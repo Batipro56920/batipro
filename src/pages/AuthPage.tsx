@@ -60,7 +60,7 @@ export default function AuthPage() {
   }
 
   return (
-    <div className="min-h-[calc(100vh-2rem)] flex items-center justify-center p-4">
+    <div className="min-h-[100dvh] pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] flex items-center justify-center p-4">
       <div className="w-full max-w-md rounded-2xl border bg-white p-6 space-y-4">
         <div className="space-y-1">
           <div className="text-2xl font-bold">Batipro</div>
