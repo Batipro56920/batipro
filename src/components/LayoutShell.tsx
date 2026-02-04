@@ -1,4 +1,4 @@
-// src/components/LayoutShell.tsx
+﻿// src/components/LayoutShell.tsx
 import { useEffect, useState } from "react";
 import { Outlet, useNavigate } from "react-router-dom";
 import Sidebar from "./Sidebar";
@@ -8,6 +8,7 @@ export default function LayoutShell() {
   const navigate = useNavigate();
   const [email, setEmail] = useState<string | null>(null);
   const [signingOut, setSigningOut] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
 
   useEffect(() => {
     let alive = true;
@@ -39,16 +40,24 @@ export default function LayoutShell() {
 
   return (
     <div className="min-h-[100dvh] bg-slate-50 text-slate-900 max-w-[100vw] overflow-x-hidden pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)]">
-      <div className="flex min-h-[100dvh] max-w-[100vw] overflow-x-hidden">
-        {/* Sidebar */}
-        <aside className="w-72 flex-shrink-0 border-r bg-white">
+      <div className="layout">
+        <aside className={`sidebar border-r bg-white ${sidebarOpen ? "open" : ""}`}>
           <Sidebar />
         </aside>
 
-        {/* Contenu */}
-        <main className="flex-1 min-w-0">
+        <main className="content">
           <header className="h-14 border-b bg-white flex items-center justify-between px-4">
-            <span className="font-semibold">Batipro</span>
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                className="sidebar-toggle rounded-lg border px-3 py-2 text-sm"
+                onClick={() => setSidebarOpen((v) => !v)}
+                aria-label="Ouvrir le menu"
+              >
+                â˜°
+              </button>
+              <span className="font-semibold">Batipro</span>
+            </div>
 
             <div className="flex items-center gap-3">
               {email ? (
@@ -56,7 +65,7 @@ export default function LayoutShell() {
                   {email}
                 </span>
               ) : (
-                <span className="text-sm text-slate-400">—</span>
+                <span className="text-sm text-slate-400">â€”</span>
               )}
 
               <button
@@ -70,7 +79,7 @@ export default function LayoutShell() {
                     : "bg-white hover:bg-slate-50 border-slate-200",
                 ].join(" ")}
               >
-                {signingOut ? "Déconnexion…" : "Se déconnecter"}
+                {signingOut ? "DÃ©connexionâ€¦" : "Se dÃ©connecter"}
               </button>
             </div>
           </header>
