@@ -1,11 +1,12 @@
 ﻿// src/components/LayoutShell.tsx
 import { useEffect, useState } from "react";
-import { Outlet, useNavigate } from "react-router-dom";
+import { Outlet, useLocation, useNavigate } from "react-router-dom";
 import Sidebar from "./Sidebar";
 import { supabase } from "../lib/supabaseClient";
 
 export default function LayoutShell() {
   const navigate = useNavigate();
+  const location = useLocation();
   const [email, setEmail] = useState<string | null>(null);
   const [signingOut, setSigningOut] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -28,6 +29,10 @@ export default function LayoutShell() {
     };
   }, []);
 
+  useEffect(() => {
+    setSidebarOpen(false);
+  }, [location.pathname]);
+
   async function logout() {
     setSigningOut(true);
     try {
@@ -40,7 +45,7 @@ export default function LayoutShell() {
 
   return (
     <div className="min-h-[100dvh] bg-slate-50 text-slate-900 max-w-[100vw] overflow-x-hidden pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)]">
-      <div className="layout">
+      <div className="app-layout">
         <aside className={`sidebar border-r bg-white ${sidebarOpen ? "open" : ""}`}>
           <Sidebar />
         </aside>
