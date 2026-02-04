@@ -86,7 +86,7 @@ export default function LayoutShell() {
                     : "bg-white hover:bg-slate-50 border-slate-200",
                 ].join(" ")}
               >
-                {signingOut ? "DÃ©connexionâ€¦" : "Se dÃ©connecter"}
+                {signingOut ? "Déconnexion" : "Se déconnecter"}
               </button>
             </div>
           </header>
