@@ -1,6 +1,7 @@
 ﻿// src/components/LayoutShell.tsx
 import { useEffect, useState } from "react";
 import { Outlet, useLocation, useNavigate } from "react-router-dom";
+import { Menu, X } from "lucide-react";
 import Sidebar from "./Sidebar";
 import { supabase } from "../lib/supabaseClient";
 
@@ -44,7 +45,7 @@ export default function LayoutShell() {
   }
 
   return (
-    <div className="min-h-[100dvh] w-full max-w-full bg-slate-50 text-slate-900 overflow-x-hidden pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)]">
+    <div className="min-h-[100dvh] w-full max-w-full bg-slate-50 text-slate-900 overflow-x-hidden">
       {/* Desktop: fixed sidebar column. Mobile: off-canvas drawer without content push. */}
       <div className="app-layout">
         <aside className={`sidebar border-r bg-white ${sidebarOpen ? "open" : ""}`}>
@@ -52,15 +53,15 @@ export default function LayoutShell() {
         </aside>
 
         <main className="content">
-          <header className="h-14 border-b bg-white flex items-center justify-between px-4">
+          <header className="header-bar h-14 border-b bg-white flex items-center justify-between px-4">
             <div className="flex items-center gap-3">
               <button
                 type="button"
                 className="sidebar-toggle rounded-lg border px-3 py-2 text-sm"
                 onClick={() => setSidebarOpen((v) => !v)}
-                aria-label="Ouvrir le menu"
+                aria-label={sidebarOpen ? "Fermer le menu" : "Ouvrir le menu"}
               >
-                â˜°
+                {sidebarOpen ? <X size={18} /> : <Menu size={18} />}
               </button>
               <span className="font-semibold">Batipro</span>
             </div>
@@ -90,7 +91,7 @@ export default function LayoutShell() {
             </div>
           </header>
 
-          <div className="p-6">
+          <div className="content-body p-6">
             <Outlet />
           </div>
         </main>
