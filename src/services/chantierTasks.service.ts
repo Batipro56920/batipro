@@ -18,6 +18,10 @@ export type ChantierTaskRow = {
 
   intervenant_id: string | null;
 
+  quantite: number | null;
+  unite: string | null;
+  temps_prevu_h: number | null;
+
   // ✅ TEMPS V1 (optionnel)
   date_debut: string | null; // YYYY-MM-DD
   date_fin: string | null; // YYYY-MM-DD
@@ -35,6 +39,10 @@ type CreateTaskPayload = {
   status?: TaskStatus;
   intervenant_id?: string | null;
 
+  quantite?: number | string | null;
+  unite?: string | null;
+  temps_prevu_h?: number | string | null;
+
   // ✅ TEMPS V1 (optionnel)
   date_debut?: string | null;
   date_fin?: string | null;
@@ -49,6 +57,9 @@ type UpdateTaskPatch = Partial<
     | "date"
     | "status"
     | "intervenant_id"
+    | "quantite"
+    | "unite"
+    | "temps_prevu_h"
     | "date_debut"
     | "date_fin"
     | "temps_reel_h"
@@ -59,12 +70,25 @@ type UpdateTaskPatch = Partial<
    HELPERS
    ========================================================= */
 
+function normalizeNumber(value: unknown): number | null {
+  if (value === null || value === undefined || value === "") return null;
+  if (typeof value === "string") {
+    const raw = value.trim().replace(",", ".");
+    if (!raw) return null;
+    const n = Number(raw);
+    return Number.isFinite(n) ? n : null;
+  }
+  if (typeof value === "number") return Number.isFinite(value) ? value : null;
+  return null;
+}
+
 function cleanPatch(patch: UpdateTaskPatch) {
   const cleaned: any = { ...patch };
 
   // chaînes
   if (typeof cleaned.titre === "string") cleaned.titre = cleaned.titre.trim();
   if (typeof cleaned.corps_etat === "string") cleaned.corps_etat = cleaned.corps_etat.trim();
+  if (typeof cleaned.unite === "string") cleaned.unite = cleaned.unite.trim();
 
   // vides -> null
   if (cleaned.corps_etat === "") cleaned.corps_etat = null;
@@ -72,20 +96,18 @@ function cleanPatch(patch: UpdateTaskPatch) {
   if (cleaned.date_debut === "") cleaned.date_debut = null;
   if (cleaned.date_fin === "") cleaned.date_fin = null;
   if (cleaned.intervenant_id === "") cleaned.intervenant_id = null;
+  if (cleaned.unite === "") cleaned.unite = null;
 
   // temps réel
   if (cleaned.temps_reel_h !== undefined) {
-    if (cleaned.temps_reel_h === "" || cleaned.temps_reel_h === null) {
-      cleaned.temps_reel_h = null;
-    } else if (typeof cleaned.temps_reel_h === "string") {
-      const raw = cleaned.temps_reel_h.trim().replace(",", ".");
-      const n = raw === "" ? null : Number(raw);
-      cleaned.temps_reel_h = n === null || Number.isNaN(n) ? null : n;
-    } else if (typeof cleaned.temps_reel_h === "number") {
-      cleaned.temps_reel_h = Number.isFinite(cleaned.temps_reel_h) ? cleaned.temps_reel_h : null;
-    } else {
-      cleaned.temps_reel_h = null;
-    }
+    cleaned.temps_reel_h = normalizeNumber(cleaned.temps_reel_h);
+  }
+
+  if (cleaned.quantite !== undefined) {
+    cleaned.quantite = normalizeNumber(cleaned.quantite);
+  }
+  if (cleaned.temps_prevu_h !== undefined) {
+    cleaned.temps_prevu_h = normalizeNumber(cleaned.temps_prevu_h);
   }
 
   // aucune obligation demandée par toi,
@@ -115,6 +137,9 @@ export async function getTasksByChantierId(chantierId: string) {
         "date",
         "status",
         "intervenant_id",
+        "quantite",
+        "unite",
+        "temps_prevu_h",
         "date_debut",
         "date_fin",
         "temps_reel_h",
@@ -136,6 +161,9 @@ export async function createTask(payload: CreateTaskPayload) {
   if (!chantier_id) throw new Error("chantier_id manquant.");
   if (!titre) throw new Error("titre manquant.");
 
+  const quantiteValue = normalizeNumber(payload.quantite);
+  const tempsPrevuValue = normalizeNumber(payload.temps_prevu_h);
+
   const insertRow: any = {
     chantier_id,
     titre,
@@ -143,6 +171,9 @@ export async function createTask(payload: CreateTaskPayload) {
     date: payload.date ?? null,
     status: payload.status ?? "A_FAIRE",
     intervenant_id: payload.intervenant_id ?? null,
+    quantite: quantiteValue === null ? 1 : quantiteValue,
+    unite: (payload.unite ?? "").trim() || null,
+    temps_prevu_h: tempsPrevuValue ?? null,
 
     // ✅ temps (optionnel)
     date_debut: payload.date_debut ?? null,
@@ -162,6 +193,9 @@ export async function createTask(payload: CreateTaskPayload) {
         "date",
         "status",
         "intervenant_id",
+        "quantite",
+        "unite",
+        "temps_prevu_h",
         "date_debut",
         "date_fin",
         "temps_reel_h",
@@ -193,6 +227,9 @@ export async function updateTask(id: string, patch: UpdateTaskPatch) {
         "date",
         "status",
         "intervenant_id",
+        "quantite",
+        "unite",
+        "temps_prevu_h",
         "date_debut",
         "date_fin",
         "temps_reel_h",

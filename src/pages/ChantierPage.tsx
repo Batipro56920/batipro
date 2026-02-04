@@ -132,6 +132,17 @@ function toInputNumberString(v: number | null | undefined) {
   if (!Number.isFinite(n)) return "";
   return String(n);
 }
+function toNumberOrNull(v: unknown) {
+  if (v === null || v === undefined || v === "") return null;
+  if (typeof v === "string") {
+    const raw = v.trim().replace(",", ".");
+    if (!raw) return null;
+    const n = Number(raw);
+    return Number.isFinite(n) ? n : null;
+  }
+  if (typeof v === "number") return Number.isFinite(v) ? v : null;
+  return null;
+}
 
 async function copyToClipboard(text: string) {
   try {
@@ -197,6 +208,8 @@ export default function ChantierPage() {
   const [newCorpsEtat, setNewCorpsEtat] = useState("");
   const [newDate, setNewDate] = useState("");
   const [newIntervenantId, setNewIntervenantId] = useState<string>("__NONE__");
+  const [newQuantite, setNewQuantite] = useState("1");
+  const [newUnite, setNewUnite] = useState("");
   const [addingTask, setAddingTask] = useState(false);
 
   // Edition tâche
@@ -207,6 +220,8 @@ export default function ChantierPage() {
   const [editDate, setEditDate] = useState("");
   const [editStatus, setEditStatus] = useState<TaskStatus>("A_FAIRE");
   const [editIntervenantId, setEditIntervenantId] = useState<string>("__NONE__");
+  const [editQuantite, setEditQuantite] = useState("1");
+  const [editUnite, setEditUnite] = useState("");
 
   // Devis
   const [devis, setDevis] = useState<DevisRow[]>([]);
@@ -489,6 +504,15 @@ export default function ChantierPage() {
       return;
     }
 
+    const qtyRaw = newQuantite.trim();
+    const quantite = qtyRaw === "" ? 1 : toNumberOrNull(qtyRaw);
+    if (quantite === null || quantite <= 0) {
+      setTasksError("Quantite invalide.");
+      return;
+    }
+
+    const unite = newUnite.trim() || null;
+
     setAddingTask(true);
     setTasksError(null);
 
@@ -503,6 +527,9 @@ export default function ChantierPage() {
       date: newDate || null,
       status: "A_FAIRE",
       intervenant_id,
+      quantite,
+      unite,
+      temps_prevu_h: null,
       date_debut: null,
       date_fin: null,
       temps_reel_h: null,
@@ -520,6 +547,8 @@ export default function ChantierPage() {
         date: newDate || null,
         status: "A_FAIRE",
         intervenant_id,
+        quantite,
+        unite,
       });
 
       setTasks((prev) => prev.map((t) => (t.id === tempId ? (saved as any) : t)));
@@ -528,6 +557,8 @@ export default function ChantierPage() {
       setNewCorpsEtat("");
       setNewDate("");
       setNewIntervenantId("__NONE__");
+      setNewQuantite("1");
+      setNewUnite("");
 
       setToast({ type: "ok", msg: "Tâche ajoutée." });
     } catch (e: any) {
@@ -541,11 +572,18 @@ export default function ChantierPage() {
 
   function startEditTask(t: ChantierTaskRow) {
     setEditingTaskId(t.id);
-    setEditTitre(stripLegacyPrefix(t.titre ?? ""));
+    const baseTitre = stripLegacyPrefix(t.titre ?? "");
+    const decoded = decodeQtyUnit(baseTitre);
+    const q = toNumberOrNull((t as any).quantite);
+    const rawUnite = (t as any).unite;
+    const unite = (typeof rawUnite === "string" ? rawUnite.trim() : "") || decoded.unite || "";
+    setEditTitre(baseTitre);
     setEditCorpsEtat(t.corps_etat ?? "");
     setEditDate(t.date ?? "");
     setEditStatus((t.status ?? "A_FAIRE") as any);
     setEditIntervenantId(t.intervenant_id ?? "__NONE__");
+    setEditQuantite(String(q ?? decoded.quantite ?? 1));
+    setEditUnite(unite);
   }
   function cancelEditTask() {
     setEditingTaskId(null);
@@ -559,12 +597,23 @@ export default function ChantierPage() {
       return;
     }
 
+    const qtyRaw = editQuantite.trim();
+    const quantite = qtyRaw === "" ? 1 : toNumberOrNull(qtyRaw);
+    if (quantite === null || quantite <= 0) {
+      setToast({ type: "error", msg: "Quantite invalide." });
+      return;
+    }
+
+    const unite = editUnite.trim() || null;
+
     const patch = {
       titre,
       corps_etat: editCorpsEtat.trim() || null,
       date: editDate || null,
       status: editStatus ?? "A_FAIRE",
       intervenant_id: editIntervenantId === "__NONE__" ? null : editIntervenantId,
+      quantite,
+      unite,
     };
 
     setSavingTask(true);
@@ -1626,7 +1675,7 @@ export default function ChantierPage() {
               {/* ✅ AJOUT TÂCHE */}
               <div className="rounded-xl border bg-slate-50 p-3 space-y-3">
                 <form onSubmit={addTask} className="space-y-3">
-                  <div className="grid gap-2 md:grid-cols-4">
+                  <div className="grid gap-2 md:grid-cols-6">
                     <input
                       className="rounded-xl border px-3 py-2 text-sm md:col-span-2"
                       placeholder="Titre"
@@ -1644,6 +1693,19 @@ export default function ChantierPage() {
                       type="date"
                       value={newDate}
                       onChange={(e) => setNewDate(e.target.value)}
+                    />
+                    <input
+                      className="rounded-xl border px-3 py-2 text-sm"
+                      inputMode="decimal"
+                      placeholder="Quantite"
+                      value={newQuantite}
+                      onChange={(e) => setNewQuantite(e.target.value)}
+                    />
+                    <input
+                      className="rounded-xl border px-3 py-2 text-sm"
+                      placeholder="Unite"
+                      value={newUnite}
+                      onChange={(e) => setNewUnite(e.target.value)}
                     />
                   </div>
 
@@ -1692,12 +1754,37 @@ export default function ChantierPage() {
                 {filteredTasks.map((t: any) => {
                   const isEditing = editingTaskId === t.id;
                   const displayTitre = stripLegacyPrefix(t.titre ?? "");
-                  const { cleanTitle, quantite, unite } = decodeQtyUnit(displayTitre);
-                  const displayTitreClean = cleanTitle || displayTitre;
-                  const hasTemps = (t as any).temps_reel_h !== null && (t as any).temps_reel_h !== undefined;
-                  const tempsReel = Number((t as any).temps_reel_h ?? 0);
-                  const qtyLabel = quantite === null ? "Qte : --" : `Qte : ${quantite}${unite ? ` ${unite}` : ""}`;
-                  const avancementLabel = hasTemps ? `Avancement (temps) : ${tempsReel} h` : "Avancement (temps) : --";
+                  const decoded = decodeQtyUnit(displayTitre);
+                  const displayTitreClean = decoded.cleanTitle || displayTitre;
+                  const quantiteRaw = toNumberOrNull((t as any).quantite);
+                  const uniteRaw = (t as any).unite;
+                  const quantiteValue = quantiteRaw ?? decoded.quantite;
+                  const uniteValue =
+                    (typeof uniteRaw === "string" ? uniteRaw.trim() : "") || decoded.unite || null;
+
+                  const tempsPasse = Number((t as any).temps_reel_h ?? 0);
+                  const tempsPasseDisplay = Math.round(tempsPasse * 100) / 100;
+                  const tempsPrevu = toNumberOrNull((t as any).temps_prevu_h);
+
+                  let avancementPct: number | null = null;
+                  if (tempsPrevu !== null && tempsPrevu > 0) {
+                    avancementPct = Math.min(100, Math.round((tempsPasse / tempsPrevu) * 100));
+                  } else {
+                    const uniteNorm = (uniteValue ?? "").toString().trim().toLowerCase();
+                    if (
+                      (uniteNorm === "h" || uniteNorm === "heure" || uniteNorm === "heures") &&
+                      quantiteValue !== null &&
+                      quantiteValue > 0
+                    ) {
+                      avancementPct = Math.min(100, Math.round((tempsPasse / quantiteValue) * 100));
+                    }
+                  }
+
+                  const qtyLabel =
+                    quantiteValue === null ? "Qte: --" : `Qte: ${quantiteValue}${uniteValue ? ` ${uniteValue}` : ""}`;
+                  const tempsPasseLabel = `Temps passe: ${tempsPasseDisplay} h`;
+                  const avancementLabel =
+                    avancementPct === null ? "Avancement (temps): --" : `Avancement (temps): ${avancementPct}%`;
                   const it = t.intervenant_id ? intervenantById.get(t.intervenant_id) : null;
 
                   return (
@@ -1714,11 +1801,11 @@ export default function ChantierPage() {
                                 {t.date ? ` • ${t.date}` : ""}
                               </div>
                               <div className="text-xs text-slate-500 mt-1">
-                                {qtyLabel} / {avancementLabel}
+                                {qtyLabel} / {tempsPasseLabel} / {avancementLabel}
                               </div>
                             </>
                           ) : (
-                            <div className="grid gap-2 md:grid-cols-6">
+                            <div className="grid gap-2 md:grid-cols-8">
                               <input
                                 className="rounded-xl border px-3 py-2 text-sm md:col-span-2"
                                 value={editTitre}
@@ -1730,6 +1817,19 @@ export default function ChantierPage() {
                                 value={editCorpsEtat}
                                 onChange={(e) => setEditCorpsEtat(e.target.value)}
                                 placeholder="Lot"
+                              />
+                              <input
+                                className="rounded-xl border px-3 py-2 text-sm"
+                                inputMode="decimal"
+                                value={editQuantite}
+                                onChange={(e) => setEditQuantite(e.target.value)}
+                                placeholder="Quantite"
+                              />
+                              <input
+                                className="rounded-xl border px-3 py-2 text-sm"
+                                value={editUnite}
+                                onChange={(e) => setEditUnite(e.target.value)}
+                                placeholder="Unite"
                               />
                               <select
                                 className="rounded-xl border px-3 py-2 text-sm"
