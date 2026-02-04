@@ -1,24 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { Chantier } from "../types/chantier";
 import { supabase } from "./supabaseClient";
-
-type ChantierRow = {
-  id: string;
-  nom: string;
-  client: string | null;
-  adresse: string | null;
-  status: string | null;
-  avancement: number | null;
-  date_debut: string | null;
-  date_fin_prevue: string | null;
-  heures_prevues: number | null;
-  heures_passees: number | null;
-  created_at?: string | null;
-};
-
-// IMPORTANT: sélection explicite (pas de "*") et AUCUN "description"
-const CHANTIER_SELECT =
-  "id, nom, client, adresse, status, avancement, date_debut, date_fin_prevue, heures_prevues, heures_passees, created_at" as const;
+import { listChantiers, type ChantierRow } from "../services/chantiers.service";
 
 function mapRow(r: ChantierRow): Chantier {
   return {
@@ -26,7 +9,7 @@ function mapRow(r: ChantierRow): Chantier {
     nom: r.nom,
     client: r.client ?? null,
     adresse: r.adresse ?? null,
-    status: (r.status ?? "EN_ATTENTE") as any,
+    status: (r.status ?? "PREPARATION") as any,
     avancement: r.avancement ?? 0,
     dateDebut: r.date_debut ?? null,
     dateFinPrevue: r.date_fin_prevue ?? null,
@@ -48,14 +31,8 @@ export function useChantiers() {
     setLoading(true);
     setError(null);
     try {
-      const { data, error } = await supabase
-        .from("chantiers")
-        .select(CHANTIER_SELECT)
-        .order("created_at", { ascending: false });
-
-      if (error) throw error;
-
-      const mapped = (data as ChantierRow[] | null)?.map(mapRow) ?? [];
+      const data = await listChantiers({ scope: "all" });
+      const mapped = (data ?? []).map(mapRow);
       setItems(mapped);
     } catch (e: any) {
       setError(e?.message ?? "Erreur Supabase");
@@ -82,7 +59,7 @@ export function useChantiers() {
           nom: data.nom,
           client: data.client ?? null,
           adresse: data.adresse ?? null,
-          status: data.status ?? "EN_ATTENTE",
+          status: data.status ?? "PREPARATION",
           avancement: data.avancement ?? 0,
           date_debut: data.dateDebut ?? null,
           date_fin_prevue: data.dateFinPrevue ?? null,

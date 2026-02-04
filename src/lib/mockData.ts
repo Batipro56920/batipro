@@ -17,7 +17,7 @@ export const seedChantiers: Chantier[] = [
     nom: "Duplex Centre",
     adresse: "Pontivy",
     client: "Client privé",
-    status: "EN_ATTENTE",
+    status: "PREPARATION",
     avancement: 0,
     dateDebut: "2026-01-10",
     heuresPrevues: 120,

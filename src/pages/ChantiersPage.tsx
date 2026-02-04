@@ -1,8 +1,7 @@
 import { Link, useNavigate } from "react-router-dom";
 import { useEffect, useState } from "react";
-import { getChantiers, deleteChantier } from "../services/chantiers.service";
-
-type ChantierStatus = "PREPARATION" | "EN_COURS" | "TERMINE" | string;
+import type { ChantierStatus } from "../types/chantier";
+import { getChantiers, deleteChantier, countChantiers } from "../services/chantiers.service";
 
 type ChantierRow = {
   id: string;
@@ -45,6 +44,7 @@ export default function ChantiersPage() {
   const [items, setItems] = useState<ChantierRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [debugCount, setDebugCount] = useState<number | null>(null);
 
   async function refresh() {
     setLoading(true);
@@ -52,6 +52,10 @@ export default function ChantiersPage() {
     try {
       const data = await getChantiers();
       setItems(data as ChantierRow[]);
+      if (import.meta.env.DEV) {
+        const count = await countChantiers({ scope: "all" });
+        setDebugCount(count);
+      }
     } catch (e: any) {
       setErrorMsg(e?.message ?? "Erreur lors du chargement des chantiers.");
     } finally {
@@ -174,10 +178,13 @@ export default function ChantiersPage() {
       )}
 
       {!loading && (
-        <div className="text-xs text-slate-400">
+        <div className="text-xs text-slate-400 flex flex-wrap items-center gap-3">
           <button className="underline hover:text-slate-600" onClick={refresh}>
             Rafraîchir la liste
           </button>
+          {import.meta.env.DEV && debugCount !== null && (
+            <span>DEBUG: count={debugCount} list={items.length}</span>
+          )}
         </div>
       )}
     </div>

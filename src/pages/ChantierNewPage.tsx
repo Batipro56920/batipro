@@ -1,9 +1,8 @@
 // src/pages/ChantierNewPage.tsx
 import { useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
+import type { ChantierStatus } from "../types/chantier";
 import { supabase } from "../lib/supabaseClient";
-
-type ChantierStatus = "PREPARATION" | "EN_COURS" | "TERMINE";
 
 function todayISO() {
   return new Date().toISOString().slice(0, 10);

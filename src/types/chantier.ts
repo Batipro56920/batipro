@@ -5,7 +5,7 @@
    ========================================================= */
 
 export type ChantierStatus =
-  | "EN_ATTENTE"
+  | "PREPARATION"
   | "EN_COURS"
   | "TERMINE";
 

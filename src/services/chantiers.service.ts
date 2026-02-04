@@ -1,11 +1,11 @@
 // src/services/chantiers.service.ts
 import { supabase } from "../lib/supabaseClient";
+import type { ChantierStatus } from "../types/chantier";
+import { CHANTIER_EN_COURS_STATUSES } from "../lib/chantierRules";
 
 /* =========================================================
    TYPES
    ========================================================= */
-
-export type ChantierStatus = "PREPARATION" | "EN_COURS" | "TERMINE";
 
 export type ChantierRow = {
   id: string;
@@ -24,8 +24,10 @@ export type ChantierRow = {
   created_at?: string | null;
 };
 
-const CHANTIER_SELECT =
+export const CHANTIER_SELECT =
   "id, nom, client, adresse, status, avancement, date_debut, date_fin_prevue, heures_prevues, heures_passees, created_at" as const;
+
+export type ChantierScope = "all" | "en_cours";
 
 /* =========================================================
    HELPERS
@@ -47,18 +49,43 @@ function normalizeChantier(row: any): ChantierRow {
   };
 }
 
+function applyChantiersScope(query: any, scope: ChantierScope) {
+  if (scope === "en_cours") {
+    return query.in("status", [...CHANTIER_EN_COURS_STATUSES]);
+  }
+  return query;
+}
+
 /* =========================================================
    CRUD
    ========================================================= */
 
-export async function getChantiers(): Promise<ChantierRow[]> {
-  const { data, error } = await supabase
+export async function listChantiers(params: { scope?: ChantierScope } = {}): Promise<ChantierRow[]> {
+  const scope = params.scope ?? "all";
+
+  const query = supabase
     .from("chantiers")
     .select(CHANTIER_SELECT)
     .order("created_at", { ascending: false });
 
+  const { data, error } = await applyChantiersScope(query, scope);
+
   if (error) throw error;
   return (data ?? []).map(normalizeChantier);
+}
+
+export async function countChantiers(params: { scope?: ChantierScope } = {}): Promise<number> {
+  const scope = params.scope ?? "all";
+
+  const query = supabase.from("chantiers").select("id", { count: "exact", head: true });
+  const { count, error } = await applyChantiersScope(query, scope);
+
+  if (error) throw error;
+  return count ?? 0;
+}
+
+export async function getChantiers(): Promise<ChantierRow[]> {
+  return listChantiers({ scope: "all" });
 }
 
 export async function getChantierById(id: string): Promise<ChantierRow> {
