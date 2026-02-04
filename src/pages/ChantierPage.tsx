@@ -24,7 +24,7 @@ import {
 } from "../services/devis.service";
 
 // ✅ Import devis PDF (garde cette feature)
-import { importDevisPdfToLinesAndTasks } from "../services/devisImport.service";
+import { importDevisPdfToLinesAndTasks, decodeQtyUnit } from "../services/devisImport.service";
 import { extractTextFromPdf } from "../services/pdfText.service";
 
 import {
@@ -1692,6 +1692,12 @@ export default function ChantierPage() {
                 {filteredTasks.map((t: any) => {
                   const isEditing = editingTaskId === t.id;
                   const displayTitre = stripLegacyPrefix(t.titre ?? "");
+                  const { cleanTitle, quantite, unite } = decodeQtyUnit(displayTitre);
+                  const displayTitreClean = cleanTitle || displayTitre;
+                  const hasTemps = (t as any).temps_reel_h !== null && (t as any).temps_reel_h !== undefined;
+                  const tempsReel = Number((t as any).temps_reel_h ?? 0);
+                  const qtyLabel = quantite === null ? "Qte : --" : `Qte : ${quantite}${unite ? ` ${unite}` : ""}`;
+                  const avancementLabel = hasTemps ? `Avancement (temps) : ${tempsReel} h` : "Avancement (temps) : --";
                   const it = t.intervenant_id ? intervenantById.get(t.intervenant_id) : null;
 
                   return (
@@ -1702,10 +1708,13 @@ export default function ChantierPage() {
                         <div className="flex-1 min-w-0">
                           {!isEditing ? (
                             <>
-                              <div className="font-medium truncate">{displayTitre}</div>
+                              <div className="font-medium truncate">{displayTitreClean}</div>
                               <div className="text-xs text-slate-500">
                                 {(t.corps_etat ?? "—")} • Intervenant : {it?.nom ?? "—"}
                                 {t.date ? ` • ${t.date}` : ""}
+                              </div>
+                              <div className="text-xs text-slate-500 mt-1">
+                                {qtyLabel} / {avancementLabel}
                               </div>
                             </>
                           ) : (
