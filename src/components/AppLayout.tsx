@@ -3,8 +3,8 @@ import Sidebar from "./Sidebar";
 
 export default function AppLayout() {
   return (
-    <div className="min-h-[100dvh] bg-slate-50 text-slate-900 max-w-[100vw] overflow-x-hidden pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)]">
-      <div className="flex min-h-[100dvh] max-w-[100vw] overflow-x-hidden">
+    <div className="min-h-[100dvh] w-full max-w-full bg-slate-50 text-slate-900 overflow-x-hidden pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)]">
+      <div className="flex min-h-[100dvh] w-full max-w-full overflow-x-hidden">
         <aside className="w-72 shrink-0 border-r bg-white hidden md:flex md:flex-col">
           <div className="p-4 border-b">
             <div className="font-bold">ChantierPro</div>

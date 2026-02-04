@@ -44,7 +44,8 @@ export default function LayoutShell() {
   }
 
   return (
-    <div className="min-h-[100dvh] bg-slate-50 text-slate-900 max-w-[100vw] overflow-x-hidden pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)]">
+    <div className="min-h-[100dvh] w-full max-w-full bg-slate-50 text-slate-900 overflow-x-hidden pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)]">
+      {/* Desktop: fixed sidebar column. Mobile: off-canvas drawer without content push. */}
       <div className="app-layout">
         <aside className={`sidebar border-r bg-white ${sidebarOpen ? "open" : ""}`}>
           <Sidebar />

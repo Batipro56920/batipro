@@ -111,7 +111,7 @@ export default function ChantiersPage() {
             return (
               <div
                 key={c.id}
-                className="rounded-2xl border bg-white p-4 flex items-center justify-between gap-4"
+                className="rounded-2xl border bg-white p-4 flex flex-col gap-3 overflow-hidden sm:flex-row sm:items-center sm:justify-between"
               >
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2">
@@ -148,16 +148,16 @@ export default function ChantiersPage() {
                   </div>
                 </div>
 
-                <div className="flex items-center gap-2 shrink-0">
+                <div className="flex flex-wrap items-center gap-2 shrink-0 max-w-full">
                   <Link
                     to={`/chantiers/${c.id}`}
-                    className="rounded-xl border px-3 py-2 hover:bg-slate-50 transition"
+                    className="rounded-xl border px-3 py-2 hover:bg-slate-50 transition whitespace-nowrap"
                   >
                     Ouvrir
                   </Link>
 
                   <button
-                    className="rounded-xl border px-3 py-2 hover:bg-slate-50 transition"
+                    className="rounded-xl border px-3 py-2 hover:bg-slate-50 transition whitespace-nowrap"
                     onClick={async () => {
                       if (!window.confirm(`Supprimer "${c.nom}" ?`)) return;
                       await deleteChantier(c.id);

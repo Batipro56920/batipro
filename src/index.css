@@ -35,6 +35,7 @@ select {
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
   background: var(--sidebar-bg, #fff);
+  will-change: transform;
 }
 
 .content,
@@ -49,7 +50,7 @@ select {
   display: none;
 }
 
-@media (max-width: 768px) {
+@media (max-width: 1024px) {
   .app-layout {
     display: block;
   }
@@ -76,6 +77,11 @@ select {
 
   .sidebar.open {
     transform: translateX(0);
+  }
+
+  .sidebar.open ~ .content {
+    visibility: hidden;
+    pointer-events: none;
   }
 
   .sidebar-toggle {
