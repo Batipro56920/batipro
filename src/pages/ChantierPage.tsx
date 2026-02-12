@@ -1,6 +1,6 @@
   // src/pages/ChantierPage.tsx
-import { useEffect, useMemo, useState } from "react";
-import type { FormEvent, ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import type { ChangeEvent, FormEvent, ReactNode } from "react";
 import { Link, useParams } from "react-router-dom";
 
 import { getChantierById, type ChantierRow } from "../services/chantiers.service";
@@ -43,6 +43,11 @@ import {
   type MaterielDemandeRow,
   type MaterielStatus,
 } from "../services/materielDemandes.service";
+import {
+  listByChantier as listDocumentsByChantier,
+  uploadDocument,
+  type ChantierDocumentRow,
+} from "../services/chantierDocuments.service";
 
 // ✅ ENVOI ACCÈS (Edge Function via service)
 import { sendIntervenantAccess } from "../services/chantierAccessAdmin.service";
@@ -50,6 +55,7 @@ import { sendIntervenantAccess } from "../services/chantierAccessAdmin.service";
 /* ---------------- types ---------------- */
 type TabKey =
   | "devis-taches"
+  | "documents"
   | "intervenants"
   | "planning"
   | "temps"
@@ -171,6 +177,15 @@ export default function ChantierPage() {
   >({});
   const [savingTimeTaskId, setSavingTimeTaskId] = useState<string | null>(null);
 
+  // Documents
+  const [documents, setDocuments] = useState<ChantierDocumentRow[]>([]);
+  const [documentsLoading, setDocumentsLoading] = useState(false);
+  const [documentsError, setDocumentsError] = useState<string | null>(null);
+  const [selectedDocumentFile, setSelectedDocumentFile] = useState<File | null>(null);
+  const [uploadingDocument, setUploadingDocument] = useState(false);
+  const [uploadDocumentError, setUploadDocumentError] = useState<string | null>(null);
+  const documentInputRef = useRef<HTMLInputElement | null>(null);
+
   // Intervenants
   const [intervenants, setIntervenants] = useState<IntervenantRow[]>([]);
   const [intervenantsLoading, setIntervenantsLoading] = useState(false);
@@ -253,6 +268,59 @@ export default function ChantierPage() {
   const [mStatus, setMStatus] = useState<MaterielStatus>("A_COMMANDER");
   const [mRemarques, setMRemarques] = useState("");
   const [addingMateriel, setAddingMateriel] = useState(false);
+
+  function onClickImportDocument() {
+    setUploadDocumentError(null);
+    if (documentInputRef.current) {
+      documentInputRef.current.value = "";
+      documentInputRef.current.click();
+    }
+  }
+
+  async function onSelectDocumentFile(e: ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0] ?? null;
+    setSelectedDocumentFile(file);
+    if (!file) return;
+    if (!id) {
+      setUploadDocumentError("chantierId manquant.");
+      console.error("[documents] chantierId manquant");
+      setToast({ type: "error", msg: "Chantier manquant." });
+      return;
+    }
+
+    setUploadingDocument(true);
+    setUploadDocumentError(null);
+    try {
+      await uploadDocument({ chantierId: id, file });
+      resetSelectedDocumentFile();
+      setToast({ type: "ok", msg: "Document importé." });
+      setDocumentsLoading(true);
+      setDocumentsError(null);
+      try {
+        const data = await listDocumentsByChantier(id);
+        setDocuments(data);
+      } catch (refreshErr: any) {
+        console.error("[documents] refresh error", refreshErr?.message ?? refreshErr);
+        setDocumentsError(refreshErr?.message ?? "Erreur chargement documents.");
+        setToast({ type: "error", msg: "Erreur lors du rafraîchissement des documents." });
+      }
+    } catch (err: any) {
+      console.error("[documents] upload error", err?.message ?? err);
+      setUploadDocumentError(err?.message ?? "Erreur upload document.");
+      setToast({ type: "error", msg: err?.message ?? "Erreur upload document." });
+    } finally {
+      setDocumentsLoading(false);
+      setUploadingDocument(false);
+    }
+  }
+
+  function resetSelectedDocumentFile() {
+    setSelectedDocumentFile(null);
+    setUploadDocumentError(null);
+    if (documentInputRef.current) {
+      documentInputRef.current.value = "";
+    }
+  }
 
   /* ---------------- loaders ---------------- */
   async function refreshIntervenants() {
@@ -376,6 +444,33 @@ export default function ChantierPage() {
       alive = false;
     };
   }, [id]);
+
+  /* ---------------- load documents ---------------- */
+  useEffect(() => {
+    let alive = true;
+
+    async function loadDocuments() {
+      if (!id || tab !== "documents") return;
+      setDocumentsLoading(true);
+      setDocumentsError(null);
+      try {
+        const data = await listDocumentsByChantier(id);
+        if (!alive) return;
+        setDocuments(data);
+      } catch (e: any) {
+        if (!alive) return;
+        setDocuments([]);
+        setDocumentsError(e?.message ?? "Erreur chargement documents.");
+      } finally {
+        if (alive) setDocumentsLoading(false);
+      }
+    }
+
+    loadDocuments();
+    return () => {
+      alive = false;
+    };
+  }, [id, tab]);
 
   /* ---------------- load lignes devis ---------------- */
   useEffect(() => {
@@ -1078,31 +1173,40 @@ export default function ChantierPage() {
       </div>
 
       {/* Onglets */}
-      <div className="flex gap-2 flex-wrap">
-        <TabButton active={tab === "devis-taches"} onClick={() => setTab("devis-taches")}>
-          Devis & tâches
-        </TabButton>
-        <TabButton active={tab === "intervenants"} onClick={() => setTab("intervenants")}>
-          Intervenants
-        </TabButton>
-        <TabButton active={tab === "temps"} onClick={() => setTab("temps")}>
-          Temps
-        </TabButton>
-        <TabButton active={tab === "planning"} onClick={() => setTab("planning")}>
-          Planning
-        </TabButton>
-        <TabButton active={tab === "plans-reserves"} onClick={() => setTab("plans-reserves")}>
-          Plans & réserves
-        </TabButton>
-        <TabButton active={tab === "materiel"} onClick={() => setTab("materiel")}>
-          Matériel
-        </TabButton>
-        <TabButton active={tab === "messagerie"} onClick={() => setTab("messagerie")}>
-          Messagerie
-        </TabButton>
-        <TabButton active={tab === "rapports"} onClick={() => setTab("rapports")}>
-          Rapports
-        </TabButton>
+      <div className="space-y-3">
+        <div className="text-[11px] uppercase tracking-[0.2em] text-slate-400">Pilotage chantier</div>
+        <div className="flex gap-2 flex-wrap">
+          <TabButton active={tab === "devis-taches"} onClick={() => setTab("devis-taches")}>
+            Devis & tâches
+          </TabButton>
+          <TabButton active={tab === "temps"} onClick={() => setTab("temps")}>
+            Temps
+          </TabButton>
+          <TabButton active={tab === "planning"} onClick={() => setTab("planning")}>
+            Planning
+          </TabButton>
+          <TabButton active={tab === "plans-reserves"} onClick={() => setTab("plans-reserves")}>
+            Plans & réserves
+          </TabButton>
+        </div>
+        <div className="text-[11px] uppercase tracking-[0.2em] text-slate-400">Gestion chantier</div>
+        <div className="flex gap-2 flex-wrap">
+          <TabButton active={tab === "intervenants"} onClick={() => setTab("intervenants")}>
+            Intervenants
+          </TabButton>
+          <TabButton active={tab === "documents"} onClick={() => setTab("documents")}>
+            Documents
+          </TabButton>
+          <TabButton active={tab === "materiel"} onClick={() => setTab("materiel")}>
+            Matériel
+          </TabButton>
+          <TabButton active={tab === "messagerie"} onClick={() => setTab("messagerie")}>
+            Messagerie
+          </TabButton>
+          <TabButton active={tab === "rapports"} onClick={() => setTab("rapports")}>
+            Rapports
+          </TabButton>
+        </div>
       </div>
 
       {/* Contenu */}
@@ -1375,6 +1479,104 @@ export default function ChantierPage() {
                 ))
               )}
             </div>
+          </div>
+        )}
+
+        {/* ---------------- ONGLET DOCUMENTS ---------------- */}
+        {tab === "documents" && (
+          <div className="space-y-4">
+            <div className="flex items-start justify-between gap-4">
+              <div className="font-semibold">Documents</div>
+              <div className="flex flex-col items-end gap-2">
+                <button
+                  type="button"
+                  onClick={onClickImportDocument}
+                  disabled={uploadingDocument}
+                  className={[
+                    "rounded-xl px-3 py-2 text-sm",
+                    uploadingDocument
+                      ? "bg-slate-300 text-slate-700"
+                      : "bg-slate-900 text-white hover:bg-slate-800",
+                  ].join(" ")}
+                >
+                  {uploadingDocument ? "Import en cours..." : "Importer document"}
+                </button>
+                <input
+                  ref={documentInputRef}
+                  type="file"
+                  hidden
+                  onChange={onSelectDocumentFile}
+                  accept=".pdf,.png,.jpg,.jpeg,.webp,.doc,.docx,.xls,.xlsx,application/pdf,image/png,image/jpeg,image/webp,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                />
+                {uploadDocumentError && (
+                  <div className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700 w-full max-w-xs">
+                    {uploadDocumentError}
+                  </div>
+                )}
+                {selectedDocumentFile && (
+                  <div className="rounded-xl border bg-slate-50 px-3 py-2 text-xs text-slate-600 w-full max-w-xs">
+                    <div className="font-semibold text-slate-700 truncate">{selectedDocumentFile.name}</div>
+                    <div>Taille : {(selectedDocumentFile.size / (1024 * 1024)).toFixed(2)} Mo</div>
+                    <div>Type : {selectedDocumentFile.type || "—"}</div>
+                    {uploadingDocument && <div className="pt-1">Upload en cours...</div>}
+                    <div className="pt-2">
+                      <button
+                        type="button"
+                        onClick={resetSelectedDocumentFile}
+                        disabled={uploadingDocument}
+                        className="rounded-xl border px-2 py-1 text-xs hover:bg-slate-50"
+                      >
+                        Annuler
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {documentsError && (
+              <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                {documentsError}
+              </div>
+            )}
+
+            {documentsLoading ? (
+              <div className="text-sm text-slate-500">Chargement...</div>
+            ) : documents.length === 0 ? (
+              <div className="rounded-xl border bg-slate-50 p-4 text-sm text-slate-500">
+                Aucun document pour ce chantier.
+              </div>
+            ) : (
+              <div className="rounded-xl border overflow-hidden">
+                <table className="w-full text-sm">
+                  <thead className="bg-slate-50 text-slate-600">
+                    <tr>
+                      <th className="px-3 py-2 text-left font-medium">Nom</th>
+                      <th className="px-3 py-2 text-left font-medium">Catégorie</th>
+                      <th className="px-3 py-2 text-left font-medium">Type</th>
+                      <th className="px-3 py-2 text-left font-medium">Visibilité</th>
+                      <th className="px-3 py-2 text-left font-medium">Date</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {documents.map((doc) => (
+                      <tr key={doc.id} className="border-t">
+                        <td className="px-3 py-2">
+                          <div className="font-medium truncate">{doc.title}</div>
+                          <div className="text-xs text-slate-500 truncate">{doc.file_name}</div>
+                        </td>
+                        <td className="px-3 py-2">{doc.category}</td>
+                        <td className="px-3 py-2">{doc.document_type}</td>
+                        <td className="px-3 py-2">{doc.visibility}</td>
+                        <td className="px-3 py-2">
+                          {doc.created_at ? new Date(doc.created_at).toLocaleDateString("fr-FR") : "—"}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
         )}
 
@@ -1959,7 +2161,11 @@ export default function ChantierPage() {
         )}
 
         {/* autres onglets placeholders */}
-        {tab !== "devis-taches" && tab !== "intervenants" && tab !== "temps" && tab !== "materiel" && (
+        {tab !== "devis-taches" &&
+          tab !== "intervenants" &&
+          tab !== "documents" &&
+          tab !== "temps" &&
+          tab !== "materiel" && (
           <div className="space-y-3">
             <div className="font-semibold">
               {tab === "planning" && "Planning"}
