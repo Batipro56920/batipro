@@ -1,4 +1,4 @@
-﻿import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
+import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
@@ -66,22 +66,34 @@ serve(async (req) => {
     const PUBLIC_APP_URL = requireEnv("PUBLIC_APP_URL");
 
     const jwt = getBearerToken(req);
-    if (!jwt) {
-      console.warn("[chantier-access-admin] Missing Authorization header");
-      return json({ error: "Unauthorized" }, 401);
-    }
+    if (!jwt) return json({ error: "Unauthorized" }, 401);
 
     const userClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
       auth: { persistSession: false },
     });
-
     const { data: userData, error: userErr } = await userClient.auth.getUser(jwt);
-    if (userErr || !userData?.user) {
-      console.warn("[chantier-access-admin] Invalid JWT", userErr?.message ?? "unknown");
-      return json({ error: "Unauthorized" }, 401);
-    }
+    if (userErr || !userData?.user) return json({ error: "Unauthorized" }, 401);
+
+    const admin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
+      auth: { persistSession: false },
+    });
 
     const adminEmails = parseAdminEmails();
+    const userEmail = normalizeString(userData.user.email).toLowerCase();
+    let isAdmin = adminEmails.length > 0 && adminEmails.includes(userEmail);
+
+    if (!isAdmin) {
+      const { data: profile, error: profileErr } = await admin
+        .from("profiles")
+        .select("role")
+        .eq("id", userData.user.id)
+        .maybeSingle();
+
+      if (profileErr) return json({ error: profileErr.message }, 500);
+      isAdmin = String(profile?.role ?? "").toUpperCase() === "ADMIN";
+    }
+
+    if (!isAdmin) return json({ error: "Forbidden" }, 403);
 
     const body = await req.json().catch(() => null);
     if (!body || typeof body !== "object") return json({ error: "Invalid JSON" }, 400);
@@ -99,28 +111,6 @@ serve(async (req) => {
     let expiresInDays = Number(expiresRaw);
     if (!Number.isFinite(expiresInDays) || expiresInDays <= 0) expiresInDays = 7;
     const expiresAt = new Date(Date.now() + expiresInDays * 86400000).toISOString();
-
-    const admin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
-      auth: { persistSession: false },
-    });
-
-    const userEmail = normalizeString(userData.user.email).toLowerCase();
-    let isAdmin = adminEmails.length > 0 && adminEmails.includes(userEmail);
-
-    if (!isAdmin) {
-      const { data: profile, error: profileErr } = await admin
-        .from("profiles")
-        .select("role")
-        .eq("id", userData.user.id)
-        .maybeSingle();
-
-      if (profileErr) return json({ error: profileErr.message }, 500);
-      isAdmin = String(profile?.role ?? "").toUpperCase() === "ADMIN";
-    }
-
-    if (!isAdmin) {
-      return json({ error: "Forbidden" }, 403);
-    }
 
     let email = normalizeString((body as any).email).toLowerCase();
     if (!email && intervenantId) {
@@ -150,7 +140,7 @@ serve(async (req) => {
     if (insertErr) return json({ error: insertErr.message }, 400);
 
     const accessUrl = `${PUBLIC_APP_URL.replace(/\/$/, "")}/acces/${encodeURIComponent(token)}`;
-    return json({ token, accessUrl }, 200);
+    return json({ token, accessUrl, chantierId, intervenantId, expiresAt }, 200);
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown error";
     return json({ error: message }, 500);

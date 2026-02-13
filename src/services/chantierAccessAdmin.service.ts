@@ -40,11 +40,20 @@ export async function sendIntervenantAccess(
 
   // invoke + headers
   const { data, error } = await supabase.functions.invoke("chantier-access-admin", {
-    body: input,
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${session.access_token}`,
+    },
+    body: JSON.stringify(input),
   });
 
   if (error) {
     console.error("Edge function error:", error);
+    const msg = (error as any)?.message ?? String(error);
+    if (String(msg).includes("401") || String(msg).toLowerCase().includes("unauthorized")) {
+      throw new Error("Accès refusé (401). Reconnecte-toi puis réessaie.");
+    }
     throw error;
   }
 

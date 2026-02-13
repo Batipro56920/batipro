@@ -1,5 +1,5 @@
 // src/services/chantierAccess.service.ts
-
+import { supabase } from "../lib/supabaseClient";
 export type AccessCheckResult = {
   ok: boolean;
   chantier_id: string;
@@ -12,44 +12,24 @@ const FUNCTION_NAME = "chantier-access";
 
 /**
  * ✅ Portail PUBLIC (pas de session)
- * On fait un fetch direct vers /functions/v1/..., avec apikey + Authorization Bearer <anonKey>
- * (fonctionne en local et en cloud).
+ * Appel via supabase.functions.invoke avec anon key.
  */
 export async function checkAccessToken(token: string): Promise<AccessCheckResult> {
-  const baseUrl = (import.meta.env.VITE_SUPABASE_URL ?? "").trim();
-  const anonKey = (import.meta.env.VITE_SUPABASE_ANON_KEY ?? "").trim();
-
-  if (!baseUrl || !anonKey) {
-    throw new Error("Env manquante: VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY");
-  }
-
-  const url = `${baseUrl.replace(/\/$/, "")}/functions/v1/${FUNCTION_NAME}`;
-
-  const res = await fetch(url, {
+  const { data, error } = await supabase.functions.invoke(FUNCTION_NAME, {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      apikey: anonKey,
-      Authorization: `Bearer ${anonKey}`, // ✅ public
-    },
-    // mark_used optionnel (à false par défaut côté function)
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ token, mark_used: false }),
   });
 
-  const data = await res.json().catch(() => null);
-
-  // la function renvoie toujours 200, mais on gère quand même le cas non-200
-  if (!res.ok) {
-    const detail =
-      (data && (data.error || data.msg || data.detail)) || `HTTP ${res.status}`;
-    throw new Error(`Edge Function error ${res.status}: ${detail}`);
+  if (error) {
+    throw new Error(error.message || "Erreur Edge Function.");
   }
 
-  if (!data?.ok) {
-    throw new Error(data?.error || "Accès refusé.");
+  if (!(data as any)?.ok) {
+    throw new Error((data as any)?.error || "Accès refusé.");
   }
 
-  if (!data?.jwt || !data?.chantier_id) {
+  if (!(data as any)?.jwt || !(data as any)?.chantier_id) {
     throw new Error("Token invalide (jwt ou chantier_id manquant).");
   }
 

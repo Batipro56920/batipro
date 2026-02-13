@@ -7,7 +7,9 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "supabase:deploy:functions": "supabase functions deploy chantier-access-admin --no-verify-jwt && supabase functions deploy generate-intervenant-link --no-verify-jwt && supabase functions deploy link-intervenant-user --no-verify-jwt",
+    "supabase:deploy:all": "supabase functions deploy --no-verify-jwt"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",

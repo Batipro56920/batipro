@@ -93,7 +93,9 @@ export async function importDevisPdfToLinesAndTasks(payload: ImportPayload): Pro
 
   // 1) Appel Edge Function : elle doit insÃ©rer devis_lignes + chantier_tasks
   const { data, error } = await supabase.functions.invoke("process-devis-text", {
-    body: { chantierId, devisId, extractedText },
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ chantierId, devisId, extractedText }),
   });
 
   if (error) {

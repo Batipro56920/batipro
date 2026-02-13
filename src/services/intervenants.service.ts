@@ -1,4 +1,4 @@
-// src/services/intervenants.service.ts
+﻿// src/services/intervenants.service.ts
 import { supabase } from "../lib/supabaseClient";
 
 /* =========================================================
@@ -72,7 +72,7 @@ export async function updateIntervenant(
   if (cleaned.telephone === "") cleaned.telephone = null;
 
   if (cleaned.nom !== undefined && !cleaned.nom) {
-    throw new Error("Le nom de l’intervenant est obligatoire.");
+    throw new Error("Le nom de lâ€™intervenant est obligatoire.");
   }
 
   const { data, error } = await supabase
@@ -91,3 +91,56 @@ export async function deleteIntervenant(id: string) {
   const { error } = await supabase.from("intervenants").delete().eq("id", id);
   if (error) throw error;
 }
+
+async function ensureSession(): Promise<string> {
+  const { data: sessionData, error: sessionErr } = await supabase.auth.getSession();
+  if (sessionErr) throw sessionErr;
+
+  let session = sessionData.session;
+  if (!session) {
+    throw new Error("Pas connectÃƒÂ© : session manquante. Reconnecte-toi puis rÃƒÂ©essaie.");
+  }
+
+  const expiresAtMs = (session.expires_at ?? 0) * 1000;
+  if (!expiresAtMs || expiresAtMs < Date.now() + 60_000) {
+    const { data: refreshed, error: refreshErr } = await supabase.auth.refreshSession();
+    if (refreshErr || !refreshed.session) {
+      throw new Error("Session expirÃƒÂ©e. Reconnecte-toi puis rÃƒÂ©essaie.");
+    }
+    session = refreshed.session;
+  }
+
+  return session.access_token;
+}
+
+async function invokeEdgeFunction<T>(name: string, body: Record<string, unknown>): Promise<T> {
+  const accessToken = await ensureSession();
+
+  const { data, error } = await supabase.functions.invoke(name, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${accessToken}` },
+    body: JSON.stringify(body),
+  });
+
+  if (error) {
+    console.error(`Erreur fonction ${name}`, error);
+    const msg = (error as any)?.message ?? String(error);
+    if (String(msg).includes("401") || String(msg).toLowerCase().includes("unauthorized")) {
+      throw new Error("AccÃ¨s refusÃ© (401). Reconnecte-toi puis rÃ©essaie.");
+    }
+    throw error;
+  }
+
+  return data as T;
+}
+
+export async function generateIntervenantLink(intervenantId: string) {
+  if (!intervenantId) throw new Error("intervenantId manquant.");
+  return invokeEdgeFunction<Record<string, unknown>>("generate-intervenant-link", { intervenantId });
+}
+
+export async function linkIntervenantUser(input: { token_access: string }) {
+  if (!input?.token_access) throw new Error("token_access manquant.");
+  return invokeEdgeFunction<Record<string, unknown>>("link-intervenant-user", input);
+}
+

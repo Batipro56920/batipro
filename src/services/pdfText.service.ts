@@ -68,8 +68,12 @@ export async function processDevisText(input: {
   if (!sessionData?.session?.access_token) throw new Error("Utilisateur non authentifié");
 
   const { data, error } = await supabase.functions.invoke("process-devis-text", {
-    body: { devisId, extractedText },
-    headers: { Authorization: `Bearer ${sessionData.session.access_token}` },
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${sessionData.session.access_token}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ devisId, extractedText }),
   });
 
   if (error) {
