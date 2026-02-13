@@ -26,6 +26,7 @@ import {
 // ✅ Import devis PDF (garde cette feature)
 import { importDevisPdfToLinesAndTasks } from "../services/devisImport.service";
 import { extractTextFromPdf } from "../services/pdfText.service";
+import PlanningPage from "../features/planning/PlanningPage";
 
 import {
   listIntervenantsByChantierId,
@@ -48,8 +49,13 @@ import {
   getSignedUrl,
   linkDocumentToTask,
   uploadDocument,
+  listDocumentAccess,
+  updateDocument,
+  deleteDocument,
+  updateDocumentAccess,
   type ChantierDocumentRow,
-  type ChantierDocumentVisibility,
+  type DocumentVisibilityOption,
+  type DocumentVisibilityMode,
 } from "../services/chantierDocuments.service";
 import {
   listReservesByChantierId,
@@ -77,6 +83,7 @@ import {
   type TaskDocumentLinkRow,
 } from "../services/taskDocuments.service";
 import TaskDocumentsDrawer from "../components/chantiers/TaskDocumentsDrawer";
+import DocumentEditDrawer from "../components/chantiers/DocumentEditDrawer";
 
 // ✅ ENVOI ACCÈS (Edge Function via service)
 import { sendIntervenantAccess } from "../services/chantierAccessAdmin.service";
@@ -193,7 +200,44 @@ const DOCUMENT_TYPES = [
   "DOE",
   "AUTRE",
 ] as const;
-const DOCUMENT_VISIBILITIES = ["ADMIN", "INTERVENANT", "CLIENT"] as const;
+const DOCUMENT_VISIBILITY_OPTIONS = [
+  { value: "GLOBAL", label: "Global" },
+  { value: "RESTRICTED", label: "Restreint" },
+  { value: "ADMIN_ONLY", label: "Admin uniquement" },
+] as const;
+
+function resolveVisibilityMode(option: DocumentVisibilityOption): DocumentVisibilityMode {
+  return option === "GLOBAL" ? "GLOBAL" : "RESTRICTED";
+}
+
+function deriveLegacyVisibility(option: DocumentVisibilityOption, accessIds: string[]): string {
+  if (option === "GLOBAL") return "INTERVENANT";
+  if (option === "RESTRICTED") return accessIds.length ? "CUSTOM" : "ADMIN";
+  return "ADMIN";
+}
+
+function formatDocumentVisibility(doc: ChantierDocumentRow): string {
+  const mode = (doc.visibility_mode ?? "").toString().toUpperCase();
+  const legacy = (doc.visibility ?? "").toString().toUpperCase();
+  if (mode === "RESTRICTED" && legacy === "ADMIN") return "ADMIN";
+  if (mode === "GLOBAL") return "GLOBAL";
+  if (mode === "RESTRICTED") return "RESTRICTED";
+  if (legacy === "ADMIN") return "ADMIN";
+  if (legacy === "CUSTOM") return "RESTRICTED";
+  if (legacy === "INTERVENANT" || legacy === "INTERVENANTS" || legacy === "CLIENT") return "GLOBAL";
+  return legacy || "—";
+}
+function isAdminOnlyError(err: unknown): boolean {
+  const msg = String((err as any)?.message ?? err ?? "").toLowerCase();
+  if (!msg) return false;
+  return (
+    msg.includes("row-level security") ||
+    msg.includes("permission denied") ||
+    msg.includes("not authorized") ||
+    msg.includes("not allowed") ||
+    msg.includes("rls")
+  );
+}
 
 /** "1,5" => "1.5" */
 function normalizeHoursInput(s: string) {
@@ -253,7 +297,8 @@ export default function ChantierPage() {
   const [documentName, setDocumentName] = useState("");
   const [documentCategory, setDocumentCategory] = useState("Divers");
   const [documentType, setDocumentType] = useState("AUTRE");
-  const [documentVisibility, setDocumentVisibility] = useState<ChantierDocumentVisibility>("ADMIN");
+  const [documentVisibilityMode, setDocumentVisibilityMode] = useState<DocumentVisibilityOption>("GLOBAL");
+  const [documentAccessIds, setDocumentAccessIds] = useState<string[]>([]);
   const [documentTaskId, setDocumentTaskId] = useState("");
   const [documentUploading, setDocumentUploading] = useState(false);
   const [documentModalError, setDocumentModalError] = useState<string | null>(null);
@@ -265,6 +310,17 @@ export default function ChantierPage() {
   const [documentPreviewTitle, setDocumentPreviewTitle] = useState("");
   const [documentPreviewLoading, setDocumentPreviewLoading] = useState(false);
   const [documentPreviewError, setDocumentPreviewError] = useState<string | null>(null);
+  const [documentEditOpen, setDocumentEditOpen] = useState(false);
+  const [documentEditDoc, setDocumentEditDoc] = useState<ChantierDocumentRow | null>(null);
+  const [documentEditTitle, setDocumentEditTitle] = useState("");
+  const [documentEditCategory, setDocumentEditCategory] = useState("Divers");
+  const [documentEditType, setDocumentEditType] = useState("AUTRE");
+  const [documentEditVisibilityMode, setDocumentEditVisibilityMode] = useState<DocumentVisibilityOption>("GLOBAL");
+  const [documentEditAccessIds, setDocumentEditAccessIds] = useState<string[]>([]);
+  const [documentEditSaving, setDocumentEditSaving] = useState(false);
+  const [documentEditDeleting, setDocumentEditDeleting] = useState(false);
+  const [documentEditError, setDocumentEditError] = useState<string | null>(null);
+  const [documentEditLoadingAccess, setDocumentEditLoadingAccess] = useState(false);
   // Réserves
   const [reserves, setReserves] = useState<ChantierReserveRow[]>([]);
   const [reservesLoading, setReservesLoading] = useState(false);
@@ -401,7 +457,8 @@ export default function ChantierPage() {
     setDocumentName("");
     setDocumentCategory("Divers");
     setDocumentType("AUTRE");
-    setDocumentVisibility("ADMIN");
+    setDocumentVisibilityMode("GLOBAL");
+    setDocumentAccessIds([]);
     setDocumentTaskId("");
     if (documentInputRef.current) {
       documentInputRef.current.value = "";
@@ -451,17 +508,25 @@ export default function ChantierPage() {
       setDocumentModalError("Nom du document requis.");
       return;
     }
+    if (documentVisibilityMode === "RESTRICTED" && documentAccessIds.length === 0) {
+      setDocumentModalError("Sélectionnez au moins un intervenant ou choisissez Admin uniquement.");
+      return;
+    }
 
     setDocumentUploading(true);
     setDocumentModalError(null);
     try {
+      const accessIds = documentVisibilityMode === "RESTRICTED" ? documentAccessIds : [];
+      const visibilityMode = resolveVisibilityMode(documentVisibilityMode);
+
       const created = await uploadDocument({
         chantierId: id,
         file: documentFile,
         title: documentName.trim(),
         category: documentCategory,
         documentType,
-        visibility: documentVisibility,
+        visibility_mode: visibilityMode,
+        accessIntervenantIds: accessIds,
       });
 
       if (documentTaskId) {
@@ -525,7 +590,7 @@ export default function ChantierPage() {
       const url = await getSignedUrl(doc.storage_path, 60);
       window.open(url, "_blank", "noopener");
     } catch (err: any) {
-      setToast({ type: "error", msg: err?.message ?? "Impossible de télécharger le document." });
+      setToast({ type: "error", msg: message });
     }
   }
 
@@ -539,7 +604,128 @@ export default function ChantierPage() {
       await navigator.clipboard.writeText(url);
       setToast({ type: "ok", msg: "Lien copié (valable 60s)" });
     } catch (err: any) {
-      setToast({ type: "error", msg: err?.message ?? "Impossible de copier le lien." });
+      setToast({ type: "error", msg: message });
+    }
+  }
+
+  async function openDocumentEdit(doc: ChantierDocumentRow) {
+    setDocumentEditDoc(doc);
+    setDocumentEditTitle(doc.title ?? "");
+    setDocumentEditCategory(doc.category ?? "Divers");
+    setDocumentEditType(doc.document_type ?? "AUTRE");
+    setDocumentEditError(null);
+    setDocumentEditLoadingAccess(false);
+
+    const mode = (doc.visibility_mode ?? "").toString().toUpperCase();
+    const legacy = (doc.visibility ?? "").toString().toUpperCase();
+    let nextMode: DocumentVisibilityOption = "GLOBAL";
+    if (mode === "RESTRICTED") nextMode = "RESTRICTED";
+    else if (mode === "GLOBAL") nextMode = "GLOBAL";
+    else if (legacy === "ADMIN") nextMode = "ADMIN_ONLY";
+    else if (legacy === "CUSTOM") nextMode = "RESTRICTED";
+
+    setDocumentEditVisibilityMode(nextMode);
+    setDocumentEditAccessIds([]);
+    setDocumentEditOpen(true);
+
+    if (nextMode === "RESTRICTED") {
+      setDocumentEditLoadingAccess(true);
+      try {
+        const accessIds = await listDocumentAccess(doc.id);
+        setDocumentEditAccessIds(accessIds ?? []);
+      } catch (err: any) {
+        setDocumentEditAccessIds([]);
+      const message = isAdminOnlyError(err)
+        ? "Action reservee a l'admin."
+        : err?.message ?? "Erreur mise a jour document.";
+      setDocumentEditError(message);
+      } finally {
+        setDocumentEditLoadingAccess(false);
+      }
+    }
+  }
+
+  function closeDocumentEdit() {
+    if (documentEditSaving || documentEditDeleting) return;
+    setDocumentEditOpen(false);
+    setDocumentEditDoc(null);
+    setDocumentEditTitle("");
+    setDocumentEditCategory("Divers");
+    setDocumentEditType("AUTRE");
+    setDocumentEditVisibilityMode("GLOBAL");
+    setDocumentEditAccessIds([]);
+    setDocumentEditError(null);
+    setDocumentEditLoadingAccess(false);
+  }
+
+  async function saveDocumentEdit() {
+    if (!documentEditDoc) {
+      return;
+    }
+    if (documentEditVisibilityMode === "RESTRICTED" && documentEditAccessIds.length === 0) {
+      setDocumentEditError("Sélectionnez au moins un intervenant ou choisissez Admin uniquement.");
+      return;
+    }
+
+    setDocumentEditSaving(true);
+    setDocumentEditError(null);
+    try {
+      const accessIds = documentEditVisibilityMode === "RESTRICTED" ? documentEditAccessIds : [];
+      const visibilityMode = resolveVisibilityMode(documentEditVisibilityMode);
+      const legacyVisibility = deriveLegacyVisibility(documentEditVisibilityMode, accessIds);
+
+      const updated = await updateDocument(documentEditDoc.id, {
+        title: documentEditTitle,
+        category: documentEditCategory,
+        document_type: documentEditType,
+        visibility_mode: visibilityMode,
+        legacy_visibility: legacyVisibility,
+      });
+
+      await updateDocumentAccess(documentEditDoc.id, accessIds);
+
+      const data = await listDocumentsByChantier(updated.chantier_id);
+      setDocuments(data);
+      setChantierDocuments(data);
+      setToast({ type: "ok", msg: "Document mis à jour." });
+      closeDocumentEdit();
+    } catch (err: any) {
+      const message = isAdminOnlyError(err)
+        ? "Action reservee a l'admin."
+        : err?.message ?? "Erreur mise a jour document.";
+      setDocumentEditError(message);
+      setToast({ type: "error", msg: message });
+    } finally {
+      setDocumentEditSaving(false);
+    }
+  }
+
+  async function deleteDocumentEdit() {
+    if (!documentEditDoc) {
+      return;
+    }
+    const ok = confirm(`Supprimer le document "${documentEditDoc.title || documentEditDoc.file_name}" ?`);
+    if (!ok) return;
+
+    setDocumentEditDeleting(true);
+    setDocumentEditError(null);
+    try {
+      await deleteDocument(documentEditDoc.id, documentEditDoc.storage_path);
+      if (id) {
+        const data = await listDocumentsByChantier(id);
+        setDocuments(data);
+        setChantierDocuments(data);
+      }
+      setToast({ type: "ok", msg: "Document supprimé." });
+      closeDocumentEdit();
+    } catch (err: any) {
+      const message = isAdminOnlyError(err)
+        ? "Action reservee a l'admin."
+        : err?.message ?? "Erreur suppression document.";
+      setDocumentEditError(message);
+      setToast({ type: "error", msg: message });
+    } finally {
+      setDocumentEditDeleting(false);
     }
   }
 
@@ -665,7 +851,7 @@ export default function ChantierPage() {
       }
     } catch (err: any) {
       setReserveDrawerError(err?.message ?? "Erreur sauvegarde rÃ©serve.");
-      setToast({ type: "error", msg: err?.message ?? "Erreur sauvegarde rÃ©serve." });
+      setToast({ type: "error", msg: message });
     } finally {
       setReserveSaving(false);
     }
@@ -683,7 +869,7 @@ export default function ChantierPage() {
       setToast({ type: "ok", msg: "RÃ©serve marquÃ©e levÃ©e." });
     } catch (err: any) {
       setReserveDrawerError(err?.message ?? "Erreur mise Ã  jour rÃ©serve.");
-      setToast({ type: "error", msg: err?.message ?? "Erreur mise Ã  jour rÃ©serve." });
+      setToast({ type: "error", msg: message });
     } finally {
       setReserveSaving(false);
     }
@@ -738,14 +924,15 @@ export default function ChantierPage() {
         title: stripExtension(file.name),
         category: "Photos",
         documentType: "PHOTO",
-        visibility: "ADMIN",
+        visibility_mode: "RESTRICTED",
+        accessIntervenantIds: [],
       });
       await addReserveDocument({ reserve_id: activeReserve.id, document_id: created.id, role: "PHOTO" });
       await refreshChantierDocuments();
       await loadReservePhotos(activeReserve.id);
       setToast({ type: "ok", msg: "Photo ajoutÃ©e." });
     } catch (err: any) {
-      setToast({ type: "error", msg: err?.message ?? "Erreur ajout photo." });
+      setToast({ type: "error", msg: message });
     } finally {
       setReservePhotoUploading(false);
       setReservePhotoFile(null);
@@ -790,7 +977,7 @@ export default function ChantierPage() {
       setReserveMarkers((prev) => [...prev, created]);
       setReserveSelectedMarkerId(created.id);
     } catch (err: any) {
-      setToast({ type: "error", msg: err?.message ?? "Erreur ajout repÃ¨re." });
+      setToast({ type: "error", msg: message });
     }
   }
 
@@ -803,7 +990,7 @@ export default function ChantierPage() {
       const url = await getSignedUrl(doc.storage_path, 60);
       window.open(url, "_blank", "noopener");
     } catch (err: any) {
-      setToast({ type: "error", msg: err?.message ?? "Impossible d'ouvrir le document." });
+      setToast({ type: "error", msg: message });
     }
   }
 
@@ -846,7 +1033,7 @@ export default function ChantierPage() {
       closeTaskDocumentsModal();
     } catch (err: any) {
       setTaskDocumentsModalError(err?.message ?? "Erreur mise à jour des documents.");
-      setToast({ type: "error", msg: err?.message ?? "Erreur mise à jour des documents." });
+      setToast({ type: "error", msg: message });
     } finally {
       setTaskDocumentsModalSaving(false);
     }
@@ -1008,6 +1195,9 @@ export default function ChantierPage() {
     if (!id) return;
     void refreshReserves();
   }, [id]);
+
+  const documentEditInfoMessage =
+    documentEditOpen && !documentEditDoc ? "Document introuvable ou non accessible." : null;
 
   /* ---------------- reserve drawer side effects ---------------- */
   useEffect(() => {
@@ -1546,7 +1736,7 @@ export default function ChantierPage() {
       setToast({ type: "ok", msg: "Devis créé." });
     } catch (err: any) {
       setDevisError(err?.message ?? "Erreur création devis.");
-      setToast({ type: "error", msg: err?.message ?? "Erreur création devis." });
+      setToast({ type: "error", msg: message });
     } finally {
       setCreatingDevis(false);
     }
@@ -1600,7 +1790,7 @@ export default function ChantierPage() {
       }
     } catch (err: any) {
       setLignesError(err?.message ?? "Erreur lors de l’ajout de la ligne.");
-      setToast({ type: "error", msg: err?.message ?? "Erreur ajout ligne." });
+      setToast({ type: "error", msg: message });
     } finally {
       setAddingLigne(false);
     }
@@ -2243,12 +2433,19 @@ export default function ChantierPage() {
                         </td>
                         <td className="px-3 py-2">{doc.category}</td>
                         <td className="px-3 py-2">{doc.document_type}</td>
-                        <td className="px-3 py-2">{doc.visibility}</td>
+                        <td className="px-3 py-2">{formatDocumentVisibility(doc)}</td>
                         <td className="px-3 py-2">
                           {doc.created_at ? new Date(doc.created_at).toLocaleDateString("fr-FR") : "—"}
                         </td>
                         <td className="px-3 py-2">
                           <div className="flex flex-wrap gap-2">
+                            <button
+                              type="button"
+                              onClick={() => openDocumentEdit(doc)}
+                              className="rounded-lg border px-2 py-1 text-xs hover:bg-slate-50"
+                            >
+                              Modifier
+                            </button>
                             <button
                               type="button"
                               onClick={() => openDocumentPreview(doc)}
@@ -3010,24 +3207,28 @@ export default function ChantierPage() {
           </div>
         )}
 
+        {tab === "planning" && id && (
+          <PlanningPage chantierId={id} chantierName={item?.nom ?? null} intervenants={intervenants} />
+        )}
+
         {/* autres onglets placeholders */}
         {tab !== "devis-taches" &&
           tab !== "intervenants" &&
           tab !== "documents" &&
           tab !== "reserves" &&
           tab !== "temps" &&
-          tab !== "materiel" && (
-          <div className="space-y-3">
-            <div className="font-semibold">
-              {tab === "planning" && "Planning"}
-              {tab === "messagerie" && "Messagerie"}
-              {tab === "rapports" && "Rapports"}
+          tab !== "materiel" &&
+          tab !== "planning" && (
+            <div className="space-y-3">
+              <div className="font-semibold">
+                {tab === "messagerie" && "Messagerie"}
+                {tab === "rapports" && "Rapports"}
+              </div>
+              <div className="rounded-xl border bg-slate-50 p-4 text-sm text-slate-600">
+                Onglet en cours d’implémentation.
+              </div>
             </div>
-            <div className="rounded-xl border bg-slate-50 p-4 text-sm text-slate-600">
-              Onglet en cours d’implémentation.
-            </div>
-          </div>
-        )}
+          )}
 
         {/* DRAWER RESERVES */}
         {reserveDrawerOpen && (
@@ -3436,6 +3637,31 @@ export default function ChantierPage() {
           loading={taskDocumentsLoading}
         />
 
+        <DocumentEditDrawer
+          open={documentEditOpen}
+          documentTitle={documentEditDoc?.title ?? documentEditDoc?.file_name ?? "Document"}
+          title={documentEditTitle}
+          category={documentEditCategory}
+          documentType={documentEditType}
+          visibilityMode={documentEditVisibilityMode}
+          accessIds={documentEditAccessIds}
+          intervenants={intervenants}
+          onTitleChange={setDocumentEditTitle}
+          onCategoryChange={setDocumentEditCategory}
+          onDocumentTypeChange={setDocumentEditType}
+          onVisibilityModeChange={setDocumentEditVisibilityMode}
+          onAccessIdsChange={setDocumentEditAccessIds}
+          onClose={closeDocumentEdit}
+          onSave={saveDocumentEdit}
+          onDelete={deleteDocumentEdit}
+          saving={documentEditSaving}
+          deleting={documentEditDeleting}
+          loadingAccess={documentEditLoadingAccess}
+          error={documentEditError}
+          infoMessage={documentEditInfoMessage}
+          canSave={documentEditOpen && !!documentEditDoc}
+        />
+
         {/* MODAL IMPORT DOCUMENT */}
         {documentModalOpen && (
           <div
@@ -3550,19 +3776,57 @@ export default function ChantierPage() {
                   </div>
 
                   <div className="space-y-1">
-                    <div className="text-xs text-slate-600">Visibilité</div>
+                    <div className="text-xs text-slate-600">Mode visibilité</div>
                     <select
                       className="w-full rounded-xl border px-3 py-2 text-sm"
-                      value={documentVisibility}
-                      onChange={(e) => setDocumentVisibility(e.target.value)}
+                      value={documentVisibilityMode}
+                      onChange={(e) => setDocumentVisibilityMode(e.target.value as DocumentVisibilityOption)}
                     >
-                      {DOCUMENT_VISIBILITIES.map((v) => (
-                        <option key={v} value={v}>
-                          {v}
+                      {DOCUMENT_VISIBILITY_OPTIONS.map((opt) => (
+                        <option key={opt.value} value={opt.value}>
+                          {opt.label}
                         </option>
                       ))}
                     </select>
                   </div>
+                </div>
+
+                <div className="space-y-1">
+                  <div className="text-xs text-slate-600">Intervenants autorisés</div>
+                  <div
+                    className={[
+                      "rounded-xl border p-3 space-y-2 max-h-40 overflow-auto",
+                      documentVisibilityMode === "RESTRICTED" ? "bg-white" : "bg-slate-50 text-slate-400",
+                    ].join(" ")}
+                  >
+                    {intervenantsLoading ? (
+                      <div className="text-xs text-slate-500">Chargement...</div>
+                    ) : intervenants.length === 0 ? (
+                      <div className="text-xs text-slate-500">Aucun intervenant disponible.</div>
+                    ) : (
+                      intervenants.map((i) => {
+                        const checked = documentAccessIds.includes(i.id);
+                        return (
+                          <label key={i.id} className="flex items-center gap-2 text-sm">
+                            <input
+                              type="checkbox"
+                              checked={checked}
+                              disabled={documentVisibilityMode !== "RESTRICTED"}
+                              onChange={() =>
+                                setDocumentAccessIds((prev) =>
+                                  checked ? prev.filter((id) => id !== i.id) : [...prev, i.id],
+                                )
+                              }
+                            />
+                            <span>{i.nom}</span>
+                          </label>
+                        );
+                      })
+                    )}
+                  </div>
+                  {documentVisibilityMode !== "RESTRICTED" && (
+                    <div className="text-xs text-slate-500">Sélection désactivée pour ce mode.</div>
+                  )}
                 </div>
 
                 <div className="space-y-1">
@@ -3744,6 +4008,12 @@ export default function ChantierPage() {
     </div>
   );
 }
+
+
+
+
+
+
 
 
 

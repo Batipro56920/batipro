@@ -1,6 +1,8 @@
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { supabase } from "../lib/supabaseClient";
 
-export type ChantierDocumentVisibility = "ADMIN" | "INTERVENANT" | "INTERVENANTS" | "CLIENT" | "CUSTOM" | string;
+export type DocumentVisibilityMode = "GLOBAL" | "RESTRICTED" | string;
+export type DocumentVisibilityOption = "GLOBAL" | "RESTRICTED" | "ADMIN_ONLY";
 
 export type ChantierDocumentRow = {
   id: string;
@@ -12,13 +14,21 @@ export type ChantierDocumentRow = {
   size_bytes: number | null;
   category: string;
   document_type: string;
-  visibility: ChantierDocumentVisibility;
+  visibility_mode: DocumentVisibilityMode | null;
+  visibility?: string | null;
   allowed_intervenant_ids: string[] | null;
   uploaded_by_email: string | null;
   created_at: string;
 };
 
 const DEFAULT_BUCKET = "chantier-documents";
+
+function deriveLegacyVisibility(mode: DocumentVisibilityMode, accessIds?: string[] | null): string {
+  const normalized = String(mode ?? "GLOBAL").toUpperCase();
+  if (normalized === "GLOBAL") return "INTERVENANT";
+  const hasAccess = Array.isArray(accessIds) && accessIds.length > 0;
+  return hasAccess ? "CUSTOM" : "ADMIN";
+}
 
 function sanitizeFileName(name: string): string {
   const base = (name ?? "").trim();
@@ -59,6 +69,7 @@ export async function listByChantier(chantierId: string): Promise<ChantierDocume
         "size_bytes",
         "category",
         "document_type",
+        "visibility_mode",
         "visibility",
         "allowed_intervenant_ids",
         "uploaded_by_email",
@@ -77,6 +88,59 @@ export async function listByChantier(chantierId: string): Promise<ChantierDocume
   }
 
   return (data ?? []) as ChantierDocumentRow[];
+}
+
+// Manual test:
+// - Create a RESTRICTED doc for intervenant A.
+// - A sees it, B does not.
+// - Admin can update visibility and access list.
+export async function listForIntervenant(input: {
+  chantierId: string;
+  intervenantId: string;
+  client?: SupabaseClient;
+}): Promise<ChantierDocumentRow[]> {
+  const chantierId = input.chantierId;
+  const intervenantId = input.intervenantId;
+  const client = input.client ?? supabase;
+
+  if (!chantierId) throw new Error("chantierId manquant.");
+  if (!intervenantId) throw new Error("intervenantId manquant.");
+
+  const selectFields = [
+    "id",
+    "chantier_id",
+    "title",
+    "file_name",
+    "storage_path",
+    "mime_type",
+    "size_bytes",
+    "category",
+    "document_type",
+    "visibility_mode",
+    "visibility",
+    "allowed_intervenant_ids",
+    "uploaded_by_email",
+    "created_at",
+  ].join(",");
+
+  // Côté intervenant: on s'appuie sur la RLS pour filtrer GLOBAL/RESTRICTED.
+  const { data, error } = await client
+    .from("chantier_documents")
+    .select(selectFields)
+    .eq("chantier_id", chantierId)
+    .order("created_at", { ascending: false });
+
+  if (error) throw new Error(error.message);
+
+  return (data ?? []) as ChantierDocumentRow[];
+}
+
+export async function listDocumentsForIntervenant(input: {
+  chantierId: string;
+  intervenantId: string;
+  client?: SupabaseClient;
+}): Promise<ChantierDocumentRow[]> {
+  return listForIntervenant(input);
 }
 
 export async function getSignedUrl(storagePath: string, expiresInSeconds = 60): Promise<string> {
@@ -101,8 +165,9 @@ export async function createDocumentMeta(input: {
   storage_path: string;
   category: string;
   document_type: string;
-  visibility?: ChantierDocumentVisibility;
-  allowed_intervenant_ids?: string[] | null;
+  visibility_mode?: DocumentVisibilityMode;
+  access_intervenant_ids?: string[] | null;
+  legacy_visibility?: string | null;
   mime_type?: string | null;
   size_bytes?: number | null;
   uploaded_by_email?: string | null;
@@ -114,6 +179,9 @@ export async function createDocumentMeta(input: {
   if (!input.category) throw new Error("category manquant.");
   if (!input.document_type) throw new Error("document_type manquant.");
 
+  const visibilityMode = input.visibility_mode ?? "GLOBAL";
+  const legacyVisibility = input.legacy_visibility ?? deriveLegacyVisibility(visibilityMode, input.access_intervenant_ids);
+
   const payload = {
     id: input.id,
     chantier_id: input.chantier_id,
@@ -122,8 +190,9 @@ export async function createDocumentMeta(input: {
     storage_path: input.storage_path.trim(),
     category: input.category.trim(),
     document_type: input.document_type.trim(),
-    visibility: input.visibility ?? "ADMIN",
-    allowed_intervenant_ids: input.allowed_intervenant_ids ?? null,
+    visibility_mode: visibilityMode,
+    visibility: legacyVisibility,
+    allowed_intervenant_ids: null,
     mime_type: input.mime_type ?? null,
     size_bytes: input.size_bytes ?? null,
     uploaded_by_email: input.uploaded_by_email ?? null,
@@ -147,15 +216,17 @@ export async function createDocumentMeta(input: {
         "size_bytes",
         "category",
         "document_type",
+        "visibility_mode",
         "visibility",
         "allowed_intervenant_ids",
         "uploaded_by_email",
         "created_at",
       ].join(","),
     )
-    .single();
+    .maybeSingle();
 
   if (error) throw new Error(error.message);
+  if (!data) throw new Error("Document introuvable ou non accessible.");
   if ((import.meta as any)?.env?.DEV) {
     console.log("[chantier-documents] create response", data);
   }
@@ -168,18 +239,18 @@ export async function uploadDocument(input: {
   title: string;
   category: string;
   documentType: string;
-  visibility: ChantierDocumentVisibility;
+  visibility_mode: DocumentVisibilityMode;
+  accessIntervenantIds?: string[] | null;
   bucket?: string;
-  allowed_intervenant_ids?: string[] | null;
 }): Promise<ChantierDocumentRow> {
   const chantierId = input.chantierId;
   const file = input.file;
   if (!chantierId) throw new Error("chantierId manquant.");
   if (!file) throw new Error("fichier manquant.");
 
+  const documentId = crypto.randomUUID();
   const safeFileName = sanitizeFileName(file.name);
-  const storageId = crypto.randomUUID();
-  const storagePath = `${chantierId}/${storageId}-${safeFileName}`;
+  const storagePath = `${chantierId}/${documentId}/${safeFileName}`;
   const bucket = input.bucket ?? DEFAULT_BUCKET;
 
   const { error: uploadError } = await supabase.storage.from(bucket).upload(storagePath, file, {
@@ -213,7 +284,8 @@ export async function uploadDocument(input: {
       throw new Error("Utilisateur non authentifié");
     }
 
-    return await createChantierDocument({
+    const created = await createChantierDocument({
+      id: documentId,
       chantier_id: chantierId,
       title: input.title,
       file_name: file.name,
@@ -222,9 +294,13 @@ export async function uploadDocument(input: {
       size_bytes: file.size,
       category: input.category,
       document_type: input.documentType,
-      visibility: input.visibility,
-      allowed_intervenant_ids: input.allowed_intervenant_ids ?? null,
+      visibility_mode: input.visibility_mode,
+      legacy_visibility: deriveLegacyVisibility(input.visibility_mode, input.accessIntervenantIds),
     });
+    if (String(input.visibility_mode).toUpperCase() === "RESTRICTED") {
+      await updateDocumentAccess(created.id, input.accessIntervenantIds ?? []);
+    }
+    return created;
   } catch (err) {
     const { error: removeError } = await supabase.storage.from(bucket).remove([storagePath]);
     if (removeError) {
@@ -235,6 +311,7 @@ export async function uploadDocument(input: {
 }
 
 export async function createChantierDocument(input: {
+  id?: string;
   chantier_id: string;
   title: string;
   file_name: string;
@@ -243,10 +320,14 @@ export async function createChantierDocument(input: {
   size_bytes: number | null;
   category: string;
   document_type: string;
-  visibility: ChantierDocumentVisibility;
-  allowed_intervenant_ids?: string[] | null;
+  visibility_mode: DocumentVisibilityMode;
+  legacy_visibility?: string | null;
 }): Promise<ChantierDocumentRow> {
+  const visibilityMode = input.visibility_mode ?? "GLOBAL";
+  const legacyVisibility = input.legacy_visibility ?? deriveLegacyVisibility(visibilityMode, null);
+
   const payload = {
+    id: input.id,
     chantier_id: input.chantier_id,
     title: input.title.trim(),
     file_name: input.file_name.trim(),
@@ -255,8 +336,9 @@ export async function createChantierDocument(input: {
     size_bytes: input.size_bytes ?? null,
     category: input.category.trim(),
     document_type: input.document_type.trim(),
-    visibility: input.visibility,
-    allowed_intervenant_ids: input.allowed_intervenant_ids ?? null,
+    visibility_mode: visibilityMode,
+    visibility: legacyVisibility,
+    allowed_intervenant_ids: null,
   };
 
   const { data, error } = await supabase
@@ -273,19 +355,131 @@ export async function createChantierDocument(input: {
         "size_bytes",
         "category",
         "document_type",
+        "visibility_mode",
         "visibility",
         "allowed_intervenant_ids",
         "uploaded_by_email",
         "created_at",
       ].join(","),
     )
-    .single();
+    .maybeSingle();
 
   if (error) {
     console.error("[chantier-documents] insert error", error.message);
     throw new Error(error.message);
   }
+  if (!data) throw new Error("Document introuvable ou non accessible.");
   return data as ChantierDocumentRow;
+}
+
+export async function listDocumentAccess(documentId: string): Promise<string[]> {
+  if (!documentId) throw new Error("documentId manquant.");
+  const { data, error } = await supabase
+    .from("document_access")
+    .select("intervenant_id")
+    .eq("document_id", documentId);
+
+  if (error) throw new Error(error.message);
+  return (data ?? []).map((row) => row.intervenant_id as string);
+}
+
+export async function updateDocumentAccess(documentId: string, intervenantIds: string[]): Promise<void> {
+  if (!documentId) throw new Error("documentId manquant.");
+  const uniqueIds = Array.from(new Set((intervenantIds ?? []).filter(Boolean)));
+
+  const { data: existing, error: existingError } = await supabase
+    .from("document_access")
+    .select("intervenant_id")
+    .eq("document_id", documentId);
+
+  if (existingError) throw new Error(existingError.message);
+
+  const existingIds = new Set((existing ?? []).map((row) => row.intervenant_id as string));
+  const toAdd = uniqueIds.filter((id) => !existingIds.has(id));
+  const toRemove = Array.from(existingIds).filter((id) => !uniqueIds.includes(id));
+
+  if (toAdd.length) {
+    const { error } = await supabase.from("document_access").insert(
+      toAdd.map((intervenant_id) => ({
+        document_id: documentId,
+        intervenant_id,
+      })),
+    );
+    if (error) throw new Error(error.message);
+  }
+
+  if (toRemove.length) {
+    const { error } = await supabase
+      .from("document_access")
+      .delete()
+      .eq("document_id", documentId)
+      .in("intervenant_id", toRemove);
+    if (error) throw new Error(error.message);
+  }
+}
+
+export async function updateDocument(
+  documentId: string,
+  input: {
+    title?: string;
+    category?: string;
+    document_type?: string;
+    visibility_mode?: DocumentVisibilityMode;
+    legacy_visibility?: string | null;
+  },
+): Promise<ChantierDocumentRow> {
+  if (!documentId) throw new Error("documentId manquant.");
+
+  const payload: Record<string, any> = {};
+  if (typeof input.title === "string") payload.title = input.title.trim();
+  if (typeof input.category === "string") payload.category = input.category.trim();
+  if (typeof input.document_type === "string") payload.document_type = input.document_type.trim();
+  if (input.visibility_mode) payload.visibility_mode = input.visibility_mode;
+  if (input.legacy_visibility !== undefined) payload.visibility = input.legacy_visibility;
+
+  if (!Object.keys(payload).length) {
+    throw new Error("Aucune donnée à mettre à jour.");
+  }
+
+  const { data, error } = await supabase
+    .from("chantier_documents")
+    .update(payload)
+    .eq("id", documentId)
+    .select(
+      [
+        "id",
+        "chantier_id",
+        "title",
+        "file_name",
+        "storage_path",
+        "mime_type",
+        "size_bytes",
+        "category",
+        "document_type",
+        "visibility_mode",
+        "visibility",
+        "allowed_intervenant_ids",
+        "uploaded_by_email",
+        "created_at",
+      ].join(","),
+    )
+    .maybeSingle();
+
+  if (error) throw new Error(error.message);
+  if (!data) throw new Error("Document introuvable ou non accessible.");
+  return data as ChantierDocumentRow;
+}
+
+export async function deleteDocument(documentId: string, storagePath?: string | null): Promise<void> {
+  if (!documentId) throw new Error("documentId manquant.");
+
+  if (storagePath) {
+    const { error: storageError } = await supabase.storage.from(DEFAULT_BUCKET).remove([storagePath]);
+    if (storageError) throw new Error(storageError.message);
+  }
+
+  const { error } = await supabase.from("chantier_documents").delete().eq("id", documentId);
+  if (error) throw new Error(error.message);
 }
 
 export async function linkDocumentToTask(taskId: string, documentId: string) {
@@ -299,3 +493,4 @@ export async function linkDocumentToTask(taskId: string, documentId: string) {
 
   if (error) throw new Error(error.message);
 }
+

@@ -3,12 +3,17 @@ import { useEffect, useMemo, useState } from "react";
 import { useParams } from "react-router-dom";
 
 import { checkAccessToken } from "../services/chantierAccess.service";
+import {
+  listForIntervenant,
+  type ChantierDocumentRow,
+} from "../services/chantierDocuments.service";
 import { createPortalClient } from "../services/portalSupabaseClient";
 
 type TabKey =
   | "taches"
   | "temps"
   | "planning"
+  | "documents"
   | "materiel"
   | "reserves"
   | "messagerie"
@@ -18,6 +23,7 @@ const TABS: { key: TabKey; label: string; note?: string }[] = [
   { key: "taches", label: "Tâches" },
   { key: "temps", label: "Temps" },
   { key: "planning", label: "Planning", note: "Lecture seule" },
+  { key: "documents", label: "Documents", note: "Lecture seule" },
   { key: "materiel", label: "Matériel" },
   { key: "reserves", label: "Réserves" },
   { key: "messagerie", label: "Messagerie" },
@@ -71,6 +77,10 @@ export default function IntervenantAccessPage() {
   const [tasksLoading, setTasksLoading] = useState(false);
   const [tasksError, setTasksError] = useState<string | null>(null);
   const [tasks, setTasks] = useState<ChantierTask[]>([]);
+
+  const [documentsLoading, setDocumentsLoading] = useState(false);
+  const [documentsError, setDocumentsError] = useState<string | null>(null);
+  const [documents, setDocuments] = useState<ChantierDocumentRow[]>([]);
 
   const [draftById, setDraftById] = useState<Record<string, TaskDraft>>({});
   const [savingById, setSavingById] = useState<Record<string, boolean>>({});
@@ -201,6 +211,39 @@ export default function IntervenantAccessPage() {
       alive = false;
     };
   }, [portalClient, chantierId, activeTab]);
+
+  useEffect(() => {
+    let alive = true;
+
+    async function loadDocuments() {
+      if (!portalClient) return;
+      if (!chantierId || !intervenantId) return;
+      if (activeTab !== "documents") return;
+
+      try {
+        setDocumentsLoading(true);
+        setDocumentsError(null);
+        const rows = await listForIntervenant({
+          chantierId,
+          intervenantId,
+          client: portalClient,
+        });
+        if (!alive) return;
+        setDocuments(rows);
+      } catch (e) {
+        if (!alive) return;
+        setDocumentsError((e as Error).message ?? "Erreur chargement documents.");
+        setDocuments([]);
+      } finally {
+        if (alive) setDocumentsLoading(false);
+      }
+    }
+
+    loadDocuments();
+    return () => {
+      alive = false;
+    };
+  }, [portalClient, chantierId, intervenantId, activeTab]);
 
   function setDraft(taskId: string, patch: Partial<TaskDraft>) {
     setDraftById((prev) => {
@@ -493,6 +536,48 @@ export default function IntervenantAccessPage() {
           <>
             <h3 style={{ marginTop: 0 }}>Planning (lecture seule)</h3>
             <p>V1 : lecture seule (à brancher ensuite).</p>
+          </>
+        )}
+
+        {activeTab === "documents" && (
+          <>
+            <h3 style={{ marginTop: 0 }}>Documents</h3>
+            {documentsError && (
+              <div style={{ color: "#b91c1c", marginBottom: 8 }}>{documentsError}</div>
+            )}
+            {documentsLoading ? (
+              <div>Chargement...</div>
+            ) : documents.length === 0 ? (
+              <div>Aucun document disponible.</div>
+            ) : (
+              <div style={{ display: "grid", gap: 8 }}>
+                {documents.map((doc) => (
+                  <div
+                    key={doc.id}
+                    style={{
+                      border: "1px solid #eee",
+                      borderRadius: 10,
+                      padding: 10,
+                      display: "flex",
+                      justifyContent: "space-between",
+                      gap: 12,
+                    }}
+                  >
+                    <div style={{ minWidth: 0 }}>
+                      <div style={{ fontWeight: 600, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                        {doc.title || doc.file_name}
+                      </div>
+                      <div style={{ fontSize: 12, opacity: 0.7 }}>
+                        {doc.category} • {doc.document_type}
+                      </div>
+                    </div>
+                    <div style={{ fontSize: 12, opacity: 0.7 }}>
+                      {doc.created_at ? new Date(doc.created_at).toLocaleDateString("fr-FR") : "—"}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </>
         )}
 
