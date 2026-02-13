@@ -1,6 +1,6 @@
   // src/pages/ChantierPage.tsx
-import { useEffect, useMemo, useState } from "react";
-import type { FormEvent, ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import type { ChangeEvent, DragEvent, FormEvent, MouseEvent, ReactNode } from "react";
 import { Link, useParams } from "react-router-dom";
 
 import { getChantierById, type ChantierRow } from "../services/chantiers.service";
@@ -26,6 +26,7 @@ import {
 // ✅ Import devis PDF (garde cette feature)
 import { importDevisPdfToLinesAndTasks, decodeQtyUnit } from "../services/devisImport.service";
 import { extractTextFromPdf } from "../services/pdfText.service";
+import PlanningPage from "../features/planning/PlanningPage";
 
 import {
   listIntervenantsByChantierId,
@@ -43,6 +44,46 @@ import {
   type MaterielDemandeRow,
   type MaterielStatus,
 } from "../services/materielDemandes.service";
+import {
+  listByChantier as listDocumentsByChantier,
+  getSignedUrl,
+  linkDocumentToTask,
+  uploadDocument,
+  listDocumentAccess,
+  updateDocument,
+  deleteDocument,
+  updateDocumentAccess,
+  type ChantierDocumentRow,
+  type DocumentVisibilityOption,
+  type DocumentVisibilityMode,
+} from "../services/chantierDocuments.service";
+import {
+  listReservesByChantierId,
+  createReserve,
+  updateReserve,
+  setReserveStatus,
+  getTaskAssignee,
+  type ChantierReserveRow,
+  type ReservePriority,
+  type ReserveStatus,
+} from "../services/reserves.service";
+import {
+  listReserveDocuments,
+  addReserveDocument,
+} from "../services/reserveDocuments.service";
+import {
+  listReserveMarkers,
+  addReserveMarker,
+  type ReservePlanMarkerRow,
+} from "../services/reserveMarkers.service";
+import {
+  listTaskDocuments,
+  listTaskDocumentsByTaskIds,
+  setTaskDocuments,
+  type TaskDocumentLinkRow,
+} from "../services/taskDocuments.service";
+import TaskDocumentsDrawer from "../components/chantiers/TaskDocumentsDrawer";
+import DocumentEditDrawer from "../components/chantiers/DocumentEditDrawer";
 
 // ✅ ENVOI ACCÈS (Edge Function via service)
 import { sendIntervenantAccess } from "../services/chantierAccessAdmin.service";
@@ -50,10 +91,11 @@ import { sendIntervenantAccess } from "../services/chantierAccessAdmin.service";
 /* ---------------- types ---------------- */
 type TabKey =
   | "devis-taches"
+  | "documents"
   | "intervenants"
   | "planning"
   | "temps"
-  | "plans-reserves"
+  | "reserves"
   | "materiel"
   | "messagerie"
   | "rapports";
@@ -116,10 +158,85 @@ function taskStatusBadgeClass(s: ChantierTaskRow["status"]) {
   return "bg-slate-50 text-slate-700 border-slate-200";
 }
 
+function reserveStatusBadge(status?: string | null) {
+  const s = status ?? "OUVERTE";
+  if (s === "LEVEE") {
+    return { label: "Levée", className: "bg-emerald-50 text-emerald-700 border-emerald-200" };
+  }
+  if (s === "EN_COURS") {
+    return { label: "En cours", className: "bg-amber-50 text-amber-700 border-amber-200" };
+  }
+  return { label: "Ouverte", className: "bg-slate-50 text-slate-700 border-slate-200" };
+}
+
+function reservePriorityBadge(priority?: string | null) {
+  const p = priority ?? "NORMALE";
+  if (p === "URGENTE") {
+    return { label: "Urgente", className: "bg-red-50 text-red-700 border-red-200" };
+  }
+  if (p === "BASSE") {
+    return { label: "Basse", className: "bg-slate-50 text-slate-700 border-slate-200" };
+  }
+  return { label: "Normale", className: "bg-slate-50 text-slate-700 border-slate-200" };
+}
+
 function stripLegacyPrefix(titre: string) {
   const idx = titre.indexOf(" — ");
   if (idx <= 0) return titre;
   return titre.slice(idx + 3).trim();
+}
+
+function stripExtension(name: string) {
+  return (name ?? "").replace(/\.[^/.]+$/, "");
+}
+
+const DOCUMENT_CATEGORIES = ["Administratif", "Plans", "Fiches techniques", "Photos", "PV", "DOE", "Divers"] as const;
+const DOCUMENT_TYPES = [
+  "PLAN",
+  "FICHE_TECHNIQUE",
+  "PHOTO",
+  "MAIL",
+  "PV",
+  "DOE",
+  "AUTRE",
+] as const;
+const DOCUMENT_VISIBILITY_OPTIONS = [
+  { value: "GLOBAL", label: "Global" },
+  { value: "RESTRICTED", label: "Restreint" },
+  { value: "ADMIN_ONLY", label: "Admin uniquement" },
+] as const;
+
+function resolveVisibilityMode(option: DocumentVisibilityOption): DocumentVisibilityMode {
+  return option === "GLOBAL" ? "GLOBAL" : "RESTRICTED";
+}
+
+function deriveLegacyVisibility(option: DocumentVisibilityOption, accessIds: string[]): string {
+  if (option === "GLOBAL") return "INTERVENANT";
+  if (option === "RESTRICTED") return accessIds.length ? "CUSTOM" : "ADMIN";
+  return "ADMIN";
+}
+
+function formatDocumentVisibility(doc: ChantierDocumentRow): string {
+  const mode = (doc.visibility_mode ?? "").toString().toUpperCase();
+  const legacy = (doc.visibility ?? "").toString().toUpperCase();
+  if (mode === "RESTRICTED" && legacy === "ADMIN") return "ADMIN";
+  if (mode === "GLOBAL") return "GLOBAL";
+  if (mode === "RESTRICTED") return "RESTRICTED";
+  if (legacy === "ADMIN") return "ADMIN";
+  if (legacy === "CUSTOM") return "RESTRICTED";
+  if (legacy === "INTERVENANT" || legacy === "INTERVENANTS" || legacy === "CLIENT") return "GLOBAL";
+  return legacy || "—";
+}
+function isAdminOnlyError(err: unknown): boolean {
+  const msg = String((err as any)?.message ?? err ?? "").toLowerCase();
+  if (!msg) return false;
+  return (
+    msg.includes("row-level security") ||
+    msg.includes("permission denied") ||
+    msg.includes("not authorized") ||
+    msg.includes("not allowed") ||
+    msg.includes("rls")
+  );
 }
 
 /** "1,5" => "1.5" */
@@ -181,6 +298,78 @@ export default function ChantierPage() {
     Record<string, { date_debut: string; date_fin: string; ajout_h: string }>
   >({});
   const [savingTimeTaskId, setSavingTimeTaskId] = useState<string | null>(null);
+
+  // Documents
+  const [documents, setDocuments] = useState<ChantierDocumentRow[]>([]);
+  const [documentsLoading, setDocumentsLoading] = useState(false);
+  const [documentsError, setDocumentsError] = useState<string | null>(null);
+  const [documentModalOpen, setDocumentModalOpen] = useState(false);
+  const [documentFile, setDocumentFile] = useState<File | null>(null);
+  const [documentName, setDocumentName] = useState("");
+  const [documentCategory, setDocumentCategory] = useState("Divers");
+  const [documentType, setDocumentType] = useState("AUTRE");
+  const [documentVisibilityMode, setDocumentVisibilityMode] = useState<DocumentVisibilityOption>("GLOBAL");
+  const [documentAccessIds, setDocumentAccessIds] = useState<string[]>([]);
+  const [documentTaskId, setDocumentTaskId] = useState("");
+  const [documentUploading, setDocumentUploading] = useState(false);
+  const [documentModalError, setDocumentModalError] = useState<string | null>(null);
+  const [documentDragActive, setDocumentDragActive] = useState(false);
+  const documentInputRef = useRef<HTMLInputElement | null>(null);
+  const [documentPreviewOpen, setDocumentPreviewOpen] = useState(false);
+  const [documentPreviewUrl, setDocumentPreviewUrl] = useState("");
+  const [documentPreviewMime, setDocumentPreviewMime] = useState<string | null>(null);
+  const [documentPreviewTitle, setDocumentPreviewTitle] = useState("");
+  const [documentPreviewLoading, setDocumentPreviewLoading] = useState(false);
+  const [documentPreviewError, setDocumentPreviewError] = useState<string | null>(null);
+  const [documentEditOpen, setDocumentEditOpen] = useState(false);
+  const [documentEditDoc, setDocumentEditDoc] = useState<ChantierDocumentRow | null>(null);
+  const [documentEditTitle, setDocumentEditTitle] = useState("");
+  const [documentEditCategory, setDocumentEditCategory] = useState("Divers");
+  const [documentEditType, setDocumentEditType] = useState("AUTRE");
+  const [documentEditVisibilityMode, setDocumentEditVisibilityMode] = useState<DocumentVisibilityOption>("GLOBAL");
+  const [documentEditAccessIds, setDocumentEditAccessIds] = useState<string[]>([]);
+  const [documentEditSaving, setDocumentEditSaving] = useState(false);
+  const [documentEditDeleting, setDocumentEditDeleting] = useState(false);
+  const [documentEditError, setDocumentEditError] = useState<string | null>(null);
+  const [documentEditLoadingAccess, setDocumentEditLoadingAccess] = useState(false);
+  // Réserves
+  const [reserves, setReserves] = useState<ChantierReserveRow[]>([]);
+  const [reservesLoading, setReservesLoading] = useState(false);
+  const [reservesError, setReservesError] = useState<string | null>(null);
+  const [reservesFilter, setReservesFilter] = useState<"ALL" | "OUVERTES" | "LEVEES">("ALL");
+  const [reserveDrawerOpen, setReserveDrawerOpen] = useState(false);
+  const [activeReserve, setActiveReserve] = useState<ChantierReserveRow | null>(null);
+  const [reserveDrawerTab, setReserveDrawerTab] = useState<"details" | "photos" | "plan">("details");
+  const [reserveDrawerError, setReserveDrawerError] = useState<string | null>(null);
+  const [reserveSaving, setReserveSaving] = useState(false);
+  const [reserveDraftTitle, setReserveDraftTitle] = useState("");
+  const [reserveDraftDescription, setReserveDraftDescription] = useState("");
+  const [reserveDraftStatus, setReserveDraftStatus] = useState<ReserveStatus>("OUVERTE");
+  const [reserveDraftPriority, setReserveDraftPriority] = useState<ReservePriority>("NORMALE");
+  const [reserveDraftTaskId, setReserveDraftTaskId] = useState<string>("");
+  const [reserveDraftIntervenantId, setReserveDraftIntervenantId] = useState<string>("__NONE__");
+  const [reservePhotoUploading, setReservePhotoUploading] = useState(false);
+  const [reservePhotoFile, setReservePhotoFile] = useState<File | null>(null);
+  const [reservePhotos, setReservePhotos] = useState<ChantierDocumentRow[]>([]);
+  const [reservePhotosLoading, setReservePhotosLoading] = useState(false);
+  const [reservePhotoUrlCache, setReservePhotoUrlCache] = useState<Record<string, string>>({});
+  const reservePhotoInputRef = useRef<HTMLInputElement | null>(null);
+  const [reservePlanDocumentId, setReservePlanDocumentId] = useState("");
+  const [reservePlanUrl, setReservePlanUrl] = useState("");
+  const [reservePlanLoading, setReservePlanLoading] = useState(false);
+  const [reservePlanError, setReservePlanError] = useState<string | null>(null);
+  const [reserveMarkers, setReserveMarkers] = useState<ReservePlanMarkerRow[]>([]);
+  const [reserveMarkersLoading, setReserveMarkersLoading] = useState(false);
+  const [reserveSelectedMarkerId, setReserveSelectedMarkerId] = useState<string | null>(null);
+  const [chantierDocuments, setChantierDocuments] = useState<ChantierDocumentRow[]>([]);
+  const [taskDocumentLinks, setTaskDocumentLinks] = useState<TaskDocumentLinkRow[]>([]);
+  const [taskDocumentsLoading, setTaskDocumentsLoading] = useState(false);
+  const [taskDocumentsModalOpen, setTaskDocumentsModalOpen] = useState(false);
+  const [taskDocumentsModalTask, setTaskDocumentsModalTask] = useState<ChantierTaskRow | null>(null);
+  const [taskDocumentsSelection, setTaskDocumentsSelection] = useState<string[]>([]);
+  const [taskDocumentsQuery, setTaskDocumentsQuery] = useState("");
+  const [taskDocumentsModalSaving, setTaskDocumentsModalSaving] = useState(false);
+  const [taskDocumentsModalError, setTaskDocumentsModalError] = useState<string | null>(null);
 
   // Intervenants
   const [intervenants, setIntervenants] = useState<IntervenantRow[]>([]);
@@ -268,6 +457,602 @@ export default function ChantierPage() {
   const [mStatus, setMStatus] = useState<MaterielStatus>("A_COMMANDER");
   const [mRemarques, setMRemarques] = useState("");
   const [addingMateriel, setAddingMateriel] = useState(false);
+
+  function openDocumentModal() {
+    setDocumentModalError(null);
+    setDocumentModalOpen(true);
+  }
+
+  function closeDocumentModal() {
+    if (documentUploading) return;
+    setDocumentModalOpen(false);
+    setDocumentModalError(null);
+    setDocumentDragActive(false);
+    setDocumentFile(null);
+    setDocumentName("");
+    setDocumentCategory("Divers");
+    setDocumentType("AUTRE");
+    setDocumentVisibilityMode("GLOBAL");
+    setDocumentAccessIds([]);
+    setDocumentTaskId("");
+    if (documentInputRef.current) {
+      documentInputRef.current.value = "";
+    }
+  }
+
+  function setDocumentFileState(file: File | null) {
+    setDocumentFile(file);
+    setDocumentModalError(null);
+    if (file) {
+      setDocumentName(stripExtension(file.name));
+    }
+  }
+
+  function onSelectDocumentFile(e: ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0] ?? null;
+    setDocumentFileState(file);
+  }
+
+  function onDocumentDragOver(e: DragEvent<HTMLDivElement>) {
+    e.preventDefault();
+    setDocumentDragActive(true);
+  }
+
+  function onDocumentDragLeave() {
+    setDocumentDragActive(false);
+  }
+
+  function onDocumentDrop(e: DragEvent<HTMLDivElement>) {
+    e.preventDefault();
+    setDocumentDragActive(false);
+    const file = e.dataTransfer.files?.[0] ?? null;
+    setDocumentFileState(file);
+  }
+
+  async function onImportDocument() {
+    if (!id) {
+      setDocumentModalError("Chantier manquant.");
+      setToast({ type: "error", msg: "Chantier manquant." });
+      return;
+    }
+    if (!documentFile) {
+      setDocumentModalError("Fichier requis.");
+      return;
+    }
+    if (!documentName.trim()) {
+      setDocumentModalError("Nom du document requis.");
+      return;
+    }
+    if (documentVisibilityMode === "RESTRICTED" && documentAccessIds.length === 0) {
+      setDocumentModalError("Sélectionnez au moins un intervenant ou choisissez Admin uniquement.");
+      return;
+    }
+
+    setDocumentUploading(true);
+    setDocumentModalError(null);
+    try {
+      const accessIds = documentVisibilityMode === "RESTRICTED" ? documentAccessIds : [];
+      const visibilityMode = resolveVisibilityMode(documentVisibilityMode);
+
+      const created = await uploadDocument({
+        chantierId: id,
+        file: documentFile,
+        title: documentName.trim(),
+        category: documentCategory,
+        documentType,
+        visibility_mode: visibilityMode,
+        accessIntervenantIds: accessIds,
+      });
+
+      if (documentTaskId) {
+        await linkDocumentToTask(documentTaskId, created.id);
+      }
+
+      setDocumentsLoading(true);
+      setDocumentsError(null);
+      const data = await listDocumentsByChantier(id);
+      setDocuments(data);
+      setChantierDocuments(data);
+      setToast({ type: "ok", msg: "Document importé." });
+      closeDocumentModal();
+    } catch (err: any) {
+      console.error("[documents] upload error", err?.message ?? err);
+      const message = err?.message ?? "Erreur upload document.";
+      setDocumentModalError(message);
+      setToast({ type: "error", msg: message });
+    } finally {
+      setDocumentsLoading(false);
+      setDocumentUploading(false);
+    }
+  }
+
+  async function openDocumentPreview(doc: ChantierDocumentRow) {
+    if (!doc.storage_path) {
+      setToast({ type: "error", msg: "Chemin de stockage manquant." });
+      return;
+    }
+    setDocumentPreviewOpen(true);
+    setDocumentPreviewLoading(true);
+    setDocumentPreviewError(null);
+    setDocumentPreviewUrl("");
+    setDocumentPreviewTitle(doc.title || doc.file_name || "Document");
+    setDocumentPreviewMime(doc.mime_type ?? null);
+    try {
+      const url = await getSignedUrl(doc.storage_path, 60);
+      setDocumentPreviewUrl(url);
+    } catch (err: any) {
+      setDocumentPreviewError(err?.message ?? "Impossible d'ouvrir le document.");
+    } finally {
+      setDocumentPreviewLoading(false);
+    }
+  }
+
+  function closeDocumentPreview() {
+    if (documentPreviewLoading) return;
+    setDocumentPreviewOpen(false);
+    setDocumentPreviewUrl("");
+    setDocumentPreviewError(null);
+    setDocumentPreviewMime(null);
+    setDocumentPreviewTitle("");
+  }
+
+  async function downloadDocument(doc: ChantierDocumentRow) {
+    if (!doc.storage_path) {
+      setToast({ type: "error", msg: "Chemin de stockage manquant." });
+      return;
+    }
+    try {
+      const url = await getSignedUrl(doc.storage_path, 60);
+      window.open(url, "_blank", "noopener");
+    } catch (err: any) {
+      setToast({ type: "error", msg: message });
+    }
+  }
+
+  async function copyDocumentLink(doc: ChantierDocumentRow) {
+    if (!doc.storage_path) {
+      setToast({ type: "error", msg: "Chemin de stockage manquant." });
+      return;
+    }
+    try {
+      const url = await getSignedUrl(doc.storage_path, 60);
+      await navigator.clipboard.writeText(url);
+      setToast({ type: "ok", msg: "Lien copié (valable 60s)" });
+    } catch (err: any) {
+      setToast({ type: "error", msg: message });
+    }
+  }
+
+  async function openDocumentEdit(doc: ChantierDocumentRow) {
+    setDocumentEditDoc(doc);
+    setDocumentEditTitle(doc.title ?? "");
+    setDocumentEditCategory(doc.category ?? "Divers");
+    setDocumentEditType(doc.document_type ?? "AUTRE");
+    setDocumentEditError(null);
+    setDocumentEditLoadingAccess(false);
+
+    const mode = (doc.visibility_mode ?? "").toString().toUpperCase();
+    const legacy = (doc.visibility ?? "").toString().toUpperCase();
+    let nextMode: DocumentVisibilityOption = "GLOBAL";
+    if (mode === "RESTRICTED") nextMode = "RESTRICTED";
+    else if (mode === "GLOBAL") nextMode = "GLOBAL";
+    else if (legacy === "ADMIN") nextMode = "ADMIN_ONLY";
+    else if (legacy === "CUSTOM") nextMode = "RESTRICTED";
+
+    setDocumentEditVisibilityMode(nextMode);
+    setDocumentEditAccessIds([]);
+    setDocumentEditOpen(true);
+
+    if (nextMode === "RESTRICTED") {
+      setDocumentEditLoadingAccess(true);
+      try {
+        const accessIds = await listDocumentAccess(doc.id);
+        setDocumentEditAccessIds(accessIds ?? []);
+      } catch (err: any) {
+        setDocumentEditAccessIds([]);
+      const message = isAdminOnlyError(err)
+        ? "Action reservee a l'admin."
+        : err?.message ?? "Erreur mise a jour document.";
+      setDocumentEditError(message);
+      } finally {
+        setDocumentEditLoadingAccess(false);
+      }
+    }
+  }
+
+  function closeDocumentEdit() {
+    if (documentEditSaving || documentEditDeleting) return;
+    setDocumentEditOpen(false);
+    setDocumentEditDoc(null);
+    setDocumentEditTitle("");
+    setDocumentEditCategory("Divers");
+    setDocumentEditType("AUTRE");
+    setDocumentEditVisibilityMode("GLOBAL");
+    setDocumentEditAccessIds([]);
+    setDocumentEditError(null);
+    setDocumentEditLoadingAccess(false);
+  }
+
+  async function saveDocumentEdit() {
+    if (!documentEditDoc) {
+      return;
+    }
+    if (documentEditVisibilityMode === "RESTRICTED" && documentEditAccessIds.length === 0) {
+      setDocumentEditError("Sélectionnez au moins un intervenant ou choisissez Admin uniquement.");
+      return;
+    }
+
+    setDocumentEditSaving(true);
+    setDocumentEditError(null);
+    try {
+      const accessIds = documentEditVisibilityMode === "RESTRICTED" ? documentEditAccessIds : [];
+      const visibilityMode = resolveVisibilityMode(documentEditVisibilityMode);
+      const legacyVisibility = deriveLegacyVisibility(documentEditVisibilityMode, accessIds);
+
+      const updated = await updateDocument(documentEditDoc.id, {
+        title: documentEditTitle,
+        category: documentEditCategory,
+        document_type: documentEditType,
+        visibility_mode: visibilityMode,
+        legacy_visibility: legacyVisibility,
+      });
+
+      await updateDocumentAccess(documentEditDoc.id, accessIds);
+
+      const data = await listDocumentsByChantier(updated.chantier_id);
+      setDocuments(data);
+      setChantierDocuments(data);
+      setToast({ type: "ok", msg: "Document mis à jour." });
+      closeDocumentEdit();
+    } catch (err: any) {
+      const message = isAdminOnlyError(err)
+        ? "Action reservee a l'admin."
+        : err?.message ?? "Erreur mise a jour document.";
+      setDocumentEditError(message);
+      setToast({ type: "error", msg: message });
+    } finally {
+      setDocumentEditSaving(false);
+    }
+  }
+
+  async function deleteDocumentEdit() {
+    if (!documentEditDoc) {
+      return;
+    }
+    const ok = confirm(`Supprimer le document "${documentEditDoc.title || documentEditDoc.file_name}" ?`);
+    if (!ok) return;
+
+    setDocumentEditDeleting(true);
+    setDocumentEditError(null);
+    try {
+      await deleteDocument(documentEditDoc.id, documentEditDoc.storage_path);
+      if (id) {
+        const data = await listDocumentsByChantier(id);
+        setDocuments(data);
+        setChantierDocuments(data);
+      }
+      setToast({ type: "ok", msg: "Document supprimé." });
+      closeDocumentEdit();
+    } catch (err: any) {
+      const message = isAdminOnlyError(err)
+        ? "Action reservee a l'admin."
+        : err?.message ?? "Erreur suppression document.";
+      setDocumentEditError(message);
+      setToast({ type: "error", msg: message });
+    } finally {
+      setDocumentEditDeleting(false);
+    }
+  }
+
+  function openReserveDrawer(reserve?: ChantierReserveRow | null) {
+    setReserveDrawerError(null);
+    setReserveDrawerTab("details");
+    setReserveSelectedMarkerId(null);
+    setReservePlanUrl("");
+    setReservePlanError(null);
+    setReservePlanDocumentId("");
+    setReservePhotos([]);
+    setReservePhotoFile(null);
+    setReservePhotoUrlCache({});
+    setReserveMarkers([]);
+
+    if (reserve) {
+      setActiveReserve(reserve);
+      setReserveDraftTitle(reserve.title ?? "");
+      setReserveDraftDescription(reserve.description ?? "");
+      setReserveDraftStatus((reserve.status ?? "OUVERTE") as ReserveStatus);
+      setReserveDraftPriority((reserve.priority ?? "NORMALE") as ReservePriority);
+      setReserveDraftTaskId(reserve.task_id ?? "");
+      setReserveDraftIntervenantId(reserve.intervenant_id ?? "__NONE__");
+    } else {
+      setActiveReserve(null);
+      setReserveDraftTitle("");
+      setReserveDraftDescription("");
+      setReserveDraftStatus("OUVERTE");
+      setReserveDraftPriority("NORMALE");
+      setReserveDraftTaskId("");
+      setReserveDraftIntervenantId("__NONE__");
+    }
+    setReserveDrawerOpen(true);
+  }
+
+  function closeReserveDrawer() {
+    if (reserveSaving || reservePhotoUploading) return;
+    setReserveDrawerOpen(false);
+    setReserveDrawerError(null);
+    setActiveReserve(null);
+    setReservePlanDocumentId("");
+    setReservePlanUrl("");
+    setReservePlanError(null);
+    setReserveMarkers([]);
+    setReserveSelectedMarkerId(null);
+    setReservePhotos([]);
+    setReservePhotoFile(null);
+    setReservePhotoUrlCache({});
+  }
+
+  async function refreshReserves() {
+    if (!id) return;
+    setReservesLoading(true);
+    setReservesError(null);
+    try {
+      const data = await listReservesByChantierId(id);
+      setReserves(data);
+    } catch (err: any) {
+      setReserves([]);
+      setReservesError(err?.message ?? "Erreur chargement rÃ©serves.");
+    } finally {
+      setReservesLoading(false);
+    }
+  }
+
+  async function refreshChantierDocuments() {
+    if (!id) return [] as ChantierDocumentRow[];
+    const data = await listDocumentsByChantier(id);
+    setChantierDocuments(data);
+    return data;
+  }
+
+  async function saveReserve() {
+    if (!id) {
+      setReserveDrawerError("Chantier manquant.");
+      return;
+    }
+    if (!reserveDraftTitle.trim()) {
+      setReserveDrawerError("Titre requis.");
+      return;
+    }
+    if (!reserveDraftTaskId) {
+      setReserveDrawerError("TÃ¢che requise.");
+      return;
+    }
+
+    setReserveSaving(true);
+    setReserveDrawerError(null);
+    try {
+      const taskId = reserveDraftTaskId || null;
+      const derivedIntervenantId =
+        taskId && selectedReserveTask?.intervenant_id
+          ? selectedReserveTask.intervenant_id
+          : reserveDraftIntervenantId !== "__NONE__"
+            ? reserveDraftIntervenantId
+            : null;
+
+      if (activeReserve) {
+        const updated = await updateReserve(activeReserve.id, {
+          task_id: taskId,
+          title: reserveDraftTitle.trim(),
+          description: reserveDraftDescription.trim() || null,
+          status: reserveDraftStatus,
+          priority: reserveDraftPriority,
+          intervenant_id: derivedIntervenantId,
+        });
+        setReserves((prev) => prev.map((r) => (r.id === updated.id ? updated : r)));
+        setActiveReserve(updated);
+        setToast({ type: "ok", msg: "RÃ©serve mise Ã  jour." });
+      } else {
+        const created = await createReserve({
+          chantier_id: id,
+          task_id: taskId,
+          title: reserveDraftTitle.trim(),
+          description: reserveDraftDescription.trim() || null,
+          status: reserveDraftStatus,
+          priority: reserveDraftPriority,
+          intervenant_id: derivedIntervenantId,
+        });
+        setReserves((prev) => [created, ...prev]);
+        setToast({ type: "ok", msg: "RÃ©serve crÃ©Ã©e." });
+        closeReserveDrawer();
+      }
+    } catch (err: any) {
+      setReserveDrawerError(err?.message ?? "Erreur sauvegarde rÃ©serve.");
+      setToast({ type: "error", msg: message });
+    } finally {
+      setReserveSaving(false);
+    }
+  }
+
+  async function markReserveLevee() {
+    if (!activeReserve) return;
+    setReserveSaving(true);
+    setReserveDrawerError(null);
+    try {
+      const updated = await setReserveStatus(activeReserve.id, "LEVEE");
+      setReserves((prev) => prev.map((r) => (r.id === updated.id ? updated : r)));
+      setActiveReserve(updated);
+      setReserveDraftStatus(updated.status as ReserveStatus);
+      setToast({ type: "ok", msg: "RÃ©serve marquÃ©e levÃ©e." });
+    } catch (err: any) {
+      setReserveDrawerError(err?.message ?? "Erreur mise Ã  jour rÃ©serve.");
+      setToast({ type: "error", msg: message });
+    } finally {
+      setReserveSaving(false);
+    }
+  }
+
+  async function loadReservePhotos(reserveId: string) {
+    if (!id) return;
+    setReservePhotosLoading(true);
+    try {
+      const [links, docs] = await Promise.all([
+        listReserveDocuments(reserveId, "PHOTO"),
+        chantierDocuments.length ? Promise.resolve(chantierDocuments) : listDocumentsByChantier(id),
+      ]);
+      if (!chantierDocuments.length) {
+        setChantierDocuments(docs);
+      }
+      const map = new Map<string, ChantierDocumentRow>();
+      for (const doc of docs) map.set(doc.id, doc);
+      const photos = (links ?? [])
+        .map((link) => map.get(link.document_id))
+        .filter(Boolean) as ChantierDocumentRow[];
+      setReservePhotos(photos);
+    } catch (err: any) {
+      console.error("[reserves] load photos error", err?.message ?? err);
+    } finally {
+      setReservePhotosLoading(false);
+    }
+  }
+
+  async function loadReserveMarkers(reserveId: string) {
+    setReserveMarkersLoading(true);
+    try {
+      const data = await listReserveMarkers(reserveId);
+      setReserveMarkers(data);
+    } catch (err: any) {
+      console.error("[reserves] load markers error", err?.message ?? err);
+    } finally {
+      setReserveMarkersLoading(false);
+    }
+  }
+
+  async function onSelectReservePhoto(e: ChangeEvent<HTMLInputElement>) {
+    if (!id || !activeReserve) return;
+    const file = e.target.files?.[0] ?? null;
+    if (!file) return;
+    setReservePhotoFile(file);
+    setReservePhotoUploading(true);
+    try {
+      const created = await uploadDocument({
+        chantierId: id,
+        file,
+        title: stripExtension(file.name),
+        category: "Photos",
+        documentType: "PHOTO",
+        visibility_mode: "RESTRICTED",
+        accessIntervenantIds: [],
+      });
+      await addReserveDocument({ reserve_id: activeReserve.id, document_id: created.id, role: "PHOTO" });
+      await refreshChantierDocuments();
+      await loadReservePhotos(activeReserve.id);
+      setToast({ type: "ok", msg: "Photo ajoutÃ©e." });
+    } catch (err: any) {
+      setToast({ type: "error", msg: message });
+    } finally {
+      setReservePhotoUploading(false);
+      setReservePhotoFile(null);
+      if (reservePhotoInputRef.current) reservePhotoInputRef.current.value = "";
+    }
+  }
+
+  async function onSelectReservePlan(documentId: string) {
+    setReservePlanDocumentId(documentId);
+    setReservePlanUrl("");
+    setReservePlanError(null);
+    setReserveSelectedMarkerId(null);
+    if (!documentId) return;
+    const doc = documentsById.get(documentId);
+    if (!doc?.storage_path) {
+      setReservePlanError("Chemin de stockage manquant.");
+      return;
+    }
+    setReservePlanLoading(true);
+    try {
+      const url = await getSignedUrl(doc.storage_path, 60);
+      setReservePlanUrl(url);
+    } catch (err: any) {
+      setReservePlanError(err?.message ?? "Impossible de charger le plan.");
+    } finally {
+      setReservePlanLoading(false);
+    }
+  }
+
+  async function onClickPlanPreview(e: MouseEvent<HTMLDivElement>) {
+    if (!activeReserve || !reservePlanDocumentId) return;
+    const rect = (e.currentTarget as HTMLDivElement).getBoundingClientRect();
+    const x = clamp((e.clientX - rect.left) / rect.width, 0, 1);
+    const y = clamp((e.clientY - rect.top) / rect.height, 0, 1);
+    try {
+      const created = await addReserveMarker({
+        reserve_id: activeReserve.id,
+        plan_document_id: reservePlanDocumentId,
+        x,
+        y,
+      });
+      setReserveMarkers((prev) => [...prev, created]);
+      setReserveSelectedMarkerId(created.id);
+    } catch (err: any) {
+      setToast({ type: "error", msg: message });
+    }
+  }
+
+  async function openReserveDocument(doc: ChantierDocumentRow) {
+    if (!doc.storage_path) {
+      setToast({ type: "error", msg: "Chemin de stockage manquant." });
+      return;
+    }
+    try {
+      const url = await getSignedUrl(doc.storage_path, 60);
+      window.open(url, "_blank", "noopener");
+    } catch (err: any) {
+      setToast({ type: "error", msg: message });
+    }
+  }
+
+  async function openTaskDocumentsModal(task: ChantierTaskRow) {
+    if (!id) return;
+    setTaskDocumentsModalError(null);
+    setTaskDocumentsModalTask(task);
+    setTaskDocumentsModalOpen(true);
+    setTaskDocumentsQuery("");
+    try {
+      const [docs, linkedIds] = await Promise.all([
+        chantierDocuments.length ? Promise.resolve(chantierDocuments) : listDocumentsByChantier(id),
+        listTaskDocuments(task.id),
+      ]);
+      setChantierDocuments(docs);
+      setTaskDocumentsSelection(linkedIds);
+    } catch (err: any) {
+      setTaskDocumentsModalError(err?.message ?? "Erreur chargement documents.");
+    }
+  }
+
+  function closeTaskDocumentsModal() {
+    if (taskDocumentsModalSaving) return;
+    setTaskDocumentsModalOpen(false);
+    setTaskDocumentsModalTask(null);
+    setTaskDocumentsSelection([]);
+    setTaskDocumentsQuery("");
+    setTaskDocumentsModalError(null);
+  }
+
+  async function saveTaskDocuments() {
+    if (!taskDocumentsModalTask) return;
+    setTaskDocumentsModalSaving(true);
+    setTaskDocumentsModalError(null);
+    try {
+      await setTaskDocuments(taskDocumentsModalTask.id, taskDocumentsSelection);
+      const links = await listTaskDocumentsByTaskIds(tasks.map((t) => t.id));
+      setTaskDocumentLinks(links);
+      setToast({ type: "ok", msg: "Documents liés mis à jour." });
+      closeTaskDocumentsModal();
+    } catch (err: any) {
+      setTaskDocumentsModalError(err?.message ?? "Erreur mise à jour des documents.");
+      setToast({ type: "error", msg: message });
+    } finally {
+      setTaskDocumentsModalSaving(false);
+    }
+  }
 
   /* ---------------- loaders ---------------- */
   async function refreshIntervenants() {
@@ -392,6 +1177,129 @@ export default function ChantierPage() {
     };
   }, [id]);
 
+  /* ---------------- load documents ---------------- */
+  useEffect(() => {
+    let alive = true;
+
+    async function loadDocuments() {
+      if (!id || tab !== "documents") return;
+      setDocumentsLoading(true);
+      setDocumentsError(null);
+      try {
+        const data = await listDocumentsByChantier(id);
+        if (!alive) return;
+        setDocuments(data);
+        setChantierDocuments(data);
+      } catch (e: any) {
+        if (!alive) return;
+        setDocuments([]);
+        setDocumentsError(e?.message ?? "Erreur chargement documents.");
+      } finally {
+        if (alive) setDocumentsLoading(false);
+      }
+    }
+
+    loadDocuments();
+    return () => {
+      alive = false;
+    };
+  }, [id, tab]);
+
+  /* ---------------- load reserves ---------------- */
+  useEffect(() => {
+    if (!id) return;
+    void refreshReserves();
+  }, [id]);
+
+  const documentEditInfoMessage =
+    documentEditOpen && !documentEditDoc ? "Document introuvable ou non accessible." : null;
+
+  /* ---------------- reserve drawer side effects ---------------- */
+  useEffect(() => {
+    if (!reserveDrawerOpen) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = prev;
+    };
+  }, [reserveDrawerOpen]);
+
+  useEffect(() => {
+    if (!reserveDrawerOpen) return;
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.key === "Escape") closeReserveDrawer();
+    }
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [reserveDrawerOpen]);
+
+  useEffect(() => {
+    if (!reserveDrawerOpen || !activeReserve) return;
+    void loadReservePhotos(activeReserve.id);
+    void loadReserveMarkers(activeReserve.id);
+  }, [reserveDrawerOpen, activeReserve?.id]);
+
+  useEffect(() => {
+    if (!reserveDrawerOpen || reservePhotos.length === 0) return;
+    let alive = true;
+
+    async function loadPhotoUrls() {
+      const missing = reservePhotos.filter(
+        (doc) => doc.storage_path && !reservePhotoUrlCache[doc.id],
+      );
+      if (missing.length === 0) return;
+
+      for (const doc of missing) {
+        try {
+          const url = await getSignedUrl(doc.storage_path, 60);
+          if (!alive) return;
+          setReservePhotoUrlCache((prev) => ({ ...prev, [doc.id]: url }));
+        } catch (err) {
+          if (!alive) return;
+          console.warn("[reserves] photo url error", doc.id, err);
+        }
+      }
+    }
+
+    void loadPhotoUrls();
+    return () => {
+      alive = false;
+    };
+  }, [reserveDrawerOpen, reservePhotos, reservePhotoUrlCache]);
+
+  /* ---------------- load task documents links ---------------- */
+  useEffect(() => {
+    let alive = true;
+
+    async function loadTaskDocuments() {
+      if (!id) return;
+      if (!tasks.length) {
+        setTaskDocumentLinks([]);
+        return;
+      }
+      setTaskDocumentsLoading(true);
+      try {
+        const [docs, links] = await Promise.all([
+          listDocumentsByChantier(id),
+          listTaskDocumentsByTaskIds(tasks.map((t) => t.id)),
+        ]);
+        if (!alive) return;
+        setChantierDocuments(docs);
+        setTaskDocumentLinks(links);
+      } catch (e: any) {
+        if (!alive) return;
+        console.error("[documents] load task documents error", e?.message ?? e);
+      } finally {
+        if (alive) setTaskDocumentsLoading(false);
+      }
+    }
+
+    loadTaskDocuments();
+    return () => {
+      alive = false;
+    };
+  }, [id, tasks]);
+
   /* ---------------- load lignes devis ---------------- */
   useEffect(() => {
     let alive = true;
@@ -450,6 +1358,52 @@ export default function ChantierPage() {
     return m;
   }, [intervenants]);
 
+  const taskById = useMemo(() => {
+    const m = new Map<string, ChantierTaskRow>();
+    for (const t of tasks) m.set(t.id, t);
+    return m;
+  }, [tasks]);
+
+  const selectedReserveTask = useMemo(() => {
+    if (!reserveDraftTaskId) return null;
+    return taskById.get(reserveDraftTaskId) ?? null;
+  }, [taskById, reserveDraftTaskId]);
+
+  useEffect(() => {
+    let alive = true;
+    if (!reserveDraftTaskId) return () => {};
+
+    if (selectedReserveTask?.intervenant_id) {
+      setReserveDraftIntervenantId(selectedReserveTask.intervenant_id);
+      return () => {};
+    }
+
+    (async () => {
+      try {
+        const assigneeId = await getTaskAssignee(reserveDraftTaskId);
+        if (!alive) return;
+        setReserveDraftIntervenantId(assigneeId ?? "__NONE__");
+      } catch (err) {
+        if (!alive) return;
+        console.warn("[reserves] assignee lookup error", err);
+      }
+    })();
+
+    return () => {
+      alive = false;
+    };
+  }, [reserveDraftTaskId, selectedReserveTask?.intervenant_id]);
+
+  const selectedReserveIntervenant = useMemo(() => {
+    if (selectedReserveTask?.intervenant_id) {
+      return intervenantById.get(selectedReserveTask.intervenant_id) ?? null;
+    }
+    if (reserveDraftIntervenantId && reserveDraftIntervenantId !== "__NONE__") {
+      return intervenantById.get(reserveDraftIntervenantId) ?? null;
+    }
+    return null;
+  }, [selectedReserveTask, reserveDraftIntervenantId, intervenantById]);
+
   const taskLots = useMemo(() => {
     const set = new Set<string>();
     for (const t of tasks) {
@@ -458,6 +1412,47 @@ export default function ChantierPage() {
     }
     return Array.from(set).sort((a, b) => a.localeCompare(b));
   }, [tasks]);
+
+  const documentsById = useMemo(() => {
+    const map = new Map<string, ChantierDocumentRow>();
+    for (const doc of chantierDocuments) {
+      map.set(doc.id, doc);
+    }
+    return map;
+  }, [chantierDocuments]);
+
+  const planDocuments = useMemo(() => {
+    return chantierDocuments.filter((doc) => {
+      return doc.document_type === "PLAN" || (doc.category ?? "") === "Plans";
+    });
+  }, [chantierDocuments]);
+
+  const taskDocumentsByTaskId = useMemo(() => {
+    const map = new Map<string, string[]>();
+    for (const link of taskDocumentLinks) {
+      if (!map.has(link.task_id)) map.set(link.task_id, []);
+      map.get(link.task_id)?.push(link.document_id);
+    }
+    return map;
+  }, [taskDocumentLinks]);
+
+  const filteredReserves = useMemo(() => {
+    if (reservesFilter === "ALL") return reserves;
+    if (reservesFilter === "LEVEES") {
+      return reserves.filter((r) => (r.status ?? "") === "LEVEE");
+    }
+    return reserves.filter((r) => (r.status ?? "") !== "LEVEE");
+  }, [reserves, reservesFilter]);
+
+  const reserveMarkersForPlan = useMemo(() => {
+    if (!reservePlanDocumentId) return [];
+    return reserveMarkers.filter((m) => m.plan_document_id === reservePlanDocumentId);
+  }, [reserveMarkers, reservePlanDocumentId]);
+
+  const selectedPlanDoc = useMemo(() => {
+    if (!reservePlanDocumentId) return null;
+    return documentsById.get(reservePlanDocumentId) ?? null;
+  }, [documentsById, reservePlanDocumentId]);
 
   const filteredTasks = useMemo(() => {
     return tasks.filter((t) => {
@@ -478,6 +1473,12 @@ export default function ChantierPage() {
   }, [tasks]);
 
   const tempsPrevues = Number((item as any)?.heures_prevues ?? 0) || 0;
+  const reservesOuvertes = useMemo(() => {
+    return reserves.filter((r) => (r.status ?? "") !== "LEVEE").length;
+  }, [reserves]);
+  const documentsCount = useMemo(() => {
+    return Math.max(documents.length, chantierDocuments.length);
+  }, [documents.length, chantierDocuments.length]);
 
   /* ---------------- actions ---------------- */
 
@@ -784,7 +1785,7 @@ export default function ChantierPage() {
       setToast({ type: "ok", msg: "Devis créé." });
     } catch (err: any) {
       setDevisError(err?.message ?? "Erreur création devis.");
-      setToast({ type: "error", msg: err?.message ?? "Erreur création devis." });
+      setToast({ type: "error", msg: message });
     } finally {
       setCreatingDevis(false);
     }
@@ -838,7 +1839,7 @@ export default function ChantierPage() {
       }
     } catch (err: any) {
       setLignesError(err?.message ?? "Erreur lors de l’ajout de la ligne.");
-      setToast({ type: "error", msg: err?.message ?? "Erreur ajout ligne." });
+      setToast({ type: "error", msg: message });
     } finally {
       setAddingLigne(false);
     }
@@ -1046,9 +2047,6 @@ export default function ChantierPage() {
     );
   }
 
-  // KPIs placeholders
-  const reservesOuvertes = 0;
-  const documentsCount = 0;
   const tempsHeures = totalTempsReel;
 
   /* ---------------- render ---------------- */
@@ -1127,31 +2125,40 @@ export default function ChantierPage() {
       </div>
 
       {/* Onglets */}
-      <div className="flex gap-2 flex-wrap">
-        <TabButton active={tab === "devis-taches"} onClick={() => setTab("devis-taches")}>
-          Devis & tâches
-        </TabButton>
-        <TabButton active={tab === "intervenants"} onClick={() => setTab("intervenants")}>
-          Intervenants
-        </TabButton>
-        <TabButton active={tab === "temps"} onClick={() => setTab("temps")}>
-          Temps
-        </TabButton>
-        <TabButton active={tab === "planning"} onClick={() => setTab("planning")}>
-          Planning
-        </TabButton>
-        <TabButton active={tab === "plans-reserves"} onClick={() => setTab("plans-reserves")}>
-          Plans & réserves
-        </TabButton>
-        <TabButton active={tab === "materiel"} onClick={() => setTab("materiel")}>
-          Matériel
-        </TabButton>
-        <TabButton active={tab === "messagerie"} onClick={() => setTab("messagerie")}>
-          Messagerie
-        </TabButton>
-        <TabButton active={tab === "rapports"} onClick={() => setTab("rapports")}>
-          Rapports
-        </TabButton>
+      <div className="space-y-3">
+        <div className="text-[11px] uppercase tracking-[0.2em] text-slate-400">Pilotage chantier</div>
+        <div className="flex gap-2 flex-wrap">
+          <TabButton active={tab === "devis-taches"} onClick={() => setTab("devis-taches")}>
+            Devis & tâches
+          </TabButton>
+          <TabButton active={tab === "temps"} onClick={() => setTab("temps")}>
+            Temps
+          </TabButton>
+          <TabButton active={tab === "planning"} onClick={() => setTab("planning")}>
+            Planning
+          </TabButton>
+          <TabButton active={tab === "reserves"} onClick={() => setTab("reserves")}>
+            Réserves
+          </TabButton>
+        </div>
+        <div className="text-[11px] uppercase tracking-[0.2em] text-slate-400">Gestion chantier</div>
+        <div className="flex gap-2 flex-wrap">
+          <TabButton active={tab === "intervenants"} onClick={() => setTab("intervenants")}>
+            Intervenants
+          </TabButton>
+          <TabButton active={tab === "documents"} onClick={() => setTab("documents")}>
+            Documents
+          </TabButton>
+          <TabButton active={tab === "materiel"} onClick={() => setTab("materiel")}>
+            Matériel
+          </TabButton>
+          <TabButton active={tab === "messagerie"} onClick={() => setTab("messagerie")}>
+            Messagerie
+          </TabButton>
+          <TabButton active={tab === "rapports"} onClick={() => setTab("rapports")}>
+            Rapports
+          </TabButton>
+        </div>
       </div>
 
       {/* Contenu */}
@@ -1424,6 +2431,203 @@ export default function ChantierPage() {
                 ))
               )}
             </div>
+          </div>
+        )}
+
+        {/* ---------------- ONGLET DOCUMENTS ---------------- */}
+        {tab === "documents" && (
+          <div className="space-y-4">
+            <div className="flex items-start justify-between gap-4">
+              <div className="font-semibold">Documents</div>
+              <button
+                type="button"
+                onClick={openDocumentModal}
+                className="rounded-xl bg-slate-900 px-3 py-2 text-sm text-white hover:bg-slate-800"
+              >
+                Importer document
+              </button>
+            </div>
+
+            {documentsError && (
+              <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                {documentsError}
+              </div>
+            )}
+
+            {documentsLoading ? (
+              <div className="text-sm text-slate-500">Chargement...</div>
+            ) : documents.length === 0 ? (
+              <div className="rounded-xl border bg-slate-50 p-4 text-sm text-slate-500">
+                Aucun document pour ce chantier.
+              </div>
+            ) : (
+              <div className="rounded-xl border overflow-hidden">
+                <table className="w-full text-sm">
+                  <thead className="bg-slate-50 text-slate-600">
+                    <tr>
+                      <th className="px-3 py-2 text-left font-medium">Nom</th>
+                      <th className="px-3 py-2 text-left font-medium">Catégorie</th>
+                      <th className="px-3 py-2 text-left font-medium">Type</th>
+                      <th className="px-3 py-2 text-left font-medium">Visibilité</th>
+                      <th className="px-3 py-2 text-left font-medium">Date</th>
+                      <th className="px-3 py-2 text-left font-medium">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {documents.map((doc) => (
+                      <tr key={doc.id} className="border-t">
+                        <td className="px-3 py-2">
+                          <div className="font-medium truncate">{doc.title}</div>
+                          <div className="text-xs text-slate-500 truncate">{doc.file_name}</div>
+                        </td>
+                        <td className="px-3 py-2">{doc.category}</td>
+                        <td className="px-3 py-2">{doc.document_type}</td>
+                        <td className="px-3 py-2">{formatDocumentVisibility(doc)}</td>
+                        <td className="px-3 py-2">
+                          {doc.created_at ? new Date(doc.created_at).toLocaleDateString("fr-FR") : "—"}
+                        </td>
+                        <td className="px-3 py-2">
+                          <div className="flex flex-wrap gap-2">
+                            <button
+                              type="button"
+                              onClick={() => openDocumentEdit(doc)}
+                              className="rounded-lg border px-2 py-1 text-xs hover:bg-slate-50"
+                            >
+                              Modifier
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => openDocumentPreview(doc)}
+                              className="rounded-lg border px-2 py-1 text-xs hover:bg-slate-50"
+                            >
+                              Ouvrir
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => downloadDocument(doc)}
+                              className="rounded-lg border px-2 py-1 text-xs hover:bg-slate-50"
+                            >
+                              Télécharger
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => copyDocumentLink(doc)}
+                              className="rounded-lg border px-2 py-1 text-xs hover:bg-slate-50"
+                            >
+                              Copier lien
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ---------------- ONGLET RÉSERVES ---------------- */}
+        {tab === "reserves" && (
+          <div className="space-y-4">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <div className="font-semibold">Réserves</div>
+                <div className="text-sm text-slate-500">Suivi des réserves chantier.</div>
+              </div>
+              <button
+                type="button"
+                onClick={() => openReserveDrawer(null)}
+                className="rounded-xl px-4 py-2 text-sm bg-slate-900 text-white hover:bg-slate-800"
+              >
+                Nouvelle réserve
+              </button>
+            </div>
+
+            <div className="flex flex-wrap gap-2">
+              {(
+                [
+                  { key: "ALL", label: "Toutes" },
+                  { key: "OUVERTES", label: "Ouvertes" },
+                  { key: "LEVEES", label: "Levées" },
+                ] as const
+              ).map((f) => (
+                <button
+                  key={f.key}
+                  type="button"
+                  onClick={() => setReservesFilter(f.key)}
+                  className={[
+                    "px-3 py-1.5 rounded-xl text-xs border",
+                    reservesFilter === f.key
+                      ? "bg-slate-900 text-white border-slate-900"
+                      : "bg-white text-slate-700 border-slate-200 hover:bg-slate-50",
+                  ].join(" ")}
+                >
+                  {f.label}
+                </button>
+              ))}
+            </div>
+
+            {reservesError && (
+              <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                {reservesError}
+              </div>
+            )}
+
+            {reservesLoading ? (
+              <div className="text-sm text-slate-500">Chargement…</div>
+            ) : filteredReserves.length === 0 ? (
+              <div className="text-sm text-slate-500">Aucune réserve pour ce chantier.</div>
+            ) : (
+              <div className="space-y-3">
+                {filteredReserves.map((reserve) => {
+                  const status = reserveStatusBadge(reserve.status);
+                  const priority = reservePriorityBadge(reserve.priority);
+                  const task = reserve.task_id ? taskById.get(reserve.task_id) : null;
+                  const it = task?.intervenant_id ? intervenantById.get(task.intervenant_id) : null;
+
+                  return (
+                    <div
+                      key={reserve.id}
+                      className="rounded-xl border p-4 hover:bg-slate-50 cursor-pointer"
+                      onClick={() => openReserveDrawer(reserve)}
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <div className="font-medium truncate">{reserve.title}</div>
+                          {reserve.description ? (
+                            <div className="text-xs text-slate-500 line-clamp-2">
+                              {reserve.description}
+                            </div>
+                          ) : (
+                            <div className="text-xs text-slate-400">Aucune description.</div>
+                          )}
+                        </div>
+                        <span
+                          className={[
+                            "text-xs px-2 py-1 rounded-full border shrink-0",
+                            status.className,
+                          ].join(" ")}
+                        >
+                          {status.label}
+                        </span>
+                      </div>
+
+                      <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-slate-500">
+                        <span className={["px-2 py-1 rounded-full border", priority.className].join(" ")}>
+                          {priority.label}
+                        </span>
+                        <span>Tâche : {task ? stripLegacyPrefix(task.titre ?? "") : "—"}</span>
+                        <span>Intervenant : {it?.nom ?? "—"}</span>
+                        <span>
+                          Créée : {new Date(reserve.created_at).toLocaleDateString("fr-FR")}
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
         )}
 
@@ -1867,6 +3071,51 @@ export default function ChantierPage() {
                         </span>
                       </div>
 
+                      {(() => {
+                        const linkedIds = taskDocumentsByTaskId.get(t.id) ?? [];
+                        const linkedDocs = linkedIds
+                          .map((docId) => documentsById.get(docId))
+                          .filter((doc): doc is ChantierDocumentRow => Boolean(doc));
+                        const visibleDocs = linkedDocs.slice(0, 3);
+                        const extraCount = Math.max(0, linkedDocs.length - visibleDocs.length);
+
+                        return (
+                          <div className="mt-2 space-y-1">
+                            <div className="flex items-center justify-between">
+                              <div className="text-xs text-slate-500 font-medium">Documents liés</div>
+                              <button
+                                type="button"
+                                onClick={() => openTaskDocumentsModal(t)}
+                                className="text-xs rounded-lg border px-2 py-1 hover:bg-slate-50"
+                              >
+                                Lier documents
+                              </button>
+                            </div>
+                            <div className="flex flex-wrap gap-2">
+                              {linkedDocs.length === 0 ? (
+                                <span className="text-xs text-slate-500">Aucun</span>
+                              ) : (
+                                <>
+                                  {visibleDocs.map((doc) => (
+                                    <span
+                                      key={doc.id}
+                                      className="text-xs rounded-full border bg-slate-50 px-2 py-1 text-slate-700"
+                                    >
+                                      {doc.title}
+                                    </span>
+                                  ))}
+                                  {extraCount > 0 && (
+                                    <span className="text-xs rounded-full border bg-slate-50 px-2 py-1 text-slate-700">
+                                      +{extraCount}
+                                    </span>
+                                  )}
+                                </>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })()}
+
                       {!isEditing ? (
                         <div className="flex justify-end gap-2">
                           <button
@@ -2067,17 +3316,722 @@ export default function ChantierPage() {
           </div>
         )}
 
+        {tab === "planning" && id && (
+          <PlanningPage chantierId={id} chantierName={item?.nom ?? null} intervenants={intervenants} />
+        )}
+
         {/* autres onglets placeholders */}
-        {tab !== "devis-taches" && tab !== "intervenants" && tab !== "temps" && tab !== "materiel" && (
-          <div className="space-y-3">
-            <div className="font-semibold">
-              {tab === "planning" && "Planning"}
-              {tab === "plans-reserves" && "Plans & réserves"}
-              {tab === "messagerie" && "Messagerie"}
-              {tab === "rapports" && "Rapports"}
+        {tab !== "devis-taches" &&
+          tab !== "intervenants" &&
+          tab !== "documents" &&
+          tab !== "reserves" &&
+          tab !== "temps" &&
+          tab !== "materiel" &&
+          tab !== "planning" && (
+            <div className="space-y-3">
+              <div className="font-semibold">
+                {tab === "messagerie" && "Messagerie"}
+                {tab === "rapports" && "Rapports"}
+              </div>
+              <div className="rounded-xl border bg-slate-50 p-4 text-sm text-slate-600">
+                Onglet en cours d’implémentation.
+              </div>
             </div>
-            <div className="rounded-xl border bg-slate-50 p-4 text-sm text-slate-600">
-              Onglet en cours d’implémentation.
+          )}
+
+        {/* DRAWER RESERVES */}
+        {reserveDrawerOpen && (
+          <div className="fixed inset-0 z-50">
+            <div className="absolute inset-0 bg-black/40" onClick={closeReserveDrawer} />
+            <div className="absolute right-0 top-0 h-screen w-[50vw] max-w-[900px] min-w-[360px] bg-white border-l shadow-xl flex flex-col">
+              <div className="px-4 py-3 border-b flex items-center justify-between">
+                <div className="font-semibold truncate">
+                  Réserve — {activeReserve?.title ?? "Nouvelle réserve"}
+                </div>
+                <button
+                  type="button"
+                  className="rounded-xl border px-2 py-1 text-sm hover:bg-slate-50"
+                  onClick={closeReserveDrawer}
+                  disabled={reserveSaving}
+                >
+                  ✕
+                </button>
+              </div>
+
+              <div className="px-4 py-2 border-b flex gap-2">
+                {(
+                  [
+                    { key: "details", label: "Détails" },
+                    { key: "photos", label: "Photos" },
+                    { key: "plan", label: "Plan" },
+                  ] as const
+                ).map((t) => {
+                  const disabled = !activeReserve && t.key !== "details";
+                  return (
+                    <button
+                      key={t.key}
+                      type="button"
+                      disabled={disabled}
+                      onClick={() => setReserveDrawerTab(t.key)}
+                      className={[
+                        "px-3 py-1.5 rounded-xl text-xs border",
+                        reserveDrawerTab === t.key
+                          ? "bg-slate-900 text-white border-slate-900"
+                          : "bg-white text-slate-700 border-slate-200 hover:bg-slate-50",
+                        disabled ? "opacity-50 cursor-not-allowed" : "",
+                      ].join(" ")}
+                    >
+                      {t.label}
+                    </button>
+                  );
+                })}
+              </div>
+
+              <div className="flex-1 overflow-auto p-4 space-y-4">
+                {reserveDrawerTab === "details" && (
+                  <div className="space-y-4">
+                    <div className="space-y-1">
+                      <div className="text-xs text-slate-600">Titre</div>
+                      <input
+                        className="w-full rounded-xl border px-3 py-2 text-sm"
+                        value={reserveDraftTitle}
+                        onChange={(e) => setReserveDraftTitle(e.target.value)}
+                        placeholder="Titre de la réserve"
+                      />
+                    </div>
+
+                    <div className="space-y-1">
+                      <div className="text-xs text-slate-600">Description</div>
+                      <textarea
+                        className="w-full rounded-xl border px-3 py-2 text-sm min-h-[120px]"
+                        value={reserveDraftDescription}
+                        onChange={(e) => setReserveDraftDescription(e.target.value)}
+                        placeholder="Décrivez la réserve..."
+                      />
+                    </div>
+
+                    <div className="grid gap-3 md:grid-cols-2">
+                      <div className="space-y-1">
+                        <div className="text-xs text-slate-600">Statut</div>
+                        <select
+                          className="w-full rounded-xl border px-3 py-2 text-sm"
+                          value={reserveDraftStatus}
+                          onChange={(e) => setReserveDraftStatus(e.target.value as ReserveStatus)}
+                        >
+                          <option value="OUVERTE">OUVERTE</option>
+                          <option value="EN_COURS">EN_COURS</option>
+                          <option value="LEVEE">LEVEE</option>
+                        </select>
+                      </div>
+
+                      <div className="space-y-1">
+                        <div className="text-xs text-slate-600">Priorité</div>
+                        <select
+                          className="w-full rounded-xl border px-3 py-2 text-sm"
+                          value={reserveDraftPriority}
+                          onChange={(e) => setReserveDraftPriority(e.target.value as ReservePriority)}
+                        >
+                          <option value="BASSE">BASSE</option>
+                          <option value="NORMALE">NORMALE</option>
+                          <option value="URGENTE">URGENTE</option>
+                        </select>
+                      </div>
+
+                      <div className="space-y-1 md:col-span-2">
+                        <div className="text-xs text-slate-600">Tâche</div>
+                        <select
+                          className="w-full rounded-xl border px-3 py-2 text-sm"
+                          value={reserveDraftTaskId}
+                          onChange={(e) => setReserveDraftTaskId(e.target.value)}
+                        >
+                          <option value="">Sélectionner une tâche</option>
+                          {tasks.map((t) => (
+                            <option key={t.id} value={t.id}>
+                              {stripLegacyPrefix(t.titre ?? "Tâche")}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
+                      <div className="space-y-1 md:col-span-2">
+                        <div className="text-xs text-slate-600">Intervenant</div>
+                        <select
+                          className={[
+                            "w-full rounded-xl border px-3 py-2 text-sm",
+                            reserveDraftTaskId ? "bg-slate-50 text-slate-600" : "bg-white",
+                          ].join(" ")}
+                          value={
+                            reserveDraftTaskId
+                              ? selectedReserveTask?.intervenant_id ?? "__NONE__"
+                              : reserveDraftIntervenantId
+                          }
+                          onChange={(e) => setReserveDraftIntervenantId(e.target.value)}
+                          disabled={!!reserveDraftTaskId}
+                        >
+                          <option value="__NONE__">Aucun intervenant</option>
+                          {intervenants.map((i) => (
+                            <option key={i.id} value={i.id}>
+                              {i.nom}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    </div>
+
+                    {activeReserve && (
+                      <div>
+                        <button
+                          type="button"
+                          onClick={markReserveLevee}
+                          disabled={reserveSaving || reserveDraftStatus === "LEVEE"}
+                          className={[
+                            "rounded-xl border px-3 py-2 text-sm",
+                            reserveDraftStatus === "LEVEE"
+                              ? "bg-slate-100 text-slate-500 cursor-not-allowed"
+                              : "border-emerald-200 text-emerald-700 hover:bg-emerald-50",
+                          ].join(" ")}
+                        >
+                          Marquer levée
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {reserveDrawerTab === "photos" && (
+                  <div className="space-y-4">
+                    {!activeReserve ? (
+                      <div className="text-sm text-slate-500">
+                        Créez la réserve pour ajouter des photos.
+                      </div>
+                    ) : (
+                      <>
+                        <div className="flex items-center justify-between gap-3">
+                          <div className="font-semibold">Photos</div>
+                          <div className="flex items-center gap-2">
+                            <input
+                              ref={reservePhotoInputRef}
+                              type="file"
+                              accept="image/*"
+                              hidden
+                              onChange={onSelectReservePhoto}
+                            />
+                            <button
+                              type="button"
+                              onClick={() => reservePhotoInputRef.current?.click()}
+                              disabled={reservePhotoUploading}
+                              className={[
+                                "rounded-xl px-3 py-2 text-sm",
+                                reservePhotoUploading
+                                  ? "bg-slate-300 text-slate-700"
+                                  : "bg-slate-900 text-white hover:bg-slate-800",
+                              ].join(" ")}
+                            >
+                              {reservePhotoUploading ? "Upload..." : "Ajouter photo"}
+                            </button>
+                          </div>
+                        </div>
+
+                        {reservePhotoFile && (
+                          <div className="text-xs text-slate-500">
+                            Fichier sÃ©lectionnÃ© : {reservePhotoFile.name}
+                          </div>
+                        )}
+
+                        {reservePhotosLoading ? (
+                          <div className="text-sm text-slate-500">Chargement...</div>
+                        ) : reservePhotos.length === 0 ? (
+                          <div className="text-sm text-slate-500">Aucune photo liée.</div>
+                        ) : (
+                          <div className="grid gap-3 sm:grid-cols-2">
+                            {reservePhotos.map((doc) => {
+                              const url = reservePhotoUrlCache[doc.id];
+                              const isImage = (doc.mime_type ?? "").startsWith("image/");
+                              return (
+                                <div key={doc.id} className="rounded-xl border p-2 space-y-2">
+                                  <div className="aspect-[4/3] rounded-lg border bg-slate-50 flex items-center justify-center overflow-hidden">
+                                    {isImage && url ? (
+                                      <img
+                                        src={url}
+                                        alt={doc.title}
+                                        className="w-full h-full object-contain"
+                                      />
+                                    ) : (
+                                      <div className="text-xs text-slate-500">Aperçu indisponible</div>
+                                    )}
+                                  </div>
+                                  <div className="text-xs font-medium truncate">{doc.title}</div>
+                                  <button
+                                    type="button"
+                                    onClick={() => openReserveDocument(doc)}
+                                    className="rounded-lg border px-2 py-1 text-xs hover:bg-slate-50"
+                                  >
+                                    Ouvrir
+                                  </button>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </>
+                    )}
+                  </div>
+                )}
+
+                {reserveDrawerTab === "plan" && (
+                  <div className="space-y-4">
+                    {!activeReserve ? (
+                      <div className="text-sm text-slate-500">
+                        Créez la réserve pour lier un plan.
+                      </div>
+                    ) : planDocuments.length === 0 ? (
+                      <div className="text-sm text-slate-500">
+                        Aucun plan disponible. Ajoutez un document de type PLAN dans l’onglet Documents.
+                      </div>
+                    ) : (
+                      <>
+                        <div className="flex flex-wrap items-end justify-between gap-3">
+                          <div className="space-y-1 min-w-[220px]">
+                            <div className="text-xs text-slate-600">Choisir un plan</div>
+                            <select
+                              className="w-full rounded-xl border px-3 py-2 text-sm"
+                              value={reservePlanDocumentId}
+                              onChange={(e) => onSelectReservePlan(e.target.value)}
+                            >
+                              <option value="">Sélectionner un plan</option>
+                              {planDocuments.map((doc) => (
+                                <option key={doc.id} value={doc.id}>
+                                  {doc.title || doc.file_name}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                          <button
+                            type="button"
+                            disabled={!selectedPlanDoc}
+                            onClick={() => selectedPlanDoc && openReserveDocument(selectedPlanDoc)}
+                            className="rounded-xl border px-3 py-2 text-sm hover:bg-slate-50"
+                          >
+                            Ouvrir
+                          </button>
+                        </div>
+
+                        {reservePlanError && (
+                          <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                            {reservePlanError}
+                          </div>
+                        )}
+
+                        {!reservePlanDocumentId ? (
+                          <div className="text-sm text-slate-500">Choisissez un plan pour l’afficher.</div>
+                        ) : reservePlanLoading ? (
+                          <div className="text-sm text-slate-500">Chargement du plan…</div>
+                        ) : !reservePlanUrl ? (
+                          <div className="text-sm text-slate-500">Aperçu indisponible.</div>
+                        ) : (
+                          <div className="space-y-2">
+                            <div className="text-xs text-slate-500">
+                              Cliquez sur le plan pour placer un repère.
+                            </div>
+                            <div className="relative w-full h-[60vh] rounded-xl border overflow-hidden bg-slate-50">
+                              {(selectedPlanDoc?.mime_type ?? "").startsWith("image/") ? (
+                                <img
+                                  src={reservePlanUrl}
+                                  alt={selectedPlanDoc?.title ?? "Plan"}
+                                  className="w-full h-full object-contain"
+                                />
+                              ) : selectedPlanDoc?.mime_type === "application/pdf" ? (
+                                <iframe
+                                  src={reservePlanUrl}
+                                  title={selectedPlanDoc?.title ?? "Plan"}
+                                  className="w-full h-full pointer-events-none"
+                                />
+                              ) : (
+                                <div className="flex items-center justify-center h-full text-sm text-slate-500">
+                                  Aperçu non disponible.
+                                </div>
+                              )}
+
+                              <div className="absolute inset-0" onClick={onClickPlanPreview}>
+                                {reserveMarkersForPlan.map((marker) => {
+                                  const selected = reserveSelectedMarkerId === marker.id;
+                                  return (
+                                    <div
+                                      key={marker.id}
+                                      className="absolute"
+                                      style={{
+                                        left: `${marker.x * 100}%`,
+                                        top: `${marker.y * 100}%`,
+                                      }}
+                                    >
+                                      <button
+                                        type="button"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          setReserveSelectedMarkerId(marker.id);
+                                          if (marker.label) {
+                                            setToast({ type: "ok", msg: marker.label });
+                                          }
+                                        }}
+                                        className={[
+                                          "w-3 h-3 rounded-full border",
+                                          selected ? "bg-amber-500 border-amber-600" : "bg-red-500 border-red-600",
+                                        ].join(" ")}
+                                        style={{ transform: "translate(-50%, -50%)" }}
+                                      />
+                                      {selected && marker.label && (
+                                        <div className="absolute left-3 top-0 text-xs bg-white border rounded px-2 py-1 shadow">
+                                          {marker.label}
+                                        </div>
+                                      )}
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                            {reserveMarkersLoading && (
+                              <div className="text-xs text-slate-500">Chargement des repères…</div>
+                            )}
+                          </div>
+                        )}
+                      </>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {reserveDrawerError && (
+                <div className="mx-4 my-2 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                  {reserveDrawerError}
+                </div>
+              )}
+
+              <div className="border-t p-4 flex justify-end gap-2">
+                <button
+                  type="button"
+                  className="rounded-xl border px-3 py-2 text-sm hover:bg-slate-50"
+                  onClick={closeReserveDrawer}
+                  disabled={reserveSaving}
+                >
+                  Annuler
+                </button>
+                <button
+                  type="button"
+                  onClick={saveReserve}
+                  disabled={reserveSaving}
+                  className={[
+                    "rounded-xl px-4 py-2 text-sm",
+                    reserveSaving ? "bg-slate-300 text-slate-700" : "bg-slate-900 text-white hover:bg-slate-800",
+                  ].join(" ")}
+                >
+                  {reserveSaving ? "Enregistrement..." : "Enregistrer"}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        <TaskDocumentsDrawer
+          open={taskDocumentsModalOpen}
+          taskTitle={taskDocumentsModalTask?.titre ?? "Tâche"}
+          documents={chantierDocuments}
+          selectedIds={taskDocumentsSelection}
+          onSelectionChange={setTaskDocumentsSelection}
+          query={taskDocumentsQuery}
+          onQueryChange={setTaskDocumentsQuery}
+          onClose={closeTaskDocumentsModal}
+          onSave={saveTaskDocuments}
+          saving={taskDocumentsModalSaving}
+          error={taskDocumentsModalError}
+          loading={taskDocumentsLoading}
+        />
+
+        <DocumentEditDrawer
+          open={documentEditOpen}
+          documentTitle={documentEditDoc?.title ?? documentEditDoc?.file_name ?? "Document"}
+          title={documentEditTitle}
+          category={documentEditCategory}
+          documentType={documentEditType}
+          visibilityMode={documentEditVisibilityMode}
+          accessIds={documentEditAccessIds}
+          intervenants={intervenants}
+          onTitleChange={setDocumentEditTitle}
+          onCategoryChange={setDocumentEditCategory}
+          onDocumentTypeChange={setDocumentEditType}
+          onVisibilityModeChange={setDocumentEditVisibilityMode}
+          onAccessIdsChange={setDocumentEditAccessIds}
+          onClose={closeDocumentEdit}
+          onSave={saveDocumentEdit}
+          onDelete={deleteDocumentEdit}
+          saving={documentEditSaving}
+          deleting={documentEditDeleting}
+          loadingAccess={documentEditLoadingAccess}
+          error={documentEditError}
+          infoMessage={documentEditInfoMessage}
+          canSave={documentEditOpen && !!documentEditDoc}
+        />
+
+        {/* MODAL IMPORT DOCUMENT */}
+        {documentModalOpen && (
+          <div
+            className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4"
+            onClick={closeDocumentModal}
+          >
+            <div
+              className="w-full max-w-2xl rounded-2xl bg-white border p-4"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-center justify-between">
+                <div className="font-semibold">Importer un document</div>
+                <button
+                  type="button"
+                  className="rounded-xl border px-2 py-1 text-sm hover:bg-slate-50"
+                  onClick={closeDocumentModal}
+                  disabled={documentUploading}
+                >
+                  ✕
+                </button>
+              </div>
+
+              <div className="mt-4 space-y-4">
+                <div className="space-y-2">
+                  <div className="text-xs text-slate-600">Fichier</div>
+                  <div
+                    className={[
+                      "rounded-xl border border-dashed px-4 py-6 text-sm text-slate-600 text-center cursor-pointer",
+                      documentDragActive ? "bg-slate-50 border-slate-400" : "bg-white border-slate-200",
+                    ].join(" ")}
+                    onClick={() => documentInputRef.current?.click()}
+                    onDragOver={onDocumentDragOver}
+                    onDragLeave={onDocumentDragLeave}
+                    onDrop={onDocumentDrop}
+                  >
+                    {documentFile ? (
+                      <div className="space-y-2">
+                        <div className="font-medium text-slate-900 truncate">{documentFile.name}</div>
+                        <div className="text-xs">
+                          Taille : {(documentFile.size / (1024 * 1024)).toFixed(2)} Mo • Type :{" "}
+                          {documentFile.type || "—"}
+                        </div>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setDocumentFileState(null);
+                          }}
+                          className="rounded-xl border px-2 py-1 text-xs hover:bg-slate-50"
+                          disabled={documentUploading}
+                        >
+                          Retirer
+                        </button>
+                      </div>
+                    ) : (
+                      <div>
+                        Glissez-déposez un fichier ici ou cliquez pour sélectionner.
+                        <div className="text-xs text-slate-500 mt-1">
+                          PDF, images, Word, Excel
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                  <input
+                    ref={documentInputRef}
+                    type="file"
+                    hidden
+                    onChange={onSelectDocumentFile}
+                    accept=".pdf,.png,.jpg,.jpeg,.webp,.doc,.docx,.xls,.xlsx,application/pdf,image/png,image/jpeg,image/webp,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                  />
+                </div>
+
+                <div className="grid gap-3 md:grid-cols-2">
+                  <div className="space-y-1">
+                    <div className="text-xs text-slate-600">Nom du document</div>
+                    <input
+                      className="w-full rounded-xl border px-3 py-2 text-sm"
+                      value={documentName}
+                      onChange={(e) => setDocumentName(e.target.value)}
+                      placeholder="Nom du document"
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <div className="text-xs text-slate-600">Catégorie</div>
+                    <select
+                      className="w-full rounded-xl border px-3 py-2 text-sm"
+                      value={documentCategory}
+                      onChange={(e) => setDocumentCategory(e.target.value)}
+                    >
+                      {DOCUMENT_CATEGORIES.map((c) => (
+                        <option key={c} value={c}>
+                          {c}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="space-y-1">
+                    <div className="text-xs text-slate-600">Type</div>
+                    <select
+                      className="w-full rounded-xl border px-3 py-2 text-sm"
+                      value={documentType}
+                      onChange={(e) => setDocumentType(e.target.value)}
+                    >
+                      {DOCUMENT_TYPES.map((t) => (
+                        <option key={t} value={t}>
+                          {t}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="space-y-1">
+                    <div className="text-xs text-slate-600">Mode visibilité</div>
+                    <select
+                      className="w-full rounded-xl border px-3 py-2 text-sm"
+                      value={documentVisibilityMode}
+                      onChange={(e) => setDocumentVisibilityMode(e.target.value as DocumentVisibilityOption)}
+                    >
+                      {DOCUMENT_VISIBILITY_OPTIONS.map((opt) => (
+                        <option key={opt.value} value={opt.value}>
+                          {opt.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
+                <div className="space-y-1">
+                  <div className="text-xs text-slate-600">Intervenants autorisés</div>
+                  <div
+                    className={[
+                      "rounded-xl border p-3 space-y-2 max-h-40 overflow-auto",
+                      documentVisibilityMode === "RESTRICTED" ? "bg-white" : "bg-slate-50 text-slate-400",
+                    ].join(" ")}
+                  >
+                    {intervenantsLoading ? (
+                      <div className="text-xs text-slate-500">Chargement...</div>
+                    ) : intervenants.length === 0 ? (
+                      <div className="text-xs text-slate-500">Aucun intervenant disponible.</div>
+                    ) : (
+                      intervenants.map((i) => {
+                        const checked = documentAccessIds.includes(i.id);
+                        return (
+                          <label key={i.id} className="flex items-center gap-2 text-sm">
+                            <input
+                              type="checkbox"
+                              checked={checked}
+                              disabled={documentVisibilityMode !== "RESTRICTED"}
+                              onChange={() =>
+                                setDocumentAccessIds((prev) =>
+                                  checked ? prev.filter((id) => id !== i.id) : [...prev, i.id],
+                                )
+                              }
+                            />
+                            <span>{i.nom}</span>
+                          </label>
+                        );
+                      })
+                    )}
+                  </div>
+                  {documentVisibilityMode !== "RESTRICTED" && (
+                    <div className="text-xs text-slate-500">Sélection désactivée pour ce mode.</div>
+                  )}
+                </div>
+
+                <div className="space-y-1">
+                  <div className="text-xs text-slate-600">Lier à une tâche (optionnel)</div>
+                  <select
+                    className="w-full rounded-xl border px-3 py-2 text-sm"
+                    value={documentTaskId}
+                    onChange={(e) => setDocumentTaskId(e.target.value)}
+                    disabled={tasksLoading}
+                  >
+                    <option value="">Aucune</option>
+                    {tasks.map((t) => (
+                      <option key={t.id} value={t.id}>
+                        {t.titre}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {documentModalError && (
+                  <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                    {documentModalError}
+                  </div>
+                )}
+
+                <div className="flex justify-end gap-2">
+                  <button
+                    type="button"
+                    className="rounded-xl border px-3 py-2 text-sm hover:bg-slate-50"
+                    onClick={closeDocumentModal}
+                    disabled={documentUploading}
+                  >
+                    Annuler
+                  </button>
+                  <button
+                    type="button"
+                    onClick={onImportDocument}
+                    disabled={documentUploading}
+                    className={[
+                      "rounded-xl px-4 py-2 text-sm",
+                      documentUploading
+                        ? "bg-slate-300 text-slate-700"
+                        : "bg-slate-900 text-white hover:bg-slate-800",
+                    ].join(" ")}
+                  >
+                    {documentUploading ? "Import..." : "Importer"}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* MODAL PREVIEW DOCUMENT */}
+        {documentPreviewOpen && (
+          <div
+            className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4"
+            onClick={closeDocumentPreview}
+          >
+            <div
+              className="w-full max-w-4xl rounded-2xl bg-white border p-4"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-center justify-between">
+                <div className="font-semibold truncate">{documentPreviewTitle}</div>
+                <button
+                  type="button"
+                  className="rounded-xl border px-2 py-1 text-sm hover:bg-slate-50"
+                  onClick={closeDocumentPreview}
+                  disabled={documentPreviewLoading}
+                >
+                  ✕
+                </button>
+              </div>
+
+              <div className="mt-4">
+                {documentPreviewLoading ? (
+                  <div className="text-sm text-slate-500">Chargement...</div>
+                ) : documentPreviewError ? (
+                  <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                    {documentPreviewError}
+                  </div>
+                ) : documentPreviewMime?.startsWith("image/") ? (
+                  <img src={documentPreviewUrl} alt={documentPreviewTitle} className="max-h-[70vh] w-auto mx-auto" />
+                ) : documentPreviewMime === "application/pdf" ? (
+                  <iframe
+                    src={documentPreviewUrl}
+                    title={documentPreviewTitle}
+                    className="w-full h-[70vh] rounded-xl border"
+                  />
+                ) : (
+                  <div className="rounded-xl border bg-slate-50 p-4 text-sm text-slate-600">
+                    Aperçu non disponible.
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         )}
@@ -2163,3 +4117,12 @@ export default function ChantierPage() {
     </div>
   );
 }
+
+
+
+
+
+
+
+
+
