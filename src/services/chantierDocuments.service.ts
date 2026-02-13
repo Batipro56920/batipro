@@ -1,6 +1,6 @@
 import { supabase } from "../lib/supabaseClient";
 
-export type ChantierDocumentVisibility = "ADMIN" | "INTERVENANTS" | "CUSTOM" | string;
+export type ChantierDocumentVisibility = "ADMIN" | "INTERVENANT" | "INTERVENANTS" | "CLIENT" | "CUSTOM" | string;
 
 export type ChantierDocumentRow = {
   id: string;
@@ -79,6 +79,20 @@ export async function listByChantier(chantierId: string): Promise<ChantierDocume
   return (data ?? []) as ChantierDocumentRow[];
 }
 
+export async function getSignedUrl(storagePath: string, expiresInSeconds = 60): Promise<string> {
+  if (!storagePath) throw new Error("storage_path manquant.");
+  const { data, error } = await supabase
+    .storage
+    .from(DEFAULT_BUCKET)
+    .createSignedUrl(storagePath, expiresInSeconds);
+
+  if (error || !data?.signedUrl) {
+    throw new Error(error?.message ?? "Impossible de générer l'URL signée.");
+  }
+
+  return data.signedUrl;
+}
+
 export async function createDocumentMeta(input: {
   id?: string;
   chantier_id: string;
@@ -151,19 +165,21 @@ export async function createDocumentMeta(input: {
 export async function uploadDocument(input: {
   chantierId: string;
   file: File;
-  category?: string;
-  documentType?: string;
-  visibility?: ChantierDocumentVisibility;
+  title: string;
+  category: string;
+  documentType: string;
+  visibility: ChantierDocumentVisibility;
   bucket?: string;
+  allowed_intervenant_ids?: string[] | null;
 }): Promise<ChantierDocumentRow> {
   const chantierId = input.chantierId;
   const file = input.file;
   if (!chantierId) throw new Error("chantierId manquant.");
   if (!file) throw new Error("fichier manquant.");
 
-  const documentId = crypto.randomUUID();
   const safeFileName = sanitizeFileName(file.name);
-  const storagePath = `${chantierId}/${documentId}/${safeFileName}`;
+  const storageId = crypto.randomUUID();
+  const storagePath = `${chantierId}/${storageId}-${safeFileName}`;
   const bucket = input.bucket ?? DEFAULT_BUCKET;
 
   const { error: uploadError } = await supabase.storage.from(bucket).upload(storagePath, file, {
@@ -176,47 +192,39 @@ export async function uploadDocument(input: {
     throw new Error(uploadError.message);
   }
 
-  const insertPayload = {
-    id: documentId,
-    chantier_id: chantierId,
-    title: file.name.replace(/\.[^/.]+$/, ""),
-    file_name: file.name,
-    storage_path: storagePath,
-    mime_type: file.type || null,
-    size_bytes: file.size,
-    category: input.category ?? "Divers",
-    document_type: input.documentType ?? "AUTRE",
-    visibility: input.visibility ?? "ADMIN",
-  };
-
   try {
-    const { data, error: insertError } = await supabase
-      .from("chantier_documents")
-      .insert(insertPayload)
-      .select(
-        [
-          "id",
-          "chantier_id",
-          "title",
-          "file_name",
-          "storage_path",
-          "mime_type",
-          "size_bytes",
-          "category",
-          "document_type",
-          "visibility",
-          "allowed_intervenant_ids",
-          "uploaded_by_email",
-          "created_at",
-        ].join(","),
-      )
-      .single();
+    const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
 
-    if (insertError) {
-      console.error("[chantier-documents] insert error", insertError.message);
-      throw new Error(insertError.message);
+    if (sessionError) {
+      console.log("=== AUTH DEBUG ===");
+      console.log("Session exists:", false);
+      console.log("User:", undefined);
+      console.log("Role:", undefined);
+      console.log("==================");
+    } else {
+      console.log("=== AUTH DEBUG ===");
+      console.log("Session exists:", !!sessionData.session);
+      console.log("User:", sessionData.session?.user?.email);
+      console.log("Role:", sessionData.session?.user?.role);
+      console.log("==================");
     }
-    return data as ChantierDocumentRow;
+
+    if (!sessionData.session) {
+      throw new Error("Utilisateur non authentifié");
+    }
+
+    return await createChantierDocument({
+      chantier_id: chantierId,
+      title: input.title,
+      file_name: file.name,
+      storage_path: storagePath,
+      mime_type: file.type || null,
+      size_bytes: file.size,
+      category: input.category,
+      document_type: input.documentType,
+      visibility: input.visibility,
+      allowed_intervenant_ids: input.allowed_intervenant_ids ?? null,
+    });
   } catch (err) {
     const { error: removeError } = await supabase.storage.from(bucket).remove([storagePath]);
     if (removeError) {
@@ -224,4 +232,70 @@ export async function uploadDocument(input: {
     }
     throw err;
   }
+}
+
+export async function createChantierDocument(input: {
+  chantier_id: string;
+  title: string;
+  file_name: string;
+  storage_path: string;
+  mime_type: string | null;
+  size_bytes: number | null;
+  category: string;
+  document_type: string;
+  visibility: ChantierDocumentVisibility;
+  allowed_intervenant_ids?: string[] | null;
+}): Promise<ChantierDocumentRow> {
+  const payload = {
+    chantier_id: input.chantier_id,
+    title: input.title.trim(),
+    file_name: input.file_name.trim(),
+    storage_path: input.storage_path.trim(),
+    mime_type: input.mime_type ?? null,
+    size_bytes: input.size_bytes ?? null,
+    category: input.category.trim(),
+    document_type: input.document_type.trim(),
+    visibility: input.visibility,
+    allowed_intervenant_ids: input.allowed_intervenant_ids ?? null,
+  };
+
+  const { data, error } = await supabase
+    .from("chantier_documents")
+    .insert(payload)
+    .select(
+      [
+        "id",
+        "chantier_id",
+        "title",
+        "file_name",
+        "storage_path",
+        "mime_type",
+        "size_bytes",
+        "category",
+        "document_type",
+        "visibility",
+        "allowed_intervenant_ids",
+        "uploaded_by_email",
+        "created_at",
+      ].join(","),
+    )
+    .single();
+
+  if (error) {
+    console.error("[chantier-documents] insert error", error.message);
+    throw new Error(error.message);
+  }
+  return data as ChantierDocumentRow;
+}
+
+export async function linkDocumentToTask(taskId: string, documentId: string) {
+  if (!taskId) throw new Error("taskId manquant.");
+  if (!documentId) throw new Error("documentId manquant.");
+
+  const { error } = await supabase.from("task_documents").insert({
+    task_id: taskId,
+    document_id: documentId,
+  });
+
+  if (error) throw new Error(error.message);
 }

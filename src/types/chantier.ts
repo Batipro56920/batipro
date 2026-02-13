@@ -37,10 +37,14 @@ export type ReserveStatus =
 
 export type ChantierReserve = {
   id: string;
-  piece?: string;
-  description: string;
+  title: string;
+  description: string | null;
   status: ReserveStatus;
-  createdAt: string; // ISO string
+  priority: "BASSE" | "NORMALE" | "URGENTE" | string;
+  chantier_id: string;
+  task_id?: string | null;
+  intervenant_id?: string | null;
+  created_at: string; // ISO string
 };
 
 /* =========================================================
