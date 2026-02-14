@@ -1,4 +1,4 @@
-// src/pages/ChantierNewPage.tsx
+﻿// src/pages/ChantierNewPage.tsx
 import { useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import type { ChantierStatus } from "../types/chantier";
@@ -203,3 +203,6 @@ export default function ChantierNewPage() {
     </div>
   );
 }
+
+
+

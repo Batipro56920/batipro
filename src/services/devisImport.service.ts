@@ -19,18 +19,18 @@ type ImportPayload = {
 };
 
 /**
- * âœ… Nettoie une dÃ©signation â€œpolluÃ©eâ€ (si jamais le back renvoie encore collÃ©)
- * - enlÃ¨ve " â‚¬ ..." et "%", etc.
- * - enlÃ¨ve les doubles espaces
+ * Nettoie une désignation “polluée” (si jamais le back renvoie encore collé)
+ * - enlève " € ..." et "%", etc.
+ * - enlève les doubles espaces
  */
 function sanitizeDesignation(s: string) {
   let t = (s ?? "").trim();
 
-  // vire les montants aprÃ¨s la quantitÃ© si Ã§a a Ã©tÃ© collÃ©
-  // ex: "... 69,50 mÂ² 10,50 â‚¬ 10,00 %" -> on garde avant "â‚¬"
-  t = t.replace(/\s+\d+(?:[.,]\d+)?\s*â‚¬.*$/i, "").trim();
+  // vire les montants après la quantité si ça a été collé
+  // ex: "... 69,50 m² 10,50 € 10,00 %" -> on garde avant "€"
+  t = t.replace(/\s+\d+(?:[.,]\d+)?\s*€.*$/i, "").trim();
 
-  // vire TVA en % si collÃ©e
+  // vire TVA en % si collée
   t = t.replace(/\s+\d+(?:[.,]\d+)?\s*%.*$/i, "").trim();
 
   // espaces
@@ -39,11 +39,11 @@ function sanitizeDesignation(s: string) {
 }
 
 /**
- * âœ… Import PDF -> Edge Function "process-devis-text"
+ * Import PDF -> Edge Function "process-devis-text"
  * IMPORTANT :
- * - on nâ€™upload rien en storage
- * - on nâ€™importe PAS PU/TVA (suivi chantier uniquement)
- * - on ne crÃ©e PAS de tÃ¢che pour lots / sous-lots (uniquement lignes chiffrÃ©es)
+ * - on n’upload rien en storage
+ * - on n’importe PAS PU/TVA (suivi chantier uniquement)
+ * - on ne crée PAS de tâche pour lots / sous-lots (uniquement lignes chiffrées)
  */
 export async function uploadDevisPdf(file: File, chantierId: string) {
   if (!file) throw new Error("Aucun fichier PDF fourni");
@@ -83,7 +83,7 @@ export async function importDevisPdfToLinesAndTasks(payload: ImportPayload): Pro
   if (!devisId) throw new Error("devisId manquant.");
   if (!extractedText || extractedText.length < 20) throw new Error("Texte PDF vide / trop court.");
 
-  // Log utile (tu lâ€™avais dans la console)
+  // Log utile (tu l’avais dans la console)
   console.log("[importDevisPdfToLinesAndTasks] sending", {
     chantierId,
     devisId,
@@ -91,7 +91,7 @@ export async function importDevisPdfToLinesAndTasks(payload: ImportPayload): Pro
     preview: extractedText.slice(0, 180),
   });
 
-  // 1) Appel Edge Function : elle doit insÃ©rer devis_lignes + chantier_tasks
+  // 1) Appel Edge Function : elle doit insérer devis_lignes + chantier_tasks
   const { data, error } = await supabase.functions.invoke("process-devis-text", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -107,9 +107,9 @@ export async function importDevisPdfToLinesAndTasks(payload: ImportPayload): Pro
   const res = (data ?? {}) as ProcessDevisTextResult;
   console.log("[process-devis-text] OK", res);
 
-  // 2) SÃ©curitÃ© : si le back est encore â€œancienâ€ et renvoie des lignes brutes,
-  // on empÃªche le client dâ€™en dÃ©duire des tÃ¢ches/finances.
-  // (Normalement le back gÃ¨re tout, mais on â€œverrouilleâ€ cÃ´tÃ© client.)
+  // 2) Sécurité : si le back est encore “ancien” et renvoie des lignes brutes,
+  // on empêche le client d’en déduire des tâches/finances.
+  // (Normalement le back gère tout, mais on “verrouille” côté client.)
   if (res?.ok !== true) {
     return res;
   }
@@ -125,8 +125,8 @@ export async function importDevisPdfToLinesAndTasks(payload: ImportPayload): Pro
 }
 
 /**
- * (Optionnel) Helper UI : si tu veux afficher quantitÃ©/unitÃ© en badges
- * depuis le titre tÃ¢che, tu pourras l'utiliser dans ChantierPage plus tard.
+ * (Optionnel) Helper UI : si tu veux afficher quantité/unité en badges
+ * depuis le titre tâche, tu pourras l'utiliser dans ChantierPage plus tard.
  *
  * Exemple :
  *   const { cleanTitle, quantite, unite } = decodeQtyUnit(task.titre)
@@ -134,16 +134,16 @@ export async function importDevisPdfToLinesAndTasks(payload: ImportPayload): Pro
 export function decodeQtyUnit(titre: string): { cleanTitle: string; quantite: number | null; unite: string | null } {
   const t = (titre ?? "").trim();
 
-  const qm = t.match(/âŸ¦Q=([0-9.]+)âŸ§/);
-  const um = t.match(/âŸ¦U=([^âŸ§]+)âŸ§/);
+  const qm = t.match(/\u27E6Q=([0-9.]+)\u27E7/);
+  const um = t.match(/\u27E6U=([^\u27E7]+)\u27E7/);
 
   const quantite = qm ? Number(qm[1]) : null;
   const unite = um ? String(um[1]).trim() : null;
 
   const cleanTitle = sanitizeDesignation(
     t
-      .replace(/âŸ¦Q=[0-9.]+âŸ§/g, "")
-      .replace(/âŸ¦U=[^âŸ§]+âŸ§/g, "")
+      .replace(/\u27E6Q=[0-9.]+\u27E7/g, "")
+      .replace(/\u27E6U=[^\u27E7]+\u27E7/g, "")
       .trim(),
   );
 
@@ -153,4 +153,7 @@ export function decodeQtyUnit(titre: string): { cleanTitle: string; quantite: nu
     unite: unite || null,
   };
 }
+
+
+
 

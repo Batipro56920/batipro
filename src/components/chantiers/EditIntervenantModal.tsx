@@ -1,4 +1,4 @@
-import type { IntervenantRow } from "../../services/intervenants.service";
+﻿import type { IntervenantRow } from "../../services/intervenants.service";
 
 type Props = {
   editingIntervenant: IntervenantRow | null;
@@ -48,7 +48,7 @@ export default function EditIntervenantModal(props: Props) {
             onClick={onCancel}
             disabled={savingIntervenant}
           >
-            ✕
+            ×
           </button>
         </div>
 
@@ -109,3 +109,6 @@ export default function EditIntervenantModal(props: Props) {
     </div>
   );
 }
+
+
+

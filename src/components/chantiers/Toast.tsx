@@ -1,4 +1,4 @@
-export type ToastState = { type: "ok" | "error"; msg: string } | null;
+﻿export type ToastState = { type: "ok" | "error"; msg: string } | null;
 
 export default function Toast({ toast }: { toast: ToastState }) {
   if (!toast) return null;
@@ -16,3 +16,5 @@ export default function Toast({ toast }: { toast: ToastState }) {
     </div>
   );
 }
+
+

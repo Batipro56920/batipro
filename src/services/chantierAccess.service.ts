@@ -1,4 +1,4 @@
-// src/services/chantierAccess.service.ts
+﻿// src/services/chantierAccess.service.ts
 import { supabase } from "../lib/supabaseClient";
 export type AccessCheckResult = {
   ok: boolean;
@@ -11,7 +11,7 @@ export type AccessCheckResult = {
 const FUNCTION_NAME = "chantier-access";
 
 /**
- * ✅ Portail PUBLIC (pas de session)
+ * ? Portail PUBLIC (pas de session)
  * Appel via supabase.functions.invoke avec anon key.
  */
 export async function checkAccessToken(token: string): Promise<AccessCheckResult> {
@@ -37,7 +37,7 @@ export async function checkAccessToken(token: string): Promise<AccessCheckResult
 }
 
 /**
- * ⚠️ Nettoyage :
+ * ?ï¸ Nettoyage :
  * Les fonctions ci-dessous utilisent l'ancienne table "chantier_intervenant_access"
  * Elles ne correspondent plus à ta V2 (table "chantier_access" + edge functions).
  * => On les garde en commenté pour ne pas casser si tu les utilisais ailleurs,
@@ -128,3 +128,6 @@ function cryptoRandomToken(byteLen: number) {
   return btoa(bin).replace(/=/g, "").replace(/\+/g, "-").replace(/\//g, "_");
 }
 */
+
+
+

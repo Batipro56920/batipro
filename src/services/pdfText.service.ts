@@ -1,8 +1,8 @@
-// src/services/pdfText.service.ts
+﻿// src/services/pdfText.service.ts
 import { supabase } from "../lib/supabaseClient";
 import * as pdfjsLib from "pdfjs-dist";
 
-// ✅ Worker servi par Vite depuis /public/pdfjs/...
+// ? Worker servi par Vite depuis /public/pdfjs/...
 pdfjsLib.GlobalWorkerOptions.workerSrc = "/pdfjs/pdf.worker.min.mjs";
 
 /** Extrait le texte d'un PDF texte (non scanné) */
@@ -11,7 +11,7 @@ export async function extractTextFromPdf(file: File): Promise<string> {
 
   const buffer = await file.arrayBuffer();
 
-  // ✅ Disable worker fallback: on veut une erreur si le worker n'est pas chargé
+  // ? Disable worker fallback: on veut une erreur si le worker n'est pas chargé
   // (sinon "fake worker" => extraction instable)
   const loadingTask = pdfjsLib.getDocument({
     data: buffer,
@@ -77,7 +77,7 @@ export async function processDevisText(input: {
   });
 
   if (error) {
-    // ✅ On veut voir le vrai message (pas juste "non-2xx")
+    // ? On veut voir le vrai message (pas juste "non-2xx")
     console.error("Edge Function invoke error:", error);
     throw new Error(error.message || "Erreur Edge Function");
   }
@@ -86,3 +86,6 @@ export async function processDevisText(input: {
 
   return data;
 }
+
+
+

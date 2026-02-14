@@ -1,4 +1,4 @@
-import { supabase } from "../lib/supabaseClient";
+﻿import { supabase } from "../lib/supabaseClient";
 
 export type ReservePlanMarkerRow = {
   id: string;
@@ -28,6 +28,22 @@ export async function listReserveMarkers(reserveId: string): Promise<ReservePlan
     .from("reserve_plan_markers")
     .select("id, reserve_id, plan_document_id, page, x, y, label, created_at")
     .eq("reserve_id", reserveId)
+    .order("created_at", { ascending: true });
+
+  if (error) {
+    if (isMissingTableError(error)) return [];
+    throw new Error(error.message);
+  }
+  return (data ?? []) as ReservePlanMarkerRow[];
+}
+
+export async function listReserveMarkersByPlan(planDocumentId: string): Promise<ReservePlanMarkerRow[]> {
+  if (!planDocumentId) throw new Error("planDocumentId manquant.");
+
+  const { data, error } = await supabase
+    .from("reserve_plan_markers")
+    .select("id, reserve_id, plan_document_id, page, x, y, label, created_at")
+    .eq("plan_document_id", planDocumentId)
     .order("created_at", { ascending: true });
 
   if (error) {
@@ -77,4 +93,6 @@ export async function removeReserveMarker(markerId: string): Promise<void> {
 
   if (error) throw new Error(error.message);
 }
+
+
 

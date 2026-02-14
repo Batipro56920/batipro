@@ -1,4 +1,4 @@
-import { useState } from "react";
+﻿import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "../lib/supabaseClient";
 
@@ -24,7 +24,7 @@ export default function LoginPage() {
       return;
     }
 
-    console.log("✅ CONNECTÉ :", data.user?.email);
+    console.log("? CONNECTÉ :", data.user?.email);
     navigate("/chantiers");
   }
 
@@ -51,3 +51,7 @@ export default function LoginPage() {
     </div>
   );
 }
+
+
+
+

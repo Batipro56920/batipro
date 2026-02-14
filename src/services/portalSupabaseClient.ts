@@ -1,4 +1,4 @@
-import { createClient } from "@supabase/supabase-js";
+﻿import { createClient } from "@supabase/supabase-js";
 import type { Database } from "../types/supabase";
 
 export function createPortalClient(jwt: string) {
@@ -17,3 +17,5 @@ export function createPortalClient(jwt: string) {
     },
   });
 }
+
+

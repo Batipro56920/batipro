@@ -1,4 +1,4 @@
-import { supabase } from "../../lib/supabaseClient";
+﻿import { supabase } from "../../lib/supabaseClient";
 import {
   checkDependencyViolations as checkDependencyViolationsUtil,
   checkIntervenantConflicts as checkIntervenantConflictsUtil,
@@ -196,3 +196,6 @@ export function checkIntervenantConflicts(entries: PlanningEntryRow[]) {
 export function checkDependencyViolations(entries: PlanningEntryRow[], deps: TaskDependencyRow[]) {
   return checkDependencyViolationsUtil(entries as PlanningEntryLike[], deps as DependencyRow[]);
 }
+
+
+

@@ -1,4 +1,4 @@
-import { Link } from "react-router-dom";
+﻿import { Link } from "react-router-dom";
 import type { ChantierRow } from "../../services/chantiers.service";
 
 function statusBadge(status?: string | null) {
@@ -43,3 +43,6 @@ export default function ChantierHeader({ item }: { item: ChantierRow }) {
     </div>
   );
 }
+
+
+

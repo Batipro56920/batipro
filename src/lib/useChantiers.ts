@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+﻿import { useCallback, useEffect, useMemo, useState } from "react";
 import type { Chantier } from "../types/chantier";
 import { supabase } from "./supabaseClient";
 import { listChantiers, type ChantierRow } from "../services/chantiers.service";
@@ -116,3 +116,6 @@ export function useChantiers() {
 
   return api;
 }
+
+
+

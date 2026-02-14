@@ -1,4 +1,4 @@
-import { Link, useNavigate } from "react-router-dom";
+﻿import { Link, useNavigate } from "react-router-dom";
 import { useEffect, useState } from "react";
 import type { ChantierStatus } from "../types/chantier";
 import { getChantiers, deleteChantier, countChantiers } from "../services/chantiers.service";
@@ -190,3 +190,6 @@ export default function ChantiersPage() {
     </div>
   );
 }
+
+
+

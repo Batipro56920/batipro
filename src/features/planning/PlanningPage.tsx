@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+﻿import { useEffect, useMemo, useRef, useState } from "react";
 import html2canvas from "html2canvas";
 import jsPDF from "jspdf";
 import type { IntervenantRow } from "../../services/intervenants.service";
@@ -338,3 +338,6 @@ export default function PlanningPage({ chantierId, chantierName, intervenants }:
     </div>
   );
 }
+
+
+

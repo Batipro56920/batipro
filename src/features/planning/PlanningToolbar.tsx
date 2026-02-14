@@ -1,4 +1,4 @@
-import type { PlanningPeriod } from "./planning.utils";
+﻿import type { PlanningPeriod } from "./planning.utils";
 
 type Option = { value: string; label: string };
 
@@ -49,10 +49,8 @@ export default function PlanningToolbar({
             type="button"
             onClick={() => onViewModeChange("gantt")}
             className={[
-              "px-3 py-1.5 rounded-xl text-xs border",
-              viewMode === "gantt"
-                ? "bg-slate-900 text-white border-slate-900"
-                : "bg-white text-slate-700 border-slate-200 hover:bg-slate-50",
+              "chip-btn",
+              viewMode === "gantt" ? "chip-btn--active" : "chip-btn--inactive",
             ].join(" ")}
           >
             Vue Gantt
@@ -61,10 +59,8 @@ export default function PlanningToolbar({
             type="button"
             onClick={() => onViewModeChange("team")}
             className={[
-              "px-3 py-1.5 rounded-xl text-xs border",
-              viewMode === "team"
-                ? "bg-slate-900 text-white border-slate-900"
-                : "bg-white text-slate-700 border-slate-200 hover:bg-slate-50",
+              "chip-btn",
+              viewMode === "team" ? "chip-btn--active" : "chip-btn--inactive",
             ].join(" ")}
           >
             Vue équipe
@@ -103,7 +99,7 @@ export default function PlanningToolbar({
           <button
             type="button"
             onClick={onExportPdf}
-            className="rounded-xl bg-[#2563EB] text-white px-3 py-1.5 text-xs hover:bg-blue-600"
+            className="rounded-xl bg-[var(--color-primary)] text-white px-3 py-1.5 text-xs hover:bg-[#1479bf]"
           >
             Export PDF
           </button>
@@ -154,3 +150,6 @@ export default function PlanningToolbar({
     </div>
   );
 }
+
+
+

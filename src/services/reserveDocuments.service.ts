@@ -1,4 +1,4 @@
-import { supabase } from "../lib/supabaseClient";
+﻿import { supabase } from "../lib/supabaseClient";
 
 export type ReserveDocumentRole = "PHOTO" | "PIECE_JOINTE" | string;
 
@@ -84,4 +84,6 @@ export async function removeReserveDocument(input: {
   const { error } = await query;
   if (error) throw new Error(error.message);
 }
+
+
 

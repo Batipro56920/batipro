@@ -1,4 +1,4 @@
-// src/pages/IntervenantAccessPage.tsx
+﻿// src/pages/IntervenantAccessPage.tsx
 import { useEffect, useMemo, useState } from "react";
 import { useParams } from "react-router-dom";
 
@@ -105,7 +105,7 @@ export default function IntervenantAccessPage() {
           return;
         }
 
-        // ✅ cache pour éviter de rappeler la function à chaque refresh
+        // ? cache pour éviter de rappeler la function à chaque refresh
         const keyJwt = `portal_jwt_${token}`;
         const keyChantier = `portal_chantier_${token}`;
         const keyInterv = `portal_intervenant_${token}`;
@@ -126,7 +126,7 @@ export default function IntervenantAccessPage() {
 
         if (!alive) return;
 
-        // ✅ sécurise les champs attendus
+        // ? sécurise les champs attendus
         const nextJwt = (res as any)?.jwt as string | undefined;
         const nextChantier = (res as any)?.chantier_id as string | undefined;
         const nextInterv = (res as any)?.intervenant_id as string | null | undefined;
@@ -139,7 +139,7 @@ export default function IntervenantAccessPage() {
         setChantierId(nextChantier);
         setIntervenantId(nextInterv ?? null);
 
-        // ⚠️ sessionStorage n'accepte que des strings
+        // ?ï¸ sessionStorage n'accepte que des strings
         sessionStorage.setItem(keyJwt, nextJwt);
         sessionStorage.setItem(keyChantier, nextChantier);
         sessionStorage.setItem(keyInterv, String(nextInterv ?? ""));
@@ -319,7 +319,7 @@ export default function IntervenantAccessPage() {
         [taskId]: { ...(prev[taskId] as TaskDraft), ajout_h: "" },
       }));
 
-      setSaveMsgById((p) => ({ ...p, [taskId]: "Enregistré ✅" }));
+      setSaveMsgById((p) => ({ ...p, [taskId]: "Enregistré ?" }));
     } catch (e) {
       setSaveMsgById((p) => ({
         ...p,
@@ -440,7 +440,7 @@ export default function IntervenantAccessPage() {
                 </button>
 
                 {msg ? (
-                  <span style={{ fontSize: 13, color: msg.includes("✅") ? "green" : "crimson" }}>
+                  <span style={{ fontSize: 13, color: msg.includes("?") ? "green" : "crimson" }}>
                     {msg}
                   </span>
                 ) : null}
@@ -485,14 +485,7 @@ export default function IntervenantAccessPage() {
           <button
             key={t.key}
             onClick={() => setActiveTab(t.key)}
-            style={{
-              padding: "8px 10px",
-              borderRadius: 10,
-              border: "1px solid #ddd",
-              background: activeTab === t.key ? "#111" : "#fff",
-              color: activeTab === t.key ? "#fff" : "#111",
-              cursor: "pointer",
-            }}
+            className={["tab-btn", activeTab === t.key ? "tab-btn--active" : "tab-btn--inactive"].join(" ")}
           >
             {t.label}
             {t.note ? (
@@ -612,3 +605,7 @@ export default function IntervenantAccessPage() {
     </div>
   );
 }
+
+
+
+

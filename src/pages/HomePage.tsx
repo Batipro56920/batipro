@@ -1,4 +1,4 @@
-export default function HomePage() {
+﻿export default function HomePage() {
   return (
     <div style={{ padding: 24 }}>
       <h1>HOME OK</h1>
@@ -6,3 +6,6 @@ export default function HomePage() {
     </div>
   );
 }
+
+
+

@@ -1,4 +1,4 @@
-// src/services/chantierAccessAdmin.service.ts
+﻿// src/services/chantierAccessAdmin.service.ts
 import { supabase } from "../lib/supabaseClient";
 
 export type SendIntervenantAccessInput = {
@@ -73,3 +73,6 @@ export async function sendIntervenantAccess(
     expiresAt: (data as any)?.expiresAt,
   };
 }
+
+
+

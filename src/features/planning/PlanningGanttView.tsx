@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+﻿import { useMemo } from "react";
 import {
   DndContext,
   PointerSensor,
@@ -92,7 +92,7 @@ function DraggableBar({
       {...listeners}
     >
       <span className="truncate">{title}</span>
-      {conflict || violated ? <span className="ml-1">⚠️</span> : null}
+      {conflict || violated ? <span className="ml-1">?ï¸</span> : null}
       <div
         ref={leftRef}
         className="absolute left-0 top-0 h-full w-2 cursor-ew-resize"
@@ -279,3 +279,6 @@ export default function PlanningGanttView({
     </DndContext>
   );
 }
+
+
+

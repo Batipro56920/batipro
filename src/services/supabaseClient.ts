@@ -1,4 +1,4 @@
-import { createClient } from "@supabase/supabase-js";
+﻿import { createClient } from "@supabase/supabase-js";
 import type { Database } from "../types/supabase";
 
 const supabaseUrl = (import.meta.env.VITE_SUPABASE_URL ?? "").trim();
@@ -14,10 +14,14 @@ if (!supabaseUrl || !supabaseAnonKey) {
 
 export const supabase = createClient<Database>(supabaseUrl, supabaseAnonKey);
 
-// ✅ session check APRÈS init
+// ? session check APRÈS init
 supabase.auth.getSession().then(({ data, error }) => {
   console.log("[SESSION CHECK] error =", error?.message ?? null);
   console.log("[SESSION CHECK] hasSession =", !!data.session);
   console.log("[SESSION CHECK] user =", data.session?.user?.email ?? null);
   console.log("[SESSION CHECK] tokenStart =", data.session?.access_token?.slice(0, 10) ?? null);
 });
+
+
+
+

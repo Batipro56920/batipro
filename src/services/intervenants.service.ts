@@ -72,7 +72,7 @@ export async function updateIntervenant(
   if (cleaned.telephone === "") cleaned.telephone = null;
 
   if (cleaned.nom !== undefined && !cleaned.nom) {
-    throw new Error("Le nom de lâ€™intervenant est obligatoire.");
+    throw new Error("Le nom de l’intervenant est obligatoire.");
   }
 
   const { data, error } = await supabase
@@ -98,14 +98,14 @@ async function ensureSession(): Promise<string> {
 
   let session = sessionData.session;
   if (!session) {
-    throw new Error("Pas connectÃƒÂ© : session manquante. Reconnecte-toi puis rÃƒÂ©essaie.");
+    throw new Error("Pas connecté : session manquante. Reconnecte-toi puis réessaie.");
   }
 
   const expiresAtMs = (session.expires_at ?? 0) * 1000;
   if (!expiresAtMs || expiresAtMs < Date.now() + 60_000) {
     const { data: refreshed, error: refreshErr } = await supabase.auth.refreshSession();
     if (refreshErr || !refreshed.session) {
-      throw new Error("Session expirÃƒÂ©e. Reconnecte-toi puis rÃƒÂ©essaie.");
+      throw new Error("Session expirée. Reconnecte-toi puis réessaie.");
     }
     session = refreshed.session;
   }
@@ -126,7 +126,7 @@ async function invokeEdgeFunction<T>(name: string, body: Record<string, unknown>
     console.error(`Erreur fonction ${name}`, error);
     const msg = (error as any)?.message ?? String(error);
     if (String(msg).includes("401") || String(msg).toLowerCase().includes("unauthorized")) {
-      throw new Error("AccÃ¨s refusÃ© (401). Reconnecte-toi puis rÃ©essaie.");
+      throw new Error("Accès refusé (401). Reconnecte-toi puis réessaie.");
     }
     throw error;
   }
@@ -143,4 +143,7 @@ export async function linkIntervenantUser(input: { token_access: string }) {
   if (!input?.token_access) throw new Error("token_access manquant.");
   return invokeEdgeFunction<Record<string, unknown>>("link-intervenant-user", input);
 }
+
+
+
 

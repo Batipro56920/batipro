@@ -1,4 +1,4 @@
-import type { Chantier } from "../types/chantier";
+﻿import type { Chantier } from "../types/chantier";
 
 export const seedChantiers: Chantier[] = [
   {
@@ -24,3 +24,6 @@ export const seedChantiers: Chantier[] = [
     heuresPassees: 12,
   },
 ];
+
+
+

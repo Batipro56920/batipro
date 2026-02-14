@@ -1,4 +1,4 @@
-// src/services/chantierTasks.service.ts
+﻿// src/services/chantierTasks.service.ts
 import { supabase } from "../lib/supabaseClient";
 
 /* =========================================================
@@ -22,7 +22,7 @@ export type ChantierTaskRow = {
   unite: string | null;
   temps_prevu_h: number | null;
 
-  // ✅ TEMPS V1 (optionnel)
+  // ? TEMPS V1 (optionnel)
   date_debut: string | null; // YYYY-MM-DD
   date_fin: string | null; // YYYY-MM-DD
   temps_reel_h: number | null;
@@ -43,7 +43,7 @@ type CreateTaskPayload = {
   unite?: string | null;
   temps_prevu_h?: number | string | null;
 
-  // ✅ TEMPS V1 (optionnel)
+  // ? TEMPS V1 (optionnel)
   date_debut?: string | null;
   date_fin?: string | null;
   temps_reel_h?: number | null;
@@ -175,7 +175,7 @@ export async function createTask(payload: CreateTaskPayload) {
     unite: (payload.unite ?? "").trim() || null,
     temps_prevu_h: tempsPrevuValue ?? null,
 
-    // ✅ temps (optionnel)
+    // ? temps (optionnel)
     date_debut: payload.date_debut ?? null,
     date_fin: payload.date_fin ?? null,
     temps_reel_h: payload.temps_reel_h ?? null,
@@ -242,3 +242,6 @@ export async function updateTask(id: string, patch: UpdateTaskPatch) {
   if (error) throw error;
   return data as unknown as ChantierTaskRow;
 }
+
+
+

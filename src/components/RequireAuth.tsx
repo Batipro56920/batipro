@@ -1,4 +1,4 @@
-// src/components/RequireAuth.tsx
+﻿// src/components/RequireAuth.tsx
 import { useEffect, useState } from "react";
 import type { ReactNode } from "react";
 import { Navigate, useLocation } from "react-router-dom";
@@ -43,3 +43,6 @@ export default function RequireAuth({ children }: { children: ReactNode }) {
 
   return children;
 }
+
+
+

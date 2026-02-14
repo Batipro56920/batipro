@@ -1,4 +1,4 @@
-// src/services/materielDemandes.service.ts
+﻿// src/services/materielDemandes.service.ts
 import { supabase } from "./supabaseClient";
 
 /**
@@ -150,3 +150,6 @@ export async function deleteMaterielDemande(id: string): Promise<void> {
   const { error } = await supabase.from(TABLE).delete().eq("id", id);
   if (error) throw new Error(error.message);
 }
+
+
+

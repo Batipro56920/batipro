@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+ï»¿import { useEffect } from "react";
 import type { DocumentVisibilityOption } from "../../services/chantierDocuments.service";
 import type { IntervenantRow } from "../../services/intervenants.service";
 
@@ -8,6 +8,7 @@ const DOCUMENT_CATEGORIES = [
   "Fiches techniques",
   "Photos",
   "PV",
+  "VISITE",
   "DOE",
   "Divers",
 ] as const;
@@ -18,7 +19,9 @@ const DOCUMENT_TYPES = [
   "PHOTO",
   "MAIL",
   "PV",
+  "VISITE",
   "DOE",
+  "PDF",
   "AUTRE",
 ] as const;
 
@@ -100,7 +103,7 @@ export default function DocumentEditDrawer({
       <div className="absolute inset-0 bg-black/40" onClick={onClose} />
       <div className="absolute right-0 top-0 h-screen w-[50vw] max-w-[900px] min-w-[360px] bg-white border-l shadow-xl flex flex-col">
         <div className="px-4 py-3 border-b flex items-center justify-between">
-          <div className="font-semibold truncate">Modifier le document — {documentTitle}</div>
+          <div className="font-semibold truncate">Modifier le document â€” {documentTitle}</div>
           <button
             type="button"
             className="rounded-xl border px-2 py-1 text-sm hover:bg-slate-50"
@@ -124,7 +127,7 @@ export default function DocumentEditDrawer({
 
           <div className="grid gap-3 md:grid-cols-2">
             <div className="space-y-1">
-              <div className="text-xs text-slate-600">Catégorie</div>
+              <div className="text-xs text-slate-600">CatÃ©gorie</div>
               <select
                 className="w-full rounded-xl border px-3 py-2 text-sm"
                 value={category}
@@ -154,7 +157,7 @@ export default function DocumentEditDrawer({
             </div>
 
             <div className="space-y-1 md:col-span-2">
-              <div className="text-xs text-slate-600">Mode visibilité</div>
+              <div className="text-xs text-slate-600">Mode visibilitÃ©</div>
               <select
                 className="w-full rounded-xl border px-3 py-2 text-sm"
                 value={visibilityMode}
@@ -168,7 +171,7 @@ export default function DocumentEditDrawer({
           </div>
 
           <div className="space-y-1">
-            <div className="text-xs text-slate-600">Intervenants autorisés</div>
+            <div className="text-xs text-slate-600">Intervenants autorisÃ©s</div>
             <div
               className={[
                 "rounded-xl border p-3 space-y-2 max-h-48 overflow-auto",
@@ -201,7 +204,7 @@ export default function DocumentEditDrawer({
               )}
             </div>
             {!canSelectIntervenants && (
-              <div className="text-xs text-slate-500">Sélection désactivée pour ce mode.</div>
+              <div className="text-xs text-slate-500">SÃ©lection dÃ©sactivÃ©e pour ce mode.</div>
             )}
           </div>
 
@@ -252,6 +255,8 @@ export default function DocumentEditDrawer({
     </div>
   );
 }
+
+
 
 
 

@@ -1,4 +1,4 @@
-import type { SupabaseClient } from "@supabase/supabase-js";
+﻿import type { SupabaseClient } from "@supabase/supabase-js";
 import { supabase } from "../lib/supabaseClient";
 import type { Database } from "../types/supabase";
 
@@ -401,4 +401,6 @@ export async function linkDocumentToTask(taskId: string, documentId: string) {
 
   if (error) throw error;
 }
+
+
 

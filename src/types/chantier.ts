@@ -1,4 +1,4 @@
-// src/types/chantier.ts
+﻿// src/types/chantier.ts
 
 /* =========================================================
    STATUTS CHANTIER
@@ -79,7 +79,7 @@ export type Chantier = {
   adresse?: string | null;
 
   status: ChantierStatus;
-  avancement: number; // 0 → 100
+  avancement: number; // 0 ? 100
 
   dateDebut?: string | null; // YYYY-MM-DD
   dateFinPrevue?: string | null; // YYYY-MM-DD
@@ -94,4 +94,8 @@ export type Chantier = {
   reserves?: ChantierReserve[];
   documents?: ChantierDocument[];
 };
+
+
+
+
 

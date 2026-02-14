@@ -1,4 +1,4 @@
-// src/pages/ChantierDetailsPage.tsx
+﻿// src/pages/ChantierDetailsPage.tsx
 import { useEffect, useMemo, useState } from "react";
 import { Link, NavLink, useNavigate, useParams } from "react-router-dom";
 import { supabase } from "../lib/supabaseClient";
@@ -321,7 +321,7 @@ function InfosTab({
       <div className="flex items-center justify-between gap-3">
         <div className="text-sm text-slate-500">
           {saveState === "saved"
-            ? "Enregistré ✓"
+            ? "Enregistré ?"
             : isDirty
               ? "Modifications non enregistrées."
               : "Aucune modification."}
@@ -340,10 +340,13 @@ function InfosTab({
           {saveState === "saving"
             ? "Enregistrement..."
             : saveState === "saved"
-              ? "Enregistré ✓"
+              ? "Enregistré ?"
               : "Enregistrer"}
         </button>
       </div>
     </div>
   );
 }
+
+
+

@@ -1,4 +1,4 @@
-import type { PlanningEntryRow, PlanningTaskRow, TaskDependencyRow } from "./planning.service";
+﻿import type { PlanningEntryRow, PlanningTaskRow, TaskDependencyRow } from "./planning.service";
 
 type Props = {
   selectedEntry: PlanningEntryRow | null;
@@ -128,3 +128,6 @@ export default function PlanningSidebar({
     </div>
   );
 }
+
+
+

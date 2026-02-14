@@ -72,7 +72,7 @@ export default function LayoutShell() {
                   {email}
                 </span>
               ) : (
-                <span className="text-sm text-slate-400">â€”</span>
+                <span className="text-sm text-slate-400">—</span>
               )}
 
               <button
@@ -99,3 +99,6 @@ export default function LayoutShell() {
     </div>
   );
 }
+
+
+

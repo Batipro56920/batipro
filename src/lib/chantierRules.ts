@@ -1,4 +1,4 @@
-import type { Chantier, ChantierStatus, ChantierTask } from "../types/chantier";
+﻿import type { Chantier, ChantierStatus, ChantierTask } from "../types/chantier";
 
 export const CHANTIER_STATUSES = ["PREPARATION", "EN_COURS", "TERMINE"] as const;
 export const CHANTIER_EN_COURS_STATUSES = ["EN_COURS"] as const;
@@ -23,10 +23,13 @@ export function computeAvancementFromTasks(tasks: ChantierTask[]) {
 export function chantierStatusBadge(status: ChantierStatus) {
   switch (status) {
     case "PREPARATION":
-      return { label: "PrÃ©paration", className: "bg-slate-50 border-slate-200 text-slate-700" };
+      return { label: "Préparation", className: "bg-slate-50 border-slate-200 text-slate-700" };
     case "EN_COURS":
       return { label: "En cours", className: "bg-blue-50 border-blue-200 text-blue-800" };
     case "TERMINE":
       return { label: "Terminé", className: "bg-emerald-50 border-emerald-200 text-emerald-800" };
   }
 }
+
+
+

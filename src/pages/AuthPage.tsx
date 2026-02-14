@@ -1,4 +1,4 @@
-// src/pages/AuthPage.tsx
+﻿// src/pages/AuthPage.tsx
 import { useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { supabase } from "../lib/supabaseClient";
@@ -15,7 +15,7 @@ export default function AuthPage() {
   const [msg, setMsg] = useState<string | null>(null);
 
   useEffect(() => {
-    // Si déjà connecté → on renvoie vers l'app
+    // Si déjà connecté ? on renvoie vers l'app
     supabase.auth.getSession().then(({ data }) => {
       if (data.session) navigate("/dashboard", { replace: true });
     });
@@ -128,3 +128,6 @@ export default function AuthPage() {
     </div>
   );
 }
+
+
+

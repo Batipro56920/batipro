@@ -1,4 +1,4 @@
-import { Outlet } from "react-router-dom";
+﻿import { Outlet } from "react-router-dom";
 import Sidebar from "./Sidebar";
 
 export default function AppLayout() {
@@ -31,3 +31,5 @@ export default function AppLayout() {
     </div>
   );
 }
+
+

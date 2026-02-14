@@ -1,4 +1,4 @@
-import { useMemo, type ReactNode } from "react";
+﻿import { useMemo, type ReactNode } from "react";
 import {
   DndContext,
   PointerSensor,
@@ -57,7 +57,7 @@ function TeamBar({ entry, title, left, width, conflict, onSelect }: TeamBarProps
       }}
     >
       <span className="truncate">{title}</span>
-      {conflict ? <span className="ml-1">⚠️</span> : null}
+      {conflict ? <span className="ml-1">?ï¸</span> : null}
     </div>
   );
 }
@@ -209,3 +209,7 @@ export default function PlanningTeamView({
     </DndContext>
   );
 }
+
+
+
+

@@ -1,4 +1,4 @@
-import React from "react";
+﻿import React from "react";
 import type { IntervenantRow } from "../../services/intervenants.service";
 
 type Props = {
@@ -190,3 +190,6 @@ export default function TabIntervenants(props: Props) {
     </div>
   );
 }
+
+
+

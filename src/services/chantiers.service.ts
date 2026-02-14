@@ -1,4 +1,4 @@
-// src/services/chantiers.service.ts
+﻿// src/services/chantiers.service.ts
 import { supabase } from "../lib/supabaseClient";
 import type { ChantierStatus } from "../types/chantier";
 import { CHANTIER_EN_COURS_STATUSES } from "../lib/chantierRules";
@@ -91,7 +91,7 @@ export async function getChantiers(): Promise<ChantierRow[]> {
 export async function getChantierById(id: string): Promise<ChantierRow> {
   if (!id) throw new Error("id manquant.");
 
-  // ✅ important : maybeSingle() évite le 406 "Cannot coerce the result to a single JSON object"
+  // ? important : maybeSingle() évite le 406 "Cannot coerce the result to a single JSON object"
   const { data, error } = await supabase
     .from("chantiers")
     .select(CHANTIER_SELECT)
@@ -165,3 +165,6 @@ export async function deleteChantier(id: string): Promise<void> {
   const { error } = await supabase.from("chantiers").delete().eq("id", id);
   if (error) throw error;
 }
+
+
+

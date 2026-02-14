@@ -1,4 +1,4 @@
-type AnyRow = Record<string, any>;
+﻿type AnyRow = Record<string, any>;
 type DatabaseRelationship = {
   foreignKeyName: string;
   columns: string[];
@@ -152,6 +152,9 @@ export type Database = {
         Relationships: DatabaseRelationship[];
       };
       chantier_intervenant_access: AnyTable;
+      chantier_doe_items: AnyTable;
+      chantier_visite_actions: AnyTable;
+      chantier_visites: AnyTable;
       chantier_tasks: AnyTable;
       chantiers: AnyTable;
       devis: AnyTable;
@@ -162,6 +165,7 @@ export type Database = {
       planning_entries: AnyTable;
       reserve_documents: AnyTable;
       reserve_plan_markers: AnyTable;
+      task_templates: AnyTable;
       task_dependencies: AnyTable;
       task_documents: AnyTable;
     };
@@ -171,5 +175,7 @@ export type Database = {
     CompositeTypes: Record<string, never>;
   };
 };
+
+
 
 

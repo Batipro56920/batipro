@@ -1,4 +1,4 @@
-const KEY = "batipro.chantiers.v1";
+﻿const KEY = "batipro.chantiers.v1";
 
 export function loadChantiers<T>(fallback: T): T {
   try {
@@ -12,3 +12,4 @@ export function loadChantiers<T>(fallback: T): T {
 export function saveChantiers<T>(data: T) {
   localStorage.setItem(KEY, JSON.stringify(data));
 }
+

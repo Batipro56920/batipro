@@ -1,16 +1,20 @@
-import { NavLink } from "react-router-dom";
+﻿import { NavLink } from "react-router-dom";
 import {
   LayoutDashboard,
   Hammer,
-  Settings,
-  FileText,
+  Users,
+  LibraryBig,
+  ChartColumnBig,
+  Truck,
 } from "lucide-react";
 
 const nav = [
   { to: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { to: "/chantiers", label: "Chantiers", icon: Hammer },
-  { to: "/documents", label: "Documents", icon: FileText },
-  { to: "/settings", label: "Réglages", icon: Settings },
+  { to: "/intervenants", label: "Intervenants", icon: Users },
+  { to: "/bibliotheque", label: "Bibliothèque", icon: LibraryBig },
+  { to: "/statistiques", label: "Statistiques", icon: ChartColumnBig },
+  { to: "/fournisseurs", label: "Fournisseurs", icon: Truck },
 ];
 
 export default function Sidebar() {
@@ -29,7 +33,7 @@ export default function Sidebar() {
               <li key={item.to}>
                 <NavLink
                   to={item.to}
-                  end={item.to === "/dashboard"} // évite le "dashboard actif partout"
+                  end={item.to === "/dashboard"}
                   className={({ isActive }) =>
                     [
                       "flex items-center gap-3 rounded-xl px-3 py-2 text-sm transition",

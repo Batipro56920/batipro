@@ -1,4 +1,4 @@
-// src/services/devis.service.ts
+﻿// src/services/devis.service.ts
 import { supabase } from "../lib/supabaseClient";
 
 /* =========================================================
@@ -18,7 +18,7 @@ export type DevisLigneRow = {
   ordre: number | null;
   corps_etat: string | null;
 
-  // ✅ NOUVEAU
+  // ? NOUVEAU
   entreprise: string | null;
 
   designation: string;
@@ -189,3 +189,6 @@ export {
   updateDevisLigne as _updateDevisLigne,
   deleteDevisLigne as _deleteDevisLigne,
 };
+
+
+

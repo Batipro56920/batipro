@@ -1,4 +1,4 @@
-export type PlanningPeriod = "week" | "2weeks" | "month";
+﻿export type PlanningPeriod = "week" | "2weeks" | "month";
 
 export function parseDate(dateStr: string): Date {
   // dateStr expected YYYY-MM-DD
@@ -242,3 +242,6 @@ export function computeSequentialSchedule(
 
   return { updates };
 }
+
+
+
