@@ -1,4 +1,4 @@
-  // src/pages/ChantierPage.tsx
+﻿  // src/pages/ChantierPage.tsx
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { ChangeEvent, DragEvent, FormEvent, MouseEvent, ReactNode } from "react";
 import { Link, useParams } from "react-router-dom";
@@ -23,7 +23,7 @@ import {
   type DevisLigneRow,
 } from "../services/devis.service";
 
-// ✅ Import devis PDF (garde cette feature)
+// âœ… Import devis PDF (garde cette feature)
 import { importDevisPdfToLinesAndTasks, decodeQtyUnit } from "../services/devisImport.service";
 import { extractTextFromPdf } from "../services/pdfText.service";
 import PlanningPage from "../features/planning/PlanningPage";
@@ -85,7 +85,7 @@ import {
 import TaskDocumentsDrawer from "../components/chantiers/TaskDocumentsDrawer";
 import DocumentEditDrawer from "../components/chantiers/DocumentEditDrawer";
 
-// ✅ ENVOI ACCÈS (Edge Function via service)
+// âœ… ENVOI ACCÃˆS (Edge Function via service)
 import { sendIntervenantAccess } from "../services/chantierAccessAdmin.service";
 
 /* ---------------- types ---------------- */
@@ -117,9 +117,9 @@ function statusBadge(status?: string | null) {
     return { label: "En cours", className: "bg-amber-50 text-amber-700 border-amber-200" };
   }
   if (s === "TERMINE") {
-    return { label: "Terminé", className: "bg-emerald-50 text-emerald-700 border-emerald-200" };
+    return { label: "TerminÃ©", className: "bg-emerald-50 text-emerald-700 border-emerald-200" };
   }
-  return { label: "Préparation", className: "bg-slate-50 text-slate-700 border-slate-200" };
+  return { label: "PrÃ©paration", className: "bg-slate-50 text-slate-700 border-slate-200" };
 }
 
 function TabButton({
@@ -150,7 +150,7 @@ function TabButton({
 function taskStatusLabel(s: ChantierTaskRow["status"]) {
   if (s === "FAIT") return "Fait";
   if (s === "EN_COURS") return "En cours";
-  return "À faire";
+  return "Ã€ faire";
 }
 function taskStatusBadgeClass(s: ChantierTaskRow["status"]) {
   if (s === "FAIT") return "bg-emerald-50 text-emerald-700 border-emerald-200";
@@ -161,7 +161,7 @@ function taskStatusBadgeClass(s: ChantierTaskRow["status"]) {
 function reserveStatusBadge(status?: string | null) {
   const s = status ?? "OUVERTE";
   if (s === "LEVEE") {
-    return { label: "Levée", className: "bg-emerald-50 text-emerald-700 border-emerald-200" };
+    return { label: "LevÃ©e", className: "bg-emerald-50 text-emerald-700 border-emerald-200" };
   }
   if (s === "EN_COURS") {
     return { label: "En cours", className: "bg-amber-50 text-amber-700 border-amber-200" };
@@ -181,7 +181,7 @@ function reservePriorityBadge(priority?: string | null) {
 }
 
 function stripLegacyPrefix(titre: string) {
-  const idx = titre.indexOf(" — ");
+  const idx = titre.indexOf(" â€” ");
   if (idx <= 0) return titre;
   return titre.slice(idx + 3).trim();
 }
@@ -225,7 +225,7 @@ function formatDocumentVisibility(doc: ChantierDocumentRow): string {
   if (legacy === "ADMIN") return "ADMIN";
   if (legacy === "CUSTOM") return "RESTRICTED";
   if (legacy === "INTERVENANT" || legacy === "INTERVENANTS" || legacy === "CLIENT") return "GLOBAL";
-  return legacy || "—";
+  return legacy || "â€”";
 }
 function isAdminOnlyError(err: unknown): boolean {
   const msg = String((err as any)?.message ?? err ?? "").toLowerCase();
@@ -293,7 +293,7 @@ export default function ChantierPage() {
   const [tasksLoading, setTasksLoading] = useState(false);
   const [tasksError, setTasksError] = useState<string | null>(null);
 
-  // ✅ Temps tab (draft par tâche) : date début/fin + ajout (h)
+  // âœ… Temps tab (draft par tÃ¢che) : date dÃ©but/fin + ajout (h)
   const [timeDraftByTaskId, setTimeDraftByTaskId] = useState<
     Record<string, { date_debut: string; date_fin: string; ajout_h: string }>
   >({});
@@ -332,7 +332,7 @@ export default function ChantierPage() {
   const [documentEditDeleting, setDocumentEditDeleting] = useState(false);
   const [documentEditError, setDocumentEditError] = useState<string | null>(null);
   const [documentEditLoadingAccess, setDocumentEditLoadingAccess] = useState(false);
-  // Réserves
+  // RÃ©serves
   const [reserves, setReserves] = useState<ChantierReserveRow[]>([]);
   const [reservesLoading, setReservesLoading] = useState(false);
   const [reservesError, setReservesError] = useState<string | null>(null);
@@ -376,7 +376,7 @@ export default function ChantierPage() {
   const [intervenantsLoading, setIntervenantsLoading] = useState(false);
   const [intervenantsError, setIntervenantsError] = useState<string | null>(null);
 
-  // ✅ Envoi accès (bouton "Envoyer accès")
+  // âœ… Envoi accÃ¨s (bouton "Envoyer accÃ¨s")
   const [sendingAccessId, setSendingAccessId] = useState<string | null>(null);
 
   // Ajout intervenant
@@ -392,7 +392,7 @@ export default function ChantierPage() {
   const [editIntervenantEmail, setEditIntervenantEmail] = useState("");
   const [editIntervenantTel, setEditIntervenantTel] = useState("");
 
-  // Ajout tâche
+  // Ajout tÃ¢che
   const [newTitre, setNewTitre] = useState("");
   const [newCorpsEtat, setNewCorpsEtat] = useState("");
   const [newDate, setNewDate] = useState("");
@@ -401,7 +401,7 @@ export default function ChantierPage() {
   const [newUnite, setNewUnite] = useState("");
   const [addingTask, setAddingTask] = useState(false);
 
-  // Edition tâche
+  // Edition tÃ¢che
   const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
   const [savingTask, setSavingTask] = useState(false);
   const [editTitre, setEditTitre] = useState("");
@@ -434,21 +434,21 @@ export default function ChantierPage() {
   const [lGen, setLGen] = useState(true);
   const [addingLigne, setAddingLigne] = useState(false);
 
-  // Filtres tâches
+  // Filtres tÃ¢ches
   const [filterLot, setFilterLot] = useState<string>("__ALL__");
   const [filterIntervenant, setFilterIntervenant] = useState<string>("__ALL__");
 
-  // ✅ Import devis PDF
+  // âœ… Import devis PDF
   const [importPdfFile, setImportPdfFile] = useState<File | null>(null);
   const [importPdfBusy, setImportPdfBusy] = useState(false);
   const [importPdfError, setImportPdfError] = useState<string | null>(null);
 
-  // ✅ Matériel
+  // âœ… MatÃ©riel
   const [materiel, setMateriel] = useState<MaterielDemandeRow[]>([]);
   const [materielLoading, setMaterielLoading] = useState(false);
   const [materielError, setMaterielError] = useState<string | null>(null);
 
-  // Form matériel
+  // Form matÃ©riel
   const [mIntervenantId, setMIntervenantId] = useState<string>("__NONE__");
   const [mDesignation, setMDesignation] = useState("");
   const [mQuantite, setMQuantite] = useState("1");
@@ -524,7 +524,7 @@ export default function ChantierPage() {
       return;
     }
     if (documentVisibilityMode === "RESTRICTED" && documentAccessIds.length === 0) {
-      setDocumentModalError("Sélectionnez au moins un intervenant ou choisissez Admin uniquement.");
+      setDocumentModalError("SÃ©lectionnez au moins un intervenant ou choisissez Admin uniquement.");
       return;
     }
 
@@ -553,7 +553,7 @@ export default function ChantierPage() {
       const data = await listDocumentsByChantier(id);
       setDocuments(data);
       setChantierDocuments(data);
-      setToast({ type: "ok", msg: "Document importé." });
+      setToast({ type: "ok", msg: "Document importÃ©." });
       closeDocumentModal();
     } catch (err: any) {
       console.error("[documents] upload error", err?.message ?? err);
@@ -605,6 +605,7 @@ export default function ChantierPage() {
       const url = await getSignedUrl(doc.storage_path, 60);
       window.open(url, "_blank", "noopener");
     } catch (err: any) {
+      const message = err?.message ?? "Erreur telechargement document.";
       setToast({ type: "error", msg: message });
     }
   }
@@ -617,8 +618,9 @@ export default function ChantierPage() {
     try {
       const url = await getSignedUrl(doc.storage_path, 60);
       await navigator.clipboard.writeText(url);
-      setToast({ type: "ok", msg: "Lien copié (valable 60s)" });
+      setToast({ type: "ok", msg: "Lien copie (valable 60s)" });
     } catch (err: any) {
+      const message = err?.message ?? "Erreur copie lien document.";
       setToast({ type: "error", msg: message });
     }
   }
@@ -650,10 +652,10 @@ export default function ChantierPage() {
         setDocumentEditAccessIds(accessIds ?? []);
       } catch (err: any) {
         setDocumentEditAccessIds([]);
-      const message = isAdminOnlyError(err)
-        ? "Action reservee a l'admin."
-        : err?.message ?? "Erreur mise a jour document.";
-      setDocumentEditError(message);
+        const message = isAdminOnlyError(err)
+          ? "Action reservee a l'admin."
+          : err?.message ?? "Erreur mise a jour document.";
+        setDocumentEditError(message);
       } finally {
         setDocumentEditLoadingAccess(false);
       }
@@ -678,7 +680,7 @@ export default function ChantierPage() {
       return;
     }
     if (documentEditVisibilityMode === "RESTRICTED" && documentEditAccessIds.length === 0) {
-      setDocumentEditError("Sélectionnez au moins un intervenant ou choisissez Admin uniquement.");
+      setDocumentEditError("SÃ©lectionnez au moins un intervenant ou choisissez Admin uniquement.");
       return;
     }
 
@@ -702,7 +704,7 @@ export default function ChantierPage() {
       const data = await listDocumentsByChantier(updated.chantier_id);
       setDocuments(data);
       setChantierDocuments(data);
-      setToast({ type: "ok", msg: "Document mis à jour." });
+      setToast({ type: "ok", msg: "Document mis Ã  jour." });
       closeDocumentEdit();
     } catch (err: any) {
       const message = isAdminOnlyError(err)
@@ -731,7 +733,7 @@ export default function ChantierPage() {
         setDocuments(data);
         setChantierDocuments(data);
       }
-      setToast({ type: "ok", msg: "Document supprimé." });
+      setToast({ type: "ok", msg: "Document supprimÃ©." });
       closeDocumentEdit();
     } catch (err: any) {
       const message = isAdminOnlyError(err)
@@ -800,7 +802,7 @@ export default function ChantierPage() {
       setReserves(data);
     } catch (err: any) {
       setReserves([]);
-      setReservesError(err?.message ?? "Erreur chargement rÃ©serves.");
+      setReservesError(err?.message ?? "Erreur chargement rÃƒÂ©serves.");
     } finally {
       setReservesLoading(false);
     }
@@ -823,7 +825,7 @@ export default function ChantierPage() {
       return;
     }
     if (!reserveDraftTaskId) {
-      setReserveDrawerError("TÃ¢che requise.");
+      setReserveDrawerError("TÃƒÂ¢che requise.");
       return;
     }
 
@@ -849,7 +851,7 @@ export default function ChantierPage() {
         });
         setReserves((prev) => prev.map((r) => (r.id === updated.id ? updated : r)));
         setActiveReserve(updated);
-        setToast({ type: "ok", msg: "RÃ©serve mise Ã  jour." });
+        setToast({ type: "ok", msg: "RÃƒÂ©serve mise ÃƒÂ  jour." });
       } else {
         const created = await createReserve({
           chantier_id: id,
@@ -861,11 +863,12 @@ export default function ChantierPage() {
           intervenant_id: derivedIntervenantId,
         });
         setReserves((prev) => [created, ...prev]);
-        setToast({ type: "ok", msg: "RÃ©serve crÃ©Ã©e." });
+        setToast({ type: "ok", msg: "RÃƒÂ©serve crÃƒÂ©ÃƒÂ©e." });
         closeReserveDrawer();
       }
     } catch (err: any) {
-      setReserveDrawerError(err?.message ?? "Erreur sauvegarde rÃ©serve.");
+      const message = err?.message ?? "Erreur sauvegarde reserve.";
+      setReserveDrawerError(message);
       setToast({ type: "error", msg: message });
     } finally {
       setReserveSaving(false);
@@ -881,9 +884,10 @@ export default function ChantierPage() {
       setReserves((prev) => prev.map((r) => (r.id === updated.id ? updated : r)));
       setActiveReserve(updated);
       setReserveDraftStatus(updated.status as ReserveStatus);
-      setToast({ type: "ok", msg: "RÃ©serve marquÃ©e levÃ©e." });
+      setToast({ type: "ok", msg: "RÃƒÂ©serve marquÃƒÂ©e levÃƒÂ©e." });
     } catch (err: any) {
-      setReserveDrawerError(err?.message ?? "Erreur mise Ã  jour rÃ©serve.");
+      const message = err?.message ?? "Erreur mise a jour reserve.";
+      setReserveDrawerError(message);
       setToast({ type: "error", msg: message });
     } finally {
       setReserveSaving(false);
@@ -945,8 +949,9 @@ export default function ChantierPage() {
       await addReserveDocument({ reserve_id: activeReserve.id, document_id: created.id, role: "PHOTO" });
       await refreshChantierDocuments();
       await loadReservePhotos(activeReserve.id);
-      setToast({ type: "ok", msg: "Photo ajoutÃ©e." });
+      setToast({ type: "ok", msg: "Photo ajoutee." });
     } catch (err: any) {
+      const message = err?.message ?? "Erreur ajout photo.";
       setToast({ type: "error", msg: message });
     } finally {
       setReservePhotoUploading(false);
@@ -992,6 +997,7 @@ export default function ChantierPage() {
       setReserveMarkers((prev) => [...prev, created]);
       setReserveSelectedMarkerId(created.id);
     } catch (err: any) {
+      const message = err?.message ?? "Erreur ajout repere.";
       setToast({ type: "error", msg: message });
     }
   }
@@ -1005,6 +1011,7 @@ export default function ChantierPage() {
       const url = await getSignedUrl(doc.storage_path, 60);
       window.open(url, "_blank", "noopener");
     } catch (err: any) {
+      const message = err?.message ?? "Erreur ouverture document.";
       setToast({ type: "error", msg: message });
     }
   }
@@ -1044,10 +1051,11 @@ export default function ChantierPage() {
       await setTaskDocuments(taskDocumentsModalTask.id, taskDocumentsSelection);
       const links = await listTaskDocumentsByTaskIds(tasks.map((t) => t.id));
       setTaskDocumentLinks(links);
-      setToast({ type: "ok", msg: "Documents liés mis à jour." });
+      setToast({ type: "ok", msg: "Documents liÃ©s mis Ã  jour." });
       closeTaskDocumentsModal();
     } catch (err: any) {
-      setTaskDocumentsModalError(err?.message ?? "Erreur mise à jour des documents.");
+      const message = err?.message ?? "Erreur mise a jour des documents.";
+      setTaskDocumentsModalError(message);
       setToast({ type: "error", msg: message });
     } finally {
       setTaskDocumentsModalSaving(false);
@@ -1085,7 +1093,7 @@ export default function ChantierPage() {
       setMateriel(data);
     } catch (e: any) {
       setMateriel([]);
-      setMaterielError(e?.message ?? "Erreur chargement matériel.");
+      setMaterielError(e?.message ?? "Erreur chargement matÃ©riel.");
     } finally {
       setMaterielLoading(false);
     }
@@ -1113,7 +1121,7 @@ export default function ChantierPage() {
           setTasks(tasksData);
         } catch (e: any) {
           if (!alive) return;
-          setTasksError(e?.message ?? "Erreur lors du chargement des tâches.");
+          setTasksError(e?.message ?? "Erreur lors du chargement des tÃ¢ches.");
           setTasks([]);
         } finally {
           if (alive) setTasksLoading(false);
@@ -1149,7 +1157,7 @@ export default function ChantierPage() {
           if (alive) setIntervenantsLoading(false);
         }
 
-        // matériel
+        // matÃ©riel
         setMaterielLoading(true);
         setMaterielError(null);
         try {
@@ -1159,7 +1167,7 @@ export default function ChantierPage() {
         } catch (e: any) {
           if (!alive) return;
           setMateriel([]);
-          setMaterielError(e?.message ?? "Erreur chargement matériel.");
+          setMaterielError(e?.message ?? "Erreur chargement matÃ©riel.");
         } finally {
           if (alive) setMaterielLoading(false);
         }
@@ -1330,7 +1338,7 @@ export default function ChantierPage() {
     };
   }, [activeDevisId]);
 
-  // ✅ initialise le draft temps quand tasks changent
+  // âœ… initialise le draft temps quand tasks changent
   useEffect(() => {
     const next: Record<string, { date_debut: string; date_fin: string; ajout_h: string }> = {};
     for (const t of tasks as any[]) {
@@ -1393,16 +1401,6 @@ export default function ChantierPage() {
       alive = false;
     };
   }, [reserveDraftTaskId, selectedReserveTask?.intervenant_id]);
-
-  const selectedReserveIntervenant = useMemo(() => {
-    if (selectedReserveTask?.intervenant_id) {
-      return intervenantById.get(selectedReserveTask.intervenant_id) ?? null;
-    }
-    if (reserveDraftIntervenantId && reserveDraftIntervenantId !== "__NONE__") {
-      return intervenantById.get(reserveDraftIntervenantId) ?? null;
-    }
-    return null;
-  }, [selectedReserveTask, reserveDraftIntervenantId, intervenantById]);
 
   const taskLots = useMemo(() => {
     const set = new Set<string>();
@@ -1482,7 +1480,7 @@ export default function ChantierPage() {
 
   /* ---------------- actions ---------------- */
 
-  // ----- tâches -----
+  // ----- tÃ¢ches -----
   async function toggleTaskDone(t: ChantierTaskRow) {
     const nextStatus = t.status === "FAIT" ? "A_FAIRE" : "FAIT";
     setTasks((prev) => prev.map((x) => (x.id === t.id ? { ...x, status: nextStatus } : x)));
@@ -1490,8 +1488,8 @@ export default function ChantierPage() {
       await updateTask(t.id, { status: nextStatus });
     } catch (e: any) {
       setTasks((prev) => prev.map((x) => (x.id === t.id ? { ...x, status: t.status } : x)));
-      setTasksError(e?.message ?? "Erreur lors de la mise à jour de la tâche.");
-      setToast({ type: "error", msg: e?.message ?? "Erreur mise à jour tâche." });
+      setTasksError(e?.message ?? "Erreur lors de la mise Ã  jour de la tÃ¢che.");
+      setToast({ type: "error", msg: e?.message ?? "Erreur mise Ã  jour tÃ¢che." });
     }
   }
 
@@ -1561,11 +1559,11 @@ export default function ChantierPage() {
       setNewQuantite("1");
       setNewUnite("");
 
-      setToast({ type: "ok", msg: "Tâche ajoutée." });
+      setToast({ type: "ok", msg: "TÃ¢che ajoutÃ©e." });
     } catch (e: any) {
       setTasks((prev) => prev.filter((t) => t.id !== tempId));
-      setTasksError(e?.message ?? "Erreur lors de l’ajout de la tâche.");
-      setToast({ type: "error", msg: e?.message ?? "Erreur ajout tâche." });
+      setTasksError(e?.message ?? "Erreur lors de lâ€™ajout de la tÃ¢che.");
+      setToast({ type: "error", msg: e?.message ?? "Erreur ajout tÃ¢che." });
     } finally {
       setAddingTask(false);
     }
@@ -1622,11 +1620,11 @@ export default function ChantierPage() {
 
     try {
       await updateTask(t.id, patch as any);
-      setToast({ type: "ok", msg: "Tâche mise à jour." });
+      setToast({ type: "ok", msg: "TÃ¢che mise Ã  jour." });
       setEditingTaskId(null);
     } catch (e: any) {
       await refreshTasksOnly();
-      setToast({ type: "error", msg: e?.message ?? "Erreur mise à jour tâche." });
+      setToast({ type: "error", msg: e?.message ?? "Erreur mise Ã  jour tÃ¢che." });
     } finally {
       setSavingTask(false);
     }
@@ -1649,7 +1647,7 @@ export default function ChantierPage() {
 
     const nom = (editIntervenantNom ?? "").trim();
     if (!nom) {
-      setToast({ type: "error", msg: "Le nom de l’intervenant est obligatoire." });
+      setToast({ type: "error", msg: "Le nom de lâ€™intervenant est obligatoire." });
       return;
     }
 
@@ -1665,23 +1663,23 @@ export default function ChantierPage() {
         prev.map((x) => (x.id === updated.id ? updated : x)).sort((a, b) => a.nom.localeCompare(b.nom)),
       );
 
-      setToast({ type: "ok", msg: "Intervenant mis à jour." });
+      setToast({ type: "ok", msg: "Intervenant mis Ã  jour." });
       setEditingIntervenant(null);
     } catch (e: any) {
-      setToast({ type: "error", msg: e?.message ?? "Erreur mise à jour intervenant." });
+      setToast({ type: "error", msg: e?.message ?? "Erreur mise Ã  jour intervenant." });
     } finally {
       setSavingIntervenant(false);
     }
   }
 
   async function onDeleteIntervenant(i: IntervenantRow) {
-    const ok = confirm(`Supprimer l’intervenant "${i.nom}" ?`);
+    const ok = confirm(`Supprimer lâ€™intervenant "${i.nom}" ?`);
     if (!ok) return;
 
     try {
       await deleteIntervenant(i.id);
       setIntervenants((prev) => prev.filter((x) => x.id !== i.id));
-      setToast({ type: "ok", msg: "Intervenant supprimé." });
+      setToast({ type: "ok", msg: "Intervenant supprimÃ©." });
     } catch (e: any) {
       setToast({ type: "error", msg: e?.message ?? "Erreur suppression intervenant." });
     }
@@ -1714,16 +1712,16 @@ export default function ChantierPage() {
       setNewIntervenantEmail("");
       setNewIntervenantTel("");
 
-      setToast({ type: "ok", msg: "Intervenant ajouté." });
+      setToast({ type: "ok", msg: "Intervenant ajoutÃ©." });
     } catch (e: any) {
-      setIntervenantsError(e?.message ?? "Erreur création intervenant.");
-      setToast({ type: "error", msg: e?.message ?? "Erreur création intervenant." });
+      setIntervenantsError(e?.message ?? "Erreur crÃ©ation intervenant.");
+      setToast({ type: "error", msg: e?.message ?? "Erreur crÃ©ation intervenant." });
     } finally {
       setCreatingIntervenant(false);
     }
   }
-  // ----- ✅ ENVOI ACCÈS -----
-  // ✅ même si le mail ne part pas : on récupère accessUrl et on te le donne pour le partager manuellement
+  // ----- âœ… ENVOI ACCÃˆS -----
+  // âœ… mÃªme si le mail ne part pas : on rÃ©cupÃ¨re accessUrl et on te le donne pour le partager manuellement
   async function onSendAccess(i: IntervenantRow) {
     if (!id) return;
 
@@ -1748,18 +1746,18 @@ export default function ChantierPage() {
       if (accessUrl) {
         const copied = await copyToClipboard(accessUrl);
         if (copied) {
-          setToast({ type: "ok", msg: `Lien d’accès copié. Tu peux l’envoyer à ${i.nom}.` });
+          setToast({ type: "ok", msg: `Lien dâ€™accÃ¨s copiÃ©. Tu peux lâ€™envoyer Ã  ${i.nom}.` });
         } else {
           // fallback simple (fonctionne partout)
-          window.prompt("Copie ce lien et envoie-le à l’intervenant :", accessUrl);
-          setToast({ type: "ok", msg: `Lien d’accès généré. Envoie-le à ${i.nom}.` });
+          window.prompt("Copie ce lien et envoie-le Ã  lâ€™intervenant :", accessUrl);
+          setToast({ type: "ok", msg: `Lien dâ€™accÃ¨s gÃ©nÃ©rÃ©. Envoie-le Ã  ${i.nom}.` });
         }
       } else {
-        // si pas d'URL retournée, on indique quand même que c'est “tenté”
-        setToast({ type: "ok", msg: `Accès généré / envoyé à ${i.nom}.` });
+        // si pas d'URL retournÃ©e, on indique quand mÃªme que c'est â€œtentÃ©â€
+        setToast({ type: "ok", msg: `AccÃ¨s gÃ©nÃ©rÃ© / envoyÃ© Ã  ${i.nom}.` });
       }
     } catch (e: any) {
-      setToast({ type: "error", msg: e?.message ?? "Erreur lors de l’envoi de l’accès." });
+      setToast({ type: "error", msg: e?.message ?? "Erreur lors de lâ€™envoi de lâ€™accÃ¨s." });
     } finally {
       setSendingAccessId(null);
     }
@@ -1782,9 +1780,10 @@ export default function ChantierPage() {
       const d = await createDevis({ chantier_id: id, nom });
       setDevis((prev) => [d, ...prev]);
       setNewDevisNom("");
-      setToast({ type: "ok", msg: "Devis créé." });
+      setToast({ type: "ok", msg: "Devis crÃ©Ã©." });
     } catch (err: any) {
-      setDevisError(err?.message ?? "Erreur création devis.");
+      const message = err?.message ?? "Erreur creation devis.";
+      setDevisError(message);
       setToast({ type: "error", msg: message });
     } finally {
       setCreatingDevis(false);
@@ -1797,7 +1796,7 @@ export default function ChantierPage() {
 
     const designation = lDesignation.trim();
     if (!designation) {
-      setLignesError("La désignation est obligatoire.");
+      setLignesError("La dÃ©signation est obligatoire.");
       return;
     }
 
@@ -1832,13 +1831,14 @@ export default function ChantierPage() {
       setLQty("1");
       setLGen(true);
 
-      setToast({ type: "ok", msg: "Ligne ajoutée." });
+      setToast({ type: "ok", msg: "Ligne ajoutÃ©e." });
 
       if (lGen && id) {
         await refreshTasksOnly();
       }
     } catch (err: any) {
-      setLignesError(err?.message ?? "Erreur lors de l’ajout de la ligne.");
+      const message = err?.message ?? "Erreur lors de l'ajout de la ligne.";
+      setLignesError(message);
       setToast({ type: "error", msg: message });
     } finally {
       setAddingLigne(false);
@@ -1849,22 +1849,22 @@ export default function ChantierPage() {
     try {
       await deleteDevisLigne(ligneId);
       setLignes((prev) => prev.filter((x) => x.id !== ligneId));
-      setToast({ type: "ok", msg: "Ligne supprimée." });
+      setToast({ type: "ok", msg: "Ligne supprimÃ©e." });
     } catch (e: any) {
       setLignesError(e?.message ?? "Erreur suppression ligne.");
       setToast({ type: "error", msg: e?.message ?? "Erreur suppression ligne." });
     }
   }
 
-  // ----- ✅ Import PDF -----
+  // ----- âœ… Import PDF -----
   async function onImportDevisPdf() {
     if (!id) return;
     if (!importPdfFile) {
-      setImportPdfError("Sélectionne un PDF.");
+      setImportPdfError("SÃ©lectionne un PDF.");
       return;
     }
     if (!activeDevisId) {
-      setImportPdfError("Ouvre un devis (bouton “Voir lignes”) pour importer dedans.");
+      setImportPdfError("Ouvre un devis (bouton â€œVoir lignesâ€) pour importer dedans.");
       return;
     }
 
@@ -1884,7 +1884,7 @@ export default function ChantierPage() {
       setLignes(data);
 
       setImportPdfFile(null);
-      setToast({ type: "ok", msg: "Devis importé : lignes + tâches générées." });
+      setToast({ type: "ok", msg: "Devis importÃ© : lignes + tÃ¢ches gÃ©nÃ©rÃ©es." });
     } catch (e: any) {
       setImportPdfError(e?.message ?? "Erreur import PDF.");
       setToast({ type: "error", msg: e?.message ?? "Erreur import PDF." });
@@ -1893,11 +1893,11 @@ export default function ChantierPage() {
     }
   }
 
-  // ----- matériel -----
+  // ----- matÃ©riel -----
   function materielStatusLabel(s: MaterielStatus) {
-    if (s === "COMMANDE") return "Commandé";
-    if (s === "LIVRE") return "Livré";
-    return "À commander";
+    if (s === "COMMANDE") return "CommandÃ©";
+    if (s === "LIVRE") return "LivrÃ©";
+    return "Ã€ commander";
   }
 
   function materielStatusBadgeClass(s: MaterielStatus) {
@@ -1920,11 +1920,11 @@ export default function ChantierPage() {
       return;
     }
     if (!designation) {
-      setMaterielError("Désignation obligatoire.");
+      setMaterielError("DÃ©signation obligatoire.");
       return;
     }
     if (!Number.isFinite(qty) || qty <= 0) {
-      setMaterielError("Quantité invalide.");
+      setMaterielError("QuantitÃ© invalide.");
       return;
     }
 
@@ -1970,11 +1970,11 @@ export default function ChantierPage() {
       setMStatus("A_COMMANDER");
       setMRemarques("");
 
-      setToast({ type: "ok", msg: "Demande matériel ajoutée." });
+      setToast({ type: "ok", msg: "Demande matÃ©riel ajoutÃ©e." });
     } catch (e: any) {
       setMateriel((prev) => prev.filter((x) => x.id !== tempId));
-      setMaterielError(e?.message ?? "Erreur ajout matériel.");
-      setToast({ type: "error", msg: e?.message ?? "Erreur ajout matériel." });
+      setMaterielError(e?.message ?? "Erreur ajout matÃ©riel.");
+      setToast({ type: "error", msg: e?.message ?? "Erreur ajout matÃ©riel." });
     } finally {
       setAddingMateriel(false);
     }
@@ -1986,7 +1986,7 @@ export default function ChantierPage() {
       await updateMaterielDemande(row.id, { status } as any);
     } catch (e: any) {
       await refreshMateriel();
-      setToast({ type: "error", msg: e?.message ?? "Erreur mise à jour matériel." });
+      setToast({ type: "error", msg: e?.message ?? "Erreur mise Ã  jour matÃ©riel." });
     }
   }
 
@@ -1999,10 +1999,10 @@ export default function ChantierPage() {
 
     try {
       await deleteMaterielDemande(row.id);
-      setToast({ type: "ok", msg: "Demande supprimée." });
+      setToast({ type: "ok", msg: "Demande supprimÃ©e." });
     } catch (e: any) {
       setMateriel(before);
-      setToast({ type: "error", msg: e?.message ?? "Erreur suppression matériel." });
+      setToast({ type: "error", msg: e?.message ?? "Erreur suppression matÃ©riel." });
     }
   }
 
@@ -2024,7 +2024,7 @@ export default function ChantierPage() {
   if (loading) {
     return (
       <div className="rounded-2xl border bg-white p-6">
-        <div className="font-semibold">Chargement…</div>
+        <div className="font-semibold">Chargementâ€¦</div>
         <div className="text-slate-500 text-sm mt-1">Ouverture du dossier chantier.</div>
       </div>
     );
@@ -2042,7 +2042,7 @@ export default function ChantierPage() {
     return (
       <div className="rounded-2xl border bg-white p-6">
         <div className="font-semibold">Chantier introuvable</div>
-        <div className="text-slate-500 text-sm mt-1">Aucun chantier ne correspond à cet ID.</div>
+        <div className="text-slate-500 text-sm mt-1">Aucun chantier ne correspond Ã  cet ID.</div>
       </div>
     );
   }
@@ -2084,7 +2084,7 @@ export default function ChantierPage() {
           </div>
 
           <div className="text-slate-500 text-sm">
-            {item.client ?? "—"} • {item.adresse ?? "—"}
+            {item.client ?? "â€”"} â€¢ {item.adresse ?? "â€”"}
           </div>
         </div>
 
@@ -2096,7 +2096,7 @@ export default function ChantierPage() {
       {/* KPIs */}
       <div className="grid gap-3 md:grid-cols-4">
         <div className="rounded-2xl border bg-white p-4">
-          <div className="text-xs text-slate-500">Réserves ouvertes</div>
+          <div className="text-xs text-slate-500">RÃ©serves ouvertes</div>
           <div className="text-2xl font-bold mt-1">{reservesOuvertes}</div>
         </div>
         <div className="rounded-2xl border bg-white p-4">
@@ -2108,7 +2108,7 @@ export default function ChantierPage() {
           <div className="text-2xl font-bold mt-1">{tempsHeures} h</div>
         </div>
         <div className="rounded-2xl border bg-white p-4">
-          <div className="text-xs text-slate-500">Temps prévu</div>
+          <div className="text-xs text-slate-500">Temps prÃ©vu</div>
           <div className="text-2xl font-bold mt-1">{tempsPrevues} h</div>
         </div>
       </div>
@@ -2129,7 +2129,7 @@ export default function ChantierPage() {
         <div className="text-[11px] uppercase tracking-[0.2em] text-slate-400">Pilotage chantier</div>
         <div className="flex gap-2 flex-wrap">
           <TabButton active={tab === "devis-taches"} onClick={() => setTab("devis-taches")}>
-            Devis & tâches
+            Devis & tÃ¢ches
           </TabButton>
           <TabButton active={tab === "temps"} onClick={() => setTab("temps")}>
             Temps
@@ -2138,7 +2138,7 @@ export default function ChantierPage() {
             Planning
           </TabButton>
           <TabButton active={tab === "reserves"} onClick={() => setTab("reserves")}>
-            Réserves
+            RÃ©serves
           </TabButton>
         </div>
         <div className="text-[11px] uppercase tracking-[0.2em] text-slate-400">Gestion chantier</div>
@@ -2150,7 +2150,7 @@ export default function ChantierPage() {
             Documents
           </TabButton>
           <TabButton active={tab === "materiel"} onClick={() => setTab("materiel")}>
-            Matériel
+            MatÃ©riel
           </TabButton>
           <TabButton active={tab === "messagerie"} onClick={() => setTab("messagerie")}>
             Messagerie
@@ -2168,9 +2168,9 @@ export default function ChantierPage() {
           <div className="space-y-4">
             <div className="flex items-center justify-between">
               <div>
-                <div className="font-semibold">Temps (par tâche)</div>
+                <div className="font-semibold">Temps (par tÃ¢che)</div>
                 <div className="text-sm text-slate-500">
-                  Renseigne date début / fin et ajoute des heures. Le total s’additionne automatiquement.
+                  Renseigne date dÃ©but / fin et ajoute des heures. Le total sâ€™additionne automatiquement.
                 </div>
               </div>
               <div className="text-xs text-slate-500">
@@ -2188,13 +2188,13 @@ export default function ChantierPage() {
                     <div className="min-w-0">
                       <div className="font-medium truncate">{stripLegacyPrefix(t.titre ?? "")}</div>
                       <div className="text-xs text-slate-500">
-                        {(t.corps_etat ?? "—")} • Intervenant : {it?.nom ?? "—"}
+                        {(t.corps_etat ?? "â€”")} â€¢ Intervenant : {it?.nom ?? "â€”"}
                       </div>
                     </div>
 
                     <div className="grid gap-2 md:grid-cols-5">
                       <div className="space-y-1">
-                        <div className="text-xs text-slate-600">Date début</div>
+                        <div className="text-xs text-slate-600">Date dÃ©but</div>
                         <input
                           className="w-full rounded-xl border px-3 py-2 text-sm"
                           type="date"
@@ -2296,7 +2296,7 @@ export default function ChantierPage() {
                                 [t.id]: { ...d, ajout_h: "" },
                               }));
 
-                              setToast({ type: "ok", msg: "Temps enregistré." });
+                              setToast({ type: "ok", msg: "Temps enregistrÃ©." });
                             } catch (e: any) {
                               await refreshTasksOnly();
                               setToast({ type: "error", msg: e?.message ?? "Erreur enregistrement temps." });
@@ -2305,7 +2305,7 @@ export default function ChantierPage() {
                             }
                           }}
                         >
-                          {savingTimeTaskId === t.id ? "Enregistrement…" : "Enregistrer"}
+                          {savingTimeTaskId === t.id ? "Enregistrementâ€¦" : "Enregistrer"}
                         </button>
                       </div>
                     </div>
@@ -2315,7 +2315,7 @@ export default function ChantierPage() {
             </div>
 
             <div className="text-xs text-slate-500">
-              Note : “Ajouter (h)” s’additionne au total. Laisse vide si tu ne veux rien ajouter.
+              Note : â€œAjouter (h)â€ sâ€™additionne au total. Laisse vide si tu ne veux rien ajouter.
             </div>
           </div>
         )}
@@ -2327,7 +2327,7 @@ export default function ChantierPage() {
               <div>
                 <div className="font-semibold">Intervenants</div>
                 <div className="text-sm text-slate-500">
-                  Créer, modifier et supprimer les intervenants du chantier
+                  CrÃ©er, modifier et supprimer les intervenants du chantier
                 </div>
               </div>
               <button
@@ -2336,7 +2336,7 @@ export default function ChantierPage() {
                 className="rounded-xl border px-3 py-2 text-sm hover:bg-slate-50"
                 disabled={intervenantsLoading}
               >
-                {intervenantsLoading ? "Chargement…" : "Rafraîchir"}
+                {intervenantsLoading ? "Chargementâ€¦" : "RafraÃ®chir"}
               </button>
             </div>
 
@@ -2351,7 +2351,7 @@ export default function ChantierPage() {
               <div className="grid gap-2 md:grid-cols-3">
                 <input
                   className="rounded-xl border px-3 py-2 text-sm"
-                  placeholder="Nom (ex: Pierre — Plombier)"
+                  placeholder="Nom (ex: Pierre â€” Plombier)"
                   value={newIntervenantNom}
                   onChange={(e) => setNewIntervenantNom(e.target.value)}
                 />
@@ -2363,7 +2363,7 @@ export default function ChantierPage() {
                 />
                 <input
                   className="rounded-xl border px-3 py-2 text-sm"
-                  placeholder="Téléphone (optionnel)"
+                  placeholder="TÃ©lÃ©phone (optionnel)"
                   value={newIntervenantTel}
                   onChange={(e) => setNewIntervenantTel(e.target.value)}
                 />
@@ -2377,14 +2377,14 @@ export default function ChantierPage() {
                     creatingIntervenant ? "bg-slate-300 text-slate-700" : "bg-slate-900 text-white hover:bg-slate-800",
                   ].join(" ")}
                 >
-                  {creatingIntervenant ? "Création…" : "+ Ajouter"}
+                  {creatingIntervenant ? "CrÃ©ationâ€¦" : "+ Ajouter"}
                 </button>
               </div>
             </form>
 
             <div className="space-y-2">
               {intervenantsLoading ? (
-                <div className="text-sm text-slate-500">Chargement…</div>
+                <div className="text-sm text-slate-500">Chargementâ€¦</div>
               ) : intervenants.length === 0 ? (
                 <div className="text-sm text-slate-500">Aucun intervenant pour le moment.</div>
               ) : (
@@ -2393,7 +2393,7 @@ export default function ChantierPage() {
                     <div className="min-w-0">
                       <div className="font-medium truncate">{i.nom}</div>
                       <div className="text-xs text-slate-500">
-                        {(i.email ?? "—")} • {(i.telephone ?? "—")}
+                        {(i.email ?? "â€”")} â€¢ {(i.telephone ?? "â€”")}
                       </div>
                     </div>
 
@@ -2406,9 +2406,9 @@ export default function ChantierPage() {
                           "text-sm rounded-xl border px-3 py-2",
                           sendingAccessId === i.id ? "bg-slate-100 text-slate-500" : "hover:bg-slate-50",
                         ].join(" ")}
-                        title={i.email ? `Générer / envoyer accès à ${i.email}` : "Email manquant"}
+                        title={i.email ? `GÃ©nÃ©rer / envoyer accÃ¨s Ã  ${i.email}` : "Email manquant"}
                       >
-                        {sendingAccessId === i.id ? "Envoi…" : "Envoyer accès"}
+                        {sendingAccessId === i.id ? "Envoiâ€¦" : "Envoyer accÃ¨s"}
                       </button>
 
                       <button
@@ -2466,9 +2466,9 @@ export default function ChantierPage() {
                   <thead className="bg-slate-50 text-slate-600">
                     <tr>
                       <th className="px-3 py-2 text-left font-medium">Nom</th>
-                      <th className="px-3 py-2 text-left font-medium">Catégorie</th>
+                      <th className="px-3 py-2 text-left font-medium">CatÃ©gorie</th>
                       <th className="px-3 py-2 text-left font-medium">Type</th>
-                      <th className="px-3 py-2 text-left font-medium">Visibilité</th>
+                      <th className="px-3 py-2 text-left font-medium">VisibilitÃ©</th>
                       <th className="px-3 py-2 text-left font-medium">Date</th>
                       <th className="px-3 py-2 text-left font-medium">Actions</th>
                     </tr>
@@ -2484,7 +2484,7 @@ export default function ChantierPage() {
                         <td className="px-3 py-2">{doc.document_type}</td>
                         <td className="px-3 py-2">{formatDocumentVisibility(doc)}</td>
                         <td className="px-3 py-2">
-                          {doc.created_at ? new Date(doc.created_at).toLocaleDateString("fr-FR") : "—"}
+                          {doc.created_at ? new Date(doc.created_at).toLocaleDateString("fr-FR") : "â€”"}
                         </td>
                         <td className="px-3 py-2">
                           <div className="flex flex-wrap gap-2">
@@ -2507,7 +2507,7 @@ export default function ChantierPage() {
                               onClick={() => downloadDocument(doc)}
                               className="rounded-lg border px-2 py-1 text-xs hover:bg-slate-50"
                             >
-                              Télécharger
+                              TÃ©lÃ©charger
                             </button>
                             <button
                               type="button"
@@ -2527,20 +2527,20 @@ export default function ChantierPage() {
           </div>
         )}
 
-        {/* ---------------- ONGLET RÉSERVES ---------------- */}
+        {/* ---------------- ONGLET RÃ‰SERVES ---------------- */}
         {tab === "reserves" && (
           <div className="space-y-4">
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
-                <div className="font-semibold">Réserves</div>
-                <div className="text-sm text-slate-500">Suivi des réserves chantier.</div>
+                <div className="font-semibold">RÃ©serves</div>
+                <div className="text-sm text-slate-500">Suivi des rÃ©serves chantier.</div>
               </div>
               <button
                 type="button"
                 onClick={() => openReserveDrawer(null)}
                 className="rounded-xl px-4 py-2 text-sm bg-slate-900 text-white hover:bg-slate-800"
               >
-                Nouvelle réserve
+                Nouvelle rÃ©serve
               </button>
             </div>
 
@@ -2549,7 +2549,7 @@ export default function ChantierPage() {
                 [
                   { key: "ALL", label: "Toutes" },
                   { key: "OUVERTES", label: "Ouvertes" },
-                  { key: "LEVEES", label: "Levées" },
+                  { key: "LEVEES", label: "LevÃ©es" },
                 ] as const
               ).map((f) => (
                 <button
@@ -2575,9 +2575,9 @@ export default function ChantierPage() {
             )}
 
             {reservesLoading ? (
-              <div className="text-sm text-slate-500">Chargement…</div>
+              <div className="text-sm text-slate-500">Chargementâ€¦</div>
             ) : filteredReserves.length === 0 ? (
-              <div className="text-sm text-slate-500">Aucune réserve pour ce chantier.</div>
+              <div className="text-sm text-slate-500">Aucune rÃ©serve pour ce chantier.</div>
             ) : (
               <div className="space-y-3">
                 {filteredReserves.map((reserve) => {
@@ -2617,10 +2617,10 @@ export default function ChantierPage() {
                         <span className={["px-2 py-1 rounded-full border", priority.className].join(" ")}>
                           {priority.label}
                         </span>
-                        <span>Tâche : {task ? stripLegacyPrefix(task.titre ?? "") : "—"}</span>
-                        <span>Intervenant : {it?.nom ?? "—"}</span>
+                        <span>TÃ¢che : {task ? stripLegacyPrefix(task.titre ?? "") : "â€”"}</span>
+                        <span>Intervenant : {it?.nom ?? "â€”"}</span>
                         <span>
-                          Créée : {new Date(reserve.created_at).toLocaleDateString("fr-FR")}
+                          CrÃ©Ã©e : {new Date(reserve.created_at).toLocaleDateString("fr-FR")}
                         </span>
                       </div>
                     </div>
@@ -2631,7 +2631,7 @@ export default function ChantierPage() {
           </div>
         )}
 
-        {/* ---------------- ONGLET DEVIS & TÂCHES ---------------- */}
+        {/* ---------------- ONGLET DEVIS & TÃ‚CHES ---------------- */}
         {tab === "devis-taches" && (
           <div className="space-y-8">
             {/* DEVIS */}
@@ -2642,7 +2642,7 @@ export default function ChantierPage() {
                   <div className="text-sm text-slate-500">Mode manuel + import PDF</div>
                 </div>
                 <div className="text-xs text-slate-500">
-                  {devisLoading ? "Chargement…" : `${devis.length} devis`}
+                  {devisLoading ? "Chargementâ€¦" : `${devis.length} devis`}
                 </div>
               </div>
 
@@ -2667,11 +2667,11 @@ export default function ChantierPage() {
                     creatingDevis ? "bg-slate-300 text-slate-700" : "bg-slate-900 text-white hover:bg-slate-800",
                   ].join(" ")}
                 >
-                  {creatingDevis ? "Création…" : "+ Nouveau devis"}
+                  {creatingDevis ? "CrÃ©ationâ€¦" : "+ Nouveau devis"}
                 </button>
               </form>
 
-              {/* ✅ IMPORT PDF : NE PAS SUPPRIMER */}
+              {/* âœ… IMPORT PDF : NE PAS SUPPRIMER */}
               <div className="rounded-xl border bg-slate-50 p-4 space-y-3">
                 <div className="font-semibold text-sm">Importer un devis PDF</div>
 
@@ -2696,7 +2696,7 @@ export default function ChantierPage() {
                       importPdfBusy ? "bg-slate-300 text-slate-700" : "bg-slate-900 text-white hover:bg-slate-800",
                     ].join(" ")}
                   >
-                    {importPdfBusy ? "Import…" : "Importer"}
+                    {importPdfBusy ? "Importâ€¦" : "Importer"}
                   </button>
                   <div className="text-xs text-slate-500">
                     Devis ouvert : <span className="font-semibold">{activeDevisId ? "Oui" : "Non"}</span>
@@ -2734,7 +2734,7 @@ export default function ChantierPage() {
                           )}
 
                           {lignesLoading ? (
-                            <div className="text-sm text-slate-500">Chargement…</div>
+                            <div className="text-sm text-slate-500">Chargementâ€¦</div>
                           ) : lignes.length === 0 ? (
                             <div className="text-sm text-slate-500">Aucune ligne.</div>
                           ) : (
@@ -2744,9 +2744,9 @@ export default function ChantierPage() {
                                   <div className="min-w-0 flex-1">
                                     <div className="font-medium">{l.designation}</div>
                                     <div className="text-xs text-slate-500">
-                                      {(l.corps_etat ?? "—")} {" • "}
-                                      {l.entreprise ?? "—"} {" • "}
-                                      {(l.quantite ?? "—")} {(l.unite ?? "")}
+                                      {(l.corps_etat ?? "â€”")} {" â€¢ "}
+                                      {l.entreprise ?? "â€”"} {" â€¢ "}
+                                      {(l.quantite ?? "â€”")} {(l.unite ?? "")}
                                     </div>
                                   </div>
                                   <button
@@ -2768,7 +2768,7 @@ export default function ChantierPage() {
                               <div className="grid gap-2 md:grid-cols-2">
                                 <input
                                   className="rounded-xl border px-3 py-2 text-sm"
-                                  placeholder="Corps d’état (lot)"
+                                  placeholder="Corps dâ€™Ã©tat (lot)"
                                   value={lCorpsEtat}
                                   onChange={(e) => setLCorpsEtat(e.target.value)}
                                 />
@@ -2782,7 +2782,7 @@ export default function ChantierPage() {
 
                               <input
                                 className="rounded-xl border px-3 py-2 text-sm"
-                                placeholder="Désignation"
+                                placeholder="DÃ©signation"
                                 value={lDesignation}
                                 onChange={(e) => setLDesignation(e.target.value)}
                               />
@@ -2790,20 +2790,20 @@ export default function ChantierPage() {
                               <div className="grid gap-2 md:grid-cols-3">
                                 <input
                                   className="rounded-xl border px-3 py-2 text-sm"
-                                  placeholder="Unité"
+                                  placeholder="UnitÃ©"
                                   value={lUnite}
                                   onChange={(e) => setLUnite(e.target.value)}
                                 />
                                 <input
                                   className="rounded-xl border px-3 py-2 text-sm"
-                                  placeholder="Qté"
+                                  placeholder="QtÃ©"
                                   value={lQty}
                                   onChange={(e) => setLQty(e.target.value)}
                                 />
                                 <label className="text-sm text-slate-700 flex items-center gap-2 justify-between">
                                   <span className="flex items-center gap-2">
                                     <input type="checkbox" checked={lGen} onChange={(e) => setLGen(e.target.checked)} />
-                                    Générer une tâche
+                                    GÃ©nÃ©rer une tÃ¢che
                                   </span>
                                 </label>
                               </div>
@@ -2817,12 +2817,12 @@ export default function ChantierPage() {
                                     addingLigne ? "bg-slate-300 text-slate-700" : "bg-slate-900 text-white hover:bg-slate-800",
                                   ].join(" ")}
                                 >
-                                  {addingLigne ? "Ajout…" : "+ Ajouter ligne"}
+                                  {addingLigne ? "Ajoutâ€¦" : "+ Ajouter ligne"}
                                 </button>
                               </div>
 
                               <div className="text-xs text-slate-500">
-                                Simple : lot + entreprise + désignation + unité + quantité.
+                                Simple : lot + entreprise + dÃ©signation + unitÃ© + quantitÃ©.
                               </div>
                             </form>
                           </div>
@@ -2834,15 +2834,15 @@ export default function ChantierPage() {
               </div>
             </section>
 
-            {/* TÂCHES */}
+            {/* TÃ‚CHES */}
             <section className="space-y-4">
               <div className="flex justify-between">
                 <div>
-                  <div className="font-semibold">Tâches</div>
+                  <div className="font-semibold">TÃ¢ches</div>
                   <div className="text-sm text-slate-500">Attribution par intervenant + modification</div>
                 </div>
                 <div className="text-xs text-slate-500">
-                  {tasksLoading ? "Chargement…" : `${filteredTasks.length} / ${tasks.length} tâche(s)`}
+                  {tasksLoading ? "Chargementâ€¦" : `${filteredTasks.length} / ${tasks.length} tÃ¢che(s)`}
                 </div>
               </div>
 
@@ -2867,7 +2867,7 @@ export default function ChantierPage() {
                   disabled={intervenantsLoading}
                 >
                   <option value="__ALL__">Tous les intervenants</option>
-                  <option value="__NONE__">Non attribué</option>
+                  <option value="__NONE__">Non attribuÃ©</option>
                   {intervenants.map((i) => (
                     <option key={i.id} value={i.id}>
                       {i.nom}
@@ -2876,7 +2876,7 @@ export default function ChantierPage() {
                 </select>
               </div>
 
-              {/* ✅ AJOUT TÂCHE */}
+              {/* âœ… AJOUT TÃ‚CHE */}
               <div className="rounded-xl border bg-slate-50 p-3 space-y-3">
                 <form onSubmit={addTask} className="space-y-3">
                   <div className="grid gap-2 md:grid-cols-6">
@@ -2888,7 +2888,7 @@ export default function ChantierPage() {
                     />
                     <input
                       className="rounded-xl border px-3 py-2 text-sm"
-                      placeholder="Corps d’état (lot)"
+                      placeholder="Corps dâ€™Ã©tat (lot)"
                       value={newCorpsEtat}
                       onChange={(e) => setNewCorpsEtat(e.target.value)}
                     />
@@ -2920,7 +2920,7 @@ export default function ChantierPage() {
                       onChange={(e) => setNewIntervenantId(e.target.value)}
                       disabled={intervenantsLoading}
                     >
-                      <option value="__NONE__">Intervenant : non attribué</option>
+                      <option value="__NONE__">Intervenant : non attribuÃ©</option>
                       {intervenants.map((i) => (
                         <option key={i.id} value={i.id}>
                           {i.nom}
@@ -2929,7 +2929,7 @@ export default function ChantierPage() {
                     </select>
 
                     <div className="md:col-span-2 text-xs text-slate-500 flex items-center">
-                      Astuce : crée tes intervenants dans l’onglet “Intervenants”, puis attribue-les ici.
+                      Astuce : crÃ©e tes intervenants dans lâ€™onglet â€œIntervenantsâ€, puis attribue-les ici.
                     </div>
                   </div>
 
@@ -2942,7 +2942,7 @@ export default function ChantierPage() {
                         addingTask ? "bg-slate-300 text-slate-700" : "bg-slate-900 text-white hover:bg-slate-800",
                       ].join(" ")}
                     >
-                      {addingTask ? "Ajout…" : "+ Ajouter tâche"}
+                      {addingTask ? "Ajoutâ€¦" : "+ Ajouter tÃ¢che"}
                     </button>
                   </div>
                 </form>
@@ -3001,8 +3001,8 @@ export default function ChantierPage() {
                             <>
                               <div className="font-medium truncate">{displayTitreClean}</div>
                               <div className="text-xs text-slate-500">
-                                {(t.corps_etat ?? "—")} • Intervenant : {it?.nom ?? "—"}
-                                {t.date ? ` • ${t.date}` : ""}
+                                {(t.corps_etat ?? "â€”")} â€¢ Intervenant : {it?.nom ?? "â€”"}
+                                {t.date ? ` â€¢ ${t.date}` : ""}
                               </div>
                               <div className="text-xs text-slate-500 mt-1">
                                 {qtyLabel} / {tempsPasseLabel} / {avancementLabel}
@@ -3040,7 +3040,7 @@ export default function ChantierPage() {
                                 value={editStatus as any}
                                 onChange={(e) => setEditStatus(e.target.value as any)}
                               >
-                                <option value="A_FAIRE">À faire</option>
+                                <option value="A_FAIRE">Ã€ faire</option>
                                 <option value="EN_COURS">En cours</option>
                                 <option value="FAIT">Fait</option>
                               </select>
@@ -3055,7 +3055,7 @@ export default function ChantierPage() {
                                 value={editIntervenantId}
                                 onChange={(e) => setEditIntervenantId(e.target.value)}
                               >
-                                <option value="__NONE__">Non attribué</option>
+                                <option value="__NONE__">Non attribuÃ©</option>
                                 {intervenants.map((x) => (
                                   <option key={x.id} value={x.id}>
                                     {x.nom}
@@ -3082,7 +3082,7 @@ export default function ChantierPage() {
                         return (
                           <div className="mt-2 space-y-1">
                             <div className="flex items-center justify-between">
-                              <div className="text-xs text-slate-500 font-medium">Documents liés</div>
+                              <div className="text-xs text-slate-500 font-medium">Documents liÃ©s</div>
                               <button
                                 type="button"
                                 onClick={() => openTaskDocumentsModal(t)}
@@ -3145,7 +3145,7 @@ export default function ChantierPage() {
                             ].join(" ")}
                             disabled={savingTask}
                           >
-                            {savingTask ? "Enregistrement…" : "Enregistrer"}
+                            {savingTask ? "Enregistrementâ€¦" : "Enregistrer"}
                           </button>
                         </div>
                       )}
@@ -3157,14 +3157,14 @@ export default function ChantierPage() {
           </div>
         )}
 
-        {/* ---------------- ONGLET MATÉRIEL ---------------- */}
+        {/* ---------------- ONGLET MATÃ‰RIEL ---------------- */}
         {tab === "materiel" && (
           <div className="space-y-4">
             <div className="flex items-center justify-between">
               <div>
-                <div className="font-semibold">Matériel</div>
+                <div className="font-semibold">MatÃ©riel</div>
                 <div className="text-sm text-slate-500">
-                  Demandes matériel avec statut : À commander / Commandé / Livré.
+                  Demandes matÃ©riel avec statut : Ã€ commander / CommandÃ© / LivrÃ©.
                 </div>
               </div>
               <button
@@ -3173,7 +3173,7 @@ export default function ChantierPage() {
                 className="rounded-xl border px-3 py-2 text-sm hover:bg-slate-50"
                 disabled={materielLoading}
               >
-                {materielLoading ? "Chargement…" : "Rafraîchir"}
+                {materielLoading ? "Chargementâ€¦" : "RafraÃ®chir"}
               </button>
             </div>
 
@@ -3184,7 +3184,7 @@ export default function ChantierPage() {
             )}
 
             <form onSubmit={onAddMateriel} className="rounded-xl border bg-slate-50 p-4 space-y-3">
-              <div className="font-semibold text-sm">Créer une demande de matériel</div>
+              <div className="font-semibold text-sm">CrÃ©er une demande de matÃ©riel</div>
 
               <div className="grid gap-2 md:grid-cols-3">
                 <select
@@ -3202,7 +3202,7 @@ export default function ChantierPage() {
 
                 <input
                   className="rounded-xl border px-3 py-2 text-sm"
-                  placeholder="Désignation (obligatoire)"
+                  placeholder="DÃ©signation (obligatoire)"
                   value={mDesignation}
                   onChange={(e) => setMDesignation(e.target.value)}
                 />
@@ -3210,13 +3210,13 @@ export default function ChantierPage() {
                 <div className="grid grid-cols-2 gap-2">
                   <input
                     className="rounded-xl border px-3 py-2 text-sm"
-                    placeholder="Qté"
+                    placeholder="QtÃ©"
                     value={mQuantite}
                     onChange={(e) => setMQuantite(e.target.value)}
                   />
                   <input
                     className="rounded-xl border px-3 py-2 text-sm"
-                    placeholder="Unité (ex: U, m², ml...)"
+                    placeholder="UnitÃ© (ex: U, mÂ², ml...)"
                     value={mUnite}
                     onChange={(e) => setMUnite(e.target.value)}
                   />
@@ -3236,9 +3236,9 @@ export default function ChantierPage() {
                   value={mStatus}
                   onChange={(e) => setMStatus(e.target.value as any)}
                 >
-                  <option value="A_COMMANDER">À commander</option>
-                  <option value="COMMANDE">Commandé</option>
-                  <option value="LIVRE">Livré</option>
+                  <option value="A_COMMANDER">Ã€ commander</option>
+                  <option value="COMMANDE">CommandÃ©</option>
+                  <option value="LIVRE">LivrÃ©</option>
                 </select>
 
                 <input
@@ -3258,16 +3258,16 @@ export default function ChantierPage() {
                     addingMateriel ? "bg-slate-300 text-slate-700" : "bg-slate-900 text-white hover:bg-slate-800",
                   ].join(" ")}
                 >
-                  {addingMateriel ? "Ajout…" : "+ Ajouter"}
+                  {addingMateriel ? "Ajoutâ€¦" : "+ Ajouter"}
                 </button>
               </div>
             </form>
 
             <div className="space-y-2">
               {materielLoading ? (
-                <div className="text-sm text-slate-500">Chargement…</div>
+                <div className="text-sm text-slate-500">Chargementâ€¦</div>
               ) : materiel.length === 0 ? (
-                <div className="text-sm text-slate-500">Aucune demande matériel.</div>
+                <div className="text-sm text-slate-500">Aucune demande matÃ©riel.</div>
               ) : (
                 materiel.map((m: any) => {
                   const it = intervenantById.get(m.intervenant_id);
@@ -3276,10 +3276,10 @@ export default function ChantierPage() {
                       <div className="flex items-start justify-between gap-3">
                         <div className="min-w-0">
                           <div className="font-medium truncate">
-                            {m.designation} • Qté {m.quantite}
+                            {m.designation} â€¢ QtÃ© {m.quantite}
                             {m.unite ? ` ${m.unite}` : ""}
                           </div>
-                          <div className="text-xs text-slate-500">Intervenant : {it?.nom ?? "—"}</div>
+                          <div className="text-xs text-slate-500">Intervenant : {it?.nom ?? "â€”"}</div>
                         </div>
 
                         <span className={["text-xs px-2 py-1 rounded-full border", materielStatusBadgeClass(m.status)].join(" ")}>
@@ -3293,9 +3293,9 @@ export default function ChantierPage() {
                           value={m.status}
                           onChange={(e) => onUpdateMaterielStatus(m, e.target.value as any)}
                         >
-                          <option value="A_COMMANDER">À commander</option>
-                          <option value="COMMANDE">Commandé</option>
-                          <option value="LIVRE">Livré</option>
+                          <option value="A_COMMANDER">Ã€ commander</option>
+                          <option value="COMMANDE">CommandÃ©</option>
+                          <option value="LIVRE">LivrÃ©</option>
                         </select>
 
                         <button
@@ -3334,7 +3334,7 @@ export default function ChantierPage() {
                 {tab === "rapports" && "Rapports"}
               </div>
               <div className="rounded-xl border bg-slate-50 p-4 text-sm text-slate-600">
-                Onglet en cours d’implémentation.
+                Onglet en cours dâ€™implÃ©mentation.
               </div>
             </div>
           )}
@@ -3346,7 +3346,7 @@ export default function ChantierPage() {
             <div className="absolute right-0 top-0 h-screen w-[50vw] max-w-[900px] min-w-[360px] bg-white border-l shadow-xl flex flex-col">
               <div className="px-4 py-3 border-b flex items-center justify-between">
                 <div className="font-semibold truncate">
-                  Réserve — {activeReserve?.title ?? "Nouvelle réserve"}
+                  RÃ©serve â€” {activeReserve?.title ?? "Nouvelle rÃ©serve"}
                 </div>
                 <button
                   type="button"
@@ -3354,14 +3354,14 @@ export default function ChantierPage() {
                   onClick={closeReserveDrawer}
                   disabled={reserveSaving}
                 >
-                  ✕
+                  âœ•
                 </button>
               </div>
 
               <div className="px-4 py-2 border-b flex gap-2">
                 {(
                   [
-                    { key: "details", label: "Détails" },
+                    { key: "details", label: "DÃ©tails" },
                     { key: "photos", label: "Photos" },
                     { key: "plan", label: "Plan" },
                   ] as const
@@ -3396,7 +3396,7 @@ export default function ChantierPage() {
                         className="w-full rounded-xl border px-3 py-2 text-sm"
                         value={reserveDraftTitle}
                         onChange={(e) => setReserveDraftTitle(e.target.value)}
-                        placeholder="Titre de la réserve"
+                        placeholder="Titre de la rÃ©serve"
                       />
                     </div>
 
@@ -3406,7 +3406,7 @@ export default function ChantierPage() {
                         className="w-full rounded-xl border px-3 py-2 text-sm min-h-[120px]"
                         value={reserveDraftDescription}
                         onChange={(e) => setReserveDraftDescription(e.target.value)}
-                        placeholder="Décrivez la réserve..."
+                        placeholder="DÃ©crivez la rÃ©serve..."
                       />
                     </div>
 
@@ -3425,7 +3425,7 @@ export default function ChantierPage() {
                       </div>
 
                       <div className="space-y-1">
-                        <div className="text-xs text-slate-600">Priorité</div>
+                        <div className="text-xs text-slate-600">PrioritÃ©</div>
                         <select
                           className="w-full rounded-xl border px-3 py-2 text-sm"
                           value={reserveDraftPriority}
@@ -3438,16 +3438,16 @@ export default function ChantierPage() {
                       </div>
 
                       <div className="space-y-1 md:col-span-2">
-                        <div className="text-xs text-slate-600">Tâche</div>
+                        <div className="text-xs text-slate-600">TÃ¢che</div>
                         <select
                           className="w-full rounded-xl border px-3 py-2 text-sm"
                           value={reserveDraftTaskId}
                           onChange={(e) => setReserveDraftTaskId(e.target.value)}
                         >
-                          <option value="">Sélectionner une tâche</option>
+                          <option value="">SÃ©lectionner une tÃ¢che</option>
                           {tasks.map((t) => (
                             <option key={t.id} value={t.id}>
-                              {stripLegacyPrefix(t.titre ?? "Tâche")}
+                              {stripLegacyPrefix(t.titre ?? "TÃ¢che")}
                             </option>
                           ))}
                         </select>
@@ -3491,7 +3491,7 @@ export default function ChantierPage() {
                               : "border-emerald-200 text-emerald-700 hover:bg-emerald-50",
                           ].join(" ")}
                         >
-                          Marquer levée
+                          Marquer levÃ©e
                         </button>
                       </div>
                     )}
@@ -3502,7 +3502,7 @@ export default function ChantierPage() {
                   <div className="space-y-4">
                     {!activeReserve ? (
                       <div className="text-sm text-slate-500">
-                        Créez la réserve pour ajouter des photos.
+                        CrÃ©ez la rÃ©serve pour ajouter des photos.
                       </div>
                     ) : (
                       <>
@@ -3534,14 +3534,14 @@ export default function ChantierPage() {
 
                         {reservePhotoFile && (
                           <div className="text-xs text-slate-500">
-                            Fichier sÃ©lectionnÃ© : {reservePhotoFile.name}
+                            Fichier sÃƒÂ©lectionnÃƒÂ© : {reservePhotoFile.name}
                           </div>
                         )}
 
                         {reservePhotosLoading ? (
                           <div className="text-sm text-slate-500">Chargement...</div>
                         ) : reservePhotos.length === 0 ? (
-                          <div className="text-sm text-slate-500">Aucune photo liée.</div>
+                          <div className="text-sm text-slate-500">Aucune photo liÃ©e.</div>
                         ) : (
                           <div className="grid gap-3 sm:grid-cols-2">
                             {reservePhotos.map((doc) => {
@@ -3557,7 +3557,7 @@ export default function ChantierPage() {
                                         className="w-full h-full object-contain"
                                       />
                                     ) : (
-                                      <div className="text-xs text-slate-500">Aperçu indisponible</div>
+                                      <div className="text-xs text-slate-500">AperÃ§u indisponible</div>
                                     )}
                                   </div>
                                   <div className="text-xs font-medium truncate">{doc.title}</div>
@@ -3582,11 +3582,11 @@ export default function ChantierPage() {
                   <div className="space-y-4">
                     {!activeReserve ? (
                       <div className="text-sm text-slate-500">
-                        Créez la réserve pour lier un plan.
+                        CrÃ©ez la rÃ©serve pour lier un plan.
                       </div>
                     ) : planDocuments.length === 0 ? (
                       <div className="text-sm text-slate-500">
-                        Aucun plan disponible. Ajoutez un document de type PLAN dans l’onglet Documents.
+                        Aucun plan disponible. Ajoutez un document de type PLAN dans lâ€™onglet Documents.
                       </div>
                     ) : (
                       <>
@@ -3598,7 +3598,7 @@ export default function ChantierPage() {
                               value={reservePlanDocumentId}
                               onChange={(e) => onSelectReservePlan(e.target.value)}
                             >
-                              <option value="">Sélectionner un plan</option>
+                              <option value="">SÃ©lectionner un plan</option>
                               {planDocuments.map((doc) => (
                                 <option key={doc.id} value={doc.id}>
                                   {doc.title || doc.file_name}
@@ -3623,15 +3623,15 @@ export default function ChantierPage() {
                         )}
 
                         {!reservePlanDocumentId ? (
-                          <div className="text-sm text-slate-500">Choisissez un plan pour l’afficher.</div>
+                          <div className="text-sm text-slate-500">Choisissez un plan pour lâ€™afficher.</div>
                         ) : reservePlanLoading ? (
-                          <div className="text-sm text-slate-500">Chargement du plan…</div>
+                          <div className="text-sm text-slate-500">Chargement du planâ€¦</div>
                         ) : !reservePlanUrl ? (
-                          <div className="text-sm text-slate-500">Aperçu indisponible.</div>
+                          <div className="text-sm text-slate-500">AperÃ§u indisponible.</div>
                         ) : (
                           <div className="space-y-2">
                             <div className="text-xs text-slate-500">
-                              Cliquez sur le plan pour placer un repère.
+                              Cliquez sur le plan pour placer un repÃ¨re.
                             </div>
                             <div className="relative w-full h-[60vh] rounded-xl border overflow-hidden bg-slate-50">
                               {(selectedPlanDoc?.mime_type ?? "").startsWith("image/") ? (
@@ -3648,7 +3648,7 @@ export default function ChantierPage() {
                                 />
                               ) : (
                                 <div className="flex items-center justify-center h-full text-sm text-slate-500">
-                                  Aperçu non disponible.
+                                  AperÃ§u non disponible.
                                 </div>
                               )}
 
@@ -3690,7 +3690,7 @@ export default function ChantierPage() {
                               </div>
                             </div>
                             {reserveMarkersLoading && (
-                              <div className="text-xs text-slate-500">Chargement des repères…</div>
+                              <div className="text-xs text-slate-500">Chargement des repÃ¨resâ€¦</div>
                             )}
                           </div>
                         )}
@@ -3733,7 +3733,7 @@ export default function ChantierPage() {
 
         <TaskDocumentsDrawer
           open={taskDocumentsModalOpen}
-          taskTitle={taskDocumentsModalTask?.titre ?? "Tâche"}
+          taskTitle={taskDocumentsModalTask?.titre ?? "TÃ¢che"}
           documents={chantierDocuments}
           selectedIds={taskDocumentsSelection}
           onSelectionChange={setTaskDocumentsSelection}
@@ -3789,7 +3789,7 @@ export default function ChantierPage() {
                   onClick={closeDocumentModal}
                   disabled={documentUploading}
                 >
-                  ✕
+                  âœ•
                 </button>
               </div>
 
@@ -3810,8 +3810,8 @@ export default function ChantierPage() {
                       <div className="space-y-2">
                         <div className="font-medium text-slate-900 truncate">{documentFile.name}</div>
                         <div className="text-xs">
-                          Taille : {(documentFile.size / (1024 * 1024)).toFixed(2)} Mo • Type :{" "}
-                          {documentFile.type || "—"}
+                          Taille : {(documentFile.size / (1024 * 1024)).toFixed(2)} Mo â€¢ Type :{" "}
+                          {documentFile.type || "â€”"}
                         </div>
                         <button
                           type="button"
@@ -3827,7 +3827,7 @@ export default function ChantierPage() {
                       </div>
                     ) : (
                       <div>
-                        Glissez-déposez un fichier ici ou cliquez pour sélectionner.
+                        Glissez-dÃ©posez un fichier ici ou cliquez pour sÃ©lectionner.
                         <div className="text-xs text-slate-500 mt-1">
                           PDF, images, Word, Excel
                         </div>
@@ -3855,7 +3855,7 @@ export default function ChantierPage() {
                   </div>
 
                   <div className="space-y-1">
-                    <div className="text-xs text-slate-600">Catégorie</div>
+                    <div className="text-xs text-slate-600">CatÃ©gorie</div>
                     <select
                       className="w-full rounded-xl border px-3 py-2 text-sm"
                       value={documentCategory}
@@ -3885,7 +3885,7 @@ export default function ChantierPage() {
                   </div>
 
                   <div className="space-y-1">
-                    <div className="text-xs text-slate-600">Mode visibilité</div>
+                    <div className="text-xs text-slate-600">Mode visibilitÃ©</div>
                     <select
                       className="w-full rounded-xl border px-3 py-2 text-sm"
                       value={documentVisibilityMode}
@@ -3901,7 +3901,7 @@ export default function ChantierPage() {
                 </div>
 
                 <div className="space-y-1">
-                  <div className="text-xs text-slate-600">Intervenants autorisés</div>
+                  <div className="text-xs text-slate-600">Intervenants autorisÃ©s</div>
                   <div
                     className={[
                       "rounded-xl border p-3 space-y-2 max-h-40 overflow-auto",
@@ -3934,12 +3934,12 @@ export default function ChantierPage() {
                     )}
                   </div>
                   {documentVisibilityMode !== "RESTRICTED" && (
-                    <div className="text-xs text-slate-500">Sélection désactivée pour ce mode.</div>
+                    <div className="text-xs text-slate-500">SÃ©lection dÃ©sactivÃ©e pour ce mode.</div>
                   )}
                 </div>
 
                 <div className="space-y-1">
-                  <div className="text-xs text-slate-600">Lier à une tâche (optionnel)</div>
+                  <div className="text-xs text-slate-600">Lier Ã  une tÃ¢che (optionnel)</div>
                   <select
                     className="w-full rounded-xl border px-3 py-2 text-sm"
                     value={documentTaskId}
@@ -4007,7 +4007,7 @@ export default function ChantierPage() {
                   onClick={closeDocumentPreview}
                   disabled={documentPreviewLoading}
                 >
-                  ✕
+                  âœ•
                 </button>
               </div>
 
@@ -4028,7 +4028,7 @@ export default function ChantierPage() {
                   />
                 ) : (
                   <div className="rounded-xl border bg-slate-50 p-4 text-sm text-slate-600">
-                    Aperçu non disponible.
+                    AperÃ§u non disponible.
                   </div>
                 )}
               </div>
@@ -4053,7 +4053,7 @@ export default function ChantierPage() {
                   onClick={cancelEditIntervenant}
                   disabled={savingIntervenant}
                 >
-                  ✕
+                  âœ•
                 </button>
               </div>
 
@@ -4079,12 +4079,12 @@ export default function ChantierPage() {
                 </div>
 
                 <div className="space-y-1">
-                  <div className="text-xs text-slate-600">Téléphone</div>
+                  <div className="text-xs text-slate-600">TÃ©lÃ©phone</div>
                   <input
                     className="w-full rounded-xl border px-3 py-2 text-sm"
                     value={editIntervenantTel}
                     onChange={(e) => setEditIntervenantTel(e.target.value)}
-                    placeholder="Téléphone (optionnel)"
+                    placeholder="TÃ©lÃ©phone (optionnel)"
                   />
                 </div>
               </div>
@@ -4107,7 +4107,7 @@ export default function ChantierPage() {
                   onClick={saveEditIntervenant}
                   disabled={savingIntervenant}
                 >
-                  {savingIntervenant ? "Enregistrement…" : "Enregistrer"}
+                  {savingIntervenant ? "Enregistrementâ€¦" : "Enregistrer"}
                 </button>
               </div>
             </div>
@@ -4117,6 +4117,15 @@ export default function ChantierPage() {
     </div>
   );
 }
+
+
+
+
+
+
+
+
+
 
 
 

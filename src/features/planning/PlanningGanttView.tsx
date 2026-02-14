@@ -28,11 +28,9 @@ type BarProps = {
   title: string;
   left: number;
   width: number;
-  dayWidth: number;
   conflict: boolean;
   violated: boolean;
   onSelect: () => void;
-  onUpdate: (start: string, end: string) => void;
 };
 
 function DraggableBar({
@@ -40,13 +38,11 @@ function DraggableBar({
   title,
   left,
   width,
-  dayWidth,
   conflict,
   violated,
   onSelect,
-  onUpdate,
 }: BarProps) {
-  const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
+  const { attributes, listeners, setNodeRef, transform } = useDraggable({
     id: `move:${entry.id}`,
     disabled: !!entry.is_locked,
   });
@@ -76,10 +72,6 @@ function DraggableBar({
       ? `translate3d(${transform.x}px, ${transform.y}px, 0)`
       : undefined,
   };
-
-  const start = parseDate(entry.start_date);
-  const end = parseDate(entry.end_date);
-  const duration = Math.max(1, diffDays(start, end) + 1);
 
   return (
     <div
@@ -270,11 +262,9 @@ export default function PlanningGanttView({
                             title={taskTitleById.get(entry.task_id) ?? entry.task_id.slice(0, 6)}
                             left={leftDays * dayWidth}
                             width={width}
-                            dayWidth={dayWidth}
                             conflict={conflictEntryIds.has(entry.id)}
                             violated={violatedEntryIds.has(entry.id)}
                             onSelect={() => onSelectEntry(entry)}
-                            onUpdate={(startStr, endStr) => onUpdateEntryDates(entry.id, startStr, endStr)}
                           />
                         );
                       })() : null}

@@ -44,20 +44,7 @@ export async function getPlanningEntries(chantierId: string): Promise<PlanningEn
   if (!chantierId) throw new Error("chantierId manquant.");
   const { data, error } = await supabase
     .from("planning_entries")
-    .select(
-      [
-        "id",
-        "chantier_id",
-        "task_id",
-        "start_date",
-        "end_date",
-        "assigned_intervenant_ids",
-        "order_index",
-        "is_locked",
-        "created_at",
-        "updated_at",
-      ].join(","),
-    )
+    .select("*")
     .eq("chantier_id", chantierId)
     .order("start_date", { ascending: true });
 
@@ -82,20 +69,7 @@ export async function createPlanningEntry(payload: {
       order_index: payload.order_index ?? 0,
       is_locked: payload.is_locked ?? false,
     })
-    .select(
-      [
-        "id",
-        "chantier_id",
-        "task_id",
-        "start_date",
-        "end_date",
-        "assigned_intervenant_ids",
-        "order_index",
-        "is_locked",
-        "created_at",
-        "updated_at",
-      ].join(","),
-    )
+    .select("*")
     .maybeSingle();
 
   if (error) throw new Error(error.message);
@@ -112,20 +86,7 @@ export async function updatePlanningEntry(
     .from("planning_entries")
     .update(patch)
     .eq("id", id)
-    .select(
-      [
-        "id",
-        "chantier_id",
-        "task_id",
-        "start_date",
-        "end_date",
-        "assigned_intervenant_ids",
-        "order_index",
-        "is_locked",
-        "created_at",
-        "updated_at",
-      ].join(","),
-    )
+    .select("*")
     .maybeSingle();
 
   if (error) throw new Error(error.message);
@@ -143,16 +104,7 @@ export async function getDependencies(chantierId: string): Promise<TaskDependenc
   if (!chantierId) throw new Error("chantierId manquant.");
   const { data, error } = await supabase
     .from("task_dependencies")
-    .select(
-      [
-        "id",
-        "chantier_id",
-        "predecessor_task_id",
-        "successor_task_id",
-        "type",
-        "created_at",
-      ].join(","),
-    )
+    .select("*")
     .eq("chantier_id", chantierId);
 
   if (error) throw new Error(error.message);
@@ -217,16 +169,7 @@ export async function createDependency(payload: {
       successor_task_id: payload.successor_task_id,
       type: payload.type ?? "FINISH_TO_START",
     })
-    .select(
-      [
-        "id",
-        "chantier_id",
-        "predecessor_task_id",
-        "successor_task_id",
-        "type",
-        "created_at",
-      ].join(","),
-    )
+    .select("*")
     .maybeSingle();
 
   if (error) throw new Error(error.message);
@@ -238,19 +181,7 @@ export async function getPlanningTasks(chantierId: string): Promise<PlanningTask
   if (!chantierId) throw new Error("chantierId manquant.");
   const { data, error } = await supabase
     .from("chantier_tasks")
-    .select(
-      [
-        "id",
-        "chantier_id",
-        "titre",
-        "status",
-        "lot",
-        "corps_etat",
-        "intervenant_id",
-        "date_debut",
-        "date_fin",
-      ].join(","),
-    )
+    .select("*")
     .eq("chantier_id", chantierId)
     .order("ordre", { ascending: true });
 

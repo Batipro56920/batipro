@@ -1,21 +1,12 @@
-import { supabase } from "../lib/supabaseClient";
+﻿import { supabase } from "../lib/supabaseClient";
+import type { Database } from "../types/supabase";
 
 export type ReserveStatus = "OUVERTE" | "LEVEE" | "EN_COURS" | string;
 export type ReservePriority = "BASSE" | "NORMALE" | "URGENTE" | string;
 
-export type ChantierReserveRow = {
-  id: string;
-  chantier_id: string;
-  task_id: string | null;
-  title: string;
-  description: string | null;
-  status: ReserveStatus;
-  priority: ReservePriority;
-  intervenant_id: string | null;
-  levee_at: string | null;
-  created_at: string;
-  updated_at: string;
-};
+export type ChantierReserveRow = Database["public"]["Tables"]["chantier_reserves"]["Row"];
+
+type AssigneeRow = Database["public"]["Tables"]["chantier_task_assignees"]["Row"];
 
 function isMissingTableError(error: { message?: string } | null): boolean {
   const msg = (error?.message ?? "").toLowerCase();
@@ -39,6 +30,7 @@ function isMissingAssigneesTableError(error: { message?: string } | null): boole
 
 export async function getTaskAssignee(taskId: string): Promise<string | null> {
   if (!taskId) return null;
+
   const { data, error } = await supabase
     .from("chantier_task_assignees")
     .select("intervenant_id")
@@ -48,10 +40,11 @@ export async function getTaskAssignee(taskId: string): Promise<string | null> {
 
   if (error) {
     if (isMissingAssigneesTableError(error)) return null;
-    throw new Error(error.message);
+    throw error;
   }
 
-  return data?.intervenant_id ?? null;
+  const row = data as AssigneeRow | null;
+  return row?.intervenant_id ?? null;
 }
 
 export async function listReservesByChantierId(chantierId: string): Promise<ChantierReserveRow[]> {
@@ -59,30 +52,17 @@ export async function listReservesByChantierId(chantierId: string): Promise<Chan
 
   const { data, error } = await supabase
     .from("chantier_reserves")
-    .select(
-      [
-        "id",
-        "chantier_id",
-        "task_id",
-        "title",
-        "description",
-        "status",
-        "priority",
-        "intervenant_id",
-        "levee_at",
-        "created_at",
-        "updated_at",
-      ].join(","),
-    )
+    .select()
     .eq("chantier_id", chantierId)
-    .order("created_at", { ascending: false });
+    .order("created_at", { ascending: false })
+    .overrideTypes<ChantierReserveRow[]>();
 
   if (error) {
     if (isMissingTableError(error)) return [];
-    throw new Error(error.message);
+    throw error;
   }
 
-  return (data ?? []) as ChantierReserveRow[];
+  return data ?? [];
 }
 
 export async function createReserve(input: {
@@ -110,25 +90,13 @@ export async function createReserve(input: {
   const { data, error } = await supabase
     .from("chantier_reserves")
     .insert(payload)
-    .select(
-      [
-        "id",
-        "chantier_id",
-        "task_id",
-        "title",
-        "description",
-        "status",
-        "priority",
-        "intervenant_id",
-        "levee_at",
-        "created_at",
-        "updated_at",
-      ].join(","),
-    )
-    .single();
+    .select()
+    .maybeSingle()
+    .overrideTypes<ChantierReserveRow>();
 
-  if (error) throw new Error(error.message);
-  return data as ChantierReserveRow;
+  if (error) throw error;
+  if (!data) throw new Error("No reserve returned");
+  return data;
 }
 
 export async function updateReserve(
@@ -145,36 +113,37 @@ export async function updateReserve(
 ): Promise<ChantierReserveRow> {
   if (!id) throw new Error("id manquant.");
 
-  const payload: any = { ...patch, updated_at: new Date().toISOString() };
+  const payload: {
+    task_id?: string | null;
+    title?: string;
+    description?: string | null;
+    status?: ReserveStatus;
+    priority?: ReservePriority;
+    intervenant_id?: string | null;
+    levee_at?: string | null;
+    updated_at: string;
+  } = {
+    ...patch,
+    updated_at: new Date().toISOString(),
+  };
+
   if (payload.title !== undefined) payload.title = String(payload.title).trim();
 
   const { data, error } = await supabase
     .from("chantier_reserves")
     .update(payload)
     .eq("id", id)
-    .select(
-      [
-        "id",
-        "chantier_id",
-        "task_id",
-        "title",
-        "description",
-        "status",
-        "priority",
-        "intervenant_id",
-        "levee_at",
-        "created_at",
-        "updated_at",
-      ].join(","),
-    )
-    .single();
+    .select()
+    .maybeSingle()
+    .overrideTypes<ChantierReserveRow>();
 
-  if (error) throw new Error(error.message);
-  return data as ChantierReserveRow;
+  if (error) throw error;
+  if (!data) throw new Error("No reserve returned");
+  return data;
 }
 
 export async function setReserveStatus(id: string, status: ReserveStatus): Promise<ChantierReserveRow> {
-  const patch: any = { status };
+  const patch: { status: ReserveStatus; levee_at?: string } = { status };
   if (status === "LEVEE") patch.levee_at = new Date().toISOString();
   return updateReserve(id, patch);
 }
