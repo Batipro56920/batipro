@@ -246,9 +246,19 @@ alter table "public"."chantier_tasks" add column "temps_reel_h" numeric;
 
 alter table "public"."chantier_tasks" add column "unite" text;
 
-alter table "public"."chantier_tasks" alter column "ordre" set default 1;
-
-alter table "public"."chantier_tasks" alter column "ordre" drop not null;
+do $$
+begin
+  if exists (
+    select 1
+    from information_schema.columns
+    where table_schema = 'public'
+      and table_name = 'chantier_tasks'
+      and column_name = 'ordre'
+  ) then
+    execute 'alter table "public"."chantier_tasks" alter column "ordre" set default 1';
+    execute 'alter table "public"."chantier_tasks" alter column "ordre" drop not null';
+  end if;
+end $$;
 
 alter table "public"."chantier_tasks" enable row level security;
 
@@ -396,9 +406,19 @@ CREATE UNIQUE INDEX fournisseurs_pkey ON public.fournisseurs USING btree (id);
 
 CREATE INDEX idx_chantier_tasks_chantier_id ON public.chantier_tasks USING btree (chantier_id);
 
-CREATE INDEX idx_chantier_tasks_chantier_id_ordre ON public.chantier_tasks USING btree (chantier_id, ordre);
-
-CREATE INDEX idx_chantier_tasks_chantier_ordre ON public.chantier_tasks USING btree (chantier_id, ordre);
+do $$
+begin
+  if exists (
+    select 1
+    from information_schema.columns
+    where table_schema = 'public'
+      and table_name = 'chantier_tasks'
+      and column_name = 'ordre'
+  ) then
+    execute 'create index if not exists idx_chantier_tasks_chantier_id_ordre on public.chantier_tasks using btree (chantier_id, ordre)';
+    execute 'create index if not exists idx_chantier_tasks_chantier_ordre on public.chantier_tasks using btree (chantier_id, ordre)';
+  end if;
+end $$;
 
 CREATE INDEX idx_chantier_tasks_devis_ligne_id ON public.chantier_tasks USING btree (devis_ligne_id);
 

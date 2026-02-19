@@ -16,18 +16,46 @@ alter table public.chantier_tasks
   add column if not exists duration_days integer not null default 1,
   add column if not exists order_index integer not null default 0;
 
-update public.chantier_tasks
-set
-  duration_days = coalesce(duration_days, 1),
-  order_index = coalesce(order_index, ordre, 0)
-where duration_days is null
-   or order_index is null;
+do $$
+begin
+  if exists (
+    select 1
+    from information_schema.columns
+    where table_schema = 'public'
+      and table_name = 'chantier_tasks'
+      and column_name = 'ordre'
+  ) then
+    execute '
+      update public.chantier_tasks
+      set
+        duration_days = greatest(1, coalesce(duration_days, 1)),
+        order_index = greatest(0, coalesce(order_index, ordre, 0))
+      where duration_days is null
+         or duration_days < 1
+         or order_index is null
+         or order_index < 0
+    ';
 
--- one-shot migration: legacy ordre -> order_index (order_index devient la source unique)
-update public.chantier_tasks
-set order_index = greatest(0, coalesce(ordre, 0))
-where coalesce(order_index, 0) = 0
-  and coalesce(ordre, 0) <> 0;
+    -- one-shot migration: legacy ordre -> order_index (order_index devient la source unique)
+    execute '
+      update public.chantier_tasks
+      set order_index = greatest(0, coalesce(ordre, 0))
+      where coalesce(order_index, 0) = 0
+        and coalesce(ordre, 0) <> 0
+    ';
+  else
+    execute '
+      update public.chantier_tasks
+      set
+        duration_days = greatest(1, coalesce(duration_days, 1)),
+        order_index = greatest(0, coalesce(order_index, 0))
+      where duration_days is null
+         or duration_days < 1
+         or order_index is null
+         or order_index < 0
+    ';
+  end if;
+end $$;
 
 update public.chantier_tasks
 set duration_days = 1

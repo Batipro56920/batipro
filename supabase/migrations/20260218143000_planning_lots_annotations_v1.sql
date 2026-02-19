@@ -1,4 +1,4 @@
-﻿-- Nouveau module planning V2: lots + annotations + champs de projection
+-- Nouveau module planning V2: lots + annotations + champs de projection
 
 alter table public.chantiers
   add column if not exists start_date date,
@@ -15,7 +15,7 @@ alter table public.chantier_tasks
   add column if not exists order_index integer not null default 0;
 
 update public.chantier_tasks
-set order_index = coalesce(order_index, ordre, 0)
+set order_index = coalesce(order_index, 0)
 where order_index is null;
 
 update public.chantier_tasks
