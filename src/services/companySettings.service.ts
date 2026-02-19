@@ -1,0 +1,284 @@
+import { supabase } from "../lib/supabaseClient";
+
+const TABLE = "company_settings";
+const LOGO_BUCKET = "chantier-documents";
+const MAX_LOGO_BYTES = 5 * 1024 * 1024;
+const LOCAL_SETTINGS_KEY = "batipro.company_settings.v1";
+
+export type CompanySettingsRow = {
+  id: string;
+  organization_id: string;
+  company_name: string;
+  logo_path: string | null;
+  logo_url?: string | null;
+  address: string | null;
+  phone: string | null;
+  email: string | null;
+  siret: string | null;
+  insurance_decennale: string | null;
+  primary_color: string;
+  secondary_color: string;
+  created_at: string;
+  updated_at: string;
+};
+
+export type CompanyBrandingPdf = {
+  companyName: string;
+  address: string | null;
+  phone: string | null;
+  email: string | null;
+  siret: string | null;
+  insuranceDecennale: string | null;
+  primaryColor: string;
+  secondaryColor: string;
+  logoDataUrl: string | null;
+};
+
+function sanitizeFileName(name: string): string {
+  const base = (name ?? "").trim();
+  if (!base) return "logo";
+  const noAccents = base.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+  const lower = noAccents.toLowerCase();
+  const noApostrophes = lower.replace(/['\u2019]/g, "");
+  const underscored = noApostrophes.replace(/\s+/g, "_");
+  const safe = underscored.replace(/[^a-z0-9._-]/g, "");
+  return safe || "logo";
+}
+
+function normalizeHexColor(raw: string | null | undefined, fallback: string): string {
+  const value = String(raw ?? "").trim();
+  return /^#([0-9A-Fa-f]{6})$/.test(value) ? value : fallback;
+}
+
+function isMissingCompanySettingsTableError(error: { message?: string } | null): boolean {
+  const msg = String(error?.message ?? "").toLowerCase();
+  if (!msg) return false;
+  return (
+    (msg.includes("schema cache") && msg.includes("company_settings")) ||
+    (msg.includes("relation") && msg.includes("company_settings")) ||
+    msg.includes("does not exist")
+  );
+}
+
+function loadLocalSettings(orgId: string): Partial<CompanySettingsRow> | null {
+  try {
+    const raw = localStorage.getItem(`${LOCAL_SETTINGS_KEY}:${orgId}`);
+    if (!raw) return null;
+    return JSON.parse(raw) as Partial<CompanySettingsRow>;
+  } catch {
+    return null;
+  }
+}
+
+function saveLocalSettings(orgId: string, data: Partial<CompanySettingsRow>) {
+  try {
+    localStorage.setItem(`${LOCAL_SETTINGS_KEY}:${orgId}`, JSON.stringify(data));
+  } catch {
+    // ignore local persistence errors
+  }
+}
+
+async function getCurrentUserId(): Promise<string> {
+  const { data, error } = await supabase.auth.getUser();
+  if (error) throw new Error(error.message);
+  if (!data.user?.id) throw new Error("Utilisateur non authentifie.");
+  return data.user.id;
+}
+
+function withDefaults(orgId: string, row?: Partial<CompanySettingsRow>): CompanySettingsRow {
+  const rowAny = row as any;
+  const logoPath = (rowAny?.logo_path ?? rowAny?.logo_url ?? null) as string | null;
+  return {
+    id: String(row?.id ?? ""),
+    organization_id: String(row?.organization_id ?? orgId),
+    company_name: String(row?.company_name ?? ""),
+    logo_path: logoPath,
+    logo_url: rowAny?.logo_url ?? null,
+    address: row?.address ?? null,
+    phone: row?.phone ?? null,
+    email: row?.email ?? null,
+    siret: row?.siret ?? null,
+    insurance_decennale: row?.insurance_decennale ?? null,
+    primary_color: normalizeHexColor(row?.primary_color, "#2563eb"),
+    secondary_color: normalizeHexColor(row?.secondary_color, "#0f172a"),
+    created_at: String(row?.created_at ?? ""),
+    updated_at: String(row?.updated_at ?? ""),
+  };
+}
+
+export async function getCompanySettings(): Promise<CompanySettingsRow> {
+  const userId = await getCurrentUserId();
+  const { data, error } = await supabase
+    .from(TABLE)
+    .select("*")
+    .eq("organization_id", userId)
+    .maybeSingle();
+
+  if (error) {
+    if (isMissingCompanySettingsTableError(error)) {
+      return withDefaults(userId, loadLocalSettings(userId) ?? undefined);
+    }
+    throw new Error(error.message);
+  }
+
+  const normalized = withDefaults(userId, (data ?? undefined) as Partial<CompanySettingsRow> | undefined);
+  saveLocalSettings(userId, normalized);
+  return normalized;
+}
+
+export async function upsertCompanySettings(
+  patch: Partial<
+    Pick<
+      CompanySettingsRow,
+      | "company_name"
+      | "logo_path"
+      | "address"
+      | "phone"
+      | "email"
+      | "siret"
+      | "insurance_decennale"
+      | "primary_color"
+      | "secondary_color"
+    >
+  >,
+): Promise<CompanySettingsRow> {
+  const userId = await getCurrentUserId();
+  const nowIso = new Date().toISOString();
+
+  const payload = {
+    organization_id: userId,
+    company_name: String(patch.company_name ?? "").trim(),
+    logo_path: patch.logo_path ?? null,
+    address: patch.address ? patch.address.trim() : null,
+    phone: patch.phone ? patch.phone.trim() : null,
+    email: patch.email ? patch.email.trim() : null,
+    siret: patch.siret ? patch.siret.trim() : null,
+    insurance_decennale: patch.insurance_decennale ? patch.insurance_decennale.trim() : null,
+    primary_color: normalizeHexColor(patch.primary_color, "#2563eb"),
+    secondary_color: normalizeHexColor(patch.secondary_color, "#0f172a"),
+  };
+
+  const { data, error } = await supabase
+    .from(TABLE)
+    .upsert(payload, { onConflict: "organization_id" })
+    .select("*")
+    .single();
+
+  if (error) {
+    if (isMissingCompanySettingsTableError(error)) {
+      const local = withDefaults(userId, loadLocalSettings(userId) ?? undefined);
+      const fallback: Partial<CompanySettingsRow> = {
+        ...local,
+        ...payload,
+        created_at: local.created_at || nowIso,
+        updated_at: nowIso,
+      };
+      saveLocalSettings(userId, fallback);
+      return withDefaults(userId, fallback);
+    }
+    throw new Error(error.message);
+  }
+
+  const normalized = withDefaults(userId, data as Partial<CompanySettingsRow>);
+  saveLocalSettings(userId, normalized);
+  return normalized;
+}
+
+function fileToDataUrl(file: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      if (typeof reader.result === "string") {
+        resolve(reader.result);
+        return;
+      }
+      reject(new Error("Conversion du logo impossible."));
+    };
+    reader.onerror = () => reject(new Error("Conversion du logo impossible."));
+    reader.readAsDataURL(file);
+  });
+}
+
+export async function uploadCompanyLogo(file: File, currentLogoPath?: string | null): Promise<string> {
+  if (!file) throw new Error("Logo manquant.");
+  if (!file.type.startsWith("image/")) throw new Error("Le logo doit etre une image.");
+  if (file.size > MAX_LOGO_BYTES) throw new Error("Le logo depasse 5 Mo.");
+
+  const userId = await getCurrentUserId();
+  const safeName = sanitizeFileName(file.name || "logo");
+  const storagePath = `company/${userId}/${crypto.randomUUID()}-${safeName}`;
+
+  const { error: uploadError } = await supabase.storage.from(LOGO_BUCKET).upload(storagePath, file, {
+    upsert: false,
+    contentType: file.type || "application/octet-stream",
+  });
+  if (uploadError) {
+    // Fallback local if Storage is not available yet (policies, env, migration delay, etc.)
+    return fileToDataUrl(file);
+  }
+
+  if (currentLogoPath && !/^https?:\/\//i.test(currentLogoPath) && !/^data:image\//i.test(currentLogoPath)) {
+    await supabase.storage.from(LOGO_BUCKET).remove([currentLogoPath]);
+  }
+
+  return storagePath;
+}
+
+export async function getCompanyLogoSignedUrl(storagePath: string, expiresInSeconds = 3600): Promise<string> {
+  if (/^https?:\/\//i.test(storagePath) || /^data:image\//i.test(storagePath)) {
+    return storagePath;
+  }
+  const { data, error } = await supabase.storage.from(LOGO_BUCKET).createSignedUrl(storagePath, expiresInSeconds);
+  if (error || !data?.signedUrl) throw new Error(error?.message ?? "Impossible de charger le logo.");
+  return data.signedUrl;
+}
+
+export async function getCompanyBrandingForPdf(): Promise<CompanyBrandingPdf> {
+  try {
+    const settings = await getCompanySettings();
+    let logoDataUrl: string | null = null;
+
+    if (settings.logo_path) {
+      try {
+        const logoRef = settings.logo_path;
+        if (/^data:image\//i.test(logoRef)) {
+          logoDataUrl = logoRef;
+        } else {
+          const signedOrDirectUrl =
+            /^https?:\/\//i.test(logoRef) ? logoRef : await getCompanyLogoSignedUrl(logoRef, 600);
+          const response = await fetch(signedOrDirectUrl);
+          if (response.ok) {
+            const blob = await response.blob();
+            logoDataUrl = await fileToDataUrl(blob);
+          }
+        }
+      } catch {
+        logoDataUrl = null;
+      }
+    }
+
+    return {
+      companyName: settings.company_name.trim() || "Batipro",
+      address: settings.address,
+      phone: settings.phone,
+      email: settings.email,
+      siret: settings.siret,
+      insuranceDecennale: settings.insurance_decennale,
+      primaryColor: settings.primary_color,
+      secondaryColor: settings.secondary_color,
+      logoDataUrl,
+    };
+  } catch {
+    return {
+      companyName: "Batipro",
+      address: null,
+      phone: null,
+      email: null,
+      siret: null,
+      insuranceDecennale: null,
+      primaryColor: "#2563eb",
+      secondaryColor: "#0f172a",
+      logoDataUrl: null,
+    };
+  }
+}

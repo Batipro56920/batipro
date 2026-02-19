@@ -36,15 +36,15 @@ export async function getTaskAssignee(taskId: string): Promise<string | null> {
     .select("intervenant_id")
     .eq("task_id", taskId)
     .limit(1)
-    .maybeSingle();
+    .maybeSingle()
+    .overrideTypes<Pick<AssigneeRow, "intervenant_id">>();
 
   if (error) {
     if (isMissingAssigneesTableError(error)) return null;
     throw error;
   }
 
-  const row = data as AssigneeRow | null;
-  return row?.intervenant_id ?? null;
+  return data?.intervenant_id ?? null;
 }
 
 export async function listReservesByChantierId(chantierId: string): Promise<ChantierReserveRow[]> {

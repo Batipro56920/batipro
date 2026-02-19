@@ -14,6 +14,16 @@ type DocumentInsert = Database["public"]["Tables"]["chantier_documents"]["Insert
 type DocumentUpdate = Database["public"]["Tables"]["chantier_documents"]["Update"];
 
 const DEFAULT_BUCKET = "chantier-documents";
+const MAX_UPLOAD_BYTES = 50 * 1024 * 1024;
+const ALLOWED_CONTENT_PREFIXES = [
+  "application/pdf",
+  "image/",
+  "text/",
+  "application/msword",
+  "application/vnd.openxmlformats-officedocument",
+  "application/vnd.ms-excel",
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+];
 
 
 function deriveLegacyVisibility(mode: DocumentVisibilityMode, accessIds?: string[] | null): string {
@@ -34,6 +44,35 @@ function sanitizeFileName(name: string): string {
   const trimmed = safe.replace(/^_+|_+$/g, "") || "fichier";
   const maxLen = 120;
   return trimmed.length > maxLen ? trimmed.slice(0, maxLen) : trimmed;
+}
+
+function resolveContentType(file: File): string {
+  const raw = String(file.type ?? "").trim().toLowerCase();
+  if (raw) return raw;
+  const name = String(file.name ?? "").toLowerCase();
+  if (name.endsWith(".pdf")) return "application/pdf";
+  if (name.endsWith(".png")) return "image/png";
+  if (name.endsWith(".jpg") || name.endsWith(".jpeg")) return "image/jpeg";
+  if (name.endsWith(".webp")) return "image/webp";
+  if (name.endsWith(".txt")) return "text/plain";
+  return "application/octet-stream";
+}
+
+function validateUploadFile(file: File): { safeName: string; contentType: string } {
+  if (!file) throw new Error("Fichier manquant.");
+  if (!file.name || !file.name.trim()) throw new Error("Nom de fichier invalide.");
+  if (!Number.isFinite(file.size) || file.size <= 0) throw new Error("Fichier vide ou invalide.");
+  if (file.size > MAX_UPLOAD_BYTES) {
+    throw new Error("Fichier trop volumineux (max 50 Mo).");
+  }
+  const contentType = resolveContentType(file);
+  const allowed = ALLOWED_CONTENT_PREFIXES.some((prefix) => contentType.startsWith(prefix));
+  if (!allowed && contentType !== "application/octet-stream") {
+    throw new Error(`Type de fichier non supporte (${contentType}).`);
+  }
+  const safeName = sanitizeFileName(file.name);
+  if (!safeName) throw new Error("Nom de fichier non exploitable.");
+  return { safeName, contentType };
 }
 
 function isMissingTableError(error: { message?: string } | null): boolean {
@@ -186,13 +225,22 @@ export async function uploadDocument(input: {
   if (!file) throw new Error("fichier manquant.");
 
   const documentId = crypto.randomUUID();
-  const safeFileName = sanitizeFileName(file.name);
+  const { safeName: safeFileName, contentType } = validateUploadFile(file);
+  if (import.meta.env.DEV) {
+    console.debug("[documents] upload validation", {
+      chantierId,
+      name: file.name,
+      safeFileName,
+      size: file.size,
+      contentType,
+    });
+  }
   const storagePath = `${chantierId}/${documentId}/${safeFileName}`;
   const bucket = input.bucket ?? DEFAULT_BUCKET;
 
   const { error: uploadError } = await supabase.storage.from(bucket).upload(storagePath, file, {
     upsert: false,
-    contentType: file.type || undefined,
+    contentType,
   });
 
   if (uploadError) {
@@ -227,7 +275,7 @@ export async function uploadDocument(input: {
       title: input.title,
       file_name: file.name,
       storage_path: storagePath,
-      mime_type: file.type || null,
+      mime_type: contentType || null,
       size_bytes: file.size,
       category: input.category,
       document_type: input.documentType,
@@ -297,11 +345,12 @@ export async function listDocumentAccess(documentId: string): Promise<string[]> 
   const { data, error } = await supabase
     .from("document_access")
     .select("intervenant_id")
-    .eq("document_id", documentId);
+    .eq("document_id", documentId)
+    .overrideTypes<DocumentAccessRow[]>();
 
   if (error) throw error;
 
-  const rows = (data ?? []) as DocumentAccessRow[];
+  const rows = data ?? [];
   return rows.map((row) => row.intervenant_id);
 }
 
@@ -312,11 +361,12 @@ export async function updateDocumentAccess(documentId: string, intervenantIds: s
   const { data: existing, error: existingError } = await supabase
     .from("document_access")
     .select("intervenant_id")
-    .eq("document_id", documentId);
+    .eq("document_id", documentId)
+    .overrideTypes<DocumentAccessRow[]>();
 
   if (existingError) throw existingError;
 
-  const existingRows = (existing ?? []) as DocumentAccessRow[];
+  const existingRows = existing ?? [];
   const existingIds = new Set(existingRows.map((row) => row.intervenant_id));
   const toAdd = uniqueIds.filter((id) => !existingIds.has(id));
   const toRemove = Array.from(existingIds).filter((id) => !uniqueIds.includes(id));

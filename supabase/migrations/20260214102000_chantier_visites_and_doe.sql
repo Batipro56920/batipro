@@ -70,9 +70,9 @@ create policy "chantier_visites_intervenant_select"
     public.is_admin()
     or exists (
       select 1
-      from public.chantier_intervenant_access cia
-      where cia.chantier_id = chantier_visites.chantier_id
-        and lower(cia.intervenant_email) = lower(coalesce(auth.jwt() ->> 'email', ''))
+      from public.chantier_access ca
+      where ca.chantier_id = chantier_visites.chantier_id
+        and lower(ca.email) = lower(coalesce(auth.jwt() ->> 'email', ''))
     )
   );
 
@@ -92,9 +92,9 @@ create policy "chantier_visite_actions_intervenant_select"
     or exists (
       select 1
       from public.chantier_visites v
-      join public.chantier_intervenant_access cia on cia.chantier_id = v.chantier_id
+      join public.chantier_access ca on ca.chantier_id = v.chantier_id
       where v.id = chantier_visite_actions.visite_id
-        and lower(cia.intervenant_email) = lower(coalesce(auth.jwt() ->> 'email', ''))
+        and lower(ca.email) = lower(coalesce(auth.jwt() ->> 'email', ''))
     )
   );
 
@@ -113,8 +113,8 @@ create policy "chantier_doe_items_intervenant_select"
     public.is_admin()
     or exists (
       select 1
-      from public.chantier_intervenant_access cia
-      where cia.chantier_id = chantier_doe_items.chantier_id
-        and lower(cia.intervenant_email) = lower(coalesce(auth.jwt() ->> 'email', ''))
+      from public.chantier_access ca
+      where ca.chantier_id = chantier_doe_items.chantier_id
+        and lower(ca.email) = lower(coalesce(auth.jwt() ->> 'email', ''))
     )
   );

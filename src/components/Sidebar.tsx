@@ -5,6 +5,7 @@ import {
   Users,
   LibraryBig,
   ChartColumnBig,
+  Building2,
   Truck,
 } from "lucide-react";
 
@@ -15,6 +16,7 @@ const nav = [
   { to: "/bibliotheque", label: "Bibliothèque", icon: LibraryBig },
   { to: "/statistiques", label: "Statistiques", icon: ChartColumnBig },
   { to: "/fournisseurs", label: "Fournisseurs", icon: Truck },
+  { to: "/entreprise", label: "Mon entreprise", icon: Building2 },
 ];
 
 export default function Sidebar() {

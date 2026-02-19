@@ -8,6 +8,7 @@ import {
   upsertDoeItem,
 } from "../../services/chantierDoe.service";
 import { generateDoeFinalPdfBlob } from "../../services/chantiersReportsPdf.service";
+import { getCompanyBrandingForPdf } from "../../services/companySettings.service";
 
 type Props = {
   chantierId: string;
@@ -146,13 +147,15 @@ export default function DoeTab({
         throw new Error("Aucun document exploitable pour le DOE final.");
       }
       const nowIso = new Date().toISOString();
+      const company = await getCompanyBrandingForPdf();
       const blob = await generateDoeFinalPdfBlob({
         chantierName,
         chantierAddress,
         clientName,
-        companyName: "CB Renovation",
+        companyName: company.companyName,
         generatedAt: nowIso,
         documents: docsForPdf,
+        company,
       });
       const datePart = nowIso.slice(0, 10);
       const file = new File([blob], `DOE-final-${datePart}.pdf`, { type: "application/pdf" });

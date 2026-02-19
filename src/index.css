@@ -3,10 +3,10 @@
 :root {
   --safe-top: env(safe-area-inset-top);
   --safe-bottom: env(safe-area-inset-bottom);
-  --color-primary: #1787d6;
-  --color-primary-light: #78b8e6;
-  --color-bg-soft: #f4f8fc;
-  --color-border-soft: #e2eef8;
+  --color-primary: #2563eb;
+  --color-primary-light: #93c5fd;
+  --color-bg-soft: #dbeafe;
+  --color-border-soft: #dbeafe;
 }
 
 html,
@@ -50,11 +50,12 @@ body {
 .tab-btn--inactive {
   background: #fff;
   color: #334155;
-  border-color: var(--color-primary-light);
+  border-color: #cbd5e1;
 }
 
 .tab-btn--inactive:hover {
   background: var(--color-bg-soft);
+  border-color: var(--color-primary-light);
 }
 
 .chip-btn {

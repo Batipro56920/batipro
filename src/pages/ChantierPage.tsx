@@ -6,7 +6,7 @@ import { Link, useParams } from "react-router-dom";
 import { getChantierById, type ChantierRow } from "../services/chantiers.service";
 
 import {
-  getTasksByChantierId,
+  getTasksByChantierIdDetailed,
   createTask,
   updateTask,
   type ChantierTaskRow,
@@ -15,7 +15,6 @@ import {
 
 import {
   listDevisByChantierId,
-  createDevis,
   listDevisLignes,
   createDevisLigne,
   deleteDevisLigne,
@@ -23,10 +22,8 @@ import {
   type DevisLigneRow,
 } from "../services/devis.service";
 
-// Import devis PDF (garde cette feature)
-import { importDevisPdfToLinesAndTasks, decodeQtyUnit } from "../services/devisImport.service";
-import { extractTextFromPdf } from "../services/pdfText.service";
-import PlanningPage from "../features/planning/PlanningPage";
+import { decodeQtyUnit } from "../services/devisImport.service";
+import PlanningTab from "../components/chantiers/PlanningTab";
 
 import {
   listIntervenantsByChantierId,
@@ -74,6 +71,9 @@ import {
 import {
   listReserveMarkersByPlan,
   addReserveMarker,
+  removeReserveMarker,
+  removeReserveMarkersGroup,
+  renameReserveMarkersGroup,
   type ReservePlanMarkerRow,
 } from "../services/reserveMarkers.service";
 import {
@@ -93,6 +93,7 @@ import DocumentEditDrawer from "../components/chantiers/DocumentEditDrawer";
 import ReservePlanViewer from "../components/chantiers/ReservePlanViewer";
 import VisiteTab from "../components/chantiers/VisiteTab";
 import DoeTab from "../components/chantiers/DoeTab";
+import DevisImportDrawer, { type DevisImportResult } from "../components/chantiers/DevisImportDrawer";
 import TaskTemplateDrawer from "../components/TaskTemplateDrawer";
 import {
   create as createTaskTemplate,
@@ -169,6 +170,29 @@ function taskStatusBadgeClass(s: ChantierTaskRow["status"]) {
   return "bg-slate-50 text-slate-700 border-slate-200";
 }
 
+const DEFAULT_STANDARD_LOTS = [
+  "Curage / Démolition",
+  "Maçonnerie / Gros œuvre",
+  "Charpente / Couverture",
+  "Menuiseries extérieures",
+  "Cloisons / Plâtrerie",
+  "Isolation",
+  "Électricité",
+  "Plomberie",
+  "Chauffage / Ventilation",
+  "Sols",
+  "Faïence / Carrelage",
+  "Peinture",
+  "Cuisine / Sanitaires",
+  "Finitions / Nettoyage",
+  "Extérieurs / VRD",
+  "Divers / À classer",
+] as const;
+
+function normalizeLotLabel(value: string | null | undefined): string {
+  return String(value ?? "").trim();
+}
+
 function reserveStatusBadge(status?: string | null) {
   const s = status ?? "OUVERTE";
   if (s === "LEVEE") {
@@ -218,6 +242,7 @@ const DOCUMENT_TYPES = [
   "MAIL",
   "PV",
   "VISITE",
+  "RAPPORT_CLIENT",
   "DOE",
   "PDF",
   "AUTRE",
@@ -321,6 +346,7 @@ export default function ChantierPage() {
   const [tasks, setTasks] = useState<ChantierTaskRow[]>([]);
   const [tasksLoading, setTasksLoading] = useState(false);
   const [tasksError, setTasksError] = useState<string | null>(null);
+  const [tasksPlanningWarning, setTasksPlanningWarning] = useState<string | null>(null);
 
   // Temps tab (draft par tâche) : date début/fin + ajout (h)
   const [timeDraftByTaskId, setTimeDraftByTaskId] = useState<
@@ -391,8 +417,10 @@ export default function ChantierPage() {
   const [reservePlanError, setReservePlanError] = useState<string | null>(null);
   const [reserveMarkers, setReserveMarkers] = useState<ReservePlanMarkerRow[]>([]);
   const [reserveMarkersLoading, setReserveMarkersLoading] = useState(false);
+  const [reserveMarkerSaving, setReserveMarkerSaving] = useState(false);
   const [reserveSelectedMarkerId, setReserveSelectedMarkerId] = useState<string | null>(null);
-  const [reservePlacementMode, setReservePlacementMode] = useState(false);
+  const [reserveDrawingMode, setReserveDrawingMode] = useState(false);
+  const [reserveShowAllMarkers, setReserveShowAllMarkers] = useState(false);
   const [chantierDocuments, setChantierDocuments] = useState<ChantierDocumentRow[]>([]);
   const [taskDocumentLinks, setTaskDocumentLinks] = useState<TaskDocumentLinkRow[]>([]);
   const [taskDocumentsLoading, setTaskDocumentsLoading] = useState(false);
@@ -426,8 +454,12 @@ export default function ChantierPage() {
 
   // Ajout tâche
   const [newTitre, setNewTitre] = useState("");
-  const [newCorpsEtat, setNewCorpsEtat] = useState("");
-  const [newDate, setNewDate] = useState("");
+  const [, setNewCorpsEtat] = useState("");
+  const [newLotSelection, setNewLotSelection] = useState("");
+  const [newLotDraftName, setNewLotDraftName] = useState("");
+  const [newTaskStatus, setNewTaskStatus] = useState<TaskStatus>("A_FAIRE");
+  const [newDurationDays, setNewDurationDays] = useState("1");
+  const [newOrderIndex, setNewOrderIndex] = useState("0");
   const [newIntervenantId, setNewIntervenantId] = useState<string>("__NONE__");
   const [newQuantite, setNewQuantite] = useState("1");
   const [newUnite, setNewUnite] = useState("");
@@ -438,7 +470,10 @@ export default function ChantierPage() {
   const [savingTask, setSavingTask] = useState(false);
   const [editTitre, setEditTitre] = useState("");
   const [editCorpsEtat, setEditCorpsEtat] = useState("");
-  const [editDate, setEditDate] = useState("");
+  const [editLotSelection, setEditLotSelection] = useState("");
+  const [editLotDraftName, setEditLotDraftName] = useState("");
+  const [editDurationDays, setEditDurationDays] = useState("1");
+  const [editOrderIndex, setEditOrderIndex] = useState("0");
   const [editStatus, setEditStatus] = useState<TaskStatus>("A_FAIRE");
   const [editIntervenantId, setEditIntervenantId] = useState<string>("__NONE__");
   const [editQuantite, setEditQuantite] = useState("1");
@@ -452,8 +487,7 @@ export default function ChantierPage() {
   const [devis, setDevis] = useState<DevisRow[]>([]);
   const [devisLoading, setDevisLoading] = useState(false);
   const [devisError, setDevisError] = useState<string | null>(null);
-  const [newDevisNom, setNewDevisNom] = useState("");
-  const [creatingDevis, setCreatingDevis] = useState(false);
+  const [devisImportDrawerOpen, setDevisImportDrawerOpen] = useState(false);
 
   // Lignes devis
   const [activeDevisId, setActiveDevisId] = useState<string | null>(null);
@@ -471,13 +505,7 @@ export default function ChantierPage() {
   const [addingLigne, setAddingLigne] = useState(false);
 
   // Filtres tâches
-  const [filterLot, setFilterLot] = useState<string>("__ALL__");
   const [filterIntervenant, setFilterIntervenant] = useState<string>("__ALL__");
-
-  // Import devis PDF
-  const [importPdfFile, setImportPdfFile] = useState<File | null>(null);
-  const [importPdfBusy, setImportPdfBusy] = useState(false);
-  const [importPdfError, setImportPdfError] = useState<string | null>(null);
 
   // Matériel
   const [materiel, setMateriel] = useState<MaterielDemandeRow[]>([]);
@@ -806,7 +834,9 @@ export default function ChantierPage() {
     setReserveDrawerError(null);
     setReserveDrawerTab("details");
     setReserveSelectedMarkerId(null);
-    setReservePlacementMode(false);
+    setReserveDrawingMode(false);
+    setReserveShowAllMarkers(false);
+    setReserveMarkerSaving(false);
     setReservePhotos([]);
     setReservePhotoFile(null);
     setReservePhotoUrlCache({});
@@ -820,7 +850,9 @@ export default function ChantierPage() {
     setReserveDrawerError(null);
     setActiveReserve(null);
     setReserveSelectedMarkerId(null);
-    setReservePlacementMode(false);
+    setReserveDrawingMode(false);
+    setReserveShowAllMarkers(false);
+    setReserveMarkerSaving(false);
     setReservePhotos([]);
     setReservePhotoFile(null);
     setReservePhotoUrlCache({});
@@ -1044,7 +1076,9 @@ export default function ChantierPage() {
     setReservePlanUrl("");
     setReservePlanError(null);
     setReserveSelectedMarkerId(null);
-    setReservePlacementMode(false);
+    setReserveDrawingMode(false);
+    setReserveShowAllMarkers(false);
+    setReserveMarkerSaving(false);
     setReserveMarkers([]);
     if (!documentId) return;
     const doc = documentsById.get(documentId);
@@ -1066,7 +1100,17 @@ export default function ChantierPage() {
     }
   }
 
-  async function onPlaceReserveMarker(input: { x: number; y: number; page: number | null }) {
+  async function onCreateReserveMarker(input: {
+    type: "POINT" | "LINE" | "CROSS" | "CHECK" | "TEXT";
+    color: string;
+    stroke_width: number;
+    page_number: number | null;
+    x1: number;
+    y1: number;
+    x2?: number | null;
+    y2?: number | null;
+    text?: string | null;
+  }) {
     if (!reservePlanDocumentId) return;
     if (!activeReserve) {
       const createNow = confirm("Aucune réserve sélectionnée. Créer une nouvelle réserve ?");
@@ -1075,31 +1119,171 @@ export default function ChantierPage() {
       }
       return;
     }
+    const documentId = reservePlanDocumentId;
+    const markerType = input.type;
+    const markerColor = (input.color || "#ef4444").toLowerCase();
+    const markerStroke = Number(input.stroke_width || 2) || 2;
+    const markerLabel = (input.text ?? activeReserve.title ?? "").trim() || null;
+    const payload = {
+      reserve_id: activeReserve.id,
+      document_id: documentId,
+      plan_document_id: documentId,
+      type: markerType,
+      color: markerColor,
+      stroke_width: markerStroke,
+      page_number: input.page_number,
+      x1: input.x1,
+      y1: input.y1,
+      x2: input.x2 ?? null,
+      y2: input.y2 ?? null,
+      text: input.text ?? null,
+      label: markerLabel,
+      legend_label: null,
+      legend_key: `${markerType}:${markerColor}`,
+    } as const;
+
+    if (import.meta.env.DEV) {
+      console.debug("[markers] insert payload", payload);
+    }
+
+    const tempId = `tmp-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const optimistic: ReservePlanMarkerRow = {
+      id: tempId,
+      reserve_id: activeReserve.id,
+      document_id: documentId,
+      plan_document_id: documentId,
+      page_number: input.page_number,
+      page: input.page_number,
+      type: markerType,
+      color: markerColor,
+      stroke_width: markerStroke,
+      x1: input.x1,
+      y1: input.y1,
+      x2: input.x2 ?? null,
+      y2: input.y2 ?? null,
+      text: input.text ?? null,
+      legend_label: null,
+      legend_key: `${markerType}:${markerColor}`,
+      x: input.x1,
+      y: input.y1,
+      label: markerLabel,
+      created_at: new Date().toISOString(),
+    };
+
+    setReserveMarkers((prev) => [...prev, optimistic]);
+    setReserveSelectedMarkerId(tempId);
+    setReserveMarkerSaving(true);
+
     try {
-      const created = await addReserveMarker({
-        reserve_id: activeReserve.id,
-        plan_document_id: reservePlanDocumentId,
-        x: input.x,
-        y: input.y,
-        page: input.page,
-        label: activeReserve.title || null,
-      });
-      setReserveMarkers((prev) => [...prev, created]);
+      const created = await addReserveMarker(payload);
+      if (import.meta.env.DEV) {
+        console.debug("[markers] insert ok", created);
+      }
+      setReserveMarkers((prev) => prev.map((marker) => (marker.id === tempId ? created : marker)));
       setReserveSelectedMarkerId(created.id);
-      setReservePlacementMode(false);
+      await loadReserveMarkersForPlan(documentId);
     } catch (err: any) {
+      if (import.meta.env.DEV) {
+        console.error("[markers] insert err", err);
+      }
+      setReserveMarkers((prev) => prev.filter((marker) => marker.id !== tempId));
+      setReserveSelectedMarkerId((prev) => (prev === tempId ? null : prev));
       const message = err?.message ?? "Erreur ajout repere.";
       setToast({ type: "error", msg: message });
+    } finally {
+      setReserveMarkerSaving(false);
     }
   }
 
-  function onSelectReserveMarker(marker: { id: string; reserve_id: string }) {
+  function onSelectReserveMarker(marker: { id: string; reserve_id: string }, openReserve: boolean) {
     setReserveSelectedMarkerId(marker.id);
-    setReservePlacementMode(false);
+    if (!openReserve) return;
+    setReserveDrawingMode(false);
     const targetReserve = reserves.find((r) => r.id === marker.reserve_id) ?? null;
     if (!targetReserve) return;
     applyReserveToDrawer(targetReserve);
     setReserveDrawerTab("details");
+  }
+
+  async function deleteReserveMarkerById(markerId: string) {
+    if (!markerId) return;
+    try {
+      await removeReserveMarker(markerId);
+      if (reservePlanDocumentId) {
+        await loadReserveMarkersForPlan(reservePlanDocumentId);
+      } else {
+        setReserveMarkers((prev) => prev.filter((marker) => marker.id !== markerId));
+      }
+      setReserveSelectedMarkerId((prev) => (prev === markerId ? null : prev));
+      setToast({ type: "ok", msg: "Marqueur supprimé." });
+    } catch (err: any) {
+      const message = err?.message ?? "Erreur suppression marqueur.";
+      setToast({ type: "error", msg: message });
+    }
+  }
+
+  async function deleteSelectedReserveMarker() {
+    if (!reserveSelectedMarkerId) return;
+    await deleteReserveMarkerById(reserveSelectedMarkerId);
+  }
+
+  async function removeReserveLegendGroup(input: {
+    page_number: number | null;
+    type: "POINT" | "LINE" | "CROSS" | "CHECK" | "TEXT";
+    color: string;
+  }) {
+    if (!reservePlanDocumentId) return;
+    const scope = !reserveShowAllMarkers && activeReserve ? "ACTIVE_ONLY" : "ALL_RESERVES";
+    const reserveId = scope === "ACTIVE_ONLY" ? activeReserve?.id ?? null : null;
+    try {
+      const removed = await removeReserveMarkersGroup({
+        document_id: reservePlanDocumentId,
+        page_number: input.page_number ?? 1,
+        type: input.type,
+        color: input.color,
+        reserve_id: reserveId,
+        scope,
+      });
+      await loadReserveMarkersForPlan(reservePlanDocumentId);
+      setReserveSelectedMarkerId(null);
+      setToast({ type: "ok", msg: `${removed} marqueur(s) supprimé(s).` });
+    } catch (err: any) {
+      const message = err?.message ?? "Erreur suppression du groupe.";
+      setToast({ type: "error", msg: message });
+      throw err;
+    }
+  }
+
+  async function renameReserveLegendGroup(input: {
+    page_number: number | null;
+    type: "POINT" | "LINE" | "CROSS" | "CHECK" | "TEXT";
+    color: string;
+    label: string | null;
+  }) {
+    if (!reservePlanDocumentId) return;
+    const scope = !reserveShowAllMarkers && activeReserve ? "ACTIVE_ONLY" : "ALL_RESERVES";
+    const reserveId = scope === "ACTIVE_ONLY" ? activeReserve?.id ?? null : null;
+    try {
+      const updated = await renameReserveMarkersGroup({
+        document_id: reservePlanDocumentId,
+        page_number: input.page_number ?? 1,
+        type: input.type,
+        color: input.color,
+        new_label: input.label,
+        reserve_id: reserveId,
+        scope,
+      });
+      if (updated === 0) {
+        setToast({ type: "error", msg: "Aucun marqueur correspondant à renommer sur cette page." });
+        return;
+      }
+      await loadReserveMarkersForPlan(reservePlanDocumentId);
+      setToast({ type: "ok", msg: `${updated} marqueur(s) renommé(s).` });
+    } catch (err: any) {
+      const message = err?.message ?? "Erreur renommage du groupe.";
+      setToast({ type: "error", msg: message });
+      throw err;
+    }
   }
 
   async function openReserveDocument(doc: ChantierDocumentRow) {
@@ -1180,8 +1364,31 @@ export default function ChantierPage() {
 
   async function refreshTasksOnly() {
     if (!id) return;
-    const tasksData = await getTasksByChantierId(id);
-    setTasks(tasksData);
+    const tasksResult = await getTasksByChantierIdDetailed(id);
+    setTasks(tasksResult.tasks);
+    setTasksPlanningWarning(
+      tasksResult.planningColumnsMissing
+        ? `Migration planning manquante sur Supabase. Colonnes attendues sur public.chantier_tasks: ${tasksResult.expectedPlanningColumns.join(", ")}.`
+        : null,
+    );
+  }
+
+  async function refreshDevisOnly(preferredDevisId?: string | null) {
+    if (!id) return;
+    setDevisLoading(true);
+    setDevisError(null);
+    try {
+      const devisData = await listDevisByChantierId(id);
+      setDevis(devisData);
+      if (preferredDevisId !== undefined) {
+        setActiveDevisId(preferredDevisId);
+      }
+    } catch (e: any) {
+      setDevis([]);
+      setDevisError(e?.message ?? "Erreur lors du chargement des devis.");
+    } finally {
+      setDevisLoading(false);
+    }
   }
 
   async function refreshMateriel() {
@@ -1215,14 +1422,21 @@ export default function ChantierPage() {
         // tasks
         setTasksLoading(true);
         setTasksError(null);
+        setTasksPlanningWarning(null);
         try {
-          const tasksData = await getTasksByChantierId(id);
+          const tasksData = await getTasksByChantierIdDetailed(id);
           if (!alive) return;
-          setTasks(tasksData);
+          setTasks(tasksData.tasks);
+          setTasksPlanningWarning(
+            tasksData.planningColumnsMissing
+              ? `Migration planning manquante sur Supabase. Colonnes attendues sur public.chantier_tasks: ${tasksData.expectedPlanningColumns.join(", ")}.`
+              : null,
+          );
         } catch (e: any) {
           if (!alive) return;
           setTasksError(e?.message ?? "Erreur lors du chargement des tâches.");
           setTasks([]);
+          setTasksPlanningWarning(null);
         } finally {
           if (alive) setTasksLoading(false);
         }
@@ -1511,14 +1725,42 @@ export default function ChantierPage() {
     };
   }, [reserveDraftTaskId, selectedReserveTask?.intervenant_id]);
 
-  const taskLots = useMemo(() => {
-    const set = new Set<string>();
-    for (const t of tasks) {
-      const ce = (t.corps_etat ?? "").trim();
-      if (ce) set.add(ce);
+  const lotOptions = useMemo(() => {
+    const byKey = new Map<string, string>();
+    const add = (value: string | null | undefined) => {
+      const normalized = normalizeLotLabel(value);
+      if (!normalized) return;
+      const key = normalized.toLocaleLowerCase("fr");
+      if (!byKey.has(key)) byKey.set(key, normalized);
+    };
+
+    DEFAULT_STANDARD_LOTS.forEach((name) => add(name));
+    for (const task of tasks) {
+      add(task.lot);
+      if (!normalizeLotLabel(task.lot)) add(task.corps_etat);
     }
-    return Array.from(set).sort((a, b) => a.localeCompare(b));
-  }, [tasks]);
+    if (newLotSelection && newLotSelection !== "__CREATE__") add(newLotSelection);
+    if (editLotSelection && editLotSelection !== "__CREATE__") add(editLotSelection);
+
+    return [...byKey.values()];
+  }, [tasks, newLotSelection, editLotSelection]);
+
+  function resolveTaskLotName(task: Pick<ChantierTaskRow, "lot" | "corps_etat">): string {
+    const fromLotText = normalizeLotLabel(task.lot);
+    if (fromLotText) return fromLotText;
+    const fromCorpsEtat = normalizeLotLabel(task.corps_etat);
+    if (fromCorpsEtat) return fromCorpsEtat;
+    return "A classer";
+  }
+
+  useEffect(() => {
+    if (!lotOptions.length) return;
+    if (newLotSelection === "__CREATE__") return;
+    if (newLotSelection && lotOptions.includes(newLotSelection)) return;
+    const firstLot = lotOptions[0];
+    setNewLotSelection(firstLot);
+    setNewCorpsEtat(firstLot);
+  }, [lotOptions, newLotSelection]);
 
   const documentsById = useMemo(() => {
     const map = new Map<string, ChantierDocumentRow>();
@@ -1553,8 +1795,13 @@ export default function ChantierPage() {
 
   const reserveMarkersForPlan = useMemo(() => {
     if (!reservePlanDocumentId) return [];
-    return reserveMarkers.filter((m) => m.plan_document_id === reservePlanDocumentId);
-  }, [reserveMarkers, reservePlanDocumentId]);
+    const markersOnPlan = reserveMarkers.filter((m) => {
+      return (m.document_id ?? m.plan_document_id) === reservePlanDocumentId;
+    });
+    if (reserveShowAllMarkers) return markersOnPlan;
+    if (!activeReserve) return markersOnPlan;
+    return markersOnPlan.filter((marker) => marker.reserve_id === activeReserve.id);
+  }, [reserveMarkers, reservePlanDocumentId, reserveShowAllMarkers, activeReserve?.id]);
 
   const selectedPlanDoc = useMemo(() => {
     if (!reservePlanDocumentId) return null;
@@ -1563,9 +1810,6 @@ export default function ChantierPage() {
 
   const filteredTasks = useMemo(() => {
     return tasks.filter((t) => {
-      if (filterLot !== "__ALL__") {
-        if ((t.corps_etat ?? "") !== filterLot) return false;
-      }
       if (filterIntervenant === "__NONE__") {
         if (t.intervenant_id) return false;
       } else if (filterIntervenant !== "__ALL__") {
@@ -1573,7 +1817,7 @@ export default function ChantierPage() {
       }
       return true;
     });
-  }, [tasks, filterLot, filterIntervenant]);
+  }, [tasks, filterIntervenant]);
 
   const totalTempsReel = useMemo(() => {
     return (tasks as any[]).reduce((sum, t) => sum + (Number(t.temps_reel_h ?? 0) || 0), 0);
@@ -1590,6 +1834,42 @@ export default function ChantierPage() {
   /* ---------------- actions ---------------- */
 
   // ----- tâches -----
+  function createLotAndSelect(lotName: string, target: "add" | "edit"): string | null {
+    const cleanName = normalizeLotLabel(lotName);
+    if (!cleanName) {
+      setTasksError("Le nom du lot est obligatoire.");
+      return null;
+    }
+
+    const existing = lotOptions.find((option) => option.toLocaleLowerCase("fr") === cleanName.toLocaleLowerCase("fr"));
+    if (existing) {
+      if (target === "add") {
+        setNewLotSelection(existing);
+        setNewCorpsEtat(existing);
+        setNewLotDraftName("");
+      } else {
+        setEditLotSelection(existing);
+        setEditCorpsEtat(existing);
+        setEditLotDraftName("");
+      }
+      return existing;
+    }
+
+    setTasksError(null);
+    if (target === "add") {
+      setNewLotSelection(cleanName);
+      setNewCorpsEtat(cleanName);
+      setNewLotDraftName("");
+    } else {
+      setEditLotSelection(cleanName);
+      setEditCorpsEtat(cleanName);
+      setEditLotDraftName("");
+    }
+
+    setToast({ type: "ok", msg: "Lot ajouté à la liste." });
+    return cleanName;
+  }
+
   async function toggleTaskDone(t: ChantierTaskRow) {
     const nextStatus = t.status === "FAIT" ? "A_FAIRE" : "FAIT";
     setTasks((prev) => prev.map((x) => (x.id === t.id ? { ...x, status: nextStatus } : x)));
@@ -1620,6 +1900,30 @@ export default function ChantierPage() {
     }
 
     const unite = newUnite.trim() || null;
+    if (newLotSelection === "__CREATE__") {
+      setTasksError("Crée d'abord le nouveau lot avant d'ajouter la tâche.");
+      return;
+    }
+    const lotName = normalizeLotLabel(newLotSelection) || normalizeLotLabel(newLotDraftName) || null;
+    if (!lotName) {
+      setTasksError("Choisis un lot dans la liste ou crée-en un nouveau.");
+      return;
+    }
+    const durationRaw = newDurationDays.trim();
+    const durationParsed = Number(durationRaw || "1");
+    const durationDays = Number.isFinite(durationParsed) ? Math.max(1, Math.trunc(durationParsed)) : NaN;
+    if (!Number.isFinite(durationDays)) {
+      setTasksError("Durée invalide.");
+      return;
+    }
+
+    const orderRaw = newOrderIndex.trim();
+    const orderParsed = Number(orderRaw || "0");
+    const orderIndex = Number.isFinite(orderParsed) ? Math.max(0, Math.trunc(orderParsed)) : NaN;
+    if (!Number.isFinite(orderIndex)) {
+      setTasksError("Ordre invalide.");
+      return;
+    }
 
     setAddingTask(true);
     setTasksError(null);
@@ -1631,9 +1935,9 @@ export default function ChantierPage() {
       id: tempId,
       chantier_id: id,
       titre,
-      corps_etat: newCorpsEtat.trim() || null,
-      date: newDate || null,
-      status: "A_FAIRE",
+      corps_etat: lotName,
+      lot: lotName,
+      status: newTaskStatus,
       intervenant_id,
       quantite,
       unite,
@@ -1641,6 +1945,8 @@ export default function ChantierPage() {
       date_debut: null,
       date_fin: null,
       temps_reel_h: null,
+      duration_days: durationDays,
+      order_index: orderIndex,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     };
@@ -1651,19 +1957,24 @@ export default function ChantierPage() {
       const saved = await createTask({
         chantier_id: id,
         titre,
-        corps_etat: newCorpsEtat.trim() || null,
-        date: newDate || null,
-        status: "A_FAIRE",
+        corps_etat: lotName,
+        lot: lotName,
+        status: newTaskStatus,
         intervenant_id,
         quantite,
         unite,
+        duration_days: durationDays,
+        order_index: orderIndex,
       });
 
       setTasks((prev) => prev.map((t) => (t.id === tempId ? (saved as any) : t)));
 
       setNewTitre("");
-      setNewCorpsEtat("");
-      setNewDate("");
+      setNewCorpsEtat(lotName);
+      setNewLotSelection(lotName);
+      setNewTaskStatus("A_FAIRE");
+      setNewDurationDays("1");
+      setNewOrderIndex("0");
       setNewIntervenantId("__NONE__");
       setNewQuantite("1");
       setNewUnite("");
@@ -1685,9 +1996,13 @@ export default function ChantierPage() {
     const q = toNumberOrNull((t as any).quantite);
     const rawUnite = (t as any).unite;
     const unite = (typeof rawUnite === "string" ? rawUnite.trim() : "") || decoded.unite || "";
+    const resolvedLotName = resolveTaskLotName(t);
     setEditTitre(baseTitre);
-    setEditCorpsEtat(t.corps_etat ?? "");
-    setEditDate(t.date ?? "");
+    setEditCorpsEtat(resolvedLotName === "A classer" ? "" : resolvedLotName);
+    setEditLotSelection(resolvedLotName === "A classer" ? "" : resolvedLotName);
+    setEditLotDraftName("");
+    setEditDurationDays(String(Math.max(1, Number((t as any).duration_days ?? 1))));
+    setEditOrderIndex(String(Math.max(0, Number((t as any).order_index ?? 0))));
     setEditStatus((t.status ?? "A_FAIRE") as any);
     setEditIntervenantId(t.intervenant_id ?? "__NONE__");
     setEditQuantite(String(q ?? decoded.quantite ?? 1));
@@ -1696,6 +2011,8 @@ export default function ChantierPage() {
   function cancelEditTask() {
     setEditingTaskId(null);
     setSavingTask(false);
+    setEditLotSelection("");
+    setEditLotDraftName("");
   }
 
   function openTaskTemplateDrawerFromTask(t: ChantierTaskRow) {
@@ -1705,7 +2022,7 @@ export default function ChantierPage() {
       return;
     }
 
-    const lot = editCorpsEtat.trim() || (t.corps_etat ?? "");
+    const lot = normalizeLotLabel(editLotSelection) || editCorpsEtat.trim() || resolveTaskLotName(t);
     const uniteRaw = editUnite.trim() || ((t as any).unite ?? "");
     const quantiteFromEdit = toNumberOrNull(editQuantite.trim());
     const quantiteTask = toNumberOrNull((t as any).quantite);
@@ -1763,15 +2080,43 @@ export default function ChantierPage() {
     }
 
     const unite = editUnite.trim() || null;
+    const durationRaw = editDurationDays.trim();
+    const durationParsed = Number(durationRaw || "1");
+    const durationDays = Number.isFinite(durationParsed) ? Math.max(1, Math.trunc(durationParsed)) : NaN;
+    if (!Number.isFinite(durationDays)) {
+      setToast({ type: "error", msg: "Durée invalide." });
+      return;
+    }
+
+    const orderRaw = editOrderIndex.trim();
+    const orderParsed = Number(orderRaw || "0");
+    const orderIndex = Number.isFinite(orderParsed) ? Math.max(0, Math.trunc(orderParsed)) : NaN;
+    if (!Number.isFinite(orderIndex)) {
+      setToast({ type: "error", msg: "Ordre invalide." });
+      return;
+    }
+
+    if (editLotSelection === "__CREATE__") {
+      setToast({ type: "error", msg: "Crée d'abord le nouveau lot avant d'enregistrer." });
+      return;
+    }
+
+    const lotName = normalizeLotLabel(editLotSelection) || normalizeLotLabel(editLotDraftName) || null;
+    if (!lotName) {
+      setToast({ type: "error", msg: "Choisis un lot avant d'enregistrer la tâche." });
+      return;
+    }
 
     const patch = {
       titre,
-      corps_etat: editCorpsEtat.trim() || null,
-      date: editDate || null,
+      corps_etat: lotName,
+      lot: lotName,
       status: editStatus ?? "A_FAIRE",
       intervenant_id: editIntervenantId === "__NONE__" ? null : editIntervenantId,
       quantite,
       unite,
+      duration_days: durationDays,
+      order_index: orderIndex,
     };
 
     setSavingTask(true);
@@ -1923,30 +2268,16 @@ export default function ChantierPage() {
   }
 
   // ----- devis -----
-  async function onCreateDevis(e: FormEvent) {
-    e.preventDefault();
-    if (!id) return;
-
-    const nom = newDevisNom.trim();
-    if (!nom) {
-      setDevisError("Le nom du devis est obligatoire.");
-      return;
-    }
-
-    setCreatingDevis(true);
-    setDevisError(null);
+  async function onDevisImported(result: DevisImportResult) {
     try {
-      const d = await createDevis({ chantier_id: id, nom });
-      setDevis((prev) => [d, ...prev]);
-      setNewDevisNom("");
-      setToast({ type: "ok", msg: "Devis créé." });
-    } catch (err: any) {
-      const message = err?.message ?? "Erreur creation devis.";
-      setDevisError(message);
-      setToast({ type: "error", msg: message });
-    } finally {
-      setCreatingDevis(false);
+      await Promise.all([refreshTasksOnly(), refreshDevisOnly(result.devisId)]);
+    } catch (err) {
+      console.error("[devis-import] refresh error", err);
     }
+    setToast({
+      type: "ok",
+      msg: `Import termine: ${result.linesInserted} ligne(s), ${result.tasksCreated} tache(s), mode ${result.mode}.`,
+    });
   }
 
   async function onAddLigne(e: FormEvent) {
@@ -2012,43 +2343,6 @@ export default function ChantierPage() {
     } catch (e: any) {
       setLignesError(e?.message ?? "Erreur suppression ligne.");
       setToast({ type: "error", msg: e?.message ?? "Erreur suppression ligne." });
-    }
-  }
-
-  // ----- ? Import PDF -----
-  async function onImportDevisPdf() {
-    if (!id) return;
-    if (!importPdfFile) {
-      setImportPdfError("Sélectionne un PDF.");
-      return;
-    }
-    if (!activeDevisId) {
-      setImportPdfError("Ouvre un devis (bouton “Voir lignes”) pour importer dedans.");
-      return;
-    }
-
-    setImportPdfBusy(true);
-    setImportPdfError(null);
-
-    try {
-      const extractedText = await extractTextFromPdf(importPdfFile);
-      await importDevisPdfToLinesAndTasks({
-        chantierId: id,
-        devisId: activeDevisId,
-        extractedText,
-      });
-
-      await refreshTasksOnly();
-      const data = await listDevisLignes(activeDevisId);
-      setLignes(data);
-
-      setImportPdfFile(null);
-      setToast({ type: "ok", msg: "Devis importé : lignes + tâches générées." });
-    } catch (e: any) {
-      setImportPdfError(e?.message ?? "Erreur import PDF.");
-      setToast({ type: "error", msg: e?.message ?? "Erreur import PDF." });
-    } finally {
-      setImportPdfBusy(false);
     }
   }
 
@@ -2285,22 +2579,43 @@ export default function ChantierPage() {
 
       {/* Onglets */}
       <div className="space-y-3">
-        <div className="text-[11px] uppercase tracking-[0.2em] text-slate-400">Pilotage chantier</div>
-        <div className="flex gap-2 flex-wrap">
-          <TabButton active={tab === "devis-taches"} onClick={() => setTab("devis-taches")}>
-            Devis & tâches
-          </TabButton>
-          <TabButton active={tab === "temps"} onClick={() => setTab("temps")}>
-            Temps
-          </TabButton>
-          <TabButton active={tab === "planning"} onClick={() => setTab("planning")}>
-            Planning
-          </TabButton>
-          <TabButton active={tab === "reserves"} onClick={() => setTab("reserves")}>
-            Réserves
-          </TabButton>
+        <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_1px_minmax(280px,auto)] lg:items-start">
+          <div className="space-y-2">
+            <div className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-500">Pilotage chantier</div>
+            <div className="flex gap-2 flex-wrap">
+              <TabButton active={tab === "devis-taches"} onClick={() => setTab("devis-taches")}>
+                Devis & tâches
+              </TabButton>
+              <TabButton active={tab === "temps"} onClick={() => setTab("temps")}>
+                Temps
+              </TabButton>
+              <TabButton active={tab === "planning"} onClick={() => setTab("planning")}>
+                Planning
+              </TabButton>
+              <TabButton active={tab === "reserves"} onClick={() => setTab("reserves")}>
+                Réserves
+              </TabButton>
+            </div>
+          </div>
+
+          <div className="hidden lg:block h-full w-px bg-slate-200" />
+
+          <div className="space-y-2 lg:pl-1">
+            <div className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-500">Livrables</div>
+            <div className="flex gap-2 flex-wrap">
+              <TabButton active={tab === "visite"} onClick={() => setTab("visite")}>
+                Visites de chantier
+              </TabButton>
+              <TabButton active={tab === "doe"} onClick={() => setTab("doe")}>
+                DOE
+              </TabButton>
+            </div>
+          </div>
         </div>
-        <div className="text-[11px] uppercase tracking-[0.2em] text-slate-400">Gestion chantier</div>
+
+        <div className="h-px bg-gradient-to-r from-transparent via-slate-200 to-transparent" />
+
+        <div className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-500">Gestion chantier</div>
         <div className="flex gap-2 flex-wrap">
           <TabButton active={tab === "intervenants"} onClick={() => setTab("intervenants")}>
             Intervenants
@@ -2313,12 +2628,6 @@ export default function ChantierPage() {
           </TabButton>
           <TabButton active={tab === "messagerie"} onClick={() => setTab("messagerie")}>
             Messagerie
-          </TabButton>
-          <TabButton active={tab === "doe"} onClick={() => setTab("doe")}>
-            DOE
-          </TabButton>
-          <TabButton active={tab === "visite"} onClick={() => setTab("visite")}>
-            Visite de chantier
           </TabButton>
         </div>
       </div>
@@ -2818,13 +3127,20 @@ export default function ChantierPage() {
           <div className="space-y-8">
             {/* DEVIS */}
             <section className="space-y-4">
-              <div className="flex items-center justify-between">
+              <div className="flex items-center justify-between gap-3">
                 <div>
                   <div className="font-semibold">Devis</div>
-                  <div className="text-sm text-slate-500">Mode manuel + import PDF</div>
+                  <div className="text-sm text-slate-500">Import PDF avec extraction IA et aperçu obligatoire</div>
                 </div>
-                <div className="text-xs text-slate-500">
-                  {devisLoading ? "Chargement…" : `${devis.length} devis`}
+                <div className="flex items-center gap-3">
+                  <div className="text-xs text-slate-500">{devisLoading ? "Chargement…" : `${devis.length} devis`}</div>
+                  <button
+                    type="button"
+                    className="rounded-xl bg-[#2563EB] px-4 py-2 text-sm text-white hover:bg-[#1d4ed8]"
+                    onClick={() => setDevisImportDrawerOpen(true)}
+                  >
+                    Importer devis (PDF)
+                  </button>
                 </div>
               </div>
 
@@ -2834,56 +3150,9 @@ export default function ChantierPage() {
                 </div>
               )}
 
-              <form className="grid gap-2 md:grid-cols-3" onSubmit={onCreateDevis}>
-                <input
-                  className="rounded-xl border px-3 py-2 text-sm md:col-span-2"
-                  placeholder="Nom du devis"
-                  value={newDevisNom}
-                  onChange={(e) => setNewDevisNom(e.target.value)}
-                />
-                <button
-                  type="submit"
-                  disabled={creatingDevis}
-                  className={[
-                    "rounded-xl px-4 py-2 text-sm",
-                    creatingDevis ? "bg-slate-300 text-slate-700" : "bg-slate-900 text-white hover:bg-slate-800",
-                  ].join(" ")}
-                >
-                  {creatingDevis ? "Création…" : "+ Nouveau devis"}
-                </button>
-              </form>
-
-              {/* IMPORT PDF : NE PAS SUPPRIMER */}
-              <div className="rounded-xl border bg-slate-50 p-4 space-y-3">
-                <div className="font-semibold text-sm">Importer un devis PDF</div>
-
-                {importPdfError && (
-                  <div className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
-                    {importPdfError}
-                  </div>
-                )}
-
-                <div className="flex flex-wrap items-center gap-2">
-                  <input
-                    type="file"
-                    accept="application/pdf"
-                    onChange={(e) => setImportPdfFile(e.target.files?.[0] ?? null)}
-                  />
-                  <button
-                    type="button"
-                    onClick={onImportDevisPdf}
-                    disabled={importPdfBusy}
-                    className={[
-                      "rounded-xl px-4 py-2 text-sm",
-                      importPdfBusy ? "bg-slate-300 text-slate-700" : "bg-slate-900 text-white hover:bg-slate-800",
-                    ].join(" ")}
-                  >
-                    {importPdfBusy ? "Import…" : "Importer"}
-                  </button>
-                  <div className="text-xs text-slate-500">
-                    Devis ouvert : <span className="font-semibold">{activeDevisId ? "Oui" : "Non"}</span>
-                  </div>
-                </div>
+              <div className="rounded-xl border bg-blue-50/50 p-4 text-sm text-slate-700">
+                Utilisez <span className="font-semibold">Importer devis (PDF)</span> pour extraire les lignes de
+                travaux, verifier l'apercu puis creer les taches.
               </div>
 
               <div className="space-y-3">
@@ -3028,20 +3297,7 @@ export default function ChantierPage() {
                 </div>
               </div>
 
-              <div className="grid gap-2 md:grid-cols-2">
-                <select
-                  className="rounded-xl border px-3 py-2 text-sm"
-                  value={filterLot}
-                  onChange={(e) => setFilterLot(e.target.value)}
-                >
-                  <option value="__ALL__">Tous les lots</option>
-                  {taskLots.map((x) => (
-                    <option key={x} value={x}>
-                      {x}
-                    </option>
-                  ))}
-                </select>
-
+              <div className="grid gap-2 md:grid-cols-1">
                 <select
                   className="rounded-xl border px-3 py-2 text-sm"
                   value={filterIntervenant}
@@ -3061,58 +3317,135 @@ export default function ChantierPage() {
               {/* AJOUT TÂCHE */}
               <div className="rounded-xl border bg-slate-50 p-3 space-y-3">
                 <form onSubmit={addTask} className="space-y-3">
-                  <div className="grid gap-2 md:grid-cols-6">
-                    <input
-                      className="rounded-xl border px-3 py-2 text-sm md:col-span-2"
-                      placeholder="Titre"
-                      value={newTitre}
-                      onChange={(e) => setNewTitre(e.target.value)}
-                    />
-                    <input
-                      className="rounded-xl border px-3 py-2 text-sm"
-                      placeholder="Corps d’état (lot)"
-                      value={newCorpsEtat}
-                      onChange={(e) => setNewCorpsEtat(e.target.value)}
-                    />
-                    <input
-                      className="rounded-xl border px-3 py-2 text-sm"
-                      type="date"
-                      value={newDate}
-                      onChange={(e) => setNewDate(e.target.value)}
-                    />
-                    <input
-                      className="rounded-xl border px-3 py-2 text-sm"
-                      inputMode="decimal"
-                      placeholder="Quantite"
-                      value={newQuantite}
-                      onChange={(e) => setNewQuantite(e.target.value)}
-                    />
-                    <input
-                      className="rounded-xl border px-3 py-2 text-sm"
-                      placeholder="Unite"
-                      value={newUnite}
-                      onChange={(e) => setNewUnite(e.target.value)}
-                    />
+                  <div className="grid gap-2 md:grid-cols-10">
+                    <label className="space-y-1 text-xs text-slate-600 md:col-span-4">
+                      <div>Intitulé</div>
+                      <input
+                        className="w-full rounded-xl border bg-white px-3 py-2 text-sm text-slate-900"
+                        value={newTitre}
+                        onChange={(e) => setNewTitre(e.target.value)}
+                      />
+                    </label>
+                    <label className="space-y-1 text-xs text-slate-600 md:col-span-2">
+                      <div>Lot</div>
+                      <select
+                        className="w-full rounded-xl border bg-white px-3 py-2 text-sm text-slate-900"
+                        value={newLotSelection}
+                        onChange={(e) => {
+                          const value = e.target.value;
+                          setNewLotSelection(value);
+                          if (value === "__CREATE__") {
+                            setNewCorpsEtat("");
+                            return;
+                          }
+                          setNewCorpsEtat(value);
+                        }}
+                      >
+                        {lotOptions.map((lot) => (
+                          <option key={lot} value={lot}>
+                            {lot}
+                          </option>
+                        ))}
+                        <option value="__DIVIDER__" disabled>
+                          ────────────
+                        </option>
+                        <option value="__CREATE__">➕ Créer un nouveau lot…</option>
+                      </select>
+                    </label>
+                    <label className="space-y-1 text-xs text-slate-600 md:col-span-2">
+                      <div>Quantité</div>
+                      <input
+                        className="w-full rounded-xl border bg-white px-3 py-2 text-sm text-slate-900"
+                        inputMode="decimal"
+                        value={newQuantite}
+                        onChange={(e) => setNewQuantite(e.target.value)}
+                      />
+                    </label>
+                    <label className="space-y-1 text-xs text-slate-600 md:col-span-2">
+                      <div>Unité</div>
+                      <input
+                        className="w-full rounded-xl border bg-white px-3 py-2 text-sm text-slate-900"
+                        value={newUnite}
+                        onChange={(e) => setNewUnite(e.target.value)}
+                      />
+                    </label>
                   </div>
 
-                  <div className="grid gap-2 md:grid-cols-3">
-                    <select
-                      className="rounded-xl border px-3 py-2 text-sm"
-                      value={newIntervenantId}
-                      onChange={(e) => setNewIntervenantId(e.target.value)}
-                      disabled={intervenantsLoading}
-                    >
-                      <option value="__NONE__">Intervenant : non attribué</option>
-                      {intervenants.map((i) => (
-                        <option key={i.id} value={i.id}>
-                          {i.nom}
-                        </option>
-                      ))}
-                    </select>
-
-                    <div className="md:col-span-2 text-xs text-slate-500 flex items-center">
-                      Astuce : crée tes intervenants dans l’onglet “Intervenants”, puis attribue-les ici.
+                  {newLotSelection === "__CREATE__" && (
+                    <div className="grid gap-2 md:grid-cols-[minmax(0,1fr)_auto]">
+                      <input
+                        className="w-full rounded-xl border bg-white px-3 py-2 text-sm text-slate-900"
+                        placeholder="Nom du nouveau lot"
+                        value={newLotDraftName}
+                        onChange={(e) => setNewLotDraftName(e.target.value)}
+                      />
+                      <button
+                        type="button"
+                        className="rounded-xl border px-3 py-2 text-sm hover:bg-slate-100"
+                        onClick={() => void createLotAndSelect(newLotDraftName, "add")}
+                      >
+                        Créer le lot
+                      </button>
                     </div>
+                  )}
+
+                  <div className="grid gap-2 md:grid-cols-12">
+                    <label className="space-y-1 text-xs text-slate-600 md:col-span-3">
+                      <div>Statut</div>
+                      <select
+                        className="w-full rounded-xl border bg-white px-3 py-2 text-sm text-slate-900"
+                        value={newTaskStatus}
+                        onChange={(e) => setNewTaskStatus(e.target.value as TaskStatus)}
+                      >
+                        <option value="A_FAIRE">À faire</option>
+                        <option value="EN_COURS">En cours</option>
+                        <option value="FAIT">Fait</option>
+                      </select>
+                    </label>
+                    <label className="space-y-1 text-xs text-slate-600 md:col-span-3">
+                      <div>Durée (jours)</div>
+                      <input
+                        className="w-full rounded-xl border bg-white px-3 py-2 text-sm text-slate-900"
+                        type="number"
+                        min={1}
+                        step={1}
+                        value={newDurationDays}
+                        onChange={(e) => setNewDurationDays(e.target.value)}
+                      />
+                      <p className="text-[11px] text-slate-500">Durée estimée utilisée pour le planning</p>
+                    </label>
+                    <label className="space-y-1 text-xs text-slate-600 md:col-span-3">
+                      <div>Ordre</div>
+                      <input
+                        className="w-full rounded-xl border bg-white px-3 py-2 text-sm text-slate-900"
+                        type="number"
+                        min={0}
+                        step={1}
+                        value={newOrderIndex}
+                        onChange={(e) => setNewOrderIndex(e.target.value)}
+                      />
+                      <p className="text-[11px] text-slate-500">Ordre d'enchaînement dans le lot</p>
+                    </label>
+                    <label className="space-y-1 text-xs text-slate-600 md:col-span-3">
+                      <div>Intervenant</div>
+                      <select
+                        className="w-full rounded-xl border bg-white px-3 py-2 text-sm text-slate-900"
+                        value={newIntervenantId}
+                        onChange={(e) => setNewIntervenantId(e.target.value)}
+                        disabled={intervenantsLoading}
+                      >
+                        <option value="__NONE__">Non attribué</option>
+                        {intervenants.map((i) => (
+                          <option key={i.id} value={i.id}>
+                            {i.nom}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  </div>
+
+                  <div className="text-xs text-slate-500">
+                    Astuce : crée tes intervenants dans l'onglet "Intervenants", puis attribue-les ici.
                   </div>
 
                   <div className="flex justify-end">
@@ -3133,6 +3466,11 @@ export default function ChantierPage() {
               {tasksError && (
                 <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
                   {tasksError}
+                </div>
+              )}
+              {tasksPlanningWarning && (
+                <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+                  {tasksPlanningWarning}
                 </div>
               )}
 
@@ -3183,67 +3521,139 @@ export default function ChantierPage() {
                             <>
                               <div className="font-medium truncate">{displayTitreClean}</div>
                               <div className="text-xs text-slate-500">
-                                {(t.corps_etat ?? "—")} • Intervenant : {it?.nom ?? "—"}
-                                {t.date ? ` • ${t.date}` : ""}
+                                {resolveTaskLotName(t)} • Intervenant : {it?.nom ?? "—"}
                               </div>
                               <div className="text-xs text-slate-500 mt-1">
                                 {qtyLabel} / {tempsPasseLabel} / {avancementLabel}
                               </div>
                             </>
                           ) : (
-                            <div className="grid gap-2 md:grid-cols-8">
-                              <input
-                                className="rounded-xl border px-3 py-2 text-sm md:col-span-2"
-                                value={editTitre}
-                                onChange={(e) => setEditTitre(e.target.value)}
-                                placeholder="Titre"
-                              />
-                              <input
-                                className="rounded-xl border px-3 py-2 text-sm"
-                                value={editCorpsEtat}
-                                onChange={(e) => setEditCorpsEtat(e.target.value)}
-                                placeholder="Lot"
-                              />
-                              <input
-                                className="rounded-xl border px-3 py-2 text-sm"
-                                inputMode="decimal"
-                                value={editQuantite}
-                                onChange={(e) => setEditQuantite(e.target.value)}
-                                placeholder="Quantite"
-                              />
-                              <input
-                                className="rounded-xl border px-3 py-2 text-sm"
-                                value={editUnite}
-                                onChange={(e) => setEditUnite(e.target.value)}
-                                placeholder="Unite"
-                              />
-                              <select
-                                className="rounded-xl border px-3 py-2 text-sm"
-                                value={editStatus as any}
-                                onChange={(e) => setEditStatus(e.target.value as any)}
-                              >
-                                <option value="A_FAIRE">À faire</option>
-                                <option value="EN_COURS">En cours</option>
-                                <option value="FAIT">Fait</option>
-                              </select>
-                              <input
-                                className="rounded-xl border px-3 py-2 text-sm"
-                                type="date"
-                                value={editDate}
-                                onChange={(e) => setEditDate(e.target.value)}
-                              />
-                              <select
-                                className="rounded-xl border px-3 py-2 text-sm"
-                                value={editIntervenantId}
-                                onChange={(e) => setEditIntervenantId(e.target.value)}
-                              >
-                                <option value="__NONE__">Non attribué</option>
-                                {intervenants.map((x) => (
-                                  <option key={x.id} value={x.id}>
-                                    {x.nom}
-                                  </option>
-                                ))}
-                              </select>
+                            <div className="rounded-xl border bg-slate-50 p-3 space-y-3">
+                              <div className="grid gap-2 md:grid-cols-10">
+                                <label className="space-y-1 text-xs text-slate-600 md:col-span-3">
+                                  <div>Intitulé</div>
+                                  <input
+                                    className="w-full rounded-xl border bg-white px-3 py-2 text-sm text-slate-900"
+                                    value={editTitre}
+                                    onChange={(e) => setEditTitre(e.target.value)}
+                                  />
+                                </label>
+                                <label className="space-y-1 text-xs text-slate-600 md:col-span-2">
+                                  <div>Lot</div>
+                                  <select
+                                    className="w-full rounded-xl border bg-white px-3 py-2 text-sm text-slate-900"
+                                    value={editLotSelection}
+                                    onChange={(e) => {
+                                      const value = e.target.value;
+                                      setEditLotSelection(value);
+                                      if (value === "__CREATE__") {
+                                        setEditCorpsEtat("");
+                                        return;
+                                      }
+                                      setEditCorpsEtat(value);
+                                    }}
+                                  >
+                                    {lotOptions.map((lot) => (
+                                      <option key={lot} value={lot}>
+                                        {lot}
+                                      </option>
+                                    ))}
+                                    <option value="__DIVIDER__" disabled>
+                                      ────────────
+                                    </option>
+                                    <option value="__CREATE__">➕ Créer un nouveau lot…</option>
+                                  </select>
+                                </label>
+                                <label className="space-y-1 text-xs text-slate-600">
+                                  <div>Quantité</div>
+                                  <input
+                                    className="w-full rounded-xl border bg-white px-3 py-2 text-sm text-slate-900"
+                                    inputMode="decimal"
+                                    value={editQuantite}
+                                    onChange={(e) => setEditQuantite(e.target.value)}
+                                  />
+                                </label>
+                                <label className="space-y-1 text-xs text-slate-600">
+                                  <div>Unité</div>
+                                  <input
+                                    className="w-full rounded-xl border bg-white px-3 py-2 text-sm text-slate-900"
+                                    value={editUnite}
+                                    onChange={(e) => setEditUnite(e.target.value)}
+                                  />
+                                </label>
+                                <label className="space-y-1 text-xs text-slate-600 md:col-span-3">
+                                  <div>Statut</div>
+                                  <select
+                                    className="w-full rounded-xl border bg-white px-3 py-2 text-sm text-slate-900"
+                                    value={editStatus as any}
+                                    onChange={(e) => setEditStatus(e.target.value as any)}
+                                  >
+                                    <option value="A_FAIRE">À faire</option>
+                                    <option value="EN_COURS">En cours</option>
+                                    <option value="FAIT">Fait</option>
+                                  </select>
+                                </label>
+                              </div>
+
+                              {editLotSelection === "__CREATE__" && (
+                                <div className="grid gap-2 md:grid-cols-[minmax(0,1fr)_auto]">
+                                  <input
+                                    className="w-full rounded-xl border bg-white px-3 py-2 text-sm text-slate-900"
+                                    placeholder="Nom du nouveau lot"
+                                    value={editLotDraftName}
+                                    onChange={(e) => setEditLotDraftName(e.target.value)}
+                                  />
+                                  <button
+                                    type="button"
+                                    className="rounded-xl border px-3 py-2 text-sm hover:bg-slate-100"
+                                    onClick={() => void createLotAndSelect(editLotDraftName, "edit")}
+                                  >
+                                    Créer le lot
+                                  </button>
+                                </div>
+                              )}
+
+                              <div className="grid gap-2 md:grid-cols-9">
+                                <label className="space-y-1 text-xs text-slate-600 md:col-span-3">
+                                  <div>Durée (jours)</div>
+                                  <input
+                                    className="w-full rounded-xl border bg-white px-3 py-2 text-sm text-slate-900"
+                                    type="number"
+                                    min={1}
+                                    step={1}
+                                    value={editDurationDays}
+                                    onChange={(e) => setEditDurationDays(e.target.value)}
+                                  />
+                                  <p className="text-[11px] text-slate-500">Durée estimée utilisée pour le planning</p>
+                                </label>
+                                <label className="space-y-1 text-xs text-slate-600 md:col-span-3">
+                                  <div>Ordre</div>
+                                  <input
+                                    className="w-full rounded-xl border bg-white px-3 py-2 text-sm text-slate-900"
+                                    type="number"
+                                    min={0}
+                                    step={1}
+                                    value={editOrderIndex}
+                                    onChange={(e) => setEditOrderIndex(e.target.value)}
+                                  />
+                                  <p className="text-[11px] text-slate-500">Ordre d'enchaînement dans le lot</p>
+                                </label>
+                                <label className="space-y-1 text-xs text-slate-600 md:col-span-3">
+                                  <div>Intervenant</div>
+                                  <select
+                                    className="w-full rounded-xl border bg-white px-3 py-2 text-sm text-slate-900"
+                                    value={editIntervenantId}
+                                    onChange={(e) => setEditIntervenantId(e.target.value)}
+                                  >
+                                    <option value="__NONE__">Non attribué</option>
+                                    {intervenants.map((x) => (
+                                      <option key={x.id} value={x.id}>
+                                        {x.nom}
+                                      </option>
+                                    ))}
+                                  </select>
+                                </label>
+                              </div>
                             </div>
                           )}
                         </div>
@@ -3507,7 +3917,7 @@ export default function ChantierPage() {
         )}
 
         {tab === "planning" && id && (
-          <PlanningPage chantierId={id} chantierName={item?.nom ?? null} intervenants={intervenants} />
+          <PlanningTab chantierId={id} chantierName={item?.nom ?? null} intervenants={intervenants} />
         )}
 
         {tab === "doe" && id && (
@@ -3529,7 +3939,9 @@ export default function ChantierPage() {
           <VisiteTab
             chantierId={id}
             chantierName={item?.nom ?? "Chantier"}
+            chantierReference={(item as any)?.reference ?? id}
             chantierAddress={(item as any)?.adresse ?? null}
+            clientName={(item as any)?.client_nom ?? (item as any)?.client ?? null}
             intervenants={intervenants}
             onDocumentsRefresh={async () => {
               const data = await refreshChantierDocuments();
@@ -3564,8 +3976,8 @@ export default function ChantierPage() {
         {reserveDrawerOpen && (
           <div className="fixed inset-0 z-50">
             <div className="absolute inset-0 bg-black/40" onClick={closeReserveDrawer} />
-            <div className="absolute right-0 top-0 h-screen w-[50vw] max-w-[900px] min-w-[360px] bg-white border-l shadow-xl flex flex-col">
-              <div className="px-4 py-3 border-b flex items-center justify-between">
+            <div className="absolute right-0 top-0 h-screen w-full sm:w-[90vw] lg:w-[85vw] lg:min-w-[980px] 2xl:w-[70vw] bg-white border-l shadow-xl flex flex-col">
+              <div className="px-3 lg:px-4 py-3 border-b flex items-center justify-between">
                 <div className="font-semibold truncate">
                   Réserve — {activeReserve?.title ?? "Nouvelle réserve"}
                 </div>
@@ -3579,7 +3991,7 @@ export default function ChantierPage() {
                 </button>
               </div>
 
-              <div className="px-4 py-2 border-b flex gap-2">
+              <div className="px-3 lg:px-4 py-2 border-b flex gap-2">
                 {(
                   [
                     { key: "details", label: "Détails" },
@@ -3606,7 +4018,7 @@ export default function ChantierPage() {
                 })}
               </div>
 
-              <div className="flex-1 overflow-auto p-4 space-y-4">
+              <div className="flex-1 overflow-y-auto px-3 lg:px-4 py-3 space-y-4">
                 {reserveDrawerTab === "details" && (
                   <div className="space-y-4">
                     <div className="space-y-1">
@@ -3829,19 +4241,14 @@ export default function ChantierPage() {
                           >
                             Ouvrir
                           </button>
-                          <button
-                            type="button"
-                            disabled={!reservePlanDocumentId}
-                            onClick={() => setReservePlacementMode((v) => !v)}
-                            className={[
-                              "rounded-xl px-3 py-2 text-sm border",
-                              reservePlacementMode
-                                ? "bg-slate-900 text-white border-slate-900"
-                                : "hover:bg-slate-50",
-                            ].join(" ")}
-                          >
-                            {reservePlacementMode ? "Placement actif" : "Ajouter marqueur"}
-                          </button>
+                          <label className="inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-sm">
+                            <input
+                              type="checkbox"
+                              checked={reserveShowAllMarkers}
+                              onChange={(e) => setReserveShowAllMarkers(e.target.checked)}
+                            />
+                            Afficher toutes les réserves
+                          </label>
                         </div>
 
                         {reservePlanError && (
@@ -3858,21 +4265,17 @@ export default function ChantierPage() {
                           <div className="text-sm text-slate-500">Aperçu indisponible.</div>
                         ) : (
                           <div className="space-y-2">
-                            <div className="text-xs text-slate-500 flex flex-wrap items-center gap-2">
-                              <span>
-                                {reservePlacementMode
-                                  ? "Cliquez sur le plan pour placer un marqueur."
-                                  : "Activez “Ajouter marqueur” pour placer un point."}
+                            <div className="text-xs text-slate-500 flex items-center gap-2">
+                              <span
+                                className="inline-flex h-5 w-5 items-center justify-center rounded-full border text-[10px]"
+                                title="Consultation: clic marqueur = sélection. Corbeille: suppression avec annulation 5s."
+                              >
+                                i
                               </span>
-                              {!activeReserve && (
-                                <span className="text-amber-700">
-                                  Sélectionnez d’abord une réserve (ou créez-en une) pour lier le marqueur.
-                                </span>
-                              )}
-                              {activeReserve && (
-                                <span className="font-medium text-slate-700">
-                                  Réserve active : {activeReserve.title}
-                                </span>
+                              {activeReserve ? (
+                                <span className="font-medium text-slate-700">Réserve active : {activeReserve.title}</span>
+                              ) : (
+                                <span className="text-amber-700">Aucune réserve active.</span>
                               )}
                             </div>
                             <ReservePlanViewer
@@ -3885,13 +4288,17 @@ export default function ChantierPage() {
                               }))}
                               selectedMarkerId={reserveSelectedMarkerId}
                               selectedReserveId={activeReserve?.id ?? null}
-                              placementEnabled={reservePlacementMode}
-                              onPlaceMarker={onPlaceReserveMarker}
+                              drawingMode={reserveDrawingMode}
+                              onDrawingModeChange={setReserveDrawingMode}
+                              onCreateMarker={onCreateReserveMarker}
                               onSelectMarker={onSelectReserveMarker}
+                              onDeleteSelected={deleteSelectedReserveMarker}
+                              onDeleteMarker={deleteReserveMarkerById}
+                              onRemoveLegendGroup={removeReserveLegendGroup}
+                              onRenameLegendGroup={renameReserveLegendGroup}
+                              markerSaving={reserveMarkerSaving}
+                              showAllReserves={reserveShowAllMarkers}
                             />
-                            <div className="text-xs text-slate-500">
-                              Clic sur un marqueur: ouvre la réserve liée dans le drawer actuel.
-                            </div>
                             {reserveMarkersLoading && (
                               <div className="text-xs text-slate-500">Chargement des repères…</div>
                             )}
@@ -3909,7 +4316,7 @@ export default function ChantierPage() {
                 </div>
               )}
 
-              <div className="border-t p-4 flex justify-end gap-2">
+              <div className="sticky bottom-0 border-t bg-white/95 backdrop-blur px-3 lg:px-4 py-3 flex justify-end gap-2">
                 <button
                   type="button"
                   className="rounded-xl border px-3 py-2 text-sm hover:bg-slate-50"
@@ -3984,6 +4391,14 @@ export default function ChantierPage() {
           onClose={closeTaskTemplateDrawer}
           onSave={saveTaskTemplateFromTask}
           onDelete={async () => {}}
+        />
+
+        <DevisImportDrawer
+          open={devisImportDrawerOpen}
+          chantierId={id ?? null}
+          intervenants={intervenants}
+          onClose={() => setDevisImportDrawerOpen(false)}
+          onImported={onDevisImported}
         />
 
         {/* MODAL IMPORT DOCUMENT */}

@@ -1,9 +1,7 @@
-ï»¿import { supabase } from "../../lib/supabaseClient";
+import { supabase } from "../../lib/supabaseClient";
 import {
   checkDependencyViolations as checkDependencyViolationsUtil,
   checkIntervenantConflicts as checkIntervenantConflictsUtil,
-  type DependencyRow,
-  type PlanningEntryLike,
 } from "./planning.utils";
 
 export type PlanningEntryRow = {
@@ -46,10 +44,11 @@ export async function getPlanningEntries(chantierId: string): Promise<PlanningEn
     .from("planning_entries")
     .select("*")
     .eq("chantier_id", chantierId)
-    .order("start_date", { ascending: true });
+    .order("start_date", { ascending: true })
+    .overrideTypes<PlanningEntryRow[]>();
 
   if (error) throw new Error(error.message);
-  return (data ?? []) as PlanningEntryRow[];
+  return data ?? [];
 }
 
 export async function createPlanningEntry(payload: {
@@ -70,11 +69,12 @@ export async function createPlanningEntry(payload: {
       is_locked: payload.is_locked ?? false,
     })
     .select("*")
-    .maybeSingle();
+    .maybeSingle()
+    .overrideTypes<PlanningEntryRow>();
 
   if (error) throw new Error(error.message);
-  if (!data) throw new Error("EntrÃ©e planning introuvable.");
-  return data as PlanningEntryRow;
+  if (!data) throw new Error("Entrée planning introuvable.");
+  return data;
 }
 
 export async function updatePlanningEntry(
@@ -87,11 +87,12 @@ export async function updatePlanningEntry(
     .update(patch)
     .eq("id", id)
     .select("*")
-    .maybeSingle();
+    .maybeSingle()
+    .overrideTypes<PlanningEntryRow>();
 
   if (error) throw new Error(error.message);
-  if (!data) throw new Error("EntrÃ©e planning introuvable.");
-  return data as PlanningEntryRow;
+  if (!data) throw new Error("Entrée planning introuvable.");
+  return data;
 }
 
 export async function deletePlanningEntry(id: string): Promise<void> {
@@ -105,10 +106,11 @@ export async function getDependencies(chantierId: string): Promise<TaskDependenc
   const { data, error } = await supabase
     .from("task_dependencies")
     .select("*")
-    .eq("chantier_id", chantierId);
+    .eq("chantier_id", chantierId)
+    .overrideTypes<TaskDependencyRow[]>();
 
   if (error) throw new Error(error.message);
-  return (data ?? []) as TaskDependencyRow[];
+  return data ?? [];
 }
 
 export async function createDependency(payload: {
@@ -119,11 +121,11 @@ export async function createDependency(payload: {
 }): Promise<TaskDependencyRow> {
   if (!payload.chantier_id) throw new Error("chantier_id manquant.");
   if (!payload.predecessor_task_id || !payload.successor_task_id) {
-    throw new Error("DÃ©pendances invalides.");
+    throw new Error("Dépendances invalides.");
   }
 
   if (payload.predecessor_task_id === payload.successor_task_id) {
-    throw new Error("Une tÃ¢che ne peut pas dÃ©pendre d'elle-mÃªme.");
+    throw new Error("Une tâche ne peut pas dépendre d'elle-même.");
   }
 
   const { data: existingDeps, error: depsError } = await supabase
@@ -134,8 +136,8 @@ export async function createDependency(payload: {
   if (depsError) throw new Error(depsError.message);
 
   const edges = (existingDeps ?? []).map((d) => ({
-    from: d.predecessor_task_id as string,
-    to: d.successor_task_id as string,
+    from: d.predecessor_task_id,
+    to: d.successor_task_id,
   }));
   edges.push({ from: payload.predecessor_task_id, to: payload.successor_task_id });
 
@@ -158,7 +160,7 @@ export async function createDependency(payload: {
   };
 
   if (hasPath(payload.successor_task_id, payload.predecessor_task_id)) {
-    throw new Error("DÃ©pendance circulaire dÃ©tectÃ©e.");
+    throw new Error("Dépendance circulaire détectée.");
   }
 
   const { data, error } = await supabase
@@ -170,11 +172,12 @@ export async function createDependency(payload: {
       type: payload.type ?? "FINISH_TO_START",
     })
     .select("*")
-    .maybeSingle();
+    .maybeSingle()
+    .overrideTypes<TaskDependencyRow>();
 
   if (error) throw new Error(error.message);
-  if (!data) throw new Error("DÃ©pendance introuvable.");
-  return data as TaskDependencyRow;
+  if (!data) throw new Error("Dépendance introuvable.");
+  return data;
 }
 
 export async function getPlanningTasks(chantierId: string): Promise<PlanningTaskRow[]> {
@@ -183,18 +186,19 @@ export async function getPlanningTasks(chantierId: string): Promise<PlanningTask
     .from("chantier_tasks")
     .select("*")
     .eq("chantier_id", chantierId)
-    .order("ordre", { ascending: true });
+    .order("ordre", { ascending: true })
+    .overrideTypes<PlanningTaskRow[]>();
 
   if (error) throw new Error(error.message);
-  return (data ?? []) as PlanningTaskRow[];
+  return data ?? [];
 }
 
 export function checkIntervenantConflicts(entries: PlanningEntryRow[]) {
-  return checkIntervenantConflictsUtil(entries as PlanningEntryLike[]);
+  return checkIntervenantConflictsUtil(entries);
 }
 
 export function checkDependencyViolations(entries: PlanningEntryRow[], deps: TaskDependencyRow[]) {
-  return checkDependencyViolationsUtil(entries as PlanningEntryLike[], deps as DependencyRow[]);
+  return checkDependencyViolationsUtil(entries, deps);
 }
 
 

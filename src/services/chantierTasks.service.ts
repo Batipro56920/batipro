@@ -13,6 +13,7 @@ export type ChantierTaskRow = {
 
   titre: string;
   corps_etat: string | null;
+  lot: string | null;
   date: string | null; // date prévue (ancienne logique)
   status: TaskStatus;
 
@@ -26,6 +27,8 @@ export type ChantierTaskRow = {
   date_debut: string | null; // YYYY-MM-DD
   date_fin: string | null; // YYYY-MM-DD
   temps_reel_h: number | null;
+  duration_days: number;
+  order_index: number;
 
   created_at?: string | null;
   updated_at?: string | null;
@@ -35,6 +38,7 @@ type CreateTaskPayload = {
   chantier_id: string;
   titre: string;
   corps_etat?: string | null;
+  lot?: string | null;
   date?: string | null;
   status?: TaskStatus;
   intervenant_id?: string | null;
@@ -47,6 +51,17 @@ type CreateTaskPayload = {
   date_debut?: string | null;
   date_fin?: string | null;
   temps_reel_h?: number | null;
+  duration_days?: number | null;
+  order_index?: number | null;
+};
+
+export type TaskPlanningColumnsStatus = {
+  planningColumnsMissing: boolean;
+  expectedPlanningColumns: ["duration_days", "order_index"];
+};
+
+export type ChantierTasksFetchResult = TaskPlanningColumnsStatus & {
+  tasks: ChantierTaskRow[];
 };
 
 type UpdateTaskPatch = Partial<
@@ -54,6 +69,7 @@ type UpdateTaskPatch = Partial<
     ChantierTaskRow,
     | "titre"
     | "corps_etat"
+    | "lot"
     | "date"
     | "status"
     | "intervenant_id"
@@ -63,8 +79,50 @@ type UpdateTaskPatch = Partial<
     | "date_debut"
     | "date_fin"
     | "temps_reel_h"
+    | "duration_days"
+    | "order_index"
   >
 >;
+
+const TASK_SELECT = [
+  "id",
+  "chantier_id",
+  "titre",
+  "corps_etat",
+  "lot",
+  "date",
+  "status",
+  "intervenant_id",
+  "quantite",
+  "unite",
+  "temps_prevu_h",
+  "date_debut",
+  "date_fin",
+  "temps_reel_h",
+  "duration_days",
+  "order_index",
+  "created_at",
+  "updated_at",
+].join(",");
+
+const TASK_SELECT_LEGACY = [
+  "id",
+  "chantier_id",
+  "titre",
+  "corps_etat",
+  "lot",
+  "date",
+  "status",
+  "intervenant_id",
+  "quantite",
+  "unite",
+  "temps_prevu_h",
+  "date_debut",
+  "date_fin",
+  "temps_reel_h",
+  "created_at",
+  "updated_at",
+].join(",");
 
 /* =========================================================
    HELPERS
@@ -88,15 +146,19 @@ function cleanPatch(patch: UpdateTaskPatch) {
   // chaînes
   if (typeof cleaned.titre === "string") cleaned.titre = cleaned.titre.trim();
   if (typeof cleaned.corps_etat === "string") cleaned.corps_etat = cleaned.corps_etat.trim();
+  if (typeof cleaned.lot === "string") cleaned.lot = cleaned.lot.trim();
   if (typeof cleaned.unite === "string") cleaned.unite = cleaned.unite.trim();
 
   // vides -> null
   if (cleaned.corps_etat === "") cleaned.corps_etat = null;
+  if (cleaned.lot === "") cleaned.lot = null;
   if (cleaned.date === "") cleaned.date = null;
   if (cleaned.date_debut === "") cleaned.date_debut = null;
   if (cleaned.date_fin === "") cleaned.date_fin = null;
   if (cleaned.intervenant_id === "") cleaned.intervenant_id = null;
   if (cleaned.unite === "") cleaned.unite = null;
+  if (cleaned.lot !== undefined && cleaned.corps_etat === undefined) cleaned.corps_etat = cleaned.lot;
+  if (cleaned.corps_etat !== undefined && cleaned.lot === undefined) cleaned.lot = cleaned.corps_etat;
 
   // temps réel
   if (cleaned.temps_reel_h !== undefined) {
@@ -109,6 +171,14 @@ function cleanPatch(patch: UpdateTaskPatch) {
   if (cleaned.temps_prevu_h !== undefined) {
     cleaned.temps_prevu_h = normalizeNumber(cleaned.temps_prevu_h);
   }
+  if (cleaned.duration_days !== undefined) {
+    const duration = normalizeNumber(cleaned.duration_days);
+    cleaned.duration_days = duration === null ? 1 : Math.max(1, Math.trunc(duration));
+  }
+  if (cleaned.order_index !== undefined) {
+    const orderIndex = normalizeNumber(cleaned.order_index);
+    cleaned.order_index = orderIndex === null ? 0 : Math.max(0, Math.trunc(orderIndex));
+  }
 
   // aucune obligation demandée par toi,
   // mais on garde une petite sécurité: si titre fourni, il ne doit pas être vide
@@ -119,39 +189,64 @@ function cleanPatch(patch: UpdateTaskPatch) {
   return cleaned as UpdateTaskPatch;
 }
 
+function normalizeTaskRow(row: any): ChantierTaskRow {
+  return {
+    ...row,
+    duration_days: Math.max(1, Number(row?.duration_days ?? 1)),
+    order_index: Math.max(0, Math.trunc(Number(row?.order_index ?? 0))),
+  } as ChantierTaskRow;
+}
+
+function isMissingTaskPlanningColumnsError(error: any): boolean {
+  const msg = String(error?.message ?? "").toLowerCase();
+  const code = String(error?.code ?? "");
+  if (code === "42703") return true;
+  if (!msg) return false;
+  return (
+    msg.includes("column") &&
+    msg.includes("chantier_tasks") &&
+    (msg.includes("duration_days") || msg.includes("order_index"))
+  );
+}
+
 /* =========================================================
    QUERIES
    ========================================================= */
 
-export async function getTasksByChantierId(chantierId: string) {
+export async function getTasksByChantierIdDetailed(chantierId: string): Promise<ChantierTasksFetchResult> {
   if (!chantierId) throw new Error("chantierId manquant.");
 
-  const { data, error } = await supabase
+  const first = await supabase
     .from("chantier_tasks")
-    .select(
-      [
-        "id",
-        "chantier_id",
-        "titre",
-        "corps_etat",
-        "date",
-        "status",
-        "intervenant_id",
-        "quantite",
-        "unite",
-        "temps_prevu_h",
-        "date_debut",
-        "date_fin",
-        "temps_reel_h",
-        "created_at",
-        "updated_at",
-      ].join(","),
-    )
+    .select(TASK_SELECT)
     .eq("chantier_id", chantierId)
     .order("created_at", { ascending: false });
 
-  if (error) throw error;
-  return (data ?? []) as unknown as ChantierTaskRow[];
+  if (!first.error) {
+    return {
+      tasks: (first.data ?? []).map(normalizeTaskRow),
+      planningColumnsMissing: false,
+      expectedPlanningColumns: ["duration_days", "order_index"],
+    };
+  }
+  if (!isMissingTaskPlanningColumnsError(first.error)) throw first.error;
+
+  const fallback = await supabase
+    .from("chantier_tasks")
+    .select(TASK_SELECT_LEGACY)
+    .eq("chantier_id", chantierId)
+    .order("created_at", { ascending: false });
+  if (fallback.error) throw fallback.error;
+  return {
+    tasks: (fallback.data ?? []).map(normalizeTaskRow),
+    planningColumnsMissing: true,
+    expectedPlanningColumns: ["duration_days", "order_index"],
+  };
+}
+
+export async function getTasksByChantierId(chantierId: string): Promise<ChantierTaskRow[]> {
+  const result = await getTasksByChantierIdDetailed(chantierId);
+  return result.tasks;
 }
 
 export async function createTask(payload: CreateTaskPayload) {
@@ -167,7 +262,8 @@ export async function createTask(payload: CreateTaskPayload) {
   const insertRow: any = {
     chantier_id,
     titre,
-    corps_etat: payload.corps_etat ?? null,
+    corps_etat: payload.corps_etat ?? payload.lot ?? null,
+    lot: payload.lot ?? payload.corps_etat ?? null,
     date: payload.date ?? null,
     status: payload.status ?? "A_FAIRE",
     intervenant_id: payload.intervenant_id ?? null,
@@ -179,34 +275,31 @@ export async function createTask(payload: CreateTaskPayload) {
     date_debut: payload.date_debut ?? null,
     date_fin: payload.date_fin ?? null,
     temps_reel_h: payload.temps_reel_h ?? null,
+    duration_days: Math.max(1, Math.trunc(normalizeNumber(payload.duration_days) ?? 1)),
+    order_index: Math.max(0, Math.trunc(normalizeNumber(payload.order_index) ?? 0)),
   };
 
-  const { data, error } = await supabase
+  const first = await supabase
     .from("chantier_tasks")
     .insert([insertRow])
-    .select(
-      [
-        "id",
-        "chantier_id",
-        "titre",
-        "corps_etat",
-        "date",
-        "status",
-        "intervenant_id",
-        "quantite",
-        "unite",
-        "temps_prevu_h",
-        "date_debut",
-        "date_fin",
-        "temps_reel_h",
-        "created_at",
-        "updated_at",
-      ].join(","),
-    )
+    .select(TASK_SELECT)
     .single();
 
-  if (error) throw error;
-  return data as unknown as ChantierTaskRow;
+  if (!first.error) return normalizeTaskRow(first.data);
+  if (!isMissingTaskPlanningColumnsError(first.error)) throw first.error;
+
+  const legacyInsert = { ...insertRow };
+  delete legacyInsert.duration_days;
+  delete legacyInsert.order_index;
+
+  const fallback = await supabase
+    .from("chantier_tasks")
+    .insert([legacyInsert])
+    .select(TASK_SELECT_LEGACY)
+    .single();
+
+  if (fallback.error) throw fallback.error;
+  return normalizeTaskRow(fallback.data);
 }
 
 export async function updateTask(id: string, patch: UpdateTaskPatch) {
@@ -214,33 +307,37 @@ export async function updateTask(id: string, patch: UpdateTaskPatch) {
 
   const cleaned = cleanPatch(patch);
 
-  const { data, error } = await supabase
+  const first = await supabase
     .from("chantier_tasks")
     .update(cleaned as any)
     .eq("id", id)
-    .select(
-      [
-        "id",
-        "chantier_id",
-        "titre",
-        "corps_etat",
-        "date",
-        "status",
-        "intervenant_id",
-        "quantite",
-        "unite",
-        "temps_prevu_h",
-        "date_debut",
-        "date_fin",
-        "temps_reel_h",
-        "created_at",
-        "updated_at",
-      ].join(","),
-    )
+    .select(TASK_SELECT)
     .single();
 
+  if (!first.error) return normalizeTaskRow(first.data);
+  if (!isMissingTaskPlanningColumnsError(first.error)) throw first.error;
+
+  const legacyPatch: Record<string, unknown> = { ...cleaned };
+  delete legacyPatch.duration_days;
+  delete legacyPatch.order_index;
+
+  const fallback = await supabase
+    .from("chantier_tasks")
+    .update(legacyPatch as any)
+    .eq("id", id)
+    .select(TASK_SELECT_LEGACY)
+    .single();
+
+  if (fallback.error) throw fallback.error;
+  return normalizeTaskRow(fallback.data);
+}
+
+export async function deleteTasksByIds(taskIds: string[]): Promise<void> {
+  const ids = (taskIds ?? []).filter(Boolean);
+  if (!ids.length) return;
+
+  const { error } = await supabase.from("chantier_tasks").delete().in("id", ids);
   if (error) throw error;
-  return data as unknown as ChantierTaskRow;
 }
 
 

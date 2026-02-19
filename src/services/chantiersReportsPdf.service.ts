@@ -23,6 +23,7 @@ type VisitePdfInput = {
   decisions?: string | null;
   actions: VisiteActionInput[];
   photos: File[];
+  company?: CompanyBrandingInput;
 };
 
 type DoeSourceDocument = {
@@ -38,6 +39,29 @@ type DoePdfInput = {
   companyName?: string | null;
   generatedAt: string;
   documents: DoeSourceDocument[];
+  company?: CompanyBrandingInput;
+};
+
+type CompanyBrandingInput = {
+  companyName?: string | null;
+  logoDataUrl?: string | null;
+  address?: string | null;
+  phone?: string | null;
+  email?: string | null;
+  siret?: string | null;
+  insuranceDecennale?: string | null;
+  primaryColor?: string | null;
+  secondaryColor?: string | null;
+};
+
+type CompanyBrandingResolved = {
+  name: string;
+  logoDataUrl: string | null;
+  primary: [number, number, number];
+  secondary: [number, number, number];
+  headerLine: string;
+  subHeaderLine: string;
+  footerLine: string;
 };
 
 function formatDateFr(value: string): string {
@@ -46,17 +70,129 @@ function formatDateFr(value: string): string {
   return date.toLocaleString("fr-FR");
 }
 
-function addFooter(pdf: jsPDF, label: string) {
+function cleanList(values: Array<string | null | undefined>): string[] {
+  return values
+    .map((value) => String(value ?? "").trim())
+    .filter(Boolean);
+}
+
+function truncateText(value: string, max: number): string {
+  if (value.length <= max) return value;
+  return `${value.slice(0, max - 1).trimEnd()}…`;
+}
+
+function hexToRgb(hex: string | null | undefined, fallback: [number, number, number]): [number, number, number] {
+  const normalized = String(hex ?? "")
+    .trim()
+    .match(/^#([0-9a-fA-F]{6})$/);
+  if (!normalized) return fallback;
+  const raw = normalized[1];
+  return [
+    Number.parseInt(raw.slice(0, 2), 16),
+    Number.parseInt(raw.slice(2, 4), 16),
+    Number.parseInt(raw.slice(4, 6), 16),
+  ];
+}
+
+function imageFormatFromDataUrl(dataUrl: string): "JPEG" | "PNG" | "WEBP" {
+  const raw = String(dataUrl ?? "").toLowerCase();
+  if (raw.startsWith("data:image/png")) return "PNG";
+  if (raw.startsWith("data:image/webp")) return "WEBP";
+  return "JPEG";
+}
+
+function resolveCompanyBranding(
+  input?: CompanyBrandingInput,
+  fallbackCompanyName?: string | null,
+): CompanyBrandingResolved {
+  const name = String(input?.companyName ?? fallbackCompanyName ?? "").trim() || "Batipro";
+  const address = String(input?.address ?? "").trim();
+  const phone = String(input?.phone ?? "").trim();
+  const email = String(input?.email ?? "").trim();
+  const siret = String(input?.siret ?? "").trim();
+  const insurance = String(input?.insuranceDecennale ?? "").trim();
+
+  return {
+    name,
+    logoDataUrl: input?.logoDataUrl ?? null,
+    primary: hexToRgb(input?.primaryColor, [37, 99, 235]),
+    secondary: hexToRgb(input?.secondaryColor, [15, 23, 42]),
+    headerLine: cleanList([address, phone]).join(" • "),
+    subHeaderLine: cleanList([email, siret ? `SIRET ${siret}` : ""]).join(" • "),
+    footerLine:
+      cleanList([name, phone, email, siret ? `SIRET ${siret}` : "", insurance ? `Decennale ${insurance}` : ""]).join(" • ") ||
+      "Batipro",
+  };
+}
+
+function addHeaderAndFooter(pdf: jsPDF, label: string, company: CompanyBrandingResolved) {
   const totalPages = pdf.getNumberOfPages();
   const width = pdf.internal.pageSize.getWidth();
   const height = pdf.internal.pageSize.getHeight();
-  pdf.setFontSize(9);
-  pdf.setTextColor(90, 98, 112);
+
   for (let page = 1; page <= totalPages; page += 1) {
     pdf.setPage(page);
-    pdf.text(`Batipro - ${label} - page ${page}/${totalPages}`, width / 2, height - 8, {
-      align: "center",
-    });
+    const firstPage = page === 1;
+
+    pdf.setDrawColor(226, 232, 240);
+    pdf.line(12, 14, width - 12, 14);
+    pdf.line(12, height - 10, width - 12, height - 10);
+
+    let leftX = 12;
+    if (company.logoDataUrl) {
+      try {
+        pdf.addImage(
+          company.logoDataUrl,
+          imageFormatFromDataUrl(company.logoDataUrl),
+          12,
+          4.8,
+          10,
+          7,
+          undefined,
+          "FAST",
+        );
+        leftX = 24;
+      } catch {
+        leftX = 12;
+      }
+    }
+
+    pdf.setFont("helvetica", "bold");
+    pdf.setFontSize(9);
+    if (firstPage) {
+      pdf.setTextColor(255, 255, 255);
+    } else {
+      pdf.setTextColor(...company.primary);
+    }
+    pdf.text(truncateText(company.name, 36), leftX, 8.2);
+
+    if (company.headerLine) {
+      pdf.setFont("helvetica", "normal");
+      pdf.setFontSize(7.7);
+      if (firstPage) {
+        pdf.setTextColor(255, 255, 255);
+      } else {
+        pdf.setTextColor(71, 85, 105);
+      }
+      pdf.text(truncateText(company.headerLine, 66), leftX, 11.5);
+    }
+
+    pdf.setFont("helvetica", "normal");
+    pdf.setFontSize(7.7);
+    if (firstPage) {
+      pdf.setTextColor(255, 255, 255);
+    } else {
+      pdf.setTextColor(71, 85, 105);
+    }
+    if (company.subHeaderLine) {
+      pdf.text(truncateText(company.subHeaderLine, 72), width - 12, 11.5, { align: "right" });
+    }
+
+    pdf.setFont("helvetica", "normal");
+    pdf.setFontSize(8.5);
+    pdf.setTextColor(90, 98, 112);
+    pdf.text(truncateText(company.footerLine, 90), 12, height - 5.5);
+    pdf.text(`${label} - page ${page}/${totalPages}`, width - 12, height - 5.5, { align: "right" });
   }
 }
 
@@ -114,14 +250,15 @@ function addImageFittedPage(pdf: jsPDF, imgData: string, label?: string) {
     pdf.setTextColor(15, 23, 42);
     pdf.text(label, margin, margin);
   }
-  pdf.addImage(imgData, "JPEG", x, y, w, h, undefined, "FAST");
+  pdf.addImage(imgData, imageFormatFromDataUrl(imgData), x, y, w, h, undefined, "FAST");
 }
 
 export async function generateVisiteReportPdfBlob(input: VisitePdfInput): Promise<Blob> {
   const pdf = new jsPDF({ unit: "mm", format: "a4", orientation: "portrait" });
   const width = pdf.internal.pageSize.getWidth();
+  const company = resolveCompanyBranding(input.company);
 
-  pdf.setFillColor(15, 23, 42);
+  pdf.setFillColor(...company.secondary);
   pdf.rect(0, 0, width, 30, "F");
   pdf.setTextColor(255, 255, 255);
   pdf.setFont("helvetica", "bold");
@@ -188,7 +325,7 @@ export async function generateVisiteReportPdfBlob(input: VisitePdfInput): Promis
     addImageFittedPage(pdf, dataUrl, `Annexe photo ${i + 1}`);
   }
 
-  addFooter(pdf, "Rapport de visite");
+  addHeaderAndFooter(pdf, "Rapport de visite", company);
   const blob = pdf.output("blob");
   return blob;
 }
@@ -230,15 +367,16 @@ async function appendImageSource(pdf: jsPDF, doc: DoeSourceDocument) {
 export async function generateDoeFinalPdfBlob(input: DoePdfInput): Promise<Blob> {
   const pdf = new jsPDF({ unit: "mm", format: "a4", orientation: "portrait" });
   const width = pdf.internal.pageSize.getWidth();
+  const company = resolveCompanyBranding(input.company, input.companyName);
 
-  pdf.setFillColor(15, 23, 42);
+  pdf.setFillColor(...company.secondary);
   pdf.rect(0, 0, width, 48, "F");
   pdf.setFont("helvetica", "bold");
   pdf.setFontSize(22);
   pdf.setTextColor(255, 255, 255);
   pdf.text("DOE FINAL", 16, 22);
   pdf.setFontSize(11);
-  pdf.text(input.companyName || "CB Renovation", 16, 30);
+  pdf.text(company.name, 16, 30);
   pdf.text(`Genere le ${formatDateFr(input.generatedAt)}`, 16, 36);
 
   pdf.setTextColor(15, 23, 42);
@@ -287,6 +425,6 @@ export async function generateDoeFinalPdfBlob(input: DoePdfInput): Promise<Blob>
     pdf.text("Ce type de document ne peut pas être fusionné en aperçu.", 16, 34);
   }
 
-  addFooter(pdf, "DOE final");
+  addHeaderAndFooter(pdf, "DOE final", company);
   return pdf.output("blob");
 }
