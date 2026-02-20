@@ -10,6 +10,7 @@ import ChantierNewPage from "./pages/ChantierNewPage";
 import ChantierPage from "./pages/ChantierPage";
 import ChantierVisitesPage from "./pages/ChantierVisitesPage";
 import IntervenantAccessPage from "./pages/IntervenantAccessPage";
+import IntervenantPortalPage from "./pages/IntervenantPortalPage";
 import IntervenantsPage from "./pages/IntervenantsPage";
 import BibliothequeTasksPage from "./pages/BibliothequeTasksPage";
 import StatistiquesPage from "./pages/StatistiquesPage";
@@ -24,6 +25,7 @@ export default function App() {
 
       {/* Public - portail intervenant */}
       <Route path="/acces/:token" element={<IntervenantAccessPage />} />
+      <Route path="/intervenant" element={<IntervenantPortalPage />} />
 
       {/* Protégé */}
       <Route

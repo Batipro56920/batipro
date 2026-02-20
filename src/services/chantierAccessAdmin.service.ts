@@ -1,5 +1,6 @@
 ﻿// src/services/chantierAccessAdmin.service.ts
 import { supabase } from "../lib/supabaseClient";
+import { buildIntervenantLink } from "../lib/publicUrl";
 
 export type SendIntervenantAccessInput = {
   chantierId: string;
@@ -57,12 +58,16 @@ export async function sendIntervenantAccess(
     throw error;
   }
 
-  const token = (data as any)?.token;
-  const accessUrl = (data as any)?.accessUrl;
+  const token = String((data as any)?.token ?? "").trim();
 
-  if (!token || !accessUrl) {
+  if (!token) {
     console.error("Invalid function response:", data);
-    throw new Error("Réponse Edge Function invalide : attendu { token, accessUrl }.");
+    throw new Error("Réponse Edge Function invalide : attendu { token }.");
+  }
+
+  const accessUrl = buildIntervenantLink(token);
+  if (import.meta.env.DEV) {
+    console.log("Generated intervenant link:", accessUrl);
   }
 
   return {

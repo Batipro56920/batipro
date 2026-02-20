@@ -2,6 +2,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { ChangeEvent, DragEvent, FormEvent, ReactNode } from "react";
 import { Link, useParams } from "react-router-dom";
+import { supabase } from "../lib/supabaseClient";
 
 import { getChantierById, type ChantierRow } from "../services/chantiers.service";
 
@@ -102,6 +103,7 @@ import {
 
 // ENVOI ACCÈS (Edge Function via service)
 import { sendIntervenantAccess } from "../services/chantierAccessAdmin.service";
+import { buildIntervenantLink } from "../lib/publicUrl";
 
 /* ---------------- types ---------------- */
 type TabKey =
@@ -118,10 +120,6 @@ type TabKey =
   | "visite";
 
 type ToastState = { type: "ok" | "error"; msg: string } | null;
-
-type SendAccessResponse =
-  | { ok: true; accessUrl?: string; inserted?: any; mode?: string; warning?: string }
-  | { ok?: boolean; error?: string; accessUrl?: string };
 
 /* ---------------- helpers ---------------- */
 function clamp(n: number, min: number, max: number) {
@@ -191,6 +189,17 @@ const DEFAULT_STANDARD_LOTS = [
 
 function normalizeLotLabel(value: string | null | undefined): string {
   return String(value ?? "").trim();
+}
+
+function isIntervenantDuplicateEmailError(error: unknown): boolean {
+  const code = String((error as any)?.code ?? "").trim();
+  const msg = String((error as any)?.message ?? "").toLowerCase();
+  return code === "23505" || msg.includes("intervenants_email_unique");
+}
+
+function isPublicAppUrlConfigError(error: unknown): boolean {
+  const msg = String((error as any)?.message ?? error ?? "");
+  return msg.includes("VITE_PUBLIC_APP_URL");
 }
 
 function reserveStatusBadge(status?: string | null) {
@@ -438,6 +447,8 @@ export default function ChantierPage() {
 
   // ENVOI ACCÈS (bouton "Envoyer accès")
   const [sendingAccessId, setSendingAccessId] = useState<string | null>(null);
+  const [generatingIntervenantLink, setGeneratingIntervenantLink] = useState(false);
+  const [generatedIntervenantLink, setGeneratedIntervenantLink] = useState<string>("");
 
   // Ajout intervenant
   const [creatingIntervenant, setCreatingIntervenant] = useState(false);
@@ -2199,6 +2210,17 @@ export default function ChantierPage() {
       return;
     }
 
+    const email = newIntervenantEmail.trim();
+    if (email) {
+      const exists = intervenants.some((row) => String(row.email ?? "").trim().toLowerCase() === email.toLowerCase());
+      if (exists) {
+        const friendly = "Cet email est déjà utilisé par un intervenant.";
+        setIntervenantsError(friendly);
+        setToast({ type: "error", msg: friendly });
+        return;
+      }
+    }
+
     setCreatingIntervenant(true);
     setIntervenantsError(null);
 
@@ -2206,7 +2228,7 @@ export default function ChantierPage() {
       const created = await createIntervenant({
         chantier_id: id,
         nom,
-        email: newIntervenantEmail.trim() || null,
+        email: email || null,
         telephone: newIntervenantTel.trim() || null,
       });
 
@@ -2218,14 +2240,17 @@ export default function ChantierPage() {
 
       setToast({ type: "ok", msg: "Intervenant ajouté." });
     } catch (e: any) {
-      setIntervenantsError(e?.message ?? "Erreur création intervenant.");
-      setToast({ type: "error", msg: e?.message ?? "Erreur création intervenant." });
+      const message = isIntervenantDuplicateEmailError(e)
+        ? "Cet email est déjà utilisé par un intervenant."
+        : e?.message ?? "Erreur création intervenant.";
+      setIntervenantsError(message);
+      setToast({ type: "error", msg: message });
     } finally {
       setCreatingIntervenant(false);
     }
   }
   // ----- ENVOI ACCÈS -----
-  // même si le mail ne part pas : on récupère accessUrl et on te le donne pour le partager manuellement
+  // même si le mail ne part pas : on récupère le token et on construit le lien public côté front
   async function onSendAccess(i: IntervenantRow) {
     if (!id) return;
 
@@ -2238,32 +2263,90 @@ export default function ChantierPage() {
     try {
       setSendingAccessId(i.id);
 
-      const resp = (await sendIntervenantAccess({
+      const resp = await sendIntervenantAccess({
         chantierId: id,
         intervenantId: i.id,
         // l'edge function va relire l'email en base si besoin, mais on peut aussi le passer
         email,
-      })) as SendAccessResponse;
+      });
 
-      const accessUrl = (resp as any)?.accessUrl;
+      const accessUrl = buildIntervenantLink(resp.token);
+      if (import.meta.env.DEV) {
+        console.log("Generated intervenant link:", accessUrl);
+      }
 
-      if (accessUrl) {
-        const copied = await copyToClipboard(accessUrl);
-        if (copied) {
-          setToast({ type: "ok", msg: `Lien d’accès copié. Tu peux l’envoyer à ${i.nom}.` });
-        } else {
-          // fallback simple (fonctionne partout)
-          window.prompt("Copie ce lien et envoie-le à l’intervenant :", accessUrl);
-          setToast({ type: "ok", msg: `Lien d’accès généré. Envoie-le à ${i.nom}.` });
-        }
+      const copied = await copyToClipboard(accessUrl);
+      if (copied) {
+        setToast({ type: "ok", msg: `Lien d’accès copié. Tu peux l’envoyer à ${i.nom}.` });
       } else {
-        // si pas d'URL retournée, on indique quand même que c'est “tenté”
-        setToast({ type: "ok", msg: `Accès généré / envoyé à ${i.nom}.` });
+        // fallback simple (fonctionne partout)
+        window.prompt("Copie ce lien et envoie-le à l’intervenant :", accessUrl);
+        setToast({ type: "ok", msg: `Lien d’accès généré. Envoie-le à ${i.nom}.` });
       }
     } catch (e: any) {
-      setToast({ type: "error", msg: e?.message ?? "Erreur lors de l’envoi de l’accès." });
+      const message = isPublicAppUrlConfigError(e)
+        ? "VITE_PUBLIC_APP_URL manquant (à définir sur Vercel et en local)"
+        : e?.message ?? "Erreur lors de l’envoi de l’accès.";
+      setToast({ type: "error", msg: message });
     } finally {
       setSendingAccessId(null);
+    }
+  }
+
+  function resolveIntervenantTokenFromRpc(data: unknown): string | null {
+    if (typeof data === "string") {
+      const token = data.trim();
+      return token || null;
+    }
+    if (Array.isArray(data)) {
+      if (!data.length) return null;
+      return resolveIntervenantTokenFromRpc(data[0]);
+    }
+    if (data && typeof data === "object") {
+      const row = data as Record<string, unknown>;
+      const directToken = String(row.token ?? "").trim();
+      if (directToken) return directToken;
+      const altToken = String(row.access_token ?? "").trim();
+      if (altToken) return altToken;
+      const fnToken = String(row.admin_create_intervenant_link ?? "").trim();
+      if (fnToken) return fnToken;
+    }
+    return null;
+  }
+
+  async function onGenerateIntervenantLink() {
+    if (!id) return;
+
+    try {
+      setGeneratingIntervenantLink(true);
+
+      const { data, error } = await (supabase as any).rpc("admin_create_intervenant_link", {
+        p_chantier_id: id,
+      });
+      if (error) throw error;
+
+      const token = resolveIntervenantTokenFromRpc(data);
+      if (!token) throw new Error("Token intervenant introuvable dans la réponse RPC.");
+
+      const url = buildIntervenantLink(token);
+      if (import.meta.env.DEV) {
+        console.log("Generated intervenant link:", url);
+      }
+      setGeneratedIntervenantLink(url);
+
+      const copied = await copyToClipboard(url);
+      if (copied) {
+        setToast({ type: "ok", msg: "Lien intervenant généré et copié." });
+      } else {
+        setToast({ type: "ok", msg: "Lien intervenant généré." });
+      }
+    } catch (e: any) {
+      const message = isPublicAppUrlConfigError(e)
+        ? "VITE_PUBLIC_APP_URL manquant (à définir sur Vercel et en local)"
+        : e?.message ?? "Erreur génération lien intervenant.";
+      setToast({ type: "error", msg: message });
+    } finally {
+      setGeneratingIntervenantLink(false);
     }
   }
 
@@ -2801,19 +2884,59 @@ export default function ChantierPage() {
                   Créer, modifier et supprimer les intervenants du chantier
                 </div>
               </div>
-              <button
-                type="button"
-                onClick={refreshIntervenants}
-                className="rounded-xl border px-3 py-2 text-sm hover:bg-slate-50"
-                disabled={intervenantsLoading}
-              >
-                {intervenantsLoading ? "Chargement…" : "Rafraîchir"}
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => void onGenerateIntervenantLink()}
+                  className={[
+                    "rounded-xl border px-3 py-2 text-sm",
+                    generatingIntervenantLink ? "bg-slate-100 text-slate-500" : "hover:bg-slate-50",
+                  ].join(" ")}
+                  disabled={generatingIntervenantLink}
+                >
+                  {generatingIntervenantLink ? "Génération..." : "Générer lien intervenant"}
+                </button>
+                <button
+                  type="button"
+                  onClick={refreshIntervenants}
+                  className="rounded-xl border px-3 py-2 text-sm hover:bg-slate-50"
+                  disabled={intervenantsLoading}
+                >
+                  {intervenantsLoading ? "Chargement…" : "Rafraîchir"}
+                </button>
+              </div>
             </div>
 
             {intervenantsError && (
               <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
                 {intervenantsError}
+              </div>
+            )}
+
+            {generatedIntervenantLink && (
+              <div className="rounded-xl border bg-slate-50 p-4 space-y-2">
+                <div className="text-sm font-semibold text-slate-800">Lien intervenant</div>
+                <div className="flex flex-col gap-2 md:flex-row md:items-center">
+                  <input
+                    className="w-full rounded-xl border bg-white px-3 py-2 text-sm text-slate-900"
+                    value={generatedIntervenantLink}
+                    readOnly
+                  />
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      const copied = await copyToClipboard(generatedIntervenantLink);
+                      if (copied) {
+                        setToast({ type: "ok", msg: "Lien intervenant copié." });
+                      } else {
+                        window.prompt("Copie ce lien :", generatedIntervenantLink);
+                      }
+                    }}
+                    className="rounded-xl border px-3 py-2 text-sm hover:bg-white"
+                  >
+                    Copier
+                  </button>
+                </div>
               </div>
             )}
 
