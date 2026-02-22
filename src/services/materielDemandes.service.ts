@@ -1,5 +1,5 @@
-ï»¿// src/services/materielDemandes.service.ts
-import { supabase } from "./supabaseClient";
+// src/services/materielDemandes.service.ts
+import { supabase } from "../lib/supabaseClient";
 
 /**
  * Table attendue : public.materiel_demandes
@@ -70,7 +70,7 @@ export async function createMaterielDemande(input: {
   unite?: string | null; // optionnel
   date_livraison?: string | null; // optionnel (YYYY-MM-DD)
   remarques?: string | null; // optionnel
-  status?: MaterielStatus; // optionnel, dÃ©faut A_COMMANDER
+  status?: MaterielStatus; // optionnel, défaut A_COMMANDER
 }): Promise<MaterielDemandeRow> {
   assertRequired(Boolean(input?.chantier_id), "chantier_id obligatoire.");
   assertRequired(Boolean(input?.intervenant_id), "intervenant_id obligatoire.");
@@ -78,7 +78,7 @@ export async function createMaterielDemande(input: {
 
   const q = normalizeNumber(input?.quantite);
   assertRequired(!Number.isNaN(q), "quantite invalide.");
-  assertRequired(q > 0, "quantite doit Ãªtre > 0.");
+  assertRequired(q > 0, "quantite doit être > 0.");
 
   const payload = {
     chantier_id: input.chantier_id,
@@ -128,7 +128,7 @@ export async function updateMaterielDemande(
   if (patch.quantite !== undefined) {
     const q = normalizeNumber(patch.quantite);
     assertRequired(!Number.isNaN(q), "quantite invalide.");
-    assertRequired(q > 0, "quantite doit Ãªtre > 0.");
+    assertRequired(q > 0, "quantite doit être > 0.");
     updatePayload.quantite = q;
   }
 

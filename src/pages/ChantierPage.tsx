@@ -2285,7 +2285,7 @@ export default function ChantierPage() {
       }
     } catch (e: any) {
       const message = isPublicAppUrlConfigError(e)
-        ? "VITE_PUBLIC_APP_URL manquant (à définir sur Vercel et en local)"
+        ? e?.message ?? "VITE_PUBLIC_APP_URL manquant (à définir sur Vercel et en local)"
         : e?.message ?? "Erreur lors de l’envoi de l’accès.";
       setToast({ type: "error", msg: message });
     } finally {
@@ -2293,10 +2293,37 @@ export default function ChantierPage() {
     }
   }
 
+  function extractIntervenantToken(value: unknown): string | null {
+    const raw = String(value ?? "").trim();
+    if (!raw) return null;
+
+    if (raw.includes("token=")) {
+      try {
+        const parsed = new URL(raw);
+        const tokenFromQuery = parsed.searchParams.get("token")?.trim();
+        if (tokenFromQuery) return tokenFromQuery;
+      } catch {
+        // Fallback for non-URL strings containing token=
+      }
+      const tokenPart = raw.split("token=")[1] ?? "";
+      const sanitized = tokenPart.split("&")[0]?.trim();
+      if (sanitized) return decodeURIComponent(sanitized);
+    }
+
+    const legacyMatch = raw.match(/\/acces\/([^/?#]+)/i);
+    if (legacyMatch?.[1]) {
+      return decodeURIComponent(legacyMatch[1]);
+    }
+
+    // If it's an URL without token query param, do not treat it as token.
+    if (/^https?:\/\//i.test(raw)) return null;
+
+    return raw;
+  }
+
   function resolveIntervenantTokenFromRpc(data: unknown): string | null {
     if (typeof data === "string") {
-      const token = data.trim();
-      return token || null;
+      return extractIntervenantToken(data);
     }
     if (Array.isArray(data)) {
       if (!data.length) return null;
@@ -2304,12 +2331,14 @@ export default function ChantierPage() {
     }
     if (data && typeof data === "object") {
       const row = data as Record<string, unknown>;
-      const directToken = String(row.token ?? "").trim();
+      const directToken = extractIntervenantToken(row.token);
       if (directToken) return directToken;
-      const altToken = String(row.access_token ?? "").trim();
+      const altToken = extractIntervenantToken(row.access_token);
       if (altToken) return altToken;
-      const fnToken = String(row.admin_create_intervenant_link ?? "").trim();
+      const fnToken = extractIntervenantToken(row.admin_create_intervenant_link);
       if (fnToken) return fnToken;
+      const linkToken = extractIntervenantToken(row.access_url ?? row.url ?? row.link);
+      if (linkToken) return linkToken;
     }
     return null;
   }
@@ -2319,10 +2348,30 @@ export default function ChantierPage() {
 
     try {
       setGeneratingIntervenantLink(true);
+      const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
 
-      const { data, error } = await (supabase as any).rpc("admin_create_intervenant_link", {
+      let { data, error } = await (supabase as any).rpc("admin_create_intervenant_link", {
         p_chantier_id: id,
+        p_expires_at: expiresAt,
       });
+
+      if (error) {
+        const msg = String((error as any)?.message ?? "").toLowerCase();
+        const supportsLegacySignature =
+          msg.includes("p_expires_at") ||
+          msg.includes("does not exist") ||
+          msg.includes("function") ||
+          msg.includes("signature");
+
+        if (supportsLegacySignature) {
+          const fallback = await (supabase as any).rpc("admin_create_intervenant_link", {
+            p_chantier_id: id,
+          });
+          data = fallback.data;
+          error = fallback.error;
+        }
+      }
+
       if (error) throw error;
 
       const token = resolveIntervenantTokenFromRpc(data);
@@ -2342,7 +2391,7 @@ export default function ChantierPage() {
       }
     } catch (e: any) {
       const message = isPublicAppUrlConfigError(e)
-        ? "VITE_PUBLIC_APP_URL manquant (à définir sur Vercel et en local)"
+        ? e?.message ?? "VITE_PUBLIC_APP_URL manquant (à définir sur Vercel et en local)"
         : e?.message ?? "Erreur génération lien intervenant.";
       setToast({ type: "error", msg: message });
     } finally {

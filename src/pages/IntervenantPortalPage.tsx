@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { supabase } from "../lib/supabaseClient";
+import { checkAccessToken } from "../services/chantierAccess.service";
 
 type PlanningLotRow = {
   chantier_id: string | null;
@@ -143,6 +144,17 @@ function isInvalidTokenError(error: unknown): boolean {
   return msg.includes("invalid_or_expired_token") || msg.includes("invalid") || msg.includes("expire");
 }
 
+function shouldTryLegacyAccessFallback(error: unknown): boolean {
+  const msg = String((error as any)?.message ?? "").toLowerCase();
+  return (
+    msg.includes("invalid_or_expired_token") ||
+    msg.includes("invalid") ||
+    msg.includes("expire") ||
+    msg.includes("function") ||
+    msg.includes("does not exist")
+  );
+}
+
 function formatDateFr(value: string | null): string {
   if (!value) return "-";
   const parsed = new Date(`${value}T00:00:00`);
@@ -162,6 +174,7 @@ export default function IntervenantPortalPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [invalidToken, setInvalidToken] = useState(false);
+  const [invalidReason, setInvalidReason] = useState<string | null>(null);
   const [lots, setLots] = useState<PlanningLotRow[]>([]);
 
   useEffect(() => {
@@ -171,6 +184,7 @@ export default function IntervenantPortalPage() {
       setLoading(true);
       setError(null);
       setInvalidToken(false);
+      setInvalidReason(null);
 
       const candidateToken = queryToken || readStoredToken();
       if (!candidateToken) {
@@ -179,6 +193,7 @@ export default function IntervenantPortalPage() {
         setLots([]);
         setChantierId(null);
         setInvalidToken(true);
+        setInvalidReason("Token manquant.");
         setLoading(false);
         return;
       }
@@ -193,14 +208,31 @@ export default function IntervenantPortalPage() {
       if (!alive) return;
 
       if (rpcError) {
+        const rpcMessage = String(rpcError.message ?? "").trim();
+        if (import.meta.env.DEV) {
+          console.log("Intervenant RPC error:", rpcMessage || rpcError);
+        }
+        if (shouldTryLegacyAccessFallback(rpcError)) {
+          try {
+            await checkAccessToken(candidateToken);
+            if (!alive) return;
+            navigate(`/acces/${encodeURIComponent(candidateToken)}`, { replace: true });
+            return;
+          } catch (legacyError) {
+            if (import.meta.env.DEV) {
+              console.log("Intervenant legacy fallback failed:", legacyError);
+            }
+          }
+        }
         if (isInvalidTokenError(rpcError)) {
           setInvalidToken(true);
           setError(null);
           setLots([]);
           setChantierId(null);
+          setInvalidReason(rpcMessage || "invalid_or_expired_token");
         } else {
           setInvalidToken(false);
-          setError(rpcError.message ?? "Erreur de chargement du planning.");
+          setError(rpcMessage || "Erreur de chargement du planning.");
           setLots([]);
           setChantierId(null);
         }
@@ -220,7 +252,7 @@ export default function IntervenantPortalPage() {
     return () => {
       alive = false;
     };
-  }, [queryToken]);
+  }, [queryToken, navigate]);
 
   function logoutIntervenant() {
     clearStoredToken();
@@ -244,6 +276,7 @@ export default function IntervenantPortalPage() {
         <div className="rounded-2xl border border-red-200 bg-red-50 p-6">
           <h1 className="text-xl font-semibold text-red-800">Lien invalide ou expire</h1>
           <p className="mt-2 text-sm text-red-700">Demande un nouveau lien a ton administrateur Batipro.</p>
+          {invalidReason && <p className="mt-2 text-xs text-red-600">Detail: {invalidReason}</p>}
         </div>
       </div>
     );
