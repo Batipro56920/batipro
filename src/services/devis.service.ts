@@ -43,7 +43,16 @@ let devisLignesSupportsEntrepriseColumn: boolean | null = null;
 function isMissingColumnError(error: { message?: string } | null, table: string, column: string): boolean {
   const msg = (error?.message ?? "").toLowerCase();
   if (!msg) return false;
-  return msg.includes("schema cache") && msg.includes(table.toLowerCase()) && msg.includes(column.toLowerCase());
+  const hasColumn = msg.includes(column.toLowerCase());
+  const hasTable =
+    msg.includes(table.toLowerCase()) ||
+    msg.includes(`relation "${table.toLowerCase()}"`) ||
+    msg.includes(`table "${table.toLowerCase()}"`);
+  const isSchemaCache = msg.includes("schema cache");
+  const isUnknownColumn = msg.includes("could not find") || msg.includes("does not exist");
+  const isColumnError = msg.includes("column");
+
+  return hasColumn && (isSchemaCache || (isColumnError && isUnknownColumn)) && (hasTable || isSchemaCache);
 }
 
 function mapLegacyLigne(row: any): DevisLigneRow {
@@ -85,7 +94,10 @@ function generateDevisNumero(): string {
 function isUnknownColumnError(error: { message?: string } | null, column: string): boolean {
   const msg = (error?.message ?? "").toLowerCase();
   if (!msg) return false;
-  return msg.includes("could not find") && msg.includes(column.toLowerCase());
+  const hasColumn = msg.includes(column.toLowerCase());
+  const isSchemaCache = msg.includes("could not find");
+  const isSqlUnknownColumn = msg.includes("column") && msg.includes("does not exist");
+  return hasColumn && (isSchemaCache || isSqlUnknownColumn);
 }
 
 export async function createDevis(payload: {
