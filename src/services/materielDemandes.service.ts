@@ -1,34 +1,25 @@
-// src/services/materielDemandes.service.ts
-import { supabase } from "../lib/supabaseClient";
+ï»¿import { supabase } from "../lib/supabaseClient";
 
-/**
- * Table attendue : public.materiel_demandes
- * Colonnes attendues :
- * - id (uuid)
- * - chantier_id (uuid)
- * - intervenant_id (uuid) NOT NULL
- * - designation (text) NOT NULL
- * - quantite (numeric/int) NOT NULL
- * - unite (text) NULL
- * - date_livraison (date) NULL
- * - remarques (text) NULL
- * - status (text) NOT NULL  -> A_COMMANDER | COMMANDE | LIVRE
- * - created_at (timestamptz)
- * - updated_at (timestamptz)
- */
-
-export type MaterielStatus = "A_COMMANDER" | "COMMANDE" | "LIVRE";
+export type MaterielStatus = "en_attente" | "validee" | "refusee" | "livree";
 
 export type MaterielDemandeRow = {
   id: string;
   chantier_id: string;
   intervenant_id: string;
+  intervenant_nom?: string | null;
+  titre: string;
   designation: string;
   quantite: number;
   unite: string | null;
-  date_livraison: string | null; // "YYYY-MM-DD"
+  commentaire: string | null;
   remarques: string | null;
-  status: MaterielStatus;
+  date_souhaitee: string | null;
+  date_livraison: string | null;
+  statut: MaterielStatus;
+  status: string | null;
+  admin_commentaire: string | null;
+  validated_at: string | null;
+  validated_by: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -47,109 +38,191 @@ function assertRequired(cond: boolean, msg: string) {
   if (!cond) throw new Error(msg);
 }
 
-/** LIST */
+function normalizeStatus(input: unknown): MaterielStatus {
+  const value = String(input ?? "").trim().toLowerCase();
+  if (value === "validee") return "validee";
+  if (value === "refusee") return "refusee";
+  if (value === "livree") return "livree";
+  return "en_attente";
+}
+
+function legacyStatusFromStatut(statut: MaterielStatus): string {
+  if (statut === "validee") return "COMMANDE";
+  if (statut === "refusee") return "REFUSEE";
+  if (statut === "livree") return "LIVRE";
+  return "A_COMMANDER";
+}
+
+function mapRow(row: Record<string, unknown>): MaterielDemandeRow {
+  const statut = normalizeStatus(row.statut ?? row.status);
+  const titre = String(row.titre ?? row.designation ?? "Demande materiel").trim() || "Demande materiel";
+  const commentaire = (row.commentaire as string | null | undefined) ?? (row.remarques as string | null | undefined) ?? null;
+  return {
+    id: String(row.id ?? ""),
+    chantier_id: String(row.chantier_id ?? ""),
+    intervenant_id: String(row.intervenant_id ?? ""),
+    intervenant_nom: (row.intervenant_nom as string | null | undefined) ?? null,
+    titre,
+    designation: String(row.designation ?? titre),
+    quantite: Number(row.quantite ?? 0) || 0,
+    unite: (row.unite as string | null | undefined) ?? null,
+    commentaire,
+    remarques: (row.remarques as string | null | undefined) ?? commentaire ?? null,
+    date_souhaitee:
+      (row.date_souhaitee as string | null | undefined) ??
+      (row.date_besoin as string | null | undefined) ??
+      (row.date_livraison as string | null | undefined) ??
+      null,
+    date_livraison: (row.date_livraison as string | null | undefined) ?? null,
+    statut,
+    status: (row.status as string | null | undefined) ?? legacyStatusFromStatut(statut),
+    admin_commentaire: (row.admin_commentaire as string | null | undefined) ?? null,
+    validated_at: (row.validated_at as string | null | undefined) ?? null,
+    validated_by: (row.validated_by as string | null | undefined) ?? null,
+    created_at: String(row.created_at ?? ""),
+    updated_at: String(row.updated_at ?? row.created_at ?? ""),
+  };
+}
+
 export async function listMaterielDemandesByChantierId(chantierId: string): Promise<MaterielDemandeRow[]> {
   assertRequired(Boolean(chantierId), "chantierId manquant.");
 
-  const { data, error } = await supabase
-    .from(TABLE)
-    .select("*")
-    .eq("chantier_id", chantierId)
-    .order("created_at", { ascending: false });
+  const rpc = await (supabase as any).rpc("admin_materiel_list", { p_chantier_id: chantierId });
+  if (!rpc.error) {
+    const rows = Array.isArray(rpc.data) ? rpc.data : [];
+    return rows.map((row: unknown) => mapRow((row ?? {}) as Record<string, unknown>));
+  }
 
+  const { data, error } = await supabase.from(TABLE).select("*").eq("chantier_id", chantierId).order("created_at", { ascending: false });
   if (error) throw new Error(error.message);
-  return (data ?? []) as MaterielDemandeRow[];
+
+  const rows = (data ?? []) as Array<Record<string, unknown>>;
+  return rows.map((row) => mapRow(row));
 }
 
-/** CREATE */
 export async function createMaterielDemande(input: {
   chantier_id: string;
-  intervenant_id: string; // obligatoire
-  designation: string; // obligatoire
-  quantite: number | string; // obligatoire
-  unite?: string | null; // optionnel
-  date_livraison?: string | null; // optionnel (YYYY-MM-DD)
-  remarques?: string | null; // optionnel
-  status?: MaterielStatus; // optionnel, défaut A_COMMANDER
+  intervenant_id: string;
+  designation?: string;
+  titre?: string;
+  quantite?: number | string;
+  unite?: string | null;
+  date_livraison?: string | null;
+  date_souhaitee?: string | null;
+  remarques?: string | null;
+  commentaire?: string | null;
+  statut?: MaterielStatus;
 }): Promise<MaterielDemandeRow> {
-  assertRequired(Boolean(input?.chantier_id), "chantier_id obligatoire.");
-  assertRequired(Boolean(input?.intervenant_id), "intervenant_id obligatoire.");
-  assertRequired(Boolean(String(input?.designation ?? "").trim()), "designation obligatoire.");
+  const chantier_id = input?.chantier_id;
+  const intervenant_id = input?.intervenant_id;
+  const titre = String(input?.titre ?? input?.designation ?? "").trim();
 
-  const q = normalizeNumber(input?.quantite);
+  assertRequired(Boolean(chantier_id), "chantier_id obligatoire.");
+  assertRequired(Boolean(intervenant_id), "intervenant_id obligatoire.");
+  assertRequired(Boolean(titre), "titre/designation obligatoire.");
+
+  const q = normalizeNumber(input?.quantite ?? 1);
   assertRequired(!Number.isNaN(q), "quantite invalide.");
-  assertRequired(q > 0, "quantite doit être > 0.");
+  assertRequired(q > 0, "quantite doit etre > 0.");
+
+  const statut = normalizeStatus(input?.statut ?? "en_attente");
+  const commentaire = input.commentaire ?? input.remarques ?? null;
+  const dateSouhaitee = input.date_souhaitee ?? input.date_livraison ?? null;
 
   const payload = {
-    chantier_id: input.chantier_id,
-    intervenant_id: input.intervenant_id,
-    designation: String(input.designation).trim(),
+    chantier_id,
+    intervenant_id,
+    titre,
+    designation: titre,
     quantite: q,
     unite: input.unite ?? null,
-    date_livraison: input.date_livraison ?? null,
-    remarques: input.remarques ?? null,
-    status: input.status ?? "A_COMMANDER",
+    date_souhaitee: dateSouhaitee,
+    date_livraison: input.date_livraison ?? dateSouhaitee,
+    commentaire,
+    remarques: commentaire,
+    statut,
+    status: legacyStatusFromStatut(statut),
   };
 
   const { data, error } = await supabase.from(TABLE).insert(payload).select("*").single();
-
   if (error) throw new Error(error.message);
-  return data as MaterielDemandeRow;
+
+  return mapRow((data ?? {}) as Record<string, unknown>);
 }
 
-/** UPDATE (patch) */
 export async function updateMaterielDemande(
   id: string,
   patch: Partial<{
     intervenant_id: string;
+    titre: string;
     designation: string;
     quantite: number | string;
     unite: string | null;
     date_livraison: string | null;
+    date_souhaitee: string | null;
     remarques: string | null;
-    status: MaterielStatus;
+    commentaire: string | null;
+    statut: MaterielStatus;
+    admin_commentaire: string | null;
   }>,
 ): Promise<MaterielDemandeRow> {
   assertRequired(Boolean(id), "id manquant.");
 
-  const updatePayload: any = {};
+  if (patch.statut !== undefined) {
+    const statut = normalizeStatus(patch.statut);
+    const { data, error } = await (supabase as any).rpc("admin_materiel_update_status", {
+      p_id: id,
+      p_statut: statut,
+      p_admin_commentaire: patch.admin_commentaire ?? null,
+    });
+    if (error) throw new Error(error.message);
+    return mapRow((data ?? {}) as Record<string, unknown>);
+  }
+
+  const updatePayload: Record<string, unknown> = {};
 
   if (patch.intervenant_id !== undefined) {
     assertRequired(Boolean(patch.intervenant_id), "intervenant_id obligatoire.");
     updatePayload.intervenant_id = patch.intervenant_id;
   }
 
-  if (patch.designation !== undefined) {
-    const d = String(patch.designation ?? "").trim();
-    assertRequired(Boolean(d), "designation obligatoire.");
-    updatePayload.designation = d;
+  if (patch.titre !== undefined || patch.designation !== undefined) {
+    const titre = String(patch.titre ?? patch.designation ?? "").trim();
+    assertRequired(Boolean(titre), "titre/designation obligatoire.");
+    updatePayload.titre = titre;
+    updatePayload.designation = titre;
   }
 
   if (patch.quantite !== undefined) {
     const q = normalizeNumber(patch.quantite);
     assertRequired(!Number.isNaN(q), "quantite invalide.");
-    assertRequired(q > 0, "quantite doit être > 0.");
+    assertRequired(q > 0, "quantite doit etre > 0.");
     updatePayload.quantite = q;
   }
 
   if (patch.unite !== undefined) updatePayload.unite = patch.unite ?? null;
-  if (patch.date_livraison !== undefined) updatePayload.date_livraison = patch.date_livraison ?? null;
-  if (patch.remarques !== undefined) updatePayload.remarques = patch.remarques ?? null;
-  if (patch.status !== undefined) updatePayload.status = patch.status;
+
+  if (patch.date_souhaitee !== undefined || patch.date_livraison !== undefined) {
+    const dateSouhaitee = patch.date_souhaitee ?? patch.date_livraison ?? null;
+    updatePayload.date_souhaitee = dateSouhaitee;
+    updatePayload.date_livraison = patch.date_livraison ?? dateSouhaitee;
+  }
+
+  if (patch.commentaire !== undefined || patch.remarques !== undefined) {
+    const commentaire = patch.commentaire ?? patch.remarques ?? null;
+    updatePayload.commentaire = commentaire;
+    updatePayload.remarques = commentaire;
+  }
 
   const { data, error } = await supabase.from(TABLE).update(updatePayload).eq("id", id).select("*").single();
-
   if (error) throw new Error(error.message);
-  return data as MaterielDemandeRow;
+
+  return mapRow((data ?? {}) as Record<string, unknown>);
 }
 
-/** DELETE */
 export async function deleteMaterielDemande(id: string): Promise<void> {
   assertRequired(Boolean(id), "id manquant.");
 
   const { error } = await supabase.from(TABLE).delete().eq("id", id);
   if (error) throw new Error(error.message);
 }
-
-
-

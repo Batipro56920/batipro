@@ -1,6 +1,6 @@
 ﻿// src/pages/IntervenantAccessPage.tsx
 import { useEffect, useMemo, useState } from "react";
-import { useParams } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 
 import { checkAccessToken } from "../services/chantierAccess.service";
 import {
@@ -63,7 +63,10 @@ function normalizeHoursInput(s: string) {
 
 export default function IntervenantAccessPage() {
   const params = useParams();
+  const navigate = useNavigate();
   const token = params.token as string | undefined;
+  const legacyFallbackEnabled =
+    String(import.meta.env.VITE_ENABLE_INTERVENANT_LEGACY_FALLBACK ?? "0").trim() === "1";
 
   const [loading, setLoading] = useState(true);
   const [fatalError, setFatalError] = useState<string | null>(null);
@@ -93,6 +96,12 @@ export default function IntervenantAccessPage() {
 
   // 1) Token => JWT (avec cache sessionStorage)
   useEffect(() => {
+    if (!legacyFallbackEnabled) {
+      const next = token ? `/intervenant?token=${encodeURIComponent(token)}` : "/intervenant";
+      navigate(next, { replace: true });
+      return;
+    }
+
     let alive = true;
 
     async function run() {
@@ -155,7 +164,7 @@ export default function IntervenantAccessPage() {
     return () => {
       alive = false;
     };
-  }, [token]);
+  }, [legacyFallbackEnabled, navigate, token]);
 
   // 2) Load tâches (on charge quand on est sur Tâches OU Temps)
   useEffect(() => {

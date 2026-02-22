@@ -46,3 +46,18 @@ PowerShell interprete cela comme une commande, pas comme une variable d'environn
 Ajouter `VITE_PUBLIC_APP_URL` dans **Project Settings > Environment Variables**
 pour `Production`, `Preview` (et `Development` si besoin), puis redeployer.
 
+## Fallback legacy (temporaire)
+
+Le portail principal est `/intervenant?token=...`.
+
+Pour garder temporairement la compatibilite avec `/acces/:token` en cas de RPC manquante:
+
+```env
+VITE_ENABLE_INTERVENANT_LEGACY_FALLBACK=1
+```
+
+Pour desactiver ce fallback:
+
+```env
+VITE_ENABLE_INTERVENANT_LEGACY_FALLBACK=0
+```

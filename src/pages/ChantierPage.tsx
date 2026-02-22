@@ -529,9 +529,11 @@ export default function ChantierPage() {
   const [mQuantite, setMQuantite] = useState("1");
   const [mUnite, setMUnite] = useState("");
   const [mDate, setMDate] = useState("");
-  const [mStatus, setMStatus] = useState<MaterielStatus>("A_COMMANDER");
+  const [mStatus, setMStatus] = useState<MaterielStatus>("en_attente");
   const [mRemarques, setMRemarques] = useState("");
   const [addingMateriel, setAddingMateriel] = useState(false);
+  const [materielFilter, setMaterielFilter] = useState<"__ALL__" | MaterielStatus>("__ALL__");
+  const [materielAdminComments, setMaterielAdminComments] = useState<Record<string, string>>({});
 
   function openDocumentModal() {
     setDocumentModalError(null);
@@ -2480,15 +2482,17 @@ export default function ChantierPage() {
 
   // ----- matériel -----
   function materielStatusLabel(s: MaterielStatus) {
-    if (s === "COMMANDE") return "Commandé";
-    if (s === "LIVRE") return "Livré";
-    return "À commander";
+    if (s === "validee") return "Validée";
+    if (s === "refusee") return "Refusée";
+    if (s === "livree") return "Livrée";
+    return "En attente";
   }
 
   function materielStatusBadgeClass(s: MaterielStatus) {
-    if (s === "LIVRE") return "bg-emerald-50 text-emerald-700 border-emerald-200";
-    if (s === "COMMANDE") return "bg-amber-50 text-amber-700 border-amber-200";
-    return "bg-slate-50 text-slate-700 border-slate-200";
+    if (s === "livree") return "bg-emerald-50 text-emerald-700 border-emerald-200";
+    if (s === "validee") return "bg-blue-50 text-blue-700 border-blue-200";
+    if (s === "refusee") return "bg-red-50 text-red-700 border-red-200";
+    return "bg-amber-50 text-amber-700 border-amber-200";
   }
 
   async function onAddMateriel(e: FormEvent) {
@@ -2521,12 +2525,14 @@ export default function ChantierPage() {
       id: tempId,
       chantier_id: id,
       intervenant_id,
+      titre: designation,
       designation,
       quantite: qty,
       unite: mUnite.trim() || null,
       date_souhaitee: mDate || null,
-      status: mStatus,
+      statut: mStatus,
       remarques: mRemarques.trim() || null,
+      commentaire: mRemarques.trim() || null,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     };
@@ -2537,12 +2543,12 @@ export default function ChantierPage() {
       const saved = await createMaterielDemande({
         chantier_id: id,
         intervenant_id,
-        designation,
+        titre: designation,
         quantite: qty,
         unite: mUnite.trim() || null,
         date_souhaitee: mDate || null,
-        status: mStatus,
-        remarques: mRemarques.trim() || null,
+        statut: mStatus,
+        commentaire: mRemarques.trim() || null,
       } as any);
 
       setMateriel((prev) => prev.map((x) => (x.id === tempId ? (saved as any) : x)));
@@ -2552,7 +2558,7 @@ export default function ChantierPage() {
       setMQuantite("1");
       setMUnite("");
       setMDate("");
-      setMStatus("A_COMMANDER");
+      setMStatus("en_attente");
       setMRemarques("");
 
       setToast({ type: "ok", msg: "Demande matériel ajoutée." });
@@ -2566,9 +2572,18 @@ export default function ChantierPage() {
   }
 
   async function onUpdateMaterielStatus(row: MaterielDemandeRow, status: MaterielStatus) {
-    setMateriel((prev) => prev.map((x) => (x.id === row.id ? { ...x, status } : x)));
+    const adminCommentaireRaw =
+      materielAdminComments[row.id] ?? row.admin_commentaire ?? row.commentaire ?? row.remarques ?? "";
+    const adminCommentaire = adminCommentaireRaw.trim() || null;
+    setMateriel((prev) =>
+      prev.map((x) =>
+        x.id === row.id ? { ...x, statut: status, admin_commentaire: adminCommentaire, updated_at: new Date().toISOString() } : x,
+      ),
+    );
     try {
-      await updateMaterielDemande(row.id, { status } as any);
+      const updated = await updateMaterielDemande(row.id, { statut: status, admin_commentaire: adminCommentaire } as any);
+      setMateriel((prev) => prev.map((x) => (x.id === row.id ? updated : x)));
+      setToast({ type: "ok", msg: "Statut matériel mis à jour." });
     } catch (e: any) {
       await refreshMateriel();
       setToast({ type: "error", msg: e?.message ?? "Erreur mise à jour matériel." });
@@ -2576,7 +2591,8 @@ export default function ChantierPage() {
   }
 
   async function onDeleteMateriel(row: MaterielDemandeRow) {
-    const ok = confirm(`Supprimer la demande "${row.designation}" ?`);
+    const label = row.titre || row.designation || "demande matériel";
+    const ok = confirm(`Supprimer la demande "${label}" ?`);
     if (!ok) return;
 
     const before = materiel;
@@ -2633,6 +2649,8 @@ export default function ChantierPage() {
   }
 
   const tempsHeures = totalTempsReel;
+  const filteredMateriel =
+    materielFilter === "__ALL__" ? materiel : materiel.filter((row) => row.statut === materielFilter);
 
   /* ---------------- render ---------------- */
   return (
@@ -3936,17 +3954,30 @@ export default function ChantierPage() {
               <div>
                 <div className="font-semibold section-title">Matériel</div>
                 <div className="text-sm text-slate-500">
-                  Demandes matériel avec statut : À commander / Commandé / Livré.
+                  Demandes matériel avec statut : En attente / Validée / Refusée / Livrée.
                 </div>
               </div>
-              <button
-                type="button"
-                onClick={refreshMateriel}
-                className="rounded-xl border px-3 py-2 text-sm hover:bg-slate-50"
-                disabled={materielLoading}
-              >
-                {materielLoading ? "Chargement…" : "Rafraîchir"}
-              </button>
+              <div className="flex items-center gap-2">
+                <select
+                  className="rounded-xl border px-3 py-2 text-sm"
+                  value={materielFilter}
+                  onChange={(e) => setMaterielFilter(e.target.value as "__ALL__" | MaterielStatus)}
+                >
+                  <option value="__ALL__">Tous</option>
+                  <option value="en_attente">En attente</option>
+                  <option value="validee">Validée</option>
+                  <option value="refusee">Refusée</option>
+                  <option value="livree">Livrée</option>
+                </select>
+                <button
+                  type="button"
+                  onClick={refreshMateriel}
+                  className="rounded-xl border px-3 py-2 text-sm hover:bg-slate-50"
+                  disabled={materielLoading}
+                >
+                  {materielLoading ? "Chargement…" : "Rafraîchir"}
+                </button>
+              </div>
             </div>
 
             {materielError && (
@@ -4008,9 +4039,10 @@ export default function ChantierPage() {
                   value={mStatus}
                   onChange={(e) => setMStatus(e.target.value as any)}
                 >
-                  <option value="A_COMMANDER">À commander</option>
-                  <option value="COMMANDE">Commandé</option>
-                  <option value="LIVRE">Livré</option>
+                  <option value="en_attente">En attente</option>
+                  <option value="validee">Validée</option>
+                  <option value="refusee">Refusée</option>
+                  <option value="livree">Livrée</option>
                 </select>
 
                 <input
@@ -4038,48 +4070,78 @@ export default function ChantierPage() {
             <div className="space-y-2">
               {materielLoading ? (
                 <div className="text-sm text-slate-500">Chargement…</div>
-              ) : materiel.length === 0 ? (
+              ) : filteredMateriel.length === 0 ? (
                 <div className="text-sm text-slate-500">Aucune demande matériel.</div>
               ) : (
-                materiel.map((m: any) => {
+                filteredMateriel.map((m) => {
                   const it = intervenantById.get(m.intervenant_id);
+                  const displayName = m.titre || m.designation || "Demande matériel";
+                  const draftComment = materielAdminComments[m.id] ?? m.admin_commentaire ?? "";
                   return (
                     <div key={m.id} className="rounded-xl border p-4 space-y-3">
                       <div className="flex items-start justify-between gap-3">
                         <div className="min-w-0">
                           <div className="font-medium truncate">
-                            {m.designation} • Qté {m.quantite}
+                            {displayName} • Qté {m.quantite}
                             {m.unite ? ` ${m.unite}` : ""}
                           </div>
                           <div className="text-xs text-slate-500">Intervenant : {it?.nom ?? "—"}</div>
+                          {m.date_souhaitee ? (
+                            <div className="text-xs text-slate-500">Date souhaitée : {new Date(`${m.date_souhaitee}T00:00:00`).toLocaleDateString("fr-FR")}</div>
+                          ) : null}
                         </div>
 
-                        <span className={["text-xs px-2 py-1 rounded-full border", materielStatusBadgeClass(m.status)].join(" ")}>
-                          {materielStatusLabel(m.status)}
+                        <span className={["text-xs px-2 py-1 rounded-full border", materielStatusBadgeClass(m.statut)].join(" ")}>
+                          {materielStatusLabel(m.statut)}
                         </span>
                       </div>
 
-                      <div className="flex flex-wrap items-center gap-2 justify-between">
-                        <select
+                      <div className="grid gap-2 md:grid-cols-[1fr_auto] md:items-center">
+                        <input
                           className="rounded-xl border px-3 py-2 text-sm"
-                          value={m.status}
-                          onChange={(e) => onUpdateMaterielStatus(m, e.target.value as any)}
-                        >
-                          <option value="A_COMMANDER">À commander</option>
-                          <option value="COMMANDE">Commandé</option>
-                          <option value="LIVRE">Livré</option>
-                        </select>
-
-                        <button
-                          type="button"
-                          onClick={() => onDeleteMateriel(m)}
-                          className="text-sm rounded-xl border border-red-200 text-red-700 px-3 py-2 hover:bg-red-50"
-                        >
-                          Supprimer
-                        </button>
+                          placeholder="Commentaire admin (optionnel)"
+                          value={draftComment}
+                          onChange={(e) =>
+                            setMaterielAdminComments((prev) => ({
+                              ...prev,
+                              [m.id]: e.target.value,
+                            }))
+                          }
+                        />
+                        <div className="flex flex-wrap gap-2">
+                          <button
+                            type="button"
+                            onClick={() => onUpdateMaterielStatus(m, "validee")}
+                            className="text-sm rounded-xl border px-3 py-2 hover:bg-blue-50"
+                          >
+                            Valider
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => onUpdateMaterielStatus(m, "refusee")}
+                            className="text-sm rounded-xl border px-3 py-2 hover:bg-red-50"
+                          >
+                            Refuser
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => onUpdateMaterielStatus(m, "livree")}
+                            className="text-sm rounded-xl border px-3 py-2 hover:bg-emerald-50"
+                          >
+                            Livrée
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => onDeleteMateriel(m)}
+                            className="text-sm rounded-xl border border-red-200 text-red-700 px-3 py-2 hover:bg-red-50"
+                          >
+                            Supprimer
+                          </button>
+                        </div>
                       </div>
 
-                      {m.remarques ? <div className="text-sm text-slate-600">{m.remarques}</div> : null}
+                      {m.commentaire ? <div className="text-sm text-slate-600">{m.commentaire}</div> : null}
+                      {m.admin_commentaire ? <div className="text-sm text-slate-500">Admin: {m.admin_commentaire}</div> : null}
                     </div>
                   );
                 })
