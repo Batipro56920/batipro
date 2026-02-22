@@ -88,7 +88,26 @@ create table if not exists public.chantier_lot_planning (
 );
 
 create index if not exists chantier_lot_planning_chantier_idx on public.chantier_lot_planning(chantier_id);
-create index if not exists chantier_lot_planning_order_idx on public.chantier_lot_planning(chantier_id, order_index, lot_name);
+do $$
+begin
+  if exists (
+    select 1
+    from information_schema.columns
+    where table_schema = 'public'
+      and table_name = 'chantier_lot_planning'
+      and column_name = 'lot'
+  ) then
+    execute 'create index if not exists chantier_lot_planning_order_idx on public.chantier_lot_planning(chantier_id, order_index, lot)';
+  elsif exists (
+    select 1
+    from information_schema.columns
+    where table_schema = 'public'
+      and table_name = 'chantier_lot_planning'
+      and column_name = 'lot_name'
+  ) then
+    execute 'create index if not exists chantier_lot_planning_order_idx on public.chantier_lot_planning(chantier_id, order_index, lot_name)';
+  end if;
+end $$;
 
 alter table public.chantier_lot_planning enable row level security;
 
