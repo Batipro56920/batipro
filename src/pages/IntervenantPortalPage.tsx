@@ -5,7 +5,6 @@ import { useLocation, useNavigate } from "react-router-dom";
 import {
   intervenantGetChantiers,
   intervenantGetDocuments,
-  intervenantGetPlanning,
   intervenantGetTasks,
   intervenantMaterielCreate,
   intervenantMaterielList,
@@ -15,12 +14,11 @@ import {
   type IntervenantChantier,
   type IntervenantDocument,
   type IntervenantMateriel,
-  type IntervenantPlanning,
   type IntervenantTask,
   type IntervenantTimeEntry,
 } from "../services/intervenantPortal.service";
 
-type PortalTab = "chantiers" | "taches" | "temps" | "documents" | "planning" | "materiel";
+type PortalTab = "taches" | "temps" | "documents" | "materiel";
 
 type LoadState<T> = {
   loading: boolean;
@@ -180,6 +178,13 @@ function taskStatusPriority(status: string | null): number {
   return 3;
 }
 
+function taskPlanningDateValue(task: IntervenantTask): number {
+  const candidate = task.date_debut ?? task.date ?? task.date_fin;
+  if (!candidate) return Number.MAX_SAFE_INTEGER;
+  const timestamp = Date.parse(candidate);
+  return Number.isNaN(timestamp) ? Number.MAX_SAFE_INTEGER : timestamp;
+}
+
 function isTaskIdRequiredError(message: string): boolean {
   return String(message ?? "").toLowerCase().includes("task_id_required");
 }
@@ -188,6 +193,21 @@ function taskQuantityProgress(task: IntervenantTask): number | null {
   if (task.quantite === null || task.quantite <= 0) return null;
   const done = Number(task.quantite_realisee ?? 0);
   return Math.max(0, Math.min(100, (done / task.quantite) * 100));
+}
+
+function taskPortalPriority(task: IntervenantTask): number {
+  const progress = taskQuantityProgress(task);
+  if (progress !== null) {
+    if (progress >= 100) return 2;
+    if (progress > 0) return 0;
+    return 1;
+  }
+
+  const statusPriority = taskStatusPriority(task.status);
+  if (statusPriority === 1) return 0;
+  if (statusPriority === 0) return 1;
+  if (statusPriority === 2) return 2;
+  return 3;
 }
 
 function statusLabel(status: string | null): string {
@@ -238,12 +258,6 @@ const EMPTY_DOCUMENTS_STATE: LoadState<IntervenantDocument[]> = {
   data: [],
 };
 
-const EMPTY_PLANNING_STATE: LoadState<IntervenantPlanning> = {
-  loading: false,
-  error: null,
-  data: { chantier_id: null, lots: [] },
-};
-
 const EMPTY_TIME_STATE: LoadState<IntervenantTimeEntry[]> = {
   loading: false,
   error: null,
@@ -280,14 +294,13 @@ export default function IntervenantPortalPage() {
 
   const [tasksState, setTasksState] = useState<LoadState<IntervenantTask[]>>(EMPTY_TASKS_STATE);
   const [documentsState, setDocumentsState] = useState<LoadState<IntervenantDocument[]>>(EMPTY_DOCUMENTS_STATE);
-  const [planningState, setPlanningState] = useState<LoadState<IntervenantPlanning>>(EMPTY_PLANNING_STATE);
   const [timeState, setTimeState] = useState<LoadState<IntervenantTimeEntry[]>>(EMPTY_TIME_STATE);
   const [materielState, setMaterielState] = useState<LoadState<IntervenantMateriel[]>>(EMPTY_MATERIEL_STATE);
 
   const [reloadTick, setReloadTick] = useState(0);
   const [portalOptionsOpen, setPortalOptionsOpen] = useState(false);
   const [timeTaskId, setTimeTaskId] = useState<string | null>(null);
-  const [timeTaskQuery, setTimeTaskQuery] = useState("");
+  const [timeTaskSearch, setTimeTaskSearch] = useState("");
   const [timeTaskListOpen, setTimeTaskListOpen] = useState(false);
   const [timeFeedback, setTimeFeedback] = useState<{ type: "success" | "error"; message: string } | null>(null);
   const [timeDate, setTimeDate] = useState(todayIsoDate());
@@ -340,20 +353,17 @@ export default function IntervenantPortalPage() {
         const storedChantierId = readStoredChantierId();
         const fromQuery = queryChantierId && chantierIds.has(queryChantierId) ? queryChantierId : "";
         const fromStorage = storedChantierId && chantierIds.has(storedChantierId) ? storedChantierId : "";
-        let nextChantierId = fromQuery || fromStorage;
-        if (!nextChantierId && chantierRows.length === 1) {
-          nextChantierId = chantierRows[0]?.id ?? "";
-        }
+        const nextChantierId = fromQuery || fromStorage || chantierRows[0]?.id || "";
 
         setSessionInfo(sessionData);
         setChantiers(chantierRows);
         setSelectedChantierId(nextChantierId);
+        setActiveTab("taches");
 
         if (nextChantierId) {
           persistChantierId(nextChantierId);
         } else {
           clearStoredChantierId();
-          setActiveTab("chantiers");
         }
 
         setBootLoading(false);
@@ -390,6 +400,16 @@ export default function IntervenantPortalPage() {
   }, [selectedChantierId]);
 
   useEffect(() => {
+    setTimeTaskId(null);
+    setTimeTaskSearch("");
+    setTimeTaskListOpen(false);
+    setTimeFeedback(null);
+    setTimeQuantity("");
+    setTimeNote("");
+    setTimeDate(todayIsoDate());
+  }, [selectedChantierId]);
+
+  useEffect(() => {
     if (!token || !selectedChantierId || bootLoading || bootError) return;
 
     let alive = true;
@@ -397,14 +417,12 @@ export default function IntervenantPortalPage() {
     async function loadChantierData() {
       setTasksState({ loading: true, error: null, data: [] });
       setDocumentsState({ loading: true, error: null, data: [] });
-      setPlanningState({ loading: true, error: null, data: { chantier_id: selectedChantierId, lots: [] } });
       setTimeState({ loading: true, error: null, data: [] });
       setMaterielState({ loading: true, error: null, data: [] });
 
-      const [tasksResult, documentsResult, planningResult, timeResult, materielResult] = await Promise.allSettled([
+      const [tasksResult, documentsResult, timeResult, materielResult] = await Promise.allSettled([
         intervenantGetTasks(token, selectedChantierId),
         intervenantGetDocuments(token, selectedChantierId),
-        intervenantGetPlanning(token, selectedChantierId),
         intervenantTimeList(token, selectedChantierId),
         intervenantMaterielList(token, selectedChantierId),
       ]);
@@ -416,10 +434,7 @@ export default function IntervenantPortalPage() {
           (tasksResult.status === "rejected" && shouldFallbackToLegacy(tasksResult.reason) && tasksResult.reason) ||
           (documentsResult.status === "rejected" &&
             shouldFallbackToLegacy(documentsResult.reason) &&
-            documentsResult.reason) ||
-          (planningResult.status === "rejected" &&
-            shouldFallbackToLegacy(planningResult.reason) &&
-            planningResult.reason);
+            documentsResult.reason);
 
         if (fallbackError) {
           if (import.meta.env.DEV) {
@@ -451,16 +466,6 @@ export default function IntervenantPortalPage() {
           loading: false,
           error: getErrorMessage(documentsResult.reason, "Erreur chargement documents."),
           data: [],
-        });
-      }
-
-      if (planningResult.status === "fulfilled") {
-        setPlanningState({ loading: false, error: null, data: planningResult.value });
-      } else {
-        setPlanningState({
-          loading: false,
-          error: getErrorMessage(planningResult.reason, "Erreur chargement planning."),
-          data: { chantier_id: selectedChantierId, lots: [] },
         });
       }
 
@@ -506,39 +511,37 @@ export default function IntervenantPortalPage() {
     [chantiers, selectedChantierId],
   );
   const prioritizedTasks = useMemo(() => {
-    const currentIntervenantId = sessionInfo?.intervenant_id ?? null;
     return [...tasksState.data].sort((a, b) => {
-      const aAssigned = currentIntervenantId && a.intervenant_id === currentIntervenantId ? 0 : 1;
-      const bAssigned = currentIntervenantId && b.intervenant_id === currentIntervenantId ? 0 : 1;
-      if (aAssigned !== bAssigned) return aAssigned - bAssigned;
+      const bucketDelta = taskPortalPriority(a) - taskPortalPriority(b);
+      if (bucketDelta !== 0) return bucketDelta;
 
-      const statusDelta = taskStatusPriority(a.status) - taskStatusPriority(b.status);
-      if (statusDelta !== 0) return statusDelta;
+      const planningDelta = taskPlanningDateValue(a) - taskPlanningDateValue(b);
+      if (planningDelta !== 0) return planningDelta;
 
-      const lotDelta = resolveTaskLot(a).localeCompare(resolveTaskLot(b), "fr");
-      if (lotDelta !== 0) return lotDelta;
+      const orderDelta = Number(a.order_index ?? 0) - Number(b.order_index ?? 0);
+      if (orderDelta !== 0) return orderDelta;
 
       return a.titre.localeCompare(b.titre, "fr");
     });
-  }, [sessionInfo?.intervenant_id, tasksState.data]);
+  }, [tasksState.data]);
   const filteredTimeTasks = useMemo(() => {
-    const query = timeTaskQuery.trim().toLowerCase();
+    const query = timeTaskSearch.trim().toLowerCase();
     const rows = query
       ? prioritizedTasks.filter((task) => task.titre.toLowerCase().includes(query))
       : prioritizedTasks;
     return rows.slice(0, 10);
-  }, [prioritizedTasks, timeTaskQuery]);
+  }, [prioritizedTasks, timeTaskSearch]);
   const selectedTimeTask =
     timeTaskId ? prioritizedTasks.find((task) => task.id === timeTaskId) ?? null : null;
 
-  const requiresChantierSelection = chantiers.length > 1 && !selectedChantierId;
+  const hasNoChantiers = chantiers.length === 0;
+  const showChantiersSelector = chantiers.length > 1;
   const isInvalidToken = isInvalidTokenError(bootError ?? "");
-  const showChantiersShortcut = chantiers.length > 1 && activeTab !== "chantiers";
 
   useEffect(() => {
     if (!prioritizedTasks.length) {
       setTimeTaskId(null);
-      setTimeTaskQuery("");
+      setTimeTaskSearch("");
       return;
     }
 
@@ -549,7 +552,7 @@ export default function IntervenantPortalPage() {
 
     const preferredTask = prioritizedTasks[0];
     setTimeTaskId(preferredTask.id);
-    setTimeTaskQuery(preferredTask.titre);
+    setTimeTaskSearch("");
   }, [prioritizedTasks, timeTaskId]);
 
   function reloadAll() {
@@ -558,11 +561,12 @@ export default function IntervenantPortalPage() {
 
   function onSelectChantier(chantierId: string) {
     setSelectedChantierId(chantierId);
+    persistChantierId(chantierId);
   }
 
   function selectTimeTask(task: IntervenantTask) {
     setTimeTaskId(task.id);
-    setTimeTaskQuery(task.titre);
+    setTimeTaskSearch("");
     setTimeTaskListOpen(false);
     setTimeFeedback(null);
   }
@@ -607,10 +611,10 @@ export default function IntervenantPortalPage() {
       if (taskRows.length > 0) {
         const currentTask = taskRows.find((task) => task.id === timeTaskId) ?? taskRows[0];
         setTimeTaskId(currentTask.id);
-        setTimeTaskQuery(currentTask.titre);
+        setTimeTaskSearch("");
       } else {
         setTimeTaskId(null);
-        setTimeTaskQuery("");
+        setTimeTaskSearch("");
       }
       setTimeTaskListOpen(false);
       setTimeDate(todayIsoDate());
@@ -622,7 +626,7 @@ export default function IntervenantPortalPage() {
         if (prioritizedTasks.length > 0) {
           const preferredTask = prioritizedTasks[0];
           setTimeTaskId(preferredTask.id);
-          setTimeTaskQuery(preferredTask.titre);
+          setTimeTaskSearch("");
         }
         setTimeState((prev) => ({ ...prev, error: "Choisir une tache." }));
         setTimeFeedback(null);
@@ -745,7 +749,7 @@ export default function IntervenantPortalPage() {
               ) : null}
             </header>
 
-            {showChantiersShortcut ? (
+            {showChantiersSelector ? (
               <section className="rounded-2xl border bg-white p-4 sm:p-5">
                 <div className="mb-2 text-sm font-semibold text-slate-900">Chantiers accessibles</div>
                 <div className="overflow-x-auto whitespace-nowrap pb-1">
@@ -774,9 +778,9 @@ export default function IntervenantPortalPage() {
               </section>
             ) : null}
 
-            {requiresChantierSelection ? (
+            {hasNoChantiers ? (
               <section className="rounded-2xl border bg-white p-6 text-sm text-slate-600">
-                Choisir un chantier pour afficher les taches, le temps, le planning, les documents et le materiel.
+                Aucun chantier accessible pour ce lien intervenant.
               </section>
             ) : (
               <section className="rounded-2xl border bg-white p-4 sm:p-5">
@@ -785,6 +789,9 @@ export default function IntervenantPortalPage() {
                     Chantier selectionne
                   </div>
                   <div className="mt-1 text-base font-semibold text-slate-900">{activeChantier?.nom ?? "Chantier"}</div>
+                  <div className="mt-1 text-xs leading-5 text-slate-500">
+                    Client: {activeChantier?.client || "Non renseigne"}
+                  </div>
                   <div className="mt-1 text-xs leading-5 text-slate-500">
                     {activeChantier?.adresse || "Adresse non renseignee"}
                   </div>
@@ -798,11 +805,9 @@ export default function IntervenantPortalPage() {
                 <div className="overflow-x-auto whitespace-nowrap pb-2">
                   <div className="inline-flex gap-2">
                     {([
-                      { key: "chantiers", label: "Chantiers" },
                       { key: "taches", label: "Taches" },
                       { key: "temps", label: "Temps" },
                       { key: "documents", label: "Documents" },
-                      { key: "planning", label: "Planning" },
                       { key: "materiel", label: "Materiel" },
                     ] as Array<{ key: PortalTab; label: string }>).map((tab) => (
                       <button
@@ -821,40 +826,6 @@ export default function IntervenantPortalPage() {
                     ))}
                   </div>
                 </div>
-
-                {activeTab === "chantiers" && (
-                  <div className="space-y-2">
-                    {chantiers.map((chantier) => (
-                      <article key={chantier.id} className="rounded-xl border p-3">
-                        <div className="flex items-center justify-between gap-3">
-                          <div>
-                            <div className="font-medium text-slate-900">{chantier.nom}</div>
-                            <div className="text-xs text-slate-500">{chantier.client || "Client non renseigne"}</div>
-                          </div>
-                          {selectedChantierId === chantier.id ? (
-                            <span className="rounded-full border border-blue-200 bg-blue-50 px-2 py-0.5 text-xs text-blue-700">Selectionne</span>
-                          ) : (
-                            <button
-                              type="button"
-                              onClick={() => onSelectChantier(chantier.id)}
-                              className="rounded-lg border px-2 py-1 text-xs hover:bg-slate-50"
-                            >
-                              Ouvrir
-                            </button>
-                          )}
-                        </div>
-                        <div className="mt-2 text-xs leading-5 text-slate-500">
-                          {chantier.adresse || "Adresse non renseignee"}
-                        </div>
-                        <div className="mt-1 text-xs leading-5 text-slate-500">
-                          Debut: {formatDateFr(chantier.planning_start_date ?? chantier.date_debut)}
-                          {" - "}
-                          Fin: {formatDateFr(chantier.planning_end_date ?? chantier.date_fin_prevue)}
-                        </div>
-                      </article>
-                    ))}
-                  </div>
-                )}
 
                 {activeTab === "taches" && (
                   <div className="space-y-2">
@@ -908,20 +879,34 @@ export default function IntervenantPortalPage() {
                           <label className="text-xs font-medium text-slate-600">Tache</label>
                           <input
                             className="w-full rounded-lg border px-3 py-2 text-sm"
-                            value={timeTaskQuery}
+                            value={timeTaskSearch}
                             placeholder="Rechercher une tache..."
                             onFocus={() => setTimeTaskListOpen(true)}
                             onChange={(e) => {
                               const value = e.target.value;
-                              setTimeTaskQuery(value);
+                              setTimeTaskSearch(value);
                               setTimeTaskListOpen(true);
                               setTimeFeedback(null);
-                              const matchesSelected = selectedTimeTask && value.trim() === selectedTimeTask.titre;
-                              if (!matchesSelected) {
+                              if (value.trim()) {
                                 setTimeTaskId(null);
                               }
                             }}
                           />
+
+                          {selectedTimeTask ? (
+                            <div className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs text-slate-600">
+                              <div className="font-medium text-slate-800">Tache choisie</div>
+                              <div className="mt-1" style={TITLE_CLAMP_STYLE}>
+                                {selectedTimeTask.titre}
+                              </div>
+                            </div>
+                          ) : null}
+
+                          {import.meta.env.DEV ? (
+                            <div className="text-[11px] text-slate-500">
+                              {prioritizedTasks.length} taches disponibles
+                            </div>
+                          ) : null}
 
                           {timeTaskListOpen && filteredTimeTasks.length > 0 ? (
                             <div className="rounded-xl border bg-white p-1">
@@ -1064,39 +1049,6 @@ export default function IntervenantPortalPage() {
                           <div className="font-medium text-slate-900">{doc.title || doc.file_name || "Document"}</div>
                           <div className="mt-1 text-xs text-slate-500">
                             {doc.category || "-"} - {doc.document_type || "-"} - {formatDateTimeFr(doc.created_at)}
-                          </div>
-                        </article>
-                      ))
-                    )}
-                  </div>
-                )}
-
-                {activeTab === "planning" && (
-                  <div className="space-y-2">
-                    {planningState.loading ? (
-                      <div className="rounded-xl border bg-slate-50 p-3 text-sm text-slate-600">Chargement du planning...</div>
-                    ) : planningState.error ? (
-                      <div className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">{planningState.error}</div>
-                    ) : planningState.data.lots.length === 0 ? (
-                      <div className="rounded-xl border bg-slate-50 p-3 text-sm text-slate-500">Aucun lot planifie.</div>
-                    ) : (
-                      planningState.data.lots.map((lot) => (
-                        <article key={lot.lot} className="rounded-xl border p-3">
-                          <div className="flex items-center justify-between gap-3">
-                            <div className="font-medium text-slate-900">{lot.lot}</div>
-                            <div className="text-xs text-slate-500">{lot.progress_pct.toFixed(1)}%</div>
-                          </div>
-                          <div className="mt-2 h-2 rounded-full bg-slate-100">
-                            <div
-                              className="h-2 rounded-full bg-blue-600"
-                              style={{ width: `${Math.max(0, Math.min(100, lot.progress_pct))}%` }}
-                            />
-                          </div>
-                          <div className="mt-2 text-xs text-slate-500">
-                            Debut: {formatDateFr(lot.start_date)} - Fin: {formatDateFr(lot.end_date)}
-                          </div>
-                          <div className="mt-1 text-xs text-slate-500">
-                            Taches: {lot.done_tasks}/{lot.total_tasks} - Duree estimee: {lot.total_duration_days} j
                           </div>
                         </article>
                       ))
