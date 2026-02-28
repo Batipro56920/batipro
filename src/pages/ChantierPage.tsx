@@ -10,6 +10,7 @@ import {
   getTasksByChantierIdDetailed,
   createTask,
   updateTask,
+  adminSetTaskProgressOffset,
   type ChantierTaskRow,
   type TaskStatus,
 } from "../services/chantierTasks.service";
@@ -80,7 +81,8 @@ import {
 import {
   listTaskDocuments,
   listTaskDocumentsByTaskIds,
-  setTaskDocuments,
+  adminSetTaskDocumentPermissions,
+  listDocumentPermissionsByDocumentIds,
   type TaskDocumentLinkRow,
 } from "../services/taskDocuments.service";
 import {
@@ -324,6 +326,43 @@ function toNumberOrNull(v: unknown) {
   return null;
 }
 
+type TaskProgressInfo = {
+  displayPercent: number;
+  autoPercent: number | null;
+  offsetPercent: number;
+  isAdjusted: boolean;
+};
+
+function computeTaskProgress(task: {
+  temps_reel_h?: number | null;
+  temps_prevu_h?: number | null;
+  progress_admin_offset_percent?: number | null;
+}): TaskProgressInfo {
+  const tempsReel = Number(task.temps_reel_h ?? 0);
+  const tempsPrevu = toNumberOrNull(task.temps_prevu_h);
+  const autoPercent =
+    tempsPrevu !== null && tempsPrevu > 0
+      ? Math.max(0, Math.min(100, Math.round((tempsReel / tempsPrevu) * 100)))
+      : null;
+
+  const offsetRaw = toNumberOrNull((task as any).progress_admin_offset_percent);
+  const offsetPercent = Math.max(-100, Math.min(100, Math.round(offsetRaw ?? 0)));
+  const displayPercent = Math.max(0, Math.min(100, Math.round((autoPercent ?? 0) + offsetPercent)));
+
+  return {
+    displayPercent,
+    autoPercent,
+    offsetPercent,
+    isAdjusted: Math.abs(offsetPercent) > 0,
+  };
+}
+
+function getStatusFromProgress(progressPercent: number): TaskStatus {
+  if (progressPercent >= 100) return "FAIT";
+  if (progressPercent > 0) return "EN_COURS";
+  return "A_FAIRE";
+}
+
 async function copyToClipboard(text: string) {
   try {
     await navigator.clipboard.writeText(text);
@@ -436,6 +475,8 @@ export default function ChantierPage() {
   const [taskDocumentsModalOpen, setTaskDocumentsModalOpen] = useState(false);
   const [taskDocumentsModalTask, setTaskDocumentsModalTask] = useState<ChantierTaskRow | null>(null);
   const [taskDocumentsSelection, setTaskDocumentsSelection] = useState<string[]>([]);
+  const [taskDocumentsIntervenantIds, setTaskDocumentsIntervenantIds] = useState<string[]>([]);
+  const [taskDocumentsShareAll, setTaskDocumentsShareAll] = useState(true);
   const [taskDocumentsQuery, setTaskDocumentsQuery] = useState("");
   const [taskDocumentsModalSaving, setTaskDocumentsModalSaving] = useState(false);
   const [taskDocumentsModalError, setTaskDocumentsModalError] = useState<string | null>(null);
@@ -474,6 +515,7 @@ export default function ChantierPage() {
   const [newIntervenantId, setNewIntervenantId] = useState<string>("__NONE__");
   const [newQuantite, setNewQuantite] = useState("1");
   const [newUnite, setNewUnite] = useState("");
+  const [newTempsPrevuH, setNewTempsPrevuH] = useState("1");
   const [addingTask, setAddingTask] = useState(false);
 
   // Edition tâche
@@ -489,6 +531,11 @@ export default function ChantierPage() {
   const [editIntervenantId, setEditIntervenantId] = useState<string>("__NONE__");
   const [editQuantite, setEditQuantite] = useState("1");
   const [editUnite, setEditUnite] = useState("");
+  const [editTempsPrevuH, setEditTempsPrevuH] = useState("");
+
+  const [taskProgressDrafts, setTaskProgressDrafts] = useState<Record<string, string>>({});
+  const [taskProgressSavingId, setTaskProgressSavingId] = useState<string | null>(null);
+  const [taskProgressEditingId, setTaskProgressEditingId] = useState<string | null>(null);
   const [taskTemplateDrawerOpen, setTaskTemplateDrawerOpen] = useState(false);
   const [taskTemplateSeed, setTaskTemplateSeed] = useState<TaskTemplateInput | null>(null);
   const [taskTemplateSaving, setTaskTemplateSaving] = useState(false);
@@ -525,6 +572,7 @@ export default function ChantierPage() {
 
   // Form matériel
   const [mIntervenantId, setMIntervenantId] = useState<string>("__NONE__");
+  const [mTaskId, setMTaskId] = useState("");
   const [mDesignation, setMDesignation] = useState("");
   const [mQuantite, setMQuantite] = useState("1");
   const [mUnite, setMUnite] = useState("");
@@ -1324,8 +1372,27 @@ export default function ChantierPage() {
         chantierDocuments.length ? Promise.resolve(chantierDocuments) : listDocumentsByChantier(id),
         listTaskDocuments(task.id),
       ]);
+      const permissions =
+        linkedIds.length > 0 ? await listDocumentPermissionsByDocumentIds(id, linkedIds) : [];
+      const permissionIntervenantIds = Array.from(
+        new Set(permissions.map((row) => row.intervenant_id).filter(Boolean)),
+      );
+      const allIntervenantIds = intervenants.map((intervenant) => intervenant.id);
+      const hasAllIntervenants =
+        allIntervenantIds.length > 0 &&
+        permissionIntervenantIds.length > 0 &&
+        allIntervenantIds.every((intervenantId) => permissionIntervenantIds.includes(intervenantId));
+
       setChantierDocuments(docs);
       setTaskDocumentsSelection(linkedIds);
+      setTaskDocumentsIntervenantIds(
+        permissionIntervenantIds.length > 0
+          ? permissionIntervenantIds
+          : task.intervenant_id
+            ? [task.intervenant_id]
+            : [],
+      );
+      setTaskDocumentsShareAll(hasAllIntervenants);
     } catch (err: any) {
       setTaskDocumentsModalError(err?.message ?? "Erreur chargement documents.");
     }
@@ -1336,19 +1403,37 @@ export default function ChantierPage() {
     setTaskDocumentsModalOpen(false);
     setTaskDocumentsModalTask(null);
     setTaskDocumentsSelection([]);
+    setTaskDocumentsIntervenantIds([]);
+    setTaskDocumentsShareAll(true);
     setTaskDocumentsQuery("");
     setTaskDocumentsModalError(null);
   }
 
   async function saveTaskDocuments() {
     if (!taskDocumentsModalTask) return;
+    const allIntervenantIds = intervenants.map((intervenant) => intervenant.id);
+    const effectiveIntervenantIds = Array.from(
+      new Set(
+        (taskDocumentsShareAll ? allIntervenantIds : taskDocumentsIntervenantIds).filter(Boolean),
+      ),
+    );
+
+    if (taskDocumentsSelection.length > 0 && effectiveIntervenantIds.length === 0) {
+      setTaskDocumentsModalError("Sélectionne au moins un intervenant autorisé.");
+      return;
+    }
+
     setTaskDocumentsModalSaving(true);
     setTaskDocumentsModalError(null);
     try {
-      await setTaskDocuments(taskDocumentsModalTask.id, taskDocumentsSelection);
+      await adminSetTaskDocumentPermissions({
+        taskId: taskDocumentsModalTask.id,
+        documentIds: taskDocumentsSelection,
+        intervenantIds: effectiveIntervenantIds,
+      });
       const links = await listTaskDocumentsByTaskIds(tasks.map((t) => t.id));
       setTaskDocumentLinks(links);
-      setToast({ type: "ok", msg: "Documents liés mis à jour." });
+      setToast({ type: "ok", msg: "Documents et autorisations mis à jour." });
       closeTaskDocumentsModal();
     } catch (err: any) {
       const message = err?.message ?? "Erreur mise a jour des documents.";
@@ -1687,6 +1772,15 @@ export default function ChantierPage() {
     setTimeDraftByTaskId(next);
   }, [tasks]);
 
+  useEffect(() => {
+    const next: Record<string, string> = {};
+    for (const task of tasks) {
+      const progress = computeTaskProgress(task);
+      next[task.id] = String(progress.offsetPercent);
+    }
+    setTaskProgressDrafts(next);
+  }, [tasks]);
+
   /* ---------------- computed ---------------- */
   const badge = useMemo(() => statusBadge(item?.status), [item?.status]);
 
@@ -1895,6 +1989,98 @@ export default function ChantierPage() {
     }
   }
 
+  function onTaskProgressDraftChange(taskId: string, rawValue: string) {
+    const normalized = rawValue.replace(",", ".");
+    setTaskProgressDrafts((prev) => ({ ...prev, [taskId]: normalized }));
+  }
+
+  function startTaskProgressEdit(task: ChantierTaskRow) {
+    const progress = computeTaskProgress(task);
+    setTaskProgressDrafts((prev) => ({ ...prev, [task.id]: String(progress.offsetPercent ?? 0) }));
+    setTaskProgressEditingId(task.id);
+  }
+
+  function cancelTaskProgressEdit(task: ChantierTaskRow) {
+    const progress = computeTaskProgress(task);
+    setTaskProgressDrafts((prev) => ({ ...prev, [task.id]: String(progress.offsetPercent ?? 0) }));
+    setTaskProgressEditingId((prev) => (prev === task.id ? null : prev));
+  }
+
+  async function applyTaskProgressOffset(task: ChantierTaskRow) {
+    const draftRaw = String(taskProgressDrafts[task.id] ?? "").trim().replace(",", ".");
+    const parsed = Number(draftRaw);
+    if (!Number.isFinite(parsed)) {
+      setToast({ type: "error", msg: "Valeur d'ajustement invalide (-100 à 100)." });
+      return;
+    }
+
+    const clamped = Math.max(-100, Math.min(100, parsed));
+    setTaskProgressSavingId(task.id);
+
+    try {
+      await adminSetTaskProgressOffset(task.id, clamped);
+      const progress = computeTaskProgress({
+        ...task,
+        progress_admin_offset_percent: clamped,
+      });
+      const nextStatus = getStatusFromProgress(progress.displayPercent);
+      setTasks((prev) =>
+        prev.map((row) =>
+          row.id === task.id
+            ? {
+                ...row,
+                progress_admin_offset_percent: clamped,
+                progress_admin_offset_updated_at: new Date().toISOString(),
+                status: nextStatus,
+              }
+            : row,
+        ),
+      );
+      setTaskProgressDrafts((prev) => ({ ...prev, [task.id]: String(Math.round(clamped)) }));
+      setToast({ type: "ok", msg: "Ajustement d'avancement appliqué." });
+      setTaskProgressEditingId((prev) => (prev === task.id ? null : prev));
+      await refreshTasksOnly();
+    } catch (e: any) {
+      setToast({ type: "error", msg: e?.message ?? "Erreur mise à jour avancement." });
+      await refreshTasksOnly();
+    } finally {
+      setTaskProgressSavingId(null);
+    }
+  }
+
+  async function resetTaskProgressOffset(task: ChantierTaskRow) {
+    setTaskProgressSavingId(task.id);
+    try {
+      await adminSetTaskProgressOffset(task.id, null);
+      const progress = computeTaskProgress({
+        ...task,
+        progress_admin_offset_percent: 0,
+      });
+      const nextStatus = getStatusFromProgress(progress.displayPercent);
+      setTasks((prev) =>
+        prev.map((row) =>
+          row.id === task.id
+            ? {
+                ...row,
+                progress_admin_offset_percent: 0,
+                progress_admin_offset_updated_at: new Date().toISOString(),
+                status: nextStatus,
+              }
+            : row,
+        ),
+      );
+      setTaskProgressDrafts((prev) => ({ ...prev, [task.id]: "0" }));
+      setToast({ type: "ok", msg: "Retour au calcul automatique appliqué." });
+      setTaskProgressEditingId((prev) => (prev === task.id ? null : prev));
+      await refreshTasksOnly();
+    } catch (e: any) {
+      setToast({ type: "error", msg: e?.message ?? "Erreur reset avancement." });
+      await refreshTasksOnly();
+    } finally {
+      setTaskProgressSavingId(null);
+    }
+  }
+
   async function addTask(e: FormEvent) {
     e.preventDefault();
     if (!id) return;
@@ -1913,6 +2099,12 @@ export default function ChantierPage() {
     }
 
     const unite = newUnite.trim() || null;
+    const tempsPrevuRaw = newTempsPrevuH.trim();
+    const tempsPrevu = tempsPrevuRaw === "" ? null : toNumberOrNull(tempsPrevuRaw);
+    if (tempsPrevuRaw !== "" && (tempsPrevu === null || tempsPrevu <= 0)) {
+      setTasksError("Temps prévu invalide (heures > 0).");
+      return;
+    }
     if (newLotSelection === "__CREATE__") {
       setTasksError("Crée d'abord le nouveau lot avant d'ajouter la tâche.");
       return;
@@ -1954,10 +2146,11 @@ export default function ChantierPage() {
       intervenant_id,
       quantite,
       unite,
-      temps_prevu_h: null,
+      temps_prevu_h: tempsPrevu,
       date_debut: null,
       date_fin: null,
       temps_reel_h: null,
+      progress_admin_offset_percent: 0,
       duration_days: durationDays,
       order_index: orderIndex,
       created_at: new Date().toISOString(),
@@ -1976,6 +2169,7 @@ export default function ChantierPage() {
         intervenant_id,
         quantite,
         unite,
+        temps_prevu_h: tempsPrevu,
         duration_days: durationDays,
         order_index: orderIndex,
       });
@@ -1991,6 +2185,7 @@ export default function ChantierPage() {
       setNewIntervenantId("__NONE__");
       setNewQuantite("1");
       setNewUnite("");
+      setNewTempsPrevuH("1");
 
       setToast({ type: "ok", msg: "Tâche ajoutée." });
     } catch (e: any) {
@@ -2020,6 +2215,7 @@ export default function ChantierPage() {
     setEditIntervenantId(t.intervenant_id ?? "__NONE__");
     setEditQuantite(String(q ?? decoded.quantite ?? 1));
     setEditUnite(unite);
+    setEditTempsPrevuH(toInputNumberString((t as any).temps_prevu_h));
   }
   function cancelEditTask() {
     setEditingTaskId(null);
@@ -2093,6 +2289,12 @@ export default function ChantierPage() {
     }
 
     const unite = editUnite.trim() || null;
+    const tempsPrevuRaw = editTempsPrevuH.trim();
+    const tempsPrevu = tempsPrevuRaw === "" ? null : toNumberOrNull(tempsPrevuRaw);
+    if (tempsPrevuRaw !== "" && (tempsPrevu === null || tempsPrevu <= 0)) {
+      setToast({ type: "error", msg: "Temps prévu invalide (heures > 0)." });
+      return;
+    }
     const durationRaw = editDurationDays.trim();
     const durationParsed = Number(durationRaw || "1");
     const durationDays = Number.isFinite(durationParsed) ? Math.max(1, Math.trunc(durationParsed)) : NaN;
@@ -2108,7 +2310,6 @@ export default function ChantierPage() {
       setToast({ type: "error", msg: "Ordre invalide." });
       return;
     }
-
     if (editLotSelection === "__CREATE__") {
       setToast({ type: "error", msg: "Crée d'abord le nouveau lot avant d'enregistrer." });
       return;
@@ -2128,6 +2329,7 @@ export default function ChantierPage() {
       intervenant_id: editIntervenantId === "__NONE__" ? null : editIntervenantId,
       quantite,
       unite,
+      temps_prevu_h: tempsPrevu,
       duration_days: durationDays,
       order_index: orderIndex,
     };
@@ -2500,6 +2702,7 @@ export default function ChantierPage() {
     if (!id) return;
 
     const intervenant_id = mIntervenantId === "__NONE__" ? "" : mIntervenantId;
+    const task_id = mTaskId || null;
     const designation = mDesignation.trim();
     const rawQty = String(mQuantite ?? "1").trim().replace(",", ".");
     const qty = Number(rawQty);
@@ -2525,6 +2728,8 @@ export default function ChantierPage() {
       id: tempId,
       chantier_id: id,
       intervenant_id,
+      task_id,
+      task_titre: task_id ? tasks.find((task) => task.id === task_id)?.titre ?? null : null,
       titre: designation,
       designation,
       quantite: qty,
@@ -2543,6 +2748,7 @@ export default function ChantierPage() {
       const saved = await createMaterielDemande({
         chantier_id: id,
         intervenant_id,
+        task_id,
         titre: designation,
         quantite: qty,
         unite: mUnite.trim() || null,
@@ -2554,6 +2760,7 @@ export default function ChantierPage() {
       setMateriel((prev) => prev.map((x) => (x.id === tempId ? (saved as any) : x)));
 
       setMIntervenantId("__NONE__");
+      setMTaskId("");
       setMDesignation("");
       setMQuantite("1");
       setMUnite("");
@@ -2909,7 +3116,22 @@ export default function ChantierPage() {
                             );
 
                             try {
-                              await updateTask(t.id, { date_debut, date_fin, temps_reel_h: nextTotal } as any);
+                              const saved = await updateTask(t.id, {
+                                date_debut,
+                                date_fin,
+                                temps_reel_h: nextTotal,
+                              } as any);
+                              const savedProgress = computeTaskProgress(saved as any);
+                              const derivedStatus = getStatusFromProgress(savedProgress.displayPercent);
+                              const savedStatus = String((saved as any)?.status ?? "A_FAIRE").toUpperCase();
+                              const statusNeedsSync = savedStatus !== derivedStatus;
+
+                              const finalSaved = statusNeedsSync
+                                ? await updateTask(t.id, { status: derivedStatus } as any)
+                                : saved;
+                              setTasks((prev: any[]) =>
+                                prev.map((x) => (x.id === t.id ? (finalSaved as any) : x)),
+                              );
 
                               // reset ajout
                               setTimeDraftByTaskId((prev) => ({
@@ -3579,8 +3801,8 @@ export default function ChantierPage() {
                     </div>
                   )}
 
-                  <div className="grid gap-2 md:grid-cols-12">
-                    <label className="space-y-1 text-xs text-slate-600 md:col-span-3">
+                  <div className="grid gap-2 md:grid-cols-5">
+                    <label className="space-y-1 text-xs text-slate-600">
                       <div>Statut</div>
                       <select
                         className="w-full rounded-xl border bg-white px-3 py-2 text-sm text-slate-900"
@@ -3592,7 +3814,18 @@ export default function ChantierPage() {
                         <option value="FAIT">Fait</option>
                       </select>
                     </label>
-                    <label className="space-y-1 text-xs text-slate-600 md:col-span-3">
+                    <label className="space-y-1 text-xs text-slate-600">
+                      <div>Temps prévu (h)</div>
+                      <input
+                        className="w-full rounded-xl border bg-white px-3 py-2 text-sm text-slate-900"
+                        inputMode="decimal"
+                        placeholder="ex: 2.5"
+                        value={newTempsPrevuH}
+                        onChange={(e) => setNewTempsPrevuH(e.target.value)}
+                      />
+                      <p className="text-[11px] text-slate-500">Utilisé pour le calcul automatique d'avancement</p>
+                    </label>
+                    <label className="space-y-1 text-xs text-slate-600">
                       <div>Durée (jours)</div>
                       <input
                         className="w-full rounded-xl border bg-white px-3 py-2 text-sm text-slate-900"
@@ -3604,7 +3837,7 @@ export default function ChantierPage() {
                       />
                       <p className="text-[11px] text-slate-500">Durée estimée utilisée pour le planning</p>
                     </label>
-                    <label className="space-y-1 text-xs text-slate-600 md:col-span-3">
+                    <label className="space-y-1 text-xs text-slate-600">
                       <div>Ordre</div>
                       <input
                         className="w-full rounded-xl border bg-white px-3 py-2 text-sm text-slate-900"
@@ -3616,7 +3849,7 @@ export default function ChantierPage() {
                       />
                       <p className="text-[11px] text-slate-500">Ordre d'enchaînement dans le lot</p>
                     </label>
-                    <label className="space-y-1 text-xs text-slate-600 md:col-span-3">
+                    <label className="space-y-1 text-xs text-slate-600">
                       <div>Intervenant</div>
                       <select
                         className="w-full rounded-xl border bg-white px-3 py-2 text-sm text-slate-900"
@@ -3633,6 +3866,12 @@ export default function ChantierPage() {
                       </select>
                     </label>
                   </div>
+
+                  {(toNumberOrNull(newTempsPrevuH) ?? 0) <= 0 && (
+                    <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                      Temps prévu requis pour un calcul automatique fiable de l'avancement.
+                    </div>
+                  )}
 
                   <div className="text-xs text-slate-500">
                     Astuce : crée tes intervenants dans l'onglet "Intervenants", puis attribue-les ici.
@@ -3678,27 +3917,25 @@ export default function ChantierPage() {
 
                   const tempsPasse = Number((t as any).temps_reel_h ?? 0);
                   const tempsPasseDisplay = Math.round(tempsPasse * 100) / 100;
-                  const tempsPrevu = toNumberOrNull((t as any).temps_prevu_h);
-
-                  let avancementPct: number | null = null;
-                  if (tempsPrevu !== null && tempsPrevu > 0) {
-                    avancementPct = Math.min(100, Math.round((tempsPasse / tempsPrevu) * 100));
-                  } else {
-                    const uniteNorm = (uniteValue ?? "").toString().trim().toLowerCase();
-                    if (
-                      (uniteNorm === "h" || uniteNorm === "heure" || uniteNorm === "heures") &&
-                      quantiteValue !== null &&
-                      quantiteValue > 0
-                    ) {
-                      avancementPct = Math.min(100, Math.round((tempsPasse / quantiteValue) * 100));
-                    }
-                  }
+                  const progress = computeTaskProgress(t);
+                  const avancementPct = progress.displayPercent;
+                  const hasOffset = progress.isAdjusted;
+                  const offsetPct = progress.offsetPercent;
+                  const autoPct = progress.autoPercent;
+                  const isAdjustingProgress = taskProgressEditingId === t.id;
+                  const draftRaw = taskProgressDrafts[t.id];
+                  const parsedDraft = Number(String(draftRaw ?? "").replace(",", "."));
+                  const draftOffset = Number.isFinite(parsedDraft)
+                    ? Math.max(-100, Math.min(100, Math.round(parsedDraft)))
+                    : offsetPct;
 
                   const qtyLabel =
                     quantiteValue === null ? "Qte: --" : `Qte: ${quantiteValue}${uniteValue ? ` ${uniteValue}` : ""}`;
+                  const tempsPrevuLabel =
+                    autoPct === null ? "Temps prévu: -- h" : `Temps prévu: ${Math.round((toNumberOrNull((t as any).temps_prevu_h) ?? 0) * 100) / 100} h`;
                   const tempsPasseLabel = `Temps passe: ${tempsPasseDisplay} h`;
-                  const avancementLabel =
-                    avancementPct === null ? "Avancement (temps): --" : `Avancement (temps): ${avancementPct}%`;
+                  const progressFillClass =
+                    avancementPct < 40 ? "bg-amber-400" : avancementPct < 80 ? "bg-blue-500" : "bg-emerald-500";
                   const it = t.intervenant_id ? intervenantById.get(t.intervenant_id) : null;
 
                   return (
@@ -3714,7 +3951,87 @@ export default function ChantierPage() {
                                 {resolveTaskLotName(t)} • Intervenant : {it?.nom ?? "—"}
                               </div>
                               <div className="text-xs text-slate-500 mt-1">
-                                {qtyLabel} / {tempsPasseLabel} / {avancementLabel}
+                                {qtyLabel} / {tempsPrevuLabel} / {tempsPasseLabel}
+                              </div>
+                              <div className="mt-2 space-y-1">
+                                <div className="flex items-center gap-2">
+                                  <div className="h-2 flex-1 overflow-hidden rounded-full bg-slate-200">
+                                    <div
+                                      className={["h-full transition-all", progressFillClass].join(" ")}
+                                      style={{ width: `${Math.max(0, Math.min(100, avancementPct))}%` }}
+                                    />
+                                  </div>
+                                  <span className="text-xs text-slate-600 tabular-nums">
+                                    {`${avancementPct}%`}
+                                  </span>
+                                  {hasOffset && (
+                                    <span className="rounded-full border border-blue-200 bg-blue-50 px-2 py-0.5 text-[11px] text-blue-700">
+                                      Ajusté admin ({offsetPct > 0 ? "+" : ""}
+                                      {offsetPct}%)
+                                    </span>
+                                  )}
+                                </div>
+                                <div className="text-[11px] text-slate-500">
+                                  {autoPct === null
+                                    ? `Auto indisponible (temps prévu manquant) | Ajustement admin: ${offsetPct > 0 ? "+" : ""}${offsetPct}% | Final: ${avancementPct}%`
+                                    : `Auto: ${autoPct}% | Ajustement admin: ${offsetPct > 0 ? "+" : ""}${offsetPct}% | Final: ${avancementPct}%`}
+                                </div>
+                                {!isAdjustingProgress ? (
+                                  <div className="flex justify-end">
+                                    <button
+                                      type="button"
+                                      onClick={() => startTaskProgressEdit(t)}
+                                      className="rounded-lg border px-2 py-1 text-xs hover:bg-slate-50"
+                                    >
+                                      Ajuster
+                                    </button>
+                                  </div>
+                                ) : (
+                                  <div className="rounded-lg border bg-slate-50 p-2 space-y-2">
+                                    <div className="flex items-center justify-between text-[11px] text-slate-500">
+                                      <span>Ajustement (offset)</span>
+                                      <span>
+                                        {draftOffset > 0 ? "+" : ""}
+                                        {draftOffset}%
+                                      </span>
+                                    </div>
+                                    <input
+                                      type="range"
+                                      min={-100}
+                                      max={100}
+                                      step={1}
+                                      value={String(draftOffset)}
+                                      onChange={(e) => onTaskProgressDraftChange(t.id, e.target.value)}
+                                      className="w-full accent-blue-600"
+                                    />
+                                    <div className="flex flex-wrap justify-end gap-2">
+                                      <button
+                                        type="button"
+                                        onClick={() => void applyTaskProgressOffset(t)}
+                                        disabled={taskProgressSavingId === t.id}
+                                        className="rounded-lg border px-2 py-1 text-xs hover:bg-slate-50 disabled:opacity-60"
+                                      >
+                                        {taskProgressSavingId === t.id ? "..." : "Enregistrer"}
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => cancelTaskProgressEdit(t)}
+                                        disabled={taskProgressSavingId === t.id}
+                                        className="rounded-lg border px-2 py-1 text-xs hover:bg-slate-50 disabled:opacity-60"
+                                      >
+                                        Annuler
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => void resetTaskProgressOffset(t)}
+                                        disabled={taskProgressSavingId === t.id || !hasOffset}
+                                        className="rounded-lg border px-2 py-1 text-xs hover:bg-slate-50 disabled:opacity-60"
+                                      >
+                                        Auto
+                                      </button>
+                                    </div>
+                                  </div>
+                                )}
                               </div>
                             </>
                           ) : (
@@ -3803,7 +4120,18 @@ export default function ChantierPage() {
                                 </div>
                               )}
 
-                              <div className="grid gap-2 md:grid-cols-9">
+                              <div className="grid gap-2 md:grid-cols-12">
+                                <label className="space-y-1 text-xs text-slate-600 md:col-span-3">
+                                  <div>Temps prévu (h)</div>
+                                  <input
+                                    className="w-full rounded-xl border bg-white px-3 py-2 text-sm text-slate-900"
+                                    inputMode="decimal"
+                                    placeholder="ex: 2.5"
+                                    value={editTempsPrevuH}
+                                    onChange={(e) => setEditTempsPrevuH(e.target.value)}
+                                  />
+                                  <p className="text-[11px] text-slate-500">Utilisé pour le calcul automatique d'avancement</p>
+                                </label>
                                 <label className="space-y-1 text-xs text-slate-600 md:col-span-3">
                                   <div>Durée (jours)</div>
                                   <input
@@ -3844,6 +4172,11 @@ export default function ChantierPage() {
                                   </select>
                                 </label>
                               </div>
+                              {(toNumberOrNull(editTempsPrevuH) ?? 0) <= 0 && (
+                                <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                                  Temps prévu requis pour un calcul automatique fiable de l'avancement.
+                                </div>
+                              )}
                             </div>
                           )}
                         </div>
@@ -4003,6 +4336,19 @@ export default function ChantierPage() {
                   ))}
                 </select>
 
+                <select
+                  className="rounded-xl border px-3 py-2 text-sm"
+                  value={mTaskId}
+                  onChange={(e) => setMTaskId(e.target.value)}
+                >
+                  <option value="">Tâche concernée (optionnel)</option>
+                  {tasks.map((task) => (
+                    <option key={task.id} value={task.id}>
+                      {task.titre}
+                    </option>
+                  ))}
+                </select>
+
                 <input
                   className="rounded-xl border px-3 py-2 text-sm"
                   placeholder="Désignation (obligatoire)"
@@ -4085,6 +4431,11 @@ export default function ChantierPage() {
                             {displayName} • Qté {m.quantite}
                             {m.unite ? ` ${m.unite}` : ""}
                           </div>
+                          {(m.task_titre || m.task_id) ? (
+                            <div className="text-xs text-slate-500">
+                              Tâche : {m.task_titre ?? tasks.find((task) => task.id === m.task_id)?.titre ?? "—"}
+                            </div>
+                          ) : null}
                           <div className="text-xs text-slate-500">Intervenant : {it?.nom ?? "—"}</div>
                           {m.date_souhaitee ? (
                             <div className="text-xs text-slate-500">Date souhaitée : {new Date(`${m.date_souhaitee}T00:00:00`).toLocaleDateString("fr-FR")}</div>
@@ -4581,6 +4932,11 @@ export default function ChantierPage() {
           documents={chantierDocuments}
           selectedIds={taskDocumentsSelection}
           onSelectionChange={setTaskDocumentsSelection}
+          intervenants={intervenants.map((intervenant) => ({ id: intervenant.id, nom: intervenant.nom }))}
+          selectedIntervenantIds={taskDocumentsIntervenantIds}
+          onIntervenantSelectionChange={setTaskDocumentsIntervenantIds}
+          shareWithAllIntervenants={taskDocumentsShareAll}
+          onShareWithAllIntervenantsChange={setTaskDocumentsShareAll}
           query={taskDocumentsQuery}
           onQueryChange={setTaskDocumentsQuery}
           onClose={closeTaskDocumentsModal}

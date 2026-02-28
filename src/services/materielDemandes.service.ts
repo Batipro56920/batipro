@@ -6,6 +6,8 @@ export type MaterielDemandeRow = {
   id: string;
   chantier_id: string;
   intervenant_id: string;
+  task_id: string | null;
+  task_titre?: string | null;
   intervenant_nom?: string | null;
   titre: string;
   designation: string;
@@ -61,6 +63,8 @@ function mapRow(row: Record<string, unknown>): MaterielDemandeRow {
     id: String(row.id ?? ""),
     chantier_id: String(row.chantier_id ?? ""),
     intervenant_id: String(row.intervenant_id ?? ""),
+    task_id: (row.task_id as string | null | undefined) ?? null,
+    task_titre: (row.task_titre as string | null | undefined) ?? null,
     intervenant_nom: (row.intervenant_nom as string | null | undefined) ?? null,
     titre,
     designation: String(row.designation ?? titre),
@@ -103,6 +107,7 @@ export async function listMaterielDemandesByChantierId(chantierId: string): Prom
 export async function createMaterielDemande(input: {
   chantier_id: string;
   intervenant_id: string;
+  task_id?: string | null;
   designation?: string;
   titre?: string;
   quantite?: number | string;
@@ -132,6 +137,7 @@ export async function createMaterielDemande(input: {
   const payload = {
     chantier_id,
     intervenant_id,
+    task_id: input.task_id ?? null,
     titre,
     designation: titre,
     quantite: q,
@@ -154,6 +160,7 @@ export async function updateMaterielDemande(
   id: string,
   patch: Partial<{
     intervenant_id: string;
+    task_id: string | null;
     titre: string;
     designation: string;
     quantite: number | string;
@@ -184,6 +191,10 @@ export async function updateMaterielDemande(
   if (patch.intervenant_id !== undefined) {
     assertRequired(Boolean(patch.intervenant_id), "intervenant_id obligatoire.");
     updatePayload.intervenant_id = patch.intervenant_id;
+  }
+
+  if (patch.task_id !== undefined) {
+    updatePayload.task_id = patch.task_id ?? null;
   }
 
   if (patch.titre !== undefined || patch.designation !== undefined) {

@@ -98,6 +98,8 @@ export type IntervenantMateriel = {
   id: string;
   chantier_id: string;
   intervenant_id: string;
+  task_id: string | null;
+  task_titre: string | null;
   titre: string;
   quantite: number | null;
   unite: string | null;
@@ -318,6 +320,14 @@ export async function intervenantTimeCreate(
   if (error) throw new Error(rpcMessage(error, "Creation temps impossible."));
 }
 
+export async function intervenantTimeDelete(token: string, timeEntryId: string): Promise<void> {
+  const { error } = await (supabase as any).rpc("intervenant_time_delete", {
+    p_token: token,
+    p_time_entry_id: timeEntryId,
+  });
+  if (error) throw new Error(rpcMessage(error, "Suppression temps impossible."));
+}
+
 export async function intervenantTimeList(token: string, chantierId: string): Promise<IntervenantTimeEntry[]> {
   const { data, error } = await (supabase as any).rpc("intervenant_time_list", {
     p_token: token,
@@ -344,6 +354,7 @@ export async function intervenantMaterielCreate(
   token: string,
   payload: {
     chantier_id: string;
+    task_id?: string | null;
     titre: string;
     quantite?: number | null;
     unite?: string | null;
@@ -373,6 +384,8 @@ export async function intervenantMaterielList(
     id: String(row.id ?? ""),
     chantier_id: String(row.chantier_id ?? chantierId),
     intervenant_id: String(row.intervenant_id ?? ""),
+    task_id: asNullableString(row.task_id),
+    task_titre: asNullableString(row.task_titre),
     titre: String(row.titre ?? "Demande materiel"),
     quantite: asNullableNumber(row.quantite),
     unite: asNullableString(row.unite),

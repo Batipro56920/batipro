@@ -5,20 +5,23 @@ import { useLocation, useNavigate } from "react-router-dom";
 import {
   intervenantGetChantiers,
   intervenantGetDocuments,
+  intervenantGetPlanning,
   intervenantGetTasks,
   intervenantMaterielCreate,
   intervenantMaterielList,
   intervenantSession,
   intervenantTimeCreate,
+  intervenantTimeDelete,
   intervenantTimeList,
   type IntervenantChantier,
   type IntervenantDocument,
   type IntervenantMateriel,
+  type IntervenantPlanning,
   type IntervenantTask,
   type IntervenantTimeEntry,
 } from "../services/intervenantPortal.service";
 
-type PortalTab = "taches" | "temps" | "documents" | "materiel";
+type PortalTab = "taches" | "temps" | "documents" | "planning" | "materiel";
 
 type LoadState<T> = {
   loading: boolean;
@@ -258,6 +261,12 @@ const EMPTY_DOCUMENTS_STATE: LoadState<IntervenantDocument[]> = {
   data: [],
 };
 
+const EMPTY_PLANNING_STATE: LoadState<IntervenantPlanning> = {
+  loading: false,
+  error: null,
+  data: { chantier_id: null, lots: [] },
+};
+
 const EMPTY_TIME_STATE: LoadState<IntervenantTimeEntry[]> = {
   loading: false,
   error: null,
@@ -294,21 +303,22 @@ export default function IntervenantPortalPage() {
 
   const [tasksState, setTasksState] = useState<LoadState<IntervenantTask[]>>(EMPTY_TASKS_STATE);
   const [documentsState, setDocumentsState] = useState<LoadState<IntervenantDocument[]>>(EMPTY_DOCUMENTS_STATE);
+  const [planningState, setPlanningState] = useState<LoadState<IntervenantPlanning>>(EMPTY_PLANNING_STATE);
   const [timeState, setTimeState] = useState<LoadState<IntervenantTimeEntry[]>>(EMPTY_TIME_STATE);
   const [materielState, setMaterielState] = useState<LoadState<IntervenantMateriel[]>>(EMPTY_MATERIEL_STATE);
 
   const [reloadTick, setReloadTick] = useState(0);
   const [portalOptionsOpen, setPortalOptionsOpen] = useState(false);
   const [timeTaskId, setTimeTaskId] = useState<string | null>(null);
-  const [timeTaskSearch, setTimeTaskSearch] = useState("");
-  const [timeTaskListOpen, setTimeTaskListOpen] = useState(false);
   const [timeFeedback, setTimeFeedback] = useState<{ type: "success" | "error"; message: string } | null>(null);
   const [timeDate, setTimeDate] = useState(todayIsoDate());
   const [timeQuantity, setTimeQuantity] = useState("");
   const [timeNote, setTimeNote] = useState("");
   const [timeSaving, setTimeSaving] = useState(false);
+  const [timeDeletingId, setTimeDeletingId] = useState<string | null>(null);
 
   const [materielTitre, setMaterielTitre] = useState("");
+  const [materielTaskId, setMaterielTaskId] = useState("");
   const [materielQuantite, setMaterielQuantite] = useState("1");
   const [materielUnite, setMaterielUnite] = useState("");
   const [materielDate, setMaterielDate] = useState("");
@@ -401,12 +411,11 @@ export default function IntervenantPortalPage() {
 
   useEffect(() => {
     setTimeTaskId(null);
-    setTimeTaskSearch("");
-    setTimeTaskListOpen(false);
     setTimeFeedback(null);
     setTimeQuantity("");
     setTimeNote("");
     setTimeDate(todayIsoDate());
+    setMaterielTaskId("");
   }, [selectedChantierId]);
 
   useEffect(() => {
@@ -417,12 +426,14 @@ export default function IntervenantPortalPage() {
     async function loadChantierData() {
       setTasksState({ loading: true, error: null, data: [] });
       setDocumentsState({ loading: true, error: null, data: [] });
+      setPlanningState({ loading: true, error: null, data: { chantier_id: selectedChantierId, lots: [] } });
       setTimeState({ loading: true, error: null, data: [] });
       setMaterielState({ loading: true, error: null, data: [] });
 
-      const [tasksResult, documentsResult, timeResult, materielResult] = await Promise.allSettled([
+      const [tasksResult, documentsResult, planningResult, timeResult, materielResult] = await Promise.allSettled([
         intervenantGetTasks(token, selectedChantierId),
         intervenantGetDocuments(token, selectedChantierId),
+        intervenantGetPlanning(token, selectedChantierId),
         intervenantTimeList(token, selectedChantierId),
         intervenantMaterielList(token, selectedChantierId),
       ]);
@@ -434,7 +445,10 @@ export default function IntervenantPortalPage() {
           (tasksResult.status === "rejected" && shouldFallbackToLegacy(tasksResult.reason) && tasksResult.reason) ||
           (documentsResult.status === "rejected" &&
             shouldFallbackToLegacy(documentsResult.reason) &&
-            documentsResult.reason);
+            documentsResult.reason) ||
+          (planningResult.status === "rejected" &&
+            shouldFallbackToLegacy(planningResult.reason) &&
+            planningResult.reason);
 
         if (fallbackError) {
           if (import.meta.env.DEV) {
@@ -466,6 +480,16 @@ export default function IntervenantPortalPage() {
           loading: false,
           error: getErrorMessage(documentsResult.reason, "Erreur chargement documents."),
           data: [],
+        });
+      }
+
+      if (planningResult.status === "fulfilled") {
+        setPlanningState({ loading: false, error: null, data: planningResult.value });
+      } else {
+        setPlanningState({
+          loading: false,
+          error: getErrorMessage(planningResult.reason, "Erreur chargement planning."),
+          data: { chantier_id: selectedChantierId, lots: [] },
         });
       }
 
@@ -524,13 +548,6 @@ export default function IntervenantPortalPage() {
       return a.titre.localeCompare(b.titre, "fr");
     });
   }, [tasksState.data]);
-  const filteredTimeTasks = useMemo(() => {
-    const query = timeTaskSearch.trim().toLowerCase();
-    const rows = query
-      ? prioritizedTasks.filter((task) => task.titre.toLowerCase().includes(query))
-      : prioritizedTasks;
-    return rows.slice(0, 10);
-  }, [prioritizedTasks, timeTaskSearch]);
   const selectedTimeTask =
     timeTaskId ? prioritizedTasks.find((task) => task.id === timeTaskId) ?? null : null;
 
@@ -541,7 +558,6 @@ export default function IntervenantPortalPage() {
   useEffect(() => {
     if (!prioritizedTasks.length) {
       setTimeTaskId(null);
-      setTimeTaskSearch("");
       return;
     }
 
@@ -552,7 +568,6 @@ export default function IntervenantPortalPage() {
 
     const preferredTask = prioritizedTasks[0];
     setTimeTaskId(preferredTask.id);
-    setTimeTaskSearch("");
   }, [prioritizedTasks, timeTaskId]);
 
   function reloadAll() {
@@ -566,8 +581,6 @@ export default function IntervenantPortalPage() {
 
   function selectTimeTask(task: IntervenantTask) {
     setTimeTaskId(task.id);
-    setTimeTaskSearch("");
-    setTimeTaskListOpen(false);
     setTimeFeedback(null);
   }
 
@@ -611,12 +624,9 @@ export default function IntervenantPortalPage() {
       if (taskRows.length > 0) {
         const currentTask = taskRows.find((task) => task.id === timeTaskId) ?? taskRows[0];
         setTimeTaskId(currentTask.id);
-        setTimeTaskSearch("");
       } else {
         setTimeTaskId(null);
-        setTimeTaskSearch("");
       }
-      setTimeTaskListOpen(false);
       setTimeDate(todayIsoDate());
       setTimeQuantity("");
       setTimeNote("");
@@ -626,7 +636,6 @@ export default function IntervenantPortalPage() {
         if (prioritizedTasks.length > 0) {
           const preferredTask = prioritizedTasks[0];
           setTimeTaskId(preferredTask.id);
-          setTimeTaskSearch("");
         }
         setTimeState((prev) => ({ ...prev, error: "Choisir une tache." }));
         setTimeFeedback(null);
@@ -640,6 +649,43 @@ export default function IntervenantPortalPage() {
       setTimeFeedback(null);
     } finally {
       setTimeSaving(false);
+    }
+  }
+
+  async function onDeleteTimeEntry(entry: IntervenantTimeEntry) {
+    if (!token || !selectedChantierId) return;
+
+    const ok = window.confirm(`Supprimer la saisie du ${formatDateFr(entry.work_date)} ?`);
+    if (!ok) return;
+
+    setTimeDeletingId(entry.id);
+    setTimeFeedback(null);
+    const previousRows = timeState.data;
+    setTimeState((prev) => ({
+      ...prev,
+      error: null,
+      data: prev.data.filter((row) => row.id !== entry.id),
+    }));
+
+    try {
+      await intervenantTimeDelete(token, entry.id);
+
+      const [rows, taskRows] = await Promise.all([
+        intervenantTimeList(token, selectedChantierId),
+        intervenantGetTasks(token, selectedChantierId),
+      ]);
+
+      setTimeState({ loading: false, error: null, data: rows });
+      setTasksState({ loading: false, error: null, data: taskRows });
+      setTimeFeedback({ type: "success", message: "Saisie supprimee." });
+    } catch (error) {
+      setTimeState((prev) => ({
+        ...prev,
+        error: getErrorMessage(error, "Suppression temps impossible."),
+        data: previousRows,
+      }));
+    } finally {
+      setTimeDeletingId(null);
     }
   }
 
@@ -665,6 +711,7 @@ export default function IntervenantPortalPage() {
     try {
       await intervenantMaterielCreate(token, {
         chantier_id: selectedChantierId,
+        task_id: materielTaskId || null,
         titre,
         quantite,
         unite: materielUnite.trim() || null,
@@ -675,6 +722,7 @@ export default function IntervenantPortalPage() {
       const rows = await intervenantMaterielList(token, selectedChantierId);
       setMaterielState({ loading: false, error: null, data: rows });
       setMaterielTitre("");
+      setMaterielTaskId("");
       setMaterielQuantite("1");
       setMaterielUnite("");
       setMaterielDate("");
@@ -808,6 +856,7 @@ export default function IntervenantPortalPage() {
                       { key: "taches", label: "Taches" },
                       { key: "temps", label: "Temps" },
                       { key: "documents", label: "Documents" },
+                      { key: "planning", label: "Planning" },
                       { key: "materiel", label: "Materiel" },
                     ] as Array<{ key: PortalTab; label: string }>).map((tab) => (
                       <button
@@ -877,21 +926,26 @@ export default function IntervenantPortalPage() {
                       <div className="grid gap-2">
                         <div className="space-y-2">
                           <label className="text-xs font-medium text-slate-600">Tache</label>
-                          <input
+                          <select
                             className="w-full rounded-lg border px-3 py-2 text-sm"
-                            value={timeTaskSearch}
-                            placeholder="Rechercher une tache..."
-                            onFocus={() => setTimeTaskListOpen(true)}
+                            value={timeTaskId ?? ""}
                             onChange={(e) => {
-                              const value = e.target.value;
-                              setTimeTaskSearch(value);
-                              setTimeTaskListOpen(true);
-                              setTimeFeedback(null);
-                              if (value.trim()) {
+                              const task = prioritizedTasks.find((row) => row.id === e.target.value);
+                              if (task) {
+                                selectTimeTask(task);
+                              } else {
                                 setTimeTaskId(null);
+                                setTimeFeedback(null);
                               }
                             }}
-                          />
+                          >
+                            <option value="">Choisir une tache</option>
+                            {prioritizedTasks.map((task) => (
+                              <option key={task.id} value={task.id}>
+                                {task.titre} - {resolveTaskLot(task)} - {statusLabel(task.status)}
+                              </option>
+                            ))}
+                          </select>
 
                           {selectedTimeTask ? (
                             <div className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs text-slate-600">
@@ -902,36 +956,7 @@ export default function IntervenantPortalPage() {
                             </div>
                           ) : null}
 
-                          {import.meta.env.DEV ? (
-                            <div className="text-[11px] text-slate-500">
-                              {prioritizedTasks.length} taches disponibles
-                            </div>
-                          ) : null}
-
-                          {timeTaskListOpen && filteredTimeTasks.length > 0 ? (
-                            <div className="rounded-xl border bg-white p-1">
-                              {filteredTimeTasks.map((task) => (
-                                <button
-                                  key={task.id}
-                                  type="button"
-                                  onMouseDown={(e) => e.preventDefault()}
-                                  onClick={() => selectTimeTask(task)}
-                                  className="block w-full rounded-lg px-3 py-2 text-left hover:bg-slate-50"
-                                >
-                                  <div className="text-sm font-medium text-slate-800" style={TITLE_CLAMP_STYLE}>
-                                    {task.titre}
-                                  </div>
-                                  <div className="mt-1 text-xs text-slate-500">
-                                    {resolveTaskLot(task)} - {statusLabel(task.status)}
-                                  </div>
-                                </button>
-                              ))}
-                            </div>
-                          ) : timeTaskListOpen ? (
-                            <div className="rounded-xl border bg-white px-3 py-2 text-xs text-slate-500">
-                              Aucune tache correspondante.
-                            </div>
-                          ) : null}
+                          <div className="text-[11px] text-slate-500">{prioritizedTasks.length} taches disponibles</div>
                         </div>
 
                         <div className="space-y-1">
@@ -1021,14 +1046,24 @@ export default function IntervenantPortalPage() {
                     ) : (
                       timeState.data.map((entry) => (
                         <article key={entry.id} className="rounded-xl border p-3">
-                          <div className="font-medium text-slate-900">
-                            {formatDateFr(entry.work_date)}
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="min-w-0">
+                              <div className="font-medium text-slate-900">{formatDateFr(entry.work_date)}</div>
+                              <div className="mt-1 text-xs text-slate-500">{entry.task_titre || "Tache"}</div>
+                              <div className="mt-1 text-xs text-slate-500">
+                                Quantite: {formatQuantity(entry.quantite_realisee, entry.task_unite)}
+                              </div>
+                              {entry.note ? <div className="mt-1 text-xs text-slate-500">Note: {entry.note}</div> : null}
+                            </div>
+                            <button
+                              type="button"
+                              disabled={timeDeletingId === entry.id}
+                              onClick={() => void onDeleteTimeEntry(entry)}
+                              className="rounded-lg border border-red-200 px-2 py-1 text-xs text-red-700 hover:bg-red-50 disabled:opacity-60"
+                            >
+                              {timeDeletingId === entry.id ? "Suppression..." : "Supprimer"}
+                            </button>
                           </div>
-                          <div className="mt-1 text-xs text-slate-500">{entry.task_titre || "Tache"}</div>
-                          <div className="mt-1 text-xs text-slate-500">
-                            Quantite: {formatQuantity(entry.quantite_realisee, entry.task_unite)}
-                          </div>
-                          {entry.note ? <div className="mt-1 text-xs text-slate-500">Note: {entry.note}</div> : null}
                         </article>
                       ))
                     )}
@@ -1056,13 +1091,58 @@ export default function IntervenantPortalPage() {
                   </div>
                 )}
 
+                {activeTab === "planning" && (
+                  <div className="space-y-2">
+                    {planningState.loading ? (
+                      <div className="rounded-xl border bg-slate-50 p-3 text-sm text-slate-600">Chargement du planning...</div>
+                    ) : planningState.error ? (
+                      <div className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">{planningState.error}</div>
+                    ) : planningState.data.lots.length === 0 ? (
+                      <div className="rounded-xl border bg-slate-50 p-3 text-sm text-slate-500">Aucun lot planifie.</div>
+                    ) : (
+                      planningState.data.lots.map((lot) => (
+                        <article key={lot.lot} className="rounded-xl border p-3">
+                          <div className="flex items-center justify-between gap-3">
+                            <div className="font-medium text-slate-900">{lot.lot}</div>
+                            <div className="text-xs text-slate-500">{lot.progress_pct.toFixed(1)}%</div>
+                          </div>
+                          <div className="mt-2 h-2 rounded-full bg-slate-100">
+                            <div
+                              className="h-2 rounded-full bg-blue-600"
+                              style={{ width: `${Math.max(0, Math.min(100, lot.progress_pct))}%` }}
+                            />
+                          </div>
+                          <div className="mt-2 text-xs text-slate-500">
+                            Debut: {formatDateFr(lot.start_date)} - Fin: {formatDateFr(lot.end_date)}
+                          </div>
+                          <div className="mt-1 text-xs text-slate-500">
+                            Taches: {lot.done_tasks}/{lot.total_tasks} - Duree estimee: {lot.total_duration_days} j
+                          </div>
+                        </article>
+                      ))
+                    )}
+                  </div>
+                )}
+
                 {activeTab === "materiel" && (
                   <div className="space-y-3">
                     <form onSubmit={onCreateMateriel} className="rounded-xl border bg-slate-50 p-3">
                       <div className="mb-2 text-sm font-medium text-slate-800">Nouvelle demande materiel</div>
                       <div className="grid gap-2 md:grid-cols-5">
-                        <input
+                        <select
                           className="rounded-lg border px-2 py-1 text-sm md:col-span-2"
+                          value={materielTaskId}
+                          onChange={(e) => setMaterielTaskId(e.target.value)}
+                        >
+                          <option value="">Tache concernee (optionnel)</option>
+                          {prioritizedTasks.map((task) => (
+                            <option key={task.id} value={task.id}>
+                              {task.titre}
+                            </option>
+                          ))}
+                        </select>
+                        <input
+                          className="rounded-lg border px-2 py-1 text-sm"
                           placeholder="Titre"
                           value={materielTitre}
                           onChange={(e) => setMaterielTitre(e.target.value)}
@@ -1113,7 +1193,14 @@ export default function IntervenantPortalPage() {
                       materielState.data.map((row) => (
                         <article key={row.id} className="rounded-xl border p-3">
                           <div className="flex items-center justify-between gap-3">
-                            <div className="font-medium text-slate-900">{row.titre}</div>
+                            <div className="min-w-0">
+                              <div className="font-medium text-slate-900">{row.titre}</div>
+                              {(row.task_titre || row.task_id) ? (
+                                <div className="mt-1 text-xs text-slate-500">
+                                  Tache: {row.task_titre ?? prioritizedTasks.find((task) => task.id === row.task_id)?.titre ?? "-"}
+                                </div>
+                              ) : null}
+                            </div>
                             <span
                               className={[
                                 "inline-flex rounded-full border px-2 py-0.5 text-xs font-medium",
