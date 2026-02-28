@@ -3,7 +3,6 @@ import { useEffect, useMemo, useState } from "react";
 import type { FormEvent } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import {
-  intervenantAddTaskComment,
   intervenantGetChantiers,
   intervenantGetDocuments,
   intervenantGetPlanning,
@@ -13,7 +12,6 @@ import {
   intervenantSession,
   intervenantTimeCreate,
   intervenantTimeList,
-  intervenantUpdateTaskStatus,
   type IntervenantChantier,
   type IntervenantDocument,
   type IntervenantMateriel,
@@ -34,7 +32,12 @@ const STORAGE_TOKEN_KEY = "batipro_intervenant_token";
 const STORAGE_CHANTIER_KEY = "batipro_intervenant_chantier_id";
 const LEGACY_FALLBACK_ENABLED =
   String(import.meta.env.VITE_ENABLE_INTERVENANT_LEGACY_FALLBACK ?? "0").trim() === "1";
-const TASK_STATUS_OPTIONS = ["A_FAIRE", "EN_COURS", "FAIT"] as const;
+const TITLE_CLAMP_STYLE = {
+  display: "-webkit-box",
+  WebkitBoxOrient: "vertical" as const,
+  WebkitLineClamp: 2,
+  overflow: "hidden",
+};
 
 let memoryToken = "";
 let memoryChantierId = "";
@@ -167,6 +170,19 @@ function todayIsoDate(): string {
   const d = String(now.getDate()).padStart(2, "0");
   return `${y}-${m}-${d}`;
 }
+
+function taskStatusPriority(status: string | null): number {
+  const normalized = String(status ?? "").toUpperCase();
+  if (["A_FAIRE", "TODO", "PENDING"].includes(normalized)) return 0;
+  if (["EN_COURS", "IN_PROGRESS"].includes(normalized)) return 1;
+  if (["FAIT", "TERMINE", "DONE", "COMPLETED"].includes(normalized)) return 2;
+  return 3;
+}
+
+function isTaskIdRequiredError(message: string): boolean {
+  return String(message ?? "").toLowerCase().includes("task_id_required");
+}
+
 function statusLabel(status: string | null): string {
   const normalized = String(status ?? "").toUpperCase();
   if (["FAIT", "TERMINE", "DONE", "COMPLETED"].includes(normalized)) return "Fait";
@@ -262,11 +278,13 @@ export default function IntervenantPortalPage() {
   const [materielState, setMaterielState] = useState<LoadState<IntervenantMateriel[]>>(EMPTY_MATERIEL_STATE);
 
   const [reloadTick, setReloadTick] = useState(0);
-  const [updatingTaskId, setUpdatingTaskId] = useState<string | null>(null);
-  const [taskStatusDrafts, setTaskStatusDrafts] = useState<Record<string, string>>({});
-  const [taskCommentDrafts, setTaskCommentDrafts] = useState<Record<string, string>>({});
-
-  const [timeTaskId, setTimeTaskId] = useState("__NONE__");
+  const [portalOptionsOpen, setPortalOptionsOpen] = useState(false);
+  const [timeTaskId, setTimeTaskId] = useState<string | null>(null);
+  const [timeTaskQuery, setTimeTaskQuery] = useState("");
+  const [timeTaskListOpen, setTimeTaskListOpen] = useState(false);
+  const [timeNoTaskSelected, setTimeNoTaskSelected] = useState(false);
+  const [timeSupportsNoTask, setTimeSupportsNoTask] = useState(true);
+  const [timeFeedback, setTimeFeedback] = useState<{ type: "success" | "error"; message: string } | null>(null);
   const [timeDate, setTimeDate] = useState(todayIsoDate());
   const [timeDuration, setTimeDuration] = useState("1");
   const [timeNote, setTimeNote] = useState("");
@@ -413,7 +431,6 @@ export default function IntervenantPortalPage() {
       if (tasksResult.status === "fulfilled") {
         const taskRows = tasksResult.value;
         setTasksState({ loading: false, error: null, data: taskRows });
-        setTaskStatusDrafts(Object.fromEntries(taskRows.map((task) => [task.id, task.status ?? "A_FAIRE"])));
       } else {
         setTasksState({
           loading: false,
@@ -483,9 +500,58 @@ export default function IntervenantPortalPage() {
     () => chantiers.find((chantier) => chantier.id === selectedChantierId) ?? null,
     [chantiers, selectedChantierId],
   );
+  const prioritizedTasks = useMemo(() => {
+    const currentIntervenantId = sessionInfo?.intervenant_id ?? null;
+    return [...tasksState.data].sort((a, b) => {
+      const aAssigned = currentIntervenantId && a.intervenant_id === currentIntervenantId ? 0 : 1;
+      const bAssigned = currentIntervenantId && b.intervenant_id === currentIntervenantId ? 0 : 1;
+      if (aAssigned !== bAssigned) return aAssigned - bAssigned;
+
+      const statusDelta = taskStatusPriority(a.status) - taskStatusPriority(b.status);
+      if (statusDelta !== 0) return statusDelta;
+
+      const lotDelta = resolveTaskLot(a).localeCompare(resolveTaskLot(b), "fr");
+      if (lotDelta !== 0) return lotDelta;
+
+      return a.titre.localeCompare(b.titre, "fr");
+    });
+  }, [sessionInfo?.intervenant_id, tasksState.data]);
+  const filteredTimeTasks = useMemo(() => {
+    const query = timeTaskQuery.trim().toLowerCase();
+    const rows = query
+      ? prioritizedTasks.filter((task) => task.titre.toLowerCase().includes(query))
+      : prioritizedTasks;
+    return rows.slice(0, 10);
+  }, [prioritizedTasks, timeTaskQuery]);
+  const selectedTimeTask =
+    timeTaskId ? prioritizedTasks.find((task) => task.id === timeTaskId) ?? null : null;
 
   const requiresChantierSelection = chantiers.length > 1 && !selectedChantierId;
   const isInvalidToken = isInvalidTokenError(bootError ?? "");
+  const showChantiersShortcut = chantiers.length > 1 && activeTab !== "chantiers";
+
+  useEffect(() => {
+    if (!prioritizedTasks.length) {
+      setTimeTaskId(null);
+      setTimeTaskQuery("");
+      setTimeNoTaskSelected(true);
+      return;
+    }
+
+    const currentTask = timeTaskId ? prioritizedTasks.find((task) => task.id === timeTaskId) ?? null : null;
+    if (currentTask) {
+      return;
+    }
+
+    if (timeNoTaskSelected && timeSupportsNoTask) {
+      return;
+    }
+
+    const preferredTask = prioritizedTasks[0];
+    setTimeTaskId(preferredTask.id);
+    setTimeTaskQuery(preferredTask.titre);
+    setTimeNoTaskSelected(false);
+  }, [prioritizedTasks, timeNoTaskSelected, timeSupportsNoTask, timeTaskId]);
 
   function reloadAll() {
     setReloadTick((tick) => tick + 1);
@@ -495,45 +561,25 @@ export default function IntervenantPortalPage() {
     setSelectedChantierId(chantierId);
   }
 
-  async function onSaveTaskStatus(taskId: string) {
-    if (!token || !selectedChantierId) return;
-
-    const nextStatus = String(taskStatusDrafts[taskId] ?? "A_FAIRE").trim() || "A_FAIRE";
-    setUpdatingTaskId(taskId);
-
-    try {
-      await intervenantUpdateTaskStatus(token, taskId, nextStatus);
-      setTasksState((prev) => ({
-        ...prev,
-        data: prev.data.map((task) => (task.id === taskId ? { ...task, status: nextStatus } : task)),
-      }));
-    } catch (error) {
-      setTasksState((prev) => ({
-        ...prev,
-        error: getErrorMessage(error, "Mise a jour statut impossible."),
-      }));
-    } finally {
-      setUpdatingTaskId(null);
-    }
+  function selectTimeTask(task: IntervenantTask) {
+    setTimeTaskId(task.id);
+    setTimeTaskQuery(task.titre);
+    setTimeTaskListOpen(false);
+    setTimeNoTaskSelected(false);
+    setTimeFeedback(null);
   }
 
-  async function onSaveTaskComment(taskId: string) {
-    if (!token || !selectedChantierId) return;
-    const message = String(taskCommentDrafts[taskId] ?? "").trim();
-    if (!message) return;
+  function selectNoTask() {
+    setTimeTaskId(null);
+    setTimeTaskQuery("");
+    setTimeTaskListOpen(false);
+    setTimeNoTaskSelected(true);
+    setTimeFeedback(null);
+  }
 
-    setUpdatingTaskId(taskId);
-    try {
-      await intervenantAddTaskComment(token, taskId, message, []);
-      setTaskCommentDrafts((prev) => ({ ...prev, [taskId]: "" }));
-    } catch (error) {
-      setTasksState((prev) => ({
-        ...prev,
-        error: getErrorMessage(error, "Ajout commentaire impossible."),
-      }));
-    } finally {
-      setUpdatingTaskId(null);
-    }
+  function onStartTimeForTask(task: IntervenantTask) {
+    selectTimeTask(task);
+    setActiveTab("temps");
   }
 
   async function onCreateTimeEntry(e: FormEvent) {
@@ -543,16 +589,30 @@ export default function IntervenantPortalPage() {
     const duration = Number(String(timeDuration).replace(",", "."));
     if (!Number.isFinite(duration) || duration <= 0) {
       setTimeState((prev) => ({ ...prev, error: "Duree invalide." }));
+      setTimeFeedback(null);
+      return;
+    }
+
+    if (!timeNoTaskSelected && !timeTaskId && prioritizedTasks.length > 0) {
+      setTimeState((prev) => ({ ...prev, error: "Choisir une tache." }));
+      setTimeFeedback(null);
+      return;
+    }
+
+    if (timeNoTaskSelected && !timeSupportsNoTask && prioritizedTasks.length > 0) {
+      setTimeState((prev) => ({ ...prev, error: "Choisir une tache." }));
+      setTimeFeedback(null);
       return;
     }
 
     setTimeSaving(true);
+    setTimeFeedback(null);
     setTimeState((prev) => ({ ...prev, error: null }));
 
     try {
       await intervenantTimeCreate(token, {
         chantier_id: selectedChantierId,
-        task_id: timeTaskId === "__NONE__" ? null : timeTaskId,
+        task_id: timeNoTaskSelected ? null : timeTaskId,
         work_date: timeDate || null,
         duration_hours: duration,
         note: timeNote.trim() || null,
@@ -560,15 +620,41 @@ export default function IntervenantPortalPage() {
 
       const rows = await intervenantTimeList(token, selectedChantierId);
       setTimeState({ loading: false, error: null, data: rows });
-      setTimeTaskId("__NONE__");
+      setTimeFeedback({ type: "success", message: "Temps enregistre." });
+      if (prioritizedTasks.length > 0) {
+        const preferredTask = prioritizedTasks[0];
+        setTimeTaskId(preferredTask.id);
+        setTimeTaskQuery(preferredTask.titre);
+        setTimeNoTaskSelected(false);
+      } else {
+        setTimeTaskId(null);
+        setTimeTaskQuery("");
+        setTimeNoTaskSelected(true);
+      }
+      setTimeTaskListOpen(false);
       setTimeDate(todayIsoDate());
       setTimeDuration("1");
       setTimeNote("");
     } catch (error) {
+      const message = getErrorMessage(error, "Creation temps impossible.");
+      if (isTaskIdRequiredError(message)) {
+        setTimeSupportsNoTask(false);
+        setTimeNoTaskSelected(false);
+        if (prioritizedTasks.length > 0) {
+          const preferredTask = prioritizedTasks[0];
+          setTimeTaskId(preferredTask.id);
+          setTimeTaskQuery(preferredTask.titre);
+        }
+        setTimeState((prev) => ({ ...prev, error: "Choisir une tache." }));
+        setTimeFeedback(null);
+        return;
+      }
+
       setTimeState((prev) => ({
         ...prev,
-        error: getErrorMessage(error, "Creation temps impossible."),
+        error: message,
       }));
+      setTimeFeedback(null);
     } finally {
       setTimeSaving(false);
     }
@@ -639,17 +725,29 @@ export default function IntervenantPortalPage() {
           </div>
         ) : (
           <div className="space-y-4">
-            <header className="rounded-2xl border bg-white p-4 sm:p-5">
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                <div>
-                  <h1 className="text-xl font-semibold text-slate-900 sm:text-2xl">Portail intervenant</h1>
-                  <p className="mt-1 text-sm text-slate-500">
+            <header className="rounded-2xl border bg-white px-4 py-3 sm:px-5">
+              <div className="flex items-center justify-between gap-3">
+                <div className="min-w-0">
+                  <div className="truncate text-sm font-semibold text-slate-900">
                     {sessionInfo?.intervenant?.nom || sessionInfo?.intervenant?.email || sessionInfo?.email || "Intervenant"}
+                  </div>
+                  <p className="mt-0.5 text-xs text-slate-500">
+                    Session expire le {formatDateTimeFr(sessionInfo?.expires_at ?? null)}
                   </p>
-                  <p className="text-xs text-slate-400">Session expire le {formatDateTimeFr(sessionInfo?.expires_at ?? null)}</p>
                 </div>
 
-                <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setPortalOptionsOpen((open) => !open)}
+                  className="inline-flex shrink-0 items-center gap-2 rounded-xl border px-3 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50"
+                >
+                  Options
+                  <span className="text-[10px]">{portalOptionsOpen ? "▴" : "▾"}</span>
+                </button>
+              </div>
+
+              {portalOptionsOpen ? (
+                <div className="mt-3 flex flex-wrap gap-2 border-t border-slate-100 pt-3">
                   <button
                     type="button"
                     onClick={reloadAll}
@@ -665,14 +763,12 @@ export default function IntervenantPortalPage() {
                     Deconnexion
                   </button>
                 </div>
-              </div>
+              ) : null}
             </header>
 
-            <section className="rounded-2xl border bg-white p-4 sm:p-5">
-              <div className="mb-2 text-sm font-semibold text-slate-900">Chantiers accessibles</div>
-              {chantiers.length === 0 ? (
-                <div className="rounded-xl border bg-slate-50 px-3 py-2 text-sm text-slate-500">Aucun chantier disponible.</div>
-              ) : (
+            {showChantiersShortcut ? (
+              <section className="rounded-2xl border bg-white p-4 sm:p-5">
+                <div className="mb-2 text-sm font-semibold text-slate-900">Chantiers accessibles</div>
                 <div className="overflow-x-auto whitespace-nowrap pb-1">
                   <div className="inline-flex gap-2">
                     {chantiers.map((chantier) => {
@@ -696,8 +792,8 @@ export default function IntervenantPortalPage() {
                     })}
                   </div>
                 </div>
-              )}
-            </section>
+              </section>
+            ) : null}
 
             {requiresChantierSelection ? (
               <section className="rounded-2xl border bg-white p-6 text-sm text-slate-600">
@@ -705,10 +801,18 @@ export default function IntervenantPortalPage() {
               </section>
             ) : (
               <section className="rounded-2xl border bg-white p-4 sm:p-5">
-                <div className="mb-3">
-                  <div className="text-base font-semibold text-slate-900">{activeChantier?.nom ?? "Chantier"}</div>
-                  <div className="text-xs text-slate-500">
-                    {activeChantier?.adresse || "Adresse non renseignee"} - Debut: {formatDateFr(activeChantier?.planning_start_date ?? activeChantier?.date_debut ?? null)} - Fin: {formatDateFr(activeChantier?.planning_end_date ?? activeChantier?.date_fin_prevue ?? null)}
+                <div className="mb-4 rounded-2xl border border-slate-200 bg-slate-50 px-3 py-3">
+                  <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
+                    Chantier selectionne
+                  </div>
+                  <div className="mt-1 text-base font-semibold text-slate-900">{activeChantier?.nom ?? "Chantier"}</div>
+                  <div className="mt-1 text-xs leading-5 text-slate-500">
+                    {activeChantier?.adresse || "Adresse non renseignee"}
+                  </div>
+                  <div className="mt-1 text-xs leading-5 text-slate-500">
+                    Debut: {formatDateFr(activeChantier?.planning_start_date ?? activeChantier?.date_debut ?? null)}
+                    {" - "}
+                    Fin: {formatDateFr(activeChantier?.planning_end_date ?? activeChantier?.date_fin_prevue ?? null)}
                   </div>
                 </div>
 
@@ -760,8 +864,13 @@ export default function IntervenantPortalPage() {
                             </button>
                           )}
                         </div>
-                        <div className="mt-2 text-xs text-slate-500">
-                          Adresse: {chantier.adresse || "-"} - Debut: {formatDateFr(chantier.planning_start_date ?? chantier.date_debut)} - Fin: {formatDateFr(chantier.planning_end_date ?? chantier.date_fin_prevue)}
+                        <div className="mt-2 text-xs leading-5 text-slate-500">
+                          {chantier.adresse || "Adresse non renseignee"}
+                        </div>
+                        <div className="mt-1 text-xs leading-5 text-slate-500">
+                          Debut: {formatDateFr(chantier.planning_start_date ?? chantier.date_debut)}
+                          {" - "}
+                          Fin: {formatDateFr(chantier.planning_end_date ?? chantier.date_fin_prevue)}
                         </div>
                       </article>
                     ))}
@@ -777,64 +886,37 @@ export default function IntervenantPortalPage() {
                     ) : tasksState.data.length === 0 ? (
                       <div className="rounded-xl border bg-slate-50 p-3 text-sm text-slate-500">Aucune tache assignee.</div>
                     ) : (
-                      tasksState.data.map((task) => (
+                      prioritizedTasks.map((task) => (
                         <article key={task.id} className="rounded-xl border p-3">
-                          <div className="flex items-center justify-between gap-3">
-                            <div className="font-medium text-slate-900">{task.titre}</div>
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="min-w-0 flex-1">
+                              <div className="text-sm font-medium text-slate-900" style={TITLE_CLAMP_STYLE}>
+                                {task.titre}
+                              </div>
+                              <div className="mt-1 text-xs text-slate-500">Lot: {resolveTaskLot(task)}</div>
+                              <div className="mt-1 text-xs leading-5 text-slate-500">
+                                Temps prevu: {formatHours(task.temps_prevu_h)}
+                                {" - "}
+                                Temps saisi: {formatHours(task.temps_reel_h)}
+                              </div>
+                            </div>
                             <span
                               className={[
-                                "inline-flex rounded-full border px-2 py-0.5 text-xs font-medium",
+                                "inline-flex shrink-0 rounded-full border px-2 py-0.5 text-xs font-medium",
                                 statusBadgeClass(task.status),
                               ].join(" ")}
                             >
                               {statusLabel(task.status)}
                             </span>
                           </div>
-                          <div className="mt-1 text-xs text-slate-500">
-                            Lot: {resolveTaskLot(task)} - Duree: {task.duration_days} j - Ordre: {task.order_index}
-                          </div>
-                          <div className="mt-1 text-xs text-slate-500">
-                            Debut: {formatDateFr(task.date_debut)} - Fin: {formatDateFr(task.date_fin)} - Temps prevu: {formatHours(task.temps_prevu_h)} - Temps saisi: {formatHours(task.temps_reel_h)}
-                          </div>
-                          <div className="mt-3 grid gap-2 md:grid-cols-[1fr_auto] md:items-center">
-                            <div className="flex items-center gap-2">
-                              <select
-                                className="rounded-lg border px-2 py-1 text-sm"
-                                value={taskStatusDrafts[task.id] ?? task.status ?? "A_FAIRE"}
-                                onChange={(e) => setTaskStatusDrafts((prev) => ({ ...prev, [task.id]: e.target.value }))}
-                              >
-                                {TASK_STATUS_OPTIONS.map((status) => (
-                                  <option key={status} value={status}>
-                                    {status}
-                                  </option>
-                                ))}
-                              </select>
-                              <button
-                                type="button"
-                                onClick={() => onSaveTaskStatus(task.id)}
-                                disabled={updatingTaskId === task.id}
-                                className="rounded-lg border px-2 py-1 text-sm hover:bg-slate-50 disabled:opacity-60"
-                              >
-                                {updatingTaskId === task.id ? "Enregistrement..." : "Mettre a jour"}
-                              </button>
-                            </div>
-
-                            <div className="flex items-center gap-2">
-                              <input
-                                className="rounded-lg border px-2 py-1 text-sm"
-                                placeholder="Commentaire..."
-                                value={taskCommentDrafts[task.id] ?? ""}
-                                onChange={(e) => setTaskCommentDrafts((prev) => ({ ...prev, [task.id]: e.target.value }))}
-                              />
-                              <button
-                                type="button"
-                                onClick={() => onSaveTaskComment(task.id)}
-                                disabled={updatingTaskId === task.id || !String(taskCommentDrafts[task.id] ?? "").trim()}
-                                className="rounded-lg border px-2 py-1 text-sm hover:bg-slate-50 disabled:opacity-60"
-                              >
-                                Ajouter
-                              </button>
-                            </div>
+                          <div className="mt-3 flex justify-end">
+                            <button
+                              type="button"
+                              onClick={() => onStartTimeForTask(task)}
+                              className="rounded-lg border px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+                            >
+                              Saisir du temps
+                            </button>
                           </div>
                         </article>
                       ))
@@ -846,39 +928,118 @@ export default function IntervenantPortalPage() {
                   <div className="space-y-3">
                     <form onSubmit={onCreateTimeEntry} className="rounded-xl border bg-slate-50 p-3">
                       <div className="mb-2 text-sm font-medium text-slate-800">Saisir du temps</div>
-                      <div className="grid gap-2 md:grid-cols-4">
-                        <select
-                          className="rounded-lg border px-2 py-1 text-sm"
-                          value={timeTaskId}
-                          onChange={(e) => setTimeTaskId(e.target.value)}
-                        >
-                          <option value="__NONE__">Sans tache</option>
-                          {tasksState.data.map((task) => (
-                            <option key={task.id} value={task.id}>
-                              {task.titre}
-                            </option>
-                          ))}
-                        </select>
+                      <div className="grid gap-2">
+                        <div className="space-y-2">
+                          <label className="text-xs font-medium text-slate-600">Tache</label>
+                          <input
+                            className="w-full rounded-lg border px-3 py-2 text-sm"
+                            value={timeTaskQuery}
+                            placeholder="Rechercher une tache..."
+                            onFocus={() => setTimeTaskListOpen(true)}
+                            onChange={(e) => {
+                              const value = e.target.value;
+                              setTimeTaskQuery(value);
+                              setTimeTaskListOpen(true);
+                              setTimeFeedback(null);
+                              const matchesSelected = selectedTimeTask && value.trim() === selectedTimeTask.titre;
+                              if (!matchesSelected) {
+                                setTimeTaskId(null);
+                                setTimeNoTaskSelected(false);
+                              }
+                            }}
+                          />
+
+                          <div className="flex flex-wrap items-center gap-2">
+                            {selectedTimeTask ? (
+                              <span className="rounded-full border border-blue-200 bg-blue-50 px-2.5 py-1 text-xs font-medium text-blue-700">
+                                {selectedTimeTask.titre}
+                              </span>
+                            ) : null}
+                            {timeNoTaskSelected ? (
+                              <span className="rounded-full border border-slate-200 bg-white px-2.5 py-1 text-xs font-medium text-slate-600">
+                                Sans tache
+                              </span>
+                            ) : null}
+                            {timeSupportsNoTask || prioritizedTasks.length === 0 ? (
+                              <button
+                                type="button"
+                                onClick={selectNoTask}
+                                className="rounded-full border px-2.5 py-1 text-xs text-slate-600 hover:bg-white"
+                              >
+                                Sans tache
+                              </button>
+                            ) : null}
+                          </div>
+
+                          {timeTaskListOpen && filteredTimeTasks.length > 0 ? (
+                            <div className="rounded-xl border bg-white p-1">
+                              {filteredTimeTasks.map((task) => (
+                                <button
+                                  key={task.id}
+                                  type="button"
+                                  onMouseDown={(e) => e.preventDefault()}
+                                  onClick={() => selectTimeTask(task)}
+                                  className="block w-full rounded-lg px-3 py-2 text-left hover:bg-slate-50"
+                                >
+                                  <div className="text-sm font-medium text-slate-800" style={TITLE_CLAMP_STYLE}>
+                                    {task.titre}
+                                  </div>
+                                  <div className="mt-1 text-xs text-slate-500">
+                                    {resolveTaskLot(task)} - {statusLabel(task.status)}
+                                  </div>
+                                </button>
+                              ))}
+                            </div>
+                          ) : timeTaskListOpen ? (
+                            <div className="rounded-xl border bg-white px-3 py-2 text-xs text-slate-500">
+                              Aucune tache correspondante.
+                            </div>
+                          ) : null}
+                        </div>
+
                         <input
                           className="rounded-lg border px-2 py-1 text-sm"
                           type="date"
                           value={timeDate}
-                          onChange={(e) => setTimeDate(e.target.value)}
+                          onChange={(e) => {
+                            setTimeDate(e.target.value);
+                            setTimeFeedback(null);
+                          }}
                         />
-                        <input
-                          className="rounded-lg border px-2 py-1 text-sm"
-                          value={timeDuration}
-                          onChange={(e) => setTimeDuration(e.target.value)}
-                          placeholder="Duree (h)"
-                        />
-                        <input
-                          className="rounded-lg border px-2 py-1 text-sm"
-                          value={timeNote}
-                          onChange={(e) => setTimeNote(e.target.value)}
-                          placeholder="Note"
-                        />
+                        <div className="grid gap-2 sm:grid-cols-2">
+                          <input
+                            className="rounded-lg border px-2 py-1 text-sm"
+                            value={timeDuration}
+                            onChange={(e) => {
+                              setTimeDuration(e.target.value);
+                              setTimeFeedback(null);
+                            }}
+                            placeholder="Duree (h)"
+                          />
+                          <input
+                            className="rounded-lg border px-2 py-1 text-sm"
+                            value={timeNote}
+                            onChange={(e) => {
+                              setTimeNote(e.target.value);
+                              setTimeFeedback(null);
+                            }}
+                            placeholder="Note"
+                          />
+                        </div>
                       </div>
-                      <div className="mt-2 flex justify-end">
+                      {timeFeedback ? (
+                        <div
+                          className={[
+                            "mt-3 rounded-lg border px-3 py-2 text-sm",
+                            timeFeedback.type === "success"
+                              ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                              : "border-red-200 bg-red-50 text-red-700",
+                          ].join(" ")}
+                        >
+                          {timeFeedback.message}
+                        </div>
+                      ) : null}
+                      <div className="mt-3 flex justify-end">
                         <button
                           type="submit"
                           disabled={timeSaving}
@@ -892,7 +1053,9 @@ export default function IntervenantPortalPage() {
                     {timeState.loading ? (
                       <div className="rounded-xl border bg-slate-50 p-3 text-sm text-slate-600">Chargement du temps...</div>
                     ) : timeState.error ? (
-                      <div className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">{timeState.error}</div>
+                      <div className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+                        {isTaskIdRequiredError(timeState.error) ? "Choisir une tache." : timeState.error}
+                      </div>
                     ) : timeState.data.length === 0 ? (
                       <div className="rounded-xl border bg-slate-50 p-3 text-sm text-slate-500">Aucun temps saisi.</div>
                     ) : (
