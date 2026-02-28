@@ -27,6 +27,9 @@ export type ChantierTaskRow = {
   date_debut: string | null; // YYYY-MM-DD
   date_fin: string | null; // YYYY-MM-DD
   temps_reel_h: number | null;
+  progress_admin_offset_percent: number | null;
+  progress_admin_offset_updated_at: string | null;
+  progress_admin_offset_updated_by: string | null;
   duration_days: number;
   order_index: number;
 
@@ -99,6 +102,9 @@ const TASK_SELECT = [
   "date_debut",
   "date_fin",
   "temps_reel_h",
+  "progress_admin_offset_percent",
+  "progress_admin_offset_updated_at",
+  "progress_admin_offset_updated_by",
   "duration_days",
   "order_index",
   "created_at",
@@ -164,7 +170,6 @@ function cleanPatch(patch: UpdateTaskPatch) {
   if (cleaned.temps_reel_h !== undefined) {
     cleaned.temps_reel_h = normalizeNumber(cleaned.temps_reel_h);
   }
-
   if (cleaned.quantite !== undefined) {
     cleaned.quantite = normalizeNumber(cleaned.quantite);
   }
@@ -190,8 +195,13 @@ function cleanPatch(patch: UpdateTaskPatch) {
 }
 
 function normalizeTaskRow(row: any): ChantierTaskRow {
+  const offsetRaw = normalizeNumber(row?.progress_admin_offset_percent);
+
   return {
     ...row,
+    progress_admin_offset_percent: offsetRaw === null ? 0 : Math.max(-100, Math.min(100, Number(offsetRaw))),
+    progress_admin_offset_updated_at: row?.progress_admin_offset_updated_at ?? null,
+    progress_admin_offset_updated_by: row?.progress_admin_offset_updated_by ?? null,
     duration_days: Math.max(1, Number(row?.duration_days ?? 1)),
     order_index: Math.max(0, Math.trunc(Number(row?.order_index ?? 0))),
   } as ChantierTaskRow;
@@ -205,7 +215,11 @@ function isMissingTaskPlanningColumnsError(error: any): boolean {
   return (
     msg.includes("column") &&
     msg.includes("chantier_tasks") &&
-    (msg.includes("duration_days") || msg.includes("order_index"))
+    (
+      msg.includes("duration_days") ||
+      msg.includes("order_index") ||
+      msg.includes("progress_admin_offset_percent")
+    )
   );
 }
 
@@ -337,6 +351,23 @@ export async function deleteTasksByIds(taskIds: string[]): Promise<void> {
   if (!ids.length) return;
 
   const { error } = await supabase.from("chantier_tasks").delete().in("id", ids);
+  if (error) throw error;
+}
+
+export async function adminSetTaskProgressOffset(taskId: string, offset: number | null): Promise<void> {
+  if (!taskId) throw new Error("id tâche manquant.");
+
+  const parsedOffset =
+    offset === null || offset === undefined ? null : Math.max(-100, Math.min(100, Number(offset)));
+  if (parsedOffset !== null && !Number.isFinite(parsedOffset)) {
+    throw new Error("Ajustement invalide.");
+  }
+
+  const { error } = await (supabase as any).rpc("admin_set_task_progress_offset", {
+    p_task_id: taskId,
+    p_offset: parsedOffset,
+  });
+
   if (error) throw error;
 }
 

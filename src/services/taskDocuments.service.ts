@@ -7,6 +7,20 @@ export type TaskDocumentLinkRow = {
   created_at: string;
 };
 
+export type DocumentPermissionRow = {
+  document_id: string;
+  intervenant_id: string;
+};
+
+function isMissingTableError(error: unknown): boolean {
+  const msg = String((error as { message?: string } | null)?.message ?? "").toLowerCase();
+  return (
+    msg.includes("does not exist") ||
+    msg.includes("schema cache") ||
+    (msg.includes("relation") && msg.includes("document_permissions"))
+  );
+}
+
 export async function listTaskDocuments(taskId: string): Promise<string[]> {
   if (!taskId) throw new Error("taskId manquant.");
   const { data, error } = await supabase
@@ -54,6 +68,56 @@ export async function setTaskDocuments(taskId: string, documentIds: string[]): P
       .in("document_id", toRemove);
     if (error) throw new Error(error.message);
   }
+}
+
+export async function listDocumentPermissionsByDocumentIds(
+  chantierId: string,
+  documentIds: string[],
+): Promise<DocumentPermissionRow[]> {
+  const ids = Array.from(new Set((documentIds ?? []).filter(Boolean)));
+  if (!chantierId || ids.length === 0) return [];
+
+  const primary = await (supabase as any)
+    .from("document_permissions")
+    .select("document_id, intervenant_id")
+    .eq("chantier_id", chantierId)
+    .in("document_id", ids);
+
+  if (!primary.error) {
+    return (primary.data ?? []) as DocumentPermissionRow[];
+  }
+
+  if (!isMissingTableError(primary.error)) {
+    throw new Error(primary.error.message);
+  }
+
+  const fallback = await supabase
+    .from("document_access")
+    .select("document_id, intervenant_id")
+    .in("document_id", ids);
+
+  if (fallback.error) throw new Error(fallback.error.message);
+  return (fallback.data ?? []) as DocumentPermissionRow[];
+}
+
+export async function adminSetTaskDocumentPermissions(input: {
+  taskId: string;
+  documentIds: string[];
+  intervenantIds: string[];
+}): Promise<void> {
+  const taskId = String(input.taskId ?? "").trim();
+  if (!taskId) throw new Error("taskId manquant.");
+
+  const documentIds = Array.from(new Set((input.documentIds ?? []).filter(Boolean)));
+  const intervenantIds = Array.from(new Set((input.intervenantIds ?? []).filter(Boolean)));
+
+  const { error } = await (supabase as any).rpc("admin_set_task_document_permissions", {
+    p_task_id: taskId,
+    p_document_ids: documentIds,
+    p_intervenant_ids: intervenantIds,
+  });
+
+  if (error) throw new Error(error.message);
 }
 
 
