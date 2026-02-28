@@ -158,9 +158,10 @@ function formatDateTimeFr(value: string | null): string {
   return parsed.toLocaleString("fr-FR");
 }
 
-function formatHours(value: number | null): string {
-  if (value === null) return "-";
-  return `${value.toLocaleString("fr-FR", { maximumFractionDigits: 2 })} h`;
+function formatQuantity(value: number | null, unit: string | null, empty = "0"): string {
+  if (value === null) return empty;
+  const formatted = value.toLocaleString("fr-FR", { maximumFractionDigits: 2 });
+  return unit ? `${formatted} ${unit}` : formatted;
 }
 
 function todayIsoDate(): string {
@@ -181,6 +182,12 @@ function taskStatusPriority(status: string | null): number {
 
 function isTaskIdRequiredError(message: string): boolean {
   return String(message ?? "").toLowerCase().includes("task_id_required");
+}
+
+function taskQuantityProgress(task: IntervenantTask): number | null {
+  if (task.quantite === null || task.quantite <= 0) return null;
+  const done = Number(task.quantite_realisee ?? 0);
+  return Math.max(0, Math.min(100, (done / task.quantite) * 100));
 }
 
 function statusLabel(status: string | null): string {
@@ -282,11 +289,9 @@ export default function IntervenantPortalPage() {
   const [timeTaskId, setTimeTaskId] = useState<string | null>(null);
   const [timeTaskQuery, setTimeTaskQuery] = useState("");
   const [timeTaskListOpen, setTimeTaskListOpen] = useState(false);
-  const [timeNoTaskSelected, setTimeNoTaskSelected] = useState(false);
-  const [timeSupportsNoTask, setTimeSupportsNoTask] = useState(true);
   const [timeFeedback, setTimeFeedback] = useState<{ type: "success" | "error"; message: string } | null>(null);
   const [timeDate, setTimeDate] = useState(todayIsoDate());
-  const [timeDuration, setTimeDuration] = useState("1");
+  const [timeQuantity, setTimeQuantity] = useState("");
   const [timeNote, setTimeNote] = useState("");
   const [timeSaving, setTimeSaving] = useState(false);
 
@@ -534,7 +539,6 @@ export default function IntervenantPortalPage() {
     if (!prioritizedTasks.length) {
       setTimeTaskId(null);
       setTimeTaskQuery("");
-      setTimeNoTaskSelected(true);
       return;
     }
 
@@ -543,15 +547,10 @@ export default function IntervenantPortalPage() {
       return;
     }
 
-    if (timeNoTaskSelected && timeSupportsNoTask) {
-      return;
-    }
-
     const preferredTask = prioritizedTasks[0];
     setTimeTaskId(preferredTask.id);
     setTimeTaskQuery(preferredTask.titre);
-    setTimeNoTaskSelected(false);
-  }, [prioritizedTasks, timeNoTaskSelected, timeSupportsNoTask, timeTaskId]);
+  }, [prioritizedTasks, timeTaskId]);
 
   function reloadAll() {
     setReloadTick((tick) => tick + 1);
@@ -565,42 +564,22 @@ export default function IntervenantPortalPage() {
     setTimeTaskId(task.id);
     setTimeTaskQuery(task.titre);
     setTimeTaskListOpen(false);
-    setTimeNoTaskSelected(false);
     setTimeFeedback(null);
-  }
-
-  function selectNoTask() {
-    setTimeTaskId(null);
-    setTimeTaskQuery("");
-    setTimeTaskListOpen(false);
-    setTimeNoTaskSelected(true);
-    setTimeFeedback(null);
-  }
-
-  function onStartTimeForTask(task: IntervenantTask) {
-    selectTimeTask(task);
-    setActiveTab("temps");
   }
 
   async function onCreateTimeEntry(e: FormEvent) {
     e.preventDefault();
     if (!token || !selectedChantierId) return;
 
-    const duration = Number(String(timeDuration).replace(",", "."));
-    if (!Number.isFinite(duration) || duration <= 0) {
-      setTimeState((prev) => ({ ...prev, error: "Duree invalide." }));
-      setTimeFeedback(null);
-      return;
-    }
-
-    if (!timeNoTaskSelected && !timeTaskId && prioritizedTasks.length > 0) {
+    const quantity = Number(String(timeQuantity).replace(",", "."));
+    if (!timeTaskId) {
       setTimeState((prev) => ({ ...prev, error: "Choisir une tache." }));
       setTimeFeedback(null);
       return;
     }
 
-    if (timeNoTaskSelected && !timeSupportsNoTask && prioritizedTasks.length > 0) {
-      setTimeState((prev) => ({ ...prev, error: "Choisir une tache." }));
+    if (!Number.isFinite(quantity) || quantity <= 0) {
+      setTimeState((prev) => ({ ...prev, error: "Quantite realisee invalide." }));
       setTimeFeedback(null);
       return;
     }
@@ -612,34 +591,34 @@ export default function IntervenantPortalPage() {
     try {
       await intervenantTimeCreate(token, {
         chantier_id: selectedChantierId,
-        task_id: timeNoTaskSelected ? null : timeTaskId,
+        task_id: timeTaskId,
         work_date: timeDate || null,
-        duration_hours: duration,
+        quantite_realisee: quantity,
         note: timeNote.trim() || null,
       });
 
-      const rows = await intervenantTimeList(token, selectedChantierId);
+      const [rows, taskRows] = await Promise.all([
+        intervenantTimeList(token, selectedChantierId),
+        intervenantGetTasks(token, selectedChantierId),
+      ]);
       setTimeState({ loading: false, error: null, data: rows });
-      setTimeFeedback({ type: "success", message: "Temps enregistre." });
-      if (prioritizedTasks.length > 0) {
-        const preferredTask = prioritizedTasks[0];
-        setTimeTaskId(preferredTask.id);
-        setTimeTaskQuery(preferredTask.titre);
-        setTimeNoTaskSelected(false);
+      setTasksState({ loading: false, error: null, data: taskRows });
+      setTimeFeedback({ type: "success", message: "Saisie enregistree." });
+      if (taskRows.length > 0) {
+        const currentTask = taskRows.find((task) => task.id === timeTaskId) ?? taskRows[0];
+        setTimeTaskId(currentTask.id);
+        setTimeTaskQuery(currentTask.titre);
       } else {
         setTimeTaskId(null);
         setTimeTaskQuery("");
-        setTimeNoTaskSelected(true);
       }
       setTimeTaskListOpen(false);
       setTimeDate(todayIsoDate());
-      setTimeDuration("1");
+      setTimeQuantity("");
       setTimeNote("");
     } catch (error) {
       const message = getErrorMessage(error, "Creation temps impossible.");
       if (isTaskIdRequiredError(message)) {
-        setTimeSupportsNoTask(false);
-        setTimeNoTaskSelected(false);
         if (prioritizedTasks.length > 0) {
           const preferredTask = prioritizedTasks[0];
           setTimeTaskId(preferredTask.id);
@@ -895,10 +874,15 @@ export default function IntervenantPortalPage() {
                               </div>
                               <div className="mt-1 text-xs text-slate-500">Lot: {resolveTaskLot(task)}</div>
                               <div className="mt-1 text-xs leading-5 text-slate-500">
-                                Temps prevu: {formatHours(task.temps_prevu_h)}
+                                Qte totale: {formatQuantity(task.quantite, task.unite, "-")}
                                 {" - "}
-                                Temps saisi: {formatHours(task.temps_reel_h)}
+                                Qte realisee: {formatQuantity(task.quantite_realisee, task.unite)}
                               </div>
+                              {taskQuantityProgress(task) !== null ? (
+                                <div className="mt-1 text-xs text-slate-400">
+                                  Avancement estime: {Math.round(taskQuantityProgress(task) ?? 0)}%
+                                </div>
+                              ) : null}
                             </div>
                             <span
                               className={[
@@ -909,15 +893,6 @@ export default function IntervenantPortalPage() {
                               {statusLabel(task.status)}
                             </span>
                           </div>
-                          <div className="mt-3 flex justify-end">
-                            <button
-                              type="button"
-                              onClick={() => onStartTimeForTask(task)}
-                              className="rounded-lg border px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
-                            >
-                              Saisir du temps
-                            </button>
-                          </div>
                         </article>
                       ))
                     )}
@@ -927,7 +902,7 @@ export default function IntervenantPortalPage() {
                 {activeTab === "temps" && (
                   <div className="space-y-3">
                     <form onSubmit={onCreateTimeEntry} className="rounded-xl border bg-slate-50 p-3">
-                      <div className="mb-2 text-sm font-medium text-slate-800">Saisir du temps</div>
+                      <div className="mb-2 text-sm font-medium text-slate-800">Ajouter une saisie</div>
                       <div className="grid gap-2">
                         <div className="space-y-2">
                           <label className="text-xs font-medium text-slate-600">Tache</label>
@@ -944,32 +919,9 @@ export default function IntervenantPortalPage() {
                               const matchesSelected = selectedTimeTask && value.trim() === selectedTimeTask.titre;
                               if (!matchesSelected) {
                                 setTimeTaskId(null);
-                                setTimeNoTaskSelected(false);
                               }
                             }}
                           />
-
-                          <div className="flex flex-wrap items-center gap-2">
-                            {selectedTimeTask ? (
-                              <span className="rounded-full border border-blue-200 bg-blue-50 px-2.5 py-1 text-xs font-medium text-blue-700">
-                                {selectedTimeTask.titre}
-                              </span>
-                            ) : null}
-                            {timeNoTaskSelected ? (
-                              <span className="rounded-full border border-slate-200 bg-white px-2.5 py-1 text-xs font-medium text-slate-600">
-                                Sans tache
-                              </span>
-                            ) : null}
-                            {timeSupportsNoTask || prioritizedTasks.length === 0 ? (
-                              <button
-                                type="button"
-                                onClick={selectNoTask}
-                                className="rounded-full border px-2.5 py-1 text-xs text-slate-600 hover:bg-white"
-                              >
-                                Sans tache
-                              </button>
-                            ) : null}
-                          </div>
 
                           {timeTaskListOpen && filteredTimeTasks.length > 0 ? (
                             <div className="rounded-xl border bg-white p-1">
@@ -997,33 +949,56 @@ export default function IntervenantPortalPage() {
                           ) : null}
                         </div>
 
-                        <input
-                          className="rounded-lg border px-2 py-1 text-sm"
-                          type="date"
-                          value={timeDate}
-                          onChange={(e) => {
-                            setTimeDate(e.target.value);
-                            setTimeFeedback(null);
-                          }}
-                        />
-                        <div className="grid gap-2 sm:grid-cols-2">
+                        <div className="space-y-1">
+                          <label className="text-xs font-medium text-slate-600">Date</label>
                           <input
                             className="rounded-lg border px-2 py-1 text-sm"
-                            value={timeDuration}
+                            type="date"
+                            value={timeDate}
                             onChange={(e) => {
-                              setTimeDuration(e.target.value);
+                              setTimeDate(e.target.value);
                               setTimeFeedback(null);
                             }}
-                            placeholder="Duree (h)"
                           />
+                        </div>
+
+                        <div className="space-y-1">
+                          <label className="text-xs font-medium text-slate-600">Quantite realisee</label>
+                          {selectedTimeTask ? (
+                            <div className="text-xs text-slate-500">
+                              Qte totale: {formatQuantity(selectedTimeTask.quantite, selectedTimeTask.unite, "-")}
+                            </div>
+                          ) : null}
                           <input
                             className="rounded-lg border px-2 py-1 text-sm"
+                            inputMode="decimal"
+                            value={timeQuantity}
+                            onChange={(e) => {
+                              setTimeQuantity(e.target.value);
+                              setTimeFeedback(null);
+                            }}
+                            placeholder={selectedTimeTask?.unite ? `Quantite (${selectedTimeTask.unite})` : "Quantite"}
+                          />
+                          <div className="text-[11px] text-slate-500">
+                            L'avancement est calcule a partir de cette quantite.
+                          </div>
+                          {selectedTimeTask && taskQuantityProgress(selectedTimeTask) !== null ? (
+                            <div className="text-[11px] text-slate-400">
+                              Avancement actuel: {Math.round(taskQuantityProgress(selectedTimeTask) ?? 0)}%
+                            </div>
+                          ) : null}
+                        </div>
+
+                        <div className="space-y-1">
+                          <label className="text-xs font-medium text-slate-600">Observations</label>
+                          <textarea
+                            className="min-h-20 rounded-lg border px-2 py-2 text-sm"
                             value={timeNote}
                             onChange={(e) => {
                               setTimeNote(e.target.value);
                               setTimeFeedback(null);
                             }}
-                            placeholder="Note"
+                            placeholder="Observations (optionnel)"
                           />
                         </div>
                       </div>
@@ -1045,7 +1020,7 @@ export default function IntervenantPortalPage() {
                           disabled={timeSaving}
                           className="rounded-lg bg-slate-900 px-3 py-1.5 text-sm text-white hover:bg-slate-800 disabled:opacity-60"
                         >
-                          {timeSaving ? "Enregistrement..." : "Ajouter temps"}
+                          {timeSaving ? "Enregistrement..." : "Enregistrer"}
                         </button>
                       </div>
                     </form>
@@ -1062,9 +1037,12 @@ export default function IntervenantPortalPage() {
                       timeState.data.map((entry) => (
                         <article key={entry.id} className="rounded-xl border p-3">
                           <div className="font-medium text-slate-900">
-                            {formatHours(entry.duration_hours)} - {formatDateFr(entry.work_date)}
+                            {formatDateFr(entry.work_date)}
                           </div>
-                          <div className="mt-1 text-xs text-slate-500">Tache: {entry.task_titre || "Sans tache"}</div>
+                          <div className="mt-1 text-xs text-slate-500">{entry.task_titre || "Tache"}</div>
+                          <div className="mt-1 text-xs text-slate-500">
+                            Quantite: {formatQuantity(entry.quantite_realisee, entry.task_unite)}
+                          </div>
                           {entry.note ? <div className="mt-1 text-xs text-slate-500">Note: {entry.note}</div> : null}
                         </article>
                       ))

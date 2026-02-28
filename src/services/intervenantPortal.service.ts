@@ -43,6 +43,7 @@ export type IntervenantTask = {
   date_debut: string | null;
   date_fin: string | null;
   quantite: number | null;
+  quantite_realisee: number | null;
   unite: string | null;
   temps_prevu_h: number | null;
   temps_reel_h: number | null;
@@ -85,9 +86,10 @@ export type IntervenantTimeEntry = {
   chantier_id: string;
   task_id: string | null;
   task_titre: string | null;
+  task_unite: string | null;
   intervenant_id: string;
   work_date: string;
-  duration_hours: number;
+  quantite_realisee: number | null;
   note: string | null;
   created_at: string | null;
 };
@@ -207,6 +209,7 @@ export async function intervenantGetTasks(token: string, chantierId: string): Pr
     date_debut: asNullableString(row.date_debut),
     date_fin: asNullableString(row.date_fin),
     quantite: asNullableNumber(row.quantite),
+    quantite_realisee: asNullableNumber(row.quantite_realisee),
     unite: asNullableString(row.unite),
     temps_prevu_h: asNullableNumber(row.temps_prevu_h),
     temps_reel_h: asNullableNumber(row.temps_reel_h),
@@ -302,9 +305,9 @@ export async function intervenantTimeCreate(
   token: string,
   payload: {
     chantier_id: string;
-    task_id?: string | null;
+    task_id: string;
     work_date?: string | null;
-    duration_hours: number;
+    quantite_realisee: number;
     note?: string | null;
   },
 ): Promise<void> {
@@ -328,9 +331,10 @@ export async function intervenantTimeList(token: string, chantierId: string): Pr
     chantier_id: String(row.chantier_id ?? chantierId),
     task_id: asNullableString(row.task_id),
     task_titre: asNullableString(row.task_titre),
+    task_unite: asNullableString(row.task_unite),
     intervenant_id: String(row.intervenant_id ?? ""),
     work_date: String(row.work_date ?? ""),
-    duration_hours: Number(row.duration_hours ?? 0) || 0,
+    quantite_realisee: asNullableNumber(row.quantite_realisee),
     note: asNullableString(row.note),
     created_at: asNullableString(row.created_at),
   }));
