@@ -1937,6 +1937,90 @@ export default function ChantierPage() {
   const documentsCount = useMemo(() => {
     return Math.max(documents.length, chantierDocuments.length);
   }, [documents.length, chantierDocuments.length]);
+  const overdueTasks = useMemo(() => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    return tasks.filter((task) => {
+      if (!task.date_fin) return false;
+      if (task.status === "FAIT") return false;
+      const timestamp = Date.parse(`${task.date_fin}T00:00:00`);
+      return Number.isFinite(timestamp) && timestamp < today.getTime();
+    });
+  }, [tasks]);
+  const blockedLots = useMemo(() => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const byLot = new Map<string, { hasProgress: boolean; hasPastCommitment: boolean }>();
+    tasks.forEach((task) => {
+      const lot = resolveTaskLotName(task);
+      const current = byLot.get(lot) ?? { hasProgress: false, hasPastCommitment: false };
+      if (task.status === "EN_COURS" || task.status === "FAIT" || Number(task.temps_reel_h ?? 0) > 0) {
+        current.hasProgress = true;
+      }
+      const anchor = task.date_fin ?? task.date_debut ?? task.date;
+      if (anchor) {
+        const timestamp = Date.parse(`${anchor}T00:00:00`);
+        if (Number.isFinite(timestamp) && timestamp < today.getTime()) {
+          current.hasPastCommitment = true;
+        }
+      }
+      byLot.set(lot, current);
+    });
+    return [...byLot.entries()]
+      .filter(([, state]) => state.hasPastCommitment && !state.hasProgress)
+      .map(([lot]) => lot);
+  }, [tasks]);
+  const heuresDepassees = useMemo(() => {
+    if (tempsPrevues <= 0) return 0;
+    return Math.max(0, totalTempsReel - tempsPrevues);
+  }, [tempsPrevues, totalTempsReel]);
+  const missingRecentTime = useMemo(() => {
+    const cutoff = Date.now() - 7 * 24 * 60 * 60 * 1000;
+    const latestRelevantUpdate = tasks.reduce((latest, task) => {
+      if (Number(task.temps_reel_h ?? 0) <= 0) return latest;
+      const timestamp = Date.parse(task.updated_at ?? task.created_at ?? "");
+      return Number.isFinite(timestamp) ? Math.max(latest, timestamp) : latest;
+    }, 0);
+    if (totalTempsReel <= 0) return true;
+    if (latestRelevantUpdate <= 0) return true;
+    return latestRelevantUpdate < cutoff;
+  }, [tasks, totalTempsReel]);
+  const alertCards = useMemo(() => {
+    const rows: Array<{ key: string; title: string; detail: string; tone: "warning" | "danger" | "ok" }> = [];
+    if (overdueTasks.length > 0) {
+      rows.push({
+        key: "retard",
+        title: "Tâches en retard",
+        detail: `${overdueTasks.length} tâche${overdueTasks.length > 1 ? "s" : ""} à relancer`,
+        tone: overdueTasks.length > 3 ? "danger" : "warning",
+      });
+    }
+    if (blockedLots.length > 0) {
+      rows.push({
+        key: "lots",
+        title: "Lots bloqués",
+        detail: blockedLots.slice(0, 2).join(" • "),
+        tone: "warning",
+      });
+    }
+    if (heuresDepassees > 0) {
+      rows.push({
+        key: "budget",
+        title: "Dépassement budget",
+        detail: `${heuresDepassees.toFixed(1)} h au-dessus du prévu`,
+        tone: "danger",
+      });
+    }
+    if (missingRecentTime) {
+      rows.push({
+        key: "temps",
+        title: "Absence de saisie récente",
+        detail: "Aucune saisie temps récente sur le chantier",
+        tone: "warning",
+      });
+    }
+    return rows;
+  }, [blockedLots, heuresDepassees, missingRecentTime, overdueTasks.length]);
 
   /* ---------------- actions ---------------- */
 
@@ -2876,7 +2960,6 @@ export default function ChantierPage() {
         </div>
       )}
 
-      {/* Header */}
       <div className="flex items-start justify-between gap-4">
         <div className="space-y-2 min-w-0">
           <div className="text-sm text-slate-500">
@@ -2885,16 +2968,9 @@ export default function ChantierPage() {
             </Link>{" "}
             / <span className="text-slate-700">{item.nom}</span>
           </div>
-
           <div className="flex items-center gap-3">
-            <h1 className="text-3xl font-bold truncate">{item.nom}</h1>
-            <span className={["text-xs px-2 py-1 rounded-full border", badge.className].join(" ")}>
-              {badge.label}
-            </span>
-          </div>
-
-          <div className="text-slate-500 text-sm">
-            {item.client ?? "—"} • {item.adresse ?? "—"}
+            <h1 className="truncate text-3xl font-semibold text-slate-950">{item.nom}</h1>
+            <span className={["rounded-full border px-2 py-1 text-xs", badge.className].join(" ")}>{badge.label}</span>
           </div>
         </div>
 
@@ -2903,82 +2979,123 @@ export default function ChantierPage() {
         </Link>
       </div>
 
-      {/* KPIs */}
-      <div className="grid gap-3 md:grid-cols-4">
-        <div className="rounded-2xl border bg-white p-4">
-          <div className="text-xs text-slate-500">Réserves ouvertes</div>
-          <div className="text-2xl font-bold mt-1">{reservesOuvertes}</div>
-        </div>
-        <div className="rounded-2xl border bg-white p-4">
-          <div className="text-xs text-slate-500">Documents</div>
-          <div className="text-2xl font-bold mt-1">{documentsCount}</div>
-        </div>
-        <div className="rounded-2xl border bg-white p-4">
-          <div className="text-xs text-slate-500">Temps saisi</div>
-          <div className="text-2xl font-bold mt-1">{tempsHeures} h</div>
-        </div>
-        <div className="rounded-2xl border bg-white p-4">
-          <div className="text-xs text-slate-500">Temps prévu</div>
-          <div className="text-2xl font-bold mt-1">{tempsPrevues} h</div>
-        </div>
-      </div>
-
-      {/* Avancement */}
-      <div className="rounded-2xl border bg-white p-4">
-        <div className="flex justify-between text-sm">
-          <div className="text-slate-600">Avancement</div>
-          <div className="font-semibold">{avancement}%</div>
-        </div>
-        <div className="h-3 mt-2 rounded-full bg-slate-100 overflow-hidden">
-          <div className="h-full bg-slate-900" style={{ width: `${avancement}%` }} />
-        </div>
-      </div>
-
-      {/* Onglets */}
-      <div className="space-y-3">
-        <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_1px_minmax(280px,auto)] lg:items-start">
-          <div className="space-y-2">
-            <div className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-500">Pilotage chantier</div>
-            <div className="flex gap-2 flex-wrap">
-              <TabButton active={tab === "devis-taches"} onClick={() => setTab("devis-taches")}>
-                Devis & tâches
-              </TabButton>
-              <TabButton active={tab === "temps"} onClick={() => setTab("temps")}>
-                Temps
-              </TabButton>
-              <TabButton active={tab === "planning"} onClick={() => setTab("planning")}>
-                Planning
-              </TabButton>
-              <TabButton active={tab === "reserves"} onClick={() => setTab("reserves")}>
-                Réserves
-              </TabButton>
+      <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+        <div className="grid gap-5 xl:grid-cols-[minmax(0,1.2fr)_minmax(280px,0.8fr)]">
+          <div className="space-y-4">
+            <div className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">Synthèse chantier</div>
+            <div>
+              <div className="text-2xl font-semibold text-slate-950">{item.nom}</div>
+              <div className="mt-1 text-sm text-slate-500">{item.client ?? "Client non renseigné"}</div>
+              <div className="mt-1 text-sm text-slate-500">{item.adresse ?? "Adresse non renseignée"}</div>
+            </div>
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Début / fin</div>
+                <div className="mt-2 text-sm font-medium text-slate-900">
+                  {(item.date_debut as string | null) ?? "—"} / {(item.date_fin_prevue as string | null) ?? "—"}
+                </div>
+              </div>
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Avancement</div>
+                <div className="mt-2 text-2xl font-semibold text-slate-950">{avancement}%</div>
+              </div>
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Heures prévues</div>
+                <div className="mt-2 text-2xl font-semibold text-slate-950">{tempsPrevues} h</div>
+              </div>
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Heures réalisées</div>
+                <div className="mt-2 text-2xl font-semibold text-slate-950">{totalTempsReel} h</div>
+              </div>
+            </div>
+            <div>
+              <div className="flex items-center justify-between text-sm">
+                <span className="font-medium text-slate-600">Progression globale</span>
+                <span className="font-semibold text-slate-900">{avancement}%</span>
+              </div>
+              <div className="mt-2 h-3 overflow-hidden rounded-full bg-slate-100">
+                <div className="h-full rounded-full bg-blue-600" style={{ width: `${avancement}%` }} />
+              </div>
             </div>
           </div>
 
-          <div className="hidden lg:block h-full w-px bg-slate-200" />
-
-          <div className="space-y-2 lg:pl-1">
-            <div className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-500">Livrables</div>
-            <div className="flex gap-2 flex-wrap">
-              <TabButton active={tab === "visite"} onClick={() => setTab("visite")}>
-                Visites de chantier
-              </TabButton>
-              <TabButton active={tab === "doe"} onClick={() => setTab("doe")}>
-                DOE
-              </TabButton>
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-1">
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+              <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Réserves ouvertes</div>
+              <div className="mt-2 text-2xl font-semibold text-slate-950">{reservesOuvertes}</div>
+            </div>
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+              <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Documents</div>
+              <div className="mt-2 text-2xl font-semibold text-slate-950">{documentsCount}</div>
+            </div>
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+              <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Temps saisi</div>
+              <div className="mt-2 text-2xl font-semibold text-slate-950">{tempsHeures} h</div>
             </div>
           </div>
         </div>
+      </section>
 
-        <div className="h-px bg-gradient-to-r from-transparent via-slate-200 to-transparent" />
+      <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+        <div className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">Pilotage chantier</div>
+        <div className="mt-3 flex flex-wrap gap-2">
+          <TabButton active={tab === "devis-taches"} onClick={() => setTab("devis-taches")}>
+            Tâches
+          </TabButton>
+          <TabButton active={tab === "planning"} onClick={() => setTab("planning")}>
+            Planning
+          </TabButton>
+          <TabButton active={tab === "temps"} onClick={() => setTab("temps")}>
+            Temps
+          </TabButton>
+          <TabButton active={tab === "reserves"} onClick={() => setTab("reserves")}>
+            Réserves
+          </TabButton>
+        </div>
+      </section>
 
-        <div className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-500">Gestion chantier</div>
-        <div className="flex gap-2 flex-wrap">
-          <TabButton active={tab === "intervenants"} onClick={() => setTab("intervenants")}>
-            Intervenants
+      <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+        <div className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">Alertes chantier</div>
+        <div className="mt-3 grid gap-3 lg:grid-cols-4">
+          {alertCards.length === 0 ? (
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-500 lg:col-span-4">
+              Aucune alerte.
+            </div>
+          ) : (
+            alertCards.map((alert) => (
+              <div
+                key={alert.key}
+                className={[
+                  "rounded-2xl border p-4",
+                  alert.tone === "danger"
+                    ? "border-red-200 bg-red-50"
+                    : alert.tone === "warning"
+                      ? "border-amber-200 bg-amber-50"
+                      : "border-emerald-200 bg-emerald-50",
+                ].join(" ")}
+              >
+                <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">{alert.title}</div>
+                <div className="mt-2 text-sm font-medium text-slate-900">{alert.detail}</div>
+              </div>
+            ))
+          )}
+        </div>
+      </section>
+
+      <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+        <div className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">Gestion secondaire</div>
+        <div className="mt-3 flex flex-wrap gap-2">
+          <TabButton active={tab === "devis-taches"} onClick={() => setTab("devis-taches")}>
+            Devis
           </TabButton>
           <TabButton active={tab === "documents"} onClick={() => setTab("documents")}>
             Documents
+          </TabButton>
+          <TabButton active={tab === "doe"} onClick={() => setTab("doe")}>
+            DOE
+          </TabButton>
+          <TabButton active={tab === "intervenants"} onClick={() => setTab("intervenants")}>
+            Intervenants
           </TabButton>
           <TabButton active={tab === "materiel"} onClick={() => setTab("materiel")}>
             Matériel
@@ -2986,8 +3103,11 @@ export default function ChantierPage() {
           <TabButton active={tab === "messagerie"} onClick={() => setTab("messagerie")}>
             Messagerie
           </TabButton>
+          <TabButton active={tab === "visite"} onClick={() => setTab("visite")}>
+            Visites
+          </TabButton>
         </div>
-      </div>
+      </section>
 
       {/* Contenu */}
       <div className="rounded-2xl border bg-white p-6">
