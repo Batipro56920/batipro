@@ -1,4 +1,4 @@
-  // src/pages/ChantierPage.tsx
+ï»¿  // src/pages/ChantierPage.tsx
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { ChangeEvent, DragEvent, FormEvent } from "react";
 import { Link, useParams } from "react-router-dom";
@@ -103,7 +103,7 @@ import {
   type TaskTemplateInput,
 } from "../services/taskTemplates.service";
 
-// ENVOI ACCÈS (Edge Function via service)
+// ENVOI ACCÃˆS (Edge Function via service)
 import { sendIntervenantAccess } from "../services/chantierAccessAdmin.service";
 import { buildIntervenantLink } from "../lib/publicUrl";
 
@@ -136,15 +136,15 @@ function statusBadge(status?: string | null) {
     return { label: "En cours", className: "bg-amber-50 text-amber-700 border-amber-200" };
   }
   if (s === "TERMINE") {
-    return { label: "Terminé", className: "bg-emerald-50 text-emerald-700 border-emerald-200" };
+    return { label: "TerminÃ©", className: "bg-emerald-50 text-emerald-700 border-emerald-200" };
   }
-  return { label: "Préparation", className: "bg-slate-50 text-slate-700 border-slate-200" };
+  return { label: "PrÃ©paration", className: "bg-slate-50 text-slate-700 border-slate-200" };
 }
 
 function taskStatusLabel(s: ChantierTaskRow["status"]) {
   if (s === "FAIT") return "Fait";
   if (s === "EN_COURS") return "En cours";
-  return "À faire";
+  return "A faire";
 }
 function taskStatusBadgeClass(s: ChantierTaskRow["status"]) {
   if (s === "FAIT") return "bg-emerald-50 text-emerald-700 border-emerald-200";
@@ -153,22 +153,22 @@ function taskStatusBadgeClass(s: ChantierTaskRow["status"]) {
 }
 
 const DEFAULT_STANDARD_LOTS = [
-  "Curage / Démolition",
-  "Maçonnerie / Gros œuvre",
+  "Curage / DÃ©molition",
+  "MaÃ§onnerie / Gros Å“uvre",
   "Charpente / Couverture",
-  "Menuiseries extérieures",
-  "Cloisons / Plâtrerie",
+  "Menuiseries extÃ©rieures",
+  "Cloisons / PlÃ¢trerie",
   "Isolation",
-  "Électricité",
+  "Ã‰lectricitÃ©",
   "Plomberie",
   "Chauffage / Ventilation",
   "Sols",
-  "Faïence / Carrelage",
+  "FaÃ¯ence / Carrelage",
   "Peinture",
   "Cuisine / Sanitaires",
   "Finitions / Nettoyage",
-  "Extérieurs / VRD",
-  "Divers / À classer",
+  "ExtÃ©rieurs / VRD",
+  "Divers / Ã€ classer",
 ] as const;
 
 function normalizeLotLabel(value: string | null | undefined): string {
@@ -189,7 +189,7 @@ function isPublicAppUrlConfigError(error: unknown): boolean {
 function reserveStatusBadge(status?: string | null) {
   const s = status ?? "OUVERTE";
   if (s === "LEVEE") {
-    return { label: "Levée", className: "bg-emerald-50 text-emerald-700 border-emerald-200" };
+    return { label: "LevÃ©e", className: "bg-emerald-50 text-emerald-700 border-emerald-200" };
   }
   if (s === "EN_COURS") {
     return { label: "En cours", className: "bg-amber-50 text-amber-700 border-amber-200" };
@@ -209,7 +209,7 @@ function reservePriorityBadge(priority?: string | null) {
 }
 
 function stripLegacyPrefix(titre: string) {
-  const idx = titre.indexOf(" — ");
+  const idx = titre.indexOf(" â€” ");
   if (idx <= 0) return titre;
   return titre.slice(idx + 3).trim();
 }
@@ -265,7 +265,7 @@ function formatDocumentVisibility(doc: ChantierDocumentRow): string {
   if (legacy === "ADMIN") return "ADMIN";
   if (legacy === "CUSTOM") return "RESTRICTED";
   if (legacy === "INTERVENANT" || legacy === "INTERVENANTS" || legacy === "CLIENT") return "GLOBAL";
-  return legacy || "—";
+  return legacy || "â€”";
 }
 function visibilityBadgeClass(label: string) {
   const key = String(label || "").toLowerCase();
@@ -379,7 +379,7 @@ export default function ChantierPage() {
   const [tasksError, setTasksError] = useState<string | null>(null);
   const [tasksPlanningWarning, setTasksPlanningWarning] = useState<string | null>(null);
 
-  // Temps tab (draft par tâche) : date début/fin + ajout (h)
+  // Temps tab (draft par tÃ¢che) : date dÃ©but/fin + ajout (h)
   const [timeDraftByTaskId, setTimeDraftByTaskId] = useState<
     Record<string, { date_debut: string; date_fin: string; ajout_h: string }>
   >({});
@@ -420,7 +420,7 @@ export default function ChantierPage() {
   const [documentEditLoadingAccess, setDocumentEditLoadingAccess] = useState(false);
   const [doeDocumentIds, setDoeDocumentIds] = useState<string[]>([]);
   const [doeSyncingDocumentId, setDoeSyncingDocumentId] = useState<string | null>(null);
-  // Réserves
+  // RÃ©serves
   const [reserves, setReserves] = useState<ChantierReserveRow[]>([]);
   const [reservesLoading, setReservesLoading] = useState(false);
   const [reservesError, setReservesError] = useState<string | null>(null);
@@ -469,7 +469,7 @@ export default function ChantierPage() {
   const [intervenantsLoading, setIntervenantsLoading] = useState(false);
   const [intervenantsError, setIntervenantsError] = useState<string | null>(null);
 
-  // ENVOI ACCÈS (bouton "Envoyer accès")
+  // ENVOI ACCÃˆS (bouton "Envoyer accÃ¨s")
   const [sendingAccessId, setSendingAccessId] = useState<string | null>(null);
   const [generatingIntervenantLink, setGeneratingIntervenantLink] = useState(false);
   const [generatedIntervenantLink, setGeneratedIntervenantLink] = useState<string>("");
@@ -487,7 +487,7 @@ export default function ChantierPage() {
   const [editIntervenantEmail, setEditIntervenantEmail] = useState("");
   const [editIntervenantTel, setEditIntervenantTel] = useState("");
 
-  // Ajout tâche
+  // Ajout tÃ¢che
   const [newTitre, setNewTitre] = useState("");
   const [, setNewCorpsEtat] = useState("");
   const [newLotSelection, setNewLotSelection] = useState("");
@@ -502,7 +502,7 @@ export default function ChantierPage() {
   const [addingTask, setAddingTask] = useState(false);
   const [taskCreateDrawerOpen, setTaskCreateDrawerOpen] = useState(false);
 
-  // Edition tâche
+  // Edition tÃ¢che
   const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
   const [savingTask, setSavingTask] = useState(false);
   const [editTitre, setEditTitre] = useState("");
@@ -546,15 +546,15 @@ export default function ChantierPage() {
   const [lGen, setLGen] = useState(true);
   const [addingLigne, setAddingLigne] = useState(false);
 
-  // Filtres tâches
+  // Filtres tÃ¢ches
   const [filterIntervenant, setFilterIntervenant] = useState<string>("__ALL__");
 
-  // Matériel
+  // MatÃ©riel
   const [materiel, setMateriel] = useState<MaterielDemandeRow[]>([]);
   const [materielLoading, setMaterielLoading] = useState(false);
   const [materielError, setMaterielError] = useState<string | null>(null);
 
-  // Form matériel
+  // Form matÃ©riel
   const [mIntervenantId, setMIntervenantId] = useState<string>("__NONE__");
   const [mTaskId, setMTaskId] = useState("");
   const [mDesignation, setMDesignation] = useState("");
@@ -633,7 +633,7 @@ export default function ChantierPage() {
       return;
     }
     if (documentVisibilityMode === "RESTRICTED" && documentAccessIds.length === 0) {
-      setDocumentModalError("Sélectionnez au moins un intervenant ou choisissez Admin uniquement.");
+      setDocumentModalError("SÃ©lectionnez au moins un intervenant ou choisissez Admin uniquement.");
       return;
     }
 
@@ -662,7 +662,7 @@ export default function ChantierPage() {
       const data = await listDocumentsByChantier(id);
       setDocuments(data);
       setChantierDocuments(data);
-      setToast({ type: "ok", msg: "Document importé." });
+      setToast({ type: "ok", msg: "Document importÃ©." });
       closeDocumentModal();
     } catch (err: any) {
       console.error("[documents] upload error", err?.message ?? err);
@@ -789,7 +789,7 @@ export default function ChantierPage() {
       return;
     }
     if (documentEditVisibilityMode === "RESTRICTED" && documentEditAccessIds.length === 0) {
-      setDocumentEditError("Sélectionnez au moins un intervenant ou choisissez Admin uniquement.");
+      setDocumentEditError("SÃ©lectionnez au moins un intervenant ou choisissez Admin uniquement.");
       return;
     }
 
@@ -813,7 +813,7 @@ export default function ChantierPage() {
       const data = await listDocumentsByChantier(updated.chantier_id);
       setDocuments(data);
       setChantierDocuments(data);
-      setToast({ type: "ok", msg: "Document mis à jour." });
+      setToast({ type: "ok", msg: "Document mis Ã  jour." });
       closeDocumentEdit();
     } catch (err: any) {
       const message = isAdminOnlyError(err)
@@ -842,7 +842,7 @@ export default function ChantierPage() {
         setDocuments(data);
         setChantierDocuments(data);
       }
-      setToast({ type: "ok", msg: "Document supprimé." });
+      setToast({ type: "ok", msg: "Document supprimÃ©." });
       closeDocumentEdit();
     } catch (err: any) {
       const message = isAdminOnlyError(err)
@@ -912,7 +912,7 @@ export default function ChantierPage() {
       setReserves(data);
     } catch (err: any) {
       setReserves([]);
-      setReservesError(err?.message ?? "Erreur chargement réserves.");
+      setReservesError(err?.message ?? "Erreur chargement rÃ©serves.");
     } finally {
       setReservesLoading(false);
     }
@@ -948,7 +948,7 @@ export default function ChantierPage() {
           await reorderDoeItems(id, nextIds);
         }
         setDoeDocumentIds(nextIds);
-        setToast({ type: "ok", msg: "Document retiré du DOE." });
+        setToast({ type: "ok", msg: "Document retirÃ© du DOE." });
       } else {
         const sortOrder = doeDocumentIds.length + 1;
         await upsertDoeItem({
@@ -960,7 +960,7 @@ export default function ChantierPage() {
         setToast({ type: "ok", msg: "Document inclus au DOE." });
       }
     } catch (err: any) {
-      const message = err?.message ?? "Erreur mise à jour DOE.";
+      const message = err?.message ?? "Erreur mise Ã  jour DOE.";
       setToast({ type: "error", msg: message });
     } finally {
       setDoeSyncingDocumentId(null);
@@ -977,7 +977,7 @@ export default function ChantierPage() {
       return;
     }
     if (!reserveDraftTaskId) {
-      setReserveDrawerError("Tâche requise.");
+      setReserveDrawerError("TÃ¢che requise.");
       return;
     }
 
@@ -1003,7 +1003,7 @@ export default function ChantierPage() {
         });
         setReserves((prev) => prev.map((r) => (r.id === updated.id ? updated : r)));
         setActiveReserve(updated);
-        setToast({ type: "ok", msg: "Réserve mise à jour." });
+        setToast({ type: "ok", msg: "RÃ©serve mise Ã  jour." });
       } else {
         const created = await createReserve({
           chantier_id: id,
@@ -1015,7 +1015,7 @@ export default function ChantierPage() {
           intervenant_id: derivedIntervenantId,
         });
         setReserves((prev) => [created, ...prev]);
-        setToast({ type: "ok", msg: "Réserve créée." });
+        setToast({ type: "ok", msg: "RÃ©serve crÃ©Ã©e." });
         closeReserveDrawer();
       }
     } catch (err: any) {
@@ -1036,7 +1036,7 @@ export default function ChantierPage() {
       setReserves((prev) => prev.map((r) => (r.id === updated.id ? updated : r)));
       setActiveReserve(updated);
       setReserveDraftStatus(updated.status as ReserveStatus);
-      setToast({ type: "ok", msg: "Réserve marquée levée." });
+      setToast({ type: "ok", msg: "RÃ©serve marquÃ©e levÃ©e." });
     } catch (err: any) {
       const message = err?.message ?? "Erreur mise a jour reserve.";
       setReserveDrawerError(message);
@@ -1158,7 +1158,7 @@ export default function ChantierPage() {
   }) {
     if (!reservePlanDocumentId) return;
     if (!activeReserve) {
-      const createNow = confirm("Aucune réserve sélectionnée. Créer une nouvelle réserve ?");
+      const createNow = confirm("Aucune rÃ©serve sÃ©lectionnÃ©e. CrÃ©er une nouvelle rÃ©serve ?");
       if (createNow) {
         openReserveDrawer(null);
       }
@@ -1260,7 +1260,7 @@ export default function ChantierPage() {
         setReserveMarkers((prev) => prev.filter((marker) => marker.id !== markerId));
       }
       setReserveSelectedMarkerId((prev) => (prev === markerId ? null : prev));
-      setToast({ type: "ok", msg: "Marqueur supprimé." });
+      setToast({ type: "ok", msg: "Marqueur supprimÃ©." });
     } catch (err: any) {
       const message = err?.message ?? "Erreur suppression marqueur.";
       setToast({ type: "error", msg: message });
@@ -1291,7 +1291,7 @@ export default function ChantierPage() {
       });
       await loadReserveMarkersForPlan(reservePlanDocumentId);
       setReserveSelectedMarkerId(null);
-      setToast({ type: "ok", msg: `${removed} marqueur(s) supprimé(s).` });
+      setToast({ type: "ok", msg: `${removed} marqueur(s) supprimÃ©(s).` });
     } catch (err: any) {
       const message = err?.message ?? "Erreur suppression du groupe.";
       setToast({ type: "error", msg: message });
@@ -1319,11 +1319,11 @@ export default function ChantierPage() {
         scope,
       });
       if (updated === 0) {
-        setToast({ type: "error", msg: "Aucun marqueur correspondant à renommer sur cette page." });
+        setToast({ type: "error", msg: "Aucun marqueur correspondant Ã  renommer sur cette page." });
         return;
       }
       await loadReserveMarkersForPlan(reservePlanDocumentId);
-      setToast({ type: "ok", msg: `${updated} marqueur(s) renommé(s).` });
+      setToast({ type: "ok", msg: `${updated} marqueur(s) renommÃ©(s).` });
     } catch (err: any) {
       const message = err?.message ?? "Erreur renommage du groupe.";
       setToast({ type: "error", msg: message });
@@ -1403,7 +1403,7 @@ export default function ChantierPage() {
     );
 
     if (taskDocumentsSelection.length > 0 && effectiveIntervenantIds.length === 0) {
-      setTaskDocumentsModalError("Sélectionne au moins un intervenant autorisé.");
+      setTaskDocumentsModalError("SÃ©lectionne au moins un intervenant autorisÃ©.");
       return;
     }
 
@@ -1417,7 +1417,7 @@ export default function ChantierPage() {
       });
       const links = await listTaskDocumentsByTaskIds(tasks.map((t) => t.id));
       setTaskDocumentLinks(links);
-      setToast({ type: "ok", msg: "Documents et autorisations mis à jour." });
+      setToast({ type: "ok", msg: "Documents et autorisations mis Ã  jour." });
       closeTaskDocumentsModal();
     } catch (err: any) {
       const message = err?.message ?? "Erreur mise a jour des documents.";
@@ -1482,7 +1482,7 @@ export default function ChantierPage() {
       setMateriel(data);
     } catch (e: any) {
       setMateriel([]);
-      setMaterielError(e?.message ?? "Erreur chargement matériel.");
+      setMaterielError(e?.message ?? "Erreur chargement matÃ©riel.");
     } finally {
       setMaterielLoading(false);
     }
@@ -1516,7 +1516,7 @@ export default function ChantierPage() {
           );
         } catch (e: any) {
           if (!alive) return;
-          setTasksError(e?.message ?? "Erreur lors du chargement des tâches.");
+          setTasksError(e?.message ?? "Erreur lors du chargement des tÃ¢ches.");
           setTasks([]);
           setTasksPlanningWarning(null);
         } finally {
@@ -1553,7 +1553,7 @@ export default function ChantierPage() {
           if (alive) setIntervenantsLoading(false);
         }
 
-        // matériel
+        // matÃ©riel
         setMaterielLoading(true);
         setMaterielError(null);
         try {
@@ -1563,7 +1563,7 @@ export default function ChantierPage() {
         } catch (e: any) {
           if (!alive) return;
           setMateriel([]);
-          setMaterielError(e?.message ?? "Erreur chargement matériel.");
+          setMaterielError(e?.message ?? "Erreur chargement matÃ©riel.");
         } finally {
           if (alive) setMaterielLoading(false);
         }
@@ -1971,32 +1971,32 @@ export default function ChantierPage() {
     if (overdueTasks.length > 0) {
       rows.push({
         key: "retard",
-        title: "Tâches en retard",
-        detail: `${overdueTasks.length} tâche${overdueTasks.length > 1 ? "s" : ""} à relancer`,
+        title: "TÃ¢ches en retard",
+        detail: `${overdueTasks.length} tÃ¢che${overdueTasks.length > 1 ? "s" : ""} Ã  relancer`,
         tone: overdueTasks.length > 3 ? "danger" : "warning",
       });
     }
     if (blockedLots.length > 0) {
       rows.push({
         key: "lots",
-        title: "Lots bloqués",
-        detail: blockedLots.slice(0, 2).join(" • "),
+        title: "Lots bloquÃ©s",
+        detail: blockedLots.slice(0, 2).join(" â€¢ "),
         tone: "warning",
       });
     }
     if (heuresDepassees > 0) {
       rows.push({
         key: "budget",
-        title: "Dépassement budget",
-        detail: `${heuresDepassees.toFixed(1)} h au-dessus du prévu`,
+        title: "DÃ©passement budget",
+        detail: `${heuresDepassees.toFixed(1)} h au-dessus du prÃ©vu`,
         tone: "danger",
       });
     }
     if (missingRecentTime) {
       rows.push({
         key: "temps",
-        title: "Absence de saisie récente",
-        detail: "Aucune saisie temps récente sur le chantier",
+        title: "Absence de saisie rÃ©cente",
+        detail: "Aucune saisie temps rÃ©cente sur le chantier",
         tone: "warning",
       });
     }
@@ -2005,7 +2005,7 @@ export default function ChantierPage() {
 
   /* ---------------- actions ---------------- */
 
-  // ----- tâches -----
+  // ----- tÃ¢ches -----
   function createLotAndSelect(lotName: string, target: "add" | "edit"): string | null {
     const cleanName = normalizeLotLabel(lotName);
     if (!cleanName) {
@@ -2038,7 +2038,7 @@ export default function ChantierPage() {
       setEditLotDraftName("");
     }
 
-    setToast({ type: "ok", msg: "Lot ajouté à la liste." });
+    setToast({ type: "ok", msg: "Lot ajoutÃ© Ã  la liste." });
     return cleanName;
   }
 
@@ -2049,8 +2049,8 @@ export default function ChantierPage() {
       await updateTask(t.id, { status: nextStatus });
     } catch (e: any) {
       setTasks((prev) => prev.map((x) => (x.id === t.id ? { ...x, status: t.status } : x)));
-      setTasksError(e?.message ?? "Erreur lors de la mise à jour de la tâche.");
-      setToast({ type: "error", msg: e?.message ?? "Erreur mise à jour tâche." });
+      setTasksError(e?.message ?? "Erreur lors de la mise Ã  jour de la tÃ¢che.");
+      setToast({ type: "error", msg: e?.message ?? "Erreur mise Ã  jour tÃ¢che." });
     }
   }
 
@@ -2075,7 +2075,7 @@ export default function ChantierPage() {
     const draftRaw = String(taskProgressDrafts[task.id] ?? "").trim().replace(",", ".");
     const parsed = Number(draftRaw);
     if (!Number.isFinite(parsed)) {
-      setToast({ type: "error", msg: "Valeur d'ajustement invalide (-100 à 100)." });
+      setToast({ type: "error", msg: "Valeur d'ajustement invalide (-100 Ã  100)." });
       return;
     }
 
@@ -2102,11 +2102,11 @@ export default function ChantierPage() {
         ),
       );
       setTaskProgressDrafts((prev) => ({ ...prev, [task.id]: String(Math.round(clamped)) }));
-      setToast({ type: "ok", msg: "Ajustement d'avancement appliqué." });
+      setToast({ type: "ok", msg: "Ajustement d'avancement appliquÃ©." });
       setTaskProgressEditingId((prev) => (prev === task.id ? null : prev));
       await refreshTasksOnly();
     } catch (e: any) {
-      setToast({ type: "error", msg: e?.message ?? "Erreur mise à jour avancement." });
+      setToast({ type: "error", msg: e?.message ?? "Erreur mise Ã  jour avancement." });
       await refreshTasksOnly();
     } finally {
       setTaskProgressSavingId(null);
@@ -2135,7 +2135,7 @@ export default function ChantierPage() {
         ),
       );
       setTaskProgressDrafts((prev) => ({ ...prev, [task.id]: "0" }));
-      setToast({ type: "ok", msg: "Retour au calcul automatique appliqué." });
+      setToast({ type: "ok", msg: "Retour au calcul automatique appliquÃ©." });
       setTaskProgressEditingId((prev) => (prev === task.id ? null : prev));
       await refreshTasksOnly();
     } catch (e: any) {
@@ -2167,23 +2167,23 @@ export default function ChantierPage() {
     const tempsPrevuRaw = newTempsPrevuH.trim();
     const tempsPrevu = tempsPrevuRaw === "" ? null : toNumberOrNull(tempsPrevuRaw);
     if (tempsPrevuRaw !== "" && (tempsPrevu === null || tempsPrevu <= 0)) {
-      setTasksError("Temps prévu invalide (heures > 0).");
+      setTasksError("Temps prÃ©vu invalide (heures > 0).");
       return;
     }
     if (newLotSelection === "__CREATE__") {
-      setTasksError("Crée d'abord le nouveau lot avant d'ajouter la tâche.");
+      setTasksError("CrÃ©e d'abord le nouveau lot avant d'ajouter la tÃ¢che.");
       return;
     }
     const lotName = normalizeLotLabel(newLotSelection) || normalizeLotLabel(newLotDraftName) || null;
     if (!lotName) {
-      setTasksError("Choisis un lot dans la liste ou crée-en un nouveau.");
+      setTasksError("Choisis un lot dans la liste ou crÃ©e-en un nouveau.");
       return;
     }
     const durationRaw = newDurationDays.trim();
     const durationParsed = Number(durationRaw || "1");
     const durationDays = Number.isFinite(durationParsed) ? Math.max(1, Math.trunc(durationParsed)) : NaN;
     if (!Number.isFinite(durationDays)) {
-      setTasksError("Durée invalide.");
+      setTasksError("DurÃ©e invalide.");
       return;
     }
 
@@ -2253,11 +2253,11 @@ export default function ChantierPage() {
       setNewTempsPrevuH("1");
       setTaskCreateDrawerOpen(false);
 
-      setToast({ type: "ok", msg: "Tâche ajoutée." });
+      setToast({ type: "ok", msg: "TÃ¢che ajoutÃ©e." });
     } catch (e: any) {
       setTasks((prev) => prev.filter((t) => t.id !== tempId));
-      setTasksError(e?.message ?? "Erreur lors de l’ajout de la tâche.");
-      setToast({ type: "error", msg: e?.message ?? "Erreur ajout tâche." });
+      setTasksError(e?.message ?? "Erreur lors de lâ€™ajout de la tÃ¢che.");
+      setToast({ type: "error", msg: e?.message ?? "Erreur ajout tÃ¢che." });
     } finally {
       setAddingTask(false);
     }
@@ -2293,7 +2293,7 @@ export default function ChantierPage() {
   function openTaskTemplateDrawerFromTask(t: ChantierTaskRow) {
     const titre = editTitre.trim() || stripLegacyPrefix(t.titre ?? "");
     if (!titre) {
-      setToast({ type: "error", msg: "Titre tâche manquant." });
+      setToast({ type: "error", msg: "Titre tÃ¢che manquant." });
       return;
     }
 
@@ -2329,7 +2329,7 @@ export default function ChantierPage() {
     setTaskTemplateError(null);
     try {
       await createTaskTemplate(payload);
-      setToast({ type: "ok", msg: "Template ajouté à la bibliothèque." });
+      setToast({ type: "ok", msg: "Template ajoutÃ© Ã  la bibliothÃ¨que." });
       closeTaskTemplateDrawer();
     } catch (err: any) {
       const message = err?.message ?? "Erreur ajout template.";
@@ -2358,14 +2358,14 @@ export default function ChantierPage() {
     const tempsPrevuRaw = editTempsPrevuH.trim();
     const tempsPrevu = tempsPrevuRaw === "" ? null : toNumberOrNull(tempsPrevuRaw);
     if (tempsPrevuRaw !== "" && (tempsPrevu === null || tempsPrevu <= 0)) {
-      setToast({ type: "error", msg: "Temps prévu invalide (heures > 0)." });
+      setToast({ type: "error", msg: "Temps prÃ©vu invalide (heures > 0)." });
       return;
     }
     const durationRaw = editDurationDays.trim();
     const durationParsed = Number(durationRaw || "1");
     const durationDays = Number.isFinite(durationParsed) ? Math.max(1, Math.trunc(durationParsed)) : NaN;
     if (!Number.isFinite(durationDays)) {
-      setToast({ type: "error", msg: "Durée invalide." });
+      setToast({ type: "error", msg: "DurÃ©e invalide." });
       return;
     }
 
@@ -2377,13 +2377,13 @@ export default function ChantierPage() {
       return;
     }
     if (editLotSelection === "__CREATE__") {
-      setToast({ type: "error", msg: "Crée d'abord le nouveau lot avant d'enregistrer." });
+      setToast({ type: "error", msg: "CrÃ©e d'abord le nouveau lot avant d'enregistrer." });
       return;
     }
 
     const lotName = normalizeLotLabel(editLotSelection) || normalizeLotLabel(editLotDraftName) || null;
     if (!lotName) {
-      setToast({ type: "error", msg: "Choisis un lot avant d'enregistrer la tâche." });
+      setToast({ type: "error", msg: "Choisis un lot avant d'enregistrer la tÃ¢che." });
       return;
     }
 
@@ -2405,11 +2405,11 @@ export default function ChantierPage() {
 
     try {
       await updateTask(t.id, patch as any);
-      setToast({ type: "ok", msg: "Tâche mise à jour." });
+      setToast({ type: "ok", msg: "TÃ¢che mise Ã  jour." });
       setEditingTaskId(null);
     } catch (e: any) {
       await refreshTasksOnly();
-      setToast({ type: "error", msg: e?.message ?? "Erreur mise à jour tâche." });
+      setToast({ type: "error", msg: e?.message ?? "Erreur mise Ã  jour tÃ¢che." });
     } finally {
       setSavingTask(false);
     }
@@ -2432,7 +2432,7 @@ export default function ChantierPage() {
 
     const nom = (editIntervenantNom ?? "").trim();
     if (!nom) {
-      setToast({ type: "error", msg: "Le nom de l’intervenant est obligatoire." });
+      setToast({ type: "error", msg: "Le nom de lâ€™intervenant est obligatoire." });
       return;
     }
 
@@ -2448,23 +2448,23 @@ export default function ChantierPage() {
         prev.map((x) => (x.id === updated.id ? updated : x)).sort((a, b) => a.nom.localeCompare(b.nom)),
       );
 
-      setToast({ type: "ok", msg: "Intervenant mis à jour." });
+      setToast({ type: "ok", msg: "Intervenant mis Ã  jour." });
       setEditingIntervenant(null);
     } catch (e: any) {
-      setToast({ type: "error", msg: e?.message ?? "Erreur mise à jour intervenant." });
+      setToast({ type: "error", msg: e?.message ?? "Erreur mise Ã  jour intervenant." });
     } finally {
       setSavingIntervenant(false);
     }
   }
 
   async function onDeleteIntervenant(i: IntervenantRow) {
-    const ok = confirm(`Supprimer l’intervenant "${i.nom}" ?`);
+    const ok = confirm(`Supprimer lâ€™intervenant "${i.nom}" ?`);
     if (!ok) return;
 
     try {
       await deleteIntervenant(i.id);
       setIntervenants((prev) => prev.filter((x) => x.id !== i.id));
-      setToast({ type: "ok", msg: "Intervenant supprimé." });
+      setToast({ type: "ok", msg: "Intervenant supprimÃ©." });
     } catch (e: any) {
       setToast({ type: "error", msg: e?.message ?? "Erreur suppression intervenant." });
     }
@@ -2484,7 +2484,7 @@ export default function ChantierPage() {
     if (email) {
       const exists = intervenants.some((row) => String(row.email ?? "").trim().toLowerCase() === email.toLowerCase());
       if (exists) {
-        const friendly = "Cet email est déjà utilisé par un intervenant.";
+        const friendly = "Cet email est dÃ©jÃ  utilisÃ© par un intervenant.";
         setIntervenantsError(friendly);
         setToast({ type: "error", msg: friendly });
         return;
@@ -2508,19 +2508,19 @@ export default function ChantierPage() {
       setNewIntervenantEmail("");
       setNewIntervenantTel("");
 
-      setToast({ type: "ok", msg: "Intervenant ajouté." });
+      setToast({ type: "ok", msg: "Intervenant ajoutÃ©." });
     } catch (e: any) {
       const message = isIntervenantDuplicateEmailError(e)
-        ? "Cet email est déjà utilisé par un intervenant."
-        : e?.message ?? "Erreur création intervenant.";
+        ? "Cet email est dÃ©jÃ  utilisÃ© par un intervenant."
+        : e?.message ?? "Erreur crÃ©ation intervenant.";
       setIntervenantsError(message);
       setToast({ type: "error", msg: message });
     } finally {
       setCreatingIntervenant(false);
     }
   }
-  // ----- ENVOI ACCÈS -----
-  // même si le mail ne part pas : on récupère le token et on construit le lien public côté front
+  // ----- ENVOI ACCÃˆS -----
+  // mÃªme si le mail ne part pas : on rÃ©cupÃ¨re le token et on construit le lien public cÃ´tÃ© front
   async function onSendAccess(i: IntervenantRow) {
     if (!id) return;
 
@@ -2547,16 +2547,16 @@ export default function ChantierPage() {
 
       const copied = await copyToClipboard(accessUrl);
       if (copied) {
-        setToast({ type: "ok", msg: `Lien d’accès copié. Tu peux l’envoyer à ${i.nom}.` });
+        setToast({ type: "ok", msg: `Lien dâ€™accÃ¨s copiÃ©. Tu peux lâ€™envoyer Ã  ${i.nom}.` });
       } else {
         // fallback simple (fonctionne partout)
-        window.prompt("Copie ce lien et envoie-le à l’intervenant :", accessUrl);
-        setToast({ type: "ok", msg: `Lien d’accès généré. Envoie-le à ${i.nom}.` });
+        window.prompt("Copie ce lien et envoie-le Ã  lâ€™intervenant :", accessUrl);
+        setToast({ type: "ok", msg: `Lien dâ€™accÃ¨s gÃ©nÃ©rÃ©. Envoie-le Ã  ${i.nom}.` });
       }
     } catch (e: any) {
       const message = isPublicAppUrlConfigError(e)
-        ? e?.message ?? "VITE_PUBLIC_APP_URL manquant (à définir sur Vercel et en local)"
-        : e?.message ?? "Erreur lors de l’envoi de l’accès.";
+        ? e?.message ?? "VITE_PUBLIC_APP_URL manquant (Ã  dÃ©finir sur Vercel et en local)"
+        : e?.message ?? "Erreur lors de lâ€™envoi de lâ€™accÃ¨s.";
       setToast({ type: "error", msg: message });
     } finally {
       setSendingAccessId(null);
@@ -2645,7 +2645,7 @@ export default function ChantierPage() {
       if (error) throw error;
 
       const token = resolveIntervenantTokenFromRpc(data);
-      if (!token) throw new Error("Token intervenant introuvable dans la réponse RPC.");
+      if (!token) throw new Error("Token intervenant introuvable dans la rÃ©ponse RPC.");
 
       const url = buildIntervenantLink(token);
       if (import.meta.env.DEV) {
@@ -2655,14 +2655,14 @@ export default function ChantierPage() {
 
       const copied = await copyToClipboard(url);
       if (copied) {
-        setToast({ type: "ok", msg: "Lien intervenant généré et copié." });
+        setToast({ type: "ok", msg: "Lien intervenant gÃ©nÃ©rÃ© et copiÃ©." });
       } else {
-        setToast({ type: "ok", msg: "Lien intervenant généré." });
+        setToast({ type: "ok", msg: "Lien intervenant gÃ©nÃ©rÃ©." });
       }
     } catch (e: any) {
       const message = isPublicAppUrlConfigError(e)
-        ? e?.message ?? "VITE_PUBLIC_APP_URL manquant (à définir sur Vercel et en local)"
-        : e?.message ?? "Erreur génération lien intervenant.";
+        ? e?.message ?? "VITE_PUBLIC_APP_URL manquant (Ã  dÃ©finir sur Vercel et en local)"
+        : e?.message ?? "Erreur gÃ©nÃ©ration lien intervenant.";
       setToast({ type: "error", msg: message });
     } finally {
       setGeneratingIntervenantLink(false);
@@ -2688,7 +2688,7 @@ export default function ChantierPage() {
 
     const designation = lDesignation.trim();
     if (!designation) {
-      setLignesError("La désignation est obligatoire.");
+      setLignesError("La dÃ©signation est obligatoire.");
       return;
     }
 
@@ -2723,7 +2723,7 @@ export default function ChantierPage() {
       setLQty("1");
       setLGen(true);
 
-      setToast({ type: "ok", msg: "Ligne ajoutée." });
+      setToast({ type: "ok", msg: "Ligne ajoutÃ©e." });
 
       if (lGen && id) {
         await refreshTasksOnly();
@@ -2741,18 +2741,18 @@ export default function ChantierPage() {
     try {
       await deleteDevisLigne(ligneId);
       setLignes((prev) => prev.filter((x) => x.id !== ligneId));
-      setToast({ type: "ok", msg: "Ligne supprimée." });
+      setToast({ type: "ok", msg: "Ligne supprimÃ©e." });
     } catch (e: any) {
       setLignesError(e?.message ?? "Erreur suppression ligne.");
       setToast({ type: "error", msg: e?.message ?? "Erreur suppression ligne." });
     }
   }
 
-  // ----- matériel -----
+  // ----- matÃ©riel -----
   function materielStatusLabel(s: MaterielStatus) {
-    if (s === "validee") return "Validée";
-    if (s === "refusee") return "Refusée";
-    if (s === "livree") return "Livrée";
+    if (s === "validee") return "ValidÃ©e";
+    if (s === "refusee") return "RefusÃ©e";
+    if (s === "livree") return "LivrÃ©e";
     return "En attente";
   }
 
@@ -2778,11 +2778,11 @@ export default function ChantierPage() {
       return;
     }
     if (!designation) {
-      setMaterielError("Désignation obligatoire.");
+      setMaterielError("DÃ©signation obligatoire.");
       return;
     }
     if (!Number.isFinite(qty) || qty <= 0) {
-      setMaterielError("Quantité invalide.");
+      setMaterielError("Quantite invalide.");
       return;
     }
 
@@ -2834,11 +2834,11 @@ export default function ChantierPage() {
       setMStatus("en_attente");
       setMRemarques("");
 
-      setToast({ type: "ok", msg: "Demande matériel ajoutée." });
+      setToast({ type: "ok", msg: "Demande matÃ©riel ajoutÃ©e." });
     } catch (e: any) {
       setMateriel((prev) => prev.filter((x) => x.id !== tempId));
-      setMaterielError(e?.message ?? "Erreur ajout matériel.");
-      setToast({ type: "error", msg: e?.message ?? "Erreur ajout matériel." });
+      setMaterielError(e?.message ?? "Erreur ajout matÃ©riel.");
+      setToast({ type: "error", msg: e?.message ?? "Erreur ajout matÃ©riel." });
     } finally {
       setAddingMateriel(false);
     }
@@ -2856,15 +2856,15 @@ export default function ChantierPage() {
     try {
       const updated = await updateMaterielDemande(row.id, { statut: status, admin_commentaire: adminCommentaire } as any);
       setMateriel((prev) => prev.map((x) => (x.id === row.id ? updated : x)));
-      setToast({ type: "ok", msg: "Statut matériel mis à jour." });
+      setToast({ type: "ok", msg: "Statut matÃ©riel mis Ã  jour." });
     } catch (e: any) {
       await refreshMateriel();
-      setToast({ type: "error", msg: e?.message ?? "Erreur mise à jour matériel." });
+      setToast({ type: "error", msg: e?.message ?? "Erreur mise Ã  jour matÃ©riel." });
     }
   }
 
   async function onDeleteMateriel(row: MaterielDemandeRow) {
-    const label = row.titre || row.designation || "demande matériel";
+    const label = row.titre || row.designation || "demande matÃ©riel";
     const ok = confirm(`Supprimer la demande "${label}" ?`);
     if (!ok) return;
 
@@ -2873,10 +2873,10 @@ export default function ChantierPage() {
 
     try {
       await deleteMaterielDemande(row.id);
-      setToast({ type: "ok", msg: "Demande supprimée." });
+      setToast({ type: "ok", msg: "Demande supprimÃ©e." });
     } catch (e: any) {
       setMateriel(before);
-      setToast({ type: "error", msg: e?.message ?? "Erreur suppression matériel." });
+      setToast({ type: "error", msg: e?.message ?? "Erreur suppression matÃ©riel." });
     }
   }
 
@@ -2898,7 +2898,7 @@ export default function ChantierPage() {
   if (loading) {
     return (
       <div className="rounded-2xl border bg-white p-6">
-        <div className="font-semibold">Chargement…</div>
+        <div className="font-semibold">Chargement...</div>
         <div className="text-slate-500 text-sm mt-1">Ouverture du dossier chantier.</div>
       </div>
     );
@@ -2916,7 +2916,7 @@ export default function ChantierPage() {
     return (
       <div className="rounded-2xl border bg-white p-6">
         <div className="font-semibold">Chantier introuvable</div>
-        <div className="text-slate-500 text-sm mt-1">Aucun chantier ne correspond à cet ID.</div>
+        <div className="text-slate-500 text-sm mt-1">Aucun chantier ne correspond Ã  cet ID.</div>
       </div>
     );
   }
@@ -2954,8 +2954,8 @@ export default function ChantierPage() {
             <span className={["rounded-full border px-2 py-1 text-xs", badge.className].join(" ")}>{badge.label}</span>
           </div>
           <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-sm text-slate-500">
-            <span>Debut {item.date_debut ?? "—"}</span>
-            <span>Fin {item.date_fin_prevue ?? "—"}</span>
+            <span>Debut {item.date_debut ?? "â€”"}</span>
+            <span>Fin {item.date_fin_prevue ?? "â€”"}</span>
           </div>
           <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-slate-100">
             <div className="h-full rounded-full bg-blue-600" style={{ width: `${avancement}%` }} />
@@ -3096,7 +3096,7 @@ export default function ChantierPage() {
           <div className="space-y-3">
             <div className="flex items-center justify-between">
               <div>
-                <div className="font-semibold section-title">Temps (par tâche)</div>
+                <div className="font-semibold section-title">Temps (par tÃ¢che)</div>
               </div>
               <div className="text-xs text-slate-500">
                 Total saisi : <span className="font-semibold">{totalTempsReel} h</span>
@@ -3113,13 +3113,13 @@ export default function ChantierPage() {
                     <div className="min-w-0">
                       <div className="font-medium truncate">{stripLegacyPrefix(t.titre ?? "")}</div>
                       <div className="text-xs text-slate-500">
-                        {(t.corps_etat ?? "—")} • Intervenant : {it?.nom ?? "—"}
+                        {(t.corps_etat ?? "â€”")} | Intervenant: {it?.nom ?? "â€”"}
                       </div>
                     </div>
 
                     <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-5">
                       <div className="space-y-1">
-                        <div className="text-xs text-slate-600">Date début</div>
+                        <div className="text-xs text-slate-600">Date dÃ©but</div>
                         <input
                           className="w-full min-w-0 rounded-xl border px-2.5 py-2 text-sm"
                           type="date"
@@ -3236,7 +3236,7 @@ export default function ChantierPage() {
                                 [t.id]: { ...d, ajout_h: "" },
                               }));
 
-                              setToast({ type: "ok", msg: "Temps enregistré." });
+                              setToast({ type: "ok", msg: "Temps enregistrÃ©." });
                             } catch (e: any) {
                               await refreshTasksOnly();
                               setToast({ type: "error", msg: e?.message ?? "Erreur enregistrement temps." });
@@ -3245,7 +3245,7 @@ export default function ChantierPage() {
                             }
                           }}
                         >
-                          {savingTimeTaskId === t.id ? "Enregistrement…" : "Enregistrer"}
+                          {savingTimeTaskId === t.id ? "Enregistrement..." : "Enregistrer"}
                         </button>
                       </div>
                     </div>
@@ -3263,7 +3263,7 @@ export default function ChantierPage() {
               <div>
                 <div className="font-semibold section-title">Intervenants</div>
                 <div className="text-sm text-slate-500">
-                  Créer, modifier et supprimer les intervenants du chantier
+                  CrÃ©er, modifier et supprimer les intervenants du chantier
                 </div>
               </div>
               <div className="flex items-center gap-2">
@@ -3276,7 +3276,7 @@ export default function ChantierPage() {
                   ].join(" ")}
                   disabled={generatingIntervenantLink}
                 >
-                  {generatingIntervenantLink ? "Génération..." : "Générer lien intervenant"}
+                  {generatingIntervenantLink ? "GÃ©nÃ©ration..." : "GÃ©nÃ©rer lien intervenant"}
                 </button>
                 <button
                   type="button"
@@ -3284,7 +3284,7 @@ export default function ChantierPage() {
                   className="rounded-xl border px-3 py-2 text-sm hover:bg-slate-50"
                   disabled={intervenantsLoading}
                 >
-                  {intervenantsLoading ? "Chargement…" : "Rafraîchir"}
+                  {intervenantsLoading ? "Chargement..." : "RafraÃ®chir"}
                 </button>
               </div>
             </div>
@@ -3309,7 +3309,7 @@ export default function ChantierPage() {
                     onClick={async () => {
                       const copied = await copyToClipboard(generatedIntervenantLink);
                       if (copied) {
-                        setToast({ type: "ok", msg: "Lien intervenant copié." });
+                        setToast({ type: "ok", msg: "Lien intervenant copiÃ©." });
                       } else {
                         window.prompt("Copie ce lien :", generatedIntervenantLink);
                       }
@@ -3327,7 +3327,7 @@ export default function ChantierPage() {
               <div className="grid gap-2 md:grid-cols-3">
                 <input
                   className="rounded-xl border px-3 py-2 text-sm"
-                  placeholder="Nom (ex: Pierre — Plombier)"
+                  placeholder="Nom (ex: Pierre â€” Plombier)"
                   value={newIntervenantNom}
                   onChange={(e) => setNewIntervenantNom(e.target.value)}
                 />
@@ -3339,7 +3339,7 @@ export default function ChantierPage() {
                 />
                 <input
                   className="rounded-xl border px-3 py-2 text-sm"
-                  placeholder="Téléphone (optionnel)"
+                  placeholder="TÃ©lÃ©phone (optionnel)"
                   value={newIntervenantTel}
                   onChange={(e) => setNewIntervenantTel(e.target.value)}
                 />
@@ -3353,14 +3353,14 @@ export default function ChantierPage() {
                     creatingIntervenant ? "bg-slate-300 text-slate-700" : "bg-slate-900 text-white hover:bg-slate-800",
                   ].join(" ")}
                 >
-                  {creatingIntervenant ? "Création…" : "+ Ajouter"}
+                  {creatingIntervenant ? "CrÃ©ationâ€¦" : "+ Ajouter"}
                 </button>
               </div>
             </form>
 
             <div className="space-y-2">
               {intervenantsLoading ? (
-                <div className="text-sm text-slate-500">Chargement…</div>
+                <div className="text-sm text-slate-500">Chargement...</div>
               ) : intervenants.length === 0 ? (
                 <div className="text-sm text-slate-500">Aucun intervenant pour le moment.</div>
               ) : (
@@ -3369,7 +3369,7 @@ export default function ChantierPage() {
                     <div className="min-w-0">
                       <div className="font-medium truncate">{i.nom}</div>
                       <div className="text-xs text-slate-500">
-                        {(i.email ?? "—")} • {(i.telephone ?? "—")}
+                        {(i.email ?? "â€”")} â€¢ {(i.telephone ?? "â€”")}
                       </div>
                     </div>
 
@@ -3382,9 +3382,9 @@ export default function ChantierPage() {
                           "text-sm rounded-xl border px-3 py-2",
                           sendingAccessId === i.id ? "bg-slate-100 text-slate-500" : "hover:bg-slate-50",
                         ].join(" ")}
-                        title={i.email ? `Générer / envoyer accès à ${i.email}` : "Email manquant"}
+                        title={i.email ? `GÃ©nÃ©rer / envoyer accÃ¨s Ã  ${i.email}` : "Email manquant"}
                       >
-                        {sendingAccessId === i.id ? "Envoi…" : "Envoyer accès"}
+                        {sendingAccessId === i.id ? "Envoiâ€¦" : "Envoyer accÃ¨s"}
                       </button>
 
                       <button
@@ -3442,9 +3442,9 @@ export default function ChantierPage() {
                   <thead className="text-slate-600">
                     <tr>
                       <th className="px-3 py-2 text-left font-medium">Nom</th>
-                      <th className="px-3 py-2 text-left font-medium">Catégorie</th>
+                      <th className="px-3 py-2 text-left font-medium">CatÃ©gorie</th>
                       <th className="px-3 py-2 text-left font-medium">Type</th>
-                      <th className="px-3 py-2 text-left font-medium">Visibilité</th>
+                      <th className="px-3 py-2 text-left font-medium">VisibilitÃ©</th>
                       <th className="px-3 py-2 text-left font-medium">Date</th>
                       <th className="px-3 py-2 text-left font-medium">Actions</th>
                     </tr>
@@ -3465,7 +3465,7 @@ export default function ChantierPage() {
                           })()}
                         </td>
                         <td className="px-3 py-2">
-                          {doc.created_at ? new Date(doc.created_at).toLocaleDateString("fr-FR") : "—"}
+                          {doc.created_at ? new Date(doc.created_at).toLocaleDateString("fr-FR") : "â€”"}
                         </td>
                         <td className="px-3 py-2">
                           <div className="flex flex-wrap gap-2">
@@ -3481,7 +3481,7 @@ export default function ChantierPage() {
                               ].join(" ")}
                             >
                               {doeSyncingDocumentId === doc.id
-                                ? "Mise à jour..."
+                                ? "Mise Ã  jour..."
                                 : doeDocumentIds.includes(doc.id)
                                   ? "Retirer DOE"
                                   : "Inclure DOE"}
@@ -3505,7 +3505,7 @@ export default function ChantierPage() {
                               onClick={() => downloadDocument(doc)}
                               className="rounded-lg border px-2 py-1 text-xs hover:bg-slate-50"
                             >
-                              Télécharger
+                              TÃ©lÃ©charger
                             </button>
                             <button
                               type="button"
@@ -3525,20 +3525,20 @@ export default function ChantierPage() {
           </div>
         )}
 
-        {/* ---------------- ONGLET RÉSERVES ---------------- */}
+        {/* ---------------- ONGLET RÃ‰SERVES ---------------- */}
         {tab === "reserves" && (
           <div className="space-y-4">
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
-                <div className="font-semibold section-title">Réserves</div>
-                <div className="text-sm text-slate-500">Suivi des réserves chantier.</div>
+                <div className="font-semibold section-title">RÃ©serves</div>
+                <div className="text-sm text-slate-500">Suivi des rÃ©serves chantier.</div>
               </div>
               <button
                 type="button"
                 onClick={() => openReserveDrawer(null)}
                 className="rounded-xl px-4 py-2 text-sm bg-slate-900 text-white hover:bg-slate-800"
               >
-                Nouvelle réserve
+                Nouvelle rÃ©serve
               </button>
             </div>
 
@@ -3547,7 +3547,7 @@ export default function ChantierPage() {
                 [
                   { key: "ALL", label: "Toutes" },
                   { key: "OUVERTES", label: "Ouvertes" },
-                  { key: "LEVEES", label: "Levées" },
+                  { key: "LEVEES", label: "LevÃ©es" },
                 ] as const
               ).map((f) => (
                 <button
@@ -3571,9 +3571,9 @@ export default function ChantierPage() {
             )}
 
             {reservesLoading ? (
-              <div className="text-sm text-slate-500">Chargement…</div>
+              <div className="text-sm text-slate-500">Chargement...</div>
             ) : filteredReserves.length === 0 ? (
-              <div className="text-sm text-slate-500">Aucune réserve pour ce chantier.</div>
+              <div className="text-sm text-slate-500">Aucune rÃ©serve pour ce chantier.</div>
             ) : (
               <div className="space-y-3">
                 {filteredReserves.map((reserve) => {
@@ -3613,10 +3613,10 @@ export default function ChantierPage() {
                         <span className={["px-2 py-1 rounded-full border", priority.className].join(" ")}>
                           {priority.label}
                         </span>
-                        <span>Tâche : {task ? stripLegacyPrefix(task.titre ?? "") : "—"}</span>
-                        <span>Intervenant : {it?.nom ?? "—"}</span>
+                        <span>TÃ¢che : {task ? stripLegacyPrefix(task.titre ?? "") : "â€”"}</span>
+                        <span>Intervenant : {it?.nom ?? "â€”"}</span>
                         <span>
-                          Créée : {new Date(reserve.created_at).toLocaleDateString("fr-FR")}
+                          CrÃ©Ã©e : {new Date(reserve.created_at).toLocaleDateString("fr-FR")}
                         </span>
                       </div>
                     </div>
@@ -3627,7 +3627,7 @@ export default function ChantierPage() {
           </div>
         )}
 
-        {/* ---------------- ONGLET DEVIS & TÂCHES ---------------- */}
+        {/* ---------------- ONGLET DEVIS & TÃ‚CHES ---------------- */}
         {tab === "devis-taches" && (
           <div className="space-y-8">
             {/* DEVIS */}
@@ -3635,10 +3635,10 @@ export default function ChantierPage() {
               <div className="flex items-center justify-between gap-3">
                 <div>
                   <div className="font-semibold">Devis</div>
-                  <div className="text-sm text-slate-500">Import PDF avec extraction IA et aperçu obligatoire</div>
+                  <div className="text-sm text-slate-500">Import PDF avec extraction IA et aperÃ§u obligatoire</div>
                 </div>
                 <div className="flex items-center gap-3">
-                  <div className="text-xs text-slate-500">{devisLoading ? "Chargement…" : `${devis.length} devis`}</div>
+                  <div className="text-xs text-slate-500">{devisLoading ? "Chargement..." : `${devis.length} devis`}</div>
                   <button
                     type="button"
                     className="rounded-xl bg-[#2563EB] px-4 py-2 text-sm text-white hover:bg-[#1d4ed8]"
@@ -3690,7 +3690,7 @@ export default function ChantierPage() {
                           )}
 
                           {lignesLoading ? (
-                            <div className="text-sm text-slate-500">Chargement…</div>
+                            <div className="text-sm text-slate-500">Chargement...</div>
                           ) : lignes.length === 0 ? (
                             <div className="text-sm text-slate-500">Aucune ligne.</div>
                           ) : (
@@ -3700,9 +3700,9 @@ export default function ChantierPage() {
                                   <div className="min-w-0 flex-1">
                                     <div className="font-medium">{l.designation}</div>
                                     <div className="text-xs text-slate-500">
-                                      {(l.corps_etat ?? "—")} {" • "}
-                                      {l.entreprise ?? "—"} {" • "}
-                                      {(l.quantite ?? "—")} {(l.unite ?? "")}
+                                      {(l.corps_etat ?? "â€”")} {" â€¢ "}
+                                      {l.entreprise ?? "â€”"} {" â€¢ "}
+                                      {(l.quantite ?? "â€”")} {(l.unite ?? "")}
                                     </div>
                                   </div>
                                   <button
@@ -3724,7 +3724,7 @@ export default function ChantierPage() {
                               <div className="grid gap-2 md:grid-cols-2">
                                 <input
                                   className="rounded-xl border px-3 py-2 text-sm"
-                                  placeholder="Corps d’état (lot)"
+                                  placeholder="Corps dâ€™Ã©tat (lot)"
                                   value={lCorpsEtat}
                                   onChange={(e) => setLCorpsEtat(e.target.value)}
                                 />
@@ -3738,7 +3738,7 @@ export default function ChantierPage() {
 
                               <input
                                 className="rounded-xl border px-3 py-2 text-sm"
-                                placeholder="Désignation"
+                                placeholder="DÃ©signation"
                                 value={lDesignation}
                                 onChange={(e) => setLDesignation(e.target.value)}
                               />
@@ -3746,20 +3746,20 @@ export default function ChantierPage() {
                               <div className="grid gap-2 md:grid-cols-3">
                                 <input
                                   className="rounded-xl border px-3 py-2 text-sm"
-                                  placeholder="Unité"
+                                  placeholder="Unite"
                                   value={lUnite}
                                   onChange={(e) => setLUnite(e.target.value)}
                                 />
                                 <input
                                   className="rounded-xl border px-3 py-2 text-sm"
-                                  placeholder="Qté"
+                                  placeholder="QtÃ©"
                                   value={lQty}
                                   onChange={(e) => setLQty(e.target.value)}
                                 />
                                 <label className="text-sm text-slate-700 flex items-center gap-2 justify-between">
                                   <span className="flex items-center gap-2">
                                     <input type="checkbox" checked={lGen} onChange={(e) => setLGen(e.target.checked)} />
-                                    Générer une tâche
+                                    GÃ©nÃ©rer une tÃ¢che
                                   </span>
                                 </label>
                               </div>
@@ -3773,12 +3773,12 @@ export default function ChantierPage() {
                                     addingLigne ? "bg-slate-300 text-slate-700" : "bg-slate-900 text-white hover:bg-slate-800",
                                   ].join(" ")}
                                 >
-                                  {addingLigne ? "Ajout…" : "+ Ajouter ligne"}
+                                  {addingLigne ? "Ajout..." : "+ Ajouter ligne"}
                                 </button>
                               </div>
 
                               <div className="text-xs text-slate-500">
-                                Simple : lot + entreprise + désignation + unité + quantité.
+                                Simple : lot + entreprise + dÃ©signation + unitÃ© + quantitÃ©.
                               </div>
                             </form>
                           </div>
@@ -3790,15 +3790,15 @@ export default function ChantierPage() {
               </div>
             </section>
 
-            {/* TÂCHES */}
+            {/* TACHES */}
             <section className="space-y-4">
               <div className="flex justify-between">
                 <div>
-                  <div className="font-semibold section-title">Tâches</div>
+                  <div className="font-semibold section-title">Taches</div>
                   <div className="text-sm text-slate-500">Attribution par intervenant + modification</div>
                 </div>
                 <div className="text-xs text-slate-500">
-                  {tasksLoading ? "Chargement…" : `${filteredTasks.length} / ${tasks.length} tâche(s)`}
+                  {tasksLoading ? "Chargement..." : `${filteredTasks.length} / ${tasks.length} tache(s)`}
                 </div>
               </div>
 
@@ -3813,8 +3813,8 @@ export default function ChantierPage() {
                   >
                     <div className="sticky top-0 z-10 -mx-4 -mt-4 mb-4 flex items-center justify-between border-b bg-white px-4 py-4 sm:-mx-6 sm:-mt-6 sm:px-6">
                       <div>
-                        <div className="text-base font-semibold text-slate-900">Ajouter une tâche</div>
-                        <div className="text-xs text-slate-500">Créer et attribuer une tâche sans quitter la liste.</div>
+                        <div className="text-base font-semibold text-slate-900">Ajouter une tache</div>
+                        <div className="text-xs text-slate-500">Creer et attribuer une tache sans quitter la liste.</div>
                       </div>
                       <button
                         type="button"
@@ -3828,7 +3828,7 @@ export default function ChantierPage() {
                     <form onSubmit={addTask} className="space-y-3">
                       <div className="grid gap-2 md:grid-cols-10">
                         <label className="space-y-1 text-xs text-slate-600 md:col-span-4">
-                          <div>Intitulé</div>
+                          <div>Intitule</div>
                           <input
                             className="w-full rounded-xl border bg-white px-3 py-2 text-sm text-slate-900"
                             value={newTitre}
@@ -3862,7 +3862,7 @@ export default function ChantierPage() {
                           </select>
                         </label>
                         <label className="space-y-1 text-xs text-slate-600 md:col-span-2">
-                          <div>Quantité</div>
+                          <div>Quantite</div>
                           <input
                             className="w-full rounded-xl border bg-white px-3 py-2 text-sm text-slate-900"
                             inputMode="decimal"
@@ -3871,7 +3871,7 @@ export default function ChantierPage() {
                           />
                         </label>
                         <label className="space-y-1 text-xs text-slate-600 md:col-span-2">
-                          <div>Unité</div>
+                          <div>Unite</div>
                           <input
                             className="w-full rounded-xl border bg-white px-3 py-2 text-sm text-slate-900"
                             value={newUnite}
@@ -3893,7 +3893,7 @@ export default function ChantierPage() {
                             className="rounded-xl border px-3 py-2 text-sm hover:bg-slate-100"
                             onClick={() => void createLotAndSelect(newLotDraftName, "add")}
                           >
-                            Créer le lot
+                            CrÃ©er le lot
                           </button>
                         </div>
                       )}
@@ -3906,13 +3906,13 @@ export default function ChantierPage() {
                             value={newTaskStatus}
                             onChange={(e) => setNewTaskStatus(e.target.value as TaskStatus)}
                           >
-                            <option value="A_FAIRE">À faire</option>
+                            <option value="A_FAIRE">A faire</option>
                             <option value="EN_COURS">En cours</option>
                             <option value="FAIT">Fait</option>
                           </select>
                         </label>
                         <label className="space-y-1 text-xs text-slate-600">
-                          <div>Temps prévu (h)</div>
+                          <div>Temps prevu (h)</div>
                           <input
                             className="w-full rounded-xl border bg-white px-3 py-2 text-sm text-slate-900"
                             inputMode="decimal"
@@ -3920,10 +3920,10 @@ export default function ChantierPage() {
                             value={newTempsPrevuH}
                             onChange={(e) => setNewTempsPrevuH(e.target.value)}
                           />
-                          <p className="text-[11px] text-slate-500">Utilisé pour le calcul automatique d'avancement</p>
+                          <p className="text-[11px] text-slate-500">Utilise pour le calcul automatique d'avancement</p>
                         </label>
                         <label className="space-y-1 text-xs text-slate-600">
-                          <div>Durée (jours)</div>
+                          <div>Duree (jours)</div>
                           <input
                             className="w-full rounded-xl border bg-white px-3 py-2 text-sm text-slate-900"
                             type="number"
@@ -3932,7 +3932,7 @@ export default function ChantierPage() {
                             value={newDurationDays}
                             onChange={(e) => setNewDurationDays(e.target.value)}
                           />
-                          <p className="text-[11px] text-slate-500">Durée estimée utilisée pour le planning</p>
+                          <p className="text-[11px] text-slate-500">Duree estimee utilisee pour le planning</p>
                         </label>
                         <label className="space-y-1 text-xs text-slate-600">
                           <div>Ordre</div>
@@ -3944,7 +3944,7 @@ export default function ChantierPage() {
                             value={newOrderIndex}
                             onChange={(e) => setNewOrderIndex(e.target.value)}
                           />
-                          <p className="text-[11px] text-slate-500">Ordre d'enchaînement dans le lot</p>
+                          <p className="text-[11px] text-slate-500">Ordre d'enchaÃ®nement dans le lot</p>
                         </label>
                         <label className="space-y-1 text-xs text-slate-600">
                           <div>Intervenant</div>
@@ -3954,7 +3954,7 @@ export default function ChantierPage() {
                             onChange={(e) => setNewIntervenantId(e.target.value)}
                             disabled={intervenantsLoading}
                           >
-                            <option value="__NONE__">Non attribué</option>
+                            <option value="__NONE__">Non attribue</option>
                             {intervenants.map((i) => (
                               <option key={i.id} value={i.id}>
                                 {i.nom}
@@ -3966,12 +3966,12 @@ export default function ChantierPage() {
 
                       {(toNumberOrNull(newTempsPrevuH) ?? 0) <= 0 && (
                         <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
-                          Temps prévu requis pour un calcul automatique fiable de l'avancement.
+                          Temps prevu requis pour un calcul automatique fiable de l'avancement.
                         </div>
                       )}
 
                       <div className="text-xs text-slate-500">
-                        Astuce : crée tes intervenants dans l'onglet "Intervenants", puis attribue-les ici.
+                        Astuce : crÃ©e tes intervenants dans l'onglet "Intervenants", puis attribue-les ici.
                       </div>
 
                       <div className="flex items-center justify-end gap-2 border-t pt-3">
@@ -3990,7 +3990,7 @@ export default function ChantierPage() {
                             addingTask ? "bg-slate-300 text-slate-700" : "bg-slate-900 text-white hover:bg-slate-800",
                           ].join(" ")}
                         >
-                          {addingTask ? "Ajout…" : "+ Ajouter tâche"}
+                          {addingTask ? "Ajout..." : "+ Ajouter tache"}
                         </button>
                       </div>
                     </form>
@@ -4006,7 +4006,7 @@ export default function ChantierPage() {
                   disabled={intervenantsLoading}
                 >
                   <option value="__ALL__">Tous les intervenants</option>
-                  <option value="__NONE__">Non attribué</option>
+                  <option value="__NONE__">Non attribue</option>
                   {intervenants.map((i) => (
                     <option key={i.id} value={i.id}>
                       {i.nom}
@@ -4055,7 +4055,7 @@ export default function ChantierPage() {
                   const qtyLabel =
                     quantiteValue === null ? "Qte: --" : `Qte: ${quantiteValue}${uniteValue ? ` ${uniteValue}` : ""}`;
                   const tempsPrevuLabel =
-                    autoPct === null ? "Temps prévu: -- h" : `Temps prévu: ${Math.round((toNumberOrNull((t as any).temps_prevu_h) ?? 0) * 100) / 100} h`;
+                    autoPct === null ? "Temps prevu: -- h" : `Temps prevu: ${Math.round((toNumberOrNull((t as any).temps_prevu_h) ?? 0) * 100) / 100} h`;
                   const tempsPasseLabel = `Temps passe: ${tempsPasseDisplay} h`;
                   const progressFillClass =
                     avancementPct < 40 ? "bg-amber-400" : avancementPct < 80 ? "bg-blue-500" : "bg-emerald-500";
@@ -4063,15 +4063,20 @@ export default function ChantierPage() {
 
                   return (
                     <div key={t.id} className="rounded-xl border border-slate-200 bg-white p-3 space-y-3">
-                      <div className="flex flex-col gap-3">
-                        <input type="checkbox" checked={t.status === "FAIT"} onChange={() => toggleTaskDone(t)} />
+                      <div className="flex flex-wrap items-start gap-3">
+                        <input
+                          type="checkbox"
+                          className="mt-1 shrink-0"
+                          checked={t.status === "FAIT"}
+                          onChange={() => toggleTaskDone(t)}
+                        />
 
-                        <div className="flex-1 min-w-0">
+                        <div className="min-w-0 flex-1 basis-[18rem]">
                           {!isEditing ? (
                             <>
                               <div className="font-medium break-words">{displayTitreClean}</div>
                               <div className="text-xs text-slate-500">
-                                {resolveTaskLotName(t)} • Intervenant : {it?.nom ?? "—"}
+                                {resolveTaskLotName(t)} | Intervenant: {it?.nom ?? "â€”"}
                               </div>
                               <div className="text-xs text-slate-500 mt-1">
                                 {qtyLabel} / {tempsPrevuLabel} / {tempsPasseLabel}
@@ -4089,14 +4094,14 @@ export default function ChantierPage() {
                                   </span>
                                   {hasOffset && (
                                     <span className="rounded-full border border-blue-200 bg-blue-50 px-2 py-0.5 text-[11px] text-blue-700">
-                                      Ajusté admin ({offsetPct > 0 ? "+" : ""}
+                                      Ajuste admin ({offsetPct > 0 ? "+" : ""}
                                       {offsetPct}%)
                                     </span>
                                   )}
                                 </div>
                                 <div className="text-[11px] text-slate-500">
                                   {autoPct === null
-                                    ? `Auto indisponible (temps prévu manquant) | Ajustement admin: ${offsetPct > 0 ? "+" : ""}${offsetPct}% | Final: ${avancementPct}%`
+                                    ? `Auto indisponible (temps prevu manquant) | Ajustement admin: ${offsetPct > 0 ? "+" : ""}${offsetPct}% | Final: ${avancementPct}%`
                                     : `Auto: ${autoPct}% | Ajustement admin: ${offsetPct > 0 ? "+" : ""}${offsetPct}% | Final: ${avancementPct}%`}
                                 </div>
                                 {!isAdjustingProgress ? (
@@ -4161,7 +4166,7 @@ export default function ChantierPage() {
                             <div className="rounded-xl border bg-slate-50 p-3 space-y-3">
                               <div className="grid gap-2 md:grid-cols-10">
                                 <label className="space-y-1 text-xs text-slate-600 md:col-span-3">
-                                  <div>Intitulé</div>
+                                  <div>Intitule</div>
                                   <input
                                     className="w-full rounded-xl border bg-white px-3 py-2 text-sm text-slate-900"
                                     value={editTitre}
@@ -4195,7 +4200,7 @@ export default function ChantierPage() {
                                   </select>
                                 </label>
                                 <label className="space-y-1 text-xs text-slate-600">
-                                  <div>Quantité</div>
+                                  <div>Quantite</div>
                                   <input
                                     className="w-full rounded-xl border bg-white px-3 py-2 text-sm text-slate-900"
                                     inputMode="decimal"
@@ -4204,7 +4209,7 @@ export default function ChantierPage() {
                                   />
                                 </label>
                                 <label className="space-y-1 text-xs text-slate-600">
-                                  <div>Unité</div>
+                                  <div>Unite</div>
                                   <input
                                     className="w-full rounded-xl border bg-white px-3 py-2 text-sm text-slate-900"
                                     value={editUnite}
@@ -4218,7 +4223,7 @@ export default function ChantierPage() {
                                     value={editStatus as any}
                                     onChange={(e) => setEditStatus(e.target.value as any)}
                                   >
-                                    <option value="A_FAIRE">À faire</option>
+                                    <option value="A_FAIRE">A faire</option>
                                     <option value="EN_COURS">En cours</option>
                                     <option value="FAIT">Fait</option>
                                   </select>
@@ -4238,14 +4243,14 @@ export default function ChantierPage() {
                                     className="rounded-xl border px-3 py-2 text-sm hover:bg-slate-100"
                                     onClick={() => void createLotAndSelect(editLotDraftName, "edit")}
                                   >
-                                    Créer le lot
+                                    CrÃ©er le lot
                                   </button>
                                 </div>
                               )}
 
                               <div className="grid gap-2 md:grid-cols-12">
                                 <label className="space-y-1 text-xs text-slate-600 md:col-span-3">
-                                  <div>Temps prévu (h)</div>
+                                  <div>Temps prevu (h)</div>
                                   <input
                                     className="w-full rounded-xl border bg-white px-3 py-2 text-sm text-slate-900"
                                     inputMode="decimal"
@@ -4253,10 +4258,10 @@ export default function ChantierPage() {
                                     value={editTempsPrevuH}
                                     onChange={(e) => setEditTempsPrevuH(e.target.value)}
                                   />
-                                  <p className="text-[11px] text-slate-500">Utilisé pour le calcul automatique d'avancement</p>
+                                  <p className="text-[11px] text-slate-500">Utilise pour le calcul automatique d'avancement</p>
                                 </label>
                                 <label className="space-y-1 text-xs text-slate-600 md:col-span-3">
-                                  <div>Durée (jours)</div>
+                                  <div>Duree (jours)</div>
                                   <input
                                     className="w-full rounded-xl border bg-white px-3 py-2 text-sm text-slate-900"
                                     type="number"
@@ -4265,7 +4270,7 @@ export default function ChantierPage() {
                                     value={editDurationDays}
                                     onChange={(e) => setEditDurationDays(e.target.value)}
                                   />
-                                  <p className="text-[11px] text-slate-500">Durée estimée utilisée pour le planning</p>
+                                  <p className="text-[11px] text-slate-500">Duree estimee utilisee pour le planning</p>
                                 </label>
                                 <label className="space-y-1 text-xs text-slate-600 md:col-span-3">
                                   <div>Ordre</div>
@@ -4277,7 +4282,7 @@ export default function ChantierPage() {
                                     value={editOrderIndex}
                                     onChange={(e) => setEditOrderIndex(e.target.value)}
                                   />
-                                  <p className="text-[11px] text-slate-500">Ordre d'enchaînement dans le lot</p>
+                                  <p className="text-[11px] text-slate-500">Ordre d'enchaÃ®nement dans le lot</p>
                                 </label>
                                 <label className="space-y-1 text-xs text-slate-600 md:col-span-3">
                                   <div>Intervenant</div>
@@ -4286,7 +4291,7 @@ export default function ChantierPage() {
                                     value={editIntervenantId}
                                     onChange={(e) => setEditIntervenantId(e.target.value)}
                                   >
-                                    <option value="__NONE__">Non attribué</option>
+                                    <option value="__NONE__">Non attribue</option>
                                     {intervenants.map((x) => (
                                       <option key={x.id} value={x.id}>
                                         {x.nom}
@@ -4297,14 +4302,19 @@ export default function ChantierPage() {
                               </div>
                               {(toNumberOrNull(editTempsPrevuH) ?? 0) <= 0 && (
                                 <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
-                                  Temps prévu requis pour un calcul automatique fiable de l'avancement.
+                                  Temps prevu requis pour un calcul automatique fiable de l'avancement.
                                 </div>
                               )}
                             </div>
                           )}
                         </div>
 
-                        <span className={["text-xs px-2 py-1 rounded-full border", taskStatusBadgeClass(t.status)].join(" ")}>
+                        <span
+                          className={[
+                            "ml-auto shrink-0 self-start text-xs px-2 py-1 rounded-full border",
+                            taskStatusBadgeClass(t.status),
+                          ].join(" ")}
+                        >
                           {taskStatusLabel(t.status)}
                         </span>
                       </div>
@@ -4319,8 +4329,8 @@ export default function ChantierPage() {
 
                         return (
                           <div className="mt-2 space-y-1">
-                            <div className="flex items-center justify-between">
-                              <div className="text-xs text-slate-500 font-medium">Documents liés</div>
+                            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                              <div className="text-xs text-slate-500 font-medium">Documents lies</div>
                               <button
                                 type="button"
                                 onClick={() => openTaskDocumentsModal(t)}
@@ -4372,7 +4382,7 @@ export default function ChantierPage() {
                             className="text-sm rounded-xl border px-3 py-2 hover:bg-slate-50"
                             disabled={savingTask || taskTemplateSaving}
                           >
-                            Ajouter à la bibliothèque
+                            Ajouter a la bibliotheque
                           </button>
                           <button
                             type="button"
@@ -4391,7 +4401,7 @@ export default function ChantierPage() {
                             ].join(" ")}
                             disabled={savingTask}
                           >
-                            {savingTask ? "Enregistrement…" : "Enregistrer"}
+                            {savingTask ? "Enregistrement..." : "Enregistrer"}
                           </button>
                         </div>
                       )}
@@ -4403,14 +4413,14 @@ export default function ChantierPage() {
           </div>
         )}
 
-        {/* ---------------- ONGLET MATÉRIEL ---------------- */}
+        {/* ---------------- ONGLET MATÃ‰RIEL ---------------- */}
         {tab === "materiel" && (
           <div className="space-y-4">
             <div className="flex items-center justify-between">
               <div>
-                <div className="font-semibold section-title">Matériel</div>
+                <div className="font-semibold section-title">MatÃ©riel</div>
                 <div className="text-sm text-slate-500">
-                  Demandes matériel avec statut : En attente / Validée / Refusée / Livrée.
+                  Demandes matÃ©riel avec statut : En attente / ValidÃ©e / RefusÃ©e / LivrÃ©e.
                 </div>
               </div>
               <div className="flex items-center gap-2">
@@ -4421,9 +4431,9 @@ export default function ChantierPage() {
                 >
                   <option value="__ALL__">Tous</option>
                   <option value="en_attente">En attente</option>
-                  <option value="validee">Validée</option>
-                  <option value="refusee">Refusée</option>
-                  <option value="livree">Livrée</option>
+                  <option value="validee">ValidÃ©e</option>
+                  <option value="refusee">RefusÃ©e</option>
+                  <option value="livree">LivrÃ©e</option>
                 </select>
                 <button
                   type="button"
@@ -4431,7 +4441,7 @@ export default function ChantierPage() {
                   className="rounded-xl border px-3 py-2 text-sm hover:bg-slate-50"
                   disabled={materielLoading}
                 >
-                  {materielLoading ? "Chargement…" : "Rafraîchir"}
+                  {materielLoading ? "Chargement..." : "RafraÃ®chir"}
                 </button>
               </div>
             </div>
@@ -4443,7 +4453,7 @@ export default function ChantierPage() {
             )}
 
             <form onSubmit={onAddMateriel} className="rounded-xl border bg-slate-50 p-4 space-y-3">
-              <div className="font-semibold text-sm">Créer une demande de matériel</div>
+              <div className="font-semibold text-sm">CrÃ©er une demande de matÃ©riel</div>
 
               <div className="grid gap-2 md:grid-cols-3">
                 <select
@@ -4464,7 +4474,7 @@ export default function ChantierPage() {
                   value={mTaskId}
                   onChange={(e) => setMTaskId(e.target.value)}
                 >
-                  <option value="">Tâche concernée (optionnel)</option>
+                  <option value="">TÃ¢che concernÃ©e (optionnel)</option>
                   {tasks.map((task) => (
                     <option key={task.id} value={task.id}>
                       {task.titre}
@@ -4474,7 +4484,7 @@ export default function ChantierPage() {
 
                 <input
                   className="rounded-xl border px-3 py-2 text-sm"
-                  placeholder="Désignation (obligatoire)"
+                  placeholder="DÃ©signation (obligatoire)"
                   value={mDesignation}
                   onChange={(e) => setMDesignation(e.target.value)}
                 />
@@ -4482,13 +4492,13 @@ export default function ChantierPage() {
                 <div className="grid grid-cols-2 gap-2">
                   <input
                     className="rounded-xl border px-3 py-2 text-sm"
-                    placeholder="Qté"
+                    placeholder="QtÃ©"
                     value={mQuantite}
                     onChange={(e) => setMQuantite(e.target.value)}
                   />
                   <input
                     className="rounded-xl border px-3 py-2 text-sm"
-                    placeholder="Unité (ex: U, m², ml...)"
+                    placeholder="Unite (ex: U, mÂ², ml...)"
                     value={mUnite}
                     onChange={(e) => setMUnite(e.target.value)}
                   />
@@ -4509,9 +4519,9 @@ export default function ChantierPage() {
                   onChange={(e) => setMStatus(e.target.value as any)}
                 >
                   <option value="en_attente">En attente</option>
-                  <option value="validee">Validée</option>
-                  <option value="refusee">Refusée</option>
-                  <option value="livree">Livrée</option>
+                  <option value="validee">ValidÃ©e</option>
+                  <option value="refusee">RefusÃ©e</option>
+                  <option value="livree">LivrÃ©e</option>
                 </select>
 
                 <input
@@ -4531,37 +4541,37 @@ export default function ChantierPage() {
                     addingMateriel ? "bg-slate-300 text-slate-700" : "bg-slate-900 text-white hover:bg-slate-800",
                   ].join(" ")}
                 >
-                  {addingMateriel ? "Ajout…" : "+ Ajouter"}
+                  {addingMateriel ? "Ajout..." : "+ Ajouter"}
                 </button>
               </div>
             </form>
 
             <div className="space-y-2">
               {materielLoading ? (
-                <div className="text-sm text-slate-500">Chargement…</div>
+                <div className="text-sm text-slate-500">Chargement...</div>
               ) : filteredMateriel.length === 0 ? (
-                <div className="text-sm text-slate-500">Aucune demande matériel.</div>
+                <div className="text-sm text-slate-500">Aucune demande matÃ©riel.</div>
               ) : (
                 filteredMateriel.map((m) => {
                   const it = intervenantById.get(m.intervenant_id);
-                  const displayName = m.titre || m.designation || "Demande matériel";
+                  const displayName = m.titre || m.designation || "Demande matÃ©riel";
                   const draftComment = materielAdminComments[m.id] ?? m.admin_commentaire ?? "";
                   return (
                     <div key={m.id} className="rounded-xl border p-4 space-y-3">
                       <div className="flex items-start justify-between gap-3">
                         <div className="min-w-0">
                           <div className="font-medium truncate">
-                            {displayName} • Qté {m.quantite}
+                            {displayName} â€¢ QtÃ© {m.quantite}
                             {m.unite ? ` ${m.unite}` : ""}
                           </div>
                           {(m.task_titre || m.task_id) ? (
                             <div className="text-xs text-slate-500">
-                              Tâche : {m.task_titre ?? tasks.find((task) => task.id === m.task_id)?.titre ?? "—"}
+                              TÃ¢che : {m.task_titre ?? tasks.find((task) => task.id === m.task_id)?.titre ?? "â€”"}
                             </div>
                           ) : null}
-                          <div className="text-xs text-slate-500">Intervenant : {it?.nom ?? "—"}</div>
+                          <div className="text-xs text-slate-500">Intervenant : {it?.nom ?? "â€”"}</div>
                           {m.date_souhaitee ? (
-                            <div className="text-xs text-slate-500">Date souhaitée : {new Date(`${m.date_souhaitee}T00:00:00`).toLocaleDateString("fr-FR")}</div>
+                            <div className="text-xs text-slate-500">Date souhaitÃ©e : {new Date(`${m.date_souhaitee}T00:00:00`).toLocaleDateString("fr-FR")}</div>
                           ) : null}
                         </div>
 
@@ -4602,7 +4612,7 @@ export default function ChantierPage() {
                             onClick={() => onUpdateMaterielStatus(m, "livree")}
                             className="text-sm rounded-xl border px-3 py-2 hover:bg-emerald-50"
                           >
-                            Livrée
+                            LivrÃ©e
                           </button>
                           <button
                             type="button"
@@ -4675,7 +4685,7 @@ export default function ChantierPage() {
                 {tab === "rapports" && "Rapports"}
               </div>
               <div className="rounded-xl border bg-slate-50 p-4 text-sm text-slate-600">
-                Onglet en cours d’implémentation.
+                Onglet en cours dâ€™implÃ©mentation.
               </div>
             </div>
           )}
@@ -4688,7 +4698,7 @@ export default function ChantierPage() {
             <div className="absolute right-0 top-0 h-screen w-full sm:w-[90vw] lg:w-[85vw] lg:min-w-[980px] 2xl:w-[70vw] bg-white border-l shadow-xl flex flex-col">
               <div className="px-3 lg:px-4 py-3 border-b flex items-center justify-between">
                 <div className="font-semibold truncate">
-                  Réserve — {activeReserve?.title ?? "Nouvelle réserve"}
+                  RÃ©serve â€” {activeReserve?.title ?? "Nouvelle rÃ©serve"}
                 </div>
                 <button
                   type="button"
@@ -4696,14 +4706,14 @@ export default function ChantierPage() {
                   onClick={closeReserveDrawer}
                   disabled={reserveSaving}
                 >
-                  ×
+                  Ã—
                 </button>
               </div>
 
               <div className="px-3 lg:px-4 py-2 border-b flex gap-2">
                 {(
                   [
-                    { key: "details", label: "Détails" },
+                    { key: "details", label: "DÃ©tails" },
                     { key: "photos", label: "Photos" },
                     { key: "plan", label: "Plan" },
                   ] as const
@@ -4736,7 +4746,7 @@ export default function ChantierPage() {
                         className="w-full rounded-xl border px-3 py-2 text-sm"
                         value={reserveDraftTitle}
                         onChange={(e) => setReserveDraftTitle(e.target.value)}
-                        placeholder="Titre de la réserve"
+                        placeholder="Titre de la rÃ©serve"
                       />
                     </div>
 
@@ -4746,7 +4756,7 @@ export default function ChantierPage() {
                         className="w-full rounded-xl border px-3 py-2 text-sm min-h-[120px]"
                         value={reserveDraftDescription}
                         onChange={(e) => setReserveDraftDescription(e.target.value)}
-                        placeholder="Décrivez la réserve..."
+                        placeholder="DÃ©crivez la rÃ©serve..."
                       />
                     </div>
 
@@ -4765,7 +4775,7 @@ export default function ChantierPage() {
                       </div>
 
                       <div className="space-y-1">
-                        <div className="text-xs text-slate-600">Priorité</div>
+                        <div className="text-xs text-slate-600">PrioritÃ©</div>
                         <select
                           className="w-full rounded-xl border px-3 py-2 text-sm"
                           value={reserveDraftPriority}
@@ -4778,16 +4788,16 @@ export default function ChantierPage() {
                       </div>
 
                       <div className="space-y-1 md:col-span-2">
-                        <div className="text-xs text-slate-600">Tâche</div>
+                        <div className="text-xs text-slate-600">TÃ¢che</div>
                         <select
                           className="w-full rounded-xl border px-3 py-2 text-sm"
                           value={reserveDraftTaskId}
                           onChange={(e) => setReserveDraftTaskId(e.target.value)}
                         >
-                          <option value="">Sélectionner une tâche</option>
+                          <option value="">SÃ©lectionner une tÃ¢che</option>
                           {tasks.map((t) => (
                             <option key={t.id} value={t.id}>
-                              {stripLegacyPrefix(t.titre ?? "Tâche")}
+                              {stripLegacyPrefix(t.titre ?? "TÃ¢che")}
                             </option>
                           ))}
                         </select>
@@ -4831,7 +4841,7 @@ export default function ChantierPage() {
                               : "border-emerald-200 text-emerald-700 hover:bg-emerald-50",
                           ].join(" ")}
                         >
-                          Marquer levée
+                          Marquer levÃ©e
                         </button>
                       </div>
                     )}
@@ -4842,7 +4852,7 @@ export default function ChantierPage() {
                   <div className="space-y-4">
                     {!activeReserve ? (
                       <div className="text-sm text-slate-500">
-                        Créez la réserve pour ajouter des photos.
+                        CrÃ©ez la rÃ©serve pour ajouter des photos.
                       </div>
                     ) : (
                       <>
@@ -4874,14 +4884,14 @@ export default function ChantierPage() {
 
                         {reservePhotoFile && (
                           <div className="text-xs text-slate-500">
-                            Fichier sélectionné : {reservePhotoFile.name}
+                            Fichier sÃ©lectionnÃ© : {reservePhotoFile.name}
                           </div>
                         )}
 
                         {reservePhotosLoading ? (
                           <div className="text-sm text-slate-500">Chargement...</div>
                         ) : reservePhotos.length === 0 ? (
-                          <div className="text-sm text-slate-500">Aucune photo liée.</div>
+                          <div className="text-sm text-slate-500">Aucune photo liÃ©e.</div>
                         ) : (
                           <div className="grid gap-3 sm:grid-cols-2">
                             {reservePhotos.map((doc) => {
@@ -4897,7 +4907,7 @@ export default function ChantierPage() {
                                         className="w-full h-full object-contain"
                                       />
                                     ) : (
-                                      <div className="text-xs text-slate-500">Aperçu indisponible</div>
+                                      <div className="text-xs text-slate-500">AperÃ§u indisponible</div>
                                     )}
                                   </div>
                                   <div className="text-xs font-medium truncate">{doc.title}</div>
@@ -4922,7 +4932,7 @@ export default function ChantierPage() {
                   <div className="space-y-4">
                     {planDocuments.length === 0 ? (
                       <div className="text-sm text-slate-500">
-                        Aucun plan disponible. Ajoutez un document de type PLAN dans l’onglet Documents.
+                        Aucun plan disponible. Ajoutez un document de type PLAN dans lâ€™onglet Documents.
                       </div>
                     ) : (
                       <>
@@ -4934,7 +4944,7 @@ export default function ChantierPage() {
                               value={reservePlanDocumentId}
                               onChange={(e) => onSelectReservePlan(e.target.value)}
                             >
-                              <option value="">Sélectionner un plan</option>
+                              <option value="">SÃ©lectionner un plan</option>
                               {planDocuments.map((doc) => (
                                 <option key={doc.id} value={doc.id}>
                                   {doc.title || doc.file_name}
@@ -4956,7 +4966,7 @@ export default function ChantierPage() {
                               checked={reserveShowAllMarkers}
                               onChange={(e) => setReserveShowAllMarkers(e.target.checked)}
                             />
-                            Afficher toutes les réserves
+                            Afficher toutes les rÃ©serves
                           </label>
                         </div>
 
@@ -4967,24 +4977,24 @@ export default function ChantierPage() {
                         )}
 
                         {!reservePlanDocumentId ? (
-                          <div className="text-sm text-slate-500">Choisissez un plan pour l’afficher.</div>
+                          <div className="text-sm text-slate-500">Choisissez un plan pour lâ€™afficher.</div>
                         ) : reservePlanLoading ? (
-                          <div className="text-sm text-slate-500">Chargement du plan…</div>
+                          <div className="text-sm text-slate-500">Chargement du planâ€¦</div>
                         ) : !reservePlanUrl ? (
-                          <div className="text-sm text-slate-500">Aperçu indisponible.</div>
+                          <div className="text-sm text-slate-500">AperÃ§u indisponible.</div>
                         ) : (
                           <div className="space-y-2">
                             <div className="text-xs text-slate-500 flex items-center gap-2">
                               <span
                                 className="inline-flex h-5 w-5 items-center justify-center rounded-full border text-[10px]"
-                                title="Consultation: clic marqueur = sélection. Corbeille: suppression avec annulation 5s."
+                                title="Consultation: clic marqueur = sÃ©lection. Corbeille: suppression avec annulation 5s."
                               >
                                 i
                               </span>
                               {activeReserve ? (
-                                <span className="font-medium text-slate-700">Réserve active : {activeReserve.title}</span>
+                                <span className="font-medium text-slate-700">RÃ©serve active : {activeReserve.title}</span>
                               ) : (
-                                <span className="text-amber-700">Aucune réserve active.</span>
+                                <span className="text-amber-700">Aucune rÃ©serve active.</span>
                               )}
                             </div>
                             <ReservePlanViewer
@@ -5009,7 +5019,7 @@ export default function ChantierPage() {
                               showAllReserves={reserveShowAllMarkers}
                             />
                             {reserveMarkersLoading && (
-                              <div className="text-xs text-slate-500">Chargement des repères…</div>
+                              <div className="text-xs text-slate-500">Chargement des repÃ¨resâ€¦</div>
                             )}
                           </div>
                         )}
@@ -5052,7 +5062,7 @@ export default function ChantierPage() {
 
         <TaskDocumentsDrawer
           open={taskDocumentsModalOpen}
-          taskTitle={taskDocumentsModalTask?.titre ?? "Tâche"}
+          taskTitle={taskDocumentsModalTask?.titre ?? "TÃ¢che"}
           documents={chantierDocuments}
           selectedIds={taskDocumentsSelection}
           onSelectionChange={setTaskDocumentsSelection}
@@ -5133,7 +5143,7 @@ export default function ChantierPage() {
                   onClick={closeDocumentModal}
                   disabled={documentUploading}
                 >
-                  ×
+                  Ã—
                 </button>
               </div>
 
@@ -5154,8 +5164,8 @@ export default function ChantierPage() {
                       <div className="space-y-2">
                         <div className="font-medium text-slate-900 truncate">{documentFile.name}</div>
                         <div className="text-xs">
-                          Taille : {(documentFile.size / (1024 * 1024)).toFixed(2)} Mo • Type :{" "}
-                          {documentFile.type || "—"}
+                          Taille : {(documentFile.size / (1024 * 1024)).toFixed(2)} Mo â€¢ Type :{" "}
+                          {documentFile.type || "â€”"}
                         </div>
                         <button
                           type="button"
@@ -5171,7 +5181,7 @@ export default function ChantierPage() {
                       </div>
                     ) : (
                       <div>
-                        Glissez-déposez un fichier ici ou cliquez pour sélectionner.
+                        Glissez-dÃ©posez un fichier ici ou cliquez pour sÃ©lectionner.
                         <div className="text-xs text-slate-500 mt-1">
                           PDF, images, Word, Excel
                         </div>
@@ -5199,7 +5209,7 @@ export default function ChantierPage() {
                   </div>
 
                   <div className="space-y-1">
-                    <div className="text-xs text-slate-600">Catégorie</div>
+                    <div className="text-xs text-slate-600">CatÃ©gorie</div>
                     <select
                       className="w-full rounded-xl border px-3 py-2 text-sm"
                       value={documentCategory}
@@ -5229,7 +5239,7 @@ export default function ChantierPage() {
                   </div>
 
                   <div className="space-y-1">
-                    <div className="text-xs text-slate-600">Mode visibilité</div>
+                    <div className="text-xs text-slate-600">Mode visibilitÃ©</div>
                     <select
                       className="w-full rounded-xl border px-3 py-2 text-sm"
                       value={documentVisibilityMode}
@@ -5245,7 +5255,7 @@ export default function ChantierPage() {
                 </div>
 
                 <div className="space-y-1">
-                  <div className="text-xs text-slate-600">Intervenants autorisés</div>
+                  <div className="text-xs text-slate-600">Intervenants autorisÃ©s</div>
                   <div
                     className={[
                       "rounded-xl border p-3 space-y-2 max-h-40 overflow-auto",
@@ -5278,12 +5288,12 @@ export default function ChantierPage() {
                     )}
                   </div>
                   {documentVisibilityMode !== "RESTRICTED" && (
-                    <div className="text-xs text-slate-500">Sélection désactivée pour ce mode.</div>
+                    <div className="text-xs text-slate-500">SÃ©lection dÃ©sactivÃ©e pour ce mode.</div>
                   )}
                 </div>
 
                 <div className="space-y-1">
-                  <div className="text-xs text-slate-600">Lier à une tâche (optionnel)</div>
+                  <div className="text-xs text-slate-600">Lier Ã  une tÃ¢che (optionnel)</div>
                   <select
                     className="w-full rounded-xl border px-3 py-2 text-sm"
                     value={documentTaskId}
@@ -5351,7 +5361,7 @@ export default function ChantierPage() {
                   onClick={closeDocumentPreview}
                   disabled={documentPreviewLoading}
                 >
-                  ×
+                  Ã—
                 </button>
               </div>
 
@@ -5372,7 +5382,7 @@ export default function ChantierPage() {
                   />
                 ) : (
                   <div className="rounded-xl border bg-slate-50 p-4 text-sm text-slate-600">
-                    Aperçu non disponible.
+                    AperÃ§u non disponible.
                   </div>
                 )}
               </div>
@@ -5397,7 +5407,7 @@ export default function ChantierPage() {
                   onClick={cancelEditIntervenant}
                   disabled={savingIntervenant}
                 >
-                  ×
+                  Ã—
                 </button>
               </div>
 
@@ -5423,12 +5433,12 @@ export default function ChantierPage() {
                 </div>
 
                 <div className="space-y-1">
-                  <div className="text-xs text-slate-600">Téléphone</div>
+                  <div className="text-xs text-slate-600">TÃ©lÃ©phone</div>
                   <input
                     className="w-full rounded-xl border px-3 py-2 text-sm"
                     value={editIntervenantTel}
                     onChange={(e) => setEditIntervenantTel(e.target.value)}
-                    placeholder="Téléphone (optionnel)"
+                    placeholder="TÃ©lÃ©phone (optionnel)"
                   />
                 </div>
               </div>
@@ -5451,7 +5461,7 @@ export default function ChantierPage() {
                   onClick={saveEditIntervenant}
                   disabled={savingIntervenant}
                 >
-                  {savingIntervenant ? "Enregistrement…" : "Enregistrer"}
+                  {savingIntervenant ? "Enregistrement..." : "Enregistrer"}
                 </button>
               </div>
             </div>
