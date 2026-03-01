@@ -1,6 +1,6 @@
 ﻿  // src/pages/ChantierPage.tsx
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { ChangeEvent, DragEvent, FormEvent, ReactNode } from "react";
+import type { ChangeEvent, DragEvent, FormEvent } from "react";
 import { Link, useParams } from "react-router-dom";
 import { supabase } from "../lib/supabaseClient";
 
@@ -121,6 +121,8 @@ type TabKey =
   | "doe"
   | "visite";
 
+type AdminViewTab = "overview" | "taches" | "planning" | "temps" | "reserves" | "gestion";
+
 type ToastState = { type: "ok" | "error"; msg: string } | null;
 
 /* ---------------- helpers ---------------- */
@@ -137,26 +139,6 @@ function statusBadge(status?: string | null) {
     return { label: "Terminé", className: "bg-emerald-50 text-emerald-700 border-emerald-200" };
   }
   return { label: "Préparation", className: "bg-slate-50 text-slate-700 border-slate-200" };
-}
-
-function TabButton({
-  active,
-  onClick,
-  children,
-}: {
-  active: boolean;
-  onClick: () => void;
-  children: ReactNode;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={["tab-btn", active ? "tab-btn--active" : "tab-btn--inactive"].join(" ")}
-    >
-      {children}
-    </button>
-  );
 }
 
 function taskStatusLabel(s: ChantierTaskRow["status"]) {
@@ -381,6 +363,7 @@ export default function ChantierPage() {
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   const [tab, setTab] = useState<TabKey>("devis-taches");
+  const [adminView, setAdminView] = useState<AdminViewTab>("overview");
 
   // Toast
   const [toast, setToast] = useState<ToastState>(null);
@@ -1934,9 +1917,6 @@ export default function ChantierPage() {
   const reservesOuvertes = useMemo(() => {
     return reserves.filter((r) => (r.status ?? "") !== "LEVEE").length;
   }, [reserves]);
-  const documentsCount = useMemo(() => {
-    return Math.max(documents.length, chantierDocuments.length);
-  }, [documents.length, chantierDocuments.length]);
   const overdueTasks = useMemo(() => {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
@@ -2939,7 +2919,6 @@ export default function ChantierPage() {
     );
   }
 
-  const tempsHeures = totalTempsReel;
   const filteredMateriel =
     materielFilter === "__ALL__" ? materiel : materiel.filter((row) => row.statut === materielFilter);
 
@@ -2980,137 +2959,184 @@ export default function ChantierPage() {
       </div>
 
       <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-        <div className="grid gap-5 xl:grid-cols-[minmax(0,1.2fr)_minmax(280px,0.8fr)]">
-          <div className="space-y-4">
-            <div className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">Synthèse chantier</div>
-            <div>
-              <div className="text-2xl font-semibold text-slate-950">{item.nom}</div>
-              <div className="mt-1 text-sm text-slate-500">{item.client ?? "Client non renseigné"}</div>
-              <div className="mt-1 text-sm text-slate-500">{item.adresse ?? "Adresse non renseignée"}</div>
+        <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="truncate text-2xl font-semibold text-slate-950">{item.nom}</div>
+              <span className={["rounded-full border px-2 py-1 text-xs", badge.className].join(" ")}>{badge.label}</span>
             </div>
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Début / fin</div>
-                <div className="mt-2 text-sm font-medium text-slate-900">
-                  {(item.date_debut as string | null) ?? "—"} / {(item.date_fin_prevue as string | null) ?? "—"}
+            <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-sm text-slate-500">
+              <span>{item.client ?? "Client non renseigne"}</span>
+              <span>Debut {item.date_debut ?? "—"}</span>
+              <span>Fin {item.date_fin_prevue ?? "—"}</span>
+            </div>
+            <div className="mt-3 h-2 overflow-hidden rounded-full bg-slate-100">
+              <div className="h-full rounded-full bg-blue-600" style={{ width: `${avancement}%` }} />
+            </div>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-3">
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+              <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">Avancement</div>
+              <div className="mt-1 text-lg font-semibold text-slate-950">{avancement}%</div>
+            </div>
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+              <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">Heures prevues</div>
+              <div className="mt-1 text-lg font-semibold text-slate-950">{tempsPrevues} h</div>
+            </div>
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+              <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">Heures realisees</div>
+              <div className="mt-1 text-lg font-semibold text-slate-950">{totalTempsReel} h</div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+        <div className="flex flex-wrap gap-2">
+          {[
+            { key: "overview" as const, label: "Vue generale" },
+            { key: "taches" as const, label: "Taches" },
+            { key: "planning" as const, label: "Planning" },
+            { key: "temps" as const, label: "Temps" },
+            { key: "reserves" as const, label: "Reserves" },
+            { key: "gestion" as const, label: "Gestion" },
+          ].map((view) => (
+            <button
+              key={view.key}
+              type="button"
+              onClick={() => {
+                setAdminView(view.key);
+                if (view.key === "taches") setTab("devis-taches");
+                if (view.key === "planning") setTab("planning");
+                if (view.key === "temps") setTab("temps");
+                if (view.key === "reserves") setTab("reserves");
+                if (
+                  view.key === "gestion" &&
+                  !["devis-taches", "documents", "doe", "intervenants", "materiel", "messagerie", "visite"].includes(tab)
+                ) {
+                  setTab("documents");
+                }
+              }}
+              className={[
+                "rounded-full px-4 py-2 text-sm font-medium transition",
+                adminView === view.key
+                  ? "bg-blue-600 text-white"
+                  : "border border-slate-200 bg-white text-slate-700 hover:bg-slate-50",
+              ].join(" ")}
+            >
+              {view.label}
+            </button>
+          ))}
+        </div>
+      </section>
+
+      {adminView === "overview" ? (
+        <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+          <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(280px,0.9fr)]">
+            <div className="space-y-4">
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                  <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">Avancement</div>
+                  <div className="mt-2 text-2xl font-semibold text-slate-950">{avancement}%</div>
+                </div>
+                <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                  <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">Heures prevues</div>
+                  <div className="mt-2 text-2xl font-semibold text-slate-950">{tempsPrevues} h</div>
+                </div>
+                <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                  <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">Heures realisees</div>
+                  <div className="mt-2 text-2xl font-semibold text-slate-950">{totalTempsReel} h</div>
+                </div>
+                <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                  <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">Reserves ouvertes</div>
+                  <div className="mt-2 text-2xl font-semibold text-slate-950">{reservesOuvertes}</div>
                 </div>
               </div>
-              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Avancement</div>
-                <div className="mt-2 text-2xl font-semibold text-slate-950">{avancement}%</div>
+              <div>
+                <div className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">Alertes chantier</div>
+                <div className="mt-3 grid gap-3 lg:grid-cols-2">
+                  {alertCards.length === 0 ? (
+                    <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-500 lg:col-span-2">
+                      Aucune alerte.
+                    </div>
+                  ) : (
+                    alertCards.map((alert) => (
+                      <div
+                        key={alert.key}
+                        className={[
+                          "rounded-2xl border p-4",
+                          alert.tone === "danger"
+                            ? "border-red-200 bg-red-50"
+                            : alert.tone === "warning"
+                              ? "border-amber-200 bg-amber-50"
+                              : "border-emerald-200 bg-emerald-50",
+                        ].join(" ")}
+                      >
+                        <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">{alert.title}</div>
+                        <div className="mt-2 text-sm font-medium text-slate-900">{alert.detail}</div>
+                      </div>
+                    ))
+                  )}
+                </div>
               </div>
-              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Heures prévues</div>
-                <div className="mt-2 text-2xl font-semibold text-slate-950">{tempsPrevues} h</div>
-              </div>
-              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Heures réalisées</div>
-                <div className="mt-2 text-2xl font-semibold text-slate-950">{totalTempsReel} h</div>
-              </div>
             </div>
-            <div>
-              <div className="flex items-center justify-between text-sm">
-                <span className="font-medium text-slate-600">Progression globale</span>
-                <span className="font-semibold text-slate-900">{avancement}%</span>
-              </div>
-              <div className="mt-2 h-3 overflow-hidden rounded-full bg-slate-100">
-                <div className="h-full rounded-full bg-blue-600" style={{ width: `${avancement}%` }} />
-              </div>
-            </div>
-          </div>
-
-          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-1">
-            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-              <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Réserves ouvertes</div>
-              <div className="mt-2 text-2xl font-semibold text-slate-950">{reservesOuvertes}</div>
-            </div>
-            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-              <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Documents</div>
-              <div className="mt-2 text-2xl font-semibold text-slate-950">{documentsCount}</div>
-            </div>
-            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-              <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Temps saisi</div>
-              <div className="mt-2 text-2xl font-semibold text-slate-950">{tempsHeures} h</div>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-        <div className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">Pilotage chantier</div>
-        <div className="mt-3 flex flex-wrap gap-2">
-          <TabButton active={tab === "devis-taches"} onClick={() => setTab("devis-taches")}>
-            Tâches
-          </TabButton>
-          <TabButton active={tab === "planning"} onClick={() => setTab("planning")}>
-            Planning
-          </TabButton>
-          <TabButton active={tab === "temps"} onClick={() => setTab("temps")}>
-            Temps
-          </TabButton>
-          <TabButton active={tab === "reserves"} onClick={() => setTab("reserves")}>
-            Réserves
-          </TabButton>
-        </div>
-      </section>
-
-      <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-        <div className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">Alertes chantier</div>
-        <div className="mt-3 grid gap-3 lg:grid-cols-4">
-          {alertCards.length === 0 ? (
-            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-500 lg:col-span-4">
-              Aucune alerte.
-            </div>
-          ) : (
-            alertCards.map((alert) => (
-              <div
-                key={alert.key}
-                className={[
-                  "rounded-2xl border p-4",
-                  alert.tone === "danger"
-                    ? "border-red-200 bg-red-50"
-                    : alert.tone === "warning"
-                      ? "border-amber-200 bg-amber-50"
-                      : "border-emerald-200 bg-emerald-50",
-                ].join(" ")}
+            <div className="space-y-3">
+              <div className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">Actions rapides</div>
+              <button
+                type="button"
+                onClick={() => {
+                  setAdminView("taches");
+                  setTab("devis-taches");
+                }}
+                className="w-full rounded-2xl bg-blue-600 px-4 py-3 text-left text-sm font-medium text-white"
               >
-                <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">{alert.title}</div>
-                <div className="mt-2 text-sm font-medium text-slate-900">{alert.detail}</div>
-              </div>
-            ))
-          )}
-        </div>
-      </section>
-
-      <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-        <div className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">Gestion secondaire</div>
-        <div className="mt-3 flex flex-wrap gap-2">
-          <TabButton active={tab === "devis-taches"} onClick={() => setTab("devis-taches")}>
-            Devis
-          </TabButton>
-          <TabButton active={tab === "documents"} onClick={() => setTab("documents")}>
-            Documents
-          </TabButton>
-          <TabButton active={tab === "doe"} onClick={() => setTab("doe")}>
-            DOE
-          </TabButton>
-          <TabButton active={tab === "intervenants"} onClick={() => setTab("intervenants")}>
-            Intervenants
-          </TabButton>
-          <TabButton active={tab === "materiel"} onClick={() => setTab("materiel")}>
-            Matériel
-          </TabButton>
-          <TabButton active={tab === "messagerie"} onClick={() => setTab("messagerie")}>
-            Messagerie
-          </TabButton>
-          <TabButton active={tab === "visite"} onClick={() => setTab("visite")}>
-            Visites
-          </TabButton>
-        </div>
-      </section>
-
-      {/* Contenu */}
-      <div className="rounded-2xl border bg-white p-6">
+                Ouvrir les taches
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setAdminView("temps");
+                  setTab("temps");
+                }}
+                className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-left text-sm font-medium text-slate-700"
+              >
+                Suivre le temps
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setAdminView("reserves");
+                  setTab("reserves");
+                }}
+                className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-left text-sm font-medium text-slate-700"
+              >
+                Traiter les reserves
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setAdminView("gestion");
+                  setTab("materiel");
+                }}
+                className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-left text-sm font-medium text-slate-700"
+              >
+                Ouvrir la gestion
+              </button>
+            </div>
+          </div>
+        </section>
+      ) : (
+      <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+        {adminView === "gestion" ? (
+          <div className="mb-5 flex flex-wrap gap-2 border-b border-slate-100 pb-4">
+            <button type="button" onClick={() => setTab("devis-taches")} className={["rounded-full px-3 py-1.5 text-sm font-medium", tab === "devis-taches" ? "bg-blue-600 text-white" : "border border-slate-200 text-slate-700"].join(" ")}>Devis</button>
+            <button type="button" onClick={() => setTab("documents")} className={["rounded-full px-3 py-1.5 text-sm font-medium", tab === "documents" ? "bg-blue-600 text-white" : "border border-slate-200 text-slate-700"].join(" ")}>Documents</button>
+            <button type="button" onClick={() => setTab("doe")} className={["rounded-full px-3 py-1.5 text-sm font-medium", tab === "doe" ? "bg-blue-600 text-white" : "border border-slate-200 text-slate-700"].join(" ")}>DOE</button>
+            <button type="button" onClick={() => setTab("intervenants")} className={["rounded-full px-3 py-1.5 text-sm font-medium", tab === "intervenants" ? "bg-blue-600 text-white" : "border border-slate-200 text-slate-700"].join(" ")}>Intervenants</button>
+            <button type="button" onClick={() => setTab("materiel")} className={["rounded-full px-3 py-1.5 text-sm font-medium", tab === "materiel" ? "bg-blue-600 text-white" : "border border-slate-200 text-slate-700"].join(" ")}>Materiel</button>
+            <button type="button" onClick={() => setTab("messagerie")} className={["rounded-full px-3 py-1.5 text-sm font-medium", tab === "messagerie" ? "bg-blue-600 text-white" : "border border-slate-200 text-slate-700"].join(" ")}>Messagerie</button>
+          </div>
+        ) : null}
         {/* ---------------- ONGLET TEMPS ---------------- */}
         {tab === "temps" && (
           <div className="space-y-4">
@@ -4677,6 +4703,9 @@ export default function ChantierPage() {
             </div>
           )}
 
+      </div>
+      )}
+
         {/* DRAWER RESERVES */}
         {reserveDrawerOpen && (
           <div className="fixed inset-0 z-50">
@@ -5453,7 +5482,6 @@ export default function ChantierPage() {
             </div>
           </div>
         )}
-      </div>
     </div>
   );
 }

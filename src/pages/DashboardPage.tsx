@@ -434,65 +434,61 @@ export default function DashboardPage() {
         ))}
       </section>
 
-      <section className="grid gap-4 xl:grid-cols-[minmax(0,1.3fr)_minmax(0,0.7fr)]">
-        <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-          <div className="flex items-center justify-between gap-3">
-            <div>
-              <div className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">Vue filtree</div>
-              <div className="mt-1 text-lg font-semibold text-slate-950">
-                {activeView === "avancement"
-                  ? "Chantiers a relancer"
-                  : activeView === "heures"
-                    ? "Derives heures"
-                    : activeView === "materiel"
-                      ? "Demandes a traiter"
-                      : "Chantiers en cours"}
-              </div>
-            </div>
-            {activeView ? (
-              <button
-                type="button"
-                onClick={() => setActiveView(null)}
-                className="rounded-full border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-700"
-              >
-                Reinitialiser
-              </button>
-            ) : null}
+      <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+          <div>
+            <div className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">Points d'attention</div>
+            <div className="mt-1 text-lg font-semibold text-slate-950">A traiter en priorite</div>
           </div>
-          <div className="mt-4 space-y-3">
-            {focusRows.length === 0 ? (
-              <div className="rounded-2xl border border-dashed border-slate-200 p-4 text-sm text-slate-500">Aucune donnee a afficher.</div>
-            ) : (
-              focusRows.map((row) => (
-                <Link key={row.key} to={row.href} className="block rounded-2xl border border-slate-200 p-4 transition hover:border-blue-200 hover:bg-blue-50/40">
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <div className="text-sm font-semibold text-slate-950">{row.title}</div>
-                      <div className="mt-1 text-sm text-slate-500">{row.subtitle}</div>
-                    </div>
-                    <div className="text-right text-xs font-medium text-slate-600">{row.meta}</div>
-                  </div>
-                </Link>
-              ))
-            )}
-          </div>
+          {activeView ? (
+            <button
+              type="button"
+              onClick={() => setActiveView(null)}
+              className="rounded-full border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-700"
+            >
+              Reinitialiser
+            </button>
+          ) : null}
         </div>
-
-        <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-          <div className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">Points d'attention</div>
-          <div className="mt-1 text-lg font-semibold text-slate-950">A traiter en priorite</div>
-          <div className="mt-4 space-y-3">
-            {pointsAttention.length === 0 ? (
-              <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800">Aucun point critique.</div>
-            ) : (
-              pointsAttention.map((item) => (
-                <div key={item.key} className={["rounded-2xl border p-4", statusToneClass(item.tone)].join(" ")}>
-                  <div className="text-xs font-semibold uppercase tracking-[0.18em]">{item.label}</div>
-                  <div className="mt-2 text-2xl font-semibold">{item.value}</div>
-                </div>
-              ))
-            )}
+        <div className="mt-4 grid gap-3 lg:grid-cols-4">
+          {pointsAttention.length === 0 ? (
+            <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800 lg:col-span-4">
+              Aucun point critique.
+            </div>
+          ) : (
+            pointsAttention.map((item) => (
+              <div key={item.key} className={["rounded-2xl border p-4", statusToneClass(item.tone)].join(" ")}>
+                <div className="text-xs font-semibold uppercase tracking-[0.18em]">{item.label}</div>
+                <div className="mt-2 text-2xl font-semibold">{item.value}</div>
+              </div>
+            ))
+          )}
+        </div>
+        <div className="mt-5 space-y-3">
+          <div className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">
+            {activeView === "avancement"
+              ? "Chantiers a relancer"
+              : activeView === "heures"
+                ? "Derives heures"
+                : activeView === "materiel"
+                  ? "Demandes a traiter"
+                  : "Focus en cours"}
           </div>
+          {focusRows.length === 0 ? (
+            <div className="rounded-2xl border border-dashed border-slate-200 p-4 text-sm text-slate-500">Aucune donnee a afficher.</div>
+          ) : (
+            focusRows.slice(0, 4).map((row) => (
+              <Link key={row.key} to={row.href} className="block rounded-2xl border border-slate-200 p-4 transition hover:border-blue-200 hover:bg-blue-50/40">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="text-sm font-semibold text-slate-950">{row.title}</div>
+                    <div className="mt-1 text-sm text-slate-500">{row.subtitle}</div>
+                  </div>
+                  <div className="text-right text-xs font-medium text-slate-600">{row.meta}</div>
+                </div>
+              </Link>
+            ))
+          )}
         </div>
       </section>
 
