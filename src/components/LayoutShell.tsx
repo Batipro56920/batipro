@@ -4,24 +4,40 @@ import { Outlet, useLocation, useNavigate } from "react-router-dom";
 import { Menu, X } from "lucide-react";
 import Sidebar from "./Sidebar";
 import { supabase } from "../lib/supabaseClient";
+import { getCompanySettings } from "../services/companySettings.service";
 
 export default function LayoutShell() {
   const navigate = useNavigate();
   const location = useLocation();
-  const [email, setEmail] = useState<string | null>(null);
+  const [companyName, setCompanyName] = useState("Mon entreprise");
   const [signingOut, setSigningOut] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   useEffect(() => {
     let alive = true;
 
-    supabase.auth.getUser().then(({ data }) => {
-      if (!alive) return;
-      setEmail(data.user?.email ?? null);
-    });
+    getCompanySettings()
+      .then((settings) => {
+        if (!alive) return;
+        const nextName = String(settings.company_name ?? "").trim();
+        setCompanyName(nextName || "Mon entreprise");
+      })
+      .catch(() => {
+        if (!alive) return;
+        setCompanyName("Mon entreprise");
+      });
 
-    const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
-      setEmail(session?.user?.email ?? null);
+    const { data: sub } = supabase.auth.onAuthStateChange(() => {
+      getCompanySettings()
+        .then((settings) => {
+          if (!alive) return;
+          const nextName = String(settings.company_name ?? "").trim();
+          setCompanyName(nextName || "Mon entreprise");
+        })
+        .catch(() => {
+          if (!alive) return;
+          setCompanyName("Mon entreprise");
+        });
     });
 
     return () => {
@@ -53,7 +69,7 @@ export default function LayoutShell() {
         </aside>
 
         <main className="content">
-          <header className="header-bar h-14 border-b bg-white flex items-center justify-between px-4">
+          <header className="header-bar h-14 border-b bg-white flex items-center justify-between gap-3 px-4">
             <div className="flex items-center gap-3">
               <button
                 type="button"
@@ -63,30 +79,25 @@ export default function LayoutShell() {
               >
                 {sidebarOpen ? <X size={18} /> : <Menu size={18} />}
               </button>
-              <span className="font-semibold">Batipro</span>
+              <span className="max-w-[14rem] truncate text-sm font-semibold text-slate-900 sm:max-w-none sm:text-base">
+                {companyName}
+              </span>
             </div>
 
-            <div className="flex items-center gap-3">
-              {email ? (
-                <span className="text-sm text-slate-500 truncate max-w-[240px]">
-                  {email}
-                </span>
-              ) : (
-                <span className="text-sm text-slate-400">—</span>
-              )}
-
+            <div className="flex items-center gap-2">
               <button
                 type="button"
                 onClick={logout}
                 disabled={signingOut}
                 className={[
-                  "rounded-xl border px-3 py-2 text-sm transition",
+                  "rounded-xl border px-3 py-2 text-sm transition whitespace-nowrap",
                   signingOut
                     ? "bg-slate-100 text-slate-500 border-slate-200"
                     : "bg-white hover:bg-slate-50 border-slate-200",
                 ].join(" ")}
               >
-                {signingOut ? "Déconnexion" : "Se déconnecter"}
+                <span className="sm:hidden">{signingOut ? "..." : "Sortir"}</span>
+                <span className="hidden sm:inline">{signingOut ? "Deconnexion..." : "Deconnexion"}</span>
               </button>
             </div>
           </header>

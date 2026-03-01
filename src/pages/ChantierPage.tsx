@@ -3858,7 +3858,7 @@ export default function ChantierPage() {
                             <option value="__DIVIDER__" disabled>
                               ------------
                             </option>
-                            <option value="__CREATE__">? Créer un nouveau lot…</option>
+                            <option value="__CREATE__">+ Creer un nouveau lot...</option>
                           </select>
                         </label>
                         <label className="space-y-1 text-xs text-slate-600 md:col-span-2">
@@ -4062,14 +4062,14 @@ export default function ChantierPage() {
                   const it = t.intervenant_id ? intervenantById.get(t.intervenant_id) : null;
 
                   return (
-                    <div key={t.id} className="rounded-xl border p-3 space-y-2">
-                      <div className="flex items-start gap-3">
+                    <div key={t.id} className="rounded-xl border border-slate-200 bg-white p-3 space-y-3">
+                      <div className="flex flex-col gap-3">
                         <input type="checkbox" checked={t.status === "FAIT"} onChange={() => toggleTaskDone(t)} />
 
                         <div className="flex-1 min-w-0">
                           {!isEditing ? (
                             <>
-                              <div className="font-medium truncate">{displayTitreClean}</div>
+                              <div className="font-medium break-words">{displayTitreClean}</div>
                               <div className="text-xs text-slate-500">
                                 {resolveTaskLotName(t)} • Intervenant : {it?.nom ?? "—"}
                               </div>
@@ -4191,7 +4191,7 @@ export default function ChantierPage() {
                                     <option value="__DIVIDER__" disabled>
                                       ------------
                                     </option>
-                                    <option value="__CREATE__">? Créer un nouveau lot…</option>
+                                    <option value="__CREATE__">+ Creer un nouveau lot...</option>
                                   </select>
                                 </label>
                                 <label className="space-y-1 text-xs text-slate-600">

@@ -23,8 +23,7 @@ export default function Sidebar() {
   return (
     <div className="h-full">
       <div className="p-4 border-b">
-        <div className="font-bold text-lg leading-none">ChantierPro</div>
-        <div className="text-xs text-slate-500 mt-1">Batipro</div>
+        <div className="font-bold text-lg leading-none">Navigation</div>
       </div>
 
       <nav className="p-3">
