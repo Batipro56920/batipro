@@ -6,27 +6,6 @@ import { listChantiers, type ChantierRow } from "../services/chantiers.service";
 
 type DashboardView = "chantiers" | "avancement" | "heures" | "materiel" | null;
 
-type TaskSnapshot = {
-  id: string;
-  chantier_id: string;
-  titre: string;
-  status: string | null;
-  date_fin: string | null;
-  temps_prevu_h: number | null;
-  temps_reel_h: number | null;
-  updated_at: string | null;
-  created_at: string | null;
-};
-
-type ReserveSnapshot = {
-  id: string;
-  chantier_id: string;
-  title: string | null;
-  status: string | null;
-  priority: string | null;
-  created_at: string | null;
-};
-
 type MaterielSnapshot = {
   id: string;
   chantier_id: string;
@@ -38,38 +17,6 @@ type MaterielSnapshot = {
   unite: string | null;
   created_at: string | null;
 };
-
-type TimeSnapshot = {
-  id: string;
-  chantier_id: string;
-  task_id: string | null;
-  duration_hours: number | null;
-  quantite_realisee: number | null;
-  work_date: string | null;
-  created_at: string | null;
-};
-
-type RecentEvent = {
-  id: string;
-  kind: "time" | "materiel" | "reserve";
-  chantierId: string;
-  title: string;
-  meta: string;
-  createdAt: string | null;
-};
-
-function parseDateValue(value: string | null | undefined): number {
-  if (!value) return 0;
-  const timestamp = Date.parse(value);
-  return Number.isFinite(timestamp) ? timestamp : 0;
-}
-
-function formatDateTimeFr(value: string | null | undefined): string {
-  if (!value) return "-";
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) return String(value);
-  return parsed.toLocaleString("fr-FR");
-}
 
 function formatHours(value: number): string {
   return `${value.toLocaleString("fr-FR", { maximumFractionDigits: 1 })} h`;
@@ -112,10 +59,7 @@ function cardToneClass(tone: "normal" | "warning" | "danger", active: boolean) {
 
 export default function DashboardPage() {
   const [chantiers, setChantiers] = useState<ChantierRow[]>([]);
-  const [tasks, setTasks] = useState<TaskSnapshot[]>([]);
-  const [reserves, setReserves] = useState<ReserveSnapshot[]>([]);
   const [materiel, setMateriel] = useState<MaterielSnapshot[]>([]);
-  const [timeEntries, setTimeEntries] = useState<TimeSnapshot[]>([]);
   const [activeView, setActiveView] = useState<DashboardView>("chantiers");
   const [loading, setLoading] = useState(true);
 
@@ -125,23 +69,11 @@ export default function DashboardPage() {
     async function load() {
       setLoading(true);
       try {
-        const [chantiersResult, tasksResult, reservesResult, materielResult, timeResult] = await Promise.all([
+        const [chantiersResult, materielResult] = await Promise.all([
           listChantiers({ scope: "all" }),
-          supabase
-            .from("chantier_tasks")
-            .select("id, chantier_id, titre, status, date_fin, temps_prevu_h, temps_reel_h, updated_at, created_at")
-            .order("updated_at", { ascending: false }),
-          supabase
-            .from("chantier_reserves")
-            .select("id, chantier_id, title, status, priority, created_at")
-            .order("created_at", { ascending: false }),
           supabase
             .from("materiel_demandes")
             .select("id, chantier_id, titre, designation, statut, status, quantite, unite, created_at")
-            .order("created_at", { ascending: false }),
-          supabase
-            .from("chantier_time_entries")
-            .select("id, chantier_id, task_id, duration_hours, quantite_realisee, work_date, created_at")
             .order("created_at", { ascending: false }),
         ]);
 
@@ -149,22 +81,13 @@ export default function DashboardPage() {
 
         setChantiers(chantiersResult);
 
-        if (tasksResult.error && !isMissingRelationError(tasksResult.error.message)) throw tasksResult.error;
-        if (reservesResult.error && !isMissingRelationError(reservesResult.error.message)) throw reservesResult.error;
         if (materielResult.error && !isMissingRelationError(materielResult.error.message)) throw materielResult.error;
-        if (timeResult.error && !isMissingRelationError(timeResult.error.message)) throw timeResult.error;
 
-        setTasks((tasksResult.data ?? []) as TaskSnapshot[]);
-        setReserves((reservesResult.data ?? []) as ReserveSnapshot[]);
         setMateriel((materielResult.data ?? []) as MaterielSnapshot[]);
-        setTimeEntries((timeResult.data ?? []) as TimeSnapshot[]);
       } catch {
         if (!alive) return;
         setChantiers([]);
-        setTasks([]);
-        setReserves([]);
         setMateriel([]);
-        setTimeEntries([]);
       } finally {
         if (!alive) return;
         setLoading(false);
@@ -208,65 +131,6 @@ export default function DashboardPage() {
     () => materiel.filter((row) => !["livree", "refusee"].includes(normalizeMaterialStatus(row))),
     [materiel],
   );
-
-  const openReserves = useMemo(
-    () => reserves.filter((row) => String(row.status ?? "").toUpperCase() !== "LEVEE"),
-    [reserves],
-  );
-
-  const overdueTasks = useMemo(() => {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    return tasks.filter((task) => {
-      if (!task.date_fin) return false;
-      if (String(task.status ?? "").toUpperCase() === "FAIT") return false;
-      return parseDateValue(`${task.date_fin}T00:00:00`) < today.getTime();
-    });
-  }, [tasks]);
-
-  const overrunChantiers = useMemo(
-    () =>
-      chantiers.filter(
-        (chantier) =>
-          Number(chantier.heures_prevues ?? 0) > 0 && Number(chantier.heures_passees ?? 0) > Number(chantier.heures_prevues ?? 0),
-      ),
-    [chantiers],
-  );
-
-  const recentEvents = useMemo(() => {
-    const timeEvents: RecentEvent[] = timeEntries.slice(0, 6).map((row) => ({
-      id: `time-${row.id}`,
-      kind: "time",
-      chantierId: row.chantier_id,
-      title: "Temps saisi",
-      meta: `${formatHours(Number(row.duration_hours ?? 0))}${
-        row.quantite_realisee ? ` | Qte ${Number(row.quantite_realisee).toLocaleString("fr-FR")}` : ""
-      }`,
-      createdAt: row.created_at ?? row.work_date,
-    }));
-
-    const materielEvents: RecentEvent[] = materiel.slice(0, 6).map((row) => ({
-      id: `materiel-${row.id}`,
-      kind: "materiel",
-      chantierId: row.chantier_id,
-      title: row.titre || row.designation || "Demande materiel",
-      meta: materialStatusLabel(normalizeMaterialStatus(row)),
-      createdAt: row.created_at,
-    }));
-
-    const reserveEvents: RecentEvent[] = reserves.slice(0, 6).map((row) => ({
-      id: `reserve-${row.id}`,
-      kind: "reserve",
-      chantierId: row.chantier_id,
-      title: row.title || "Reserve",
-      meta: String(row.status ?? "OUVERTE"),
-      createdAt: row.created_at,
-    }));
-
-    return [...timeEvents, ...materielEvents, ...reserveEvents]
-      .sort((a, b) => parseDateValue(b.createdAt) - parseDateValue(a.createdAt))
-      .slice(0, 10);
-  }, [materiel, reserves, timeEntries]);
 
   const focusRows = useMemo(() => {
     if (activeView === "materiel") {
@@ -319,43 +183,6 @@ export default function DashboardPage() {
     }));
   }, [activeView, chantierById, chantiers, chantiersEnCours, pendingMateriel]);
 
-  const pointsAttention = useMemo(() => {
-    const items: Array<{ key: string; label: string; value: string; tone: "warning" | "danger" }> = [];
-    if (overdueTasks.length > 0) {
-      items.push({
-        key: "retard",
-        label: "Taches en retard",
-        value: `${overdueTasks.length}`,
-        tone: overdueTasks.length > 5 ? "danger" : "warning",
-      });
-    }
-    if (overrunChantiers.length > 0) {
-      items.push({
-        key: "heures",
-        label: "Depassement d'heures",
-        value: `${overrunChantiers.length} chantier${overrunChantiers.length > 1 ? "s" : ""}`,
-        tone: "danger",
-      });
-    }
-    if (pendingMateriel.length > 0) {
-      items.push({
-        key: "materiel",
-        label: "Demandes materiel non traitees",
-        value: `${pendingMateriel.length}`,
-        tone: pendingMateriel.length > 5 ? "danger" : "warning",
-      });
-    }
-    if (openReserves.length > 0) {
-      items.push({
-        key: "reserves",
-        label: "Reserves ouvertes",
-        value: `${openReserves.length}`,
-        tone: openReserves.length > 5 ? "danger" : "warning",
-      });
-    }
-    return items;
-  }, [openReserves.length, overdueTasks.length, overrunChantiers.length, pendingMateriel.length]);
-
   const kpis: Array<{
     key: Exclude<DashboardView, null>;
     label: string;
@@ -400,21 +227,12 @@ export default function DashboardPage() {
 
   return (
     <div className="space-y-6">
-      <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
-        <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-400">Pilotage global</p>
-            <h1 className="mt-2 text-3xl font-semibold text-slate-950">Cockpit chantiers</h1>
-            <p className="mt-1 text-sm text-slate-500">Lecture rapide des tensions, des derives et des actions a traiter.</p>
-          </div>
-          <Link
-            to="/chantiers"
-            className="inline-flex items-center rounded-full border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
-          >
-            Voir tous les chantiers
-          </Link>
-        </div>
-      </section>
+      <div className="flex items-center justify-between gap-3">
+        <h1 className="text-3xl font-semibold text-slate-950">Cockpit chantiers</h1>
+        <Link to="/chantiers" className="rounded-full border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50">
+          Chantiers
+        </Link>
+      </div>
 
       <section className="grid gap-4 xl:grid-cols-4">
         {kpis.map((kpi) => (
@@ -423,100 +241,37 @@ export default function DashboardPage() {
             type="button"
             onClick={() => setActiveView((current) => (current === kpi.key ? null : kpi.key))}
             className={[
-              "rounded-3xl border p-5 text-left shadow-sm transition",
+              "rounded-2xl border px-4 py-3 text-left transition",
               cardToneClass(kpi.tone, activeView === kpi.key),
             ].join(" ")}
           >
             <div className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">{kpi.label}</div>
-            <div className="mt-3 text-3xl font-semibold text-slate-950">{kpi.value}</div>
-            <div className="mt-2 text-sm text-slate-600">{kpi.hint}</div>
+            <div className="mt-1 text-lg font-semibold text-slate-950">{kpi.value}</div>
           </button>
         ))}
       </section>
 
-      <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-        <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-          <div>
-            <div className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">Points d'attention</div>
-            <div className="mt-1 text-lg font-semibold text-slate-950">A traiter en priorite</div>
-          </div>
+      <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+        <div className="flex items-center justify-between gap-3">
+          <div className="text-sm font-semibold text-slate-950">Chantiers</div>
           {activeView ? (
-            <button
-              type="button"
-              onClick={() => setActiveView(null)}
-              className="rounded-full border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-700"
-            >
+            <button type="button" onClick={() => setActiveView(null)} className="rounded-full border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-700">
               Reinitialiser
             </button>
           ) : null}
         </div>
-        <div className="mt-4 grid gap-3 lg:grid-cols-4">
-          {pointsAttention.length === 0 ? (
-            <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800 lg:col-span-4">
-              Aucun point critique.
-            </div>
-          ) : (
-            pointsAttention.map((item) => (
-              <div key={item.key} className={["rounded-2xl border p-4", statusToneClass(item.tone)].join(" ")}>
-                <div className="text-xs font-semibold uppercase tracking-[0.18em]">{item.label}</div>
-                <div className="mt-2 text-2xl font-semibold">{item.value}</div>
-              </div>
-            ))
-          )}
-        </div>
-        <div className="mt-5 space-y-3">
-          <div className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">
-            {activeView === "avancement"
-              ? "Chantiers a relancer"
-              : activeView === "heures"
-                ? "Derives heures"
-                : activeView === "materiel"
-                  ? "Demandes a traiter"
-                  : "Focus en cours"}
-          </div>
+        <div className="mt-4 space-y-3">
           {focusRows.length === 0 ? (
-            <div className="rounded-2xl border border-dashed border-slate-200 p-4 text-sm text-slate-500">Aucune donnee a afficher.</div>
+            <div className="rounded-2xl border border-dashed border-slate-200 p-4 text-sm text-slate-500">Aucun chantier a afficher.</div>
           ) : (
-            focusRows.slice(0, 4).map((row) => (
-              <Link key={row.key} to={row.href} className="block rounded-2xl border border-slate-200 p-4 transition hover:border-blue-200 hover:bg-blue-50/40">
-                <div className="flex items-start justify-between gap-3">
+            focusRows.map((row) => (
+              <Link key={row.key} to={row.href} className="block rounded-2xl border border-slate-200 px-4 py-3 transition hover:border-blue-200 hover:bg-blue-50/40">
+                <div className="flex items-center justify-between gap-3">
                   <div className="min-w-0">
                     <div className="text-sm font-semibold text-slate-950">{row.title}</div>
                     <div className="mt-1 text-sm text-slate-500">{row.subtitle}</div>
                   </div>
                   <div className="text-right text-xs font-medium text-slate-600">{row.meta}</div>
-                </div>
-              </Link>
-            ))
-          )}
-        </div>
-      </section>
-
-      <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-        <div>
-          <div className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">Activite recente</div>
-          <div className="mt-1 text-lg font-semibold text-slate-950">Derniers mouvements terrain</div>
-        </div>
-        <div className="mt-4 space-y-3">
-          {recentEvents.length === 0 ? (
-            <div className="rounded-2xl border border-dashed border-slate-200 p-4 text-sm text-slate-500">Aucune activite recente.</div>
-          ) : (
-            recentEvents.map((event) => (
-              <Link key={event.id} to={`/chantiers/${event.chantierId}`} className="block rounded-2xl border border-slate-200 p-4 transition hover:border-blue-200 hover:bg-blue-50/40">
-                <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-                  <div className="min-w-0">
-                    <div className="flex items-center gap-2">
-                      <span className="inline-flex rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-600">
-                        {event.kind === "time" ? "Temps" : event.kind === "materiel" ? "Materiel" : "Reserve"}
-                      </span>
-                      <span className="text-sm font-semibold text-slate-950">{event.title}</span>
-                    </div>
-                    <div className="mt-1 text-sm text-slate-500">{chantierById.get(event.chantierId)?.nom || "Chantier"}</div>
-                  </div>
-                  <div className="text-right text-xs text-slate-500">
-                    <div>{event.meta}</div>
-                    <div className="mt-1">{formatDateTimeFr(event.createdAt)}</div>
-                  </div>
                 </div>
               </Link>
             ))

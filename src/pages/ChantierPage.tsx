@@ -121,7 +121,7 @@ type TabKey =
   | "doe"
   | "visite";
 
-type AdminViewTab = "overview" | "taches" | "planning" | "temps" | "reserves" | "gestion";
+type AdminPrimaryTab = "taches" | "planning" | "temps" | "reserves" | "gestion";
 
 type ToastState = { type: "ok" | "error"; msg: string } | null;
 
@@ -363,7 +363,7 @@ export default function ChantierPage() {
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   const [tab, setTab] = useState<TabKey>("devis-taches");
-  const [adminView, setAdminView] = useState<AdminViewTab>("overview");
+  const [primaryTab, setPrimaryTab] = useState<AdminPrimaryTab>("taches");
 
   // Toast
   const [toast, setToast] = useState<ToastState>(null);
@@ -2939,196 +2939,128 @@ export default function ChantierPage() {
         </div>
       )}
 
-      <div className="flex items-start justify-between gap-4">
-        <div className="space-y-2 min-w-0">
-          <div className="text-sm text-slate-500">
-            <Link to="/chantiers" className="hover:underline">
-              Chantiers
-            </Link>{" "}
-            / <span className="text-slate-700">{item.nom}</span>
-          </div>
-          <div className="flex items-center gap-3">
-            <h1 className="truncate text-3xl font-semibold text-slate-950">{item.nom}</h1>
-            <span className={["rounded-full border px-2 py-1 text-xs", badge.className].join(" ")}>{badge.label}</span>
-          </div>
-        </div>
-
-        <Link to="/chantiers" className="rounded-xl border px-4 py-2 hover:bg-slate-50">
-          Retour
-        </Link>
-      </div>
-
-      <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-        <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
-          <div className="min-w-0">
+      <section className="rounded-3xl border border-slate-200 bg-white px-5 py-4 shadow-sm">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+          <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-2">
-              <div className="truncate text-2xl font-semibold text-slate-950">{item.nom}</div>
+              <h1 className="truncate text-2xl font-semibold text-slate-950">{item.nom}</h1>
               <span className={["rounded-full border px-2 py-1 text-xs", badge.className].join(" ")}>{badge.label}</span>
             </div>
             <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-sm text-slate-500">
-              <span>{item.client ?? "Client non renseigne"}</span>
               <span>Debut {item.date_debut ?? "—"}</span>
               <span>Fin {item.date_fin_prevue ?? "—"}</span>
             </div>
-            <div className="mt-3 h-2 overflow-hidden rounded-full bg-slate-100">
+            <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-slate-100">
               <div className="h-full rounded-full bg-blue-600" style={{ width: `${avancement}%` }} />
             </div>
           </div>
-          <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-3">
-            <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
-              <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">Avancement</div>
-              <div className="mt-1 text-lg font-semibold text-slate-950">{avancement}%</div>
-            </div>
-            <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
-              <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">Heures prevues</div>
-              <div className="mt-1 text-lg font-semibold text-slate-950">{tempsPrevues} h</div>
-            </div>
-            <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
-              <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">Heures realisees</div>
-              <div className="mt-1 text-lg font-semibold text-slate-950">{totalTempsReel} h</div>
-            </div>
-          </div>
+          <Link to="/chantiers" className="rounded-xl border px-4 py-2 text-sm hover:bg-slate-50">
+            Retour
+          </Link>
         </div>
       </section>
 
-      <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+      <section className="grid grid-cols-2 gap-2">
+        <div className="rounded-2xl border border-slate-200 px-4 py-3">
+          <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">Avancement</div>
+          <div className="mt-1 text-lg font-semibold text-slate-950">{avancement}%</div>
+        </div>
+        <div className="rounded-2xl border border-slate-200 px-4 py-3">
+          <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">Heures prevues</div>
+          <div className="mt-1 text-lg font-semibold text-slate-950">{tempsPrevues} h</div>
+        </div>
+        <div className="rounded-2xl border border-slate-200 px-4 py-3">
+          <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">Heures realisees</div>
+          <div className="mt-1 text-lg font-semibold text-slate-950">{totalTempsReel} h</div>
+        </div>
+        <div className="rounded-2xl border border-slate-200 px-4 py-3">
+          <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">Reserves</div>
+          <div className="mt-1 text-lg font-semibold text-slate-950">{reservesOuvertes}</div>
+        </div>
+      </section>
+
+      <section className="rounded-2xl border border-slate-200 bg-white px-4 py-3">
+        <div className="flex flex-wrap items-center gap-2">
+          {alertCards.length === 0 ? (
+            <span className="text-sm text-slate-500">Aucune alerte.</span>
+          ) : (
+            alertCards.map((alert) => (
+              <span
+                key={alert.key}
+                className={[
+                  "inline-flex items-center rounded-full border px-3 py-1 text-xs font-medium",
+                  alert.tone === "danger"
+                    ? "border-red-200 bg-red-50 text-red-700"
+                    : alert.tone === "warning"
+                      ? "border-amber-200 bg-amber-50 text-amber-700"
+                      : "border-emerald-200 bg-emerald-50 text-emerald-700",
+                ].join(" ")}
+              >
+                {alert.title}: {alert.detail}
+              </span>
+            ))
+          )}
+        </div>
+      </section>
+
+      <section className="rounded-2xl border border-slate-200 bg-white p-3">
         <div className="flex flex-wrap gap-2">
-          {[
-            { key: "overview" as const, label: "Vue generale" },
-            { key: "taches" as const, label: "Taches" },
-            { key: "planning" as const, label: "Planning" },
-            { key: "temps" as const, label: "Temps" },
-            { key: "reserves" as const, label: "Reserves" },
-            { key: "gestion" as const, label: "Gestion" },
-          ].map((view) => (
-            <button
-              key={view.key}
-              type="button"
-              onClick={() => {
-                setAdminView(view.key);
-                if (view.key === "taches") setTab("devis-taches");
-                if (view.key === "planning") setTab("planning");
-                if (view.key === "temps") setTab("temps");
-                if (view.key === "reserves") setTab("reserves");
-                if (
-                  view.key === "gestion" &&
-                  !["devis-taches", "documents", "doe", "intervenants", "materiel", "messagerie", "visite"].includes(tab)
-                ) {
-                  setTab("documents");
-                }
-              }}
-              className={[
-                "rounded-full px-4 py-2 text-sm font-medium transition",
-                adminView === view.key
-                  ? "bg-blue-600 text-white"
-                  : "border border-slate-200 bg-white text-slate-700 hover:bg-slate-50",
-              ].join(" ")}
-            >
-              {view.label}
-            </button>
-          ))}
+          <button
+            type="button"
+            onClick={() => {
+              setPrimaryTab("taches");
+              setTab("devis-taches");
+            }}
+            className={["rounded-full px-4 py-2 text-sm font-medium", primaryTab === "taches" ? "bg-blue-600 text-white" : "border border-slate-200 text-slate-700"].join(" ")}
+          >
+            Taches
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setPrimaryTab("planning");
+              setTab("planning");
+            }}
+            className={["rounded-full px-4 py-2 text-sm font-medium", primaryTab === "planning" ? "bg-blue-600 text-white" : "border border-slate-200 text-slate-700"].join(" ")}
+          >
+            Planning
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setPrimaryTab("temps");
+              setTab("temps");
+            }}
+            className={["rounded-full px-4 py-2 text-sm font-medium", primaryTab === "temps" ? "bg-blue-600 text-white" : "border border-slate-200 text-slate-700"].join(" ")}
+          >
+            Temps
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setPrimaryTab("reserves");
+              setTab("reserves");
+            }}
+            className={["rounded-full px-4 py-2 text-sm font-medium", primaryTab === "reserves" ? "bg-blue-600 text-white" : "border border-slate-200 text-slate-700"].join(" ")}
+          >
+            Reserves
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setPrimaryTab("gestion");
+              if (!["documents", "doe", "intervenants", "materiel", "messagerie"].includes(tab)) setTab("documents");
+            }}
+            className={["rounded-full px-4 py-2 text-sm font-medium", primaryTab === "gestion" ? "bg-blue-600 text-white" : "border border-slate-200 text-slate-700"].join(" ")}
+          >
+            Gestion
+          </button>
         </div>
       </section>
 
-      {adminView === "overview" ? (
-        <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-          <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(280px,0.9fr)]">
-            <div className="space-y-4">
-              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-                <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                  <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">Avancement</div>
-                  <div className="mt-2 text-2xl font-semibold text-slate-950">{avancement}%</div>
-                </div>
-                <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                  <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">Heures prevues</div>
-                  <div className="mt-2 text-2xl font-semibold text-slate-950">{tempsPrevues} h</div>
-                </div>
-                <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                  <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">Heures realisees</div>
-                  <div className="mt-2 text-2xl font-semibold text-slate-950">{totalTempsReel} h</div>
-                </div>
-                <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                  <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">Reserves ouvertes</div>
-                  <div className="mt-2 text-2xl font-semibold text-slate-950">{reservesOuvertes}</div>
-                </div>
-              </div>
-              <div>
-                <div className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">Alertes chantier</div>
-                <div className="mt-3 grid gap-3 lg:grid-cols-2">
-                  {alertCards.length === 0 ? (
-                    <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-500 lg:col-span-2">
-                      Aucune alerte.
-                    </div>
-                  ) : (
-                    alertCards.map((alert) => (
-                      <div
-                        key={alert.key}
-                        className={[
-                          "rounded-2xl border p-4",
-                          alert.tone === "danger"
-                            ? "border-red-200 bg-red-50"
-                            : alert.tone === "warning"
-                              ? "border-amber-200 bg-amber-50"
-                              : "border-emerald-200 bg-emerald-50",
-                        ].join(" ")}
-                      >
-                        <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">{alert.title}</div>
-                        <div className="mt-2 text-sm font-medium text-slate-900">{alert.detail}</div>
-                      </div>
-                    ))
-                  )}
-                </div>
-              </div>
-            </div>
-            <div className="space-y-3">
-              <div className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">Actions rapides</div>
-              <button
-                type="button"
-                onClick={() => {
-                  setAdminView("taches");
-                  setTab("devis-taches");
-                }}
-                className="w-full rounded-2xl bg-blue-600 px-4 py-3 text-left text-sm font-medium text-white"
-              >
-                Ouvrir les taches
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setAdminView("temps");
-                  setTab("temps");
-                }}
-                className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-left text-sm font-medium text-slate-700"
-              >
-                Suivre le temps
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setAdminView("reserves");
-                  setTab("reserves");
-                }}
-                className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-left text-sm font-medium text-slate-700"
-              >
-                Traiter les reserves
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setAdminView("gestion");
-                  setTab("materiel");
-                }}
-                className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-left text-sm font-medium text-slate-700"
-              >
-                Ouvrir la gestion
-              </button>
-            </div>
-          </div>
-        </section>
-      ) : (
-      <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-        {adminView === "gestion" ? (
-          <div className="mb-5 flex flex-wrap gap-2 border-b border-slate-100 pb-4">
+      <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+        {primaryTab === "gestion" ? (
+          <div className="mb-4 flex flex-wrap gap-2 border-b border-slate-100 pb-4">
             <button type="button" onClick={() => setTab("devis-taches")} className={["rounded-full px-3 py-1.5 text-sm font-medium", tab === "devis-taches" ? "bg-blue-600 text-white" : "border border-slate-200 text-slate-700"].join(" ")}>Devis</button>
             <button type="button" onClick={() => setTab("documents")} className={["rounded-full px-3 py-1.5 text-sm font-medium", tab === "documents" ? "bg-blue-600 text-white" : "border border-slate-200 text-slate-700"].join(" ")}>Documents</button>
             <button type="button" onClick={() => setTab("doe")} className={["rounded-full px-3 py-1.5 text-sm font-medium", tab === "doe" ? "bg-blue-600 text-white" : "border border-slate-200 text-slate-700"].join(" ")}>DOE</button>
@@ -4702,9 +4634,7 @@ export default function ChantierPage() {
               </div>
             </div>
           )}
-
       </div>
-      )}
 
         {/* DRAWER RESERVES */}
         {reserveDrawerOpen && (
