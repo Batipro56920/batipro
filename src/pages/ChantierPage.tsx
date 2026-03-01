@@ -121,7 +121,7 @@ type TabKey =
   | "doe"
   | "visite";
 
-type AdminPrimaryTab = "taches" | "planning" | "temps" | "reserves" | "gestion";
+type AdminPrimaryTab = "overview" | "taches" | "planning" | "temps" | "reserves" | "gestion";
 
 type ToastState = { type: "ok" | "error"; msg: string } | null;
 
@@ -363,7 +363,7 @@ export default function ChantierPage() {
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   const [tab, setTab] = useState<TabKey>("devis-taches");
-  const [primaryTab, setPrimaryTab] = useState<AdminPrimaryTab>("taches");
+  const [primaryTab, setPrimaryTab] = useState<AdminPrimaryTab>("overview");
 
   // Toast
   const [toast, setToast] = useState<ToastState>(null);
@@ -500,6 +500,7 @@ export default function ChantierPage() {
   const [newUnite, setNewUnite] = useState("");
   const [newTempsPrevuH, setNewTempsPrevuH] = useState("1");
   const [addingTask, setAddingTask] = useState(false);
+  const [taskCreateDrawerOpen, setTaskCreateDrawerOpen] = useState(false);
 
   // Edition tâche
   const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
@@ -2250,6 +2251,7 @@ export default function ChantierPage() {
       setNewQuantite("1");
       setNewUnite("");
       setNewTempsPrevuH("1");
+      setTaskCreateDrawerOpen(false);
 
       setToast({ type: "ok", msg: "Tâche ajoutée." });
     } catch (e: any) {
@@ -2939,43 +2941,45 @@ export default function ChantierPage() {
         </div>
       )}
 
+      <div className="flex items-center gap-2 text-sm text-slate-500">
+        <Link to="/chantiers" className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-slate-200 hover:bg-slate-50" aria-label="Retour aux chantiers">
+          ←
+        </Link>
+        <span>Mon entreprise</span>
+      </div>
+
       <section className="rounded-3xl border border-slate-200 bg-white px-5 py-4 shadow-sm">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-          <div className="min-w-0 flex-1">
-            <div className="flex flex-wrap items-center gap-2">
-              <h1 className="truncate text-2xl font-semibold text-slate-950">{item.nom}</h1>
-              <span className={["rounded-full border px-2 py-1 text-xs", badge.className].join(" ")}>{badge.label}</span>
-            </div>
-            <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-sm text-slate-500">
-              <span>Debut {item.date_debut ?? "—"}</span>
-              <span>Fin {item.date_fin_prevue ?? "—"}</span>
-            </div>
-            <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-slate-100">
-              <div className="h-full rounded-full bg-blue-600" style={{ width: `${avancement}%` }} />
-            </div>
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-start gap-2">
+            <h1 className="max-w-3xl text-2xl font-semibold leading-tight text-slate-950">{item.nom}</h1>
+            <span className={["rounded-full border px-2 py-1 text-xs", badge.className].join(" ")}>{badge.label}</span>
           </div>
-          <Link to="/chantiers" className="rounded-xl border px-4 py-2 text-sm hover:bg-slate-50">
-            Retour
-          </Link>
+          <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-sm text-slate-500">
+            <span>Debut {item.date_debut ?? "—"}</span>
+            <span>Fin {item.date_fin_prevue ?? "—"}</span>
+          </div>
+          <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-slate-100">
+            <div className="h-full rounded-full bg-blue-600" style={{ width: `${avancement}%` }} />
+          </div>
         </div>
       </section>
 
       <section className="grid grid-cols-2 gap-2">
-        <div className="rounded-2xl border border-slate-200 px-4 py-3">
+        <div className="rounded-2xl border border-slate-200 px-3 py-2">
           <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">Avancement</div>
-          <div className="mt-1 text-lg font-semibold text-slate-950">{avancement}%</div>
+          <div className="mt-1 text-base font-semibold text-slate-950">{avancement}%</div>
         </div>
-        <div className="rounded-2xl border border-slate-200 px-4 py-3">
+        <div className="rounded-2xl border border-slate-200 px-3 py-2">
           <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">Heures prevues</div>
-          <div className="mt-1 text-lg font-semibold text-slate-950">{tempsPrevues} h</div>
+          <div className="mt-1 text-base font-semibold text-slate-950">{tempsPrevues} h</div>
         </div>
-        <div className="rounded-2xl border border-slate-200 px-4 py-3">
+        <div className="rounded-2xl border border-slate-200 px-3 py-2">
           <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">Heures realisees</div>
-          <div className="mt-1 text-lg font-semibold text-slate-950">{totalTempsReel} h</div>
+          <div className="mt-1 text-base font-semibold text-slate-950">{totalTempsReel} h</div>
         </div>
-        <div className="rounded-2xl border border-slate-200 px-4 py-3">
+        <div className="rounded-2xl border border-slate-200 px-3 py-2">
           <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">Reserves</div>
-          <div className="mt-1 text-lg font-semibold text-slate-950">{reservesOuvertes}</div>
+          <div className="mt-1 text-base font-semibold text-slate-950">{reservesOuvertes}</div>
         </div>
       </section>
 
@@ -3003,81 +3007,150 @@ export default function ChantierPage() {
         </div>
       </section>
 
-      <section className="rounded-2xl border border-slate-200 bg-white p-3">
-        <div className="flex flex-wrap gap-2">
-          <button
-            type="button"
-            onClick={() => {
-              setPrimaryTab("taches");
-              setTab("devis-taches");
-            }}
-            className={["rounded-full px-4 py-2 text-sm font-medium", primaryTab === "taches" ? "bg-blue-600 text-white" : "border border-slate-200 text-slate-700"].join(" ")}
-          >
-            Taches
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              setPrimaryTab("planning");
-              setTab("planning");
-            }}
-            className={["rounded-full px-4 py-2 text-sm font-medium", primaryTab === "planning" ? "bg-blue-600 text-white" : "border border-slate-200 text-slate-700"].join(" ")}
-          >
-            Planning
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              setPrimaryTab("temps");
-              setTab("temps");
-            }}
-            className={["rounded-full px-4 py-2 text-sm font-medium", primaryTab === "temps" ? "bg-blue-600 text-white" : "border border-slate-200 text-slate-700"].join(" ")}
-          >
-            Temps
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              setPrimaryTab("reserves");
-              setTab("reserves");
-            }}
-            className={["rounded-full px-4 py-2 text-sm font-medium", primaryTab === "reserves" ? "bg-blue-600 text-white" : "border border-slate-200 text-slate-700"].join(" ")}
-          >
-            Reserves
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              setPrimaryTab("gestion");
-              if (!["documents", "doe", "intervenants", "materiel", "messagerie"].includes(tab)) setTab("documents");
-            }}
-            className={["rounded-full px-4 py-2 text-sm font-medium", primaryTab === "gestion" ? "bg-blue-600 text-white" : "border border-slate-200 text-slate-700"].join(" ")}
-          >
-            Gestion
-          </button>
+      <section className="rounded-2xl border border-slate-200 bg-white p-3 space-y-3">
+        <div className="space-y-2">
+          <div className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-400">Pilotage</div>
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={() => {
+                setPrimaryTab("overview");
+              }}
+              className={["rounded-full px-4 py-2 text-sm font-medium", primaryTab === "overview" ? "bg-blue-600 text-white" : "border border-slate-200 text-slate-700"].join(" ")}
+            >
+              Vue synthese
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setPrimaryTab("taches");
+                setTab("devis-taches");
+              }}
+              className={["rounded-full px-4 py-2 text-sm font-medium", primaryTab === "taches" ? "bg-blue-600 text-white" : "border border-slate-200 text-slate-700"].join(" ")}
+            >
+              Taches
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setPrimaryTab("planning");
+                setTab("planning");
+              }}
+              className={["rounded-full px-4 py-2 text-sm font-medium", primaryTab === "planning" ? "bg-blue-600 text-white" : "border border-slate-200 text-slate-700"].join(" ")}
+            >
+              Planning
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setPrimaryTab("temps");
+                setTab("temps");
+              }}
+              className={["rounded-full px-4 py-2 text-sm font-medium", primaryTab === "temps" ? "bg-blue-600 text-white" : "border border-slate-200 text-slate-700"].join(" ")}
+            >
+              Temps
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setPrimaryTab("reserves");
+                setTab("reserves");
+              }}
+              className={["rounded-full px-4 py-2 text-sm font-medium", primaryTab === "reserves" ? "bg-blue-600 text-white" : "border border-slate-200 text-slate-700"].join(" ")}
+            >
+              Reserves
+            </button>
+          </div>
+        </div>
+        <div className="space-y-2">
+          <div className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-400">Gestion</div>
+          <div className="flex flex-wrap gap-2">
+            {[
+              { key: "devis-taches", label: "Devis" },
+              { key: "documents", label: "Documents" },
+              { key: "doe", label: "DOE" },
+              { key: "intervenants", label: "Intervenants" },
+              { key: "materiel", label: "Materiel" },
+              { key: "messagerie", label: "Messagerie" },
+            ].map((entry) => (
+              <button
+                key={entry.key}
+                type="button"
+                onClick={() => {
+                  setPrimaryTab("gestion");
+                  setTab(entry.key as TabKey);
+                }}
+                className={[
+                  "rounded-full px-4 py-2 text-sm font-medium",
+                  primaryTab === "gestion" && tab === entry.key ? "bg-slate-900 text-white" : "border border-slate-200 text-slate-700",
+                ].join(" ")}
+              >
+                {entry.label}
+              </button>
+            ))}
+          </div>
         </div>
       </section>
 
       <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-        {primaryTab === "gestion" ? (
-          <div className="mb-4 flex flex-wrap gap-2 border-b border-slate-100 pb-4">
-            <button type="button" onClick={() => setTab("devis-taches")} className={["rounded-full px-3 py-1.5 text-sm font-medium", tab === "devis-taches" ? "bg-blue-600 text-white" : "border border-slate-200 text-slate-700"].join(" ")}>Devis</button>
-            <button type="button" onClick={() => setTab("documents")} className={["rounded-full px-3 py-1.5 text-sm font-medium", tab === "documents" ? "bg-blue-600 text-white" : "border border-slate-200 text-slate-700"].join(" ")}>Documents</button>
-            <button type="button" onClick={() => setTab("doe")} className={["rounded-full px-3 py-1.5 text-sm font-medium", tab === "doe" ? "bg-blue-600 text-white" : "border border-slate-200 text-slate-700"].join(" ")}>DOE</button>
-            <button type="button" onClick={() => setTab("intervenants")} className={["rounded-full px-3 py-1.5 text-sm font-medium", tab === "intervenants" ? "bg-blue-600 text-white" : "border border-slate-200 text-slate-700"].join(" ")}>Intervenants</button>
-            <button type="button" onClick={() => setTab("materiel")} className={["rounded-full px-3 py-1.5 text-sm font-medium", tab === "materiel" ? "bg-blue-600 text-white" : "border border-slate-200 text-slate-700"].join(" ")}>Materiel</button>
-            <button type="button" onClick={() => setTab("messagerie")} className={["rounded-full px-3 py-1.5 text-sm font-medium", tab === "messagerie" ? "bg-blue-600 text-white" : "border border-slate-200 text-slate-700"].join(" ")}>Messagerie</button>
+        {primaryTab === "overview" ? (
+          <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(320px,0.9fr)]">
+            <div className="grid grid-cols-2 gap-2">
+              <div className="rounded-2xl border border-slate-200 px-3 py-2">
+                <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">Avancement</div>
+                <div className="mt-1 text-base font-semibold text-slate-950">{avancement}%</div>
+              </div>
+              <div className="rounded-2xl border border-slate-200 px-3 py-2">
+                <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">Heures prevues</div>
+                <div className="mt-1 text-base font-semibold text-slate-950">{tempsPrevues} h</div>
+              </div>
+              <div className="rounded-2xl border border-slate-200 px-3 py-2">
+                <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">Heures realisees</div>
+                <div className="mt-1 text-base font-semibold text-slate-950">{totalTempsReel} h</div>
+              </div>
+              <div className="rounded-2xl border border-slate-200 px-3 py-2">
+                <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">Reserves</div>
+                <div className="mt-1 text-base font-semibold text-slate-950">{reservesOuvertes}</div>
+              </div>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              {alertCards.length === 0 ? (
+                <span className="text-sm text-slate-500">Aucune alerte.</span>
+              ) : (
+                alertCards.map((alert) => (
+                  <span
+                    key={alert.key}
+                    className={[
+                      "inline-flex items-center rounded-full border px-3 py-1 text-xs font-medium",
+                      alert.tone === "danger"
+                        ? "border-red-200 bg-red-50 text-red-700"
+                        : alert.tone === "warning"
+                          ? "border-amber-200 bg-amber-50 text-amber-700"
+                          : "border-emerald-200 bg-emerald-50 text-emerald-700",
+                    ].join(" ")}
+                  >
+                    {alert.title}: {alert.detail}
+                  </span>
+                ))
+              )}
+            </div>
           </div>
         ) : null}
+        {primaryTab === "taches" && tab === "devis-taches" ? (
+          <button
+            type="button"
+            onClick={() => setTaskCreateDrawerOpen(true)}
+            className="fixed bottom-6 right-6 z-20 rounded-full bg-blue-600 px-4 py-3 text-sm font-medium text-white shadow-lg hover:bg-blue-700"
+          >
+            + Ajouter tache
+          </button>
+        ) : null}
         {/* ---------------- ONGLET TEMPS ---------------- */}
-        {tab === "temps" && (
-          <div className="space-y-4">
+        {primaryTab !== "overview" && tab === "temps" && (
+          <div className="space-y-3">
             <div className="flex items-center justify-between">
               <div>
                 <div className="font-semibold section-title">Temps (par tâche)</div>
-                <div className="text-sm text-slate-500">
-                  Renseigne date début / fin et ajoute des heures. Le total s’additionne automatiquement.
-                </div>
               </div>
               <div className="text-xs text-slate-500">
                 Total saisi : <span className="font-semibold">{totalTempsReel} h</span>
@@ -3090,7 +3163,7 @@ export default function ChantierPage() {
                 const it = t.intervenant_id ? intervenantById.get(t.intervenant_id) : null;
 
                 return (
-                  <div key={t.id} className="rounded-xl border p-3 space-y-2">
+                  <div key={t.id} className="rounded-xl border p-2.5 space-y-2">
                     <div className="min-w-0">
                       <div className="font-medium truncate">{stripLegacyPrefix(t.titre ?? "")}</div>
                       <div className="text-xs text-slate-500">
@@ -3098,11 +3171,11 @@ export default function ChantierPage() {
                       </div>
                     </div>
 
-                    <div className="grid gap-2 md:grid-cols-5">
+                    <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-5">
                       <div className="space-y-1">
                         <div className="text-xs text-slate-600">Date début</div>
                         <input
-                          className="w-full rounded-xl border px-3 py-2 text-sm"
+                          className="w-full min-w-0 rounded-xl border px-2.5 py-2 text-sm"
                           type="date"
                           value={d.date_debut}
                           onChange={(e) =>
@@ -3117,7 +3190,7 @@ export default function ChantierPage() {
                       <div className="space-y-1">
                         <div className="text-xs text-slate-600">Date fin</div>
                         <input
-                          className="w-full rounded-xl border px-3 py-2 text-sm"
+                          className="w-full min-w-0 rounded-xl border px-2.5 py-2 text-sm"
                           type="date"
                           value={d.date_fin}
                           onChange={(e) =>
@@ -3132,7 +3205,7 @@ export default function ChantierPage() {
                       <div className="space-y-1">
                         <div className="text-xs text-slate-600">Total actuel (h)</div>
                         <input
-                          className="w-full rounded-xl border px-3 py-2 text-sm bg-slate-50"
+                          className="w-full min-w-0 rounded-xl border px-2.5 py-2 text-sm bg-slate-50"
                           value={toInputNumberString((t as any).temps_reel_h)}
                           disabled
                         />
@@ -3141,7 +3214,7 @@ export default function ChantierPage() {
                       <div className="space-y-1">
                         <div className="text-xs text-slate-600">Ajouter (h)</div>
                         <input
-                          className="w-full rounded-xl border px-3 py-2 text-sm"
+                          className="w-full min-w-0 rounded-xl border px-2.5 py-2 text-sm"
                           inputMode="decimal"
                           placeholder="ex: 1.5"
                           value={d.ajout_h}
@@ -3154,12 +3227,12 @@ export default function ChantierPage() {
                         />
                       </div>
 
-                      <div className="flex items-end justify-end">
+                      <div className="flex items-end md:col-span-2 xl:col-span-1">
                         <button
                           type="button"
                           disabled={savingTimeTaskId === t.id}
                           className={[
-                            "rounded-xl px-4 py-2 text-sm",
+                            "w-full rounded-xl px-3 py-2 text-sm",
                             savingTimeTaskId === t.id
                               ? "bg-slate-300 text-slate-700"
                               : "bg-slate-900 text-white hover:bg-slate-800",
@@ -3234,15 +3307,11 @@ export default function ChantierPage() {
                 );
               })}
             </div>
-
-            <div className="text-xs text-slate-500">
-              Note : “Ajouter (h)” s’additionne au total. Laisse vide si tu ne veux rien ajouter.
-            </div>
           </div>
         )}
 
         {/* ---------------- ONGLET INTERVENANTS ---------------- */}
-        {tab === "intervenants" && (
+        {primaryTab !== "overview" && tab === "intervenants" && (
           <div className="space-y-6">
             <div className="flex items-center justify-between">
               <div>
@@ -3396,7 +3465,7 @@ export default function ChantierPage() {
         )}
 
         {/* ---------------- ONGLET DOCUMENTS ---------------- */}
-        {tab === "documents" && (
+        {primaryTab !== "overview" && tab === "documents" && (
           <div className="space-y-4">
             <div className="flex items-start justify-between gap-4">
               <div className="font-semibold section-title">Documents</div>
@@ -3511,7 +3580,7 @@ export default function ChantierPage() {
         )}
 
         {/* ---------------- ONGLET RÉSERVES ---------------- */}
-        {tab === "reserves" && (
+        {primaryTab !== "overview" && tab === "reserves" && (
           <div className="space-y-4">
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
@@ -3613,7 +3682,7 @@ export default function ChantierPage() {
         )}
 
         {/* ---------------- ONGLET DEVIS & TÂCHES ---------------- */}
-        {tab === "devis-taches" && (
+        {primaryTab !== "overview" && tab === "devis-taches" && (
           <div className="space-y-8">
             {/* DEVIS */}
             <section className="space-y-4">
@@ -3787,6 +3856,202 @@ export default function ChantierPage() {
                 </div>
               </div>
 
+              {taskCreateDrawerOpen ? (
+                <div
+                  className="fixed inset-0 z-40 bg-slate-900/30"
+                  onClick={() => setTaskCreateDrawerOpen(false)}
+                >
+                  <div
+                    className="absolute inset-y-0 right-0 w-full max-w-4xl overflow-y-auto border-l bg-white p-4 shadow-2xl sm:p-6"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <div className="sticky top-0 z-10 -mx-4 -mt-4 mb-4 flex items-center justify-between border-b bg-white px-4 py-4 sm:-mx-6 sm:-mt-6 sm:px-6">
+                      <div>
+                        <div className="text-base font-semibold text-slate-900">Ajouter une tâche</div>
+                        <div className="text-xs text-slate-500">Créer et attribuer une tâche sans quitter la liste.</div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setTaskCreateDrawerOpen(false)}
+                        className="rounded-xl border px-3 py-2 text-sm hover:bg-slate-50"
+                      >
+                        Fermer
+                      </button>
+                    </div>
+
+                    <form onSubmit={addTask} className="space-y-3">
+                      <div className="grid gap-2 md:grid-cols-10">
+                        <label className="space-y-1 text-xs text-slate-600 md:col-span-4">
+                          <div>Intitulé</div>
+                          <input
+                            className="w-full rounded-xl border bg-white px-3 py-2 text-sm text-slate-900"
+                            value={newTitre}
+                            onChange={(e) => setNewTitre(e.target.value)}
+                          />
+                        </label>
+                        <label className="space-y-1 text-xs text-slate-600 md:col-span-2">
+                          <div>Lot</div>
+                          <select
+                            className="w-full rounded-xl border bg-white px-3 py-2 text-sm text-slate-900"
+                            value={newLotSelection}
+                            onChange={(e) => {
+                              const value = e.target.value;
+                              setNewLotSelection(value);
+                              if (value === "__CREATE__") {
+                                setNewCorpsEtat("");
+                                return;
+                              }
+                              setNewCorpsEtat(value);
+                            }}
+                          >
+                            {lotOptions.map((lot) => (
+                              <option key={lot} value={lot}>
+                                {lot}
+                              </option>
+                            ))}
+                            <option value="__DIVIDER__" disabled>
+                              ────────────
+                            </option>
+                            <option value="__CREATE__">➕ Créer un nouveau lot…</option>
+                          </select>
+                        </label>
+                        <label className="space-y-1 text-xs text-slate-600 md:col-span-2">
+                          <div>Quantité</div>
+                          <input
+                            className="w-full rounded-xl border bg-white px-3 py-2 text-sm text-slate-900"
+                            inputMode="decimal"
+                            value={newQuantite}
+                            onChange={(e) => setNewQuantite(e.target.value)}
+                          />
+                        </label>
+                        <label className="space-y-1 text-xs text-slate-600 md:col-span-2">
+                          <div>Unité</div>
+                          <input
+                            className="w-full rounded-xl border bg-white px-3 py-2 text-sm text-slate-900"
+                            value={newUnite}
+                            onChange={(e) => setNewUnite(e.target.value)}
+                          />
+                        </label>
+                      </div>
+
+                      {newLotSelection === "__CREATE__" && (
+                        <div className="grid gap-2 md:grid-cols-[minmax(0,1fr)_auto]">
+                          <input
+                            className="w-full rounded-xl border bg-white px-3 py-2 text-sm text-slate-900"
+                            placeholder="Nom du nouveau lot"
+                            value={newLotDraftName}
+                            onChange={(e) => setNewLotDraftName(e.target.value)}
+                          />
+                          <button
+                            type="button"
+                            className="rounded-xl border px-3 py-2 text-sm hover:bg-slate-100"
+                            onClick={() => void createLotAndSelect(newLotDraftName, "add")}
+                          >
+                            Créer le lot
+                          </button>
+                        </div>
+                      )}
+
+                      <div className="grid gap-2 md:grid-cols-5">
+                        <label className="space-y-1 text-xs text-slate-600">
+                          <div>Statut</div>
+                          <select
+                            className="w-full rounded-xl border bg-white px-3 py-2 text-sm text-slate-900"
+                            value={newTaskStatus}
+                            onChange={(e) => setNewTaskStatus(e.target.value as TaskStatus)}
+                          >
+                            <option value="A_FAIRE">À faire</option>
+                            <option value="EN_COURS">En cours</option>
+                            <option value="FAIT">Fait</option>
+                          </select>
+                        </label>
+                        <label className="space-y-1 text-xs text-slate-600">
+                          <div>Temps prévu (h)</div>
+                          <input
+                            className="w-full rounded-xl border bg-white px-3 py-2 text-sm text-slate-900"
+                            inputMode="decimal"
+                            placeholder="ex: 2.5"
+                            value={newTempsPrevuH}
+                            onChange={(e) => setNewTempsPrevuH(e.target.value)}
+                          />
+                          <p className="text-[11px] text-slate-500">Utilisé pour le calcul automatique d'avancement</p>
+                        </label>
+                        <label className="space-y-1 text-xs text-slate-600">
+                          <div>Durée (jours)</div>
+                          <input
+                            className="w-full rounded-xl border bg-white px-3 py-2 text-sm text-slate-900"
+                            type="number"
+                            min={1}
+                            step={1}
+                            value={newDurationDays}
+                            onChange={(e) => setNewDurationDays(e.target.value)}
+                          />
+                          <p className="text-[11px] text-slate-500">Durée estimée utilisée pour le planning</p>
+                        </label>
+                        <label className="space-y-1 text-xs text-slate-600">
+                          <div>Ordre</div>
+                          <input
+                            className="w-full rounded-xl border bg-white px-3 py-2 text-sm text-slate-900"
+                            type="number"
+                            min={0}
+                            step={1}
+                            value={newOrderIndex}
+                            onChange={(e) => setNewOrderIndex(e.target.value)}
+                          />
+                          <p className="text-[11px] text-slate-500">Ordre d'enchaînement dans le lot</p>
+                        </label>
+                        <label className="space-y-1 text-xs text-slate-600">
+                          <div>Intervenant</div>
+                          <select
+                            className="w-full rounded-xl border bg-white px-3 py-2 text-sm text-slate-900"
+                            value={newIntervenantId}
+                            onChange={(e) => setNewIntervenantId(e.target.value)}
+                            disabled={intervenantsLoading}
+                          >
+                            <option value="__NONE__">Non attribué</option>
+                            {intervenants.map((i) => (
+                              <option key={i.id} value={i.id}>
+                                {i.nom}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                      </div>
+
+                      {(toNumberOrNull(newTempsPrevuH) ?? 0) <= 0 && (
+                        <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                          Temps prévu requis pour un calcul automatique fiable de l'avancement.
+                        </div>
+                      )}
+
+                      <div className="text-xs text-slate-500">
+                        Astuce : crée tes intervenants dans l'onglet "Intervenants", puis attribue-les ici.
+                      </div>
+
+                      <div className="flex items-center justify-end gap-2 border-t pt-3">
+                        <button
+                          type="button"
+                          onClick={() => setTaskCreateDrawerOpen(false)}
+                          className="rounded-xl border px-4 py-2 text-sm hover:bg-slate-50"
+                        >
+                          Annuler
+                        </button>
+                        <button
+                          type="submit"
+                          disabled={addingTask}
+                          className={[
+                            "rounded-xl px-4 py-2 text-sm",
+                            addingTask ? "bg-slate-300 text-slate-700" : "bg-slate-900 text-white hover:bg-slate-800",
+                          ].join(" ")}
+                        >
+                          {addingTask ? "Ajout…" : "+ Ajouter tâche"}
+                        </button>
+                      </div>
+                    </form>
+                  </div>
+                </div>
+              ) : null}
+
               <div className="grid gap-2 md:grid-cols-1">
                 <select
                   className="rounded-xl border px-3 py-2 text-sm"
@@ -3802,172 +4067,6 @@ export default function ChantierPage() {
                     </option>
                   ))}
                 </select>
-              </div>
-
-              {/* AJOUT TÂCHE */}
-              <div className="rounded-xl border bg-slate-50 p-3 space-y-3">
-                <form onSubmit={addTask} className="space-y-3">
-                  <div className="grid gap-2 md:grid-cols-10">
-                    <label className="space-y-1 text-xs text-slate-600 md:col-span-4">
-                      <div>Intitulé</div>
-                      <input
-                        className="w-full rounded-xl border bg-white px-3 py-2 text-sm text-slate-900"
-                        value={newTitre}
-                        onChange={(e) => setNewTitre(e.target.value)}
-                      />
-                    </label>
-                    <label className="space-y-1 text-xs text-slate-600 md:col-span-2">
-                      <div>Lot</div>
-                      <select
-                        className="w-full rounded-xl border bg-white px-3 py-2 text-sm text-slate-900"
-                        value={newLotSelection}
-                        onChange={(e) => {
-                          const value = e.target.value;
-                          setNewLotSelection(value);
-                          if (value === "__CREATE__") {
-                            setNewCorpsEtat("");
-                            return;
-                          }
-                          setNewCorpsEtat(value);
-                        }}
-                      >
-                        {lotOptions.map((lot) => (
-                          <option key={lot} value={lot}>
-                            {lot}
-                          </option>
-                        ))}
-                        <option value="__DIVIDER__" disabled>
-                          ────────────
-                        </option>
-                        <option value="__CREATE__">➕ Créer un nouveau lot…</option>
-                      </select>
-                    </label>
-                    <label className="space-y-1 text-xs text-slate-600 md:col-span-2">
-                      <div>Quantité</div>
-                      <input
-                        className="w-full rounded-xl border bg-white px-3 py-2 text-sm text-slate-900"
-                        inputMode="decimal"
-                        value={newQuantite}
-                        onChange={(e) => setNewQuantite(e.target.value)}
-                      />
-                    </label>
-                    <label className="space-y-1 text-xs text-slate-600 md:col-span-2">
-                      <div>Unité</div>
-                      <input
-                        className="w-full rounded-xl border bg-white px-3 py-2 text-sm text-slate-900"
-                        value={newUnite}
-                        onChange={(e) => setNewUnite(e.target.value)}
-                      />
-                    </label>
-                  </div>
-
-                  {newLotSelection === "__CREATE__" && (
-                    <div className="grid gap-2 md:grid-cols-[minmax(0,1fr)_auto]">
-                      <input
-                        className="w-full rounded-xl border bg-white px-3 py-2 text-sm text-slate-900"
-                        placeholder="Nom du nouveau lot"
-                        value={newLotDraftName}
-                        onChange={(e) => setNewLotDraftName(e.target.value)}
-                      />
-                      <button
-                        type="button"
-                        className="rounded-xl border px-3 py-2 text-sm hover:bg-slate-100"
-                        onClick={() => void createLotAndSelect(newLotDraftName, "add")}
-                      >
-                        Créer le lot
-                      </button>
-                    </div>
-                  )}
-
-                  <div className="grid gap-2 md:grid-cols-5">
-                    <label className="space-y-1 text-xs text-slate-600">
-                      <div>Statut</div>
-                      <select
-                        className="w-full rounded-xl border bg-white px-3 py-2 text-sm text-slate-900"
-                        value={newTaskStatus}
-                        onChange={(e) => setNewTaskStatus(e.target.value as TaskStatus)}
-                      >
-                        <option value="A_FAIRE">À faire</option>
-                        <option value="EN_COURS">En cours</option>
-                        <option value="FAIT">Fait</option>
-                      </select>
-                    </label>
-                    <label className="space-y-1 text-xs text-slate-600">
-                      <div>Temps prévu (h)</div>
-                      <input
-                        className="w-full rounded-xl border bg-white px-3 py-2 text-sm text-slate-900"
-                        inputMode="decimal"
-                        placeholder="ex: 2.5"
-                        value={newTempsPrevuH}
-                        onChange={(e) => setNewTempsPrevuH(e.target.value)}
-                      />
-                      <p className="text-[11px] text-slate-500">Utilisé pour le calcul automatique d'avancement</p>
-                    </label>
-                    <label className="space-y-1 text-xs text-slate-600">
-                      <div>Durée (jours)</div>
-                      <input
-                        className="w-full rounded-xl border bg-white px-3 py-2 text-sm text-slate-900"
-                        type="number"
-                        min={1}
-                        step={1}
-                        value={newDurationDays}
-                        onChange={(e) => setNewDurationDays(e.target.value)}
-                      />
-                      <p className="text-[11px] text-slate-500">Durée estimée utilisée pour le planning</p>
-                    </label>
-                    <label className="space-y-1 text-xs text-slate-600">
-                      <div>Ordre</div>
-                      <input
-                        className="w-full rounded-xl border bg-white px-3 py-2 text-sm text-slate-900"
-                        type="number"
-                        min={0}
-                        step={1}
-                        value={newOrderIndex}
-                        onChange={(e) => setNewOrderIndex(e.target.value)}
-                      />
-                      <p className="text-[11px] text-slate-500">Ordre d'enchaînement dans le lot</p>
-                    </label>
-                    <label className="space-y-1 text-xs text-slate-600">
-                      <div>Intervenant</div>
-                      <select
-                        className="w-full rounded-xl border bg-white px-3 py-2 text-sm text-slate-900"
-                        value={newIntervenantId}
-                        onChange={(e) => setNewIntervenantId(e.target.value)}
-                        disabled={intervenantsLoading}
-                      >
-                        <option value="__NONE__">Non attribué</option>
-                        {intervenants.map((i) => (
-                          <option key={i.id} value={i.id}>
-                            {i.nom}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-                  </div>
-
-                  {(toNumberOrNull(newTempsPrevuH) ?? 0) <= 0 && (
-                    <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
-                      Temps prévu requis pour un calcul automatique fiable de l'avancement.
-                    </div>
-                  )}
-
-                  <div className="text-xs text-slate-500">
-                    Astuce : crée tes intervenants dans l'onglet "Intervenants", puis attribue-les ici.
-                  </div>
-
-                  <div className="flex justify-end">
-                    <button
-                      type="submit"
-                      disabled={addingTask}
-                      className={[
-                        "rounded-xl px-4 py-2 text-sm",
-                        addingTask ? "bg-slate-300 text-slate-700" : "bg-slate-900 text-white hover:bg-slate-800",
-                      ].join(" ")}
-                    >
-                      {addingTask ? "Ajout…" : "+ Ajouter tâche"}
-                    </button>
-                  </div>
-                </form>
               </div>
 
               {tasksError && (
@@ -4359,7 +4458,7 @@ export default function ChantierPage() {
         )}
 
         {/* ---------------- ONGLET MATÉRIEL ---------------- */}
-        {tab === "materiel" && (
+        {primaryTab !== "overview" && tab === "materiel" && (
           <div className="space-y-4">
             <div className="flex items-center justify-between">
               <div>
@@ -4579,11 +4678,11 @@ export default function ChantierPage() {
           </div>
         )}
 
-        {tab === "planning" && id && (
+        {primaryTab !== "overview" && tab === "planning" && id && (
           <PlanningTab chantierId={id} chantierName={item?.nom ?? null} intervenants={intervenants} />
         )}
 
-        {tab === "doe" && id && (
+        {primaryTab !== "overview" && tab === "doe" && id && (
           <DoeTab
             chantierId={id}
             chantierName={item?.nom ?? "Chantier"}
@@ -4598,7 +4697,7 @@ export default function ChantierPage() {
           />
         )}
 
-        {tab === "visite" && id && (
+        {primaryTab !== "overview" && tab === "visite" && id && (
           <VisiteTab
             chantierId={id}
             chantierName={item?.nom ?? "Chantier"}
@@ -4615,7 +4714,8 @@ export default function ChantierPage() {
         )}
 
         {/* autres onglets placeholders */}
-        {tab !== "devis-taches" &&
+        {primaryTab !== "overview" &&
+          tab !== "devis-taches" &&
           tab !== "intervenants" &&
           tab !== "documents" &&
           tab !== "reserves" &&
