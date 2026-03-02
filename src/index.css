@@ -133,6 +133,10 @@ select {
   overflow-x: hidden;
 }
 
+.app-layout.sidebar-collapsed {
+  grid-template-columns: 80px 1fr;
+}
+
 .sidebar {
   width: 280px;
   height: 100vh;
@@ -142,6 +146,11 @@ select {
   -webkit-overflow-scrolling: touch;
   background: var(--sidebar-bg, #fff);
   will-change: transform;
+  transition: width 0.2s ease;
+}
+
+.sidebar.collapsed {
+  width: 80px;
 }
 
 .content,
@@ -180,6 +189,10 @@ select {
     display: block;
   }
 
+  .app-layout.sidebar-collapsed {
+    grid-template-columns: none;
+  }
+
   .content,
   .layout-content {
     width: 100%;
@@ -200,6 +213,10 @@ select {
     transform: translateX(-100%);
     transition: transform 0.25s ease;
     z-index: 1000;
+  }
+
+  .sidebar.collapsed {
+    width: min(86vw, 320px);
   }
 
   .sidebar.open {

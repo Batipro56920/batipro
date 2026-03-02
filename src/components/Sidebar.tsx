@@ -1,5 +1,7 @@
 ﻿import { NavLink } from "react-router-dom";
 import {
+  PanelLeftClose,
+  PanelLeftOpen,
   LayoutDashboard,
   Hammer,
   Users,
@@ -19,11 +21,27 @@ const nav = [
   { to: "/entreprise", label: "Mon entreprise", icon: Building2 },
 ];
 
-export default function Sidebar() {
+type Props = {
+  collapsed?: boolean;
+  onToggleCollapse?: () => void;
+};
+
+export default function Sidebar({ collapsed = false, onToggleCollapse }: Props) {
   return (
     <div className="h-full">
-      <div className="p-4 border-b">
-        <div className="font-bold text-lg leading-none">Navigation</div>
+      <div className={["border-b", collapsed ? "p-3" : "p-4"].join(" ")}>
+        <div className="flex items-center justify-between gap-2">
+          <div className={["font-bold leading-none", collapsed ? "sr-only" : "text-lg"].join(" ")}>Navigation</div>
+          <button
+            type="button"
+            onClick={onToggleCollapse}
+            className="hidden rounded-xl border border-slate-200 p-2 text-slate-600 hover:bg-slate-50 lg:inline-flex"
+            aria-label={collapsed ? "Etendre la navigation" : "Replier la navigation"}
+            title={collapsed ? "Etendre la navigation" : "Replier la navigation"}
+          >
+            {collapsed ? <PanelLeftOpen className="h-4 w-4" /> : <PanelLeftClose className="h-4 w-4" />}
+          </button>
+        </div>
       </div>
 
       <nav className="p-3">
@@ -37,16 +55,18 @@ export default function Sidebar() {
                   end={item.to === "/dashboard"}
                   className={({ isActive }) =>
                     [
-                      "flex items-center gap-3 rounded-xl px-3 py-2 text-sm transition",
+                      "flex items-center rounded-xl px-3 py-2 text-sm transition",
+                      collapsed ? "justify-center gap-0" : "gap-3",
                       "hover:bg-slate-100",
                       isActive
                         ? "bg-slate-900 text-white hover:bg-slate-900"
                         : "text-slate-700",
                     ].join(" ")
                   }
+                  title={collapsed ? item.label : undefined}
                 >
                   <Icon className="h-4 w-4 shrink-0" />
-                  <span className="truncate">{item.label}</span>
+                  <span className={collapsed ? "sr-only" : "truncate"}>{item.label}</span>
                 </NavLink>
               </li>
             );

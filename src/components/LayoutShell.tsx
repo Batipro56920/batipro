@@ -7,11 +7,16 @@ import { supabase } from "../lib/supabaseClient";
 import { getCompanySettings } from "../services/companySettings.service";
 
 export default function LayoutShell() {
+  const storageKey = "batipro:sidebar-collapsed";
   const navigate = useNavigate();
   const location = useLocation();
   const [companyName, setCompanyName] = useState("Mon entreprise");
   const [signingOut, setSigningOut] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
+    if (typeof window === "undefined") return false;
+    return window.localStorage.getItem(storageKey) === "1";
+  });
 
   useEffect(() => {
     let alive = true;
@@ -50,6 +55,11 @@ export default function LayoutShell() {
     setSidebarOpen(false);
   }, [location.pathname]);
 
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    window.localStorage.setItem(storageKey, sidebarCollapsed ? "1" : "0");
+  }, [sidebarCollapsed]);
+
   async function logout() {
     setSigningOut(true);
     try {
@@ -63,9 +73,9 @@ export default function LayoutShell() {
   return (
     <div className="min-h-[100dvh] w-full max-w-full bg-slate-50 text-slate-900 overflow-x-hidden">
       {/* Desktop: fixed sidebar column. Mobile: off-canvas drawer without content push. */}
-      <div className="app-layout">
-        <aside className={`sidebar border-r bg-white ${sidebarOpen ? "open" : ""}`}>
-          <Sidebar />
+      <div className={`app-layout ${sidebarCollapsed ? "sidebar-collapsed" : ""}`}>
+        <aside className={`sidebar border-r bg-white ${sidebarOpen ? "open" : ""} ${sidebarCollapsed ? "collapsed" : ""}`}>
+          <Sidebar collapsed={sidebarCollapsed} onToggleCollapse={() => setSidebarCollapsed((value) => !value)} />
         </aside>
 
         <main className="content">
