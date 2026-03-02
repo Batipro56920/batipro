@@ -7,7 +7,7 @@ import { supabase } from "../lib/supabaseClient";
 import { getCompanySettings } from "../services/companySettings.service";
 
 export default function LayoutShell() {
-  const storageKey = "batipro:sidebar-collapsed";
+  const storageKey = "batipro.sidebarCollapsed";
   const navigate = useNavigate();
   const location = useLocation();
   const [companyName, setCompanyName] = useState("Mon entreprise");

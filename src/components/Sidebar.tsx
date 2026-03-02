@@ -1,7 +1,7 @@
 ﻿import { NavLink } from "react-router-dom";
 import {
-  PanelLeftClose,
-  PanelLeftOpen,
+  ChevronLeft,
+  ChevronRight,
   LayoutDashboard,
   Hammer,
   Users,
@@ -39,7 +39,7 @@ export default function Sidebar({ collapsed = false, onToggleCollapse }: Props) 
             aria-label={collapsed ? "Etendre la navigation" : "Replier la navigation"}
             title={collapsed ? "Etendre la navigation" : "Replier la navigation"}
           >
-            {collapsed ? <PanelLeftOpen className="h-4 w-4" /> : <PanelLeftClose className="h-4 w-4" />}
+            {collapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}
           </button>
         </div>
       </div>

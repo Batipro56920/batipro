@@ -134,7 +134,7 @@ select {
 }
 
 .app-layout.sidebar-collapsed {
-  grid-template-columns: 80px 1fr;
+  grid-template-columns: 72px 1fr;
 }
 
 .sidebar {
@@ -150,7 +150,7 @@ select {
 }
 
 .sidebar.collapsed {
-  width: 80px;
+  width: 72px;
 }
 
 .content,

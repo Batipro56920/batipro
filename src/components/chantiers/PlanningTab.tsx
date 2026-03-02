@@ -139,14 +139,14 @@ function DayDropZone({
     <div
       ref={setNodeRef}
       className={[
-        "flex min-h-[12rem] flex-col rounded-2xl border border-slate-200 bg-white p-3",
+        "flex min-w-0 min-h-[14rem] flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white p-2 lg:p-3",
         isOver ? "border-blue-400 bg-blue-50/60" : "",
       ].join(" ")}
     >
       <div className="mb-3 flex items-center justify-between gap-2">
-        <div>
-          <div className="text-sm font-semibold text-slate-900">{title}</div>
-          <div className="text-[11px] text-slate-500">Depot ou clic pour creer</div>
+        <div className="min-w-0">
+          <div className="truncate text-xs font-semibold text-slate-900 lg:text-sm">{title}</div>
+          <div className="text-[11px] text-slate-500">Depot ou clic</div>
         </div>
         <button type="button" className={buttonClass()} onClick={onAdd} aria-label={`Ajouter sur ${title}`}>
           <Plus className="h-4 w-4" />
@@ -257,7 +257,6 @@ function TaskCard({
 export default function PlanningTab({ chantierId, chantierName, intervenants }: Props) {
   const [state, setState] = useState<PlanningCalendarState | null>(null);
   const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -285,8 +284,7 @@ export default function PlanningTab({ chantierId, chantierName, intervenants }: 
   const mergedMetaSupported = Boolean(state?.mergedMetaSupported);
 
   async function loadAll(isRefresh = false) {
-    if (isRefresh) setRefreshing(true);
-    else setLoading(true);
+    if (!isRefresh) setLoading(true);
     setError(null);
     try {
       const nextState = await getPlanningCalendarState(chantierId);
@@ -295,8 +293,7 @@ export default function PlanningTab({ chantierId, chantierName, intervenants }: 
     } catch (err: any) {
       setError(err?.message ?? "Erreur chargement planning.");
     } finally {
-      if (isRefresh) setRefreshing(false);
-      else setLoading(false);
+      if (!isRefresh) setLoading(false);
     }
   }
 
@@ -721,10 +718,7 @@ export default function PlanningTab({ chantierId, chantierName, intervenants }: 
             </div>
 
             <div className="flex w-full flex-col gap-2 xl:w-auto xl:min-w-[48rem]">
-              <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-[auto_minmax(10rem,1fr)_12rem_12rem_10rem_auto] xl:items-center">
-                <button type="button" className={buttonClass("primary")} onClick={() => setDrawer({ mode: "create", startDate: null })}>
-                  <Plus className="mr-1 inline h-4 w-4" />Tache
-                </button>
+              <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-[minmax(10rem,1fr)_12rem_12rem_10rem_auto] xl:items-center">
                 <input className={inputClass()} placeholder="Recherche" value={backlogQuery} onChange={(e) => setBacklogQuery(e.target.value)} />
                 <select className={inputClass()} value={assigneeFilter} onChange={(e) => setAssigneeFilter(e.target.value)}>
                   <option value="__all__">Tous les intervenants</option>
@@ -744,7 +738,9 @@ export default function PlanningTab({ chantierId, chantierName, intervenants }: 
                     <option key={option.value} value={option.value}>{option.label}</option>
                   ))}
                 </select>
-                <button type="button" className={buttonClass()} onClick={() => void loadAll(true)}>{refreshing ? "..." : "Rafraichir"}</button>
+                <button type="button" className={buttonClass()} onClick={() => setShowSettings((current) => !current)}>
+                  {showSettings ? "Masquer reglages" : "Reglages"}
+                </button>
               </div>
               <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500">
                 <span>{`${visibleDays[0]} -> ${visibleDays[visibleDays.length - 1]}`}</span>
@@ -831,16 +827,11 @@ export default function PlanningTab({ chantierId, chantierName, intervenants }: 
         </section>
 
         <section className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm">
-          <div className="mb-4 flex items-center justify-between gap-2">
-            <div>
-              <div className="text-sm font-semibold text-slate-900">Calendrier</div>
-              <div className="text-xs text-slate-500">Zone principale du planning</div>
-            </div>
-            <button type="button" className={buttonClass()} onClick={() => setShowSettings((current) => !current)}>
-              {showSettings ? "Masquer reglages" : "Reglages"}
-            </button>
+          <div className="mb-4">
+            <div className="text-sm font-semibold text-slate-900">Calendrier</div>
+            <div className="text-xs text-slate-500">Zone principale du planning</div>
           </div>
-          <div className="min-h-[68vh] overflow-auto rounded-2xl border border-slate-100 bg-slate-50/70 p-2">
+          <div className="rounded-2xl border border-slate-100 bg-slate-50/70 p-2">
             {view === "month" ? (
               <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-7">
                 {visibleDays.map((day) => {
@@ -868,7 +859,7 @@ export default function PlanningTab({ chantierId, chantierName, intervenants }: 
                 })}
               </div>
             ) : (
-              <div className={view === "day" ? "grid gap-3" : "grid min-w-[72rem] gap-3 lg:grid-cols-7"}>
+              <div className={view === "day" ? "grid gap-3" : "grid grid-cols-7 gap-2 lg:gap-3"}>
                 {visibleDays.map((day) => (
                   <DayDropZone key={day} dateKey={day} title={formatDisplayDate(day)} onAdd={() => setDrawer({ mode: "create", startDate: day })}>
                     {(daySegments.get(day) ?? []).map((segment) => (
@@ -905,6 +896,9 @@ export default function PlanningTab({ chantierId, chantierName, intervenants }: 
                   <button type="button" className={segmentedButton(taskPanelTab === "backlog")} onClick={() => setTaskPanelTab("backlog")}>Non planifiees</button>
                   <button type="button" className={segmentedButton(taskPanelTab === "planned")} onClick={() => setTaskPanelTab("planned")}>Planifiees</button>
                 </div>
+                <button type="button" className={buttonClass("primary")} onClick={() => setDrawer({ mode: "create", startDate: null })}>
+                  <Plus className="mr-1 inline h-4 w-4" />Ajouter une tache
+                </button>
                 <span className="rounded-full bg-slate-100 px-2 py-1 text-xs text-slate-600">
                   {taskPanelTab === "backlog" ? backlogTasks.length : plannedTasks.length} element(s)
                 </span>
@@ -955,7 +949,7 @@ export default function PlanningTab({ chantierId, chantierName, intervenants }: 
                         <span className="truncate text-sm text-slate-600">{task.intervenant_id ? intervenantsById.get(task.intervenant_id)?.nom ?? "-" : "-"}</span>
                         <span className="text-sm text-slate-600">{task.duration_days}j</span>
                         <span className="text-sm text-slate-600">{STATUS_OPTIONS.find((option) => option.value === task.status)?.label ?? task.status}</span>
-                        <span className="text-right text-slate-400">›</span>
+                        <span className="text-right text-slate-400">ï¿½</span>
                       </button>
                     ))
                   )}
