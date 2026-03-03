@@ -1,9 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { DndContext, useDraggable, useDroppable, type DragEndEvent } from "@dnd-kit/core";
-import { ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Copy, GripVertical, Plus, Scissors, Trash2, X } from "lucide-react";
+import { CalendarDays, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, GripVertical, Trash2, X } from "lucide-react";
 import type { IntervenantRow } from "../../services/intervenants.service";
 import {
-  createPlanningCalendarTask,
   deletePlanningCalendarTasks,
   getPlanningCalendarState,
   updatePlanningCalendarSettings,
@@ -13,7 +12,6 @@ import {
 } from "../../services/chantierPlanningCalendar.service";
 import {
   addDaysToKey,
-  buildSplitDates,
   clampDurationDays,
   compareDateKeys,
   computePlannedHours,
@@ -26,7 +24,6 @@ import {
   startOfWeek,
   statusPriority,
   type PlanningCalendarSettings,
-  type SplitMode,
 } from "./planningCalendar.utils";
 
 type Props = {
@@ -38,7 +35,6 @@ type Props = {
 type PlanningView = "day" | "week" | "month";
 type DrawerState =
   | { mode: "task"; taskId: string }
-  | { mode: "create"; startDate: string | null }
   | { mode: "day"; day: string }
   | null;
 
@@ -126,18 +122,30 @@ function getDefaultDraft(task?: PlanningCalendarTask | null, startDate?: string 
 function DayDropZone({
   dateKey,
   title,
-  onAdd,
+  onOpenDay,
   children,
 }: {
   dateKey: string;
   title: string;
-  onAdd: () => void;
+  onOpenDay: () => void;
   children: React.ReactNode;
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: `day:${dateKey}` });
   return (
     <div
       ref={setNodeRef}
+      onClick={(event) => {
+        if ((event.target as HTMLElement).closest("[data-planning-card='1']")) return;
+        onOpenDay();
+      }}
+      role="button"
+      tabIndex={0}
+      onKeyDown={(event) => {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          onOpenDay();
+        }
+      }}
       className={[
         "flex min-w-0 min-h-[14rem] flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white p-2 lg:p-3",
         isOver ? "border-blue-400 bg-blue-50/60" : "",
@@ -146,11 +154,8 @@ function DayDropZone({
       <div className="mb-3 flex items-center justify-between gap-2">
         <div className="min-w-0">
           <div className="truncate text-xs font-semibold text-slate-900 lg:text-sm">{title}</div>
-          <div className="text-[11px] text-slate-500">Depot ou clic</div>
+          <div className="text-[11px] text-slate-500">Glisse une tache non planifiee ici</div>
         </div>
-        <button type="button" className={buttonClass()} onClick={onAdd} aria-label={`Ajouter sur ${title}`}>
-          <Plus className="h-4 w-4" />
-        </button>
       </div>
       <div className="flex flex-1 flex-col gap-2">{children}</div>
     </div>
@@ -166,6 +171,8 @@ function TaskCard({
   onToggleSelect,
   onOpen,
   onShiftOrder,
+  onPlanify,
+  onDeplanify,
   onResize,
   onDelete,
 }: {
@@ -177,6 +184,8 @@ function TaskCard({
   onToggleSelect: () => void;
   onOpen: () => void;
   onShiftOrder?: (delta: number) => void;
+  onPlanify?: () => void;
+  onDeplanify?: () => void;
   onResize: (delta: number) => void;
   onDelete: () => void;
 }) {
@@ -192,6 +201,7 @@ function TaskCard({
   return (
     <div
       ref={setNodeRef}
+      data-planning-card="1"
       style={style}
       className={[
         "rounded-2xl border border-slate-200 border-l-4 p-2 shadow-sm transition",
@@ -229,6 +239,17 @@ function TaskCard({
         </button>
         {segment.isStart ? (
           <div className="flex shrink-0 items-center gap-1">
+            {onPlanify ? (
+              <button type="button" className="rounded-lg border border-slate-200 px-2 py-1 text-[11px] font-medium text-blue-700" onClick={onPlanify}>
+                <CalendarDays className="mr-1 inline h-3.5 w-3.5" />
+                Planifier
+              </button>
+            ) : null}
+            {onDeplanify ? (
+              <button type="button" className="rounded-lg border border-slate-200 px-1.5 py-1 text-[10px] font-medium text-slate-600" onClick={onDeplanify}>
+                Depl.
+              </button>
+            ) : null}
             {onShiftOrder ? (
               <>
                 <button type="button" className="rounded-lg border border-slate-200 px-1.5 py-1 text-xs" onClick={() => onShiftOrder(-1)}>
@@ -270,9 +291,7 @@ export default function PlanningTab({ chantierId, chantierName, intervenants }: 
   const [selectedTaskIds, setSelectedTaskIds] = useState<string[]>([]);
   const [backlogQuery, setBacklogQuery] = useState("");
   const [assigneeFilter, setAssigneeFilter] = useState("__all__");
-  const [mergeAssigneeChoice, setMergeAssigneeChoice] = useState("__none__");
-  const [splitParts, setSplitParts] = useState(2);
-  const [splitMode, setSplitMode] = useState<SplitMode>("sequential");
+  const [dayAssignTaskId, setDayAssignTaskId] = useState("");
   const [showSettings, setShowSettings] = useState(false);
   const [taskPanelTab, setTaskPanelTab] = useState<"backlog" | "planned">("backlog");
   const [statusFilter, setStatusFilter] = useState("__all__");
@@ -442,8 +461,8 @@ export default function PlanningTab({ chantierId, chantierName, intervenants }: 
     if (drawer?.mode === "task" && currentTask) {
       setDraft(getDefaultDraft(currentTask, currentTask.date_debut));
     }
-    if (drawer?.mode === "create") {
-      setDraft(getDefaultDraft(null, drawer.startDate));
+    if (drawer?.mode === "day") {
+      setDayAssignTaskId("");
     }
   }, [currentTask, drawer]);
   async function persistTask(taskId: string, patch: Parameters<typeof updatePlanningCalendarTask>[1]) {
@@ -461,46 +480,29 @@ export default function PlanningTab({ chantierId, chantierName, intervenants }: 
   }
 
   async function handleSaveDraft() {
+    if (!drawer || drawer.mode !== "task" || !currentTask) return;
     setSaving(true);
     setError(null);
     try {
-      if (drawer?.mode === "task" && currentTask) {
-        await updatePlanningCalendarTask(
-          currentTask.id,
-          {
-            titre: draft.titre,
-            description: draft.description || null,
-            status: draft.status,
-            lot: draft.lot || null,
-            corps_etat: draft.lot || null,
-            intervenant_id: draft.intervenant_id || null,
-            date_debut: draft.date_debut || null,
-            date_fin: draft.date_debut ? undefined : null,
-            duration_days: draft.duration_days,
-          },
-          settings,
-          mergedMetaSupported,
-        );
-      } else {
-        await createPlanningCalendarTask(
-          chantierId,
-          {
-            titre: draft.titre,
-            description: draft.description || null,
-            status: draft.status,
-            lot: draft.lot || null,
-            corps_etat: draft.lot || null,
-            intervenant_id: draft.intervenant_id || null,
-            date_debut: draft.date_debut || null,
-            duration_days: draft.duration_days,
-          },
-          settings,
-          mergedMetaSupported,
-        );
-      }
+      await updatePlanningCalendarTask(
+        currentTask.id,
+        {
+          titre: draft.titre,
+          description: draft.description || null,
+          status: draft.status,
+          lot: draft.lot || null,
+          corps_etat: draft.lot || null,
+          intervenant_id: draft.intervenant_id || null,
+          date_debut: draft.date_debut || null,
+          date_fin: draft.date_debut ? undefined : null,
+          duration_days: draft.duration_days,
+        },
+        settings,
+        mergedMetaSupported,
+      );
       setDrawer(null);
       await loadAll(true);
-      setNotice("Tache enregistree.");
+      setNotice("Planification mise a jour.");
     } catch (err: any) {
       setError(err?.message ?? "Erreur enregistrement.");
     } finally {
@@ -524,103 +526,34 @@ export default function PlanningTab({ chantierId, chantierName, intervenants }: 
     }
   }
 
-  async function handleDuplicate() {
-    if (!currentTask) return;
+  async function deplanifyTask(taskId: string) {
     setSaving(true);
     try {
-      const nextStart = currentTask.date_debut ? addDaysToKey(currentTask.date_fin ?? currentTask.date_debut, 1) : null;
-      await createPlanningCalendarTask(
-        chantierId,
-        {
-          titre: `${currentTask.titre} (copie)`,
-          description: currentTask.description,
-          status: currentTask.status,
-          lot: currentTask.lot,
-          corps_etat: currentTask.corps_etat,
-          intervenant_id: currentTask.intervenant_id,
-          date_debut: nextStart,
-          duration_days: currentTask.duration_days,
-          merged_from_task_ids: currentTask.merged_from_task_ids,
-        },
-        settings,
-        mergedMetaSupported,
-      );
+      await updatePlanningCalendarTask(taskId, { date_debut: null, date_fin: null, order_index: 0 }, settings, mergedMetaSupported);
+      setDrawer((current) => (current && current.mode === "task" && current.taskId === taskId ? null : current));
       await loadAll(true);
-      setNotice("Tache dupliquee.");
+      setNotice("Tache deplanifiee.");
     } catch (err: any) {
-      setError(err?.message ?? "Erreur duplication.");
+      setError(err?.message ?? "Erreur deplanification.");
     } finally {
       setSaving(false);
     }
   }
 
-  async function handleMerge() {
-    if (selectedTasks.length < 2) return;
-    const distinctAssignees = [...new Set(selectedTasks.map((task) => task.intervenant_id).filter(Boolean))];
-    const assigneeToKeep = distinctAssignees.length > 1 ? (mergeAssigneeChoice === "__none__" ? null : mergeAssigneeChoice) : distinctAssignees[0] ?? null;
-    const sorted = [...selectedTasks].sort((a, b) => compareDateKeys(a.date_debut ?? "9999-12-31", b.date_debut ?? "9999-12-31"));
-    const first = sorted[0];
-    const totalDuration = selectedTasks.reduce((sum, task) => sum + clampDurationDays(task.duration_days), 0);
+  async function assignExistingTaskToDay(day: string, taskId: string) {
+    if (!taskId) return;
+    const dayTasks = (daySegments.get(day) ?? [])
+      .map((segment) => segment.task)
+      .filter((task, index, arr) => arr.findIndex((entry) => entry.id === task.id) === index);
 
     setSaving(true);
     try {
-      await createPlanningCalendarTask(
-        chantierId,
-        {
-          titre: `${first.titre} + ${selectedTasks.length - 1}`,
-          description: first.description,
-          status: selectedTasks.some((task) => task.status === "EN_COURS") ? "EN_COURS" : "A_FAIRE",
-          lot: first.lot ?? first.corps_etat,
-          corps_etat: first.corps_etat ?? first.lot,
-          intervenant_id: assigneeToKeep,
-          date_debut: first.date_debut,
-          duration_days: totalDuration,
-          merged_from_task_ids: selectedTasks.map((task) => task.id),
-        },
-        settings,
-        mergedMetaSupported,
-      );
-      await deletePlanningCalendarTasks(selectedTasks.map((task) => task.id));
-      setSelectedTaskIds([]);
+      await updatePlanningCalendarTask(taskId, { date_debut: day, order_index: dayTasks.length }, settings, mergedMetaSupported);
+      setDayAssignTaskId("");
       await loadAll(true);
-      setNotice("Taches fusionnees.");
+      setNotice("Tache planifiee.");
     } catch (err: any) {
-      setError(err?.message ?? "Erreur fusion.");
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  async function handleSplit() {
-    if (selectedTasks.length !== 1) return;
-    const task = selectedTasks[0];
-    const splits = buildSplitDates(task.date_debut ?? anchorDate, task.duration_days, splitParts, splitMode, settings);
-    setSaving(true);
-    try {
-      for (let index = 0; index < splits.length; index += 1) {
-        const split = splits[index];
-        await createPlanningCalendarTask(
-          chantierId,
-          {
-            titre: `${task.titre} (${index + 1}/${splits.length})`,
-            description: task.description,
-            status: task.status,
-            lot: task.lot,
-            corps_etat: task.corps_etat,
-            intervenant_id: task.intervenant_id,
-            date_debut: task.date_debut ? split.startDate : null,
-            duration_days: split.durationDays,
-          },
-          settings,
-          mergedMetaSupported,
-        );
-      }
-      await deletePlanningCalendarTasks([task.id]);
-      setSelectedTaskIds([]);
-      await loadAll(true);
-      setNotice("Tache decoupee.");
-    } catch (err: any) {
-      setError(err?.message ?? "Erreur decoupe.");
+      setError(err?.message ?? "Erreur planification.");
     } finally {
       setSaving(false);
     }
@@ -652,7 +585,7 @@ export default function PlanningTab({ chantierId, chantierName, intervenants }: 
     const overId = String(event.over?.id ?? "");
     if (!taskId || !overId) return;
     if (overId === "backlog") {
-      await persistTask(taskId, { date_debut: null, date_fin: null });
+      await persistTask(taskId, { date_debut: null, date_fin: null, order_index: 0 });
       return;
     }
     if (overId.startsWith("day:")) {
@@ -756,29 +689,6 @@ export default function PlanningTab({ chantierId, chantierName, intervenants }: 
               <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
                 <div className="text-sm font-medium text-blue-900">{selectedTasks.length} tache(s) selectionnee(s)</div>
                 <div className="flex flex-wrap items-center gap-2">
-                  {selectedTasks.length >= 2 ? (
-                    <>
-                      {[...new Set(selectedTasks.map((task) => task.intervenant_id).filter(Boolean))].length > 1 ? (
-                        <select className={inputClass()} value={mergeAssigneeChoice} onChange={(e) => setMergeAssigneeChoice(e.target.value)}>
-                          <option value="__none__">Aucun intervenant</option>
-                          {intervenants.map((it) => (
-                            <option key={it.id} value={it.id}>{it.nom}</option>
-                          ))}
-                        </select>
-                      ) : null}
-                      <button type="button" className={buttonClass("primary")} onClick={() => void handleMerge()}>Fusionner</button>
-                    </>
-                  ) : null}
-                  {selectedTasks.length === 1 ? (
-                    <>
-                      <input type="number" min="2" max="6" className="w-20 rounded-xl border border-slate-200 px-3 py-2 text-sm" value={splitParts} onChange={(e) => setSplitParts(Math.max(2, Math.min(6, Number(e.target.value) || 2)))} />
-                      <select className={inputClass()} value={splitMode} onChange={(e) => setSplitMode(e.target.value as SplitMode)}>
-                        <option value="sequential">A la suite</option>
-                        <option value="same_day">Meme jour</option>
-                      </select>
-                      <button type="button" className={buttonClass()} onClick={() => void handleSplit()}><Scissors className="mr-1 inline h-4 w-4" />Decouper</button>
-                    </>
-                  ) : null}
                   <button
                     type="button"
                     className={buttonClass("danger")}
@@ -861,7 +771,7 @@ export default function PlanningTab({ chantierId, chantierName, intervenants }: 
             ) : (
               <div className={view === "day" ? "grid gap-3" : "grid grid-cols-7 gap-2 lg:gap-3"}>
                 {visibleDays.map((day) => (
-                  <DayDropZone key={day} dateKey={day} title={formatDisplayDate(day)} onAdd={() => setDrawer({ mode: "create", startDate: day })}>
+                  <DayDropZone key={day} dateKey={day} title={formatDisplayDate(day)} onOpenDay={() => setDrawer({ mode: "day", day })}>
                     {(daySegments.get(day) ?? []).map((segment) => (
                       <TaskCard
                         key={`${day}:${segment.task.id}:${segment.isStart ? "s" : "c"}`}
@@ -872,6 +782,7 @@ export default function PlanningTab({ chantierId, chantierName, intervenants }: 
                         draggable={segment.isStart}
                         onToggleSelect={() => toggleTaskSelection(segment.task.id)}
                         onOpen={() => setDrawer({ mode: "task", taskId: segment.task.id })}
+                        onDeplanify={segment.isStart ? () => void deplanifyTask(segment.task.id) : undefined}
                         onShiftOrder={segment.isStart ? (delta) => void reorderWithinDay(day, segment.task.id, delta) : undefined}
                         onResize={(delta) => void persistTask(segment.task.id, { duration_days: clampDurationDays(segment.task.duration_days + delta) })}
                         onDelete={() => void handleDelete(segment.task.id)}
@@ -889,16 +800,13 @@ export default function PlanningTab({ chantierId, chantierName, intervenants }: 
             <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
               <div>
                 <div className="text-sm font-semibold text-slate-900">Taches</div>
-                <div className="text-xs text-slate-500">Liste compacte, scrollable, ouverture du drawer au clic</div>
+                <div className="text-xs text-slate-500">Taches existantes a planifier, deplacer ou ajuster</div>
               </div>
               <div className="flex flex-wrap items-center gap-2">
                 <div className="flex items-center rounded-full border border-slate-200 bg-slate-50 p-1">
                   <button type="button" className={segmentedButton(taskPanelTab === "backlog")} onClick={() => setTaskPanelTab("backlog")}>Non planifiees</button>
                   <button type="button" className={segmentedButton(taskPanelTab === "planned")} onClick={() => setTaskPanelTab("planned")}>Planifiees</button>
                 </div>
-                <button type="button" className={buttonClass("primary")} onClick={() => setDrawer({ mode: "create", startDate: null })}>
-                  <Plus className="mr-1 inline h-4 w-4" />Ajouter une tache
-                </button>
                 <span className="rounded-full bg-slate-100 px-2 py-1 text-xs text-slate-600">
                   {taskPanelTab === "backlog" ? backlogTasks.length : plannedTasks.length} element(s)
                 </span>
@@ -922,6 +830,7 @@ export default function PlanningTab({ chantierId, chantierName, intervenants }: 
                       draggable
                       onToggleSelect={() => toggleTaskSelection(task.id)}
                       onOpen={() => setDrawer({ mode: "task", taskId: task.id })}
+                      onPlanify={() => setDrawer({ mode: "task", taskId: task.id })}
                       onResize={(delta) => void persistTask(task.id, { duration_days: clampDurationDays(task.duration_days + delta) })}
                       onDelete={() => void handleDelete(task.id)}
                     />
@@ -949,7 +858,7 @@ export default function PlanningTab({ chantierId, chantierName, intervenants }: 
                         <span className="truncate text-sm text-slate-600">{task.intervenant_id ? intervenantsById.get(task.intervenant_id)?.nom ?? "-" : "-"}</span>
                         <span className="text-sm text-slate-600">{task.duration_days}j</span>
                         <span className="text-sm text-slate-600">{STATUS_OPTIONS.find((option) => option.value === task.status)?.label ?? task.status}</span>
-                        <span className="text-right text-slate-400">�</span>
+                        <span className="text-right text-slate-400">...</span>
                       </button>
                     ))
                   )}
@@ -966,7 +875,7 @@ export default function PlanningTab({ chantierId, chantierName, intervenants }: 
               <div className="mb-4 flex items-center justify-between gap-2 border-b border-slate-100 pb-3">
                 <div>
                   <div className="text-sm font-semibold text-slate-900">
-                    {drawer.mode === "task" ? "Details / modifications" : drawer.mode === "create" ? "Nouvelle tache" : "Jour selectionne"}
+                    {drawer.mode === "task" ? "Details tache" : "Jour selectionne"}
                   </div>
                   <div className="text-xs text-slate-500">
                     {drawer.mode === "day" ? formatDisplayDate(drawer.day) : chantier?.nom ?? chantierName ?? "Planning"}
@@ -977,9 +886,25 @@ export default function PlanningTab({ chantierId, chantierName, intervenants }: 
 
               {drawer.mode === "day" ? (
                 <div className="space-y-3">
-                  <button type="button" className={buttonClass("primary")} onClick={() => setDrawer({ mode: "create", startDate: drawer.day })}>
-                    <Plus className="mr-1 inline h-4 w-4" />Ajouter une tache dans ce jour
-                  </button>
+                  <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
+                    <div className="mb-2 text-xs font-medium text-slate-500">Affecter une tache existante</div>
+                    <div className="flex flex-col gap-2 sm:flex-row">
+                      <select className={inputClass()} value={dayAssignTaskId} onChange={(e) => setDayAssignTaskId(e.target.value)}>
+                        <option value="">Choisir une tache non planifiee</option>
+                        {backlogTasks.map((task) => (
+                          <option key={task.id} value={task.id}>{task.titre}</option>
+                        ))}
+                      </select>
+                      <button
+                        type="button"
+                        className={buttonClass("primary")}
+                        disabled={!dayAssignTaskId || saving}
+                        onClick={() => void assignExistingTaskToDay(drawer.day, dayAssignTaskId)}
+                      >
+                        Affecter
+                      </button>
+                    </div>
+                  </div>
                   {drawerDayTasks.length === 0 ? (
                     <div className="rounded-2xl border border-dashed border-slate-200 p-4 text-sm text-slate-500">Aucune tache planifiee.</div>
                   ) : (
@@ -1045,9 +970,11 @@ export default function PlanningTab({ chantierId, chantierName, intervenants }: 
                     </button>
                     {currentTask ? (
                       <>
-                        <button type="button" className={buttonClass()} onClick={() => void handleDuplicate()}>
-                          <Copy className="mr-1 inline h-4 w-4" />Dupliquer
-                        </button>
+                        {currentTask.date_debut ? (
+                          <button type="button" className={buttonClass()} onClick={() => void deplanifyTask(currentTask.id)}>
+                            Deplanifier
+                          </button>
+                        ) : null}
                         <button type="button" className={buttonClass("danger")} onClick={() => void handleDelete(currentTask.id)}>
                           <Trash2 className="mr-1 inline h-4 w-4" />Supprimer
                         </button>
@@ -1063,3 +990,4 @@ export default function PlanningTab({ chantierId, chantierName, intervenants }: 
     </DndContext>
   );
 }
+
