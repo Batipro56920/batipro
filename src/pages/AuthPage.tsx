@@ -2,10 +2,12 @@
 import { useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { supabase } from "../lib/supabaseClient";
+import { useI18n } from "../i18n";
 
 export default function AuthPage() {
   const navigate = useNavigate();
   const location = useLocation();
+  const { t } = useI18n();
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -28,7 +30,7 @@ export default function AuthPage() {
 
     try {
       if (!email.trim() || !password) {
-        setMsg("Email et mot de passe requis.");
+        setMsg(t("auth.emailRequired"));
         return;
       }
 
@@ -38,7 +40,7 @@ export default function AuthPage() {
           password,
         });
         if (error) throw error;
-        setMsg("Compte créé. Tu peux te connecter.");
+        setMsg(t("auth.signupSuccess"));
         setMode("login");
         return;
       }
@@ -53,7 +55,7 @@ export default function AuthPage() {
       const from = (location.state as any)?.from?.pathname ?? "/dashboard";
       navigate(from, { replace: true });
     } catch (err: any) {
-      setMsg(err?.message ?? "Erreur authentification.");
+      setMsg(err?.message ?? t("auth.error"));
     } finally {
       setLoading(false);
     }
@@ -65,7 +67,7 @@ export default function AuthPage() {
         <div className="space-y-1">
           <div className="text-2xl font-bold">Batipro</div>
           <div className="text-slate-500 text-sm">
-            {mode === "login" ? "Connexion" : "Création de compte"}
+            {mode === "login" ? t("auth.loginTitle") : t("auth.signupTitle")}
           </div>
         </div>
 
@@ -78,7 +80,7 @@ export default function AuthPage() {
         <form className="space-y-3" onSubmit={onSubmit}>
           <input
             className="w-full rounded-xl border px-3 py-2 text-sm"
-            placeholder="Email"
+            placeholder={t("common.labels.email")}
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             type="email"
@@ -86,7 +88,7 @@ export default function AuthPage() {
           />
           <input
             className="w-full rounded-xl border px-3 py-2 text-sm"
-            placeholder="Mot de passe"
+            placeholder={t("auth.passwordPlaceholder")}
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             type="password"
@@ -101,7 +103,7 @@ export default function AuthPage() {
               loading ? "bg-slate-300 text-slate-700" : "bg-slate-900 text-white hover:bg-slate-800",
             ].join(" ")}
           >
-            {loading ? "…" : mode === "login" ? "Se connecter" : "Créer le compte"}
+            {loading ? "…" : mode === "login" ? t("auth.submitLogin") : t("auth.submitSignup")}
           </button>
         </form>
 
@@ -112,7 +114,7 @@ export default function AuthPage() {
               onClick={() => setMode("signup")}
               type="button"
             >
-              Créer un compte
+              {t("auth.goToSignup")}
             </button>
           ) : (
             <button
@@ -120,7 +122,7 @@ export default function AuthPage() {
               onClick={() => setMode("login")}
               type="button"
             >
-              J’ai déjà un compte
+              {t("auth.goToLogin")}
             </button>
           )}
         </div>

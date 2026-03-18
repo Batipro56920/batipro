@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import type { TaskTemplateInput, TaskTemplateRow } from "../services/taskTemplates.service";
+import { useI18n } from "../i18n";
 
 type Props = {
   open: boolean;
@@ -30,6 +31,7 @@ export default function TaskTemplateDrawer({
   onSave,
   onDelete,
 }: Props) {
+  const { t } = useI18n();
   const [titre, setTitre] = useState("");
   const [lot, setLot] = useState("");
   const [unite, setUnite] = useState("");
@@ -86,14 +88,14 @@ export default function TaskTemplateDrawer({
   ]);
 
   const busy = saving || deleting;
-  const title = useMemo(() => (template ? "Modifier template" : "Nouveau template"), [template]);
+  const title = useMemo(() => (template ? `${t("common.actions.edit")} template` : t("bibliothequeTasks.new")), [t, template]);
 
   if (!open) return null;
 
   async function handleSave() {
     setLocalError(null);
     if (!titre.trim()) {
-      setLocalError("Le titre est obligatoire.");
+      setLocalError(`${t("common.labels.title")} obligatoire.`);
       return;
     }
     const payload: TaskTemplateInput = {
@@ -109,7 +111,7 @@ export default function TaskTemplateDrawer({
       payload.quantite_defaut !== undefined &&
       Number.isNaN(payload.quantite_defaut)
     ) {
-      setLocalError("Quantité défaut invalide.");
+      setLocalError(t("taskTemplateDrawer.invalidDefaultQuantity"));
       return;
     }
     if (
@@ -117,7 +119,7 @@ export default function TaskTemplateDrawer({
       payload.temps_prevu_par_unite_h !== undefined &&
       Number.isNaN(payload.temps_prevu_par_unite_h)
     ) {
-      setLocalError("Temps/unité invalide.");
+      setLocalError(t("taskTemplateDrawer.invalidTimePerUnit"));
       return;
     }
     await onSave(payload);
@@ -125,7 +127,7 @@ export default function TaskTemplateDrawer({
 
   async function handleDelete() {
     if (!template?.id) return;
-    const ok = window.confirm(`Supprimer le template "${template.titre}" ?`);
+    const ok = window.confirm(t("taskTemplateDrawer.deleteConfirm", { name: template.titre }));
     if (!ok) return;
     await onDelete(template.id);
   }
@@ -142,13 +144,13 @@ export default function TaskTemplateDrawer({
             onClick={onClose}
             disabled={busy}
           >
-            X
+            {t("common.actions.close")}
           </button>
         </div>
 
         <div className="flex-1 overflow-auto p-4 space-y-4">
           <label className="block space-y-1">
-            <div className="text-xs text-slate-600">Titre *</div>
+            <div className="text-xs text-slate-600">{t("common.labels.title")} *</div>
             <input
               className="w-full rounded-xl border px-3 py-2 text-sm"
               value={titre}
@@ -159,7 +161,7 @@ export default function TaskTemplateDrawer({
 
           <div className="grid gap-3 md:grid-cols-2">
             <label className="block space-y-1">
-              <div className="text-xs text-slate-600">Lot</div>
+              <div className="text-xs text-slate-600">{t("common.labels.lot")}</div>
               <input
                 className="w-full rounded-xl border px-3 py-2 text-sm"
                 value={lot}
@@ -168,7 +170,7 @@ export default function TaskTemplateDrawer({
               />
             </label>
             <label className="block space-y-1">
-              <div className="text-xs text-slate-600">Unité</div>
+              <div className="text-xs text-slate-600">{t("taskTemplateDrawer.fields.unit")}</div>
               <input
                 className="w-full rounded-xl border px-3 py-2 text-sm"
                 value={unite}
@@ -180,7 +182,7 @@ export default function TaskTemplateDrawer({
 
           <div className="grid gap-3 md:grid-cols-2">
             <label className="block space-y-1">
-              <div className="text-xs text-slate-600">Qté défaut</div>
+              <div className="text-xs text-slate-600">{t("taskTemplateDrawer.fields.defaultQuantity")}</div>
               <input
                 type="number"
                 step="0.01"
@@ -190,7 +192,7 @@ export default function TaskTemplateDrawer({
               />
             </label>
             <label className="block space-y-1">
-              <div className="text-xs text-slate-600">Temps/unité (h)</div>
+              <div className="text-xs text-slate-600">{t("taskTemplateDrawer.fields.timePerUnit")}</div>
               <input
                 type="number"
                 step="0.01"
@@ -224,7 +226,7 @@ export default function TaskTemplateDrawer({
             onClick={handleDelete}
             disabled={busy || !template}
           >
-            {deleting ? "Suppression..." : "Supprimer"}
+            {deleting ? t("common.states.deleting") : t("common.actions.delete")}
           </button>
           <div className="flex gap-2">
             <button
@@ -233,7 +235,7 @@ export default function TaskTemplateDrawer({
               onClick={onClose}
               disabled={busy}
             >
-              Annuler
+              {t("common.actions.cancel")}
             </button>
             <button
               type="button"
@@ -244,7 +246,7 @@ export default function TaskTemplateDrawer({
               onClick={handleSave}
               disabled={busy}
             >
-              {saving ? "Enregistrement..." : "Enregistrer"}
+              {saving ? t("common.states.saving") : t("common.actions.save")}
             </button>
           </div>
         </div>

@@ -3,9 +3,11 @@ import { useEffect, useState } from "react";
 import type { ReactNode } from "react";
 import { Navigate, useLocation } from "react-router-dom";
 import { supabase } from "../lib/supabaseClient";
+import { useI18n } from "../i18n";
 
 export default function RequireAuth({ children }: { children: ReactNode }) {
   const location = useLocation();
+  const { t } = useI18n();
   const [checking, setChecking] = useState(true);
   const [hasSession, setHasSession] = useState(false);
 
@@ -31,8 +33,8 @@ export default function RequireAuth({ children }: { children: ReactNode }) {
   if (checking) {
     return (
       <div className="rounded-2xl border bg-white p-6">
-        <div className="font-semibold">Chargement…</div>
-        <div className="text-slate-500 text-sm mt-1">Vérification session.</div>
+        <div className="font-semibold">{t("requireAuth.loadingTitle")}</div>
+        <div className="text-slate-500 text-sm mt-1">{t("requireAuth.loadingMessage")}</div>
       </div>
     );
   }

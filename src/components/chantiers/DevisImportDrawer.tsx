@@ -294,6 +294,13 @@ export default function DevisImportDrawer({ open, chantierId, intervenants, onCl
         });
         ordre += 1;
 
+        // If the imported unit is hours, reuse quantity as planned hours
+        // so automatic progress works immediately after import.
+        const plannedHours =
+          row.unit === "h" && typeof row.quantity === "number" && row.quantity > 0
+            ? row.quantity
+            : 1;
+
         const createdTask = await createTask({
           chantier_id: chantierId,
           titre: row.title,
@@ -303,6 +310,7 @@ export default function DevisImportDrawer({ open, chantierId, intervenants, onCl
           intervenant_id: row.intervenant_id,
           quantite: row.quantity ?? 1,
           unite: row.unit,
+          temps_prevu_h: plannedHours,
         });
         createdTaskIds.push(createdTask.id);
 

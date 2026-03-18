@@ -1,5 +1,7 @@
 ﻿import React from "react";
 
+import { useI18n } from "../../i18n";
+
 export type TabKey =
   | "devis-taches"
   | "intervenants"
@@ -37,31 +39,33 @@ export default function ChantierTabs({
   tab: TabKey;
   setTab: (t: TabKey) => void;
 }) {
+  const { t } = useI18n();
+
   return (
     <div className="flex gap-2 flex-wrap">
       <TabButton active={tab === "devis-taches"} onClick={() => setTab("devis-taches")}>
-        Devis & tâches
+        {t("chantierTabs.quotesTasks")}
       </TabButton>
       <TabButton active={tab === "intervenants"} onClick={() => setTab("intervenants")}>
-        Intervenants
+        {t("chantierTabs.intervenants")}
       </TabButton>
       <TabButton active={tab === "temps"} onClick={() => setTab("temps")}>
-        Temps
+        {t("chantierTabs.time")}
       </TabButton>
       <TabButton active={tab === "planning"} onClick={() => setTab("planning")}>
-        Planning
+        {t("chantierTabs.planning")}
       </TabButton>
       <TabButton active={tab === "plans-reserves"} onClick={() => setTab("plans-reserves")}>
-        Plans & réserves
+        {t("chantierTabs.plansReserves")}
       </TabButton>
       <TabButton active={tab === "materiel"} onClick={() => setTab("materiel")}>
-        Matériel
+        {t("chantierTabs.material")}
       </TabButton>
       <TabButton active={tab === "messagerie"} onClick={() => setTab("messagerie")}>
-        Messagerie
+        {t("chantierTabs.messaging")}
       </TabButton>
       <TabButton active={tab === "rapports"} onClick={() => setTab("rapports")}>
-        Rapports
+        {t("chantierTabs.reports")}
       </TabButton>
     </div>
   );

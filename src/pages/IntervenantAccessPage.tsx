@@ -8,6 +8,7 @@ import {
   type ChantierDocumentRow,
 } from "../services/chantierDocuments.service";
 import { createPortalClient } from "../services/portalSupabaseClient";
+import { useI18n } from "../i18n";
 
 type TabKey =
   | "taches"
@@ -18,17 +19,6 @@ type TabKey =
   | "reserves"
   | "messagerie"
   | "rapports";
-
-const TABS: { key: TabKey; label: string; note?: string }[] = [
-  { key: "taches", label: "Tâches" },
-  { key: "temps", label: "Temps" },
-  { key: "planning", label: "Planning", note: "Lecture seule" },
-  { key: "documents", label: "Documents", note: "Lecture seule" },
-  { key: "materiel", label: "Matériel" },
-  { key: "reserves", label: "Réserves" },
-  { key: "messagerie", label: "Messagerie" },
-  { key: "rapports", label: "Rapports", note: "Lecture seule" },
-];
 
 type TaskStatus = "A_FAIRE" | "EN_COURS" | "FAIT";
 
@@ -64,6 +54,7 @@ function normalizeHoursInput(s: string) {
 export default function IntervenantAccessPage() {
   const params = useParams();
   const navigate = useNavigate();
+  const { language, locale, setLanguage, t } = useI18n();
   const token = params.token as string | undefined;
   const legacyFallbackEnabled =
     String(import.meta.env.VITE_ENABLE_INTERVENANT_LEGACY_FALLBACK ?? "0").trim() === "1";
@@ -88,6 +79,16 @@ export default function IntervenantAccessPage() {
   const [draftById, setDraftById] = useState<Record<string, TaskDraft>>({});
   const [savingById, setSavingById] = useState<Record<string, boolean>>({});
   const [saveMsgById, setSaveMsgById] = useState<Record<string, string>>({});
+  const tabs: { key: TabKey; label: string; note?: string }[] = [
+    { key: "taches", label: t("intervenantAccess.tabs.tasks") },
+    { key: "temps", label: t("intervenantAccess.tabs.time") },
+    { key: "planning", label: t("intervenantAccess.tabs.planning"), note: t("intervenantAccess.readonly") },
+    { key: "documents", label: t("intervenantAccess.tabs.documents"), note: t("intervenantAccess.readonly") },
+    { key: "materiel", label: t("intervenantAccess.tabs.material") },
+    { key: "reserves", label: t("intervenantAccess.tabs.reserves") },
+    { key: "messagerie", label: t("intervenantAccess.tabs.messaging") },
+    { key: "rapports", label: t("intervenantAccess.tabs.reports"), note: t("intervenantAccess.readonly") },
+  ];
 
   const portalClient = useMemo(() => {
     if (!jwt) return null;
@@ -110,7 +111,7 @@ export default function IntervenantAccessPage() {
         setFatalError(null);
 
         if (!token) {
-          setFatalError("Lien invalide (token manquant).");
+          setFatalError(t("intervenantAccess.invalidLink"));
           return;
         }
 
@@ -141,7 +142,7 @@ export default function IntervenantAccessPage() {
         const nextInterv = (res as any)?.intervenant_id as string | null | undefined;
 
         if (!nextJwt || !nextChantier) {
-          throw new Error("Accès refusé : réponse invalide (jwt/chantier_id manquant).");
+          throw new Error(t("intervenantAccess.deniedInvalidResponse"));
         }
 
         setJwt(nextJwt);
@@ -154,7 +155,7 @@ export default function IntervenantAccessPage() {
         sessionStorage.setItem(keyInterv, String(nextInterv ?? ""));
       } catch (e) {
         if (!alive) return;
-        setFatalError((e as Error).message || "Accès refusé.");
+        setFatalError((e as Error).message || t("intervenantAccess.denied"));
       } finally {
         if (alive) setLoading(false);
       }
@@ -164,7 +165,7 @@ export default function IntervenantAccessPage() {
     return () => {
       alive = false;
     };
-  }, [legacyFallbackEnabled, navigate, token]);
+  }, [legacyFallbackEnabled, navigate, t, token]);
 
   // 2) Load tâches (on charge quand on est sur Tâches OU Temps)
   useEffect(() => {
@@ -241,7 +242,7 @@ export default function IntervenantAccessPage() {
         setDocuments(rows);
       } catch (e) {
         if (!alive) return;
-        setDocumentsError((e as Error).message ?? "Erreur chargement documents.");
+        setDocumentsError((e as Error).message ?? t("intervenantAccess.documentsError"));
         setDocuments([]);
       } finally {
         if (alive) setDocumentsLoading(false);
@@ -252,7 +253,7 @@ export default function IntervenantAccessPage() {
     return () => {
       alive = false;
     };
-  }, [portalClient, chantierId, intervenantId, activeTab]);
+  }, [portalClient, chantierId, intervenantId, activeTab, t]);
 
   function setDraft(taskId: string, patch: Partial<TaskDraft>) {
     setDraftById((prev) => {
@@ -292,7 +293,7 @@ export default function IntervenantAccessPage() {
       const add = addStr === "" ? 0 : Number(addStr);
 
       if (!Number.isFinite(add) || add < 0) {
-        throw new Error("Ajout (h) invalide (ex: 1.5 ou 1,5).");
+        throw new Error(t("intervenantAccess.invalidHours"));
       }
 
       const current = Number(task.temps_reel_h ?? 0);
@@ -328,11 +329,11 @@ export default function IntervenantAccessPage() {
         [taskId]: { ...(prev[taskId] as TaskDraft), ajout_h: "" },
       }));
 
-      setSaveMsgById((p) => ({ ...p, [taskId]: "Enregistré ?" }));
+      setSaveMsgById((p) => ({ ...p, [taskId]: t("intervenantAccess.saved") }));
     } catch (e) {
       setSaveMsgById((p) => ({
         ...p,
-        [taskId]: (e as Error).message || "Erreur enregistrement",
+        [taskId]: (e as Error).message || t("intervenantAccess.saveError"),
       }));
     } finally {
       setSavingById((p) => ({ ...p, [taskId]: false }));
@@ -345,9 +346,9 @@ export default function IntervenantAccessPage() {
   }, [tasks]);
 
   const renderTaskCards = () => {
-    if (tasksLoading) return <p>Chargement des tâches…</p>;
+    if (tasksLoading) return <p>{t("intervenantAccess.loadingTasks")}</p>;
     if (tasksError) return <p style={{ color: "crimson" }}>{tasksError}</p>;
-    if (tasks.length === 0) return <p>Aucune tâche trouvée.</p>;
+    if (tasks.length === 0) return <p>{t("intervenantAccess.noTask")}</p>;
 
     return (
       <div style={{ display: "grid", gap: 10 }}>
@@ -383,18 +384,18 @@ export default function IntervenantAccessPage() {
                   alignItems: "center",
                 }}
               >
-                <div style={{ fontSize: 13, opacity: 0.8 }}>Statut</div>
+                <div style={{ fontSize: 13, opacity: 0.8 }}>{t("intervenantAccess.fields.status")}</div>
                 <select
                   value={d.status}
                   onChange={(e) => setDraft(task.id, { status: e.target.value as TaskStatus })}
                   style={{ padding: 8, borderRadius: 8, border: "1px solid #ddd" }}
                 >
-                  <option value="A_FAIRE">À faire</option>
-                  <option value="EN_COURS">En cours</option>
-                  <option value="FAIT">Fait</option>
+                  <option value="A_FAIRE">{t("common.taskStatus.A_FAIRE")}</option>
+                  <option value="EN_COURS">{t("common.taskStatus.EN_COURS")}</option>
+                  <option value="FAIT">{t("common.taskStatus.FAIT")}</option>
                 </select>
 
-                <div style={{ fontSize: 13, opacity: 0.8 }}>Date début</div>
+                <div style={{ fontSize: 13, opacity: 0.8 }}>{t("intervenantAccess.fields.startDate")}</div>
                 <input
                   type="date"
                   value={d.date_debut}
@@ -402,7 +403,7 @@ export default function IntervenantAccessPage() {
                   style={{ padding: 8, borderRadius: 8, border: "1px solid #ddd" }}
                 />
 
-                <div style={{ fontSize: 13, opacity: 0.8 }}>Date fin</div>
+                <div style={{ fontSize: 13, opacity: 0.8 }}>{t("intervenantAccess.fields.endDate")}</div>
                 <input
                   type="date"
                   value={d.date_fin}
@@ -410,7 +411,7 @@ export default function IntervenantAccessPage() {
                   style={{ padding: 8, borderRadius: 8, border: "1px solid #ddd" }}
                 />
 
-                <div style={{ fontSize: 13, opacity: 0.8 }}>Total actuel (h)</div>
+                <div style={{ fontSize: 13, opacity: 0.8 }}>{t("intervenantAccess.fields.currentTotalHours")}</div>
                 <input
                   value={toInputNumberString(task.temps_reel_h)}
                   disabled
@@ -422,7 +423,7 @@ export default function IntervenantAccessPage() {
                   }}
                 />
 
-                <div style={{ fontSize: 13, opacity: 0.8 }}>Ajouter (h)</div>
+                <div style={{ fontSize: 13, opacity: 0.8 }}>{t("intervenantAccess.fields.addHours")}</div>
                 <input
                   inputMode="decimal"
                   placeholder="ex: 1.5"
@@ -445,11 +446,11 @@ export default function IntervenantAccessPage() {
                     cursor: saving ? "not-allowed" : "pointer",
                   }}
                 >
-                  {saving ? "Enregistrement…" : "Enregistrer"}
+                  {saving ? t("common.states.saving") : t("common.actions.save")}
                 </button>
 
                 {msg ? (
-                  <span style={{ fontSize: 13, color: msg.includes("?") ? "green" : "crimson" }}>
+                  <span style={{ fontSize: 13, color: msg === t("intervenantAccess.saved") ? "green" : "crimson" }}>
                     {msg}
                   </span>
                 ) : null}
@@ -464,8 +465,8 @@ export default function IntervenantAccessPage() {
   if (loading) {
     return (
       <div style={{ padding: 16 }}>
-        <h2>Portail intervenant</h2>
-        <p>Chargement de l’accès…</p>
+        <h2>{t("intervenantAccess.title")}</h2>
+        <p>{t("intervenantAccess.loadingAccess")}</p>
       </div>
     );
   }
@@ -473,32 +474,69 @@ export default function IntervenantAccessPage() {
   if (fatalError) {
     return (
       <div style={{ padding: 16 }}>
-        <h2>Accès intervenant</h2>
+        <h2>{t("intervenantAccess.accessTitle")}</h2>
         <p style={{ color: "crimson" }}>{fatalError}</p>
-        <p>Demande à l’administrateur de renvoyer un lien.</p>
+        <p>{t("intervenantAccess.askAdmin")}</p>
       </div>
     );
   }
 
   return (
     <div style={{ padding: 16, maxWidth: 1100, margin: "0 auto" }}>
-      <header style={{ marginBottom: 16 }}>
-        <h2 style={{ margin: 0 }}>Portail intervenant</h2>
-        <div style={{ opacity: 0.7, fontSize: 13, marginTop: 6 }}>
-          Chantier: {chantierId ?? "—"} — Intervenant: {intervenantId ?? "—"}
+      <header style={{ marginBottom: 16, display: "flex", justifyContent: "space-between", gap: 12, alignItems: "flex-start", flexWrap: "wrap" }}>
+        <div>
+          <h2 style={{ margin: 0 }}>{t("intervenantAccess.title")}</h2>
+          <div style={{ opacity: 0.7, fontSize: 13, marginTop: 6 }}>
+            {t("intervenantAccess.chantierLabel")}: {chantierId ?? "—"} — {t("intervenantAccess.intervenantLabel")}: {intervenantId ?? "—"}
+          </div>
+        </div>
+        <div
+          style={{
+            display: "inline-flex",
+            alignItems: "center",
+            gap: 4,
+            padding: 4,
+            border: "1px solid #e2e8f0",
+            borderRadius: 12,
+            background: "#f8fafc",
+          }}
+          role="group"
+          aria-label={t("layout.languageSwitcherLabel")}
+        >
+          {(["fr", "al"] as const).map((value) => (
+            <button
+              key={value}
+              type="button"
+              onClick={() => setLanguage(value)}
+              style={{
+                border: "none",
+                borderRadius: 8,
+                padding: "6px 10px",
+                fontSize: 12,
+                fontWeight: 600,
+                cursor: "pointer",
+                background: language === value ? "#ffffff" : "transparent",
+                color: language === value ? "#0f172a" : "#64748b",
+                boxShadow: language === value ? "0 1px 2px rgba(15, 23, 42, 0.08)" : "none",
+              }}
+              aria-pressed={language === value}
+            >
+              {t(`common.languages.${value}`)}
+            </button>
+          ))}
         </div>
       </header>
 
       <nav style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 16 }}>
-        {TABS.map((t) => (
+        {tabs.map((tab) => (
           <button
-            key={t.key}
-            onClick={() => setActiveTab(t.key)}
-            className={["tab-btn", activeTab === t.key ? "tab-btn--active" : "tab-btn--inactive"].join(" ")}
+            key={tab.key}
+            onClick={() => setActiveTab(tab.key)}
+            className={["tab-btn", activeTab === tab.key ? "tab-btn--active" : "tab-btn--inactive"].join(" ")}
           >
-            {t.label}
-            {t.note ? (
-              <span style={{ marginLeft: 8, fontSize: 12, opacity: 0.75 }}>({t.note})</span>
+            {tab.label}
+            {tab.note ? (
+              <span style={{ marginLeft: 8, fontSize: 12, opacity: 0.75 }}>({tab.note})</span>
             ) : null}
           </button>
         ))}
@@ -507,7 +545,7 @@ export default function IntervenantAccessPage() {
       <section style={{ border: "1px solid #eee", borderRadius: 14, padding: 14 }}>
         {activeTab === "taches" && (
           <>
-            <h3 style={{ marginTop: 0 }}>Tâches</h3>
+            <h3 style={{ marginTop: 0 }}>{t("intervenantAccess.tabs.tasks")}</h3>
             {renderTaskCards()}
           </>
         )}
@@ -516,41 +554,41 @@ export default function IntervenantAccessPage() {
           <>
             <div style={{ display: "flex", justifyContent: "space-between", gap: 12 }}>
               <div>
-                <h3 style={{ marginTop: 0, marginBottom: 6 }}>Temps (par tâche)</h3>
+                <h3 style={{ marginTop: 0, marginBottom: 6 }}>{t("intervenantAccess.tabs.time")}</h3>
                 <div style={{ fontSize: 13, opacity: 0.75 }}>
-                  Renseigne dates début/fin et ajoute des heures. Le total s’incrémente.
+                  {t("intervenantAccess.timeHelp")}
                 </div>
               </div>
               <div style={{ fontSize: 13, opacity: 0.85 }}>
-                Total saisi : <b>{totalSaisi} h</b>
+                <b>{t("intervenantAccess.totalEntered", { value: totalSaisi })}</b>
               </div>
             </div>
 
             <div style={{ marginTop: 12 }}>{renderTaskCards()}</div>
 
             <div style={{ fontSize: 13, opacity: 0.7, marginTop: 10 }}>
-              Note : “Ajouter (h)” s’additionne au total. Laisse vide si tu ne veux rien ajouter.
+              {t("intervenantAccess.addHoursHint")}
             </div>
           </>
         )}
 
         {activeTab === "planning" && (
           <>
-            <h3 style={{ marginTop: 0 }}>Planning (lecture seule)</h3>
-            <p>V1 : lecture seule (à brancher ensuite).</p>
+            <h3 style={{ marginTop: 0 }}>{t("intervenantAccess.tabs.planning")} ({t("intervenantAccess.readonly")})</h3>
+            <p>{t("intervenantAccess.planningReadonly")}</p>
           </>
         )}
 
         {activeTab === "documents" && (
           <>
-            <h3 style={{ marginTop: 0 }}>Documents</h3>
+            <h3 style={{ marginTop: 0 }}>{t("intervenantAccess.tabs.documents")}</h3>
             {documentsError && (
               <div style={{ color: "#b91c1c", marginBottom: 8 }}>{documentsError}</div>
             )}
             {documentsLoading ? (
-              <div>Chargement...</div>
+              <div>{t("common.states.loading")}</div>
             ) : documents.length === 0 ? (
-              <div>Aucun document disponible.</div>
+              <div>{t("intervenantAccess.noDocument")}</div>
             ) : (
               <div style={{ display: "grid", gap: 8 }}>
                 {documents.map((doc) => (
@@ -574,7 +612,7 @@ export default function IntervenantAccessPage() {
                       </div>
                     </div>
                     <div style={{ fontSize: 12, opacity: 0.7 }}>
-                      {doc.created_at ? new Date(doc.created_at).toLocaleDateString("fr-FR") : "—"}
+                      {doc.created_at ? new Date(doc.created_at).toLocaleDateString(locale) : "—"}
                     </div>
                   </div>
                 ))}
@@ -585,29 +623,29 @@ export default function IntervenantAccessPage() {
 
         {activeTab === "materiel" && (
           <>
-            <h3 style={{ marginTop: 0 }}>Matériel</h3>
-            <p>V1 : demandes + statut (à brancher ensuite).</p>
+            <h3 style={{ marginTop: 0 }}>{t("intervenantAccess.tabs.material")}</h3>
+            <p>{t("intervenantAccess.materialReadonly")}</p>
           </>
         )}
 
         {activeTab === "reserves" && (
           <>
-            <h3 style={{ marginTop: 0 }}>Réserves</h3>
-            <p>V1 : création/modification (à brancher ensuite).</p>
+            <h3 style={{ marginTop: 0 }}>{t("intervenantAccess.tabs.reserves")}</h3>
+            <p>{t("intervenantAccess.reservesReadonly")}</p>
           </>
         )}
 
         {activeTab === "messagerie" && (
           <>
-            <h3 style={{ marginTop: 0 }}>Messagerie</h3>
-            <p>V1 : écrire (à brancher ensuite).</p>
+            <h3 style={{ marginTop: 0 }}>{t("intervenantAccess.tabs.messaging")}</h3>
+            <p>{t("intervenantAccess.messagingReadonly")}</p>
           </>
         )}
 
         {activeTab === "rapports" && (
           <>
-            <h3 style={{ marginTop: 0 }}>Rapports (lecture seule)</h3>
-            <p>V1 : lecture seule (à brancher ensuite).</p>
+            <h3 style={{ marginTop: 0 }}>{t("intervenantAccess.tabs.reports")} ({t("intervenantAccess.readonly")})</h3>
+            <p>{t("intervenantAccess.reportsReadonly")}</p>
           </>
         )}
       </section>

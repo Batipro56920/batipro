@@ -2,6 +2,7 @@
 import { useEffect, useState } from "react";
 import type { ChantierStatus } from "../types/chantier";
 import { getChantiers, deleteChantier, countChantiers } from "../services/chantiers.service";
+import { useI18n } from "../i18n";
 
 type ChantierRow = {
   id: string;
@@ -12,14 +13,14 @@ type ChantierRow = {
   created_at?: string | null;
 };
 
-function statusLabel(status: ChantierStatus) {
+function statusLabel(status: ChantierStatus, t: (key: string) => string) {
   switch (status) {
     case "PREPARATION":
-      return "Préparation";
+      return t("common.chantierStatus.PREPARATION");
     case "EN_COURS":
-      return "En cours";
+      return t("common.chantierStatus.EN_COURS");
     case "TERMINE":
-      return "Terminé";
+      return t("common.chantierStatus.TERMINE");
     default:
       return status || "—";
   }
@@ -40,6 +41,7 @@ function statusClasses(status: ChantierStatus) {
 
 export default function ChantiersPage() {
   const navigate = useNavigate();
+  const { t } = useI18n();
 
   const [items, setItems] = useState<ChantierRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -57,7 +59,7 @@ export default function ChantiersPage() {
         setDebugCount(count);
       }
     } catch (e: any) {
-      setErrorMsg(e?.message ?? "Erreur lors du chargement des chantiers.");
+      setErrorMsg(e?.message ?? t("chantiers.loadError"));
     } finally {
       setLoading(false);
     }
@@ -72,15 +74,15 @@ export default function ChantiersPage() {
       {/* Header */}
       <div className="flex items-start justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold">Chantiers</h1>
-          <p className="text-slate-500">Liste et suivi</p>
+          <h1 className="text-2xl font-bold">{t("chantiers.title")}</h1>
+          <p className="text-slate-500">{t("chantiers.subtitle")}</p>
         </div>
 
         <button
           className="rounded-xl bg-slate-900 text-white px-4 py-2 hover:bg-slate-800 transition"
           onClick={() => navigate("/chantiers/nouveau")}
         >
-          + Nouveau chantier
+          + {t("chantiers.new")}
         </button>
       </div>
 
@@ -94,17 +96,13 @@ export default function ChantiersPage() {
       {/* Loading / Empty / List */}
       {loading ? (
         <div className="rounded-2xl border bg-white p-8 text-center">
-          <div className="font-semibold">Chargement…</div>
-          <div className="text-slate-500 text-sm mt-1">
-            Récupération des chantiers depuis la base.
-          </div>
+          <div className="font-semibold">{t("chantiers.loadingTitle")}</div>
+          <div className="text-slate-500 text-sm mt-1">{t("chantiers.loadingMessage")}</div>
         </div>
       ) : items.length === 0 ? (
         <div className="rounded-2xl border bg-white p-8 text-center">
-          <div className="font-semibold">Aucun chantier</div>
-          <div className="text-slate-500 text-sm mt-1">
-            Clique sur “Nouveau chantier” pour démarrer.
-          </div>
+          <div className="font-semibold">{t("chantiers.emptyTitle")}</div>
+          <div className="text-slate-500 text-sm mt-1">{t("chantiers.emptyMessage")}</div>
         </div>
       ) : (
         <div className="grid gap-3">
@@ -126,7 +124,7 @@ export default function ChantiersPage() {
                         statusClasses(status),
                       ].join(" ")}
                     >
-                      {statusLabel(status)}
+                      {statusLabel(status, t)}
                     </span>
                   </div>
 
@@ -136,7 +134,7 @@ export default function ChantiersPage() {
 
                   <div className="mt-3">
                     <div className="flex items-center justify-between text-xs text-slate-500">
-                      <span>Avancement</span>
+                      <span>{t("chantiers.progress")}</span>
                       <span className="font-medium text-slate-700">
                         {avancement}%
                       </span>
@@ -157,18 +155,18 @@ export default function ChantiersPage() {
                     to={`/chantiers/${c.id}`}
                     className="rounded-xl border px-3 py-2 hover:bg-slate-50 transition whitespace-nowrap"
                   >
-                    Ouvrir
+                    {t("chantiers.open")}
                   </Link>
 
                   <button
                     className="rounded-xl border px-3 py-2 hover:bg-slate-50 transition whitespace-nowrap"
                     onClick={async () => {
-                      if (!window.confirm(`Supprimer "${c.nom}" ?`)) return;
+                      if (!window.confirm(t("chantiers.deleteConfirm", { name: c.nom }))) return;
                       await deleteChantier(c.id);
                       await refresh();
                     }}
                   >
-                    Supprimer
+                    {t("common.actions.delete")}
                   </button>
                 </div>
               </div>
@@ -180,7 +178,7 @@ export default function ChantiersPage() {
       {!loading && (
         <div className="text-xs text-slate-400 flex flex-wrap items-center gap-3">
           <button className="underline hover:text-slate-600" onClick={refresh}>
-            Rafraîchir la liste
+            {t("chantiers.refresh")}
           </button>
           {import.meta.env.DEV && debugCount !== null && (
             <span>DEBUG: count={debugCount} list={items.length}</span>

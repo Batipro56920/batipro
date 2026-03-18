@@ -1,5 +1,6 @@
 ﻿import React from "react";
 import type { IntervenantRow } from "../../services/intervenants.service";
+import { useI18n } from "../../i18n";
 
 type Props = {
   intervenants: IntervenantRow[];
@@ -28,6 +29,7 @@ type Props = {
 };
 
 export default function TabIntervenants(props: Props) {
+  const { t } = useI18n();
   const {
     intervenants,
     intervenantsLoading,
@@ -56,9 +58,9 @@ export default function TabIntervenants(props: Props) {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <div className="font-semibold">Intervenants</div>
+          <div className="font-semibold">{t("intervenantsTab.title")}</div>
           <div className="text-sm text-slate-500">
-            Créer, modifier et gérer l’accès au portail chantier
+            {t("intervenantsTab.subtitle")}
           </div>
         </div>
         <button
@@ -67,7 +69,7 @@ export default function TabIntervenants(props: Props) {
           className="rounded-xl border px-3 py-2 text-sm hover:bg-slate-50"
           disabled={intervenantsLoading}
         >
-          {intervenantsLoading ? "Chargement…" : "Rafraîchir"}
+          {intervenantsLoading ? t("intervenantsTab.loading") : t("common.actions.refresh")}
         </button>
       </div>
 
@@ -78,23 +80,23 @@ export default function TabIntervenants(props: Props) {
       )}
 
       <form onSubmit={onCreateIntervenantFromTab} className="rounded-xl border bg-slate-50 p-4 space-y-3">
-        <div className="font-semibold text-sm">Ajouter un intervenant</div>
+        <div className="font-semibold text-sm">{t("intervenantsTab.addTitle")}</div>
         <div className="grid gap-2 md:grid-cols-3">
           <input
             className="rounded-xl border px-3 py-2 text-sm"
-            placeholder="Nom (ex: Pierre — Plombier)"
+            placeholder={t("intervenantsTab.namePlaceholder")}
             value={newIntervenantNom}
             onChange={(e) => setNewIntervenantNom(e.target.value)}
           />
           <input
             className="rounded-xl border px-3 py-2 text-sm"
-            placeholder="Email (optionnel)"
+            placeholder={t("intervenantsTab.emailPlaceholder")}
             value={newIntervenantEmail}
             onChange={(e) => setNewIntervenantEmail(e.target.value)}
           />
           <input
             className="rounded-xl border px-3 py-2 text-sm"
-            placeholder="Téléphone (optionnel)"
+            placeholder={t("intervenantsTab.phonePlaceholder")}
             value={newIntervenantTel}
             onChange={(e) => setNewIntervenantTel(e.target.value)}
           />
@@ -108,16 +110,16 @@ export default function TabIntervenants(props: Props) {
               creatingIntervenant ? "bg-slate-300 text-slate-700" : "bg-slate-900 text-white hover:bg-slate-800",
             ].join(" ")}
           >
-            {creatingIntervenant ? "Création…" : "+ Ajouter"}
+            {creatingIntervenant ? t("intervenantsTab.creating") : `+ ${t("common.actions.add")}`}
           </button>
         </div>
       </form>
 
       <div className="space-y-2">
         {intervenantsLoading ? (
-          <div className="text-sm text-slate-500">Chargement…</div>
+          <div className="text-sm text-slate-500">{t("intervenantsTab.loading")}</div>
         ) : intervenants.length === 0 ? (
-          <div className="text-sm text-slate-500">Aucun intervenant pour le moment.</div>
+          <div className="text-sm text-slate-500">{t("intervenantsTab.empty")}</div>
         ) : (
           intervenants.map((i) => {
             const accessUrl = accessUrlByIntervenant[i.id] ?? "";
@@ -141,7 +143,7 @@ export default function TabIntervenants(props: Props) {
                         sendingAccessId === i.id ? "bg-slate-100 text-slate-500" : "hover:bg-slate-50",
                       ].join(" ")}
                     >
-                      {sendingAccessId === i.id ? "Envoi…" : "Envoyer accès"}
+                      {sendingAccessId === i.id ? t("intervenantsTab.sending") : t("intervenantsTab.sendAccess")}
                     </button>
 
                     <button
@@ -149,7 +151,7 @@ export default function TabIntervenants(props: Props) {
                       onClick={() => startEditIntervenant(i)}
                       className="text-sm rounded-xl border px-3 py-2 hover:bg-slate-50"
                     >
-                      Modifier
+                      {t("common.actions.edit")}
                     </button>
 
                     <button
@@ -157,14 +159,14 @@ export default function TabIntervenants(props: Props) {
                       onClick={() => onDeleteIntervenant(i)}
                       className="text-sm rounded-xl border border-red-200 text-red-700 px-3 py-2 hover:bg-red-50"
                     >
-                      Supprimer
+                      {t("common.actions.delete")}
                     </button>
                   </div>
                 </div>
 
                 {accessUrl ? (
                   <div className="rounded-xl border bg-slate-50 p-3">
-                    <div className="text-xs text-slate-600 mb-2">Lien d’accès</div>
+                    <div className="text-xs text-slate-600 mb-2">{t("intervenantsTab.accessLink")}</div>
                     <div className="text-xs font-mono break-all">{accessUrl}</div>
                     <div className="mt-3 flex gap-2">
                       <button
@@ -172,11 +174,11 @@ export default function TabIntervenants(props: Props) {
                         className="text-sm rounded-xl border px-3 py-2 hover:bg-white"
                         onClick={() => copyToClipboard(accessUrl)}
                       >
-                        Copier le lien
+                        {t("intervenantsTab.copyLink")}
                       </button>
                       <a href={accessUrl} target="_blank" rel="noreferrer">
                         <button type="button" className="text-sm rounded-xl border px-3 py-2 hover:bg-white">
-                          Ouvrir
+                          {t("common.actions.open")}
                         </button>
                       </a>
                     </div>

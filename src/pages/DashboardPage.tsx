@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { supabase } from "../lib/supabaseClient";
 import { CHANTIER_EN_COURS_STATUSES } from "../lib/chantierRules";
 import { listChantiers, type ChantierRow } from "../services/chantiers.service";
+import { useI18n } from "../i18n";
 
 type DashboardView = "chantiers" | "avancement" | "heures" | "materiel" | null;
 
@@ -18,8 +19,8 @@ type MaterielSnapshot = {
   created_at: string | null;
 };
 
-function formatHours(value: number): string {
-  return `${value.toLocaleString("fr-FR", { maximumFractionDigits: 1 })} h`;
+function formatHours(value: number, locale: string): string {
+  return `${value.toLocaleString(locale, { maximumFractionDigits: 1 })} h`;
 }
 
 function formatPercent(value: number): string {
@@ -39,11 +40,11 @@ function normalizeMaterialStatus(row: Pick<MaterielSnapshot, "statut" | "status"
   return "en_attente";
 }
 
-function materialStatusLabel(value: string): string {
-  if (value === "validee") return "Validee";
-  if (value === "refusee") return "Refusee";
-  if (value === "livree") return "Livree";
-  return "En attente";
+function materialStatusLabel(value: string, t: (key: string) => string): string {
+  if (value === "validee") return t("common.materielStatus.validee");
+  if (value === "refusee") return t("common.materielStatus.refusee");
+  if (value === "livree") return t("common.materielStatus.livree");
+  return t("common.materielStatus.en_attente");
 }
 
 function statusToneClass(tone: "normal" | "warning" | "danger") {
@@ -58,6 +59,7 @@ function cardToneClass(tone: "normal" | "warning" | "danger", active: boolean) {
 }
 
 export default function DashboardPage() {
+  const { locale, t } = useI18n();
   const [chantiers, setChantiers] = useState<ChantierRow[]>([]);
   const [materiel, setMateriel] = useState<MaterielSnapshot[]>([]);
   const [activeView, setActiveView] = useState<DashboardView>("chantiers");
@@ -137,9 +139,9 @@ export default function DashboardPage() {
       return pendingMateriel.slice(0, 8).map((row) => ({
         key: row.id,
         href: `/chantiers/${row.chantier_id}`,
-        title: row.titre || row.designation || "Demande materiel",
-        subtitle: chantierById.get(row.chantier_id)?.nom || "Chantier",
-        meta: `${materialStatusLabel(normalizeMaterialStatus(row))} | ${Number(row.quantite ?? 0).toLocaleString("fr-FR")} ${row.unite ?? ""}`.trim(),
+        title: row.titre || row.designation || t("dashboard.materialRequest"),
+        subtitle: chantierById.get(row.chantier_id)?.nom || t("sidebar.chantiers"),
+        meta: `${materialStatusLabel(normalizeMaterialStatus(row), t)} | ${Number(row.quantite ?? 0).toLocaleString(locale)} ${row.unite ?? ""}`.trim(),
       }));
     }
 
@@ -151,8 +153,8 @@ export default function DashboardPage() {
           key: chantier.id,
           href: `/chantiers/${chantier.id}`,
           title: chantier.nom,
-          subtitle: chantier.client || "Client non renseigne",
-          meta: `Avancement ${formatPercent(Number(chantier.avancement ?? 0))}`,
+          subtitle: chantier.client || t("dashboard.missingClient"),
+          meta: t("dashboard.progressLabel", { value: formatPercent(Number(chantier.avancement ?? 0)) }),
         }));
     }
 
@@ -169,8 +171,8 @@ export default function DashboardPage() {
           key: chantier.id,
           href: `/chantiers/${chantier.id}`,
           title: chantier.nom,
-          subtitle: chantier.client || "Client non renseigne",
-          meta: `${formatHours(Number(chantier.heures_passees ?? 0))} / ${formatHours(Number(chantier.heures_prevues ?? 0))}`,
+          subtitle: chantier.client || t("dashboard.missingClient"),
+          meta: `${formatHours(Number(chantier.heures_passees ?? 0), locale)} / ${formatHours(Number(chantier.heures_prevues ?? 0), locale)}`,
         }));
     }
 
@@ -178,10 +180,12 @@ export default function DashboardPage() {
       key: chantier.id,
       href: `/chantiers/${chantier.id}`,
       title: chantier.nom,
-      subtitle: chantier.client || "Client non renseigne",
-      meta: `Fin prevue ${chantier.date_fin_prevue || "non planifiee"}`,
+      subtitle: chantier.client || t("dashboard.missingClient"),
+      meta: chantier.date_fin_prevue
+        ? t("dashboard.finishPlanned", { date: chantier.date_fin_prevue })
+        : t("dashboard.finishNotPlanned"),
     }));
-  }, [activeView, chantierById, chantiers, chantiersEnCours, pendingMateriel]);
+  }, [activeView, chantierById, chantiers, chantiersEnCours, locale, pendingMateriel, t]);
 
   const kpis: Array<{
     key: Exclude<DashboardView, null>;
@@ -192,23 +196,23 @@ export default function DashboardPage() {
   }> = [
     {
       key: "chantiers",
-      label: "Chantiers en cours",
+      label: t("dashboard.kpis.chantiers"),
       value: loading ? "..." : String(chantiersEnCours.length),
-      hint: "Vue operationnelle",
+      hint: t("dashboard.viewOperational"),
       tone: chantiersEnCours.length === 0 ? "warning" : "normal",
     },
     {
       key: "avancement",
-      label: "Avancement moyen global",
+      label: t("dashboard.kpis.averageProgress"),
       value: loading ? "..." : formatPercent(avgAvancement),
-      hint: avgAvancement < 40 ? "A relancer" : "Suivi global",
+      hint: avgAvancement < 40 ? t("dashboard.relaunch") : t("dashboard.followUp"),
       tone: avgAvancement < 40 ? "danger" : avgAvancement < 70 ? "warning" : "normal",
     },
     {
       key: "heures",
-      label: "Heures consommees vs prevues",
-      value: loading ? "..." : `${formatHours(totalHeuresPassees)} / ${formatHours(totalHeuresPrevues)}`,
-      hint: totalHeuresPrevues > 0 && totalHeuresPassees > totalHeuresPrevues ? "Derive a corriger" : "Sous controle",
+      label: t("dashboard.kpis.hours"),
+      value: loading ? "..." : `${formatHours(totalHeuresPassees, locale)} / ${formatHours(totalHeuresPrevues, locale)}`,
+      hint: totalHeuresPrevues > 0 && totalHeuresPassees > totalHeuresPrevues ? t("dashboard.drift") : t("dashboard.underControl"),
       tone:
         totalHeuresPrevues > 0 && totalHeuresPassees > totalHeuresPrevues
           ? "danger"
@@ -218,9 +222,9 @@ export default function DashboardPage() {
     },
     {
       key: "materiel",
-      label: "Demandes materiel en attente",
+      label: t("dashboard.kpis.material"),
       value: loading ? "..." : String(pendingMateriel.length),
-      hint: pendingMateriel.length > 0 ? "Action attendue" : "Flux propre",
+      hint: pendingMateriel.length > 0 ? t("dashboard.actionNeeded") : t("dashboard.cleanFlow"),
       tone: pendingMateriel.length > 4 ? "danger" : pendingMateriel.length > 0 ? "warning" : "normal",
     },
   ];
@@ -228,9 +232,9 @@ export default function DashboardPage() {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between gap-3">
-        <h1 className="text-3xl font-semibold text-slate-950">Cockpit chantiers</h1>
+        <h1 className="text-3xl font-semibold text-slate-950">{t("dashboard.title")}</h1>
         <Link to="/chantiers" className="rounded-full border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50">
-          Chantiers
+          {t("dashboard.cta")}
         </Link>
       </div>
 
@@ -253,16 +257,16 @@ export default function DashboardPage() {
 
       <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
         <div className="flex items-center justify-between gap-3">
-          <div className="text-sm font-semibold text-slate-950">Chantiers</div>
+          <div className="text-sm font-semibold text-slate-950">{t("dashboard.sectionTitle")}</div>
           {activeView ? (
             <button type="button" onClick={() => setActiveView(null)} className="rounded-full border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-700">
-              Reinitialiser
+              {t("common.actions.reset")}
             </button>
           ) : null}
         </div>
         <div className="mt-4 space-y-3">
           {focusRows.length === 0 ? (
-            <div className="rounded-2xl border border-dashed border-slate-200 p-4 text-sm text-slate-500">Aucun chantier a afficher.</div>
+            <div className="rounded-2xl border border-dashed border-slate-200 p-4 text-sm text-slate-500">{t("dashboard.empty")}</div>
           ) : (
             focusRows.map((row) => (
               <Link key={row.key} to={row.href} className="block rounded-2xl border border-slate-200 px-4 py-3 transition hover:border-blue-200 hover:bg-blue-50/40">

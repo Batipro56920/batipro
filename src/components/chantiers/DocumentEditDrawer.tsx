@@ -1,6 +1,7 @@
 ﻿import { useEffect } from "react";
 import type { DocumentVisibilityOption } from "../../services/chantierDocuments.service";
 import type { IntervenantRow } from "../../services/intervenants.service";
+import { useI18n } from "../../i18n";
 
 const DOCUMENT_CATEGORIES = [
   "Administratif",
@@ -74,6 +75,8 @@ export default function DocumentEditDrawer({
   infoMessage,
   canSave = true,
 }: Props) {
+  const { t } = useI18n();
+
   useEffect(() => {
     if (!open) return;
     const prev = document.body.style.overflow;
@@ -103,31 +106,31 @@ export default function DocumentEditDrawer({
       <div className="absolute inset-0 bg-black/40" onClick={onClose} />
       <div className="absolute right-0 top-0 h-screen w-[50vw] max-w-[900px] min-w-[360px] bg-white border-l shadow-xl flex flex-col">
         <div className="px-4 py-3 border-b flex items-center justify-between">
-          <div className="font-semibold truncate">Modifier le document — {documentTitle}</div>
+          <div className="font-semibold truncate">{t("documentEdit.title")} — {documentTitle}</div>
           <button
             type="button"
             className="rounded-xl border px-2 py-1 text-sm hover:bg-slate-50"
             onClick={onClose}
             disabled={busy}
           >
-            X
+            {t("common.actions.close")}
           </button>
         </div>
 
         <div className="flex-1 overflow-auto p-4 space-y-4">
           <div className="space-y-1">
-            <div className="text-xs text-slate-600">Nom du document</div>
+            <div className="text-xs text-slate-600">{t("documentEdit.documentName")}</div>
             <input
               className="w-full rounded-xl border px-3 py-2 text-sm"
               value={title}
               onChange={(e) => onTitleChange(e.target.value)}
-              placeholder="Nom du document"
+              placeholder={t("documentEdit.documentName")}
             />
           </div>
 
           <div className="grid gap-3 md:grid-cols-2">
             <div className="space-y-1">
-              <div className="text-xs text-slate-600">Catégorie</div>
+              <div className="text-xs text-slate-600">{t("common.labels.category")}</div>
               <select
                 className="w-full rounded-xl border px-3 py-2 text-sm"
                 value={category}
@@ -142,7 +145,7 @@ export default function DocumentEditDrawer({
             </div>
 
             <div className="space-y-1">
-              <div className="text-xs text-slate-600">Type</div>
+              <div className="text-xs text-slate-600">{t("common.labels.type")}</div>
               <select
                 className="w-full rounded-xl border px-3 py-2 text-sm"
                 value={documentType}
@@ -157,21 +160,21 @@ export default function DocumentEditDrawer({
             </div>
 
             <div className="space-y-1 md:col-span-2">
-              <div className="text-xs text-slate-600">Mode visibilité</div>
+              <div className="text-xs text-slate-600">{t("documentEdit.visibilityMode")}</div>
               <select
                 className="w-full rounded-xl border px-3 py-2 text-sm"
                 value={visibilityMode}
                 onChange={(e) => onVisibilityModeChange(e.target.value as DocumentVisibilityOption)}
               >
-                <option value="GLOBAL">Global</option>
-                <option value="RESTRICTED">Restreint</option>
-                <option value="ADMIN_ONLY">Admin uniquement</option>
+                <option value="GLOBAL">{t("common.visibility.global")}</option>
+                <option value="RESTRICTED">{t("common.visibility.restricted")}</option>
+                <option value="ADMIN_ONLY">{t("common.visibility.adminOnly")}</option>
               </select>
             </div>
           </div>
 
           <div className="space-y-1">
-            <div className="text-xs text-slate-600">Intervenants autorisés</div>
+            <div className="text-xs text-slate-600">{t("documentEdit.allowedIntervenants")}</div>
             <div
               className={[
                 "rounded-xl border p-3 space-y-2 max-h-48 overflow-auto",
@@ -179,9 +182,9 @@ export default function DocumentEditDrawer({
               ].join(" ")}
             >
               {loadingAccess ? (
-                <div className="text-xs text-slate-500">Chargement...</div>
+                <div className="text-xs text-slate-500">{t("common.states.loading")}</div>
               ) : intervenants.length === 0 ? (
-                <div className="text-xs text-slate-500">Aucun intervenant disponible.</div>
+                <div className="text-xs text-slate-500">{t("documentEdit.noIntervenant")}</div>
               ) : (
                 intervenants.map((i) => {
                   const checked = accessIds.includes(i.id);
@@ -204,7 +207,7 @@ export default function DocumentEditDrawer({
               )}
             </div>
             {!canSelectIntervenants && (
-              <div className="text-xs text-slate-500">Sélection désactivée pour ce mode.</div>
+              <div className="text-xs text-slate-500">{t("documentEdit.selectionDisabled")}</div>
             )}
           </div>
 
@@ -227,7 +230,7 @@ export default function DocumentEditDrawer({
             onClick={onDelete}
             disabled={busy}
           >
-            {deleting ? "Suppression..." : "Supprimer"}
+            {deleting ? t("common.states.deleting") : t("common.actions.delete")}
           </button>
           <div className="flex gap-2">
             <button
@@ -236,7 +239,7 @@ export default function DocumentEditDrawer({
               onClick={onClose}
               disabled={busy}
             >
-              Annuler
+              {t("common.actions.cancel")}
             </button>
             <button
               type="button"
@@ -247,7 +250,7 @@ export default function DocumentEditDrawer({
                 disableSave ? "bg-slate-300 text-slate-700" : "bg-slate-900 text-white hover:bg-slate-800",
               ].join(" ")}
             >
-              {saving ? "Enregistrement..." : "Enregistrer"}
+              {saving ? t("common.states.saving") : t("common.actions.save")}
             </button>
           </div>
         </div>

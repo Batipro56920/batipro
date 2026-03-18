@@ -9,6 +9,7 @@ import {
 } from "../../services/chantierDoe.service";
 import { generateDoeFinalPdfBlob } from "../../services/chantiersReportsPdf.service";
 import { getCompanyBrandingForPdf } from "../../services/companySettings.service";
+import { useI18n } from "../../i18n";
 
 type Props = {
   chantierId: string;
@@ -27,6 +28,7 @@ export default function DoeTab({
   documents,
   onDocumentsRefresh,
 }: Props) {
+  const { t } = useI18n();
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [generating, setGenerating] = useState(false);
@@ -43,8 +45,10 @@ export default function DoeTab({
   }, [documents]);
 
   const categories = useMemo(() => {
-    return Array.from(new Set(documents.map((doc) => doc.category || "Divers"))).sort((a, b) => a.localeCompare(b));
-  }, [documents]);
+    return Array.from(new Set(documents.map((doc) => doc.category || t("common.documentCategories.other")))).sort((a, b) =>
+      a.localeCompare(b),
+    );
+  }, [documents, t]);
 
   const types = useMemo(() => {
     return Array.from(new Set(documents.map((doc) => doc.document_type || "AUTRE"))).sort((a, b) => a.localeCompare(b));
@@ -70,7 +74,7 @@ export default function DoeTab({
       const items = await listDoeItemsByChantierId(chantierId);
       setOrderedIds(items.map((item) => item.document_id));
     } catch (err: any) {
-      setError(err?.message ?? "Erreur chargement DOE.");
+      setError(err?.message ?? t("doe.loadError"));
     } finally {
       setLoading(false);
     }
@@ -102,7 +106,7 @@ export default function DoeTab({
         setOrderedIds(next);
       }
     } catch (err: any) {
-      setError(err?.message ?? "Erreur mise à jour DOE.");
+      setError(err?.message ?? t("doe.updateError"));
     } finally {
       setSaving(false);
     }
@@ -119,14 +123,14 @@ export default function DoeTab({
     try {
       await reorderDoeItems(chantierId, next);
     } catch (err: any) {
-      setError(err?.message ?? "Erreur tri DOE.");
+      setError(err?.message ?? t("doe.sortError"));
     }
   }
 
   async function generateDoeFinal() {
     if (!chantierId) return;
     if (!orderedDocuments.length) {
-      setError("Sélectionnez au moins un document.");
+      setError(t("doe.requiredDocument"));
       return;
     }
     setGenerating(true);
@@ -138,13 +142,13 @@ export default function DoeTab({
         if (!doc.storage_path) continue;
         const signedUrl = await getSignedUrl(doc.storage_path, 180);
         docsForPdf.push({
-          title: doc.title || doc.file_name || "Document",
+          title: doc.title || doc.file_name || t("common.labels.document"),
           mimeType: doc.mime_type,
           signedUrl,
         });
       }
       if (!docsForPdf.length) {
-        throw new Error("Aucun document exploitable pour le DOE final.");
+        throw new Error(t("doe.noUsableDocument"));
       }
       const nowIso = new Date().toISOString();
       const company = await getCompanyBrandingForPdf();
@@ -169,9 +173,9 @@ export default function DoeTab({
       });
       await onDocumentsRefresh();
       await loadItems();
-      setMessage("DOE final généré et classé dans Documents.");
+      setMessage(t("doe.success"));
     } catch (err: any) {
-      setError(err?.message ?? "Erreur génération DOE.");
+      setError(err?.message ?? t("doe.generationError"));
     } finally {
       setGenerating(false);
     }
@@ -181,8 +185,8 @@ export default function DoeTab({
     <div className="space-y-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <div className="font-semibold section-title">DOE</div>
-          <div className="text-sm text-slate-500">Sélectionnez, ordonnez et générez le DOE final.</div>
+          <div className="font-semibold section-title">{t("doe.title")}</div>
+          <div className="text-sm text-slate-500">{t("doe.subtitle")}</div>
         </div>
         <button
           type="button"
@@ -193,7 +197,7 @@ export default function DoeTab({
             generating ? "bg-slate-300 text-slate-700" : "bg-slate-900 text-white hover:bg-slate-800",
           ].join(" ")}
         >
-          {generating ? "Génération..." : "Générer DOE final"}
+          {generating ? t("common.states.generating") : t("doe.generate")}
         </button>
       </div>
 
@@ -210,13 +214,13 @@ export default function DoeTab({
 
       <div className="grid gap-3 md:grid-cols-2">
         <label className="space-y-1 text-sm">
-          <div className="text-xs text-slate-600">Filtrer par catégorie</div>
+          <div className="text-xs text-slate-600">{t("doe.filterCategory")}</div>
           <select
             className="w-full rounded-xl border px-3 py-2 text-sm"
             value={categoryFilter}
             onChange={(e) => setCategoryFilter(e.target.value)}
           >
-            <option value="__ALL__">Toutes</option>
+            <option value="__ALL__">{t("doe.all")}</option>
             {categories.map((category) => (
               <option key={category} value={category}>
                 {category}
@@ -225,13 +229,13 @@ export default function DoeTab({
           </select>
         </label>
         <label className="space-y-1 text-sm">
-          <div className="text-xs text-slate-600">Filtrer par type</div>
+          <div className="text-xs text-slate-600">{t("doe.filterType")}</div>
           <select
             className="w-full rounded-xl border px-3 py-2 text-sm"
             value={typeFilter}
             onChange={(e) => setTypeFilter(e.target.value)}
           >
-            <option value="__ALL__">Tous</option>
+            <option value="__ALL__">{t("doe.allTypes")}</option>
             {types.map((type) => (
               <option key={type} value={type}>
                 {type}
@@ -242,11 +246,11 @@ export default function DoeTab({
       </div>
 
       <div className="rounded-xl border bg-white p-4 space-y-3">
-        <div className="font-medium">Pièces DOE</div>
+        <div className="font-medium">{t("doe.partsTitle")}</div>
         {loading ? (
-          <div className="text-sm text-slate-500">Chargement...</div>
+          <div className="text-sm text-slate-500">{t("common.states.loading")}</div>
         ) : filteredDocuments.length === 0 ? (
-          <div className="text-sm text-slate-500">Aucun document.</div>
+          <div className="text-sm text-slate-500">{t("bibliotheque.empty")}</div>
         ) : (
           <div className="space-y-2">
             {filteredDocuments.map((doc) => {
@@ -268,14 +272,14 @@ export default function DoeTab({
                   </div>
                   {checked && (
                     <div className="flex items-center gap-2 ml-auto">
-                      <div className="text-xs text-slate-500">Ordre #{orderIndex + 1}</div>
+                      <div className="text-xs text-slate-500">{t("doe.orderPrefix")} #{orderIndex + 1}</div>
                       <button
                         type="button"
                         className="rounded-lg border px-2 py-1 text-xs hover:bg-slate-50"
                         onClick={() => moveItem(doc.id, -1)}
                         disabled={orderIndex <= 0}
                       >
-                        Haut
+                        {t("common.actions.up")}
                       </button>
                       <button
                         type="button"
@@ -283,7 +287,7 @@ export default function DoeTab({
                         onClick={() => moveItem(doc.id, 1)}
                         disabled={orderIndex >= orderedIds.length - 1}
                       >
-                        Bas
+                        {t("common.actions.down")}
                       </button>
                     </div>
                   )}
@@ -295,9 +299,9 @@ export default function DoeTab({
       </div>
 
       <div className="rounded-xl border bg-white p-4">
-        <div className="font-medium mb-2">Ordre final</div>
+        <div className="font-medium mb-2">{t("doe.finalOrder")}</div>
         {orderedDocuments.length === 0 ? (
-          <div className="text-sm text-slate-500">Aucune pièce sélectionnée.</div>
+          <div className="text-sm text-slate-500">{t("doe.noSelection")}</div>
         ) : (
           <ol className="list-decimal pl-5 space-y-1 text-sm text-slate-700">
             {orderedDocuments.map((doc) => (

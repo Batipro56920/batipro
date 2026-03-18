@@ -3,6 +3,7 @@ import { useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import type { ChantierStatus } from "../types/chantier";
 import { supabase } from "../lib/supabaseClient";
+import { useI18n } from "../i18n";
 
 function todayISO() {
   return new Date().toISOString().slice(0, 10);
@@ -10,6 +11,7 @@ function todayISO() {
 
 export default function ChantierNewPage() {
   const navigate = useNavigate();
+  const { t } = useI18n();
 
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -67,31 +69,31 @@ export default function ChantierNewPage() {
         <div className="space-y-2">
           <div className="text-sm text-slate-500">
             <Link to="/chantiers" className="hover:underline">
-              Chantiers
+              {t("chantierNew.breadcrumb")}
             </Link>{" "}
             <span className="mx-1">/</span>
-            <span className="text-slate-700">Nouveau chantier</span>
+            <span className="text-slate-700">{t("chantierNew.title")}</span>
           </div>
 
           <div className="flex items-center gap-3">
-            <h1 className="text-3xl font-bold">Nouveau chantier</h1>
+            <h1 className="text-3xl font-bold">{t("chantierNew.title")}</h1>
             <span className="text-xs px-2 py-1 rounded-full border bg-slate-50 text-slate-700">
               {form.status === "PREPARATION"
-                ? "Préparation"
+                ? t("common.chantierStatus.PREPARATION")
                 : form.status === "EN_COURS"
-                ? "En cours"
-                : "Terminé"}
+                ? t("common.chantierStatus.EN_COURS")
+                : t("common.chantierStatus.TERMINE")}
             </span>
           </div>
 
-          <div className="text-slate-500">Créer un chantier et démarrer le suivi</div>
+          <div className="text-slate-500">{t("chantierNew.subtitle")}</div>
         </div>
 
         <Link
           to="/chantiers"
           className="rounded-xl border px-4 py-2 hover:bg-slate-50 transition"
         >
-          Retour
+          {t("chantierNew.back")}
         </Link>
       </div>
 
@@ -99,38 +101,38 @@ export default function ChantierNewPage() {
       <form onSubmit={onSubmit} className="rounded-2xl border bg-white p-6 space-y-6">
         {errorMsg && (
           <div className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">
-            Erreur : {errorMsg}
+            {t("chantierNew.errorPrefix", { message: errorMsg })}
           </div>
         )}
 
         <div className="grid gap-5">
           <div className="space-y-2">
             <label className="text-sm font-medium">
-              Nom du chantier <span className="text-red-600">*</span>
+              {t("chantierNew.fields.name")} <span className="text-red-600">*</span>
             </label>
             <input
               className="w-full rounded-xl border px-3 py-2"
-              placeholder="Ex: Rénovation appartement Dupont"
+              placeholder={t("chantierNew.placeholders.name")}
               value={form.nom}
               onChange={(e) => setForm((p) => ({ ...p, nom: e.target.value }))}
             />
           </div>
 
           <div className="space-y-2">
-            <label className="text-sm font-medium">Client</label>
+            <label className="text-sm font-medium">{t("chantierNew.fields.client")}</label>
             <input
               className="w-full rounded-xl border px-3 py-2"
-              placeholder="Ex: SCI LOJO IMMO"
+              placeholder={t("chantierNew.placeholders.client")}
               value={form.client}
               onChange={(e) => setForm((p) => ({ ...p, client: e.target.value }))}
             />
           </div>
 
           <div className="space-y-2">
-            <label className="text-sm font-medium">Adresse du chantier</label>
+            <label className="text-sm font-medium">{t("chantierNew.fields.address")}</label>
             <textarea
               className="w-full rounded-xl border px-3 py-2 min-h-[84px]"
-              placeholder="Adresse complète"
+              placeholder={t("chantierNew.placeholders.address")}
               value={form.adresse}
               onChange={(e) => setForm((p) => ({ ...p, adresse: e.target.value }))}
             />
@@ -138,7 +140,7 @@ export default function ChantierNewPage() {
 
           <div className="grid md:grid-cols-2 gap-4">
             <div className="space-y-2">
-              <label className="text-sm font-medium">Date de début</label>
+              <label className="text-sm font-medium">{t("chantierNew.fields.startDate")}</label>
               <input
                 type="date"
                 className="w-full rounded-xl border px-3 py-2"
@@ -150,12 +152,12 @@ export default function ChantierNewPage() {
                 className="text-xs text-slate-600 hover:underline"
                 onClick={() => setForm((p) => ({ ...p, date_debut: todayISO() }))}
               >
-                Mettre aujourd’hui
+                {t("chantierNew.setToday")}
               </button>
             </div>
 
             <div className="space-y-2">
-              <label className="text-sm font-medium">Date de fin prévue</label>
+              <label className="text-sm font-medium">{t("chantierNew.fields.endDate")}</label>
               <input
                 type="date"
                 className="w-full rounded-xl border px-3 py-2"
@@ -166,7 +168,7 @@ export default function ChantierNewPage() {
           </div>
 
           <div className="space-y-2">
-            <label className="text-sm font-medium">Statut</label>
+            <label className="text-sm font-medium">{t("chantierNew.fields.status")}</label>
             <select
               className="w-full rounded-xl border px-3 py-2 bg-white"
               value={form.status}
@@ -174,16 +176,16 @@ export default function ChantierNewPage() {
                 setForm((p) => ({ ...p, status: e.target.value as ChantierStatus }))
               }
             >
-              <option value="PREPARATION">Préparation</option>
-              <option value="EN_COURS">En cours</option>
-              <option value="TERMINE">Terminé</option>
+              <option value="PREPARATION">{t("common.chantierStatus.PREPARATION")}</option>
+              <option value="EN_COURS">{t("common.chantierStatus.EN_COURS")}</option>
+              <option value="TERMINE">{t("common.chantierStatus.TERMINE")}</option>
             </select>
           </div>
         </div>
 
         <div className="flex items-center justify-end gap-3">
           <Link to="/chantiers" className="rounded-xl border px-4 py-2 hover:bg-slate-50 transition">
-            Annuler
+            {t("common.actions.cancel")}
           </Link>
 
           <button
@@ -196,7 +198,7 @@ export default function ChantierNewPage() {
                 : "bg-slate-200 text-slate-500 cursor-not-allowed",
             ].join(" ")}
           >
-            {loading ? "Création..." : "Créer le chantier"}
+            {loading ? t("chantierNew.creating") : t("chantierNew.submit")}
           </button>
         </div>
       </form>

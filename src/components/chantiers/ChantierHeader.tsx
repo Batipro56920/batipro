@@ -1,26 +1,28 @@
 ﻿import { Link } from "react-router-dom";
 import type { ChantierRow } from "../../services/chantiers.service";
+import { useI18n } from "../../i18n";
 
-function statusBadge(status?: string | null) {
+function statusBadge(status: string | null | undefined, t: (key: string) => string) {
   const s = status ?? "PREPARATION";
   if (s === "EN_COURS") {
-    return { label: "En cours", className: "bg-amber-50 text-amber-700 border-amber-200" };
+    return { label: t("common.chantierStatus.EN_COURS"), className: "bg-amber-50 text-amber-700 border-amber-200" };
   }
   if (s === "TERMINE") {
-    return { label: "Terminé", className: "bg-emerald-50 text-emerald-700 border-emerald-200" };
+    return { label: t("common.chantierStatus.TERMINE"), className: "bg-emerald-50 text-emerald-700 border-emerald-200" };
   }
-  return { label: "Préparation", className: "bg-slate-50 text-slate-700 border-slate-200" };
+  return { label: t("common.chantierStatus.PREPARATION"), className: "bg-slate-50 text-slate-700 border-slate-200" };
 }
 
 export default function ChantierHeader({ item }: { item: ChantierRow }) {
-  const badge = statusBadge(item?.status);
+  const { t } = useI18n();
+  const badge = statusBadge(item?.status, t);
 
   return (
     <div className="flex items-start justify-between gap-4">
       <div className="space-y-2 min-w-0">
         <div className="text-sm text-slate-500">
           <Link to="/chantiers" className="hover:underline">
-            Chantiers
+            {t("chantiers.title")}
           </Link>{" "}
           / <span className="text-slate-700">{item.nom}</span>
         </div>
@@ -38,7 +40,7 @@ export default function ChantierHeader({ item }: { item: ChantierRow }) {
       </div>
 
       <Link to="/chantiers" className="rounded-xl border px-4 py-2 hover:bg-slate-50">
-        Retour
+        {t("chantierHeader.back")}
       </Link>
     </div>
   );

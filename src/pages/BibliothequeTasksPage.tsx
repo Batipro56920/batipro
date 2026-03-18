@@ -10,8 +10,10 @@ import {
   type TaskTemplateInput,
   type TaskTemplateRow,
 } from "../services/taskTemplates.service";
+import { useI18n } from "../i18n";
 
 export default function BibliothequeTasksPage() {
+  const { locale, t } = useI18n();
   const [rows, setRows] = useState<TaskTemplateRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -46,7 +48,7 @@ export default function BibliothequeTasksPage() {
       const data = await list();
       setRows(data);
     } catch (err: any) {
-      setError(err?.message ?? "Erreur chargement templates.");
+      setError(err?.message ?? t("bibliothequeTasks.loadError"));
       setRows([]);
     } finally {
       setLoading(false);
@@ -83,16 +85,16 @@ export default function BibliothequeTasksPage() {
       if (!activeTemplate) {
         const created = await create(payload);
         setRows((prev) => [created, ...prev]);
-        setToast({ type: "ok", msg: "Template créé." });
+        setToast({ type: "ok", msg: t("bibliothequeTasks.created") });
       } else {
         const updated = await update(activeTemplate.id, payload);
         setRows((prev) => prev.map((row) => (row.id === activeTemplate.id ? updated : row)));
-        setToast({ type: "ok", msg: "Template mis à jour." });
+        setToast({ type: "ok", msg: t("bibliothequeTasks.updated") });
       }
       closeDrawer();
     } catch (err: any) {
-      setDrawerError(err?.message ?? "Erreur enregistrement template.");
-      setToast({ type: "error", msg: err?.message ?? "Erreur enregistrement template." });
+      setDrawerError(err?.message ?? t("bibliothequeTasks.saveError"));
+      setToast({ type: "error", msg: err?.message ?? t("bibliothequeTasks.saveError") });
     } finally {
       setSaving(false);
     }
@@ -104,11 +106,11 @@ export default function BibliothequeTasksPage() {
     try {
       await remove(id);
       setRows((prev) => prev.filter((row) => row.id !== id));
-      setToast({ type: "ok", msg: "Template supprimé." });
+      setToast({ type: "ok", msg: t("bibliothequeTasks.deleted") });
       closeDrawer();
     } catch (err: any) {
-      setDrawerError(err?.message ?? "Erreur suppression template.");
-      setToast({ type: "error", msg: err?.message ?? "Erreur suppression template." });
+      setDrawerError(err?.message ?? t("bibliothequeTasks.deleteError"));
+      setToast({ type: "error", msg: err?.message ?? t("bibliothequeTasks.deleteError") });
     } finally {
       setDeleting(false);
     }
@@ -119,24 +121,24 @@ export default function BibliothequeTasksPage() {
     try {
       const duplicated = await duplicate(templateId);
       setRows((prev) => [duplicated, ...prev]);
-      setToast({ type: "ok", msg: "Template dupliqué." });
+      setToast({ type: "ok", msg: t("bibliothequeTasks.duplicated") });
     } catch (err: any) {
-      setToast({ type: "error", msg: err?.message ?? "Erreur duplication template." });
+      setToast({ type: "error", msg: err?.message ?? t("bibliothequeTasks.duplicateError") });
     } finally {
       setDuplicateId(null);
     }
   }
 
   async function onDeleteRow(template: TaskTemplateRow) {
-    const ok = window.confirm(`Supprimer le template "${template.titre}" ?`);
+    const ok = window.confirm(t("bibliothequeTasks.deleteConfirm", { name: template.titre }));
     if (!ok) return;
     setDeleteId(template.id);
     try {
       await remove(template.id);
       setRows((prev) => prev.filter((row) => row.id !== template.id));
-      setToast({ type: "ok", msg: "Template supprimé." });
+      setToast({ type: "ok", msg: t("bibliothequeTasks.deleted") });
     } catch (err: any) {
-      setToast({ type: "error", msg: err?.message ?? "Erreur suppression template." });
+      setToast({ type: "error", msg: err?.message ?? t("bibliothequeTasks.deleteError") });
     } finally {
       setDeleteId(null);
     }
@@ -146,22 +148,22 @@ export default function BibliothequeTasksPage() {
     <div className="space-y-4">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold">Bibliothèque</h1>
-          <p className="text-slate-500">Templates de tâches</p>
+          <h1 className="text-2xl font-bold">{t("bibliothequeTasks.title")}</h1>
+          <p className="text-slate-500">{t("bibliothequeTasks.subtitle")}</p>
         </div>
         <button
           type="button"
           onClick={openCreateDrawer}
           className="rounded-xl bg-slate-900 px-4 py-2 text-sm text-white hover:bg-slate-800"
         >
-          + Nouveau template
+          + {t("bibliothequeTasks.new")}
         </button>
       </div>
 
       <div className="rounded-2xl border bg-white p-4">
         <input
           className="w-full rounded-xl border px-3 py-2 text-sm"
-          placeholder="Rechercher (titre ou lot)..."
+          placeholder={t("bibliothequeTasks.searchPlaceholder")}
           value={query}
           onChange={(e) => setQuery(e.target.value)}
         />
@@ -172,21 +174,21 @@ export default function BibliothequeTasksPage() {
       )}
 
       {loading ? (
-        <div className="rounded-2xl border bg-white p-6 text-sm text-slate-500">Chargement...</div>
+        <div className="rounded-2xl border bg-white p-6 text-sm text-slate-500">{t("common.states.loading")}</div>
       ) : filteredRows.length === 0 ? (
-        <div className="rounded-2xl border bg-white p-6 text-sm text-slate-500">Aucun template.</div>
+        <div className="rounded-2xl border bg-white p-6 text-sm text-slate-500">{t("bibliothequeTasks.empty")}</div>
       ) : (
         <div className="rounded-2xl border bg-white overflow-hidden">
           <table className="w-full text-sm">
             <thead className="bg-slate-50 text-slate-600">
               <tr>
-                <th className="px-4 py-3 text-left font-medium">Titre</th>
-                <th className="px-4 py-3 text-left font-medium">Lot</th>
-                <th className="px-4 py-3 text-left font-medium">Unité</th>
-                <th className="px-4 py-3 text-left font-medium">Qté défaut</th>
-                <th className="px-4 py-3 text-left font-medium">Temps/unité (h)</th>
-                <th className="px-4 py-3 text-left font-medium">Modifié le</th>
-                <th className="px-4 py-3 text-left font-medium">Actions</th>
+                <th className="px-4 py-3 text-left font-medium">{t("bibliothequeTasks.headers.title")}</th>
+                <th className="px-4 py-3 text-left font-medium">{t("bibliothequeTasks.headers.lot")}</th>
+                <th className="px-4 py-3 text-left font-medium">{t("bibliothequeTasks.headers.unit")}</th>
+                <th className="px-4 py-3 text-left font-medium">{t("bibliothequeTasks.headers.defaultQuantity")}</th>
+                <th className="px-4 py-3 text-left font-medium">{t("bibliothequeTasks.headers.timePerUnit")}</th>
+                <th className="px-4 py-3 text-left font-medium">{t("bibliothequeTasks.headers.updatedAt")}</th>
+                <th className="px-4 py-3 text-left font-medium">{t("common.actions.edit")}</th>
               </tr>
             </thead>
             <tbody>
@@ -201,7 +203,7 @@ export default function BibliothequeTasksPage() {
                   <td className="px-4 py-3">{row.quantite_defaut ?? "-"}</td>
                   <td className="px-4 py-3">{row.temps_prevu_par_unite_h ?? "-"}</td>
                   <td className="px-4 py-3">
-                    {row.updated_at ? new Date(row.updated_at).toLocaleDateString("fr-FR") : "-"}
+                    {row.updated_at ? new Date(row.updated_at).toLocaleDateString(locale) : "-"}
                   </td>
                   <td className="px-4 py-3">
                     <div className="flex flex-wrap gap-2">
@@ -210,7 +212,7 @@ export default function BibliothequeTasksPage() {
                         onClick={() => openEditDrawer(row)}
                         className="rounded-lg border px-2 py-1 text-xs hover:bg-slate-50"
                       >
-                        Modifier
+                        {t("common.actions.edit")}
                       </button>
                       <button
                         type="button"
@@ -218,7 +220,7 @@ export default function BibliothequeTasksPage() {
                         onClick={() => onDuplicate(row.id)}
                         className="rounded-lg border px-2 py-1 text-xs hover:bg-slate-50 disabled:opacity-50"
                       >
-                        {duplicateId === row.id ? "Duplication..." : "Dupliquer"}
+                        {duplicateId === row.id ? "Duplication..." : t("common.actions.duplicate")}
                       </button>
                       <button
                         type="button"
@@ -226,7 +228,7 @@ export default function BibliothequeTasksPage() {
                         onClick={() => onDeleteRow(row)}
                         className="rounded-lg border border-red-200 text-red-700 px-2 py-1 text-xs hover:bg-red-50 disabled:opacity-50"
                       >
-                        {deleteId === row.id ? "Suppression..." : "Supprimer"}
+                        {deleteId === row.id ? t("common.states.deleting") : t("common.actions.delete")}
                       </button>
                     </div>
                   </td>

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "../lib/supabaseClient";
 import { getChantiers, type ChantierRow } from "../services/chantiers.service";
+import { useI18n } from "../i18n";
 
 type IntervenantListRow = {
   id: string;
@@ -12,6 +13,7 @@ type IntervenantListRow = {
 };
 
 export default function IntervenantsPage() {
+  const { locale, t } = useI18n();
   const [rows, setRows] = useState<IntervenantListRow[]>([]);
   const [chantiers, setChantiers] = useState<ChantierRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -39,7 +41,7 @@ export default function IntervenantsPage() {
       setRows((intervenantsRes.data ?? []) as IntervenantListRow[]);
       setChantiers(chantierRows);
     } catch (err: any) {
-      setError(err?.message ?? "Erreur chargement intervenants.");
+      setError(err?.message ?? t("intervenantsPage.loadError"));
       setRows([]);
       setChantiers([]);
     } finally {
@@ -55,15 +57,15 @@ export default function IntervenantsPage() {
     <div className="space-y-4">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold">Intervenants</h1>
-          <p className="text-slate-500">Vue globale des intervenants sur tous les chantiers.</p>
+          <h1 className="text-2xl font-bold">{t("intervenantsPage.title")}</h1>
+          <p className="text-slate-500">{t("intervenantsPage.subtitle")}</p>
         </div>
         <button
           type="button"
           onClick={refresh}
           className="rounded-xl border px-3 py-2 text-sm hover:bg-slate-50"
         >
-          Rafraichir
+          {t("common.actions.refresh")}
         </button>
       </div>
 
@@ -72,19 +74,19 @@ export default function IntervenantsPage() {
       )}
 
       {loading ? (
-        <div className="rounded-2xl border bg-white p-6 text-sm text-slate-500">Chargement...</div>
+        <div className="rounded-2xl border bg-white p-6 text-sm text-slate-500">{t("intervenantsPage.loading")}</div>
       ) : rows.length === 0 ? (
-        <div className="rounded-2xl border bg-white p-6 text-sm text-slate-500">Aucun intervenant.</div>
+        <div className="rounded-2xl border bg-white p-6 text-sm text-slate-500">{t("intervenantsPage.empty")}</div>
       ) : (
         <div className="rounded-2xl border bg-white overflow-hidden">
           <table className="w-full text-sm">
             <thead className="bg-slate-50 text-slate-600">
               <tr>
-                <th className="px-4 py-3 text-left font-medium">Nom</th>
-                <th className="px-4 py-3 text-left font-medium">Email</th>
-                <th className="px-4 py-3 text-left font-medium">Telephone</th>
-                <th className="px-4 py-3 text-left font-medium">Chantier</th>
-                <th className="px-4 py-3 text-left font-medium">Ajoute le</th>
+                <th className="px-4 py-3 text-left font-medium">{t("common.labels.name")}</th>
+                <th className="px-4 py-3 text-left font-medium">{t("common.labels.email")}</th>
+                <th className="px-4 py-3 text-left font-medium">{t("common.labels.phone")}</th>
+                <th className="px-4 py-3 text-left font-medium">{t("sidebar.chantiers")}</th>
+                <th className="px-4 py-3 text-left font-medium">{t("common.labels.date")}</th>
               </tr>
             </thead>
             <tbody>
@@ -95,7 +97,7 @@ export default function IntervenantsPage() {
                   <td className="px-4 py-3">{row.telephone ?? "-"}</td>
                   <td className="px-4 py-3">{chantierNameById.get(row.chantier_id) ?? row.chantier_id}</td>
                   <td className="px-4 py-3">
-                    {row.created_at ? new Date(row.created_at).toLocaleDateString("fr-FR") : "-"}
+                    {row.created_at ? new Date(row.created_at).toLocaleDateString(locale) : "-"}
                   </td>
                 </tr>
               ))}

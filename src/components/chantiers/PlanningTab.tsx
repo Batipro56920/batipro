@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { DndContext, useDraggable, useDroppable, type DragEndEvent } from "@dnd-kit/core";
 import { CalendarDays, ChevronLeft, ChevronRight, ChevronUp, ChevronDown, GripVertical, Trash2, X } from "lucide-react";
 import type { IntervenantRow } from "../../services/intervenants.service";
+import { useI18n } from "../../i18n";
 import {
   createPlanningCalendarSegment,
   deletePlanningCalendarSegments,
@@ -59,28 +60,15 @@ type SegmentDraft = {
   intervenant_id: string;
 };
 
-const VIEW_OPTIONS: Array<{ value: PlanningView; label: string }> = [
-  { value: "day", label: "Jour" },
-  { value: "week", label: "Semaine" },
-  { value: "month", label: "Mois" },
-];
-
 const DURATION_OPTIONS = [0.25, 0.5, 0.75, 1, 1.5, 2, 3, 4, 5, 7];
-const STATUS_OPTIONS = [
-  { value: "A_FAIRE", label: "A faire" },
-  { value: "EN_COURS", label: "En cours" },
-  { value: "FAIT", label: "Terminee" },
-  { value: "BLOQUE", label: "Bloquee" },
-];
-
-function formatDisplayDate(dateKey: string): string {
+function formatDisplayDate(dateKey: string, locale: string): string {
   const date = parseDateKey(dateKey);
-  return new Intl.DateTimeFormat("fr-FR", { weekday: "short", day: "numeric", month: "short" }).format(date);
+  return new Intl.DateTimeFormat(locale, { weekday: "short", day: "numeric", month: "short" }).format(date);
 }
 
-function formatShortDate(dateKey: string): string {
+function formatShortDate(dateKey: string, locale: string): string {
   const date = parseDateKey(dateKey);
-  return new Intl.DateTimeFormat("fr-FR", { day: "numeric", month: "short" }).format(date);
+  return new Intl.DateTimeFormat(locale, { day: "numeric", month: "short" }).format(date);
 }
 
 function addMonthsToKey(dateKey: string, amount: number): string {
@@ -141,6 +129,7 @@ function DayDropZone({
   onOpen: () => void;
   children: React.ReactNode;
 }) {
+  const { t } = useI18n();
   const { setNodeRef, isOver } = useDroppable({ id: `day:${day}` });
   return (
     <div
@@ -164,7 +153,7 @@ function DayDropZone({
     >
       <div className="mb-3">
         <div className="truncate text-xs font-semibold text-slate-900 lg:text-sm">{title}</div>
-        <div className="text-[11px] text-slate-500">Glisse une tache non planifiee ici</div>
+        <div className="text-[11px] text-slate-500">{t("planningTab.backlog.dropHint")}</div>
       </div>
       <div className="flex flex-1 flex-col gap-2">{children}</div>
     </div>
@@ -172,6 +161,7 @@ function DayDropZone({
 }
 
 function BacklogRow({ task, assigneeName, onOpen }: { task: PlanningCalendarTask; assigneeName: string; onOpen: () => void }) {
+  const { t } = useI18n();
   const drag = useDraggable({ id: `task:${task.id}` });
   const style = drag.transform
     ? { transform: `translate3d(${drag.transform.x}px, ${drag.transform.y}px, 0)` }
@@ -186,13 +176,13 @@ function BacklogRow({ task, assigneeName, onOpen }: { task: PlanningCalendarTask
         <button type="button" className="min-w-0 flex-1 text-left" onClick={onOpen}>
           <div className="truncate text-sm font-semibold text-slate-900">{task.titre}</div>
           <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-slate-500">
-            <span>{task.planned_duration_days}j prevu</span>
+            <span>{t("planningTab.backlog.plannedDays", { days: task.planned_duration_days })}</span>
             {assigneeName ? <span>{assigneeName}</span> : null}
             {(task.lot || task.corps_etat) ? <span>{task.lot ?? task.corps_etat}</span> : null}
           </div>
         </button>
         <button type="button" className="rounded-lg border border-slate-200 px-2 py-1 text-[11px] font-medium text-blue-700" onClick={onOpen}>
-          <CalendarDays className="mr-1 inline h-3.5 w-3.5" />Planifier
+          <CalendarDays className="mr-1 inline h-3.5 w-3.5" />{t("planningTab.backlog.schedule")}
         </button>
       </div>
     </div>
@@ -214,6 +204,7 @@ function SegmentCard({
   onMoveOrder: (delta: number) => void;
   onDelete: () => void;
 }) {
+  const { t } = useI18n();
   const drag = useDraggable({ id: entry.isStart ? `segment:${entry.segment.id}` : `segment-copy:${entry.segment.id}` });
   const style = entry.isStart && drag.transform
     ? { transform: `translate3d(${drag.transform.x}px, ${drag.transform.y}px, 0)` }
@@ -234,7 +225,7 @@ function SegmentCard({
         )}
 
         <button type="button" className="min-w-0 flex-1 text-left" onClick={onOpenTask}>
-          <div className="truncate text-sm font-semibold text-slate-900">{entry.isStart ? entry.task.titre : `Suite - ${entry.task.titre}`}</div>
+          <div className="truncate text-sm font-semibold text-slate-900">{entry.isStart ? entry.task.titre : t("planningTab.backlog.continued", { title: entry.task.titre })}</div>
           <div className="mt-1 flex flex-wrap items-center gap-2 text-[11px] text-slate-500">
             <span>{entry.isStart ? entry.segment.duration_days : entry.dayLoad}j</span>
             {assigneeName ? <span>{assigneeName}</span> : null}
@@ -256,6 +247,7 @@ function SegmentCard({
 }
 
 export default function PlanningTab({ chantierId, chantierName, intervenants }: Props) {
+  const { locale, t } = useI18n();
   const [state, setState] = useState<PlanningCalendarState | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -280,6 +272,17 @@ export default function PlanningTab({ chantierId, chantierName, intervenants }: 
   const tasks = state?.tasks ?? [];
   const segments = state?.segments ?? [];
   const chantier = state?.chantier ?? null;
+  const viewOptions: Array<{ value: PlanningView; label: string }> = [
+    { value: "day", label: t("planningTab.view.day") },
+    { value: "week", label: t("planningTab.view.week") },
+    { value: "month", label: t("planningTab.view.month") },
+  ];
+  const statusOptions = [
+    { value: "A_FAIRE", label: t("planningTab.status.todo") },
+    { value: "EN_COURS", label: t("planningTab.status.inProgress") },
+    { value: "FAIT", label: t("planningTab.status.done") },
+    { value: "BLOQUE", label: t("planningTab.status.blocked") },
+  ];
 
   const backlogDrop = useDroppable({ id: "backlog" });
 
@@ -289,7 +292,7 @@ export default function PlanningTab({ chantierId, chantierName, intervenants }: 
     try {
       setState(await getPlanningCalendarState(chantierId));
     } catch (err: any) {
-      setError(err?.message ?? "Erreur chargement planning.");
+      setError(err?.message ?? t("planningTab.errors.load"));
     } finally {
       if (!isRefresh) setLoading(false);
     }
@@ -430,11 +433,11 @@ export default function PlanningTab({ chantierId, chantierName, intervenants }: 
     for (const [key, value] of byAssigneeDay.entries()) {
       if (value <= 1) continue;
       const [intervenantId, day] = key.split(":");
-      warnings.push(`Surcharge ${intervenantsById.get(intervenantId)?.nom ?? "intervenant"} le ${formatShortDate(day)} (${value.toFixed(2)}j)`);
+      warnings.push(t("planningTab.warnings.assigneeOverload", { name: intervenantsById.get(intervenantId)?.nom ?? t("planningTab.headers.intervenant").toLowerCase(), date: formatShortDate(day, locale), value: value.toFixed(2) }));
     }
     for (const [day, value] of byDay.entries()) {
       if (value <= settings.dayCapacity) continue;
-      warnings.push(`Charge globale forte le ${formatShortDate(day)} (${value.toFixed(2)}j / cap ${settings.dayCapacity}j)`);
+      warnings.push(t("planningTab.warnings.globalLoad", { date: formatShortDate(day, locale), value: value.toFixed(2), capacity: settings.dayCapacity }));
     }
 
     return { totalHours: Math.round(totalHours * 100) / 100, warnings };
@@ -461,9 +464,9 @@ export default function PlanningTab({ chantierId, chantierName, intervenants }: 
     try {
       await updatePlanningCalendarTask(taskId, patch, settings, false);
       await loadAll(true);
-      setNotice("Tache mise a jour.");
+      setNotice(t("planningTab.notices.taskUpdated"));
     } catch (err: any) {
-      setError(err?.message ?? "Erreur mise a jour tache.");
+      setError(err?.message ?? t("planningTab.errors.taskUpdate"));
     } finally {
       setSaving(false);
     }
@@ -477,9 +480,9 @@ export default function PlanningTab({ chantierId, chantierName, intervenants }: 
     try {
       await updatePlanningCalendarSegment(segmentId, patch, settings, { start_date: segment.start_date, duration_days: segment.duration_days });
       await loadAll(true);
-      setNotice("Segment mis a jour.");
+      setNotice(t("planningTab.notices.segmentUpdated"));
     } catch (err: any) {
-      setError(err?.message ?? "Erreur mise a jour segment.");
+      setError(err?.message ?? t("planningTab.errors.segmentUpdate"));
     } finally {
       setSaving(false);
     }
@@ -500,9 +503,9 @@ export default function PlanningTab({ chantierId, chantierName, intervenants }: 
         order_in_day: orderInDay ?? dayStartEntries(day).length,
       }, settings);
       await loadAll(true);
-      setNotice("Segment planifie.");
+      setNotice(t("planningTab.notices.segmentPlanned"));
     } catch (err: any) {
-      setError(err?.message ?? "Erreur planification segment.");
+      setError(err?.message ?? t("planningTab.errors.segmentPlan"));
     } finally {
       setSaving(false);
     }
@@ -515,9 +518,9 @@ export default function PlanningTab({ chantierId, chantierName, intervenants }: 
     try {
       await deletePlanningCalendarSegments(segmentIds);
       await loadAll(true);
-      setNotice("Segment supprime.");
+      setNotice(t("planningTab.notices.segmentDeleted"));
     } catch (err: any) {
-      setError(err?.message ?? "Erreur suppression segment.");
+      setError(err?.message ?? t("planningTab.errors.segmentDelete"));
     } finally {
       setSaving(false);
     }
@@ -528,7 +531,7 @@ export default function PlanningTab({ chantierId, chantierName, intervenants }: 
   }
 
   async function deleteTask(taskId: string) {
-    const confirmed = typeof window === "undefined" ? true : window.confirm("Supprimer cette tache ?");
+    const confirmed = typeof window === "undefined" ? true : window.confirm(t("planningTab.confirms.deleteTask"));
     if (!confirmed) return;
     setSaving(true);
     setError(null);
@@ -536,9 +539,9 @@ export default function PlanningTab({ chantierId, chantierName, intervenants }: 
       await deletePlanningCalendarTasks([taskId]);
       setDrawer((current) => (current && current.mode === "task" && current.taskId === taskId ? null : current));
       await loadAll(true);
-      setNotice("Tache supprimee.");
+      setNotice(t("common.actions.delete"));
     } catch (err: any) {
-      setError(err?.message ?? "Erreur suppression tache.");
+      setError(err?.message ?? t("planningTab.errors.taskDelete"));
     } finally {
       setSaving(false);
     }
@@ -560,7 +563,7 @@ export default function PlanningTab({ chantierId, chantierName, intervenants }: 
       await updatePlanningCalendarSegment(b.id, { order_in_day: a.order_in_day }, settings, { start_date: b.start_date, duration_days: b.duration_days });
       await loadAll(true);
     } catch (err: any) {
-      setError(err?.message ?? "Erreur reorganisation.");
+      setError(err?.message ?? t("planningTab.errors.reorder"));
     } finally {
       setSaving(false);
     }
@@ -601,9 +604,9 @@ export default function PlanningTab({ chantierId, chantierName, intervenants }: 
     try {
       await updatePlanningCalendarSettings(chantierId, patch);
       await loadAll(true);
-      setNotice("Parametres planning mis a jour.");
+      setNotice(t("planningTab.notices.settingsUpdated"));
     } catch (err: any) {
-      setError(err?.message ?? "Erreur parametres planning.");
+      setError(err?.message ?? t("planningTab.errors.settings"));
     } finally {
       setSaving(false);
     }
@@ -615,7 +618,7 @@ export default function PlanningTab({ chantierId, chantierName, intervenants }: 
     else setAnchorDate((current) => addDaysToKey(current, offset));
   }
 
-  if (loading) return <div className="rounded-2xl border border-slate-200 bg-white p-6 text-sm text-slate-500">Chargement planning...</div>;
+  if (loading) return <div className="rounded-2xl border border-slate-200 bg-white p-6 text-sm text-slate-500">{t("planningTab.loading")}</div>;
 
   const lotOptions = [...new Set(tasks.map((task) => task.lot ?? task.corps_etat ?? "").filter((value) => String(value).trim()))].sort((a, b) => String(a).localeCompare(String(b), "fr"));
 
@@ -626,18 +629,18 @@ export default function PlanningTab({ chantierId, chantierName, intervenants }: 
           <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-2">
-                <h2 className="text-xl font-semibold text-slate-950">Planning chantier</h2>
+                <h2 className="text-xl font-semibold text-slate-950">{t("planningTab.title")}</h2>
                 {chantierName ? <span className="rounded-full bg-slate-100 px-2 py-1 text-xs font-medium text-slate-600">{chantierName}</span> : null}
               </div>
               <div className="mt-2 flex flex-wrap items-center gap-2">
                 <div className="flex items-center rounded-full border border-slate-200 bg-slate-50 p-1">
-                  {VIEW_OPTIONS.map((option) => (
+                  {viewOptions.map((option) => (
                     <button key={option.value} type="button" className={segmentedButton(view === option.value)} onClick={() => setView(option.value)}>{option.label}</button>
                   ))}
                 </div>
                 <div className="flex items-center gap-1 rounded-full border border-slate-200 p-1">
                   <button type="button" className={buttonClass()} onClick={() => navigate(-1)}><ChevronLeft className="h-4 w-4" /></button>
-                  <button type="button" className={buttonClass()} onClick={() => setAnchorDate(formatDateKey(new Date()))}>Aujourd'hui</button>
+                  <button type="button" className={buttonClass()} onClick={() => setAnchorDate(formatDateKey(new Date()))}>{t("planningTab.today")}</button>
                   <button type="button" className={buttonClass()} onClick={() => navigate(1)}><ChevronRight className="h-4 w-4" /></button>
                 </div>
               </div>
@@ -645,26 +648,26 @@ export default function PlanningTab({ chantierId, chantierName, intervenants }: 
 
             <div className="flex w-full flex-col gap-2 xl:w-auto xl:min-w-[48rem]">
               <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-[minmax(10rem,1fr)_12rem_12rem_10rem_auto] xl:items-center">
-                <input className={inputClass()} placeholder="Recherche" value={query} onChange={(e) => setQuery(e.target.value)} />
+                <input className={inputClass()} placeholder={t("planningTab.searchPlaceholder")} value={query} onChange={(e) => setQuery(e.target.value)} />
                 <select className={inputClass()} value={assigneeFilter} onChange={(e) => setAssigneeFilter(e.target.value)}>
-                  <option value="__all__">Tous les intervenants</option>
+                  <option value="__all__">{t("planningTab.allIntervenants")}</option>
                   {intervenants.map((it) => <option key={it.id} value={it.id}>{it.nom}</option>)}
                 </select>
                 <select className={inputClass()} value={lotFilter} onChange={(e) => setLotFilter(e.target.value)}>
-                  <option value="__all__">Tous les lots</option>
+                  <option value="__all__">{t("planningTab.allLots")}</option>
                   {lotOptions.map((lot) => <option key={lot} value={lot}>{lot}</option>)}
                 </select>
                 <select className={inputClass()} value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
-                  <option value="__all__">Tous les statuts</option>
-                  {STATUS_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+                  <option value="__all__">{t("planningTab.allStatuses")}</option>
+                  {statusOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
                 </select>
-                <button type="button" className={buttonClass()} onClick={() => setShowSettings((current) => !current)}>{showSettings ? "Masquer reglages" : "Reglages"}</button>
+                <button type="button" className={buttonClass()} onClick={() => setShowSettings((current) => !current)}>{showSettings ? t("planningTab.hideSettings") : t("planningTab.settings")}</button>
               </div>
               <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500">
                 <span>{`${visibleDays[0]} -> ${visibleDays[visibleDays.length - 1]}`}</span>
-                <span>{rangeSummary.totalHours}h planifiees</span>
-                <span>{rangeSummary.warnings.length} alerte(s)</span>
-                {state?.segmentColumnsMissing ? <span className="text-amber-700">Migration segments a pousser</span> : null}
+                <span>{t("planningTab.totalHours", { value: rangeSummary.totalHours })}</span>
+                <span>{t("planningTab.alerts", { count: rangeSummary.warnings.length })}</span>
+                {state?.segmentColumnsMissing ? <span className="text-amber-700">{t("planningTab.segmentMigration")}</span> : null}
               </div>
             </div>
           </div>
@@ -675,16 +678,16 @@ export default function PlanningTab({ chantierId, chantierName, intervenants }: 
           {showSettings ? (
             <div className="mt-4 grid gap-2 rounded-2xl border border-slate-200 bg-slate-50 p-3 md:grid-cols-3">
               <label className="block">
-                <span className="mb-1 block text-xs text-slate-500">Heures / jour</span>
+                <span className="mb-1 block text-xs text-slate-500">{t("planningTab.hoursPerDay")}</span>
                 <input type="number" min="1" step="0.5" className={inputClass()} defaultValue={settings.hoursPerDay} onBlur={(e) => void saveSettings({ hoursPerDay: Number(e.target.value) })} />
               </label>
               <label className="block">
-                <span className="mb-1 block text-xs text-slate-500">Capacite jour (j)</span>
+                <span className="mb-1 block text-xs text-slate-500">{t("planningTab.dayCapacity")}</span>
                 <input type="number" min="1" step="0.25" className={inputClass()} defaultValue={settings.dayCapacity} onBlur={(e) => void saveSettings({ dayCapacity: Number(e.target.value) })} />
               </label>
               <label className="flex items-center gap-2 pt-6 text-xs text-slate-600">
                 <input type="checkbox" defaultChecked={settings.skipWeekends} onChange={(e) => void saveSettings({ skipWeekends: e.target.checked })} />
-                Ignorer samedi et dimanche
+                {t("planningTab.skipWeekends")}
               </label>
             </div>
           ) : null}
@@ -692,8 +695,8 @@ export default function PlanningTab({ chantierId, chantierName, intervenants }: 
 
         <section className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm">
           <div className="mb-4">
-            <div className="text-sm font-semibold text-slate-900">Calendrier</div>
-            <div className="text-xs text-slate-500">Affichage des segments planifies</div>
+            <div className="text-sm font-semibold text-slate-900">{t("planningTab.calendar")}</div>
+            <div className="text-xs text-slate-500">{t("planningTab.calendarSubtitle")}</div>
           </div>
           <div className="rounded-2xl border border-slate-100 bg-slate-50/70 p-2">
             {view === "month" ? (
@@ -705,7 +708,7 @@ export default function PlanningTab({ chantierId, chantierName, intervenants }: 
                     <button key={day} type="button" className="min-h-[10rem] rounded-3xl border border-slate-200 bg-white p-3 text-left shadow-sm hover:border-blue-200" onClick={() => setDrawer({ mode: "day", day })}>
                       <div className="flex items-start justify-between gap-2">
                         <div>
-                          <div className="text-xs text-slate-500">{formatDisplayDate(day)}</div>
+                          <div className="text-xs text-slate-500">{formatDisplayDate(day, locale)}</div>
                           <div className="text-sm font-semibold text-slate-900">{day.slice(8, 10)}</div>
                         </div>
                         <span className="rounded-full bg-slate-100 px-2 py-1 text-[11px] text-slate-600">{entries.length}</span>
@@ -725,7 +728,7 @@ export default function PlanningTab({ chantierId, chantierName, intervenants }: 
             ) : (
               <div className={view === "day" ? "grid gap-3" : "grid grid-cols-7 gap-2 lg:gap-3"}>
                 {visibleDays.map((day) => (
-                  <DayDropZone key={day} day={day} title={formatDisplayDate(day)} onOpen={() => setDrawer({ mode: "day", day })}>
+                  <DayDropZone key={day} day={day} title={formatDisplayDate(day, locale)} onOpen={() => setDrawer({ mode: "day", day })}>
                     {(dayEntries.get(day) ?? []).map((entry) => (
                       <SegmentCard
                         key={`${day}:${entry.segment.id}:${entry.isStart ? "s" : "c"}`}
@@ -748,15 +751,15 @@ export default function PlanningTab({ chantierId, chantierName, intervenants }: 
           <div className="sticky top-0 z-10 -mx-4 -mt-4 mb-4 border-b border-slate-100 bg-white px-4 py-4">
             <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
               <div>
-                <div className="text-sm font-semibold text-slate-900">Taches</div>
-                <div className="text-xs text-slate-500">Backlog non planifie / taches planifiees</div>
+                <div className="text-sm font-semibold text-slate-900">{t("planningTab.tasksTitle")}</div>
+                <div className="text-xs text-slate-500">{t("planningTab.tasksSubtitle")}</div>
               </div>
               <div className="flex flex-wrap items-center gap-2">
                 <div className="flex items-center rounded-full border border-slate-200 bg-slate-50 p-1">
-                  <button type="button" className={segmentedButton(taskTab === "backlog")} onClick={() => setTaskTab("backlog")}>Non planifiees</button>
-                  <button type="button" className={segmentedButton(taskTab === "planned")} onClick={() => setTaskTab("planned")}>Planifiees</button>
+                  <button type="button" className={segmentedButton(taskTab === "backlog")} onClick={() => setTaskTab("backlog")}>{t("planningTab.unscheduled")}</button>
+                  <button type="button" className={segmentedButton(taskTab === "planned")} onClick={() => setTaskTab("planned")}>{t("planningTab.scheduled")}</button>
                 </div>
-                <span className="rounded-full bg-slate-100 px-2 py-1 text-xs text-slate-600">{taskTab === "backlog" ? backlogTasks.length : plannedTasks.length} element(s)</span>
+                <span className="rounded-full bg-slate-100 px-2 py-1 text-xs text-slate-600">{t("planningTab.elements", { count: taskTab === "backlog" ? backlogTasks.length : plannedTasks.length })}</span>
               </div>
             </div>
           </div>
@@ -765,7 +768,7 @@ export default function PlanningTab({ chantierId, chantierName, intervenants }: 
             {taskTab === "backlog" ? (
               <div ref={backlogDrop.setNodeRef} className={["space-y-2 rounded-2xl border border-dashed border-slate-200 p-2", backlogDrop.isOver ? "border-blue-400 bg-blue-50/60" : ""].join(" ")}>
                 {backlogTasks.length === 0 ? (
-                  <div className="rounded-2xl border border-dashed border-slate-200 p-4 text-sm text-slate-500">Aucune tache non planifiee.</div>
+                  <div className="rounded-2xl border border-dashed border-slate-200 p-4 text-sm text-slate-500">{t("planningTab.noUnscheduled")}</div>
                 ) : (
                   backlogTasks.map((task) => (
                     <BacklogRow
@@ -780,11 +783,11 @@ export default function PlanningTab({ chantierId, chantierName, intervenants }: 
             ) : (
               <div className="overflow-hidden rounded-2xl border border-slate-200">
                 <div className="grid grid-cols-[minmax(14rem,2fr)_minmax(9rem,1fr)_minmax(8rem,1fr)_6rem_6rem_6rem] gap-3 border-b border-slate-200 bg-slate-50 px-3 py-2 text-xs font-medium uppercase tracking-wide text-slate-500">
-                  <span>Tache</span><span>Lot</span><span>Intervenant</span><span>Prevu</span><span>Planifie</span><span></span>
+                  <span>{t("planningTab.headers.task")}</span><span>{t("planningTab.headers.lot")}</span><span>{t("planningTab.headers.intervenant")}</span><span>{t("planningTab.headers.planned")}</span><span>{t("planningTab.headers.scheduled")}</span><span></span>
                 </div>
                 <div className="divide-y divide-slate-100">
                   {plannedTasks.length === 0 ? (
-                    <div className="px-3 py-6 text-sm text-slate-500">Aucune tache planifiee avec les filtres actuels.</div>
+                    <div className="px-3 py-6 text-sm text-slate-500">{t("planningTab.noScheduledWithFilters")}</div>
                   ) : (
                     plannedTasks.map((task) => {
                       const plannedDays = Math.round(((segmentsByTask.get(task.id) ?? []).reduce((sum, segment) => sum + segment.duration_days, 0)) * 100) / 100;
@@ -812,8 +815,8 @@ export default function PlanningTab({ chantierId, chantierName, intervenants }: 
             <aside className="fixed inset-x-0 bottom-0 z-50 max-h-[85vh] overflow-y-auto rounded-t-3xl border border-slate-200 bg-white p-4 shadow-2xl xl:inset-y-4 xl:right-4 xl:left-auto xl:w-[30rem] xl:max-h-none xl:rounded-3xl">
               <div className="mb-4 flex items-center justify-between gap-2 border-b border-slate-100 pb-3">
                 <div>
-                  <div className="text-sm font-semibold text-slate-900">{drawer.mode === "task" ? "Details tache" : "Jour selectionne"}</div>
-                  <div className="text-xs text-slate-500">{drawer.mode === "day" ? formatDisplayDate(drawer.day) : chantier?.nom ?? chantierName ?? "Planning"}</div>
+                  <div className="text-sm font-semibold text-slate-900">{drawer.mode === "task" ? t("planningTab.drawer.taskDetails") : t("planningTab.drawer.selectedDay")}</div>
+                  <div className="text-xs text-slate-500">{drawer.mode === "day" ? formatDisplayDate(drawer.day, locale) : chantier?.nom ?? chantierName ?? t("planningTab.title")}</div>
                 </div>
                 <button type="button" className={buttonClass()} onClick={() => setDrawer(null)}><X className="h-4 w-4" /></button>
               </div>
@@ -821,25 +824,25 @@ export default function PlanningTab({ chantierId, chantierName, intervenants }: 
               {drawer.mode === "day" ? (
                 <div className="space-y-3">
                   <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
-                    <div className="mb-2 text-xs font-medium text-slate-500">Affecter une tache existante</div>
+                    <div className="mb-2 text-xs font-medium text-slate-500">{t("planningTab.drawer.assignExistingTask")}</div>
                     <div className="grid gap-2 sm:grid-cols-2">
                       <select className={inputClass()} value={dayTaskId} onChange={(e) => setDayTaskId(e.target.value)}>
-                        <option value="">Choisir une tache non planifiee</option>
+                        <option value="">{t("planningTab.drawer.chooseUnscheduledTask")}</option>
                         {backlogTasks.map((task) => <option key={task.id} value={task.id}>{task.titre}</option>)}
                       </select>
                       <select className={inputClass()} value={String(dayDuration)} onChange={(e) => setDayDuration(Number(e.target.value))}>
                         {DURATION_OPTIONS.map((value) => <option key={value} value={value}>{value}j</option>)}
                       </select>
                       <select className={inputClass()} value={dayAssigneeId} onChange={(e) => setDayAssigneeId(e.target.value)}>
-                        <option value="">Intervenant par defaut</option>
+                        <option value="">{t("planningTab.drawer.defaultIntervenant")}</option>
                         {intervenants.map((it) => <option key={it.id} value={it.id}>{it.nom}</option>)}
                       </select>
-                      <button type="button" className={buttonClass("primary")} disabled={!dayTaskId || saving} onClick={() => void addSegment(dayTaskId, drawer.day, dayDuration, dayAssigneeId || null, dayStartEntries(drawer.day).length)}>Affecter</button>
+                      <button type="button" className={buttonClass("primary")} disabled={!dayTaskId || saving} onClick={() => void addSegment(dayTaskId, drawer.day, dayDuration, dayAssigneeId || null, dayStartEntries(drawer.day).length)}>{t("planningTab.drawer.assign")}</button>
                     </div>
                   </div>
 
                   {dayDrawerSegments.length === 0 ? (
-                    <div className="rounded-2xl border border-dashed border-slate-200 p-4 text-sm text-slate-500">Aucun segment planifie ce jour.</div>
+                    <div className="rounded-2xl border border-dashed border-slate-200 p-4 text-sm text-slate-500">{t("planningTab.drawer.emptyDay")}</div>
                   ) : (
                     dayDrawerSegments.map((entry) => (
                       <div key={entry.segment.id} className="rounded-2xl border border-slate-200 p-3">
@@ -853,41 +856,41 @@ export default function PlanningTab({ chantierId, chantierName, intervenants }: 
                 </div>
               ) : currentTask ? (
                 <div className="space-y-4">
-                  <label className="block"><span className="mb-1 block text-xs font-medium text-slate-500">Titre</span><input className={inputClass()} value={taskDraft.titre} onChange={(e) => setTaskDraft((current) => ({ ...current, titre: e.target.value }))} /></label>
+                  <label className="block"><span className="mb-1 block text-xs font-medium text-slate-500">{t("planningTab.drawer.title")}</span><input className={inputClass()} value={taskDraft.titre} onChange={(e) => setTaskDraft((current) => ({ ...current, titre: e.target.value }))} /></label>
                   <div className="grid gap-3 md:grid-cols-2">
-                    <label className="block"><span className="mb-1 block text-xs font-medium text-slate-500">Intervenant</span><select className={inputClass()} value={taskDraft.intervenant_id} onChange={(e) => setTaskDraft((current) => ({ ...current, intervenant_id: e.target.value }))}><option value="">Aucun</option>{intervenants.map((it) => <option key={it.id} value={it.id}>{it.nom}</option>)}</select></label>
-                    <label className="block"><span className="mb-1 block text-xs font-medium text-slate-500">Statut</span><select className={inputClass()} value={taskDraft.status} onChange={(e) => setTaskDraft((current) => ({ ...current, status: e.target.value }))}>{STATUS_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label>
+                    <label className="block"><span className="mb-1 block text-xs font-medium text-slate-500">{t("planningTab.drawer.intervenant")}</span><select className={inputClass()} value={taskDraft.intervenant_id} onChange={(e) => setTaskDraft((current) => ({ ...current, intervenant_id: e.target.value }))}><option value="">{t("planningTab.drawer.none")}</option>{intervenants.map((it) => <option key={it.id} value={it.id}>{it.nom}</option>)}</select></label>
+                    <label className="block"><span className="mb-1 block text-xs font-medium text-slate-500">{t("planningTab.drawer.status")}</span><select className={inputClass()} value={taskDraft.status} onChange={(e) => setTaskDraft((current) => ({ ...current, status: e.target.value }))}>{statusOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label>
                   </div>
-                  <label className="block"><span className="mb-1 block text-xs font-medium text-slate-500">Lot / phase</span><input className={inputClass()} value={taskDraft.lot} onChange={(e) => setTaskDraft((current) => ({ ...current, lot: e.target.value }))} /></label>
-                  <label className="block"><span className="mb-1 block text-xs font-medium text-slate-500">Duree metier prevue (j)</span><select className={inputClass()} value={String(taskDraft.planned_duration_days)} onChange={(e) => setTaskDraft((current) => ({ ...current, planned_duration_days: Number(e.target.value) }))}>{DURATION_OPTIONS.map((value) => <option key={value} value={value}>{value}j</option>)}</select></label>
+                  <label className="block"><span className="mb-1 block text-xs font-medium text-slate-500">{t("planningTab.drawer.lotPhase")}</span><input className={inputClass()} value={taskDraft.lot} onChange={(e) => setTaskDraft((current) => ({ ...current, lot: e.target.value }))} /></label>
+                  <label className="block"><span className="mb-1 block text-xs font-medium text-slate-500">{t("planningTab.drawer.plannedDuration")}</span><select className={inputClass()} value={String(taskDraft.planned_duration_days)} onChange={(e) => setTaskDraft((current) => ({ ...current, planned_duration_days: Number(e.target.value) }))}>{DURATION_OPTIONS.map((value) => <option key={value} value={value}>{value}j</option>)}</select></label>
 
-                  <button type="button" className={buttonClass("primary")} disabled={saving || !taskDraft.titre.trim()} onClick={() => void saveTaskMeta(currentTask.id, { titre: taskDraft.titre, status: taskDraft.status, lot: taskDraft.lot || null, corps_etat: taskDraft.lot || null, intervenant_id: taskDraft.intervenant_id || null, planned_duration_days: taskDraft.planned_duration_days })}>Enregistrer tache</button>
+                  <button type="button" className={buttonClass("primary")} disabled={saving || !taskDraft.titre.trim()} onClick={() => void saveTaskMeta(currentTask.id, { titre: taskDraft.titre, status: taskDraft.status, lot: taskDraft.lot || null, corps_etat: taskDraft.lot || null, intervenant_id: taskDraft.intervenant_id || null, planned_duration_days: taskDraft.planned_duration_days })}>{t("planningTab.drawer.saveTask")}</button>
 
                   <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
-                    <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Planification</div>
+                    <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">{t("planningTab.drawer.planning")}</div>
                     {(() => {
                       const planned = Math.round(currentTaskSegments.reduce((sum, segment) => sum + segment.duration_days, 0) * 100) / 100;
                       const remaining = Math.round((taskDraft.planned_duration_days - planned) * 100) / 100;
-                      return <div className="mt-2 text-xs text-slate-700">Prevu: {taskDraft.planned_duration_days}j | Planifie: {planned}j | Reste: {remaining}j {planned > taskDraft.planned_duration_days ? "(Surplanifiee)" : ""}</div>;
+                      return <div className="mt-2 text-xs text-slate-700">{t("planningTab.drawer.planningSummary", { planned: taskDraft.planned_duration_days, scheduled: planned, remaining })}{planned > taskDraft.planned_duration_days ? t("planningTab.drawer.planningSummaryOver") : ""}</div>;
                     })()}
 
                     <div className="mt-3 grid gap-2 md:grid-cols-2">
                       <input type="date" className={inputClass()} value={newSegmentDraft.start_date} onChange={(e) => setNewSegmentDraft((current) => ({ ...current, start_date: e.target.value }))} />
                       <select className={inputClass()} value={String(newSegmentDraft.duration_days)} onChange={(e) => setNewSegmentDraft((current) => ({ ...current, duration_days: Number(e.target.value) }))}>{DURATION_OPTIONS.map((value) => <option key={value} value={value}>{value}j</option>)}</select>
-                      <select className={inputClass()} value={newSegmentDraft.intervenant_id} onChange={(e) => setNewSegmentDraft((current) => ({ ...current, intervenant_id: e.target.value }))}><option value="">Intervenant par defaut</option>{intervenants.map((it) => <option key={it.id} value={it.id}>{it.nom}</option>)}</select>
-                      <button type="button" className={buttonClass("primary")} disabled={!newSegmentDraft.start_date || saving} onClick={() => void addSegment(currentTask.id, newSegmentDraft.start_date, newSegmentDraft.duration_days, newSegmentDraft.intervenant_id || null, currentTaskSegments.length)}>Ajouter un segment</button>
+                      <select className={inputClass()} value={newSegmentDraft.intervenant_id} onChange={(e) => setNewSegmentDraft((current) => ({ ...current, intervenant_id: e.target.value }))}><option value="">{t("planningTab.drawer.defaultIntervenant")}</option>{intervenants.map((it) => <option key={it.id} value={it.id}>{it.nom}</option>)}</select>
+                      <button type="button" className={buttonClass("primary")} disabled={!newSegmentDraft.start_date || saving} onClick={() => void addSegment(currentTask.id, newSegmentDraft.start_date, newSegmentDraft.duration_days, newSegmentDraft.intervenant_id || null, currentTaskSegments.length)}>{t("planningTab.drawer.addSegment")}</button>
                     </div>
 
                     <div className="mt-3 space-y-2">
                       {currentTaskSegments.length === 0 ? (
-                        <div className="rounded-xl border border-dashed border-slate-200 p-3 text-xs text-slate-500">Aucun segment pour cette tache.</div>
+                        <div className="rounded-xl border border-dashed border-slate-200 p-3 text-xs text-slate-500">{t("planningTab.drawer.noSegmentForTask")}</div>
                       ) : (
                         currentTaskSegments.map((segment) => (
                           <div key={segment.id} className="grid gap-2 rounded-xl border border-slate-200 bg-white p-2 md:grid-cols-[1fr_7rem_7rem_auto] md:items-center">
                             <input type="date" className={inputClass()} value={segment.start_date} onChange={(e) => void saveSegment(segment.id, { start_date: e.target.value })} />
                             <select className={inputClass()} value={String(segment.duration_days)} onChange={(e) => void saveSegment(segment.id, { duration_days: Number(e.target.value) })}>{DURATION_OPTIONS.map((value) => <option key={value} value={value}>{value}j</option>)}</select>
-                            <select className={inputClass()} value={segment.intervenant_id ?? ""} onChange={(e) => void saveSegment(segment.id, { intervenant_id: e.target.value || null })}><option value="">Defaut</option>{intervenants.map((it) => <option key={it.id} value={it.id}>{it.nom}</option>)}</select>
-                            <button type="button" className={buttonClass("danger")} onClick={() => void removeSegments([segment.id])}><Trash2 className="mr-1 inline h-4 w-4" />Supprimer</button>
+                            <select className={inputClass()} value={segment.intervenant_id ?? ""} onChange={(e) => void saveSegment(segment.id, { intervenant_id: e.target.value || null })}><option value="">{t("planningTab.drawer.default")}</option>{intervenants.map((it) => <option key={it.id} value={it.id}>{it.nom}</option>)}</select>
+                            <button type="button" className={buttonClass("danger")} onClick={() => void removeSegments([segment.id])}><Trash2 className="mr-1 inline h-4 w-4" />{t("planningTab.drawer.delete")}</button>
                           </div>
                         ))
                       )}
@@ -895,8 +898,8 @@ export default function PlanningTab({ chantierId, chantierName, intervenants }: 
                   </div>
 
                   <div className="flex flex-wrap items-center gap-2">
-                    {currentTaskSegments.length > 0 ? <button type="button" className={buttonClass()} onClick={() => void deplanifyTask(currentTask.id)}>Deplanifier la tache</button> : null}
-                    <button type="button" className={buttonClass("danger")} onClick={() => void deleteTask(currentTask.id)}><Trash2 className="mr-1 inline h-4 w-4" />Supprimer la tache</button>
+                    {currentTaskSegments.length > 0 ? <button type="button" className={buttonClass()} onClick={() => void deplanifyTask(currentTask.id)}>{t("planningTab.drawer.unscheduleTask")}</button> : null}
+                    <button type="button" className={buttonClass("danger")} onClick={() => void deleteTask(currentTask.id)}><Trash2 className="mr-1 inline h-4 w-4" />{t("planningTab.drawer.deleteTask")}</button>
                   </div>
                 </div>
               ) : null}

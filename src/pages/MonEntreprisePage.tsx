@@ -6,6 +6,7 @@ import {
   uploadCompanyLogo,
   type CompanySettingsRow,
 } from "../services/companySettings.service";
+import { useI18n } from "../i18n";
 
 type CompanyFormState = {
   company_name: string;
@@ -32,6 +33,7 @@ function toCompanyForm(settings: CompanySettingsRow): CompanyFormState {
 }
 
 export default function MonEntreprisePage() {
+  const { t } = useI18n();
   const [loadingSettings, setLoadingSettings] = useState(true);
   const [savingSettings, setSavingSettings] = useState(false);
   const [settingsError, setSettingsError] = useState<string | null>(null);
@@ -70,7 +72,7 @@ export default function MonEntreprisePage() {
         setLogoPreviewUrl(null);
       }
     } catch (err: any) {
-      setSettingsError(err?.message ?? "Erreur chargement parametres entreprise.");
+      setSettingsError(err?.message ?? t("monEntreprise.loadError"));
     } finally {
       setLoadingSettings(false);
     }
@@ -124,9 +126,9 @@ export default function MonEntreprisePage() {
         setLogoPreviewUrl(null);
       }
 
-      setSettingsNotice("Parametres entreprise enregistres.");
+      setSettingsNotice(t("monEntreprise.saveSuccess"));
     } catch (err: any) {
-      setSettingsError(err?.message ?? "Impossible d'enregistrer les parametres.");
+      setSettingsError(err?.message ?? t("monEntreprise.saveError"));
     } finally {
       setSavingSettings(false);
     }
@@ -136,8 +138,8 @@ export default function MonEntreprisePage() {
     <div className="space-y-4">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold">Mon entreprise</h1>
-          <p className="text-slate-500">Parametres globaux de l'entreprise.</p>
+          <h1 className="text-2xl font-bold">{t("monEntreprise.title")}</h1>
+          <p className="text-slate-500">{t("monEntreprise.subtitle")}</p>
         </div>
       </div>
 
@@ -151,14 +153,14 @@ export default function MonEntreprisePage() {
       )}
 
       {loadingSettings ? (
-        <div className="rounded-2xl border bg-white p-6 text-sm text-slate-500">Chargement des parametres...</div>
+        <div className="rounded-2xl border bg-white p-6 text-sm text-slate-500">{t("monEntreprise.loading")}</div>
       ) : (
         <div className="grid gap-4 lg:grid-cols-[minmax(0,2fr)_minmax(300px,1fr)]">
           <div className="rounded-2xl border bg-white p-4 space-y-4">
-            <div className="font-semibold section-title">Parametres entreprise</div>
+            <div className="font-semibold section-title">{t("monEntreprise.sectionTitle")}</div>
             <div className="grid gap-3 md:grid-cols-2">
               <label className="space-y-1 text-sm md:col-span-2">
-                <div className="text-xs text-slate-600">Nom entreprise</div>
+                <div className="text-xs text-slate-600">{t("monEntreprise.fields.companyName")}</div>
                 <input
                   className="w-full rounded-xl border px-3 py-2 text-sm"
                   value={companyForm.company_name}
@@ -167,7 +169,7 @@ export default function MonEntreprisePage() {
               </label>
 
               <label className="space-y-1 text-sm md:col-span-2">
-                <div className="text-xs text-slate-600">Adresse</div>
+                <div className="text-xs text-slate-600">{t("monEntreprise.fields.address")}</div>
                 <textarea
                   className="w-full rounded-xl border px-3 py-2 text-sm min-h-20"
                   value={companyForm.address}
@@ -176,7 +178,7 @@ export default function MonEntreprisePage() {
               </label>
 
               <label className="space-y-1 text-sm">
-                <div className="text-xs text-slate-600">Telephone</div>
+                <div className="text-xs text-slate-600">{t("monEntreprise.fields.phone")}</div>
                 <input
                   className="w-full rounded-xl border px-3 py-2 text-sm"
                   value={companyForm.phone}
@@ -184,7 +186,7 @@ export default function MonEntreprisePage() {
                 />
               </label>
               <label className="space-y-1 text-sm">
-                <div className="text-xs text-slate-600">Email</div>
+                <div className="text-xs text-slate-600">{t("monEntreprise.fields.email")}</div>
                 <input
                   className="w-full rounded-xl border px-3 py-2 text-sm"
                   value={companyForm.email}
@@ -193,7 +195,7 @@ export default function MonEntreprisePage() {
               </label>
 
               <label className="space-y-1 text-sm">
-                <div className="text-xs text-slate-600">SIRET</div>
+                <div className="text-xs text-slate-600">{t("monEntreprise.fields.siret")}</div>
                 <input
                   className="w-full rounded-xl border px-3 py-2 text-sm"
                   value={companyForm.siret}
@@ -201,7 +203,7 @@ export default function MonEntreprisePage() {
                 />
               </label>
               <label className="space-y-1 text-sm">
-                <div className="text-xs text-slate-600">Assurance decennale</div>
+                <div className="text-xs text-slate-600">{t("monEntreprise.fields.insurance")}</div>
                 <input
                   className="w-full rounded-xl border px-3 py-2 text-sm"
                   value={companyForm.insurance_decennale}
@@ -212,7 +214,7 @@ export default function MonEntreprisePage() {
               </label>
 
               <label className="space-y-1 text-sm">
-                <div className="text-xs text-slate-600">Couleur principale</div>
+                <div className="text-xs text-slate-600">{t("monEntreprise.fields.primaryColor")}</div>
                 <div className="flex items-center gap-2">
                   <input
                     type="color"
@@ -229,7 +231,7 @@ export default function MonEntreprisePage() {
               </label>
 
               <label className="space-y-1 text-sm">
-                <div className="text-xs text-slate-600">Couleur secondaire</div>
+                <div className="text-xs text-slate-600">{t("monEntreprise.fields.secondaryColor")}</div>
                 <div className="flex items-center gap-2">
                   <input
                     type="color"
@@ -247,14 +249,14 @@ export default function MonEntreprisePage() {
             </div>
 
             <div className="rounded-xl border p-3 space-y-2">
-              <div className="text-sm font-medium">Logo</div>
+              <div className="text-sm font-medium">{t("monEntreprise.logoTitle")}</div>
               <input
                 type="file"
                 accept="image/*"
                 onChange={(e) => setLogoFile(e.target.files?.[0] ?? null)}
                 className="block w-full text-sm"
               />
-              <div className="text-xs text-slate-500">Le logo est optionnel. Taille max: 5 Mo.</div>
+              <div className="text-xs text-slate-500">{t("monEntreprise.logoHint")}</div>
             </div>
 
             <div className="flex justify-end">
@@ -267,25 +269,25 @@ export default function MonEntreprisePage() {
                   savingSettings ? "bg-slate-300 text-slate-700" : "bg-slate-900 text-white hover:bg-slate-800",
                 ].join(" ")}
               >
-                {savingSettings ? "Enregistrement..." : "Enregistrer"}
+                {savingSettings ? t("common.states.saving") : t("common.actions.save")}
               </button>
             </div>
           </div>
 
           <div className="rounded-2xl border bg-white p-4 space-y-4">
-            <div className="font-semibold">Apercu identite</div>
+            <div className="font-semibold">{t("monEntreprise.previewTitle")}</div>
             <div className="rounded-xl border p-4 space-y-3">
               <div
                 className="rounded-lg px-3 py-2 text-white text-sm font-medium"
                 style={{ backgroundColor: companyForm.primary_color || "#2563eb" }}
               >
-                En-tete rapport
+                {t("monEntreprise.previewHeader")}
               </div>
               <div className="flex items-center gap-3">
                 {effectiveLogoPreviewUrl ? (
                   <img
                     src={effectiveLogoPreviewUrl}
-                    alt="Logo entreprise"
+                    alt={t("monEntreprise.altLogo")}
                     className="h-16 w-16 rounded-lg border object-contain bg-white"
                   />
                 ) : (
@@ -293,13 +295,13 @@ export default function MonEntreprisePage() {
                     className="h-16 w-16 rounded-lg border flex items-center justify-center text-xs text-white text-center px-1"
                     style={{ backgroundColor: companyForm.secondary_color || "#0f172a" }}
                   >
-                    {companyForm.company_name || "Mon entreprise"}
+                    {companyForm.company_name || t("monEntreprise.title")}
                   </div>
                 )}
                 <div className="text-sm">
-                  <div className="font-semibold">{companyForm.company_name || "Mon entreprise"}</div>
-                  <div className="text-slate-600">{companyForm.email || "email@entreprise.fr"}</div>
-                  <div className="text-slate-600">{companyForm.phone || "Telephone"}</div>
+                  <div className="font-semibold">{companyForm.company_name || t("monEntreprise.title")}</div>
+                  <div className="text-slate-600">{companyForm.email || t("monEntreprise.fallbackEmail")}</div>
+                  <div className="text-slate-600">{companyForm.phone || t("monEntreprise.fallbackPhone")}</div>
                 </div>
               </div>
             </div>

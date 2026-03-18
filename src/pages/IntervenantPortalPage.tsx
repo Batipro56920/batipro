@@ -19,6 +19,7 @@ import {
   type IntervenantTask,
   type IntervenantTimeEntry,
 } from "../services/intervenantPortal.service";
+import { useI18n } from "../i18n";
 
 type PortalTab = "accueil" | "temps" | "taches" | "planning" | "documents" | "materiel" | "messages";
 type LoadState<T> = { loading: boolean; error: string | null; data: T };
@@ -141,23 +142,23 @@ function shouldFallbackToLegacy(error: unknown): boolean {
   );
 }
 
-function formatDateFr(value: string | null): string {
+function formatDateLabel(value: string | null, locale: string): string {
   if (!value) return "-";
   const parsed = new Date(`${value}T00:00:00`);
   if (Number.isNaN(parsed.getTime())) return value;
-  return parsed.toLocaleDateString("fr-FR");
+  return parsed.toLocaleDateString(locale);
 }
 
-function formatDateTimeFr(value: string | null): string {
+function formatDateTimeLabel(value: string | null, locale: string): string {
   if (!value) return "-";
   const parsed = new Date(value);
   if (Number.isNaN(parsed.getTime())) return value;
-  return parsed.toLocaleString("fr-FR");
+  return parsed.toLocaleString(locale);
 }
 
-function formatQuantity(value: number | null, unit: string | null, empty = "0"): string {
+function formatQuantity(value: number | null, unit: string | null, locale: string, empty = "0"): string {
   if (value === null) return empty;
-  const formatted = value.toLocaleString("fr-FR", { maximumFractionDigits: 2 });
+  const formatted = value.toLocaleString(locale, { maximumFractionDigits: 2 });
   return unit ? `${formatted} ${unit}` : formatted;
 }
 
@@ -225,11 +226,14 @@ function taskAnchorDate(task: IntervenantTask): string | null {
   return task.date_debut ?? task.date ?? task.date_fin;
 }
 
-function statusLabel(status: string | null): string {
+function statusLabel(
+  status: string | null,
+  t: (key: string, params?: Record<string, string | number>) => string,
+): string {
   const normalized = String(status ?? "").toUpperCase();
-  if (["FAIT", "TERMINE", "DONE", "COMPLETED"].includes(normalized)) return "Termine";
-  if (["EN_COURS", "IN_PROGRESS"].includes(normalized)) return "En cours";
-  return "A faire";
+  if (["FAIT", "TERMINE", "DONE", "COMPLETED"].includes(normalized)) return t("intervenantPortal.taskStatus.done");
+  if (["EN_COURS", "IN_PROGRESS"].includes(normalized)) return t("intervenantPortal.taskStatus.inProgress");
+  return t("intervenantPortal.taskStatus.todo");
 }
 
 function statusBadgeClass(status: string | null): string {
@@ -239,15 +243,18 @@ function statusBadgeClass(status: string | null): string {
   return "bg-slate-50 text-slate-700 border-slate-200";
 }
 
-function resolveTaskLot(task: IntervenantTask): string {
-  return String(task.lot ?? task.corps_etat ?? "").trim() || "A classer";
+function resolveTaskLot(
+  task: IntervenantTask,
+  t: (key: string, params?: Record<string, string | number>) => string,
+): string {
+  return String(task.lot ?? task.corps_etat ?? "").trim() || t("intervenantPortal.lotFallback");
 }
 
-function materielStatusLabel(status: IntervenantMateriel["statut"]): string {
-  if (status === "validee") return "Validee";
-  if (status === "refusee") return "Refusee";
-  if (status === "livree") return "Livree";
-  return "En attente";
+function materielStatusLabel(
+  status: IntervenantMateriel["statut"],
+  t: (key: string, params?: Record<string, string | number>) => string,
+): string {
+  return t(`common.materielStatus.${status}`);
 }
 
 function materielStatusClass(status: IntervenantMateriel["statut"]): string {
@@ -261,14 +268,18 @@ function isOpenMaterielStatus(status: IntervenantMateriel["statut"]): boolean {
   return status === "en_attente" || status === "validee";
 }
 
-function chantierDateSummary(chantier: IntervenantChantier | null): string {
+function chantierDateSummary(
+  chantier: IntervenantChantier | null,
+  locale: string,
+  t: (key: string, params?: Record<string, string | number>) => string,
+): string {
   if (!chantier) return "";
   const start = chantier.date_debut ?? chantier.planning_start_date;
   const end = chantier.date_fin_prevue ?? chantier.planning_end_date;
-  if (start && end) return `${formatDateFr(start)} -> ${formatDateFr(end)}`;
-  if (start) return `Depuis ${formatDateFr(start)}`;
-  if (end) return `Jusqu'au ${formatDateFr(end)}`;
-  return "Dates non renseignees";
+  if (start && end) return `${formatDateLabel(start, locale)} -> ${formatDateLabel(end, locale)}`;
+  if (start) return t("intervenantPortal.siteDates.since", { date: formatDateLabel(start, locale) });
+  if (end) return t("intervenantPortal.siteDates.until", { date: formatDateLabel(end, locale) });
+  return t("intervenantPortal.siteDates.unknown");
 }
 
 function chantierSearchText(chantier: IntervenantChantier): string {
@@ -278,6 +289,7 @@ function chantierSearchText(chantier: IntervenantChantier): string {
 export default function IntervenantPortalPage() {
   const location = useLocation();
   const navigate = useNavigate();
+  const { language, locale, setLanguage, t } = useI18n();
   const queryToken = useMemo(() => new URLSearchParams(location.search).get("token")?.trim() ?? "", [location.search]);
   const queryChantierId = useMemo(
     () => new URLSearchParams(location.search).get("chantier_id")?.trim() ?? "",
@@ -339,7 +351,7 @@ export default function IntervenantPortalPage() {
         setSessionInfo(null);
         setChantiers([]);
         setSelectedChantierId("");
-        setBootError("Token manquant.");
+        setBootError(t("intervenantPortal.missingToken"));
         setBootLoading(false);
         return;
       }
@@ -372,7 +384,7 @@ export default function IntervenantPortalPage() {
         setBootLoading(false);
       } catch (error) {
         if (!alive) return;
-        const message = getErrorMessage(error, "Acces intervenant indisponible.");
+        const message = getErrorMessage(error, t("intervenantPortal.errors.portalLoad"));
         if (LEGACY_FALLBACK_ENABLED && shouldFallbackToLegacy(error)) {
           navigate(`/acces/${encodeURIComponent(candidateToken)}`, { replace: true });
           return;
@@ -389,7 +401,7 @@ export default function IntervenantPortalPage() {
     return () => {
       alive = false;
     };
-  }, [navigate, queryChantierId, queryToken]);
+  }, [navigate, queryChantierId, queryToken, t]);
 
   useEffect(() => {
     if (bootLoading || bootError) return;
@@ -460,17 +472,17 @@ export default function IntervenantPortalPage() {
           return;
         }
       }
-      setTasksState(tasksResult.status === "fulfilled" ? { loading: false, error: null, data: tasksResult.value } : { loading: false, error: getErrorMessage(tasksResult.reason, "Erreur chargement taches."), data: [] });
-      setDocumentsState(documentsResult.status === "fulfilled" ? { loading: false, error: null, data: documentsResult.value } : { loading: false, error: getErrorMessage(documentsResult.reason, "Erreur chargement documents."), data: [] });
-      setPlanningState(planningResult.status === "fulfilled" ? { loading: false, error: null, data: planningResult.value } : { loading: false, error: getErrorMessage(planningResult.reason, "Erreur chargement planning."), data: { chantier_id: selectedChantierId, lots: [] } });
-      setTimeState(timeResult.status === "fulfilled" ? { loading: false, error: null, data: timeResult.value } : { loading: false, error: getErrorMessage(timeResult.reason, "Erreur chargement temps."), data: [] });
-      setMaterielState(materielResult.status === "fulfilled" ? { loading: false, error: null, data: materielResult.value } : { loading: false, error: getErrorMessage(materielResult.reason, "Erreur chargement materiel."), data: [] });
+      setTasksState(tasksResult.status === "fulfilled" ? { loading: false, error: null, data: tasksResult.value } : { loading: false, error: getErrorMessage(tasksResult.reason, t("intervenantPortal.errors.tasksLoad")), data: [] });
+      setDocumentsState(documentsResult.status === "fulfilled" ? { loading: false, error: null, data: documentsResult.value } : { loading: false, error: getErrorMessage(documentsResult.reason, t("intervenantPortal.errors.documentsLoad")), data: [] });
+      setPlanningState(planningResult.status === "fulfilled" ? { loading: false, error: null, data: planningResult.value } : { loading: false, error: getErrorMessage(planningResult.reason, t("intervenantPortal.errors.planningLoad")), data: { chantier_id: selectedChantierId, lots: [] } });
+      setTimeState(timeResult.status === "fulfilled" ? { loading: false, error: null, data: timeResult.value } : { loading: false, error: getErrorMessage(timeResult.reason, t("intervenantPortal.errors.timeLoad")), data: [] });
+      setMaterielState(materielResult.status === "fulfilled" ? { loading: false, error: null, data: materielResult.value } : { loading: false, error: getErrorMessage(materielResult.reason, t("intervenantPortal.errors.materialLoad")), data: [] });
     }
     void loadChantierData();
     return () => {
       alive = false;
     };
-  }, [bootError, bootLoading, navigate, reloadTick, selectedChantierId, token]);
+  }, [bootError, bootLoading, navigate, reloadTick, selectedChantierId, t, token]);
 
   useEffect(() => {
     if (!token || bootLoading || bootError) return;
@@ -490,13 +502,13 @@ export default function IntervenantPortalPage() {
       let dashboardTasksError: string | null = null;
       taskLoads.forEach((result) => {
         if (result.status === "fulfilled") result.value.rows.forEach((task) => dashboardTasks.push({ chantier: result.value.chantier, task }));
-        else if (!dashboardTasksError) dashboardTasksError = getErrorMessage(result.reason, "Erreur chargement accueil.");
+        else if (!dashboardTasksError) dashboardTasksError = getErrorMessage(result.reason, t("intervenantPortal.errors.homeLoad"));
       });
       const dashboardMateriel: DashboardMaterielItem[] = [];
       let dashboardMaterielError: string | null = null;
       materielLoads.forEach((result) => {
         if (result.status === "fulfilled") result.value.rows.forEach((row) => dashboardMateriel.push({ chantier: result.value.chantier, row }));
-        else if (!dashboardMaterielError) dashboardMaterielError = getErrorMessage(result.reason, "Erreur chargement demandes materiel.");
+        else if (!dashboardMaterielError) dashboardMaterielError = getErrorMessage(result.reason, t("intervenantPortal.errors.materialRequestsLoad"));
       });
       setDashboardTasksState({ loading: false, error: dashboardTasksError, data: dashboardTasks });
       setDashboardMaterielState({ loading: false, error: dashboardMaterielError, data: dashboardMateriel });
@@ -505,7 +517,7 @@ export default function IntervenantPortalPage() {
     return () => {
       alive = false;
     };
-  }, [bootError, bootLoading, chantiers, reloadTick, token]);
+  }, [bootError, bootLoading, chantiers, reloadTick, t, token]);
   function logoutIntervenant() {
     clearStoredToken();
     clearStoredChantierId();
@@ -538,6 +550,22 @@ export default function IntervenantPortalPage() {
     if (activeTab === "accueil") {
       setActiveTab("temps");
     }
+  }
+
+  function tabLabel(tab: PortalTab) {
+    return t(`intervenantPortal.tabs.${tab}`);
+  }
+
+  function formatPortalDate(value: string | null) {
+    return formatDateLabel(value, locale);
+  }
+
+  function formatPortalDateTime(value: string | null) {
+    return formatDateTimeLabel(value, locale);
+  }
+
+  function formatPortalQuantity(value: number | null, unit: string | null, empty = "0") {
+    return formatQuantity(value, unit, locale, empty);
   }
 
   const activeChantier = useMemo(() => chantiers.find((chantier) => chantier.id === selectedChantierId) ?? null, [chantiers, selectedChantierId]);
@@ -586,8 +614,10 @@ export default function IntervenantPortalPage() {
     return bTs - aTs;
   }), [dashboardMaterielState.data]);
   const latestTimeEntry = useMemo(() => timeState.data[0] ?? null, [timeState.data]);
-  const contentTitle = activeTab === "accueil" ? "Accueil intervenant" : activeChantier?.nom ?? "Selection chantier";
-  const contentSubtitle = activeTab === "accueil" ? `${chantiers.length} chantier${chantiers.length > 1 ? "s" : ""} accessible${chantiers.length > 1 ? "s" : ""}` : chantierDateSummary(activeChantier);
+  const contentTitle = activeTab === "accueil" ? t("intervenantPortal.portalTitle") : activeChantier?.nom ?? t("intervenantPortal.selectedSiteFallback");
+  const contentSubtitle = activeTab === "accueil"
+    ? `${chantiers.length} ${t("intervenantPortal.tabs.chantiers").toLowerCase()}`
+    : chantierDateSummary(activeChantier, locale, t);
 
   function selectTimeTask(task: IntervenantTask) {
     setTimeTaskId(task.id);
@@ -628,19 +658,19 @@ export default function IntervenantPortalPage() {
     event.preventDefault();
     if (!token || !selectedChantierId) return;
     if (!timeTaskId) {
-      setTimeFeedback({ type: "error", message: "Choisir une tache." });
+      setTimeFeedback({ type: "error", message: t("intervenantPortal.errors.chooseTask") });
       return;
     }
     const quantity = Number(String(timeQuantity).replace(",", "."));
     if (!Number.isFinite(quantity) || quantity <= 0) {
-      setTimeFeedback({ type: "error", message: "Saisir une quantite valide." });
+      setTimeFeedback({ type: "error", message: t("intervenantPortal.errors.validQuantity") });
       return;
     }
     setTimeSaving(true);
     setTimeFeedback(null);
     try {
       await intervenantTimeCreate(token, { chantier_id: selectedChantierId, task_id: timeTaskId, work_date: timeDate || todayIsoDate(), quantite_realisee: quantity, note: timeNote.trim() || null });
-      setTimeFeedback({ type: "success", message: "Saisie enregistree." });
+      setTimeFeedback({ type: "success", message: t("intervenantPortal.feedback.timeSaved") });
       setTimeQuantity("");
       setTimeNote("");
       setTimeDate(todayIsoDate());
@@ -652,8 +682,8 @@ export default function IntervenantPortalPage() {
       }
       setReloadTick((value) => value + 1);
     } catch (error) {
-      const message = getErrorMessage(error, "Impossible d'enregistrer la saisie.");
-      setTimeFeedback({ type: "error", message: isTaskIdRequiredError(message) ? "Choisir une tache." : message });
+      const message = getErrorMessage(error, t("intervenantPortal.errors.saveTime"));
+      setTimeFeedback({ type: "error", message: isTaskIdRequiredError(message) ? t("intervenantPortal.errors.chooseTask") : message });
     } finally {
       setTimeSaving(false);
     }
@@ -661,15 +691,15 @@ export default function IntervenantPortalPage() {
 
   async function onDeleteTimeEntry(entry: IntervenantTimeEntry) {
     if (!token) return;
-    if (typeof window !== "undefined" && !window.confirm("Supprimer cette saisie ?")) return;
+    if (typeof window !== "undefined" && !window.confirm(t("intervenantPortal.time.deleteConfirm"))) return;
     setTimeDeletingId(entry.id);
     setTimeFeedback(null);
     try {
       await intervenantTimeDelete(token, entry.id);
-      setTimeFeedback({ type: "success", message: "Saisie supprimee." });
+      setTimeFeedback({ type: "success", message: t("intervenantPortal.feedback.timeDeleted") });
       setReloadTick((value) => value + 1);
     } catch (error) {
-      setTimeFeedback({ type: "error", message: getErrorMessage(error, "Impossible de supprimer la saisie.") });
+      setTimeFeedback({ type: "error", message: getErrorMessage(error, t("intervenantPortal.errors.deleteTime")) });
     } finally {
       setTimeDeletingId(null);
     }
@@ -678,19 +708,19 @@ export default function IntervenantPortalPage() {
     event.preventDefault();
     if (!token || !selectedChantierId) return;
     if (!materielTitre.trim()) {
-      setMaterielFeedback({ type: "error", message: "Renseigner une description." });
+      setMaterielFeedback({ type: "error", message: t("intervenantPortal.errors.descriptionRequired") });
       return;
     }
     const quantityValue = materielQuantite.trim() ? Number(String(materielQuantite).replace(",", ".")) : null;
     if (quantityValue !== null && (!Number.isFinite(quantityValue) || quantityValue <= 0)) {
-      setMaterielFeedback({ type: "error", message: "Saisir une quantite valide." });
+      setMaterielFeedback({ type: "error", message: t("intervenantPortal.errors.validQuantity") });
       return;
     }
     setMaterielSaving(true);
     setMaterielFeedback(null);
     try {
       await intervenantMaterielCreate(token, { chantier_id: selectedChantierId, task_id: materielTaskId || null, titre: materielTitre.trim(), quantite: quantityValue, unite: materielUnite.trim() || null, commentaire: materielCommentaire.trim() || null, date_souhaitee: materielDate || null });
-      setMaterielFeedback({ type: "success", message: "Demande envoyee." });
+      setMaterielFeedback({ type: "success", message: t("intervenantPortal.feedback.materialSent") });
       setMaterielTitre("");
       setMaterielTaskId("");
       setMaterielQuantite("1");
@@ -699,7 +729,7 @@ export default function IntervenantPortalPage() {
       setMaterielCommentaire("");
       setReloadTick((value) => value + 1);
     } catch (error) {
-      setMaterielFeedback({ type: "error", message: getErrorMessage(error, "Impossible d'envoyer la demande.") });
+      setMaterielFeedback({ type: "error", message: getErrorMessage(error, t("intervenantPortal.errors.sendMaterial")) });
     } finally {
       setMaterielSaving(false);
     }
@@ -708,23 +738,23 @@ export default function IntervenantPortalPage() {
   async function onCreateQuickMateriel(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!token || !quickMaterielChantierId) {
-      setQuickMaterielFeedback({ type: "error", message: "Choisir un chantier." });
+      setQuickMaterielFeedback({ type: "error", message: t("intervenantPortal.errors.chooseSite") });
       return;
     }
     if (!quickMaterielTitre.trim()) {
-      setQuickMaterielFeedback({ type: "error", message: "Renseigner une description." });
+      setQuickMaterielFeedback({ type: "error", message: t("intervenantPortal.errors.descriptionRequired") });
       return;
     }
     const quantityValue = quickMaterielQuantite.trim() ? Number(String(quickMaterielQuantite).replace(",", ".")) : null;
     if (quantityValue !== null && (!Number.isFinite(quantityValue) || quantityValue <= 0)) {
-      setQuickMaterielFeedback({ type: "error", message: "Saisir une quantite valide." });
+      setQuickMaterielFeedback({ type: "error", message: t("intervenantPortal.errors.validQuantity") });
       return;
     }
     setQuickMaterielSaving(true);
     setQuickMaterielFeedback(null);
     try {
       await intervenantMaterielCreate(token, { chantier_id: quickMaterielChantierId, titre: quickMaterielTitre.trim(), quantite: quantityValue });
-      setQuickMaterielFeedback({ type: "success", message: "Demande envoyee." });
+      setQuickMaterielFeedback({ type: "success", message: t("intervenantPortal.feedback.materialSent") });
       setQuickMaterielTitre("");
       setQuickMaterielQuantite("1");
       if (mobileQuickAction === "materiel") {
@@ -732,23 +762,23 @@ export default function IntervenantPortalPage() {
       }
       setReloadTick((value) => value + 1);
     } catch (error) {
-      setQuickMaterielFeedback({ type: "error", message: getErrorMessage(error, "Impossible d'envoyer la demande.") });
+      setQuickMaterielFeedback({ type: "error", message: getErrorMessage(error, t("intervenantPortal.errors.sendMaterial")) });
     } finally {
       setQuickMaterielSaving(false);
     }
   }
 
   if (bootLoading) {
-    return <div className="min-h-screen bg-slate-100 px-4 py-6 text-slate-700">Chargement du portail intervenant...</div>;
+    return <div className="min-h-screen bg-slate-100 px-4 py-6 text-slate-700">{t("intervenantPortal.bootLoading")}</div>;
   }
 
   if (bootError) {
     return (
       <div className="min-h-screen bg-slate-100 px-4 py-6 text-slate-700">
         <div className="mx-auto max-w-xl rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
-          <div className="text-lg font-semibold text-slate-900">Acces intervenant indisponible</div>
+          <div className="text-lg font-semibold text-slate-900">{t("intervenantPortal.unavailableTitle")}</div>
           <div className="mt-2 text-sm text-slate-600">{bootError}</div>
-          {isInvalidTokenError(bootError) ? <button type="button" onClick={() => navigate("/", { replace: true })} className="mt-4 rounded-full bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700">Retour accueil</button> : null}
+          {isInvalidTokenError(bootError) ? <button type="button" onClick={() => navigate("/", { replace: true })} className="mt-4 rounded-full bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700">{t("intervenantPortal.backHome")}</button> : null}
         </div>
       </div>
     );
@@ -762,48 +792,64 @@ export default function IntervenantPortalPage() {
         <aside className="hidden md:block">
           <div className="sticky top-4 space-y-4">
             <section className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm">
-              <div className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">Intervenant</div>
-              <div className="mt-2 text-lg font-semibold text-slate-900">{sessionInfo?.intervenant.nom || "Portail intervenant"}</div>
-              <div className="mt-1 text-xs text-slate-500">Session {sessionInfo?.expires_at ? `jusqu'au ${formatDateTimeFr(sessionInfo.expires_at)}` : "active"}</div>
+              <div className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">{t("intervenantPortal.sectionIntervenant")}</div>
+              <div className="mt-2 text-lg font-semibold text-slate-900">{sessionInfo?.intervenant.nom || t("intervenantPortal.portalTitle")}</div>
+              <div className="mt-1 text-xs text-slate-500">{sessionInfo?.expires_at ? t("intervenantPortal.sessionUntil", { date: formatPortalDateTime(sessionInfo.expires_at) }) : t("intervenantPortal.sessionActive")}</div>
+              <div className="mt-4 inline-flex items-center rounded-xl border border-slate-200 bg-slate-50 p-1" role="group" aria-label={t("layout.languageSwitcherLabel")}>
+                {(["fr", "al"] as const).map((value) => (
+                  <button
+                    key={value}
+                    type="button"
+                    onClick={() => setLanguage(value)}
+                    className={[
+                      "rounded-lg px-2.5 py-1.5 text-xs font-medium transition",
+                      language === value ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-900",
+                    ].join(" ")}
+                    aria-pressed={language === value}
+                  >
+                    {t(`common.languages.${value}`)}
+                  </button>
+                ))}
+              </div>
               <div className="mt-4 flex gap-2">
-                <button type="button" onClick={() => setReloadTick((value) => value + 1)} className="flex-1 rounded-full border border-slate-200 px-3 py-2 text-sm font-medium text-slate-700">Rafraichir</button>
-                <button type="button" onClick={logoutIntervenant} className="flex-1 rounded-full border border-red-200 px-3 py-2 text-sm font-medium text-red-700">Deconnexion</button>
+                <button type="button" onClick={() => setReloadTick((value) => value + 1)} className="flex-1 rounded-full border border-slate-200 px-3 py-2 text-sm font-medium text-slate-700">{t("common.actions.refresh")}</button>
+                <button type="button" onClick={logoutIntervenant} className="flex-1 rounded-full border border-red-200 px-3 py-2 text-sm font-medium text-red-700">{t("layout.signOut")}</button>
               </div>
             </section>
             <section className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm">
-              <div className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">Chantiers</div>
-              <input className="mt-3 w-full rounded-2xl border border-slate-200 px-3 py-2 text-sm" value={sidebarChantierQuery} onChange={(e) => setSidebarChantierQuery(e.target.value)} placeholder="Rechercher un chantier" />
+              <div className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">{t("intervenantPortal.sectionSites")}</div>
+              <input className="mt-3 w-full rounded-2xl border border-slate-200 px-3 py-2 text-sm" value={sidebarChantierQuery} onChange={(e) => setSidebarChantierQuery(e.target.value)} placeholder={t("intervenantPortal.searchSitePlaceholder")} />
               <div className="mt-3 max-h-[40vh] space-y-2 overflow-y-auto pr-1">
-                {filteredChantiers.length === 0 ? <div className="rounded-2xl border border-dashed border-slate-200 p-3 text-sm text-slate-500">Aucun chantier trouve.</div> : filteredChantiers.map((chantier) => {
+                {filteredChantiers.length === 0 ? <div className="rounded-2xl border border-dashed border-slate-200 p-3 text-sm text-slate-500">{t("intervenantPortal.noSiteFound")}</div> : filteredChantiers.map((chantier) => {
                   const selected = chantier.id === selectedChantierId;
-                  return <button key={chantier.id} type="button" onClick={() => chooseChantier(chantier.id)} className={["w-full rounded-2xl border px-3 py-3 text-left", selected ? "border-blue-600 bg-blue-600 text-white" : "border-slate-200 bg-white text-slate-900"].join(" ")}><div className="text-sm font-semibold">{chantier.nom}</div><div className={selected ? "mt-1 text-xs text-slate-200" : "mt-1 text-xs text-slate-500"}>{chantier.client || "Client non renseigne"}</div></button>;
+                  return <button key={chantier.id} type="button" onClick={() => chooseChantier(chantier.id)} className={["w-full rounded-2xl border px-3 py-3 text-left", selected ? "border-blue-600 bg-blue-600 text-white" : "border-slate-200 bg-white text-slate-900"].join(" ")}><div className="text-sm font-semibold">{chantier.nom}</div><div className={selected ? "mt-1 text-xs text-slate-200" : "mt-1 text-xs text-slate-500"}>{chantier.client || t("intervenantPortal.noClient")}</div></button>;
                 })}
               </div>
             </section>
             <nav className="rounded-3xl border border-slate-200 bg-white p-2 shadow-sm">
-              {(["accueil","temps","taches","planning","documents","materiel","messages"] as PortalTab[]).map((tab) => <button key={tab} type="button" onClick={() => setActiveTab(tab)} className={["block w-full rounded-2xl px-3 py-2 text-left text-sm font-medium", activeTab === tab ? "bg-blue-600 text-white" : "text-slate-700 hover:bg-slate-100"].join(" ")}>{tab === "accueil" ? "Accueil" : tab === "taches" ? "Taches" : tab.charAt(0).toUpperCase() + tab.slice(1)}</button>)}
+              {(["accueil","temps","taches","planning","documents","materiel","messages"] as PortalTab[]).map((tab) => <button key={tab} type="button" onClick={() => setActiveTab(tab)} className={["block w-full rounded-2xl px-3 py-2 text-left text-sm font-medium", activeTab === tab ? "bg-blue-600 text-white" : "text-slate-700 hover:bg-slate-100"].join(" ")}>{tabLabel(tab)}</button>)}
             </nav>
           </div>
         </aside>
 
         <main className="min-w-0 space-y-3 md:space-y-4">
           <section className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm md:hidden">
-            <div className="flex items-start justify-between gap-3"><div className="min-w-0"><div className="text-base font-semibold text-slate-900">{sessionInfo?.intervenant.nom || "Portail intervenant"}</div><div className="mt-1 text-xs text-slate-500">Session {sessionInfo?.expires_at ? `jusqu'au ${formatDateTimeFr(sessionInfo.expires_at)}` : "active"}</div></div><div className="flex shrink-0 gap-2"><button type="button" onClick={openMobileHome} className={["rounded-full px-3 py-1.5 text-xs font-medium", mobileGlobalTab === "home" ? "bg-blue-600 text-white" : "border border-slate-200 text-slate-700"].join(" ")}>Accueil</button><button type="button" onClick={() => setPortalOptionsOpen((value) => !value)} className="rounded-full border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-700">Options</button></div></div>
-            {portalOptionsOpen ? <div className="mt-3 grid grid-cols-2 gap-2"><button type="button" onClick={() => setReloadTick((value) => value + 1)} className="rounded-full border border-slate-200 px-3 py-2 text-sm font-medium text-slate-700">Rafraichir</button><button type="button" onClick={logoutIntervenant} className="rounded-full border border-red-200 px-3 py-2 text-sm font-medium text-red-700">Deconnexion</button></div> : null}
+            <div className="flex items-start justify-between gap-3"><div className="min-w-0"><div className="text-base font-semibold text-slate-900">{sessionInfo?.intervenant.nom || t("intervenantPortal.portalTitle")}</div><div className="mt-1 text-xs text-slate-500">{sessionInfo?.expires_at ? t("intervenantPortal.sessionUntil", { date: formatPortalDateTime(sessionInfo.expires_at) }) : t("intervenantPortal.sessionActive")}</div></div><div className="flex shrink-0 gap-2"><button type="button" onClick={openMobileHome} className={["rounded-full px-3 py-1.5 text-xs font-medium", mobileGlobalTab === "home" ? "bg-blue-600 text-white" : "border border-slate-200 text-slate-700"].join(" ")}>{t("intervenantPortal.tabs.accueil")}</button><button type="button" onClick={() => setPortalOptionsOpen((value) => !value)} className="rounded-full border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-700">{t("intervenantPortal.tabs.options")}</button></div></div>
+            {portalOptionsOpen ? <div className="mt-3 space-y-2"><div className="grid grid-cols-2 gap-2"><button type="button" onClick={() => setReloadTick((value) => value + 1)} className="rounded-full border border-slate-200 px-3 py-2 text-sm font-medium text-slate-700">{t("common.actions.refresh")}</button><button type="button" onClick={logoutIntervenant} className="rounded-full border border-red-200 px-3 py-2 text-sm font-medium text-red-700">{t("layout.signOut")}</button></div><div className="inline-flex items-center rounded-xl border border-slate-200 bg-slate-50 p-1" role="group" aria-label={t("layout.languageSwitcherLabel")}>{(["fr", "al"] as const).map((value) => <button key={value} type="button" onClick={() => setLanguage(value)} className={["rounded-lg px-2.5 py-1.5 text-xs font-medium transition", language === value ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-900"].join(" ")} aria-pressed={language === value}>{t(`common.languages.${value}`)}</button>)}</div></div> : null}
           </section>
-          <section className="rounded-3xl border border-slate-200 bg-white p-2 shadow-sm md:hidden"><div className="grid grid-cols-2 gap-2"><button type="button" onClick={openMobileHome} className={["rounded-2xl px-3 py-2 text-sm font-medium", mobileGlobalTab === "home" ? "bg-blue-600 text-white" : "border border-slate-200 text-slate-700"].join(" ")}>Accueil</button><button type="button" onClick={openMobileSites} className={["rounded-2xl px-3 py-2 text-sm font-medium", mobileGlobalTab !== "home" ? "bg-blue-600 text-white" : "border border-slate-200 text-slate-700"].join(" ")}>Chantiers</button></div></section>
-          {mobileGlobalTab === "sites" ? <section className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm md:hidden"><div className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">Chantiers accessibles</div><input className="mt-3 w-full rounded-2xl border border-slate-200 px-3 py-2 text-sm" value={sidebarChantierQuery} onChange={(e) => setSidebarChantierQuery(e.target.value)} placeholder="Rechercher un chantier" /><div className="mt-3 space-y-2">{filteredChantiers.length === 0 ? <div className="rounded-2xl border border-dashed border-slate-200 p-3 text-sm text-slate-500">Aucun chantier trouve.</div> : filteredChantiers.map((chantier) => <button key={chantier.id} type="button" onClick={() => openMobileSite(chantier.id)} className="block w-full rounded-2xl border border-slate-200 bg-white px-3 py-3 text-left"><div className="text-sm font-semibold text-slate-900">{chantier.nom}</div><div className="mt-1 text-xs text-slate-500">{chantier.client || "Client non renseigne"}</div></button>)}</div></section> : null}
-          {mobileGlobalTab === "site" && selectedChantierId ? <section className="space-y-3 md:hidden"><button type="button" onClick={openMobileSites} className="block w-full rounded-3xl border border-blue-200 bg-blue-50 px-4 py-3 text-left shadow-sm"><div className="text-xs font-semibold uppercase tracking-[0.2em] text-blue-700">Chantier</div><div className="mt-1 text-sm font-semibold text-slate-900">Chantier : {activeChantier?.nom ?? "Choisir un chantier"} ▾</div></button><nav className="no-scrollbar flex gap-2 overflow-x-auto rounded-3xl border border-slate-200 bg-white p-2 shadow-sm">{(["temps","taches","planning","documents","materiel","messages"] as PortalTab[]).map((tab) => <button key={tab} type="button" onClick={() => setActiveTab(tab)} className={["shrink-0 rounded-full px-3 py-2 text-sm font-medium", activeTab === tab ? "bg-blue-600 text-white" : "border border-slate-200 text-slate-700"].join(" ")}>{tab === "taches" ? "Taches" : tab.charAt(0).toUpperCase() + tab.slice(1)}</button>)}</nav></section> : null}
-          <section className={["rounded-3xl border border-slate-200 bg-white p-4 shadow-sm", mobileGlobalTab === "sites" || (mobileGlobalTab === "home" && activeTab === "accueil") ? "hidden md:block" : ""].join(" ")}><div className="flex flex-col gap-2 md:flex-row md:items-end md:justify-between"><div className="min-w-0"><div className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">{activeTab === "accueil" ? "Dashboard" : "Chantier selectionne"}</div><div className="mt-1 text-lg font-semibold text-slate-900">{contentTitle}</div><div className="mt-1 text-sm text-slate-500">{contentSubtitle}</div>{activeTab !== "accueil" && activeChantier ? <div className="mt-2 text-xs text-slate-500">{activeChantier.client || "Client non renseigne"}{activeChantier.adresse ? ` - ${activeChantier.adresse}` : ""}</div> : null}</div>{activeTab !== "accueil" && activeChantier ? <div className="text-sm text-slate-500">Avancement: {activeChantier.avancement ?? 0}%</div> : null}</div></section>
-          {chantiers.length === 0 ? <section className={["rounded-3xl border border-dashed border-slate-300 bg-white p-6 text-center shadow-sm", mobileGlobalTab === "sites" ? "hidden md:block" : ""].join(" ")}><div className="text-lg font-semibold text-slate-900">Aucun chantier accessible</div><div className="mt-2 text-sm text-slate-500">Votre lien est valide, mais aucun chantier n'est rattache a cette session.</div></section> : <section className={["rounded-3xl border border-slate-200 bg-white p-4 shadow-sm", mobileGlobalTab === "sites" ? "hidden md:block" : ""].join(" ")}>
+          <section className="rounded-3xl border border-slate-200 bg-white p-2 shadow-sm md:hidden"><div className="grid grid-cols-2 gap-2"><button type="button" onClick={openMobileHome} className={["rounded-2xl px-3 py-2 text-sm font-medium", mobileGlobalTab === "home" ? "bg-blue-600 text-white" : "border border-slate-200 text-slate-700"].join(" ")}>{t("intervenantPortal.tabs.accueil")}</button><button type="button" onClick={openMobileSites} className={["rounded-2xl px-3 py-2 text-sm font-medium", mobileGlobalTab !== "home" ? "bg-blue-600 text-white" : "border border-slate-200 text-slate-700"].join(" ")}>{t("intervenantPortal.tabs.chantiers")}</button></div></section>
+          {mobileGlobalTab === "sites" ? <section className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm md:hidden"><div className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">{t("intervenantPortal.sitesAccessible")}</div><input className="mt-3 w-full rounded-2xl border border-slate-200 px-3 py-2 text-sm" value={sidebarChantierQuery} onChange={(e) => setSidebarChantierQuery(e.target.value)} placeholder={t("intervenantPortal.searchSitePlaceholder")} /><div className="mt-3 space-y-2">{filteredChantiers.length === 0 ? <div className="rounded-2xl border border-dashed border-slate-200 p-3 text-sm text-slate-500">{t("intervenantPortal.noSiteFound")}</div> : filteredChantiers.map((chantier) => <button key={chantier.id} type="button" onClick={() => openMobileSite(chantier.id)} className="block w-full rounded-2xl border border-slate-200 bg-white px-3 py-3 text-left"><div className="text-sm font-semibold text-slate-900">{chantier.nom}</div><div className="mt-1 text-xs text-slate-500">{chantier.client || t("intervenantPortal.noClient")}</div></button>)}</div></section> : null}
+          {mobileGlobalTab === "site" && selectedChantierId ? <section className="space-y-3 md:hidden"><button type="button" onClick={openMobileSites} className="block w-full rounded-3xl border border-blue-200 bg-blue-50 px-4 py-3 text-left shadow-sm"><div className="text-xs font-semibold uppercase tracking-[0.2em] text-blue-700">{t("intervenantPortal.siteLabel")}</div><div className="mt-1 text-sm font-semibold text-slate-900">{t("intervenantPortal.siteLabel")} : {activeChantier?.nom ?? t("intervenantPortal.chooseSite")} ▾</div></button><nav className="no-scrollbar flex gap-2 overflow-x-auto rounded-3xl border border-slate-200 bg-white p-2 shadow-sm">{(["temps","taches","planning","documents","materiel","messages"] as PortalTab[]).map((tab) => <button key={tab} type="button" onClick={() => setActiveTab(tab)} className={["shrink-0 rounded-full px-3 py-2 text-sm font-medium", activeTab === tab ? "bg-blue-600 text-white" : "border border-slate-200 text-slate-700"].join(" ")}>{tabLabel(tab)}</button>)}</nav></section> : null}
+          <section className={["rounded-3xl border border-slate-200 bg-white p-4 shadow-sm", mobileGlobalTab === "sites" || (mobileGlobalTab === "home" && activeTab === "accueil") ? "hidden md:block" : ""].join(" ")}><div className="flex flex-col gap-2 md:flex-row md:items-end md:justify-between"><div className="min-w-0"><div className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">{activeTab === "accueil" ? t("intervenantPortal.dashboardTitle") : t("intervenantPortal.selectedSite")}</div><div className="mt-1 text-lg font-semibold text-slate-900">{contentTitle}</div><div className="mt-1 text-sm text-slate-500">{contentSubtitle}</div>{activeTab !== "accueil" && activeChantier ? <div className="mt-2 text-xs text-slate-500">{activeChantier.client || t("intervenantPortal.noClient")}{activeChantier.adresse ? ` - ${activeChantier.adresse}` : ""}</div> : null}</div>{activeTab !== "accueil" && activeChantier ? <div className="text-sm text-slate-500">{t("intervenantPortal.progress", { value: activeChantier.avancement ?? 0 })}</div> : null}</div></section>
+          {chantiers.length === 0 ? <section className={["rounded-3xl border border-dashed border-slate-300 bg-white p-6 text-center shadow-sm", mobileGlobalTab === "sites" ? "hidden md:block" : ""].join(" ")}><div className="text-lg font-semibold text-slate-900">{t("intervenantPortal.noAccessibleSiteTitle")}</div><div className="mt-2 text-sm text-slate-500">{t("intervenantPortal.noAccessibleSiteMessage")}</div></section> : <section className={["rounded-3xl border border-slate-200 bg-white p-4 shadow-sm", mobileGlobalTab === "sites" ? "hidden md:block" : ""].join(" ")}>
             {activeTab === "accueil" ? (
               <div className="space-y-4">
                 <div className="space-y-4 md:hidden">
                   <section className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                    <div className="text-sm font-semibold text-slate-900">Semaine en cours</div>
-                    <div className="mt-1 text-xs text-slate-500">Planning global tous chantiers</div>
+                    <div className="text-sm font-semibold text-slate-900">{t("intervenantPortal.currentWeek")}</div>
+                    <div className="mt-1 text-xs text-slate-500">{t("intervenantPortal.globalPlanningAllSites")}</div>
                     {dashboardTasksState.loading ? (
-                      <div className="mt-3 text-sm text-slate-600">Chargement du planning global...</div>
+                      <div className="mt-3 text-sm text-slate-600">{t("intervenantPortal.loadingGlobalPlanning")}</div>
                     ) : dashboardTasksState.error ? (
                       <div className="mt-3 rounded-2xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">
                         {dashboardTasksState.error}
@@ -813,7 +859,7 @@ export default function IntervenantPortalPage() {
                         {dashboardWeekGroups.map((group) =>
                           group.items.length === 0 ? null : (
                             <div key={group.isoDate} className="rounded-2xl border border-slate-200 bg-white p-3">
-                              <div className="text-sm font-semibold text-slate-900">{formatDateFr(group.isoDate)}</div>
+                              <div className="text-sm font-semibold text-slate-900">{formatPortalDate(group.isoDate)}</div>
                               <div className="mt-2 space-y-2">
                                 {group.items.map((item) => (
                                   <div key={`${item.chantier.id}-${item.task.id}`} className="rounded-2xl border border-slate-200 p-3">
@@ -837,49 +883,49 @@ export default function IntervenantPortalPage() {
                       </div>
                     ) : (
                       <div className="mt-3 rounded-2xl border border-slate-200 bg-white p-3 text-sm text-slate-500">
-                        Aucune tache planifiee sur la semaine.
+                        {t("intervenantPortal.noTaskPlannedWeek")}
                       </div>
                     )}
                   </section>
                   <section className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                    <div className="text-sm font-semibold text-slate-900">Actions rapides</div>
+                    <div className="text-sm font-semibold text-slate-900">{t("intervenantPortal.quickActions")}</div>
                     <div className="mt-3 grid gap-3">
                       <button type="button" onClick={openMobileQuickTime} className="w-full rounded-2xl bg-blue-600 px-4 py-3 text-sm font-medium text-white hover:bg-blue-700">
-                        Renseigner un temps
+                        {t("intervenantPortal.enterTime")}
                       </button>
                       <button type="button" onClick={openMobileQuickMateriel} className="w-full rounded-2xl border border-blue-600 bg-white px-4 py-3 text-sm font-medium text-blue-700">
-                        Faire une demande de materiel
+                        {t("intervenantPortal.quickMaterialRequest")}
                       </button>
                     </div>
                   </section>
                 </div>
 
                 <div className="hidden gap-4 md:grid xl:grid-cols-[minmax(0,1.3fr)_minmax(18rem,0.7fr)]">
-                  <div className="space-y-4"><section className="rounded-2xl border border-slate-200 bg-slate-50 p-4"><div className="text-sm font-semibold text-slate-900">Semaine en cours</div><div className="mt-1 text-xs text-slate-500">Planning global tous chantiers</div>{dashboardTasksState.loading ? <div className="mt-3 text-sm text-slate-600">Chargement du planning global...</div> : dashboardTasksState.error ? <div className="mt-3 rounded-2xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">{dashboardTasksState.error}</div> : dashboardWeekGroups.some((group) => group.items.length > 0) ? <div className="mt-3 space-y-3">{dashboardWeekGroups.map((group) => group.items.length === 0 ? null : <div key={group.isoDate} className="rounded-2xl border border-slate-200 bg-white p-3"><div className="text-sm font-semibold text-slate-900">{formatDateFr(group.isoDate)}</div><div className="mt-2 space-y-2">{group.items.map((item) => <div key={`${item.chantier.id}-${item.task.id}`} className="rounded-2xl border border-slate-200 p-3"><div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">{item.chantier.nom}</div><div className="mt-1 text-sm font-medium text-slate-900" style={TITLE_CLAMP_STYLE}>{item.task.titre}</div><div className="mt-1 text-xs text-slate-500">{resolveTaskLot(item.task)} - {statusLabel(item.task.status)}</div></div>)}</div></div>)}</div> : upcomingDashboardTasks.length > 0 ? <div className="mt-3 space-y-2"><div className="text-sm font-medium text-slate-700">Prochaines taches</div>{upcomingDashboardTasks.slice(0, 6).map((item) => <div key={`${item.chantier.id}-${item.task.id}`} className="rounded-2xl border border-slate-200 bg-white p-3"><div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">{item.chantier.nom}</div><div className="mt-1 text-sm font-medium text-slate-900" style={TITLE_CLAMP_STYLE}>{item.task.titre}</div><div className="mt-1 text-xs text-slate-500">{taskAnchorDate(item.task) ? formatDateFr(taskAnchorDate(item.task)) : "Date non renseignee"}</div></div>)}</div> : <div className="mt-3 rounded-2xl border border-slate-200 bg-white p-3 text-sm text-slate-500">Aucune tache planifiee sur la semaine.</div>}</section><section className="rounded-2xl border border-slate-200 bg-slate-50 p-4"><div className="text-sm font-semibold text-slate-900">Demandes materiel en cours</div><div className="mt-1 text-xs text-slate-500">Vue multi-chantiers</div>{dashboardMaterielState.loading ? <div className="mt-3 text-sm text-slate-600">Chargement des demandes...</div> : dashboardMaterielState.error ? <div className="mt-3 rounded-2xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">{dashboardMaterielState.error}</div> : openDashboardMateriel.length === 0 ? <div className="mt-3 rounded-2xl border border-slate-200 bg-white p-3 text-sm text-slate-500">Aucune demande en cours.</div> : <div className="mt-3 space-y-2">{openDashboardMateriel.slice(0, 6).map((item) => <div key={item.row.id} className="rounded-2xl border border-slate-200 bg-white p-3"><div className="flex items-start justify-between gap-3"><div className="min-w-0"><div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">{item.chantier.nom}</div><div className="mt-1 text-sm font-medium text-slate-900">{item.row.titre}</div></div><span className={["inline-flex rounded-full border px-2 py-0.5 text-xs font-medium", materielStatusClass(item.row.statut)].join(" ")}>{materielStatusLabel(item.row.statut)}</span></div><div className="mt-1 text-xs text-slate-500">{formatQuantity(item.row.quantite, item.row.unite, "-")}</div></div>)}</div>}</section></div><div className="space-y-4"><section className="rounded-2xl border border-slate-200 bg-slate-50 p-4"><div className="text-sm font-semibold text-slate-900">Actions rapides</div><div className="mt-3 space-y-3"><button type="button" onClick={jumpToTimeEntry} className="w-full rounded-2xl bg-blue-600 px-4 py-3 text-sm font-medium text-white hover:bg-blue-700">Ajouter du temps</button><form onSubmit={onCreateQuickMateriel} className="space-y-2 rounded-2xl border border-slate-200 bg-white p-3"><div className="text-sm font-medium text-slate-900">Demande materiel rapide</div><select className="w-full rounded-2xl border border-slate-200 px-3 py-2 text-sm" value={quickMaterielChantierId} onChange={(e) => { setQuickMaterielChantierId(e.target.value); setQuickMaterielFeedback(null); }}>{chantiers.map((chantier) => <option key={chantier.id} value={chantier.id}>{chantier.nom}</option>)}</select><input className="w-full rounded-2xl border border-slate-200 px-3 py-2 text-sm" value={quickMaterielTitre} onChange={(e) => { setQuickMaterielTitre(e.target.value); setQuickMaterielFeedback(null); }} placeholder="Description" /><input className="w-full rounded-2xl border border-slate-200 px-3 py-2 text-sm" value={quickMaterielQuantite} onChange={(e) => { setQuickMaterielQuantite(e.target.value); setQuickMaterielFeedback(null); }} placeholder="Quantite" />{quickMaterielFeedback ? <div className={["rounded-2xl border px-3 py-2 text-sm", quickMaterielFeedback.type === "success" ? "border-emerald-200 bg-emerald-50 text-emerald-700" : "border-red-200 bg-red-50 text-red-700"].join(" ")}>{quickMaterielFeedback.message}</div> : null}<button type="submit" disabled={quickMaterielSaving} className="w-full rounded-2xl border border-blue-600 px-4 py-2 text-sm font-medium text-blue-700 disabled:opacity-60">{quickMaterielSaving ? "Envoi..." : "Envoyer"}</button></form></div></section><section className="rounded-2xl border border-slate-200 bg-slate-50 p-4"><div className="flex items-center justify-between gap-3"><div><div className="text-sm font-semibold text-slate-900">Messagerie</div><div className="mt-1 text-xs text-slate-500">Apercu des derniers echanges</div></div><span className="inline-flex rounded-full border border-slate-200 bg-white px-2 py-0.5 text-xs font-medium text-slate-700">0 non lu</span></div><div className="mt-3 rounded-2xl border border-slate-200 bg-white p-3 text-sm text-slate-500">La messagerie detaillee n'est pas encore exposee par le backend. L'onglet est prepare pour la suite.</div></section></div>
+                  <div className="space-y-4"><section className="rounded-2xl border border-slate-200 bg-slate-50 p-4"><div className="text-sm font-semibold text-slate-900">{t("intervenantPortal.currentWeek")}</div><div className="mt-1 text-xs text-slate-500">{t("intervenantPortal.globalPlanningAllSites")}</div>{dashboardTasksState.loading ? <div className="mt-3 text-sm text-slate-600">{t("intervenantPortal.loadingGlobalPlanning")}</div> : dashboardTasksState.error ? <div className="mt-3 rounded-2xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">{dashboardTasksState.error}</div> : dashboardWeekGroups.some((group) => group.items.length > 0) ? <div className="mt-3 space-y-3">{dashboardWeekGroups.map((group) => group.items.length === 0 ? null : <div key={group.isoDate} className="rounded-2xl border border-slate-200 bg-white p-3"><div className="text-sm font-semibold text-slate-900">{formatPortalDate(group.isoDate)}</div><div className="mt-2 space-y-2">{group.items.map((item) => <div key={`${item.chantier.id}-${item.task.id}`} className="rounded-2xl border border-slate-200 p-3"><div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">{item.chantier.nom}</div><div className="mt-1 text-sm font-medium text-slate-900" style={TITLE_CLAMP_STYLE}>{item.task.titre}</div><div className="mt-1 text-xs text-slate-500">{resolveTaskLot(item.task, t)} - {statusLabel(item.task.status, t)}</div></div>)}</div></div>)}</div> : upcomingDashboardTasks.length > 0 ? <div className="mt-3 space-y-2"><div className="text-sm font-medium text-slate-700">{t("intervenantPortal.nextTasks")}</div>{upcomingDashboardTasks.slice(0, 6).map((item) => <div key={`${item.chantier.id}-${item.task.id}`} className="rounded-2xl border border-slate-200 bg-white p-3"><div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">{item.chantier.nom}</div><div className="mt-1 text-sm font-medium text-slate-900" style={TITLE_CLAMP_STYLE}>{item.task.titre}</div><div className="mt-1 text-xs text-slate-500">{taskAnchorDate(item.task) ? formatPortalDate(taskAnchorDate(item.task)) : t("intervenantPortal.dateNotProvided")}</div></div>)}</div> : <div className="mt-3 rounded-2xl border border-slate-200 bg-white p-3 text-sm text-slate-500">{t("intervenantPortal.noTaskPlannedWeek")}</div>}</section><section className="rounded-2xl border border-slate-200 bg-slate-50 p-4"><div className="text-sm font-semibold text-slate-900">{t("intervenantPortal.openMaterialRequests")}</div><div className="mt-1 text-xs text-slate-500">{t("intervenantPortal.multiSiteView")}</div>{dashboardMaterielState.loading ? <div className="mt-3 text-sm text-slate-600">{t("intervenantPortal.loadingRequests")}</div> : dashboardMaterielState.error ? <div className="mt-3 rounded-2xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">{dashboardMaterielState.error}</div> : openDashboardMateriel.length === 0 ? <div className="mt-3 rounded-2xl border border-slate-200 bg-white p-3 text-sm text-slate-500">{t("intervenantPortal.noOpenRequest")}</div> : <div className="mt-3 space-y-2">{openDashboardMateriel.slice(0, 6).map((item) => <div key={item.row.id} className="rounded-2xl border border-slate-200 bg-white p-3"><div className="flex items-start justify-between gap-3"><div className="min-w-0"><div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">{item.chantier.nom}</div><div className="mt-1 text-sm font-medium text-slate-900">{item.row.titre}</div></div><span className={["inline-flex rounded-full border px-2 py-0.5 text-xs font-medium", materielStatusClass(item.row.statut)].join(" ")}>{materielStatusLabel(item.row.statut, t)}</span></div><div className="mt-1 text-xs text-slate-500">{formatPortalQuantity(item.row.quantite, item.row.unite, "-")}</div></div>)}</div>}</section></div><div className="space-y-4"><section className="rounded-2xl border border-slate-200 bg-slate-50 p-4"><div className="text-sm font-semibold text-slate-900">{t("intervenantPortal.quickActions")}</div><div className="mt-3 space-y-3"><button type="button" onClick={jumpToTimeEntry} className="w-full rounded-2xl bg-blue-600 px-4 py-3 text-sm font-medium text-white hover:bg-blue-700">{t("intervenantPortal.addTime")}</button><form onSubmit={onCreateQuickMateriel} className="space-y-2 rounded-2xl border border-slate-200 bg-white p-3"><div className="text-sm font-medium text-slate-900">{t("intervenantPortal.quickMaterialRequest")}</div><select className="w-full rounded-2xl border border-slate-200 px-3 py-2 text-sm" value={quickMaterielChantierId} onChange={(e) => { setQuickMaterielChantierId(e.target.value); setQuickMaterielFeedback(null); }}>{chantiers.map((chantier) => <option key={chantier.id} value={chantier.id}>{chantier.nom}</option>)}</select><input className="w-full rounded-2xl border border-slate-200 px-3 py-2 text-sm" value={quickMaterielTitre} onChange={(e) => { setQuickMaterielTitre(e.target.value); setQuickMaterielFeedback(null); }} placeholder={t("intervenantPortal.material.description")} /><input className="w-full rounded-2xl border border-slate-200 px-3 py-2 text-sm" value={quickMaterielQuantite} onChange={(e) => { setQuickMaterielQuantite(e.target.value); setQuickMaterielFeedback(null); }} placeholder={t("intervenantPortal.material.quantity")} />{quickMaterielFeedback ? <div className={["rounded-2xl border px-3 py-2 text-sm", quickMaterielFeedback.type === "success" ? "border-emerald-200 bg-emerald-50 text-emerald-700" : "border-red-200 bg-red-50 text-red-700"].join(" ")}>{quickMaterielFeedback.message}</div> : null}<button type="submit" disabled={quickMaterielSaving} className="w-full rounded-2xl border border-blue-600 px-4 py-2 text-sm font-medium text-blue-700 disabled:opacity-60">{quickMaterielSaving ? t("intervenantPortal.material.sending") : t("intervenantPortal.material.send")}</button></form></div></section><section className="rounded-2xl border border-slate-200 bg-slate-50 p-4"><div className="flex items-center justify-between gap-3"><div><div className="text-sm font-semibold text-slate-900">{t("intervenantPortal.latestMessages")}</div><div className="mt-1 text-xs text-slate-500">{t("intervenantPortal.latestMessagesPreview")}</div></div><span className="inline-flex rounded-full border border-slate-200 bg-white px-2 py-0.5 text-xs font-medium text-slate-700">{t("intervenantPortal.unreadCount", { count: 0 })}</span></div><div className="mt-3 rounded-2xl border border-slate-200 bg-white p-3 text-sm text-slate-500">{t("intervenantPortal.messagingPlaceholder")}</div></section></div>
                 </div>
               </div>
             ) : null}
-            {activeTab === "taches" ? <div className="space-y-3">{tasksState.loading ? <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-600">Chargement des taches...</div> : tasksState.error ? <div className="rounded-2xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">{tasksState.error}</div> : prioritizedTasks.length === 0 ? <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-500">Aucune tache assignee.</div> : prioritizedTasks.map((task) => { const progress = taskQuantityProgress(task); return <article key={task.id} className="rounded-2xl border border-slate-200 p-3"><div className="flex items-start justify-between gap-3"><div className="min-w-0 flex-1"><div className="text-sm font-semibold text-slate-900" style={TITLE_CLAMP_STYLE}>{task.titre}</div><div className="mt-1 text-xs text-slate-500">Lot: {resolveTaskLot(task)}</div><div className="mt-1 text-xs text-slate-500">Qte totale: {formatQuantity(task.quantite, task.unite, "-")}</div><div className="mt-1 text-xs text-slate-500">Qte realisee: {formatQuantity(task.quantite_realisee, task.unite)}</div><div className="mt-1 text-xs text-slate-500">Avancement: {Math.round(progress ?? 0)}%</div></div><span className={["inline-flex rounded-full border px-2 py-0.5 text-xs font-medium", statusBadgeClass(task.status)].join(" ")}>{statusLabel(task.status)}</span></div></article>; })}</div> : null}
-            {activeTab === "temps" ? <div className="space-y-3"><form onSubmit={onCreateTimeEntry} className="rounded-2xl border border-slate-200 bg-slate-50 p-3"><div className="text-sm font-semibold text-slate-900">Ajouter une saisie</div><div className="mt-3 grid gap-3 md:grid-cols-2"><div className="space-y-2 md:col-span-2"><label className="text-xs font-medium text-slate-600">Tache</label><div className="rounded-2xl border border-slate-200 bg-white p-2"><input className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm" value={timeTaskSearch} onChange={(e) => { setTimeTaskSearch(e.target.value); setTimeTaskListOpen(true); setTimeFeedback(null); }} onFocus={() => setTimeTaskListOpen(true)} placeholder="Rechercher une tache..." />{selectedTimeTask ? <div className="mt-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600"><div className="font-medium text-slate-800">Tache choisie</div><div className="mt-1" style={TITLE_CLAMP_STYLE}>{selectedTimeTask.titre}</div></div> : null}{timeTaskListOpen ? <div className="mt-2 max-h-64 space-y-2 overflow-y-auto rounded-xl border border-slate-200 bg-slate-50 p-2">{filteredTimeTasks.length === 0 ? <div className="px-2 py-3 text-sm text-slate-500">Aucune tache correspondante.</div> : filteredTimeTasks.map((task) => <button key={task.id} type="button" onClick={() => selectTimeTask(task)} className={["block w-full rounded-xl border px-3 py-2 text-left", task.id === timeTaskId ? "border-blue-600 bg-blue-600 text-white" : "border-slate-200 bg-white text-slate-900"].join(" ")}><div className="text-sm font-medium" style={TITLE_CLAMP_STYLE}>{task.titre}</div><div className={task.id === timeTaskId ? "mt-1 text-xs text-slate-200" : "mt-1 text-xs text-slate-500"}>{resolveTaskLot(task)} - {statusLabel(task.status)}</div></button>)}</div> : null}<div className="mt-2 text-[11px] text-slate-500">{prioritizedTasks.length} taches disponibles</div></div></div><div className="space-y-1"><label className="text-xs font-medium text-slate-600">Date</label><input className="w-full rounded-2xl border border-slate-200 px-3 py-2 text-sm" type="date" value={timeDate} onChange={(e) => { setTimeDate(e.target.value); setTimeFeedback(null); }} /></div><div className="space-y-1"><label className="text-xs font-medium text-slate-600">Quantite realisee</label>{selectedTimeTask ? <div className="text-xs text-slate-500">Qte totale: {formatQuantity(selectedTimeTask.quantite, selectedTimeTask.unite, "-")}</div> : null}<input className="w-full rounded-2xl border border-slate-200 px-3 py-2 text-sm" inputMode="decimal" value={timeQuantity} onChange={(e) => { setTimeQuantity(e.target.value); setTimeFeedback(null); }} placeholder={selectedTimeTask?.unite ? `Quantite (${selectedTimeTask.unite})` : "Quantite"} /><div className="text-[11px] text-slate-500">L'avancement est calcule a partir de cette quantite.</div></div><div className="space-y-1 md:col-span-2"><label className="text-xs font-medium text-slate-600">Observations</label><textarea className="min-h-24 w-full rounded-2xl border border-slate-200 px-3 py-2 text-sm" value={timeNote} onChange={(e) => { setTimeNote(e.target.value); setTimeFeedback(null); }} placeholder="Observations (optionnel)" /></div></div>{timeFeedback ? <div className={["mt-3 rounded-2xl border px-3 py-2 text-sm", timeFeedback.type === "success" ? "border-emerald-200 bg-emerald-50 text-emerald-700" : "border-red-200 bg-red-50 text-red-700"].join(" ")}>{timeFeedback.message}</div> : null}<div className="mt-3 flex justify-end"><button type="submit" disabled={timeSaving} className="rounded-full bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-60">{timeSaving ? "Enregistrement..." : "Enregistrer"}</button></div></form>
-            <section className="space-y-2"><div className="text-sm font-semibold text-slate-900">Dernieres saisies</div>{timeState.loading ? <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-600">Chargement du temps...</div> : timeState.error ? <div className="rounded-2xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">{isTaskIdRequiredError(timeState.error) ? "Choisir une tache." : timeState.error}</div> : timeState.data.length === 0 ? <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-500">Aucune saisie pour ce chantier.</div> : timeState.data.map((entry) => <article key={entry.id} className="rounded-2xl border border-slate-200 p-3"><div className="flex items-start justify-between gap-3"><div className="min-w-0 flex-1"><div className="text-sm font-semibold text-slate-900">{formatDateFr(entry.work_date)}</div><div className="mt-1 text-xs text-slate-500">{entry.task_titre || "Tache"}</div><div className="mt-1 text-xs text-slate-500">Quantite: {formatQuantity(entry.quantite_realisee, entry.task_unite)}</div>{entry.note ? <div className="mt-1 text-xs text-slate-500">Note: {entry.note}</div> : null}</div><button type="button" disabled={timeDeletingId === entry.id} onClick={() => void onDeleteTimeEntry(entry)} className="rounded-full border border-red-200 px-3 py-1.5 text-xs font-medium text-red-700 disabled:opacity-60">{timeDeletingId === entry.id ? "Suppression..." : "Supprimer"}</button></div></article>)}</section></div> : null}
-            {activeTab === "planning" ? <div className="space-y-2">{planningState.loading ? <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-600">Chargement du planning...</div> : planningState.error ? <div className="rounded-2xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">{planningState.error}</div> : planningState.data.lots.length === 0 ? <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-500">Aucun lot planifie.</div> : planningState.data.lots.map((lot) => <article key={lot.lot} className="rounded-2xl border border-slate-200 p-3"><div className="flex items-center justify-between gap-3"><div className="text-sm font-semibold text-slate-900">{lot.lot}</div><div className="text-xs text-slate-500">{lot.progress_pct.toFixed(1)}%</div></div><div className="mt-2 h-2 rounded-full bg-slate-100"><div className="h-2 rounded-full bg-blue-600" style={{ width: `${Math.max(0, Math.min(100, lot.progress_pct))}%` }} /></div><div className="mt-2 text-xs text-slate-500">Debut: {formatDateFr(lot.start_date)} - Fin: {formatDateFr(lot.end_date)}</div><div className="mt-1 text-xs text-slate-500">Taches: {lot.done_tasks}/{lot.total_tasks} - Duree estimee: {lot.total_duration_days} j</div></article>)}</div> : null}
-            {activeTab === "documents" ? <div className="space-y-2">{documentsState.loading ? <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-600">Chargement des documents...</div> : documentsState.error ? <div className="rounded-2xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">{documentsState.error}</div> : documentsState.data.length === 0 ? <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-500">Aucun document disponible.</div> : documentsState.data.map((doc) => <article key={doc.id} className="rounded-2xl border border-slate-200 p-3"><div className="text-sm font-semibold text-slate-900">{doc.title || doc.file_name || "Document"}</div><div className="mt-1 text-xs text-slate-500">{doc.category || "-"} - {doc.document_type || "-"} - {formatDateTimeFr(doc.created_at)}</div></article>)}</div> : null}
-            {activeTab === "materiel" ? <div className="space-y-3"><form onSubmit={onCreateMateriel} className="rounded-2xl border border-slate-200 bg-slate-50 p-3"><div className="text-sm font-semibold text-slate-900">Nouvelle demande materiel</div><div className="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-5"><select className="rounded-2xl border border-slate-200 px-3 py-2 text-sm xl:col-span-2" value={materielTaskId} onChange={(e) => { setMaterielTaskId(e.target.value); setMaterielFeedback(null); }}><option value="">Tache concernee (optionnel)</option>{prioritizedTasks.map((task) => <option key={task.id} value={task.id}>{task.titre}</option>)}</select><input className="rounded-2xl border border-slate-200 px-3 py-2 text-sm" placeholder="Description" value={materielTitre} onChange={(e) => { setMaterielTitre(e.target.value); setMaterielFeedback(null); }} /><input className="rounded-2xl border border-slate-200 px-3 py-2 text-sm" placeholder="Quantite" value={materielQuantite} onChange={(e) => { setMaterielQuantite(e.target.value); setMaterielFeedback(null); }} /><input className="rounded-2xl border border-slate-200 px-3 py-2 text-sm" placeholder="Unite" value={materielUnite} onChange={(e) => { setMaterielUnite(e.target.value); setMaterielFeedback(null); }} /><input className="rounded-2xl border border-slate-200 px-3 py-2 text-sm xl:col-span-2" type="date" value={materielDate} onChange={(e) => { setMaterielDate(e.target.value); setMaterielFeedback(null); }} /><input className="rounded-2xl border border-slate-200 px-3 py-2 text-sm xl:col-span-3" placeholder="Commentaire" value={materielCommentaire} onChange={(e) => { setMaterielCommentaire(e.target.value); setMaterielFeedback(null); }} /></div>{materielFeedback ? <div className={["mt-3 rounded-2xl border px-3 py-2 text-sm", materielFeedback.type === "success" ? "border-emerald-200 bg-emerald-50 text-emerald-700" : "border-red-200 bg-red-50 text-red-700"].join(" ")}>{materielFeedback.message}</div> : null}<div className="mt-3 flex justify-end"><button type="submit" disabled={materielSaving} className="rounded-full bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-60">{materielSaving ? "Envoi..." : "Envoyer"}</button></div></form>{materielState.loading ? <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-600">Chargement des demandes...</div> : materielState.error ? <div className="rounded-2xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">{materielState.error}</div> : materielState.data.length === 0 ? <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-500">Aucune demande materiel.</div> : materielState.data.map((row) => <article key={row.id} className="rounded-2xl border border-slate-200 p-3"><div className="flex items-start justify-between gap-3"><div className="min-w-0 flex-1"><div className="text-sm font-semibold text-slate-900">{row.titre}</div>{(row.task_titre || row.task_id) ? <div className="mt-1 text-xs text-slate-500">Tache: {row.task_titre ?? prioritizedTasks.find((task) => task.id === row.task_id)?.titre ?? "-"}</div> : null}<div className="mt-1 text-xs text-slate-500">Quantite: {row.quantite ?? "-"} {row.unite || ""}</div><div className="mt-1 text-xs text-slate-500">Souhaitee: {formatDateFr(row.date_souhaitee)}</div>{row.commentaire ? <div className="mt-1 text-xs text-slate-500">Commentaire: {row.commentaire}</div> : null}{row.admin_commentaire ? <div className="mt-1 text-xs text-slate-500">Admin: {row.admin_commentaire}</div> : null}</div><span className={["inline-flex rounded-full border px-2 py-0.5 text-xs font-medium", materielStatusClass(row.statut)].join(" ")}>{materielStatusLabel(row.statut)}</span></div></article>)}</div> : null}
-            {activeTab === "messages" ? <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-600">La messagerie n'est pas encore branchee sur une source de donnees. Le layout est en place pour stabiliser la navigation desktop et mobile.</div> : null}
+            {activeTab === "taches" ? <div className="space-y-3">{tasksState.loading ? <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-600">{t("intervenantPortal.tasks.loading")}</div> : tasksState.error ? <div className="rounded-2xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">{tasksState.error}</div> : prioritizedTasks.length === 0 ? <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-500">{t("intervenantPortal.tasks.empty")}</div> : prioritizedTasks.map((task) => { const progress = taskQuantityProgress(task); return <article key={task.id} className="rounded-2xl border border-slate-200 p-3"><div className="flex items-start justify-between gap-3"><div className="min-w-0 flex-1"><div className="text-sm font-semibold text-slate-900" style={TITLE_CLAMP_STYLE}>{task.titre}</div><div className="mt-1 text-xs text-slate-500">{t("intervenantPortal.tasks.lot", { value: resolveTaskLot(task, t) })}</div><div className="mt-1 text-xs text-slate-500">{t("intervenantPortal.tasks.totalQuantity", { value: formatPortalQuantity(task.quantite, task.unite, "-") })}</div><div className="mt-1 text-xs text-slate-500">{t("intervenantPortal.tasks.doneQuantity", { value: formatPortalQuantity(task.quantite_realisee, task.unite) })}</div><div className="mt-1 text-xs text-slate-500">{t("intervenantPortal.tasks.progress", { value: Math.round(progress ?? 0) })}</div></div><span className={["inline-flex rounded-full border px-2 py-0.5 text-xs font-medium", statusBadgeClass(task.status)].join(" ")}>{statusLabel(task.status, t)}</span></div></article>; })}</div> : null}
+            {activeTab === "temps" ? <div className="space-y-3"><form onSubmit={onCreateTimeEntry} className="rounded-2xl border border-slate-200 bg-slate-50 p-3"><div className="text-sm font-semibold text-slate-900">{t("intervenantPortal.time.addEntry")}</div><div className="mt-3 grid gap-3 md:grid-cols-2"><div className="space-y-2 md:col-span-2"><label className="text-xs font-medium text-slate-600">{t("intervenantPortal.time.task")}</label><div className="rounded-2xl border border-slate-200 bg-white p-2"><input className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm" value={timeTaskSearch} onChange={(e) => { setTimeTaskSearch(e.target.value); setTimeTaskListOpen(true); setTimeFeedback(null); }} onFocus={() => setTimeTaskListOpen(true)} placeholder={t("intervenantPortal.time.searchTaskPlaceholder")} />{selectedTimeTask ? <div className="mt-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600"><div className="font-medium text-slate-800">{t("intervenantPortal.time.selectedTask")}</div><div className="mt-1" style={TITLE_CLAMP_STYLE}>{selectedTimeTask.titre}</div></div> : null}{timeTaskListOpen ? <div className="mt-2 max-h-64 space-y-2 overflow-y-auto rounded-xl border border-slate-200 bg-slate-50 p-2">{filteredTimeTasks.length === 0 ? <div className="px-2 py-3 text-sm text-slate-500">{t("intervenantPortal.time.noMatchingTask")}</div> : filteredTimeTasks.map((task) => <button key={task.id} type="button" onClick={() => selectTimeTask(task)} className={["block w-full rounded-xl border px-3 py-2 text-left", task.id === timeTaskId ? "border-blue-600 bg-blue-600 text-white" : "border-slate-200 bg-white text-slate-900"].join(" ")}><div className="text-sm font-medium" style={TITLE_CLAMP_STYLE}>{task.titre}</div><div className={task.id === timeTaskId ? "mt-1 text-xs text-slate-200" : "mt-1 text-xs text-slate-500"}>{resolveTaskLot(task, t)} - {statusLabel(task.status, t)}</div></button>)}</div> : null}<div className="mt-2 text-[11px] text-slate-500">{t("intervenantPortal.time.availableTasks", { count: prioritizedTasks.length })}</div></div></div><div className="space-y-1"><label className="text-xs font-medium text-slate-600">{t("intervenantPortal.time.date")}</label><input className="w-full rounded-2xl border border-slate-200 px-3 py-2 text-sm" type="date" value={timeDate} onChange={(e) => { setTimeDate(e.target.value); setTimeFeedback(null); }} /></div><div className="space-y-1"><label className="text-xs font-medium text-slate-600">{t("intervenantPortal.time.doneQuantity")}</label>{selectedTimeTask ? <div className="text-xs text-slate-500">{t("intervenantPortal.time.totalQuantity", { value: formatPortalQuantity(selectedTimeTask.quantite, selectedTimeTask.unite, "-") })}</div> : null}<input className="w-full rounded-2xl border border-slate-200 px-3 py-2 text-sm" inputMode="decimal" value={timeQuantity} onChange={(e) => { setTimeQuantity(e.target.value); setTimeFeedback(null); }} placeholder={selectedTimeTask?.unite ? t("intervenantPortal.time.quantityPlaceholderWithUnit", { unit: selectedTimeTask.unite }) : t("intervenantPortal.time.quantityPlaceholder")} /><div className="text-[11px] text-slate-500">{t("intervenantPortal.time.progressHelp")}</div></div><div className="space-y-1 md:col-span-2"><label className="text-xs font-medium text-slate-600">{t("intervenantPortal.time.observations")}</label><textarea className="min-h-24 w-full rounded-2xl border border-slate-200 px-3 py-2 text-sm" value={timeNote} onChange={(e) => { setTimeNote(e.target.value); setTimeFeedback(null); }} placeholder={t("intervenantPortal.time.observationsPlaceholder")} /></div></div>{timeFeedback ? <div className={["mt-3 rounded-2xl border px-3 py-2 text-sm", timeFeedback.type === "success" ? "border-emerald-200 bg-emerald-50 text-emerald-700" : "border-red-200 bg-red-50 text-red-700"].join(" ")}>{timeFeedback.message}</div> : null}<div className="mt-3 flex justify-end"><button type="submit" disabled={timeSaving} className="rounded-full bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-60">{timeSaving ? t("intervenantPortal.time.saving") : t("intervenantPortal.time.save")}</button></div></form>
+            <section className="space-y-2"><div className="text-sm font-semibold text-slate-900">{t("intervenantPortal.time.latestEntries")}</div>{timeState.loading ? <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-600">{t("intervenantPortal.time.loading")}</div> : timeState.error ? <div className="rounded-2xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">{isTaskIdRequiredError(timeState.error) ? t("intervenantPortal.errors.chooseTask") : timeState.error}</div> : timeState.data.length === 0 ? <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-500">{t("intervenantPortal.time.empty")}</div> : timeState.data.map((entry) => <article key={entry.id} className="rounded-2xl border border-slate-200 p-3"><div className="flex items-start justify-between gap-3"><div className="min-w-0 flex-1"><div className="text-sm font-semibold text-slate-900">{formatPortalDate(entry.work_date)}</div><div className="mt-1 text-xs text-slate-500">{entry.task_titre || t("intervenantPortal.time.taskFallback")}</div><div className="mt-1 text-xs text-slate-500">{t("intervenantPortal.time.quantity", { value: formatPortalQuantity(entry.quantite_realisee, entry.task_unite) })}</div>{entry.note ? <div className="mt-1 text-xs text-slate-500">{t("intervenantPortal.time.note", { value: entry.note })}</div> : null}</div><button type="button" disabled={timeDeletingId === entry.id} onClick={() => void onDeleteTimeEntry(entry)} className="rounded-full border border-red-200 px-3 py-1.5 text-xs font-medium text-red-700 disabled:opacity-60">{timeDeletingId === entry.id ? t("intervenantPortal.time.deleting") : t("intervenantPortal.time.delete")}</button></div></article>)}</section></div> : null}
+            {activeTab === "planning" ? <div className="space-y-2">{planningState.loading ? <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-600">{t("intervenantPortal.planning.loading")}</div> : planningState.error ? <div className="rounded-2xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">{planningState.error}</div> : planningState.data.lots.length === 0 ? <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-500">{t("intervenantPortal.planning.empty")}</div> : planningState.data.lots.map((lot) => <article key={lot.lot} className="rounded-2xl border border-slate-200 p-3"><div className="flex items-center justify-between gap-3"><div className="text-sm font-semibold text-slate-900">{lot.lot}</div><div className="text-xs text-slate-500">{lot.progress_pct.toFixed(1)}%</div></div><div className="mt-2 h-2 rounded-full bg-slate-100"><div className="h-2 rounded-full bg-blue-600" style={{ width: `${Math.max(0, Math.min(100, lot.progress_pct))}%` }} /></div><div className="mt-2 text-xs text-slate-500">{t("intervenantPortal.planning.schedule", { start: formatPortalDate(lot.start_date), end: formatPortalDate(lot.end_date) })}</div><div className="mt-1 text-xs text-slate-500">{t("intervenantPortal.planning.summary", { done: lot.done_tasks, total: lot.total_tasks, days: lot.total_duration_days })}</div></article>)}</div> : null}
+            {activeTab === "documents" ? <div className="space-y-2">{documentsState.loading ? <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-600">{t("intervenantPortal.documents.loading")}</div> : documentsState.error ? <div className="rounded-2xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">{documentsState.error}</div> : documentsState.data.length === 0 ? <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-500">{t("intervenantPortal.documents.empty")}</div> : documentsState.data.map((doc) => <article key={doc.id} className="rounded-2xl border border-slate-200 p-3"><div className="text-sm font-semibold text-slate-900">{doc.title || doc.file_name || t("intervenantPortal.documents.fallback")}</div><div className="mt-1 text-xs text-slate-500">{doc.category || "-"} - {doc.document_type || "-"} - {formatPortalDateTime(doc.created_at)}</div></article>)}</div> : null}
+            {activeTab === "materiel" ? <div className="space-y-3"><form onSubmit={onCreateMateriel} className="rounded-2xl border border-slate-200 bg-slate-50 p-3"><div className="text-sm font-semibold text-slate-900">{t("intervenantPortal.material.newRequest")}</div><div className="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-5"><select className="rounded-2xl border border-slate-200 px-3 py-2 text-sm xl:col-span-2" value={materielTaskId} onChange={(e) => { setMaterielTaskId(e.target.value); setMaterielFeedback(null); }}><option value="">{t("intervenantPortal.material.relatedTaskPlaceholder")}</option>{prioritizedTasks.map((task) => <option key={task.id} value={task.id}>{task.titre}</option>)}</select><input className="rounded-2xl border border-slate-200 px-3 py-2 text-sm" placeholder={t("intervenantPortal.material.description")} value={materielTitre} onChange={(e) => { setMaterielTitre(e.target.value); setMaterielFeedback(null); }} /><input className="rounded-2xl border border-slate-200 px-3 py-2 text-sm" placeholder={t("intervenantPortal.material.quantity")} value={materielQuantite} onChange={(e) => { setMaterielQuantite(e.target.value); setMaterielFeedback(null); }} /><input className="rounded-2xl border border-slate-200 px-3 py-2 text-sm" placeholder={t("intervenantPortal.material.unit")} value={materielUnite} onChange={(e) => { setMaterielUnite(e.target.value); setMaterielFeedback(null); }} /><input className="rounded-2xl border border-slate-200 px-3 py-2 text-sm xl:col-span-2" type="date" value={materielDate} onChange={(e) => { setMaterielDate(e.target.value); setMaterielFeedback(null); }} /><input className="rounded-2xl border border-slate-200 px-3 py-2 text-sm xl:col-span-3" placeholder={t("intervenantPortal.material.comment")} value={materielCommentaire} onChange={(e) => { setMaterielCommentaire(e.target.value); setMaterielFeedback(null); }} /></div>{materielFeedback ? <div className={["mt-3 rounded-2xl border px-3 py-2 text-sm", materielFeedback.type === "success" ? "border-emerald-200 bg-emerald-50 text-emerald-700" : "border-red-200 bg-red-50 text-red-700"].join(" ")}>{materielFeedback.message}</div> : null}<div className="mt-3 flex justify-end"><button type="submit" disabled={materielSaving} className="rounded-full bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-60">{materielSaving ? t("intervenantPortal.material.sending") : t("intervenantPortal.material.send")}</button></div></form>{materielState.loading ? <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-600">{t("intervenantPortal.material.loading")}</div> : materielState.error ? <div className="rounded-2xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">{materielState.error}</div> : materielState.data.length === 0 ? <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-500">{t("intervenantPortal.material.empty")}</div> : materielState.data.map((row) => <article key={row.id} className="rounded-2xl border border-slate-200 p-3"><div className="flex items-start justify-between gap-3"><div className="min-w-0 flex-1"><div className="text-sm font-semibold text-slate-900">{row.titre}</div>{(row.task_titre || row.task_id) ? <div className="mt-1 text-xs text-slate-500">{t("intervenantPortal.material.task", { value: row.task_titre ?? prioritizedTasks.find((task) => task.id === row.task_id)?.titre ?? "-" })}</div> : null}<div className="mt-1 text-xs text-slate-500">{t("intervenantPortal.material.quantityValue", { value: formatPortalQuantity(row.quantite, row.unite, "-") })}</div><div className="mt-1 text-xs text-slate-500">{t("intervenantPortal.material.requested", { value: formatPortalDate(row.date_souhaitee) })}</div>{row.commentaire ? <div className="mt-1 text-xs text-slate-500">{t("intervenantPortal.material.commentValue", { value: row.commentaire })}</div> : null}{row.admin_commentaire ? <div className="mt-1 text-xs text-slate-500">{t("intervenantPortal.material.adminComment", { value: row.admin_commentaire })}</div> : null}</div><span className={["inline-flex rounded-full border px-2 py-0.5 text-xs font-medium", materielStatusClass(row.statut)].join(" ")}>{materielStatusLabel(row.statut, t)}</span></div></article>)}</div> : null}
+            {activeTab === "messages" ? <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-600">{t("intervenantPortal.messagingPlaceholder")}</div> : null}
           </section>}
           {mobileQuickAction ? (
             <div className="fixed inset-0 z-50 bg-slate-100 md:hidden">
               <div className="flex min-h-screen flex-col px-3 pb-[max(1rem,env(safe-area-inset-bottom))] pt-[max(1rem,env(safe-area-inset-top))]">
                 <div className="flex items-center justify-between rounded-3xl border border-slate-200 bg-white px-4 py-3 shadow-sm">
                   <div className="text-sm font-semibold text-slate-900">
-                    {mobileQuickAction === "time" ? "Renseigner un temps" : "Demande materiel"}
+                    {mobileQuickAction === "time" ? t("intervenantPortal.mobile.quickTimeTitle") : t("intervenantPortal.mobile.quickMaterialTitle")}
                   </div>
                   <button
                     type="button"
                     onClick={() => setMobileQuickAction(null)}
                     className="rounded-full border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-700"
                   >
-                    Fermer
+                    {t("intervenantPortal.mobile.close")}
                   </button>
                 </div>
                 <div className="mt-3 flex-1 overflow-y-auto">
@@ -887,7 +933,7 @@ export default function IntervenantPortalPage() {
                     <form onSubmit={onCreateTimeEntry} className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm">
                       <div className="space-y-3">
                         <div className="space-y-1">
-                          <label className="text-xs font-medium text-slate-600">Chantier</label>
+                          <label className="text-xs font-medium text-slate-600">{t("intervenantPortal.siteLabel")}</label>
                           <select
                             className="w-full rounded-2xl border border-slate-200 px-3 py-2 text-sm"
                             value={selectedChantierId}
@@ -901,7 +947,7 @@ export default function IntervenantPortalPage() {
                           </select>
                         </div>
                         <div className="space-y-2">
-                          <label className="text-xs font-medium text-slate-600">Tache</label>
+                          <label className="text-xs font-medium text-slate-600">{t("intervenantPortal.time.task")}</label>
                           <div className="rounded-2xl border border-slate-200 bg-white p-2">
                             <input
                               className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"
@@ -912,11 +958,11 @@ export default function IntervenantPortalPage() {
                                 setTimeFeedback(null);
                               }}
                               onFocus={() => setTimeTaskListOpen(true)}
-                              placeholder="Rechercher une tache..."
+                              placeholder={t("intervenantPortal.time.searchTaskPlaceholder")}
                             />
                             {selectedTimeTask ? (
                               <div className="mt-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
-                                <div className="font-medium text-slate-800">Tache choisie</div>
+                                <div className="font-medium text-slate-800">{t("intervenantPortal.time.selectedTask")}</div>
                                 <div className="mt-1" style={TITLE_CLAMP_STYLE}>
                                   {selectedTimeTask.titre}
                                 </div>
@@ -925,7 +971,7 @@ export default function IntervenantPortalPage() {
                             {timeTaskListOpen ? (
                               <div className="mt-2 max-h-64 space-y-2 overflow-y-auto rounded-xl border border-slate-200 bg-slate-50 p-2">
                                 {filteredTimeTasks.slice(0, 10).length === 0 ? (
-                                  <div className="px-2 py-3 text-sm text-slate-500">Aucune tache correspondante.</div>
+                                  <div className="px-2 py-3 text-sm text-slate-500">{t("intervenantPortal.time.noMatchingTask")}</div>
                                 ) : (
                                   filteredTimeTasks.slice(0, 10).map((task) => (
                                     <button
@@ -947,7 +993,7 @@ export default function IntervenantPortalPage() {
                                           task.id === timeTaskId ? "mt-1 text-xs text-slate-200" : "mt-1 text-xs text-slate-500"
                                         }
                                       >
-                                        {resolveTaskLot(task)} - {statusLabel(task.status)}
+                                        {resolveTaskLot(task, t)} - {statusLabel(task.status, t)}
                                       </div>
                                     </button>
                                   ))
@@ -957,7 +1003,7 @@ export default function IntervenantPortalPage() {
                           </div>
                         </div>
                         <div className="space-y-1">
-                          <label className="text-xs font-medium text-slate-600">Date</label>
+                          <label className="text-xs font-medium text-slate-600">{t("intervenantPortal.time.date")}</label>
                           <input
                             className="w-full rounded-2xl border border-slate-200 px-3 py-2 text-sm"
                             type="date"
@@ -969,10 +1015,10 @@ export default function IntervenantPortalPage() {
                           />
                         </div>
                         <div className="space-y-1">
-                          <label className="text-xs font-medium text-slate-600">Quantite realisee</label>
+                          <label className="text-xs font-medium text-slate-600">{t("intervenantPortal.time.doneQuantity")}</label>
                           {selectedTimeTask ? (
                             <div className="text-xs text-slate-500">
-                              Qte totale: {formatQuantity(selectedTimeTask.quantite, selectedTimeTask.unite, "-")}
+                              {t("intervenantPortal.time.totalQuantity", { value: formatPortalQuantity(selectedTimeTask.quantite, selectedTimeTask.unite, "-") })}
                             </div>
                           ) : null}
                           <input
@@ -983,14 +1029,14 @@ export default function IntervenantPortalPage() {
                               setTimeQuantity(e.target.value);
                               setTimeFeedback(null);
                             }}
-                            placeholder={selectedTimeTask?.unite ? `Quantite (${selectedTimeTask.unite})` : "Quantite"}
+                            placeholder={selectedTimeTask?.unite ? t("intervenantPortal.time.quantityPlaceholderWithUnit", { unit: selectedTimeTask.unite }) : t("intervenantPortal.time.quantityPlaceholder")}
                           />
                           <div className="text-[11px] text-slate-500">
-                            L'avancement est calcule a partir de cette quantite.
+                            {t("intervenantPortal.time.progressHelp")}
                           </div>
                         </div>
                         <div className="space-y-1">
-                          <label className="text-xs font-medium text-slate-600">Note</label>
+                          <label className="text-xs font-medium text-slate-600">{t("intervenantPortal.time.observations")}</label>
                           <textarea
                             className="min-h-24 w-full rounded-2xl border border-slate-200 px-3 py-2 text-sm"
                             value={timeNote}
@@ -998,7 +1044,7 @@ export default function IntervenantPortalPage() {
                               setTimeNote(e.target.value);
                               setTimeFeedback(null);
                             }}
-                            placeholder="Observations (optionnel)"
+                            placeholder={t("intervenantPortal.time.observationsPlaceholder")}
                           />
                         </div>
                       </div>
@@ -1019,14 +1065,14 @@ export default function IntervenantPortalPage() {
                         disabled={timeSaving}
                         className="mt-4 w-full rounded-2xl bg-blue-600 px-4 py-3 text-sm font-medium text-white disabled:opacity-60"
                       >
-                        {timeSaving ? "Enregistrement..." : "Enregistrer"}
+                        {timeSaving ? t("intervenantPortal.time.saving") : t("intervenantPortal.time.save")}
                       </button>
                     </form>
                   ) : (
                     <form onSubmit={onCreateQuickMateriel} className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm">
                       <div className="space-y-3">
                         <div className="space-y-1">
-                          <label className="text-xs font-medium text-slate-600">Chantier</label>
+                          <label className="text-xs font-medium text-slate-600">{t("intervenantPortal.siteLabel")}</label>
                           <select
                             className="w-full rounded-2xl border border-slate-200 px-3 py-2 text-sm"
                             value={quickMaterielChantierId}
@@ -1043,7 +1089,7 @@ export default function IntervenantPortalPage() {
                           </select>
                         </div>
                         <div className="space-y-1">
-                          <label className="text-xs font-medium text-slate-600">Description</label>
+                          <label className="text-xs font-medium text-slate-600">{t("intervenantPortal.material.description")}</label>
                           <input
                             className="w-full rounded-2xl border border-slate-200 px-3 py-2 text-sm"
                             value={quickMaterielTitre}
@@ -1051,11 +1097,11 @@ export default function IntervenantPortalPage() {
                               setQuickMaterielTitre(e.target.value);
                               setQuickMaterielFeedback(null);
                             }}
-                            placeholder="Description"
+                            placeholder={t("intervenantPortal.material.description")}
                           />
                         </div>
                         <div className="space-y-1">
-                          <label className="text-xs font-medium text-slate-600">Quantite</label>
+                          <label className="text-xs font-medium text-slate-600">{t("intervenantPortal.material.quantity")}</label>
                           <input
                             className="w-full rounded-2xl border border-slate-200 px-3 py-2 text-sm"
                             inputMode="decimal"
@@ -1064,7 +1110,7 @@ export default function IntervenantPortalPage() {
                               setQuickMaterielQuantite(e.target.value);
                               setQuickMaterielFeedback(null);
                             }}
-                            placeholder="Quantite"
+                            placeholder={t("intervenantPortal.material.quantity")}
                           />
                         </div>
                       </div>
@@ -1085,7 +1131,7 @@ export default function IntervenantPortalPage() {
                         disabled={quickMaterielSaving}
                         className="mt-4 w-full rounded-2xl bg-blue-600 px-4 py-3 text-sm font-medium text-white disabled:opacity-60"
                       >
-                        {quickMaterielSaving ? "Envoi..." : "Envoyer"}
+                        {quickMaterielSaving ? t("intervenantPortal.material.sending") : t("intervenantPortal.material.send")}
                       </button>
                     </form>
                   )}
@@ -1093,7 +1139,7 @@ export default function IntervenantPortalPage() {
               </div>
             </div>
           ) : null}
-          {LEGACY_FALLBACK_ENABLED && import.meta.env.DEV ? <p className="text-xs text-slate-400">Compat fallback active: /acces/:token sera utilise uniquement si les RPC ne sont pas disponibles.</p> : null}
+          {LEGACY_FALLBACK_ENABLED && import.meta.env.DEV ? <p className="text-xs text-slate-400">{t("intervenantPortal.legacyFallbackNotice")}</p> : null}
         </main>
       </div>
     </div>

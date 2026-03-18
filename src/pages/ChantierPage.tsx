@@ -102,6 +102,7 @@ import {
   create as createTaskTemplate,
   type TaskTemplateInput,
 } from "../services/taskTemplates.service";
+import { useI18n } from "../i18n";
 
 // ENVOI ACCÈS (Edge Function via service)
 import { sendIntervenantAccess } from "../services/chantierAccessAdmin.service";
@@ -130,21 +131,21 @@ function clamp(n: number, min: number, max: number) {
   return Math.min(max, Math.max(min, n));
 }
 
-function statusBadge(status?: string | null) {
+function statusBadge(status: string | null | undefined, t: (key: string) => string) {
   const s = status ?? "PREPARATION";
   if (s === "EN_COURS") {
-    return { label: "En cours", className: "bg-amber-50 text-amber-700 border-amber-200" };
+    return { label: t("common.chantierStatus.EN_COURS"), className: "bg-amber-50 text-amber-700 border-amber-200" };
   }
   if (s === "TERMINE") {
-    return { label: "Terminé", className: "bg-emerald-50 text-emerald-700 border-emerald-200" };
+    return { label: t("common.chantierStatus.TERMINE"), className: "bg-emerald-50 text-emerald-700 border-emerald-200" };
   }
-  return { label: "Préparation", className: "bg-slate-50 text-slate-700 border-slate-200" };
+  return { label: t("common.chantierStatus.PREPARATION"), className: "bg-slate-50 text-slate-700 border-slate-200" };
 }
 
-function taskStatusLabel(s: ChantierTaskRow["status"]) {
-  if (s === "FAIT") return "Fait";
-  if (s === "EN_COURS") return "En cours";
-  return "A faire";
+function taskStatusLabel(s: ChantierTaskRow["status"], t: (key: string) => string) {
+  if (s === "FAIT") return t("common.taskStatus.FAIT");
+  if (s === "EN_COURS") return t("common.taskStatus.EN_COURS");
+  return t("common.taskStatus.A_FAIRE");
 }
 function taskStatusBadgeClass(s: ChantierTaskRow["status"]) {
   if (s === "FAIT") return "bg-emerald-50 text-emerald-700 border-emerald-200";
@@ -186,26 +187,26 @@ function isPublicAppUrlConfigError(error: unknown): boolean {
   return msg.includes("VITE_PUBLIC_APP_URL");
 }
 
-function reserveStatusBadge(status?: string | null) {
+function reserveStatusBadge(status: string | null | undefined, t: (key: string) => string) {
   const s = status ?? "OUVERTE";
   if (s === "LEVEE") {
-    return { label: "Levée", className: "bg-emerald-50 text-emerald-700 border-emerald-200" };
+    return { label: t("common.reserveStatus.LEVEE"), className: "bg-emerald-50 text-emerald-700 border-emerald-200" };
   }
   if (s === "EN_COURS") {
-    return { label: "En cours", className: "bg-amber-50 text-amber-700 border-amber-200" };
+    return { label: t("common.reserveStatus.EN_COURS"), className: "bg-amber-50 text-amber-700 border-amber-200" };
   }
-  return { label: "Ouverte", className: "bg-slate-50 text-slate-700 border-slate-200" };
+  return { label: t("common.reserveStatus.OUVERTE"), className: "bg-slate-50 text-slate-700 border-slate-200" };
 }
 
-function reservePriorityBadge(priority?: string | null) {
+function reservePriorityBadge(priority: string | null | undefined, t: (key: string) => string) {
   const p = priority ?? "NORMALE";
   if (p === "URGENTE") {
-    return { label: "Urgente", className: "bg-red-50 text-red-700 border-red-200" };
+    return { label: t("common.reservePriority.URGENTE"), className: "bg-red-50 text-red-700 border-red-200" };
   }
   if (p === "BASSE") {
-    return { label: "Basse", className: "bg-slate-50 text-slate-700 border-slate-200" };
+    return { label: t("common.reservePriority.BASSE"), className: "bg-slate-50 text-slate-700 border-slate-200" };
   }
-  return { label: "Normale", className: "bg-slate-50 text-slate-700 border-slate-200" };
+  return { label: t("common.reservePriority.NORMALE"), className: "bg-slate-50 text-slate-700 border-slate-200" };
 }
 
 function stripLegacyPrefix(titre: string) {
@@ -357,6 +358,8 @@ async function copyToClipboard(text: string) {
 /* ---------------- component ---------------- */
 export default function ChantierPage() {
   const { id } = useParams<{ id: string }>();
+  const { locale, t } = useI18n();
+  const translate = t;
 
   const [item, setItem] = useState<ChantierRow | null>(null);
   const [loading, setLoading] = useState(true);
@@ -1766,7 +1769,7 @@ export default function ChantierPage() {
   }, [tasks]);
 
   /* ---------------- computed ---------------- */
-  const badge = useMemo(() => statusBadge(item?.status), [item?.status]);
+  const badge = useMemo(() => statusBadge(item?.status, t), [item?.status, t]);
 
   const avancement = useMemo(() => {
     if (!tasks || tasks.length === 0) return 0;
@@ -2884,11 +2887,11 @@ export default function ChantierPage() {
   if (!id) {
     return (
       <div className="rounded-2xl border bg-white p-6">
-        <div className="font-semibold">Chantier introuvable</div>
-        <div className="text-slate-500 text-sm mt-1">ID manquant.</div>
+        <div className="font-semibold">{t("chantierPage.notFoundTitle")}</div>
+        <div className="text-slate-500 text-sm mt-1">{t("chantierPage.missingId")}</div>
         <div className="mt-4">
           <Link to="/chantiers" className="rounded-xl border px-3 py-2 hover:bg-slate-50">
-            Retour aux chantiers
+            {t("chantierPage.backToChantiers")}
           </Link>
         </div>
       </div>
@@ -2898,8 +2901,8 @@ export default function ChantierPage() {
   if (loading) {
     return (
       <div className="rounded-2xl border bg-white p-6">
-        <div className="font-semibold">Chargement...</div>
-        <div className="text-slate-500 text-sm mt-1">Ouverture du dossier chantier.</div>
+        <div className="font-semibold">{t("common.states.loading")}</div>
+        <div className="text-slate-500 text-sm mt-1">{t("chantierPage.loadingMessage")}</div>
       </div>
     );
   }
@@ -2915,8 +2918,8 @@ export default function ChantierPage() {
   if (!item) {
     return (
       <div className="rounded-2xl border bg-white p-6">
-        <div className="font-semibold">Chantier introuvable</div>
-        <div className="text-slate-500 text-sm mt-1">Aucun chantier ne correspond à cet ID.</div>
+        <div className="font-semibold">{t("chantierPage.notFoundTitle")}</div>
+        <div className="text-slate-500 text-sm mt-1">{t("chantierPage.notFoundMessage")}</div>
       </div>
     );
   }
@@ -2942,7 +2945,7 @@ export default function ChantierPage() {
       )}
 
       <div className="flex items-center gap-2 text-sm text-slate-500">
-        <Link to="/chantiers" className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-slate-200 hover:bg-slate-50" aria-label="Retour aux chantiers">
+        <Link to="/chantiers" className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-slate-200 hover:bg-slate-50" aria-label={t("chantierPage.backToChantiers")}>
           ?
         </Link>
       </div>
@@ -2954,8 +2957,8 @@ export default function ChantierPage() {
             <span className={["rounded-full border px-2 py-1 text-xs", badge.className].join(" ")}>{badge.label}</span>
           </div>
           <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-sm text-slate-500">
-            <span>Debut {item.date_debut ?? "—"}</span>
-            <span>Fin {item.date_fin_prevue ?? "—"}</span>
+            <span>{t("chantierPage.start")} {item.date_debut ?? "—"}</span>
+            <span>{t("chantierPage.end")} {item.date_fin_prevue ?? "—"}</span>
           </div>
           <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-slate-100">
             <div className="h-full rounded-full bg-blue-600" style={{ width: `${avancement}%` }} />
@@ -2965,19 +2968,19 @@ export default function ChantierPage() {
 
       <section className="grid grid-cols-2 gap-2">
         <div className="rounded-2xl border border-slate-200 px-3 py-2">
-          <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">Avancement</div>
+          <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">{t("chantiers.progress")}</div>
           <div className="mt-1 text-base font-semibold text-slate-950">{avancement}%</div>
         </div>
         <div className="rounded-2xl border border-slate-200 px-3 py-2">
-          <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">Heures prevues</div>
+          <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">{t("chantierPage.hoursPlanned")}</div>
           <div className="mt-1 text-base font-semibold text-slate-950">{tempsPrevues} h</div>
         </div>
         <div className="rounded-2xl border border-slate-200 px-3 py-2">
-          <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">Heures realisees</div>
+          <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">{t("chantierPage.hoursDone")}</div>
           <div className="mt-1 text-base font-semibold text-slate-950">{totalTempsReel} h</div>
         </div>
         <div className="rounded-2xl border border-slate-200 px-3 py-2">
-          <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">Reserves</div>
+          <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">{t("intervenantAccess.tabs.reserves")}</div>
           <div className="mt-1 text-base font-semibold text-slate-950">{reservesOuvertes}</div>
         </div>
       </section>
@@ -2985,7 +2988,7 @@ export default function ChantierPage() {
       <section className="rounded-2xl border border-slate-200 bg-white px-4 py-3">
         <div className="flex flex-wrap items-center gap-2">
           {alertCards.length === 0 ? (
-            <span className="text-sm text-slate-500">Aucune alerte.</span>
+            <span className="text-sm text-slate-500">{t("chantierPage.noAlert")}</span>
           ) : (
             alertCards.map((alert) => (
               <span
@@ -3008,7 +3011,7 @@ export default function ChantierPage() {
 
       <section className="rounded-2xl border border-slate-200 bg-white p-3 space-y-3">
         <div className="space-y-2">
-          <div className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-400">Pilotage</div>
+          <div className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-400">{t("chantierPage.pilotage")}</div>
           <div className="flex flex-wrap gap-2">
             <button
               type="button"
@@ -3018,7 +3021,7 @@ export default function ChantierPage() {
               }}
               className={["rounded-full px-4 py-2 text-sm font-medium", primaryTab === "taches" ? "bg-blue-600 text-white" : "border border-slate-200 text-slate-700"].join(" ")}
             >
-              Taches
+              {t("chantierPage.tasks")}
             </button>
             <button
               type="button"
@@ -3028,7 +3031,7 @@ export default function ChantierPage() {
               }}
               className={["rounded-full px-4 py-2 text-sm font-medium", primaryTab === "planning" ? "bg-blue-600 text-white" : "border border-slate-200 text-slate-700"].join(" ")}
             >
-              Planning
+              {t("chantierTabs.planning")}
             </button>
             <button
               type="button"
@@ -3038,7 +3041,7 @@ export default function ChantierPage() {
               }}
               className={["rounded-full px-4 py-2 text-sm font-medium", primaryTab === "temps" ? "bg-blue-600 text-white" : "border border-slate-200 text-slate-700"].join(" ")}
             >
-              Temps
+              {t("chantierTabs.time")}
             </button>
             <button
               type="button"
@@ -3048,19 +3051,19 @@ export default function ChantierPage() {
               }}
               className={["rounded-full px-4 py-2 text-sm font-medium", primaryTab === "reserves" ? "bg-blue-600 text-white" : "border border-slate-200 text-slate-700"].join(" ")}
             >
-              Reserves
+              {t("intervenantAccess.tabs.reserves")}
             </button>
           </div>
         </div>
         <div className="space-y-2">
-          <div className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-400">Gestion</div>
+          <div className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-400">{t("chantierPage.management")}</div>
           <div className="flex flex-wrap gap-2">
             {[
-              { key: "documents", label: "Documents" },
+              { key: "documents", label: t("intervenantAccess.tabs.documents") },
               { key: "doe", label: "DOE" },
-              { key: "intervenants", label: "Intervenants" },
-              { key: "materiel", label: "Materiel" },
-              { key: "messagerie", label: "Messagerie" },
+              { key: "intervenants", label: t("sidebar.intervenants") },
+              { key: "materiel", label: t("intervenantAccess.tabs.material") },
+              { key: "messagerie", label: t("intervenantAccess.tabs.messaging") },
             ].map((entry) => (
               <button
                 key={entry.key}
@@ -3088,7 +3091,7 @@ export default function ChantierPage() {
             onClick={() => setTaskCreateDrawerOpen(true)}
             className="fixed bottom-6 right-6 z-20 rounded-full bg-blue-600 px-4 py-3 text-sm font-medium text-white shadow-lg hover:bg-blue-700"
           >
-            + Ajouter tache
+            + {t("chantierPage.addTask")}
           </button>
         ) : null}
         {/* ---------------- ONGLET TEMPS ---------------- */}
@@ -3096,10 +3099,10 @@ export default function ChantierPage() {
           <div className="space-y-3">
             <div className="flex items-center justify-between">
               <div>
-                <div className="font-semibold section-title">Temps (par tâche)</div>
+                <div className="font-semibold section-title">{t("chantierPage.timeByTask")}</div>
               </div>
               <div className="text-xs text-slate-500">
-                Total saisi : <span className="font-semibold">{totalTempsReel} h</span>
+                {t("intervenantAccess.totalEntered", { value: totalTempsReel })}
               </div>
             </div>
 
@@ -3113,13 +3116,13 @@ export default function ChantierPage() {
                     <div className="min-w-0">
                       <div className="font-medium truncate">{stripLegacyPrefix(t.titre ?? "")}</div>
                       <div className="text-xs text-slate-500">
-                        {(t.corps_etat ?? "—")} | Intervenant: {it?.nom ?? "—"}
+                        {(t.corps_etat ?? "—")} | {t("intervenantAccess.intervenantLabel")}: {it?.nom ?? "—"}
                       </div>
                     </div>
 
                     <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-5">
                       <div className="space-y-1">
-                        <div className="text-xs text-slate-600">Date début</div>
+                        <div className="text-xs text-slate-600">{t("intervenantAccess.fields.startDate")}</div>
                         <input
                           className="w-full min-w-0 rounded-xl border px-2.5 py-2 text-sm"
                           type="date"
@@ -3134,7 +3137,7 @@ export default function ChantierPage() {
                       </div>
 
                       <div className="space-y-1">
-                        <div className="text-xs text-slate-600">Date fin</div>
+                        <div className="text-xs text-slate-600">{t("intervenantAccess.fields.endDate")}</div>
                         <input
                           className="w-full min-w-0 rounded-xl border px-2.5 py-2 text-sm"
                           type="date"
@@ -3149,7 +3152,7 @@ export default function ChantierPage() {
                       </div>
 
                       <div className="space-y-1">
-                        <div className="text-xs text-slate-600">Total actuel (h)</div>
+                        <div className="text-xs text-slate-600">{t("intervenantAccess.fields.currentTotalHours")}</div>
                         <input
                           className="w-full min-w-0 rounded-xl border px-2.5 py-2 text-sm bg-slate-50"
                           value={toInputNumberString((t as any).temps_reel_h)}
@@ -3158,7 +3161,7 @@ export default function ChantierPage() {
                       </div>
 
                       <div className="space-y-1">
-                        <div className="text-xs text-slate-600">Ajouter (h)</div>
+                        <div className="text-xs text-slate-600">{t("intervenantAccess.fields.addHours")}</div>
                         <input
                           className="w-full min-w-0 rounded-xl border px-2.5 py-2 text-sm"
                           inputMode="decimal"
@@ -3193,7 +3196,7 @@ export default function ChantierPage() {
                             const add = addStr === "" ? 0 : Number(addStr);
 
                             if (!Number.isFinite(add) || add < 0) {
-                              setToast({ type: "error", msg: "Ajout (h) invalide (ex: 1.5 ou 1,5)." });
+                              setToast({ type: "error", msg: t("intervenantAccess.invalidHours") });
                               setSavingTimeTaskId(null);
                               return;
                             }
@@ -3236,16 +3239,16 @@ export default function ChantierPage() {
                                 [t.id]: { ...d, ajout_h: "" },
                               }));
 
-                              setToast({ type: "ok", msg: "Temps enregistré." });
+                              setToast({ type: "ok", msg: t("chantierPage.timeSaved") });
                             } catch (e: any) {
                               await refreshTasksOnly();
-                              setToast({ type: "error", msg: e?.message ?? "Erreur enregistrement temps." });
+                              setToast({ type: "error", msg: e?.message ?? t("chantierPage.timeSaveError") });
                             } finally {
                               setSavingTimeTaskId(null);
                             }
                           }}
                         >
-                          {savingTimeTaskId === t.id ? "Enregistrement..." : "Enregistrer"}
+                          {savingTimeTaskId === t.id ? t("common.states.saving") : t("common.actions.save")}
                         </button>
                       </div>
                     </div>
@@ -3263,7 +3266,7 @@ export default function ChantierPage() {
               <div>
                 <div className="font-semibold section-title">Intervenants</div>
                 <div className="text-sm text-slate-500">
-                  Créer, modifier et supprimer les intervenants du chantier
+                  {t("chantierPage.intervenantsSubtitle")}
                 </div>
               </div>
               <div className="flex items-center gap-2">
@@ -3276,7 +3279,7 @@ export default function ChantierPage() {
                   ].join(" ")}
                   disabled={generatingIntervenantLink}
                 >
-                  {generatingIntervenantLink ? "Génération..." : "Générer lien intervenant"}
+                  {generatingIntervenantLink ? t("common.states.generating") : t("chantierPage.generateIntervenantLink")}
                 </button>
                 <button
                   type="button"
@@ -3284,7 +3287,7 @@ export default function ChantierPage() {
                   className="rounded-xl border px-3 py-2 text-sm hover:bg-slate-50"
                   disabled={intervenantsLoading}
                 >
-                  {intervenantsLoading ? "Chargement..." : "Rafraîchir"}
+                  {intervenantsLoading ? t("common.states.loading") : t("common.actions.refresh")}
                 </button>
               </div>
             </div>
@@ -3297,7 +3300,7 @@ export default function ChantierPage() {
 
             {generatedIntervenantLink && (
               <div className="rounded-xl border bg-slate-50 p-4 space-y-2">
-                <div className="text-sm font-semibold text-slate-800">Lien intervenant</div>
+                <div className="text-sm font-semibold text-slate-800">{t("chantierPage.intervenantLink")}</div>
                 <div className="flex flex-col gap-2 md:flex-row md:items-center">
                   <input
                     className="w-full rounded-xl border bg-white px-3 py-2 text-sm text-slate-900"
@@ -3309,37 +3312,37 @@ export default function ChantierPage() {
                     onClick={async () => {
                       const copied = await copyToClipboard(generatedIntervenantLink);
                       if (copied) {
-                        setToast({ type: "ok", msg: "Lien intervenant copié." });
+                        setToast({ type: "ok", msg: t("chantierPage.intervenantLinkCopied") });
                       } else {
-                        window.prompt("Copie ce lien :", generatedIntervenantLink);
+                        window.prompt(t("chantierPage.copyThisLink"), generatedIntervenantLink);
                       }
                     }}
                     className="rounded-xl border px-3 py-2 text-sm hover:bg-white"
                   >
-                    Copier
+                    {t("common.actions.copy")}
                   </button>
                 </div>
               </div>
             )}
 
             <form onSubmit={onCreateIntervenantFromTab} className="rounded-xl border bg-slate-50 p-4 space-y-3">
-              <div className="font-semibold text-sm">Ajouter un intervenant</div>
+              <div className="font-semibold text-sm">{t("intervenantsTab.addTitle")}</div>
               <div className="grid gap-2 md:grid-cols-3">
                 <input
                   className="rounded-xl border px-3 py-2 text-sm"
-                  placeholder="Nom (ex: Pierre — Plombier)"
+                  placeholder={t("intervenantsTab.namePlaceholder")}
                   value={newIntervenantNom}
                   onChange={(e) => setNewIntervenantNom(e.target.value)}
                 />
                 <input
                   className="rounded-xl border px-3 py-2 text-sm"
-                  placeholder="Email (optionnel)"
+                  placeholder={t("intervenantsTab.emailPlaceholder")}
                   value={newIntervenantEmail}
                   onChange={(e) => setNewIntervenantEmail(e.target.value)}
                 />
                 <input
                   className="rounded-xl border px-3 py-2 text-sm"
-                  placeholder="Téléphone (optionnel)"
+                  placeholder={t("intervenantsTab.phonePlaceholder")}
                   value={newIntervenantTel}
                   onChange={(e) => setNewIntervenantTel(e.target.value)}
                 />
@@ -3353,16 +3356,16 @@ export default function ChantierPage() {
                     creatingIntervenant ? "bg-slate-300 text-slate-700" : "bg-slate-900 text-white hover:bg-slate-800",
                   ].join(" ")}
                 >
-                  {creatingIntervenant ? "Création…" : "+ Ajouter"}
+                  {creatingIntervenant ? t("intervenantsTab.creating") : `+ ${t("common.actions.add")}`}
                 </button>
               </div>
             </form>
 
             <div className="space-y-2">
               {intervenantsLoading ? (
-                <div className="text-sm text-slate-500">Chargement...</div>
+                <div className="text-sm text-slate-500">{t("common.states.loading")}</div>
               ) : intervenants.length === 0 ? (
-                <div className="text-sm text-slate-500">Aucun intervenant pour le moment.</div>
+                <div className="text-sm text-slate-500">{t("intervenantsTab.empty")}</div>
               ) : (
                 intervenants.map((i) => (
                   <div key={i.id} className="rounded-xl border p-3 flex items-start justify-between gap-3">
@@ -3382,9 +3385,9 @@ export default function ChantierPage() {
                           "text-sm rounded-xl border px-3 py-2",
                           sendingAccessId === i.id ? "bg-slate-100 text-slate-500" : "hover:bg-slate-50",
                         ].join(" ")}
-                        title={i.email ? `Générer / envoyer accès à ${i.email}` : "Email manquant"}
+                        title={i.email ? `${t("intervenantsTab.sendAccess")} ${i.email}` : t("common.labels.email")}
                       >
-                        {sendingAccessId === i.id ? "Envoi…" : "Envoyer accès"}
+                        {sendingAccessId === i.id ? t("intervenantsTab.sending") : t("intervenantsTab.sendAccess")}
                       </button>
 
                       <button
@@ -3392,7 +3395,7 @@ export default function ChantierPage() {
                         onClick={() => startEditIntervenant(i)}
                         className="text-sm rounded-xl border px-3 py-2 hover:bg-slate-50"
                       >
-                        Modifier
+                        {t("common.actions.edit")}
                       </button>
 
                       <button
@@ -3400,7 +3403,7 @@ export default function ChantierPage() {
                         onClick={() => onDeleteIntervenant(i)}
                         className="text-sm rounded-xl border border-red-200 text-red-700 px-3 py-2 hover:bg-red-50"
                       >
-                        Supprimer
+                        {t("common.actions.delete")}
                       </button>
                     </div>
                   </div>
@@ -3414,13 +3417,13 @@ export default function ChantierPage() {
         {tab === "documents" && (
           <div className="space-y-4">
             <div className="flex items-start justify-between gap-4">
-              <div className="font-semibold section-title">Documents</div>
+              <div className="font-semibold section-title">{t("intervenantAccess.tabs.documents")}</div>
               <button
                 type="button"
                 onClick={openDocumentModal}
                 className="rounded-xl bg-slate-900 px-3 py-2 text-sm text-white hover:bg-slate-800"
               >
-                Importer document
+                {t("chantierPage.importDocument")}
               </button>
             </div>
 
@@ -3431,22 +3434,22 @@ export default function ChantierPage() {
             )}
 
             {documentsLoading ? (
-              <div className="text-sm text-slate-500">Chargement...</div>
+              <div className="text-sm text-slate-500">{t("common.states.loading")}</div>
             ) : documents.length === 0 ? (
               <div className="rounded-xl border bg-slate-50 p-4 text-sm text-slate-500">
-                Aucun document pour ce chantier.
+                {t("chantierPage.noDocumentForChantier")}
               </div>
             ) : (
               <div className="rounded-xl border overflow-hidden">
                 <table className="w-full text-sm table-soft">
                   <thead className="text-slate-600">
                     <tr>
-                      <th className="px-3 py-2 text-left font-medium">Nom</th>
-                      <th className="px-3 py-2 text-left font-medium">Catégorie</th>
-                      <th className="px-3 py-2 text-left font-medium">Type</th>
-                      <th className="px-3 py-2 text-left font-medium">Visibilité</th>
-                      <th className="px-3 py-2 text-left font-medium">Date</th>
-                      <th className="px-3 py-2 text-left font-medium">Actions</th>
+                      <th className="px-3 py-2 text-left font-medium">{t("common.labels.name")}</th>
+                      <th className="px-3 py-2 text-left font-medium">{t("common.labels.category")}</th>
+                      <th className="px-3 py-2 text-left font-medium">{t("common.labels.type")}</th>
+                      <th className="px-3 py-2 text-left font-medium">{t("documentEdit.visibilityMode")}</th>
+                      <th className="px-3 py-2 text-left font-medium">{t("common.labels.date")}</th>
+                      <th className="px-3 py-2 text-left font-medium">{t("chantierPage.actions")}</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -3465,7 +3468,7 @@ export default function ChantierPage() {
                           })()}
                         </td>
                         <td className="px-3 py-2">
-                          {doc.created_at ? new Date(doc.created_at).toLocaleDateString("fr-FR") : "—"}
+                          {doc.created_at ? new Date(doc.created_at).toLocaleDateString(locale) : "—"}
                         </td>
                         <td className="px-3 py-2">
                           <div className="flex flex-wrap gap-2">
@@ -3481,38 +3484,38 @@ export default function ChantierPage() {
                               ].join(" ")}
                             >
                               {doeSyncingDocumentId === doc.id
-                                ? "Mise à jour..."
+                                ? t("common.actions.update")
                                 : doeDocumentIds.includes(doc.id)
-                                  ? "Retirer DOE"
-                                  : "Inclure DOE"}
+                                  ? t("chantierPage.removeDoe")
+                                  : t("chantierPage.includeDoe")}
                             </button>
                             <button
                               type="button"
                               onClick={() => openDocumentEdit(doc)}
                               className="rounded-lg border px-2 py-1 text-xs hover:bg-slate-50"
                             >
-                              Modifier
+                              {t("common.actions.edit")}
                             </button>
                             <button
                               type="button"
                               onClick={() => openDocumentPreview(doc)}
                               className="rounded-lg border px-2 py-1 text-xs hover:bg-slate-50"
                             >
-                              Ouvrir
+                              {t("common.actions.open")}
                             </button>
                             <button
                               type="button"
                               onClick={() => downloadDocument(doc)}
                               className="rounded-lg border px-2 py-1 text-xs hover:bg-slate-50"
                             >
-                              Télécharger
+                              {t("common.actions.download")}
                             </button>
                             <button
                               type="button"
                               onClick={() => copyDocumentLink(doc)}
                               className="rounded-lg border px-2 py-1 text-xs hover:bg-slate-50"
                             >
-                              Copier lien
+                              {t("common.actions.copy")}
                             </button>
                           </div>
                         </td>
@@ -3530,24 +3533,24 @@ export default function ChantierPage() {
           <div className="space-y-4">
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
-                <div className="font-semibold section-title">Réserves</div>
-                <div className="text-sm text-slate-500">Suivi des réserves chantier.</div>
+                <div className="font-semibold section-title">{t("intervenantAccess.tabs.reserves")}</div>
+                <div className="text-sm text-slate-500">{t("chantierPage.reservesSubtitle")}</div>
               </div>
               <button
                 type="button"
                 onClick={() => openReserveDrawer(null)}
                 className="rounded-xl px-4 py-2 text-sm bg-slate-900 text-white hover:bg-slate-800"
               >
-                Nouvelle réserve
+                {t("chantierPage.newReserve")}
               </button>
             </div>
 
             <div className="flex flex-wrap gap-2">
               {(
                 [
-                  { key: "ALL", label: "Toutes" },
-                  { key: "OUVERTES", label: "Ouvertes" },
-                  { key: "LEVEES", label: "Levées" },
+                  { key: "ALL", label: t("doe.all") },
+                  { key: "OUVERTES", label: t("chantierPage.openReserves") },
+                  { key: "LEVEES", label: t("common.reserveStatus.LEVEE") },
                 ] as const
               ).map((f) => (
                 <button
@@ -3571,14 +3574,14 @@ export default function ChantierPage() {
             )}
 
             {reservesLoading ? (
-              <div className="text-sm text-slate-500">Chargement...</div>
+              <div className="text-sm text-slate-500">{t("common.states.loading")}</div>
             ) : filteredReserves.length === 0 ? (
-              <div className="text-sm text-slate-500">Aucune réserve pour ce chantier.</div>
+              <div className="text-sm text-slate-500">{t("chantierPage.noReserve")}</div>
             ) : (
               <div className="space-y-3">
                 {filteredReserves.map((reserve) => {
-                  const status = reserveStatusBadge(reserve.status);
-                  const priority = reservePriorityBadge(reserve.priority);
+                  const status = reserveStatusBadge(reserve.status, t);
+                  const priority = reservePriorityBadge(reserve.priority, t);
                   const task = reserve.task_id ? taskById.get(reserve.task_id) : null;
                   const it = task?.intervenant_id ? intervenantById.get(task.intervenant_id) : null;
 
@@ -3634,17 +3637,17 @@ export default function ChantierPage() {
             <section className="space-y-4">
               <div className="flex items-center justify-between gap-3">
                 <div>
-                  <div className="font-semibold">Devis</div>
-                  <div className="text-sm text-slate-500">Import PDF avec extraction IA et aperçu obligatoire</div>
+                  <div className="font-semibold">{t("chantierPage.quotesTitle")}</div>
+                  <div className="text-sm text-slate-500">{t("chantierPage.quotesSubtitle")}</div>
                 </div>
                 <div className="flex items-center gap-3">
-                  <div className="text-xs text-slate-500">{devisLoading ? "Chargement..." : `${devis.length} devis`}</div>
+                  <div className="text-xs text-slate-500">{devisLoading ? t("common.states.loading") : `${devis.length} ${t("chantierPage.quotesCount")}`}</div>
                   <button
                     type="button"
                     className="rounded-xl bg-[#2563EB] px-4 py-2 text-sm text-white hover:bg-[#1d4ed8]"
                     onClick={() => setDevisImportDrawerOpen(true)}
                   >
-                    Importer devis (PDF)
+                    {t("chantierPage.importQuotePdf")}
                   </button>
                 </div>
               </div>
@@ -3656,8 +3659,7 @@ export default function ChantierPage() {
               )}
 
               <div className="rounded-xl border bg-blue-50/50 p-4 text-sm text-slate-700">
-                Utilisez <span className="font-semibold">Importer devis (PDF)</span> pour extraire les lignes de
-                travaux, verifier l'apercu puis creer les taches.
+                {t("chantierPage.quoteHelpPrefix")} <span className="font-semibold">{t("chantierPage.importQuotePdf")}</span> {t("chantierPage.quoteHelpSuffix")}
               </div>
 
               <div className="space-y-3">
@@ -3667,7 +3669,7 @@ export default function ChantierPage() {
                     <div key={d.id} className="rounded-xl border p-4 space-y-3">
                       <div className="flex justify-between gap-3">
                         <div className="min-w-0">
-                          <div className="font-medium truncate">{d.nom ?? "Devis"}</div>
+                          <div className="font-medium truncate">{d.nom ?? t("chantierPage.quoteFallback")}</div>
                           <div className="text-xs text-slate-500">ID : {d.id}</div>
                         </div>
                         <div className="flex items-center gap-2">
@@ -3676,7 +3678,7 @@ export default function ChantierPage() {
                             className="rounded-xl border px-3 py-2 text-sm hover:bg-slate-50"
                             onClick={() => setActiveDevisId(isOpen ? null : d.id)}
                           >
-                            {isOpen ? "Fermer" : "Voir lignes"}
+                            {isOpen ? t("common.actions.close") : t("chantierPage.viewLines")}
                           </button>
                         </div>
                       </div>
@@ -3690,9 +3692,9 @@ export default function ChantierPage() {
                           )}
 
                           {lignesLoading ? (
-                            <div className="text-sm text-slate-500">Chargement...</div>
+                            <div className="text-sm text-slate-500">{t("common.states.loading")}</div>
                           ) : lignes.length === 0 ? (
-                            <div className="text-sm text-slate-500">Aucune ligne.</div>
+                            <div className="text-sm text-slate-500">{t("chantierPage.noLine")}</div>
                           ) : (
                             <div className="space-y-2">
                               {lignes.map((l: any) => (
@@ -3710,7 +3712,7 @@ export default function ChantierPage() {
                                     onClick={() => onDeleteLigne(l.id)}
                                     className="text-red-600 text-xs hover:underline"
                                   >
-                                    Suppr
+                                    {t("common.actions.delete")}
                                   </button>
                                 </div>
                               ))}
@@ -3719,18 +3721,18 @@ export default function ChantierPage() {
 
                           {/* Ajouter une ligne */}
                           <div className="pt-2">
-                            <div className="font-semibold text-sm">Ajouter une ligne</div>
+                            <div className="font-semibold text-sm">{t("chantierPage.addLine")}</div>
                             <form onSubmit={onAddLigne} className="mt-2 grid gap-2">
                               <div className="grid gap-2 md:grid-cols-2">
                                 <input
                                   className="rounded-xl border px-3 py-2 text-sm"
-                                  placeholder="Corps d’état (lot)"
+                                  placeholder={t("chantierPage.lotPlaceholder")}
                                   value={lCorpsEtat}
                                   onChange={(e) => setLCorpsEtat(e.target.value)}
                                 />
                                 <input
                                   className="rounded-xl border px-3 py-2 text-sm"
-                                  placeholder="Entreprise"
+                                  placeholder={t("chantierPage.companyPlaceholder")}
                                   value={lEntreprise}
                                   onChange={(e) => setLEntreprise(e.target.value)}
                                 />
@@ -3738,7 +3740,7 @@ export default function ChantierPage() {
 
                               <input
                                 className="rounded-xl border px-3 py-2 text-sm"
-                                placeholder="Désignation"
+                                placeholder={t("chantierPage.designationPlaceholder")}
                                 value={lDesignation}
                                 onChange={(e) => setLDesignation(e.target.value)}
                               />
@@ -3746,20 +3748,20 @@ export default function ChantierPage() {
                               <div className="grid gap-2 md:grid-cols-3">
                                 <input
                                   className="rounded-xl border px-3 py-2 text-sm"
-                                  placeholder="Unite"
+                                  placeholder={t("common.labels.unit")}
                                   value={lUnite}
                                   onChange={(e) => setLUnite(e.target.value)}
                                 />
                                 <input
                                   className="rounded-xl border px-3 py-2 text-sm"
-                                  placeholder="Qté"
+                                  placeholder={t("common.labels.quantity")}
                                   value={lQty}
                                   onChange={(e) => setLQty(e.target.value)}
                                 />
                                 <label className="text-sm text-slate-700 flex items-center gap-2 justify-between">
                                   <span className="flex items-center gap-2">
                                     <input type="checkbox" checked={lGen} onChange={(e) => setLGen(e.target.checked)} />
-                                    Générer une tâche
+                                    {t("chantierPage.generateTask")}
                                   </span>
                                 </label>
                               </div>
@@ -3773,12 +3775,12 @@ export default function ChantierPage() {
                                     addingLigne ? "bg-slate-300 text-slate-700" : "bg-slate-900 text-white hover:bg-slate-800",
                                   ].join(" ")}
                                 >
-                                  {addingLigne ? "Ajout..." : "+ Ajouter ligne"}
+                                  {addingLigne ? t("chantierPage.adding") : `+ ${t("chantierPage.addLine")}`}
                                 </button>
                               </div>
 
                               <div className="text-xs text-slate-500">
-                                Simple : lot + entreprise + désignation + unité + quantité.
+                                {t("chantierPage.lineHelp")}
                               </div>
                             </form>
                           </div>
@@ -3794,11 +3796,11 @@ export default function ChantierPage() {
             <section className="space-y-4">
               <div className="flex justify-between">
                 <div>
-                  <div className="font-semibold section-title">Taches</div>
-                  <div className="text-sm text-slate-500">Attribution par intervenant + modification</div>
+                  <div className="font-semibold section-title">{t("chantierPage.tasks")}</div>
+                  <div className="text-sm text-slate-500">{t("chantierPage.tasksSubtitle")}</div>
                 </div>
                 <div className="text-xs text-slate-500">
-                  {tasksLoading ? "Chargement..." : `${filteredTasks.length} / ${tasks.length} tache(s)`}
+                  {tasksLoading ? t("common.states.loading") : `${filteredTasks.length} / ${tasks.length} ${t("chantierPage.tasksCount")}`}
                 </div>
               </div>
 
@@ -4315,7 +4317,7 @@ export default function ChantierPage() {
                             taskStatusBadgeClass(t.status),
                           ].join(" ")}
                         >
-                          {taskStatusLabel(t.status)}
+                          {taskStatusLabel(t.status, translate)}
                         </span>
                       </div>
 
@@ -4698,7 +4700,7 @@ export default function ChantierPage() {
             <div className="absolute right-0 top-0 h-screen w-full sm:w-[90vw] lg:w-[85vw] lg:min-w-[980px] 2xl:w-[70vw] bg-white border-l shadow-xl flex flex-col">
               <div className="px-3 lg:px-4 py-3 border-b flex items-center justify-between">
                 <div className="font-semibold truncate">
-                  Réserve — {activeReserve?.title ?? "Nouvelle réserve"}
+                  {t("intervenantAccess.tabs.reserves")} — {activeReserve?.title ?? t("chantierPage.newReserve")}
                 </div>
                 <button
                   type="button"
@@ -4713,9 +4715,9 @@ export default function ChantierPage() {
               <div className="px-3 lg:px-4 py-2 border-b flex gap-2">
                 {(
                   [
-                    { key: "details", label: "Détails" },
-                    { key: "photos", label: "Photos" },
-                    { key: "plan", label: "Plan" },
+                    { key: "details", label: t("chantierPage.details") },
+                    { key: "photos", label: t("common.documentCategories.photos") },
+                    { key: "plan", label: t("common.documentCategories.plans") },
                   ] as const
                 ).map((t) => {
                   const disabled = !activeReserve && t.key !== "details";
@@ -4741,70 +4743,70 @@ export default function ChantierPage() {
                 {reserveDrawerTab === "details" && (
                   <div className="space-y-4">
                     <div className="space-y-1">
-                      <div className="text-xs text-slate-600">Titre</div>
+                      <div className="text-xs text-slate-600">{t("common.labels.title")}</div>
                       <input
                         className="w-full rounded-xl border px-3 py-2 text-sm"
                         value={reserveDraftTitle}
                         onChange={(e) => setReserveDraftTitle(e.target.value)}
-                        placeholder="Titre de la réserve"
+                        placeholder={t("chantierPage.reserveTitlePlaceholder")}
                       />
                     </div>
 
                     <div className="space-y-1">
-                      <div className="text-xs text-slate-600">Description</div>
+                      <div className="text-xs text-slate-600">{t("chantierPage.description")}</div>
                       <textarea
                         className="w-full rounded-xl border px-3 py-2 text-sm min-h-[120px]"
                         value={reserveDraftDescription}
                         onChange={(e) => setReserveDraftDescription(e.target.value)}
-                        placeholder="Décrivez la réserve..."
+                        placeholder={t("chantierPage.reserveDescriptionPlaceholder")}
                       />
                     </div>
 
                     <div className="grid gap-3 md:grid-cols-2">
                       <div className="space-y-1">
-                        <div className="text-xs text-slate-600">Statut</div>
+                        <div className="text-xs text-slate-600">{t("common.labels.status")}</div>
                         <select
                           className="w-full rounded-xl border px-3 py-2 text-sm"
                           value={reserveDraftStatus}
                           onChange={(e) => setReserveDraftStatus(e.target.value as ReserveStatus)}
                         >
-                          <option value="OUVERTE">OUVERTE</option>
-                          <option value="EN_COURS">EN_COURS</option>
-                          <option value="LEVEE">LEVEE</option>
+                          <option value="OUVERTE">{t("common.reserveStatus.OUVERTE")}</option>
+                          <option value="EN_COURS">{t("common.reserveStatus.EN_COURS")}</option>
+                          <option value="LEVEE">{t("common.reserveStatus.LEVEE")}</option>
                         </select>
                       </div>
 
                       <div className="space-y-1">
-                        <div className="text-xs text-slate-600">Priorité</div>
+                        <div className="text-xs text-slate-600">{t("chantierPage.priority")}</div>
                         <select
                           className="w-full rounded-xl border px-3 py-2 text-sm"
                           value={reserveDraftPriority}
                           onChange={(e) => setReserveDraftPriority(e.target.value as ReservePriority)}
                         >
-                          <option value="BASSE">BASSE</option>
-                          <option value="NORMALE">NORMALE</option>
-                          <option value="URGENTE">URGENTE</option>
+                          <option value="BASSE">{t("common.reservePriority.BASSE")}</option>
+                          <option value="NORMALE">{t("common.reservePriority.NORMALE")}</option>
+                          <option value="URGENTE">{t("common.reservePriority.URGENTE")}</option>
                         </select>
                       </div>
 
                       <div className="space-y-1 md:col-span-2">
-                        <div className="text-xs text-slate-600">Tâche</div>
+                        <div className="text-xs text-slate-600">{t("chantierPage.tasks")}</div>
                         <select
                           className="w-full rounded-xl border px-3 py-2 text-sm"
                           value={reserveDraftTaskId}
                           onChange={(e) => setReserveDraftTaskId(e.target.value)}
                         >
-                          <option value="">Sélectionner une tâche</option>
-                          {tasks.map((t) => (
-                            <option key={t.id} value={t.id}>
-                              {stripLegacyPrefix(t.titre ?? "Tâche")}
+                          <option value="">{t("chantierPage.selectTask")}</option>
+                          {tasks.map((task) => (
+                            <option key={task.id} value={task.id}>
+                              {stripLegacyPrefix(task.titre ?? t("chantierPage.tasks"))}
                             </option>
                           ))}
                         </select>
                       </div>
 
                       <div className="space-y-1 md:col-span-2">
-                        <div className="text-xs text-slate-600">Intervenant</div>
+                        <div className="text-xs text-slate-600">{t("intervenantAccess.intervenantLabel")}</div>
                         <select
                           className={[
                             "w-full rounded-xl border px-3 py-2 text-sm",
@@ -4818,7 +4820,7 @@ export default function ChantierPage() {
                           onChange={(e) => setReserveDraftIntervenantId(e.target.value)}
                           disabled={!!reserveDraftTaskId}
                         >
-                          <option value="__NONE__">Aucun intervenant</option>
+                          <option value="__NONE__">{t("chantierPage.noIntervenant")}</option>
                           {intervenants.map((i) => (
                             <option key={i.id} value={i.id}>
                               {i.nom}
@@ -4841,7 +4843,7 @@ export default function ChantierPage() {
                               : "border-emerald-200 text-emerald-700 hover:bg-emerald-50",
                           ].join(" ")}
                         >
-                          Marquer levée
+                          {t("chantierPage.markResolved")}
                         </button>
                       </div>
                     )}
@@ -4852,12 +4854,12 @@ export default function ChantierPage() {
                   <div className="space-y-4">
                     {!activeReserve ? (
                       <div className="text-sm text-slate-500">
-                        Créez la réserve pour ajouter des photos.
+                        {t("chantierPage.createReserveForPhotos")}
                       </div>
                     ) : (
                       <>
                         <div className="flex items-center justify-between gap-3">
-                          <div className="font-semibold">Photos</div>
+                          <div className="font-semibold">{t("common.documentCategories.photos")}</div>
                           <div className="flex items-center gap-2">
                             <input
                               ref={reservePhotoInputRef}
@@ -4877,21 +4879,21 @@ export default function ChantierPage() {
                                   : "bg-slate-900 text-white hover:bg-slate-800",
                               ].join(" ")}
                             >
-                              {reservePhotoUploading ? "Upload..." : "Ajouter photo"}
+                              {reservePhotoUploading ? "Upload..." : t("chantierPage.addPhoto")}
                             </button>
                           </div>
                         </div>
 
                         {reservePhotoFile && (
                           <div className="text-xs text-slate-500">
-                            Fichier sélectionné : {reservePhotoFile.name}
+                            {t("chantierPage.selectedFile")}: {reservePhotoFile.name}
                           </div>
                         )}
 
                         {reservePhotosLoading ? (
-                          <div className="text-sm text-slate-500">Chargement...</div>
+                          <div className="text-sm text-slate-500">{t("common.states.loading")}</div>
                         ) : reservePhotos.length === 0 ? (
-                          <div className="text-sm text-slate-500">Aucune photo liée.</div>
+                          <div className="text-sm text-slate-500">{t("chantierPage.noPhotoLinked")}</div>
                         ) : (
                           <div className="grid gap-3 sm:grid-cols-2">
                             {reservePhotos.map((doc) => {

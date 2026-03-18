@@ -10,16 +10,7 @@ import {
   Building2,
   Truck,
 } from "lucide-react";
-
-const nav = [
-  { to: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
-  { to: "/chantiers", label: "Chantiers", icon: Hammer },
-  { to: "/intervenants", label: "Intervenants", icon: Users },
-  { to: "/bibliotheque", label: "Bibliothèque", icon: LibraryBig },
-  { to: "/statistiques", label: "Statistiques", icon: ChartColumnBig },
-  { to: "/fournisseurs", label: "Fournisseurs", icon: Truck },
-  { to: "/entreprise", label: "Mon entreprise", icon: Building2 },
-];
+import { useI18n } from "../i18n";
 
 type Props = {
   collapsed?: boolean;
@@ -27,17 +18,28 @@ type Props = {
 };
 
 export default function Sidebar({ collapsed = false, onToggleCollapse }: Props) {
+  const { t } = useI18n();
+  const nav = [
+    { to: "/dashboard", label: t("sidebar.dashboard"), icon: LayoutDashboard },
+    { to: "/chantiers", label: t("sidebar.chantiers"), icon: Hammer },
+    { to: "/intervenants", label: t("sidebar.intervenants"), icon: Users },
+    { to: "/bibliotheque", label: t("sidebar.library"), icon: LibraryBig },
+    { to: "/statistiques", label: t("sidebar.statistics"), icon: ChartColumnBig },
+    { to: "/fournisseurs", label: t("sidebar.suppliers"), icon: Truck },
+    { to: "/entreprise", label: t("sidebar.company"), icon: Building2 },
+  ];
+
   return (
     <div className="h-full">
       <div className={["border-b", collapsed ? "p-3" : "p-4"].join(" ")}>
         <div className="flex items-center justify-between gap-2">
-          <div className={["font-bold leading-none", collapsed ? "sr-only" : "text-lg"].join(" ")}>Navigation</div>
+          <div className={["font-bold leading-none", collapsed ? "sr-only" : "text-lg"].join(" ")}>{t("layout.navigation")}</div>
           <button
             type="button"
             onClick={onToggleCollapse}
             className="hidden rounded-xl border border-slate-200 p-2 text-slate-600 hover:bg-slate-50 lg:inline-flex"
-            aria-label={collapsed ? "Etendre la navigation" : "Replier la navigation"}
-            title={collapsed ? "Etendre la navigation" : "Replier la navigation"}
+            aria-label={collapsed ? t("layout.expandNavigation") : t("layout.collapseNavigation")}
+            title={collapsed ? t("layout.expandNavigation") : t("layout.collapseNavigation")}
           >
             {collapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}
           </button>

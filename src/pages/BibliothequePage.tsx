@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "../lib/supabaseClient";
 import { getChantiers, type ChantierRow } from "../services/chantiers.service";
+import { useI18n } from "../i18n";
 
 type BibliothequeDocRow = {
   id: string;
@@ -13,6 +14,7 @@ type BibliothequeDocRow = {
 };
 
 export default function BibliothequePage() {
+  const { locale, t } = useI18n();
   const [rows, setRows] = useState<BibliothequeDocRow[]>([]);
   const [chantiers, setChantiers] = useState<ChantierRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -27,10 +29,10 @@ export default function BibliothequePage() {
   }, [chantiers]);
 
   const categories = useMemo(() => {
-    return Array.from(new Set(rows.map((row) => row.category || "Divers"))).sort((a, b) =>
+    return Array.from(new Set(rows.map((row) => row.category || t("common.documentCategories.other")))).sort((a, b) =>
       a.localeCompare(b),
     );
-  }, [rows]);
+  }, [rows, t]);
 
   const filteredRows = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -61,7 +63,7 @@ export default function BibliothequePage() {
       setRows((docsRes.data ?? []) as BibliothequeDocRow[]);
       setChantiers(chantierRows);
     } catch (err: any) {
-      setError(err?.message ?? "Erreur chargement bibliotheque.");
+      setError(err?.message ?? t("bibliotheque.loadError"));
       setRows([]);
       setChantiers([]);
     } finally {
@@ -77,22 +79,22 @@ export default function BibliothequePage() {
     <div className="space-y-4">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold">Bibliotheque</h1>
-          <p className="text-slate-500">Documents recents de tous les chantiers.</p>
+          <h1 className="text-2xl font-bold">{t("bibliotheque.title")}</h1>
+          <p className="text-slate-500">{t("bibliotheque.subtitle")}</p>
         </div>
         <button
           type="button"
           onClick={refresh}
           className="rounded-xl border px-3 py-2 text-sm hover:bg-slate-50"
         >
-          Rafraichir
+          {t("common.actions.refresh")}
         </button>
       </div>
 
       <div className="rounded-2xl border bg-white p-4 grid gap-3 md:grid-cols-3">
         <input
           className="rounded-xl border px-3 py-2 text-sm md:col-span-2"
-          placeholder="Rechercher un document..."
+          placeholder={t("bibliotheque.searchPlaceholder")}
           value={query}
           onChange={(e) => setQuery(e.target.value)}
         />
@@ -101,7 +103,7 @@ export default function BibliothequePage() {
           value={categoryFilter}
           onChange={(e) => setCategoryFilter(e.target.value)}
         >
-          <option value="__ALL__">Toutes categories</option>
+          <option value="__ALL__">{t("bibliotheque.allCategories")}</option>
           {categories.map((category) => (
             <option key={category} value={category}>
               {category}
@@ -115,19 +117,19 @@ export default function BibliothequePage() {
       )}
 
       {loading ? (
-        <div className="rounded-2xl border bg-white p-6 text-sm text-slate-500">Chargement...</div>
+        <div className="rounded-2xl border bg-white p-6 text-sm text-slate-500">{t("bibliotheque.loading")}</div>
       ) : filteredRows.length === 0 ? (
-        <div className="rounded-2xl border bg-white p-6 text-sm text-slate-500">Aucun document.</div>
+        <div className="rounded-2xl border bg-white p-6 text-sm text-slate-500">{t("bibliotheque.empty")}</div>
       ) : (
         <div className="rounded-2xl border bg-white overflow-hidden">
           <table className="w-full text-sm">
             <thead className="bg-slate-50 text-slate-600">
               <tr>
-                <th className="px-4 py-3 text-left font-medium">Titre</th>
-                <th className="px-4 py-3 text-left font-medium">Chantier</th>
-                <th className="px-4 py-3 text-left font-medium">Categorie</th>
-                <th className="px-4 py-3 text-left font-medium">Type</th>
-                <th className="px-4 py-3 text-left font-medium">Date</th>
+                <th className="px-4 py-3 text-left font-medium">{t("common.labels.title")}</th>
+                <th className="px-4 py-3 text-left font-medium">{t("sidebar.chantiers")}</th>
+                <th className="px-4 py-3 text-left font-medium">{t("common.labels.category")}</th>
+                <th className="px-4 py-3 text-left font-medium">{t("common.labels.type")}</th>
+                <th className="px-4 py-3 text-left font-medium">{t("common.labels.date")}</th>
               </tr>
             </thead>
             <tbody>
@@ -141,7 +143,7 @@ export default function BibliothequePage() {
                   <td className="px-4 py-3">{row.category || "-"}</td>
                   <td className="px-4 py-3">{row.document_type || "-"}</td>
                   <td className="px-4 py-3">
-                    {row.created_at ? new Date(row.created_at).toLocaleDateString("fr-FR") : "-"}
+                    {row.created_at ? new Date(row.created_at).toLocaleDateString(locale) : "-"}
                   </td>
                 </tr>
               ))}
