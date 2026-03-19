@@ -1,4 +1,4 @@
-import { useSyncExternalStore } from "react";
+import { useMemo, useSyncExternalStore } from "react";
 import { al } from "./al";
 import { fr } from "./fr";
 
@@ -129,18 +129,20 @@ function subscribe(listener: () => void) {
 
 export function useI18n() {
   const language = useSyncExternalStore<Language>(subscribe, getLanguage, () => "fr");
-
-  return {
-    language,
-    locale: getLocale(language),
-    setLanguage,
-    t: (key: string, params?: Params) => translate(key, params, language),
-    formatDate: (value: string | number | Date | null | undefined, options?: Intl.DateTimeFormatOptions) =>
-      formatDate(value, options, language),
-    formatDateTime: (value: string | number | Date | null | undefined, options?: Intl.DateTimeFormatOptions) =>
-      formatDateTime(value, language, options),
-    formatNumber: (value: number, options?: Intl.NumberFormatOptions) => formatNumber(value, options, language),
-  };
+  return useMemo(
+    () => ({
+      language,
+      locale: getLocale(language),
+      setLanguage,
+      t: (key: string, params?: Params) => translate(key, params, language),
+      formatDate: (value: string | number | Date | null | undefined, options?: Intl.DateTimeFormatOptions) =>
+        formatDate(value, options, language),
+      formatDateTime: (value: string | number | Date | null | undefined, options?: Intl.DateTimeFormatOptions) =>
+        formatDateTime(value, language, options),
+      formatNumber: (value: number, options?: Intl.NumberFormatOptions) => formatNumber(value, options, language),
+    }),
+    [language],
+  );
 }
 
 initializeI18n();
