@@ -12,6 +12,23 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="default" />
     <meta name="apple-mobile-web-app-title" content="Batipro" />
     <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
+    <script>
+      window.__BATIPRO_DISABLE_SW__ = true;
+      if ("serviceWorker" in navigator) {
+        navigator.serviceWorker.getRegistrations().then((registrations) => {
+          registrations.forEach((registration) => {
+            void registration.unregister();
+          });
+        }).catch(() => {});
+      }
+      if ("caches" in window) {
+        caches.keys().then((keys) => {
+          keys.forEach((key) => {
+            void caches.delete(key);
+          });
+        }).catch(() => {});
+      }
+    </script>
   </head>
   <body>
     <div id="root"></div>

@@ -4,7 +4,13 @@ import { BrowserRouter } from "react-router-dom";
 import App from "./App";
 import "./index.css";
 
-if (import.meta.env.PROD && "serviceWorker" in navigator) {
+declare global {
+  interface Window {
+    __BATIPRO_DISABLE_SW__?: boolean;
+  }
+}
+
+if (import.meta.env.PROD && !window.__BATIPRO_DISABLE_SW__ && "serviceWorker" in navigator) {
   let reloading = false;
   let visibilityListenerAttached = false;
 
