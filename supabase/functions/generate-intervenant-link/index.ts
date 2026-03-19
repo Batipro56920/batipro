@@ -20,6 +20,10 @@ function requireEnv(name: string) {
   return value;
 }
 
+function optionalEnv(name: string) {
+  return normalizeString(Deno.env.get(name) ?? "");
+}
+
 function parseAdminEmails() {
   const raw =
     Deno.env.get("ADMIN_EMAILS") ??
@@ -55,6 +59,46 @@ function normalizeString(value: unknown) {
   return String(value).trim();
 }
 
+function normalizeBaseUrl(value: string) {
+  const raw = normalizeString(value).replace(/^['"]|['"]$/g, "");
+  if (!raw) return null;
+
+  try {
+    const parsed = new URL(raw);
+    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") return null;
+    return `${parsed.origin}${parsed.pathname === "/" ? "" : parsed.pathname}`.replace(/\/$/, "");
+  } catch {
+    return null;
+  }
+}
+
+function resolvePublicAppUrl(req: Request) {
+  const configured =
+    normalizeBaseUrl(optionalEnv("PUBLIC_APP_URL")) ||
+    normalizeBaseUrl(optionalEnv("VITE_PUBLIC_APP_URL"));
+  if (configured) return configured;
+
+  const fromOrigin = normalizeBaseUrl(req.headers.get("origin") ?? "");
+  if (fromOrigin) return fromOrigin;
+
+  const referer = req.headers.get("referer") ?? "";
+  if (referer) {
+    try {
+      return new URL(referer).origin;
+    } catch {
+      return null;
+    }
+  }
+
+  return null;
+}
+
+function buildIntervenantAccessUrl(req: Request, token: string) {
+  const path = `/intervenant?token=${encodeURIComponent(token)}`;
+  const base = resolvePublicAppUrl(req);
+  return base ? `${base}${path}` : path;
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") return json({ ok: true }, 200);
   if (req.method !== "POST") return json({ error: "Method not allowed" }, 405);
@@ -63,7 +107,6 @@ serve(async (req) => {
     const SUPABASE_URL = requireEnv("SUPABASE_URL");
     const SUPABASE_ANON_KEY = requireEnv("SUPABASE_ANON_KEY");
     const SUPABASE_SERVICE_ROLE_KEY = requireEnv("SUPABASE_SERVICE_ROLE_KEY");
-    const PUBLIC_APP_URL = requireEnv("PUBLIC_APP_URL");
 
     const jwt = getBearerToken(req);
     if (!jwt) return json({ error: "Unauthorized" }, 401);
@@ -139,7 +182,7 @@ serve(async (req) => {
 
     if (insertErr) return json({ error: insertErr.message }, 400);
 
-    const accessUrl = `${PUBLIC_APP_URL.replace(/\/$/, "")}/acces/${encodeURIComponent(token)}`;
+    const accessUrl = buildIntervenantAccessUrl(req, token);
     return json({ token, accessUrl, chantierId, intervenantId, expiresAt }, 200);
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown error";

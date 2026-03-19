@@ -7,27 +7,52 @@
 
   if (configuredUrl) return configuredUrl;
 
-  if (typeof window !== "undefined") {
-    const runtimeOrigin = normalizePublicUrl(window.location.origin);
-    if (runtimeOrigin) return runtimeOrigin;
-  }
+  const runtimeUrl = getRuntimePublicAppUrl();
+  if (runtimeUrl) return runtimeUrl;
 
-  throw new Error(
-    "VITE_PUBLIC_APP_URL manquant. Définir sur Vercel (Production) et dans .env.local (Local).",
-  );
+  return "";
 }
 
 export function buildIntervenantLink(token: string): string {
+  const path = `/intervenant?token=${encodeURIComponent(token)}`;
   const base = getPublicAppUrl();
-  return `${base}/intervenant?token=${encodeURIComponent(token)}`;
+
+  if (base) return `${base}${path}`;
+
+  if (typeof window !== "undefined" && window.location?.href) {
+    return new URL(path, window.location.href).toString();
+  }
+
+  return path;
 }
 
 function normalizePublicUrl(value: string): string | null {
   const normalizedRaw = String(value ?? "").replace(/^['\"]|['\"]$/g, "").trim();
   if (!normalizedRaw || !normalizedRaw.startsWith("http")) return null;
 
-  const normalized = normalizedRaw.replace(/\/$/, "");
-  if (normalized.includes("<") || normalized.includes(">")) return null;
+  try {
+    const parsed = new URL(normalizedRaw);
+    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") return null;
 
-  return normalized;
+    const normalized = `${parsed.origin}${parsed.pathname === "/" ? "" : parsed.pathname}`.replace(/\/$/, "");
+    if (normalized.includes("<") || normalized.includes(">")) return null;
+
+    return normalized;
+  } catch {
+    return null;
+  }
+}
+
+function getRuntimePublicAppUrl(): string | null {
+  if (typeof window !== "undefined" && window.location?.origin) {
+    const runtimeOrigin = normalizePublicUrl(window.location.origin);
+    if (runtimeOrigin) return runtimeOrigin;
+  }
+
+  if (typeof document !== "undefined") {
+    const runtimeBase = normalizePublicUrl(document.baseURI ?? document.URL ?? "");
+    if (runtimeBase) return runtimeBase;
+  }
+
+  return null;
 }
