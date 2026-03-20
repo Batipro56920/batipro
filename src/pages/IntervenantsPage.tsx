@@ -26,15 +26,13 @@ export default function IntervenantsPage() {
     setLoading(true);
     setError(null);
     try {
-      const [intervenantsRows, chantierRows, chantierLinksRes, intervenantLinksRes] = await Promise.all([
+      const [intervenantsRows, chantierRows, chantierLinksRes] = await Promise.all([
         listIntervenants(),
         getChantiers(),
         (supabase as any).from("chantier_intervenants").select("intervenant_id, chantier_id"),
-        (supabase as any).from("intervenant_chantiers").select("intervenant_id, chantier_id"),
       ]);
 
       if (chantierLinksRes.error) throw chantierLinksRes.error;
-      if (intervenantLinksRes.error) throw intervenantLinksRes.error;
 
       const chantierIdsByIntervenant = new Map<string, Set<string>>();
       const appendLink = (row: IntervenantLinkRow) => {
@@ -46,7 +44,6 @@ export default function IntervenantsPage() {
       };
 
       for (const row of (chantierLinksRes.data ?? []) as IntervenantLinkRow[]) appendLink(row);
-      for (const row of (intervenantLinksRes.data ?? []) as IntervenantLinkRow[]) appendLink(row);
       for (const row of intervenantsRows) {
         if (row.chantier_id) appendLink({ intervenant_id: row.id, chantier_id: row.chantier_id });
       }

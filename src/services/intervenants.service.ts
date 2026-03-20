@@ -54,17 +54,16 @@ async function getIntervenantByEmail(email: string) {
 }
 
 async function listLinkedIntervenantIdsByChantierId(chantierId: string) {
-  const [chantierLinksRes, intervenantLinksRes] = await Promise.all([
-    (supabase as any).from("chantier_intervenants").select("intervenant_id").eq("chantier_id", chantierId),
-    (supabase as any).from("intervenant_chantiers").select("intervenant_id").eq("chantier_id", chantierId),
-  ]);
+  const chantierLinksRes = await (supabase as any)
+    .from("chantier_intervenants")
+    .select("intervenant_id")
+    .eq("chantier_id", chantierId);
 
   if (chantierLinksRes.error) throw chantierLinksRes.error;
-  if (intervenantLinksRes.error) throw intervenantLinksRes.error;
 
   return Array.from(
     new Set(
-      [...(chantierLinksRes.data ?? []), ...(intervenantLinksRes.data ?? [])]
+      [...(chantierLinksRes.data ?? [])]
         .map((row) => String((row as { intervenant_id?: string | null }).intervenant_id ?? ""))
         .filter(Boolean),
     ),
@@ -74,14 +73,9 @@ async function listLinkedIntervenantIdsByChantierId(chantierId: string) {
 async function isIntervenantAssignedToChantier(intervenantId: string, chantierId: string) {
   if (!intervenantId || !chantierId) return false;
 
-  const [chantierLinkRes, intervenantLinkRes, legacyRes] = await Promise.all([
+  const [chantierLinkRes, legacyRes] = await Promise.all([
     supabase
       .from("chantier_intervenants" as any)
-      .select("intervenant_id", { head: true, count: "exact" })
-      .eq("chantier_id", chantierId)
-      .eq("intervenant_id", intervenantId),
-    supabase
-      .from("intervenant_chantiers" as any)
       .select("intervenant_id", { head: true, count: "exact" })
       .eq("chantier_id", chantierId)
       .eq("intervenant_id", intervenantId),
@@ -93,28 +87,17 @@ async function isIntervenantAssignedToChantier(intervenantId: string, chantierId
   ]);
 
   if (chantierLinkRes.error) throw chantierLinkRes.error;
-  if (intervenantLinkRes.error) throw intervenantLinkRes.error;
   if (legacyRes.error) throw legacyRes.error;
 
-  return Boolean(
-    (chantierLinkRes.count ?? 0) > 0 ||
-      (intervenantLinkRes.count ?? 0) > 0 ||
-      (legacyRes.count ?? 0) > 0,
-  );
+  return Boolean((chantierLinkRes.count ?? 0) > 0 || (legacyRes.count ?? 0) > 0);
 }
 
 async function ensureIntervenantLinkedToChantier(chantierId: string, intervenantId: string) {
-  const [chantierLinkRes, intervenantLinkRes] = await Promise.all([
-    (supabase as any)
-      .from("chantier_intervenants")
-      .upsert({ chantier_id: chantierId, intervenant_id: intervenantId }, { onConflict: "chantier_id,intervenant_id" }),
-    (supabase as any)
-      .from("intervenant_chantiers")
-      .upsert({ chantier_id: chantierId, intervenant_id: intervenantId }, { onConflict: "intervenant_id,chantier_id" }),
-  ]);
+  const chantierLinkRes = await (supabase as any)
+    .from("chantier_intervenants")
+    .upsert({ chantier_id: chantierId, intervenant_id: intervenantId }, { onConflict: "chantier_id,intervenant_id" });
 
   if (chantierLinkRes.error) throw chantierLinkRes.error;
-  if (intervenantLinkRes.error) throw intervenantLinkRes.error;
 }
 
 async function syncPrimaryChantierId(intervenantId: string, preferredChantierId?: string | null) {
@@ -129,17 +112,17 @@ async function syncPrimaryChantierId(intervenantId: string, preferredChantierId?
     return nextPreferred;
   }
 
-  const [chantierLinksRes, intervenantLinksRes] = await Promise.all([
-    (supabase as any).from("chantier_intervenants").select("chantier_id").eq("intervenant_id", intervenantId).limit(1),
-    (supabase as any).from("intervenant_chantiers").select("chantier_id").eq("intervenant_id", intervenantId).limit(1),
-  ]);
+  const chantierLinksRes = await (supabase as any)
+    .from("chantier_intervenants")
+    .select("chantier_id")
+    .eq("intervenant_id", intervenantId)
+    .limit(1);
 
   if (chantierLinksRes.error) throw chantierLinksRes.error;
-  if (intervenantLinksRes.error) throw intervenantLinksRes.error;
 
-  const nextChantierId =
-    normalizeOptionalText((chantierLinksRes.data?.[0] as { chantier_id?: string | null } | undefined)?.chantier_id) ??
-    normalizeOptionalText((intervenantLinksRes.data?.[0] as { chantier_id?: string | null } | undefined)?.chantier_id);
+  const nextChantierId = normalizeOptionalText(
+    (chantierLinksRes.data?.[0] as { chantier_id?: string | null } | undefined)?.chantier_id,
+  );
 
   const { error } = await supabase
     .from("intervenants")
@@ -320,13 +303,13 @@ export async function deleteIntervenant(id: string, chantierId?: string) {
   if (!id) throw new Error("id intervenant manquant.");
 
   if (chantierId) {
-    const [chantierLinkDeleteRes, intervenantLinkDeleteRes] = await Promise.all([
-      (supabase as any).from("chantier_intervenants").delete().eq("chantier_id", chantierId).eq("intervenant_id", id),
-      (supabase as any).from("intervenant_chantiers").delete().eq("chantier_id", chantierId).eq("intervenant_id", id),
-    ]);
+    const chantierLinkDeleteRes = await (supabase as any)
+      .from("chantier_intervenants")
+      .delete()
+      .eq("chantier_id", chantierId)
+      .eq("intervenant_id", id);
 
     if (chantierLinkDeleteRes.error) throw chantierLinkDeleteRes.error;
-    if (intervenantLinkDeleteRes.error) throw intervenantLinkDeleteRes.error;
 
     await syncPrimaryChantierId(id, null);
     return;
