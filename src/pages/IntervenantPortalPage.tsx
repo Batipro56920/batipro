@@ -2,8 +2,12 @@ import { useEffect, useMemo, useState } from "react";
 import type { FormEvent } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import {
+  intervenantDailyChecklistGet,
+  intervenantDailyChecklistUpsert,
   intervenantGetChantiers,
   intervenantGetDocuments,
+  intervenantInformationRequestCreate,
+  intervenantInformationRequestList,
   intervenantGetPlanning,
   intervenantGetTasks,
   intervenantMaterielCreate,
@@ -13,12 +17,18 @@ import {
   intervenantTimeDelete,
   intervenantTimeList,
   type IntervenantChantier,
+  type IntervenantDailyChecklist,
   type IntervenantDocument,
+  type IntervenantInformationRequest,
   type IntervenantMateriel,
   type IntervenantPlanning,
   type IntervenantTask,
   type IntervenantTimeEntry,
 } from "../services/intervenantPortal.service";
+import TodayChecklistCard, {
+  type DailyChecklistItemKey,
+  type DailyChecklistValues,
+} from "../components/TodayChecklistCard";
 import { useI18n } from "../i18n";
 
 type PortalTab = "accueil" | "temps" | "taches" | "planning" | "documents" | "materiel" | "messages";
@@ -47,6 +57,7 @@ const EMPTY_PLANNING_STATE: LoadState<IntervenantPlanning> = {
 };
 const EMPTY_TIME_STATE: LoadState<IntervenantTimeEntry[]> = { loading: false, error: null, data: [] };
 const EMPTY_MATERIEL_STATE: LoadState<IntervenantMateriel[]> = { loading: false, error: null, data: [] };
+const EMPTY_INFO_REQUESTS_STATE: LoadState<IntervenantInformationRequest[]> = { loading: false, error: null, data: [] };
 const EMPTY_DASHBOARD_TASKS_STATE: LoadState<DashboardTaskItem[]> = { loading: false, error: null, data: [] };
 const EMPTY_DASHBOARD_MATERIEL_STATE: LoadState<DashboardMaterielItem[]> = { loading: false, error: null, data: [] };
 
@@ -171,6 +182,34 @@ function todayIsoDateFromDate(date: Date): string {
 
 function todayIsoDate(): string {
   return todayIsoDateFromDate(new Date());
+}
+
+function checklistValuesFromRow(row: IntervenantDailyChecklist | null | undefined): DailyChecklistValues {
+  return {
+    photos_taken: row?.photos_taken ?? null,
+    tasks_reported: row?.tasks_reported ?? null,
+    time_logged: row?.time_logged ?? null,
+    has_equipment: row?.has_equipment ?? null,
+    has_materials: row?.has_materials ?? null,
+    has_information: row?.has_information ?? null,
+  };
+}
+
+function checklistStarted(row: IntervenantDailyChecklist | null | undefined): boolean {
+  if (!row) return false;
+  return Boolean(
+    row.id ||
+      row.created_at ||
+      row.updated_at ||
+      row.validated_at ||
+      Object.values(checklistValuesFromRow(row)).some((value) => value !== null),
+  );
+}
+
+function checklistStatus(row: IntervenantDailyChecklist | null | undefined): "pending" | "in_progress" | "validated" {
+  if (row?.validated_at) return "validated";
+  if (checklistStarted(row)) return "in_progress";
+  return "pending";
 }
 
 function startOfWeekIso(date = new Date()): string {
@@ -339,6 +378,16 @@ export default function IntervenantPortalPage() {
   const [quickMaterielQuantite, setQuickMaterielQuantite] = useState("1");
   const [quickMaterielSaving, setQuickMaterielSaving] = useState(false);
   const [quickMaterielFeedback, setQuickMaterielFeedback] = useState<{ type: "success" | "error"; message: string } | null>(null);
+  const [dailyChecklist, setDailyChecklist] = useState<IntervenantDailyChecklist | null>(null);
+  const [dailyChecklistLoading, setDailyChecklistLoading] = useState(false);
+  const [dailyChecklistSaving, setDailyChecklistSaving] = useState(false);
+  const [dailyChecklistError, setDailyChecklistError] = useState<string | null>(null);
+  const [dailyChecklistFeedback, setDailyChecklistFeedback] = useState<{ type: "success" | "error"; message: string } | null>(null);
+  const [infoRequestState, setInfoRequestState] = useState<LoadState<IntervenantInformationRequest[]>>(EMPTY_INFO_REQUESTS_STATE);
+  const [infoRequestSubject, setInfoRequestSubject] = useState("");
+  const [infoRequestMessage, setInfoRequestMessage] = useState("");
+  const [infoRequestSaving, setInfoRequestSaving] = useState(false);
+  const [infoRequestFeedback, setInfoRequestFeedback] = useState<{ type: "success" | "error"; message: string } | null>(null);
   useEffect(() => {
     let alive = true;
     async function bootstrap() {
@@ -404,6 +453,30 @@ export default function IntervenantPortalPage() {
   }, [navigate, queryChantierId, queryToken, t]);
 
   useEffect(() => {
+    if (!token || bootLoading || bootError) return;
+    let alive = true;
+    async function loadDailyChecklist() {
+      setDailyChecklistLoading(true);
+      setDailyChecklistError(null);
+      try {
+        const row = await intervenantDailyChecklistGet(token, todayIsoDate());
+        if (!alive) return;
+        setDailyChecklist(row);
+      } catch (error) {
+        if (!alive) return;
+        setDailyChecklist(null);
+        setDailyChecklistError(getErrorMessage(error, t("intervenantPortal.errors.checklistLoad")));
+      } finally {
+        if (alive) setDailyChecklistLoading(false);
+      }
+    }
+    void loadDailyChecklist();
+    return () => {
+      alive = false;
+    };
+  }, [bootError, bootLoading, t, token]);
+
+  useEffect(() => {
     if (bootLoading || bootError) return;
     if (chantiers.length === 0) {
       if (selectedChantierId) setSelectedChantierId("");
@@ -443,6 +516,7 @@ export default function IntervenantPortalPage() {
     setTimeDate(todayIsoDate());
     setMaterielTaskId("");
     setMaterielFeedback(null);
+    setInfoRequestFeedback(null);
   }, [selectedChantierId]);
 
   useEffect(() => {
@@ -454,12 +528,14 @@ export default function IntervenantPortalPage() {
       setPlanningState({ loading: true, error: null, data: { chantier_id: selectedChantierId, lots: [] } });
       setTimeState({ loading: true, error: null, data: [] });
       setMaterielState({ loading: true, error: null, data: [] });
-      const [tasksResult, documentsResult, planningResult, timeResult, materielResult] = await Promise.allSettled([
+      setInfoRequestState({ loading: true, error: null, data: [] });
+      const [tasksResult, documentsResult, planningResult, timeResult, materielResult, infoRequestsResult] = await Promise.allSettled([
         intervenantGetTasks(token, selectedChantierId),
         intervenantGetDocuments(token, selectedChantierId),
         intervenantGetPlanning(token, selectedChantierId),
         intervenantTimeList(token, selectedChantierId),
         intervenantMaterielList(token, selectedChantierId),
+        intervenantInformationRequestList(token, selectedChantierId),
       ]);
       if (!alive) return;
       if (LEGACY_FALLBACK_ENABLED) {
@@ -477,6 +553,7 @@ export default function IntervenantPortalPage() {
       setPlanningState(planningResult.status === "fulfilled" ? { loading: false, error: null, data: planningResult.value } : { loading: false, error: getErrorMessage(planningResult.reason, t("intervenantPortal.errors.planningLoad")), data: { chantier_id: selectedChantierId, lots: [] } });
       setTimeState(timeResult.status === "fulfilled" ? { loading: false, error: null, data: timeResult.value } : { loading: false, error: getErrorMessage(timeResult.reason, t("intervenantPortal.errors.timeLoad")), data: [] });
       setMaterielState(materielResult.status === "fulfilled" ? { loading: false, error: null, data: materielResult.value } : { loading: false, error: getErrorMessage(materielResult.reason, t("intervenantPortal.errors.materialLoad")), data: [] });
+      setInfoRequestState(infoRequestsResult.status === "fulfilled" ? { loading: false, error: null, data: infoRequestsResult.value } : { loading: false, error: getErrorMessage(infoRequestsResult.reason, t("intervenantPortal.errors.infoLoad")), data: [] });
     }
     void loadChantierData();
     return () => {
@@ -614,10 +691,20 @@ export default function IntervenantPortalPage() {
     return bTs - aTs;
   }), [dashboardMaterielState.data]);
   const latestTimeEntry = useMemo(() => timeState.data[0] ?? null, [timeState.data]);
+  const todayChecklistDate = useMemo(() => todayIsoDate(), []);
+  const dailyChecklistValues = useMemo(() => checklistValuesFromRow(dailyChecklist), [dailyChecklist]);
+  const dailyChecklistCurrentStatus = useMemo(() => checklistStatus(dailyChecklist), [dailyChecklist]);
+  const latestInfoRequests = useMemo(() => infoRequestState.data.slice(0, 3), [infoRequestState.data]);
+  const openInfoRequestCount = useMemo(
+    () => infoRequestState.data.filter((request) => request.status !== "traitee").length,
+    [infoRequestState.data],
+  );
   const contentTitle = activeTab === "accueil" ? t("intervenantPortal.portalTitle") : activeChantier?.nom ?? t("intervenantPortal.selectedSiteFallback");
   const contentSubtitle = activeTab === "accueil"
     ? `${chantiers.length} ${t("intervenantPortal.tabs.chantiers").toLowerCase()}`
     : chantierDateSummary(activeChantier, locale, t);
+  const dailyChecklistDateLabel = formatPortalDate(todayChecklistDate);
+  const dailyChecklistValidatedLabel = dailyChecklist?.validated_at ? formatPortalDateTime(dailyChecklist.validated_at) : null;
 
   function selectTimeTask(task: IntervenantTask) {
     setTimeTaskId(task.id);
@@ -652,6 +739,81 @@ export default function IntervenantPortalPage() {
       setQuickMaterielChantierId(selectedChantierId || chantiers[0].id);
     }
     setMobileQuickAction("materiel");
+  }
+
+  function preferredChecklistChantierId() {
+    return selectedChantierId || activeChantier?.id || chantiers[0]?.id || "";
+  }
+
+  async function saveDailyChecklist(
+    patch: Partial<DailyChecklistValues> & { validate?: boolean },
+    feedbackMessage: string,
+    fallbackError: string,
+  ) {
+    if (!token) return;
+    const nextChantierId = preferredChecklistChantierId() || dailyChecklist?.chantier_id || null;
+    setDailyChecklistSaving(true);
+    setDailyChecklistFeedback(null);
+    setDailyChecklistError(null);
+    try {
+      const nextRow = await intervenantDailyChecklistUpsert(token, {
+        chantier_id: nextChantierId,
+        checklist_date: todayChecklistDate,
+        photos_taken: patch.photos_taken ?? dailyChecklistValues.photos_taken,
+        tasks_reported: patch.tasks_reported ?? dailyChecklistValues.tasks_reported,
+        time_logged: patch.time_logged ?? dailyChecklistValues.time_logged,
+        has_equipment: patch.has_equipment ?? dailyChecklistValues.has_equipment,
+        has_materials: patch.has_materials ?? dailyChecklistValues.has_materials,
+        has_information: patch.has_information ?? dailyChecklistValues.has_information,
+        validate: patch.validate ?? false,
+      });
+      setDailyChecklist(nextRow);
+      setDailyChecklistFeedback({ type: "success", message: feedbackMessage });
+    } catch (error) {
+      const message = getErrorMessage(error, fallbackError);
+      setDailyChecklistError(message);
+      setDailyChecklistFeedback({ type: "error", message });
+    } finally {
+      setDailyChecklistSaving(false);
+    }
+  }
+
+  function onToggleDailyChecklistItem(key: DailyChecklistItemKey) {
+    if (dailyChecklistCurrentStatus === "validated") return;
+    const currentValue = dailyChecklistValues[key];
+    const nextValue = currentValue === true ? false : true;
+    void saveDailyChecklist({ [key]: nextValue }, t("intervenantPortal.feedback.checklistSaved"), t("intervenantPortal.errors.checklistSave"));
+  }
+
+  function onValidateDailyChecklist() {
+    if (dailyChecklistCurrentStatus === "validated") return;
+    void saveDailyChecklist({ validate: true }, t("intervenantPortal.feedback.checklistValidated"), t("intervenantPortal.errors.checklistValidate"));
+  }
+
+  function openChecklistMaterialRequest(kind: "materiel" | "materiaux") {
+    const chantierId = preferredChecklistChantierId();
+    if (chantierId) chooseChantier(chantierId);
+    setMobileGlobalTab("site");
+    setActiveTab("materiel");
+    setMaterielFeedback(null);
+    setMaterielTaskId("");
+    setMaterielDate(todayIsoDate());
+    setMaterielTitre(
+      kind === "materiaux"
+        ? t("intervenantPortal.dailyChecklist.prefill.materialsTitle")
+        : t("intervenantPortal.dailyChecklist.prefill.materialTitle"),
+    );
+    setMaterielCommentaire("");
+  }
+
+  function openChecklistInformationRequest() {
+    const chantierId = preferredChecklistChantierId();
+    if (chantierId) chooseChantier(chantierId);
+    setMobileGlobalTab("site");
+    setActiveTab("messages");
+    setInfoRequestFeedback(null);
+    setInfoRequestSubject(t("intervenantPortal.dailyChecklist.prefill.informationSubject"));
+    setInfoRequestMessage(t("intervenantPortal.dailyChecklist.prefill.informationMessage"));
   }
 
   async function onCreateTimeEntry(event: FormEvent<HTMLFormElement>) {
@@ -768,6 +930,209 @@ export default function IntervenantPortalPage() {
     }
   }
 
+  async function onCreateInfoRequest(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!token || !selectedChantierId) {
+      setInfoRequestFeedback({ type: "error", message: t("intervenantPortal.errors.chooseSite") });
+      return;
+    }
+    if (!infoRequestSubject.trim()) {
+      setInfoRequestFeedback({ type: "error", message: t("intervenantPortal.errors.infoSubjectRequired") });
+      return;
+    }
+    if (!infoRequestMessage.trim()) {
+      setInfoRequestFeedback({ type: "error", message: t("intervenantPortal.errors.infoMessageRequired") });
+      return;
+    }
+
+    setInfoRequestSaving(true);
+    setInfoRequestFeedback(null);
+    try {
+      await intervenantInformationRequestCreate(token, {
+        chantier_id: selectedChantierId,
+        request_date: todayIsoDate(),
+        subject: infoRequestSubject.trim(),
+        message: infoRequestMessage.trim(),
+      });
+      setInfoRequestFeedback({ type: "success", message: t("intervenantPortal.feedback.infoSent") });
+      setInfoRequestSubject("");
+      setInfoRequestMessage("");
+      setReloadTick((value) => value + 1);
+    } catch (error) {
+      setInfoRequestFeedback({ type: "error", message: getErrorMessage(error, t("intervenantPortal.errors.sendInfo")) });
+    } finally {
+      setInfoRequestSaving(false);
+    }
+  }
+
+  const checklistCard = (
+    <div className="space-y-3">
+      <TodayChecklistCard
+        status={dailyChecklistCurrentStatus}
+        checklistDateLabel={dailyChecklistDateLabel}
+        validatedAtLabel={dailyChecklistValidatedLabel}
+        values={dailyChecklistValues}
+        saving={dailyChecklistSaving || dailyChecklistLoading}
+        feedback={dailyChecklistFeedback}
+        onToggle={onToggleDailyChecklistItem}
+        onValidate={onValidateDailyChecklist}
+        onRequestMaterial={() => openChecklistMaterialRequest("materiel")}
+        onRequestMaterials={() => openChecklistMaterialRequest("materiaux")}
+        onRequestInformation={openChecklistInformationRequest}
+      />
+      {dailyChecklistError ? (
+        <div className="rounded-2xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+          {dailyChecklistError}
+        </div>
+      ) : null}
+    </div>
+  );
+
+  const latestInfoRequestsCard = (
+    <section className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+      <div className="flex items-center justify-between gap-3">
+        <div>
+          <div className="text-sm font-semibold text-slate-900">{t("intervenantPortal.latestMessages")}</div>
+          <div className="mt-1 text-xs text-slate-500">{t("intervenantPortal.latestMessagesPreview")}</div>
+        </div>
+        <span className="inline-flex rounded-full border border-slate-200 bg-white px-2 py-0.5 text-xs font-medium text-slate-700">
+          {t("intervenantPortal.unreadCount", { count: openInfoRequestCount })}
+        </span>
+      </div>
+      {infoRequestState.loading ? (
+        <div className="mt-3 rounded-2xl border border-slate-200 bg-white p-3 text-sm text-slate-600">
+          {t("intervenantPortal.messages.loading")}
+        </div>
+      ) : infoRequestState.error ? (
+        <div className="mt-3 rounded-2xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+          {infoRequestState.error}
+        </div>
+      ) : latestInfoRequests.length === 0 ? (
+        <div className="mt-3 rounded-2xl border border-slate-200 bg-white p-3 text-sm text-slate-500">
+          {t("intervenantPortal.messages.empty")}
+        </div>
+      ) : (
+        <div className="mt-3 space-y-2">
+          {latestInfoRequests.map((request) => (
+            <div key={request.id} className="rounded-2xl border border-slate-200 bg-white p-3">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0 flex-1">
+                  <div className="text-sm font-medium text-slate-900">{request.subject}</div>
+                  <div className="mt-1 text-xs text-slate-500">{t("intervenantPortal.messages.requestDate", { value: formatPortalDate(request.request_date) })}</div>
+                </div>
+                <span className="inline-flex rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-xs font-medium text-slate-700">
+                  {request.status === "traitee" ? t("intervenantPortal.messages.statusDone") : t("intervenantPortal.messages.statusSent")}
+                </span>
+              </div>
+              <div className="mt-2 text-sm text-slate-600">{request.message}</div>
+            </div>
+          ))}
+        </div>
+      )}
+    </section>
+  );
+
+  const messagesPanel = (
+    <div className="space-y-4">
+      <section className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <div className="text-sm font-semibold text-slate-900">{t("intervenantPortal.messages.title")}</div>
+            <div className="mt-1 text-xs text-slate-500">{t("intervenantPortal.messages.subtitle")}</div>
+          </div>
+          <span className="inline-flex w-fit rounded-full border border-slate-200 bg-white px-2.5 py-1 text-xs font-medium text-slate-700">
+            {t("intervenantPortal.unreadCount", { count: openInfoRequestCount })}
+          </span>
+        </div>
+        <form onSubmit={onCreateInfoRequest} className="mt-4 space-y-3 rounded-2xl border border-slate-200 bg-white p-3">
+          <div className="text-sm font-medium text-slate-900">{t("intervenantPortal.messages.newRequest")}</div>
+          <div className="space-y-1">
+            <label className="text-xs font-medium text-slate-600">{t("intervenantPortal.messages.subject")}</label>
+            <input
+              className="w-full rounded-2xl border border-slate-200 px-3 py-2 text-sm"
+              value={infoRequestSubject}
+              onChange={(event) => {
+                setInfoRequestSubject(event.target.value);
+                setInfoRequestFeedback(null);
+              }}
+              placeholder={t("intervenantPortal.messages.subjectPlaceholder")}
+            />
+          </div>
+          <div className="space-y-1">
+            <label className="text-xs font-medium text-slate-600">{t("intervenantPortal.messages.message")}</label>
+            <textarea
+              className="min-h-28 w-full rounded-2xl border border-slate-200 px-3 py-2 text-sm"
+              value={infoRequestMessage}
+              onChange={(event) => {
+                setInfoRequestMessage(event.target.value);
+                setInfoRequestFeedback(null);
+              }}
+              placeholder={t("intervenantPortal.messages.messagePlaceholder")}
+            />
+          </div>
+          {infoRequestFeedback ? (
+            <div
+              className={[
+                "rounded-2xl border px-3 py-2 text-sm",
+                infoRequestFeedback.type === "success"
+                  ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                  : "border-red-200 bg-red-50 text-red-700",
+              ].join(" ")}
+            >
+              {infoRequestFeedback.message}
+            </div>
+          ) : null}
+          <div className="flex justify-end">
+            <button
+              type="submit"
+              disabled={infoRequestSaving}
+              className="rounded-full bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800 disabled:opacity-60"
+            >
+              {infoRequestSaving ? t("intervenantPortal.messages.sending") : t("intervenantPortal.messages.send")}
+            </button>
+          </div>
+        </form>
+      </section>
+
+      <section className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+        {infoRequestState.loading ? (
+          <div className="rounded-2xl border border-slate-200 bg-white p-3 text-sm text-slate-600">
+            {t("intervenantPortal.messages.loading")}
+          </div>
+        ) : infoRequestState.error ? (
+          <div className="rounded-2xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+            {infoRequestState.error}
+          </div>
+        ) : infoRequestState.data.length === 0 ? (
+          <div className="rounded-2xl border border-slate-200 bg-white p-3 text-sm text-slate-500">
+            {t("intervenantPortal.messages.empty")}
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {infoRequestState.data.map((request) => (
+              <article key={request.id} className="rounded-2xl border border-slate-200 bg-white p-3">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0 flex-1">
+                    <div className="text-sm font-semibold text-slate-900">{request.subject}</div>
+                    <div className="mt-1 text-xs text-slate-500">
+                      {t("intervenantPortal.messages.requestDate", { value: formatPortalDate(request.request_date) })}
+                    </div>
+                  </div>
+                  <span className="inline-flex rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-xs font-medium text-slate-700">
+                    {request.status === "traitee"
+                      ? t("intervenantPortal.messages.statusDone")
+                      : t("intervenantPortal.messages.statusSent")}
+                  </span>
+                </div>
+                <div className="mt-2 text-sm text-slate-600">{request.message}</div>
+              </article>
+            ))}
+          </div>
+        )}
+      </section>
+    </div>
+  );
+
   if (bootLoading) {
     return <div className="min-h-screen bg-slate-100 px-4 py-6 text-slate-700">{t("intervenantPortal.bootLoading")}</div>;
   }
@@ -845,6 +1210,7 @@ export default function IntervenantPortalPage() {
             {activeTab === "accueil" ? (
               <div className="space-y-4">
                 <div className="space-y-4 md:hidden">
+                  {checklistCard}
                   <section className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
                     <div className="text-sm font-semibold text-slate-900">{t("intervenantPortal.currentWeek")}</div>
                     <div className="mt-1 text-xs text-slate-500">{t("intervenantPortal.globalPlanningAllSites")}</div>
@@ -863,8 +1229,12 @@ export default function IntervenantPortalPage() {
                               <div className="mt-2 space-y-2">
                                 {group.items.map((item) => (
                                   <div key={`${item.chantier.id}-${item.task.id}`} className="rounded-2xl border border-slate-200 p-3">
-                                    <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">{item.chantier.nom}</div>
-                                    <div className="mt-1 text-sm font-medium text-slate-900" style={TITLE_CLAMP_STYLE}>{item.task.titre}</div>
+                                    <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
+                                      {item.chantier.nom}
+                                    </div>
+                                    <div className="mt-1 text-sm font-medium text-slate-900" style={TITLE_CLAMP_STYLE}>
+                                      {item.task.titre}
+                                    </div>
                                   </div>
                                 ))}
                               </div>
@@ -877,7 +1247,9 @@ export default function IntervenantPortalPage() {
                         {upcomingDashboardTasks.slice(0, 6).map((item) => (
                           <div key={`${item.chantier.id}-${item.task.id}`} className="rounded-2xl border border-slate-200 bg-white p-3">
                             <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">{item.chantier.nom}</div>
-                            <div className="mt-1 text-sm font-medium text-slate-900" style={TITLE_CLAMP_STYLE}>{item.task.titre}</div>
+                            <div className="mt-1 text-sm font-medium text-slate-900" style={TITLE_CLAMP_STYLE}>
+                              {item.task.titre}
+                            </div>
                           </div>
                         ))}
                       </div>
@@ -890,18 +1262,191 @@ export default function IntervenantPortalPage() {
                   <section className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
                     <div className="text-sm font-semibold text-slate-900">{t("intervenantPortal.quickActions")}</div>
                     <div className="mt-3 grid gap-3">
-                      <button type="button" onClick={openMobileQuickTime} className="w-full rounded-2xl bg-blue-600 px-4 py-3 text-sm font-medium text-white hover:bg-blue-700">
+                      <button
+                        type="button"
+                        onClick={openMobileQuickTime}
+                        className="w-full rounded-2xl bg-blue-600 px-4 py-3 text-sm font-medium text-white hover:bg-blue-700"
+                      >
                         {t("intervenantPortal.enterTime")}
                       </button>
-                      <button type="button" onClick={openMobileQuickMateriel} className="w-full rounded-2xl border border-blue-600 bg-white px-4 py-3 text-sm font-medium text-blue-700">
+                      <button
+                        type="button"
+                        onClick={openMobileQuickMateriel}
+                        className="w-full rounded-2xl border border-blue-600 bg-white px-4 py-3 text-sm font-medium text-blue-700"
+                      >
                         {t("intervenantPortal.quickMaterialRequest")}
                       </button>
                     </div>
                   </section>
+                  {latestInfoRequestsCard}
                 </div>
 
                 <div className="hidden gap-4 md:grid xl:grid-cols-[minmax(0,1.3fr)_minmax(18rem,0.7fr)]">
-                  <div className="space-y-4"><section className="rounded-2xl border border-slate-200 bg-slate-50 p-4"><div className="text-sm font-semibold text-slate-900">{t("intervenantPortal.currentWeek")}</div><div className="mt-1 text-xs text-slate-500">{t("intervenantPortal.globalPlanningAllSites")}</div>{dashboardTasksState.loading ? <div className="mt-3 text-sm text-slate-600">{t("intervenantPortal.loadingGlobalPlanning")}</div> : dashboardTasksState.error ? <div className="mt-3 rounded-2xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">{dashboardTasksState.error}</div> : dashboardWeekGroups.some((group) => group.items.length > 0) ? <div className="mt-3 space-y-3">{dashboardWeekGroups.map((group) => group.items.length === 0 ? null : <div key={group.isoDate} className="rounded-2xl border border-slate-200 bg-white p-3"><div className="text-sm font-semibold text-slate-900">{formatPortalDate(group.isoDate)}</div><div className="mt-2 space-y-2">{group.items.map((item) => <div key={`${item.chantier.id}-${item.task.id}`} className="rounded-2xl border border-slate-200 p-3"><div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">{item.chantier.nom}</div><div className="mt-1 text-sm font-medium text-slate-900" style={TITLE_CLAMP_STYLE}>{item.task.titre}</div><div className="mt-1 text-xs text-slate-500">{resolveTaskLot(item.task, t)} - {statusLabel(item.task.status, t)}</div></div>)}</div></div>)}</div> : upcomingDashboardTasks.length > 0 ? <div className="mt-3 space-y-2"><div className="text-sm font-medium text-slate-700">{t("intervenantPortal.nextTasks")}</div>{upcomingDashboardTasks.slice(0, 6).map((item) => <div key={`${item.chantier.id}-${item.task.id}`} className="rounded-2xl border border-slate-200 bg-white p-3"><div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">{item.chantier.nom}</div><div className="mt-1 text-sm font-medium text-slate-900" style={TITLE_CLAMP_STYLE}>{item.task.titre}</div><div className="mt-1 text-xs text-slate-500">{taskAnchorDate(item.task) ? formatPortalDate(taskAnchorDate(item.task)) : t("intervenantPortal.dateNotProvided")}</div></div>)}</div> : <div className="mt-3 rounded-2xl border border-slate-200 bg-white p-3 text-sm text-slate-500">{t("intervenantPortal.noTaskPlannedWeek")}</div>}</section><section className="rounded-2xl border border-slate-200 bg-slate-50 p-4"><div className="text-sm font-semibold text-slate-900">{t("intervenantPortal.openMaterialRequests")}</div><div className="mt-1 text-xs text-slate-500">{t("intervenantPortal.multiSiteView")}</div>{dashboardMaterielState.loading ? <div className="mt-3 text-sm text-slate-600">{t("intervenantPortal.loadingRequests")}</div> : dashboardMaterielState.error ? <div className="mt-3 rounded-2xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">{dashboardMaterielState.error}</div> : openDashboardMateriel.length === 0 ? <div className="mt-3 rounded-2xl border border-slate-200 bg-white p-3 text-sm text-slate-500">{t("intervenantPortal.noOpenRequest")}</div> : <div className="mt-3 space-y-2">{openDashboardMateriel.slice(0, 6).map((item) => <div key={item.row.id} className="rounded-2xl border border-slate-200 bg-white p-3"><div className="flex items-start justify-between gap-3"><div className="min-w-0"><div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">{item.chantier.nom}</div><div className="mt-1 text-sm font-medium text-slate-900">{item.row.titre}</div></div><span className={["inline-flex rounded-full border px-2 py-0.5 text-xs font-medium", materielStatusClass(item.row.statut)].join(" ")}>{materielStatusLabel(item.row.statut, t)}</span></div><div className="mt-1 text-xs text-slate-500">{formatPortalQuantity(item.row.quantite, item.row.unite, "-")}</div></div>)}</div>}</section></div><div className="space-y-4"><section className="rounded-2xl border border-slate-200 bg-slate-50 p-4"><div className="text-sm font-semibold text-slate-900">{t("intervenantPortal.quickActions")}</div><div className="mt-3 space-y-3"><button type="button" onClick={jumpToTimeEntry} className="w-full rounded-2xl bg-blue-600 px-4 py-3 text-sm font-medium text-white hover:bg-blue-700">{t("intervenantPortal.addTime")}</button><form onSubmit={onCreateQuickMateriel} className="space-y-2 rounded-2xl border border-slate-200 bg-white p-3"><div className="text-sm font-medium text-slate-900">{t("intervenantPortal.quickMaterialRequest")}</div><select className="w-full rounded-2xl border border-slate-200 px-3 py-2 text-sm" value={quickMaterielChantierId} onChange={(e) => { setQuickMaterielChantierId(e.target.value); setQuickMaterielFeedback(null); }}>{chantiers.map((chantier) => <option key={chantier.id} value={chantier.id}>{chantier.nom}</option>)}</select><input className="w-full rounded-2xl border border-slate-200 px-3 py-2 text-sm" value={quickMaterielTitre} onChange={(e) => { setQuickMaterielTitre(e.target.value); setQuickMaterielFeedback(null); }} placeholder={t("intervenantPortal.material.description")} /><input className="w-full rounded-2xl border border-slate-200 px-3 py-2 text-sm" value={quickMaterielQuantite} onChange={(e) => { setQuickMaterielQuantite(e.target.value); setQuickMaterielFeedback(null); }} placeholder={t("intervenantPortal.material.quantity")} />{quickMaterielFeedback ? <div className={["rounded-2xl border px-3 py-2 text-sm", quickMaterielFeedback.type === "success" ? "border-emerald-200 bg-emerald-50 text-emerald-700" : "border-red-200 bg-red-50 text-red-700"].join(" ")}>{quickMaterielFeedback.message}</div> : null}<button type="submit" disabled={quickMaterielSaving} className="w-full rounded-2xl border border-blue-600 px-4 py-2 text-sm font-medium text-blue-700 disabled:opacity-60">{quickMaterielSaving ? t("intervenantPortal.material.sending") : t("intervenantPortal.material.send")}</button></form></div></section><section className="rounded-2xl border border-slate-200 bg-slate-50 p-4"><div className="flex items-center justify-between gap-3"><div><div className="text-sm font-semibold text-slate-900">{t("intervenantPortal.latestMessages")}</div><div className="mt-1 text-xs text-slate-500">{t("intervenantPortal.latestMessagesPreview")}</div></div><span className="inline-flex rounded-full border border-slate-200 bg-white px-2 py-0.5 text-xs font-medium text-slate-700">{t("intervenantPortal.unreadCount", { count: 0 })}</span></div><div className="mt-3 rounded-2xl border border-slate-200 bg-white p-3 text-sm text-slate-500">{t("intervenantPortal.messagingPlaceholder")}</div></section></div>
+                  <div className="space-y-4">
+                    <section className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                      <div className="text-sm font-semibold text-slate-900">{t("intervenantPortal.currentWeek")}</div>
+                      <div className="mt-1 text-xs text-slate-500">{t("intervenantPortal.globalPlanningAllSites")}</div>
+                      {dashboardTasksState.loading ? (
+                        <div className="mt-3 text-sm text-slate-600">{t("intervenantPortal.loadingGlobalPlanning")}</div>
+                      ) : dashboardTasksState.error ? (
+                        <div className="mt-3 rounded-2xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+                          {dashboardTasksState.error}
+                        </div>
+                      ) : dashboardWeekGroups.some((group) => group.items.length > 0) ? (
+                        <div className="mt-3 space-y-3">
+                          {dashboardWeekGroups.map((group) =>
+                            group.items.length === 0 ? null : (
+                              <div key={group.isoDate} className="rounded-2xl border border-slate-200 bg-white p-3">
+                                <div className="text-sm font-semibold text-slate-900">{formatPortalDate(group.isoDate)}</div>
+                                <div className="mt-2 space-y-2">
+                                  {group.items.map((item) => (
+                                    <div key={`${item.chantier.id}-${item.task.id}`} className="rounded-2xl border border-slate-200 p-3">
+                                      <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
+                                        {item.chantier.nom}
+                                      </div>
+                                      <div className="mt-1 text-sm font-medium text-slate-900" style={TITLE_CLAMP_STYLE}>
+                                        {item.task.titre}
+                                      </div>
+                                      <div className="mt-1 text-xs text-slate-500">
+                                        {resolveTaskLot(item.task, t)} - {statusLabel(item.task.status, t)}
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            ),
+                          )}
+                        </div>
+                      ) : upcomingDashboardTasks.length > 0 ? (
+                        <div className="mt-3 space-y-2">
+                          <div className="text-sm font-medium text-slate-700">{t("intervenantPortal.nextTasks")}</div>
+                          {upcomingDashboardTasks.slice(0, 6).map((item) => (
+                            <div key={`${item.chantier.id}-${item.task.id}`} className="rounded-2xl border border-slate-200 bg-white p-3">
+                              <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">{item.chantier.nom}</div>
+                              <div className="mt-1 text-sm font-medium text-slate-900" style={TITLE_CLAMP_STYLE}>
+                                {item.task.titre}
+                              </div>
+                              <div className="mt-1 text-xs text-slate-500">
+                                {taskAnchorDate(item.task)
+                                  ? formatPortalDate(taskAnchorDate(item.task))
+                                  : t("intervenantPortal.dateNotProvided")}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="mt-3 rounded-2xl border border-slate-200 bg-white p-3 text-sm text-slate-500">
+                          {t("intervenantPortal.noTaskPlannedWeek")}
+                        </div>
+                      )}
+                    </section>
+
+                    <section className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                      <div className="text-sm font-semibold text-slate-900">{t("intervenantPortal.openMaterialRequests")}</div>
+                      <div className="mt-1 text-xs text-slate-500">{t("intervenantPortal.multiSiteView")}</div>
+                      {dashboardMaterielState.loading ? (
+                        <div className="mt-3 text-sm text-slate-600">{t("intervenantPortal.loadingRequests")}</div>
+                      ) : dashboardMaterielState.error ? (
+                        <div className="mt-3 rounded-2xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+                          {dashboardMaterielState.error}
+                        </div>
+                      ) : openDashboardMateriel.length === 0 ? (
+                        <div className="mt-3 rounded-2xl border border-slate-200 bg-white p-3 text-sm text-slate-500">
+                          {t("intervenantPortal.noOpenRequest")}
+                        </div>
+                      ) : (
+                        <div className="mt-3 space-y-2">
+                          {openDashboardMateriel.slice(0, 6).map((item) => (
+                            <div key={item.row.id} className="rounded-2xl border border-slate-200 bg-white p-3">
+                              <div className="flex items-start justify-between gap-3">
+                                <div className="min-w-0">
+                                  <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
+                                    {item.chantier.nom}
+                                  </div>
+                                  <div className="mt-1 text-sm font-medium text-slate-900">{item.row.titre}</div>
+                                </div>
+                                <span className={["inline-flex rounded-full border px-2 py-0.5 text-xs font-medium", materielStatusClass(item.row.statut)].join(" ")}>
+                                  {materielStatusLabel(item.row.statut, t)}
+                                </span>
+                              </div>
+                              <div className="mt-1 text-xs text-slate-500">{formatPortalQuantity(item.row.quantite, item.row.unite, "-")}</div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </section>
+                  </div>
+
+                  <div className="space-y-4">
+                    {checklistCard}
+                    <section className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                      <div className="text-sm font-semibold text-slate-900">{t("intervenantPortal.quickActions")}</div>
+                      <div className="mt-3 space-y-3">
+                        <button
+                          type="button"
+                          onClick={jumpToTimeEntry}
+                          className="w-full rounded-2xl bg-blue-600 px-4 py-3 text-sm font-medium text-white hover:bg-blue-700"
+                        >
+                          {t("intervenantPortal.addTime")}
+                        </button>
+                        <form onSubmit={onCreateQuickMateriel} className="space-y-2 rounded-2xl border border-slate-200 bg-white p-3">
+                          <div className="text-sm font-medium text-slate-900">{t("intervenantPortal.quickMaterialRequest")}</div>
+                          <select
+                            className="w-full rounded-2xl border border-slate-200 px-3 py-2 text-sm"
+                            value={quickMaterielChantierId}
+                            onChange={(event) => {
+                              setQuickMaterielChantierId(event.target.value);
+                              setQuickMaterielFeedback(null);
+                            }}
+                          >
+                            {chantiers.map((chantier) => (
+                              <option key={chantier.id} value={chantier.id}>
+                                {chantier.nom}
+                              </option>
+                            ))}
+                          </select>
+                          <input
+                            className="w-full rounded-2xl border border-slate-200 px-3 py-2 text-sm"
+                            value={quickMaterielTitre}
+                            onChange={(event) => {
+                              setQuickMaterielTitre(event.target.value);
+                              setQuickMaterielFeedback(null);
+                            }}
+                            placeholder={t("intervenantPortal.material.description")}
+                          />
+                          <input
+                            className="w-full rounded-2xl border border-slate-200 px-3 py-2 text-sm"
+                            value={quickMaterielQuantite}
+                            onChange={(event) => {
+                              setQuickMaterielQuantite(event.target.value);
+                              setQuickMaterielFeedback(null);
+                            }}
+                            placeholder={t("intervenantPortal.material.quantity")}
+                          />
+                          {quickMaterielFeedback ? (
+                            <div
+                              className={[
+                                "rounded-2xl border px-3 py-2 text-sm",
+                                quickMaterielFeedback.type === "success"
+                                  ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                                  : "border-red-200 bg-red-50 text-red-700",
+                              ].join(" ")}
+                            >
+                              {quickMaterielFeedback.message}
+                            </div>
+                          ) : null}
+                          <button
+                            type="submit"
+                            disabled={quickMaterielSaving}
+                            className="w-full rounded-2xl border border-blue-600 px-4 py-2 text-sm font-medium text-blue-700 disabled:opacity-60"
+                          >
+                            {quickMaterielSaving ? t("intervenantPortal.material.sending") : t("intervenantPortal.material.send")}
+                          </button>
+                        </form>
+                      </div>
+                    </section>
+                    {latestInfoRequestsCard}
+                  </div>
                 </div>
               </div>
             ) : null}
@@ -911,7 +1456,7 @@ export default function IntervenantPortalPage() {
             {activeTab === "planning" ? <div className="space-y-2">{planningState.loading ? <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-600">{t("intervenantPortal.planning.loading")}</div> : planningState.error ? <div className="rounded-2xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">{planningState.error}</div> : planningState.data.lots.length === 0 ? <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-500">{t("intervenantPortal.planning.empty")}</div> : planningState.data.lots.map((lot) => <article key={lot.lot} className="rounded-2xl border border-slate-200 p-3"><div className="flex items-center justify-between gap-3"><div className="text-sm font-semibold text-slate-900">{lot.lot}</div><div className="text-xs text-slate-500">{lot.progress_pct.toFixed(1)}%</div></div><div className="mt-2 h-2 rounded-full bg-slate-100"><div className="h-2 rounded-full bg-blue-600" style={{ width: `${Math.max(0, Math.min(100, lot.progress_pct))}%` }} /></div><div className="mt-2 text-xs text-slate-500">{t("intervenantPortal.planning.schedule", { start: formatPortalDate(lot.start_date), end: formatPortalDate(lot.end_date) })}</div><div className="mt-1 text-xs text-slate-500">{t("intervenantPortal.planning.summary", { done: lot.done_tasks, total: lot.total_tasks, days: lot.total_duration_days })}</div></article>)}</div> : null}
             {activeTab === "documents" ? <div className="space-y-2">{documentsState.loading ? <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-600">{t("intervenantPortal.documents.loading")}</div> : documentsState.error ? <div className="rounded-2xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">{documentsState.error}</div> : documentsState.data.length === 0 ? <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-500">{t("intervenantPortal.documents.empty")}</div> : documentsState.data.map((doc) => <article key={doc.id} className="rounded-2xl border border-slate-200 p-3"><div className="text-sm font-semibold text-slate-900">{doc.title || doc.file_name || t("intervenantPortal.documents.fallback")}</div><div className="mt-1 text-xs text-slate-500">{doc.category || "-"} - {doc.document_type || "-"} - {formatPortalDateTime(doc.created_at)}</div></article>)}</div> : null}
             {activeTab === "materiel" ? <div className="space-y-3"><form onSubmit={onCreateMateriel} className="rounded-2xl border border-slate-200 bg-slate-50 p-3"><div className="text-sm font-semibold text-slate-900">{t("intervenantPortal.material.newRequest")}</div><div className="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-5"><select className="rounded-2xl border border-slate-200 px-3 py-2 text-sm xl:col-span-2" value={materielTaskId} onChange={(e) => { setMaterielTaskId(e.target.value); setMaterielFeedback(null); }}><option value="">{t("intervenantPortal.material.relatedTaskPlaceholder")}</option>{prioritizedTasks.map((task) => <option key={task.id} value={task.id}>{task.titre}</option>)}</select><input className="rounded-2xl border border-slate-200 px-3 py-2 text-sm" placeholder={t("intervenantPortal.material.description")} value={materielTitre} onChange={(e) => { setMaterielTitre(e.target.value); setMaterielFeedback(null); }} /><input className="rounded-2xl border border-slate-200 px-3 py-2 text-sm" placeholder={t("intervenantPortal.material.quantity")} value={materielQuantite} onChange={(e) => { setMaterielQuantite(e.target.value); setMaterielFeedback(null); }} /><input className="rounded-2xl border border-slate-200 px-3 py-2 text-sm" placeholder={t("intervenantPortal.material.unit")} value={materielUnite} onChange={(e) => { setMaterielUnite(e.target.value); setMaterielFeedback(null); }} /><input className="rounded-2xl border border-slate-200 px-3 py-2 text-sm xl:col-span-2" type="date" value={materielDate} onChange={(e) => { setMaterielDate(e.target.value); setMaterielFeedback(null); }} /><input className="rounded-2xl border border-slate-200 px-3 py-2 text-sm xl:col-span-3" placeholder={t("intervenantPortal.material.comment")} value={materielCommentaire} onChange={(e) => { setMaterielCommentaire(e.target.value); setMaterielFeedback(null); }} /></div>{materielFeedback ? <div className={["mt-3 rounded-2xl border px-3 py-2 text-sm", materielFeedback.type === "success" ? "border-emerald-200 bg-emerald-50 text-emerald-700" : "border-red-200 bg-red-50 text-red-700"].join(" ")}>{materielFeedback.message}</div> : null}<div className="mt-3 flex justify-end"><button type="submit" disabled={materielSaving} className="rounded-full bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-60">{materielSaving ? t("intervenantPortal.material.sending") : t("intervenantPortal.material.send")}</button></div></form>{materielState.loading ? <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-600">{t("intervenantPortal.material.loading")}</div> : materielState.error ? <div className="rounded-2xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">{materielState.error}</div> : materielState.data.length === 0 ? <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-500">{t("intervenantPortal.material.empty")}</div> : materielState.data.map((row) => <article key={row.id} className="rounded-2xl border border-slate-200 p-3"><div className="flex items-start justify-between gap-3"><div className="min-w-0 flex-1"><div className="text-sm font-semibold text-slate-900">{row.titre}</div>{(row.task_titre || row.task_id) ? <div className="mt-1 text-xs text-slate-500">{t("intervenantPortal.material.task", { value: row.task_titre ?? prioritizedTasks.find((task) => task.id === row.task_id)?.titre ?? "-" })}</div> : null}<div className="mt-1 text-xs text-slate-500">{t("intervenantPortal.material.quantityValue", { value: formatPortalQuantity(row.quantite, row.unite, "-") })}</div><div className="mt-1 text-xs text-slate-500">{t("intervenantPortal.material.requested", { value: formatPortalDate(row.date_souhaitee) })}</div>{row.commentaire ? <div className="mt-1 text-xs text-slate-500">{t("intervenantPortal.material.commentValue", { value: row.commentaire })}</div> : null}{row.admin_commentaire ? <div className="mt-1 text-xs text-slate-500">{t("intervenantPortal.material.adminComment", { value: row.admin_commentaire })}</div> : null}</div><span className={["inline-flex rounded-full border px-2 py-0.5 text-xs font-medium", materielStatusClass(row.statut)].join(" ")}>{materielStatusLabel(row.statut, t)}</span></div></article>)}</div> : null}
-            {activeTab === "messages" ? <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-600">{t("intervenantPortal.messagingPlaceholder")}</div> : null}
+            {activeTab === "messages" ? messagesPanel : null}
           </section>}
           {mobileQuickAction ? (
             <div className="fixed inset-0 z-50 bg-slate-100 md:hidden">

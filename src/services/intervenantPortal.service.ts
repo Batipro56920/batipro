@@ -113,6 +113,34 @@ export type IntervenantMateriel = {
   updated_at: string | null;
 };
 
+export type IntervenantDailyChecklist = {
+  id: string | null;
+  intervenant_id: string | null;
+  chantier_id: string | null;
+  checklist_date: string;
+  photos_taken: boolean | null;
+  tasks_reported: boolean | null;
+  time_logged: boolean | null;
+  has_equipment: boolean | null;
+  has_materials: boolean | null;
+  has_information: boolean | null;
+  validated_at: string | null;
+  created_at: string | null;
+  updated_at: string | null;
+};
+
+export type IntervenantInformationRequest = {
+  id: string;
+  chantier_id: string;
+  intervenant_id: string;
+  request_date: string;
+  subject: string;
+  message: string;
+  status: "envoyee" | "traitee";
+  created_at: string | null;
+  updated_at: string | null;
+};
+
 function rpcMessage(error: unknown, fallback: string): string {
   return String((error as { message?: string } | null)?.message ?? fallback).trim() || fallback;
 }
@@ -133,12 +161,25 @@ function asInt(value: unknown, fallback: number): number {
   return Math.trunc(n);
 }
 
+function asNullableBoolean(value: unknown): boolean | null {
+  if (value === null || value === undefined || value === "") return null;
+  if (typeof value === "boolean") return value;
+  const normalized = String(value).trim().toLowerCase();
+  if (normalized === "true" || normalized === "t" || normalized === "1") return true;
+  if (normalized === "false" || normalized === "f" || normalized === "0") return false;
+  return null;
+}
+
 function normalizeMaterielStatus(value: unknown): IntervenantMateriel["statut"] {
   const v = String(value ?? "").trim().toLowerCase();
   if (v === "validee") return "validee";
   if (v === "refusee") return "refusee";
   if (v === "livree") return "livree";
   return "en_attente";
+}
+
+function normalizeInformationRequestStatus(value: unknown): IntervenantInformationRequest["status"] {
+  return String(value ?? "").trim().toLowerCase() === "traitee" ? "traitee" : "envoyee";
 }
 
 function parseChantier(row: Record<string, unknown>): IntervenantChantier {
@@ -395,6 +436,125 @@ export async function intervenantMaterielList(
     admin_commentaire: asNullableString(row.admin_commentaire),
     validated_at: asNullableString(row.validated_at),
     validated_by: asNullableString(row.validated_by),
+    created_at: asNullableString(row.created_at),
+    updated_at: asNullableString(row.updated_at),
+  }));
+}
+
+export async function intervenantDailyChecklistGet(
+  token: string,
+  checklistDate: string,
+): Promise<IntervenantDailyChecklist> {
+  const { data, error } = await (supabase as any).rpc("intervenant_daily_checklist_get", {
+    p_token: token,
+    p_checklist_date: checklistDate,
+  });
+  if (error) throw new Error(rpcMessage(error, "Chargement checklist impossible."));
+
+  const row = (data && typeof data === "object" ? data : {}) as Record<string, unknown>;
+  return {
+    id: asNullableString(row.id),
+    intervenant_id: asNullableString(row.intervenant_id),
+    chantier_id: asNullableString(row.chantier_id),
+    checklist_date: String(row.checklist_date ?? checklistDate),
+    photos_taken: asNullableBoolean(row.photos_taken),
+    tasks_reported: asNullableBoolean(row.tasks_reported),
+    time_logged: asNullableBoolean(row.time_logged),
+    has_equipment: asNullableBoolean(row.has_equipment),
+    has_materials: asNullableBoolean(row.has_materials),
+    has_information: asNullableBoolean(row.has_information),
+    validated_at: asNullableString(row.validated_at),
+    created_at: asNullableString(row.created_at),
+    updated_at: asNullableString(row.updated_at),
+  };
+}
+
+export async function intervenantDailyChecklistUpsert(
+  token: string,
+  payload: {
+    chantier_id?: string | null;
+    checklist_date: string;
+    photos_taken?: boolean | null;
+    tasks_reported?: boolean | null;
+    time_logged?: boolean | null;
+    has_equipment?: boolean | null;
+    has_materials?: boolean | null;
+    has_information?: boolean | null;
+    validate?: boolean;
+  },
+): Promise<IntervenantDailyChecklist> {
+  const { data, error } = await (supabase as any).rpc("intervenant_daily_checklist_upsert", {
+    p_token: token,
+    p_payload: payload,
+  });
+  if (error) throw new Error(rpcMessage(error, "Enregistrement checklist impossible."));
+
+  const row = (data && typeof data === "object" ? data : {}) as Record<string, unknown>;
+  return {
+    id: asNullableString(row.id),
+    intervenant_id: asNullableString(row.intervenant_id),
+    chantier_id: asNullableString(row.chantier_id),
+    checklist_date: String(row.checklist_date ?? payload.checklist_date),
+    photos_taken: asNullableBoolean(row.photos_taken),
+    tasks_reported: asNullableBoolean(row.tasks_reported),
+    time_logged: asNullableBoolean(row.time_logged),
+    has_equipment: asNullableBoolean(row.has_equipment),
+    has_materials: asNullableBoolean(row.has_materials),
+    has_information: asNullableBoolean(row.has_information),
+    validated_at: asNullableString(row.validated_at),
+    created_at: asNullableString(row.created_at),
+    updated_at: asNullableString(row.updated_at),
+  };
+}
+
+export async function intervenantInformationRequestCreate(
+  token: string,
+  payload: {
+    chantier_id: string;
+    request_date?: string | null;
+    subject: string;
+    message: string;
+  },
+): Promise<IntervenantInformationRequest> {
+  const { data, error } = await (supabase as any).rpc("intervenant_information_request_create", {
+    p_token: token,
+    p_payload: payload,
+  });
+  if (error) throw new Error(rpcMessage(error, "Envoi demande d'information impossible."));
+
+  const row = (data && typeof data === "object" ? data : {}) as Record<string, unknown>;
+  return {
+    id: String(row.id ?? ""),
+    chantier_id: String(row.chantier_id ?? payload.chantier_id),
+    intervenant_id: String(row.intervenant_id ?? ""),
+    request_date: String(row.request_date ?? payload.request_date ?? ""),
+    subject: String(row.subject ?? payload.subject),
+    message: String(row.message ?? payload.message),
+    status: normalizeInformationRequestStatus(row.status),
+    created_at: asNullableString(row.created_at),
+    updated_at: asNullableString(row.updated_at),
+  };
+}
+
+export async function intervenantInformationRequestList(
+  token: string,
+  chantierId: string,
+): Promise<IntervenantInformationRequest[]> {
+  const { data, error } = await (supabase as any).rpc("intervenant_information_request_list", {
+    p_token: token,
+    p_chantier_id: chantierId,
+  });
+  if (error) throw new Error(rpcMessage(error, "Chargement demandes d'information impossible."));
+
+  const rows = Array.isArray(data) ? data : [];
+  return rows.map((row) => ({
+    id: String(row.id ?? ""),
+    chantier_id: String(row.chantier_id ?? chantierId),
+    intervenant_id: String(row.intervenant_id ?? ""),
+    request_date: String(row.request_date ?? ""),
+    subject: String(row.subject ?? "Demande d'information"),
+    message: String(row.message ?? ""),
+    status: normalizeInformationRequestStatus(row.status),
     created_at: asNullableString(row.created_at),
     updated_at: asNullableString(row.updated_at),
   }));
