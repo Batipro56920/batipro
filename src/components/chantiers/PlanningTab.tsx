@@ -496,12 +496,20 @@ export default function PlanningTab({ chantierId, chantierName, intervenants }: 
     setSaving(true);
     setError(null);
     try {
-      await createPlanningCalendarSegment(chantierId, taskId, {
+      const createdSegment = await createPlanningCalendarSegment(chantierId, taskId, {
         start_date: day,
         duration_days: duration,
         intervenant_id: assigneeId,
         order_in_day: orderInDay ?? dayStartEntries(day).length,
       }, settings);
+      setState((current) =>
+        current
+          ? {
+              ...current,
+              segments: [...current.segments.filter((segment) => segment.id !== createdSegment.id), createdSegment],
+            }
+          : current,
+      );
       await loadAll(true);
       setNotice(t("planningTab.notices.segmentPlanned"));
     } catch (err: any) {

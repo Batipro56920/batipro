@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { supabase } from "../lib/supabaseClient";
-import { CHANTIER_EN_COURS_STATUSES } from "../lib/chantierRules";
 import { listChantiers, type ChantierRow } from "../services/chantiers.service";
 import { useI18n } from "../i18n";
 
@@ -108,16 +107,20 @@ export default function DashboardPage() {
     return map;
   }, [chantiers]);
 
-  const chantiersEnCours = useMemo(
-    () => chantiers.filter((chantier) => CHANTIER_EN_COURS_STATUSES.some((status) => status === chantier.status)),
-    [chantiers],
-  );
+  const orderedChantiers = useMemo(() => {
+    return [...chantiers].sort((a, b) => {
+      const aCreated = Date.parse(String(a.created_at ?? "")) || 0;
+      const bCreated = Date.parse(String(b.created_at ?? "")) || 0;
+      if (aCreated !== bCreated) return bCreated - aCreated;
+      return String(a.nom ?? "").localeCompare(String(b.nom ?? ""), "fr");
+    });
+  }, [chantiers]);
 
   const avgAvancement = useMemo(() => {
-    if (chantiersEnCours.length === 0) return 0;
-    const total = chantiersEnCours.reduce((sum, chantier) => sum + Number(chantier.avancement ?? 0), 0);
-    return total / chantiersEnCours.length;
-  }, [chantiersEnCours]);
+    if (chantiers.length === 0) return 0;
+    const total = chantiers.reduce((sum, chantier) => sum + Number(chantier.avancement ?? 0), 0);
+    return total / chantiers.length;
+  }, [chantiers]);
 
   const totalHeuresPrevues = useMemo(
     () => chantiers.reduce((sum, chantier) => sum + Number(chantier.heures_prevues ?? 0), 0),
@@ -146,7 +149,7 @@ export default function DashboardPage() {
     }
 
     if (activeView === "avancement") {
-      return [...chantiersEnCours]
+      return [...orderedChantiers]
         .sort((a, b) => Number(a.avancement ?? 0) - Number(b.avancement ?? 0))
         .slice(0, 8)
         .map((chantier) => ({
@@ -159,7 +162,7 @@ export default function DashboardPage() {
     }
 
     if (activeView === "heures") {
-      return [...chantiers]
+      return [...orderedChantiers]
         .filter((chantier) => Number(chantier.heures_prevues ?? 0) > 0)
         .sort((a, b) => {
           const aGap = Number(a.heures_passees ?? 0) - Number(a.heures_prevues ?? 0);
@@ -176,7 +179,7 @@ export default function DashboardPage() {
         }));
     }
 
-    return chantiersEnCours.slice(0, 8).map((chantier) => ({
+    return orderedChantiers.slice(0, 8).map((chantier) => ({
       key: chantier.id,
       href: `/chantiers/${chantier.id}`,
       title: chantier.nom,
@@ -185,7 +188,7 @@ export default function DashboardPage() {
         ? t("dashboard.finishPlanned", { date: chantier.date_fin_prevue })
         : t("dashboard.finishNotPlanned"),
     }));
-  }, [activeView, chantierById, chantiers, chantiersEnCours, locale, pendingMateriel, t]);
+  }, [activeView, chantierById, locale, orderedChantiers, pendingMateriel, t]);
 
   const kpis: Array<{
     key: Exclude<DashboardView, null>;
@@ -197,9 +200,9 @@ export default function DashboardPage() {
     {
       key: "chantiers",
       label: t("dashboard.kpis.chantiers"),
-      value: loading ? "..." : String(chantiersEnCours.length),
-      hint: t("dashboard.viewOperational"),
-      tone: chantiersEnCours.length === 0 ? "warning" : "normal",
+      value: loading ? "..." : String(chantiers.length),
+      hint: t("dashboard.sectionTitle"),
+      tone: chantiers.length === 0 ? "warning" : "normal",
     },
     {
       key: "avancement",

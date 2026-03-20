@@ -83,6 +83,9 @@ export async function sendIntervenantAccess(
       msg.includes("p_intervenant_id") || msg.includes("signature") || msg.includes("does not exist");
 
     if (supportsLegacy) {
+      if (input.intervenantId) {
+        throw new Error("La fonction de génération de lien intervenant doit être mise à jour pour cibler un intervenant précis.");
+      }
       const fallback = await (supabase as any).rpc("admin_create_intervenant_link", {
         p_chantier_id: input.chantierId,
         p_expires_at: expiresAt,

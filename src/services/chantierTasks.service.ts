@@ -207,6 +207,19 @@ function normalizeTaskRow(row: any): ChantierTaskRow {
   } as ChantierTaskRow;
 }
 
+function sortTaskRows(rows: ChantierTaskRow[]): ChantierTaskRow[] {
+  return [...rows].sort((a, b) => {
+    const orderDiff = Number(a.order_index ?? 0) - Number(b.order_index ?? 0);
+    if (orderDiff !== 0) return orderDiff;
+
+    const aCreated = Date.parse(String(a.created_at ?? "")) || 0;
+    const bCreated = Date.parse(String(b.created_at ?? "")) || 0;
+    if (aCreated !== bCreated) return aCreated - bCreated;
+
+    return String(a.titre ?? "").localeCompare(String(b.titre ?? ""), "fr");
+  });
+}
+
 function isMissingTaskPlanningColumnsError(error: any): boolean {
   const msg = String(error?.message ?? "").toLowerCase();
   const code = String(error?.code ?? "");
@@ -238,7 +251,7 @@ export async function getTasksByChantierIdDetailed(chantierId: string): Promise<
 
   if (!first.error) {
     return {
-      tasks: (first.data ?? []).map(normalizeTaskRow),
+      tasks: sortTaskRows((first.data ?? []).map(normalizeTaskRow)),
       planningColumnsMissing: false,
       expectedPlanningColumns: ["duration_days", "order_index"],
     };
@@ -252,7 +265,7 @@ export async function getTasksByChantierIdDetailed(chantierId: string): Promise<
     .order("created_at", { ascending: false });
   if (fallback.error) throw fallback.error;
   return {
-    tasks: (fallback.data ?? []).map(normalizeTaskRow),
+    tasks: sortTaskRows((fallback.data ?? []).map(normalizeTaskRow)),
     planningColumnsMissing: true,
     expectedPlanningColumns: ["duration_days", "order_index"],
   };

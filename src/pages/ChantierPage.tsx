@@ -2,7 +2,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { ChangeEvent, DragEvent, FormEvent } from "react";
 import { Link, useParams } from "react-router-dom";
-import { supabase } from "../lib/supabaseClient";
 
 import { getChantierById, type ChantierRow } from "../services/chantiers.service";
 
@@ -14,6 +13,8 @@ import {
   type ChantierTaskRow,
   type TaskStatus,
 } from "../services/chantierTasks.service";
+import { listTaskAssigneeIdsByTaskIds, replaceTaskAssignees } from "../services/chantierTaskAssignees.service";
+import { bulkUpdatePlanningTasks } from "../services/chantierPlanningTasks.service";
 
 import {
   listDevisByChantierId,
@@ -176,6 +177,18 @@ const DEFAULT_STANDARD_LOTS = [
 
 function normalizeLotLabel(value: string | null | undefined): string {
   return String(value ?? "").trim();
+}
+
+function uniqueIds(values: Array<string | null | undefined>): string[] {
+  return Array.from(new Set(values.map((value) => String(value ?? "").trim()).filter(Boolean)));
+}
+
+function moveArrayItem<T>(items: T[], from: number, to: number): T[] {
+  if (from === to) return items;
+  const next = [...items];
+  const [moved] = next.splice(from, 1);
+  next.splice(to, 0, moved);
+  return next;
 }
 
 function isPublicAppUrlConfigError(error: unknown): boolean {
@@ -377,6 +390,7 @@ export default function ChantierPage() {
   const [tasksLoading, setTasksLoading] = useState(false);
   const [tasksError, setTasksError] = useState<string | null>(null);
   const [tasksPlanningWarning, setTasksPlanningWarning] = useState<string | null>(null);
+  const [taskAssigneeIdsByTaskId, setTaskAssigneeIdsByTaskId] = useState<Record<string, string[]>>({});
 
   // Temps tab (draft par tâche) : date début/fin + ajout (h)
   const [timeDraftByTaskId, setTimeDraftByTaskId] = useState<
@@ -474,8 +488,6 @@ export default function ChantierPage() {
 
   // ENVOI ACCÈS (bouton "Envoyer accès")
   const [sendingAccessId, setSendingAccessId] = useState<string | null>(null);
-  const [generatingIntervenantLink, setGeneratingIntervenantLink] = useState(false);
-  const [generatedIntervenantLink, setGeneratedIntervenantLink] = useState<string>("");
 
   // Ajout intervenant
   const [creatingIntervenant, setCreatingIntervenant] = useState(false);
@@ -496,14 +508,14 @@ export default function ChantierPage() {
   const [newLotSelection, setNewLotSelection] = useState("");
   const [newLotDraftName, setNewLotDraftName] = useState("");
   const [newTaskStatus, setNewTaskStatus] = useState<TaskStatus>("A_FAIRE");
-  const [newDurationDays, setNewDurationDays] = useState("1");
-  const [newOrderIndex, setNewOrderIndex] = useState("0");
-  const [newIntervenantId, setNewIntervenantId] = useState<string>("__NONE__");
+  const [newAssignedIntervenantIds, setNewAssignedIntervenantIds] = useState<string[]>([]);
   const [newQuantite, setNewQuantite] = useState("1");
   const [newUnite, setNewUnite] = useState("");
   const [newTempsPrevuH, setNewTempsPrevuH] = useState("1");
   const [addingTask, setAddingTask] = useState(false);
   const [taskCreateDrawerOpen, setTaskCreateDrawerOpen] = useState(false);
+  const [taskReorderSaving, setTaskReorderSaving] = useState(false);
+  const [draggedTaskId, setDraggedTaskId] = useState<string | null>(null);
 
   // Edition tâche
   const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
@@ -512,10 +524,8 @@ export default function ChantierPage() {
   const [editCorpsEtat, setEditCorpsEtat] = useState("");
   const [editLotSelection, setEditLotSelection] = useState("");
   const [editLotDraftName, setEditLotDraftName] = useState("");
-  const [editDurationDays, setEditDurationDays] = useState("1");
-  const [editOrderIndex, setEditOrderIndex] = useState("0");
   const [editStatus, setEditStatus] = useState<TaskStatus>("A_FAIRE");
-  const [editIntervenantId, setEditIntervenantId] = useState<string>("__NONE__");
+  const [editAssignedIntervenantIds, setEditAssignedIntervenantIds] = useState<string[]>([]);
   const [editQuantite, setEditQuantite] = useState("1");
   const [editUnite, setEditUnite] = useState("");
   const [editTempsPrevuH, setEditTempsPrevuH] = useState("");
@@ -988,9 +998,10 @@ export default function ChantierPage() {
     setReserveDrawerError(null);
     try {
       const taskId = reserveDraftTaskId || null;
+      const selectedTaskAssigneeIds = selectedReserveTask ? getTaskAssignedIntervenantIds(selectedReserveTask) : [];
       const derivedIntervenantId =
-        taskId && selectedReserveTask?.intervenant_id
-          ? selectedReserveTask.intervenant_id
+        taskId && selectedTaskAssigneeIds.length > 0
+          ? selectedTaskAssigneeIds[0]
           : reserveDraftIntervenantId !== "__NONE__"
             ? reserveDraftIntervenantId
             : null;
@@ -1375,9 +1386,7 @@ export default function ChantierPage() {
       setTaskDocumentsIntervenantIds(
         permissionIntervenantIds.length > 0
           ? permissionIntervenantIds
-          : task.intervenant_id
-            ? [task.intervenant_id]
-            : [],
+          : getTaskAssignedIntervenantIds(task),
       );
       setTaskDocumentsShareAll(hasAllIntervenants);
     } catch (err: any) {
@@ -1459,10 +1468,22 @@ export default function ChantierPage() {
     }
   }
 
+  async function refreshTaskAssigneesOnly(taskRows: ChantierTaskRow[]) {
+    const ids = taskRows.map((task) => task.id);
+    const grouped = await listTaskAssigneeIdsByTaskIds(ids);
+    const fallbackMap: Record<string, string[]> = {};
+    for (const task of taskRows) {
+      const explicitIds = uniqueIds(grouped[task.id] ?? []);
+      fallbackMap[task.id] = explicitIds.length > 0 ? explicitIds : uniqueIds([task.intervenant_id]);
+    }
+    setTaskAssigneeIdsByTaskId(fallbackMap);
+  }
+
   async function refreshTasksOnly() {
     if (!id) return;
     const tasksResult = await getTasksByChantierIdDetailed(id);
     setTasks(tasksResult.tasks);
+    await refreshTaskAssigneesOnly(tasksResult.tasks);
     setTasksPlanningWarning(
       tasksResult.planningColumnsMissing
         ? `Migration planning manquante sur Supabase. Colonnes attendues sur public.chantier_tasks: ${tasksResult.expectedPlanningColumns.join(", ")}.`
@@ -1524,6 +1545,7 @@ export default function ChantierPage() {
           const tasksData = await getTasksByChantierIdDetailed(id);
           if (!alive) return;
           setTasks(tasksData.tasks);
+          await refreshTaskAssigneesOnly(tasksData.tasks);
           setTasksPlanningWarning(
             tasksData.planningColumnsMissing
               ? `Migration planning manquante sur Supabase. Colonnes attendues sur public.chantier_tasks: ${tasksData.expectedPlanningColumns.join(", ")}.`
@@ -1533,6 +1555,7 @@ export default function ChantierPage() {
           if (!alive) return;
           setTasksError(e?.message ?? "Erreur lors du chargement des tâches.");
           setTasks([]);
+          setTaskAssigneeIdsByTaskId({});
           setTasksPlanningWarning(null);
         } finally {
           if (alive) setTasksLoading(false);
@@ -1828,6 +1851,25 @@ export default function ChantierPage() {
     return m;
   }, [tasks]);
 
+  const taskOrderLabelById = useMemo(() => {
+    const map = new Map<string, number>();
+    tasks.forEach((task, index) => {
+      map.set(task.id, index + 1);
+    });
+    return map;
+  }, [tasks]);
+
+  function getTaskAssignedIntervenantIds(task: Pick<ChantierTaskRow, "id" | "intervenant_id">): string[] {
+    const explicitIds = uniqueIds(taskAssigneeIdsByTaskId[task.id] ?? []);
+    return explicitIds.length > 0 ? explicitIds : uniqueIds([task.intervenant_id]);
+  }
+
+  function getTaskAssignedIntervenantNames(task: Pick<ChantierTaskRow, "id" | "intervenant_id">): string[] {
+    return getTaskAssignedIntervenantIds(task)
+      .map((intervenantId) => intervenantById.get(intervenantId)?.nom ?? "")
+      .filter(Boolean);
+  }
+
   const selectedReserveTask = useMemo(() => {
     if (!reserveDraftTaskId) return null;
     return taskById.get(reserveDraftTaskId) ?? null;
@@ -1837,8 +1879,9 @@ export default function ChantierPage() {
     let alive = true;
     if (!reserveDraftTaskId) return () => {};
 
-    if (selectedReserveTask?.intervenant_id) {
-      setReserveDraftIntervenantId(selectedReserveTask.intervenant_id);
+    const assignedIds = selectedReserveTask ? getTaskAssignedIntervenantIds(selectedReserveTask) : [];
+    if (assignedIds.length > 0) {
+      setReserveDraftIntervenantId(assignedIds[0]);
       return () => {};
     }
 
@@ -1856,7 +1899,7 @@ export default function ChantierPage() {
     return () => {
       alive = false;
     };
-  }, [reserveDraftTaskId, selectedReserveTask?.intervenant_id]);
+  }, [reserveDraftTaskId, selectedReserveTask, taskAssigneeIdsByTaskId]);
 
   const lotOptions = useMemo(() => {
     const byKey = new Map<string, string>();
@@ -1943,14 +1986,15 @@ export default function ChantierPage() {
 
   const filteredTasks = useMemo(() => {
     return tasks.filter((t) => {
+      const assignedIds = getTaskAssignedIntervenantIds(t);
       if (filterIntervenant === "__NONE__") {
-        if (t.intervenant_id) return false;
+        if (assignedIds.length > 0) return false;
       } else if (filterIntervenant !== "__ALL__") {
-        if ((t.intervenant_id ?? "") !== filterIntervenant) return false;
+        if (!assignedIds.includes(filterIntervenant)) return false;
       }
       return true;
     });
-  }, [tasks, filterIntervenant]);
+  }, [tasks, filterIntervenant, taskAssigneeIdsByTaskId]);
 
   const totalTempsReel = useMemo(() => {
     return (tasks as any[]).reduce((sum, t) => sum + (Number(t.temps_reel_h ?? 0) || 0), 0);
@@ -2221,26 +2265,13 @@ export default function ChantierPage() {
       setTasksError("Choisis un lot dans la liste ou crée-en un nouveau.");
       return;
     }
-    const durationRaw = newDurationDays.trim();
-    const durationParsed = Number(durationRaw || "1");
-    const durationDays = Number.isFinite(durationParsed) ? Math.max(1, Math.trunc(durationParsed)) : NaN;
-    if (!Number.isFinite(durationDays)) {
-      setTasksError("Durée invalide.");
-      return;
-    }
-
-    const orderRaw = newOrderIndex.trim();
-    const orderParsed = Number(orderRaw || "0");
-    const orderIndex = Number.isFinite(orderParsed) ? Math.max(0, Math.trunc(orderParsed)) : NaN;
-    if (!Number.isFinite(orderIndex)) {
-      setTasksError("Ordre invalide.");
-      return;
-    }
 
     setAddingTask(true);
     setTasksError(null);
 
-    const intervenant_id = newIntervenantId === "__NONE__" ? null : newIntervenantId;
+    const assignedIntervenantIds = uniqueIds(newAssignedIntervenantIds);
+    const intervenant_id = assignedIntervenantIds[0] ?? null;
+    const orderIndex = tasks.reduce((max, task) => Math.max(max, Number(task.order_index ?? 0)), -1) + 1;
 
     const tempId = `temp-${crypto.randomUUID()}`;
     const optimistic: any = {
@@ -2258,13 +2289,14 @@ export default function ChantierPage() {
       date_fin: null,
       temps_reel_h: null,
       progress_admin_offset_percent: 0,
-      duration_days: durationDays,
+      duration_days: 1,
       order_index: orderIndex,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     };
 
-    setTasks((prev) => [optimistic, ...prev]);
+    setTasks((prev) => [...prev, optimistic]);
+    setTaskAssigneeIdsByTaskId((prev) => ({ ...prev, [tempId]: assignedIntervenantIds }));
 
     try {
       const saved = await createTask({
@@ -2277,19 +2309,23 @@ export default function ChantierPage() {
         quantite,
         unite,
         temps_prevu_h: tempsPrevu,
-        duration_days: durationDays,
         order_index: orderIndex,
       });
+      await replaceTaskAssignees(saved.id, assignedIntervenantIds);
 
       setTasks((prev) => prev.map((t) => (t.id === tempId ? (saved as any) : t)));
+      setTaskAssigneeIdsByTaskId((prev) => {
+        const next = { ...prev };
+        delete next[tempId];
+        next[saved.id] = assignedIntervenantIds;
+        return next;
+      });
 
       setNewTitre("");
       setNewCorpsEtat(lotName);
       setNewLotSelection(lotName);
       setNewTaskStatus("A_FAIRE");
-      setNewDurationDays("1");
-      setNewOrderIndex("0");
-      setNewIntervenantId("__NONE__");
+      setNewAssignedIntervenantIds([]);
       setNewQuantite("1");
       setNewUnite("");
       setNewTempsPrevuH("1");
@@ -2298,6 +2334,11 @@ export default function ChantierPage() {
       setToast({ type: "ok", msg: "Tâche ajoutée." });
     } catch (e: any) {
       setTasks((prev) => prev.filter((t) => t.id !== tempId));
+      setTaskAssigneeIdsByTaskId((prev) => {
+        const next = { ...prev };
+        delete next[tempId];
+        return next;
+      });
       setTasksError(e?.message ?? "Erreur lors de l’ajout de la tâche.");
       setToast({ type: "error", msg: e?.message ?? "Erreur ajout tâche." });
     } finally {
@@ -2317,10 +2358,8 @@ export default function ChantierPage() {
     setEditCorpsEtat(resolvedLotName === "A classer" ? "" : resolvedLotName);
     setEditLotSelection(resolvedLotName === "A classer" ? "" : resolvedLotName);
     setEditLotDraftName("");
-    setEditDurationDays(String(Math.max(1, Number((t as any).duration_days ?? 1))));
-    setEditOrderIndex(String(Math.max(0, Number((t as any).order_index ?? 0))));
     setEditStatus((t.status ?? "A_FAIRE") as any);
-    setEditIntervenantId(t.intervenant_id ?? "__NONE__");
+    setEditAssignedIntervenantIds(getTaskAssignedIntervenantIds(t));
     setEditQuantite(String(q ?? decoded.quantite ?? 1));
     setEditUnite(unite);
     setEditTempsPrevuH(toInputNumberString((t as any).temps_prevu_h));
@@ -2330,6 +2369,7 @@ export default function ChantierPage() {
     setSavingTask(false);
     setEditLotSelection("");
     setEditLotDraftName("");
+    setEditAssignedIntervenantIds([]);
   }
 
   function openTaskTemplateDrawerFromTask(t: ChantierTaskRow) {
@@ -2403,21 +2443,6 @@ export default function ChantierPage() {
       setToast({ type: "error", msg: "Temps prévu invalide (heures > 0)." });
       return;
     }
-    const durationRaw = editDurationDays.trim();
-    const durationParsed = Number(durationRaw || "1");
-    const durationDays = Number.isFinite(durationParsed) ? Math.max(1, Math.trunc(durationParsed)) : NaN;
-    if (!Number.isFinite(durationDays)) {
-      setToast({ type: "error", msg: "Durée invalide." });
-      return;
-    }
-
-    const orderRaw = editOrderIndex.trim();
-    const orderParsed = Number(orderRaw || "0");
-    const orderIndex = Number.isFinite(orderParsed) ? Math.max(0, Math.trunc(orderParsed)) : NaN;
-    if (!Number.isFinite(orderIndex)) {
-      setToast({ type: "error", msg: "Ordre invalide." });
-      return;
-    }
     if (editLotSelection === "__CREATE__") {
       setToast({ type: "error", msg: "Crée d'abord le nouveau lot avant d'enregistrer." });
       return;
@@ -2434,19 +2459,19 @@ export default function ChantierPage() {
       corps_etat: lotName,
       lot: lotName,
       status: editStatus ?? "A_FAIRE",
-      intervenant_id: editIntervenantId === "__NONE__" ? null : editIntervenantId,
+      intervenant_id: uniqueIds(editAssignedIntervenantIds)[0] ?? null,
       quantite,
       unite,
       temps_prevu_h: tempsPrevu,
-      duration_days: durationDays,
-      order_index: orderIndex,
     };
 
     setSavingTask(true);
     setTasks((prev) => prev.map((x) => (x.id === t.id ? { ...x, ...patch } : x)));
+    setTaskAssigneeIdsByTaskId((prev) => ({ ...prev, [t.id]: uniqueIds(editAssignedIntervenantIds) }));
 
     try {
       await updateTask(t.id, patch as any);
+      await replaceTaskAssignees(t.id, editAssignedIntervenantIds);
       setToast({ type: "ok", msg: "Tâche mise à jour." });
       setEditingTaskId(null);
     } catch (e: any) {
@@ -2512,6 +2537,30 @@ export default function ChantierPage() {
     } catch (e: any) {
       setToast({ type: "error", msg: e?.message ?? "Erreur suppression intervenant." });
     }
+  }
+
+  async function persistTaskOrder(nextTasks: ChantierTaskRow[]) {
+    const normalized = nextTasks.map((task, index) => ({ ...task, order_index: index }));
+    setTasks(normalized);
+    setTaskReorderSaving(true);
+    try {
+      await bulkUpdatePlanningTasks(normalized.map((task, index) => ({ id: task.id, order_index: index })));
+      setToast({ type: "ok", msg: "Ordre des tâches mis à jour." });
+    } catch (e: any) {
+      await refreshTasksOnly();
+      setToast({ type: "error", msg: e?.message ?? "Erreur mise à jour ordre tâches." });
+    } finally {
+      setTaskReorderSaving(false);
+      setDraggedTaskId(null);
+    }
+  }
+
+  async function moveTaskBeforeTask(sourceTaskId: string, targetTaskId: string) {
+    if (!sourceTaskId || !targetTaskId || sourceTaskId === targetTaskId) return;
+    const from = tasks.findIndex((task) => task.id === sourceTaskId);
+    const to = tasks.findIndex((task) => task.id === targetTaskId);
+    if (from < 0 || to < 0) return;
+    await persistTaskOrder(moveArrayItem(tasks, from, to));
   }
 
   async function onCreateIntervenantFromTab(e: FormEvent) {
@@ -2610,112 +2659,6 @@ export default function ChantierPage() {
       setToast({ type: "error", msg: message });
     } finally {
       setSendingAccessId(null);
-    }
-  }
-
-  function extractIntervenantToken(value: unknown): string | null {
-    const raw = String(value ?? "").trim();
-    if (!raw) return null;
-
-    if (raw.includes("token=")) {
-      try {
-        const parsed = new URL(raw);
-        const tokenFromQuery = parsed.searchParams.get("token")?.trim();
-        if (tokenFromQuery) return tokenFromQuery;
-      } catch {
-        // Fallback for non-URL strings containing token=
-      }
-      const tokenPart = raw.split("token=")[1] ?? "";
-      const sanitized = tokenPart.split("&")[0]?.trim();
-      if (sanitized) return decodeURIComponent(sanitized);
-    }
-
-    const legacyMatch = raw.match(/\/acces\/([^/?#]+)/i);
-    if (legacyMatch?.[1]) {
-      return decodeURIComponent(legacyMatch[1]);
-    }
-
-    // If it's an URL without token query param, do not treat it as token.
-    if (/^https?:\/\//i.test(raw)) return null;
-
-    return raw;
-  }
-
-  function resolveIntervenantTokenFromRpc(data: unknown): string | null {
-    if (typeof data === "string") {
-      return extractIntervenantToken(data);
-    }
-    if (Array.isArray(data)) {
-      if (!data.length) return null;
-      return resolveIntervenantTokenFromRpc(data[0]);
-    }
-    if (data && typeof data === "object") {
-      const row = data as Record<string, unknown>;
-      const directToken = extractIntervenantToken(row.token);
-      if (directToken) return directToken;
-      const altToken = extractIntervenantToken(row.access_token);
-      if (altToken) return altToken;
-      const fnToken = extractIntervenantToken(row.admin_create_intervenant_link);
-      if (fnToken) return fnToken;
-      const linkToken = extractIntervenantToken(row.access_url ?? row.url ?? row.link);
-      if (linkToken) return linkToken;
-    }
-    return null;
-  }
-
-  async function onGenerateIntervenantLink() {
-    if (!id) return;
-
-    try {
-      setGeneratingIntervenantLink(true);
-      const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
-
-      let { data, error } = await (supabase as any).rpc("admin_create_intervenant_link", {
-        p_chantier_id: id,
-        p_expires_at: expiresAt,
-      });
-
-      if (error) {
-        const msg = String((error as any)?.message ?? "").toLowerCase();
-        const supportsLegacySignature =
-          msg.includes("p_expires_at") ||
-          msg.includes("does not exist") ||
-          msg.includes("function") ||
-          msg.includes("signature");
-
-        if (supportsLegacySignature) {
-          const fallback = await (supabase as any).rpc("admin_create_intervenant_link", {
-            p_chantier_id: id,
-          });
-          data = fallback.data;
-          error = fallback.error;
-        }
-      }
-
-      if (error) throw error;
-
-      const token = resolveIntervenantTokenFromRpc(data);
-      if (!token) throw new Error("Token intervenant introuvable dans la réponse RPC.");
-
-      const url = buildIntervenantLink(token);
-      if (import.meta.env.DEV) {
-        console.log("Generated intervenant link:", url);
-      }
-      setGeneratedIntervenantLink(url);
-
-      const copied = await copyToClipboard(url);
-      if (copied) {
-        setToast({ type: "ok", msg: "Lien intervenant généré et copié." });
-      } else {
-        setToast({ type: "ok", msg: "Lien intervenant généré." });
-      }
-    } catch (e: any) {
-      const message = isPublicAppUrlConfigError(e)
-        ? e?.message ?? "VITE_PUBLIC_APP_URL manquant (à définir sur Vercel et en local)"
-        : e?.message ?? "Erreur génération lien intervenant.";
-      setToast({ type: "error", msg: message });
-    } finally {
-      setGeneratingIntervenantLink(false);
     }
   }
 
@@ -3154,16 +3097,29 @@ export default function ChantierPage() {
             </div>
 
             <div className="space-y-2">
-              {tasks.map((t: any) => {
-                const d = timeDraftByTaskId[t.id] ?? { date_debut: "", date_fin: "", ajout_h: "" };
-                const it = t.intervenant_id ? intervenantById.get(t.intervenant_id) : null;
+              {tasksLoading ? (
+                <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-5 text-sm text-slate-500">
+                  {t("common.states.loading")}
+                </div>
+              ) : tasksError ? (
+                <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-5 text-sm text-red-700">
+                  {tasksError}
+                </div>
+              ) : tasks.length === 0 ? (
+                <div className="rounded-xl border border-dashed border-slate-200 px-4 py-5 text-sm text-slate-500">
+                  Aucune tâche disponible pour saisir du temps.
+                </div>
+              ) : (
+                tasks.map((task: any) => {
+                const d = timeDraftByTaskId[task.id] ?? { date_debut: "", date_fin: "", ajout_h: "" };
+                const assigneeNames = getTaskAssignedIntervenantNames(task);
 
                 return (
-                  <div key={t.id} className="rounded-xl border p-2.5 space-y-2">
+                  <div key={task.id} className="rounded-xl border p-2.5 space-y-2">
                     <div className="min-w-0">
-                      <div className="font-medium truncate">{stripLegacyPrefix(t.titre ?? "")}</div>
+                      <div className="font-medium truncate">{stripLegacyPrefix(task.titre ?? "")}</div>
                       <div className="text-xs text-slate-500">
-                        {(t.corps_etat ?? "—")} | {t("intervenantAccess.intervenantLabel")}: {it?.nom ?? "—"}
+                        {(task.corps_etat ?? "—")} | {t("intervenantAccess.intervenantLabel")}: {assigneeNames.join(", ") || "—"}
                       </div>
                     </div>
 
@@ -3177,7 +3133,7 @@ export default function ChantierPage() {
                           onChange={(e) =>
                             setTimeDraftByTaskId((prev) => ({
                               ...prev,
-                              [t.id]: { ...d, date_debut: e.target.value },
+                              [task.id]: { ...d, date_debut: e.target.value },
                             }))
                           }
                         />
@@ -3192,7 +3148,7 @@ export default function ChantierPage() {
                           onChange={(e) =>
                             setTimeDraftByTaskId((prev) => ({
                               ...prev,
-                              [t.id]: { ...d, date_fin: e.target.value },
+                              [task.id]: { ...d, date_fin: e.target.value },
                             }))
                           }
                         />
@@ -3202,7 +3158,7 @@ export default function ChantierPage() {
                         <div className="text-xs text-slate-600">{t("intervenantAccess.fields.currentTotalHours")}</div>
                         <input
                           className="w-full min-w-0 rounded-xl border px-2.5 py-2 text-sm bg-slate-50"
-                          value={toInputNumberString((t as any).temps_reel_h)}
+                          value={toInputNumberString((task as any).temps_reel_h)}
                           disabled
                         />
                       </div>
@@ -3217,7 +3173,7 @@ export default function ChantierPage() {
                           onChange={(e) =>
                             setTimeDraftByTaskId((prev) => ({
                               ...prev,
-                              [t.id]: { ...d, ajout_h: e.target.value },
+                              [task.id]: { ...d, ajout_h: e.target.value },
                             }))
                           }
                         />
@@ -3226,15 +3182,15 @@ export default function ChantierPage() {
                       <div className="flex items-end md:col-span-2 xl:col-span-1">
                         <button
                           type="button"
-                          disabled={savingTimeTaskId === t.id}
+                          disabled={savingTimeTaskId === task.id}
                           className={[
                             "w-full rounded-xl px-3 py-2 text-sm",
-                            savingTimeTaskId === t.id
+                            savingTimeTaskId === task.id
                               ? "bg-slate-300 text-slate-700"
                               : "bg-slate-900 text-white hover:bg-slate-800",
                           ].join(" ")}
                           onClick={async () => {
-                            setSavingTimeTaskId(t.id);
+                            setSavingTimeTaskId(task.id);
 
                             const date_debut = d.date_debut ? d.date_debut : null;
                             const date_fin = d.date_fin ? d.date_fin : null;
@@ -3249,8 +3205,8 @@ export default function ChantierPage() {
                             }
 
                             const hadAny =
-                              (t as any).temps_reel_h !== null && (t as any).temps_reel_h !== undefined;
-                            const current = Number((t as any).temps_reel_h ?? 0);
+                              (task as any).temps_reel_h !== null && (task as any).temps_reel_h !== undefined;
+                            const current = Number((task as any).temps_reel_h ?? 0);
 
                             const nextTotal =
                               !hadAny && add === 0 ? null : Math.round((current + add) * 100) / 100;
@@ -3258,12 +3214,12 @@ export default function ChantierPage() {
                             // optimistic
                             setTasks((prev: any[]) =>
                               prev.map((x) =>
-                                x.id === t.id ? { ...x, date_debut, date_fin, temps_reel_h: nextTotal } : x,
+                                x.id === task.id ? { ...x, date_debut, date_fin, temps_reel_h: nextTotal } : x,
                               ),
                             );
 
                             try {
-                              const saved = await updateTask(t.id, {
+                              const saved = await updateTask(task.id, {
                                 date_debut,
                                 date_fin,
                                 temps_reel_h: nextTotal,
@@ -3274,16 +3230,16 @@ export default function ChantierPage() {
                               const statusNeedsSync = savedStatus !== derivedStatus;
 
                               const finalSaved = statusNeedsSync
-                                ? await updateTask(t.id, { status: derivedStatus } as any)
+                                ? await updateTask(task.id, { status: derivedStatus } as any)
                                 : saved;
                               setTasks((prev: any[]) =>
-                                prev.map((x) => (x.id === t.id ? (finalSaved as any) : x)),
+                                prev.map((x) => (x.id === task.id ? (finalSaved as any) : x)),
                               );
 
                               // reset ajout
                               setTimeDraftByTaskId((prev) => ({
                                 ...prev,
-                                [t.id]: { ...d, ajout_h: "" },
+                                [task.id]: { ...d, ajout_h: "" },
                               }));
 
                               setToast({ type: "ok", msg: t("chantierPage.timeSaved") });
@@ -3295,13 +3251,13 @@ export default function ChantierPage() {
                             }
                           }}
                         >
-                          {savingTimeTaskId === t.id ? t("common.states.saving") : t("common.actions.save")}
+                          {savingTimeTaskId === task.id ? t("common.states.saving") : t("common.actions.save")}
                         </button>
                       </div>
                     </div>
                   </div>
                 );
-              })}
+              }))}
             </div>
           </div>
         )}
@@ -3319,17 +3275,6 @@ export default function ChantierPage() {
               <div className="flex items-center gap-2">
                 <button
                   type="button"
-                  onClick={() => void onGenerateIntervenantLink()}
-                  className={[
-                    "rounded-xl border px-3 py-2 text-sm",
-                    generatingIntervenantLink ? "bg-slate-100 text-slate-500" : "hover:bg-slate-50",
-                  ].join(" ")}
-                  disabled={generatingIntervenantLink}
-                >
-                  {generatingIntervenantLink ? t("common.states.generating") : t("chantierPage.generateIntervenantLink")}
-                </button>
-                <button
-                  type="button"
                   onClick={refreshIntervenants}
                   className="rounded-xl border px-3 py-2 text-sm hover:bg-slate-50"
                   disabled={intervenantsLoading}
@@ -3342,33 +3287,6 @@ export default function ChantierPage() {
             {intervenantsError && (
               <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
                 {intervenantsError}
-              </div>
-            )}
-
-            {generatedIntervenantLink && (
-              <div className="rounded-xl border bg-slate-50 p-4 space-y-2">
-                <div className="text-sm font-semibold text-slate-800">{t("chantierPage.intervenantLink")}</div>
-                <div className="flex flex-col gap-2 md:flex-row md:items-center">
-                  <input
-                    className="w-full rounded-xl border bg-white px-3 py-2 text-sm text-slate-900"
-                    value={generatedIntervenantLink}
-                    readOnly
-                  />
-                  <button
-                    type="button"
-                    onClick={async () => {
-                      const copied = await copyToClipboard(generatedIntervenantLink);
-                      if (copied) {
-                        setToast({ type: "ok", msg: t("chantierPage.intervenantLinkCopied") });
-                      } else {
-                        window.prompt(t("chantierPage.copyThisLink"), generatedIntervenantLink);
-                      }
-                    }}
-                    className="rounded-xl border px-3 py-2 text-sm hover:bg-white"
-                  >
-                    {t("common.actions.copy")}
-                  </button>
-                </div>
               </div>
             )}
 
@@ -3682,7 +3600,7 @@ export default function ChantierPage() {
                   const status = reserveStatusBadge(reserve.status, t);
                   const priority = reservePriorityBadge(reserve.priority, t);
                   const task = reserve.task_id ? taskById.get(reserve.task_id) : null;
-                  const it = task?.intervenant_id ? intervenantById.get(task.intervenant_id) : null;
+                  const taskAssigneeNames = task ? getTaskAssignedIntervenantNames(task) : [];
 
                   return (
                     <div
@@ -3716,7 +3634,7 @@ export default function ChantierPage() {
                           {priority.label}
                         </span>
                         <span>Tâche : {task ? stripLegacyPrefix(task.titre ?? "") : "—"}</span>
-                        <span>Intervenant : {it?.nom ?? "—"}</span>
+                        <span>Intervenant : {taskAssigneeNames.join(", ") || "—"}</span>
                         <span>
                           Créée : {new Date(reserve.created_at).toLocaleDateString("fr-FR")}
                         </span>
@@ -3896,10 +3814,16 @@ export default function ChantierPage() {
               <div className="flex justify-between">
                 <div>
                   <div className="font-semibold section-title">{t("chantierPage.tasks")}</div>
-                  <div className="text-sm text-slate-500">{t("chantierPage.tasksSubtitle")}</div>
+                  <div className="text-sm text-slate-500">
+                    {t("chantierPage.tasksSubtitle")} Glisse-dépose les cartes pour réorganiser l’ordre.
+                  </div>
                 </div>
                 <div className="text-xs text-slate-500">
-                  {tasksLoading ? t("common.states.loading") : `${filteredTasks.length} / ${tasks.length} ${t("chantierPage.tasksCount")}`}
+                  {taskReorderSaving
+                    ? "Enregistrement de l’ordre..."
+                    : tasksLoading
+                      ? t("common.states.loading")
+                      : `${filteredTasks.length} / ${tasks.length} ${t("chantierPage.tasksCount")}`}
                 </div>
               </div>
 
@@ -3999,7 +3923,7 @@ export default function ChantierPage() {
                         </div>
                       )}
 
-                      <div className="grid gap-2 md:grid-cols-5">
+                      <div className="grid gap-2 md:grid-cols-2">
                         <label className="space-y-1 text-xs text-slate-600">
                           <div>Statut</div>
                           <select
@@ -4023,46 +3947,38 @@ export default function ChantierPage() {
                           />
                           <p className="text-[11px] text-slate-500">Utilise pour le calcul automatique d'avancement</p>
                         </label>
-                        <label className="space-y-1 text-xs text-slate-600">
-                          <div>Duree (jours)</div>
-                          <input
-                            className="w-full rounded-xl border bg-white px-3 py-2 text-sm text-slate-900"
-                            type="number"
-                            min={1}
-                            step={1}
-                            value={newDurationDays}
-                            onChange={(e) => setNewDurationDays(e.target.value)}
-                          />
-                          <p className="text-[11px] text-slate-500">Duree estimee utilisee pour le planning</p>
-                        </label>
-                        <label className="space-y-1 text-xs text-slate-600">
-                          <div>Ordre</div>
-                          <input
-                            className="w-full rounded-xl border bg-white px-3 py-2 text-sm text-slate-900"
-                            type="number"
-                            min={0}
-                            step={1}
-                            value={newOrderIndex}
-                            onChange={(e) => setNewOrderIndex(e.target.value)}
-                          />
-                          <p className="text-[11px] text-slate-500">Ordre d'enchaînement dans le lot</p>
-                        </label>
-                        <label className="space-y-1 text-xs text-slate-600">
-                          <div>Intervenant</div>
-                          <select
-                            className="w-full rounded-xl border bg-white px-3 py-2 text-sm text-slate-900"
-                            value={newIntervenantId}
-                            onChange={(e) => setNewIntervenantId(e.target.value)}
-                            disabled={intervenantsLoading}
-                          >
-                            <option value="__NONE__">Non attribue</option>
-                            {intervenants.map((i) => (
-                              <option key={i.id} value={i.id}>
-                                {i.nom}
-                              </option>
-                            ))}
-                          </select>
-                        </label>
+                      </div>
+
+                      <div className="space-y-2 rounded-xl border border-slate-200 bg-slate-50 p-3">
+                        <div className="flex items-center justify-between gap-3">
+                          <div className="text-xs font-medium text-slate-700">Intervenants affectés</div>
+                          <div className="text-[11px] text-slate-500">
+                            {newAssignedIntervenantIds.length > 0 ? `${newAssignedIntervenantIds.length} sélectionné(s)` : "Aucun intervenant sélectionné"}
+                          </div>
+                        </div>
+                        {intervenants.length === 0 ? (
+                          <div className="text-xs text-slate-500">Aucun intervenant disponible sur ce chantier.</div>
+                        ) : (
+                          <div className="grid gap-2 md:grid-cols-2">
+                            {intervenants.map((i) => {
+                              const checked = newAssignedIntervenantIds.includes(i.id);
+                              return (
+                                <label key={i.id} className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700">
+                                  <input
+                                    type="checkbox"
+                                    checked={checked}
+                                    onChange={(e) =>
+                                      setNewAssignedIntervenantIds((prev) =>
+                                        e.target.checked ? uniqueIds([...prev, i.id]) : prev.filter((id) => id !== i.id),
+                                      )
+                                    }
+                                  />
+                                  <span className="truncate">{i.nom}</span>
+                                </label>
+                              );
+                            })}
+                          </div>
+                        )}
                       </div>
 
                       {(toNumberOrNull(newTempsPrevuH) ?? 0) <= 0 && (
@@ -4160,10 +4076,30 @@ export default function ChantierPage() {
                   const tempsPasseLabel = `Temps passe: ${tempsPasseDisplay} h`;
                   const progressFillClass =
                     avancementPct < 40 ? "bg-amber-400" : avancementPct < 80 ? "bg-blue-500" : "bg-emerald-500";
-                  const it = t.intervenant_id ? intervenantById.get(t.intervenant_id) : null;
+                  const assignedNames = getTaskAssignedIntervenantNames(t);
+                  const orderLabel = taskOrderLabelById.get(t.id) ?? Math.max(0, Number(t.order_index ?? 0)) + 1;
 
                   return (
-                    <div key={t.id} className="rounded-xl border border-slate-200 bg-white p-3 space-y-3">
+                    <div
+                      key={t.id}
+                      className={[
+                        "rounded-xl border border-slate-200 bg-white p-3 space-y-3",
+                        draggedTaskId === t.id ? "opacity-60" : "",
+                        taskReorderSaving ? "pointer-events-none" : "",
+                      ].join(" ")}
+                      draggable={!isEditing}
+                      onDragStart={() => setDraggedTaskId(t.id)}
+                      onDragOver={(event) => {
+                        if (!draggedTaskId || draggedTaskId === t.id) return;
+                        event.preventDefault();
+                      }}
+                      onDrop={(event) => {
+                        event.preventDefault();
+                        if (!draggedTaskId || draggedTaskId === t.id || taskReorderSaving) return;
+                        void moveTaskBeforeTask(draggedTaskId, t.id);
+                      }}
+                      onDragEnd={() => setDraggedTaskId(null)}
+                    >
                       <div className="flex flex-wrap items-start gap-3">
                         <input
                           type="checkbox"
@@ -4175,9 +4111,15 @@ export default function ChantierPage() {
                         <div className="min-w-0 flex-1 basis-[18rem]">
                           {!isEditing ? (
                             <>
-                              <div className="font-medium break-words">{displayTitreClean}</div>
+                              <div className="flex flex-wrap items-center gap-2">
+                                <span className="cursor-grab text-slate-300" aria-hidden="true">::</span>
+                                <div className="font-medium break-words">{displayTitreClean}</div>
+                                <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[11px] text-slate-600">
+                                  #{orderLabel}
+                                </span>
+                              </div>
                               <div className="text-xs text-slate-500">
-                                {resolveTaskLotName(t)} | Intervenant: {it?.nom ?? "—"}
+                                {resolveTaskLotName(t)} | Intervenants: {assignedNames.join(", ") || "—"}
                               </div>
                               <div className="text-xs text-slate-500 mt-1">
                                 {qtyLabel} / {tempsPrevuLabel} / {tempsPasseLabel}
@@ -4349,8 +4291,8 @@ export default function ChantierPage() {
                                 </div>
                               )}
 
-                              <div className="grid gap-2 md:grid-cols-12">
-                                <label className="space-y-1 text-xs text-slate-600 md:col-span-3">
+                              <div className="grid gap-2 md:grid-cols-2">
+                                <label className="space-y-1 text-xs text-slate-600">
                                   <div>Temps prevu (h)</div>
                                   <input
                                     className="w-full rounded-xl border bg-white px-3 py-2 text-sm text-slate-900"
@@ -4361,45 +4303,33 @@ export default function ChantierPage() {
                                   />
                                   <p className="text-[11px] text-slate-500">Utilise pour le calcul automatique d'avancement</p>
                                 </label>
-                                <label className="space-y-1 text-xs text-slate-600 md:col-span-3">
-                                  <div>Duree (jours)</div>
-                                  <input
-                                    className="w-full rounded-xl border bg-white px-3 py-2 text-sm text-slate-900"
-                                    type="number"
-                                    min={1}
-                                    step={1}
-                                    value={editDurationDays}
-                                    onChange={(e) => setEditDurationDays(e.target.value)}
-                                  />
-                                  <p className="text-[11px] text-slate-500">Duree estimee utilisee pour le planning</p>
-                                </label>
-                                <label className="space-y-1 text-xs text-slate-600 md:col-span-3">
-                                  <div>Ordre</div>
-                                  <input
-                                    className="w-full rounded-xl border bg-white px-3 py-2 text-sm text-slate-900"
-                                    type="number"
-                                    min={0}
-                                    step={1}
-                                    value={editOrderIndex}
-                                    onChange={(e) => setEditOrderIndex(e.target.value)}
-                                  />
-                                  <p className="text-[11px] text-slate-500">Ordre d'enchaînement dans le lot</p>
-                                </label>
-                                <label className="space-y-1 text-xs text-slate-600 md:col-span-3">
-                                  <div>Intervenant</div>
-                                  <select
-                                    className="w-full rounded-xl border bg-white px-3 py-2 text-sm text-slate-900"
-                                    value={editIntervenantId}
-                                    onChange={(e) => setEditIntervenantId(e.target.value)}
-                                  >
-                                    <option value="__NONE__">Non attribue</option>
-                                    {intervenants.map((x) => (
-                                      <option key={x.id} value={x.id}>
-                                        {x.nom}
-                                      </option>
-                                    ))}
-                                  </select>
-                                </label>
+                              </div>
+                              <div className="space-y-2 rounded-xl border border-slate-200 bg-white p-3">
+                                <div className="flex items-center justify-between gap-3">
+                                  <div className="text-xs font-medium text-slate-700">Intervenants affectés</div>
+                                  <div className="text-[11px] text-slate-500">
+                                    {editAssignedIntervenantIds.length > 0 ? `${editAssignedIntervenantIds.length} sélectionné(s)` : "Aucun intervenant sélectionné"}
+                                  </div>
+                                </div>
+                                <div className="grid gap-2 md:grid-cols-2">
+                                  {intervenants.map((x) => {
+                                    const checked = editAssignedIntervenantIds.includes(x.id);
+                                    return (
+                                      <label key={x.id} className="flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700">
+                                        <input
+                                          type="checkbox"
+                                          checked={checked}
+                                          onChange={(e) =>
+                                            setEditAssignedIntervenantIds((prev) =>
+                                              e.target.checked ? uniqueIds([...prev, x.id]) : prev.filter((id) => id !== x.id),
+                                            )
+                                          }
+                                        />
+                                        <span className="truncate">{x.nom}</span>
+                                      </label>
+                                    );
+                                  })}
+                                </div>
                               </div>
                               {(toNumberOrNull(editTempsPrevuH) ?? 0) <= 0 && (
                                 <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
@@ -4913,7 +4843,7 @@ export default function ChantierPage() {
                           ].join(" ")}
                           value={
                             reserveDraftTaskId
-                              ? selectedReserveTask?.intervenant_id ?? "__NONE__"
+                              ? (selectedReserveTask ? getTaskAssignedIntervenantIds(selectedReserveTask)[0] ?? "__NONE__" : "__NONE__")
                               : reserveDraftIntervenantId
                           }
                           onChange={(e) => setReserveDraftIntervenantId(e.target.value)}
