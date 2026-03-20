@@ -1,20 +1,17 @@
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "../lib/supabaseClient";
 import { getChantiers, type ChantierRow } from "../services/chantiers.service";
+import { listIntervenants, type IntervenantRow } from "../services/intervenants.service";
 import { useI18n } from "../i18n";
 
-type IntervenantListRow = {
-  id: string;
+type IntervenantLinkRow = {
+  intervenant_id: string;
   chantier_id: string;
-  nom: string;
-  email: string | null;
-  telephone: string | null;
-  created_at: string | null;
 };
 
 export default function IntervenantsPage() {
   const { locale, t } = useI18n();
-  const [rows, setRows] = useState<IntervenantListRow[]>([]);
+  const [rows, setRows] = useState<Array<IntervenantRow & { chantier_ids: string[] }>>([]);
   const [chantiers, setChantiers] = useState<ChantierRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -29,16 +26,37 @@ export default function IntervenantsPage() {
     setLoading(true);
     setError(null);
     try {
-      const [intervenantsRes, chantierRows] = await Promise.all([
-        supabase
-          .from("intervenants")
-          .select("id, chantier_id, nom, email, telephone, created_at")
-          .order("created_at", { ascending: false }),
+      const [intervenantsRows, chantierRows, chantierLinksRes, intervenantLinksRes] = await Promise.all([
+        listIntervenants(),
         getChantiers(),
+        (supabase as any).from("chantier_intervenants").select("intervenant_id, chantier_id"),
+        (supabase as any).from("intervenant_chantiers").select("intervenant_id, chantier_id"),
       ]);
 
-      if (intervenantsRes.error) throw intervenantsRes.error;
-      setRows((intervenantsRes.data ?? []) as IntervenantListRow[]);
+      if (chantierLinksRes.error) throw chantierLinksRes.error;
+      if (intervenantLinksRes.error) throw intervenantLinksRes.error;
+
+      const chantierIdsByIntervenant = new Map<string, Set<string>>();
+      const appendLink = (row: IntervenantLinkRow) => {
+        if (!row?.intervenant_id || !row?.chantier_id) return;
+        if (!chantierIdsByIntervenant.has(row.intervenant_id)) {
+          chantierIdsByIntervenant.set(row.intervenant_id, new Set<string>());
+        }
+        chantierIdsByIntervenant.get(row.intervenant_id)?.add(row.chantier_id);
+      };
+
+      for (const row of (chantierLinksRes.data ?? []) as IntervenantLinkRow[]) appendLink(row);
+      for (const row of (intervenantLinksRes.data ?? []) as IntervenantLinkRow[]) appendLink(row);
+      for (const row of intervenantsRows) {
+        if (row.chantier_id) appendLink({ intervenant_id: row.id, chantier_id: row.chantier_id });
+      }
+
+      setRows(
+        intervenantsRows.map((row) => ({
+          ...row,
+          chantier_ids: Array.from(chantierIdsByIntervenant.get(row.id) ?? []),
+        })),
+      );
       setChantiers(chantierRows);
     } catch (err: any) {
       setError(err?.message ?? t("intervenantsPage.loadError"));
@@ -95,7 +113,13 @@ export default function IntervenantsPage() {
                   <td className="px-4 py-3 font-medium">{row.nom}</td>
                   <td className="px-4 py-3">{row.email ?? "-"}</td>
                   <td className="px-4 py-3">{row.telephone ?? "-"}</td>
-                  <td className="px-4 py-3">{chantierNameById.get(row.chantier_id) ?? row.chantier_id}</td>
+                  <td className="px-4 py-3">
+                    {row.chantier_ids.length === 0
+                      ? "-"
+                      : row.chantier_ids
+                          .map((chantierId) => chantierNameById.get(chantierId) ?? chantierId)
+                          .join(", ")}
+                  </td>
                   <td className="px-4 py-3">
                     {row.created_at ? new Date(row.created_at).toLocaleDateString(locale) : "-"}
                   </td>

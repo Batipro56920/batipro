@@ -29,7 +29,9 @@ import PlanningTab from "../components/chantiers/PlanningTab";
 
 import {
   listIntervenantsByChantierId,
+  listIntervenants,
   createIntervenant,
+  attachIntervenantToChantier,
   updateIntervenant,
   deleteIntervenant,
   type IntervenantRow,
@@ -174,12 +176,6 @@ const DEFAULT_STANDARD_LOTS = [
 
 function normalizeLotLabel(value: string | null | undefined): string {
   return String(value ?? "").trim();
-}
-
-function isIntervenantDuplicateEmailError(error: unknown): boolean {
-  const code = String((error as any)?.code ?? "").trim();
-  const msg = String((error as any)?.message ?? "").toLowerCase();
-  return code === "23505" || msg.includes("intervenants_email_unique");
 }
 
 function isPublicAppUrlConfigError(error: unknown): boolean {
@@ -471,6 +467,10 @@ export default function ChantierPage() {
   const [intervenants, setIntervenants] = useState<IntervenantRow[]>([]);
   const [intervenantsLoading, setIntervenantsLoading] = useState(false);
   const [intervenantsError, setIntervenantsError] = useState<string | null>(null);
+  const [allIntervenants, setAllIntervenants] = useState<IntervenantRow[]>([]);
+  const [allIntervenantsLoading, setAllIntervenantsLoading] = useState(false);
+  const [existingIntervenantQuery, setExistingIntervenantQuery] = useState("");
+  const [attachingIntervenantId, setAttachingIntervenantId] = useState<string | null>(null);
 
   // ENVOI ACCÈS (bouton "Envoyer accès")
   const [sendingAccessId, setSendingAccessId] = useState<string | null>(null);
@@ -1447,6 +1447,18 @@ export default function ChantierPage() {
     }
   }
 
+  async function refreshAllIntervenants() {
+    setAllIntervenantsLoading(true);
+    try {
+      const data = await listIntervenants();
+      setAllIntervenants(data);
+    } catch {
+      setAllIntervenants([]);
+    } finally {
+      setAllIntervenantsLoading(false);
+    }
+  }
+
   async function refreshTasksOnly() {
     if (!id) return;
     const tasksResult = await getTasksByChantierIdDetailed(id);
@@ -1554,6 +1566,18 @@ export default function ChantierPage() {
           setIntervenantsError(e?.message ?? "Erreur chargement intervenants.");
         } finally {
           if (alive) setIntervenantsLoading(false);
+        }
+
+        setAllIntervenantsLoading(true);
+        try {
+          const allIntervenantsData = await listIntervenants();
+          if (!alive) return;
+          setAllIntervenants(allIntervenantsData);
+        } catch {
+          if (!alive) return;
+          setAllIntervenants([]);
+        } finally {
+          if (alive) setAllIntervenantsLoading(false);
         }
 
         // matériel
@@ -1782,6 +1806,21 @@ export default function ChantierPage() {
     for (const i of intervenants) m.set(i.id, i);
     return m;
   }, [intervenants]);
+
+  const assignableIntervenants = useMemo(() => {
+    const assignedIds = new Set(intervenants.map((intervenant) => intervenant.id));
+    const query = existingIntervenantQuery.trim().toLowerCase();
+
+    return allIntervenants
+      .filter((intervenant) => !assignedIds.has(intervenant.id))
+      .filter((intervenant) => {
+        if (!query) return true;
+        return [intervenant.nom, intervenant.email, intervenant.telephone]
+          .map((value) => String(value ?? "").toLowerCase())
+          .some((value) => value.includes(query));
+      })
+      .slice(0, 8);
+  }, [allIntervenants, existingIntervenantQuery, intervenants]);
 
   const taskById = useMemo(() => {
     const m = new Map<string, ChantierTaskRow>();
@@ -2461,13 +2500,15 @@ export default function ChantierPage() {
   }
 
   async function onDeleteIntervenant(i: IntervenantRow) {
-    const ok = confirm(`Supprimer l’intervenant "${i.nom}" ?`);
+    if (!id) return;
+    const ok = confirm(`Retirer l’intervenant "${i.nom}" de ce chantier ?`);
     if (!ok) return;
 
     try {
-      await deleteIntervenant(i.id);
+      await deleteIntervenant(i.id, id);
       setIntervenants((prev) => prev.filter((x) => x.id !== i.id));
-      setToast({ type: "ok", msg: "Intervenant supprimé." });
+      await refreshAllIntervenants();
+      setToast({ type: "ok", msg: "Intervenant retiré du chantier." });
     } catch (e: any) {
       setToast({ type: "error", msg: e?.message ?? "Erreur suppression intervenant." });
     }
@@ -2483,43 +2524,49 @@ export default function ChantierPage() {
       return;
     }
 
-    const email = newIntervenantEmail.trim();
-    if (email) {
-      const exists = intervenants.some((row) => String(row.email ?? "").trim().toLowerCase() === email.toLowerCase());
-      if (exists) {
-        const friendly = "Cet email est déjà utilisé par un intervenant.";
-        setIntervenantsError(friendly);
-        setToast({ type: "error", msg: friendly });
-        return;
-      }
-    }
-
     setCreatingIntervenant(true);
     setIntervenantsError(null);
 
     try {
-      const created = await createIntervenant({
+      await createIntervenant({
         chantier_id: id,
         nom,
-        email: email || null,
+        email: newIntervenantEmail.trim() || null,
         telephone: newIntervenantTel.trim() || null,
       });
 
-      setIntervenants((prev) => [...prev, created].sort((a, b) => a.nom.localeCompare(b.nom)));
+      await Promise.all([refreshIntervenants(), refreshAllIntervenants()]);
 
       setNewIntervenantNom("");
       setNewIntervenantEmail("");
       setNewIntervenantTel("");
 
-      setToast({ type: "ok", msg: "Intervenant ajouté." });
+      setToast({ type: "ok", msg: "Intervenant ajouté au chantier." });
     } catch (e: any) {
-      const message = isIntervenantDuplicateEmailError(e)
-        ? "Cet email est déjà utilisé par un intervenant."
-        : e?.message ?? "Erreur création intervenant.";
+      const message = e?.message ?? "Erreur création intervenant.";
       setIntervenantsError(message);
       setToast({ type: "error", msg: message });
     } finally {
       setCreatingIntervenant(false);
+    }
+  }
+
+  async function onAttachExistingIntervenant(intervenant: IntervenantRow) {
+    if (!id) return;
+
+    setAttachingIntervenantId(intervenant.id);
+    setIntervenantsError(null);
+    try {
+      await attachIntervenantToChantier({ chantier_id: id, intervenant_id: intervenant.id });
+      await Promise.all([refreshIntervenants(), refreshAllIntervenants()]);
+      setExistingIntervenantQuery("");
+      setToast({ type: "ok", msg: `${intervenant.nom} a été affecté au chantier.` });
+    } catch (e: any) {
+      const message = e?.message ?? "Erreur affectation intervenant.";
+      setIntervenantsError(message);
+      setToast({ type: "error", msg: message });
+    } finally {
+      setAttachingIntervenantId(null);
     }
   }
   // ----- ENVOI ACCÈS -----
@@ -3361,6 +3408,58 @@ export default function ChantierPage() {
               </div>
             </form>
 
+            <div className="rounded-xl border bg-white p-4 space-y-3">
+              <div className="font-semibold text-sm">Affecter un intervenant existant</div>
+              <div className="text-sm text-slate-500">
+                Rechercher un intervenant déjà enregistré puis l’affecter à ce chantier.
+              </div>
+              <input
+                className="w-full rounded-xl border px-3 py-2 text-sm"
+                placeholder="Rechercher par nom, email ou téléphone"
+                value={existingIntervenantQuery}
+                onChange={(e) => setExistingIntervenantQuery(e.target.value)}
+              />
+
+              {allIntervenantsLoading ? (
+                <div className="text-sm text-slate-500">Chargement des intervenants existants...</div>
+              ) : assignableIntervenants.length === 0 ? (
+                <div className="text-sm text-slate-500">
+                  {existingIntervenantQuery.trim()
+                    ? "Aucun intervenant existant ne correspond à cette recherche."
+                    : "Tous les intervenants connus sont déjà affectés à ce chantier."}
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {assignableIntervenants.map((intervenant) => (
+                    <div
+                      key={intervenant.id}
+                      className="flex flex-col gap-3 rounded-xl border border-slate-200 bg-slate-50 p-3 md:flex-row md:items-center md:justify-between"
+                    >
+                      <div className="min-w-0">
+                        <div className="font-medium text-slate-900">{intervenant.nom}</div>
+                        <div className="text-xs text-slate-500">
+                          {(intervenant.email ?? "—")} • {(intervenant.telephone ?? "—")}
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => void onAttachExistingIntervenant(intervenant)}
+                        disabled={attachingIntervenantId === intervenant.id}
+                        className={[
+                          "rounded-xl px-4 py-2 text-sm",
+                          attachingIntervenantId === intervenant.id
+                            ? "bg-slate-300 text-slate-700"
+                            : "bg-white border border-slate-300 text-slate-900 hover:bg-slate-100",
+                        ].join(" ")}
+                      >
+                        {attachingIntervenantId === intervenant.id ? "Affectation..." : "Affecter au chantier"}
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
             <div className="space-y-2">
               {intervenantsLoading ? (
                 <div className="text-sm text-slate-500">{t("common.states.loading")}</div>
@@ -3403,7 +3502,7 @@ export default function ChantierPage() {
                         onClick={() => onDeleteIntervenant(i)}
                         className="text-sm rounded-xl border border-red-200 text-red-700 px-3 py-2 hover:bg-red-50"
                       >
-                        {t("common.actions.delete")}
+                        Retirer
                       </button>
                     </div>
                   </div>

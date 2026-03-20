@@ -4,7 +4,9 @@ import type { FormEvent } from "react";
 import { sendIntervenantAccess } from "../../services/chantierAccessAdmin.service";
 import {
   listIntervenantsByChantierId,
+  listIntervenants,
   createIntervenant,
+  attachIntervenantToChantier,
   deleteIntervenant,
   type IntervenantRow,
 } from "../../services/intervenants.service";
@@ -22,13 +24,19 @@ export default function IntervenantsTab({ chantierId }: Props) {
   const [nom, setNom] = useState("");
   const [email, setEmail] = useState("");
   const [telephone, setTelephone] = useState("");
+  const [allIntervenants, setAllIntervenants] = useState<IntervenantRow[]>([]);
+  const [search, setSearch] = useState("");
 
   async function refresh() {
     if (!chantierId) return;
     setLoading(true);
     try {
-      const data = await listIntervenantsByChantierId(chantierId);
+      const [data, allData] = await Promise.all([
+        listIntervenantsByChantierId(chantierId),
+        listIntervenants(),
+      ]);
       setItems(data);
+      setAllIntervenants(allData);
     } finally {
       setLoading(false);
     }
@@ -58,10 +66,19 @@ export default function IntervenantsTab({ chantierId }: Props) {
   }
 
   async function onDelete(id: string) {
-    if (!window.confirm("Supprimer cet intervenant ?")) return;
-    await deleteIntervenant(id);
+    if (!window.confirm("Retirer cet intervenant du chantier ?")) return;
+    await deleteIntervenant(id, chantierId);
     await refresh();
   }
+
+  const availableIntervenants = allIntervenants
+    .filter((row) => !items.some((current) => current.id === row.id))
+    .filter((row) => {
+      const query = search.trim().toLowerCase();
+      if (!query) return true;
+      return [row.nom, row.email, row.telephone].some((value) => String(value ?? "").toLowerCase().includes(query));
+    })
+    .slice(0, 6);
 
   async function onSendAccess(itv: IntervenantRow) {
     if (!chantierId) return;
@@ -117,6 +134,41 @@ export default function IntervenantsTab({ chantierId }: Props) {
           <button type="submit">+ Ajouter</button>
         </div>
       </form>
+
+      <div style={{ border: "1px solid #e5e7eb", borderRadius: 12, padding: 16, display: "grid", gap: 10 }}>
+        <div style={{ fontWeight: 600 }}>Affecter un intervenant existant</div>
+        <input
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="Rechercher par nom, email ou telephone"
+        />
+        <div style={{ display: "grid", gap: 8 }}>
+          {availableIntervenants.map((itv) => (
+            <div
+              key={itv.id}
+              style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "center", border: "1px solid #e5e7eb", borderRadius: 10, padding: 10 }}
+            >
+              <div>
+                <div style={{ fontWeight: 600 }}>{itv.nom}</div>
+                <div style={{ opacity: 0.75, fontSize: 13 }}>
+                  {(itv.email ?? "-")} {itv.telephone ? ` • ${itv.telephone}` : ""}
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={async () => {
+                  await attachIntervenantToChantier({ chantier_id: chantierId, intervenant_id: itv.id });
+                  setSearch("");
+                  await refresh();
+                }}
+              >
+                Affecter
+              </button>
+            </div>
+          ))}
+          {availableIntervenants.length === 0 && <div style={{ opacity: 0.7 }}>Aucun intervenant disponible.</div>}
+        </div>
+      </div>
 
       <div style={{ display: "grid", gap: 12 }}>
         {items.map((itv) => {
