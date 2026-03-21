@@ -1,5 +1,6 @@
 import { useMemo } from "react";
 import { useI18n } from "../i18n";
+import { PortalBadge, PortalPrimaryButton, PortalSecondaryButton, PortalSectionHeading, portalCardClass } from "./intervenantPortal/PortalUi";
 
 export type DailyChecklistItemKey =
   | "photos_taken"
@@ -67,94 +68,78 @@ export default function TodayChecklistCard({
         ? t("intervenantPortal.dailyChecklist.status.inProgress")
         : t("intervenantPortal.dailyChecklist.status.pending");
   const statusClass =
-    status === "validated"
-      ? "border-emerald-200 bg-emerald-50 text-emerald-700"
-      : status === "in_progress"
-        ? "border-amber-200 bg-amber-50 text-amber-700"
-        : "border-slate-200 bg-slate-50 text-slate-700";
+    status === "validated" ? "green" : status === "in_progress" ? "amber" : "neutral";
 
   const showMaterialButton = status !== "pending" && values.has_equipment !== true;
   const showMaterialsButton = status !== "pending" && values.has_materials !== true;
   const showInformationButton = status !== "pending" && values.has_information !== true;
 
   return (
-    <section className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-        <div className="min-w-0">
-          <div className="text-sm font-semibold text-slate-900">{t("intervenantPortal.dailyChecklist.title")}</div>
-          <div className="mt-1 text-xs text-slate-500">
+    <section className={portalCardClass("accent")}>
+      <PortalSectionHeading
+        eyebrow={t("intervenantPortal.checklistFocusTitle")}
+        title={t("intervenantPortal.dailyChecklist.title")}
+        subtitle={
+          <>
             {t("intervenantPortal.dailyChecklist.subtitle", { date: checklistDateLabel })}
-          </div>
-          {validatedAtLabel ? (
-            <div className="mt-1 text-xs text-emerald-700">
-              {t("intervenantPortal.dailyChecklist.validatedAt", { date: validatedAtLabel })}
-            </div>
-          ) : null}
-        </div>
-        <span className={["inline-flex w-fit rounded-full border px-2.5 py-1 text-xs font-medium", statusClass].join(" ")}>
-          {statusLabel}
-        </span>
-      </div>
+            {validatedAtLabel ? (
+              <span className="mt-1 block text-emerald-700">
+                {t("intervenantPortal.dailyChecklist.validatedAt", { date: validatedAtLabel })}
+              </span>
+            ) : null}
+          </>
+        }
+        aside={<PortalBadge tone={statusClass as "neutral" | "green" | "amber"}>{statusLabel}</PortalBadge>}
+      />
 
-      <div className="mt-4 space-y-2">
+      <div className="mt-5 space-y-3">
         {items.map((item) => (
           <label
             key={item.key}
             className={[
-              "flex items-start gap-3 rounded-2xl border px-3 py-3 transition",
-              item.checked ? "border-blue-200 bg-blue-50/70" : "border-slate-200 bg-white",
-              status === "validated" ? "opacity-80" : "cursor-pointer hover:border-slate-300",
+              "flex items-start gap-3 rounded-[1rem] border px-4 py-4 transition",
+              item.checked ? "border-blue-200 bg-blue-50/90 shadow-[0_8px_18px_rgba(30,64,175,0.08)]" : "border-slate-200 bg-white",
+              status === "validated" ? "opacity-85" : "cursor-pointer hover:border-blue-200 hover:bg-blue-50/40",
             ].join(" ")}
           >
             <input
               type="checkbox"
-              className="mt-0.5 h-4 w-4 rounded border-slate-300 text-blue-600"
+              className="mt-1 h-5 w-5 rounded border-slate-300 text-blue-700"
               checked={item.checked}
               disabled={saving || status === "validated"}
               onChange={() => onToggle(item.key)}
             />
             <div className="min-w-0 flex-1">
-              <div className="text-sm font-medium text-slate-900">{item.label}</div>
+              <div className="text-[15px] font-semibold leading-5 text-slate-900">{item.label}</div>
               {item.conditional && !item.checked && status !== "pending" ? (
                 <div className="mt-1 text-xs text-amber-700">{t("intervenantPortal.dailyChecklist.missingHint")}</div>
               ) : null}
             </div>
+            <div className={["mt-0.5 h-6 w-6 rounded-full border", item.checked ? "border-blue-700 bg-blue-700" : "border-slate-200 bg-slate-50"].join(" ")} />
           </label>
         ))}
       </div>
 
       {showMaterialButton || showMaterialsButton || showInformationButton ? (
-        <div className="mt-4 rounded-2xl border border-amber-200 bg-white p-3">
+        <div className="mt-5 rounded-[1rem] border border-amber-200 bg-white/90 p-4">
           <div className="text-xs font-semibold uppercase tracking-[0.18em] text-amber-700">
             {t("intervenantPortal.dailyChecklist.requestsTitle")}
           </div>
-          <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:flex-wrap">
+          <div className="mt-3 flex flex-col gap-2">
             {showMaterialButton ? (
-              <button
-                type="button"
-                onClick={onRequestMaterial}
-                className="rounded-full border border-blue-600 px-3 py-2 text-sm font-medium text-blue-700 hover:bg-blue-50"
-              >
+              <PortalSecondaryButton type="button" onClick={onRequestMaterial} className="w-full justify-center text-left">
                 {t("intervenantPortal.dailyChecklist.actions.requestMaterial")}
-              </button>
+              </PortalSecondaryButton>
             ) : null}
             {showMaterialsButton ? (
-              <button
-                type="button"
-                onClick={onRequestMaterials}
-                className="rounded-full border border-blue-600 px-3 py-2 text-sm font-medium text-blue-700 hover:bg-blue-50"
-              >
+              <PortalSecondaryButton type="button" onClick={onRequestMaterials} className="w-full justify-center text-left">
                 {t("intervenantPortal.dailyChecklist.actions.requestMaterials")}
-              </button>
+              </PortalSecondaryButton>
             ) : null}
             {showInformationButton ? (
-              <button
-                type="button"
-                onClick={onRequestInformation}
-                className="rounded-full border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100"
-              >
+              <PortalSecondaryButton type="button" onClick={onRequestInformation} className="w-full justify-center text-left">
                 {t("intervenantPortal.dailyChecklist.actions.requestInformation")}
-              </button>
+              </PortalSecondaryButton>
             ) : null}
           </div>
         </div>
@@ -171,24 +156,19 @@ export default function TodayChecklistCard({
         </div>
       ) : null}
 
-      <div className="mt-4 flex justify-end">
-        <button
+      <div className="mt-5">
+        <PortalPrimaryButton
           type="button"
           onClick={onValidate}
           disabled={saving || status === "validated"}
-          className={[
-            "rounded-full px-4 py-2 text-sm font-medium",
-            saving || status === "validated"
-              ? "bg-slate-200 text-slate-500"
-              : "bg-slate-900 text-white hover:bg-slate-800",
-          ].join(" ")}
+          className={["w-full", saving || status === "validated" ? "bg-slate-300 shadow-none hover:bg-slate-300" : ""].join(" ")}
         >
           {status === "validated"
             ? t("intervenantPortal.dailyChecklist.actions.validated")
             : saving
               ? t("intervenantPortal.dailyChecklist.actions.saving")
               : t("intervenantPortal.dailyChecklist.actions.validate")}
-        </button>
+        </PortalPrimaryButton>
       </div>
     </section>
   );
