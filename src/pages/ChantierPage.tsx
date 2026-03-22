@@ -113,6 +113,7 @@ import { buildIntervenantLink } from "../lib/publicUrl";
 
 /* ---------------- types ---------------- */
 type TabKey =
+  | "accueil"
   | "devis-taches"
   | "documents"
   | "intervenants"
@@ -124,8 +125,6 @@ type TabKey =
   | "rapports"
   | "doe"
   | "visite";
-
-type AdminPrimaryTab = "taches" | "planning" | "temps" | "reserves" | "gestion";
 
 type ToastState = { type: "ok" | "error"; msg: string } | null;
 
@@ -374,8 +373,7 @@ export default function ChantierPage() {
   const [loading, setLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
-  const [tab, setTab] = useState<TabKey>("devis-taches");
-  const [primaryTab, setPrimaryTab] = useState<AdminPrimaryTab>("taches");
+  const [tab, setTab] = useState<TabKey>("accueil");
 
   // Toast
   const [toast, setToast] = useState<ToastState>(null);
@@ -1823,6 +1821,12 @@ export default function ChantierPage() {
     const done = tasks.filter((t) => t.status === "FAIT").length;
     return clamp(Math.round((done / tasks.length) * 100), 0, 100);
   }, [tasks]);
+  const completedTasksCount = useMemo(() => tasks.filter((task) => task.status === "FAIT").length, [tasks]);
+  const inProgressTasksCount = useMemo(() => tasks.filter((task) => task.status === "EN_COURS").length, [tasks]);
+  const todoTasksCount = useMemo(
+    () => tasks.filter((task) => task.status !== "FAIT" && task.status !== "EN_COURS").length,
+    [tasks],
+  );
 
   const intervenantById = useMemo(() => {
     const m = new Map<string, IntervenantRow>();
@@ -2916,69 +2920,101 @@ export default function ChantierPage() {
 
   const filteredMateriel =
     materielFilter === "__ALL__" ? materiel : materiel.filter((row) => row.statut === materielFilter);
-
-  /* ---------------- render ---------------- */
-  return (
-    <div className="space-y-6">
-      {/* Toast */}
-      {toast && (
-        <div
-          className={[
-            "fixed right-6 bottom-6 z-50 rounded-xl border px-4 py-3 text-sm shadow-lg",
-            toast.type === "ok"
-              ? "bg-emerald-50 text-emerald-800 border-emerald-200"
-              : "bg-red-50 text-red-800 border-red-200",
-          ].join(" ")}
-        >
-          {toast.msg}
-        </div>
-      )}
-
-      <div className="flex items-center gap-2 text-sm text-slate-500">
-        <Link to="/chantiers" className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-slate-200 hover:bg-slate-50" aria-label={t("chantierPage.backToChantiers")}>
-          ?
-        </Link>
-      </div>
-
-      <section className="rounded-3xl border border-slate-200 bg-white px-5 py-4 shadow-sm">
-        <div className="min-w-0">
-          <div className="flex flex-wrap items-start gap-2">
-            <h1 className="max-w-3xl text-2xl font-semibold leading-tight text-slate-950">{item.nom}</h1>
-            <span className={["rounded-full border px-2 py-1 text-xs", badge.className].join(" ")}>{badge.label}</span>
+  const activeTabLabel =
+    tab === "accueil"
+      ? "Accueil"
+      : tab === "devis-taches"
+        ? t("chantierPage.tasks")
+        : tab === "planning"
+          ? t("chantierTabs.planning")
+          : tab === "temps"
+            ? t("chantierTabs.time")
+            : tab === "reserves"
+              ? t("intervenantAccess.tabs.reserves")
+              : tab === "documents"
+                ? t("intervenantAccess.tabs.documents")
+                : tab === "intervenants"
+                  ? t("sidebar.intervenants")
+                  : tab === "materiel"
+                    ? t("intervenantAccess.tabs.material")
+                    : tab === "messagerie"
+                      ? t("intervenantAccess.tabs.messaging")
+                      : tab === "doe"
+                        ? "DOE"
+                        : tab === "visite"
+                          ? "Visite"
+                          : "Rapports";
+  const chantierTabs: Array<{ key: TabKey; label: string }> = [
+    { key: "accueil", label: "Accueil" },
+    { key: "devis-taches", label: t("chantierPage.tasks") },
+    { key: "planning", label: t("chantierTabs.planning") },
+    { key: "temps", label: t("chantierTabs.time") },
+    { key: "reserves", label: t("intervenantAccess.tabs.reserves") },
+    { key: "documents", label: t("intervenantAccess.tabs.documents") },
+    { key: "intervenants", label: t("sidebar.intervenants") },
+    { key: "materiel", label: t("intervenantAccess.tabs.material") },
+    { key: "messagerie", label: t("intervenantAccess.tabs.messaging") },
+    { key: "doe", label: "DOE" },
+  ];
+  const accueilPanel = (
+    <div className="space-y-5">
+      <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+          <div className="min-w-0">
+            <div className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-400">Informations chantier</div>
+            <div className="mt-2 flex flex-wrap items-start gap-2">
+              <h2 className="max-w-3xl text-2xl font-semibold leading-tight text-slate-950">{item.nom}</h2>
+              <span className={["rounded-full border px-2 py-1 text-xs", badge.className].join(" ")}>{badge.label}</span>
+            </div>
+            <div className="mt-3 flex flex-wrap gap-x-5 gap-y-2 text-sm text-slate-500">
+              <span>{t("chantierPage.start")} {item.date_debut ?? "—"}</span>
+              <span>{t("chantierPage.end")} {item.date_fin_prevue ?? "—"}</span>
+            </div>
           </div>
-          <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-sm text-slate-500">
-            <span>{t("chantierPage.start")} {item.date_debut ?? "—"}</span>
-            <span>{t("chantierPage.end")} {item.date_fin_prevue ?? "—"}</span>
-          </div>
-          <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-slate-100">
-            <div className="h-full rounded-full bg-blue-600" style={{ width: `${avancement}%` }} />
+          <div className="w-full max-w-xs rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+            <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">{t("chantiers.progress")}</div>
+            <div className="mt-1 text-2xl font-semibold text-slate-950">{avancement}%</div>
+            <div className="mt-3 h-2 overflow-hidden rounded-full bg-slate-200">
+              <div className="h-full rounded-full bg-blue-600" style={{ width: `${avancement}%` }} />
+            </div>
           </div>
         </div>
       </section>
 
-      <section className="grid grid-cols-2 gap-2">
-        <div className="rounded-2xl border border-slate-200 px-3 py-2">
+      <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <div className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm">
           <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">{t("chantiers.progress")}</div>
-          <div className="mt-1 text-base font-semibold text-slate-950">{avancement}%</div>
+          <div className="mt-2 text-2xl font-semibold text-slate-950">{avancement}%</div>
         </div>
-        <div className="rounded-2xl border border-slate-200 px-3 py-2">
+        <div className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm">
           <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">{t("chantierPage.hoursPlanned")}</div>
-          <div className="mt-1 text-base font-semibold text-slate-950">{tempsPrevues} h</div>
+          <div className="mt-2 text-2xl font-semibold text-slate-950">{tempsPrevues} h</div>
         </div>
-        <div className="rounded-2xl border border-slate-200 px-3 py-2">
+        <div className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm">
           <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">{t("chantierPage.hoursDone")}</div>
-          <div className="mt-1 text-base font-semibold text-slate-950">{totalTempsReel} h</div>
+          <div className="mt-2 text-2xl font-semibold text-slate-950">{totalTempsReel} h</div>
         </div>
-        <div className="rounded-2xl border border-slate-200 px-3 py-2">
+        <div className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm">
           <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">{t("intervenantAccess.tabs.reserves")}</div>
-          <div className="mt-1 text-base font-semibold text-slate-950">{reservesOuvertes}</div>
+          <div className="mt-2 text-2xl font-semibold text-slate-950">{reservesOuvertes}</div>
         </div>
       </section>
 
-      <section className="rounded-2xl border border-slate-200 bg-white px-4 py-3">
-        <div className="flex flex-wrap items-center gap-2">
+      <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <div className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-400">Alertes</div>
+            <div className="mt-1 text-lg font-semibold text-slate-950">Points à surveiller</div>
+          </div>
+          <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-medium text-slate-600">
+            {alertCards.length} alerte{alertCards.length > 1 ? "s" : ""}
+          </span>
+        </div>
+        <div className="mt-4 flex flex-wrap gap-2">
           {alertCards.length === 0 ? (
-            <span className="text-sm text-slate-500">{t("chantierPage.noAlert")}</span>
+            <span className="inline-flex items-center rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-medium text-emerald-700">
+              {t("chantierPage.noAlert")}
+            </span>
           ) : (
             alertCards.map((alert) => (
               <span
@@ -2999,83 +3035,114 @@ export default function ChantierPage() {
         </div>
       </section>
 
-      <section className="rounded-2xl border border-slate-200 bg-white p-3 space-y-3">
-        <div className="space-y-2">
-          <div className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-400">{t("chantierPage.pilotage")}</div>
-          <div className="flex flex-wrap gap-2">
-            <button
-              type="button"
-              onClick={() => {
-                setPrimaryTab("taches");
-                setTab("devis-taches");
-              }}
-              className={["rounded-full px-4 py-2 text-sm font-medium", primaryTab === "taches" ? "bg-blue-600 text-white" : "border border-slate-200 text-slate-700"].join(" ")}
-            >
-              {t("chantierPage.tasks")}
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                setPrimaryTab("planning");
-                setTab("planning");
-              }}
-              className={["rounded-full px-4 py-2 text-sm font-medium", primaryTab === "planning" ? "bg-blue-600 text-white" : "border border-slate-200 text-slate-700"].join(" ")}
-            >
-              {t("chantierTabs.planning")}
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                setPrimaryTab("temps");
-                setTab("temps");
-              }}
-              className={["rounded-full px-4 py-2 text-sm font-medium", primaryTab === "temps" ? "bg-blue-600 text-white" : "border border-slate-200 text-slate-700"].join(" ")}
-            >
-              {t("chantierTabs.time")}
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                setPrimaryTab("reserves");
-                setTab("reserves");
-              }}
-              className={["rounded-full px-4 py-2 text-sm font-medium", primaryTab === "reserves" ? "bg-blue-600 text-white" : "border border-slate-200 text-slate-700"].join(" ")}
-            >
-              {t("intervenantAccess.tabs.reserves")}
-            </button>
+      <section className="grid gap-3 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,0.8fr)]">
+        <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+          <div className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-400">Résumé rapide</div>
+          <div className="mt-1 text-lg font-semibold text-slate-950">Synthèse des tâches</div>
+          <div className="mt-4 grid gap-3 sm:grid-cols-2">
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+              <div className="text-sm text-slate-500">Nombre de tâches</div>
+              <div className="mt-2 text-2xl font-semibold text-slate-950">{tasks.length}</div>
+            </div>
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+              <div className="text-sm text-slate-500">Tâches terminées / en cours</div>
+              <div className="mt-2 text-2xl font-semibold text-slate-950">
+                {completedTasksCount} / {inProgressTasksCount}
+              </div>
+            </div>
+          </div>
+          <div className="mt-4 flex flex-wrap gap-2 text-xs text-slate-500">
+            <span className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-emerald-700">
+              {completedTasksCount} terminée{completedTasksCount > 1 ? "s" : ""}
+            </span>
+            <span className="rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-amber-700">
+              {inProgressTasksCount} en cours
+            </span>
+            <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-slate-700">
+              {todoTasksCount} à faire
+            </span>
           </div>
         </div>
-        <div className="space-y-2">
-          <div className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-400">{t("chantierPage.management")}</div>
-          <div className="flex flex-wrap gap-2">
-            {[
-              { key: "documents", label: t("intervenantAccess.tabs.documents") },
-              { key: "doe", label: "DOE" },
-              { key: "intervenants", label: t("sidebar.intervenants") },
-              { key: "materiel", label: t("intervenantAccess.tabs.material") },
-              { key: "messagerie", label: t("intervenantAccess.tabs.messaging") },
-            ].map((entry) => (
+
+        <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+          <div className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-400">Pilotage</div>
+          <div className="mt-1 text-lg font-semibold text-slate-950">Vue rapide</div>
+          <div className="mt-4 space-y-3 text-sm text-slate-600">
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+              <div className="font-medium text-slate-900">Intervenants affectés</div>
+              <div className="mt-1 text-2xl font-semibold text-slate-950">{intervenants.length}</div>
+            </div>
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+              <div className="font-medium text-slate-900">Lots concernés</div>
+              <div className="mt-1 text-2xl font-semibold text-slate-950">{lotOptions.length}</div>
+            </div>
+          </div>
+        </div>
+      </section>
+    </div>
+  );
+
+  /* ---------------- render ---------------- */
+  return (
+    <div className="space-y-6">
+      {/* Toast */}
+      {toast && (
+        <div
+          className={[
+            "fixed right-6 bottom-6 z-50 rounded-xl border px-4 py-3 text-sm shadow-lg",
+            toast.type === "ok"
+              ? "bg-emerald-50 text-emerald-800 border-emerald-200"
+              : "bg-red-50 text-red-800 border-red-200",
+          ].join(" ")}
+        >
+          {toast.msg}
+        </div>
+      )}
+
+      <section className="sticky top-4 z-20 rounded-3xl border border-slate-200 bg-white/95 px-5 py-4 shadow-sm backdrop-blur">
+        <div className="flex flex-col gap-4">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+            <div className="flex items-start gap-3">
+              <Link to="/chantiers" className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-slate-200 hover:bg-slate-50" aria-label={t("chantierPage.backToChantiers")}>
+                ←
+              </Link>
+              <div className="min-w-0">
+                <div className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-400">Chantier</div>
+                <h1 className="max-w-3xl text-2xl font-semibold leading-tight text-slate-950">{item.nom}</h1>
+                <div className="mt-1 flex flex-wrap items-center gap-2 text-sm text-slate-500">
+                  <span>Vue : {activeTabLabel}</span>
+                  <span className={["rounded-full border px-2 py-0.5 text-xs", badge.className].join(" ")}>{badge.label}</span>
+                </div>
+              </div>
+            </div>
+            <div className="rounded-2xl border border-blue-100 bg-blue-50 px-4 py-3 text-sm text-blue-900">
+              <div className="font-semibold">Accueil = synthèse</div>
+              <div className="text-blue-700">Onglets = actions opérationnelles</div>
+            </div>
+          </div>
+
+          <nav className="flex flex-wrap gap-2">
+            {chantierTabs.map((entry) => (
               <button
                 key={entry.key}
                 type="button"
-                onClick={() => {
-                  setPrimaryTab("gestion");
-                  setTab(entry.key as TabKey);
-                }}
+                onClick={() => setTab(entry.key)}
                 className={[
-                  "rounded-full px-4 py-2 text-sm font-medium",
-                  primaryTab === "gestion" && tab === entry.key ? "bg-slate-900 text-white" : "border border-slate-200 text-slate-700",
+                  "rounded-full px-4 py-2 text-sm font-medium transition",
+                  tab === entry.key
+                    ? "bg-blue-600 text-white shadow-sm"
+                    : "border border-slate-200 bg-white text-slate-700 hover:bg-slate-50",
                 ].join(" ")}
               >
                 {entry.label}
               </button>
             ))}
-          </div>
+          </nav>
         </div>
       </section>
 
       <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-        {primaryTab === "taches" && tab === "devis-taches" ? (
+        {tab === "devis-taches" ? (
           <button
             type="button"
             onClick={() => setTaskCreateDrawerOpen(true)}
@@ -3084,6 +3151,7 @@ export default function ChantierPage() {
             + {t("chantierPage.addTask")}
           </button>
         ) : null}
+        {tab === "accueil" && accueilPanel}
         {/* ---------------- ONGLET TEMPS ---------------- */}
         {tab === "temps" && (
           <div className="space-y-3">
@@ -4701,7 +4769,8 @@ export default function ChantierPage() {
         )}
 
         {/* autres onglets placeholders */}
-        {tab !== "devis-taches" &&
+        {tab !== "accueil" &&
+          tab !== "devis-taches" &&
           tab !== "intervenants" &&
           tab !== "documents" &&
           tab !== "reserves" &&

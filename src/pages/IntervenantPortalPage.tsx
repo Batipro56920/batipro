@@ -12,6 +12,9 @@ import {
   intervenantGetTasks,
   intervenantMaterielCreate,
   intervenantMaterielList,
+  intervenantTerrainFeedbackCreate,
+  intervenantTerrainFeedbackList,
+  intervenantTerrainFeedbackUploadPhoto,
   intervenantSession,
   intervenantTimeCreate,
   intervenantTimeDelete,
@@ -23,12 +26,14 @@ import {
   type IntervenantMateriel,
   type IntervenantPlanning,
   type IntervenantTask,
+  type IntervenantTerrainFeedback,
   type IntervenantTimeEntry,
 } from "../services/intervenantPortal.service";
 import TodayChecklistCard, {
   type DailyChecklistItemKey,
   type DailyChecklistValues,
 } from "../components/TodayChecklistCard";
+import TerrainFeedbackPanel from "../components/intervenantPortal/TerrainFeedbackPanel";
 import {
   PortalActionTile,
   PortalBadge,
@@ -43,7 +48,7 @@ import {
 } from "../components/intervenantPortal/PortalUi";
 import { useI18n } from "../i18n";
 
-type PortalTab = "accueil" | "temps" | "taches" | "planning" | "documents" | "materiel" | "messages";
+type PortalTab = "accueil" | "temps" | "taches" | "planning" | "documents" | "materiel" | "messages" | "retours";
 type LoadState<T> = { loading: boolean; error: string | null; data: T };
 type DashboardTaskItem = { chantier: IntervenantChantier; task: IntervenantTask };
 type DashboardMaterielItem = { chantier: IntervenantChantier; row: IntervenantMateriel };
@@ -70,6 +75,7 @@ const EMPTY_PLANNING_STATE: LoadState<IntervenantPlanning> = {
 const EMPTY_TIME_STATE: LoadState<IntervenantTimeEntry[]> = { loading: false, error: null, data: [] };
 const EMPTY_MATERIEL_STATE: LoadState<IntervenantMateriel[]> = { loading: false, error: null, data: [] };
 const EMPTY_INFO_REQUESTS_STATE: LoadState<IntervenantInformationRequest[]> = { loading: false, error: null, data: [] };
+const EMPTY_TERRAIN_FEEDBACKS_STATE: LoadState<IntervenantTerrainFeedback[]> = { loading: false, error: null, data: [] };
 const EMPTY_DASHBOARD_TASKS_STATE: LoadState<DashboardTaskItem[]> = { loading: false, error: null, data: [] };
 const EMPTY_DASHBOARD_MATERIEL_STATE: LoadState<DashboardMaterielItem[]> = { loading: false, error: null, data: [] };
 
@@ -399,6 +405,15 @@ export default function IntervenantPortalPage() {
   const [infoRequestMessage, setInfoRequestMessage] = useState("");
   const [infoRequestSaving, setInfoRequestSaving] = useState(false);
   const [infoRequestFeedback, setInfoRequestFeedback] = useState<{ type: "success" | "error"; message: string } | null>(null);
+  const [terrainFeedbackState, setTerrainFeedbackState] = useState<LoadState<IntervenantTerrainFeedback[]>>(EMPTY_TERRAIN_FEEDBACKS_STATE);
+  const [terrainFeedbackChantierId, setTerrainFeedbackChantierId] = useState("");
+  const [terrainFeedbackCategory, setTerrainFeedbackCategory] = useState("observation_chantier");
+  const [terrainFeedbackUrgency, setTerrainFeedbackUrgency] = useState("normale");
+  const [terrainFeedbackTitle, setTerrainFeedbackTitle] = useState("");
+  const [terrainFeedbackDescription, setTerrainFeedbackDescription] = useState("");
+  const [terrainFeedbackFiles, setTerrainFeedbackFiles] = useState<File[]>([]);
+  const [terrainFeedbackSaving, setTerrainFeedbackSaving] = useState(false);
+  const [terrainFeedbackFeedback, setTerrainFeedbackFeedback] = useState<{ type: "success" | "error"; message: string } | null>(null);
   useEffect(() => {
     let alive = true;
     async function bootstrap() {
@@ -508,9 +523,15 @@ export default function IntervenantPortalPage() {
   useEffect(() => {
     if (chantiers.length === 0) {
       setQuickMaterielChantierId("");
+      setTerrainFeedbackChantierId("");
       return;
     }
     setQuickMaterielChantierId((current) => {
+      const validCurrent = current && chantiers.some((chantier) => chantier.id === current);
+      if (validCurrent) return current;
+      return selectedChantierId || chantiers[0].id;
+    });
+    setTerrainFeedbackChantierId((current) => {
       const validCurrent = current && chantiers.some((chantier) => chantier.id === current);
       if (validCurrent) return current;
       return selectedChantierId || chantiers[0].id;
@@ -528,6 +549,9 @@ export default function IntervenantPortalPage() {
     setMaterielTaskId("");
     setMaterielFeedback(null);
     setInfoRequestFeedback(null);
+    setTerrainFeedbackFeedback(null);
+    setTerrainFeedbackFiles([]);
+    setTerrainFeedbackChantierId(selectedChantierId);
   }, [selectedChantierId]);
 
   useEffect(() => {
@@ -540,13 +564,15 @@ export default function IntervenantPortalPage() {
       setTimeState({ loading: true, error: null, data: [] });
       setMaterielState({ loading: true, error: null, data: [] });
       setInfoRequestState({ loading: true, error: null, data: [] });
-      const [tasksResult, documentsResult, planningResult, timeResult, materielResult, infoRequestsResult] = await Promise.allSettled([
+      setTerrainFeedbackState({ loading: true, error: null, data: [] });
+      const [tasksResult, documentsResult, planningResult, timeResult, materielResult, infoRequestsResult, terrainFeedbackResult] = await Promise.allSettled([
         intervenantGetTasks(token, selectedChantierId),
         intervenantGetDocuments(token, selectedChantierId),
         intervenantGetPlanning(token, selectedChantierId),
         intervenantTimeList(token, selectedChantierId),
         intervenantMaterielList(token, selectedChantierId),
         intervenantInformationRequestList(token, selectedChantierId),
+        intervenantTerrainFeedbackList(token, selectedChantierId),
       ]);
       if (!alive) return;
       if (LEGACY_FALLBACK_ENABLED) {
@@ -565,6 +591,7 @@ export default function IntervenantPortalPage() {
       setTimeState(timeResult.status === "fulfilled" ? { loading: false, error: null, data: timeResult.value } : { loading: false, error: getErrorMessage(timeResult.reason, t("intervenantPortal.errors.timeLoad")), data: [] });
       setMaterielState(materielResult.status === "fulfilled" ? { loading: false, error: null, data: materielResult.value } : { loading: false, error: getErrorMessage(materielResult.reason, t("intervenantPortal.errors.materialLoad")), data: [] });
       setInfoRequestState(infoRequestsResult.status === "fulfilled" ? { loading: false, error: null, data: infoRequestsResult.value } : { loading: false, error: getErrorMessage(infoRequestsResult.reason, t("intervenantPortal.errors.infoLoad")), data: [] });
+      setTerrainFeedbackState(terrainFeedbackResult.status === "fulfilled" ? { loading: false, error: null, data: terrainFeedbackResult.value } : { loading: false, error: getErrorMessage(terrainFeedbackResult.reason, t("intervenantPortal.errors.terrainFeedbackLoad")), data: [] });
     }
     void loadChantierData();
     return () => {
@@ -715,8 +742,8 @@ export default function IntervenantPortalPage() {
     : chantierDateSummary(activeChantier, locale, t);
   const dailyChecklistDateLabel = formatPortalDate(todayChecklistDate);
   const dailyChecklistValidatedLabel = dailyChecklist?.validated_at ? formatPortalDateTime(dailyChecklist.validated_at) : null;
-  const allTabs = ["accueil", "temps", "taches", "planning", "documents", "materiel", "messages"] as PortalTab[];
-  const siteTabs = ["temps", "taches", "planning", "documents", "materiel", "messages"] as PortalTab[];
+  const allTabs = ["accueil", "temps", "taches", "planning", "documents", "materiel", "messages", "retours"] as PortalTab[];
+  const siteTabs = ["temps", "taches", "planning", "documents", "materiel", "messages", "retours"] as PortalTab[];
 
   const weekPlanningCard = (
     <PortalCard tone="default">
@@ -1082,6 +1109,72 @@ export default function IntervenantPortalPage() {
     }
   }
 
+  async function onCreateTerrainFeedback(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!token || !terrainFeedbackChantierId) {
+      setTerrainFeedbackFeedback({ type: "error", message: t("intervenantPortal.errors.chooseSite") });
+      return;
+    }
+    if (!terrainFeedbackTitle.trim()) {
+      setTerrainFeedbackFeedback({ type: "error", message: t("intervenantPortal.errors.terrainFeedbackTitleRequired") });
+      return;
+    }
+    if (!terrainFeedbackDescription.trim()) {
+      setTerrainFeedbackFeedback({
+        type: "error",
+        message: t("intervenantPortal.errors.terrainFeedbackDescriptionRequired"),
+      });
+      return;
+    }
+
+    setTerrainFeedbackSaving(true);
+    setTerrainFeedbackFeedback(null);
+    try {
+      const created = await intervenantTerrainFeedbackCreate(token, {
+        chantier_id: terrainFeedbackChantierId,
+        category: terrainFeedbackCategory,
+        urgency: terrainFeedbackUrgency,
+        title: terrainFeedbackTitle.trim(),
+        description: terrainFeedbackDescription.trim(),
+      });
+
+      if (terrainFeedbackFiles.length > 0) {
+        try {
+          const attachments = await Promise.all(
+            terrainFeedbackFiles.map((file) =>
+              intervenantTerrainFeedbackUploadPhoto(token, {
+                chantier_id: terrainFeedbackChantierId,
+                feedback_id: created.id,
+                file,
+              }),
+            ),
+          );
+          created.attachments = attachments;
+        } catch (error) {
+          throw new Error(getErrorMessage(error, t("intervenantPortal.errors.terrainFeedbackPhotos")));
+        }
+      }
+
+      setTerrainFeedbackFeedback({ type: "success", message: t("intervenantPortal.feedback.terrainFeedbackSent") });
+      setTerrainFeedbackCategory("observation_chantier");
+      setTerrainFeedbackUrgency("normale");
+      setTerrainFeedbackTitle("");
+      setTerrainFeedbackDescription("");
+      setTerrainFeedbackFiles([]);
+      if (terrainFeedbackChantierId !== selectedChantierId) {
+        chooseChantier(terrainFeedbackChantierId);
+      }
+      setReloadTick((value) => value + 1);
+    } catch (error) {
+      setTerrainFeedbackFeedback({
+        type: "error",
+        message: getErrorMessage(error, t("intervenantPortal.errors.terrainFeedbackCreate")),
+      });
+    } finally {
+      setTerrainFeedbackSaving(false);
+    }
+  }
+
   const checklistCard = (
     <div className="space-y-3">
       <TodayChecklistCard
@@ -1224,6 +1317,42 @@ export default function IntervenantPortalPage() {
         )}
       </PortalCard>
     </div>
+  );
+
+  const terrainFeedbackPanel = (
+    <TerrainFeedbackPanel
+      t={t}
+      chantiers={chantiers}
+      activeChantierId={selectedChantierId}
+      form={{
+        chantier_id: terrainFeedbackChantierId || selectedChantierId || chantiers[0]?.id || "",
+        category: terrainFeedbackCategory,
+        urgency: terrainFeedbackUrgency,
+        title: terrainFeedbackTitle,
+        description: terrainFeedbackDescription,
+      }}
+      onChange={(patch) => {
+        if (patch.chantier_id !== undefined) setTerrainFeedbackChantierId(patch.chantier_id);
+        if (patch.category !== undefined) setTerrainFeedbackCategory(patch.category);
+        if (patch.urgency !== undefined) setTerrainFeedbackUrgency(patch.urgency);
+        if (patch.title !== undefined) setTerrainFeedbackTitle(patch.title);
+        if (patch.description !== undefined) setTerrainFeedbackDescription(patch.description);
+        setTerrainFeedbackFeedback(null);
+      }}
+      onSubmit={onCreateTerrainFeedback}
+      saving={terrainFeedbackSaving}
+      feedback={terrainFeedbackFeedback}
+      files={terrainFeedbackFiles}
+      onFilesChange={(files) => {
+        setTerrainFeedbackFiles(files);
+        setTerrainFeedbackFeedback(null);
+      }}
+      listLoading={terrainFeedbackState.loading}
+      listError={terrainFeedbackState.error}
+      rows={terrainFeedbackState.data}
+      formatDate={formatPortalDate}
+      formatDateTime={formatPortalDateTime}
+    />
   );
 
   const tasksPanel = (
@@ -1513,7 +1642,9 @@ export default function IntervenantPortalPage() {
               ? documentsPanel
               : activeTab === "materiel"
                 ? materielPanel
-                : messagesPanel;
+                : activeTab === "retours"
+                  ? terrainFeedbackPanel
+                  : messagesPanel;
 
   if (bootLoading) {
     return <div className="min-h-screen bg-slate-100 px-4 py-6 text-slate-700">{t("intervenantPortal.bootLoading")}</div>;

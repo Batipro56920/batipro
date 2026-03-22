@@ -141,6 +141,36 @@ export type IntervenantInformationRequest = {
   updated_at: string | null;
 };
 
+export type IntervenantTerrainFeedbackAttachment = {
+  id: string;
+  storage_bucket: string;
+  storage_path: string;
+  file_name: string;
+  mime_type: string | null;
+  size_bytes: number | null;
+  created_at: string | null;
+  public_url: string;
+};
+
+export type IntervenantTerrainFeedback = {
+  id: string;
+  chantier_id: string;
+  chantier_nom: string | null;
+  author_intervenant_id: string;
+  category: string;
+  urgency: string;
+  title: string;
+  description: string;
+  status: "nouveau" | "en_cours" | "traite" | "classe_sans_suite";
+  assigned_to: string | null;
+  assigned_to_name: string | null;
+  treatment_comment: string | null;
+  treated_at: string | null;
+  created_at: string | null;
+  updated_at: string | null;
+  attachments: IntervenantTerrainFeedbackAttachment[];
+};
+
 function rpcMessage(error: unknown, fallback: string): string {
   return String((error as { message?: string } | null)?.message ?? fallback).trim() || fallback;
 }
@@ -180,6 +210,53 @@ function normalizeMaterielStatus(value: unknown): IntervenantMateriel["statut"] 
 
 function normalizeInformationRequestStatus(value: unknown): IntervenantInformationRequest["status"] {
   return String(value ?? "").trim().toLowerCase() === "traitee" ? "traitee" : "envoyee";
+}
+
+function normalizeTerrainFeedbackStatus(value: unknown): IntervenantTerrainFeedback["status"] {
+  const v = String(value ?? "").trim().toLowerCase();
+  if (v === "en_cours") return "en_cours";
+  if (v === "traite") return "traite";
+  if (v === "classe_sans_suite") return "classe_sans_suite";
+  return "nouveau";
+}
+
+function mapTerrainFeedbackAttachment(
+  row: Record<string, unknown>,
+): IntervenantTerrainFeedbackAttachment {
+  const storageBucket = String(row.storage_bucket ?? "terrain-feedbacks");
+  const storagePath = String(row.storage_path ?? "");
+  return {
+    id: String(row.id ?? ""),
+    storage_bucket: storageBucket,
+    storage_path: storagePath,
+    file_name: String(row.file_name ?? "photo"),
+    mime_type: asNullableString(row.mime_type),
+    size_bytes: asNullableNumber(row.size_bytes),
+    created_at: asNullableString(row.created_at),
+    public_url: supabase.storage.from(storageBucket).getPublicUrl(storagePath).data.publicUrl,
+  };
+}
+
+function mapTerrainFeedback(row: Record<string, unknown>): IntervenantTerrainFeedback {
+  const attachmentsRaw = Array.isArray(row.attachments) ? row.attachments : [];
+  return {
+    id: String(row.id ?? ""),
+    chantier_id: String(row.chantier_id ?? ""),
+    chantier_nom: asNullableString(row.chantier_nom),
+    author_intervenant_id: String(row.author_intervenant_id ?? ""),
+    category: String(row.category ?? "observation_chantier"),
+    urgency: String(row.urgency ?? "normale"),
+    title: String(row.title ?? "Retour terrain"),
+    description: String(row.description ?? ""),
+    status: normalizeTerrainFeedbackStatus(row.status),
+    assigned_to: asNullableString(row.assigned_to),
+    assigned_to_name: asNullableString(row.assigned_to_name),
+    treatment_comment: asNullableString(row.treatment_comment),
+    treated_at: asNullableString(row.treated_at),
+    created_at: asNullableString(row.created_at),
+    updated_at: asNullableString(row.updated_at),
+    attachments: attachmentsRaw.map((entry) => mapTerrainFeedbackAttachment((entry ?? {}) as Record<string, unknown>)),
+  };
 }
 
 function parseChantier(row: Record<string, unknown>): IntervenantChantier {
@@ -558,4 +635,68 @@ export async function intervenantInformationRequestList(
     created_at: asNullableString(row.created_at),
     updated_at: asNullableString(row.updated_at),
   }));
+}
+
+export async function intervenantTerrainFeedbackCreate(
+  token: string,
+  payload: {
+    chantier_id: string;
+    category: string;
+    urgency: string;
+    title: string;
+    description: string;
+  },
+): Promise<IntervenantTerrainFeedback> {
+  const { data, error } = await (supabase as any).rpc("intervenant_terrain_feedback_create", {
+    p_token: token,
+    p_payload: payload,
+  });
+  if (error) throw new Error(rpcMessage(error, "Creation retour terrain impossible."));
+
+  return mapTerrainFeedback((data && typeof data === "object" ? data : {}) as Record<string, unknown>);
+}
+
+export async function intervenantTerrainFeedbackList(
+  token: string,
+  chantierId?: string | null,
+): Promise<IntervenantTerrainFeedback[]> {
+  const { data, error } = await (supabase as any).rpc("intervenant_terrain_feedback_list", {
+    p_token: token,
+    p_chantier_id: chantierId ?? null,
+  });
+  if (error) throw new Error(rpcMessage(error, "Chargement retours terrain impossible."));
+
+  const rows = Array.isArray(data) ? data : [];
+  return rows.map((row) => mapTerrainFeedback((row ?? {}) as Record<string, unknown>));
+}
+
+export async function intervenantTerrainFeedbackUploadPhoto(
+  token: string,
+  payload: {
+    chantier_id: string;
+    feedback_id: string;
+    file: File;
+  },
+): Promise<IntervenantTerrainFeedbackAttachment> {
+  const formData = new FormData();
+  formData.set("token", token);
+  formData.set("chantier_id", payload.chantier_id);
+  formData.set("feedback_id", payload.feedback_id);
+  formData.set("file", payload.file);
+
+  const { data, error } = await supabase.functions.invoke("intervenant-terrain-feedback-upload", {
+    body: formData,
+  });
+  if (error) throw new Error(rpcMessage(error, "Upload photo impossible."));
+
+  const row = (data && typeof data === "object" ? (data as Record<string, unknown>).attachment : null) as
+    | Record<string, unknown>
+    | null;
+  if (!row) throw new Error("Piece jointe introuvable dans la reponse.");
+
+  const attachment = mapTerrainFeedbackAttachment(row);
+  return {
+    ...attachment,
+    public_url: asNullableString(row.public_url) ?? attachment.public_url,
+  };
 }

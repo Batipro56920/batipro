@@ -9,6 +9,7 @@ import {
   ChartColumnBig,
   Building2,
   Truck,
+  TriangleAlert,
 } from "lucide-react";
 import { useI18n } from "../i18n";
 
@@ -23,6 +24,7 @@ export default function Sidebar({ collapsed = false, onToggleCollapse }: Props) 
     { to: "/dashboard", label: t("sidebar.dashboard"), icon: LayoutDashboard },
     { to: "/chantiers", label: t("sidebar.chantiers"), icon: Hammer },
     { to: "/intervenants", label: t("sidebar.intervenants"), icon: Users },
+    { to: "/retours-terrain", label: t("sidebar.terrainFeedback"), icon: TriangleAlert },
     { to: "/bibliotheque", label: t("sidebar.library"), icon: LibraryBig },
     { to: "/statistiques", label: t("sidebar.statistics"), icon: ChartColumnBig },
     { to: "/fournisseurs", label: t("sidebar.suppliers"), icon: Truck },

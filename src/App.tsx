@@ -16,6 +16,7 @@ import BibliothequeTasksPage from "./pages/BibliothequeTasksPage";
 import StatistiquesPage from "./pages/StatistiquesPage";
 import MonEntreprisePage from "./pages/MonEntreprisePage";
 import FournisseursPage from "./pages/FournisseursPage";
+import TerrainFeedbacksPage from "./pages/TerrainFeedbacksPage";
 
 export default function App() {
   return (
@@ -44,6 +45,7 @@ export default function App() {
         <Route path="/chantiers/:id/visites" element={<ChantierVisitesPage />} />
 
         <Route path="/intervenants" element={<IntervenantsPage />} />
+        <Route path="/retours-terrain" element={<TerrainFeedbacksPage />} />
         <Route path="/bibliotheque" element={<BibliothequeTasksPage />} />
         <Route path="/statistiques" element={<StatistiquesPage />} />
         <Route path="/entreprise" element={<MonEntreprisePage />} />
