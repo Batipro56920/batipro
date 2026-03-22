@@ -3221,13 +3221,9 @@ export default function ChantierPage() {
                 </div>
               </div>
             </div>
-            <div className="rounded-2xl border border-blue-100 bg-blue-50 px-4 py-3 text-sm text-blue-900">
-              <div className="font-semibold">Accueil = synthèse</div>
-              <div className="text-blue-700">Onglets = actions opérationnelles</div>
-            </div>
           </div>
 
-          <div className="grid gap-4 lg:grid-cols-2">
+          <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_120px_minmax(0,1fr)] lg:items-end">
             <div className="space-y-2">
               <div className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-400">
                 Pilotage chantier
@@ -3251,6 +3247,12 @@ export default function ChantierPage() {
               </nav>
             </div>
 
+            <div className="hidden lg:flex lg:justify-center lg:pb-1">
+              <div className="flex h-full min-h-[86px] w-full max-w-[104px] items-center justify-center rounded-3xl border border-blue-200 bg-gradient-to-b from-blue-50 to-blue-100/80 px-3 shadow-sm">
+                <div className="h-full w-px bg-blue-300" />
+              </div>
+            </div>
+
             <div className="space-y-2">
               <div className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-400">
                 Administratif
@@ -3272,6 +3274,10 @@ export default function ChantierPage() {
                   </button>
                 ))}
               </nav>
+            </div>
+
+            <div className="lg:hidden">
+              <div className="h-3 rounded-full bg-gradient-to-r from-blue-100 via-blue-300 to-blue-100" />
             </div>
           </div>
         </div>
