@@ -3223,27 +3223,18 @@ export default function ChantierPage() {
             </div>
           </div>
 
-          <section className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4 shadow-sm">
-            <div className="space-y-3">
-              <div className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-400">
-                Vue principale
-              </div>
-              <nav className="flex flex-wrap gap-2">
-                <button
-                  type="button"
-                  onClick={() => setTab(overviewTab.key)}
-                  className={[
-                    "rounded-full px-4 py-2 text-sm font-medium transition",
-                    tab === overviewTab.key
-                      ? "bg-blue-600 text-white shadow-sm"
-                      : "border border-slate-200 bg-white text-slate-700 hover:bg-slate-50",
-                  ].join(" ")}
-                >
-                  {overviewTab.label}
-                </button>
-              </nav>
-            </div>
-          </section>
+          <button
+            type="button"
+            onClick={() => setTab(overviewTab.key)}
+            className={[
+              "w-full rounded-2xl border px-4 py-3 text-left text-sm font-medium transition",
+              tab === overviewTab.key
+                ? "border-blue-600 bg-blue-600 text-white shadow-sm"
+                : "border-slate-200 bg-slate-50/70 text-slate-700 hover:bg-slate-100",
+            ].join(" ")}
+          >
+            {overviewTab.label}
+          </button>
 
           <div className="grid gap-4 lg:grid-cols-2">
             <section className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4 shadow-sm">
