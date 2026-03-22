@@ -3223,62 +3223,56 @@ export default function ChantierPage() {
             </div>
           </div>
 
-          <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_120px_minmax(0,1fr)] lg:items-end">
-            <div className="space-y-2">
-              <div className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-400">
-                Pilotage chantier
+          <div className="grid gap-4 lg:grid-cols-2">
+            <section className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4 shadow-sm">
+              <div className="space-y-3">
+                <div className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-400">
+                  Pilotage chantier
+                </div>
+                <nav className="flex flex-wrap gap-2">
+                  {pilotageTabs.map((entry) => (
+                    <button
+                      key={entry.key}
+                      type="button"
+                      onClick={() => setTab(entry.key)}
+                      className={[
+                        "rounded-full px-4 py-2 text-sm font-medium transition",
+                        tab === entry.key
+                          ? "bg-blue-600 text-white shadow-sm"
+                          : "border border-slate-200 bg-white text-slate-700 hover:bg-slate-50",
+                      ].join(" ")}
+                    >
+                      {entry.label}
+                    </button>
+                  ))}
+                </nav>
               </div>
-              <nav className="flex flex-wrap gap-2">
-                {pilotageTabs.map((entry) => (
-                  <button
-                    key={entry.key}
-                    type="button"
-                    onClick={() => setTab(entry.key)}
-                    className={[
-                      "rounded-full px-4 py-2 text-sm font-medium transition",
-                      tab === entry.key
-                        ? "bg-blue-600 text-white shadow-sm"
-                        : "border border-slate-200 bg-white text-slate-700 hover:bg-slate-50",
-                    ].join(" ")}
-                  >
-                    {entry.label}
-                  </button>
-                ))}
-              </nav>
-            </div>
+            </section>
 
-            <div className="hidden lg:flex lg:justify-center lg:pb-1">
-              <div className="flex h-full min-h-[86px] w-full max-w-[104px] items-center justify-center rounded-3xl border border-blue-200 bg-gradient-to-b from-blue-50 to-blue-100/80 px-3 shadow-sm">
-                <div className="h-full w-px bg-blue-300" />
+            <section className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4 shadow-sm">
+              <div className="space-y-3">
+                <div className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-400">
+                  Administratif
+                </div>
+                <nav className="flex flex-wrap gap-2">
+                  {administratifTabs.map((entry) => (
+                    <button
+                      key={entry.key}
+                      type="button"
+                      onClick={() => setTab(entry.key)}
+                      className={[
+                        "rounded-full px-4 py-2 text-sm font-medium transition",
+                        tab === entry.key
+                          ? "bg-blue-600 text-white shadow-sm"
+                          : "border border-slate-200 bg-white text-slate-700 hover:bg-slate-50",
+                      ].join(" ")}
+                    >
+                      {entry.label}
+                    </button>
+                  ))}
+                </nav>
               </div>
-            </div>
-
-            <div className="space-y-2">
-              <div className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-400">
-                Administratif
-              </div>
-              <nav className="flex flex-wrap gap-2">
-                {administratifTabs.map((entry) => (
-                  <button
-                    key={entry.key}
-                    type="button"
-                    onClick={() => setTab(entry.key)}
-                    className={[
-                      "rounded-full px-4 py-2 text-sm font-medium transition",
-                      tab === entry.key
-                        ? "bg-blue-600 text-white shadow-sm"
-                        : "border border-slate-200 bg-white text-slate-700 hover:bg-slate-50",
-                    ].join(" ")}
-                  >
-                    {entry.label}
-                  </button>
-                ))}
-              </nav>
-            </div>
-
-            <div className="lg:hidden">
-              <div className="h-3 rounded-full bg-gradient-to-r from-blue-100 via-blue-300 to-blue-100" />
-            </div>
+            </section>
           </div>
         </div>
       </section>
