@@ -3046,8 +3046,8 @@ export default function ChantierPage() {
 
   const filteredMateriel =
     materielFilter === "__ALL__" ? materiel : materiel.filter((row) => row.statut === materielFilter);
+  const overviewTab: { key: TabKey; label: string } = { key: "accueil", label: "Accueil" };
   const pilotageTabs: Array<{ key: TabKey; label: string }> = [
-    { key: "accueil", label: "Accueil" },
     { key: "devis-taches", label: t("chantierPage.tasks") },
     { key: "planning", label: t("chantierTabs.planning") },
     { key: "temps", label: t("chantierTabs.time") },
@@ -3060,7 +3060,7 @@ export default function ChantierPage() {
     { key: "documents", label: t("intervenantAccess.tabs.documents") },
     { key: "doe", label: "DOE" },
   ];
-  const chantierTabs = [...pilotageTabs, ...administratifTabs];
+  const chantierTabs = [overviewTab, ...pilotageTabs, ...administratifTabs];
   const activeTabLabel = chantierTabs.find((entry) => entry.key === tab)?.label ?? "Rapports";
   const accueilPanel = (
     <div className="space-y-5">
@@ -3222,6 +3222,28 @@ export default function ChantierPage() {
               </div>
             </div>
           </div>
+
+          <section className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4 shadow-sm">
+            <div className="space-y-3">
+              <div className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-400">
+                Vue principale
+              </div>
+              <nav className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() => setTab(overviewTab.key)}
+                  className={[
+                    "rounded-full px-4 py-2 text-sm font-medium transition",
+                    tab === overviewTab.key
+                      ? "bg-blue-600 text-white shadow-sm"
+                      : "border border-slate-200 bg-white text-slate-700 hover:bg-slate-50",
+                  ].join(" ")}
+                >
+                  {overviewTab.label}
+                </button>
+              </nav>
+            </div>
+          </section>
 
           <div className="grid gap-4 lg:grid-cols-2">
             <section className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4 shadow-sm">
