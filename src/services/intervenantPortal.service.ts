@@ -89,6 +89,7 @@ export type IntervenantTimeEntry = {
   task_unite: string | null;
   intervenant_id: string;
   work_date: string;
+  duration_hours: number | null;
   quantite_realisee: number | null;
   note: string | null;
   created_at: string | null;
@@ -427,7 +428,8 @@ export async function intervenantTimeCreate(
     chantier_id: string;
     task_id: string;
     work_date?: string | null;
-    quantite_realisee: number;
+    duration_hours: number;
+    quantite_realisee?: number | null;
     note?: string | null;
   },
 ): Promise<void> {
@@ -462,6 +464,7 @@ export async function intervenantTimeList(token: string, chantierId: string): Pr
     task_unite: asNullableString(row.task_unite),
     intervenant_id: String(row.intervenant_id ?? ""),
     work_date: String(row.work_date ?? ""),
+    duration_hours: asNullableNumber(row.duration_hours),
     quantite_realisee: asNullableNumber(row.quantite_realisee),
     note: asNullableString(row.note),
     created_at: asNullableString(row.created_at),

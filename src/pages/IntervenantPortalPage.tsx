@@ -378,7 +378,8 @@ export default function IntervenantPortalPage() {
   const [timeTaskListOpen, setTimeTaskListOpen] = useState(false);
   const [timeFeedback, setTimeFeedback] = useState<{ type: "success" | "error"; message: string } | null>(null);
   const [timeDate, setTimeDate] = useState(todayIsoDate());
-  const [timeQuantity, setTimeQuantity] = useState("");
+  const [timeHours, setTimeHours] = useState("");
+  const [timeDoneQuantity, setTimeDoneQuantity] = useState("");
   const [timeNote, setTimeNote] = useState("");
   const [timeSaving, setTimeSaving] = useState(false);
   const [timeDeletingId, setTimeDeletingId] = useState<string | null>(null);
@@ -543,7 +544,8 @@ export default function IntervenantPortalPage() {
     setTimeTaskSearch("");
     setTimeTaskListOpen(false);
     setTimeFeedback(null);
-    setTimeQuantity("");
+    setTimeHours("");
+    setTimeDoneQuantity("");
     setTimeNote("");
     setTimeDate(todayIsoDate());
     setMaterielTaskId("");
@@ -677,6 +679,11 @@ export default function IntervenantPortalPage() {
 
   function formatPortalDateTime(value: string | null) {
     return formatDateTimeLabel(value, locale);
+  }
+
+  function formatPortalHours(value: number | null, empty = "-") {
+    if (value === null || value === undefined || !Number.isFinite(Number(value))) return empty;
+    return `${Math.round(Number(value) * 100) / 100} h`;
   }
 
   function formatPortalQuantity(value: number | null, unit: string | null, empty = "0") {
@@ -967,17 +974,30 @@ export default function IntervenantPortalPage() {
       setTimeFeedback({ type: "error", message: t("intervenantPortal.errors.chooseTask") });
       return;
     }
-    const quantity = Number(String(timeQuantity).replace(",", "."));
-    if (!Number.isFinite(quantity) || quantity <= 0) {
+    const hours = Number(String(timeHours).replace(",", "."));
+    if (!Number.isFinite(hours) || hours <= 0) {
+      setTimeFeedback({ type: "error", message: t("intervenantPortal.errors.validHours") });
+      return;
+    }
+    const quantityValue = timeDoneQuantity.trim() ? Number(String(timeDoneQuantity).replace(",", ".")) : null;
+    if (quantityValue !== null && (!Number.isFinite(quantityValue) || quantityValue <= 0)) {
       setTimeFeedback({ type: "error", message: t("intervenantPortal.errors.validQuantity") });
       return;
     }
     setTimeSaving(true);
     setTimeFeedback(null);
     try {
-      await intervenantTimeCreate(token, { chantier_id: selectedChantierId, task_id: timeTaskId, work_date: timeDate || todayIsoDate(), quantite_realisee: quantity, note: timeNote.trim() || null });
+      await intervenantTimeCreate(token, {
+        chantier_id: selectedChantierId,
+        task_id: timeTaskId,
+        work_date: timeDate || todayIsoDate(),
+        duration_hours: hours,
+        quantite_realisee: quantityValue,
+        note: timeNote.trim() || null,
+      });
       setTimeFeedback({ type: "success", message: t("intervenantPortal.feedback.timeSaved") });
-      setTimeQuantity("");
+      setTimeHours("");
+      setTimeDoneQuantity("");
       setTimeNote("");
       setTimeDate(todayIsoDate());
       setTimeTaskId(null);
@@ -1446,19 +1466,29 @@ export default function IntervenantPortalPage() {
             <PortalField label={t("intervenantPortal.time.date")}>
               <input className={portalInputClass()} type="date" value={timeDate} onChange={(e) => { setTimeDate(e.target.value); setTimeFeedback(null); }} />
             </PortalField>
-            <PortalField
-              label={t("intervenantPortal.time.doneQuantity")}
-              hint={selectedTimeTask ? t("intervenantPortal.time.totalQuantity", { value: formatPortalQuantity(selectedTimeTask.quantite, selectedTimeTask.unite, "-") }) : t("intervenantPortal.time.progressHelp")}
-            >
+            <PortalField label={t("intervenantPortal.time.durationHours")} hint={t("intervenantPortal.time.durationHelp")}>
               <input
                 className={portalInputClass()}
                 inputMode="decimal"
-                value={timeQuantity}
-                onChange={(e) => { setTimeQuantity(e.target.value); setTimeFeedback(null); }}
-                placeholder={selectedTimeTask?.unite ? t("intervenantPortal.time.quantityPlaceholderWithUnit", { unit: selectedTimeTask.unite }) : t("intervenantPortal.time.quantityPlaceholder")}
+                value={timeHours}
+                onChange={(e) => { setTimeHours(e.target.value); setTimeFeedback(null); }}
+                placeholder={t("intervenantPortal.time.hoursPlaceholder")}
               />
             </PortalField>
           </div>
+
+          <PortalField
+            label={t("intervenantPortal.time.doneQuantityOptional")}
+            hint={selectedTimeTask ? t("intervenantPortal.time.totalQuantity", { value: formatPortalQuantity(selectedTimeTask.quantite, selectedTimeTask.unite, "-") }) : t("intervenantPortal.time.progressHelp")}
+          >
+            <input
+              className={portalInputClass()}
+              inputMode="decimal"
+              value={timeDoneQuantity}
+              onChange={(e) => { setTimeDoneQuantity(e.target.value); setTimeFeedback(null); }}
+              placeholder={selectedTimeTask?.unite ? t("intervenantPortal.time.quantityPlaceholderWithUnit", { unit: selectedTimeTask.unite }) : t("intervenantPortal.time.quantityPlaceholder")}
+            />
+          </PortalField>
 
           <PortalField label={t("intervenantPortal.time.observations")}>
             <textarea
@@ -1494,7 +1524,10 @@ export default function IntervenantPortalPage() {
                   <div className="min-w-0 flex-1">
                     <div className="text-sm font-semibold text-slate-900">{formatPortalDate(entry.work_date)}</div>
                     <div className="mt-1 text-sm text-slate-500">{entry.task_titre || t("intervenantPortal.time.taskFallback")}</div>
-                    <div className="mt-2 text-xs text-slate-500">{t("intervenantPortal.time.quantity", { value: formatPortalQuantity(entry.quantite_realisee, entry.task_unite) })}</div>
+                    <div className="mt-2 text-xs text-slate-500">{t("intervenantPortal.time.hours", { value: formatPortalHours(entry.duration_hours) })}</div>
+                    {entry.quantite_realisee !== null ? (
+                      <div className="mt-1 text-xs text-slate-500">{t("intervenantPortal.time.quantity", { value: formatPortalQuantity(entry.quantite_realisee, entry.task_unite) })}</div>
+                    ) : null}
                     {entry.note ? <div className="mt-1 text-xs text-slate-500">{t("intervenantPortal.time.note", { value: entry.note })}</div> : null}
                   </div>
                   <PortalSecondaryButton type="button" disabled={timeDeletingId === entry.id} onClick={() => void onDeleteTimeEntry(entry)} className="px-3 py-2 text-xs text-red-700 hover:bg-red-50">
@@ -1834,7 +1867,21 @@ export default function IntervenantPortalPage() {
                           />
                         </div>
                         <div className="space-y-1">
-                          <label className="text-xs font-medium text-slate-600">{t("intervenantPortal.time.doneQuantity")}</label>
+                          <label className="text-xs font-medium text-slate-600">{t("intervenantPortal.time.durationHours")}</label>
+                          <div className="text-xs text-slate-500">{t("intervenantPortal.time.durationHelp")}</div>
+                          <input
+                            className="w-full rounded-2xl border border-slate-200 px-3 py-2 text-sm"
+                            inputMode="decimal"
+                            value={timeHours}
+                            onChange={(e) => {
+                              setTimeHours(e.target.value);
+                              setTimeFeedback(null);
+                            }}
+                            placeholder={t("intervenantPortal.time.hoursPlaceholder")}
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <label className="text-xs font-medium text-slate-600">{t("intervenantPortal.time.doneQuantityOptional")}</label>
                           {selectedTimeTask ? (
                             <div className="text-xs text-slate-500">
                               {t("intervenantPortal.time.totalQuantity", { value: formatPortalQuantity(selectedTimeTask.quantite, selectedTimeTask.unite, "-") })}
@@ -1843,9 +1890,9 @@ export default function IntervenantPortalPage() {
                           <input
                             className="w-full rounded-2xl border border-slate-200 px-3 py-2 text-sm"
                             inputMode="decimal"
-                            value={timeQuantity}
+                            value={timeDoneQuantity}
                             onChange={(e) => {
-                              setTimeQuantity(e.target.value);
+                              setTimeDoneQuantity(e.target.value);
                               setTimeFeedback(null);
                             }}
                             placeholder={selectedTimeTask?.unite ? t("intervenantPortal.time.quantityPlaceholderWithUnit", { unit: selectedTimeTask.unite }) : t("intervenantPortal.time.quantityPlaceholder")}

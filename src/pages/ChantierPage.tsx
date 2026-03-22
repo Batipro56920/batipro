@@ -15,6 +15,12 @@ import {
 } from "../services/chantierTasks.service";
 import { listTaskAssigneeIdsByTaskIds, replaceTaskAssignees } from "../services/chantierTaskAssignees.service";
 import { bulkUpdatePlanningTasks } from "../services/chantierPlanningTasks.service";
+import {
+  createChantierTimeEntry,
+  deleteChantierTimeEntry,
+  listChantierTimeEntriesByChantierId,
+  type ChantierTimeEntryRow,
+} from "../services/chantierTimeEntries.service";
 
 import {
   listDevisByChantierId,
@@ -295,10 +301,6 @@ function isAdminOnlyError(err: unknown): boolean {
   );
 }
 
-/** "1,5" => "1.5" */
-function normalizeHoursInput(s: string) {
-  return (s ?? "").trim().replace(",", ".");
-}
 function toInputNumberString(v: number | null | undefined) {
   if (v === null || v === undefined) return "";
   const n = Number(v);
@@ -390,11 +392,18 @@ export default function ChantierPage() {
   const [tasksPlanningWarning, setTasksPlanningWarning] = useState<string | null>(null);
   const [taskAssigneeIdsByTaskId, setTaskAssigneeIdsByTaskId] = useState<Record<string, string[]>>({});
 
-  // Temps tab (draft par tâche) : date début/fin + ajout (h)
-  const [timeDraftByTaskId, setTimeDraftByTaskId] = useState<
-    Record<string, { date_debut: string; date_fin: string; ajout_h: string }>
-  >({});
-  const [savingTimeTaskId, setSavingTimeTaskId] = useState<string | null>(null);
+  // Temps tab
+  const [timeEntries, setTimeEntries] = useState<ChantierTimeEntryRow[]>([]);
+  const [timeEntriesLoading, setTimeEntriesLoading] = useState(false);
+  const [timeEntriesError, setTimeEntriesError] = useState<string | null>(null);
+  const [timeEntryTaskId, setTimeEntryTaskId] = useState("");
+  const [timeEntryIntervenantId, setTimeEntryIntervenantId] = useState("");
+  const [timeEntryDate, setTimeEntryDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [timeEntryHours, setTimeEntryHours] = useState("");
+  const [timeEntryQuantity, setTimeEntryQuantity] = useState("");
+  const [timeEntryNote, setTimeEntryNote] = useState("");
+  const [timeEntrySaving, setTimeEntrySaving] = useState(false);
+  const [timeEntryDeletingId, setTimeEntryDeletingId] = useState<string | null>(null);
 
   // Documents
   const [documents, setDocuments] = useState<ChantierDocumentRow[]>([]);
@@ -1489,6 +1498,21 @@ export default function ChantierPage() {
     );
   }
 
+  async function refreshTimeEntriesOnly() {
+    if (!id) return;
+    setTimeEntriesLoading(true);
+    setTimeEntriesError(null);
+    try {
+      const rows = await listChantierTimeEntriesByChantierId(id);
+      setTimeEntries(rows);
+    } catch (e: any) {
+      setTimeEntries([]);
+      setTimeEntriesError(e?.message ?? "Erreur lors du chargement des saisies temps.");
+    } finally {
+      setTimeEntriesLoading(false);
+    }
+  }
+
   async function refreshDevisOnly(preferredDevisId?: string | null) {
     if (!id) return;
     setDevisLoading(true);
@@ -1519,6 +1543,80 @@ export default function ChantierPage() {
       setMaterielError(e?.message ?? "Erreur chargement matériel.");
     } finally {
       setMaterielLoading(false);
+    }
+  }
+
+  function resetTimeEntryDraft() {
+    setTimeEntryTaskId("");
+    setTimeEntryIntervenantId("");
+    setTimeEntryDate(new Date().toISOString().slice(0, 10));
+    setTimeEntryHours("");
+    setTimeEntryQuantity("");
+    setTimeEntryNote("");
+  }
+
+  async function saveTimeEntry() {
+    if (!id) return;
+
+    const taskId = String(timeEntryTaskId ?? "").trim();
+    const intervenantId = String(timeEntryIntervenantId ?? "").trim();
+    const workDate = String(timeEntryDate ?? "").trim();
+    const hours = toNumberOrNull(timeEntryHours);
+    const quantity = timeEntryQuantity.trim() ? toNumberOrNull(timeEntryQuantity) : null;
+
+    if (!taskId) {
+      setToast({ type: "error", msg: "Choisis une tâche." });
+      return;
+    }
+    if (!intervenantId) {
+      setToast({ type: "error", msg: "Choisis un intervenant." });
+      return;
+    }
+    if (!workDate) {
+      setToast({ type: "error", msg: "Choisis une date." });
+      return;
+    }
+    if (hours === null || hours <= 0) {
+      setToast({ type: "error", msg: "Durée invalide (heures > 0)." });
+      return;
+    }
+    if (quantity !== null && quantity <= 0) {
+      setToast({ type: "error", msg: "Quantité invalide." });
+      return;
+    }
+
+    setTimeEntrySaving(true);
+    try {
+      await createChantierTimeEntry({
+        chantier_id: id,
+        task_id: taskId,
+        intervenant_id: intervenantId,
+        work_date: workDate,
+        duration_hours: hours,
+        quantite_realisee: quantity,
+        note: timeEntryNote.trim() || null,
+      });
+      await Promise.all([refreshTasksOnly(), refreshTimeEntriesOnly()]);
+      resetTimeEntryDraft();
+      setToast({ type: "ok", msg: "Saisie temps enregistrée." });
+    } catch (e: any) {
+      setToast({ type: "error", msg: e?.message ?? "Erreur lors de l'enregistrement de la saisie temps." });
+    } finally {
+      setTimeEntrySaving(false);
+    }
+  }
+
+  async function removeTimeEntry(entryId: string) {
+    if (!entryId) return;
+    setTimeEntryDeletingId(entryId);
+    try {
+      await deleteChantierTimeEntry(entryId);
+      await Promise.all([refreshTasksOnly(), refreshTimeEntriesOnly()]);
+      setToast({ type: "ok", msg: "Saisie temps supprimée." });
+    } catch (e: any) {
+      setToast({ type: "error", msg: e?.message ?? "Erreur lors de la suppression de la saisie temps." });
+    } finally {
+      setTimeEntryDeletingId(null);
     }
   }
   /* ---------------- initial load ---------------- */
@@ -1557,6 +1655,20 @@ export default function ChantierPage() {
           setTasksPlanningWarning(null);
         } finally {
           if (alive) setTasksLoading(false);
+        }
+
+        setTimeEntriesLoading(true);
+        setTimeEntriesError(null);
+        try {
+          const rows = await listChantierTimeEntriesByChantierId(id);
+          if (!alive) return;
+          setTimeEntries(rows);
+        } catch (e: any) {
+          if (!alive) return;
+          setTimeEntries([]);
+          setTimeEntriesError(e?.message ?? "Erreur lors du chargement des saisies temps.");
+        } finally {
+          if (alive) setTimeEntriesLoading(false);
         }
 
         // devis
@@ -1791,19 +1903,6 @@ export default function ChantierPage() {
     };
   }, [activeDevisId]);
 
-  // initialise le draft temps quand tasks changent
-  useEffect(() => {
-    const next: Record<string, { date_debut: string; date_fin: string; ajout_h: string }> = {};
-    for (const t of tasks as any[]) {
-      next[t.id] = {
-        date_debut: t.date_debut ?? "",
-        date_fin: t.date_fin ?? "",
-        ajout_h: "",
-      };
-    }
-    setTimeDraftByTaskId(next);
-  }, [tasks]);
-
   useEffect(() => {
     const next: Record<string, string> = {};
     for (const task of tasks) {
@@ -1855,6 +1954,18 @@ export default function ChantierPage() {
     return m;
   }, [tasks]);
 
+  const timeEntriesByTaskId = useMemo(() => {
+    const grouped = new Map<string, ChantierTimeEntryRow[]>();
+    for (const entry of timeEntries) {
+      const taskId = String(entry.task_id ?? "").trim();
+      if (!taskId) continue;
+      const current = grouped.get(taskId) ?? [];
+      current.push(entry);
+      grouped.set(taskId, current);
+    }
+    return grouped;
+  }, [timeEntries]);
+
   const taskOrderLabelById = useMemo(() => {
     const map = new Map<string, number>();
     tasks.forEach((task, index) => {
@@ -1873,6 +1984,21 @@ export default function ChantierPage() {
       .map((intervenantId) => intervenantById.get(intervenantId)?.nom ?? "")
       .filter(Boolean);
   }
+
+  useEffect(() => {
+    if (!timeEntryTaskId) {
+      setTimeEntryIntervenantId("");
+      return;
+    }
+    const task = taskById.get(timeEntryTaskId);
+    if (!task) return;
+
+    const allowedIds = getTaskAssignedIntervenantIds(task);
+    if (!allowedIds.length) return;
+    if (!timeEntryIntervenantId || !allowedIds.includes(timeEntryIntervenantId)) {
+      setTimeEntryIntervenantId(allowedIds[0] ?? "");
+    }
+  }, [timeEntryTaskId, timeEntryIntervenantId, taskById, taskAssigneeIdsByTaskId, intervenants]);
 
   const selectedReserveTask = useMemo(() => {
     if (!reserveDraftTaskId) return null;
@@ -2920,42 +3046,22 @@ export default function ChantierPage() {
 
   const filteredMateriel =
     materielFilter === "__ALL__" ? materiel : materiel.filter((row) => row.statut === materielFilter);
-  const activeTabLabel =
-    tab === "accueil"
-      ? "Accueil"
-      : tab === "devis-taches"
-        ? t("chantierPage.tasks")
-        : tab === "planning"
-          ? t("chantierTabs.planning")
-          : tab === "temps"
-            ? t("chantierTabs.time")
-            : tab === "reserves"
-              ? t("intervenantAccess.tabs.reserves")
-              : tab === "documents"
-                ? t("intervenantAccess.tabs.documents")
-                : tab === "intervenants"
-                  ? t("sidebar.intervenants")
-                  : tab === "materiel"
-                    ? t("intervenantAccess.tabs.material")
-                    : tab === "messagerie"
-                      ? t("intervenantAccess.tabs.messaging")
-                      : tab === "doe"
-                        ? "DOE"
-                        : tab === "visite"
-                          ? "Visite"
-                          : "Rapports";
-  const chantierTabs: Array<{ key: TabKey; label: string }> = [
+  const pilotageTabs: Array<{ key: TabKey; label: string }> = [
     { key: "accueil", label: "Accueil" },
     { key: "devis-taches", label: t("chantierPage.tasks") },
     { key: "planning", label: t("chantierTabs.planning") },
     { key: "temps", label: t("chantierTabs.time") },
     { key: "reserves", label: t("intervenantAccess.tabs.reserves") },
-    { key: "documents", label: t("intervenantAccess.tabs.documents") },
-    { key: "intervenants", label: t("sidebar.intervenants") },
     { key: "materiel", label: t("intervenantAccess.tabs.material") },
     { key: "messagerie", label: t("intervenantAccess.tabs.messaging") },
+  ];
+  const administratifTabs: Array<{ key: TabKey; label: string }> = [
+    { key: "intervenants", label: t("sidebar.intervenants") },
+    { key: "documents", label: t("intervenantAccess.tabs.documents") },
     { key: "doe", label: "DOE" },
   ];
+  const chantierTabs = [...pilotageTabs, ...administratifTabs];
+  const activeTabLabel = chantierTabs.find((entry) => entry.key === tab)?.label ?? "Rapports";
   const accueilPanel = (
     <div className="space-y-5">
       <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
@@ -3121,23 +3227,53 @@ export default function ChantierPage() {
             </div>
           </div>
 
-          <nav className="flex flex-wrap gap-2">
-            {chantierTabs.map((entry) => (
-              <button
-                key={entry.key}
-                type="button"
-                onClick={() => setTab(entry.key)}
-                className={[
-                  "rounded-full px-4 py-2 text-sm font-medium transition",
-                  tab === entry.key
-                    ? "bg-blue-600 text-white shadow-sm"
-                    : "border border-slate-200 bg-white text-slate-700 hover:bg-slate-50",
-                ].join(" ")}
-              >
-                {entry.label}
-              </button>
-            ))}
-          </nav>
+          <div className="grid gap-4 lg:grid-cols-2">
+            <div className="space-y-2">
+              <div className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-400">
+                Pilotage chantier
+              </div>
+              <nav className="flex flex-wrap gap-2">
+                {pilotageTabs.map((entry) => (
+                  <button
+                    key={entry.key}
+                    type="button"
+                    onClick={() => setTab(entry.key)}
+                    className={[
+                      "rounded-full px-4 py-2 text-sm font-medium transition",
+                      tab === entry.key
+                        ? "bg-blue-600 text-white shadow-sm"
+                        : "border border-slate-200 bg-white text-slate-700 hover:bg-slate-50",
+                    ].join(" ")}
+                  >
+                    {entry.label}
+                  </button>
+                ))}
+              </nav>
+            </div>
+
+            <div className="space-y-2">
+              <div className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-400">
+                Administratif
+              </div>
+              <nav className="flex flex-wrap gap-2">
+                {administratifTabs.map((entry) => (
+                  <button
+                    key={entry.key}
+                    type="button"
+                    onClick={() => setTab(entry.key)}
+                    className={[
+                      "rounded-full px-4 py-2 text-sm font-medium transition",
+                      tab === entry.key
+                        ? "bg-blue-600 text-white shadow-sm"
+                        : "border border-slate-200 bg-white text-slate-700 hover:bg-slate-50",
+                    ].join(" ")}
+                  >
+                    {entry.label}
+                  </button>
+                ))}
+              </nav>
+            </div>
+          </div>
         </div>
       </section>
 
@@ -3164,168 +3300,189 @@ export default function ChantierPage() {
               </div>
             </div>
 
+            <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm space-y-4">
+              <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+                <label className="space-y-1 text-xs text-slate-600">
+                  <div>Tâche</div>
+                  <select
+                    className="w-full rounded-xl border px-3 py-2 text-sm"
+                    value={timeEntryTaskId}
+                    onChange={(e) => setTimeEntryTaskId(e.target.value)}
+                    disabled={tasksLoading || timeEntrySaving}
+                  >
+                    <option value="">Choisir une tâche</option>
+                    {tasks.map((task) => (
+                      <option key={task.id} value={task.id}>
+                        {stripLegacyPrefix(task.titre ?? "")}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
+                <label className="space-y-1 text-xs text-slate-600">
+                  <div>Intervenant</div>
+                  <select
+                    className="w-full rounded-xl border px-3 py-2 text-sm"
+                    value={timeEntryIntervenantId}
+                    onChange={(e) => setTimeEntryIntervenantId(e.target.value)}
+                    disabled={intervenantsLoading || timeEntrySaving}
+                  >
+                    <option value="">Choisir un intervenant</option>
+                    {(timeEntryTaskId
+                      ? (() => {
+                          const task = taskById.get(timeEntryTaskId);
+                          if (!task) return intervenants;
+                          const allowedIds = getTaskAssignedIntervenantIds(task);
+                          return allowedIds.length > 0
+                            ? allowedIds
+                                .map((intervenantId) => intervenantById.get(intervenantId))
+                                .filter((row): row is IntervenantRow => Boolean(row))
+                            : intervenants;
+                        })()
+                      : intervenants
+                    ).map((intervenant) => (
+                      <option key={intervenant.id} value={intervenant.id}>
+                        {intervenant.nom}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
+                <label className="space-y-1 text-xs text-slate-600">
+                  <div>Date</div>
+                  <input
+                    className="w-full rounded-xl border px-3 py-2 text-sm"
+                    type="date"
+                    value={timeEntryDate}
+                    onChange={(e) => setTimeEntryDate(e.target.value)}
+                    disabled={timeEntrySaving}
+                  />
+                </label>
+
+                <label className="space-y-1 text-xs text-slate-600">
+                  <div>Durée (h)</div>
+                  <input
+                    className="w-full rounded-xl border px-3 py-2 text-sm"
+                    inputMode="decimal"
+                    placeholder="ex: 4"
+                    value={timeEntryHours}
+                    onChange={(e) => setTimeEntryHours(e.target.value)}
+                    disabled={timeEntrySaving}
+                  />
+                </label>
+              </div>
+
+              <div className="grid gap-3 md:grid-cols-[220px_minmax(0,1fr)]">
+                <label className="space-y-1 text-xs text-slate-600">
+                  <div>Quantité réalisée (optionnel)</div>
+                  <input
+                    className="w-full rounded-xl border px-3 py-2 text-sm"
+                    inputMode="decimal"
+                    placeholder="ex: 3"
+                    value={timeEntryQuantity}
+                    onChange={(e) => setTimeEntryQuantity(e.target.value)}
+                    disabled={timeEntrySaving}
+                  />
+                </label>
+
+                <label className="space-y-1 text-xs text-slate-600">
+                  <div>Note (optionnel)</div>
+                  <input
+                    className="w-full rounded-xl border px-3 py-2 text-sm"
+                    placeholder="Observation éventuelle"
+                    value={timeEntryNote}
+                    onChange={(e) => setTimeEntryNote(e.target.value)}
+                    disabled={timeEntrySaving}
+                  />
+                </label>
+              </div>
+
+              <div className="flex justify-end">
+                <button
+                  type="button"
+                  onClick={() => void saveTimeEntry()}
+                  disabled={timeEntrySaving}
+                  className={[
+                    "rounded-xl px-4 py-2 text-sm",
+                    timeEntrySaving ? "bg-slate-300 text-slate-700" : "bg-slate-900 text-white hover:bg-slate-800",
+                  ].join(" ")}
+                >
+                  {timeEntrySaving ? "Enregistrement..." : "Ajouter la saisie"}
+                </button>
+              </div>
+            </div>
+
             <div className="space-y-2">
-              {tasksLoading ? (
+              {tasksLoading || timeEntriesLoading ? (
                 <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-5 text-sm text-slate-500">
                   {t("common.states.loading")}
                 </div>
-              ) : tasksError ? (
+              ) : tasksError || timeEntriesError ? (
                 <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-5 text-sm text-red-700">
-                  {tasksError}
+                  {tasksError ?? timeEntriesError}
                 </div>
               ) : tasks.length === 0 ? (
                 <div className="rounded-xl border border-dashed border-slate-200 px-4 py-5 text-sm text-slate-500">
                   Aucune tâche disponible pour saisir du temps.
                 </div>
               ) : (
-                tasks.map((task: any) => {
-                const d = timeDraftByTaskId[task.id] ?? { date_debut: "", date_fin: "", ajout_h: "" };
-                const assigneeNames = getTaskAssignedIntervenantNames(task);
+                tasks.map((task) => {
+                  const assigneeNames = getTaskAssignedIntervenantNames(task);
+                  const entries = timeEntriesByTaskId.get(task.id) ?? [];
 
-                return (
-                  <div key={task.id} className="rounded-xl border p-2.5 space-y-2">
-                    <div className="min-w-0">
-                      <div className="font-medium truncate">{stripLegacyPrefix(task.titre ?? "")}</div>
-                      <div className="text-xs text-slate-500">
-                        {(task.corps_etat ?? "—")} | {t("intervenantAccess.intervenantLabel")}: {assigneeNames.join(", ") || "—"}
+                  return (
+                    <div key={task.id} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm space-y-3">
+                      <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
+                        <div className="min-w-0">
+                          <div className="font-medium truncate">{stripLegacyPrefix(task.titre ?? "")}</div>
+                          <div className="text-xs text-slate-500">
+                            {(task.corps_etat ?? task.lot ?? "—")} | {t("intervenantAccess.intervenantLabel")}: {assigneeNames.join(", ") || "—"}
+                          </div>
+                        </div>
+                        <div className="rounded-xl bg-slate-50 px-3 py-2 text-sm text-slate-700">
+                          Total tâche : {Math.round(Number(task.temps_reel_h ?? 0) * 100) / 100} h
+                        </div>
                       </div>
+
+                      {entries.length === 0 ? (
+                        <div className="rounded-xl border border-dashed border-slate-200 px-4 py-4 text-sm text-slate-500">
+                          Aucune saisie temps sur cette tâche.
+                        </div>
+                      ) : (
+                        <div className="space-y-2">
+                          {entries.map((entry) => (
+                            <div
+                              key={entry.id}
+                              className="flex flex-col gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 md:flex-row md:items-start md:justify-between"
+                            >
+                              <div className="min-w-0 space-y-1">
+                                <div className="text-sm font-medium text-slate-900">
+                                  {intervenantById.get(entry.intervenant_id)?.nom ?? "Intervenant"}
+                                </div>
+                                <div className="text-xs text-slate-500">
+                                  {entry.work_date ? new Date(`${entry.work_date}T00:00:00`).toLocaleDateString(locale) : "—"}
+                                  {" · "}
+                                  {Math.round(Number(entry.duration_hours ?? 0) * 100) / 100} h
+                                  {entry.quantite_realisee !== null ? ` · Qte: ${entry.quantite_realisee}` : ""}
+                                </div>
+                                {entry.note ? <div className="text-xs text-slate-500">{entry.note}</div> : null}
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => void removeTimeEntry(entry.id)}
+                                disabled={timeEntryDeletingId === entry.id}
+                                className="self-start rounded-xl border border-red-200 px-3 py-2 text-xs text-red-700 hover:bg-red-50"
+                              >
+                                {timeEntryDeletingId === entry.id ? "Suppression..." : "Supprimer"}
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
                     </div>
-
-                    <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-5">
-                      <div className="space-y-1">
-                        <div className="text-xs text-slate-600">{t("intervenantAccess.fields.startDate")}</div>
-                        <input
-                          className="w-full min-w-0 rounded-xl border px-2.5 py-2 text-sm"
-                          type="date"
-                          value={d.date_debut}
-                          onChange={(e) =>
-                            setTimeDraftByTaskId((prev) => ({
-                              ...prev,
-                              [task.id]: { ...d, date_debut: e.target.value },
-                            }))
-                          }
-                        />
-                      </div>
-
-                      <div className="space-y-1">
-                        <div className="text-xs text-slate-600">{t("intervenantAccess.fields.endDate")}</div>
-                        <input
-                          className="w-full min-w-0 rounded-xl border px-2.5 py-2 text-sm"
-                          type="date"
-                          value={d.date_fin}
-                          onChange={(e) =>
-                            setTimeDraftByTaskId((prev) => ({
-                              ...prev,
-                              [task.id]: { ...d, date_fin: e.target.value },
-                            }))
-                          }
-                        />
-                      </div>
-
-                      <div className="space-y-1">
-                        <div className="text-xs text-slate-600">{t("intervenantAccess.fields.currentTotalHours")}</div>
-                        <input
-                          className="w-full min-w-0 rounded-xl border px-2.5 py-2 text-sm bg-slate-50"
-                          value={toInputNumberString((task as any).temps_reel_h)}
-                          disabled
-                        />
-                      </div>
-
-                      <div className="space-y-1">
-                        <div className="text-xs text-slate-600">{t("intervenantAccess.fields.addHours")}</div>
-                        <input
-                          className="w-full min-w-0 rounded-xl border px-2.5 py-2 text-sm"
-                          inputMode="decimal"
-                          placeholder="ex: 1.5"
-                          value={d.ajout_h}
-                          onChange={(e) =>
-                            setTimeDraftByTaskId((prev) => ({
-                              ...prev,
-                              [task.id]: { ...d, ajout_h: e.target.value },
-                            }))
-                          }
-                        />
-                      </div>
-
-                      <div className="flex items-end md:col-span-2 xl:col-span-1">
-                        <button
-                          type="button"
-                          disabled={savingTimeTaskId === task.id}
-                          className={[
-                            "w-full rounded-xl px-3 py-2 text-sm",
-                            savingTimeTaskId === task.id
-                              ? "bg-slate-300 text-slate-700"
-                              : "bg-slate-900 text-white hover:bg-slate-800",
-                          ].join(" ")}
-                          onClick={async () => {
-                            setSavingTimeTaskId(task.id);
-
-                            const date_debut = d.date_debut ? d.date_debut : null;
-                            const date_fin = d.date_fin ? d.date_fin : null;
-
-                            const addStr = normalizeHoursInput(d.ajout_h);
-                            const add = addStr === "" ? 0 : Number(addStr);
-
-                            if (!Number.isFinite(add) || add < 0) {
-                              setToast({ type: "error", msg: t("intervenantAccess.invalidHours") });
-                              setSavingTimeTaskId(null);
-                              return;
-                            }
-
-                            const hadAny =
-                              (task as any).temps_reel_h !== null && (task as any).temps_reel_h !== undefined;
-                            const current = Number((task as any).temps_reel_h ?? 0);
-
-                            const nextTotal =
-                              !hadAny && add === 0 ? null : Math.round((current + add) * 100) / 100;
-
-                            // optimistic
-                            setTasks((prev: any[]) =>
-                              prev.map((x) =>
-                                x.id === task.id ? { ...x, date_debut, date_fin, temps_reel_h: nextTotal } : x,
-                              ),
-                            );
-
-                            try {
-                              const saved = await updateTask(task.id, {
-                                date_debut,
-                                date_fin,
-                                temps_reel_h: nextTotal,
-                              } as any);
-                              const savedProgress = computeTaskProgress(saved as any);
-                              const derivedStatus = getStatusFromProgress(savedProgress.displayPercent);
-                              const savedStatus = String((saved as any)?.status ?? "A_FAIRE").toUpperCase();
-                              const statusNeedsSync = savedStatus !== derivedStatus;
-
-                              const finalSaved = statusNeedsSync
-                                ? await updateTask(task.id, { status: derivedStatus } as any)
-                                : saved;
-                              setTasks((prev: any[]) =>
-                                prev.map((x) => (x.id === task.id ? (finalSaved as any) : x)),
-                              );
-
-                              // reset ajout
-                              setTimeDraftByTaskId((prev) => ({
-                                ...prev,
-                                [task.id]: { ...d, ajout_h: "" },
-                              }));
-
-                              setToast({ type: "ok", msg: t("chantierPage.timeSaved") });
-                            } catch (e: any) {
-                              await refreshTasksOnly();
-                              setToast({ type: "error", msg: e?.message ?? t("chantierPage.timeSaveError") });
-                            } finally {
-                              setSavingTimeTaskId(null);
-                            }
-                          }}
-                        >
-                          {savingTimeTaskId === task.id ? t("common.states.saving") : t("common.actions.save")}
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                );
-              }))}
+                  );
+                })
+              )}
             </div>
           </div>
         )}

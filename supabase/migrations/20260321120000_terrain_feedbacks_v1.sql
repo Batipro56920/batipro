@@ -7,7 +7,7 @@ create table if not exists public.terrain_feedbacks (
   title text not null,
   description text not null,
   status text not null default 'nouveau',
-  assigned_to uuid null references public.profiles(id) on delete set null,
+  assigned_to uuid null,
   assigned_to_name text null,
   treatment_comment text null,
   treated_at timestamptz null,
@@ -43,10 +43,19 @@ create index if not exists terrain_feedbacks_category_idx
 
 alter table public.terrain_feedbacks enable row level security;
 
-drop trigger if exists trg_terrain_feedbacks_updated_at on public.terrain_feedbacks;
-create trigger trg_terrain_feedbacks_updated_at
-before update on public.terrain_feedbacks
-for each row execute function public.set_updated_at();
+do $$
+begin
+  if exists (
+    select 1
+    from pg_proc
+    where proname = 'set_updated_at'
+  ) then
+    drop trigger if exists trg_terrain_feedbacks_updated_at on public.terrain_feedbacks;
+    create trigger trg_terrain_feedbacks_updated_at
+    before update on public.terrain_feedbacks
+    for each row execute function public.set_updated_at();
+  end if;
+end $$;
 
 create table if not exists public.terrain_feedback_attachments (
   id uuid primary key default gen_random_uuid(),
@@ -67,7 +76,7 @@ alter table public.terrain_feedback_attachments enable row level security;
 create table if not exists public.terrain_feedback_history (
   id uuid primary key default gen_random_uuid(),
   feedback_id uuid not null references public.terrain_feedbacks(id) on delete cascade,
-  changed_by uuid null references public.profiles(id) on delete set null,
+  changed_by uuid null,
   changed_by_name text null,
   action text not null,
   changes jsonb not null default '{}'::jsonb,
@@ -79,29 +88,47 @@ create index if not exists terrain_feedback_history_feedback_idx
 
 alter table public.terrain_feedback_history enable row level security;
 
+drop function if exists public._terrain_feedback_is_admin();
+create or replace function public._terrain_feedback_is_admin()
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select exists (
+    select 1
+    from public.profiles p
+    where p.id = auth.uid()
+      and p.role = 'ADMIN'
+  );
+$$;
+
+revoke all on function public._terrain_feedback_is_admin() from public;
+
 drop policy if exists terrain_feedbacks_admin_all on public.terrain_feedbacks;
 create policy terrain_feedbacks_admin_all
   on public.terrain_feedbacks
   for all
   to authenticated
-  using (public.is_admin())
-  with check (public.is_admin());
+  using (public._terrain_feedback_is_admin())
+  with check (public._terrain_feedback_is_admin());
 
 drop policy if exists terrain_feedback_attachments_admin_all on public.terrain_feedback_attachments;
 create policy terrain_feedback_attachments_admin_all
   on public.terrain_feedback_attachments
   for all
   to authenticated
-  using (public.is_admin())
-  with check (public.is_admin());
+  using (public._terrain_feedback_is_admin())
+  with check (public._terrain_feedback_is_admin());
 
 drop policy if exists terrain_feedback_history_admin_all on public.terrain_feedback_history;
 create policy terrain_feedback_history_admin_all
   on public.terrain_feedback_history
   for all
   to authenticated
-  using (public.is_admin())
-  with check (public.is_admin());
+  using (public._terrain_feedback_is_admin())
+  with check (public._terrain_feedback_is_admin());
 
 insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
 values (
@@ -423,7 +450,9 @@ declare
   v_changed_by_name text;
   v_changes jsonb := '{}'::jsonb;
 begin
-  perform public._assert_admin_authenticated();
+  if not public._terrain_feedback_is_admin() then
+    raise exception 'forbidden';
+  end if;
 
   if p_id is null then
     raise exception 'id_required';
@@ -439,10 +468,7 @@ begin
     raise exception 'feedback_not_found';
   end if;
 
-  select coalesce(nullif(btrim(coalesce(p.display_name, '')), ''), coalesce(auth.jwt() ->> 'email', 'Admin'))
-  into v_changed_by_name
-  from public.profiles p
-  where p.id = auth.uid();
+  v_changed_by_name := coalesce(nullif(btrim(coalesce(auth.jwt() ->> 'email', '')), ''), 'Admin');
 
   v_status := case
     when p_patch ? 'status' then public._terrain_feedback_normalize_status(p_patch ->> 'status')
@@ -458,13 +484,6 @@ begin
     when p_patch ? 'assigned_to_name' then nullif(btrim(coalesce(p_patch ->> 'assigned_to_name', '')), '')
     else v_existing.assigned_to_name
   end;
-
-  if v_assigned_to is not null and (v_assigned_to_name is null or btrim(v_assigned_to_name) = '') then
-    select nullif(btrim(coalesce(display_name, '')), '')
-    into v_assigned_to_name
-    from public.profiles
-    where id = v_assigned_to;
-  end if;
 
   v_treatment_comment := case
     when p_patch ? 'treatment_comment' then nullif(btrim(coalesce(p_patch ->> 'treatment_comment', '')), '')
