@@ -46,6 +46,13 @@ function normalizePriority(value: unknown): ChantierConsignePriority {
   return "normale";
 }
 
+function deriveTitleFromDescription(value: unknown): string {
+  const description = String(value ?? "").replace(/\s+/g, " ").trim();
+  if (!description) return "Consigne chantier";
+  if (description.length <= 72) return description;
+  return `${description.slice(0, 69).trimEnd()}...`;
+}
+
 function uniqueIds(values: Array<string | null | undefined>): string[] {
   return Array.from(new Set(values.map((value) => String(value ?? "").trim()).filter(Boolean)));
 }
@@ -185,18 +192,18 @@ export async function listChantierConsignesByChantierId(chantierId: string): Pro
 
 export async function createChantierConsigne(input: {
   chantier_id: string;
-  title: string;
   description: string;
   priority?: ChantierConsignePriority;
-  date_debut: string;
+  title?: string;
+  date_debut?: string;
   date_fin?: string | null;
   task_id?: string | null;
   applies_to_all: boolean;
   intervenant_ids?: string[];
 }): Promise<ChantierConsigneRow> {
   const chantier_id = String(input.chantier_id ?? "").trim();
-  const title = String(input.title ?? "").trim();
   const description = String(input.description ?? "").trim();
+  const title = String(input.title ?? "").trim() || deriveTitleFromDescription(description);
   const date_debut = String(input.date_debut ?? "").trim();
   const date_fin = normalizeText(input.date_fin);
   const task_id = normalizeText(input.task_id);
@@ -204,25 +211,27 @@ export async function createChantierConsigne(input: {
   const intervenant_ids = uniqueIds(input.intervenant_ids ?? []);
 
   assertRequired(Boolean(chantier_id), "chantier_id obligatoire.");
-  assertRequired(Boolean(title), "Titre obligatoire.");
   assertRequired(Boolean(description), "Description obligatoire.");
-  assertRequired(Boolean(date_debut), "Date de debut obligatoire.");
   if (!applies_to_all) {
     assertRequired(intervenant_ids.length > 0, "Choisir au moins un intervenant.");
   }
 
+  const insertPayload: Record<string, unknown> = {
+    chantier_id,
+    title,
+    description,
+    priority: normalizePriority(input.priority),
+    date_fin,
+    task_id,
+    applies_to_all,
+  };
+  if (date_debut) {
+    insertPayload.date_debut = date_debut;
+  }
+
   const { data, error } = await (supabase as any)
     .from("chantier_consignes")
-    .insert({
-      chantier_id,
-      title,
-      description,
-      priority: normalizePriority(input.priority),
-      date_debut,
-      date_fin,
-      task_id,
-      applies_to_all,
-    })
+    .insert(insertPayload)
     .select("id, chantier_id")
     .single();
 
@@ -275,13 +284,19 @@ export async function updateChantierConsigne(
     updatePayload.title = String(patch.title).trim();
   }
   if (patch.description !== undefined) {
-    assertRequired(Boolean(String(patch.description).trim()), "Description obligatoire.");
-    updatePayload.description = String(patch.description).trim();
+    const description = String(patch.description).trim();
+    assertRequired(Boolean(description), "Description obligatoire.");
+    updatePayload.description = description;
+    if (patch.title === undefined) {
+      updatePayload.title = deriveTitleFromDescription(description);
+    }
   }
   if (patch.priority !== undefined) updatePayload.priority = normalizePriority(patch.priority);
   if (patch.date_debut !== undefined) {
-    assertRequired(Boolean(String(patch.date_debut).trim()), "Date de debut obligatoire.");
-    updatePayload.date_debut = String(patch.date_debut).trim();
+    const date_debut = String(patch.date_debut).trim();
+    if (date_debut) {
+      updatePayload.date_debut = date_debut;
+    }
   }
   if (patch.date_fin !== undefined) updatePayload.date_fin = normalizeText(patch.date_fin);
   if (patch.task_id !== undefined) updatePayload.task_id = normalizeText(patch.task_id);

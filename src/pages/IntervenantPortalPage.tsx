@@ -346,19 +346,6 @@ function chantierSearchText(chantier: IntervenantChantier): string {
   return [chantier.nom, chantier.client, chantier.adresse].filter(Boolean).join(" ").toLowerCase();
 }
 
-function consignePriorityTone(priority: IntervenantConsigne["priority"]): "neutral" | "amber" | "red" {
-  if (priority === "urgente") return "red";
-  if (priority === "importante") return "amber";
-  return "neutral";
-}
-
-function consignePriorityLabel(
-  priority: IntervenantConsigne["priority"],
-  t: (key: string, params?: Record<string, string | number>) => string,
-): string {
-  return t(`intervenantPortal.consignes.priority.${priority}`);
-}
-
 function isConsigneActiveForDate(consigne: IntervenantConsigne, isoDate: string): boolean {
   if (!consigne.date_debut) return false;
   if (isoDate < consigne.date_debut) return false;
@@ -776,12 +763,7 @@ export default function IntervenantPortalPage() {
     () =>
       consignesState.data
         .filter((row) => isConsigneActiveForDate(row, todayChecklistDate))
-        .sort((a, b) => {
-          const priorityOrder = { urgente: 0, importante: 1, normale: 2 } as const;
-          const delta = priorityOrder[a.priority] - priorityOrder[b.priority];
-          if (delta !== 0) return delta;
-          return String(b.date_debut).localeCompare(String(a.date_debut));
-        }),
+        .sort((a, b) => String(b.date_debut).localeCompare(String(a.date_debut))),
     [consignesState.data, todayChecklistDate],
   );
   const unreadConsignesCount = useMemo(
@@ -1347,24 +1329,18 @@ export default function IntervenantPortalPage() {
             <article key={consigne.id} className="rounded-[1rem] border border-slate-200 bg-slate-50/80 p-4">
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0 flex-1">
-                  <div className="text-sm font-semibold text-slate-900">{consigne.title}</div>
                   <div className="mt-1 text-xs text-slate-500">
-                    {consigne.task_titre ? `${consigne.task_titre} • ` : ""}
+                    {consigne.task_titre ? `${consigne.task_titre} - ` : ""}
                     {consigne.date_fin
                       ? t("intervenantPortal.consignes.period", { start: formatPortalDate(consigne.date_debut), end: formatPortalDate(consigne.date_fin) })
                       : t("intervenantPortal.consignes.startsOn", { value: formatPortalDate(consigne.date_debut) })}
                   </div>
                 </div>
-                <div className="flex flex-wrap gap-2">
-                  <PortalBadge tone={consignePriorityTone(consigne.priority)}>
-                    {consignePriorityLabel(consigne.priority, t)}
-                  </PortalBadge>
-                  <PortalBadge tone={consigne.is_read ? "green" : "blue"}>
-                    {consigne.is_read ? t("intervenantPortal.consignes.read") : t("intervenantPortal.consignes.unread")}
-                  </PortalBadge>
-                </div>
+                <PortalBadge tone={consigne.is_read ? "green" : "blue"}>
+                  {consigne.is_read ? t("intervenantPortal.consignes.read") : t("intervenantPortal.consignes.unread")}
+                </PortalBadge>
               </div>
-              <div className="mt-3 whitespace-pre-wrap text-sm text-slate-600">{consigne.description}</div>
+              <div className="mt-3 whitespace-pre-wrap text-sm text-slate-900">{consigne.description}</div>
               {!consigne.is_read ? (
                 <div className="mt-4 flex justify-end">
                   <PortalSecondaryButton
@@ -1526,29 +1502,23 @@ export default function IntervenantPortalPage() {
             <article key={consigne.id} className="rounded-[1rem] border border-slate-200 bg-slate-50/80 p-4">
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div className="min-w-0 flex-1">
-                  <div className="text-sm font-semibold text-slate-900">{consigne.title}</div>
                   <div className="mt-1 text-xs text-slate-500">
-                    {consigne.chantier_nom || activeChantier?.nom || "-"} •{" "}
+                    {consigne.chantier_nom || activeChantier?.nom || "-"} -{" "}
                     {consigne.date_fin
                       ? t("intervenantPortal.consignes.period", { start: formatPortalDate(consigne.date_debut), end: formatPortalDate(consigne.date_fin) })
                       : t("intervenantPortal.consignes.startsOn", { value: formatPortalDate(consigne.date_debut) })}
                   </div>
                 </div>
-                <div className="flex flex-wrap gap-2">
-                  <PortalBadge tone={consignePriorityTone(consigne.priority)}>
-                    {consignePriorityLabel(consigne.priority, t)}
-                  </PortalBadge>
-                  <PortalBadge tone={consigne.is_read ? "green" : "blue"}>
-                    {consigne.is_read ? t("intervenantPortal.consignes.read") : t("intervenantPortal.consignes.unread")}
-                  </PortalBadge>
-                </div>
+                <PortalBadge tone={consigne.is_read ? "green" : "blue"}>
+                  {consigne.is_read ? t("intervenantPortal.consignes.read") : t("intervenantPortal.consignes.unread")}
+                </PortalBadge>
               </div>
               {consigne.task_titre ? (
                 <div className="mt-2 text-xs text-slate-500">
                   {t("intervenantPortal.consignes.relatedTask", { value: consigne.task_titre })}
                 </div>
               ) : null}
-              <div className="mt-3 whitespace-pre-wrap text-sm text-slate-600">{consigne.description}</div>
+              <div className="mt-3 whitespace-pre-wrap text-sm text-slate-900">{consigne.description}</div>
               {!consigne.is_read ? (
                 <div className="mt-4 flex justify-end">
                   <PortalSecondaryButton
