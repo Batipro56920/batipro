@@ -2,6 +2,8 @@ import { useEffect, useMemo, useState } from "react";
 import type { FormEvent } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import {
+  intervenantConsigneList,
+  intervenantConsigneMarkRead,
   intervenantDailyChecklistGet,
   intervenantDailyChecklistUpsert,
   intervenantGetChantiers,
@@ -20,6 +22,7 @@ import {
   intervenantTimeDelete,
   intervenantTimeList,
   type IntervenantChantier,
+  type IntervenantConsigne,
   type IntervenantDailyChecklist,
   type IntervenantDocument,
   type IntervenantInformationRequest,
@@ -48,7 +51,7 @@ import {
 } from "../components/intervenantPortal/PortalUi";
 import { useI18n } from "../i18n";
 
-type PortalTab = "accueil" | "temps" | "taches" | "planning" | "documents" | "materiel" | "messages" | "retours";
+type PortalTab = "accueil" | "consignes" | "temps" | "taches" | "planning" | "documents" | "materiel" | "messages" | "retours";
 type LoadState<T> = { loading: boolean; error: string | null; data: T };
 type DashboardTaskItem = { chantier: IntervenantChantier; task: IntervenantTask };
 type DashboardMaterielItem = { chantier: IntervenantChantier; row: IntervenantMateriel };
@@ -76,6 +79,7 @@ const EMPTY_TIME_STATE: LoadState<IntervenantTimeEntry[]> = { loading: false, er
 const EMPTY_MATERIEL_STATE: LoadState<IntervenantMateriel[]> = { loading: false, error: null, data: [] };
 const EMPTY_INFO_REQUESTS_STATE: LoadState<IntervenantInformationRequest[]> = { loading: false, error: null, data: [] };
 const EMPTY_TERRAIN_FEEDBACKS_STATE: LoadState<IntervenantTerrainFeedback[]> = { loading: false, error: null, data: [] };
+const EMPTY_CONSIGNES_STATE: LoadState<IntervenantConsigne[]> = { loading: false, error: null, data: [] };
 const EMPTY_DASHBOARD_TASKS_STATE: LoadState<DashboardTaskItem[]> = { loading: false, error: null, data: [] };
 const EMPTY_DASHBOARD_MATERIEL_STATE: LoadState<DashboardMaterielItem[]> = { loading: false, error: null, data: [] };
 
@@ -342,6 +346,26 @@ function chantierSearchText(chantier: IntervenantChantier): string {
   return [chantier.nom, chantier.client, chantier.adresse].filter(Boolean).join(" ").toLowerCase();
 }
 
+function consignePriorityTone(priority: IntervenantConsigne["priority"]): "neutral" | "amber" | "red" {
+  if (priority === "urgente") return "red";
+  if (priority === "importante") return "amber";
+  return "neutral";
+}
+
+function consignePriorityLabel(
+  priority: IntervenantConsigne["priority"],
+  t: (key: string, params?: Record<string, string | number>) => string,
+): string {
+  return t(`intervenantPortal.consignes.priority.${priority}`);
+}
+
+function isConsigneActiveForDate(consigne: IntervenantConsigne, isoDate: string): boolean {
+  if (!consigne.date_debut) return false;
+  if (isoDate < consigne.date_debut) return false;
+  if (consigne.date_fin && isoDate > consigne.date_fin) return false;
+  return true;
+}
+
 export default function IntervenantPortalPage() {
   const location = useLocation();
   const navigate = useNavigate();
@@ -407,6 +431,7 @@ export default function IntervenantPortalPage() {
   const [infoRequestSaving, setInfoRequestSaving] = useState(false);
   const [infoRequestFeedback, setInfoRequestFeedback] = useState<{ type: "success" | "error"; message: string } | null>(null);
   const [terrainFeedbackState, setTerrainFeedbackState] = useState<LoadState<IntervenantTerrainFeedback[]>>(EMPTY_TERRAIN_FEEDBACKS_STATE);
+  const [consignesState, setConsignesState] = useState<LoadState<IntervenantConsigne[]>>(EMPTY_CONSIGNES_STATE);
   const [terrainFeedbackChantierId, setTerrainFeedbackChantierId] = useState("");
   const [terrainFeedbackCategory, setTerrainFeedbackCategory] = useState("observation_chantier");
   const [terrainFeedbackUrgency, setTerrainFeedbackUrgency] = useState("normale");
@@ -415,6 +440,7 @@ export default function IntervenantPortalPage() {
   const [terrainFeedbackFiles, setTerrainFeedbackFiles] = useState<File[]>([]);
   const [terrainFeedbackSaving, setTerrainFeedbackSaving] = useState(false);
   const [terrainFeedbackFeedback, setTerrainFeedbackFeedback] = useState<{ type: "success" | "error"; message: string } | null>(null);
+  const [consigneMarkingId, setConsigneMarkingId] = useState<string | null>(null);
   useEffect(() => {
     let alive = true;
     async function bootstrap() {
@@ -567,7 +593,8 @@ export default function IntervenantPortalPage() {
       setMaterielState({ loading: true, error: null, data: [] });
       setInfoRequestState({ loading: true, error: null, data: [] });
       setTerrainFeedbackState({ loading: true, error: null, data: [] });
-      const [tasksResult, documentsResult, planningResult, timeResult, materielResult, infoRequestsResult, terrainFeedbackResult] = await Promise.allSettled([
+      setConsignesState({ loading: true, error: null, data: [] });
+      const [tasksResult, documentsResult, planningResult, timeResult, materielResult, infoRequestsResult, terrainFeedbackResult, consignesResult] = await Promise.allSettled([
         intervenantGetTasks(token, selectedChantierId),
         intervenantGetDocuments(token, selectedChantierId),
         intervenantGetPlanning(token, selectedChantierId),
@@ -575,6 +602,7 @@ export default function IntervenantPortalPage() {
         intervenantMaterielList(token, selectedChantierId),
         intervenantInformationRequestList(token, selectedChantierId),
         intervenantTerrainFeedbackList(token, selectedChantierId),
+        intervenantConsigneList(token, selectedChantierId),
       ]);
       if (!alive) return;
       if (LEGACY_FALLBACK_ENABLED) {
@@ -594,6 +622,7 @@ export default function IntervenantPortalPage() {
       setMaterielState(materielResult.status === "fulfilled" ? { loading: false, error: null, data: materielResult.value } : { loading: false, error: getErrorMessage(materielResult.reason, t("intervenantPortal.errors.materialLoad")), data: [] });
       setInfoRequestState(infoRequestsResult.status === "fulfilled" ? { loading: false, error: null, data: infoRequestsResult.value } : { loading: false, error: getErrorMessage(infoRequestsResult.reason, t("intervenantPortal.errors.infoLoad")), data: [] });
       setTerrainFeedbackState(terrainFeedbackResult.status === "fulfilled" ? { loading: false, error: null, data: terrainFeedbackResult.value } : { loading: false, error: getErrorMessage(terrainFeedbackResult.reason, t("intervenantPortal.errors.terrainFeedbackLoad")), data: [] });
+      setConsignesState(consignesResult.status === "fulfilled" ? { loading: false, error: null, data: consignesResult.value } : { loading: false, error: getErrorMessage(consignesResult.reason, t("intervenantPortal.errors.consignesLoad")), data: [] });
     }
     void loadChantierData();
     return () => {
@@ -743,14 +772,30 @@ export default function IntervenantPortalPage() {
     () => infoRequestState.data.filter((request) => request.status !== "traitee").length,
     [infoRequestState.data],
   );
+  const activeConsignes = useMemo(
+    () =>
+      consignesState.data
+        .filter((row) => isConsigneActiveForDate(row, todayChecklistDate))
+        .sort((a, b) => {
+          const priorityOrder = { urgente: 0, importante: 1, normale: 2 } as const;
+          const delta = priorityOrder[a.priority] - priorityOrder[b.priority];
+          if (delta !== 0) return delta;
+          return String(b.date_debut).localeCompare(String(a.date_debut));
+        }),
+    [consignesState.data, todayChecklistDate],
+  );
+  const unreadConsignesCount = useMemo(
+    () => activeConsignes.filter((row) => !row.is_read).length,
+    [activeConsignes],
+  );
   const contentTitle = activeTab === "accueil" ? t("intervenantPortal.portalTitle") : activeChantier?.nom ?? t("intervenantPortal.selectedSiteFallback");
   const contentSubtitle = activeTab === "accueil"
     ? `${chantiers.length} ${t("intervenantPortal.tabs.chantiers").toLowerCase()}`
     : chantierDateSummary(activeChantier, locale, t);
   const dailyChecklistDateLabel = formatPortalDate(todayChecklistDate);
   const dailyChecklistValidatedLabel = dailyChecklist?.validated_at ? formatPortalDateTime(dailyChecklist.validated_at) : null;
-  const allTabs = ["accueil", "temps", "taches", "planning", "documents", "materiel", "messages", "retours"] as PortalTab[];
-  const siteTabs = ["temps", "taches", "planning", "documents", "materiel", "messages", "retours"] as PortalTab[];
+  const allTabs = ["accueil", "consignes", "temps", "taches", "planning", "documents", "materiel", "messages", "retours"] as PortalTab[];
+  const siteTabs = ["consignes", "temps", "taches", "planning", "documents", "materiel", "messages", "retours"] as PortalTab[];
 
   const weekPlanningCard = (
     <PortalCard tone="default">
@@ -1195,6 +1240,29 @@ export default function IntervenantPortalPage() {
     }
   }
 
+  async function onMarkConsigneRead(consigne: IntervenantConsigne) {
+    if (!token || consigne.is_read) return;
+    setConsigneMarkingId(consigne.id);
+    try {
+      const result = await intervenantConsigneMarkRead(token, consigne.id);
+      setConsignesState((current) => ({
+        ...current,
+        data: current.data.map((row) =>
+          row.id === consigne.id
+            ? { ...row, is_read: true, read_at: result.read_at ?? new Date().toISOString() }
+            : row,
+        ),
+      }));
+    } catch (error) {
+      setConsignesState((current) => ({
+        ...current,
+        error: getErrorMessage(error, t("intervenantPortal.errors.consigneRead")),
+      }));
+    } finally {
+      setConsigneMarkingId(null);
+    }
+  }
+
   const checklistCard = (
     <div className="space-y-3">
       <TodayChecklistCard
@@ -1251,6 +1319,67 @@ export default function IntervenantPortalPage() {
               </div>
               <div className="mt-2 text-sm text-slate-600">{request.message}</div>
             </div>
+          ))}
+        </div>
+      )}
+    </PortalCard>
+  );
+
+  const consignesCard = (
+    <PortalCard tone="default">
+      <PortalSectionHeading
+        eyebrow={t("intervenantPortal.consignes.today")}
+        title={t("intervenantPortal.consignes.today")}
+        subtitle={t("intervenantPortal.consignes.subtitle")}
+        aside={<PortalBadge tone={unreadConsignesCount > 0 ? "amber" : "neutral"}>{t("intervenantPortal.unreadCount", { count: unreadConsignesCount })}</PortalBadge>}
+      />
+      {consignesState.loading ? (
+        <div className="mt-4"><PortalEmptyState>{t("intervenantPortal.consignes.loading")}</PortalEmptyState></div>
+      ) : consignesState.error ? (
+        <div className="mt-4 rounded-[1rem] border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          {consignesState.error}
+        </div>
+      ) : activeConsignes.length === 0 ? (
+        <div className="mt-4"><PortalEmptyState>{t("intervenantPortal.consignes.emptyToday")}</PortalEmptyState></div>
+      ) : (
+        <div className="mt-4 space-y-3">
+          {activeConsignes.map((consigne) => (
+            <article key={consigne.id} className="rounded-[1rem] border border-slate-200 bg-slate-50/80 p-4">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0 flex-1">
+                  <div className="text-sm font-semibold text-slate-900">{consigne.title}</div>
+                  <div className="mt-1 text-xs text-slate-500">
+                    {consigne.task_titre ? `${consigne.task_titre} • ` : ""}
+                    {consigne.date_fin
+                      ? t("intervenantPortal.consignes.period", { start: formatPortalDate(consigne.date_debut), end: formatPortalDate(consigne.date_fin) })
+                      : t("intervenantPortal.consignes.startsOn", { value: formatPortalDate(consigne.date_debut) })}
+                  </div>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <PortalBadge tone={consignePriorityTone(consigne.priority)}>
+                    {consignePriorityLabel(consigne.priority, t)}
+                  </PortalBadge>
+                  <PortalBadge tone={consigne.is_read ? "green" : "blue"}>
+                    {consigne.is_read ? t("intervenantPortal.consignes.read") : t("intervenantPortal.consignes.unread")}
+                  </PortalBadge>
+                </div>
+              </div>
+              <div className="mt-3 whitespace-pre-wrap text-sm text-slate-600">{consigne.description}</div>
+              {!consigne.is_read ? (
+                <div className="mt-4 flex justify-end">
+                  <PortalSecondaryButton
+                    type="button"
+                    disabled={consigneMarkingId === consigne.id}
+                    onClick={() => void onMarkConsigneRead(consigne)}
+                    className="w-full sm:w-auto"
+                  >
+                    {consigneMarkingId === consigne.id
+                      ? t("intervenantPortal.consignes.marking")
+                      : t("intervenantPortal.consignes.markRead")}
+                  </PortalSecondaryButton>
+                </div>
+              ) : null}
+            </article>
           ))}
         </div>
       )}
@@ -1373,6 +1502,76 @@ export default function IntervenantPortalPage() {
       formatDate={formatPortalDate}
       formatDateTime={formatPortalDateTime}
     />
+  );
+
+  const consignesPanel = (
+    <PortalCard tone="default">
+      <PortalSectionHeading
+        eyebrow={t("intervenantPortal.consignes.title")}
+        title={t("intervenantPortal.consignes.title")}
+        subtitle={t("intervenantPortal.consignes.subtitle")}
+        aside={<PortalBadge tone={unreadConsignesCount > 0 ? "amber" : "neutral"}>{t("intervenantPortal.unreadCount", { count: unreadConsignesCount })}</PortalBadge>}
+      />
+      {consignesState.loading ? (
+        <div className="mt-4"><PortalEmptyState>{t("intervenantPortal.consignes.loading")}</PortalEmptyState></div>
+      ) : consignesState.error ? (
+        <div className="mt-4 rounded-[1rem] border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          {consignesState.error}
+        </div>
+      ) : consignesState.data.length === 0 ? (
+        <div className="mt-4"><PortalEmptyState>{t("intervenantPortal.consignes.empty")}</PortalEmptyState></div>
+      ) : (
+        <div className="mt-4 space-y-3">
+          {consignesState.data.map((consigne) => (
+            <article key={consigne.id} className="rounded-[1rem] border border-slate-200 bg-slate-50/80 p-4">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div className="min-w-0 flex-1">
+                  <div className="text-sm font-semibold text-slate-900">{consigne.title}</div>
+                  <div className="mt-1 text-xs text-slate-500">
+                    {consigne.chantier_nom || activeChantier?.nom || "-"} •{" "}
+                    {consigne.date_fin
+                      ? t("intervenantPortal.consignes.period", { start: formatPortalDate(consigne.date_debut), end: formatPortalDate(consigne.date_fin) })
+                      : t("intervenantPortal.consignes.startsOn", { value: formatPortalDate(consigne.date_debut) })}
+                  </div>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <PortalBadge tone={consignePriorityTone(consigne.priority)}>
+                    {consignePriorityLabel(consigne.priority, t)}
+                  </PortalBadge>
+                  <PortalBadge tone={consigne.is_read ? "green" : "blue"}>
+                    {consigne.is_read ? t("intervenantPortal.consignes.read") : t("intervenantPortal.consignes.unread")}
+                  </PortalBadge>
+                </div>
+              </div>
+              {consigne.task_titre ? (
+                <div className="mt-2 text-xs text-slate-500">
+                  {t("intervenantPortal.consignes.relatedTask", { value: consigne.task_titre })}
+                </div>
+              ) : null}
+              <div className="mt-3 whitespace-pre-wrap text-sm text-slate-600">{consigne.description}</div>
+              {!consigne.is_read ? (
+                <div className="mt-4 flex justify-end">
+                  <PortalSecondaryButton
+                    type="button"
+                    disabled={consigneMarkingId === consigne.id}
+                    onClick={() => void onMarkConsigneRead(consigne)}
+                    className="w-full sm:w-auto"
+                  >
+                    {consigneMarkingId === consigne.id
+                      ? t("intervenantPortal.consignes.marking")
+                      : t("intervenantPortal.consignes.markRead")}
+                  </PortalSecondaryButton>
+                </div>
+              ) : consigne.read_at ? (
+                <div className="mt-3 text-xs text-slate-500">
+                  {t("intervenantPortal.consignes.readAt", { value: formatPortalDateTime(consigne.read_at) })}
+                </div>
+              ) : null}
+            </article>
+          ))}
+        </div>
+      )}
+    </PortalCard>
   );
 
   const tasksPanel = (
@@ -1656,6 +1855,7 @@ export default function IntervenantPortalPage() {
   const homePanel = (
     <div className="space-y-4">
       {checklistCard}
+      {consignesCard}
       {weekPlanningCard}
       {quickActionsCard}
       {latestInfoRequestsCard}
@@ -1665,6 +1865,8 @@ export default function IntervenantPortalPage() {
   const activePanel =
     activeTab === "accueil"
       ? homePanel
+      : activeTab === "consignes"
+        ? consignesPanel
       : activeTab === "taches"
         ? tasksPanel
         : activeTab === "temps"

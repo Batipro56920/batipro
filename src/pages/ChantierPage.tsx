@@ -53,6 +53,14 @@ import {
   type MaterielStatus,
 } from "../services/materielDemandes.service";
 import {
+  createChantierConsigne,
+  deleteChantierConsigne,
+  listChantierConsignesByChantierId,
+  updateChantierConsigne,
+  type ChantierConsignePriority,
+  type ChantierConsigneRow,
+} from "../services/chantierConsignes.service";
+import {
   listByChantier as listDocumentsByChantier,
   getSignedUrl,
   linkDocumentToTask,
@@ -127,6 +135,7 @@ type TabKey =
   | "temps"
   | "reserves"
   | "materiel"
+  | "consignes"
   | "messagerie"
   | "rapports"
   | "doe"
@@ -586,6 +595,21 @@ export default function ChantierPage() {
   const [addingMateriel, setAddingMateriel] = useState(false);
   const [materielFilter, setMaterielFilter] = useState<"__ALL__" | MaterielStatus>("__ALL__");
   const [materielAdminComments, setMaterielAdminComments] = useState<Record<string, string>>({});
+
+  // Consignes
+  const [consignes, setConsignes] = useState<ChantierConsigneRow[]>([]);
+  const [consignesLoading, setConsignesLoading] = useState(false);
+  const [consignesError, setConsignesError] = useState<string | null>(null);
+  const [consigneEditingId, setConsigneEditingId] = useState<string | null>(null);
+  const [consigneTitle, setConsigneTitle] = useState("");
+  const [consigneDescription, setConsigneDescription] = useState("");
+  const [consignePriority, setConsignePriority] = useState<ChantierConsignePriority>("normale");
+  const [consigneDateDebut, setConsigneDateDebut] = useState(new Date().toISOString().slice(0, 10));
+  const [consigneDateFin, setConsigneDateFin] = useState("");
+  const [consigneTaskId, setConsigneTaskId] = useState("");
+  const [consigneAppliesToAll, setConsigneAppliesToAll] = useState(true);
+  const [consigneIntervenantIds, setConsigneIntervenantIds] = useState<string[]>([]);
+  const [consigneSaving, setConsigneSaving] = useState(false);
 
   function openDocumentModal() {
     setDocumentModalError(null);
@@ -1546,6 +1570,124 @@ export default function ChantierPage() {
     }
   }
 
+  async function refreshConsignes() {
+    if (!id) return;
+    setConsignesLoading(true);
+    setConsignesError(null);
+    try {
+      const data = await listChantierConsignesByChantierId(id);
+      setConsignes(data);
+    } catch (e: any) {
+      setConsignes([]);
+      setConsignesError(e?.message ?? "Erreur chargement consignes.");
+    } finally {
+      setConsignesLoading(false);
+    }
+  }
+
+  function resetConsigneForm() {
+    setConsigneEditingId(null);
+    setConsigneTitle("");
+    setConsigneDescription("");
+    setConsignePriority("normale");
+    setConsigneDateDebut(new Date().toISOString().slice(0, 10));
+    setConsigneDateFin("");
+    setConsigneTaskId("");
+    setConsigneAppliesToAll(true);
+    setConsigneIntervenantIds([]);
+  }
+
+  function startEditConsigne(row: ChantierConsigneRow) {
+    setConsigneEditingId(row.id);
+    setConsigneTitle(row.title);
+    setConsigneDescription(row.description);
+    setConsignePriority(row.priority);
+    setConsigneDateDebut(row.date_debut);
+    setConsigneDateFin(row.date_fin ?? "");
+    setConsigneTaskId(row.task_id ?? "");
+    setConsigneAppliesToAll(row.applies_to_all);
+    setConsigneIntervenantIds(row.assignee_ids);
+    setTab("consignes");
+  }
+
+  async function saveConsigne(e: FormEvent) {
+    e.preventDefault();
+    if (!id) return;
+
+    const title = consigneTitle.trim();
+    const description = consigneDescription.trim();
+    const dateDebut = consigneDateDebut.trim();
+    const dateFin = consigneDateFin.trim();
+
+    if (!title) {
+      setToast({ type: "error", msg: "Titre de consigne obligatoire." });
+      return;
+    }
+    if (!description) {
+      setToast({ type: "error", msg: "Description de consigne obligatoire." });
+      return;
+    }
+    if (!dateDebut) {
+      setToast({ type: "error", msg: "Date de debut obligatoire." });
+      return;
+    }
+    if (!consigneAppliesToAll && consigneIntervenantIds.length === 0) {
+      setToast({ type: "error", msg: "Choisis au moins un intervenant." });
+      return;
+    }
+
+    setConsigneSaving(true);
+    try {
+      if (consigneEditingId) {
+        await updateChantierConsigne(consigneEditingId, {
+          chantier_id: id,
+          title,
+          description,
+          priority: consignePriority,
+          date_debut: dateDebut,
+          date_fin: dateFin || null,
+          task_id: consigneTaskId || null,
+          applies_to_all: consigneAppliesToAll,
+          intervenant_ids: consigneAppliesToAll ? [] : consigneIntervenantIds,
+        });
+        setToast({ type: "ok", msg: "Consigne mise a jour." });
+      } else {
+        await createChantierConsigne({
+          chantier_id: id,
+          title,
+          description,
+          priority: consignePriority,
+          date_debut: dateDebut,
+          date_fin: dateFin || null,
+          task_id: consigneTaskId || null,
+          applies_to_all: consigneAppliesToAll,
+          intervenant_ids: consigneAppliesToAll ? [] : consigneIntervenantIds,
+        });
+        setToast({ type: "ok", msg: "Consigne creee." });
+      }
+      resetConsigneForm();
+      await refreshConsignes();
+    } catch (e: any) {
+      setToast({ type: "error", msg: e?.message ?? "Erreur enregistrement consigne." });
+    } finally {
+      setConsigneSaving(false);
+    }
+  }
+
+  async function removeConsigne(row: ChantierConsigneRow) {
+    if (!confirm(`Supprimer la consigne "${row.title}" ?`)) return;
+    try {
+      await deleteChantierConsigne(row.id);
+      if (consigneEditingId === row.id) {
+        resetConsigneForm();
+      }
+      await refreshConsignes();
+      setToast({ type: "ok", msg: "Consigne supprimee." });
+    } catch (e: any) {
+      setToast({ type: "error", msg: e?.message ?? "Erreur suppression consigne." });
+    }
+  }
+
   function resetTimeEntryDraft() {
     setTimeEntryTaskId("");
     setTimeEntryIntervenantId("");
@@ -1726,6 +1868,20 @@ export default function ChantierPage() {
           setMaterielError(e?.message ?? "Erreur chargement matériel.");
         } finally {
           if (alive) setMaterielLoading(false);
+        }
+
+        setConsignesLoading(true);
+        setConsignesError(null);
+        try {
+          const consignesData = await listChantierConsignesByChantierId(id);
+          if (!alive) return;
+          setConsignes(consignesData);
+        } catch (e: any) {
+          if (!alive) return;
+          setConsignes([]);
+          setConsignesError(e?.message ?? "Erreur chargement consignes.");
+        } finally {
+          if (alive) setConsignesLoading(false);
         }
       } catch (e: any) {
         if (!alive) return;
@@ -2886,6 +3042,18 @@ export default function ChantierPage() {
     return "bg-amber-50 text-amber-700 border-amber-200";
   }
 
+  function consignePriorityLabel(priority: ChantierConsignePriority) {
+    if (priority === "urgente") return "Urgent";
+    if (priority === "importante") return "Important";
+    return "Normal";
+  }
+
+  function consignePriorityBadgeClass(priority: ChantierConsignePriority) {
+    if (priority === "urgente") return "bg-red-50 text-red-700 border-red-200";
+    if (priority === "importante") return "bg-amber-50 text-amber-700 border-amber-200";
+    return "bg-slate-50 text-slate-700 border-slate-200";
+  }
+
   async function onAddMateriel(e: FormEvent) {
     e.preventDefault();
     if (!id) return;
@@ -3053,6 +3221,7 @@ export default function ChantierPage() {
     { key: "temps", label: t("chantierTabs.time") },
     { key: "reserves", label: t("intervenantAccess.tabs.reserves") },
     { key: "materiel", label: t("intervenantAccess.tabs.material") },
+    { key: "consignes", label: "Consignes" },
     { key: "messagerie", label: t("intervenantAccess.tabs.messaging") },
   ];
   const administratifTabs: Array<{ key: TabKey; label: string }> = [
@@ -4683,6 +4852,243 @@ export default function ChantierPage() {
         )}
 
         {/* ---------------- ONGLET MATÉRIEL ---------------- */}
+        {tab === "consignes" && (
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <div className="font-semibold section-title">Consignes</div>
+                <div className="text-sm text-slate-500">
+                  Instructions opérationnelles du chantier, distinctes des tâches et de la messagerie.
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={refreshConsignes}
+                className="rounded-xl border px-3 py-2 text-sm hover:bg-slate-50"
+                disabled={consignesLoading}
+              >
+                {consignesLoading ? "Chargement..." : "Rafraîchir"}
+              </button>
+            </div>
+
+            {consignesError ? (
+              <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                {consignesError}
+              </div>
+            ) : null}
+
+            <form onSubmit={saveConsigne} className="rounded-xl border bg-slate-50 p-4 space-y-4">
+              <div className="flex items-center justify-between gap-3">
+                <div className="font-semibold text-sm">
+                  {consigneEditingId ? "Modifier une consigne" : "Créer une consigne"}
+                </div>
+                {consigneEditingId ? (
+                  <button
+                    type="button"
+                    onClick={resetConsigneForm}
+                    className="rounded-xl border px-3 py-2 text-sm hover:bg-slate-50"
+                    disabled={consigneSaving}
+                  >
+                    Annuler
+                  </button>
+                ) : null}
+              </div>
+
+              <div className="grid gap-3 md:grid-cols-2">
+                <input
+                  className="rounded-xl border px-3 py-2 text-sm"
+                  placeholder="Titre de la consigne"
+                  value={consigneTitle}
+                  onChange={(e) => setConsigneTitle(e.target.value)}
+                />
+
+                <select
+                  className="rounded-xl border px-3 py-2 text-sm"
+                  value={consignePriority}
+                  onChange={(e) => setConsignePriority(e.target.value as ChantierConsignePriority)}
+                >
+                  <option value="normale">Priorité normale</option>
+                  <option value="importante">Priorité importante</option>
+                  <option value="urgente">Priorité urgente</option>
+                </select>
+
+                <input
+                  className="rounded-xl border px-3 py-2 text-sm"
+                  type="date"
+                  value={consigneDateDebut}
+                  onChange={(e) => setConsigneDateDebut(e.target.value)}
+                />
+
+                <input
+                  className="rounded-xl border px-3 py-2 text-sm"
+                  type="date"
+                  value={consigneDateFin}
+                  onChange={(e) => setConsigneDateFin(e.target.value)}
+                />
+
+                <select
+                  className="rounded-xl border px-3 py-2 text-sm md:col-span-2"
+                  value={consigneTaskId}
+                  onChange={(e) => setConsigneTaskId(e.target.value)}
+                >
+                  <option value="">Tâche liée (optionnel)</option>
+                  {tasks.map((task) => (
+                    <option key={task.id} value={task.id}>
+                      {stripLegacyPrefix(task.titre ?? "")}
+                    </option>
+                  ))}
+                </select>
+
+                <textarea
+                  className="rounded-xl border px-3 py-2 text-sm min-h-[120px] resize-y md:col-span-2"
+                  placeholder="Description détaillée de la consigne"
+                  value={consigneDescription}
+                  onChange={(e) => setConsigneDescription(e.target.value)}
+                />
+              </div>
+
+              <div className="space-y-3 rounded-xl border border-slate-200 bg-white p-4">
+                <label className="flex items-center gap-2 text-sm font-medium text-slate-800">
+                  <input
+                    type="checkbox"
+                    checked={consigneAppliesToAll}
+                    onChange={(e) => setConsigneAppliesToAll(e.target.checked)}
+                  />
+                  Appliquer à tous les intervenants du chantier
+                </label>
+
+                {!consigneAppliesToAll ? (
+                  <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+                    {intervenants.map((intervenant) => {
+                      const checked = consigneIntervenantIds.includes(intervenant.id);
+                      return (
+                        <label
+                          key={intervenant.id}
+                          className={[
+                            "flex items-start gap-2 rounded-xl border px-3 py-3 text-sm transition",
+                            checked ? "border-blue-200 bg-blue-50" : "border-slate-200 bg-white",
+                          ].join(" ")}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            onChange={(e) =>
+                              setConsigneIntervenantIds((prev) =>
+                                e.target.checked
+                                  ? Array.from(new Set([...prev, intervenant.id]))
+                                  : prev.filter((value) => value !== intervenant.id),
+                              )
+                            }
+                          />
+                          <span className="min-w-0">
+                            <span className="block font-medium text-slate-900">{intervenant.nom}</span>
+                            <span className="block text-xs text-slate-500">
+                              {intervenant.email || intervenant.telephone || "Intervenant"}
+                            </span>
+                          </span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <div className="text-sm text-slate-500">
+                    Tous les intervenants actuellement affectés au chantier recevront cette consigne.
+                  </div>
+                )}
+              </div>
+
+              <div className="flex justify-end">
+                <button
+                  type="submit"
+                  disabled={consigneSaving}
+                  className={[
+                    "rounded-xl px-4 py-2 text-sm",
+                    consigneSaving ? "bg-slate-300 text-slate-700" : "bg-slate-900 text-white hover:bg-slate-800",
+                  ].join(" ")}
+                >
+                  {consigneSaving ? "Enregistrement..." : consigneEditingId ? "Enregistrer" : "+ Ajouter"}
+                </button>
+              </div>
+            </form>
+
+            <div className="space-y-3">
+              {consignesLoading ? (
+                <div className="text-sm text-slate-500">Chargement...</div>
+              ) : consignes.length === 0 ? (
+                <div className="rounded-xl border bg-slate-50 p-4 text-sm text-slate-500">
+                  Aucune consigne chantier.
+                </div>
+              ) : (
+                consignes.map((row) => {
+                  const targetIntervenants = row.applies_to_all ? intervenants : row.assignees;
+                  const targetCount = targetIntervenants.length;
+                  const readCount = row.read_intervenant_ids.filter((intervenantId) =>
+                    targetIntervenants.some((intervenant) => intervenant.id === intervenantId),
+                  ).length;
+                  const dateLabel = row.date_fin
+                    ? `Du ${new Date(`${row.date_debut}T00:00:00`).toLocaleDateString("fr-FR")} au ${new Date(`${row.date_fin}T00:00:00`).toLocaleDateString("fr-FR")}`
+                    : `À partir du ${new Date(`${row.date_debut}T00:00:00`).toLocaleDateString("fr-FR")}`;
+
+                  return (
+                    <article key={row.id} className="rounded-xl border p-4 space-y-3">
+                      <div className="flex flex-wrap items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <div className="font-medium text-slate-900">{row.title}</div>
+                          <div className="mt-1 text-xs text-slate-500">
+                            {dateLabel}
+                            {row.task_titre ? ` • Tâche: ${stripLegacyPrefix(row.task_titre)}` : ""}
+                          </div>
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                          <span className={["text-xs rounded-full border px-2 py-1", consignePriorityBadgeClass(row.priority)].join(" ")}>
+                            {consignePriorityLabel(row.priority)}
+                          </span>
+                          <span className="text-xs rounded-full border border-slate-200 bg-slate-50 px-2 py-1 text-slate-700">
+                            {targetCount > 0 ? `${readCount}/${targetCount} lus` : "Aucun destinataire"}
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="text-sm text-slate-600 whitespace-pre-wrap">{row.description}</div>
+
+                      <div className="flex flex-wrap gap-2 text-xs text-slate-500">
+                        <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-1">
+                          {row.applies_to_all ? "Tous les intervenants" : `${row.assignees.length} intervenant(s) ciblé(s)`}
+                        </span>
+                        {!row.applies_to_all && row.assignees.length > 0
+                          ? row.assignees.map((assignee) => (
+                              <span key={assignee.id} className="rounded-full border border-slate-200 bg-white px-2 py-1">
+                                {assignee.nom}
+                              </span>
+                            ))
+                          : null}
+                      </div>
+
+                      <div className="flex justify-end gap-2">
+                        <button
+                          type="button"
+                          onClick={() => startEditConsigne(row)}
+                          className="text-sm rounded-xl border px-3 py-2 hover:bg-slate-50"
+                        >
+                          Modifier
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => void removeConsigne(row)}
+                          className="text-sm rounded-xl border border-red-200 px-3 py-2 text-red-700 hover:bg-red-50"
+                        >
+                          Supprimer
+                        </button>
+                      </div>
+                    </article>
+                  );
+                })
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* ---------------- ONGLET MATÉRIEL ---------------- */}
         {tab === "materiel" && (
           <div className="space-y-4">
             <div className="flex items-center justify-between">
@@ -4946,6 +5352,7 @@ export default function ChantierPage() {
           tab !== "reserves" &&
           tab !== "temps" &&
           tab !== "materiel" &&
+          tab !== "consignes" &&
           tab !== "planning" &&
           tab !== "doe" &&
           tab !== "visite" && (

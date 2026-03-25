@@ -172,6 +172,24 @@ export type IntervenantTerrainFeedback = {
   attachments: IntervenantTerrainFeedbackAttachment[];
 };
 
+export type IntervenantConsigne = {
+  id: string;
+  chantier_id: string;
+  chantier_nom: string | null;
+  title: string;
+  description: string;
+  priority: "normale" | "importante" | "urgente";
+  date_debut: string;
+  date_fin: string | null;
+  task_id: string | null;
+  task_titre: string | null;
+  applies_to_all: boolean;
+  is_read: boolean;
+  read_at: string | null;
+  created_at: string | null;
+  updated_at: string | null;
+};
+
 function rpcMessage(error: unknown, fallback: string): string {
   return String((error as { message?: string } | null)?.message ?? fallback).trim() || fallback;
 }
@@ -219,6 +237,33 @@ function normalizeTerrainFeedbackStatus(value: unknown): IntervenantTerrainFeedb
   if (v === "traite") return "traite";
   if (v === "classe_sans_suite") return "classe_sans_suite";
   return "nouveau";
+}
+
+function normalizeConsignePriority(value: unknown): IntervenantConsigne["priority"] {
+  const v = String(value ?? "").trim().toLowerCase();
+  if (v === "urgente") return "urgente";
+  if (v === "importante") return "importante";
+  return "normale";
+}
+
+function mapConsigne(row: Record<string, unknown>): IntervenantConsigne {
+  return {
+    id: String(row.id ?? ""),
+    chantier_id: String(row.chantier_id ?? ""),
+    chantier_nom: asNullableString(row.chantier_nom),
+    title: String(row.title ?? "Consigne"),
+    description: String(row.description ?? ""),
+    priority: normalizeConsignePriority(row.priority),
+    date_debut: String(row.date_debut ?? ""),
+    date_fin: asNullableString(row.date_fin),
+    task_id: asNullableString(row.task_id),
+    task_titre: asNullableString(row.task_titre),
+    applies_to_all: Boolean(row.applies_to_all),
+    is_read: Boolean(row.is_read),
+    read_at: asNullableString(row.read_at),
+    created_at: asNullableString(row.created_at),
+    updated_at: asNullableString(row.updated_at),
+  };
 }
 
 function mapTerrainFeedbackAttachment(
@@ -701,5 +746,36 @@ export async function intervenantTerrainFeedbackUploadPhoto(
   return {
     ...attachment,
     public_url: asNullableString(row.public_url) ?? attachment.public_url,
+  };
+}
+
+export async function intervenantConsigneList(
+  token: string,
+  chantierId?: string | null,
+): Promise<IntervenantConsigne[]> {
+  const { data, error } = await (supabase as any).rpc("intervenant_consigne_list", {
+    p_token: token,
+    p_chantier_id: chantierId ?? null,
+  });
+  if (error) throw new Error(rpcMessage(error, "Chargement consignes impossible."));
+
+  const rows = Array.isArray(data) ? data : [];
+  return rows.map((row) => mapConsigne((row ?? {}) as Record<string, unknown>));
+}
+
+export async function intervenantConsigneMarkRead(
+  token: string,
+  consigneId: string,
+): Promise<{ id: string; read_at: string | null }> {
+  const { data, error } = await (supabase as any).rpc("intervenant_consigne_mark_read", {
+    p_token: token,
+    p_consigne_id: consigneId,
+  });
+  if (error) throw new Error(rpcMessage(error, "Mise a jour lecture consigne impossible."));
+
+  const row = (data && typeof data === "object" ? data : {}) as Record<string, unknown>;
+  return {
+    id: String(row.id ?? consigneId),
+    read_at: asNullableString(row.read_at),
   };
 }
