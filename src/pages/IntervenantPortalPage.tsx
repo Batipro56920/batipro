@@ -50,6 +50,15 @@ import {
   portalInputClass,
 } from "../components/intervenantPortal/PortalUi";
 import { useI18n } from "../i18n";
+import {
+  clearStoredIntervenantChantierId,
+  clearStoredIntervenantSession,
+  extractIntervenantToken,
+  persistIntervenantChantierId,
+  persistIntervenantToken,
+  readStoredIntervenantChantierId,
+  readStoredIntervenantToken,
+} from "../utils/intervenantSession";
 
 type PortalTab = "accueil" | "consignes" | "temps" | "taches" | "planning" | "documents" | "materiel" | "messages" | "retours";
 type LoadState<T> = { loading: boolean; error: string | null; data: T };
@@ -58,8 +67,6 @@ type DashboardMaterielItem = { chantier: IntervenantChantier; row: IntervenantMa
 type MobileGlobalTab = "home" | "sites" | "site";
 type MobileQuickAction = "time" | "materiel" | null;
 
-const STORAGE_TOKEN_KEY = "batipro_intervenant_token";
-const STORAGE_CHANTIER_KEY = "batipro_intervenant_chantier_id";
 const LEGACY_FALLBACK_ENABLED =
   String(import.meta.env.VITE_ENABLE_INTERVENANT_LEGACY_FALLBACK ?? "0").trim() === "1";
 const TITLE_CLAMP_STYLE = {
@@ -82,78 +89,6 @@ const EMPTY_TERRAIN_FEEDBACKS_STATE: LoadState<IntervenantTerrainFeedback[]> = {
 const EMPTY_CONSIGNES_STATE: LoadState<IntervenantConsigne[]> = { loading: false, error: null, data: [] };
 const EMPTY_DASHBOARD_TASKS_STATE: LoadState<DashboardTaskItem[]> = { loading: false, error: null, data: [] };
 const EMPTY_DASHBOARD_MATERIEL_STATE: LoadState<DashboardMaterielItem[]> = { loading: false, error: null, data: [] };
-
-let memoryToken = "";
-let memoryChantierId = "";
-
-function getSafeStorage(): Storage | null {
-  if (typeof window === "undefined") return null;
-  try {
-    const storage = window.localStorage;
-    const probeKey = "__batipro_intervenant_storage_probe__";
-    storage.setItem(probeKey, "1");
-    storage.removeItem(probeKey);
-    return storage;
-  } catch {
-    return null;
-  }
-}
-
-function readStoredToken(): string {
-  const storage = getSafeStorage();
-  if (!storage) return memoryToken;
-  try {
-    return String(storage.getItem(STORAGE_TOKEN_KEY) ?? "").trim();
-  } catch {
-    return memoryToken;
-  }
-}
-
-function persistToken(token: string) {
-  memoryToken = String(token ?? "").trim();
-  const storage = getSafeStorage();
-  if (!storage) return;
-  try {
-    storage.setItem(STORAGE_TOKEN_KEY, memoryToken);
-  } catch {}
-}
-
-function clearStoredToken() {
-  memoryToken = "";
-  const storage = getSafeStorage();
-  if (!storage) return;
-  try {
-    storage.removeItem(STORAGE_TOKEN_KEY);
-  } catch {}
-}
-
-function readStoredChantierId(): string {
-  const storage = getSafeStorage();
-  if (!storage) return memoryChantierId;
-  try {
-    return String(storage.getItem(STORAGE_CHANTIER_KEY) ?? "").trim();
-  } catch {
-    return memoryChantierId;
-  }
-}
-
-function persistChantierId(chantierId: string) {
-  memoryChantierId = String(chantierId ?? "").trim();
-  const storage = getSafeStorage();
-  if (!storage) return;
-  try {
-    storage.setItem(STORAGE_CHANTIER_KEY, memoryChantierId);
-  } catch {}
-}
-
-function clearStoredChantierId() {
-  memoryChantierId = "";
-  const storage = getSafeStorage();
-  if (!storage) return;
-  try {
-    storage.removeItem(STORAGE_CHANTIER_KEY);
-  } catch {}
-}
 
 function getErrorMessage(error: unknown, fallback: string): string {
   const message = String((error as { message?: string } | null)?.message ?? fallback).trim();
@@ -370,6 +305,7 @@ export default function IntervenantPortalPage() {
   const [activeTab, setActiveTab] = useState<PortalTab>("accueil");
   const [bootLoading, setBootLoading] = useState(true);
   const [bootError, setBootError] = useState<string | null>(null);
+  const [accessLinkInput, setAccessLinkInput] = useState("");
 
   const [tasksState, setTasksState] = useState<LoadState<IntervenantTask[]>>(EMPTY_TASKS_STATE);
   const [documentsState, setDocumentsState] = useState<LoadState<IntervenantDocument[]>>(EMPTY_DOCUMENTS_STATE);
@@ -433,7 +369,7 @@ export default function IntervenantPortalPage() {
     async function bootstrap() {
       setBootLoading(true);
       setBootError(null);
-      const candidateToken = queryToken || readStoredToken();
+      const candidateToken = extractIntervenantToken(queryToken || readStoredIntervenantToken());
       if (!candidateToken) {
         if (!alive) return;
         setToken("");
@@ -446,14 +382,14 @@ export default function IntervenantPortalPage() {
       }
       try {
         setToken(candidateToken);
-        persistToken(candidateToken);
+        persistIntervenantToken(candidateToken);
         const [sessionData, chantierRows] = await Promise.all([
           intervenantSession(candidateToken),
           intervenantGetChantiers(candidateToken),
         ]);
         if (!alive) return;
         const chantierIds = new Set(chantierRows.map((row) => row.id));
-        const storedChantierId = readStoredChantierId();
+        const storedChantierId = readStoredIntervenantChantierId();
         const fromQuery = queryChantierId && chantierIds.has(queryChantierId) ? queryChantierId : "";
         const fromStorage = storedChantierId && chantierIds.has(storedChantierId) ? storedChantierId : "";
         const nextChantierId = fromQuery || fromStorage || chantierRows[0]?.id || "";
@@ -468,12 +404,19 @@ export default function IntervenantPortalPage() {
           setMobileGlobalTab("home");
           setActiveTab("accueil");
         }
-        if (nextChantierId) persistChantierId(nextChantierId);
-        else clearStoredChantierId();
+        if (nextChantierId) persistIntervenantChantierId(nextChantierId);
+        else clearStoredIntervenantChantierId();
+        if (queryToken) {
+          navigate("/intervenant", { replace: true });
+        }
         setBootLoading(false);
       } catch (error) {
         if (!alive) return;
         const message = getErrorMessage(error, t("intervenantPortal.errors.portalLoad"));
+        if (isInvalidTokenError(message)) {
+          clearStoredIntervenantSession();
+          setToken("");
+        }
         if (LEGACY_FALLBACK_ENABLED && shouldFallbackToLegacy(error)) {
           navigate(`/acces/${encodeURIComponent(candidateToken)}`, { replace: true });
           return;
@@ -520,16 +463,16 @@ export default function IntervenantPortalPage() {
     if (bootLoading || bootError) return;
     if (chantiers.length === 0) {
       if (selectedChantierId) setSelectedChantierId("");
-      clearStoredChantierId();
+      clearStoredIntervenantChantierId();
       setMobileGlobalTab("home");
       return;
     }
     const ids = new Set(chantiers.map((chantier) => chantier.id));
     if (selectedChantierId && ids.has(selectedChantierId)) {
-      persistChantierId(selectedChantierId);
+      persistIntervenantChantierId(selectedChantierId);
       return;
     }
-    const stored = readStoredChantierId();
+    const stored = readStoredIntervenantChantierId();
     const nextChantierId = stored && ids.has(stored) ? stored : chantiers[0].id;
     if (nextChantierId && nextChantierId !== selectedChantierId) setSelectedChantierId(nextChantierId);
   }, [bootError, bootLoading, chantiers, selectedChantierId]);
@@ -652,8 +595,7 @@ export default function IntervenantPortalPage() {
     };
   }, [bootError, bootLoading, chantiers, reloadTick, t, token]);
   function logoutIntervenant() {
-    clearStoredToken();
-    clearStoredChantierId();
+    clearStoredIntervenantSession();
     setToken("");
     setSessionInfo(null);
     setChantiers([]);
@@ -661,11 +603,27 @@ export default function IntervenantPortalPage() {
     navigate("/", { replace: true });
   }
 
+  function openIntervenantLink(rawValue: string) {
+    const nextToken = extractIntervenantToken(rawValue);
+    if (!nextToken) {
+      setBootError(t("intervenantPortal.invalidAccessLink"));
+      return;
+    }
+    setAccessLinkInput("");
+    setBootError(null);
+    navigate(`/intervenant?token=${encodeURIComponent(nextToken)}`, { replace: true });
+  }
+
+  function submitIntervenantLink(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    openIntervenantLink(accessLinkInput);
+  }
+
   function chooseChantier(nextChantierId: string) {
     if (!nextChantierId || nextChantierId === selectedChantierId) return;
     if (!chantiers.some((chantier) => chantier.id === nextChantierId)) return;
     setSelectedChantierId(nextChantierId);
-    persistChantierId(nextChantierId);
+    persistIntervenantChantierId(nextChantierId);
   }
 
   function openMobileHome() {
@@ -1856,12 +1814,47 @@ export default function IntervenantPortalPage() {
   }
 
   if (bootError) {
+    const missingToken = bootError === t("intervenantPortal.missingToken");
     return (
       <div className="min-h-screen bg-slate-100 px-4 py-6 text-slate-700">
         <div className="mx-auto max-w-xl rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
           <div className="text-lg font-semibold text-slate-900">{t("intervenantPortal.unavailableTitle")}</div>
           <div className="mt-2 text-sm text-slate-600">{bootError}</div>
-          {isInvalidTokenError(bootError) ? <button type="button" onClick={() => navigate("/", { replace: true })} className="mt-4 rounded-full bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700">{t("intervenantPortal.backHome")}</button> : null}
+          {missingToken ? (
+            <form onSubmit={submitIntervenantLink} className="mt-5 space-y-3">
+              <div className="text-sm text-slate-600">{t("intervenantPortal.accessLinkHelp")}</div>
+              <textarea
+                className="min-h-28 w-full rounded-2xl border border-slate-200 px-3 py-2 text-sm text-slate-900"
+                value={accessLinkInput}
+                onChange={(event) => {
+                  setAccessLinkInput(event.target.value);
+                  if (bootError === t("intervenantPortal.invalidAccessLink")) {
+                    setBootError(t("intervenantPortal.missingToken"));
+                  }
+                }}
+                placeholder={t("intervenantPortal.accessLinkPlaceholder")}
+              />
+              <button type="submit" className="w-full rounded-full bg-blue-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-blue-700">
+                {t("intervenantPortal.openAccessLink")}
+              </button>
+            </form>
+          ) : null}
+          {isInvalidTokenError(bootError) ? (
+            <button
+              type="button"
+              onClick={() => {
+                clearStoredIntervenantSession();
+                setToken("");
+                setSessionInfo(null);
+                setChantiers([]);
+                setSelectedChantierId("");
+                setBootError(t("intervenantPortal.missingToken"));
+              }}
+              className="mt-4 rounded-full bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
+            >
+              {t("intervenantPortal.enterAnotherLink")}
+            </button>
+          ) : null}
         </div>
       </div>
     );

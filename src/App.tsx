@@ -17,11 +17,13 @@ import StatistiquesPage from "./pages/StatistiquesPage";
 import MonEntreprisePage from "./pages/MonEntreprisePage";
 import FournisseursPage from "./pages/FournisseursPage";
 import TerrainFeedbacksPage from "./pages/TerrainFeedbacksPage";
+import AppEntryPage from "./pages/AppEntryPage";
 
 export default function App() {
   return (
     <Routes>
       {/* Public */}
+      <Route path="/" element={<AppEntryPage />} />
       <Route path="/login" element={<AuthPage />} />
 
       {/* Public - portail intervenant */}
@@ -36,7 +38,6 @@ export default function App() {
           </RequireAuth>
         }
       >
-        <Route path="/" element={<Navigate to="/dashboard" replace />} />
         <Route path="/dashboard" element={<DashboardPage />} />
 
         <Route path="/chantiers" element={<ChantiersPage />} />
@@ -53,7 +54,7 @@ export default function App() {
         <Route path="/entreprise/fournisseurs" element={<Navigate to="/fournisseurs" replace />} />
       </Route>
 
-      <Route path="*" element={<Navigate to="/dashboard" replace />} />
+      <Route path="*" element={<AppEntryPage />} />
     </Routes>
   );
 }

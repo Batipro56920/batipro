@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { supabase } from "../lib/supabaseClient";
 import { useI18n } from "../i18n";
+import { readStoredIntervenantToken } from "../utils/intervenantSession";
 
 export default function AuthPage() {
   const navigate = useNavigate();
@@ -17,6 +18,10 @@ export default function AuthPage() {
   const [msg, setMsg] = useState<string | null>(null);
 
   useEffect(() => {
+    if (readStoredIntervenantToken()) {
+      navigate("/intervenant", { replace: true });
+      return;
+    }
     // Si déjà connecté ? on renvoie vers l'app
     supabase.auth.getSession().then(({ data }) => {
       if (data.session) navigate("/dashboard", { replace: true });
