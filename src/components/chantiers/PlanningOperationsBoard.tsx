@@ -11,6 +11,7 @@ import {
   Search,
   Trash2,
   WandSparkles,
+  X,
 } from "lucide-react";
 import { useI18n } from "../../i18n";
 import type { IntervenantRow } from "../../services/intervenants.service";
@@ -28,6 +29,7 @@ import {
 import {
   addDaysToKey,
   clampDurationDays,
+  computeEndDate,
   computePlannedHours,
   formatDateKey,
   isWorkingDay,
@@ -201,6 +203,21 @@ function mapSegmentToDraft(task: PlanningCalendarTask, segment: PlanningCalendar
   };
 }
 
+function parseProgress(value: string) {
+  const parsed = Number(String(value).replace(",", "."));
+  if (!Number.isFinite(parsed)) return 0;
+  return Math.max(0, Math.min(100, Math.round(parsed)));
+}
+
+function validateDraft(draft: Draft) {
+  if (!draft.title_override.trim()) return "L'intitule du bloc est obligatoire.";
+  if (!draft.start_date) return "La date du bloc est obligatoire.";
+  if (!Number.isFinite(draft.duration_days) || draft.duration_days <= 0) return "Le temps estime doit etre superieur a 0.";
+  const progress = Number(String(draft.progress_percent).replace(",", "."));
+  if (!Number.isFinite(progress) || progress < 0 || progress > 100) return "L'avancement doit etre compris entre 0 et 100.";
+  return null;
+}
+
 function BacklogCard({
   item,
   settings,
@@ -263,19 +280,23 @@ function PlanningCell({
   loadHours,
   overloaded,
   view,
+  onClick,
 }: {
   id: string;
   loadHours: number;
   overloaded: boolean;
   view: PlanningView;
+  onClick: () => void;
 }) {
   const { setNodeRef, isOver } = useDroppable({ id });
   const intensity = Math.max(0, Math.min(1, loadHours / 8));
   return (
-    <div
+    <button
       ref={setNodeRef}
+      type="button"
+      onClick={onClick}
       className={[
-        "relative border-r border-slate-200 last:border-r-0",
+        "relative min-h-full border-r border-slate-200 text-left last:border-r-0",
         overloaded ? "bg-rose-50/70" : isOver ? "bg-blue-50" : view === "charge" ? "bg-slate-50" : "bg-white",
       ].join(" ")}
     >
@@ -285,7 +306,7 @@ function PlanningCell({
         </div>
       ) : null}
       {view === "planning" ? <div className="pointer-events-none absolute bottom-2 right-2 text-[11px] font-semibold text-slate-400">{loadHours > 0 ? formatHours(loadHours) : ""}</div> : null}
-    </div>
+    </button>
   );
 }
 
@@ -349,6 +370,7 @@ export default function PlanningOperationsBoard({ chantierId, chantierName, inte
   const [intervenantFilter, setIntervenantFilter] = useState("__all__");
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const [selectedSegmentId, setSelectedSegmentId] = useState<string | null>(null);
+  const [drawerOpen, setDrawerOpen] = useState(false);
   const [newBlockDraft, setNewBlockDraft] = useState<Draft>({
     start_date: formatDateKey(new Date()),
     duration_days: 1,
@@ -381,6 +403,18 @@ export default function PlanningOperationsBoard({ chantierId, chantierName, inte
     const timeout = window.setTimeout(() => setNotice(null), 3200);
     return () => window.clearTimeout(timeout);
   }, [notice]);
+
+  useEffect(() => {
+    if (!drawerOpen) return undefined;
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        setDrawerOpen(false);
+        setSelectedSegmentId(null);
+      }
+    }
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [drawerOpen]);
 
   const settings = state?.settings ?? { hoursPerDay: 7, dayCapacity: 3, workingDays: [1, 2, 3, 4, 5], skipWeekends: true };
   const tasks = state?.tasks ?? [];
@@ -590,6 +624,7 @@ export default function PlanningOperationsBoard({ chantierId, chantierName, inte
   function openTask(taskId: string) {
     setSelectedTaskId(taskId);
     setSelectedSegmentId(null);
+    setDrawerOpen(true);
   }
 
   function openSegment(segmentId: string) {
@@ -597,6 +632,22 @@ export default function PlanningOperationsBoard({ chantierId, chantierName, inte
     if (!segment) return;
     setSelectedTaskId(segment.task_id);
     setSelectedSegmentId(segmentId);
+    setDrawerOpen(true);
+  }
+
+  function prefillFromCell(day: string, rowId: string) {
+    if (!selectedTask) {
+      setNotice("Selectionne d'abord une tache a planifier dans la colonne de droite.");
+      return;
+    }
+    setSelectedSegmentId(null);
+    setDrawerOpen(true);
+    setNewBlockDraft((current) => ({
+      ...current,
+      ...defaultDraft(selectedTask, day),
+      start_date: day,
+      intervenant_id: rowId === "unassigned" ? "" : rowId,
+    }));
   }
 
   function nextOrderInDay(day: string, excludeId?: string) {
@@ -617,23 +668,36 @@ export default function PlanningOperationsBoard({ chantierId, chantierName, inte
     }
   }
 
-  async function createBlock(task: PlanningCalendarTask, draft: Draft) {
+  async function createBlock(task: PlanningCalendarTask, draft: Draft, options?: { keepOpen?: boolean }) {
+    const validationError = validateDraft(draft);
+    if (validationError) {
+      setError(validationError);
+      setDrawerOpen(true);
+      return;
+    }
     setSaving(true);
     setError(null);
     try {
-      await createPlanningCalendarSegment(chantierId, task.id, {
+      const created = await createPlanningCalendarSegment(chantierId, task.id, {
         start_date: draft.start_date,
         duration_days: clampDurationDays(draft.duration_days),
         intervenant_id: draft.intervenant_id || task.intervenant_id || null,
         order_in_day: nextOrderInDay(draft.start_date),
         title_override: draft.title_override.trim() || getTaskPlanningTitle(task),
-        progress_percent: Number(draft.progress_percent || 0),
+        progress_percent: parseProgress(draft.progress_percent),
         status: draft.status,
         comment: draft.comment.trim() || null,
       }, settings);
       await loadPlanning(true);
       setSelectedTaskId(task.id);
-      setSelectedSegmentId(null);
+      if (options?.keepOpen) {
+        const nextDate = nextPlannableDate(addDaysToKey(computeEndDate(created.start_date, created.duration_days, settings), 1), settings);
+        setSelectedSegmentId(null);
+        setNewBlockDraft(defaultDraft(task, nextDate));
+      } else {
+        setSelectedSegmentId(created.id);
+      }
+      setDrawerOpen(true);
       setNotice("Bloc planning cree.");
     } catch (err: any) {
       setError(err?.message ?? "Erreur creation bloc.");
@@ -643,6 +707,11 @@ export default function PlanningOperationsBoard({ chantierId, chantierName, inte
   }
 
   async function saveBlock(segment: PlanningCalendarSegment, draft: Draft) {
+    const validationError = validateDraft(draft);
+    if (validationError) {
+      setError(validationError);
+      return;
+    }
     setSaving(true);
     setError(null);
     try {
@@ -652,12 +721,13 @@ export default function PlanningOperationsBoard({ chantierId, chantierName, inte
         intervenant_id: draft.intervenant_id || null,
         order_in_day: draft.start_date !== segment.start_date ? nextOrderInDay(draft.start_date, segment.id) : segment.order_in_day,
         title_override: draft.title_override.trim() || null,
-        progress_percent: Number(draft.progress_percent || 0),
+        progress_percent: parseProgress(draft.progress_percent),
         status: draft.status,
         comment: draft.comment.trim() || null,
       }, settings, { start_date: segment.start_date, duration_days: segment.duration_days });
       await loadPlanning(true);
       setSelectedSegmentId(segment.id);
+      setDrawerOpen(true);
       setNotice("Bloc planning mis a jour.");
     } catch (err: any) {
       setError(err?.message ?? "Erreur mise a jour bloc.");
@@ -737,6 +807,7 @@ export default function PlanningOperationsBoard({ chantierId, chantierName, inte
       await loadPlanning(true);
       setSelectedTaskId(task.id);
       setSelectedSegmentId(null);
+      setDrawerOpen(true);
       setNotice("Decoupage suggere applique.");
     } catch (err: any) {
       setError(err?.message ?? "Erreur reequilibrage planning.");
@@ -758,7 +829,8 @@ export default function PlanningOperationsBoard({ chantierId, chantierName, inte
       setSelectedTaskId(task.id);
       setSelectedSegmentId(null);
       setNewBlockDraft((current) => ({ ...current, ...defaultDraft(task, day), start_date: day, intervenant_id: intervenantId }));
-      setNotice("Bloc pre-rempli. Verifie le panneau detail puis clique sur Creer un bloc.");
+      setDrawerOpen(true);
+      setNotice("Bloc pre-rempli. Complete le drawer puis valide.");
       return;
     }
 
@@ -829,7 +901,7 @@ export default function PlanningOperationsBoard({ chantierId, chantierName, inte
               </div>
               <button type="button" className={compactBadgeClass(view === "planning")} onClick={() => setView("planning")}>Vue planning</button>
               <button type="button" className={compactBadgeClass(view === "charge")} onClick={() => setView("charge")}>Vue charge</button>
-              <button type="button" className={buttonClass("primary")} disabled={!selectedTask || saving} onClick={() => selectedTask && void createBlock(selectedTask, newBlockDraft)}>
+              <button type="button" className={buttonClass("primary")} disabled={!selectedTask} onClick={() => selectedTask && setDrawerOpen(true)}>
                 <Plus className="mr-1 inline h-4 w-4" />
                 Creer un bloc
               </button>
@@ -893,12 +965,12 @@ export default function PlanningOperationsBoard({ chantierId, chantierName, inte
           </div>
         </section>
 
-        <div className="grid gap-4 xl:grid-cols-[minmax(280px,25%)_minmax(0,1fr)_minmax(320px,20%)]">
-          <aside className="rounded-[2rem] border border-slate-200 bg-white p-4 shadow-sm">
+        <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_360px]">
+          <aside className="rounded-[2rem] border border-slate-200 bg-white p-4 shadow-sm xl:order-2">
             <div className="flex items-center justify-between gap-2">
               <div>
                 <div className="text-sm font-semibold text-slate-900">Backlog taches</div>
-                <div className="text-xs text-slate-500">Cartes visibles, filtrables et glissables vers la grille.</div>
+                <div className="text-xs text-slate-500">Colonne de droite. Clique une carte pour ouvrir la planification.</div>
               </div>
               <span className="rounded-full bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-600">{filteredTasks.length}</span>
             </div>
@@ -915,7 +987,7 @@ export default function PlanningOperationsBoard({ chantierId, chantierName, inte
             </div>
           </aside>
 
-          <section className="rounded-[2rem] border border-slate-200 bg-white p-4 shadow-sm">
+          <section className="rounded-[2rem] border border-slate-200 bg-white p-4 shadow-sm xl:order-1">
             <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
               <div>
                 <div className="text-sm font-semibold text-slate-900">Semaine equipe</div>
@@ -927,8 +999,8 @@ export default function PlanningOperationsBoard({ chantierId, chantierName, inte
             </div>
 
             <div className="overflow-x-auto">
-              <div className="min-w-[940px]">
-                <div className="grid overflow-hidden rounded-t-3xl border border-slate-200 border-b-0 bg-slate-50" style={{ gridTemplateColumns: `220px repeat(${visibleDays.length}, minmax(0,1fr))` }}>
+              <div className="min-w-[1120px]">
+                <div className="grid overflow-hidden rounded-t-3xl border border-slate-200 border-b-0 bg-slate-50" style={{ gridTemplateColumns: `230px repeat(${visibleDays.length}, minmax(0,1fr))` }}>
                   <div className="border-r border-slate-200 px-4 py-4 text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Intervenants</div>
                   {visibleDays.map((day) => (
                     <div key={day} className="border-r border-slate-200 px-3 py-3 text-center last:border-r-0">
@@ -944,7 +1016,7 @@ export default function PlanningOperationsBoard({ chantierId, chantierName, inte
                     const lanesCount = Math.max(1, ...rowBlocks.map((block) => block.lane + 1));
                     const rowHeight = Math.max(CELL_HEIGHT, lanesCount * CELL_HEIGHT);
                     return (
-                      <div key={row.id} className="grid grid-cols-[220px_minmax(0,1fr)] border-b border-slate-100 last:border-b-0">
+                      <div key={row.id} className="grid grid-cols-[230px_minmax(0,1fr)] border-b border-slate-100 last:border-b-0">
                         <div className="border-r border-slate-200 px-4 py-4">
                           <div className="flex items-start gap-3">
                             <span className="mt-1 h-3 w-3 rounded-full" style={{ backgroundColor: row.color.solid }} />
@@ -956,7 +1028,7 @@ export default function PlanningOperationsBoard({ chantierId, chantierName, inte
                         </div>
                         <div className="relative" style={{ minHeight: rowHeight }}>
                           <div className="grid h-full" style={{ gridTemplateColumns: `repeat(${visibleDays.length}, minmax(0,1fr))` }}>
-                            {visibleDays.map((day) => <PlanningCell key={`${row.id}:${day}`} id={`cell:${row.id}:${day}`} loadHours={rowLoadByCell.get(`${row.id}:${day}`) ?? 0} overloaded={(rowLoadByCell.get(`${row.id}:${day}`) ?? 0) > settings.hoursPerDay} view={view} />)}
+                            {visibleDays.map((day) => <PlanningCell key={`${row.id}:${day}`} id={`cell:${row.id}:${day}`} loadHours={rowLoadByCell.get(`${row.id}:${day}`) ?? 0} overloaded={(rowLoadByCell.get(`${row.id}:${day}`) ?? 0) > settings.hoursPerDay} view={view} onClick={() => prefillFromCell(day, row.id)} />)}
                           </div>
                           {view === "planning" ? <div className="pointer-events-none absolute inset-0">{rowBlocks.map((block) => <div key={block.id} className="pointer-events-auto"><PlanningBlockCard block={block} count={visibleDays.length} selected={selectedSegmentId === block.segment.id} onSelect={() => openSegment(block.segment.id)} /></div>)}</div> : null}
                         </div>
@@ -968,7 +1040,23 @@ export default function PlanningOperationsBoard({ chantierId, chantierName, inte
             </div>
           </section>
 
-          <aside className="rounded-[2rem] border border-slate-200 bg-white p-4 shadow-sm">
+          {selectedTask && drawerOpen ? <button type="button" className="fixed inset-0 z-40 bg-slate-950/25" onClick={() => { setDrawerOpen(false); setSelectedSegmentId(null); }} aria-label="Fermer le drawer" /> : null}
+          <aside
+            className={[
+              "fixed inset-y-0 right-0 z-50 w-full max-w-xl overflow-y-auto border-l border-slate-200 bg-white p-5 shadow-2xl transition",
+              selectedTask && drawerOpen ? "translate-x-0" : "pointer-events-none translate-x-full",
+            ].join(" ")}
+          >
+            <div className="mb-4 flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">{selectedSegmentId ? "Edition de bloc" : "Planification rapide"}</div>
+                <div className="mt-1 text-lg font-semibold text-slate-900">{selectedTask ? getTaskPlanningTitle(selectedTask) : "Planning chantier"}</div>
+                <div className="mt-1 text-xs text-slate-500">{selectedTask ? `${selectedTask.lot ?? selectedTask.corps_etat ?? "Sans lot"} · ${formatHours(selectedTaskSummary?.remainingHours ?? 0)} restant(es)` : "Selectionne une tache a planifier."}</div>
+              </div>
+              <button type="button" className={buttonClass("ghost")} onClick={() => { setDrawerOpen(false); setSelectedSegmentId(null); }}>
+                <X className="h-4 w-4" />
+              </button>
+            </div>
             {!selectedTask ? (
               <div className="space-y-3 rounded-3xl border border-dashed border-slate-200 p-5 text-sm text-slate-500">
                 <div className="text-sm font-semibold text-slate-900">Panneau detail</div>
@@ -1087,6 +1175,10 @@ export default function PlanningOperationsBoard({ chantierId, chantierName, inte
                   <button type="button" className={buttonClass("primary")} disabled={saving} onClick={() => void createBlock(selectedTask, newBlockDraft)}>
                     <Plus className="mr-1 inline h-4 w-4" />
                     Planifier ce bloc
+                  </button>
+                  <button type="button" className={buttonClass()} disabled={saving} onClick={() => void createBlock(selectedTask, newBlockDraft, { keepOpen: true })}>
+                    <Plus className="mr-1 inline h-4 w-4" />
+                    Creer et continuer
                   </button>
                   <button type="button" className={buttonClass()} disabled={saving} onClick={() => void applySuggestion(selectedTask)}>
                     <WandSparkles className="mr-1 inline h-4 w-4" />
