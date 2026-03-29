@@ -12,7 +12,7 @@ import {
 import { createDevis, createDevisLigne, deleteDevis } from "../../services/devis.service";
 import { createTask, deleteTasksByIds } from "../../services/chantierTasks.service";
 import { deleteDocument, linkDocumentToTask, uploadDocument } from "../../services/chantierDocuments.service";
-import { generateTerrainTaskTitle } from "../../services/taskTerrainTitlesSimple.service";
+import { generateTerrainTaskTitle } from "../../services/taskTerrainTitlesOperational.service";
 
 type ImportMode = "AI" | "SIMPLE";
 
