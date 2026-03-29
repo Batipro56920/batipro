@@ -10,22 +10,27 @@ import {
   type PlanningCalendarSettings,
 } from "./planningCalendar.utils";
 
-export type PlanningBlockStatus = "prevu" | "en_cours" | "termine";
+export type PlanningBlockStatus = "brouillon" | "planifie" | "en_cours" | "termine" | "annule";
+export type TaskPlanningState = "a_planifier" | "partielle" | "planifiee" | "en_cours" | "terminee" | "bloquee";
 
 export type PlanningBlockMetrics = {
   segmentId: string;
   progressPercent: number;
   status: PlanningBlockStatus;
   plannedHours: number;
+  workedHours: number;
 };
 
 export type PlanningTaskSummary = {
   taskId: string;
   plannedTaskHours: number;
   scheduledBlockHours: number;
-  workedHours: number;
+  estimatedWorkedHours: number;
+  actualWorkedHours: number;
+  remainingHours: number;
   progressPercent: number;
   inconsistency: boolean;
+  segmentCount: number;
 };
 
 export type PlanningColor = {
@@ -48,18 +53,25 @@ function normalizeLabelBase(input: string): string {
   return text.charAt(0).toLowerCase() + text.slice(1);
 }
 
-export function getTaskPlanningTitle(task: Pick<PlanningCalendarTask, "titre" | "titre_terrain">): string {
-  return String(task.titre_terrain ?? "").trim() || String(task.titre ?? "").trim() || "Tache";
+function normalizeText(value: unknown): string {
+  return String(value ?? "").trim();
 }
 
-export function getSegmentPlanningTitle(
-  segment: Pick<PlanningCalendarSegment, "title_override">,
-  task: Pick<PlanningCalendarTask, "titre" | "titre_terrain">,
-): string {
-  return String(segment.title_override ?? "").trim() || getTaskPlanningTitle(task);
+function clampPercent(value: number | null | undefined): number {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return 0;
+  return Math.max(0, Math.min(100, Math.round(parsed)));
 }
 
-export function getIntervenantColor(seed: string | null | undefined): PlanningColor {
+function isDoneTaskStatus(status: string | null | undefined): boolean {
+  return ["FAIT", "DONE", "TERMINE", "COMPLETED"].includes(normalizeText(status).toUpperCase());
+}
+
+function isBlockedTaskStatus(status: string | null | undefined): boolean {
+  return ["BLOQUE", "BLOCKED", "EN_ATTENTE", "WAITING"].includes(normalizeText(status).toUpperCase());
+}
+
+export function getPlanningColor(seed: string | null | undefined): PlanningColor {
   const source = String(seed ?? "sans-affectation");
   let hash = 0;
   for (let index = 0; index < source.length; index += 1) {
@@ -68,10 +80,70 @@ export function getIntervenantColor(seed: string | null | undefined): PlanningCo
   const hue = Math.abs(hash) % 360;
   return {
     solid: `hsl(${hue} 62% 48%)`,
-    soft: `hsl(${hue} 75% 96%)`,
-    border: `hsl(${hue} 52% 76%)`,
-    text: `hsl(${hue} 70% 18%)`,
+    soft: `hsl(${hue} 78% 96%)`,
+    border: `hsl(${hue} 50% 76%)`,
+    text: `hsl(${hue} 62% 20%)`,
   };
+}
+
+export function getIntervenantColor(seed: string | null | undefined): PlanningColor {
+  return getPlanningColor(seed ?? "sans-affectation");
+}
+
+export function getLotColor(task: Pick<PlanningCalendarTask, "lot" | "corps_etat" | "titre">): PlanningColor {
+  return getPlanningColor(task.lot ?? task.corps_etat ?? task.titre);
+}
+
+export function getTaskPlanningTitle(
+  task: Pick<PlanningCalendarTask, "titre" | "titre_terrain"> & {
+    title?: string | null;
+    nom?: string | null;
+    libelle?: string | null;
+  },
+): string {
+  return (
+    normalizeText(task.titre_terrain) ||
+    normalizeText(task.titre) ||
+    normalizeText(task.title) ||
+    normalizeText(task.nom) ||
+    normalizeText(task.libelle) ||
+    "Tache sans titre"
+  );
+}
+
+export function getSegmentPlanningTitle(
+  segment: Pick<PlanningCalendarSegment, "title_override">,
+  task: Pick<PlanningCalendarTask, "titre" | "titre_terrain">,
+): string {
+  return normalizeText(segment.title_override) || getTaskPlanningTitle(task);
+}
+
+export function normalizeBlockStatus(
+  status: string | null | undefined,
+  progressPercent: number | null | undefined,
+): PlanningBlockStatus {
+  const normalized = normalizeText(status).toLowerCase();
+  if (normalized === "brouillon" || normalized === "draft") return "brouillon";
+  if (normalized === "annule" || normalized === "cancelled" || normalized === "canceled") return "annule";
+  if (normalized === "termine" || normalized === "done" || normalized === "completed") return "termine";
+  if (normalized === "en_cours" || normalized === "in_progress") return "en_cours";
+  if (normalized === "planifie" || normalized === "planned") return "planifie";
+  const progress = clampPercent(progressPercent);
+  if (progress >= 100) return "termine";
+  if (progress > 0) return "en_cours";
+  return "planifie";
+}
+
+export function getTaskPlanningState(
+  task: Pick<PlanningCalendarTask, "status">,
+  summary: PlanningTaskSummary,
+): TaskPlanningState {
+  if (isBlockedTaskStatus(task.status)) return "bloquee";
+  if (isDoneTaskStatus(task.status) || summary.progressPercent >= 100) return "terminee";
+  if (summary.progressPercent > 0) return "en_cours";
+  if (summary.segmentCount === 0) return "a_planifier";
+  if (summary.plannedTaskHours > 0 && summary.scheduledBlockHours + 0.25 < summary.plannedTaskHours) return "partielle";
+  return "planifiee";
 }
 
 export function buildSuggestedBlockTitles(taskTitle: string, parts: number): string[] {
@@ -129,46 +201,55 @@ export function computePlanningProgress(
 
   for (const task of tasks) {
     const taskSegments = segmentsByTask.get(task.id) ?? [];
-    const workedHours = Math.max(0, Number(task.temps_reel_h ?? 0) || 0);
     const scheduledBlockHours = Math.round(
       taskSegments.reduce((sum, segment) => sum + computePlannedHours(segment.duration_days, settings), 0) * 100,
     ) / 100;
     const plannedTaskHours = Math.max(
       0,
-      Math.round(
-        (
-          task.temps_prevu_h ??
-          scheduledBlockHours ??
-          computePlannedHours(task.planned_duration_days ?? 1, settings)
-        ) * 100,
-      ) / 100,
+      Math.round((task.temps_prevu_h ?? scheduledBlockHours ?? computePlannedHours(task.planned_duration_days ?? 1, settings)) * 100) / 100,
     );
+    const actualWorkedHours = Math.max(0, Number(task.temps_reel_h ?? 0) || 0);
 
-    let remainingWorked = workedHours;
+    let remainingActualHours = actualWorkedHours;
+    let estimatedWorkedHours = 0;
+
     for (const segment of taskSegments) {
       const plannedHours = Math.max(0.25, computePlannedHours(segment.duration_days, settings));
-      const consumed = Math.max(0, Math.min(plannedHours, remainingWorked));
-      const progressPercent = Math.max(0, Math.min(100, Math.round((consumed / plannedHours) * 100)));
-      const status: PlanningBlockStatus =
-        progressPercent >= 100 ? "termine" : progressPercent > 0 ? "en_cours" : "prevu";
+      const explicitProgress = segment.progress_percent;
+      const derivedWorkedHours = Math.max(0, Math.min(plannedHours, remainingActualHours));
+      const progressPercent =
+        explicitProgress === null || explicitProgress === undefined
+          ? clampPercent((derivedWorkedHours / plannedHours) * 100)
+          : clampPercent(explicitProgress);
+      const workedHours = Math.round((plannedHours * progressPercent) / 100 * 100) / 100;
+      const status = normalizeBlockStatus(segment.status, progressPercent);
 
       blockMetrics.set(segment.id, {
         segmentId: segment.id,
         progressPercent,
         status,
         plannedHours,
+        workedHours,
       });
-      remainingWorked = Math.max(0, remainingWorked - plannedHours);
+
+      estimatedWorkedHours += workedHours;
+      remainingActualHours = Math.max(0, remainingActualHours - plannedHours);
     }
 
-    const effectivePlannedHours = Math.max(plannedTaskHours, scheduledBlockHours || 0.25);
+    const effectiveReference = plannedTaskHours > 0 ? plannedTaskHours : Math.max(0.25, scheduledBlockHours || actualWorkedHours || 0);
+    const progressPercent = clampPercent((Math.max(estimatedWorkedHours, actualWorkedHours) / effectiveReference) * 100);
+    const remainingHours = Math.max(0, Math.round((plannedTaskHours - estimatedWorkedHours) * 100) / 100);
+
     taskSummaries.set(task.id, {
       taskId: task.id,
       plannedTaskHours,
       scheduledBlockHours,
-      workedHours,
-      progressPercent: Math.max(0, Math.min(100, Math.round((workedHours / effectivePlannedHours) * 100))),
+      estimatedWorkedHours: Math.round(estimatedWorkedHours * 100) / 100,
+      actualWorkedHours: Math.round(actualWorkedHours * 100) / 100,
+      remainingHours,
+      progressPercent,
       inconsistency: plannedTaskHours > 0 && Math.abs(scheduledBlockHours - plannedTaskHours) > 0.25,
+      segmentCount: taskSegments.length,
     });
   }
 

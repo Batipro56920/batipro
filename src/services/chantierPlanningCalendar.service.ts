@@ -19,6 +19,7 @@ export type PlanningCalendarTask = {
   chantier_id: string;
   titre: string;
   titre_terrain: string | null;
+  libelle_devis_original: string | null;
   status: string;
   lot: string | null;
   corps_etat: string | null;
@@ -38,6 +39,9 @@ export type PlanningCalendarSegment = {
   task_id: string;
   intervenant_id: string | null;
   title_override: string | null;
+  progress_percent: number | null;
+  status: string | null;
+  comment: string | null;
   start_date: string;
   duration_days: number;
   order_in_day: number;
@@ -72,32 +76,15 @@ export type PlanningSegmentMutation = {
   order_in_day?: number;
   intervenant_id?: string | null;
   title_override?: string | null;
+  progress_percent?: number | null;
+  status?: string | null;
+  comment?: string | null;
 };
 
-const TASK_SELECT_WITH_PLANNED_DURATION = [
+const TASK_BASE_COLUMNS = [
   "id",
   "chantier_id",
   "titre",
-  "titre_terrain",
-  "status",
-  "lot",
-  "corps_etat",
-  "intervenant_id",
-  "quantite",
-  "unite",
-  "temps_prevu_h",
-  "temps_reel_h",
-  "planned_duration_days",
-  "duration_days",
-  "created_at",
-  "updated_at",
-].join(",");
-
-const TASK_SELECT_BASE = [
-  "id",
-  "chantier_id",
-  "titre",
-  "titre_terrain",
   "status",
   "lot",
   "corps_etat",
@@ -109,22 +96,14 @@ const TASK_SELECT_BASE = [
   "duration_days",
   "created_at",
   "updated_at",
-].join(",");
+];
 
-const SEGMENT_SELECT_V3 = [
-  "id",
-  "chantier_id",
-  "task_id",
-  "intervenant_id",
-  "title_override",
-  "start_date",
-  "duration_days",
-  "order_in_day",
-  "created_at",
-  "updated_at",
-].join(",");
+const TASK_OPTIONAL_COLUMNS = {
+  titreTerrain: ["titre_terrain", "libelle_devis_original"],
+  plannedDuration: ["planned_duration_days"],
+} as const;
 
-const SEGMENT_SELECT_V2 = [
+const SEGMENT_BASE_COLUMNS = [
   "id",
   "chantier_id",
   "task_id",
@@ -134,9 +113,31 @@ const SEGMENT_SELECT_V2 = [
   "order_in_day",
   "created_at",
   "updated_at",
-].join(",");
+];
 
-let planningSegmentsSupportTitleOverride: boolean | null = null;
+const SEGMENT_OPTIONAL_COLUMNS = {
+  titleOverride: "title_override",
+  progressPercent: "progress_percent",
+  status: "status",
+  comment: "comment",
+} as const;
+
+let planningTaskSupport: { titreTerrain: boolean | null; plannedDuration: boolean | null } = {
+  titreTerrain: null,
+  plannedDuration: null,
+};
+
+let planningSegmentSupport: {
+  titleOverride: boolean | null;
+  progressPercent: boolean | null;
+  status: boolean | null;
+  comment: boolean | null;
+} = {
+  titleOverride: null,
+  progressPercent: null,
+  status: null,
+  comment: null,
+};
 
 const SEGMENT_SELECT_LEGACY = [
   "id",
@@ -153,6 +154,10 @@ function normalizeNumber(value: unknown): number | null {
   if (value === null || value === undefined || value === "") return null;
   const parsed = Number(typeof value === "string" ? value.replace(",", ".") : value);
   return Number.isFinite(parsed) ? parsed : null;
+}
+
+function normalizeText(value: unknown): string | null {
+  return typeof value === "string" && value.trim() ? value.trim() : null;
 }
 
 function isMissingColumn(error: any, column: string): boolean {
@@ -181,13 +186,116 @@ function dateKeyToIso(dateKey: string, hourUtc: number): string {
   return new Date(Date.UTC(year, Math.max(0, (month || 1) - 1), day || 1, hourUtc, 0, 0)).toISOString();
 }
 
+function buildTaskSelect(): string {
+  const columns = [...TASK_BASE_COLUMNS];
+  if (planningTaskSupport.titreTerrain !== false) columns.splice(3, 0, ...TASK_OPTIONAL_COLUMNS.titreTerrain);
+  if (planningTaskSupport.plannedDuration !== false) columns.splice(columns.indexOf("duration_days"), 0, ...TASK_OPTIONAL_COLUMNS.plannedDuration);
+  return columns.join(",");
+}
+
+function markTaskSupportMissing(column: string): boolean {
+  if ((column === "titre_terrain" || column === "libelle_devis_original") && planningTaskSupport.titreTerrain !== false) {
+    planningTaskSupport = { ...planningTaskSupport, titreTerrain: false };
+    return true;
+  }
+  if (column === "planned_duration_days" && planningTaskSupport.plannedDuration !== false) {
+    planningTaskSupport = { ...planningTaskSupport, plannedDuration: false };
+    return true;
+  }
+  return false;
+}
+
+function confirmTaskSupport(select: string) {
+  if (planningTaskSupport.titreTerrain === null && select.includes("titre_terrain")) {
+    planningTaskSupport = { ...planningTaskSupport, titreTerrain: true };
+  }
+  if (planningTaskSupport.plannedDuration === null && select.includes("planned_duration_days")) {
+    planningTaskSupport = { ...planningTaskSupport, plannedDuration: true };
+  }
+}
+
+function stripUnsupportedTaskPayload(payload: Record<string, unknown>): Record<string, unknown> {
+  const next = { ...payload };
+  if (planningTaskSupport.plannedDuration === false) delete next.planned_duration_days;
+  return next;
+}
+
+function buildSegmentSelect(): string {
+  const columns = [...SEGMENT_BASE_COLUMNS];
+  for (const [key, column] of Object.entries(SEGMENT_OPTIONAL_COLUMNS) as Array<[keyof typeof SEGMENT_OPTIONAL_COLUMNS, string]>) {
+    if (planningSegmentSupport[key] !== false) {
+      columns.splice(4, 0, column);
+    }
+  }
+  return columns.join(",");
+}
+
+function stripUnsupportedSegmentPayload(payload: Record<string, unknown>): Record<string, unknown> {
+  const next = { ...payload };
+  if (planningSegmentSupport.titleOverride === false) delete next.title_override;
+  if (planningSegmentSupport.progressPercent === false) delete next.progress_percent;
+  if (planningSegmentSupport.status === false) delete next.status;
+  if (planningSegmentSupport.comment === false) delete next.comment;
+  return next;
+}
+
+function markSegmentSupportMissing(column: string): boolean {
+  if (column === "title_override" && planningSegmentSupport.titleOverride !== false) {
+    planningSegmentSupport = { ...planningSegmentSupport, titleOverride: false };
+    return true;
+  }
+  if (column === "progress_percent" && planningSegmentSupport.progressPercent !== false) {
+    planningSegmentSupport = { ...planningSegmentSupport, progressPercent: false };
+    return true;
+  }
+  if (column === "status" && planningSegmentSupport.status !== false) {
+    planningSegmentSupport = { ...planningSegmentSupport, status: false };
+    return true;
+  }
+  if (column === "comment" && planningSegmentSupport.comment !== false) {
+    planningSegmentSupport = { ...planningSegmentSupport, comment: false };
+    return true;
+  }
+  return false;
+}
+
+function findMissingOptionalSegmentColumn(error: any): string | null {
+  for (const column of Object.values(SEGMENT_OPTIONAL_COLUMNS)) {
+    if (isMissingColumn(error, column)) return column;
+  }
+  return null;
+}
+
+function confirmSegmentSupport(select: string) {
+  if (planningSegmentSupport.titleOverride === null && select.includes("title_override")) {
+    planningSegmentSupport = { ...planningSegmentSupport, titleOverride: true };
+  }
+  if (planningSegmentSupport.progressPercent === null && select.includes("progress_percent")) {
+    planningSegmentSupport = { ...planningSegmentSupport, progressPercent: true };
+  }
+  if (planningSegmentSupport.status === null && select.includes("status")) {
+    planningSegmentSupport = { ...planningSegmentSupport, status: true };
+  }
+  if (planningSegmentSupport.comment === null && select.includes("comment")) {
+    planningSegmentSupport = { ...planningSegmentSupport, comment: true };
+  }
+}
+
 function mapTask(row: any): PlanningCalendarTask {
   const planned = clampDurationDays(normalizeNumber(row.planned_duration_days) ?? normalizeNumber(row.duration_days) ?? 1);
+  const fallbackTitle =
+    normalizeText(row.titre_terrain) ??
+    normalizeText(row.titre) ??
+    normalizeText(row.title) ??
+    normalizeText(row.nom) ??
+    normalizeText(row.libelle) ??
+    "Tache sans titre";
   return {
     id: String(row.id),
     chantier_id: String(row.chantier_id),
-    titre: String(row.titre ?? ""),
-    titre_terrain: typeof row.titre_terrain === "string" && row.titre_terrain.trim() ? row.titre_terrain.trim() : null,
+    titre: normalizeText(row.titre) ?? fallbackTitle,
+    titre_terrain: normalizeText(row.titre_terrain),
+    libelle_devis_original: normalizeText(row.libelle_devis_original),
     status: String(row.status ?? "A_FAIRE"),
     lot: row.lot ?? null,
     corps_etat: row.corps_etat ?? null,
@@ -202,28 +310,16 @@ function mapTask(row: any): PlanningCalendarTask {
   };
 }
 
-function mapSegmentV3(row: any): PlanningCalendarSegment {
+function mapSegment(row: any): PlanningCalendarSegment {
   return {
     id: String(row.id),
     chantier_id: String(row.chantier_id),
     task_id: String(row.task_id),
     intervenant_id: row.intervenant_id ?? null,
-    title_override: typeof row.title_override === "string" && row.title_override.trim() ? row.title_override.trim() : null,
-    start_date: String(row.start_date),
-    duration_days: clampDurationDays(normalizeNumber(row.duration_days) ?? 1),
-    order_in_day: Math.max(0, Math.trunc(normalizeNumber(row.order_in_day) ?? 0)),
-    created_at: row.created_at ?? null,
-    updated_at: row.updated_at ?? null,
-  };
-}
-
-function mapSegmentV2(row: any): PlanningCalendarSegment {
-  return {
-    id: String(row.id),
-    chantier_id: String(row.chantier_id),
-    task_id: String(row.task_id),
-    intervenant_id: row.intervenant_id ?? null,
-    title_override: null,
+    title_override: normalizeText(row.title_override),
+    progress_percent: normalizeNumber(row.progress_percent),
+    status: normalizeText(row.status),
+    comment: normalizeText(row.comment),
     start_date: String(row.start_date),
     duration_days: clampDurationDays(normalizeNumber(row.duration_days) ?? 1),
     order_in_day: Math.max(0, Math.trunc(normalizeNumber(row.order_in_day) ?? 0)),
@@ -244,6 +340,9 @@ function mapSegmentLegacy(row: any): PlanningCalendarSegment {
     task_id: String(row.task_id),
     intervenant_id: row.intervenant_id ?? null,
     title_override: null,
+    progress_percent: null,
+    status: null,
+    comment: null,
     start_date: startDate,
     duration_days: clampDurationDays(diffDays),
     order_in_day: 0,
@@ -300,6 +399,17 @@ function buildSegmentPayload(
     const title = String(patch.title_override ?? "").trim();
     payload.title_override = title || null;
   }
+  if (patch.progress_percent !== undefined) {
+    const progress = normalizeNumber(patch.progress_percent);
+    payload.progress_percent = progress === null ? null : Math.max(0, Math.min(100, progress));
+  }
+  if (patch.status !== undefined) {
+    const status = normalizeText(patch.status);
+    payload.status = status || null;
+  }
+  if (patch.comment !== undefined) {
+    payload.comment = normalizeText(patch.comment);
+  }
 
   if (nextStart) {
     payload.start_at = dateKeyToIso(nextStart, 8);
@@ -310,107 +420,83 @@ function buildSegmentPayload(
 }
 
 async function fetchTasks(chantierId: string): Promise<{ tasks: PlanningCalendarTask[]; planningColumnsMissing: boolean }> {
-  const first = await supabase
-    .from("chantier_tasks")
-    .select(TASK_SELECT_WITH_PLANNED_DURATION)
-    .eq("chantier_id", chantierId)
-    .order("created_at", { ascending: true });
+  while (true) {
+    const select = buildTaskSelect();
+    const result = await supabase
+      .from("chantier_tasks")
+      .select(select)
+      .eq("chantier_id", chantierId)
+      .order("created_at", { ascending: true });
 
-  if (!first.error) {
-    return {
-      tasks: (first.data ?? []).map(mapTask),
-      planningColumnsMissing: false,
-    };
+    if (!result.error) {
+      confirmTaskSupport(select);
+      return {
+        tasks: (result.data ?? []).map(mapTask),
+        planningColumnsMissing: planningTaskSupport.plannedDuration === false,
+      };
+    }
+
+    if (isMissingColumn(result.error, "titre_terrain") && markTaskSupportMissing("titre_terrain")) continue;
+    if (isMissingColumn(result.error, "libelle_devis_original") && markTaskSupportMissing("libelle_devis_original")) continue;
+    if (isMissingColumn(result.error, "planned_duration_days") && markTaskSupportMissing("planned_duration_days")) continue;
+
+    throw new Error(result.error.message);
   }
-  if (!isMissingColumn(first.error, "planned_duration_days")) {
-    throw new Error(first.error.message);
-  }
-
-  const second = await supabase
-    .from("chantier_tasks")
-    .select(TASK_SELECT_BASE)
-    .eq("chantier_id", chantierId)
-    .order("created_at", { ascending: true });
-
-  if (second.error) throw new Error(second.error.message);
-
-  return {
-    tasks: (second.data ?? []).map(mapTask),
-    planningColumnsMissing: true,
-  };
 }
 
 async function fetchSegments(chantierId: string): Promise<{ segments: PlanningCalendarSegment[]; segmentColumnsMissing: boolean }> {
-  const firstSelect = planningSegmentsSupportTitleOverride === false ? SEGMENT_SELECT_V2 : SEGMENT_SELECT_V3;
-  const first = await supabase
-    .from("chantier_task_segments" as any)
-    .select(firstSelect)
-    .eq("chantier_id", chantierId)
-    .order("start_date", { ascending: true })
-    .order("order_in_day", { ascending: true })
-    .order("created_at", { ascending: true });
-
-  if (!first.error) {
-    if (planningSegmentsSupportTitleOverride !== false) {
-      planningSegmentsSupportTitleOverride = firstSelect === SEGMENT_SELECT_V3;
-    }
-    return {
-      segments: (first.data ?? []).map(firstSelect === SEGMENT_SELECT_V3 ? mapSegmentV3 : mapSegmentV2),
-      segmentColumnsMissing: false,
-    };
-  }
-
-  if (isMissingTable(first.error, "chantier_task_segments")) {
-    return { segments: [], segmentColumnsMissing: true };
-  }
-
-  if (
-    planningSegmentsSupportTitleOverride !== false &&
-    isMissingColumn(first.error, "title_override")
-  ) {
-    planningSegmentsSupportTitleOverride = false;
-    const retryWithoutTitle = await supabase
+  while (true) {
+    const select = buildSegmentSelect();
+    const result = await supabase
       .from("chantier_task_segments" as any)
-      .select(SEGMENT_SELECT_V2)
+      .select(select)
       .eq("chantier_id", chantierId)
       .order("start_date", { ascending: true })
       .order("order_in_day", { ascending: true })
       .order("created_at", { ascending: true });
 
-    if (!retryWithoutTitle.error) {
+    if (!result.error) {
+      confirmSegmentSupport(select);
       return {
-        segments: (retryWithoutTitle.data ?? []).map(mapSegmentV2),
+        segments: (result.data ?? []).map(mapSegment),
         segmentColumnsMissing: false,
       };
     }
+
+    if (isMissingTable(result.error, "chantier_task_segments")) {
+      return { segments: [], segmentColumnsMissing: true };
+    }
+
+    const missingOptional = findMissingOptionalSegmentColumn(result.error);
+    if (missingOptional && markSegmentSupportMissing(missingOptional)) continue;
+
+    if (!isMissingColumn(result.error, "start_date") && !isMissingColumn(result.error, "duration_days") && !isMissingColumn(result.error, "order_in_day")) {
+      throw new Error(result.error.message);
+    }
+
+    const legacy = await supabase
+      .from("chantier_task_segments" as any)
+      .select(SEGMENT_SELECT_LEGACY)
+      .eq("chantier_id", chantierId)
+      .order("start_at", { ascending: true })
+      .order("created_at", { ascending: true });
+
+    if (legacy.error) throw new Error(legacy.error.message);
+
+    const normalizedLegacy = (legacy.data ?? []).map(mapSegmentLegacy);
+    const orderByDay = new Map<string, number>();
+    const normalized = normalizedLegacy.map((segment) => {
+      const key = segment.start_date;
+      const next = orderByDay.get(key) ?? 0;
+      orderByDay.set(key, next + 1);
+      return { ...segment, order_in_day: next };
+    });
+
+    return {
+      segments: normalized,
+      segmentColumnsMissing: true,
+    };
   }
-
-  if (!isMissingColumn(first.error, "start_date") && !isMissingColumn(first.error, "duration_days") && !isMissingColumn(first.error, "order_in_day")) {
-    throw new Error(first.error.message);
-  }
-
-  const second = await supabase
-    .from("chantier_task_segments" as any)
-    .select(SEGMENT_SELECT_LEGACY)
-    .eq("chantier_id", chantierId)
-    .order("start_at", { ascending: true })
-    .order("created_at", { ascending: true });
-
-  if (second.error) throw new Error(second.error.message);
-
-  const legacy = (second.data ?? []).map(mapSegmentLegacy);
-  const orderByDay = new Map<string, number>();
-  const normalized = legacy.map((segment) => {
-    const key = segment.start_date;
-    const next = orderByDay.get(key) ?? 0;
-    orderByDay.set(key, next + 1);
-    return { ...segment, order_in_day: next };
-  });
-
-  return {
-    segments: normalized,
-    segmentColumnsMissing: true,
-  };
 }
 
 export async function getPlanningCalendarState(chantierId: string): Promise<PlanningCalendarState> {
@@ -451,23 +537,22 @@ export async function createPlanningCalendarTask(
     ...buildTaskPayload(patch, settings),
   };
 
-  const first = await supabase.from("chantier_tasks").insert([payload]).select(TASK_SELECT_WITH_PLANNED_DURATION).maybeSingle();
-  if (!first.error) {
-    if (!first.data) throw new Error("Tache creee mais non retournee.");
-    return mapTask(first.data);
+  while (true) {
+    const select = buildTaskSelect();
+    const insertPayload = stripUnsupportedTaskPayload(payload);
+    const result = await supabase.from("chantier_tasks").insert([insertPayload]).select(select).maybeSingle();
+    if (!result.error) {
+      if (!result.data) throw new Error("Tache creee mais non retournee.");
+      confirmTaskSupport(select);
+      return mapTask(result.data);
+    }
+
+    if (isMissingColumn(result.error, "titre_terrain") && markTaskSupportMissing("titre_terrain")) continue;
+    if (isMissingColumn(result.error, "libelle_devis_original") && markTaskSupportMissing("libelle_devis_original")) continue;
+    if (isMissingColumn(result.error, "planned_duration_days") && markTaskSupportMissing("planned_duration_days")) continue;
+
+    throw new Error(result.error.message);
   }
-
-  if (!isMissingColumn(first.error, "planned_duration_days")) {
-    throw new Error(first.error.message);
-  }
-
-  const fallbackPayload = { ...payload };
-  delete (fallbackPayload as any).planned_duration_days;
-
-  const second = await supabase.from("chantier_tasks").insert([fallbackPayload]).select(TASK_SELECT_BASE).maybeSingle();
-  if (second.error) throw new Error(second.error.message);
-  if (!second.data) throw new Error("Tache creee mais non retournee.");
-  return mapTask(second.data);
 }
 
 export async function updatePlanningCalendarTask(
@@ -478,23 +563,22 @@ export async function updatePlanningCalendarTask(
 ): Promise<PlanningCalendarTask> {
   const payload = buildTaskPayload(patch, settings);
 
-  const first = await supabase.from("chantier_tasks").update(payload).eq("id", taskId).select(TASK_SELECT_WITH_PLANNED_DURATION).maybeSingle();
-  if (!first.error) {
-    if (!first.data) throw new Error("Tache introuvable.");
-    return mapTask(first.data);
+  while (true) {
+    const select = buildTaskSelect();
+    const updatePayload = stripUnsupportedTaskPayload(payload);
+    const result = await supabase.from("chantier_tasks").update(updatePayload).eq("id", taskId).select(select).maybeSingle();
+    if (!result.error) {
+      if (!result.data) throw new Error("Tache introuvable.");
+      confirmTaskSupport(select);
+      return mapTask(result.data);
+    }
+
+    if (isMissingColumn(result.error, "titre_terrain") && markTaskSupportMissing("titre_terrain")) continue;
+    if (isMissingColumn(result.error, "libelle_devis_original") && markTaskSupportMissing("libelle_devis_original")) continue;
+    if (isMissingColumn(result.error, "planned_duration_days") && markTaskSupportMissing("planned_duration_days")) continue;
+
+    throw new Error(result.error.message);
   }
-
-  if (!isMissingColumn(first.error, "planned_duration_days")) {
-    throw new Error(first.error.message);
-  }
-
-  const fallbackPayload = { ...payload };
-  delete (fallbackPayload as any).planned_duration_days;
-
-  const second = await supabase.from("chantier_tasks").update(fallbackPayload).eq("id", taskId).select(TASK_SELECT_BASE).maybeSingle();
-  if (second.error) throw new Error(second.error.message);
-  if (!second.data) throw new Error("Tache introuvable.");
-  return mapTask(second.data);
 }
 
 export async function deletePlanningCalendarTasks(taskIds: string[]): Promise<void> {
@@ -522,55 +606,43 @@ export async function createPlanningCalendarSegment(
       order_in_day: patch.order_in_day ?? 0,
       intervenant_id: patch.intervenant_id,
       title_override: patch.title_override,
+      progress_percent: patch.progress_percent,
+      status: patch.status,
+      comment: patch.comment,
     }, settings),
   };
 
-  const insertPayload =
-    planningSegmentsSupportTitleOverride === false
-      ? (() => {
-          const next = { ...payload };
-          delete (next as Record<string, unknown>).title_override;
-          return next;
-        })()
-      : payload;
-
-  const firstSelect = planningSegmentsSupportTitleOverride === false ? SEGMENT_SELECT_V2 : SEGMENT_SELECT_V3;
-  const first = await segmentsTable().insert([insertPayload]).select(firstSelect).maybeSingle();
-  if (!first.error) {
-    if (!first.data) throw new Error("Segment cree mais non retourne.");
-    if (planningSegmentsSupportTitleOverride !== false) {
-      planningSegmentsSupportTitleOverride = firstSelect === SEGMENT_SELECT_V3;
+  while (true) {
+    const insertPayload = stripUnsupportedSegmentPayload(payload);
+    const select = buildSegmentSelect();
+    const result = await segmentsTable().insert([insertPayload]).select(select).maybeSingle();
+    if (!result.error) {
+      if (!result.data) throw new Error("Segment cree mais non retourne.");
+      confirmSegmentSupport(select);
+      return mapSegment(result.data);
     }
-    return firstSelect === SEGMENT_SELECT_V3 ? mapSegmentV3(first.data) : mapSegmentV2(first.data);
-  }
 
-  if (
-    planningSegmentsSupportTitleOverride !== false &&
-    isMissingColumn(first.error, "title_override")
-  ) {
-    planningSegmentsSupportTitleOverride = false;
-    const fallbackInsert = { ...payload };
-    delete (fallbackInsert as Record<string, unknown>).title_override;
-    const retryWithoutTitle = await segmentsTable().insert([fallbackInsert]).select(SEGMENT_SELECT_V2).maybeSingle();
-    if (!retryWithoutTitle.error) {
-      if (!retryWithoutTitle.data) throw new Error("Segment cree mais non retourne.");
-      return mapSegmentV2(retryWithoutTitle.data);
+    const missingOptional = findMissingOptionalSegmentColumn(result.error);
+    if (missingOptional && markSegmentSupportMissing(missingOptional)) continue;
+
+    if (!isMissingColumn(result.error, "start_date") && !isMissingColumn(result.error, "duration_days") && !isMissingColumn(result.error, "order_in_day")) {
+      throw new Error(result.error.message);
     }
+
+    const fallbackPayload = { ...payload };
+    delete (fallbackPayload as any).start_date;
+    delete (fallbackPayload as any).duration_days;
+    delete (fallbackPayload as any).order_in_day;
+    delete (fallbackPayload as any).title_override;
+    delete (fallbackPayload as any).progress_percent;
+    delete (fallbackPayload as any).status;
+    delete (fallbackPayload as any).comment;
+
+    const second = await segmentsTable().insert([fallbackPayload]).select(SEGMENT_SELECT_LEGACY).maybeSingle();
+    if (second.error) throw new Error(second.error.message);
+    if (!second.data) throw new Error("Segment cree mais non retourne.");
+    return mapSegmentLegacy(second.data);
   }
-
-  if (!isMissingColumn(first.error, "start_date") && !isMissingColumn(first.error, "duration_days") && !isMissingColumn(first.error, "order_in_day")) {
-    throw new Error(first.error.message);
-  }
-
-  const fallbackPayload = { ...payload };
-  delete (fallbackPayload as any).start_date;
-  delete (fallbackPayload as any).duration_days;
-  delete (fallbackPayload as any).order_in_day;
-
-  const second = await segmentsTable().insert([fallbackPayload]).select(SEGMENT_SELECT_LEGACY).maybeSingle();
-  if (second.error) throw new Error(second.error.message);
-  if (!second.data) throw new Error("Segment cree mais non retourne.");
-  return mapSegmentLegacy(second.data);
 }
 
 export async function updatePlanningCalendarSegment(
@@ -581,51 +653,37 @@ export async function updatePlanningCalendarSegment(
 ): Promise<PlanningCalendarSegment> {
   const payload = buildSegmentPayload(patch, settings, baseline);
 
-  const updatePayload =
-    planningSegmentsSupportTitleOverride === false
-      ? (() => {
-          const next = { ...payload };
-          delete (next as Record<string, unknown>).title_override;
-          return next;
-        })()
-      : payload;
-  const firstSelect = planningSegmentsSupportTitleOverride === false ? SEGMENT_SELECT_V2 : SEGMENT_SELECT_V3;
-  const first = await segmentsTable().update(updatePayload).eq("id", segmentId).select(firstSelect).maybeSingle();
-  if (!first.error) {
-    if (!first.data) throw new Error("Segment introuvable.");
-    if (planningSegmentsSupportTitleOverride !== false) {
-      planningSegmentsSupportTitleOverride = firstSelect === SEGMENT_SELECT_V3;
+  while (true) {
+    const updatePayload = stripUnsupportedSegmentPayload(payload);
+    const select = buildSegmentSelect();
+    const result = await segmentsTable().update(updatePayload).eq("id", segmentId).select(select).maybeSingle();
+    if (!result.error) {
+      if (!result.data) throw new Error("Segment introuvable.");
+      confirmSegmentSupport(select);
+      return mapSegment(result.data);
     }
-    return firstSelect === SEGMENT_SELECT_V3 ? mapSegmentV3(first.data) : mapSegmentV2(first.data);
-  }
 
-  if (
-    planningSegmentsSupportTitleOverride !== false &&
-    isMissingColumn(first.error, "title_override")
-  ) {
-    planningSegmentsSupportTitleOverride = false;
-    const fallbackUpdate = { ...payload };
-    delete (fallbackUpdate as Record<string, unknown>).title_override;
-    const retryWithoutTitle = await segmentsTable().update(fallbackUpdate).eq("id", segmentId).select(SEGMENT_SELECT_V2).maybeSingle();
-    if (!retryWithoutTitle.error) {
-      if (!retryWithoutTitle.data) throw new Error("Segment introuvable.");
-      return mapSegmentV2(retryWithoutTitle.data);
+    const missingOptional = findMissingOptionalSegmentColumn(result.error);
+    if (missingOptional && markSegmentSupportMissing(missingOptional)) continue;
+
+    if (!isMissingColumn(result.error, "start_date") && !isMissingColumn(result.error, "duration_days") && !isMissingColumn(result.error, "order_in_day")) {
+      throw new Error(result.error.message);
     }
+
+    const fallbackPayload = { ...payload };
+    delete (fallbackPayload as any).start_date;
+    delete (fallbackPayload as any).duration_days;
+    delete (fallbackPayload as any).order_in_day;
+    delete (fallbackPayload as any).title_override;
+    delete (fallbackPayload as any).progress_percent;
+    delete (fallbackPayload as any).status;
+    delete (fallbackPayload as any).comment;
+
+    const second = await segmentsTable().update(fallbackPayload).eq("id", segmentId).select(SEGMENT_SELECT_LEGACY).maybeSingle();
+    if (second.error) throw new Error(second.error.message);
+    if (!second.data) throw new Error("Segment introuvable.");
+    return mapSegmentLegacy(second.data);
   }
-
-  if (!isMissingColumn(first.error, "start_date") && !isMissingColumn(first.error, "duration_days") && !isMissingColumn(first.error, "order_in_day")) {
-    throw new Error(first.error.message);
-  }
-
-  const fallbackPayload = { ...payload };
-  delete (fallbackPayload as any).start_date;
-  delete (fallbackPayload as any).duration_days;
-  delete (fallbackPayload as any).order_in_day;
-
-  const second = await segmentsTable().update(fallbackPayload).eq("id", segmentId).select(SEGMENT_SELECT_LEGACY).maybeSingle();
-  if (second.error) throw new Error(second.error.message);
-  if (!second.data) throw new Error("Segment introuvable.");
-  return mapSegmentLegacy(second.data);
 }
 
 export async function deletePlanningCalendarSegments(segmentIds: string[]): Promise<void> {
