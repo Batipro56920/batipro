@@ -205,6 +205,13 @@ function asNullableNumber(value: unknown): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
+function firstDefined(...values: unknown[]): unknown {
+  for (const value of values) {
+    if (value !== undefined) return value;
+  }
+  return undefined;
+}
+
 function asInt(value: unknown, fallback: number): number {
   const n = Number(value);
   if (!Number.isFinite(n)) return fallback;
@@ -511,9 +518,11 @@ export async function intervenantTimeList(token: string, chantierId: string): Pr
     task_unite: asNullableString(row.task_unite),
     intervenant_id: String(row.intervenant_id ?? ""),
     work_date: String(row.work_date ?? ""),
-    duration_hours: asNullableNumber(row.duration_hours),
+    duration_hours: asNullableNumber(
+      firstDefined(row.duration_hours, row.hours, row.duration, row.duree_h, row.duree),
+    ),
     quantite_realisee: asNullableNumber(row.quantite_realisee),
-    progress_percent: asNullableNumber(row.progress_percent),
+    progress_percent: asNullableNumber(firstDefined(row.progress_percent, row.progress_pct)),
     note: asNullableString(row.note),
     created_at: asNullableString(row.created_at),
   }));
