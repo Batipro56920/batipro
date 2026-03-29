@@ -4087,6 +4087,9 @@ export default function ChantierPage() {
                                 <div key={l.id} className="flex justify-between items-start border-b py-2 text-sm gap-3">
                                   <div className="min-w-0 flex-1">
                                     <div className="font-medium">{l.designation}</div>
+                                    {l.titre_tache ? (
+                                      <div className="mt-1 text-xs font-medium text-blue-700">Titre terrain: {l.titre_tache}</div>
+                                    ) : null}
                                     <div className="text-xs text-slate-500">
                                       {(l.corps_etat ?? "—")} {" • "}
                                       {l.entreprise ?? "—"} {" • "}

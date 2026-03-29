@@ -40,6 +40,9 @@ export type ChantierTaskRow = {
 type CreateTaskPayload = {
   chantier_id: string;
   titre: string;
+  titre_terrain?: string | null;
+  libelle_devis_original?: string | null;
+  devis_ligne_id?: string | null;
   corps_etat?: string | null;
   lot?: string | null;
   date?: string | null;
@@ -84,7 +87,10 @@ type UpdateTaskPatch = Partial<
     | "temps_reel_h"
     | "duration_days"
     | "order_index"
-  >
+  > & {
+    titre_terrain?: string | null;
+    libelle_devis_original?: string | null;
+  }
 >;
 
 const TASK_SELECT = [
@@ -151,6 +157,8 @@ function cleanPatch(patch: UpdateTaskPatch) {
 
   // chaînes
   if (typeof cleaned.titre === "string") cleaned.titre = cleaned.titre.trim();
+  if (typeof cleaned.titre_terrain === "string") cleaned.titre_terrain = cleaned.titre_terrain.trim();
+  if (typeof cleaned.libelle_devis_original === "string") cleaned.libelle_devis_original = cleaned.libelle_devis_original.trim();
   if (typeof cleaned.corps_etat === "string") cleaned.corps_etat = cleaned.corps_etat.trim();
   if (typeof cleaned.lot === "string") cleaned.lot = cleaned.lot.trim();
   if (typeof cleaned.unite === "string") cleaned.unite = cleaned.unite.trim();
@@ -158,6 +166,8 @@ function cleanPatch(patch: UpdateTaskPatch) {
   // vides -> null
   if (cleaned.corps_etat === "") cleaned.corps_etat = null;
   if (cleaned.lot === "") cleaned.lot = null;
+  if (cleaned.titre_terrain === "") cleaned.titre_terrain = null;
+  if (cleaned.libelle_devis_original === "") cleaned.libelle_devis_original = null;
   if (cleaned.date === "") cleaned.date = null;
   if (cleaned.date_debut === "") cleaned.date_debut = null;
   if (cleaned.date_fin === "") cleaned.date_fin = null;
@@ -189,6 +199,9 @@ function cleanPatch(patch: UpdateTaskPatch) {
   // mais on garde une petite sécurité: si titre fourni, il ne doit pas être vide
   if (cleaned.titre !== undefined && !cleaned.titre) {
     throw new Error("Le titre ne peut pas être vide.");
+  }
+  if (cleaned.titre !== undefined && cleaned.titre_terrain === undefined) {
+    cleaned.titre_terrain = cleaned.titre;
   }
 
   return cleaned as UpdateTaskPatch;
@@ -289,6 +302,9 @@ export async function createTask(payload: CreateTaskPayload) {
   const insertRow: any = {
     chantier_id,
     titre,
+    titre_terrain: (payload?.titre_terrain ?? payload?.titre ?? "").trim() || titre,
+    libelle_devis_original: (payload?.libelle_devis_original ?? "").trim() || null,
+    devis_ligne_id: payload?.devis_ligne_id ?? null,
     corps_etat: payload.corps_etat ?? payload.lot ?? null,
     lot: payload.lot ?? payload.corps_etat ?? null,
     date: payload.date ?? null,
@@ -316,6 +332,9 @@ export async function createTask(payload: CreateTaskPayload) {
   if (!isMissingTaskPlanningColumnsError(first.error)) throw first.error;
 
   const legacyInsert = { ...insertRow };
+  delete legacyInsert.titre_terrain;
+  delete legacyInsert.libelle_devis_original;
+  delete legacyInsert.devis_ligne_id;
   delete legacyInsert.duration_days;
   delete legacyInsert.order_index;
 
@@ -345,6 +364,8 @@ export async function updateTask(id: string, patch: UpdateTaskPatch) {
   if (!isMissingTaskPlanningColumnsError(first.error)) throw first.error;
 
   const legacyPatch: Record<string, unknown> = { ...cleaned };
+  delete legacyPatch.titre_terrain;
+  delete legacyPatch.libelle_devis_original;
   delete legacyPatch.duration_days;
   delete legacyPatch.order_index;
 

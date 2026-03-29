@@ -12,6 +12,7 @@ import {
 import { createDevis, createDevisLigne, deleteDevis } from "../../services/devis.service";
 import { createTask, deleteTasksByIds } from "../../services/chantierTasks.service";
 import { deleteDocument, linkDocumentToTask, uploadDocument } from "../../services/chantierDocuments.service";
+import { generateTerrainTaskTitle } from "../../services/taskTerrainTitles.service";
 
 type ImportMode = "AI" | "SIMPLE";
 
@@ -238,6 +239,38 @@ export default function DevisImportDrawer({ open, chantierId, intervenants, onCl
     showBulkToast(`Intervenant efface sur ${changed} ligne(s).`);
   }
 
+  function generateTerrainTitles() {
+    let changed = 0;
+    setRows((previous) =>
+      previous.map((row) => {
+        const nextTitle = generateTerrainTaskTitle({
+          sourceLabel: row.source_line,
+          currentTitle: row.title,
+          quantity: row.quantity,
+          unit: row.unit,
+          lot: row.lot,
+        });
+        if (!nextTitle || nextTitle === row.title) return row;
+        changed += 1;
+        return { ...row, title: nextTitle };
+      }),
+    );
+    showBulkToast(changed > 0 ? `Intitules terrain generes sur ${changed} ligne(s).` : "Aucun intitule a mettre a jour.");
+  }
+
+  function restoreOriginalTitles() {
+    let changed = 0;
+    setRows((previous) =>
+      previous.map((row) => {
+        const originalTitle = row.source_line.trim();
+        if (!originalTitle || originalTitle === row.title) return row;
+        changed += 1;
+        return { ...row, title: originalTitle };
+      }),
+    );
+    showBulkToast(changed > 0 ? `Libelles devis restaures sur ${changed} ligne(s).` : "Les titres utilisent deja le libelle devis.");
+  }
+
   async function onCreateTasks() {
     if (!chantierId) {
       setError("Chantier manquant.");
@@ -280,16 +313,16 @@ export default function DevisImportDrawer({ open, chantierId, intervenants, onCl
 
       let ordre = 1;
       for (const row of selectedRows) {
-        await createDevisLigne({
+        const createdLigne = await createDevisLigne({
           devis_id: createdDevis.id,
           ordre,
           corps_etat: row.lot,
           entreprise: row.intervenant_name,
-          designation: row.title,
+          designation: row.source_line,
           unite: row.unit,
           quantite: row.quantity,
           generer_tache: true,
-          titre_tache: row.source_line,
+          titre_tache: row.title,
           date_prevue: row.date,
         });
         ordre += 1;
@@ -304,6 +337,9 @@ export default function DevisImportDrawer({ open, chantierId, intervenants, onCl
         const createdTask = await createTask({
           chantier_id: chantierId,
           titre: row.title,
+          titre_terrain: row.title,
+          libelle_devis_original: row.source_line,
+          devis_ligne_id: createdLigne.id,
           corps_etat: row.lot,
           date: row.date,
           status: "A_FAIRE",
@@ -447,9 +483,25 @@ export default function DevisImportDrawer({ open, chantierId, intervenants, onCl
                   >
                     Effacer sur toutes les lignes
                   </button>
+                  <button
+                    type="button"
+                    className="rounded-lg border border-blue-200 bg-white px-2.5 py-1.5 text-sm text-blue-700 hover:bg-blue-50 disabled:opacity-60 disabled:cursor-not-allowed"
+                    onClick={generateTerrainTitles}
+                    disabled={creating || rows.length === 0}
+                  >
+                    Generer intitules terrain
+                  </button>
+                  <button
+                    type="button"
+                    className="rounded-lg border px-2.5 py-1.5 text-sm hover:bg-white disabled:opacity-60 disabled:cursor-not-allowed"
+                    onClick={restoreOriginalTitles}
+                    disabled={creating || rows.length === 0}
+                  >
+                    Revenir aux libelles devis
+                  </button>
                 </div>
                 <div className="text-xs text-slate-600">
-                  Astuce : applique l&apos;intervenant a toutes les lignes pour gagner du temps.
+                  Astuce : le libelle devis reste conserve en source, meme apres generation des intitules terrain.
                 </div>
               </div>
 
@@ -464,7 +516,7 @@ export default function DevisImportDrawer({ open, chantierId, intervenants, onCl
                   <thead className="bg-slate-50 text-slate-600 text-xs">
                     <tr>
                       <th className="p-2 text-left">Inclure</th>
-                      <th className="p-2 text-left">Titre</th>
+                      <th className="p-2 text-left">Titre terrain</th>
                       <th className="p-2 text-left">Lot</th>
                       <th className="p-2 text-left">Qté</th>
                       <th className="p-2 text-left">Unité</th>
@@ -480,11 +532,20 @@ export default function DevisImportDrawer({ open, chantierId, intervenants, onCl
                           <input type="checkbox" checked={row.include} onChange={(event) => updateRow(row.id, { include: event.target.checked })} />
                         </td>
                         <td className="p-2">
-                          <input
-                            className="w-full rounded-lg border px-2 py-1.5 text-sm"
-                            value={row.title}
-                            onChange={(event) => updateRow(row.id, { title: event.target.value })}
-                          />
+                          <div className="space-y-2">
+                            <input
+                              className="w-full rounded-lg border px-2 py-1.5 text-sm"
+                              value={row.title}
+                              onChange={(event) => updateRow(row.id, { title: event.target.value })}
+                            />
+                            <button
+                              type="button"
+                              className="rounded-lg border px-2 py-1 text-xs hover:bg-slate-50"
+                              onClick={() => updateRow(row.id, { title: row.source_line })}
+                            >
+                              Utiliser le libelle devis
+                            </button>
+                          </div>
                         </td>
                         <td className="p-2">
                           <select
