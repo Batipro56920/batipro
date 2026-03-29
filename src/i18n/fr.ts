@@ -701,6 +701,7 @@ export const fr = {
       validHours: "Saisir une duree valide en heures.",
       validQuantity: "Saisir une quantite valide.",
       validProgress: "Choisir un avancement global entre 0% et 100%.",
+      taskQuantityRequiredForProgress: "Cette tache doit avoir une quantite prevue pour enregistrer un avancement sur ce portail.",
       descriptionRequired: "Renseigner une description.",
       infoSubjectRequired: "Renseigner un objet.",
       infoMessageRequired: "Renseigner un message.",

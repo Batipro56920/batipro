@@ -682,6 +682,7 @@ export const al: DeepPartial<FrTranslations> = {
       validHours: "Vendos nje kohezgjatje te vlefshme ne ore.",
       validQuantity: "Vendos nje sasi te vlefshme.",
       validProgress: "Zgjidh nje nivel ecurie midis 0% dhe 100%.",
+      taskQuantityRequiredForProgress: "Kjo detyre duhet te kete nje sasi te planifikuar per te regjistruar ecurine ne kete portal.",
       descriptionRequired: "Ploteso pershkrimin.",
       infoSubjectRequired: "Ploteso objektin.",
       infoMessageRequired: "Ploteso mesazhin.",

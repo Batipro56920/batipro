@@ -199,10 +199,22 @@ function isTaskIdRequiredError(message: string): boolean {
   return String(message ?? "").toLowerCase().includes("task_id_required");
 }
 
+function isInvalidQuantityError(message: string): boolean {
+  return String(message ?? "").toLowerCase().includes("invalid_quantite_realisee");
+}
+
 function taskQuantityProgress(task: IntervenantTask): number | null {
   if (task.quantite === null || task.quantite <= 0) return null;
   const done = Number(task.quantite_realisee ?? 0);
   return Math.max(0, Math.min(100, (done / task.quantite) * 100));
+}
+
+function buildLegacyQuantityDelta(task: IntervenantTask | null, targetProgressPercent: number): number | null {
+  if (!task || task.quantite === null || task.quantite <= 0) return null;
+  const currentQuantity = Math.max(0, Number(task.quantite_realisee ?? 0));
+  const targetQuantity = (task.quantite * clampPercent(targetProgressPercent)) / 100;
+  const delta = Math.round((targetQuantity - currentQuantity) * 10000) / 10000;
+  return delta > 0 ? delta : null;
 }
 
 function clampPercent(value: number): number {
@@ -937,14 +949,33 @@ export default function IntervenantPortalPage() {
     setTimeSaving(true);
     setTimeFeedback(null);
     try {
-      await intervenantTimeCreate(token, {
+      const payload = {
         chantier_id: selectedChantierId,
         task_id: timeTaskId,
         work_date: timeDate || todayIsoDate(),
         duration_hours: hours,
         progress_percent: clampPercent(progressValue),
         note: timeNote.trim() || null,
-      });
+      };
+      const legacyQuantityDelta = buildLegacyQuantityDelta(selectedTimeTask, progressValue);
+      try {
+        await intervenantTimeCreate(token, payload);
+      } catch (error) {
+        const message = getErrorMessage(error, t("intervenantPortal.errors.saveTime"));
+        if (!isInvalidQuantityError(message)) throw error;
+        if (legacyQuantityDelta !== null) {
+          await intervenantTimeCreate(token, {
+            ...payload,
+            quantite_realisee: legacyQuantityDelta,
+          });
+        } else {
+          throw new Error(
+            selectedTimeTask?.quantite && selectedTimeTask.quantite > 0
+              ? t("intervenantPortal.errors.validQuantity")
+              : t("intervenantPortal.errors.taskQuantityRequiredForProgress"),
+          );
+        }
+      }
       setTimeFeedback({ type: "success", message: t("intervenantPortal.feedback.timeSaved") });
       setTimeHours("");
       setTimeProgressPercent("0");
