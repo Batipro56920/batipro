@@ -136,6 +136,8 @@ const TASK_SELECT_LEGACY = [
   "updated_at",
 ].join(",");
 
+let chantierTasksSupportsTerrainTitleColumns: boolean | null = null;
+
 /* =========================================================
    HELPERS
    ========================================================= */
@@ -249,6 +251,34 @@ function isMissingTaskPlanningColumnsError(error: any): boolean {
   );
 }
 
+function isMissingTaskColumnError(error: { message?: string } | null, column: string): boolean {
+  const msg = String(error?.message ?? "").toLowerCase();
+  if (!msg) return false;
+  return (
+    msg.includes(column.toLowerCase()) &&
+    (
+      msg.includes("schema cache") ||
+      (msg.includes("column") && msg.includes("does not exist")) ||
+      msg.includes("could not find")
+    ) &&
+    msg.includes("chantier_tasks")
+  );
+}
+
+function stripTerrainTitleColumns<T extends Record<string, unknown>>(payload: T): T {
+  const next = { ...payload };
+  delete (next as Record<string, unknown>).titre_terrain;
+  delete (next as Record<string, unknown>).libelle_devis_original;
+  return next;
+}
+
+function hasMissingTerrainTitleColumnsError(error: { message?: string } | null): boolean {
+  return (
+    isMissingTaskColumnError(error, "titre_terrain") ||
+    isMissingTaskColumnError(error, "libelle_devis_original")
+  );
+}
+
 /* =========================================================
    QUERIES
    ========================================================= */
@@ -322,18 +352,43 @@ export async function createTask(payload: CreateTaskPayload) {
     order_index: Math.max(0, Math.trunc(normalizeNumber(payload.order_index) ?? 0)),
   };
 
+  const insertWithTerrainColumns =
+    chantierTasksSupportsTerrainTitleColumns !== false ? insertRow : stripTerrainTitleColumns(insertRow);
+
   const first = await supabase
     .from("chantier_tasks")
-    .insert([insertRow])
+    .insert([insertWithTerrainColumns])
     .select(TASK_SELECT)
     .single();
 
-  if (!first.error) return normalizeTaskRow(first.data);
-  if (!isMissingTaskPlanningColumnsError(first.error)) throw first.error;
+  if (!first.error) {
+    if (chantierTasksSupportsTerrainTitleColumns !== false) {
+      chantierTasksSupportsTerrainTitleColumns = true;
+    }
+    return normalizeTaskRow(first.data);
+  }
 
-  const legacyInsert = { ...insertRow };
-  delete legacyInsert.titre_terrain;
-  delete legacyInsert.libelle_devis_original;
+  let baseInsert = insertWithTerrainColumns;
+  let baseError = first.error;
+
+  if (chantierTasksSupportsTerrainTitleColumns !== false && hasMissingTerrainTitleColumnsError(first.error)) {
+    chantierTasksSupportsTerrainTitleColumns = false;
+    baseInsert = stripTerrainTitleColumns(insertRow);
+    const retryWithoutTerrainColumns = await supabase
+      .from("chantier_tasks")
+      .insert([baseInsert])
+      .select(TASK_SELECT)
+      .single();
+
+    if (!retryWithoutTerrainColumns.error) {
+      return normalizeTaskRow(retryWithoutTerrainColumns.data);
+    }
+    baseError = retryWithoutTerrainColumns.error;
+  }
+
+  if (!isMissingTaskPlanningColumnsError(baseError)) throw baseError;
+
+  const legacyInsert = { ...baseInsert };
   delete legacyInsert.devis_ligne_id;
   delete legacyInsert.duration_days;
   delete legacyInsert.order_index;
@@ -352,20 +407,45 @@ export async function updateTask(id: string, patch: UpdateTaskPatch) {
   if (!id) throw new Error("id tâche manquant.");
 
   const cleaned = cleanPatch(patch);
+  const updateWithTerrainColumns =
+    chantierTasksSupportsTerrainTitleColumns !== false ? cleaned : stripTerrainTitleColumns(cleaned);
 
   const first = await supabase
     .from("chantier_tasks")
-    .update(cleaned as any)
+    .update(updateWithTerrainColumns as any)
     .eq("id", id)
     .select(TASK_SELECT)
     .single();
 
-  if (!first.error) return normalizeTaskRow(first.data);
-  if (!isMissingTaskPlanningColumnsError(first.error)) throw first.error;
+  if (!first.error) {
+    if (chantierTasksSupportsTerrainTitleColumns !== false) {
+      chantierTasksSupportsTerrainTitleColumns = true;
+    }
+    return normalizeTaskRow(first.data);
+  }
 
-  const legacyPatch: Record<string, unknown> = { ...cleaned };
-  delete legacyPatch.titre_terrain;
-  delete legacyPatch.libelle_devis_original;
+  let basePatch: Record<string, unknown> = { ...updateWithTerrainColumns };
+  let baseError = first.error;
+
+  if (chantierTasksSupportsTerrainTitleColumns !== false && hasMissingTerrainTitleColumnsError(first.error)) {
+    chantierTasksSupportsTerrainTitleColumns = false;
+    basePatch = stripTerrainTitleColumns(cleaned);
+    const retryWithoutTerrainColumns = await supabase
+      .from("chantier_tasks")
+      .update(basePatch as any)
+      .eq("id", id)
+      .select(TASK_SELECT)
+      .single();
+
+    if (!retryWithoutTerrainColumns.error) {
+      return normalizeTaskRow(retryWithoutTerrainColumns.data);
+    }
+    baseError = retryWithoutTerrainColumns.error;
+  }
+
+  if (!isMissingTaskPlanningColumnsError(baseError)) throw baseError;
+
+  const legacyPatch: Record<string, unknown> = { ...basePatch };
   delete legacyPatch.duration_days;
   delete legacyPatch.order_index;
 
