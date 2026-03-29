@@ -38,7 +38,6 @@ import TodayChecklistCard, {
 } from "../components/TodayChecklistCard";
 import TerrainFeedbackPanel from "../components/intervenantPortal/TerrainFeedbackPanel";
 import {
-  PortalActionTile,
   PortalBadge,
   PortalCard,
   PortalEmptyState,
@@ -63,7 +62,6 @@ import {
 type PortalTab = "accueil" | "consignes" | "temps" | "taches" | "planning" | "documents" | "materiel" | "messages" | "retours";
 type LoadState<T> = { loading: boolean; error: string | null; data: T };
 type DashboardTaskItem = { chantier: IntervenantChantier; task: IntervenantTask };
-type DashboardMaterielItem = { chantier: IntervenantChantier; row: IntervenantMateriel };
 type MobileGlobalTab = "home" | "sites" | "site";
 type MobileQuickAction = "time" | "materiel" | null;
 
@@ -88,7 +86,6 @@ const EMPTY_INFO_REQUESTS_STATE: LoadState<IntervenantInformationRequest[]> = { 
 const EMPTY_TERRAIN_FEEDBACKS_STATE: LoadState<IntervenantTerrainFeedback[]> = { loading: false, error: null, data: [] };
 const EMPTY_CONSIGNES_STATE: LoadState<IntervenantConsigne[]> = { loading: false, error: null, data: [] };
 const EMPTY_DASHBOARD_TASKS_STATE: LoadState<DashboardTaskItem[]> = { loading: false, error: null, data: [] };
-const EMPTY_DASHBOARD_MATERIEL_STATE: LoadState<DashboardMaterielItem[]> = { loading: false, error: null, data: [] };
 
 function getErrorMessage(error: unknown, fallback: string): string {
   const message = String((error as { message?: string } | null)?.message ?? fallback).trim();
@@ -208,6 +205,15 @@ function taskQuantityProgress(task: IntervenantTask): number | null {
   return Math.max(0, Math.min(100, (done / task.quantite) * 100));
 }
 
+function clampPercent(value: number): number {
+  return Math.max(0, Math.min(100, value));
+}
+
+function roundPercent(value: number | null): number | null {
+  if (value === null || !Number.isFinite(value)) return null;
+  return Math.round(clampPercent(value));
+}
+
 function taskPortalPriority(task: IntervenantTask): number {
   const progress = taskQuantityProgress(task);
   if (progress !== null) {
@@ -257,10 +263,6 @@ function tabToneClass(status: string | null): "neutral" | "amber" | "green" {
   if (["FAIT", "TERMINE", "DONE", "COMPLETED"].includes(normalized)) return "green";
   if (["EN_COURS", "IN_PROGRESS"].includes(normalized)) return "amber";
   return "neutral";
-}
-
-function isOpenMaterielStatus(status: IntervenantMateriel["statut"]): boolean {
-  return status === "en_attente" || status === "validee";
 }
 
 function chantierDateSummary(
@@ -313,7 +315,6 @@ export default function IntervenantPortalPage() {
   const [timeState, setTimeState] = useState<LoadState<IntervenantTimeEntry[]>>(EMPTY_TIME_STATE);
   const [materielState, setMaterielState] = useState<LoadState<IntervenantMateriel[]>>(EMPTY_MATERIEL_STATE);
   const [dashboardTasksState, setDashboardTasksState] = useState<LoadState<DashboardTaskItem[]>>(EMPTY_DASHBOARD_TASKS_STATE);
-  const [dashboardMaterielState, setDashboardMaterielState] = useState<LoadState<DashboardMaterielItem[]>>(EMPTY_DASHBOARD_MATERIEL_STATE);
 
   const [reloadTick, setReloadTick] = useState(0);
   const [portalOptionsOpen, setPortalOptionsOpen] = useState(false);
@@ -326,7 +327,7 @@ export default function IntervenantPortalPage() {
   const [timeFeedback, setTimeFeedback] = useState<{ type: "success" | "error"; message: string } | null>(null);
   const [timeDate, setTimeDate] = useState(todayIsoDate());
   const [timeHours, setTimeHours] = useState("");
-  const [timeDoneQuantity, setTimeDoneQuantity] = useState("");
+  const [timeProgressPercent, setTimeProgressPercent] = useState("0");
   const [timeNote, setTimeNote] = useState("");
   const [timeSaving, setTimeSaving] = useState(false);
   const [timeDeletingId, setTimeDeletingId] = useState<string | null>(null);
@@ -501,7 +502,7 @@ export default function IntervenantPortalPage() {
     setTimeTaskListOpen(false);
     setTimeFeedback(null);
     setTimeHours("");
-    setTimeDoneQuantity("");
+    setTimeProgressPercent("0");
     setTimeNote("");
     setTimeDate(todayIsoDate());
     setMaterielTaskId("");
@@ -564,15 +565,12 @@ export default function IntervenantPortalPage() {
     if (!token || bootLoading || bootError) return;
     if (chantiers.length === 0) {
       setDashboardTasksState(EMPTY_DASHBOARD_TASKS_STATE);
-      setDashboardMaterielState(EMPTY_DASHBOARD_MATERIEL_STATE);
       return;
     }
     let alive = true;
     async function loadDashboardData() {
       setDashboardTasksState({ loading: true, error: null, data: [] });
-      setDashboardMaterielState({ loading: true, error: null, data: [] });
       const taskLoads = await Promise.allSettled(chantiers.map(async (chantier) => ({ chantier, rows: await intervenantGetTasks(token, chantier.id) })));
-      const materielLoads = await Promise.allSettled(chantiers.map(async (chantier) => ({ chantier, rows: await intervenantMaterielList(token, chantier.id) })));
       if (!alive) return;
       const dashboardTasks: DashboardTaskItem[] = [];
       let dashboardTasksError: string | null = null;
@@ -580,20 +578,14 @@ export default function IntervenantPortalPage() {
         if (result.status === "fulfilled") result.value.rows.forEach((task) => dashboardTasks.push({ chantier: result.value.chantier, task }));
         else if (!dashboardTasksError) dashboardTasksError = getErrorMessage(result.reason, t("intervenantPortal.errors.homeLoad"));
       });
-      const dashboardMateriel: DashboardMaterielItem[] = [];
-      let dashboardMaterielError: string | null = null;
-      materielLoads.forEach((result) => {
-        if (result.status === "fulfilled") result.value.rows.forEach((row) => dashboardMateriel.push({ chantier: result.value.chantier, row }));
-        else if (!dashboardMaterielError) dashboardMaterielError = getErrorMessage(result.reason, t("intervenantPortal.errors.materialRequestsLoad"));
-      });
       setDashboardTasksState({ loading: false, error: dashboardTasksError, data: dashboardTasks });
-      setDashboardMaterielState({ loading: false, error: dashboardMaterielError, data: dashboardMateriel });
     }
     void loadDashboardData();
     return () => {
       alive = false;
     };
   }, [bootError, bootLoading, chantiers, reloadTick, t, token]);
+
   function logoutIntervenant() {
     clearStoredIntervenantSession();
     setToken("");
@@ -670,9 +662,36 @@ export default function IntervenantPortalPage() {
     if (!query) return chantiers;
     return chantiers.filter((chantier) => chantierSearchText(chantier).includes(query));
   }, [chantiers, sidebarChantierQuery]);
+  const latestTaskProgressById = useMemo(() => {
+    const next = new Map<string, number>();
+    timeState.data.forEach((entry) => {
+      if (!entry.task_id || entry.progress_percent === null || next.has(entry.task_id)) return;
+      next.set(entry.task_id, clampPercent(entry.progress_percent));
+    });
+    return next;
+  }, [timeState.data]);
+  function taskCurrentProgress(task: IntervenantTask): number | null {
+    return latestTaskProgressById.get(task.id) ?? taskQuantityProgress(task);
+  }
   const prioritizedTasks = useMemo(() => {
     return [...tasksState.data].sort((a, b) => {
-      const bucketDelta = taskPortalPriority(a) - taskPortalPriority(b);
+      const aProgress = taskCurrentProgress(a);
+      const bProgress = taskCurrentProgress(b);
+      const bucketDelta =
+        (aProgress !== null
+          ? aProgress > 0 && aProgress < 100
+            ? 0
+            : aProgress <= 0
+              ? 1
+              : 2
+          : taskPortalPriority(a)) -
+        (bProgress !== null
+          ? bProgress > 0 && bProgress < 100
+            ? 0
+            : bProgress <= 0
+              ? 1
+              : 2
+          : taskPortalPriority(b));
       if (bucketDelta !== 0) return bucketDelta;
       const planningDelta = taskPlanningDateValue(a) - taskPlanningDateValue(b);
       if (planningDelta !== 0) return planningDelta;
@@ -680,7 +699,7 @@ export default function IntervenantPortalPage() {
       if (orderDelta !== 0) return orderDelta;
       return a.titre.localeCompare(b.titre, "fr");
     });
-  }, [tasksState.data]);
+  }, [tasksState.data, latestTaskProgressById]);
   const selectedTimeTask = useMemo(() => prioritizedTasks.find((task) => task.id === timeTaskId) ?? null, [prioritizedTasks, timeTaskId]);
   const filteredTimeTasks = useMemo(() => {
     const query = timeTaskSearch.trim().toLowerCase();
@@ -704,10 +723,9 @@ export default function IntervenantPortalPage() {
     const anchor = taskAnchorDate(item.task);
     return !!anchor && Date.parse(anchor) >= Date.parse(`${dashboardWeekStart}T00:00:00`);
   }), [dashboardTasksSorted, dashboardWeekStart]);
-  const latestTimeEntry = useMemo(() => timeState.data[0] ?? null, [timeState.data]);
-  const openDashboardMaterielCount = useMemo(
-    () => dashboardMaterielState.data.filter((item) => isOpenMaterielStatus(item.row.statut)).length,
-    [dashboardMaterielState.data],
+  const selectedTimeTaskProgress = useMemo(
+    () => (selectedTimeTask ? roundPercent(taskCurrentProgress(selectedTimeTask)) : null),
+    [selectedTimeTask, latestTaskProgressById],
   );
   const todayChecklistDate = useMemo(() => todayIsoDate(), []);
   const dailyChecklistValues = useMemo(() => checklistValuesFromRow(dailyChecklist), [dailyChecklist]);
@@ -721,8 +739,19 @@ export default function IntervenantPortalPage() {
     () =>
       consignesState.data
         .filter((row) => isConsigneActiveForDate(row, todayChecklistDate))
-        .sort((a, b) => String(b.date_debut).localeCompare(String(a.date_debut))),
+        .sort((a, b) => {
+          if (a.is_read !== b.is_read) return a.is_read ? 1 : -1;
+          return String(b.date_debut).localeCompare(String(a.date_debut));
+        }),
     [consignesState.data, todayChecklistDate],
+  );
+  const sortedConsignes = useMemo(
+    () =>
+      [...consignesState.data].sort((a, b) => {
+        if (a.is_read !== b.is_read) return a.is_read ? 1 : -1;
+        return String(b.date_debut).localeCompare(String(a.date_debut));
+      }),
+    [consignesState.data],
   );
   const unreadConsignesCount = useMemo(
     () => activeConsignes.filter((row) => !row.is_read).length,
@@ -734,8 +763,17 @@ export default function IntervenantPortalPage() {
     : chantierDateSummary(activeChantier, locale, t);
   const dailyChecklistDateLabel = formatPortalDate(todayChecklistDate);
   const dailyChecklistValidatedLabel = dailyChecklist?.validated_at ? formatPortalDateTime(dailyChecklist.validated_at) : null;
-  const allTabs = ["accueil", "consignes", "temps", "taches", "planning", "documents", "materiel", "messages", "retours"] as PortalTab[];
-  const siteTabs = ["consignes", "temps", "taches", "planning", "documents", "materiel", "messages", "retours"] as PortalTab[];
+  const entryTabs = ["temps", "materiel", "retours", "messages"] as PortalTab[];
+  const consultTabs = ["consignes", "planning", "taches", "documents"] as PortalTab[];
+
+  useEffect(() => {
+    if (!selectedTimeTask) {
+      setTimeProgressPercent("0");
+      return;
+    }
+    const nextPercent = roundPercent(taskCurrentProgress(selectedTimeTask)) ?? 0;
+    setTimeProgressPercent(String(nextPercent));
+  }, [selectedTimeTask, latestTaskProgressById]);
 
   const weekPlanningCard = (
     <PortalCard tone="default">
@@ -789,92 +827,11 @@ export default function IntervenantPortalPage() {
     </PortalCard>
   );
 
-  const quickActionsCard = (
-    <PortalCard tone="default">
-      <PortalSectionHeading
-        eyebrow={t("intervenantPortal.quickActions")}
-        title={t("intervenantPortal.quickActions")}
-        subtitle={t("intervenantPortal.messagingPlaceholder")}
-      />
-      <div className="mt-4 grid gap-3">
-        <PortalActionTile title={t("intervenantPortal.enterTime")} description={t("intervenantPortal.addTime")} tone="blue">
-          <PortalPrimaryButton type="button" onClick={jumpToTimeEntry} className="w-full bg-white text-blue-700 shadow-none hover:bg-blue-50">
-            {t("intervenantPortal.enterTime")}
-          </PortalPrimaryButton>
-        </PortalActionTile>
-        <PortalCard tone="muted" className="p-4">
-          <div className="flex items-start justify-between gap-3">
-            <div className="min-w-0">
-              <div className="text-base font-semibold text-slate-900">{t("intervenantPortal.quickMaterialRequest")}</div>
-              <div className="mt-1 text-sm text-slate-500">{t("intervenantPortal.material.description")}</div>
-            </div>
-            <PortalBadge tone={openDashboardMaterielCount > 0 ? "amber" : "neutral"}>
-              {openDashboardMaterielCount}
-            </PortalBadge>
-          </div>
-          <form onSubmit={onCreateQuickMateriel} className="mt-4 space-y-3">
-            <PortalField label={t("intervenantPortal.siteLabel")}>
-              <select
-                className={portalInputClass()}
-                value={quickMaterielChantierId}
-                onChange={(event) => {
-                  setQuickMaterielChantierId(event.target.value);
-                  setQuickMaterielFeedback(null);
-                }}
-              >
-                {chantiers.map((chantier) => (
-                  <option key={chantier.id} value={chantier.id}>{chantier.nom}</option>
-                ))}
-              </select>
-            </PortalField>
-            <PortalField label={t("intervenantPortal.material.description")}>
-              <input
-                className={portalInputClass()}
-                value={quickMaterielTitre}
-                onChange={(event) => {
-                  setQuickMaterielTitre(event.target.value);
-                  setQuickMaterielFeedback(null);
-                }}
-                placeholder={t("intervenantPortal.material.description")}
-              />
-            </PortalField>
-            <PortalField label={t("intervenantPortal.material.quantity")}>
-              <input
-                className={portalInputClass()}
-                value={quickMaterielQuantite}
-                onChange={(event) => {
-                  setQuickMaterielQuantite(event.target.value);
-                  setQuickMaterielFeedback(null);
-                }}
-                placeholder={t("intervenantPortal.material.quantity")}
-              />
-            </PortalField>
-            {quickMaterielFeedback ? (
-              <div className={["rounded-[1rem] border px-4 py-3 text-sm", feedbackClass(quickMaterielFeedback.type)].join(" ")}>
-                {quickMaterielFeedback.message}
-              </div>
-            ) : null}
-            <PortalSecondaryButton type="submit" disabled={quickMaterielSaving} className="w-full">
-              {quickMaterielSaving ? t("intervenantPortal.material.sending") : t("intervenantPortal.material.send")}
-            </PortalSecondaryButton>
-          </form>
-        </PortalCard>
-      </div>
-    </PortalCard>
-  );
-
   function selectTimeTask(task: IntervenantTask) {
     setTimeTaskId(task.id);
     setTimeTaskSearch("");
     setTimeTaskListOpen(false);
     setTimeFeedback(null);
-  }
-
-  function jumpToTimeEntry() {
-    setActiveTab("temps");
-    setTimeDate(todayIsoDate());
-    const suggestedTask = (latestTimeEntry?.task_id && prioritizedTasks.find((task) => task.id === latestTimeEntry.task_id)) || prioritizedTasks[0] || null;
-    if (suggestedTask) setTimeTaskId(suggestedTask.id);
   }
 
   function preferredChecklistChantierId() {
@@ -964,9 +921,17 @@ export default function IntervenantPortalPage() {
       setTimeFeedback({ type: "error", message: t("intervenantPortal.errors.validHours") });
       return;
     }
-    const quantityValue = timeDoneQuantity.trim() ? Number(String(timeDoneQuantity).replace(",", ".")) : null;
-    if (quantityValue !== null && (!Number.isFinite(quantityValue) || quantityValue <= 0)) {
-      setTimeFeedback({ type: "error", message: t("intervenantPortal.errors.validQuantity") });
+    const progressValue = Number(String(timeProgressPercent).replace(",", "."));
+    if (!Number.isFinite(progressValue) || progressValue < 0 || progressValue > 100) {
+      setTimeFeedback({ type: "error", message: t("intervenantPortal.errors.validProgress") });
+      return;
+    }
+    const currentProgress = selectedTimeTask ? roundPercent(taskCurrentProgress(selectedTimeTask)) ?? 0 : 0;
+    if (
+      progressValue < currentProgress &&
+      typeof window !== "undefined" &&
+      !window.confirm(t("intervenantPortal.time.lowerProgressConfirm", { current: currentProgress, next: Math.round(progressValue) }))
+    ) {
       return;
     }
     setTimeSaving(true);
@@ -977,12 +942,12 @@ export default function IntervenantPortalPage() {
         task_id: timeTaskId,
         work_date: timeDate || todayIsoDate(),
         duration_hours: hours,
-        quantite_realisee: quantityValue,
+        progress_percent: clampPercent(progressValue),
         note: timeNote.trim() || null,
       });
       setTimeFeedback({ type: "success", message: t("intervenantPortal.feedback.timeSaved") });
       setTimeHours("");
-      setTimeDoneQuantity("");
+      setTimeProgressPercent("0");
       setTimeNote("");
       setTimeDate(todayIsoDate());
       setTimeTaskId(null);
@@ -1266,7 +1231,7 @@ export default function IntervenantPortalPage() {
   );
 
   const consignesCard = (
-    <PortalCard tone="default">
+    <PortalCard tone="accent" className="border-blue-300 shadow-[0_18px_42px_rgba(30,64,175,0.12)]">
       <PortalSectionHeading
         eyebrow={t("intervenantPortal.consignes.today")}
         title={t("intervenantPortal.consignes.today")}
@@ -1284,17 +1249,26 @@ export default function IntervenantPortalPage() {
       ) : (
         <div className="mt-4 space-y-3">
           {activeConsignes.map((consigne) => (
-            <article key={consigne.id} className="rounded-[1rem] border border-slate-200 bg-slate-50/80 p-4">
+            <article
+              key={consigne.id}
+              className={[
+                "rounded-[1rem] border p-4",
+                consigne.is_read ? "border-slate-200 bg-white/90" : "border-blue-200 bg-blue-50/80 shadow-[0_10px_24px_rgba(59,130,246,0.10)]",
+              ].join(" ")}
+            >
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0 flex-1">
-                  <div className="mt-1 text-xs text-slate-500">
+                  <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-blue-700">
+                    {consigne.is_read ? t("intervenantPortal.consignes.read") : t("intervenantPortal.consignes.priorityUnread")}
+                  </div>
+                  <div className="mt-2 text-xs text-slate-500">
                     {consigne.task_titre ? `${consigne.task_titre} - ` : ""}
                     {consigne.date_fin
                       ? t("intervenantPortal.consignes.period", { start: formatPortalDate(consigne.date_debut), end: formatPortalDate(consigne.date_fin) })
                       : t("intervenantPortal.consignes.startsOn", { value: formatPortalDate(consigne.date_debut) })}
                   </div>
                 </div>
-                <PortalBadge tone={consigne.is_read ? "green" : "blue"}>
+                <PortalBadge tone={consigne.is_read ? "green" : "amber"}>
                   {consigne.is_read ? t("intervenantPortal.consignes.read") : t("intervenantPortal.consignes.unread")}
                 </PortalBadge>
               </div>
@@ -1456,7 +1430,7 @@ export default function IntervenantPortalPage() {
         <div className="mt-4"><PortalEmptyState>{t("intervenantPortal.consignes.empty")}</PortalEmptyState></div>
       ) : (
         <div className="mt-4 space-y-3">
-          {consignesState.data.map((consigne) => (
+          {sortedConsignes.map((consigne) => (
             <article key={consigne.id} className="rounded-[1rem] border border-slate-200 bg-slate-50/80 p-4">
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div className="min-w-0 flex-1">
@@ -1512,7 +1486,7 @@ export default function IntervenantPortalPage() {
         <PortalEmptyState>{t("intervenantPortal.tasks.empty")}</PortalEmptyState>
       ) : (
         prioritizedTasks.map((task) => {
-          const progress = taskQuantityProgress(task);
+          const progress = taskCurrentProgress(task);
           return (
             <PortalCard key={task.id} tone="default" className="p-4">
               <div className="flex items-start justify-between gap-3">
@@ -1525,10 +1499,16 @@ export default function IntervenantPortalPage() {
               <div className="mt-4">
                 <div className="flex items-center justify-between text-xs font-medium text-slate-500">
                   <span>{t("intervenantPortal.tasks.progress", { value: Math.round(progress ?? 0) })}</span>
-                  <span>{formatPortalQuantity(task.quantite_realisee, task.unite)} / {formatPortalQuantity(task.quantite, task.unite, "-")}</span>
+                  <span>
+                    {progress === null
+                      ? t("intervenantPortal.time.noProgressRecorded")
+                      : task.quantite
+                        ? `${formatPortalQuantity(task.quantite_realisee, task.unite)} / ${formatPortalQuantity(task.quantite, task.unite, "-")}`
+                        : t("intervenantPortal.time.selectedProgressValue", { value: Math.round(progress) })}
+                  </span>
                 </div>
                 <div className="mt-2 h-2.5 rounded-full bg-slate-100">
-                  <div className="h-2.5 rounded-full bg-blue-700 transition-all" style={{ width: `${Math.max(6, Math.min(100, progress ?? 0))}%` }} />
+                  <div className="h-2.5 rounded-full bg-blue-700 transition-all" style={{ width: `${Math.max(progress ? 6 : 0, Math.min(100, progress ?? 0))}%` }} />
                 </div>
               </div>
             </PortalCard>
@@ -1560,6 +1540,11 @@ export default function IntervenantPortalPage() {
                 <div className="mt-3 rounded-[1rem] border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-slate-700">
                   <div className="text-xs font-semibold uppercase tracking-[0.16em] text-blue-700">{t("intervenantPortal.time.selectedTask")}</div>
                   <div className="mt-1 font-semibold text-slate-900" style={TITLE_CLAMP_STYLE}>{selectedTimeTask.titre}</div>
+                  <div className="mt-2 text-xs text-slate-600">
+                    {selectedTimeTaskProgress === null
+                      ? t("intervenantPortal.time.noProgressRecorded")
+                      : t("intervenantPortal.time.currentProgress", { value: selectedTimeTaskProgress })}
+                  </div>
                 </div>
               ) : null}
               {timeTaskListOpen ? (
@@ -1605,16 +1590,37 @@ export default function IntervenantPortalPage() {
           </div>
 
           <PortalField
-            label={t("intervenantPortal.time.doneQuantityOptional")}
-            hint={selectedTimeTask ? t("intervenantPortal.time.totalQuantity", { value: formatPortalQuantity(selectedTimeTask.quantite, selectedTimeTask.unite, "-") }) : t("intervenantPortal.time.progressHelp")}
+            label={t("intervenantPortal.time.progressLabel")}
+            hint={
+              selectedTimeTaskProgress === null
+                ? t("intervenantPortal.time.noProgressRecorded")
+                : t("intervenantPortal.time.currentProgress", { value: selectedTimeTaskProgress })
+            }
           >
-            <input
-              className={portalInputClass()}
-              inputMode="decimal"
-              value={timeDoneQuantity}
-              onChange={(e) => { setTimeDoneQuantity(e.target.value); setTimeFeedback(null); }}
-              placeholder={selectedTimeTask?.unite ? t("intervenantPortal.time.quantityPlaceholderWithUnit", { unit: selectedTimeTask.unite }) : t("intervenantPortal.time.quantityPlaceholder")}
-            />
+            <div className="rounded-[1rem] border border-slate-200 bg-slate-50/80 p-4">
+              <div className="flex items-center justify-between gap-3 text-sm font-medium text-slate-700">
+                <span>{t("intervenantPortal.time.newProgress")}</span>
+                <span className="rounded-full bg-white px-3 py-1 text-sm font-semibold text-blue-700 shadow-sm">
+                  {t("intervenantPortal.time.selectedProgressValue", { value: Math.round(Number(timeProgressPercent || 0)) })}
+                </span>
+              </div>
+              <input
+                className="mt-4 h-2 w-full cursor-pointer accent-blue-700"
+                type="range"
+                min="0"
+                max="100"
+                step="1"
+                value={timeProgressPercent}
+                onChange={(e) => {
+                  setTimeProgressPercent(e.target.value);
+                  setTimeFeedback(null);
+                }}
+              />
+              <div className="mt-3 flex items-center justify-between text-[11px] text-slate-500">
+                <span>0%</span>
+                <span>100%</span>
+              </div>
+            </div>
           </PortalField>
 
           <PortalField label={t("intervenantPortal.time.observations")}>
@@ -1652,6 +1658,9 @@ export default function IntervenantPortalPage() {
                     <div className="text-sm font-semibold text-slate-900">{formatPortalDate(entry.work_date)}</div>
                     <div className="mt-1 text-sm text-slate-500">{entry.task_titre || t("intervenantPortal.time.taskFallback")}</div>
                     <div className="mt-2 text-xs text-slate-500">{t("intervenantPortal.time.hours", { value: formatPortalHours(entry.duration_hours) })}</div>
+                    {entry.progress_percent !== null ? (
+                      <div className="mt-1 text-xs text-slate-500">{t("intervenantPortal.time.progressEntry", { value: Math.round(entry.progress_percent) })}</div>
+                    ) : null}
                     {entry.quantite_realisee !== null ? (
                       <div className="mt-1 text-xs text-slate-500">{t("intervenantPortal.time.quantity", { value: formatPortalQuantity(entry.quantite_realisee, entry.task_unite) })}</div>
                     ) : null}
@@ -1781,11 +1790,10 @@ export default function IntervenantPortalPage() {
   );
 
   const homePanel = (
-    <div className="space-y-4">
-      {checklistCard}
+    <div className="space-y-5">
       {consignesCard}
+      {checklistCard}
       {weekPlanningCard}
-      {quickActionsCard}
       {latestInfoRequestsCard}
     </div>
   );
@@ -1902,19 +1910,53 @@ export default function IntervenantPortalPage() {
                 })}
               </div>
             </section>
-            <nav className="rounded-3xl border border-slate-200 bg-white p-2 shadow-sm">
-              <div className="flex flex-wrap gap-2">
-                {allTabs.map((tab) => (
+            <nav className="rounded-3xl border border-slate-200 bg-white p-3 shadow-sm">
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">
+                    {t("intervenantPortal.tabs.accueil")}
+                  </div>
                   <PortalPillButton
-                    key={tab}
                     type="button"
-                    active={activeTab === tab}
-                    onClick={() => setActiveTab(tab)}
+                    active={activeTab === "accueil"}
+                    onClick={() => setActiveTab("accueil")}
                     className="w-full justify-start text-left"
                   >
-                    {tabLabel(tab)}
+                    {tabLabel("accueil")}
                   </PortalPillButton>
-                ))}
+                </div>
+                <div className="space-y-2">
+                  <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">
+                    {t("intervenantPortal.groups.entry")}
+                  </div>
+                  {entryTabs.map((tab) => (
+                    <PortalPillButton
+                      key={tab}
+                      type="button"
+                      active={activeTab === tab}
+                      onClick={() => setActiveTab(tab)}
+                      className="w-full justify-start text-left"
+                    >
+                      {tabLabel(tab)}
+                    </PortalPillButton>
+                  ))}
+                </div>
+                <div className="space-y-2">
+                  <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">
+                    {t("intervenantPortal.groups.consult")}
+                  </div>
+                  {consultTabs.map((tab) => (
+                    <PortalPillButton
+                      key={tab}
+                      type="button"
+                      active={activeTab === tab}
+                      onClick={() => setActiveTab(tab)}
+                      className="w-full justify-start text-left"
+                    >
+                      {tabLabel(tab)}
+                    </PortalPillButton>
+                  ))}
+                </div>
               </div>
             </nav>
           </div>
@@ -1927,7 +1969,40 @@ export default function IntervenantPortalPage() {
           </section>
           <section className="rounded-3xl border border-slate-200 bg-white p-2 shadow-sm md:hidden"><div className="grid grid-cols-2 gap-2"><PortalPillButton type="button" active={mobileGlobalTab === "home"} onClick={openMobileHome}>{t("intervenantPortal.tabs.accueil")}</PortalPillButton><PortalPillButton type="button" active={mobileGlobalTab !== "home"} onClick={openMobileSites}>{t("intervenantPortal.tabs.chantiers")}</PortalPillButton></div></section>
           {mobileGlobalTab === "sites" ? <section className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm md:hidden"><div className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">{t("intervenantPortal.sitesAccessible")}</div><input className="mt-3 w-full rounded-2xl border border-slate-200 px-3 py-2 text-sm" value={sidebarChantierQuery} onChange={(e) => setSidebarChantierQuery(e.target.value)} placeholder={t("intervenantPortal.searchSitePlaceholder")} /><div className="mt-3 space-y-2">{filteredChantiers.length === 0 ? <div className="rounded-2xl border border-dashed border-slate-200 p-3 text-sm text-slate-500">{t("intervenantPortal.noSiteFound")}</div> : filteredChantiers.map((chantier) => <button key={chantier.id} type="button" onClick={() => openMobileSite(chantier.id)} className="block w-full rounded-2xl border border-slate-200 bg-white px-3 py-3 text-left"><div className="text-sm font-semibold text-slate-900">{chantier.nom}</div><div className="mt-1 text-xs text-slate-500">{chantier.client || t("intervenantPortal.noClient")}</div></button>)}</div></section> : null}
-          {mobileGlobalTab === "site" && selectedChantierId ? <section className="space-y-3 md:hidden"><button type="button" onClick={openMobileSites} className="block w-full rounded-3xl border border-blue-200 bg-blue-50 px-4 py-3 text-left shadow-sm"><div className="text-xs font-semibold uppercase tracking-[0.2em] text-blue-700">{t("intervenantPortal.siteLabel")}</div><div className="mt-1 text-sm font-semibold text-slate-900">{t("intervenantPortal.siteLabel")} : {activeChantier?.nom ?? t("intervenantPortal.chooseSite")} ▾</div></button><nav className="no-scrollbar flex gap-2 overflow-x-auto rounded-3xl border border-slate-200 bg-white p-2 shadow-sm">{siteTabs.map((tab) => <PortalPillButton key={tab} type="button" active={activeTab === tab} onClick={() => setActiveTab(tab)} className="shrink-0">{tabLabel(tab)}</PortalPillButton>)}</nav></section> : null}
+          {mobileGlobalTab === "site" && selectedChantierId ? (
+            <section className="space-y-3 md:hidden">
+              <button type="button" onClick={openMobileSites} className="block w-full rounded-3xl border border-blue-200 bg-blue-50 px-4 py-3 text-left shadow-sm">
+                <div className="text-xs font-semibold uppercase tracking-[0.2em] text-blue-700">{t("intervenantPortal.siteLabel")}</div>
+                <div className="mt-1 text-sm font-semibold text-slate-900">{t("intervenantPortal.siteLabel")} : {activeChantier?.nom ?? t("intervenantPortal.chooseSite")} ▾</div>
+              </button>
+              <nav className="space-y-3 rounded-3xl border border-slate-200 bg-white p-3 shadow-sm">
+                <div className="space-y-2">
+                  <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">
+                    {t("intervenantPortal.groups.entry")}
+                  </div>
+                  <div className="no-scrollbar flex gap-2 overflow-x-auto">
+                    {entryTabs.map((tab) => (
+                      <PortalPillButton key={tab} type="button" active={activeTab === tab} onClick={() => setActiveTab(tab)} className="shrink-0">
+                        {tabLabel(tab)}
+                      </PortalPillButton>
+                    ))}
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">
+                    {t("intervenantPortal.groups.consult")}
+                  </div>
+                  <div className="no-scrollbar flex gap-2 overflow-x-auto">
+                    {consultTabs.map((tab) => (
+                      <PortalPillButton key={tab} type="button" active={activeTab === tab} onClick={() => setActiveTab(tab)} className="shrink-0">
+                        {tabLabel(tab)}
+                      </PortalPillButton>
+                    ))}
+                  </div>
+                </div>
+              </nav>
+            </section>
+          ) : null}
           <section className={["rounded-3xl border border-slate-200 bg-white p-4 shadow-sm", mobileGlobalTab === "sites" || (mobileGlobalTab === "home" && activeTab === "accueil") ? "hidden md:block" : ""].join(" ")}><div className="flex flex-col gap-2 md:flex-row md:items-end md:justify-between"><div className="min-w-0"><div className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">{activeTab === "accueil" ? t("intervenantPortal.dashboardTitle") : t("intervenantPortal.selectedSite")}</div><div className="mt-1 text-lg font-semibold text-slate-900">{contentTitle}</div><div className="mt-1 text-sm text-slate-500">{contentSubtitle}</div>{activeTab !== "accueil" && activeChantier ? <div className="mt-2 text-xs text-slate-500">{activeChantier.client || t("intervenantPortal.noClient")}{activeChantier.adresse ? ` - ${activeChantier.adresse}` : ""}</div> : null}</div>{activeTab !== "accueil" && activeChantier ? <div className="text-sm text-slate-500">{t("intervenantPortal.progress", { value: activeChantier.avancement ?? 0 })}</div> : null}</div></section>
           {chantiers.length === 0 ? <section className={["rounded-3xl border border-dashed border-slate-300 bg-white p-6 text-center shadow-sm", mobileGlobalTab === "sites" ? "hidden md:block" : ""].join(" ")}><div className="text-lg font-semibold text-slate-900">{t("intervenantPortal.noAccessibleSiteTitle")}</div><div className="mt-2 text-sm text-slate-500">{t("intervenantPortal.noAccessibleSiteMessage")}</div></section> : <section className={["rounded-3xl border border-slate-200 bg-white p-4 shadow-sm", mobileGlobalTab === "sites" ? "hidden md:block" : ""].join(" ")}>{activePanel}</section>}
           {mobileQuickAction ? (
@@ -1982,6 +2057,11 @@ export default function IntervenantPortalPage() {
                                 <div className="font-medium text-slate-800">{t("intervenantPortal.time.selectedTask")}</div>
                                 <div className="mt-1" style={TITLE_CLAMP_STYLE}>
                                   {selectedTimeTask.titre}
+                                </div>
+                                <div className="mt-2">
+                                  {selectedTimeTaskProgress === null
+                                    ? t("intervenantPortal.time.noProgressRecorded")
+                                    : t("intervenantPortal.time.currentProgress", { value: selectedTimeTaskProgress })}
                                 </div>
                               </div>
                             ) : null}
@@ -2046,24 +2126,33 @@ export default function IntervenantPortalPage() {
                           />
                         </div>
                         <div className="space-y-1">
-                          <label className="text-xs font-medium text-slate-600">{t("intervenantPortal.time.doneQuantityOptional")}</label>
-                          {selectedTimeTask ? (
-                            <div className="text-xs text-slate-500">
-                              {t("intervenantPortal.time.totalQuantity", { value: formatPortalQuantity(selectedTimeTask.quantite, selectedTimeTask.unite, "-") })}
+                          <label className="text-xs font-medium text-slate-600">{t("intervenantPortal.time.progressLabel")}</label>
+                          <div className="text-xs text-slate-500">
+                            {selectedTimeTaskProgress === null
+                              ? t("intervenantPortal.time.noProgressRecorded")
+                              : t("intervenantPortal.time.currentProgress", { value: selectedTimeTaskProgress })}
+                          </div>
+                          <div className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-3">
+                            <div className="flex items-center justify-between gap-3 text-xs font-medium text-slate-700">
+                              <span>{t("intervenantPortal.time.newProgress")}</span>
+                              <span>{t("intervenantPortal.time.selectedProgressValue", { value: Math.round(Number(timeProgressPercent || 0)) })}</span>
                             </div>
-                          ) : null}
-                          <input
-                            className="w-full rounded-2xl border border-slate-200 px-3 py-2 text-sm"
-                            inputMode="decimal"
-                            value={timeDoneQuantity}
-                            onChange={(e) => {
-                              setTimeDoneQuantity(e.target.value);
-                              setTimeFeedback(null);
-                            }}
-                            placeholder={selectedTimeTask?.unite ? t("intervenantPortal.time.quantityPlaceholderWithUnit", { unit: selectedTimeTask.unite }) : t("intervenantPortal.time.quantityPlaceholder")}
-                          />
-                          <div className="text-[11px] text-slate-500">
-                            {t("intervenantPortal.time.progressHelp")}
+                            <input
+                              className="mt-3 h-2 w-full cursor-pointer accent-blue-700"
+                              type="range"
+                              min="0"
+                              max="100"
+                              step="1"
+                              value={timeProgressPercent}
+                              onChange={(e) => {
+                                setTimeProgressPercent(e.target.value);
+                                setTimeFeedback(null);
+                              }}
+                            />
+                            <div className="mt-2 flex items-center justify-between text-[11px] text-slate-500">
+                              <span>0%</span>
+                              <span>100%</span>
+                            </div>
                           </div>
                         </div>
                         <div className="space-y-1">
