@@ -32,7 +32,7 @@ import {
 } from "../services/devis.service";
 
 import { decodeQtyUnit } from "../services/devisImport.service";
-import PlanningTab from "../components/chantiers/PlanningTab";
+import PlanningTab from "../components/chantiers/PlanningOperationsTab";
 
 import {
   listIntervenantsByChantierId,
