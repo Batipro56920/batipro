@@ -1,5 +1,6 @@
 import { supabase } from "../lib/supabaseClient";
 import { getChantierById, updateChantier, type ChantierRow } from "./chantiers.service";
+import { getTasksByChantierIdDetailed, type ChantierTaskRow } from "./chantierTasks.service";
 import {
   clampDurationDays,
   computeEndDate,
@@ -10,9 +11,9 @@ import {
   type PlanningCalendarSettings,
 } from "../components/chantiers/planningCalendar.utils";
 
-function segmentsTable() {
-  return (supabase as any).from("chantier_task_segments");
-}
+const SEGMENT_TABLE_CANDIDATES = ["chantier_task_segments", "chantier_task_planning_segments"] as const;
+
+let resolvedSegmentTableName: (typeof SEGMENT_TABLE_CANDIDATES)[number] | null = null;
 
 export type PlanningCalendarTask = {
   id: string;
@@ -149,6 +150,10 @@ const SEGMENT_SELECT_LEGACY = [
   "created_at",
   "updated_at",
 ].join(",");
+
+function segmentsTable(tableName?: string) {
+  return (supabase as any).from(tableName ?? resolvedSegmentTableName ?? SEGMENT_TABLE_CANDIDATES[0]);
+}
 
 function normalizeNumber(value: unknown): number | null {
   if (value === null || value === undefined || value === "") return null;
@@ -310,6 +315,34 @@ function mapTask(row: any): PlanningCalendarTask {
   };
 }
 
+function mapFallbackTask(row: ChantierTaskRow, settings: PlanningCalendarSettings): PlanningCalendarTask {
+  const plannedDuration =
+    clampDurationDays(
+      normalizeNumber(row.duration_days) ??
+        (normalizeNumber(row.temps_prevu_h) !== null ? Number(row.temps_prevu_h ?? 0) / settings.hoursPerDay : null) ??
+        1,
+    );
+
+  return {
+    id: String(row.id),
+    chantier_id: String(row.chantier_id),
+    titre: normalizeText(row.titre) ?? "Tache sans titre",
+    titre_terrain: null,
+    libelle_devis_original: null,
+    status: String(row.status ?? "A_FAIRE"),
+    lot: row.lot ?? null,
+    corps_etat: row.corps_etat ?? null,
+    intervenant_id: row.intervenant_id ?? null,
+    quantite: normalizeNumber(row.quantite),
+    unite: row.unite ?? null,
+    temps_prevu_h: normalizeNumber(row.temps_prevu_h),
+    temps_reel_h: normalizeNumber(row.temps_reel_h),
+    planned_duration_days: plannedDuration,
+    created_at: row.created_at ?? null,
+    updated_at: row.updated_at ?? null,
+  };
+}
+
 function mapSegment(row: any): PlanningCalendarSegment {
   return {
     id: String(row.id),
@@ -419,93 +452,107 @@ function buildSegmentPayload(
   return payload;
 }
 
-async function fetchTasks(chantierId: string): Promise<{ tasks: PlanningCalendarTask[]; planningColumnsMissing: boolean }> {
-  while (true) {
-    const select = buildTaskSelect();
-    const result = await supabase
-      .from("chantier_tasks")
-      .select(select)
-      .eq("chantier_id", chantierId)
-      .order("created_at", { ascending: true });
+async function fetchTasks(
+  chantierId: string,
+  settings: PlanningCalendarSettings,
+): Promise<{ tasks: PlanningCalendarTask[]; planningColumnsMissing: boolean }> {
+  try {
+    while (true) {
+      const select = buildTaskSelect();
+      const result = await supabase
+        .from("chantier_tasks")
+        .select(select)
+        .eq("chantier_id", chantierId)
+        .order("created_at", { ascending: true });
 
-    if (!result.error) {
-      confirmTaskSupport(select);
-      return {
-        tasks: (result.data ?? []).map(mapTask),
-        planningColumnsMissing: planningTaskSupport.plannedDuration === false,
-      };
-    }
+      if (!result.error) {
+        confirmTaskSupport(select);
+        return {
+          tasks: (result.data ?? []).map(mapTask),
+          planningColumnsMissing: planningTaskSupport.plannedDuration === false,
+        };
+      }
 
-    if (isMissingColumn(result.error, "titre_terrain") && markTaskSupportMissing("titre_terrain")) continue;
-    if (isMissingColumn(result.error, "libelle_devis_original") && markTaskSupportMissing("libelle_devis_original")) continue;
-    if (isMissingColumn(result.error, "planned_duration_days") && markTaskSupportMissing("planned_duration_days")) continue;
+      if (isMissingColumn(result.error, "titre_terrain") && markTaskSupportMissing("titre_terrain")) continue;
+      if (isMissingColumn(result.error, "libelle_devis_original") && markTaskSupportMissing("libelle_devis_original")) continue;
+      if (isMissingColumn(result.error, "planned_duration_days") && markTaskSupportMissing("planned_duration_days")) continue;
 
-    throw new Error(result.error.message);
-  }
-}
-
-async function fetchSegments(chantierId: string): Promise<{ segments: PlanningCalendarSegment[]; segmentColumnsMissing: boolean }> {
-  while (true) {
-    const select = buildSegmentSelect();
-    const result = await supabase
-      .from("chantier_task_segments" as any)
-      .select(select)
-      .eq("chantier_id", chantierId)
-      .order("start_date", { ascending: true })
-      .order("order_in_day", { ascending: true })
-      .order("created_at", { ascending: true });
-
-    if (!result.error) {
-      confirmSegmentSupport(select);
-      return {
-        segments: (result.data ?? []).map(mapSegment),
-        segmentColumnsMissing: false,
-      };
-    }
-
-    if (isMissingTable(result.error, "chantier_task_segments")) {
-      return { segments: [], segmentColumnsMissing: true };
-    }
-
-    const missingOptional = findMissingOptionalSegmentColumn(result.error);
-    if (missingOptional && markSegmentSupportMissing(missingOptional)) continue;
-
-    if (!isMissingColumn(result.error, "start_date") && !isMissingColumn(result.error, "duration_days") && !isMissingColumn(result.error, "order_in_day")) {
       throw new Error(result.error.message);
     }
-
-    const legacy = await supabase
-      .from("chantier_task_segments" as any)
-      .select(SEGMENT_SELECT_LEGACY)
-      .eq("chantier_id", chantierId)
-      .order("start_at", { ascending: true })
-      .order("created_at", { ascending: true });
-
-    if (legacy.error) throw new Error(legacy.error.message);
-
-    const normalizedLegacy = (legacy.data ?? []).map(mapSegmentLegacy);
-    const orderByDay = new Map<string, number>();
-    const normalized = normalizedLegacy.map((segment) => {
-      const key = segment.start_date;
-      const next = orderByDay.get(key) ?? 0;
-      orderByDay.set(key, next + 1);
-      return { ...segment, order_in_day: next };
-    });
-
+  } catch (error: any) {
+    const fallback = await getTasksByChantierIdDetailed(chantierId);
     return {
-      segments: normalized,
-      segmentColumnsMissing: true,
+      tasks: fallback.tasks.map((row) => mapFallbackTask(row, settings)),
+      planningColumnsMissing: true,
     };
   }
 }
 
+async function fetchSegments(chantierId: string): Promise<{ segments: PlanningCalendarSegment[]; segmentColumnsMissing: boolean }> {
+  for (const tableName of resolvedSegmentTableName ? [resolvedSegmentTableName, ...SEGMENT_TABLE_CANDIDATES.filter((item) => item !== resolvedSegmentTableName)] : SEGMENT_TABLE_CANDIDATES) {
+    while (true) {
+      const select = buildSegmentSelect();
+      const result = await segmentsTable(tableName)
+        .select(select)
+        .eq("chantier_id", chantierId)
+        .order("start_date", { ascending: true })
+        .order("order_in_day", { ascending: true })
+        .order("created_at", { ascending: true });
+
+      if (!result.error) {
+        resolvedSegmentTableName = tableName;
+        confirmSegmentSupport(select);
+        return {
+          segments: (result.data ?? []).map(mapSegment),
+          segmentColumnsMissing: false,
+        };
+      }
+
+      if (isMissingTable(result.error, tableName)) break;
+
+      const missingOptional = findMissingOptionalSegmentColumn(result.error);
+      if (missingOptional && markSegmentSupportMissing(missingOptional)) continue;
+
+      if (!isMissingColumn(result.error, "start_date") && !isMissingColumn(result.error, "duration_days") && !isMissingColumn(result.error, "order_in_day")) {
+        throw new Error(result.error.message);
+      }
+
+      const legacy = await segmentsTable(tableName)
+        .select(SEGMENT_SELECT_LEGACY)
+        .eq("chantier_id", chantierId)
+        .order("start_at", { ascending: true })
+        .order("created_at", { ascending: true });
+
+      if (legacy.error) throw new Error(legacy.error.message);
+
+      resolvedSegmentTableName = tableName;
+      const normalizedLegacy: PlanningCalendarSegment[] = (legacy.data ?? []).map(mapSegmentLegacy);
+      const orderByDay = new Map<string, number>();
+      const normalized = normalizedLegacy.map((segment: PlanningCalendarSegment) => {
+        const key = `${segment.intervenant_id ?? "unassigned"}:${segment.start_date}`;
+        const next = orderByDay.get(key) ?? 0;
+        orderByDay.set(key, next + 1);
+        return { ...segment, order_in_day: next };
+      });
+
+      return {
+        segments: normalized,
+        segmentColumnsMissing: true,
+      };
+    }
+  }
+
+  return { segments: [], segmentColumnsMissing: true };
+}
+
 export async function getPlanningCalendarState(chantierId: string): Promise<PlanningCalendarState> {
   const chantier = await getChantierById(chantierId);
-  const [tasksResult, segmentsResult] = await Promise.all([fetchTasks(chantierId), fetchSegments(chantierId)]);
+  const settings = toSettings(chantier);
+  const [tasksResult, segmentsResult] = await Promise.all([fetchTasks(chantierId, settings), fetchSegments(chantierId)]);
 
   return {
     chantier,
-    settings: toSettings(chantier),
+    settings,
     tasks: tasksResult.tasks,
     segments: segmentsResult.segments,
     mergedMetaSupported: false,
@@ -612,14 +659,26 @@ export async function createPlanningCalendarSegment(
     }, settings),
   };
 
+  const attemptedTables = new Set<string>();
+
   while (true) {
+    const activeTable = resolvedSegmentTableName ?? SEGMENT_TABLE_CANDIDATES[0];
+    attemptedTables.add(activeTable);
     const insertPayload = stripUnsupportedSegmentPayload(payload);
     const select = buildSegmentSelect();
-    const result = await segmentsTable().insert([insertPayload]).select(select).maybeSingle();
+    const result = await segmentsTable(activeTable).insert([insertPayload]).select(select).maybeSingle();
     if (!result.error) {
       if (!result.data) throw new Error("Segment cree mais non retourne.");
+      resolvedSegmentTableName = activeTable;
       confirmSegmentSupport(select);
       return mapSegment(result.data);
+    }
+
+    if (isMissingTable(result.error, activeTable)) {
+      const fallbackTable = SEGMENT_TABLE_CANDIDATES.find((tableName) => !attemptedTables.has(tableName)) ?? null;
+      if (!fallbackTable) throw new Error("Table segments planning introuvable.");
+      resolvedSegmentTableName = fallbackTable;
+      continue;
     }
 
     const missingOptional = findMissingOptionalSegmentColumn(result.error);
@@ -638,9 +697,10 @@ export async function createPlanningCalendarSegment(
     delete (fallbackPayload as any).status;
     delete (fallbackPayload as any).comment;
 
-    const second = await segmentsTable().insert([fallbackPayload]).select(SEGMENT_SELECT_LEGACY).maybeSingle();
+    const second = await segmentsTable(activeTable).insert([fallbackPayload]).select(SEGMENT_SELECT_LEGACY).maybeSingle();
     if (second.error) throw new Error(second.error.message);
     if (!second.data) throw new Error("Segment cree mais non retourne.");
+    resolvedSegmentTableName = activeTable;
     return mapSegmentLegacy(second.data);
   }
 }
@@ -652,15 +712,26 @@ export async function updatePlanningCalendarSegment(
   baseline?: { start_date: string; duration_days: number },
 ): Promise<PlanningCalendarSegment> {
   const payload = buildSegmentPayload(patch, settings, baseline);
+  const attemptedTables = new Set<string>();
 
   while (true) {
+    const activeTable = resolvedSegmentTableName ?? SEGMENT_TABLE_CANDIDATES[0];
+    attemptedTables.add(activeTable);
     const updatePayload = stripUnsupportedSegmentPayload(payload);
     const select = buildSegmentSelect();
-    const result = await segmentsTable().update(updatePayload).eq("id", segmentId).select(select).maybeSingle();
+    const result = await segmentsTable(activeTable).update(updatePayload).eq("id", segmentId).select(select).maybeSingle();
     if (!result.error) {
       if (!result.data) throw new Error("Segment introuvable.");
+      resolvedSegmentTableName = activeTable;
       confirmSegmentSupport(select);
       return mapSegment(result.data);
+    }
+
+    if (isMissingTable(result.error, activeTable)) {
+      const fallbackTable = SEGMENT_TABLE_CANDIDATES.find((tableName) => !attemptedTables.has(tableName)) ?? null;
+      if (!fallbackTable) throw new Error("Table segments planning introuvable.");
+      resolvedSegmentTableName = fallbackTable;
+      continue;
     }
 
     const missingOptional = findMissingOptionalSegmentColumn(result.error);
@@ -679,9 +750,10 @@ export async function updatePlanningCalendarSegment(
     delete (fallbackPayload as any).status;
     delete (fallbackPayload as any).comment;
 
-    const second = await segmentsTable().update(fallbackPayload).eq("id", segmentId).select(SEGMENT_SELECT_LEGACY).maybeSingle();
+    const second = await segmentsTable(activeTable).update(fallbackPayload).eq("id", segmentId).select(SEGMENT_SELECT_LEGACY).maybeSingle();
     if (second.error) throw new Error(second.error.message);
     if (!second.data) throw new Error("Segment introuvable.");
+    resolvedSegmentTableName = activeTable;
     return mapSegmentLegacy(second.data);
   }
 }
@@ -689,6 +761,19 @@ export async function updatePlanningCalendarSegment(
 export async function deletePlanningCalendarSegments(segmentIds: string[]): Promise<void> {
   const ids = segmentIds.filter(Boolean);
   if (!ids.length) return;
-  const { error } = await segmentsTable().delete().in("id", ids);
-  if (error) throw new Error(error.message);
+  const attemptedTables = new Set<string>();
+
+  while (true) {
+    const activeTable = resolvedSegmentTableName ?? SEGMENT_TABLE_CANDIDATES[0];
+    attemptedTables.add(activeTable);
+    const { error } = await segmentsTable(activeTable).delete().in("id", ids);
+    if (!error) {
+      resolvedSegmentTableName = activeTable;
+      return;
+    }
+    if (!isMissingTable(error, activeTable)) throw new Error(error.message);
+    const fallbackTable = SEGMENT_TABLE_CANDIDATES.find((tableName) => !attemptedTables.has(tableName)) ?? null;
+    if (!fallbackTable) throw new Error("Table segments planning introuvable.");
+    resolvedSegmentTableName = fallbackTable;
+  }
 }

@@ -365,6 +365,16 @@ export default function PlanningTimelineBoard({ chantierId, chantierName, interv
   const settings = state?.settings ?? { hoursPerDay: 7, dayCapacity: 3, workingDays: [1, 2, 3, 4, 5], skipWeekends: true };
   const tasks = state?.tasks ?? [];
   const segments = state?.segments ?? [];
+  const schemaWarnings = useMemo(() => {
+    const warnings: string[] = [];
+    if (state?.planningColumnsMissing) {
+      warnings.push("Schema taches planning legacy detecte. Une migration Supabase de reparation est recommandee.");
+    }
+    if (state?.segmentColumnsMissing) {
+      warnings.push("Schema blocs planning legacy detecte. Les blocs restent compatibles, mais une migration Supabase est recommandee.");
+    }
+    return warnings;
+  }, [state?.planningColumnsMissing, state?.segmentColumnsMissing]);
 
   const taskById = useMemo(() => new Map(tasks.map((task) => [task.id, task])), [tasks]);
   const segmentById = useMemo(() => new Map(segments.map((segment) => [segment.id, segment])), [segments]);
@@ -885,6 +895,11 @@ export default function PlanningTimelineBoard({ chantierId, chantierName, interv
     <div className="space-y-4">
       {error ? <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div> : null}
       {notice ? <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">{notice}</div> : null}
+      {schemaWarnings.length ? (
+        <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-700">
+          {schemaWarnings.join(" ")}
+        </div>
+      ) : null}
       <section className="rounded-[2rem] border border-slate-200 bg-white p-4 shadow-sm">
         <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
           <div className="min-w-0">
@@ -967,8 +982,28 @@ export default function PlanningTimelineBoard({ chantierId, chantierName, interv
           </div>
         </div>
       </section>
-      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_360px]">
-        <section className="rounded-[2rem] border border-slate-200 bg-white p-4 shadow-sm xl:order-1">
+      <div className="grid gap-4 xl:grid-cols-[360px_minmax(0,1fr)]">
+        <aside className="rounded-[2rem] border border-slate-200 bg-white p-4 shadow-sm xl:order-1">
+          <div className="flex items-center justify-between gap-2">
+            <div>
+              <div className="text-sm font-semibold text-slate-900">Taches a planifier</div>
+              <div className="text-xs text-slate-500">Selectionne une tache pour ouvrir sa planification et creer des blocs.</div>
+            </div>
+            <span className="rounded-full bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-600">{filteredTasks.length}</span>
+          </div>
+          <label className="mt-4 block">
+            <div className="relative">
+              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+              <input className={`${inputClass()} pl-9`} value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Rechercher une tache, un lot, un libelle" />
+            </div>
+          </label>
+          <div className="mt-4 max-h-[72vh] space-y-3 overflow-auto pr-1">
+            {filteredTasks.length === 0 ? <div className="rounded-2xl border border-dashed border-slate-200 p-4 text-sm text-slate-500">Aucune tache avec ces filtres.</div> : filteredTasks.map((item) => (
+              <BacklogCard key={item.task.id} item={item} settings={settings} selected={selectedTaskId === item.task.id && !selectedSegmentId} onPlan={() => openTask(item.task.id)} />
+            ))}
+          </div>
+        </aside>
+        <section className="rounded-[2rem] border border-slate-200 bg-white p-4 shadow-sm xl:order-2">
           <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
             <div>
               <div className="text-sm font-semibold text-slate-900">Timeline equipe</div>
@@ -1077,26 +1112,6 @@ export default function PlanningTimelineBoard({ chantierId, chantierName, interv
             </Timeline>
           </div>
         </section>
-        <aside className="rounded-[2rem] border border-slate-200 bg-white p-4 shadow-sm xl:order-2">
-          <div className="flex items-center justify-between gap-2">
-            <div>
-              <div className="text-sm font-semibold text-slate-900">Taches a planifier</div>
-              <div className="text-xs text-slate-500">Clique une carte pour ouvrir la planification dans le drawer.</div>
-            </div>
-            <span className="rounded-full bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-600">{filteredTasks.length}</span>
-          </div>
-          <label className="mt-4 block">
-            <div className="relative">
-              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-              <input className={`${inputClass()} pl-9`} value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Rechercher une tache, un lot, un libelle" />
-            </div>
-          </label>
-          <div className="mt-4 max-h-[72vh] space-y-3 overflow-auto pr-1">
-            {filteredTasks.length === 0 ? <div className="rounded-2xl border border-dashed border-slate-200 p-4 text-sm text-slate-500">Aucune tache avec ces filtres.</div> : filteredTasks.map((item) => (
-              <BacklogCard key={item.task.id} item={item} settings={settings} selected={selectedTaskId === item.task.id && !selectedSegmentId} onPlan={() => openTask(item.task.id)} />
-            ))}
-          </div>
-        </aside>
         {selectedTask && drawerOpen ? <button type="button" className="fixed inset-0 z-40 bg-slate-950/25" onClick={() => { setDrawerOpen(false); setSelectedSegmentId(null); }} aria-label="Fermer le drawer" /> : null}
         <aside
           className={[
