@@ -1,0 +1,190 @@
+.planning-sf-shell {
+  overflow: hidden;
+  border: 1px solid #e2e8f0;
+  border-radius: 1.5rem;
+  background:
+    radial-gradient(circle at top left, rgba(59, 130, 246, 0.06), transparent 32%),
+    linear-gradient(180deg, #f8fafc 0%, #ffffff 18%);
+}
+
+.planning-sf-scheduler {
+  font-family: inherit;
+}
+
+.planning-sf-scheduler .e-schedule-toolbar {
+  display: none;
+}
+
+.planning-sf-scheduler .e-timeline-view .e-date-header-wrap table col,
+.planning-sf-scheduler .e-timeline-view .e-content-wrap table col {
+  width: 52px;
+}
+
+.planning-sf-scheduler .e-schedule-table {
+  border-collapse: separate;
+}
+
+.planning-sf-scheduler .e-date-header-wrap,
+.planning-sf-scheduler .e-resource-column-wrap,
+.planning-sf-scheduler .e-content-wrap {
+  background: transparent;
+}
+
+.planning-sf-scheduler .e-date-header-wrap td,
+.planning-sf-scheduler .e-content-wrap td,
+.planning-sf-scheduler .e-resource-column-wrap td {
+  border-color: #e2e8f0;
+}
+
+.planning-sf-scheduler .e-resource-left-td {
+  width: 250px;
+}
+
+.planning-sf-scheduler .e-resource-cells {
+  background: linear-gradient(180deg, #ffffff, #f8fafc);
+}
+
+.planning-sf__resource {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  height: 100%;
+  padding: 0 0.85rem;
+}
+
+.planning-sf__resource-dot {
+  width: 0.75rem;
+  height: 0.75rem;
+  border-radius: 9999px;
+  flex: 0 0 auto;
+}
+
+.planning-sf__resource-title {
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.planning-sf__resource-meta {
+  margin-top: 0.125rem;
+  font-size: 0.75rem;
+  color: #64748b;
+}
+
+.planning-sf__date-header {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  padding: 0.55rem 0;
+  text-align: center;
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.planning-sf__date-load {
+  font-size: 0.68rem;
+  color: #64748b;
+}
+
+.planning-sf-scheduler .e-date-header-container {
+  background: #f8fafc;
+}
+
+.planning-sf-scheduler .e-work-cells {
+  position: relative;
+  background: rgba(255, 255, 255, 0.86);
+}
+
+.planning-sf-scheduler .e-work-cells.planning-sf__cell--weekend {
+  background: rgba(148, 163, 184, 0.07);
+}
+
+.planning-sf-scheduler .e-work-cells.planning-sf__cell--today {
+  background: rgba(37, 99, 235, 0.05);
+}
+
+.planning-sf-scheduler .e-work-cells.planning-sf__cell--overload {
+  background:
+    linear-gradient(180deg, rgba(251, 191, 36, 0.1), rgba(251, 191, 36, 0.02)),
+    rgba(255, 255, 255, 0.86);
+}
+
+.planning-sf-scheduler .e-work-cells[data-load]:not([data-load=""])::after {
+  content: attr(data-load);
+  position: absolute;
+  top: 0.2rem;
+  right: 0.2rem;
+  border-radius: 9999px;
+  padding: 0.12rem 0.42rem;
+  background: rgba(255, 255, 255, 0.92);
+  border: 1px solid #cbd5e1;
+  font-size: 0.65rem;
+  font-weight: 700;
+  color: #475569;
+}
+
+.planning-sf-scheduler .planning-sf__cell--droppable {
+  cursor: copy;
+}
+
+.planning-sf-scheduler .e-appointment {
+  border-radius: 1rem;
+  min-height: 78px;
+  overflow: hidden;
+}
+
+.planning-sf__event-card {
+  height: 100%;
+  padding: 0.65rem 0.8rem 0.7rem;
+}
+
+.planning-sf__event-lot {
+  font-size: 0.66rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  opacity: 0.8;
+}
+
+.planning-sf__event-title {
+  margin-top: 0.28rem;
+  font-size: 0.9rem;
+  font-weight: 700;
+  line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.planning-sf__event-subtitle {
+  margin-top: 0.18rem;
+  font-size: 0.75rem;
+  opacity: 0.84;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.planning-sf__event-footer {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin-top: 0.52rem;
+}
+
+.planning-sf__pill {
+  border-radius: 9999px;
+  padding: 0.18rem 0.45rem;
+  background: rgba(255, 255, 255, 0.58);
+  font-size: 0.68rem;
+  font-weight: 700;
+}
+
+.planning-sf-scheduler .e-current-timeline {
+  background: rgba(37, 99, 235, 0.08);
+}
+
+.planning-sf-scheduler .e-current-time {
+  background: #2563eb;
+}

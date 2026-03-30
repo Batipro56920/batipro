@@ -1,5 +1,5 @@
 ﻿  // src/pages/ChantierPage.tsx
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Suspense, lazy, useEffect, useMemo, useRef, useState } from "react";
 import type { ChangeEvent, DragEvent, FormEvent } from "react";
 import { Link, useParams } from "react-router-dom";
 
@@ -32,7 +32,7 @@ import {
 } from "../services/devis.service";
 
 import { decodeQtyUnit } from "../services/devisImport.service";
-import PlanningTab from "../components/chantiers/PlanningTimelineBoard";
+const PlanningTab = lazy(() => import("../components/chantiers/PlanningSyncfusionBoard"));
 
 import {
   listIntervenantsByChantierId,
@@ -5186,7 +5186,15 @@ export default function ChantierPage() {
         )}
 
         {tab === "planning" && id && (
-          <PlanningTab chantierId={id} chantierName={item?.nom ?? null} intervenants={intervenants} />
+          <Suspense
+            fallback={
+              <div className="rounded-2xl border border-slate-200 bg-white p-6 text-sm text-slate-500 shadow-sm">
+                Chargement du planning...
+              </div>
+            }
+          >
+            <PlanningTab chantierId={id} chantierName={item?.nom ?? null} intervenants={intervenants} />
+          </Suspense>
         )}
 
         {tab === "doe" && id && (
