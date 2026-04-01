@@ -32,7 +32,7 @@ import {
 } from "../services/devis.service";
 
 import { decodeQtyUnit } from "../services/devisImport.service";
-const PlanningTab = lazy(() => import("../components/chantiers/PlanningSyncfusionBoard"));
+const PlanningTab = lazy(() => import("../components/chantiers/PlanningBoard"));
 
 import {
   listIntervenantsByChantierId,
