@@ -133,6 +133,7 @@ type SchedulerEvent = {
   SoftColor: string;
   BorderColor: string;
   TextColor: string;
+  IsAllDay: boolean;
 };
 
 const DURATION_OPTIONS = [0.25, 0.5, 0.75, 1, 1.5, 2, 3, 4, 5, 7];
@@ -148,8 +149,6 @@ const VIEW_LABELS: Record<CalendarView, "TimelineDay" | "TimelineWeek"> = {
   week: "TimelineWeek",
 };
 const WORKDAY_START_HOUR = 8;
-const VISIBLE_START_HOUR = 7;
-const VISIBLE_END_HOUR = 19;
 
 function buttonClass(kind: "primary" | "secondary" | "danger" | "ghost" = "secondary") {
   if (kind === "primary") return "rounded-xl bg-blue-600 px-3 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-slate-300";
@@ -315,14 +314,8 @@ function buildRangePatch(start: Date, end: Date, settings: PlanningCalendarSetti
 function EventTemplate(props: SchedulerEvent) {
   return (
     <div className="planning-sf__event-card">
-      <div className="planning-sf__event-lot">{props.Lot}</div>
-      <div className="planning-sf__event-title">{props.Subject}</div>
-      <div className="planning-sf__event-subtitle">{props.TaskTitle}</div>
-      <div className="planning-sf__event-footer">
-        <span className="planning-sf__pill">{formatHours(props.PlannedHours)}</span>
-        <span className="planning-sf__pill">{props.ProgressPercent}%</span>
-        <span className={["planning-sf__pill", blockStatusTone(props.Status)].join(" ")}>{blockStatusLabel(props.Status)}</span>
-      </div>
+      <div className="planning-sf__event-title" title={props.Subject}>{props.Subject}</div>
+      <div className="planning-sf__event-meta">{formatHours(props.PlannedHours)}</div>
     </div>
   );
 }
@@ -642,6 +635,7 @@ export default function PlanningSyncfusionBoard({ chantierId, chantierName, inte
           SoftColor: color.soft,
           BorderColor: color.border,
           TextColor: color.text,
+          IsAllDay: true,
         };
       })
       .filter(Boolean) as SchedulerEvent[];
@@ -1015,7 +1009,7 @@ export default function PlanningSyncfusionBoard({ chantierId, chantierName, inte
             <div className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-400">Planning chantier</div>
             <h2 className="mt-2 text-2xl font-semibold text-slate-900">{chantierName ?? "Organisation chantier"}</h2>
             <p className="mt-2 max-w-3xl text-sm text-slate-500">
-              Refonte Syncfusion Scheduler en vue timeline. Les taches restent la source de verite, les blocs sont drag & drop, redimensionnables et edites depuis le drawer.
+              Une vue planning tres lisible, inspiree d'un tableau de cartes. Les taches restent la source de verite, puis se transforment en blocs simples a deplacer par jour et par intervenant.
             </p>
           </div>
           <div className="grid gap-2 sm:grid-cols-3">
@@ -1117,13 +1111,8 @@ export default function PlanningSyncfusionBoard({ chantierId, chantierName, inte
               </div>
               <button type="button" className={buttonClass()} onClick={() => setAnchorDate(formatDateKey(new Date()))}>Aujourd'hui</button>
             </div>
-            <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500">
-              {visibleDays.map((day) => (
-                <div key={day} className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2">
-                  <div className="font-semibold text-slate-700">{formatDayLabel(day, locale)}</div>
-                  <div>{formatHours(dayTotals.get(day) ?? 0)}</div>
-                </div>
-              ))}
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-500">
+              Glisse une tache depuis le backlog vers un jour. Chaque bloc reste une carte simple et deplacable.
             </div>
           </div>
 
@@ -1149,19 +1138,18 @@ export default function PlanningSyncfusionBoard({ chantierId, chantierName, inte
               allowResizing
               allowSwiping={false}
               rowAutoHeight
-              startHour={`${VISIBLE_START_HOUR}:00`}
-              endHour={`${VISIBLE_END_HOUR}:00`}
               showWeekend={!settings.skipWeekends}
               workDays={settings.workingDays}
               firstDayOfWeek={1}
-              timeScale={{ enable: true, interval: 60, slotCount: 1 }}
+              timeScale={{ enable: false }}
               group={{ resources: ["Intervenants"] }}
               dateHeaderTemplate={(props: { date: Date }) => {
                 const dateKey = formatDateKey(props.date);
+                const total = dayTotals.get(dateKey) ?? 0;
                 return (
                   <div className="planning-sf__date-header">
                     <div>{formatDayLabel(dateKey, locale)}</div>
-                    <div className="planning-sf__date-load">{formatHours(dayTotals.get(dateKey) ?? 0)}</div>
+                    <div className="planning-sf__date-total">{total > 0 ? formatHours(total) : "A planifier"}</div>
                   </div>
                 );
               }}
@@ -1190,6 +1178,7 @@ export default function PlanningSyncfusionBoard({ chantierId, chantierName, inte
                   subject: { name: "Subject" },
                   startTime: { name: "StartTime" },
                   endTime: { name: "EndTime" },
+                  isAllDay: { name: "IsAllDay" },
                 },
               }}
               popupOpen={(args: PopupOpenEventArgs) => {
@@ -1214,7 +1203,6 @@ export default function PlanningSyncfusionBoard({ chantierId, chantierName, inte
                 const load = rowLoadByCell.get(`${resource?.IntervenantId ?? "__unassigned__"}:${dateKey}`) ?? 0;
                 element.dataset.planningDate = dateKey;
                 element.dataset.resourceId = resource?.IntervenantId ?? "__unassigned__";
-                element.dataset.load = load > 0 ? formatHours(load) : "";
                 element.classList.toggle("planning-sf__cell--today", dateKey === formatDateKey(new Date()));
                 element.classList.toggle("planning-sf__cell--weekend", !isWorkingDay(dateKey, settings));
                 element.classList.toggle("planning-sf__cell--overload", load > settings.hoursPerDay + 0.05);

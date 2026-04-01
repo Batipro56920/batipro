@@ -3,8 +3,8 @@
   border: 1px solid #e2e8f0;
   border-radius: 1.5rem;
   background:
-    radial-gradient(circle at top left, rgba(59, 130, 246, 0.06), transparent 32%),
-    linear-gradient(180deg, #f8fafc 0%, #ffffff 18%);
+    radial-gradient(circle at top left, rgba(148, 163, 184, 0.1), transparent 26%),
+    linear-gradient(180deg, #fcfcfd 0%, #ffffff 20%);
 }
 
 .planning-sf-scheduler {
@@ -17,7 +17,7 @@
 
 .planning-sf-scheduler .e-timeline-view .e-date-header-wrap table col,
 .planning-sf-scheduler .e-timeline-view .e-content-wrap table col {
-  width: 52px;
+  width: 180px;
 }
 
 .planning-sf-scheduler .e-schedule-table {
@@ -37,7 +37,7 @@
 }
 
 .planning-sf-scheduler .e-resource-left-td {
-  width: 250px;
+  width: 230px;
 }
 
 .planning-sf-scheduler .e-resource-cells {
@@ -49,7 +49,7 @@
   align-items: center;
   gap: 0.75rem;
   height: 100%;
-  padding: 0 0.85rem;
+  padding: 0.85rem 1rem;
 }
 
 .planning-sf__resource-dot {
@@ -74,54 +74,42 @@
 .planning-sf__date-header {
   display: flex;
   flex-direction: column;
-  gap: 0.2rem;
-  padding: 0.55rem 0;
-  text-align: center;
-  font-size: 0.78rem;
+  gap: 0.24rem;
+  padding: 0.9rem 0.9rem 0.8rem;
+  text-align: left;
+  font-size: 0.8rem;
   font-weight: 700;
   color: #0f172a;
 }
 
-.planning-sf__date-load {
-  font-size: 0.68rem;
+.planning-sf__date-total {
+  font-size: 0.7rem;
+  font-weight: 600;
   color: #64748b;
 }
 
 .planning-sf-scheduler .e-date-header-container {
-  background: #f8fafc;
+  background: linear-gradient(180deg, #f8fafc, #ffffff);
 }
 
 .planning-sf-scheduler .e-work-cells {
   position: relative;
-  background: rgba(255, 255, 255, 0.86);
+  min-height: 118px;
+  background: rgba(255, 255, 255, 0.96);
 }
 
 .planning-sf-scheduler .e-work-cells.planning-sf__cell--weekend {
-  background: rgba(148, 163, 184, 0.07);
+  background: rgba(248, 250, 252, 0.98);
 }
 
 .planning-sf-scheduler .e-work-cells.planning-sf__cell--today {
-  background: rgba(37, 99, 235, 0.05);
+  background: rgba(239, 246, 255, 0.98);
 }
 
 .planning-sf-scheduler .e-work-cells.planning-sf__cell--overload {
   background:
-    linear-gradient(180deg, rgba(251, 191, 36, 0.1), rgba(251, 191, 36, 0.02)),
-    rgba(255, 255, 255, 0.86);
-}
-
-.planning-sf-scheduler .e-work-cells[data-load]:not([data-load=""])::after {
-  content: attr(data-load);
-  position: absolute;
-  top: 0.2rem;
-  right: 0.2rem;
-  border-radius: 9999px;
-  padding: 0.12rem 0.42rem;
-  background: rgba(255, 255, 255, 0.92);
-  border: 1px solid #cbd5e1;
-  font-size: 0.65rem;
-  font-weight: 700;
-  color: #475569;
+    linear-gradient(180deg, rgba(251, 191, 36, 0.12), rgba(251, 191, 36, 0.03)),
+    rgba(255, 255, 255, 0.96);
 }
 
 .planning-sf-scheduler .planning-sf__cell--droppable {
@@ -129,62 +117,71 @@
 }
 
 .planning-sf-scheduler .e-appointment {
-  border-radius: 1rem;
-  min-height: 78px;
+  border-radius: 1.1rem;
+  min-height: 68px;
   overflow: hidden;
+  margin: 0.45rem 0.4rem;
+  border-width: 1px;
 }
 
 .planning-sf__event-card {
   height: 100%;
-  padding: 0.65rem 0.8rem 0.7rem;
-}
-
-.planning-sf__event-lot {
-  font-size: 0.66rem;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  opacity: 0.8;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 0.35rem;
+  padding: 0.8rem 0.9rem;
 }
 
 .planning-sf__event-title {
-  margin-top: 0.28rem;
   font-size: 0.9rem;
   font-weight: 700;
-  line-height: 1.2;
-  white-space: nowrap;
+  line-height: 1.25;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
   overflow: hidden;
-  text-overflow: ellipsis;
 }
 
-.planning-sf__event-subtitle {
-  margin-top: 0.18rem;
-  font-size: 0.75rem;
-  opacity: 0.84;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.planning-sf__event-footer {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.35rem;
-  margin-top: 0.52rem;
-}
-
-.planning-sf__pill {
-  border-radius: 9999px;
-  padding: 0.18rem 0.45rem;
-  background: rgba(255, 255, 255, 0.58);
-  font-size: 0.68rem;
+.planning-sf__event-meta {
+  font-size: 0.74rem;
   font-weight: 700;
+  opacity: 0.78;
 }
 
 .planning-sf-scheduler .e-current-timeline {
-  background: rgba(37, 99, 235, 0.08);
+  background: transparent;
 }
 
 .planning-sf-scheduler .e-current-time {
-  background: #2563eb;
+  display: none;
+}
+
+.planning-sf-scheduler .e-timeline-view .e-content-table tbody td,
+.planning-sf-scheduler .e-timeline-view .e-date-header-wrap tbody td {
+  border-width: 1px;
+}
+
+.planning-sf-scheduler .e-appointment-details {
+  padding: 0;
+}
+
+.planning-sf-scheduler .e-more-indicator {
+  margin: 0.3rem 0.5rem;
+  border-radius: 9999px;
+  background: #f8fafc;
+  color: #475569;
+  font-size: 0.7rem;
+  font-weight: 700;
+}
+
+@media (max-width: 1280px) {
+  .planning-sf-scheduler .e-resource-left-td {
+    width: 200px;
+  }
+
+  .planning-sf-scheduler .e-timeline-view .e-date-header-wrap table col,
+  .planning-sf-scheduler .e-timeline-view .e-content-wrap table col {
+    width: 150px;
+  }
 }
