@@ -151,20 +151,20 @@ const VIEW_LABELS: Record<CalendarView, "TimelineDay" | "TimelineWeek"> = {
 const WORKDAY_START_HOUR = 8;
 
 function buttonClass(kind: "primary" | "secondary" | "danger" | "ghost" = "secondary") {
-  if (kind === "primary") return "rounded-xl bg-blue-600 px-3 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-slate-300";
-  if (kind === "danger") return "rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm font-medium text-rose-700 hover:bg-rose-100 disabled:cursor-not-allowed disabled:opacity-60";
-  if (kind === "ghost") return "rounded-xl px-3 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60";
-  return "rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60";
+  if (kind === "primary") return "rounded-2xl bg-slate-900 px-3 py-2 text-sm font-medium text-white shadow-sm hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-300";
+  if (kind === "danger") return "rounded-2xl bg-rose-50 px-3 py-2 text-sm font-medium text-rose-700 hover:bg-rose-100 disabled:cursor-not-allowed disabled:opacity-60";
+  if (kind === "ghost") return "rounded-2xl px-3 py-2 text-sm font-medium text-slate-600 hover:bg-white/80 disabled:cursor-not-allowed disabled:opacity-60";
+  return "rounded-2xl bg-white px-3 py-2 text-sm font-medium text-slate-700 shadow-sm ring-1 ring-slate-200/70 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60";
 }
 
 function inputClass() {
-  return "w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-blue-300 focus:ring-2 focus:ring-blue-100";
+  return "w-full rounded-2xl border border-slate-200/80 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-slate-300 focus:ring-2 focus:ring-slate-100";
 }
 
 function compactBadgeClass(active: boolean) {
   return active
-    ? "rounded-full bg-slate-900 px-3 py-1.5 text-xs font-semibold text-white"
-    : "rounded-full bg-slate-100 px-3 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-200";
+    ? "rounded-full bg-slate-900 px-3 py-1.5 text-xs font-semibold text-white shadow-sm"
+    : "rounded-full bg-white px-3 py-1.5 text-xs font-semibold text-slate-600 ring-1 ring-slate-200 hover:bg-slate-50";
 }
 
 function formatHours(value: number | null | undefined) {
@@ -343,33 +343,28 @@ function BacklogCard({
       onDragStart={onDragStart}
       onDragEnd={onDragEnd}
       className={[
-        "w-full rounded-3xl border bg-white p-4 text-left shadow-sm transition",
-        selected ? "border-slate-900 shadow-md" : "border-slate-200 hover:border-slate-300 hover:shadow-md",
+        "w-full rounded-[1.6rem] bg-white/95 p-4 text-left shadow-[0_14px_30px_rgba(15,23,42,0.08)] ring-1 ring-slate-200/70 transition",
+        selected ? "ring-2 ring-slate-900/80 shadow-[0_18px_34px_rgba(15,23,42,0.12)]" : "hover:-translate-y-0.5 hover:shadow-[0_18px_34px_rgba(15,23,42,0.12)]",
       ].join(" ")}
     >
       <button type="button" onClick={onPlan} className="block w-full text-left">
         <div className="flex flex-wrap items-center gap-2">
-          <span className="rounded-full bg-slate-100 px-2 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
+          <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
             {task.lot ?? task.corps_etat ?? "Sans lot"}
           </span>
           <span className={["rounded-full px-2 py-1 text-[11px] font-semibold", taskStateTone(planningState)].join(" ")}>
             {taskStateLabel(planningState)}
           </span>
         </div>
-        <div className="mt-3 text-sm font-semibold leading-5 text-slate-900">{getTaskPlanningTitle(task)}</div>
-        <div className="mt-3 grid grid-cols-2 gap-2 text-xs text-slate-500">
-          <div>Prevu : <span className="font-semibold text-slate-700">{formatHours(summary.plannedTaskHours || computePlannedHours(task.planned_duration_days, settings))}</span></div>
-          <div>Planifie : <span className="font-semibold text-slate-700">{formatHours(summary.scheduledBlockHours)}</span></div>
-          <div>Restant : <span className="font-semibold text-slate-700">{formatHours(summary.remainingHours)}</span></div>
-          <div>Avancement : <span className="font-semibold text-slate-700">{summary.progressPercent}%</span></div>
-        </div>
-        <div className="mt-3 h-2 overflow-hidden rounded-full bg-slate-100">
-          <div className="h-full rounded-full bg-blue-600" style={{ width: `${summary.progressPercent}%` }} />
+        <div className="mt-3 text-[15px] font-semibold leading-5 text-slate-900">{getTaskPlanningTitle(task)}</div>
+        <div className="mt-3 flex items-center justify-between gap-3 text-sm text-slate-500">
+          <span>{formatHours(summary.plannedTaskHours || computePlannedHours(task.planned_duration_days, settings))}</span>
+          <span>Restant {formatHours(summary.remainingHours)}</span>
         </div>
       </button>
-      <div className="mt-4 flex gap-2">
-        <button type="button" className={buttonClass("primary")} onClick={onPlan}>Planifier</button>
-        <div className="rounded-xl border border-dashed border-slate-300 px-3 py-2 text-xs font-medium text-slate-500">Glisser vers timeline</div>
+      <div className="mt-4 flex items-center justify-between gap-3 text-xs text-slate-500">
+        <button type="button" className={buttonClass("primary")} onClick={onPlan}>Ouvrir</button>
+        <span>Glisser vers le planning</span>
       </div>
     </div>
   );
@@ -393,6 +388,7 @@ export default function PlanningSyncfusionBoard({ chantierId, chantierName, inte
   const [selectedSegmentId, setSelectedSegmentId] = useState<string | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [draggedTaskId, setDraggedTaskId] = useState<string | null>(null);
+  const [showFilters, setShowFilters] = useState(false);
   const [newBlockDraft, setNewBlockDraft] = useState<Draft>({
     start_date: formatDateKey(new Date()),
     duration_days: 1,
@@ -1003,7 +999,7 @@ export default function PlanningSyncfusionBoard({ chantierId, chantierName, inte
 
   return (
     <div className="space-y-4">
-      <div className="rounded-[2rem] border border-slate-200 bg-white p-4 shadow-sm">
+      <div className="rounded-[2rem] bg-white/80 p-5 shadow-[0_24px_60px_rgba(15,23,42,0.08)] ring-1 ring-slate-200/70 backdrop-blur">
         <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
           <div>
             <div className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-400">Planning chantier</div>
@@ -1012,29 +1008,26 @@ export default function PlanningSyncfusionBoard({ chantierId, chantierName, inte
               Une vue planning tres lisible, inspiree d'un tableau de cartes. Les taches restent la source de verite, puis se transforment en blocs simples a deplacer par jour et par intervenant.
             </p>
           </div>
-          <div className="grid gap-2 sm:grid-cols-3">
-            <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
-              <div className="text-xs font-medium uppercase tracking-[0.18em] text-slate-400">Periode</div>
-              <div className="mt-1 text-base font-semibold text-slate-900">{formatRangeLabel(visibleDays, locale)}</div>
+          <div className="flex flex-wrap gap-2 text-sm">
+            <div className="rounded-full bg-white px-4 py-2 text-slate-600 shadow-sm ring-1 ring-slate-200/70">
+              <span className="font-semibold text-slate-900">{formatRangeLabel(visibleDays, locale)}</span>
             </div>
-            <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
-              <div className="text-xs font-medium uppercase tracking-[0.18em] text-slate-400">Blocs visibles</div>
-              <div className="mt-1 text-base font-semibold text-slate-900">{visibleBlockCount}</div>
+            <div className="rounded-full bg-white px-4 py-2 text-slate-600 shadow-sm ring-1 ring-slate-200/70">
+              <span className="font-semibold text-slate-900">{visibleBlockCount}</span> cartes
             </div>
-            <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
-              <div className="text-xs font-medium uppercase tracking-[0.18em] text-slate-400">Charge periode</div>
-              <div className="mt-1 text-base font-semibold text-slate-900">{formatHours(visibleHours)}</div>
+            <div className="rounded-full bg-white px-4 py-2 text-slate-600 shadow-sm ring-1 ring-slate-200/70">
+              Charge <span className="font-semibold text-slate-900">{formatHours(visibleHours)}</span>
             </div>
           </div>
         </div>
       </div>
 
-      <div className="grid gap-4 xl:grid-cols-[360px_minmax(0,1fr)]">
-        <aside className="rounded-[2rem] border border-slate-200 bg-white p-4 shadow-sm">
+      <div className="grid gap-6 xl:grid-cols-[320px_minmax(0,1fr)]">
+        <aside className="rounded-[2rem] bg-white/75 p-4 shadow-[0_20px_48px_rgba(15,23,42,0.08)] ring-1 ring-slate-200/60 backdrop-blur">
           <div className="flex items-center justify-between gap-3">
             <div>
               <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Backlog</div>
-              <div className="mt-1 text-lg font-semibold text-slate-900">Taches a planifier</div>
+              <div className="mt-1 text-lg font-semibold text-slate-900">Taches en attente</div>
             </div>
             <button type="button" className={buttonClass()} disabled={!selectedTask || saving} onClick={() => selectedTask && void applySuggestion(selectedTask)}>
               <WandSparkles className="mr-1 inline h-4 w-4" />
@@ -1047,22 +1040,9 @@ export default function PlanningSyncfusionBoard({ chantierId, chantierName, inte
               <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
               <input className={`${inputClass()} pl-10`} value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Rechercher une tache..." />
             </label>
-            <div className="grid gap-2 md:grid-cols-2">
-              <select className={inputClass()} value={lotFilter} onChange={(event) => setLotFilter(event.target.value)}>
-                <option value="__all__">Tous les lots</option>
-                {lots.map((lot) => <option key={lot} value={lot}>{lot}</option>)}
-              </select>
-              <select className={inputClass()} value={intervenantFilter} onChange={(event) => setIntervenantFilter(event.target.value)}>
-                <option value="__all__">Tous les intervenants</option>
-                {intervenantRows.map((row) => <option key={row.id} value={row.id}>{row.nom}</option>)}
-              </select>
-            </div>
             <div className="flex flex-wrap gap-2">
               {([
                 ["a_planifier", "A planifier"],
-                ["partielle", "Partielles"],
-                ["planifiee", "Planifiees"],
-                ["en_cours", "En cours"],
                 ["all", "Toutes"],
               ] as Array<[TaskFilter, string]>).map(([value, label]) => (
                 <button key={value} type="button" className={compactBadgeClass(taskFilter === value)} onClick={() => setTaskFilter(value)}>
@@ -1070,6 +1050,34 @@ export default function PlanningSyncfusionBoard({ chantierId, chantierName, inte
                 </button>
               ))}
             </div>
+            <details className="rounded-2xl bg-slate-50/80 px-3 py-2 text-sm text-slate-600" open={showFilters} onToggle={(event) => setShowFilters((event.currentTarget as HTMLDetailsElement).open)}>
+              <summary className="cursor-pointer list-none font-medium">Filtres avances</summary>
+              <div className="mt-3 grid gap-2">
+                <div className="grid gap-2 md:grid-cols-2">
+                  <select className={inputClass()} value={lotFilter} onChange={(event) => setLotFilter(event.target.value)}>
+                    <option value="__all__">Tous les lots</option>
+                    {lots.map((lot) => <option key={lot} value={lot}>{lot}</option>)}
+                  </select>
+                  <select className={inputClass()} value={intervenantFilter} onChange={(event) => setIntervenantFilter(event.target.value)}>
+                    <option value="__all__">Tous les intervenants</option>
+                    {intervenantRows.map((row) => <option key={row.id} value={row.id}>{row.nom}</option>)}
+                  </select>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {([
+                    ["partielle", "Partielles"],
+                    ["planifiee", "Planifiees"],
+                    ["en_cours", "En cours"],
+                    ["terminee", "Terminees"],
+                    ["bloquee", "Bloquees"],
+                  ] as Array<[TaskFilter, string]>).map(([value, label]) => (
+                    <button key={value} type="button" className={compactBadgeClass(taskFilter === value)} onClick={() => setTaskFilter(value)}>
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </details>
           </div>
 
           <div className="mt-4 space-y-3">
@@ -1093,14 +1101,14 @@ export default function PlanningSyncfusionBoard({ chantierId, chantierName, inte
           </div>
         </aside>
 
-        <section className="rounded-[2rem] border border-slate-200 bg-white p-4 shadow-sm">
+        <section className="rounded-[2rem] bg-white/75 p-4 shadow-[0_20px_48px_rgba(15,23,42,0.08)] ring-1 ring-slate-200/60 backdrop-blur">
           <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
             <div className="flex flex-wrap items-center gap-2">
-              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-1">
+              <div className="rounded-2xl bg-slate-50 p-1 ring-1 ring-slate-200/70">
                 <button type="button" className={compactBadgeClass(calendarView === "week")} onClick={() => setCalendarView("week")}>Semaine</button>
                 <button type="button" className={compactBadgeClass(calendarView === "day")} onClick={() => setCalendarView("day")}>Jour</button>
               </div>
-              <div className="flex items-center gap-2 rounded-2xl border border-slate-200 bg-slate-50 px-2 py-1">
+              <div className="flex items-center gap-2 rounded-2xl bg-slate-50 px-2 py-1 ring-1 ring-slate-200/70">
                 <button type="button" className={buttonClass("ghost")} onClick={() => navigate(-1)}>
                   <ChevronLeft className="h-4 w-4" />
                 </button>
@@ -1111,8 +1119,8 @@ export default function PlanningSyncfusionBoard({ chantierId, chantierName, inte
               </div>
               <button type="button" className={buttonClass()} onClick={() => setAnchorDate(formatDateKey(new Date()))}>Aujourd'hui</button>
             </div>
-            <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-500">
-              Glisse une tache depuis le backlog vers un jour. Chaque bloc reste une carte simple et deplacable.
+            <div className="rounded-2xl bg-slate-50 px-4 py-3 text-sm text-slate-500 ring-1 ring-slate-200/70">
+              Glisse une tache, deplace une carte, ou clique dans un vide pour creer rapidement.
             </div>
           </div>
 
