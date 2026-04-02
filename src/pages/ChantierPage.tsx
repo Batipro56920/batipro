@@ -109,6 +109,7 @@ import {
 } from "../services/chantierDoe.service";
 import TaskDocumentsDrawer from "../components/chantiers/TaskDocumentsDrawer";
 import DocumentEditDrawer from "../components/chantiers/DocumentEditDrawer";
+import PreparationTab from "../components/chantiers/PreparationTab";
 import ReservePlanViewer from "../components/chantiers/ReservePlanViewer";
 import VisiteTab from "../components/chantiers/VisiteTab";
 import DoeTab from "../components/chantiers/DoeTab";
@@ -127,6 +128,7 @@ import { buildIntervenantLink } from "../lib/publicUrl";
 /* ---------------- types ---------------- */
 type TabKey =
   | "accueil"
+  | "preparer"
   | "devis-taches"
   | "documents"
   | "intervenants"
@@ -3178,6 +3180,7 @@ export default function ChantierPage() {
     materielFilter === "__ALL__" ? materiel : materiel.filter((row) => row.statut === materielFilter);
   const overviewTab: { key: TabKey; label: string } = { key: "accueil", label: "Accueil" };
   const pilotageTabs: Array<{ key: TabKey; label: string }> = [
+    { key: "preparer", label: "Préparer" },
     { key: "devis-taches", label: t("chantierPage.tasks") },
     { key: "planning", label: t("chantierTabs.planning") },
     { key: "temps", label: t("chantierTabs.time") },
@@ -3432,6 +3435,15 @@ export default function ChantierPage() {
           </button>
         ) : null}
         {tab === "accueil" && accueilPanel}
+        {tab === "preparer" && id && (
+          <PreparationTab
+            chantierId={id}
+            tasksCount={tasks.length}
+            documentsCount={chantierDocuments.length || documents.length}
+            intervenantsCount={intervenants.length}
+            materielCount={materiel.length}
+          />
+        )}
         {/* ---------------- ONGLET TEMPS ---------------- */}
         {tab === "temps" && (
           <div className="space-y-3">
