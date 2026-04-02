@@ -668,6 +668,7 @@ export const fr = {
     tabs: {
       accueil: "Accueil",
       consignes: "Consignes",
+      reserves: "Réserves",
       temps: "Temps",
       taches: "Taches",
       planning: "Planning",
@@ -711,6 +712,8 @@ export const fr = {
       terrainFeedbackTitleRequired: "Renseigner un titre court.",
       terrainFeedbackDescriptionRequired: "Renseigner une description detaillee.",
       consigneRead: "Impossible de marquer la consigne comme lue.",
+      reservesLoad: "Erreur chargement réserves.",
+      reserveLift: "Impossible de marquer la réserve comme levée.",
     },
     feedback: {
       timeSaved: "Saisie enregistree.",
@@ -720,6 +723,7 @@ export const fr = {
       checklistValidated: "Checklist du jour validee.",
       infoSent: "Demande d'information envoyee.",
       terrainFeedbackSent: "Retour terrain envoye.",
+      reserveLifted: "Réserve marquée comme levée.",
     },
     taskStatus: {
       todo: "A faire",
@@ -845,6 +849,23 @@ export const fr = {
         importante: "Important",
         urgente: "Urgent",
       },
+    },
+    reserves: {
+      title: "Réserves chantier",
+      subtitle: "Consultez les réserves indiquées par l'admin et signalez celles qui sont levées.",
+      loading: "Chargement des réserves...",
+      empty: "Aucune réserve pour ce chantier.",
+      openCount: "{count} ouverte(s)",
+      statusOpen: "Ouverte",
+      statusInProgress: "En cours",
+      statusLevee: "Levée",
+      priorityLow: "Priorité basse",
+      priorityNormal: "Priorité normale",
+      priorityUrgent: "Priorité urgente",
+      createdAt: "Créée le {value}",
+      liftedAt: "Levée le {value}",
+      markLifted: "Réserve levée",
+      lifting: "Mise à jour...",
     },
     terrainFeedback: {
       title: "Retours terrain",

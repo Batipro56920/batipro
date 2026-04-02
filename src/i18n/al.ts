@@ -649,6 +649,7 @@ export const al: DeepPartial<FrTranslations> = {
     tabs: {
       accueil: "Kryefaqja",
       consignes: "Udhezimet",
+      reserves: "Rezervat",
       temps: "Koha",
       taches: "Detyrat",
       planning: "Planifikimi",
@@ -692,6 +693,8 @@ export const al: DeepPartial<FrTranslations> = {
       terrainFeedbackTitleRequired: "Ploteso nje titull te shkurter.",
       terrainFeedbackDescriptionRequired: "Ploteso nje pershkrim te detajuar.",
       consigneRead: "E pamundur te shenohet udhezimi si i lexuar.",
+      reservesLoad: "Gabim gjate ngarkimit te rezervave.",
+      reserveLift: "E pamundur te shenohet rezerva si e zgjidhur.",
     },
     feedback: {
       timeSaved: "Regjistrimi u ruajt.",
@@ -701,6 +704,7 @@ export const al: DeepPartial<FrTranslations> = {
       checklistValidated: "Checklista e dites u validua.",
       infoSent: "Kerkesa per informacion u dergua.",
       terrainFeedbackSent: "Raporti i terrenit u dergua.",
+      reserveLifted: "Rezerva u shenua si e zgjidhur.",
     },
     taskStatus: {
       todo: "Per t'u bere",
@@ -826,6 +830,23 @@ export const al: DeepPartial<FrTranslations> = {
         importante: "E rendesishme",
         urgente: "Urgjente",
       },
+    },
+    reserves: {
+      title: "Rezervat e kantierit",
+      subtitle: "Shiko rezervat e vendosura nga admini dhe sinjalizo ato qe jane zgjidhur.",
+      loading: "Duke ngarkuar rezervat...",
+      empty: "Asnje rezerve per kete kantier.",
+      openCount: "{count} e hapur(a)",
+      statusOpen: "E hapur",
+      statusInProgress: "Ne proces",
+      statusLevee: "E zgjidhur",
+      priorityLow: "Prioritet i ulet",
+      priorityNormal: "Prioritet normal",
+      priorityUrgent: "Prioritet urgjent",
+      createdAt: "Krijuar me {value}",
+      liftedAt: "Zgjidhur me {value}",
+      markLifted: "Rezerve e zgjidhur",
+      lifting: "Duke perditesuar...",
     },
     terrainFeedback: {
       title: "Raporte terreni",

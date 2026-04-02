@@ -14,6 +14,8 @@ import {
   intervenantGetTasks,
   intervenantMaterielCreate,
   intervenantMaterielList,
+  intervenantReserveList,
+  intervenantReserveMarkLifted,
   intervenantTerrainFeedbackCreate,
   intervenantTerrainFeedbackList,
   intervenantTerrainFeedbackUploadPhoto,
@@ -28,6 +30,7 @@ import {
   type IntervenantInformationRequest,
   type IntervenantMateriel,
   type IntervenantPlanning,
+  type IntervenantReserve,
   type IntervenantTask,
   type IntervenantTerrainFeedback,
   type IntervenantTimeEntry,
@@ -59,7 +62,7 @@ import {
   readStoredIntervenantToken,
 } from "../utils/intervenantSession";
 
-type PortalTab = "accueil" | "consignes" | "temps" | "taches" | "planning" | "documents" | "materiel" | "messages" | "retours";
+type PortalTab = "accueil" | "consignes" | "reserves" | "temps" | "taches" | "planning" | "documents" | "materiel" | "messages" | "retours";
 type LoadState<T> = { loading: boolean; error: string | null; data: T };
 type DashboardTaskItem = { chantier: IntervenantChantier; task: IntervenantTask };
 type MobileGlobalTab = "home" | "sites" | "site";
@@ -85,6 +88,7 @@ const EMPTY_MATERIEL_STATE: LoadState<IntervenantMateriel[]> = { loading: false,
 const EMPTY_INFO_REQUESTS_STATE: LoadState<IntervenantInformationRequest[]> = { loading: false, error: null, data: [] };
 const EMPTY_TERRAIN_FEEDBACKS_STATE: LoadState<IntervenantTerrainFeedback[]> = { loading: false, error: null, data: [] };
 const EMPTY_CONSIGNES_STATE: LoadState<IntervenantConsigne[]> = { loading: false, error: null, data: [] };
+const EMPTY_RESERVES_STATE: LoadState<IntervenantReserve[]> = { loading: false, error: null, data: [] };
 const EMPTY_DASHBOARD_TASKS_STATE: LoadState<DashboardTaskItem[]> = { loading: false, error: null, data: [] };
 
 function getErrorMessage(error: unknown, fallback: string): string {
@@ -302,6 +306,24 @@ function isConsigneActiveForDate(consigne: IntervenantConsigne, isoDate: string)
   return true;
 }
 
+function reserveStatusMeta(
+  status: IntervenantReserve["status"],
+  t: (key: string, params?: Record<string, string | number>) => string,
+): { label: string; tone: "blue" | "green" | "amber" } {
+  if (status === "LEVEE") return { label: t("intervenantPortal.reserves.statusLevee"), tone: "green" };
+  if (status === "EN_COURS") return { label: t("intervenantPortal.reserves.statusInProgress"), tone: "blue" };
+  return { label: t("intervenantPortal.reserves.statusOpen"), tone: "amber" };
+}
+
+function reservePriorityMeta(
+  priority: IntervenantReserve["priority"],
+  t: (key: string, params?: Record<string, string | number>) => string,
+): string {
+  if (priority === "URGENTE") return t("intervenantPortal.reserves.priorityUrgent");
+  if (priority === "BASSE") return t("intervenantPortal.reserves.priorityLow");
+  return t("intervenantPortal.reserves.priorityNormal");
+}
+
 export default function IntervenantPortalPage() {
   const location = useLocation();
   const navigate = useNavigate();
@@ -368,6 +390,7 @@ export default function IntervenantPortalPage() {
   const [infoRequestFeedback, setInfoRequestFeedback] = useState<{ type: "success" | "error"; message: string } | null>(null);
   const [terrainFeedbackState, setTerrainFeedbackState] = useState<LoadState<IntervenantTerrainFeedback[]>>(EMPTY_TERRAIN_FEEDBACKS_STATE);
   const [consignesState, setConsignesState] = useState<LoadState<IntervenantConsigne[]>>(EMPTY_CONSIGNES_STATE);
+  const [reservesState, setReservesState] = useState<LoadState<IntervenantReserve[]>>(EMPTY_RESERVES_STATE);
   const [terrainFeedbackChantierId, setTerrainFeedbackChantierId] = useState("");
   const [terrainFeedbackCategory, setTerrainFeedbackCategory] = useState("observation_chantier");
   const [terrainFeedbackUrgency, setTerrainFeedbackUrgency] = useState("normale");
@@ -377,6 +400,8 @@ export default function IntervenantPortalPage() {
   const [terrainFeedbackSaving, setTerrainFeedbackSaving] = useState(false);
   const [terrainFeedbackFeedback, setTerrainFeedbackFeedback] = useState<{ type: "success" | "error"; message: string } | null>(null);
   const [consigneMarkingId, setConsigneMarkingId] = useState<string | null>(null);
+  const [reserveLiftingId, setReserveLiftingId] = useState<string | null>(null);
+  const [reserveFeedback, setReserveFeedback] = useState<{ type: "success" | "error"; message: string } | null>(null);
   useEffect(() => {
     let alive = true;
     async function bootstrap() {
@@ -523,6 +548,7 @@ export default function IntervenantPortalPage() {
     setTerrainFeedbackFeedback(null);
     setTerrainFeedbackFiles([]);
     setTerrainFeedbackChantierId(selectedChantierId);
+    setReserveFeedback(null);
   }, [selectedChantierId]);
 
   useEffect(() => {
@@ -537,7 +563,8 @@ export default function IntervenantPortalPage() {
       setInfoRequestState({ loading: true, error: null, data: [] });
       setTerrainFeedbackState({ loading: true, error: null, data: [] });
       setConsignesState({ loading: true, error: null, data: [] });
-      const [tasksResult, documentsResult, planningResult, timeResult, materielResult, infoRequestsResult, terrainFeedbackResult, consignesResult] = await Promise.allSettled([
+      setReservesState({ loading: true, error: null, data: [] });
+      const [tasksResult, documentsResult, planningResult, timeResult, materielResult, infoRequestsResult, terrainFeedbackResult, consignesResult, reservesResult] = await Promise.allSettled([
         intervenantGetTasks(token, selectedChantierId),
         intervenantGetDocuments(token, selectedChantierId),
         intervenantGetPlanning(token, selectedChantierId),
@@ -546,6 +573,7 @@ export default function IntervenantPortalPage() {
         intervenantInformationRequestList(token, selectedChantierId),
         intervenantTerrainFeedbackList(token, selectedChantierId),
         intervenantConsigneList(token, selectedChantierId),
+        intervenantReserveList(token, selectedChantierId),
       ]);
       if (!alive) return;
       if (LEGACY_FALLBACK_ENABLED) {
@@ -566,6 +594,7 @@ export default function IntervenantPortalPage() {
       setInfoRequestState(infoRequestsResult.status === "fulfilled" ? { loading: false, error: null, data: infoRequestsResult.value } : { loading: false, error: getErrorMessage(infoRequestsResult.reason, t("intervenantPortal.errors.infoLoad")), data: [] });
       setTerrainFeedbackState(terrainFeedbackResult.status === "fulfilled" ? { loading: false, error: null, data: terrainFeedbackResult.value } : { loading: false, error: getErrorMessage(terrainFeedbackResult.reason, t("intervenantPortal.errors.terrainFeedbackLoad")), data: [] });
       setConsignesState(consignesResult.status === "fulfilled" ? { loading: false, error: null, data: consignesResult.value } : { loading: false, error: getErrorMessage(consignesResult.reason, t("intervenantPortal.errors.consignesLoad")), data: [] });
+      setReservesState(reservesResult.status === "fulfilled" ? { loading: false, error: null, data: reservesResult.value } : { loading: false, error: getErrorMessage(reservesResult.reason, t("intervenantPortal.errors.reservesLoad")), data: [] });
     }
     void loadChantierData();
     return () => {
@@ -769,6 +798,18 @@ export default function IntervenantPortalPage() {
     () => activeConsignes.filter((row) => !row.is_read).length,
     [activeConsignes],
   );
+  const sortedReserves = useMemo(
+    () =>
+      [...reservesState.data].sort((a, b) => {
+        if (a.status !== b.status) return a.status === "LEVEE" ? 1 : -1;
+        return String(b.created_at ?? "").localeCompare(String(a.created_at ?? ""));
+      }),
+    [reservesState.data],
+  );
+  const openReservesCount = useMemo(
+    () => reservesState.data.filter((row) => row.status !== "LEVEE").length,
+    [reservesState.data],
+  );
   const contentTitle = activeTab === "accueil" ? t("intervenantPortal.portalTitle") : activeChantier?.nom ?? t("intervenantPortal.selectedSiteFallback");
   const contentSubtitle = activeTab === "accueil"
     ? `${chantiers.length} ${t("intervenantPortal.tabs.chantiers").toLowerCase()}`
@@ -776,7 +817,7 @@ export default function IntervenantPortalPage() {
   const dailyChecklistDateLabel = formatPortalDate(todayChecklistDate);
   const dailyChecklistValidatedLabel = dailyChecklist?.validated_at ? formatPortalDateTime(dailyChecklist.validated_at) : null;
   const entryTabs = ["temps", "materiel", "retours", "messages"] as PortalTab[];
-  const consultTabs = ["consignes", "planning", "taches", "documents"] as PortalTab[];
+  const consultTabs = ["consignes", "reserves", "planning", "taches", "documents"] as PortalTab[];
 
   useEffect(() => {
     if (!selectedTimeTask) {
@@ -1199,6 +1240,27 @@ export default function IntervenantPortalPage() {
     }
   }
 
+  async function onMarkReserveLifted(reserve: IntervenantReserve) {
+    if (!token || reserve.status === "LEVEE") return;
+    setReserveLiftingId(reserve.id);
+    setReserveFeedback(null);
+    try {
+      const updated = await intervenantReserveMarkLifted(token, reserve.id);
+      setReservesState((current) => ({
+        ...current,
+        data: current.data.map((row) => (row.id === reserve.id ? { ...row, ...updated } : row)),
+      }));
+      setReserveFeedback({ type: "success", message: t("intervenantPortal.feedback.reserveLifted") });
+      setReloadTick((value) => value + 1);
+    } catch (error) {
+      const message = getErrorMessage(error, t("intervenantPortal.errors.reserveLift"));
+      setReserveFeedback({ type: "error", message });
+      setReservesState((current) => ({ ...current, error: message }));
+    } finally {
+      setReserveLiftingId(null);
+    }
+  }
+
   const checklistCard = (
     <div className="space-y-3">
       <TodayChecklistCard
@@ -1502,6 +1564,79 @@ export default function IntervenantPortalPage() {
               ) : null}
             </article>
           ))}
+        </div>
+      )}
+    </PortalCard>
+  );
+
+  const reservesPanel = (
+    <PortalCard tone="default">
+      <PortalSectionHeading
+        eyebrow={t("intervenantPortal.reserves.title")}
+        title={t("intervenantPortal.reserves.title")}
+        subtitle={t("intervenantPortal.reserves.subtitle")}
+        aside={
+          <PortalBadge tone={openReservesCount > 0 ? "amber" : "neutral"}>
+            {t("intervenantPortal.reserves.openCount", { count: openReservesCount })}
+          </PortalBadge>
+        }
+      />
+      {reserveFeedback ? (
+        <div className={["mt-4 rounded-[1rem] border px-4 py-3 text-sm", feedbackClass(reserveFeedback.type)].join(" ")}>
+          {reserveFeedback.message}
+        </div>
+      ) : null}
+      {reservesState.loading ? (
+        <div className="mt-4"><PortalEmptyState>{t("intervenantPortal.reserves.loading")}</PortalEmptyState></div>
+      ) : reservesState.error ? (
+        <div className="mt-4 rounded-[1rem] border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          {reservesState.error}
+        </div>
+      ) : sortedReserves.length === 0 ? (
+        <div className="mt-4"><PortalEmptyState>{t("intervenantPortal.reserves.empty")}</PortalEmptyState></div>
+      ) : (
+        <div className="mt-4 space-y-3">
+          {sortedReserves.map((reserve) => {
+            const status = reserveStatusMeta(reserve.status, t);
+            return (
+              <article key={reserve.id} className="rounded-[1rem] border border-slate-200 bg-slate-50/80 p-4">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div className="min-w-0 flex-1">
+                    <div className="text-sm font-semibold text-slate-900" style={TITLE_CLAMP_STYLE}>{reserve.title}</div>
+                    <div className="mt-1 text-xs text-slate-500">
+                      {reserve.task_titre ? `${reserve.task_titre} - ` : ""}
+                      {reservePriorityMeta(reserve.priority, t)}
+                    </div>
+                    <div className="mt-1 text-xs text-slate-500">
+                      {t("intervenantPortal.reserves.createdAt", { value: formatPortalDateTime(reserve.created_at) })}
+                    </div>
+                  </div>
+                  <PortalBadge tone={status.tone}>{status.label}</PortalBadge>
+                </div>
+                {reserve.description ? (
+                  <div className="mt-3 whitespace-pre-wrap text-sm text-slate-700">{reserve.description}</div>
+                ) : null}
+                {reserve.status === "LEVEE" ? (
+                  <div className="mt-3 text-xs text-emerald-700">
+                    {t("intervenantPortal.reserves.liftedAt", { value: formatPortalDateTime(reserve.levee_at) })}
+                  </div>
+                ) : (
+                  <div className="mt-4 flex justify-end">
+                    <PortalPrimaryButton
+                      type="button"
+                      disabled={reserveLiftingId === reserve.id}
+                      onClick={() => void onMarkReserveLifted(reserve)}
+                      className="w-full sm:w-auto"
+                    >
+                      {reserveLiftingId === reserve.id
+                        ? t("intervenantPortal.reserves.lifting")
+                        : t("intervenantPortal.reserves.markLifted")}
+                    </PortalPrimaryButton>
+                  </div>
+                )}
+              </article>
+            );
+          })}
         </div>
       )}
     </PortalCard>
@@ -1834,6 +1969,8 @@ export default function IntervenantPortalPage() {
       ? homePanel
       : activeTab === "consignes"
         ? consignesPanel
+        : activeTab === "reserves"
+          ? reservesPanel
       : activeTab === "taches"
         ? tasksPanel
         : activeTab === "temps"
