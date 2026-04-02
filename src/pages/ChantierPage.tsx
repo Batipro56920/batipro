@@ -11,6 +11,7 @@ import {
   updateTask,
   adminSetTaskProgressOffset,
   type ChantierTaskRow,
+  type TaskQualityStatus,
   type TaskStatus,
 } from "../services/chantierTasks.service";
 import { listTaskAssigneeIdsByTaskIds, replaceTaskAssignees } from "../services/chantierTaskAssignees.service";
@@ -111,6 +112,10 @@ import TaskDocumentsDrawer from "../components/chantiers/TaskDocumentsDrawer";
 import DocumentEditDrawer from "../components/chantiers/DocumentEditDrawer";
 import PreparationTab from "../components/chantiers/PreparationTab";
 import ReservePlanViewer from "../components/chantiers/ReservePlanViewer";
+import {
+  listChantierZones,
+  type ChantierZoneRow,
+} from "../services/chantierZones.service";
 import VisiteTab from "../components/chantiers/VisiteTab";
 import DoeTab from "../components/chantiers/DoeTab";
 import DevisImportDrawer, { type DevisImportResult } from "../components/chantiers/DevisImportDrawer";
@@ -168,6 +173,22 @@ function taskStatusLabel(s: ChantierTaskRow["status"], t: (key: string) => strin
 function taskStatusBadgeClass(s: ChantierTaskRow["status"]) {
   if (s === "FAIT") return "bg-emerald-50 text-emerald-700 border-emerald-200";
   if (s === "EN_COURS") return "bg-amber-50 text-amber-700 border-amber-200";
+  return "bg-slate-50 text-slate-700 border-slate-200";
+}
+
+function taskQualityLabel(status: TaskQualityStatus) {
+  if (status === "en_cours") return "En cours";
+  if (status === "termine_intervenant") return "Terminé intervenant";
+  if (status === "valide_admin") return "Validé admin";
+  if (status === "a_reprendre") return "À reprendre";
+  return "À faire";
+}
+
+function taskQualityBadgeClass(status: TaskQualityStatus) {
+  if (status === "valide_admin") return "bg-emerald-50 text-emerald-700 border-emerald-200";
+  if (status === "termine_intervenant") return "bg-blue-50 text-blue-700 border-blue-200";
+  if (status === "a_reprendre") return "bg-red-50 text-red-700 border-red-200";
+  if (status === "en_cours") return "bg-amber-50 text-amber-700 border-amber-200";
   return "bg-slate-50 text-slate-700 border-slate-200";
 }
 
@@ -366,6 +387,18 @@ function getStatusFromProgress(progressPercent: number): TaskStatus {
   return "A_FAIRE";
 }
 
+function getQualityStatusFromTaskStatus(status: TaskStatus): TaskQualityStatus {
+  if (status === "FAIT") return "termine_intervenant";
+  if (status === "EN_COURS") return "en_cours";
+  return "a_faire";
+}
+
+function getTaskStatusFromQualityStatus(status: TaskQualityStatus): TaskStatus {
+  if (status === "valide_admin" || status === "termine_intervenant") return "FAIT";
+  if (status === "en_cours" || status === "a_reprendre") return "EN_COURS";
+  return "A_FAIRE";
+}
+
 async function copyToClipboard(text: string) {
   try {
     await navigator.clipboard.writeText(text);
@@ -465,6 +498,7 @@ export default function ChantierPage() {
   const [reserveDraftStatus, setReserveDraftStatus] = useState<ReserveStatus>("OUVERTE");
   const [reserveDraftPriority, setReserveDraftPriority] = useState<ReservePriority>("NORMALE");
   const [reserveDraftTaskId, setReserveDraftTaskId] = useState<string>("");
+  const [reserveDraftZoneId, setReserveDraftZoneId] = useState<string>("");
   const [reserveDraftIntervenantId, setReserveDraftIntervenantId] = useState<string>("__NONE__");
   const [reservePhotoUploading, setReservePhotoUploading] = useState(false);
   const [reservePhotoFile, setReservePhotoFile] = useState<File | null>(null);
@@ -524,7 +558,10 @@ export default function ChantierPage() {
   const [, setNewCorpsEtat] = useState("");
   const [newLotSelection, setNewLotSelection] = useState("");
   const [newLotDraftName, setNewLotDraftName] = useState("");
+  const [newTaskZoneId, setNewTaskZoneId] = useState("");
+  const [newTaskStepName, setNewTaskStepName] = useState("");
   const [newTaskStatus, setNewTaskStatus] = useState<TaskStatus>("A_FAIRE");
+  const [newTaskQualityStatus, setNewTaskQualityStatus] = useState<TaskQualityStatus>("a_faire");
   const [newAssignedIntervenantIds, setNewAssignedIntervenantIds] = useState<string[]>([]);
   const [newQuantite, setNewQuantite] = useState("1");
   const [newUnite, setNewUnite] = useState("");
@@ -541,7 +578,10 @@ export default function ChantierPage() {
   const [editCorpsEtat, setEditCorpsEtat] = useState("");
   const [editLotSelection, setEditLotSelection] = useState("");
   const [editLotDraftName, setEditLotDraftName] = useState("");
+  const [editTaskZoneId, setEditTaskZoneId] = useState("");
+  const [editTaskStepName, setEditTaskStepName] = useState("");
   const [editStatus, setEditStatus] = useState<TaskStatus>("A_FAIRE");
+  const [editTaskQualityStatus, setEditTaskQualityStatus] = useState<TaskQualityStatus>("a_faire");
   const [editAssignedIntervenantIds, setEditAssignedIntervenantIds] = useState<string[]>([]);
   const [editQuantite, setEditQuantite] = useState("1");
   const [editUnite, setEditUnite] = useState("");
@@ -608,6 +648,8 @@ export default function ChantierPage() {
   const [consigneAppliesToAll, setConsigneAppliesToAll] = useState(true);
   const [consigneIntervenantIds, setConsigneIntervenantIds] = useState<string[]>([]);
   const [consigneSaving, setConsigneSaving] = useState(false);
+
+  const [zones, setZones] = useState<ChantierZoneRow[]>([]);
 
   function openDocumentModal() {
     setDocumentModalError(null);
@@ -905,6 +947,7 @@ export default function ChantierPage() {
       setReserveDraftStatus((reserve.status ?? "OUVERTE") as ReserveStatus);
       setReserveDraftPriority((reserve.priority ?? "NORMALE") as ReservePriority);
       setReserveDraftTaskId(reserve.task_id ?? "");
+      setReserveDraftZoneId((reserve as any).zone_id ?? "");
       setReserveDraftIntervenantId(reserve.intervenant_id ?? "__NONE__");
       return;
     }
@@ -914,6 +957,7 @@ export default function ChantierPage() {
     setReserveDraftStatus("OUVERTE");
     setReserveDraftPriority("NORMALE");
     setReserveDraftTaskId("");
+    setReserveDraftZoneId("");
     setReserveDraftIntervenantId("__NONE__");
   }
 
@@ -1038,6 +1082,7 @@ export default function ChantierPage() {
       if (activeReserve) {
         const updated = await updateReserve(activeReserve.id, {
           task_id: taskId,
+          zone_id: reserveDraftZoneId || null,
           title: reserveDraftTitle.trim(),
           description: reserveDraftDescription.trim() || null,
           status: reserveDraftStatus,
@@ -1051,6 +1096,7 @@ export default function ChantierPage() {
         const created = await createReserve({
           chantier_id: id,
           task_id: taskId,
+          zone_id: reserveDraftZoneId || null,
           title: reserveDraftTitle.trim(),
           description: reserveDraftDescription.trim() || null,
           status: reserveDraftStatus,
@@ -1508,6 +1554,17 @@ export default function ChantierPage() {
     setTaskAssigneeIdsByTaskId(fallbackMap);
   }
 
+  async function refreshZonesOnly() {
+    if (!id) return;
+    try {
+      const result = await listChantierZones(id);
+      setZones(result.zones);
+    } catch (e) {
+      console.warn("[zones] refresh error", e);
+      setZones([]);
+    }
+  }
+
   async function refreshTasksOnly() {
     if (!id) return;
     const tasksResult = await getTasksByChantierIdDetailed(id);
@@ -1859,6 +1916,12 @@ export default function ChantierPage() {
         } finally {
           if (alive) setConsignesLoading(false);
         }
+
+        try {
+          await refreshZonesOnly();
+        } catch (e) {
+          console.warn("[zones] initial load error", e);
+        }
       } catch (e: any) {
         if (!alive) return;
         setErrorMsg(e?.message ?? "Erreur lors du chargement du chantier.");
@@ -1911,6 +1974,12 @@ export default function ChantierPage() {
     if (!id) return;
     void refreshDoeDocumentIds();
   }, [id]);
+
+  useEffect(() => {
+    if (!id) return;
+    if (tab !== "preparer" && tab !== "devis-taches" && tab !== "reserves") return;
+    void refreshZonesOnly();
+  }, [id, tab]);
 
   const documentEditInfoMessage =
     documentEditOpen && !documentEditDoc ? "Document introuvable ou non accessible." : null;
@@ -2085,6 +2154,20 @@ export default function ChantierPage() {
     for (const t of tasks) m.set(t.id, t);
     return m;
   }, [tasks]);
+
+  const zoneById = useMemo(() => {
+    const map = new Map<string, ChantierZoneRow>();
+    for (const zone of zones) {
+      map.set(zone.id, zone);
+    }
+    return map;
+  }, [zones]);
+
+  function resolveZoneName(zoneId: string | null | undefined): string {
+    const cleanZoneId = String(zoneId ?? "").trim();
+    if (!cleanZoneId) return "Sans zone";
+    return zoneById.get(cleanZoneId)?.nom ?? "Zone inconnue";
+  }
 
   const timeEntriesByTaskId = useMemo(() => {
     const grouped = new Map<string, ChantierTimeEntryRow[]>();
@@ -2392,11 +2475,38 @@ export default function ChantierPage() {
 
   async function toggleTaskDone(t: ChantierTaskRow) {
     const nextStatus = t.status === "FAIT" ? "A_FAIRE" : "FAIT";
-    setTasks((prev) => prev.map((x) => (x.id === t.id ? { ...x, status: nextStatus } : x)));
+    const nextQualityStatus = getQualityStatusFromTaskStatus(nextStatus);
+    setTasks((prev) =>
+      prev.map((x) =>
+        x.id === t.id
+          ? {
+              ...x,
+              status: nextStatus,
+              quality_status: nextQualityStatus,
+              admin_validation_status: nextQualityStatus === "termine_intervenant" ? "non_verifie" : x.admin_validation_status,
+            }
+          : x,
+      ),
+    );
     try {
-      await updateTask(t.id, { status: nextStatus });
+      await updateTask(t.id, {
+        status: nextStatus,
+        quality_status: nextQualityStatus,
+        admin_validation_status: nextQualityStatus === "termine_intervenant" ? "non_verifie" : t.admin_validation_status,
+      });
     } catch (e: any) {
-      setTasks((prev) => prev.map((x) => (x.id === t.id ? { ...x, status: t.status } : x)));
+      setTasks((prev) =>
+        prev.map((x) =>
+          x.id === t.id
+            ? {
+                ...x,
+                status: t.status,
+                quality_status: t.quality_status,
+                admin_validation_status: t.admin_validation_status,
+              }
+            : x,
+        ),
+      );
       setTasksError(e?.message ?? "Erreur lors de la mise à jour de la tâche.");
       setToast({ type: "error", msg: e?.message ?? "Erreur mise à jour tâche." });
     }
@@ -2437,6 +2547,11 @@ export default function ChantierPage() {
         progress_admin_offset_percent: clamped,
       });
       const nextStatus = getStatusFromProgress(progress.displayPercent);
+      const nextQualityStatus = getQualityStatusFromTaskStatus(nextStatus);
+      await updateTask(task.id, {
+        status: nextStatus,
+        quality_status: nextQualityStatus,
+      });
       setTasks((prev) =>
         prev.map((row) =>
           row.id === task.id
@@ -2445,6 +2560,7 @@ export default function ChantierPage() {
                 progress_admin_offset_percent: clamped,
                 progress_admin_offset_updated_at: new Date().toISOString(),
                 status: nextStatus,
+                quality_status: nextQualityStatus,
               }
             : row,
         ),
@@ -2470,6 +2586,11 @@ export default function ChantierPage() {
         progress_admin_offset_percent: 0,
       });
       const nextStatus = getStatusFromProgress(progress.displayPercent);
+      const nextQualityStatus = getQualityStatusFromTaskStatus(nextStatus);
+      await updateTask(task.id, {
+        status: nextStatus,
+        quality_status: nextQualityStatus,
+      });
       setTasks((prev) =>
         prev.map((row) =>
           row.id === task.id
@@ -2478,6 +2599,7 @@ export default function ChantierPage() {
                 progress_admin_offset_percent: 0,
                 progress_admin_offset_updated_at: new Date().toISOString(),
                 status: nextStatus,
+                quality_status: nextQualityStatus,
               }
             : row,
         ),
@@ -2542,7 +2664,11 @@ export default function ChantierPage() {
       titre,
       corps_etat: lotName,
       lot: lotName,
+      zone_id: newTaskZoneId || null,
+      etape_metier: newTaskStepName.trim() || null,
       status: newTaskStatus,
+      quality_status: newTaskQualityStatus,
+      admin_validation_status: "non_verifie",
       intervenant_id,
       quantite,
       unite,
@@ -2566,7 +2692,11 @@ export default function ChantierPage() {
         titre,
         corps_etat: lotName,
         lot: lotName,
+        zone_id: newTaskZoneId || null,
+        etape_metier: newTaskStepName.trim() || null,
         status: newTaskStatus,
+        quality_status: newTaskQualityStatus,
+        admin_validation_status: "non_verifie",
         intervenant_id,
         quantite,
         unite,
@@ -2587,6 +2717,9 @@ export default function ChantierPage() {
       setNewCorpsEtat(lotName);
       setNewLotSelection(lotName);
       setNewTaskStatus("A_FAIRE");
+      setNewTaskQualityStatus("a_faire");
+      setNewTaskZoneId("");
+      setNewTaskStepName("");
       setNewAssignedIntervenantIds([]);
       setNewQuantite("1");
       setNewUnite("");
@@ -2620,7 +2753,10 @@ export default function ChantierPage() {
     setEditCorpsEtat(resolvedLotName === "A classer" ? "" : resolvedLotName);
     setEditLotSelection(resolvedLotName === "A classer" ? "" : resolvedLotName);
     setEditLotDraftName("");
+    setEditTaskZoneId((t as any).zone_id ?? "");
+    setEditTaskStepName((t as any).etape_metier ?? "");
     setEditStatus((t.status ?? "A_FAIRE") as any);
+    setEditTaskQualityStatus((t as any).quality_status ?? "a_faire");
     setEditAssignedIntervenantIds(getTaskAssignedIntervenantIds(t));
     setEditQuantite(String(q ?? decoded.quantite ?? 1));
     setEditUnite(unite);
@@ -2631,6 +2767,9 @@ export default function ChantierPage() {
     setSavingTask(false);
     setEditLotSelection("");
     setEditLotDraftName("");
+    setEditTaskZoneId("");
+    setEditTaskStepName("");
+    setEditTaskQualityStatus("a_faire");
     setEditAssignedIntervenantIds([]);
   }
 
@@ -2716,11 +2855,22 @@ export default function ChantierPage() {
       return;
     }
 
+    const nextAdminValidationStatus: ChantierTaskRow["admin_validation_status"] =
+      editTaskQualityStatus === "valide_admin"
+        ? "valide"
+        : editTaskQualityStatus === "a_reprendre"
+          ? "a_reprendre"
+          : "non_verifie";
+
     const patch = {
       titre,
       corps_etat: lotName,
       lot: lotName,
+      zone_id: editTaskZoneId || null,
+      etape_metier: editTaskStepName.trim() || null,
       status: editStatus ?? "A_FAIRE",
+      quality_status: editTaskQualityStatus,
+      admin_validation_status: nextAdminValidationStatus,
       intervenant_id: uniqueIds(editAssignedIntervenantIds)[0] ?? null,
       quantite,
       unite,
@@ -3982,6 +4132,7 @@ export default function ChantierPage() {
                   const priority = reservePriorityBadge(reserve.priority, t);
                   const task = reserve.task_id ? taskById.get(reserve.task_id) : null;
                   const taskAssigneeNames = task ? getTaskAssignedIntervenantNames(task) : [];
+                  const zoneLabel = resolveZoneName((reserve as any).zone_id ?? task?.zone_id ?? null);
 
                   return (
                     <div
@@ -4015,6 +4166,7 @@ export default function ChantierPage() {
                           {priority.label}
                         </span>
                         <span>Tâche : {task ? stripLegacyPrefix(task.titre ?? "") : "—"}</span>
+                        <span>Zone : {zoneLabel}</span>
                         <span>Intervenant : {taskAssigneeNames.join(", ") || "—"}</span>
                         <span>
                           Créée : {new Date(reserve.created_at).toLocaleDateString("fr-FR")}
@@ -4309,15 +4461,65 @@ export default function ChantierPage() {
 
                       <div className="grid gap-2 md:grid-cols-2">
                         <label className="space-y-1 text-xs text-slate-600">
+                          <div>Zone / pièce</div>
+                          <select
+                            className="w-full rounded-xl border bg-white px-3 py-2 text-sm text-slate-900"
+                            value={newTaskZoneId}
+                            onChange={(e) => setNewTaskZoneId(e.target.value)}
+                          >
+                            <option value="">Sans zone</option>
+                            {zones.map((zone) => (
+                              <option key={zone.id} value={zone.id}>
+                                {zone.nom}
+                                {zone.niveau ? ` · ${zone.niveau}` : ""}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                        <label className="space-y-1 text-xs text-slate-600">
+                          <div>Étape métier</div>
+                          <input
+                            className="w-full rounded-xl border bg-white px-3 py-2 text-sm text-slate-900"
+                            placeholder="Ex : ossature, isolation, finitions"
+                            value={newTaskStepName}
+                            onChange={(e) => setNewTaskStepName(e.target.value)}
+                          />
+                        </label>
+                      </div>
+
+                      <div className="grid gap-2 md:grid-cols-3">
+                        <label className="space-y-1 text-xs text-slate-600">
                           <div>Statut</div>
                           <select
                             className="w-full rounded-xl border bg-white px-3 py-2 text-sm text-slate-900"
                             value={newTaskStatus}
-                            onChange={(e) => setNewTaskStatus(e.target.value as TaskStatus)}
+                            onChange={(e) => {
+                              const nextStatus = e.target.value as TaskStatus;
+                              setNewTaskStatus(nextStatus);
+                              setNewTaskQualityStatus(getQualityStatusFromTaskStatus(nextStatus));
+                            }}
                           >
                             <option value="A_FAIRE">A faire</option>
                             <option value="EN_COURS">En cours</option>
                             <option value="FAIT">Fait</option>
+                          </select>
+                        </label>
+                        <label className="space-y-1 text-xs text-slate-600">
+                          <div>Statut qualité</div>
+                          <select
+                            className="w-full rounded-xl border bg-white px-3 py-2 text-sm text-slate-900"
+                            value={newTaskQualityStatus}
+                            onChange={(e) => {
+                              const nextQualityStatus = e.target.value as TaskQualityStatus;
+                              setNewTaskQualityStatus(nextQualityStatus);
+                              setNewTaskStatus(getTaskStatusFromQualityStatus(nextQualityStatus));
+                            }}
+                          >
+                            <option value="a_faire">À faire</option>
+                            <option value="en_cours">En cours</option>
+                            <option value="termine_intervenant">Terminé intervenant</option>
+                            <option value="valide_admin">Validé admin</option>
+                            <option value="a_reprendre">À reprendre</option>
                           </select>
                         </label>
                         <label className="space-y-1 text-xs text-slate-600">
@@ -4462,6 +4664,9 @@ export default function ChantierPage() {
                     avancementPct < 40 ? "bg-amber-400" : avancementPct < 80 ? "bg-blue-500" : "bg-emerald-500";
                   const assignedNames = getTaskAssignedIntervenantNames(t);
                   const orderLabel = taskOrderLabelById.get(t.id) ?? Math.max(0, Number(t.order_index ?? 0)) + 1;
+                  const taskZoneLabel = resolveZoneName((t as any).zone_id ?? null);
+                  const taskQuality = ((t as any).quality_status ?? "a_faire") as TaskQualityStatus;
+                  const taskStep = String((t as any).etape_metier ?? "").trim();
 
                   return (
                     <div
@@ -4504,6 +4709,24 @@ export default function ChantierPage() {
                               </div>
                               <div className="text-xs text-slate-500">
                                 {resolveTaskLotName(t)} | Intervenants: {assignedNames.join(", ") || "—"}
+                              </div>
+                              <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-slate-500">
+                                <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5">
+                                  Zone : {taskZoneLabel}
+                                </span>
+                                <span
+                                  className={[
+                                    "rounded-full border px-2 py-0.5",
+                                    taskQualityBadgeClass(taskQuality),
+                                  ].join(" ")}
+                                >
+                                  Qualité : {taskQualityLabel(taskQuality)}
+                                </span>
+                                {taskStep ? (
+                                  <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5">
+                                    Étape : {taskStep}
+                                  </span>
+                                ) : null}
                               </div>
                               <div className="text-xs text-slate-500 mt-1">
                                 {qtyLabel} / {tempsPrevuLabel} / {tempsPasseLabel}
@@ -4648,7 +4871,11 @@ export default function ChantierPage() {
                                   <select
                                     className="w-full rounded-xl border bg-white px-3 py-2 text-sm text-slate-900"
                                     value={editStatus as any}
-                                    onChange={(e) => setEditStatus(e.target.value as any)}
+                                    onChange={(e) => {
+                                      const nextStatus = e.target.value as TaskStatus;
+                                      setEditStatus(nextStatus);
+                                      setEditTaskQualityStatus(getQualityStatusFromTaskStatus(nextStatus));
+                                    }}
                                   >
                                     <option value="A_FAIRE">A faire</option>
                                     <option value="EN_COURS">En cours</option>
@@ -4677,6 +4904,34 @@ export default function ChantierPage() {
 
                               <div className="grid gap-2 md:grid-cols-2">
                                 <label className="space-y-1 text-xs text-slate-600">
+                                  <div>Zone / pièce</div>
+                                  <select
+                                    className="w-full rounded-xl border bg-white px-3 py-2 text-sm text-slate-900"
+                                    value={editTaskZoneId}
+                                    onChange={(e) => setEditTaskZoneId(e.target.value)}
+                                  >
+                                    <option value="">Sans zone</option>
+                                    {zones.map((zone) => (
+                                      <option key={zone.id} value={zone.id}>
+                                        {zone.nom}
+                                        {zone.niveau ? ` · ${zone.niveau}` : ""}
+                                      </option>
+                                    ))}
+                                  </select>
+                                </label>
+                                <label className="space-y-1 text-xs text-slate-600">
+                                  <div>Étape métier</div>
+                                  <input
+                                    className="w-full rounded-xl border bg-white px-3 py-2 text-sm text-slate-900"
+                                    placeholder="Ex : ossature, isolation, finitions"
+                                    value={editTaskStepName}
+                                    onChange={(e) => setEditTaskStepName(e.target.value)}
+                                  />
+                                </label>
+                              </div>
+
+                              <div className="grid gap-2 md:grid-cols-2">
+                                <label className="space-y-1 text-xs text-slate-600">
                                   <div>Temps prevu (h)</div>
                                   <input
                                     className="w-full rounded-xl border bg-white px-3 py-2 text-sm text-slate-900"
@@ -4686,6 +4941,24 @@ export default function ChantierPage() {
                                     onChange={(e) => setEditTempsPrevuH(e.target.value)}
                                   />
                                   <p className="text-[11px] text-slate-500">Utilise pour le calcul automatique d'avancement</p>
+                                </label>
+                                <label className="space-y-1 text-xs text-slate-600">
+                                  <div>Statut qualité</div>
+                                  <select
+                                    className="w-full rounded-xl border bg-white px-3 py-2 text-sm text-slate-900"
+                                    value={editTaskQualityStatus}
+                                    onChange={(e) => {
+                                      const nextQualityStatus = e.target.value as TaskQualityStatus;
+                                      setEditTaskQualityStatus(nextQualityStatus);
+                                      setEditStatus(getTaskStatusFromQualityStatus(nextQualityStatus));
+                                    }}
+                                  >
+                                    <option value="a_faire">À faire</option>
+                                    <option value="en_cours">En cours</option>
+                                    <option value="termine_intervenant">Terminé intervenant</option>
+                                    <option value="valide_admin">Validé admin</option>
+                                    <option value="a_reprendre">À reprendre</option>
+                                  </select>
                                 </label>
                               </div>
                               <div className="space-y-2 rounded-xl border border-slate-200 bg-white p-3">
@@ -5365,12 +5638,34 @@ export default function ChantierPage() {
                         <select
                           className="w-full rounded-xl border px-3 py-2 text-sm"
                           value={reserveDraftTaskId}
-                          onChange={(e) => setReserveDraftTaskId(e.target.value)}
+                          onChange={(e) => {
+                            const nextTaskId = e.target.value;
+                            setReserveDraftTaskId(nextTaskId);
+                            const task = nextTaskId ? taskById.get(nextTaskId) : null;
+                            setReserveDraftZoneId(task?.zone_id ?? "");
+                          }}
                         >
                           <option value="">{t("chantierPage.selectTask")}</option>
                           {tasks.map((task) => (
                             <option key={task.id} value={task.id}>
                               {stripLegacyPrefix(task.titre ?? t("chantierPage.tasks"))}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
+                      <div className="space-y-1 md:col-span-2">
+                        <div className="text-xs text-slate-600">Zone / pièce</div>
+                        <select
+                          className="w-full rounded-xl border px-3 py-2 text-sm"
+                          value={reserveDraftZoneId}
+                          onChange={(e) => setReserveDraftZoneId(e.target.value)}
+                        >
+                          <option value="">Sans zone</option>
+                          {zones.map((zone) => (
+                            <option key={zone.id} value={zone.id}>
+                              {zone.nom}
+                              {zone.niveau ? ` · ${zone.niveau}` : ""}
                             </option>
                           ))}
                         </select>

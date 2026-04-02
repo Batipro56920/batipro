@@ -4,7 +4,9 @@ import type { Database } from "../types/supabase";
 export type ReserveStatus = "OUVERTE" | "LEVEE" | "EN_COURS" | string;
 export type ReservePriority = "BASSE" | "NORMALE" | "URGENTE" | string;
 
-export type ChantierReserveRow = Database["public"]["Tables"]["chantier_reserves"]["Row"];
+export type ChantierReserveRow = Database["public"]["Tables"]["chantier_reserves"]["Row"] & {
+  zone_id?: string | null;
+};
 
 type AssigneeRow = Database["public"]["Tables"]["chantier_task_assignees"]["Row"];
 
@@ -25,6 +27,17 @@ function isMissingAssigneesTableError(error: { message?: string } | null): boole
     (msg.includes("relation") && msg.includes("chantier_task_assignees")) ||
     (msg.includes("schema cache") && msg.includes("chantier_task_assignees")) ||
     msg.includes("does not exist")
+  );
+}
+
+function isMissingReserveZoneColumnError(error: { message?: string; code?: string } | null): boolean {
+  const msg = String(error?.message ?? "").toLowerCase();
+  const code = String(error?.code ?? "");
+  if (code === "42703" && msg.includes("zone_id")) return true;
+  return (
+    msg.includes("zone_id") &&
+    msg.includes("chantier_reserves") &&
+    (msg.includes("does not exist") || msg.includes("schema cache") || msg.includes("could not find"))
   );
 }
 
@@ -68,6 +81,7 @@ export async function listReservesByChantierId(chantierId: string): Promise<Chan
 export async function createReserve(input: {
   chantier_id: string;
   task_id?: string | null;
+  zone_id?: string | null;
   title: string;
   description?: string | null;
   status?: ReserveStatus;
@@ -77,9 +91,10 @@ export async function createReserve(input: {
   if (!input.chantier_id) throw new Error("chantier_id manquant.");
   if (!input.title) throw new Error("title manquant.");
 
-  const payload = {
+  const payload: Record<string, unknown> = {
     chantier_id: input.chantier_id,
     task_id: input.task_id ?? null,
+    zone_id: input.zone_id ?? null,
     title: input.title.trim(),
     description: input.description ?? null,
     status: input.status ?? "OUVERTE",
@@ -87,22 +102,37 @@ export async function createReserve(input: {
     intervenant_id: input.intervenant_id ?? null,
   };
 
-  const { data, error } = await supabase
+  const first = await (supabase as any)
     .from("chantier_reserves")
     .insert(payload)
     .select()
-    .maybeSingle()
-    .overrideTypes<ChantierReserveRow>();
+    .maybeSingle();
+
+  if (!first.error) {
+    if (!first.data) throw new Error("No reserve returned");
+    return first.data as ChantierReserveRow;
+  }
+
+  if (!isMissingReserveZoneColumnError(first.error)) throw first.error;
+
+  const fallbackPayload = { ...payload };
+  delete fallbackPayload.zone_id;
+  const { data, error } = await (supabase as any)
+    .from("chantier_reserves")
+    .insert(fallbackPayload)
+    .select()
+    .maybeSingle();
 
   if (error) throw error;
   if (!data) throw new Error("No reserve returned");
-  return data;
+  return data as ChantierReserveRow;
 }
 
 export async function updateReserve(
   id: string,
   patch: Partial<{
     task_id: string | null;
+    zone_id: string | null;
     title: string;
     description: string | null;
     status: ReserveStatus;
@@ -113,8 +143,9 @@ export async function updateReserve(
 ): Promise<ChantierReserveRow> {
   if (!id) throw new Error("id manquant.");
 
-  const payload: {
+  const payload: Record<string, unknown> & {
     task_id?: string | null;
+    zone_id?: string | null;
     title?: string;
     description?: string | null;
     status?: ReserveStatus;
@@ -129,17 +160,32 @@ export async function updateReserve(
 
   if (payload.title !== undefined) payload.title = String(payload.title).trim();
 
-  const { data, error } = await supabase
+  const first = await (supabase as any)
     .from("chantier_reserves")
     .update(payload)
     .eq("id", id)
     .select()
-    .maybeSingle()
-    .overrideTypes<ChantierReserveRow>();
+    .maybeSingle();
+
+  if (!first.error) {
+    if (!first.data) throw new Error("No reserve returned");
+    return first.data as ChantierReserveRow;
+  }
+
+  if (!isMissingReserveZoneColumnError(first.error)) throw first.error;
+
+  const fallbackPayload = { ...payload };
+  delete fallbackPayload.zone_id;
+  const { data, error } = await (supabase as any)
+    .from("chantier_reserves")
+    .update(fallbackPayload)
+    .eq("id", id)
+    .select()
+    .maybeSingle();
 
   if (error) throw error;
   if (!data) throw new Error("No reserve returned");
-  return data;
+  return data as ChantierReserveRow;
 }
 
 export async function setReserveStatus(id: string, status: ReserveStatus): Promise<ChantierReserveRow> {

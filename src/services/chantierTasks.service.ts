@@ -6,6 +6,13 @@ import { supabase } from "../lib/supabaseClient";
    ========================================================= */
 
 export type TaskStatus = "A_FAIRE" | "EN_COURS" | "FAIT";
+export type TaskQualityStatus =
+  | "a_faire"
+  | "en_cours"
+  | "termine_intervenant"
+  | "valide_admin"
+  | "a_reprendre";
+export type TaskAdminValidationStatus = "non_verifie" | "valide" | "a_reprendre";
 
 export type ChantierTaskRow = {
   id: string;
@@ -14,8 +21,12 @@ export type ChantierTaskRow = {
   titre: string;
   corps_etat: string | null;
   lot: string | null;
+  zone_id: string | null;
+  etape_metier: string | null;
   date: string | null; // date prévue (ancienne logique)
   status: TaskStatus;
+  quality_status: TaskQualityStatus;
+  admin_validation_status: TaskAdminValidationStatus;
 
   intervenant_id: string | null;
 
@@ -45,8 +56,12 @@ type CreateTaskPayload = {
   devis_ligne_id?: string | null;
   corps_etat?: string | null;
   lot?: string | null;
+  zone_id?: string | null;
+  etape_metier?: string | null;
   date?: string | null;
   status?: TaskStatus;
+  quality_status?: TaskQualityStatus;
+  admin_validation_status?: TaskAdminValidationStatus;
   intervenant_id?: string | null;
 
   quantite?: number | string | null;
@@ -76,8 +91,12 @@ type UpdateTaskPatch = Partial<
     | "titre"
     | "corps_etat"
     | "lot"
+    | "zone_id"
+    | "etape_metier"
     | "date"
     | "status"
+    | "quality_status"
+    | "admin_validation_status"
     | "intervenant_id"
     | "quantite"
     | "unite"
@@ -99,8 +118,12 @@ const TASK_SELECT = [
   "titre",
   "corps_etat",
   "lot",
+  "zone_id",
+  "etape_metier",
   "date",
   "status",
+  "quality_status",
+  "admin_validation_status",
   "intervenant_id",
   "quantite",
   "unite",
@@ -138,6 +161,28 @@ const TASK_SELECT_LEGACY = [
 
 let chantierTasksSupportsTerrainTitleColumns: boolean | null = null;
 
+function normalizeQualityStatus(value: unknown): TaskQualityStatus {
+  const raw = String(value ?? "").trim().toLowerCase();
+  if (raw === "en_cours") return "en_cours";
+  if (raw === "termine_intervenant") return "termine_intervenant";
+  if (raw === "valide_admin") return "valide_admin";
+  if (raw === "a_reprendre") return "a_reprendre";
+  return "a_faire";
+}
+
+function normalizeAdminValidationStatus(value: unknown): TaskAdminValidationStatus {
+  const raw = String(value ?? "").trim().toLowerCase();
+  if (raw === "valide") return "valide";
+  if (raw === "a_reprendre") return "a_reprendre";
+  return "non_verifie";
+}
+
+function deriveQualityStatusFromTaskStatus(status: TaskStatus | undefined): TaskQualityStatus {
+  if (status === "FAIT") return "termine_intervenant";
+  if (status === "EN_COURS") return "en_cours";
+  return "a_faire";
+}
+
 /* =========================================================
    HELPERS
    ========================================================= */
@@ -163,6 +208,8 @@ function cleanPatch(patch: UpdateTaskPatch) {
   if (typeof cleaned.libelle_devis_original === "string") cleaned.libelle_devis_original = cleaned.libelle_devis_original.trim();
   if (typeof cleaned.corps_etat === "string") cleaned.corps_etat = cleaned.corps_etat.trim();
   if (typeof cleaned.lot === "string") cleaned.lot = cleaned.lot.trim();
+  if (typeof cleaned.zone_id === "string") cleaned.zone_id = cleaned.zone_id.trim();
+  if (typeof cleaned.etape_metier === "string") cleaned.etape_metier = cleaned.etape_metier.trim();
   if (typeof cleaned.unite === "string") cleaned.unite = cleaned.unite.trim();
 
   // vides -> null
@@ -171,6 +218,8 @@ function cleanPatch(patch: UpdateTaskPatch) {
   if (cleaned.titre_terrain === "") cleaned.titre_terrain = null;
   if (cleaned.libelle_devis_original === "") cleaned.libelle_devis_original = null;
   if (cleaned.date === "") cleaned.date = null;
+  if (cleaned.zone_id === "") cleaned.zone_id = null;
+  if (cleaned.etape_metier === "") cleaned.etape_metier = null;
   if (cleaned.date_debut === "") cleaned.date_debut = null;
   if (cleaned.date_fin === "") cleaned.date_fin = null;
   if (cleaned.intervenant_id === "") cleaned.intervenant_id = null;
@@ -205,6 +254,15 @@ function cleanPatch(patch: UpdateTaskPatch) {
   if (cleaned.titre !== undefined && cleaned.titre_terrain === undefined) {
     cleaned.titre_terrain = cleaned.titre;
   }
+  if (cleaned.status !== undefined && cleaned.quality_status === undefined) {
+    cleaned.quality_status = deriveQualityStatusFromTaskStatus(cleaned.status);
+  }
+  if (cleaned.quality_status !== undefined) {
+    cleaned.quality_status = normalizeQualityStatus(cleaned.quality_status);
+  }
+  if (cleaned.admin_validation_status !== undefined) {
+    cleaned.admin_validation_status = normalizeAdminValidationStatus(cleaned.admin_validation_status);
+  }
 
   return cleaned as UpdateTaskPatch;
 }
@@ -217,6 +275,10 @@ function normalizeTaskRow(row: any): ChantierTaskRow {
     progress_admin_offset_percent: offsetRaw === null ? 0 : Math.max(-100, Math.min(100, Number(offsetRaw))),
     progress_admin_offset_updated_at: row?.progress_admin_offset_updated_at ?? null,
     progress_admin_offset_updated_by: row?.progress_admin_offset_updated_by ?? null,
+    zone_id: row?.zone_id ?? null,
+    etape_metier: row?.etape_metier ?? null,
+    quality_status: normalizeQualityStatus(row?.quality_status),
+    admin_validation_status: normalizeAdminValidationStatus(row?.admin_validation_status),
     duration_days: Math.max(1, Number(row?.duration_days ?? 1)),
     order_index: Math.max(0, Math.trunc(Number(row?.order_index ?? 0))),
   } as ChantierTaskRow;
@@ -269,6 +331,17 @@ function stripTerrainTitleColumns<T extends Record<string, unknown>>(payload: T)
   const next = { ...payload };
   delete (next as Record<string, unknown>).titre_terrain;
   delete (next as Record<string, unknown>).libelle_devis_original;
+  return next;
+}
+
+function stripTaskV2Columns<T extends Record<string, unknown>>(payload: T): T {
+  const next = { ...payload };
+  delete (next as Record<string, unknown>).zone_id;
+  delete (next as Record<string, unknown>).etape_metier;
+  delete (next as Record<string, unknown>).quality_status;
+  delete (next as Record<string, unknown>).admin_validation_status;
+  delete (next as Record<string, unknown>).duration_days;
+  delete (next as Record<string, unknown>).order_index;
   return next;
 }
 
@@ -337,8 +410,12 @@ export async function createTask(payload: CreateTaskPayload) {
     devis_ligne_id: payload?.devis_ligne_id ?? null,
     corps_etat: payload.corps_etat ?? payload.lot ?? null,
     lot: payload.lot ?? payload.corps_etat ?? null,
+    zone_id: payload.zone_id ?? null,
+    etape_metier: (payload.etape_metier ?? "").trim() || null,
     date: payload.date ?? null,
     status: payload.status ?? "A_FAIRE",
+    quality_status: payload.quality_status ?? deriveQualityStatusFromTaskStatus(payload.status ?? "A_FAIRE"),
+    admin_validation_status: payload.admin_validation_status ?? "non_verifie",
     intervenant_id: payload.intervenant_id ?? null,
     quantite: quantiteValue === null ? 1 : quantiteValue,
     unite: (payload.unite ?? "").trim() || null,
@@ -388,10 +465,8 @@ export async function createTask(payload: CreateTaskPayload) {
 
   if (!isMissingTaskPlanningColumnsError(baseError)) throw baseError;
 
-  const legacyInsert = { ...baseInsert };
-  delete legacyInsert.devis_ligne_id;
-  delete legacyInsert.duration_days;
-  delete legacyInsert.order_index;
+  const legacyInsert = stripTaskV2Columns({ ...baseInsert });
+  delete (legacyInsert as Record<string, unknown>).devis_ligne_id;
 
   const fallback = await supabase
     .from("chantier_tasks")
@@ -445,9 +520,7 @@ export async function updateTask(id: string, patch: UpdateTaskPatch) {
 
   if (!isMissingTaskPlanningColumnsError(baseError)) throw baseError;
 
-  const legacyPatch: Record<string, unknown> = { ...basePatch };
-  delete legacyPatch.duration_days;
-  delete legacyPatch.order_index;
+  const legacyPatch: Record<string, unknown> = stripTaskV2Columns({ ...basePatch });
 
   const fallback = await supabase
     .from("chantier_tasks")
