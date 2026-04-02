@@ -116,6 +116,11 @@ import {
   listChantierZones,
   type ChantierZoneRow,
 } from "../services/chantierZones.service";
+import {
+  appendChantierActivityLog,
+  listChantierActivityLogs,
+  type ChantierActivityLogRow,
+} from "../services/chantierActivityLog.service";
 import VisiteTab from "../components/chantiers/VisiteTab";
 import DoeTab from "../components/chantiers/DoeTab";
 import DevisImportDrawer, { type DevisImportResult } from "../components/chantiers/DevisImportDrawer";
@@ -142,6 +147,7 @@ type TabKey =
   | "reserves"
   | "materiel"
   | "consignes"
+  | "journal"
   | "messagerie"
   | "rapports"
   | "doe"
@@ -190,6 +196,35 @@ function taskQualityBadgeClass(status: TaskQualityStatus) {
   if (status === "a_reprendre") return "bg-red-50 text-red-700 border-red-200";
   if (status === "en_cours") return "bg-amber-50 text-amber-700 border-amber-200";
   return "bg-slate-50 text-slate-700 border-slate-200";
+}
+
+function chantierActivityEntityLabel(entityType: string) {
+  if (entityType === "task") return "Tâche";
+  if (entityType === "reserve") return "Réserve";
+  if (entityType === "consigne") return "Consigne";
+  if (entityType === "time_entry") return "Temps";
+  if (entityType === "materiel") return "Matériel";
+  if (entityType === "document") return "Document";
+  if (entityType === "zone") return "Zone";
+  return "Chantier";
+}
+
+function chantierActivityActionLabel(actionType: string) {
+  if (actionType === "created") return "Création";
+  if (actionType === "updated") return "Modification";
+  if (actionType === "deleted") return "Suppression";
+  if (actionType === "status_changed") return "Changement statut";
+  if (actionType === "validated") return "Validation";
+  if (actionType === "time_logged") return "Saisie temps";
+  return actionType;
+}
+
+function chantierActivityTone(entityType: string) {
+  if (entityType === "reserve") return "border-red-200 bg-red-50 text-red-700";
+  if (entityType === "task") return "border-blue-200 bg-blue-50 text-blue-700";
+  if (entityType === "time_entry") return "border-emerald-200 bg-emerald-50 text-emerald-700";
+  if (entityType === "consigne") return "border-amber-200 bg-amber-50 text-amber-700";
+  return "border-slate-200 bg-slate-50 text-slate-700";
 }
 
 const DEFAULT_STANDARD_LOTS = [
@@ -650,6 +685,10 @@ export default function ChantierPage() {
   const [consigneSaving, setConsigneSaving] = useState(false);
 
   const [zones, setZones] = useState<ChantierZoneRow[]>([]);
+  const [activityLogs, setActivityLogs] = useState<ChantierActivityLogRow[]>([]);
+  const [activityLogsLoading, setActivityLogsLoading] = useState(false);
+  const [activityLogsError, setActivityLogsError] = useState<string | null>(null);
+  const [activityLogSchemaReady, setActivityLogSchemaReady] = useState(true);
 
   function openDocumentModal() {
     setDocumentModalError(null);
@@ -1091,6 +1130,20 @@ export default function ChantierPage() {
         });
         setReserves((prev) => prev.map((r) => (r.id === updated.id ? updated : r)));
         setActiveReserve(updated);
+        await recordChantierActivity({
+          actionType: "updated",
+          entityType: "reserve",
+          entityId: updated.id,
+          reason: "Réserve mise à jour",
+          changes: {
+            title: updated.title,
+            status: updated.status,
+            priority: updated.priority,
+            task_id: updated.task_id,
+            zone_id: (updated as any).zone_id ?? null,
+            intervenant_id: updated.intervenant_id,
+          },
+        });
         setToast({ type: "ok", msg: "Réserve mise à jour." });
       } else {
         const created = await createReserve({
@@ -1104,6 +1157,20 @@ export default function ChantierPage() {
           intervenant_id: derivedIntervenantId,
         });
         setReserves((prev) => [created, ...prev]);
+        await recordChantierActivity({
+          actionType: "created",
+          entityType: "reserve",
+          entityId: created.id,
+          reason: "Réserve créée",
+          changes: {
+            title: created.title,
+            status: created.status,
+            priority: created.priority,
+            task_id: created.task_id,
+            zone_id: (created as any).zone_id ?? null,
+            intervenant_id: created.intervenant_id,
+          },
+        });
         setToast({ type: "ok", msg: "Réserve créée." });
         closeReserveDrawer();
       }
@@ -1125,6 +1192,16 @@ export default function ChantierPage() {
       setReserves((prev) => prev.map((r) => (r.id === updated.id ? updated : r)));
       setActiveReserve(updated);
       setReserveDraftStatus(updated.status as ReserveStatus);
+      await recordChantierActivity({
+        actionType: "validated",
+        entityType: "reserve",
+        entityId: updated.id,
+        reason: "Réserve levée",
+        changes: {
+          status: updated.status,
+          levee_at: (updated as any).levee_at ?? null,
+        },
+      });
       setToast({ type: "ok", msg: "Réserve marquée levée." });
     } catch (err: any) {
       const message = err?.message ?? "Erreur mise a jour reserve.";
@@ -1640,6 +1717,47 @@ export default function ChantierPage() {
     }
   }
 
+  async function refreshActivityLogs() {
+    if (!id) return;
+    setActivityLogsLoading(true);
+    setActivityLogsError(null);
+    try {
+      const result = await listChantierActivityLogs(id);
+      setActivityLogs(result.logs);
+      setActivityLogSchemaReady(result.schemaReady);
+    } catch (e: any) {
+      setActivityLogs([]);
+      setActivityLogsError(e?.message ?? "Erreur chargement journal chantier.");
+    } finally {
+      setActivityLogsLoading(false);
+    }
+  }
+
+  async function recordChantierActivity(input: {
+    actionType: string;
+    entityType: string;
+    entityId?: string | null;
+    reason?: string | null;
+    changes?: Record<string, unknown>;
+  }) {
+    if (!id) return;
+    try {
+      await appendChantierActivityLog({
+        chantierId: id,
+        actionType: input.actionType,
+        entityType: input.entityType,
+        entityId: input.entityId ?? null,
+        reason: input.reason ?? null,
+        changes: input.changes ?? {},
+      });
+      if (tab === "journal") {
+        await refreshActivityLogs();
+      }
+    } catch (e) {
+      console.warn("[activity-log] append failed", e);
+    }
+  }
+
   function resetConsigneForm() {
     setConsigneEditingId(null);
     setConsigneDescription("");
@@ -1674,7 +1792,7 @@ export default function ChantierPage() {
     setConsigneSaving(true);
     try {
       if (consigneEditingId) {
-        await updateChantierConsigne(consigneEditingId, {
+        const updatedConsigne = await updateChantierConsigne(consigneEditingId, {
           chantier_id: id,
           description,
           date_debut: dateDebut || undefined,
@@ -1683,9 +1801,20 @@ export default function ChantierPage() {
           applies_to_all: consigneAppliesToAll,
           intervenant_ids: consigneAppliesToAll ? [] : consigneIntervenantIds,
         });
+        await recordChantierActivity({
+          actionType: "updated",
+          entityType: "consigne",
+          entityId: updatedConsigne.id,
+          reason: "Consigne mise à jour",
+          changes: {
+            date_debut: updatedConsigne.date_debut,
+            task_id: updatedConsigne.task_id,
+            applies_to_all: updatedConsigne.applies_to_all,
+          },
+        });
         setToast({ type: "ok", msg: "Consigne mise a jour." });
       } else {
-        await createChantierConsigne({
+        const createdConsigne = await createChantierConsigne({
           chantier_id: id,
           description,
           date_debut: dateDebut || undefined,
@@ -1693,6 +1822,17 @@ export default function ChantierPage() {
           task_id: consigneTaskId || null,
           applies_to_all: consigneAppliesToAll,
           intervenant_ids: consigneAppliesToAll ? [] : consigneIntervenantIds,
+        });
+        await recordChantierActivity({
+          actionType: "created",
+          entityType: "consigne",
+          entityId: createdConsigne.id,
+          reason: "Consigne créée",
+          changes: {
+            title: createdConsigne.title,
+            date_debut: createdConsigne.date_debut,
+            task_id: createdConsigne.task_id,
+          },
         });
         setToast({ type: "ok", msg: "Consigne creee." });
       }
@@ -1711,6 +1851,16 @@ export default function ChantierPage() {
     if (!confirm(`Supprimer ${label} ?`)) return;
     try {
       await deleteChantierConsigne(row.id);
+      await recordChantierActivity({
+        actionType: "deleted",
+        entityType: "consigne",
+        entityId: row.id,
+        reason: "Consigne supprimée",
+        changes: {
+          title: row.title,
+          task_id: row.task_id,
+        },
+      });
       if (consigneEditingId === row.id) {
         resetConsigneForm();
       }
@@ -1771,6 +1921,19 @@ export default function ChantierPage() {
         quantite_realisee: quantity,
         note: timeEntryNote.trim() || null,
       });
+      await recordChantierActivity({
+        actionType: "time_logged",
+        entityType: "time_entry",
+        entityId: taskId,
+        reason: "Saisie temps ajoutée",
+        changes: {
+          task_id: taskId,
+          intervenant_id: intervenantId,
+          work_date: workDate,
+          duration_hours: hours,
+          quantite_realisee: quantity,
+        },
+      });
       await Promise.all([refreshTasksOnly(), refreshTimeEntriesOnly()]);
       resetTimeEntryDraft();
       setToast({ type: "ok", msg: "Saisie temps enregistrée." });
@@ -1786,6 +1949,12 @@ export default function ChantierPage() {
     setTimeEntryDeletingId(entryId);
     try {
       await deleteChantierTimeEntry(entryId);
+      await recordChantierActivity({
+        actionType: "deleted",
+        entityType: "time_entry",
+        entityId: entryId,
+        reason: "Saisie temps supprimée",
+      });
       await Promise.all([refreshTasksOnly(), refreshTimeEntriesOnly()]);
       setToast({ type: "ok", msg: "Saisie temps supprimée." });
     } catch (e: any) {
@@ -1979,6 +2148,11 @@ export default function ChantierPage() {
     if (!id) return;
     if (tab !== "preparer" && tab !== "devis-taches" && tab !== "reserves") return;
     void refreshZonesOnly();
+  }, [id, tab]);
+
+  useEffect(() => {
+    if (!id || tab !== "journal") return;
+    void refreshActivityLogs();
   }, [id, tab]);
 
   const documentEditInfoMessage =
@@ -2494,6 +2668,17 @@ export default function ChantierPage() {
         quality_status: nextQualityStatus,
         admin_validation_status: nextQualityStatus === "termine_intervenant" ? "non_verifie" : t.admin_validation_status,
       });
+      await recordChantierActivity({
+        actionType: "status_changed",
+        entityType: "task",
+        entityId: t.id,
+        reason: "Statut tâche modifié depuis la liste",
+        changes: {
+          from_status: t.status,
+          to_status: nextStatus,
+          quality_status: nextQualityStatus,
+        },
+      });
     } catch (e: any) {
       setTasks((prev) =>
         prev.map((x) =>
@@ -2704,6 +2889,20 @@ export default function ChantierPage() {
         order_index: orderIndex,
       });
       await replaceTaskAssignees(saved.id, assignedIntervenantIds);
+      await recordChantierActivity({
+        actionType: "created",
+        entityType: "task",
+        entityId: saved.id,
+        reason: "Tâche créée",
+        changes: {
+          title: saved.titre,
+          lot: saved.lot,
+          zone_id: saved.zone_id,
+          etape_metier: saved.etape_metier,
+          quality_status: saved.quality_status,
+          temps_prevu_h: saved.temps_prevu_h,
+        },
+      });
 
       setTasks((prev) => prev.map((t) => (t.id === tempId ? (saved as any) : t)));
       setTaskAssigneeIdsByTaskId((prev) => {
@@ -2884,6 +3083,21 @@ export default function ChantierPage() {
     try {
       await updateTask(t.id, patch as any);
       await replaceTaskAssignees(t.id, editAssignedIntervenantIds);
+      await recordChantierActivity({
+        actionType: "updated",
+        entityType: "task",
+        entityId: t.id,
+        reason: "Tâche mise à jour",
+        changes: {
+          title: titre,
+          lot: lotName,
+          zone_id: patch.zone_id,
+          etape_metier: patch.etape_metier,
+          status: patch.status,
+          quality_status: patch.quality_status,
+          temps_prevu_h: patch.temps_prevu_h,
+        },
+      });
       setToast({ type: "ok", msg: "Tâche mise à jour." });
       setEditingTaskId(null);
     } catch (e: any) {
@@ -3229,6 +3443,20 @@ export default function ChantierPage() {
       } as any);
 
       setMateriel((prev) => prev.map((x) => (x.id === tempId ? (saved as any) : x)));
+      await recordChantierActivity({
+        actionType: "created",
+        entityType: "materiel",
+        entityId: saved.id,
+        reason: "Demande matériel créée",
+        changes: {
+          titre: designation,
+          task_id,
+          statut: saved.statut,
+          quantite: qty,
+          unite: mUnite.trim() || null,
+          date_souhaitee: mDate || null,
+        },
+      });
 
       setMIntervenantId("__NONE__");
       setMTaskId("");
@@ -3261,6 +3489,17 @@ export default function ChantierPage() {
     try {
       const updated = await updateMaterielDemande(row.id, { statut: status, admin_commentaire: adminCommentaire } as any);
       setMateriel((prev) => prev.map((x) => (x.id === row.id ? updated : x)));
+      await recordChantierActivity({
+        actionType: "status_changed",
+        entityType: "materiel",
+        entityId: row.id,
+        reason: "Statut matériel mis à jour",
+        changes: {
+          from_status: row.statut,
+          to_status: status,
+          commentaire: adminCommentaire,
+        },
+      });
       setToast({ type: "ok", msg: "Statut matériel mis à jour." });
     } catch (e: any) {
       await refreshMateriel();
@@ -3278,6 +3517,16 @@ export default function ChantierPage() {
 
     try {
       await deleteMaterielDemande(row.id);
+      await recordChantierActivity({
+        actionType: "deleted",
+        entityType: "materiel",
+        entityId: row.id,
+        reason: "Demande matériel supprimée",
+        changes: {
+          titre: row.titre || row.designation || null,
+          task_id: row.task_id ?? null,
+        },
+      });
       setToast({ type: "ok", msg: "Demande supprimée." });
     } catch (e: any) {
       setMateriel(before);
@@ -3329,22 +3578,35 @@ export default function ChantierPage() {
   const filteredMateriel =
     materielFilter === "__ALL__" ? materiel : materiel.filter((row) => row.statut === materielFilter);
   const overviewTab: { key: TabKey; label: string } = { key: "accueil", label: "Accueil" };
-  const pilotageTabs: Array<{ key: TabKey; label: string }> = [
+  const preparerTabs: Array<{ key: TabKey; label: string }> = [
     { key: "preparer", label: "Préparer" },
+    { key: "intervenants", label: t("sidebar.intervenants") },
+    { key: "materiel", label: t("intervenantAccess.tabs.material") },
+    { key: "documents", label: t("intervenantAccess.tabs.documents") },
+  ];
+  const executerTabs: Array<{ key: TabKey; label: string }> = [
     { key: "devis-taches", label: t("chantierPage.tasks") },
     { key: "planning", label: t("chantierTabs.planning") },
-    { key: "temps", label: t("chantierTabs.time") },
-    { key: "reserves", label: t("intervenantAccess.tabs.reserves") },
-    { key: "materiel", label: t("intervenantAccess.tabs.material") },
     { key: "consignes", label: "Consignes" },
     { key: "messagerie", label: t("intervenantAccess.tabs.messaging") },
   ];
-  const administratifTabs: Array<{ key: TabKey; label: string }> = [
-    { key: "intervenants", label: t("sidebar.intervenants") },
-    { key: "documents", label: t("intervenantAccess.tabs.documents") },
+  const controlerTabs: Array<{ key: TabKey; label: string }> = [
+    { key: "reserves", label: t("intervenantAccess.tabs.reserves") },
+    { key: "journal", label: "Journal" },
     { key: "doe", label: "DOE" },
+    { key: "visite", label: "Visite" },
   ];
-  const chantierTabs = [overviewTab, ...pilotageTabs, ...administratifTabs];
+  const piloterTabs: Array<{ key: TabKey; label: string }> = [
+    { key: "temps", label: t("chantierTabs.time") },
+    { key: "rapports", label: "Rapports" },
+  ];
+  const chantierTabSections = [
+    { title: "Préparer", tabs: preparerTabs },
+    { title: "Exécuter", tabs: executerTabs },
+    { title: "Contrôler", tabs: controlerTabs },
+    { title: "Piloter", tabs: piloterTabs },
+  ];
+  const chantierTabs = [overviewTab, ...preparerTabs, ...executerTabs, ...controlerTabs, ...piloterTabs];
   const activeTabLabel = chantierTabs.find((entry) => entry.key === tab)?.label ?? "Rapports";
   const accueilPanel = (
     <div className="space-y-5">
@@ -3520,56 +3782,36 @@ export default function ChantierPage() {
             {overviewTab.label}
           </button>
 
-          <div className="grid gap-4 lg:grid-cols-2">
-            <section className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4 shadow-sm">
-              <div className="space-y-3">
-                <div className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-400">
-                  Pilotage chantier
+          <div className="grid gap-3 xl:grid-cols-4">
+            {chantierTabSections.map((section) => (
+              <section
+                key={section.title}
+                className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4 shadow-sm"
+              >
+                <div className="space-y-3">
+                  <div className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-400">
+                    {section.title}
+                  </div>
+                  <nav className="flex flex-wrap gap-2">
+                    {section.tabs.map((entry) => (
+                      <button
+                        key={entry.key}
+                        type="button"
+                        onClick={() => setTab(entry.key)}
+                        className={[
+                          "rounded-full px-4 py-2 text-sm font-medium transition",
+                          tab === entry.key
+                            ? "bg-blue-600 text-white shadow-sm"
+                            : "border border-slate-200 bg-white text-slate-700 hover:bg-slate-50",
+                        ].join(" ")}
+                      >
+                        {entry.label}
+                      </button>
+                    ))}
+                  </nav>
                 </div>
-                <nav className="flex flex-wrap gap-2">
-                  {pilotageTabs.map((entry) => (
-                    <button
-                      key={entry.key}
-                      type="button"
-                      onClick={() => setTab(entry.key)}
-                      className={[
-                        "rounded-full px-4 py-2 text-sm font-medium transition",
-                        tab === entry.key
-                          ? "bg-blue-600 text-white shadow-sm"
-                          : "border border-slate-200 bg-white text-slate-700 hover:bg-slate-50",
-                      ].join(" ")}
-                    >
-                      {entry.label}
-                    </button>
-                  ))}
-                </nav>
-              </div>
-            </section>
-
-            <section className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4 shadow-sm">
-              <div className="space-y-3">
-                <div className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-400">
-                  Administratif
-                </div>
-                <nav className="flex flex-wrap gap-2">
-                  {administratifTabs.map((entry) => (
-                    <button
-                      key={entry.key}
-                      type="button"
-                      onClick={() => setTab(entry.key)}
-                      className={[
-                        "rounded-full px-4 py-2 text-sm font-medium transition",
-                        tab === entry.key
-                          ? "bg-blue-600 text-white shadow-sm"
-                          : "border border-slate-200 bg-white text-slate-700 hover:bg-slate-50",
-                      ].join(" ")}
-                    >
-                      {entry.label}
-                    </button>
-                  ))}
-                </nav>
-              </div>
-            </section>
+              </section>
+            ))}
           </div>
         </div>
       </section>
@@ -5482,6 +5724,91 @@ export default function ChantierPage() {
           </Suspense>
         )}
 
+        {tab === "journal" && (
+          <div className="space-y-4">
+            <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+              <div>
+                <div className="font-semibold section-title">Journal chantier</div>
+                <div className="text-sm text-slate-500">
+                  Historique des actions, validations, consignes, réserves et temps saisis.
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => void refreshActivityLogs()}
+                disabled={activityLogsLoading}
+                className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-60"
+              >
+                {activityLogsLoading ? "Chargement..." : "Rafraîchir"}
+              </button>
+            </div>
+
+            {!activityLogSchemaReady && (
+              <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+                Migration journal non appliquée : le tableau reste vide tant que
+                `20260402100000_batipro_v2_foundation_prepare_control_pilot.sql` n’est pas poussée sur Supabase.
+              </div>
+            )}
+
+            {activityLogsError && (
+              <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                {activityLogsError}
+              </div>
+            )}
+
+            <div className="space-y-3">
+              {activityLogsLoading ? (
+                <div className="rounded-2xl border border-slate-200 bg-slate-50 p-5 text-sm text-slate-500">
+                  Chargement du journal...
+                </div>
+              ) : activityLogs.length === 0 ? (
+                <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-5 text-sm text-slate-500">
+                  Aucun événement journalisé pour ce chantier.
+                </div>
+              ) : (
+                activityLogs.map((log) => (
+                  <article
+                    key={log.id}
+                    className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm"
+                  >
+                    <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                      <div className="min-w-0">
+                        <div className="flex flex-wrap gap-2">
+                          <span
+                            className={[
+                              "rounded-full border px-3 py-1 text-xs font-semibold",
+                              chantierActivityTone(log.entity_type),
+                            ].join(" ")}
+                          >
+                            {chantierActivityEntityLabel(log.entity_type)}
+                          </span>
+                          <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-semibold text-slate-700">
+                            {chantierActivityActionLabel(log.action_type)}
+                          </span>
+                        </div>
+                        <div className="mt-3 text-base font-semibold text-slate-900">
+                          {log.reason || "Action chantier"}
+                        </div>
+                        <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-sm text-slate-500">
+                          <span>{log.actor_name || "Utilisateur"}</span>
+                          {log.actor_role ? <span>{log.actor_role}</span> : null}
+                          <span>{new Date(log.created_at).toLocaleString("fr-FR")}</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {Object.keys(log.changes || {}).length > 0 ? (
+                      <pre className="mt-4 max-h-64 overflow-auto rounded-2xl bg-slate-950 px-4 py-3 text-xs leading-relaxed text-slate-100">
+                        {JSON.stringify(log.changes, null, 2)}
+                      </pre>
+                    ) : null}
+                  </article>
+                ))
+              )}
+            </div>
+          </div>
+        )}
+
         {tab === "doe" && id && (
           <DoeTab
             chantierId={id}
@@ -5523,6 +5850,7 @@ export default function ChantierPage() {
           tab !== "materiel" &&
           tab !== "consignes" &&
           tab !== "planning" &&
+          tab !== "journal" &&
           tab !== "doe" &&
           tab !== "visite" && (
             <div className="space-y-3">
