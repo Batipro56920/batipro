@@ -20,6 +20,8 @@ export type ChantierConsigneRow = {
   date_fin: string | null;
   task_id: string | null;
   task_titre: string | null;
+  zone_id: string | null;
+  zone_nom: string | null;
   applies_to_all: boolean;
   assignee_ids: string[];
   assignees: ChantierConsigneAssignee[];
@@ -69,6 +71,8 @@ function mapBaseRow(row: Record<string, unknown>): BaseRow {
     date_fin: normalizeText(row.date_fin),
     task_id: normalizeText(row.task_id),
     task_titre: normalizeText(row.task_titre),
+    zone_id: normalizeText(row.zone_id),
+    zone_nom: normalizeText(row.zone_nom),
     applies_to_all: Boolean(row.applies_to_all),
     created_at: normalizeText(row.created_at),
     updated_at: normalizeText(row.updated_at),
@@ -81,7 +85,7 @@ async function getConsigneBaseRows(
 ): Promise<BaseRow[]> {
   let query = (supabase as any)
     .from("chantier_consignes")
-    .select("id, chantier_id, author_id, title, description, priority, date_debut, date_fin, task_id, applies_to_all, created_at, updated_at")
+    .select("id, chantier_id, author_id, title, description, priority, date_debut, date_fin, task_id, zone_id, applies_to_all, created_at, updated_at")
     .eq("chantier_id", chantierId)
     .order("date_debut", { ascending: false })
     .order("created_at", { ascending: false });
@@ -101,8 +105,9 @@ async function enrichRows(baseRows: BaseRow[]): Promise<ChantierConsigneRow[]> {
 
   const consigneIds = baseRows.map((row) => row.id);
   const taskIds = uniqueIds(baseRows.map((row) => row.task_id));
+  const zoneIds = uniqueIds(baseRows.map((row) => row.zone_id));
 
-  const [assignmentsRes, readsRes, tasksRes] = await Promise.all([
+  const [assignmentsRes, readsRes, tasksRes, zonesRes] = await Promise.all([
     (supabase as any)
       .from("chantier_consigne_intervenants")
       .select("consigne_id, intervenant_id")
@@ -114,11 +119,15 @@ async function enrichRows(baseRows: BaseRow[]): Promise<ChantierConsigneRow[]> {
     taskIds.length
       ? (supabase as any).from("chantier_tasks").select("id, titre").in("id", taskIds)
       : Promise.resolve({ data: [], error: null }),
+    zoneIds.length
+      ? (supabase as any).from("chantier_zones").select("id, nom").in("id", zoneIds)
+      : Promise.resolve({ data: [], error: null }),
   ]);
 
   if (assignmentsRes.error) throw new Error(assignmentsRes.error.message);
   if (readsRes.error) throw new Error(readsRes.error.message);
   if (tasksRes.error) throw new Error(tasksRes.error.message);
+  if (zonesRes.error) throw new Error(zonesRes.error.message);
 
   const assignmentRows = (assignmentsRes.data ?? []) as Array<Record<string, unknown>>;
   const assigneeIds = uniqueIds(assignmentRows.map((row) => normalizeText(row.intervenant_id)));
@@ -136,6 +145,11 @@ async function enrichRows(baseRows: BaseRow[]): Promise<ChantierConsigneRow[]> {
   const taskTitleById = new Map<string, string>();
   for (const row of ((tasksRes.data ?? []) as Array<Record<string, unknown>>)) {
     taskTitleById.set(String(row.id ?? ""), String(row.titre ?? ""));
+  }
+
+  const zoneNameById = new Map<string, string>();
+  for (const row of ((zonesRes.data ?? []) as Array<Record<string, unknown>>)) {
+    zoneNameById.set(String(row.id ?? ""), String(row.nom ?? ""));
   }
 
   const intervenantById = new Map<string, ChantierConsigneAssignee>();
@@ -169,6 +183,7 @@ async function enrichRows(baseRows: BaseRow[]): Promise<ChantierConsigneRow[]> {
     return {
       ...row,
       task_titre: row.task_titre ?? (row.task_id ? taskTitleById.get(row.task_id) ?? null : null),
+      zone_nom: row.zone_nom ?? (row.zone_id ? zoneNameById.get(row.zone_id) ?? null : null),
       assignee_ids,
       assignees: assignee_ids.map((intervenantId) => intervenantById.get(intervenantId)).filter(Boolean) as ChantierConsigneAssignee[],
       read_intervenant_ids: uniqueIds(readIdsByConsigne.get(row.id) ?? []),
@@ -198,6 +213,7 @@ export async function createChantierConsigne(input: {
   date_debut?: string;
   date_fin?: string | null;
   task_id?: string | null;
+  zone_id?: string | null;
   applies_to_all: boolean;
   intervenant_ids?: string[];
 }): Promise<ChantierConsigneRow> {
@@ -207,6 +223,7 @@ export async function createChantierConsigne(input: {
   const date_debut = String(input.date_debut ?? "").trim();
   const date_fin = normalizeText(input.date_fin);
   const task_id = normalizeText(input.task_id);
+  const zone_id = normalizeText(input.zone_id);
   const applies_to_all = Boolean(input.applies_to_all);
   const intervenant_ids = uniqueIds(input.intervenant_ids ?? []);
 
@@ -223,6 +240,7 @@ export async function createChantierConsigne(input: {
     priority: normalizePriority(input.priority),
     date_fin,
     task_id,
+    zone_id,
     applies_to_all,
   };
   if (date_debut) {
@@ -260,6 +278,7 @@ export async function updateChantierConsigne(
     date_debut: string;
     date_fin: string | null;
     task_id: string | null;
+    zone_id: string | null;
     applies_to_all: boolean;
     intervenant_ids: string[];
   }>,
@@ -300,6 +319,7 @@ export async function updateChantierConsigne(
   }
   if (patch.date_fin !== undefined) updatePayload.date_fin = normalizeText(patch.date_fin);
   if (patch.task_id !== undefined) updatePayload.task_id = normalizeText(patch.task_id);
+  if (patch.zone_id !== undefined) updatePayload.zone_id = normalizeText(patch.zone_id);
   if (patch.applies_to_all !== undefined) updatePayload.applies_to_all = Boolean(patch.applies_to_all);
 
   if (Object.keys(updatePayload).length > 0) {

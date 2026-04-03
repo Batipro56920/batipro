@@ -58,6 +58,7 @@ import {
   deleteChantierConsigne,
   listChantierConsignesByChantierId,
   updateChantierConsigne,
+  type ChantierConsignePriority,
   type ChantierConsigneRow,
 } from "../services/chantierConsignes.service";
 import {
@@ -254,6 +255,16 @@ function chantierActivityTone(entityType: string) {
   if (entityType === "time_entry") return "border-emerald-200 bg-emerald-50 text-emerald-700";
   if (entityType === "consigne") return "border-amber-200 bg-amber-50 text-amber-700";
   return "border-slate-200 bg-slate-50 text-slate-700";
+}
+
+function consignePriorityMeta(priority: ChantierConsignePriority) {
+  if (priority === "urgente") {
+    return { label: "Urgente", className: "border-red-200 bg-red-50 text-red-700" };
+  }
+  if (priority === "importante") {
+    return { label: "Importante", className: "border-amber-200 bg-amber-50 text-amber-700" };
+  }
+  return { label: "Normale", className: "border-slate-200 bg-slate-50 text-slate-700" };
 }
 
 const DEFAULT_STANDARD_LOTS = [
@@ -710,7 +721,10 @@ export default function ChantierPage() {
   const [consigneEditingId, setConsigneEditingId] = useState<string | null>(null);
   const [consigneDescription, setConsigneDescription] = useState("");
   const [consigneDateDebut, setConsigneDateDebut] = useState("");
+  const [consigneDateFin, setConsigneDateFin] = useState("");
+  const [consignePriority, setConsignePriority] = useState<ChantierConsignePriority>("normale");
   const [consigneTaskId, setConsigneTaskId] = useState("");
+  const [consigneZoneId, setConsigneZoneId] = useState("");
   const [consigneAppliesToAll, setConsigneAppliesToAll] = useState(true);
   const [consigneIntervenantIds, setConsigneIntervenantIds] = useState<string[]>([]);
   const [consigneSaving, setConsigneSaving] = useState(false);
@@ -1812,7 +1826,10 @@ export default function ChantierPage() {
     setConsigneEditingId(null);
     setConsigneDescription("");
     setConsigneDateDebut("");
+    setConsigneDateFin("");
+    setConsignePriority("normale");
     setConsigneTaskId("");
+    setConsigneZoneId("");
     setConsigneAppliesToAll(true);
     setConsigneIntervenantIds([]);
   }
@@ -1821,7 +1838,10 @@ export default function ChantierPage() {
     setConsigneEditingId(row.id);
     setConsigneDescription(row.description);
     setConsigneDateDebut(row.date_debut);
+    setConsigneDateFin(row.date_fin ?? "");
+    setConsignePriority(row.priority);
     setConsigneTaskId(row.task_id ?? "");
+    setConsigneZoneId(row.zone_id ?? "");
     setConsigneAppliesToAll(row.applies_to_all);
     setConsigneIntervenantIds(row.assignee_ids);
     setTab("consignes");
@@ -1833,6 +1853,7 @@ export default function ChantierPage() {
 
     const description = consigneDescription.trim();
     const dateDebut = consigneDateDebut.trim();
+    const dateFin = consigneDateFin.trim();
 
     if (!description) {
       setToast({ type: "error", msg: "Description de consigne obligatoire." });
@@ -1845,9 +1866,11 @@ export default function ChantierPage() {
         const updatedConsigne = await updateChantierConsigne(consigneEditingId, {
           chantier_id: id,
           description,
+          priority: consignePriority,
           date_debut: dateDebut || undefined,
-          date_fin: null,
+          date_fin: dateFin || null,
           task_id: consigneTaskId || null,
+          zone_id: consigneZoneId || null,
           applies_to_all: consigneAppliesToAll,
           intervenant_ids: consigneAppliesToAll ? [] : consigneIntervenantIds,
         });
@@ -1857,8 +1880,11 @@ export default function ChantierPage() {
           entityId: updatedConsigne.id,
           reason: "Consigne mise à jour",
           changes: {
+            priority: updatedConsigne.priority,
             date_debut: updatedConsigne.date_debut,
+            date_fin: updatedConsigne.date_fin,
             task_id: updatedConsigne.task_id,
+            zone_id: updatedConsigne.zone_id,
             applies_to_all: updatedConsigne.applies_to_all,
           },
         });
@@ -1867,9 +1893,11 @@ export default function ChantierPage() {
         const createdConsigne = await createChantierConsigne({
           chantier_id: id,
           description,
+          priority: consignePriority,
           date_debut: dateDebut || undefined,
-          date_fin: null,
+          date_fin: dateFin || null,
           task_id: consigneTaskId || null,
+          zone_id: consigneZoneId || null,
           applies_to_all: consigneAppliesToAll,
           intervenant_ids: consigneAppliesToAll ? [] : consigneIntervenantIds,
         });
@@ -1880,8 +1908,11 @@ export default function ChantierPage() {
           reason: "Consigne créée",
           changes: {
             title: createdConsigne.title,
+            priority: createdConsigne.priority,
             date_debut: createdConsigne.date_debut,
+            date_fin: createdConsigne.date_fin,
             task_id: createdConsigne.task_id,
+            zone_id: createdConsigne.zone_id,
           },
         });
         setToast({ type: "ok", msg: "Consigne creee." });
@@ -5765,11 +5796,31 @@ export default function ChantierPage() {
                 />
 
                 <div className="grid gap-3 md:grid-cols-2">
+                  <select
+                    className="rounded-xl border px-3 py-2 text-sm"
+                    value={consignePriority}
+                    onChange={(e) => setConsignePriority(e.target.value as ChantierConsignePriority)}
+                  >
+                    <option value="normale">Priorité normale</option>
+                    <option value="importante">Priorité importante</option>
+                    <option value="urgente">Priorité urgente</option>
+                  </select>
+
                   <input
                     className="rounded-xl border px-3 py-2 text-sm"
                     type="date"
                     value={consigneDateDebut}
                     onChange={(e) => setConsigneDateDebut(e.target.value)}
+                  />
+                </div>
+
+                <div className="grid gap-3 md:grid-cols-2">
+                  <input
+                    className="rounded-xl border px-3 py-2 text-sm"
+                    type="date"
+                    value={consigneDateFin}
+                    onChange={(e) => setConsigneDateFin(e.target.value)}
+                    placeholder="Date de fin"
                   />
 
                   <select
@@ -5786,8 +5837,76 @@ export default function ChantierPage() {
                   </select>
                 </div>
 
+                <div className="grid gap-3 md:grid-cols-2">
+                  <select
+                    className="rounded-xl border px-3 py-2 text-sm"
+                    value={consigneZoneId}
+                    onChange={(e) => setConsigneZoneId(e.target.value)}
+                  >
+                    <option value="">Zone liée (optionnel)</option>
+                    {zones.map((zone) => (
+                      <option key={zone.id} value={zone.id}>
+                        {zone.nom}
+                        {zone.niveau ? ` - ${zone.niveau}` : ""}
+                      </option>
+                    ))}
+                  </select>
+
+                  <label className="flex items-center gap-2 rounded-xl border bg-white px-3 py-2 text-sm text-slate-700">
+                    <input
+                      type="checkbox"
+                      checked={consigneAppliesToAll}
+                      onChange={(e) => {
+                        setConsigneAppliesToAll(e.target.checked);
+                        if (e.target.checked) {
+                          setConsigneIntervenantIds([]);
+                        }
+                      }}
+                    />
+                    Visible par tous les intervenants
+                  </label>
+                </div>
+
+                {!consigneAppliesToAll ? (
+                  <div className="rounded-xl border border-slate-200 bg-white p-3">
+                    <div className="mb-2 text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">
+                      Destinataires
+                    </div>
+                    {intervenants.length === 0 ? (
+                      <div className="text-sm text-slate-500">Aucun intervenant rattaché au chantier.</div>
+                    ) : (
+                      <div className="flex flex-wrap gap-2">
+                        {intervenants.map((intervenant) => {
+                          const selected = consigneIntervenantIds.includes(intervenant.id);
+                          return (
+                            <button
+                              key={intervenant.id}
+                              type="button"
+                              onClick={() => {
+                                setConsigneIntervenantIds((current) =>
+                                  current.includes(intervenant.id)
+                                    ? current.filter((value) => value !== intervenant.id)
+                                    : [...current, intervenant.id],
+                                );
+                              }}
+                              className={[
+                                "rounded-full border px-3 py-1 text-xs font-medium",
+                                selected
+                                  ? "border-blue-200 bg-blue-50 text-blue-700"
+                                  : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50",
+                              ].join(" ")}
+                            >
+                              {intervenant.nom}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                ) : null}
+
                 <div className="text-xs text-slate-500">
-                  Date optionnelle. Si elle est vide, la consigne sera enregistrée pour aujourd&apos;hui.
+                  Date de début optionnelle. Si elle est vide, la consigne démarre aujourd&apos;hui.
                 </div>
               </div>
 
@@ -5819,23 +5938,62 @@ export default function ChantierPage() {
                   const readCount = row.read_intervenant_ids.filter((intervenantId) =>
                     targetIntervenants.some((intervenant) => intervenant.id === intervenantId),
                   ).length;
+                  const priorityMeta = consignePriorityMeta(row.priority);
                   const dateLabel = row.date_debut
-                    ? `Le ${new Date(`${row.date_debut}T00:00:00`).toLocaleDateString("fr-FR")}`
+                    ? row.date_fin
+                      ? `Du ${new Date(`${row.date_debut}T00:00:00`).toLocaleDateString("fr-FR")} au ${new Date(`${row.date_fin}T00:00:00`).toLocaleDateString("fr-FR")}`
+                      : `Le ${new Date(`${row.date_debut}T00:00:00`).toLocaleDateString("fr-FR")}`
                     : "Aujourd'hui";
 
                   return (
                     <article key={row.id} className="rounded-xl border p-4 space-y-3">
                       <div className="flex flex-wrap items-start justify-between gap-3">
-                        <div className="min-w-0 text-xs text-slate-500">
-                          {dateLabel}
-                          {row.task_titre ? ` • Tâche: ${stripLegacyPrefix(row.task_titre)}` : ""}
+                        <div className="min-w-0">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span
+                              className={[
+                                "rounded-full border px-2 py-1 text-[11px] font-semibold uppercase tracking-[0.14em]",
+                                priorityMeta.className,
+                              ].join(" ")}
+                            >
+                              {priorityMeta.label}
+                            </span>
+                            <span className="text-xs text-slate-500">{dateLabel}</span>
+                          </div>
+                          <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-xs text-slate-500">
+                            {row.task_titre ? <span>Tâche : {stripLegacyPrefix(row.task_titre)}</span> : null}
+                            {row.zone_nom ? <span>Zone : {row.zone_nom}</span> : null}
+                            <span>{row.applies_to_all ? "Tous les intervenants" : `${targetCount} destinataire${targetCount > 1 ? "s" : ""}`}</span>
+                          </div>
                         </div>
                         <span className="text-xs rounded-full border border-slate-200 bg-slate-50 px-2 py-1 text-slate-700">
-                          {targetCount > 0 ? `${readCount}/${targetCount} lus` : "Aucun destinataire"}
+                          {targetCount > 0 ? `${readCount}/${targetCount} lu${readCount > 1 ? "s" : ""}` : "Aucun destinataire"}
                         </span>
                       </div>
 
+                      <div className="text-sm font-semibold text-slate-900">{row.title}</div>
                       <div className="text-sm text-slate-900 whitespace-pre-wrap">{row.description}</div>
+
+                      {!row.applies_to_all && row.assignees.length > 0 ? (
+                        <div className="flex flex-wrap gap-2">
+                          {row.assignees.map((assignee) => {
+                            const read = row.read_intervenant_ids.includes(assignee.id);
+                            return (
+                              <span
+                                key={`${row.id}-${assignee.id}`}
+                                className={[
+                                  "rounded-full border px-2 py-1 text-[11px] font-medium",
+                                  read
+                                    ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                                    : "border-slate-200 bg-slate-50 text-slate-600",
+                                ].join(" ")}
+                              >
+                                {assignee.nom} · {read ? "lu" : "non lu"}
+                              </span>
+                            );
+                          })}
+                        </div>
+                      ) : null}
 
                       <div className="flex justify-end gap-2">
                         <button

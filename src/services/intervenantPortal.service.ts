@@ -184,6 +184,8 @@ export type IntervenantConsigne = {
   date_fin: string | null;
   task_id: string | null;
   task_titre: string | null;
+  zone_id: string | null;
+  zone_nom: string | null;
   applies_to_all: boolean;
   is_read: boolean;
   read_at: string | null;
@@ -296,6 +298,8 @@ function mapConsigne(row: Record<string, unknown>): IntervenantConsigne {
     date_fin: asNullableString(row.date_fin),
     task_id: asNullableString(row.task_id),
     task_titre: asNullableString(row.task_titre),
+    zone_id: asNullableString(row.zone_id),
+    zone_nom: asNullableString(row.zone_nom),
     applies_to_all: Boolean(row.applies_to_all),
     is_read: Boolean(row.is_read),
     read_at: asNullableString(row.read_at),
