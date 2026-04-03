@@ -2,9 +2,10 @@ import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { supabase } from "../lib/supabaseClient";
 import { listChantiers, type ChantierRow } from "../services/chantiers.service";
+import { listDashboardAlerts, type DashboardAlertRow } from "../services/dashboardAlerts.service";
 import { useI18n } from "../i18n";
 
-type DashboardView = "chantiers" | "avancement" | "heures" | "materiel" | null;
+type DashboardView = "chantiers" | "avancement" | "heures" | "materiel" | "alertes" | null;
 
 type MaterielSnapshot = {
   id: string;
@@ -57,10 +58,18 @@ function cardToneClass(tone: "normal" | "warning" | "danger", active: boolean) {
   return active ? `${base} ring-2 ring-blue-500` : `${base} hover:border-blue-200 hover:bg-blue-50/40`;
 }
 
+function alertCategoryLabel(category: DashboardAlertRow["category"]): string {
+  if (category === "reserve") return "Reserve";
+  if (category === "task") return "Tache";
+  if (category === "purchase") return "Approvisionnement";
+  return "Preparation";
+}
+
 export default function DashboardPage() {
   const { locale, t } = useI18n();
   const [chantiers, setChantiers] = useState<ChantierRow[]>([]);
   const [materiel, setMateriel] = useState<MaterielSnapshot[]>([]);
+  const [alerts, setAlerts] = useState<DashboardAlertRow[]>([]);
   const [activeView, setActiveView] = useState<DashboardView>("chantiers");
   const [loading, setLoading] = useState(true);
 
@@ -77,10 +86,12 @@ export default function DashboardPage() {
             .select("id, chantier_id, titre, designation, statut, status, quantite, unite, created_at")
             .order("created_at", { ascending: false }),
         ]);
+        const alertsResult = await listDashboardAlerts(chantiersResult);
 
         if (!alive) return;
 
         setChantiers(chantiersResult);
+        setAlerts(alertsResult);
 
         if (materielResult.error && !isMissingRelationError(materielResult.error.message)) throw materielResult.error;
 
@@ -89,6 +100,7 @@ export default function DashboardPage() {
         if (!alive) return;
         setChantiers([]);
         setMateriel([]);
+        setAlerts([]);
       } finally {
         if (!alive) return;
         setLoading(false);
@@ -137,7 +149,28 @@ export default function DashboardPage() {
     [materiel],
   );
 
+  const alertStats = useMemo(() => {
+    const urgentReserves = alerts.filter((alert) => alert.id.startsWith("reserve:") && alert.tone === "danger").length;
+    const taskBlockers = alerts.filter((alert) => alert.id.startsWith("task-")).length;
+    const purchaseBlockers = alerts.filter((alert) => alert.id.startsWith("purchase:")).length;
+    const incompletePreparation = alerts.filter((alert) => alert.id.startsWith("preparation:")).length;
+
+    return { urgentReserves, taskBlockers, purchaseBlockers, incompletePreparation };
+  }, [alerts]);
+
   const focusRows = useMemo(() => {
+    if (activeView === "alertes") {
+      return alerts.slice(0, 12).map((alert) => ({
+        key: alert.id,
+        href: alert.href,
+        title: alert.title,
+        subtitle: alert.chantier_nom,
+        meta: alertCategoryLabel(alert.category),
+        detail: alert.detail,
+        tone: alert.tone,
+      }));
+    }
+
     if (activeView === "materiel") {
       return pendingMateriel.slice(0, 8).map((row) => ({
         key: row.id,
@@ -145,6 +178,8 @@ export default function DashboardPage() {
         title: row.titre || row.designation || t("dashboard.materialRequest"),
         subtitle: chantierById.get(row.chantier_id)?.nom || t("sidebar.chantiers"),
         meta: `${materialStatusLabel(normalizeMaterialStatus(row), t)} | ${Number(row.quantite ?? 0).toLocaleString(locale)} ${row.unite ?? ""}`.trim(),
+        detail: "",
+        tone: "normal" as const,
       }));
     }
 
@@ -158,6 +193,8 @@ export default function DashboardPage() {
           title: chantier.nom,
           subtitle: chantier.client || t("dashboard.missingClient"),
           meta: t("dashboard.progressLabel", { value: formatPercent(Number(chantier.avancement ?? 0)) }),
+          detail: "",
+          tone: "normal" as const,
         }));
     }
 
@@ -176,6 +213,10 @@ export default function DashboardPage() {
           title: chantier.nom,
           subtitle: chantier.client || t("dashboard.missingClient"),
           meta: `${formatHours(Number(chantier.heures_passees ?? 0), locale)} / ${formatHours(Number(chantier.heures_prevues ?? 0), locale)}`,
+          detail: "",
+          tone: Number(chantier.heures_prevues ?? 0) > 0 && Number(chantier.heures_passees ?? 0) > Number(chantier.heures_prevues ?? 0)
+            ? "danger" as const
+            : "normal" as const,
         }));
     }
 
@@ -187,8 +228,10 @@ export default function DashboardPage() {
       meta: chantier.date_fin_prevue
         ? t("dashboard.finishPlanned", { date: chantier.date_fin_prevue })
         : t("dashboard.finishNotPlanned"),
+      detail: "",
+      tone: chantier.status === "PREPARATION" ? "warning" as const : "normal" as const,
     }));
-  }, [activeView, chantierById, locale, orderedChantiers, pendingMateriel, t]);
+  }, [activeView, alerts, chantierById, locale, orderedChantiers, pendingMateriel, t]);
 
   const kpis: Array<{
     key: Exclude<DashboardView, null>;
@@ -230,6 +273,20 @@ export default function DashboardPage() {
       hint: pendingMateriel.length > 0 ? t("dashboard.actionNeeded") : t("dashboard.cleanFlow"),
       tone: pendingMateriel.length > 4 ? "danger" : pendingMateriel.length > 0 ? "warning" : "normal",
     },
+    {
+      key: "alertes",
+      label: "Alertes",
+      value: loading ? "..." : String(alerts.length),
+      hint:
+        alerts.length === 0
+          ? "Aucun blocage majeur"
+          : `${alertStats.urgentReserves} reserves urgentes | ${alertStats.taskBlockers} taches | ${alertStats.purchaseBlockers} achats | ${alertStats.incompletePreparation} preparations`,
+      tone: alertStats.urgentReserves > 0 || alerts.some((alert) => alert.tone === "danger")
+        ? "danger"
+        : alerts.length > 0
+          ? "warning"
+          : "normal",
+    },
   ];
 
   return (
@@ -241,7 +298,7 @@ export default function DashboardPage() {
         </Link>
       </div>
 
-      <section className="grid gap-4 xl:grid-cols-4">
+      <section className="grid gap-4 xl:grid-cols-5">
         {kpis.map((kpi) => (
           <button
             key={kpi.key}
@@ -254,8 +311,77 @@ export default function DashboardPage() {
           >
             <div className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">{kpi.label}</div>
             <div className="mt-1 text-lg font-semibold text-slate-950">{kpi.value}</div>
+            <div className="mt-1 text-xs text-slate-600">{kpi.hint}</div>
           </button>
         ))}
+      </section>
+
+      <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <div className="text-sm font-semibold text-slate-950">Alertes et blocages</div>
+            <div className="mt-1 text-xs text-slate-500">
+              Reserves urgentes, taches en retard / a reprendre, approvisionnements non livres et chantiers non prets.
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => setActiveView("alertes")}
+            className="rounded-full border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50"
+          >
+            Voir le detail
+          </button>
+        </div>
+
+        <div className="mt-4 grid gap-3 md:grid-cols-4">
+          {[
+            { label: "Reserves urgentes", value: alertStats.urgentReserves, tone: alertStats.urgentReserves > 0 ? "danger" as const : "normal" as const },
+            { label: "Taches en blocage", value: alertStats.taskBlockers, tone: alertStats.taskBlockers > 0 ? "danger" as const : "normal" as const },
+            { label: "Achats en attente", value: alertStats.purchaseBlockers, tone: alertStats.purchaseBlockers > 0 ? "warning" as const : "normal" as const },
+            { label: "Preparations incompletes", value: alertStats.incompletePreparation, tone: alertStats.incompletePreparation > 0 ? "warning" as const : "normal" as const },
+          ].map((item) => (
+            <div
+              key={item.label}
+              className={[
+                "rounded-2xl border px-4 py-3",
+                statusToneClass(item.tone),
+              ].join(" ")}
+            >
+              <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">{item.label}</div>
+              <div className="mt-2 text-2xl font-semibold text-slate-950">{loading ? "..." : item.value}</div>
+            </div>
+          ))}
+        </div>
+
+        <div className="mt-4 space-y-3">
+          {loading ? (
+            <div className="rounded-2xl border border-dashed border-slate-200 p-4 text-sm text-slate-500">Chargement des alertes...</div>
+          ) : alerts.length === 0 ? (
+            <div className="rounded-2xl border border-dashed border-slate-200 p-4 text-sm text-slate-500">Aucun blocage prioritaire detecte.</div>
+          ) : (
+            alerts.slice(0, 6).map((alert) => (
+              <Link
+                key={alert.id}
+                to={alert.href}
+                className={[
+                  "block rounded-2xl border px-4 py-3 transition hover:border-blue-200 hover:bg-blue-50/40",
+                  alert.tone === "danger" ? "border-red-200 bg-red-50/40" : "border-amber-200 bg-amber-50/30",
+                ].join(" ")}
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="text-sm font-semibold text-slate-950">{alert.title}</div>
+                    <div className="mt-1 text-sm text-slate-700">{alert.detail}</div>
+                    <div className="mt-1 text-xs text-slate-500">{alert.chantier_nom}</div>
+                  </div>
+                  <div className="shrink-0 rounded-full border border-white/80 bg-white px-2.5 py-1 text-xs font-semibold text-slate-700">
+                    {alertCategoryLabel(alert.category)}
+                  </div>
+                </div>
+              </Link>
+            ))
+          )}
+        </div>
       </section>
 
       <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
@@ -272,11 +398,23 @@ export default function DashboardPage() {
             <div className="rounded-2xl border border-dashed border-slate-200 p-4 text-sm text-slate-500">{t("dashboard.empty")}</div>
           ) : (
             focusRows.map((row) => (
-              <Link key={row.key} to={row.href} className="block rounded-2xl border border-slate-200 px-4 py-3 transition hover:border-blue-200 hover:bg-blue-50/40">
+              <Link
+                key={row.key}
+                to={row.href}
+                className={[
+                  "block rounded-2xl border px-4 py-3 transition hover:border-blue-200 hover:bg-blue-50/40",
+                  row.tone === "danger"
+                    ? "border-red-200 bg-red-50/30"
+                    : row.tone === "warning"
+                      ? "border-amber-200 bg-amber-50/20"
+                      : "border-slate-200",
+                ].join(" ")}
+              >
                 <div className="flex items-center justify-between gap-3">
                   <div className="min-w-0">
                     <div className="text-sm font-semibold text-slate-950">{row.title}</div>
                     <div className="mt-1 text-sm text-slate-500">{row.subtitle}</div>
+                    {row.detail ? <div className="mt-1 text-sm text-slate-700">{row.detail}</div> : null}
                   </div>
                   <div className="text-right text-xs font-medium text-slate-600">{row.meta}</div>
                 </div>
