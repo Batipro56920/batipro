@@ -190,7 +190,11 @@ export async function buildVisiteSnapshot(input: {
     listIntervenantsByChantierId(chantierId).catch(() => []),
   ]);
 
-  const intervenantById = new Map(intervenants.map((it) => [it.id, it.nom]));
+  const intervenantPairs = intervenants.map((it): [string, string] => [
+    String(it.id),
+    normalizeText(it.nom, "Intervenant"),
+  ]);
+  const intervenantById = new Map<string, string>(intervenantPairs);
   const tasksTotal = tasks.length;
   const tasksEnCours = tasks.filter((t) => t.status === "EN_COURS").length;
   const tasksRetard = tasks.filter((t) => isTaskLate(normalizeDateOnly(t.date), t.status)).length;

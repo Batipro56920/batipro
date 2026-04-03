@@ -111,6 +111,7 @@ import {
 import TaskDocumentsDrawer from "../components/chantiers/TaskDocumentsDrawer";
 import DocumentEditDrawer from "../components/chantiers/DocumentEditDrawer";
 import ApprovisionnementTab from "../components/chantiers/ApprovisionnementTab";
+import ChantierPhotosTab from "../components/chantiers/ChantierPhotosTab";
 import PreparationTab from "../components/chantiers/PreparationTab";
 import ReservePlanViewer from "../components/chantiers/ReservePlanViewer";
 import {
@@ -141,6 +142,7 @@ type TabKey =
   | "accueil"
   | "preparer"
   | "devis-taches"
+  | "photos"
   | "documents"
   | "intervenants"
   | "planning"
@@ -208,6 +210,7 @@ function chantierActivityEntityLabel(entityType: string) {
   if (entityType === "materiel") return "Matériel";
   if (entityType === "approvisionnement") return "Approvisionnement";
   if (entityType === "document") return "Document";
+  if (entityType === "photo") return "Photo";
   if (entityType === "zone") return "Zone";
   return "Chantier";
 }
@@ -2149,7 +2152,15 @@ export default function ChantierPage() {
 
   useEffect(() => {
     if (!id) return;
-    if (tab !== "preparer" && tab !== "devis-taches" && tab !== "reserves" && tab !== "achats") return;
+    if (
+      tab !== "preparer" &&
+      tab !== "devis-taches" &&
+      tab !== "reserves" &&
+      tab !== "achats" &&
+      tab !== "photos"
+    ) {
+      return;
+    }
     void refreshZonesOnly();
   }, [id, tab]);
 
@@ -3591,6 +3602,7 @@ export default function ChantierPage() {
   const executerTabs: Array<{ key: TabKey; label: string }> = [
     { key: "devis-taches", label: t("chantierPage.tasks") },
     { key: "planning", label: t("chantierTabs.planning") },
+    { key: "photos", label: "Photos" },
     { key: "consignes", label: "Consignes" },
     { key: "messagerie", label: t("intervenantAccess.tabs.messaging") },
   ];
@@ -5731,6 +5743,10 @@ export default function ChantierPage() {
           </Suspense>
         )}
 
+        {tab === "photos" && id && (
+          <ChantierPhotosTab chantierId={id} tasks={tasks} zones={zones} />
+        )}
+
         {tab === "journal" && (
           <div className="space-y-4">
             <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
@@ -5854,6 +5870,7 @@ export default function ChantierPage() {
           tab !== "documents" &&
           tab !== "reserves" &&
           tab !== "achats" &&
+          tab !== "photos" &&
           tab !== "temps" &&
           tab !== "materiel" &&
           tab !== "consignes" &&
