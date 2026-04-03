@@ -345,6 +345,24 @@ function reservePriorityMeta(
   return t("intervenantPortal.reserves.priorityNormal");
 }
 
+function reservePriorityWeight(priority: IntervenantReserve["priority"]): number {
+  if (priority === "URGENTE") return 0;
+  if (priority === "NORMALE") return 1;
+  return 2;
+}
+
+function compareReserves(a: IntervenantReserve, b: IntervenantReserve): number {
+  if (a.status !== b.status) {
+    if (a.status === "LEVEE") return 1;
+    if (b.status === "LEVEE") return -1;
+    if (a.status === "OUVERTE") return -1;
+    if (b.status === "OUVERTE") return 1;
+  }
+  const priorityDelta = reservePriorityWeight(a.priority) - reservePriorityWeight(b.priority);
+  if (priorityDelta !== 0) return priorityDelta;
+  return String(b.created_at ?? "").localeCompare(String(a.created_at ?? ""));
+}
+
 export default function IntervenantPortalPage() {
   const location = useLocation();
   const navigate = useNavigate();
@@ -814,11 +832,7 @@ export default function IntervenantPortalPage() {
     [activeConsignes],
   );
   const sortedReserves = useMemo(
-    () =>
-      [...reservesState.data].sort((a, b) => {
-        if (a.status !== b.status) return a.status === "LEVEE" ? 1 : -1;
-        return String(b.created_at ?? "").localeCompare(String(a.created_at ?? ""));
-      }),
+    () => [...reservesState.data].sort(compareReserves),
     [reservesState.data],
   );
   const openReservesCount = useMemo(
@@ -1716,11 +1730,17 @@ export default function IntervenantPortalPage() {
                     <div className="text-sm font-semibold text-slate-900" style={TITLE_CLAMP_STYLE}>{reserve.title}</div>
                     <div className="mt-1 text-xs text-slate-500">
                       {reserve.task_titre ? `${reserve.task_titre} - ` : ""}
+                      {reserve.zone_nom ? `${reserve.zone_nom} - ` : ""}
                       {reservePriorityMeta(reserve.priority, t)}
                     </div>
                     <div className="mt-1 text-xs text-slate-500">
                       {t("intervenantPortal.reserves.createdAt", { value: formatPortalDateTime(reserve.created_at) })}
                     </div>
+                    {reserve.intervenant_nom ? (
+                      <div className="mt-1 text-xs text-slate-500">
+                        Responsable : {reserve.intervenant_nom}
+                      </div>
+                    ) : null}
                   </div>
                   <PortalBadge tone={status.tone}>{status.label}</PortalBadge>
                 </div>

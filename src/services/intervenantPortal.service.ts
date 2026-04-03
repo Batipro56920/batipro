@@ -199,11 +199,14 @@ export type IntervenantReserve = {
   chantier_nom: string | null;
   task_id: string | null;
   task_titre: string | null;
+  zone_id: string | null;
+  zone_nom: string | null;
   title: string;
   description: string | null;
   status: "OUVERTE" | "EN_COURS" | "LEVEE";
   priority: "BASSE" | "NORMALE" | "URGENTE";
   intervenant_id: string | null;
+  intervenant_nom: string | null;
   levee_at: string | null;
   created_at: string | null;
   updated_at: string | null;
@@ -315,11 +318,14 @@ function mapReserve(row: Record<string, unknown>): IntervenantReserve {
     chantier_nom: asNullableString(row.chantier_nom),
     task_id: asNullableString(row.task_id),
     task_titre: asNullableString(row.task_titre),
+    zone_id: asNullableString(row.zone_id),
+    zone_nom: asNullableString(row.zone_nom),
     title: String(row.title ?? "Reserve"),
     description: asNullableString(row.description),
     status: normalizeReserveStatus(row.status),
     priority: normalizeReservePriority(row.priority),
     intervenant_id: asNullableString(row.intervenant_id),
+    intervenant_nom: asNullableString(row.intervenant_nom),
     levee_at: asNullableString(row.levee_at),
     created_at: asNullableString(row.created_at),
     updated_at: asNullableString(row.updated_at),

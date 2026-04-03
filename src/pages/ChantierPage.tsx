@@ -4646,6 +4646,10 @@ export default function ChantierPage() {
                   const task = reserve.task_id ? taskById.get(reserve.task_id) : null;
                   const taskAssigneeNames = task ? getTaskAssignedIntervenantNames(task) : [];
                   const zoneLabel = resolveZoneName((reserve as any).zone_id ?? task?.zone_id ?? null);
+                  const reserveIntervenantLabel =
+                    String((reserve as any).intervenant_nom ?? "").trim() ||
+                    taskAssigneeNames.join(", ") ||
+                    "—";
 
                   return (
                     <div
@@ -4680,7 +4684,7 @@ export default function ChantierPage() {
                         </span>
                         <span>Tâche : {task ? stripLegacyPrefix(task.titre ?? "") : "—"}</span>
                         <span>Zone : {zoneLabel}</span>
-                        <span>Intervenant : {taskAssigneeNames.join(", ") || "—"}</span>
+                        <span>Responsable : {reserveIntervenantLabel}</span>
                         <span>
                           Créée : {new Date(reserve.created_at).toLocaleDateString("fr-FR")}
                         </span>

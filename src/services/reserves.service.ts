@@ -6,6 +6,8 @@ export type ReservePriority = "BASSE" | "NORMALE" | "URGENTE" | string;
 
 export type ChantierReserveRow = Database["public"]["Tables"]["chantier_reserves"]["Row"] & {
   zone_id?: string | null;
+  zone_nom?: string | null;
+  intervenant_nom?: string | null;
 };
 
 type AssigneeRow = Database["public"]["Tables"]["chantier_task_assignees"]["Row"];
@@ -39,6 +41,76 @@ function isMissingReserveZoneColumnError(error: { message?: string; code?: strin
     msg.includes("chantier_reserves") &&
     (msg.includes("does not exist") || msg.includes("schema cache") || msg.includes("could not find"))
   );
+}
+
+function isMissingZonesTableError(error: { message?: string } | null): boolean {
+  const msg = String(error?.message ?? "").toLowerCase();
+  if (!msg) return false;
+  return (
+    (msg.includes("relation") && msg.includes("chantier_zones")) ||
+    (msg.includes("schema cache") && msg.includes("chantier_zones")) ||
+    (msg.includes("chantier_zones") && msg.includes("does not exist"))
+  );
+}
+
+function asTextOrNull(value: unknown): string | null {
+  const text = String(value ?? "").trim();
+  return text || null;
+}
+
+async function enrichReserveRows(rows: ChantierReserveRow[]): Promise<ChantierReserveRow[]> {
+  if (rows.length === 0) return rows;
+
+  const zoneIds = Array.from(
+    new Set(
+      rows
+        .map((row) => String((row as any).zone_id ?? "").trim())
+        .filter(Boolean),
+    ),
+  );
+  const intervenantIds = Array.from(
+    new Set(
+      rows
+        .map((row) => String(row.intervenant_id ?? "").trim())
+        .filter(Boolean),
+    ),
+  );
+
+  const [zonesRes, intervenantsRes] = await Promise.all([
+    zoneIds.length
+      ? (supabase as any).from("chantier_zones").select("id, nom").in("id", zoneIds)
+      : Promise.resolve({ data: [], error: null }),
+    intervenantIds.length
+      ? (supabase as any).from("intervenants").select("id, nom").in("id", intervenantIds)
+      : Promise.resolve({ data: [], error: null }),
+  ]);
+
+  if (
+    zonesRes.error &&
+    !isMissingReserveZoneColumnError(zonesRes.error) &&
+    !isMissingZonesTableError(zonesRes.error)
+  ) {
+    throw zonesRes.error;
+  }
+  if (intervenantsRes.error) {
+    throw intervenantsRes.error;
+  }
+
+  const zoneNameById = new Map<string, string>();
+  for (const row of ((zonesRes.data ?? []) as Array<Record<string, unknown>>)) {
+    zoneNameById.set(String(row.id ?? ""), String(row.nom ?? ""));
+  }
+
+  const intervenantNameById = new Map<string, string>();
+  for (const row of ((intervenantsRes.data ?? []) as Array<Record<string, unknown>>)) {
+    intervenantNameById.set(String(row.id ?? ""), String(row.nom ?? ""));
+  }
+
+  return rows.map((row) => ({
+    ...row,
+    zone_nom: asTextOrNull((row as any).zone_nom) ?? ((row as any).zone_id ? zoneNameById.get(String((row as any).zone_id)) ?? null : null),
+    intervenant_nom: asTextOrNull((row as any).intervenant_nom) ?? (row.intervenant_id ? intervenantNameById.get(String(row.intervenant_id)) ?? null : null),
+  }));
 }
 
 export async function getTaskAssignee(taskId: string): Promise<string | null> {
@@ -75,7 +147,7 @@ export async function listReservesByChantierId(chantierId: string): Promise<Chan
     throw error;
   }
 
-  return data ?? [];
+  return enrichReserveRows((data ?? []) as ChantierReserveRow[]);
 }
 
 export async function createReserve(input: {
@@ -110,7 +182,8 @@ export async function createReserve(input: {
 
   if (!first.error) {
     if (!first.data) throw new Error("No reserve returned");
-    return first.data as ChantierReserveRow;
+    const [row] = await enrichReserveRows([first.data as ChantierReserveRow]);
+    return row;
   }
 
   if (!isMissingReserveZoneColumnError(first.error)) throw first.error;
@@ -125,7 +198,8 @@ export async function createReserve(input: {
 
   if (error) throw error;
   if (!data) throw new Error("No reserve returned");
-  return data as ChantierReserveRow;
+  const [row] = await enrichReserveRows([data as ChantierReserveRow]);
+  return row;
 }
 
 export async function updateReserve(
@@ -169,7 +243,8 @@ export async function updateReserve(
 
   if (!first.error) {
     if (!first.data) throw new Error("No reserve returned");
-    return first.data as ChantierReserveRow;
+    const [row] = await enrichReserveRows([first.data as ChantierReserveRow]);
+    return row;
   }
 
   if (!isMissingReserveZoneColumnError(first.error)) throw first.error;
@@ -185,7 +260,8 @@ export async function updateReserve(
 
   if (error) throw error;
   if (!data) throw new Error("No reserve returned");
-  return data as ChantierReserveRow;
+  const [row] = await enrichReserveRows([data as ChantierReserveRow]);
+  return row;
 }
 
 export async function setReserveStatus(id: string, status: ReserveStatus): Promise<ChantierReserveRow> {
