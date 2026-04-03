@@ -141,6 +141,7 @@ import {
   create as createTaskTemplate,
   type TaskTemplateInput,
 } from "../services/taskTemplates.service";
+import { createChantierTemplateFromChantier } from "../services/chantierTemplates.service";
 import { useI18n } from "../i18n";
 
 // ENVOI ACCÈS (Edge Function via service)
@@ -670,6 +671,7 @@ export default function ChantierPage() {
   const [taskTemplateSeed, setTaskTemplateSeed] = useState<TaskTemplateInput | null>(null);
   const [taskTemplateSaving, setTaskTemplateSaving] = useState(false);
   const [taskTemplateError, setTaskTemplateError] = useState<string | null>(null);
+  const [chantierTemplateSaving, setChantierTemplateSaving] = useState(false);
 
   // Devis
   const [devis, setDevis] = useState<DevisRow[]>([]);
@@ -3271,6 +3273,28 @@ export default function ChantierPage() {
     }
   }
 
+  async function saveChantierAsTemplate() {
+    if (!id) return;
+
+    const defaultName = `${item?.nom ?? "Chantier"} - modèle`;
+    const templateName = window.prompt("Nom du modèle chantier", defaultName);
+    const normalizedName = String(templateName ?? "").trim();
+    if (!normalizedName) return;
+
+    setChantierTemplateSaving(true);
+    try {
+      await createChantierTemplateFromChantier(id, {
+        nom: normalizedName,
+        description: item?.client ? `Base chantier pour ${item.client}` : item?.nom ?? null,
+      });
+      setToast({ type: "ok", msg: "Modèle chantier enregistré." });
+    } catch (err: any) {
+      setToast({ type: "error", msg: err?.message ?? "Erreur enregistrement modèle chantier." });
+    } finally {
+      setChantierTemplateSaving(false);
+    }
+  }
+
   async function saveEditTask(t: ChantierTaskRow) {
     const titre = editTitre.trim();
     if (!titre) {
@@ -4088,13 +4112,37 @@ export default function ChantierPage() {
         ) : null}
         {tab === "accueil" && accueilPanel}
         {tab === "preparer" && id && (
-          <PreparationTab
-            chantierId={id}
-            tasksCount={tasks.length}
-            documentsCount={chantierDocuments.length || documents.length}
-            intervenantsCount={intervenants.length}
-            materielCount={materiel.length}
-          />
+          <div className="space-y-4">
+            <div className="flex flex-wrap items-start justify-between gap-3 rounded-2xl border border-slate-200 bg-slate-50/70 px-4 py-3">
+              <div className="min-w-0">
+                <div className="text-sm font-semibold text-slate-900">Modèle chantier</div>
+                <div className="text-xs text-slate-500">
+                  Enregistre zones, tâches, étapes et checklist pour générer un futur chantier.
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => void saveChantierAsTemplate()}
+                disabled={chantierTemplateSaving}
+                className={[
+                  "rounded-xl px-4 py-2 text-sm font-medium transition",
+                  chantierTemplateSaving
+                    ? "bg-slate-200 text-slate-500 cursor-not-allowed"
+                    : "bg-slate-900 text-white hover:bg-slate-800",
+                ].join(" ")}
+              >
+                {chantierTemplateSaving ? "Enregistrement..." : "Enregistrer comme modèle"}
+              </button>
+            </div>
+
+            <PreparationTab
+              chantierId={id}
+              tasksCount={tasks.length}
+              documentsCount={chantierDocuments.length || documents.length}
+              intervenantsCount={intervenants.length}
+              materielCount={materiel.length}
+            />
+          </div>
         )}
         {tab === "achats" && id && (
           <ApprovisionnementTab chantierId={id} tasks={tasks} zones={zones} />
