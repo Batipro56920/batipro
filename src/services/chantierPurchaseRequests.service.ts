@@ -12,6 +12,8 @@ export type ChantierPurchaseRequestRow = {
   titre: string;
   quantite: number | null;
   unite: string | null;
+  cout_prevu_ht: number;
+  cout_reel_ht: number;
   statut_commande: ChantierPurchaseRequestStatus;
   livraison_prevue_le: string | null;
   recu: boolean;
@@ -29,6 +31,8 @@ export type ChantierPurchaseRequestInput = {
   titre: string;
   quantite?: number | null;
   unite?: string | null;
+  cout_prevu_ht?: number | string | null;
+  cout_reel_ht?: number | string | null;
   statut_commande?: ChantierPurchaseRequestStatus;
   livraison_prevue_le?: string | null;
   recu?: boolean;
@@ -38,6 +42,27 @@ export type ChantierPurchaseRequestInput = {
 export type ChantierPurchaseRequestPatch = Partial<Omit<ChantierPurchaseRequestInput, "chantier_id">>;
 
 const PURCHASE_SELECT = [
+  "id",
+  "chantier_id",
+  "task_id",
+  "zone_id",
+  "supplier_id",
+  "supplier_name",
+  "titre",
+  "quantite",
+  "unite",
+  "cout_prevu_ht",
+  "cout_reel_ht",
+  "statut_commande",
+  "livraison_prevue_le",
+  "recu",
+  "commentaire",
+  "created_by",
+  "created_at",
+  "updated_at",
+].join(",");
+
+const PURCHASE_SELECT_LEGACY = [
   "id",
   "chantier_id",
   "task_id",
@@ -81,6 +106,8 @@ function normalizePurchaseRequestRow(row: any): ChantierPurchaseRequestRow {
     titre: String(row?.titre ?? "Demande approvisionnement").trim() || "Demande approvisionnement",
     quantite: row?.quantite == null ? null : Number(row.quantite),
     unite: row?.unite ?? null,
+    cout_prevu_ht: Number.isFinite(Number(row?.cout_prevu_ht)) ? Number(row.cout_prevu_ht) : 0,
+    cout_reel_ht: Number.isFinite(Number(row?.cout_reel_ht)) ? Number(row.cout_reel_ht) : 0,
     statut_commande: (row?.statut_commande ?? "a_commander") as ChantierPurchaseRequestStatus,
     livraison_prevue_le: row?.livraison_prevue_le ?? null,
     recu: Boolean(row?.recu),
@@ -104,6 +131,18 @@ function cleanPurchasePayload(payload: ChantierPurchaseRequestInput | ChantierPu
       : Number.isFinite(Number(payload.quantite))
         ? Number(payload.quantite)
         : null;
+  const coutPrevu =
+    payload.cout_prevu_ht == null
+      ? 0
+      : Number.isFinite(Number(String(payload.cout_prevu_ht).replace(",", ".")))
+        ? Number(String(payload.cout_prevu_ht).replace(",", "."))
+        : 0;
+  const coutReel =
+    payload.cout_reel_ht == null
+      ? 0
+      : Number.isFinite(Number(String(payload.cout_reel_ht).replace(",", ".")))
+        ? Number(String(payload.cout_reel_ht).replace(",", "."))
+        : 0;
 
   if (Object.prototype.hasOwnProperty.call(payload, "titre") && !titre) {
     throw new Error("Titre de demande obligatoire.");
@@ -117,6 +156,8 @@ function cleanPurchasePayload(payload: ChantierPurchaseRequestInput | ChantierPu
     titre,
     quantite,
     unite,
+    cout_prevu_ht: Math.max(0, coutPrevu),
+    cout_reel_ht: Math.max(0, coutReel),
     statut_commande: payload.statut_commande ?? "a_commander",
     livraison_prevue_le: payload.livraison_prevue_le || null,
     recu: Boolean(payload.recu),
@@ -129,26 +170,38 @@ export async function listChantierPurchaseRequests(
 ): Promise<{ requests: ChantierPurchaseRequestRow[]; schemaReady: boolean }> {
   if (!chantierId) throw new Error("chantierId manquant.");
 
-  const { data, error } = await fromPurchaseRequests()
+  const first = await fromPurchaseRequests()
     .select(PURCHASE_SELECT)
     .eq("chantier_id", chantierId)
     .order("created_at", { ascending: false });
 
-  if (!error) {
+  if (!first.error) {
     return {
-      requests: (data ?? []).map(normalizePurchaseRequestRow),
+      requests: (first.data ?? []).map(normalizePurchaseRequestRow),
       schemaReady: true,
     };
   }
 
-  if (isMissingPurchaseSchemaError(error)) {
+  if (isMissingPurchaseSchemaError(first.error)) {
+    const fallback = await fromPurchaseRequests()
+      .select(PURCHASE_SELECT_LEGACY)
+      .eq("chantier_id", chantierId)
+      .order("created_at", { ascending: false });
+
+    if (!fallback.error) {
+      return {
+        requests: (fallback.data ?? []).map(normalizePurchaseRequestRow),
+        schemaReady: true,
+      };
+    }
+
     return {
       requests: [],
       schemaReady: false,
     };
   }
 
-  throw error;
+  throw first.error;
 }
 
 export async function createChantierPurchaseRequest(
@@ -156,8 +209,9 @@ export async function createChantierPurchaseRequest(
 ): Promise<ChantierPurchaseRequestRow> {
   if (!payload.chantier_id) throw new Error("chantier_id manquant.");
 
+  const insertPayload = cleanPurchasePayload(payload);
   const { data, error } = await fromPurchaseRequests()
-    .insert([cleanPurchasePayload(payload)])
+    .insert([insertPayload])
     .select(PURCHASE_SELECT)
     .maybeSingle();
 

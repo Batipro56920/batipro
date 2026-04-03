@@ -33,6 +33,15 @@ function statusBadgeClass(status: ChantierPurchaseRequestStatus) {
   return "border-amber-200 bg-amber-50 text-amber-700";
 }
 
+function parseAmount(value: string) {
+  const parsed = Number(String(value ?? "").trim().replace(",", "."));
+  return Number.isFinite(parsed) ? Math.max(0, parsed) : 0;
+}
+
+function formatMoney(value: number) {
+  return `${new Intl.NumberFormat("fr-FR", { maximumFractionDigits: 2 }).format(Number(value) || 0)} EUR`;
+}
+
 function statusLabel(status: ChantierPurchaseRequestStatus) {
   return STATUS_OPTIONS.find((option) => option.value === status)?.label ?? "À commander";
 }
@@ -50,6 +59,8 @@ export default function ApprovisionnementTab({ chantierId, tasks, zones }: Appro
   const [title, setTitle] = useState("");
   const [quantity, setQuantity] = useState("1");
   const [unit, setUnit] = useState("");
+  const [plannedCostHt, setPlannedCostHt] = useState("");
+  const [realCostHt, setRealCostHt] = useState("");
   const [status, setStatus] = useState<ChantierPurchaseRequestStatus>("a_commander");
   const [deliveryDate, setDeliveryDate] = useState("");
   const [comment, setComment] = useState("");
@@ -63,6 +74,8 @@ export default function ApprovisionnementTab({ chantierId, tasks, zones }: Appro
       toOrder: requests.filter((entry) => entry.statut_commande === "a_commander").length,
       ordered: requests.filter((entry) => entry.statut_commande === "commande").length,
       delivered: requests.filter((entry) => entry.statut_commande === "livre").length,
+      plannedCostHt: requests.reduce((sum, entry) => sum + (Number(entry.cout_prevu_ht ?? 0) || 0), 0),
+      realCostHt: requests.reduce((sum, entry) => sum + (Number(entry.cout_reel_ht ?? 0) || 0), 0),
     };
   }, [requests]);
 
@@ -134,6 +147,8 @@ export default function ApprovisionnementTab({ chantierId, tasks, zones }: Appro
         titre: title,
         quantite: Number(String(quantity).replace(",", ".")) || null,
         unite: unit,
+        cout_prevu_ht: parseAmount(plannedCostHt),
+        cout_reel_ht: parseAmount(realCostHt),
         statut_commande: status,
         livraison_prevue_le: deliveryDate || null,
         recu: status === "livre",
@@ -145,6 +160,8 @@ export default function ApprovisionnementTab({ chantierId, tasks, zones }: Appro
         task_id: saved.task_id,
         zone_id: saved.zone_id,
         supplier_name: saved.supplier_name,
+        cout_prevu_ht: saved.cout_prevu_ht,
+        cout_reel_ht: saved.cout_reel_ht,
         statut_commande: saved.statut_commande,
         livraison_prevue_le: saved.livraison_prevue_le,
       });
@@ -155,6 +172,8 @@ export default function ApprovisionnementTab({ chantierId, tasks, zones }: Appro
       setTitle("");
       setQuantity("1");
       setUnit("");
+      setPlannedCostHt("");
+      setRealCostHt("");
       setStatus("a_commander");
       setDeliveryDate("");
       setComment("");
@@ -182,12 +201,14 @@ export default function ApprovisionnementTab({ chantierId, tasks, zones }: Appro
       const saved = await updateChantierPurchaseRequest(row.id, {
         statut_commande: nextStatus,
         recu: nextStatus === "livre",
+        cout_reel_ht: nextStatus === "livre" && row.cout_reel_ht <= 0 ? row.cout_prevu_ht : row.cout_reel_ht,
       });
       setRequests((current) => current.map((entry) => (entry.id === saved.id ? saved : entry)));
       await logPurchaseAction("status_changed", saved, "Statut approvisionnement mis à jour", {
         from_status: row.statut_commande,
         to_status: saved.statut_commande,
         recu: saved.recu,
+        cout_reel_ht: saved.cout_reel_ht,
       });
     } catch (err: any) {
       setRequests(previous);
@@ -262,12 +283,20 @@ export default function ApprovisionnementTab({ chantierId, tasks, zones }: Appro
           <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-emerald-700">Livré</div>
           <div className="mt-2 text-2xl font-semibold text-emerald-900">{summary.delivered}</div>
         </div>
+        <div className="rounded-3xl border border-slate-200 bg-white p-4 sm:col-span-2 xl:col-span-2">
+          <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">Budget achats</div>
+          <div className="mt-2 text-sm text-slate-700">
+            Prevu <span className="font-semibold text-slate-950">{formatMoney(summary.plannedCostHt)}</span>
+            {" · "}
+            Reel <span className="font-semibold text-slate-950">{formatMoney(summary.realCostHt)}</span>
+          </div>
+        </div>
       </div>
 
       <form onSubmit={(event) => void submitRequest(event)} className="rounded-3xl border border-slate-200 bg-slate-50 p-5">
         <div className="text-sm font-semibold text-slate-900">Créer une demande fournisseur</div>
 
-        <div className="mt-4 grid gap-3 lg:grid-cols-3">
+        <div className="mt-4 grid gap-3 lg:grid-cols-4">
           <label className="space-y-1 text-xs text-slate-600">
             <div>Tâche liée</div>
             <select
@@ -343,6 +372,31 @@ export default function ApprovisionnementTab({ chantierId, tasks, zones }: Appro
                 disabled={saving || !schemaReady}
                 className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900"
                 placeholder="U, m², ml"
+              />
+            </label>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <label className="space-y-1 text-xs text-slate-600">
+              <div>Cout prevu HT</div>
+              <input
+                value={plannedCostHt}
+                onChange={(event) => setPlannedCostHt(event.target.value)}
+                disabled={saving || !schemaReady}
+                className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900"
+                placeholder="ex: 450"
+                inputMode="decimal"
+              />
+            </label>
+            <label className="space-y-1 text-xs text-slate-600">
+              <div>Cout reel HT</div>
+              <input
+                value={realCostHt}
+                onChange={(event) => setRealCostHt(event.target.value)}
+                disabled={saving || !schemaReady}
+                className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900"
+                placeholder="ex: 430"
+                inputMode="decimal"
               />
             </label>
           </div>
@@ -444,6 +498,8 @@ export default function ApprovisionnementTab({ chantierId, tasks, zones }: Appro
                         {request.unite ? ` ${request.unite}` : ""}
                       </span>
                       <span>Fournisseur : {request.supplier_name || "—"}</span>
+                      <span>Prevu : {formatMoney(request.cout_prevu_ht)}</span>
+                      <span>Reel : {formatMoney(request.cout_reel_ht)}</span>
                       {request.livraison_prevue_le ? (
                         <span>
                           Livraison : {new Date(`${request.livraison_prevue_le}T00:00:00`).toLocaleDateString("fr-FR")}

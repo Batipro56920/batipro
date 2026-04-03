@@ -113,6 +113,7 @@ import TaskDocumentsDrawer from "../components/chantiers/TaskDocumentsDrawer";
 import DocumentEditDrawer from "../components/chantiers/DocumentEditDrawer";
 import ApprovisionnementTab from "../components/chantiers/ApprovisionnementTab";
 import ChantierPhotosTab from "../components/chantiers/ChantierPhotosTab";
+import BudgetTab from "../components/chantiers/BudgetTab";
 import PilotageTab from "../components/chantiers/PilotageTab";
 import PreparationTab from "../components/chantiers/PreparationTab";
 import ReservePlanViewer from "../components/chantiers/ReservePlanViewer";
@@ -158,6 +159,7 @@ type TabKey =
   | "intervenants"
   | "planning"
   | "temps"
+  | "budget"
   | "pilotage"
   | "reserves"
   | "achats"
@@ -3881,6 +3883,7 @@ export default function ChantierPage() {
   ];
   const piloterTabs: Array<{ key: TabKey; label: string }> = [
     { key: "temps", label: t("chantierTabs.time") },
+    { key: "budget", label: "Budget" },
     { key: "pilotage", label: "Pilotage" },
     { key: "rapports", label: "Rapports" },
   ];
@@ -4155,6 +4158,7 @@ export default function ChantierPage() {
             heuresPrevuesChantier={tempsPrevues}
           />
         )}
+        {tab === "budget" && id && <BudgetTab chantierId={id} />}
         {/* ---------------- ONGLET TEMPS ---------------- */}
         {tab === "temps" && (
           <div className="space-y-3">
