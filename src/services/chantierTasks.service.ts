@@ -27,6 +27,9 @@ export type ChantierTaskRow = {
   status: TaskStatus;
   quality_status: TaskQualityStatus;
   admin_validation_status: TaskAdminValidationStatus;
+  validated_by: string | null;
+  validated_at: string | null;
+  reprise_reason: string | null;
 
   intervenant_id: string | null;
 
@@ -62,6 +65,7 @@ type CreateTaskPayload = {
   status?: TaskStatus;
   quality_status?: TaskQualityStatus;
   admin_validation_status?: TaskAdminValidationStatus;
+  reprise_reason?: string | null;
   intervenant_id?: string | null;
 
   quantite?: number | string | null;
@@ -97,6 +101,9 @@ type UpdateTaskPatch = Partial<
     | "status"
     | "quality_status"
     | "admin_validation_status"
+    | "validated_by"
+    | "validated_at"
+    | "reprise_reason"
     | "intervenant_id"
     | "quantite"
     | "unite"
@@ -124,6 +131,9 @@ const TASK_SELECT = [
   "status",
   "quality_status",
   "admin_validation_status",
+  "validated_by",
+  "validated_at",
+  "reprise_reason",
   "intervenant_id",
   "quantite",
   "unite",
@@ -210,6 +220,7 @@ function cleanPatch(patch: UpdateTaskPatch) {
   if (typeof cleaned.lot === "string") cleaned.lot = cleaned.lot.trim();
   if (typeof cleaned.zone_id === "string") cleaned.zone_id = cleaned.zone_id.trim();
   if (typeof cleaned.etape_metier === "string") cleaned.etape_metier = cleaned.etape_metier.trim();
+  if (typeof cleaned.reprise_reason === "string") cleaned.reprise_reason = cleaned.reprise_reason.trim();
   if (typeof cleaned.unite === "string") cleaned.unite = cleaned.unite.trim();
 
   // vides -> null
@@ -220,6 +231,7 @@ function cleanPatch(patch: UpdateTaskPatch) {
   if (cleaned.date === "") cleaned.date = null;
   if (cleaned.zone_id === "") cleaned.zone_id = null;
   if (cleaned.etape_metier === "") cleaned.etape_metier = null;
+  if (cleaned.reprise_reason === "") cleaned.reprise_reason = null;
   if (cleaned.date_debut === "") cleaned.date_debut = null;
   if (cleaned.date_fin === "") cleaned.date_fin = null;
   if (cleaned.intervenant_id === "") cleaned.intervenant_id = null;
@@ -279,6 +291,9 @@ function normalizeTaskRow(row: any): ChantierTaskRow {
     etape_metier: row?.etape_metier ?? null,
     quality_status: normalizeQualityStatus(row?.quality_status),
     admin_validation_status: normalizeAdminValidationStatus(row?.admin_validation_status),
+    validated_by: row?.validated_by ?? null,
+    validated_at: row?.validated_at ?? null,
+    reprise_reason: row?.reprise_reason ?? null,
     duration_days: Math.max(1, Number(row?.duration_days ?? 1)),
     order_index: Math.max(0, Math.trunc(Number(row?.order_index ?? 0))),
   } as ChantierTaskRow;
@@ -340,6 +355,9 @@ function stripTaskV2Columns<T extends Record<string, unknown>>(payload: T): T {
   delete (next as Record<string, unknown>).etape_metier;
   delete (next as Record<string, unknown>).quality_status;
   delete (next as Record<string, unknown>).admin_validation_status;
+  delete (next as Record<string, unknown>).validated_by;
+  delete (next as Record<string, unknown>).validated_at;
+  delete (next as Record<string, unknown>).reprise_reason;
   delete (next as Record<string, unknown>).duration_days;
   delete (next as Record<string, unknown>).order_index;
   return next;
@@ -416,6 +434,9 @@ export async function createTask(payload: CreateTaskPayload) {
     status: payload.status ?? "A_FAIRE",
     quality_status: payload.quality_status ?? deriveQualityStatusFromTaskStatus(payload.status ?? "A_FAIRE"),
     admin_validation_status: payload.admin_validation_status ?? "non_verifie",
+    validated_by: null,
+    validated_at: null,
+    reprise_reason: (payload.reprise_reason ?? "").trim() || null,
     intervenant_id: payload.intervenant_id ?? null,
     quantite: quantiteValue === null ? 1 : quantiteValue,
     unite: (payload.unite ?? "").trim() || null,

@@ -623,6 +623,7 @@ export default function ChantierPage() {
   const [editTaskStepName, setEditTaskStepName] = useState("");
   const [editStatus, setEditStatus] = useState<TaskStatus>("A_FAIRE");
   const [editTaskQualityStatus, setEditTaskQualityStatus] = useState<TaskQualityStatus>("a_faire");
+  const [editTaskRepriseReason, setEditTaskRepriseReason] = useState("");
   const [editAssignedIntervenantIds, setEditAssignedIntervenantIds] = useState<string[]>([]);
   const [editQuantite, setEditQuantite] = useState("1");
   const [editUnite, setEditUnite] = useState("");
@@ -659,6 +660,7 @@ export default function ChantierPage() {
 
   // Filtres tâches
   const [filterIntervenant, setFilterIntervenant] = useState<string>("__ALL__");
+  const [filterTaskQuality, setFilterTaskQuality] = useState<"__ALL__" | TaskQualityStatus>("__ALL__");
 
   // Matériel
   const [materiel, setMateriel] = useState<MaterielDemandeRow[]>([]);
@@ -2525,9 +2527,11 @@ export default function ChantierPage() {
       } else if (filterIntervenant !== "__ALL__") {
         if (!assignedIds.includes(filterIntervenant)) return false;
       }
+      const currentQualityStatus = ((t as any).quality_status ?? "a_faire") as TaskQualityStatus;
+      if (filterTaskQuality !== "__ALL__" && currentQualityStatus !== filterTaskQuality) return false;
       return true;
     });
-  }, [tasks, filterIntervenant, taskAssigneeIdsByTaskId]);
+  }, [tasks, filterIntervenant, filterTaskQuality, taskAssigneeIdsByTaskId]);
 
   const totalTempsReel = useMemo(() => {
     return (tasks as any[]).reduce((sum, t) => sum + (Number(t.temps_reel_h ?? 0) || 0), 0);
@@ -2970,6 +2974,7 @@ export default function ChantierPage() {
     setEditTaskStepName((t as any).etape_metier ?? "");
     setEditStatus((t.status ?? "A_FAIRE") as any);
     setEditTaskQualityStatus((t as any).quality_status ?? "a_faire");
+    setEditTaskRepriseReason(String((t as any).reprise_reason ?? ""));
     setEditAssignedIntervenantIds(getTaskAssignedIntervenantIds(t));
     setEditQuantite(String(q ?? decoded.quantite ?? 1));
     setEditUnite(unite);
@@ -2983,7 +2988,56 @@ export default function ChantierPage() {
     setEditTaskZoneId("");
     setEditTaskStepName("");
     setEditTaskQualityStatus("a_faire");
+    setEditTaskRepriseReason("");
     setEditAssignedIntervenantIds([]);
+  }
+
+  async function applyTaskQualityDecision(task: ChantierTaskRow, decision: "valide_admin" | "a_reprendre") {
+    const repriseReason =
+      decision === "a_reprendre"
+        ? window.prompt("Motif de reprise ?", task.reprise_reason ?? "")?.trim() ?? ""
+        : "";
+
+    if (decision === "a_reprendre" && !repriseReason) {
+      setToast({ type: "error", msg: "Motif de reprise obligatoire." });
+      return;
+    }
+
+    const nextStatus = getTaskStatusFromQualityStatus(decision);
+    const nextAdminValidationStatus: ChantierTaskRow["admin_validation_status"] =
+      decision === "valide_admin" ? "valide" : "a_reprendre";
+    const patch = {
+      status: nextStatus,
+      quality_status: decision,
+      admin_validation_status: nextAdminValidationStatus,
+      validated_at: decision === "valide_admin" ? new Date().toISOString() : null,
+      reprise_reason: decision === "a_reprendre" ? repriseReason : null,
+    };
+
+    setTasks((prev) => prev.map((row) => (row.id === task.id ? { ...row, ...patch } : row)));
+
+    try {
+      await updateTask(task.id, patch as any);
+      await recordChantierActivity({
+        actionType: "validated",
+        entityType: "task",
+        entityId: task.id,
+        reason: decision === "valide_admin" ? "Tâche validée par admin" : "Tâche marquée à reprendre",
+        changes: {
+          from_quality_status: task.quality_status,
+          to_quality_status: decision,
+          admin_validation_status: patch.admin_validation_status,
+          reprise_reason: patch.reprise_reason,
+        },
+      });
+      setToast({
+        type: "ok",
+        msg: decision === "valide_admin" ? "Tâche validée." : "Tâche marquée à reprendre.",
+      });
+    } catch (e: any) {
+      await refreshTasksOnly();
+      setToast({ type: "error", msg: e?.message ?? "Erreur validation qualité." });
+    }
   }
 
   function openTaskTemplateDrawerFromTask(t: ChantierTaskRow) {
@@ -3067,6 +3121,10 @@ export default function ChantierPage() {
       setToast({ type: "error", msg: "Choisis un lot avant d'enregistrer la tâche." });
       return;
     }
+    if (editTaskQualityStatus === "a_reprendre" && !editTaskRepriseReason.trim()) {
+      setToast({ type: "error", msg: "Motif de reprise obligatoire pour passer la tâche à reprendre." });
+      return;
+    }
 
     const nextAdminValidationStatus: ChantierTaskRow["admin_validation_status"] =
       editTaskQualityStatus === "valide_admin"
@@ -3084,6 +3142,8 @@ export default function ChantierPage() {
       status: editStatus ?? "A_FAIRE",
       quality_status: editTaskQualityStatus,
       admin_validation_status: nextAdminValidationStatus,
+      validated_at: editTaskQualityStatus === "valide_admin" ? new Date().toISOString() : null,
+      reprise_reason: editTaskQualityStatus === "a_reprendre" ? editTaskRepriseReason.trim() : null,
       intervenant_id: uniqueIds(editAssignedIntervenantIds)[0] ?? null,
       quantite,
       unite,
@@ -3109,6 +3169,8 @@ export default function ChantierPage() {
           etape_metier: patch.etape_metier,
           status: patch.status,
           quality_status: patch.quality_status,
+          admin_validation_status: patch.admin_validation_status,
+          reprise_reason: patch.reprise_reason,
           temps_prevu_h: patch.temps_prevu_h,
         },
       });
@@ -4862,7 +4924,7 @@ export default function ChantierPage() {
                 </div>
               ) : null}
 
-              <div className="grid gap-2 md:grid-cols-1">
+              <div className="grid gap-2 md:grid-cols-2">
                 <select
                   className="rounded-xl border px-3 py-2 text-sm"
                   value={filterIntervenant}
@@ -4876,6 +4938,18 @@ export default function ChantierPage() {
                       {i.nom}
                     </option>
                   ))}
+                </select>
+                <select
+                  className="rounded-xl border px-3 py-2 text-sm"
+                  value={filterTaskQuality}
+                  onChange={(e) => setFilterTaskQuality(e.target.value as "__ALL__" | TaskQualityStatus)}
+                >
+                  <option value="__ALL__">Tous les statuts qualité</option>
+                  <option value="a_faire">À faire</option>
+                  <option value="en_cours">En cours</option>
+                  <option value="termine_intervenant">Terminé intervenant</option>
+                  <option value="valide_admin">Validé admin</option>
+                  <option value="a_reprendre">À reprendre</option>
                 </select>
               </div>
 
@@ -4928,6 +5002,7 @@ export default function ChantierPage() {
                   const taskZoneLabel = resolveZoneName((t as any).zone_id ?? null);
                   const taskQuality = ((t as any).quality_status ?? "a_faire") as TaskQualityStatus;
                   const taskStep = String((t as any).etape_metier ?? "").trim();
+                  const taskRepriseReason = String((t as any).reprise_reason ?? "").trim();
 
                   return (
                     <div
@@ -4992,6 +5067,11 @@ export default function ChantierPage() {
                               <div className="text-xs text-slate-500 mt-1">
                                 {qtyLabel} / {tempsPrevuLabel} / {tempsPasseLabel}
                               </div>
+                              {taskRepriseReason && taskQuality === "a_reprendre" ? (
+                                <div className="mt-2 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
+                                  Motif de reprise : {taskRepriseReason}
+                                </div>
+                              ) : null}
                               <div className="mt-2 space-y-1">
                                 <div className="flex items-center gap-2">
                                   <div className="h-2 flex-1 overflow-hidden rounded-full bg-slate-200">
@@ -5222,6 +5302,17 @@ export default function ChantierPage() {
                                   </select>
                                 </label>
                               </div>
+                              {editTaskQualityStatus === "a_reprendre" ? (
+                                <label className="block space-y-1 text-xs text-slate-600">
+                                  <div>Motif de reprise</div>
+                                  <input
+                                    className="w-full rounded-xl border bg-white px-3 py-2 text-sm text-slate-900"
+                                    value={editTaskRepriseReason}
+                                    onChange={(e) => setEditTaskRepriseReason(e.target.value)}
+                                    placeholder="Ex : finition non conforme, reprise joint..."
+                                  />
+                                </label>
+                              ) : null}
                               <div className="space-y-2 rounded-xl border border-slate-200 bg-white p-3">
                                 <div className="flex items-center justify-between gap-3">
                                   <div className="text-xs font-medium text-slate-700">Intervenants affectés</div>
@@ -5314,7 +5405,21 @@ export default function ChantierPage() {
                       })()}
 
                       {!isEditing ? (
-                        <div className="flex justify-end gap-2">
+                        <div className="flex flex-wrap justify-end gap-2">
+                          <button
+                            type="button"
+                            onClick={() => void applyTaskQualityDecision(t, "valide_admin")}
+                            className="text-sm rounded-xl border border-emerald-200 px-3 py-2 text-emerald-700 hover:bg-emerald-50"
+                          >
+                            Valider
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => void applyTaskQualityDecision(t, "a_reprendre")}
+                            className="text-sm rounded-xl border border-red-200 px-3 py-2 text-red-700 hover:bg-red-50"
+                          >
+                            À reprendre
+                          </button>
                           <button
                             type="button"
                             onClick={() => startEditTask(t)}
