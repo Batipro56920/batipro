@@ -110,6 +110,7 @@ import {
 } from "../services/chantierDoe.service";
 import TaskDocumentsDrawer from "../components/chantiers/TaskDocumentsDrawer";
 import DocumentEditDrawer from "../components/chantiers/DocumentEditDrawer";
+import ApprovisionnementTab from "../components/chantiers/ApprovisionnementTab";
 import PreparationTab from "../components/chantiers/PreparationTab";
 import ReservePlanViewer from "../components/chantiers/ReservePlanViewer";
 import {
@@ -145,6 +146,7 @@ type TabKey =
   | "planning"
   | "temps"
   | "reserves"
+  | "achats"
   | "materiel"
   | "consignes"
   | "journal"
@@ -204,6 +206,7 @@ function chantierActivityEntityLabel(entityType: string) {
   if (entityType === "consigne") return "Consigne";
   if (entityType === "time_entry") return "Temps";
   if (entityType === "materiel") return "Matériel";
+  if (entityType === "approvisionnement") return "Approvisionnement";
   if (entityType === "document") return "Document";
   if (entityType === "zone") return "Zone";
   return "Chantier";
@@ -2146,7 +2149,7 @@ export default function ChantierPage() {
 
   useEffect(() => {
     if (!id) return;
-    if (tab !== "preparer" && tab !== "devis-taches" && tab !== "reserves") return;
+    if (tab !== "preparer" && tab !== "devis-taches" && tab !== "reserves" && tab !== "achats") return;
     void refreshZonesOnly();
   }, [id, tab]);
 
@@ -3581,6 +3584,7 @@ export default function ChantierPage() {
   const preparerTabs: Array<{ key: TabKey; label: string }> = [
     { key: "preparer", label: "Préparer" },
     { key: "intervenants", label: t("sidebar.intervenants") },
+    { key: "achats", label: "Approvisionnement" },
     { key: "materiel", label: t("intervenantAccess.tabs.material") },
     { key: "documents", label: t("intervenantAccess.tabs.documents") },
   ];
@@ -3835,6 +3839,9 @@ export default function ChantierPage() {
             intervenantsCount={intervenants.length}
             materielCount={materiel.length}
           />
+        )}
+        {tab === "achats" && id && (
+          <ApprovisionnementTab chantierId={id} tasks={tasks} zones={zones} />
         )}
         {/* ---------------- ONGLET TEMPS ---------------- */}
         {tab === "temps" && (
@@ -5846,6 +5853,7 @@ export default function ChantierPage() {
           tab !== "intervenants" &&
           tab !== "documents" &&
           tab !== "reserves" &&
+          tab !== "achats" &&
           tab !== "temps" &&
           tab !== "materiel" &&
           tab !== "consignes" &&
