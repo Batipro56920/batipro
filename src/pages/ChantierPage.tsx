@@ -120,6 +120,14 @@ import {
   type ChantierZoneRow,
 } from "../services/chantierZones.service";
 import {
+  createTaskStep,
+  deleteTaskStep,
+  listTaskStepsByChantierId,
+  updateTaskStep,
+  type ChantierTaskStepRow,
+  type ChantierTaskStepStatus,
+} from "../services/chantierTaskSteps.service";
+import {
   appendChantierActivityLog,
   listChantierActivityLogs,
   type ChantierActivityLogRow,
@@ -204,8 +212,21 @@ function taskQualityBadgeClass(status: TaskQualityStatus) {
   return "bg-slate-50 text-slate-700 border-slate-200";
 }
 
+function taskStepStatusLabel(status: ChantierTaskStepStatus) {
+  if (status === "en_cours") return "En cours";
+  if (status === "termine") return "Terminé";
+  return "À faire";
+}
+
+function taskStepStatusBadgeClass(status: ChantierTaskStepStatus) {
+  if (status === "termine") return "border-emerald-200 bg-emerald-50 text-emerald-700";
+  if (status === "en_cours") return "border-amber-200 bg-amber-50 text-amber-700";
+  return "border-slate-200 bg-slate-50 text-slate-700";
+}
+
 function chantierActivityEntityLabel(entityType: string) {
   if (entityType === "task") return "Tâche";
+  if (entityType === "task_step") return "Étape";
   if (entityType === "reserve") return "Réserve";
   if (entityType === "consigne") return "Consigne";
   if (entityType === "time_entry") return "Temps";
@@ -229,7 +250,7 @@ function chantierActivityActionLabel(actionType: string) {
 
 function chantierActivityTone(entityType: string) {
   if (entityType === "reserve") return "border-red-200 bg-red-50 text-red-700";
-  if (entityType === "task") return "border-blue-200 bg-blue-50 text-blue-700";
+  if (entityType === "task" || entityType === "task_step") return "border-blue-200 bg-blue-50 text-blue-700";
   if (entityType === "time_entry") return "border-emerald-200 bg-emerald-50 text-emerald-700";
   if (entityType === "consigne") return "border-amber-200 bg-amber-50 text-amber-700";
   return "border-slate-200 bg-slate-50 text-slate-700";
@@ -695,6 +716,11 @@ export default function ChantierPage() {
   const [consigneSaving, setConsigneSaving] = useState(false);
 
   const [zones, setZones] = useState<ChantierZoneRow[]>([]);
+  const [taskSteps, setTaskSteps] = useState<ChantierTaskStepRow[]>([]);
+  const [taskStepsSchemaReady, setTaskStepsSchemaReady] = useState(true);
+  const [taskStepDrafts, setTaskStepDrafts] = useState<Record<string, string>>({});
+  const [taskStepSavingId, setTaskStepSavingId] = useState<string | null>(null);
+  const [taskStepDeletingId, setTaskStepDeletingId] = useState<string | null>(null);
   const [activityLogs, setActivityLogs] = useState<ChantierActivityLogRow[]>([]);
   const [activityLogsLoading, setActivityLogsLoading] = useState(false);
   const [activityLogsError, setActivityLogsError] = useState<string | null>(null);
@@ -1652,11 +1678,25 @@ export default function ChantierPage() {
     }
   }
 
+  async function refreshTaskStepsOnly() {
+    if (!id) return;
+    try {
+      const result = await listTaskStepsByChantierId(id);
+      setTaskSteps(result.steps);
+      setTaskStepsSchemaReady(result.schemaReady);
+    } catch (e) {
+      console.warn("[task-steps] refresh error", e);
+      setTaskSteps([]);
+      setTaskStepsSchemaReady(false);
+    }
+  }
+
   async function refreshTasksOnly() {
     if (!id) return;
     const tasksResult = await getTasksByChantierIdDetailed(id);
     setTasks(tasksResult.tasks);
     await refreshTaskAssigneesOnly(tasksResult.tasks);
+    await refreshTaskStepsOnly();
     setTasksPlanningWarning(
       tasksResult.planningColumnsMissing
         ? `Migration planning manquante sur Supabase. Colonnes attendues sur public.chantier_tasks: ${tasksResult.expectedPlanningColumns.join(", ")}.`
@@ -2498,6 +2538,15 @@ export default function ChantierPage() {
     return map;
   }, [taskDocumentLinks]);
 
+  const taskStepsByTaskId = useMemo(() => {
+    const map = new Map<string, ChantierTaskStepRow[]>();
+    for (const step of taskSteps) {
+      if (!map.has(step.task_id)) map.set(step.task_id, []);
+      map.get(step.task_id)?.push(step);
+    }
+    return map;
+  }, [taskSteps]);
+
   const filteredReserves = useMemo(() => {
     if (reservesFilter === "ALL") return reserves;
     if (reservesFilter === "LEVEES") {
@@ -2818,6 +2867,105 @@ export default function ChantierPage() {
       await refreshTasksOnly();
     } finally {
       setTaskProgressSavingId(null);
+    }
+  }
+
+  function onTaskStepDraftChange(taskId: string, value: string) {
+    setTaskStepDrafts((prev) => ({ ...prev, [taskId]: value }));
+  }
+
+  async function addTaskOperationalStep(task: ChantierTaskRow) {
+    if (!id) return;
+    const title = String(taskStepDrafts[task.id] ?? "").trim();
+    if (!title) {
+      setToast({ type: "error", msg: "Intitulé d'étape obligatoire." });
+      return;
+    }
+
+    const existingSteps = taskStepsByTaskId.get(task.id) ?? [];
+    const nextOrder = existingSteps.reduce((max, step) => Math.max(max, Number(step.ordre ?? 0)), -1) + 1;
+    setTaskStepSavingId(task.id);
+    try {
+      const created = await createTaskStep({
+        chantier_id: id,
+        task_id: task.id,
+        titre: title,
+        ordre: nextOrder,
+      });
+      setTaskSteps((prev) => [...prev, created].sort((a, b) => a.task_id.localeCompare(b.task_id) || a.ordre - b.ordre));
+      setTaskStepDrafts((prev) => ({ ...prev, [task.id]: "" }));
+      await recordChantierActivity({
+        actionType: "created",
+        entityType: "task_step",
+        entityId: created.id,
+        reason: "Étape opérationnelle ajoutée",
+        changes: {
+          task_id: task.id,
+          titre: created.titre,
+          statut: created.statut,
+          ordre: created.ordre,
+        },
+      });
+      setToast({ type: "ok", msg: "Étape ajoutée." });
+    } catch (e: any) {
+      setToast({ type: "error", msg: e?.message ?? "Erreur création étape." });
+    } finally {
+      setTaskStepSavingId(null);
+    }
+  }
+
+  async function toggleTaskOperationalStep(step: ChantierTaskStepRow) {
+    const nextStatus: ChantierTaskStepStatus =
+      step.statut === "a_faire" ? "en_cours" : step.statut === "en_cours" ? "termine" : "a_faire";
+    const before = taskSteps;
+    setTaskSteps((prev) => prev.map((row) => (row.id === step.id ? { ...row, statut: nextStatus } : row)));
+    setTaskStepSavingId(step.task_id);
+    try {
+      const saved = await updateTaskStep(step.id, { statut: nextStatus });
+      setTaskSteps((prev) => prev.map((row) => (row.id === saved.id ? saved : row)));
+      await recordChantierActivity({
+        actionType: "status_changed",
+        entityType: "task_step",
+        entityId: saved.id,
+        reason: "Statut d'étape opérationnelle modifié",
+        changes: {
+          task_id: saved.task_id,
+          titre: saved.titre,
+          from_statut: step.statut,
+          to_statut: saved.statut,
+        },
+      });
+    } catch (e: any) {
+      setTaskSteps(before);
+      setToast({ type: "error", msg: e?.message ?? "Erreur mise à jour étape." });
+    } finally {
+      setTaskStepSavingId(null);
+    }
+  }
+
+  async function removeTaskOperationalStep(step: ChantierTaskStepRow) {
+    const before = taskSteps;
+    setTaskStepDeletingId(step.id);
+    setTaskSteps((prev) => prev.filter((row) => row.id !== step.id));
+    try {
+      await deleteTaskStep(step.id);
+      await recordChantierActivity({
+        actionType: "deleted",
+        entityType: "task_step",
+        entityId: step.id,
+        reason: "Étape opérationnelle supprimée",
+        changes: {
+          task_id: step.task_id,
+          titre: step.titre,
+          statut: step.statut,
+        },
+      });
+      setToast({ type: "ok", msg: "Étape supprimée." });
+    } catch (e: any) {
+      setTaskSteps(before);
+      setToast({ type: "error", msg: e?.message ?? "Erreur suppression étape." });
+    } finally {
+      setTaskStepDeletingId(null);
     }
   }
 
@@ -5414,6 +5562,93 @@ export default function ChantierPage() {
                           </div>
                         );
                       })()}
+
+                      <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 space-y-3">
+                        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                          <div>
+                            <div className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
+                              Étapes opérationnelles
+                            </div>
+                            <div className="mt-1 text-xs text-slate-500">
+                              Exemple : ossature, isolation, plaques, finitions.
+                            </div>
+                          </div>
+                          <div className="text-[11px] text-slate-500">
+                            {(taskStepsByTaskId.get(t.id) ?? []).length} étape
+                            {(taskStepsByTaskId.get(t.id) ?? []).length > 1 ? "s" : ""}
+                          </div>
+                        </div>
+
+                        {!taskStepsSchemaReady ? (
+                          <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700">
+                            Migration étapes non appliquée : pousse
+                            `20260402150000_chantier_task_steps_v1.sql` dans Supabase.
+                          </div>
+                        ) : null}
+
+                        <div className="space-y-2">
+                          {(taskStepsByTaskId.get(t.id) ?? []).length === 0 ? (
+                            <div className="rounded-xl border border-dashed border-slate-200 bg-white px-3 py-3 text-xs text-slate-500">
+                              Aucune étape opérationnelle définie.
+                            </div>
+                          ) : (
+                            (taskStepsByTaskId.get(t.id) ?? []).map((step) => (
+                              <div
+                                key={step.id}
+                                className="flex flex-col gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 sm:flex-row sm:items-center sm:justify-between"
+                              >
+                                <button
+                                  type="button"
+                                  onClick={() => void toggleTaskOperationalStep(step)}
+                                  disabled={taskStepSavingId === t.id || taskStepDeletingId === step.id}
+                                  className="flex min-w-0 items-center gap-2 text-left"
+                                >
+                                  <span
+                                    className={[
+                                      "inline-flex shrink-0 rounded-full border px-2 py-0.5 text-[11px] font-medium",
+                                      taskStepStatusBadgeClass(step.statut),
+                                    ].join(" ")}
+                                  >
+                                    {taskStepStatusLabel(step.statut)}
+                                  </span>
+                                  <span className="truncate text-sm text-slate-900">{step.titre}</span>
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => void removeTaskOperationalStep(step)}
+                                  disabled={taskStepDeletingId === step.id || taskStepSavingId === t.id}
+                                  className="self-start rounded-lg border border-red-200 px-2 py-1 text-xs text-red-700 hover:bg-red-50 disabled:opacity-60 sm:self-auto"
+                                >
+                                  {taskStepDeletingId === step.id ? "..." : "Supprimer"}
+                                </button>
+                              </div>
+                            ))
+                          )}
+                        </div>
+
+                        <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]">
+                          <input
+                            className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900"
+                            placeholder="Ajouter une étape : ex. isolation"
+                            value={taskStepDrafts[t.id] ?? ""}
+                            onChange={(e) => onTaskStepDraftChange(t.id, e.target.value)}
+                            disabled={taskStepSavingId === t.id || !taskStepsSchemaReady}
+                          />
+                          <button
+                            type="button"
+                            onClick={() => void addTaskOperationalStep(t)}
+                            disabled={taskStepSavingId === t.id || !taskStepsSchemaReady}
+                            className={[
+                              "rounded-xl px-3 py-2 text-sm",
+                              taskStepSavingId === t.id || !taskStepsSchemaReady
+                                ? "bg-slate-300 text-slate-700"
+                                : "bg-slate-900 text-white hover:bg-slate-800",
+                            ].join(" ")}
+                          >
+                            Ajouter étape
+                          </button>
+                        </div>
+                      </div>
 
                       {!isEditing ? (
                         <div className="flex flex-wrap justify-end gap-2">
