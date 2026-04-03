@@ -769,6 +769,7 @@ export default function IntervenantPortalPage() {
     [selectedTimeTask, latestTaskProgressById],
   );
   const todayChecklistDate = useMemo(() => todayIsoDate(), []);
+  const tomorrowChecklistDate = useMemo(() => addDaysIso(todayChecklistDate, 1), [todayChecklistDate]);
   const dailyChecklistValues = useMemo(() => checklistValuesFromRow(dailyChecklist), [dailyChecklist]);
   const dailyChecklistCurrentStatus = useMemo(() => checklistStatus(dailyChecklist), [dailyChecklist]);
   const latestInfoRequests = useMemo(() => infoRequestState.data.slice(0, 3), [infoRequestState.data]);
@@ -809,6 +810,21 @@ export default function IntervenantPortalPage() {
   const openReservesCount = useMemo(
     () => reservesState.data.filter((row) => row.status !== "LEVEE").length,
     [reservesState.data],
+  );
+  const todayDashboardTasks = useMemo(
+    () => dashboardTasksSorted.filter((item) => taskAnchorDate(item.task) === todayChecklistDate).slice(0, 4),
+    [dashboardTasksSorted, todayChecklistDate],
+  );
+  const tomorrowDashboardTasks = useMemo(
+    () => dashboardTasksSorted.filter((item) => taskAnchorDate(item.task) === tomorrowChecklistDate).slice(0, 4),
+    [dashboardTasksSorted, tomorrowChecklistDate],
+  );
+  const todoDashboardTasks = useMemo(
+    () =>
+      dashboardTasksSorted
+        .filter((item) => taskPortalPriority(item.task) < 2)
+        .slice(0, 5),
+    [dashboardTasksSorted],
   );
   const contentTitle = activeTab === "accueil" ? t("intervenantPortal.portalTitle") : activeChantier?.nom ?? t("intervenantPortal.selectedSiteFallback");
   const contentSubtitle = activeTab === "accueil"
@@ -1387,6 +1403,67 @@ export default function IntervenantPortalPage() {
     </PortalCard>
   );
 
+  const terrainSummaryCard = (
+    <PortalCard tone="default">
+      <PortalSectionHeading
+        eyebrow="Exécuter"
+        title="Aujourd'hui / Demain"
+        subtitle="Vue terrain directe : tâches à faire, planning immédiat, consignes importantes."
+        aside={<PortalBadge tone={unreadConsignesCount > 0 ? "amber" : "green"}>{unreadConsignesCount} consigne{unreadConsignesCount > 1 ? "s" : ""} non lue{unreadConsignesCount > 1 ? "s" : ""}</PortalBadge>}
+      />
+
+      <div className="mt-4 grid gap-3 xl:grid-cols-3">
+        {[
+          { title: "Aujourd'hui", items: todayDashboardTasks, empty: "Aucune tâche planifiée aujourd'hui." },
+          { title: "Demain", items: tomorrowDashboardTasks, empty: "Aucune tâche planifiée demain." },
+          { title: "À faire", items: todoDashboardTasks, empty: "Aucune tâche en attente." },
+        ].map((group) => (
+          <section key={group.title} className="rounded-[1rem] border border-slate-200 bg-slate-50/80 p-4">
+            <div className="text-sm font-semibold text-slate-900">{group.title}</div>
+            <div className="mt-3 space-y-2">
+              {dashboardTasksState.loading ? (
+                <div className="rounded-[1rem] border border-slate-200 bg-white px-3 py-3 text-sm text-slate-500">
+                  Chargement...
+                </div>
+              ) : group.items.length === 0 ? (
+                <div className="rounded-[1rem] border border-dashed border-slate-200 bg-white px-3 py-3 text-sm text-slate-500">
+                  {group.empty}
+                </div>
+              ) : (
+                group.items.map((item) => {
+                  const anchorDate = taskAnchorDate(item.task);
+                  return (
+                    <button
+                      key={`${group.title}-${item.chantier.id}-${item.task.id}`}
+                      type="button"
+                      onClick={() => {
+                        chooseChantier(item.chantier.id);
+                        setActiveTab("taches");
+                        setMobileGlobalTab("site");
+                      }}
+                      className="w-full rounded-[1rem] border border-slate-200 bg-white px-3 py-3 text-left hover:border-blue-200 hover:bg-blue-50/40"
+                    >
+                      <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-blue-700">
+                        {item.chantier.nom}
+                      </div>
+                      <div className="mt-1 text-sm font-semibold text-slate-900" style={TITLE_CLAMP_STYLE}>
+                        {item.task.titre}
+                      </div>
+                      <div className="mt-1 text-xs text-slate-500">
+                        {resolveTaskLot(item.task, t)} · {statusLabel(item.task.status, t)}
+                        {anchorDate ? ` · ${formatPortalDate(anchorDate)}` : ""}
+                      </div>
+                    </button>
+                  );
+                })
+              )}
+            </div>
+          </section>
+        ))}
+      </div>
+    </PortalCard>
+  );
+
   const messagesPanel = (
     <div className="space-y-4">
       <PortalCard tone="default">
@@ -1957,6 +2034,7 @@ export default function IntervenantPortalPage() {
 
   const homePanel = (
     <div className="space-y-5">
+      {terrainSummaryCard}
       {consignesCard}
       {checklistCard}
       {weekPlanningCard}
