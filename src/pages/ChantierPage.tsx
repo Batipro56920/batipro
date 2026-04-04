@@ -117,6 +117,7 @@ import BudgetTab from "../components/chantiers/BudgetTab";
 import MessagerieTab from "../components/chantiers/MessagerieTab";
 import PilotageTab from "../components/chantiers/PilotageTab";
 import PreparationTab from "../components/chantiers/PreparationTab";
+import RapportsTab from "../components/chantiers/RapportsTab";
 import ReservePlanViewer from "../components/chantiers/ReservePlanViewer";
 import {
   listChantierZones,
@@ -353,6 +354,7 @@ const DOCUMENT_CATEGORIES = [
   "PV",
   "VISITE",
   "DOE",
+  "Rapports",
   "Divers",
 ] as const;
 const DOCUMENT_TYPES = [
@@ -6408,6 +6410,18 @@ export default function ChantierPage() {
           />
         )}
 
+        {tab === "rapports" && item && (
+          <RapportsTab
+            chantier={item}
+            onDocumentsRefresh={async () => {
+              const data = await refreshChantierDocuments();
+              setDocuments(data);
+              await refreshDoeDocumentIds();
+            }}
+            onActivityRefresh={() => void refreshActivityLogs()}
+          />
+        )}
+
         {tab === "doe" && id && (
           <DoeTab
             chantierId={id}
@@ -6454,6 +6468,7 @@ export default function ChantierPage() {
           tab !== "planning" &&
           tab !== "journal" &&
           tab !== "messagerie" &&
+          tab !== "rapports" &&
           tab !== "doe" &&
           tab !== "visite" && (
             <div className="space-y-3">
