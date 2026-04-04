@@ -35,6 +35,19 @@ import {
   type IntervenantTerrainFeedback,
   type IntervenantTimeEntry,
 } from "../services/intervenantPortal.service";
+import {
+  countIntervenantOfflineActions,
+  createIntervenantOfflineActionId,
+  listIntervenantOfflineActions,
+  queueIntervenantOfflineAction,
+  readIntervenantOfflinePortalCache,
+  removeIntervenantOfflineAction,
+  saveIntervenantOfflinePortalCache,
+} from "../services/intervenantOfflineQueue.service";
+import type {
+  IntervenantOfflineAction,
+  IntervenantOfflineChantierCache,
+} from "../services/intervenantOfflineQueue.service";
 import TodayChecklistCard, {
   type DailyChecklistItemKey,
   type DailyChecklistValues,
@@ -90,6 +103,8 @@ const EMPTY_TERRAIN_FEEDBACKS_STATE: LoadState<IntervenantTerrainFeedback[]> = {
 const EMPTY_CONSIGNES_STATE: LoadState<IntervenantConsigne[]> = { loading: false, error: null, data: [] };
 const EMPTY_RESERVES_STATE: LoadState<IntervenantReserve[]> = { loading: false, error: null, data: [] };
 const EMPTY_DASHBOARD_TASKS_STATE: LoadState<DashboardTaskItem[]> = { loading: false, error: null, data: [] };
+const OFFLINE_NOTICE = "Mode hors ligne : donnees locales affichees, envois mis en file d'attente.";
+const OFFLINE_QUEUE_NOTICE = "Hors ligne : envoi garde localement et synchronise automatiquement.";
 
 function getErrorMessage(error: unknown, fallback: string): string {
   const message = String((error as { message?: string } | null)?.message ?? fallback).trim();
@@ -109,6 +124,88 @@ function shouldFallbackToLegacy(error: unknown): boolean {
     message.includes("schema cache") ||
     message.includes("permission denied for function")
   );
+}
+
+function shouldQueueOfflineMutation(error: unknown): boolean {
+  if (!readNavigatorOnlineStatus()) return true;
+  const message = String((error as { message?: string } | null)?.message ?? "").toLowerCase();
+  return (
+    message.includes("failed to fetch") ||
+    message.includes("network") ||
+    message.includes("fetcherror") ||
+    message.includes("load failed")
+  );
+}
+
+function readNavigatorOnlineStatus(): boolean {
+  if (typeof navigator === "undefined" || typeof navigator.onLine !== "boolean") return true;
+  return navigator.onLine;
+}
+
+function createOfflineTimeEntry(
+  payload: IntervenantOfflineAction & { kind: "time_create" },
+  task: IntervenantTask | null,
+  intervenantId: string | null | undefined,
+): IntervenantTimeEntry {
+  return {
+    id: payload.id,
+    chantier_id: payload.payload.chantier_id,
+    task_id: payload.payload.task_id,
+    task_titre: task?.titre ?? null,
+    task_unite: task?.unite ?? null,
+    intervenant_id: String(intervenantId ?? ""),
+    work_date: String(payload.payload.work_date ?? todayIsoDate()),
+    duration_hours: payload.payload.duration_hours,
+    quantite_realisee: payload.payload.quantite_realisee ?? null,
+    progress_percent: payload.payload.progress_percent ?? null,
+    note: payload.payload.note ?? null,
+    created_at: payload.queued_at,
+  };
+}
+
+function createOfflineMaterielEntry(
+  payload: IntervenantOfflineAction & { kind: "materiel_create" },
+  task: IntervenantTask | null,
+  intervenantId: string | null | undefined,
+): IntervenantMateriel {
+  return {
+    id: payload.id,
+    chantier_id: payload.payload.chantier_id,
+    intervenant_id: String(intervenantId ?? ""),
+    task_id: payload.payload.task_id ?? null,
+    task_titre: task?.titre ?? null,
+    titre: payload.payload.titre,
+    quantite: payload.payload.quantite ?? null,
+    unite: payload.payload.unite ?? null,
+    commentaire: payload.payload.commentaire ?? null,
+    date_souhaitee: payload.payload.date_souhaitee ?? null,
+    statut: "en_attente",
+    admin_commentaire: null,
+    validated_at: null,
+    validated_by: null,
+    created_at: payload.queued_at,
+    updated_at: payload.queued_at,
+  };
+}
+
+function createOfflineInformationRequest(
+  payload: IntervenantOfflineAction & { kind: "information_request_create" },
+  intervenantId: string | null | undefined,
+): IntervenantInformationRequest {
+  return {
+    id: payload.id,
+    chantier_id: payload.payload.chantier_id,
+    intervenant_id: String(intervenantId ?? ""),
+    request_date: String(payload.payload.request_date ?? todayIsoDate()),
+    subject: payload.payload.subject,
+    message: payload.payload.message,
+    status: "envoyee",
+    admin_reply: null,
+    admin_replied_by: null,
+    admin_replied_at: null,
+    created_at: payload.queued_at,
+    updated_at: payload.queued_at,
+  };
 }
 
 function formatDateLabel(value: string | null, locale: string): string {
@@ -393,6 +490,9 @@ export default function IntervenantPortalPage() {
   const [portalOptionsOpen, setPortalOptionsOpen] = useState(false);
   const [mobileGlobalTab, setMobileGlobalTab] = useState<MobileGlobalTab>("home");
   const [mobileQuickAction, setMobileQuickAction] = useState<MobileQuickAction>(null);
+  const [isPortalOnline, setIsPortalOnline] = useState(() => readNavigatorOnlineStatus());
+  const [offlineQueueCount, setOfflineQueueCount] = useState(0);
+  const [offlineSyncMessage, setOfflineSyncMessage] = useState<string | null>(null);
   const [sidebarChantierQuery, setSidebarChantierQuery] = useState("");
   const [timeTaskId, setTimeTaskId] = useState<string | null>(null);
   const [timeTaskSearch, setTimeTaskSearch] = useState("");
@@ -460,6 +560,31 @@ export default function IntervenantPortalPage() {
       try {
         setToken(candidateToken);
         persistIntervenantToken(candidateToken);
+        setOfflineQueueCount(countIntervenantOfflineActions(candidateToken));
+        const cachedPortal = readIntervenantOfflinePortalCache(candidateToken);
+        if (!readNavigatorOnlineStatus() && cachedPortal?.chantiers?.length) {
+          if (!alive) return;
+          const chantierIds = new Set(cachedPortal.chantiers.map((row) => row.id));
+          const storedChantierId = readStoredIntervenantChantierId();
+          const fromQuery = queryChantierId && chantierIds.has(queryChantierId) ? queryChantierId : "";
+          const fromStorage = storedChantierId && chantierIds.has(storedChantierId) ? storedChantierId : "";
+          const nextChantierId = fromQuery || fromStorage || cachedPortal.chantiers[0]?.id || "";
+          setSessionInfo(cachedPortal.session_info);
+          setChantiers(cachedPortal.chantiers);
+          setDashboardTasksState({ loading: false, error: OFFLINE_NOTICE, data: cachedPortal.dashboard_tasks });
+          setSelectedChantierId(nextChantierId);
+          setIsPortalOnline(false);
+          setOfflineSyncMessage(OFFLINE_QUEUE_NOTICE);
+          setMobileGlobalTab(nextChantierId ? "site" : "home");
+          setActiveTab(nextChantierId ? "temps" : "accueil");
+          if (nextChantierId) persistIntervenantChantierId(nextChantierId);
+          else clearStoredIntervenantChantierId();
+          if (queryToken) {
+            navigate("/intervenant", { replace: true });
+          }
+          setBootLoading(false);
+          return;
+        }
         const [sessionData, chantierRows] = await Promise.all([
           intervenantSession(candidateToken),
           intervenantGetChantiers(candidateToken),
@@ -472,6 +597,16 @@ export default function IntervenantPortalPage() {
         const nextChantierId = fromQuery || fromStorage || chantierRows[0]?.id || "";
         setSessionInfo(sessionData);
         setChantiers(chantierRows);
+        saveIntervenantOfflinePortalCache(candidateToken, {
+          session_info: sessionData,
+          chantiers: chantierRows,
+        });
+        setIsPortalOnline(true);
+        setOfflineSyncMessage(
+          countIntervenantOfflineActions(candidateToken) > 0
+            ? `${countIntervenantOfflineActions(candidateToken)} action(s) en attente de synchronisation.`
+            : "Synchronisation a jour.",
+        );
         setSelectedChantierId(nextChantierId);
         const isMobileViewport = typeof window !== "undefined" && window.matchMedia("(max-width: 767px)").matches;
         if (isMobileViewport && chantierRows.length === 1 && nextChantierId) {
@@ -498,6 +633,29 @@ export default function IntervenantPortalPage() {
           navigate(`/acces/${encodeURIComponent(candidateToken)}`, { replace: true });
           return;
         }
+        const cachedPortal = readIntervenantOfflinePortalCache(candidateToken);
+        if (cachedPortal?.chantiers?.length && shouldQueueOfflineMutation(error)) {
+          const chantierIds = new Set(cachedPortal.chantiers.map((row) => row.id));
+          const storedChantierId = readStoredIntervenantChantierId();
+          const fromQuery = queryChantierId && chantierIds.has(queryChantierId) ? queryChantierId : "";
+          const fromStorage = storedChantierId && chantierIds.has(storedChantierId) ? storedChantierId : "";
+          const nextChantierId = fromQuery || fromStorage || cachedPortal.chantiers[0]?.id || "";
+          setSessionInfo(cachedPortal.session_info);
+          setChantiers(cachedPortal.chantiers);
+          setDashboardTasksState({ loading: false, error: OFFLINE_NOTICE, data: cachedPortal.dashboard_tasks });
+          setSelectedChantierId(nextChantierId);
+          setIsPortalOnline(false);
+          setOfflineSyncMessage(OFFLINE_QUEUE_NOTICE);
+          setMobileGlobalTab(nextChantierId ? "site" : "home");
+          setActiveTab(nextChantierId ? "temps" : "accueil");
+          if (nextChantierId) persistIntervenantChantierId(nextChantierId);
+          else clearStoredIntervenantChantierId();
+          if (queryToken) {
+            navigate("/intervenant", { replace: true });
+          }
+          setBootLoading(false);
+          return;
+        }
         setSessionInfo(null);
         setChantiers([]);
         setSelectedChantierId("");
@@ -511,6 +669,67 @@ export default function IntervenantPortalPage() {
       alive = false;
     };
   }, [navigate, queryChantierId, queryToken, t]);
+
+  useEffect(() => {
+    function handleNetworkChange() {
+      const nextOnline = readNavigatorOnlineStatus();
+      setIsPortalOnline(nextOnline);
+      if (!nextOnline) {
+        setOfflineSyncMessage(OFFLINE_QUEUE_NOTICE);
+        return;
+      }
+      markQueuedState();
+      setReloadTick((value) => value + 1);
+    }
+
+    handleNetworkChange();
+    if (typeof window === "undefined") return;
+    window.addEventListener("online", handleNetworkChange);
+    window.addEventListener("offline", handleNetworkChange);
+    return () => {
+      window.removeEventListener("online", handleNetworkChange);
+      window.removeEventListener("offline", handleNetworkChange);
+    };
+  }, [token]);
+
+  useEffect(() => {
+    if (!token || bootLoading || bootError || !isPortalOnline || offlineQueueCount === 0) return;
+    let alive = true;
+    async function syncOfflineQueue() {
+      const queuedActions = listIntervenantOfflineActions(token);
+      if (queuedActions.length === 0) {
+        if (alive) markQueuedState(0);
+        return;
+      }
+      setOfflineSyncMessage(`Synchronisation de ${queuedActions.length} action(s) terrain...`);
+      let syncedCount = 0;
+      for (const action of queuedActions) {
+        try {
+          await replayIntervenantOfflineAction(action);
+          removeIntervenantOfflineAction(action.id);
+          syncedCount += 1;
+        } catch (error) {
+          if (shouldQueueOfflineMutation(error)) {
+            setIsPortalOnline(false);
+            setOfflineSyncMessage(OFFLINE_QUEUE_NOTICE);
+            break;
+          }
+          setOfflineSyncMessage(getErrorMessage(error, "Synchronisation offline interrompue."));
+          break;
+        }
+      }
+      if (!alive) return;
+      const nextCount = countIntervenantOfflineActions(token);
+      markQueuedState(nextCount);
+      if (syncedCount > 0) {
+        setReloadTick((value) => value + 1);
+      }
+    }
+    void syncOfflineQueue();
+    return () => {
+      alive = false;
+    };
+  }, [bootError, bootLoading, isPortalOnline, offlineQueueCount, token]);
 
   useEffect(() => {
     if (!token || bootLoading || bootError) return;
@@ -594,6 +813,14 @@ export default function IntervenantPortalPage() {
     if (!token || !selectedChantierId || bootLoading || bootError) return;
     let alive = true;
     async function loadChantierData() {
+      const cachedPortal = readIntervenantOfflinePortalCache(token);
+      const cachedChantier = cachedPortal?.chantiers_data?.[selectedChantierId] ?? null;
+      if (!readNavigatorOnlineStatus() && cachedChantier) {
+        setIsPortalOnline(false);
+        setOfflineSyncMessage(OFFLINE_QUEUE_NOTICE);
+        applyCachedChantierState(cachedChantier);
+        return;
+      }
       setTasksState({ loading: true, error: null, data: [] });
       setDocumentsState({ loading: true, error: null, data: [] });
       setPlanningState({ loading: true, error: null, data: { chantier_id: selectedChantierId, lots: [] } });
@@ -625,15 +852,88 @@ export default function IntervenantPortalPage() {
           return;
         }
       }
-      setTasksState(tasksResult.status === "fulfilled" ? { loading: false, error: null, data: tasksResult.value } : { loading: false, error: getErrorMessage(tasksResult.reason, t("intervenantPortal.errors.tasksLoad")), data: [] });
-      setDocumentsState(documentsResult.status === "fulfilled" ? { loading: false, error: null, data: documentsResult.value } : { loading: false, error: getErrorMessage(documentsResult.reason, t("intervenantPortal.errors.documentsLoad")), data: [] });
-      setPlanningState(planningResult.status === "fulfilled" ? { loading: false, error: null, data: planningResult.value } : { loading: false, error: getErrorMessage(planningResult.reason, t("intervenantPortal.errors.planningLoad")), data: { chantier_id: selectedChantierId, lots: [] } });
-      setTimeState(timeResult.status === "fulfilled" ? { loading: false, error: null, data: timeResult.value } : { loading: false, error: getErrorMessage(timeResult.reason, t("intervenantPortal.errors.timeLoad")), data: [] });
-      setMaterielState(materielResult.status === "fulfilled" ? { loading: false, error: null, data: materielResult.value } : { loading: false, error: getErrorMessage(materielResult.reason, t("intervenantPortal.errors.materialLoad")), data: [] });
-      setInfoRequestState(infoRequestsResult.status === "fulfilled" ? { loading: false, error: null, data: infoRequestsResult.value } : { loading: false, error: getErrorMessage(infoRequestsResult.reason, t("intervenantPortal.errors.infoLoad")), data: [] });
-      setTerrainFeedbackState(terrainFeedbackResult.status === "fulfilled" ? { loading: false, error: null, data: terrainFeedbackResult.value } : { loading: false, error: getErrorMessage(terrainFeedbackResult.reason, t("intervenantPortal.errors.terrainFeedbackLoad")), data: [] });
-      setConsignesState(consignesResult.status === "fulfilled" ? { loading: false, error: null, data: consignesResult.value } : { loading: false, error: getErrorMessage(consignesResult.reason, t("intervenantPortal.errors.consignesLoad")), data: [] });
-      setReservesState(reservesResult.status === "fulfilled" ? { loading: false, error: null, data: reservesResult.value } : { loading: false, error: getErrorMessage(reservesResult.reason, t("intervenantPortal.errors.reservesLoad")), data: [] });
+      const nextTasks =
+        tasksResult.status === "fulfilled"
+          ? { loading: false, error: null, data: tasksResult.value }
+          : cachedChantier && shouldQueueOfflineMutation(tasksResult.reason)
+            ? { loading: false, error: OFFLINE_NOTICE, data: cachedChantier.tasks }
+            : { loading: false, error: getErrorMessage(tasksResult.reason, t("intervenantPortal.errors.tasksLoad")), data: [] };
+      const nextDocuments =
+        documentsResult.status === "fulfilled"
+          ? { loading: false, error: null, data: documentsResult.value }
+          : cachedChantier && shouldQueueOfflineMutation(documentsResult.reason)
+            ? { loading: false, error: OFFLINE_NOTICE, data: cachedChantier.documents }
+            : { loading: false, error: getErrorMessage(documentsResult.reason, t("intervenantPortal.errors.documentsLoad")), data: [] };
+      const nextPlanning =
+        planningResult.status === "fulfilled"
+          ? { loading: false, error: null, data: planningResult.value }
+          : cachedChantier && shouldQueueOfflineMutation(planningResult.reason)
+            ? { loading: false, error: OFFLINE_NOTICE, data: cachedChantier.planning }
+            : { loading: false, error: getErrorMessage(planningResult.reason, t("intervenantPortal.errors.planningLoad")), data: { chantier_id: selectedChantierId, lots: [] } };
+      const nextTime =
+        timeResult.status === "fulfilled"
+          ? { loading: false, error: null, data: timeResult.value }
+          : cachedChantier && shouldQueueOfflineMutation(timeResult.reason)
+            ? { loading: false, error: OFFLINE_NOTICE, data: cachedChantier.time_entries }
+            : { loading: false, error: getErrorMessage(timeResult.reason, t("intervenantPortal.errors.timeLoad")), data: [] };
+      const nextMateriel =
+        materielResult.status === "fulfilled"
+          ? { loading: false, error: null, data: materielResult.value }
+          : cachedChantier && shouldQueueOfflineMutation(materielResult.reason)
+            ? { loading: false, error: OFFLINE_NOTICE, data: cachedChantier.materiel }
+            : { loading: false, error: getErrorMessage(materielResult.reason, t("intervenantPortal.errors.materialLoad")), data: [] };
+      const nextInfoRequests =
+        infoRequestsResult.status === "fulfilled"
+          ? { loading: false, error: null, data: infoRequestsResult.value }
+          : cachedChantier && shouldQueueOfflineMutation(infoRequestsResult.reason)
+            ? { loading: false, error: OFFLINE_NOTICE, data: cachedChantier.info_requests }
+            : { loading: false, error: getErrorMessage(infoRequestsResult.reason, t("intervenantPortal.errors.infoLoad")), data: [] };
+      const nextTerrainFeedbacks =
+        terrainFeedbackResult.status === "fulfilled"
+          ? { loading: false, error: null, data: terrainFeedbackResult.value }
+          : cachedChantier && shouldQueueOfflineMutation(terrainFeedbackResult.reason)
+            ? { loading: false, error: OFFLINE_NOTICE, data: cachedChantier.terrain_feedbacks }
+            : { loading: false, error: getErrorMessage(terrainFeedbackResult.reason, t("intervenantPortal.errors.terrainFeedbackLoad")), data: [] };
+      const nextConsignes =
+        consignesResult.status === "fulfilled"
+          ? { loading: false, error: null, data: consignesResult.value }
+          : cachedChantier && shouldQueueOfflineMutation(consignesResult.reason)
+            ? { loading: false, error: OFFLINE_NOTICE, data: cachedChantier.consignes }
+            : { loading: false, error: getErrorMessage(consignesResult.reason, t("intervenantPortal.errors.consignesLoad")), data: [] };
+      const nextReserves =
+        reservesResult.status === "fulfilled"
+          ? { loading: false, error: null, data: reservesResult.value }
+          : cachedChantier && shouldQueueOfflineMutation(reservesResult.reason)
+            ? { loading: false, error: OFFLINE_NOTICE, data: cachedChantier.reserves }
+            : { loading: false, error: getErrorMessage(reservesResult.reason, t("intervenantPortal.errors.reservesLoad")), data: [] };
+
+      setTasksState(nextTasks);
+      setDocumentsState(nextDocuments);
+      setPlanningState(nextPlanning);
+      setTimeState(nextTime);
+      setMaterielState(nextMateriel);
+      setInfoRequestState(nextInfoRequests);
+      setTerrainFeedbackState(nextTerrainFeedbacks);
+      setConsignesState(nextConsignes);
+      setReservesState(nextReserves);
+      saveIntervenantOfflinePortalCache(token, {
+        chantiers_data: {
+          [selectedChantierId]: {
+            saved_at: new Date().toISOString(),
+            tasks: nextTasks.data,
+            documents: nextDocuments.data,
+            planning: nextPlanning.data,
+            time_entries: nextTime.data,
+            materiel: nextMateriel.data,
+            info_requests: nextInfoRequests.data,
+            terrain_feedbacks: nextTerrainFeedbacks.data,
+            consignes: nextConsignes.data,
+            reserves: nextReserves.data,
+          },
+        },
+      });
+      setIsPortalOnline(readNavigatorOnlineStatus());
+      markQueuedState();
     }
     void loadChantierData();
     return () => {
@@ -649,6 +949,13 @@ export default function IntervenantPortalPage() {
     }
     let alive = true;
     async function loadDashboardData() {
+      const cachedPortal = readIntervenantOfflinePortalCache(token);
+      if (!readNavigatorOnlineStatus() && cachedPortal?.dashboard_tasks?.length) {
+        setDashboardTasksState({ loading: false, error: OFFLINE_NOTICE, data: cachedPortal.dashboard_tasks });
+        setIsPortalOnline(false);
+        setOfflineSyncMessage(OFFLINE_QUEUE_NOTICE);
+        return;
+      }
       setDashboardTasksState({ loading: true, error: null, data: [] });
       const taskLoads = await Promise.allSettled(chantiers.map(async (chantier) => ({ chantier, rows: await intervenantGetTasks(token, chantier.id) })));
       if (!alive) return;
@@ -658,6 +965,17 @@ export default function IntervenantPortalPage() {
         if (result.status === "fulfilled") result.value.rows.forEach((task) => dashboardTasks.push({ chantier: result.value.chantier, task }));
         else if (!dashboardTasksError) dashboardTasksError = getErrorMessage(result.reason, t("intervenantPortal.errors.homeLoad"));
       });
+      if (dashboardTasks.length > 0) {
+        setDashboardTasksState({ loading: false, error: dashboardTasksError, data: dashboardTasks });
+        saveIntervenantOfflinePortalCache(token, { dashboard_tasks: dashboardTasks });
+        return;
+      }
+      if (cachedPortal?.dashboard_tasks?.length && taskLoads.some((result) => result.status === "rejected" && shouldQueueOfflineMutation(result.reason))) {
+        setDashboardTasksState({ loading: false, error: OFFLINE_NOTICE, data: cachedPortal.dashboard_tasks });
+        setIsPortalOnline(false);
+        setOfflineSyncMessage(OFFLINE_QUEUE_NOTICE);
+        return;
+      }
       setDashboardTasksState({ loading: false, error: dashboardTasksError, data: dashboardTasks });
     }
     void loadDashboardData();
@@ -734,6 +1052,80 @@ export default function IntervenantPortalPage() {
 
   function formatPortalQuantity(value: number | null, unit: string | null, empty = "0") {
     return formatQuantity(value, unit, locale, empty);
+  }
+
+  function cachedChantierPayload(): IntervenantOfflineChantierCache | null {
+    if (!selectedChantierId) return null;
+    return {
+      saved_at: new Date().toISOString(),
+      tasks: tasksState.data,
+      documents: documentsState.data,
+      planning: planningState.data,
+      time_entries: timeState.data,
+      materiel: materielState.data,
+      info_requests: infoRequestState.data,
+      terrain_feedbacks: terrainFeedbackState.data,
+      consignes: consignesState.data,
+      reserves: reservesState.data,
+    };
+  }
+
+  function persistSelectedChantierCache(nextPatch?: Partial<IntervenantOfflineChantierCache>) {
+    if (!token || !selectedChantierId) return;
+    const basePayload = cachedChantierPayload();
+    if (!basePayload) return;
+    saveIntervenantOfflinePortalCache(token, {
+      chantiers_data: {
+        [selectedChantierId]: {
+          ...basePayload,
+          ...(nextPatch ?? {}),
+          saved_at: new Date().toISOString(),
+        },
+      },
+    });
+  }
+
+  function applyCachedChantierState(cachedData: IntervenantOfflineChantierCache) {
+    setTasksState({ loading: false, error: OFFLINE_NOTICE, data: cachedData.tasks });
+    setDocumentsState({ loading: false, error: OFFLINE_NOTICE, data: cachedData.documents });
+    setPlanningState({ loading: false, error: OFFLINE_NOTICE, data: cachedData.planning });
+    setTimeState({ loading: false, error: OFFLINE_NOTICE, data: cachedData.time_entries });
+    setMaterielState({ loading: false, error: OFFLINE_NOTICE, data: cachedData.materiel });
+    setInfoRequestState({ loading: false, error: OFFLINE_NOTICE, data: cachedData.info_requests });
+    setTerrainFeedbackState({ loading: false, error: OFFLINE_NOTICE, data: cachedData.terrain_feedbacks });
+    setConsignesState({ loading: false, error: OFFLINE_NOTICE, data: cachedData.consignes });
+    setReservesState({ loading: false, error: OFFLINE_NOTICE, data: cachedData.reserves });
+  }
+
+  function markQueuedState(nextCount?: number) {
+    const resolvedCount = typeof nextCount === "number" ? nextCount : countIntervenantOfflineActions(token);
+    setOfflineQueueCount(resolvedCount);
+    setOfflineSyncMessage(
+      resolvedCount > 0
+        ? `${resolvedCount} action${resolvedCount > 1 ? "s" : ""} en attente de synchronisation.`
+        : isPortalOnline
+          ? "Synchronisation a jour."
+          : OFFLINE_QUEUE_NOTICE,
+    );
+  }
+
+  function queueOfflineAction(action: IntervenantOfflineAction) {
+    const nextCount = queueIntervenantOfflineAction(action);
+    setIsPortalOnline(false);
+    markQueuedState(nextCount);
+  }
+
+  async function replayIntervenantOfflineAction(action: IntervenantOfflineAction) {
+    if (!token || action.token !== token) return;
+    if (action.kind === "time_create") {
+      await intervenantTimeCreate(token, action.payload);
+      return;
+    }
+    if (action.kind === "materiel_create") {
+      await intervenantMaterielCreate(token, action.payload);
+      return;
+    }
+    await intervenantInformationRequestCreate(token, action.payload);
   }
 
   const activeChantier = useMemo(() => chantiers.find((chantier) => chantier.id === selectedChantierId) ?? null, [chantiers, selectedChantierId]);
@@ -858,6 +1250,12 @@ export default function IntervenantPortalPage() {
   const contentSubtitle = activeTab === "accueil"
     ? `${chantiers.length} ${t("intervenantPortal.tabs.chantiers").toLowerCase()}`
     : chantierDateSummary(activeChantier, locale, t);
+  const syncBadgeTone = isPortalOnline ? (offlineQueueCount > 0 ? "amber" : "green") : "amber";
+  const syncBadgeLabel = isPortalOnline
+    ? offlineQueueCount > 0
+      ? `Sync ${offlineQueueCount}`
+      : "En ligne"
+    : `Hors ligne${offlineQueueCount > 0 ? ` (${offlineQueueCount})` : ""}`;
   const dailyChecklistDateLabel = formatPortalDate(todayChecklistDate);
   const dailyChecklistValidatedLabel = dailyChecklist?.validated_at ? formatPortalDateTime(dailyChecklist.validated_at) : null;
   const entryTabs = ["temps", "materiel", "retours", "messages"] as PortalTab[];
@@ -1033,15 +1431,15 @@ export default function IntervenantPortalPage() {
     }
     setTimeSaving(true);
     setTimeFeedback(null);
+    const payload = {
+      chantier_id: selectedChantierId,
+      task_id: timeTaskId,
+      work_date: timeDate || todayIsoDate(),
+      duration_hours: hours,
+      progress_percent: clampPercent(progressValue),
+      note: timeNote.trim() || null,
+    };
     try {
-      const payload = {
-        chantier_id: selectedChantierId,
-        task_id: timeTaskId,
-        work_date: timeDate || todayIsoDate(),
-        duration_hours: hours,
-        progress_percent: clampPercent(progressValue),
-        note: timeNote.trim() || null,
-      };
       const legacyQuantityDelta = buildLegacyQuantityDelta(selectedTimeTask, progressValue);
       try {
         await intervenantTimeCreate(token, payload);
@@ -1074,6 +1472,33 @@ export default function IntervenantPortalPage() {
       }
       setReloadTick((value) => value + 1);
     } catch (error) {
+      if (shouldQueueOfflineMutation(error)) {
+        const queuedAction: IntervenantOfflineAction = {
+          id: createIntervenantOfflineActionId(),
+          token,
+          kind: "time_create",
+          chantier_id: selectedChantierId,
+          queued_at: new Date().toISOString(),
+          payload,
+        };
+        const offlineEntry = createOfflineTimeEntry(queuedAction, selectedTimeTask, sessionInfo?.intervenant.id);
+        const nextTimeEntries = [offlineEntry, ...timeState.data];
+        setTimeState({ loading: false, error: OFFLINE_NOTICE, data: nextTimeEntries });
+        persistSelectedChantierCache({ time_entries: nextTimeEntries });
+        queueOfflineAction(queuedAction);
+        setTimeFeedback({ type: "success", message: OFFLINE_QUEUE_NOTICE });
+        setTimeHours("");
+        setTimeProgressPercent("0");
+        setTimeNote("");
+        setTimeDate(todayIsoDate());
+        setTimeTaskId(null);
+        setTimeTaskSearch("");
+        setTimeTaskListOpen(false);
+        if (mobileQuickAction === "time") {
+          setMobileQuickAction(null);
+        }
+        return;
+      }
       const message = getErrorMessage(error, t("intervenantPortal.errors.saveTime"));
       setTimeFeedback({ type: "error", message: isTaskIdRequiredError(message) ? t("intervenantPortal.errors.chooseTask") : message });
     } finally {
@@ -1111,7 +1536,8 @@ export default function IntervenantPortalPage() {
     setMaterielSaving(true);
     setMaterielFeedback(null);
     try {
-      await intervenantMaterielCreate(token, { chantier_id: selectedChantierId, task_id: materielTaskId || null, titre: materielTitre.trim(), quantite: quantityValue, unite: materielUnite.trim() || null, commentaire: materielCommentaire.trim() || null, date_souhaitee: materielDate || null });
+      const payload = { chantier_id: selectedChantierId, task_id: materielTaskId || null, titre: materielTitre.trim(), quantite: quantityValue, unite: materielUnite.trim() || null, commentaire: materielCommentaire.trim() || null, date_souhaitee: materielDate || null };
+      await intervenantMaterielCreate(token, payload);
       setMaterielFeedback({ type: "success", message: t("intervenantPortal.feedback.materialSent") });
       setMaterielTitre("");
       setMaterielTaskId("");
@@ -1121,6 +1547,34 @@ export default function IntervenantPortalPage() {
       setMaterielCommentaire("");
       setReloadTick((value) => value + 1);
     } catch (error) {
+      if (shouldQueueOfflineMutation(error)) {
+        const payload = { chantier_id: selectedChantierId, task_id: materielTaskId || null, titre: materielTitre.trim(), quantite: quantityValue, unite: materielUnite.trim() || null, commentaire: materielCommentaire.trim() || null, date_souhaitee: materielDate || null };
+        const queuedAction: IntervenantOfflineAction = {
+          id: createIntervenantOfflineActionId(),
+          token,
+          kind: "materiel_create",
+          chantier_id: selectedChantierId,
+          queued_at: new Date().toISOString(),
+          payload,
+        };
+        const offlineEntry = createOfflineMaterielEntry(
+          queuedAction,
+          tasksState.data.find((task) => task.id === (materielTaskId || "")) ?? null,
+          sessionInfo?.intervenant.id,
+        );
+        const nextMaterielRows = [offlineEntry, ...materielState.data];
+        setMaterielState({ loading: false, error: OFFLINE_NOTICE, data: nextMaterielRows });
+        persistSelectedChantierCache({ materiel: nextMaterielRows });
+        queueOfflineAction(queuedAction);
+        setMaterielFeedback({ type: "success", message: OFFLINE_QUEUE_NOTICE });
+        setMaterielTitre("");
+        setMaterielTaskId("");
+        setMaterielQuantite("1");
+        setMaterielUnite("");
+        setMaterielDate("");
+        setMaterielCommentaire("");
+        return;
+      }
       setMaterielFeedback({ type: "error", message: getErrorMessage(error, t("intervenantPortal.errors.sendMaterial")) });
     } finally {
       setMaterielSaving(false);
@@ -1145,7 +1599,8 @@ export default function IntervenantPortalPage() {
     setQuickMaterielSaving(true);
     setQuickMaterielFeedback(null);
     try {
-      await intervenantMaterielCreate(token, { chantier_id: quickMaterielChantierId, titre: quickMaterielTitre.trim(), quantite: quantityValue });
+      const payload = { chantier_id: quickMaterielChantierId, titre: quickMaterielTitre.trim(), quantite: quantityValue };
+      await intervenantMaterielCreate(token, payload);
       setQuickMaterielFeedback({ type: "success", message: t("intervenantPortal.feedback.materialSent") });
       setQuickMaterielTitre("");
       setQuickMaterielQuantite("1");
@@ -1154,6 +1609,31 @@ export default function IntervenantPortalPage() {
       }
       setReloadTick((value) => value + 1);
     } catch (error) {
+      if (shouldQueueOfflineMutation(error)) {
+        const payload = { chantier_id: quickMaterielChantierId, titre: quickMaterielTitre.trim(), quantite: quantityValue };
+        const queuedAction: IntervenantOfflineAction = {
+          id: createIntervenantOfflineActionId(),
+          token,
+          kind: "materiel_create",
+          chantier_id: quickMaterielChantierId,
+          queued_at: new Date().toISOString(),
+          payload,
+        };
+        if (quickMaterielChantierId === selectedChantierId) {
+          const offlineEntry = createOfflineMaterielEntry(queuedAction, null, sessionInfo?.intervenant.id);
+          const nextMaterielRows = [offlineEntry, ...materielState.data];
+          setMaterielState({ loading: false, error: OFFLINE_NOTICE, data: nextMaterielRows });
+          persistSelectedChantierCache({ materiel: nextMaterielRows });
+        }
+        queueOfflineAction(queuedAction);
+        setQuickMaterielFeedback({ type: "success", message: OFFLINE_QUEUE_NOTICE });
+        setQuickMaterielTitre("");
+        setQuickMaterielQuantite("1");
+        if (mobileQuickAction === "materiel") {
+          setMobileQuickAction(null);
+        }
+        return;
+      }
       setQuickMaterielFeedback({ type: "error", message: getErrorMessage(error, t("intervenantPortal.errors.sendMaterial")) });
     } finally {
       setQuickMaterielSaving(false);
@@ -1177,18 +1657,38 @@ export default function IntervenantPortalPage() {
 
     setInfoRequestSaving(true);
     setInfoRequestFeedback(null);
+    const payload = {
+      chantier_id: selectedChantierId,
+      request_date: todayIsoDate(),
+      subject: infoRequestSubject.trim(),
+      message: infoRequestMessage.trim(),
+    };
     try {
-      await intervenantInformationRequestCreate(token, {
-        chantier_id: selectedChantierId,
-        request_date: todayIsoDate(),
-        subject: infoRequestSubject.trim(),
-        message: infoRequestMessage.trim(),
-      });
+      await intervenantInformationRequestCreate(token, payload);
       setInfoRequestFeedback({ type: "success", message: t("intervenantPortal.feedback.infoSent") });
       setInfoRequestSubject("");
       setInfoRequestMessage("");
       setReloadTick((value) => value + 1);
     } catch (error) {
+      if (shouldQueueOfflineMutation(error)) {
+        const queuedAction: IntervenantOfflineAction = {
+          id: createIntervenantOfflineActionId(),
+          token,
+          kind: "information_request_create",
+          chantier_id: selectedChantierId,
+          queued_at: new Date().toISOString(),
+          payload,
+        };
+        const offlineRequest = createOfflineInformationRequest(queuedAction, sessionInfo?.intervenant.id);
+        const nextRequests = [offlineRequest, ...infoRequestState.data];
+        setInfoRequestState({ loading: false, error: OFFLINE_NOTICE, data: nextRequests });
+        persistSelectedChantierCache({ info_requests: nextRequests });
+        queueOfflineAction(queuedAction);
+        setInfoRequestFeedback({ type: "success", message: OFFLINE_QUEUE_NOTICE });
+        setInfoRequestSubject("");
+        setInfoRequestMessage("");
+        return;
+      }
       setInfoRequestFeedback({ type: "error", message: getErrorMessage(error, t("intervenantPortal.errors.sendInfo")) });
     } finally {
       setInfoRequestSaving(false);
@@ -2194,6 +2694,12 @@ export default function IntervenantPortalPage() {
               <div className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">{t("intervenantPortal.sectionIntervenant")}</div>
               <div className="mt-2 text-lg font-semibold text-slate-900">{sessionInfo?.intervenant.nom || t("intervenantPortal.portalTitle")}</div>
               <div className="mt-1 text-xs text-slate-500">{sessionInfo?.expires_at ? t("intervenantPortal.sessionUntil", { date: formatPortalDateTime(sessionInfo.expires_at) }) : t("intervenantPortal.sessionActive")}</div>
+              <div className="mt-3 flex items-center justify-between gap-2 rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2">
+                <PortalBadge tone={syncBadgeTone}>{syncBadgeLabel}</PortalBadge>
+                <div className="text-right text-[11px] leading-4 text-slate-500">
+                  {offlineSyncMessage || "Synchronisation a jour."}
+                </div>
+              </div>
               <div className="mt-4 inline-flex items-center rounded-xl border border-slate-200 bg-slate-50 p-1" role="group" aria-label={t("layout.languageSwitcherLabel")}>
                 {(["fr", "al"] as const).map((value) => (
                   <button
@@ -2280,6 +2786,10 @@ export default function IntervenantPortalPage() {
         <main className="min-w-0 space-y-3 md:space-y-4">
           <section className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm md:hidden">
             <div className="flex items-start justify-between gap-3"><div className="min-w-0"><div className="text-base font-semibold text-slate-900">{sessionInfo?.intervenant.nom || t("intervenantPortal.portalTitle")}</div><div className="mt-1 text-xs text-slate-500">{sessionInfo?.expires_at ? t("intervenantPortal.sessionUntil", { date: formatPortalDateTime(sessionInfo.expires_at) }) : t("intervenantPortal.sessionActive")}</div></div><div className="flex shrink-0 gap-2"><button type="button" onClick={openMobileHome} className={["rounded-full px-3 py-1.5 text-xs font-medium", mobileGlobalTab === "home" ? "bg-blue-600 text-white" : "border border-slate-200 text-slate-700"].join(" ")}>{t("intervenantPortal.tabs.accueil")}</button><button type="button" onClick={() => setPortalOptionsOpen((value) => !value)} className="rounded-full border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-700">{t("intervenantPortal.tabs.options")}</button></div></div>
+            <div className="mt-3 flex items-center justify-between gap-2 rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2">
+              <PortalBadge tone={syncBadgeTone}>{syncBadgeLabel}</PortalBadge>
+              <div className="text-right text-[11px] leading-4 text-slate-500">{offlineSyncMessage || "Synchronisation a jour."}</div>
+            </div>
             {portalOptionsOpen ? <div className="mt-3 space-y-2"><div className="grid grid-cols-2 gap-2"><button type="button" onClick={() => setReloadTick((value) => value + 1)} className="rounded-full border border-slate-200 px-3 py-2 text-sm font-medium text-slate-700">{t("common.actions.refresh")}</button><button type="button" onClick={logoutIntervenant} className="rounded-full border border-red-200 px-3 py-2 text-sm font-medium text-red-700">{t("layout.signOut")}</button></div><div className="inline-flex items-center rounded-xl border border-slate-200 bg-slate-50 p-1" role="group" aria-label={t("layout.languageSwitcherLabel")}>{(["fr", "al"] as const).map((value) => <button key={value} type="button" onClick={() => setLanguage(value)} className={["rounded-lg px-2.5 py-1.5 text-xs font-medium transition", language === value ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-900"].join(" ")} aria-pressed={language === value}>{t(`common.languages.${value}`)}</button>)}</div></div> : null}
           </section>
           <section className="rounded-3xl border border-slate-200 bg-white p-2 shadow-sm md:hidden"><div className="grid grid-cols-2 gap-2"><PortalPillButton type="button" active={mobileGlobalTab === "home"} onClick={openMobileHome}>{t("intervenantPortal.tabs.accueil")}</PortalPillButton><PortalPillButton type="button" active={mobileGlobalTab !== "home"} onClick={openMobileSites}>{t("intervenantPortal.tabs.chantiers")}</PortalPillButton></div></section>

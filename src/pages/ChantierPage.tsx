@@ -6472,10 +6472,7 @@ export default function ChantierPage() {
           tab !== "doe" &&
           tab !== "visite" && (
             <div className="space-y-3">
-              <div className="font-semibold">
-                {tab === "messagerie" && "Messagerie"}
-                {tab === "rapports" && "Rapports"}
-              </div>
+              <div className="font-semibold">{String(tab)}</div>
               <div className="rounded-xl border bg-slate-50 p-4 text-sm text-slate-600">
                 Onglet en cours d’implémentation.
               </div>
