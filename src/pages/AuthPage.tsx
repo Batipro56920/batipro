@@ -22,11 +22,17 @@ export default function AuthPage() {
       navigate("/intervenant", { replace: true });
       return;
     }
+
+    const authError = String((location.state as any)?.authError ?? "").trim();
+    if (authError) {
+      setMsg(authError);
+    }
+
     // Si déjà connecté ? on renvoie vers l'app
     supabase.auth.getSession().then(({ data }) => {
       if (data.session) navigate("/dashboard", { replace: true });
     });
-  }, [navigate]);
+  }, [location.state, navigate]);
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
