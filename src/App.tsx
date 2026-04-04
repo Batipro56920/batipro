@@ -2,6 +2,7 @@
 import { Routes, Route, Navigate } from "react-router-dom";
 import LayoutShell from "./components/LayoutShell";
 import RequireAuth from "./components/RequireAuth";
+import RequireCompanyFeature from "./components/RequireCompanyFeature";
 
 import AuthPage from "./pages/AuthPage";
 import DashboardPage from "./pages/DashboardPage";
@@ -43,14 +44,50 @@ export default function App() {
         <Route path="/chantiers" element={<ChantiersPage />} />
         <Route path="/chantiers/nouveau" element={<ChantierNewPage />} />
         <Route path="/chantiers/:id" element={<ChantierPage />} />
-        <Route path="/chantiers/:id/visites" element={<ChantierVisitesPage />} />
+        <Route
+          path="/chantiers/:id/visites"
+          element={
+            <RequireCompanyFeature moduleId="validation_qualite">
+              <ChantierVisitesPage />
+            </RequireCompanyFeature>
+          }
+        />
 
         <Route path="/intervenants" element={<IntervenantsPage />} />
-        <Route path="/retours-terrain" element={<TerrainFeedbacksPage />} />
-        <Route path="/bibliotheque" element={<BibliothequeTasksPage />} />
-        <Route path="/statistiques" element={<StatistiquesPage />} />
+        <Route
+          path="/retours-terrain"
+          element={
+            <RequireCompanyFeature moduleId="journal_chantier">
+              <TerrainFeedbacksPage />
+            </RequireCompanyFeature>
+          }
+        />
+        <Route
+          path="/bibliotheque"
+          element={
+            <RequireCompanyFeature moduleId="documents">
+              <BibliothequeTasksPage />
+            </RequireCompanyFeature>
+          }
+        />
+        <Route
+          path="/statistiques"
+          element={
+            <RequireCompanyFeature moduleId="rapports">
+              <StatistiquesPage />
+            </RequireCompanyFeature>
+          }
+        />
         <Route path="/entreprise" element={<MonEntreprisePage />} />
-        <Route path="/fournisseurs" element={<FournisseursPage />} />
+        <Route path="/entreprise/fonctionnalites" element={<MonEntreprisePage />} />
+        <Route
+          path="/fournisseurs"
+          element={
+            <RequireCompanyFeature moduleId="approvisionnement">
+              <FournisseursPage />
+            </RequireCompanyFeature>
+          }
+        />
         <Route path="/entreprise/fournisseurs" element={<Navigate to="/fournisseurs" replace />} />
       </Route>
 

@@ -1,4 +1,13 @@
 import { supabase } from "../lib/supabaseClient";
+import {
+  getEffectiveCompanyFeatureModules,
+  normalizeCompanyBusinessProfile,
+  normalizeCompanyFeatureMode,
+  normalizeCompanyFeatureModules,
+  type CompanyBusinessProfile,
+  type CompanyFeatureMode,
+  type CompanyFeatureModuleId,
+} from "../config/companyFeatures";
 
 const TABLE = "company_settings";
 const LOGO_BUCKET = "chantier-documents";
@@ -18,6 +27,9 @@ export type CompanySettingsRow = {
   insurance_decennale: string | null;
   primary_color: string;
   secondary_color: string;
+  business_profile: CompanyBusinessProfile;
+  feature_mode: CompanyFeatureMode;
+  enabled_modules: CompanyFeatureModuleId[];
   created_at: string;
   updated_at: string;
 };
@@ -88,6 +100,10 @@ async function getCurrentUserId(): Promise<string> {
 function withDefaults(orgId: string, row?: Partial<CompanySettingsRow>): CompanySettingsRow {
   const rowAny = row as any;
   const logoPath = (rowAny?.logo_path ?? rowAny?.logo_url ?? null) as string | null;
+  const businessProfile = normalizeCompanyBusinessProfile(rowAny?.business_profile);
+  const featureMode = normalizeCompanyFeatureMode(rowAny?.feature_mode);
+  const enabledModules = normalizeCompanyFeatureModules(rowAny?.enabled_modules, businessProfile);
+
   return {
     id: String(row?.id ?? ""),
     organization_id: String(row?.organization_id ?? orgId),
@@ -101,6 +117,9 @@ function withDefaults(orgId: string, row?: Partial<CompanySettingsRow>): Company
     insurance_decennale: row?.insurance_decennale ?? null,
     primary_color: normalizeHexColor(row?.primary_color, "#2563eb"),
     secondary_color: normalizeHexColor(row?.secondary_color, "#0f172a"),
+    business_profile: businessProfile,
+    feature_mode: featureMode,
+    enabled_modules: enabledModules,
     created_at: String(row?.created_at ?? ""),
     updated_at: String(row?.updated_at ?? ""),
   };
@@ -139,23 +158,51 @@ export async function upsertCompanySettings(
       | "insurance_decennale"
       | "primary_color"
       | "secondary_color"
+      | "business_profile"
+      | "feature_mode"
+      | "enabled_modules"
     >
   >,
 ): Promise<CompanySettingsRow> {
   const userId = await getCurrentUserId();
   const nowIso = new Date().toISOString();
+  const currentLocal = withDefaults(userId, loadLocalSettings(userId) ?? undefined);
+  const businessProfile =
+    patch.business_profile ?? currentLocal.business_profile ?? "entreprise_renovation";
+  const featureMode = patch.feature_mode ?? currentLocal.feature_mode ?? "simple";
+  const enabledModules =
+    patch.enabled_modules ??
+    normalizeCompanyFeatureModules(currentLocal.enabled_modules, businessProfile);
 
   const payload = {
     organization_id: userId,
-    company_name: String(patch.company_name ?? "").trim(),
-    logo_path: patch.logo_path ?? null,
-    address: patch.address ? patch.address.trim() : null,
-    phone: patch.phone ? patch.phone.trim() : null,
-    email: patch.email ? patch.email.trim() : null,
-    siret: patch.siret ? patch.siret.trim() : null,
-    insurance_decennale: patch.insurance_decennale ? patch.insurance_decennale.trim() : null,
-    primary_color: normalizeHexColor(patch.primary_color, "#2563eb"),
-    secondary_color: normalizeHexColor(patch.secondary_color, "#0f172a"),
+    company_name: String(patch.company_name ?? currentLocal.company_name ?? "").trim(),
+    logo_path: patch.logo_path !== undefined ? patch.logo_path : currentLocal.logo_path ?? null,
+    address:
+      patch.address !== undefined ? (patch.address ? patch.address.trim() : null) : currentLocal.address,
+    phone:
+      patch.phone !== undefined ? (patch.phone ? patch.phone.trim() : null) : currentLocal.phone,
+    email:
+      patch.email !== undefined ? (patch.email ? patch.email.trim() : null) : currentLocal.email,
+    siret:
+      patch.siret !== undefined ? (patch.siret ? patch.siret.trim() : null) : currentLocal.siret,
+    insurance_decennale:
+      patch.insurance_decennale !== undefined
+        ? patch.insurance_decennale
+          ? patch.insurance_decennale.trim()
+          : null
+        : currentLocal.insurance_decennale,
+    primary_color: normalizeHexColor(
+      patch.primary_color ?? currentLocal.primary_color,
+      "#2563eb",
+    ),
+    secondary_color: normalizeHexColor(
+      patch.secondary_color ?? currentLocal.secondary_color,
+      "#0f172a",
+    ),
+    business_profile: normalizeCompanyBusinessProfile(businessProfile),
+    feature_mode: normalizeCompanyFeatureMode(featureMode),
+    enabled_modules: normalizeCompanyFeatureModules(enabledModules, businessProfile),
   };
 
   const { data, error } = await supabase
@@ -281,4 +328,14 @@ export async function getCompanyBrandingForPdf(): Promise<CompanyBrandingPdf> {
       logoDataUrl: null,
     };
   }
+}
+
+export function getEnabledCompanyModulesFromSettings(
+  settings: CompanySettingsRow,
+): CompanyFeatureModuleId[] {
+  return getEffectiveCompanyFeatureModules({
+    businessProfile: settings.business_profile,
+    featureMode: settings.feature_mode,
+    featureModules: settings.enabled_modules,
+  });
 }

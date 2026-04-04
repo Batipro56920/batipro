@@ -145,6 +145,14 @@ import {
   type TaskTemplateInput,
 } from "../services/taskTemplates.service";
 import { createChantierTemplateFromChantier } from "../services/chantierTemplates.service";
+import {
+  CHANTIER_TAB_FEATURES,
+  type CompanyFeatureModuleId,
+} from "../config/companyFeatures";
+import {
+  getCompanySettings,
+  getEnabledCompanyModulesFromSettings,
+} from "../services/companySettings.service";
 import { useI18n } from "../i18n";
 
 // ENVOI ACCÈS (Edge Function via service)
@@ -216,6 +224,15 @@ function taskQualityBadgeClass(status: TaskQualityStatus) {
   if (status === "a_reprendre") return "bg-red-50 text-red-700 border-red-200";
   if (status === "en_cours") return "bg-amber-50 text-amber-700 border-amber-200";
   return "bg-slate-50 text-slate-700 border-slate-200";
+}
+
+function isChantierTabEnabled(
+  tabKey: TabKey,
+  enabledModules: Set<CompanyFeatureModuleId> | null,
+) {
+  const feature = CHANTIER_TAB_FEATURES[tabKey];
+  if (!feature) return true;
+  return !enabledModules || enabledModules.has(feature);
 }
 
 function taskStepStatusLabel(status: ChantierTaskStepStatus) {
@@ -502,6 +519,8 @@ export default function ChantierPage() {
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   const [tab, setTab] = useState<TabKey>("accueil");
+  const [enabledChantierModules, setEnabledChantierModules] =
+    useState<Set<CompanyFeatureModuleId> | null>(null);
 
   // Toast
   const [toast, setToast] = useState<ToastState>(null);
@@ -510,6 +529,32 @@ export default function ChantierPage() {
     const t = setTimeout(() => setToast(null), 4000);
     return () => clearTimeout(t);
   }, [toast]);
+
+  useEffect(() => {
+    let alive = true;
+
+    async function loadCompanyFeatureSettings() {
+      try {
+        const settings = await getCompanySettings();
+        if (!alive) return;
+        setEnabledChantierModules(new Set(getEnabledCompanyModulesFromSettings(settings)));
+      } catch {
+        if (!alive) return;
+        setEnabledChantierModules(null);
+      }
+    }
+
+    void loadCompanyFeatureSettings();
+
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (isChantierTabEnabled(tab, enabledChantierModules)) return;
+    setTab("accueil");
+  }, [enabledChantierModules, tab]);
 
   // Tasks
   const [tasks, setTasks] = useState<ChantierTaskRow[]>([]);
@@ -3866,38 +3911,46 @@ export default function ChantierPage() {
   const filteredMateriel =
     materielFilter === "__ALL__" ? materiel : materiel.filter((row) => row.statut === materielFilter);
   const overviewTab: { key: TabKey; label: string } = { key: "accueil", label: "Accueil" };
-  const preparerTabs: Array<{ key: TabKey; label: string }> = [
+  const preparerTabs = ([
     { key: "preparer", label: "Préparer" },
     { key: "intervenants", label: t("sidebar.intervenants") },
     { key: "achats", label: "Approvisionnement" },
     { key: "materiel", label: t("intervenantAccess.tabs.material") },
     { key: "documents", label: t("intervenantAccess.tabs.documents") },
-  ];
-  const executerTabs: Array<{ key: TabKey; label: string }> = [
+  ] as Array<{ key: TabKey; label: string }>).filter((entry) =>
+    isChantierTabEnabled(entry.key, enabledChantierModules),
+  );
+  const executerTabs = ([
     { key: "devis-taches", label: t("chantierPage.tasks") },
     { key: "planning", label: t("chantierTabs.planning") },
     { key: "photos", label: "Photos" },
     { key: "consignes", label: "Consignes" },
     { key: "messagerie", label: t("intervenantAccess.tabs.messaging") },
-  ];
-  const controlerTabs: Array<{ key: TabKey; label: string }> = [
+  ] as Array<{ key: TabKey; label: string }>).filter((entry) =>
+    isChantierTabEnabled(entry.key, enabledChantierModules),
+  );
+  const controlerTabs = ([
     { key: "reserves", label: t("intervenantAccess.tabs.reserves") },
     { key: "journal", label: "Journal" },
     { key: "doe", label: "DOE" },
     { key: "visite", label: "Visite" },
-  ];
-  const piloterTabs: Array<{ key: TabKey; label: string }> = [
+  ] as Array<{ key: TabKey; label: string }>).filter((entry) =>
+    isChantierTabEnabled(entry.key, enabledChantierModules),
+  );
+  const piloterTabs = ([
     { key: "temps", label: t("chantierTabs.time") },
     { key: "budget", label: "Budget" },
     { key: "pilotage", label: "Pilotage" },
     { key: "rapports", label: "Rapports" },
-  ];
+  ] as Array<{ key: TabKey; label: string }>).filter((entry) =>
+    isChantierTabEnabled(entry.key, enabledChantierModules),
+  );
   const chantierTabSections = [
     { title: "Préparer", tabs: preparerTabs },
     { title: "Exécuter", tabs: executerTabs },
     { title: "Contrôler", tabs: controlerTabs },
     { title: "Piloter", tabs: piloterTabs },
-  ];
+  ].filter((section) => section.tabs.length > 0);
   const chantierTabs = [overviewTab, ...preparerTabs, ...executerTabs, ...controlerTabs, ...piloterTabs];
   const activeTabLabel = chantierTabs.find((entry) => entry.key === tab)?.label ?? "Rapports";
   const accueilPanel = (

@@ -11,7 +11,13 @@ import {
   Truck,
   TriangleAlert,
 } from "lucide-react";
+import { useEffect, useState } from "react";
+import type { CompanyFeatureModuleId } from "../config/companyFeatures";
 import { useI18n } from "../i18n";
+import {
+  getCompanySettings,
+  getEnabledCompanyModulesFromSettings,
+} from "../services/companySettings.service";
 
 type Props = {
   collapsed?: boolean;
@@ -20,16 +26,63 @@ type Props = {
 
 export default function Sidebar({ collapsed = false, onToggleCollapse }: Props) {
   const { t } = useI18n();
+  const [enabledModules, setEnabledModules] = useState<Set<CompanyFeatureModuleId> | null>(
+    null,
+  );
+
+  useEffect(() => {
+    let alive = true;
+
+    async function loadFeatureSettings() {
+      try {
+        const settings = await getCompanySettings();
+        if (!alive) return;
+        setEnabledModules(new Set(getEnabledCompanyModulesFromSettings(settings)));
+      } catch {
+        if (!alive) return;
+        setEnabledModules(null);
+      }
+    }
+
+    void loadFeatureSettings();
+
+    return () => {
+      alive = false;
+    };
+  }, []);
+
   const nav = [
     { to: "/dashboard", label: t("sidebar.dashboard"), icon: LayoutDashboard },
     { to: "/chantiers", label: t("sidebar.chantiers"), icon: Hammer },
     { to: "/intervenants", label: t("sidebar.intervenants"), icon: Users },
-    { to: "/retours-terrain", label: t("sidebar.terrainFeedback"), icon: TriangleAlert },
-    { to: "/bibliotheque", label: t("sidebar.library"), icon: LibraryBig },
-    { to: "/statistiques", label: t("sidebar.statistics"), icon: ChartColumnBig },
-    { to: "/fournisseurs", label: t("sidebar.suppliers"), icon: Truck },
+    {
+      to: "/retours-terrain",
+      label: t("sidebar.terrainFeedback"),
+      icon: TriangleAlert,
+      feature: "journal_chantier" as const,
+    },
+    {
+      to: "/bibliotheque",
+      label: t("sidebar.library"),
+      icon: LibraryBig,
+      feature: "documents" as const,
+    },
+    {
+      to: "/statistiques",
+      label: t("sidebar.statistics"),
+      icon: ChartColumnBig,
+      feature: "rapports" as const,
+    },
+    {
+      to: "/fournisseurs",
+      label: t("sidebar.suppliers"),
+      icon: Truck,
+      feature: "approvisionnement" as const,
+    },
     { to: "/entreprise", label: t("sidebar.company"), icon: Building2 },
-  ];
+  ].filter(
+    (item) => !item.feature || !enabledModules || enabledModules.has(item.feature),
+  );
 
   return (
     <div className="h-full">

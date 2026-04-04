@@ -1,4 +1,15 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
+import {
+  COMPANY_BUSINESS_PROFILE_OPTIONS,
+  COMPANY_FEATURE_MODE_OPTIONS,
+  getModulesByPillar,
+  getPresetFeatureModules,
+  getVisibleCompanyModules,
+  type CompanyBusinessProfile,
+  type CompanyFeatureMode,
+  type CompanyFeatureModuleId,
+} from "../config/companyFeatures";
 import {
   getCompanySettings,
   getCompanyLogoSignedUrl,
@@ -19,6 +30,12 @@ type CompanyFormState = {
   secondary_color: string;
 };
 
+type CompanyFeaturesFormState = {
+  business_profile: CompanyBusinessProfile;
+  feature_mode: CompanyFeatureMode;
+  enabled_modules: CompanyFeatureModuleId[];
+};
+
 function toCompanyForm(settings: CompanySettingsRow): CompanyFormState {
   return {
     company_name: settings.company_name ?? "",
@@ -32,8 +49,21 @@ function toCompanyForm(settings: CompanySettingsRow): CompanyFormState {
   };
 }
 
+function toCompanyFeaturesForm(settings: CompanySettingsRow): CompanyFeaturesFormState {
+  return {
+    business_profile: settings.business_profile,
+    feature_mode: settings.feature_mode,
+    enabled_modules: [...settings.enabled_modules],
+  };
+}
+
 export default function MonEntreprisePage() {
+  const location = useLocation();
+  const navigate = useNavigate();
   const { t } = useI18n();
+  const activeCompanySection = location.pathname.endsWith("/fonctionnalites")
+    ? "fonctionnalites"
+    : "identite";
   const [loadingSettings, setLoadingSettings] = useState(true);
   const [savingSettings, setSavingSettings] = useState(false);
   const [settingsError, setSettingsError] = useState<string | null>(null);
@@ -49,9 +79,33 @@ export default function MonEntreprisePage() {
     primary_color: "#2563eb",
     secondary_color: "#0f172a",
   });
+  const [featuresForm, setFeaturesForm] = useState<CompanyFeaturesFormState>({
+    business_profile: "entreprise_renovation",
+    feature_mode: "simple",
+    enabled_modules: getPresetFeatureModules("entreprise_renovation"),
+  });
   const [logoPreviewUrl, setLogoPreviewUrl] = useState<string | null>(null);
   const [logoFile, setLogoFile] = useState<File | null>(null);
   const [selectedLogoPreviewUrl, setSelectedLogoPreviewUrl] = useState<string | null>(null);
+
+  const modulesByPillar = useMemo(
+    () => getModulesByPillar(getVisibleCompanyModules(featuresForm.feature_mode)),
+    [featuresForm.feature_mode],
+  );
+  const selectedProfileMeta = useMemo(
+    () =>
+      COMPANY_BUSINESS_PROFILE_OPTIONS.find(
+        (entry) => entry.id === featuresForm.business_profile,
+      ) ?? COMPANY_BUSINESS_PROFILE_OPTIONS[0],
+    [featuresForm.business_profile],
+  );
+  const activeModuleCount = useMemo(
+    () => {
+      const visibleIds = new Set(modulesByPillar.flatMap((section) => section.modules.map((m) => m.id)));
+      return featuresForm.enabled_modules.filter((moduleId) => visibleIds.has(moduleId)).length;
+    },
+    [featuresForm.enabled_modules, modulesByPillar],
+  );
 
   async function loadSettings() {
     setLoadingSettings(true);
@@ -60,6 +114,7 @@ export default function MonEntreprisePage() {
       const settings = await getCompanySettings();
       setCompanySettings(settings);
       setCompanyForm(toCompanyForm(settings));
+      setFeaturesForm(toCompanyFeaturesForm(settings));
 
       if (settings.logo_path) {
         try {
@@ -134,6 +189,51 @@ export default function MonEntreprisePage() {
     }
   }
 
+  function onChangeBusinessProfile(nextProfile: CompanyBusinessProfile) {
+    setFeaturesForm((prev) => ({
+      ...prev,
+      business_profile: nextProfile,
+      enabled_modules: getPresetFeatureModules(nextProfile),
+    }));
+  }
+
+  function onToggleModule(moduleId: CompanyFeatureModuleId) {
+    setFeaturesForm((prev) => {
+      const current = new Set(prev.enabled_modules);
+      if (current.has(moduleId)) {
+        current.delete(moduleId);
+      } else {
+        current.add(moduleId);
+      }
+      return {
+        ...prev,
+        enabled_modules: Array.from(current),
+      };
+    });
+  }
+
+  async function onSaveFeatureSettings() {
+    setSavingSettings(true);
+    setSettingsError(null);
+    setSettingsNotice(null);
+    try {
+      const saved = await upsertCompanySettings({
+        business_profile: featuresForm.business_profile,
+        feature_mode: featuresForm.feature_mode,
+        enabled_modules: featuresForm.enabled_modules,
+      });
+
+      setCompanySettings(saved);
+      setCompanyForm(toCompanyForm(saved));
+      setFeaturesForm(toCompanyFeaturesForm(saved));
+      setSettingsNotice("Configuration des fonctionnalités enregistrée.");
+    } catch (err: any) {
+      setSettingsError(err?.message ?? "Erreur enregistrement des fonctionnalités.");
+    } finally {
+      setSavingSettings(false);
+    }
+  }
+
   return (
     <div className="space-y-4">
       <div className="flex items-start justify-between gap-3">
@@ -152,9 +252,41 @@ export default function MonEntreprisePage() {
         </div>
       )}
 
+      <div className="rounded-2xl border border-slate-200 bg-white p-2">
+        <div className="grid gap-2 md:grid-cols-2">
+          <button
+            type="button"
+            onClick={() => navigate("/entreprise")}
+            className={[
+              "rounded-xl px-4 py-3 text-left transition",
+              activeCompanySection === "identite"
+                ? "bg-slate-900 text-white"
+                : "bg-slate-50 text-slate-700 hover:bg-slate-100",
+            ].join(" ")}
+          >
+            <div className="text-xs uppercase tracking-[0.2em] opacity-70">Mon entreprise</div>
+            <div className="text-sm font-semibold">Identité</div>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => navigate("/entreprise/fonctionnalites")}
+            className={[
+              "rounded-xl px-4 py-3 text-left transition",
+              activeCompanySection === "fonctionnalites"
+                ? "bg-slate-900 text-white"
+                : "bg-slate-50 text-slate-700 hover:bg-slate-100",
+            ].join(" ")}
+          >
+            <div className="text-xs uppercase tracking-[0.2em] opacity-70">Réglages</div>
+            <div className="text-sm font-semibold">Fonctionnalités</div>
+          </button>
+        </div>
+      </div>
+
       {loadingSettings ? (
         <div className="rounded-2xl border bg-white p-6 text-sm text-slate-500">{t("monEntreprise.loading")}</div>
-      ) : (
+      ) : activeCompanySection === "identite" ? (
         <div className="grid gap-4 lg:grid-cols-[minmax(0,2fr)_minmax(300px,1fr)]">
           <div className="rounded-2xl border bg-white p-4 space-y-4">
             <div className="font-semibold section-title">{t("monEntreprise.sectionTitle")}</div>
@@ -306,6 +438,152 @@ export default function MonEntreprisePage() {
               </div>
             </div>
           </div>
+        </div>
+      ) : (
+        <div className="grid gap-4 xl:grid-cols-[minmax(320px,0.8fr)_minmax(0,1.2fr)]">
+          <section className="rounded-2xl border bg-white p-4 space-y-4">
+            <div>
+              <div className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">
+                Profil métier
+              </div>
+              <h2 className="mt-1 text-lg font-semibold text-slate-900">
+                Modules activés par défaut
+              </h2>
+              <p className="mt-1 text-sm text-slate-500">{selectedProfileMeta.description}</p>
+            </div>
+
+            <label className="space-y-1 text-sm">
+              <div className="text-xs text-slate-600">Métier de l'entreprise</div>
+              <select
+                className="w-full rounded-xl border px-3 py-2 text-sm"
+                value={featuresForm.business_profile}
+                onChange={(e) => onChangeBusinessProfile(e.target.value as CompanyBusinessProfile)}
+              >
+                {COMPANY_BUSINESS_PROFILE_OPTIONS.map((profile) => (
+                  <option key={profile.id} value={profile.id}>
+                    {profile.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <div className="space-y-2">
+              <div className="text-xs text-slate-600">Mode d'affichage</div>
+              <div className="grid gap-2 sm:grid-cols-2">
+                {COMPANY_FEATURE_MODE_OPTIONS.map((mode) => (
+                  <button
+                    key={mode.id}
+                    type="button"
+                    onClick={() =>
+                      setFeaturesForm((prev) => ({ ...prev, feature_mode: mode.id }))
+                    }
+                    className={[
+                      "rounded-2xl border p-3 text-left transition",
+                      featuresForm.feature_mode === mode.id
+                        ? "border-blue-600 bg-blue-50"
+                        : "border-slate-200 bg-slate-50 hover:bg-slate-100",
+                    ].join(" ")}
+                  >
+                    <div className="text-sm font-semibold text-slate-900">{mode.label}</div>
+                    <div className="mt-1 text-xs text-slate-500">{mode.description}</div>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+              <div className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">
+                Synthèse
+              </div>
+              <div className="mt-2 text-3xl font-semibold text-slate-950">
+                {activeModuleCount}
+              </div>
+              <div className="text-sm text-slate-600">modules activés</div>
+              <div className="mt-3 text-xs text-slate-500">
+                L'architecture est pilotée par un registre central, ce qui permet d'ajouter de
+                nouveaux modules et de les rattacher ensuite aux rôles utilisateurs.
+              </div>
+            </div>
+
+            <button
+              type="button"
+              disabled={savingSettings}
+              onClick={() => void onSaveFeatureSettings()}
+              className={[
+                "w-full rounded-xl px-4 py-2 text-sm",
+                savingSettings
+                  ? "bg-slate-300 text-slate-700"
+                  : "bg-slate-900 text-white hover:bg-slate-800",
+              ].join(" ")}
+            >
+              {savingSettings ? t("common.states.saving") : "Enregistrer les fonctionnalités"}
+            </button>
+          </section>
+
+          <section className="rounded-2xl border bg-white p-4 space-y-4">
+            <div>
+              <div className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">
+                Réglages
+              </div>
+              <h2 className="mt-1 text-lg font-semibold text-slate-900">
+                Fonctionnalités par pilier
+              </h2>
+              <p className="mt-1 text-sm text-slate-500">
+                Désactivez un module pour le retirer des menus, des onglets chantier et bloquer
+                ses routes directes côté backoffice.
+              </p>
+            </div>
+
+            <div className="space-y-4">
+              {modulesByPillar.map((section) => (
+                <div key={section.pillar} className="rounded-2xl border border-slate-200 p-4">
+                  <div className="text-sm font-semibold text-slate-900">{section.label}</div>
+                  <div className="mt-3 grid gap-3 lg:grid-cols-2">
+                    {section.modules.map((module) => {
+                      const checked = featuresForm.enabled_modules.includes(module.id);
+                      return (
+                        <button
+                          key={module.id}
+                          type="button"
+                          onClick={() => onToggleModule(module.id)}
+                          className={[
+                            "rounded-2xl border p-3 text-left transition",
+                            checked
+                              ? "border-emerald-200 bg-emerald-50"
+                              : "border-slate-200 bg-slate-50 hover:bg-slate-100",
+                          ].join(" ")}
+                        >
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="min-w-0">
+                              <div className="text-sm font-semibold text-slate-900">
+                                {module.label}
+                              </div>
+                              <div className="mt-1 text-xs text-slate-500">
+                                {module.description}
+                              </div>
+                              <div className="mt-2 text-[11px] uppercase tracking-[0.16em] text-slate-400">
+                                Rôles : {module.roles.join(" / ")}
+                              </div>
+                            </div>
+                            <span
+                              className={[
+                                "shrink-0 rounded-full px-3 py-1 text-xs font-semibold",
+                                checked
+                                  ? "bg-emerald-600 text-white"
+                                  : "bg-slate-200 text-slate-600",
+                              ].join(" ")}
+                            >
+                              {checked ? "Actif" : "Inactif"}
+                            </span>
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </section>
         </div>
       )}
     </div>
