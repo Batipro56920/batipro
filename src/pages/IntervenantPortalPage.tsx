@@ -1576,6 +1576,21 @@ export default function IntervenantPortalPage() {
                   </PortalBadge>
                 </div>
                 <div className="mt-2 text-sm text-slate-600">{request.message}</div>
+                {request.admin_reply ? (
+                  <div className="mt-4 rounded-[1rem] border border-emerald-200 bg-emerald-50/80 p-3">
+                    <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-emerald-700">
+                      Réponse admin
+                    </div>
+                    <div className="mt-2 whitespace-pre-wrap text-sm text-emerald-900">
+                      {request.admin_reply}
+                    </div>
+                    {request.admin_replied_at ? (
+                      <div className="mt-2 text-xs text-emerald-700">
+                        {formatPortalDateTime(request.admin_replied_at)}
+                      </div>
+                    ) : null}
+                  </div>
+                ) : null}
               </article>
             ))}
           </div>

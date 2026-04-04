@@ -139,6 +139,9 @@ export type IntervenantInformationRequest = {
   subject: string;
   message: string;
   status: "envoyee" | "traitee";
+  admin_reply: string | null;
+  admin_replied_by: string | null;
+  admin_replied_at: string | null;
   created_at: string | null;
   updated_at: string | null;
 };
@@ -726,6 +729,9 @@ export async function intervenantInformationRequestCreate(
     subject: String(row.subject ?? payload.subject),
     message: String(row.message ?? payload.message),
     status: normalizeInformationRequestStatus(row.status),
+    admin_reply: asNullableString(row.admin_reply),
+    admin_replied_by: asNullableString(row.admin_replied_by),
+    admin_replied_at: asNullableString(row.admin_replied_at),
     created_at: asNullableString(row.created_at),
     updated_at: asNullableString(row.updated_at),
   };
@@ -750,6 +756,9 @@ export async function intervenantInformationRequestList(
     subject: String(row.subject ?? "Demande d'information"),
     message: String(row.message ?? ""),
     status: normalizeInformationRequestStatus(row.status),
+    admin_reply: asNullableString(row.admin_reply),
+    admin_replied_by: asNullableString(row.admin_replied_by),
+    admin_replied_at: asNullableString(row.admin_replied_at),
     created_at: asNullableString(row.created_at),
     updated_at: asNullableString(row.updated_at),
   }));

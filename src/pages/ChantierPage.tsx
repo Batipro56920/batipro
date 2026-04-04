@@ -114,6 +114,7 @@ import DocumentEditDrawer from "../components/chantiers/DocumentEditDrawer";
 import ApprovisionnementTab from "../components/chantiers/ApprovisionnementTab";
 import ChantierPhotosTab from "../components/chantiers/ChantierPhotosTab";
 import BudgetTab from "../components/chantiers/BudgetTab";
+import MessagerieTab from "../components/chantiers/MessagerieTab";
 import PilotageTab from "../components/chantiers/PilotageTab";
 import PreparationTab from "../components/chantiers/PreparationTab";
 import ReservePlanViewer from "../components/chantiers/ReservePlanViewer";
@@ -233,6 +234,7 @@ function chantierActivityEntityLabel(entityType: string) {
   if (entityType === "task_step") return "Étape";
   if (entityType === "reserve") return "Réserve";
   if (entityType === "consigne") return "Consigne";
+  if (entityType === "message") return "Message";
   if (entityType === "time_entry") return "Temps";
   if (entityType === "materiel") return "Matériel";
   if (entityType === "approvisionnement") return "Approvisionnement";
@@ -255,6 +257,7 @@ function chantierActivityActionLabel(actionType: string) {
 function chantierActivityTone(entityType: string) {
   if (entityType === "reserve") return "border-red-200 bg-red-50 text-red-700";
   if (entityType === "task" || entityType === "task_step") return "border-blue-200 bg-blue-50 text-blue-700";
+  if (entityType === "message") return "border-indigo-200 bg-indigo-50 text-indigo-700";
   if (entityType === "time_entry") return "border-emerald-200 bg-emerald-50 text-emerald-700";
   if (entityType === "consigne") return "border-amber-200 bg-amber-50 text-amber-700";
   return "border-slate-200 bg-slate-50 text-slate-700";
@@ -6397,6 +6400,14 @@ export default function ChantierPage() {
           </div>
         )}
 
+        {tab === "messagerie" && id && (
+          <MessagerieTab
+            chantierId={id}
+            intervenants={intervenants}
+            onActivityRefresh={() => void refreshActivityLogs()}
+          />
+        )}
+
         {tab === "doe" && id && (
           <DoeTab
             chantierId={id}
@@ -6442,6 +6453,7 @@ export default function ChantierPage() {
           tab !== "consignes" &&
           tab !== "planning" &&
           tab !== "journal" &&
+          tab !== "messagerie" &&
           tab !== "doe" &&
           tab !== "visite" && (
             <div className="space-y-3">
