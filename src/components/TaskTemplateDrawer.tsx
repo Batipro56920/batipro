@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import type { TaskTemplateInput, TaskTemplateRow } from "../services/taskTemplates.service";
+import type { TaskTemplateInput, TaskTemplateRow } from "../services/taskLibrary.service";
 import { useI18n } from "../i18n";
 
 type Props = {
@@ -37,6 +37,9 @@ export default function TaskTemplateDrawer({
   const [unite, setUnite] = useState("");
   const [quantiteDefaut, setQuantiteDefaut] = useState("");
   const [tempsParUnite, setTempsParUnite] = useState("");
+  const [coutReferenceUnitaire, setCoutReferenceUnitaire] = useState("");
+  const [descriptionTechnique, setDescriptionTechnique] = useState("");
+  const [caracteristiques, setCaracteristiques] = useState("");
   const [remarques, setRemarques] = useState("");
   const [localError, setLocalError] = useState<string | null>(null);
 
@@ -66,6 +69,9 @@ export default function TaskTemplateDrawer({
       setUnite(template.unite ?? "");
       setQuantiteDefaut(toField(template.quantite_defaut ?? null));
       setTempsParUnite(toField(template.temps_prevu_par_unite_h ?? null));
+      setCoutReferenceUnitaire(toField(template.cout_reference_unitaire_ht ?? null));
+      setDescriptionTechnique(template.description_technique ?? "");
+      setCaracteristiques((template.caracteristiques ?? []).join("\n"));
       setRemarques(template.remarques ?? "");
     } else {
       setTitre(initialValues?.titre ?? "");
@@ -73,6 +79,9 @@ export default function TaskTemplateDrawer({
       setUnite(initialValues?.unite ?? "");
       setQuantiteDefaut(toField(initialValues?.quantite_defaut ?? null));
       setTempsParUnite(toField(initialValues?.temps_prevu_par_unite_h ?? null));
+      setCoutReferenceUnitaire(toField(initialValues?.cout_reference_unitaire_ht ?? null));
+      setDescriptionTechnique(initialValues?.description_technique ?? "");
+      setCaracteristiques((initialValues?.caracteristiques ?? []).join("\n"));
       setRemarques(initialValues?.remarques ?? "");
     }
     setLocalError(null);
@@ -84,6 +93,9 @@ export default function TaskTemplateDrawer({
     initialValues?.unite,
     initialValues?.quantite_defaut,
     initialValues?.temps_prevu_par_unite_h,
+    initialValues?.cout_reference_unitaire_ht,
+    initialValues?.description_technique,
+    initialValues?.caracteristiques,
     initialValues?.remarques,
   ]);
 
@@ -104,6 +116,13 @@ export default function TaskTemplateDrawer({
       unite: unite.trim() || null,
       quantite_defaut: quantiteDefaut.trim() === "" ? null : Number(quantiteDefaut),
       temps_prevu_par_unite_h: tempsParUnite.trim() === "" ? null : Number(tempsParUnite),
+      cout_reference_unitaire_ht:
+        coutReferenceUnitaire.trim() === "" ? null : Number(coutReferenceUnitaire),
+      description_technique: descriptionTechnique.trim() || null,
+      caracteristiques: caracteristiques
+        .split(/\r?\n/)
+        .map((value) => value.trim())
+        .filter((value) => value.length > 0),
       remarques: remarques.trim() || null,
     };
     if (
@@ -120,6 +139,14 @@ export default function TaskTemplateDrawer({
       Number.isNaN(payload.temps_prevu_par_unite_h)
     ) {
       setLocalError(t("taskTemplateDrawer.invalidTimePerUnit"));
+      return;
+    }
+    if (
+      payload.cout_reference_unitaire_ht !== null &&
+      payload.cout_reference_unitaire_ht !== undefined &&
+      Number.isNaN(payload.cout_reference_unitaire_ht)
+    ) {
+      setLocalError("Coût de référence invalide.");
       return;
     }
     await onSave(payload);
@@ -180,7 +207,7 @@ export default function TaskTemplateDrawer({
             </label>
           </div>
 
-          <div className="grid gap-3 md:grid-cols-2">
+          <div className="grid gap-3 md:grid-cols-3">
             <label className="block space-y-1">
               <div className="text-xs text-slate-600">{t("taskTemplateDrawer.fields.defaultQuantity")}</div>
               <input
@@ -201,7 +228,38 @@ export default function TaskTemplateDrawer({
                 onChange={(e) => setTempsParUnite(e.target.value)}
               />
             </label>
+            <label className="block space-y-1">
+              <div className="text-xs text-slate-600">Coût de référence HT / unité</div>
+              <input
+                type="number"
+                step="0.01"
+                className="w-full rounded-xl border px-3 py-2 text-sm"
+                value={coutReferenceUnitaire}
+                onChange={(e) => setCoutReferenceUnitaire(e.target.value)}
+                placeholder="Ex: 38"
+              />
+            </label>
           </div>
+
+          <label className="block space-y-1">
+            <div className="text-xs text-slate-600">Description technique</div>
+            <textarea
+              className="w-full rounded-xl border px-3 py-2 text-sm min-h-24"
+              value={descriptionTechnique}
+              onChange={(e) => setDescriptionTechnique(e.target.value)}
+              placeholder="Ex : doublage sur ossature avec isolant et plaques hydrofuges."
+            />
+          </label>
+
+          <label className="block space-y-1">
+            <div className="text-xs text-slate-600">Caractéristiques (1 par ligne)</div>
+            <textarea
+              className="w-full rounded-xl border px-3 py-2 text-sm min-h-28"
+              value={caracteristiques}
+              onChange={(e) => setCaracteristiques(e.target.value)}
+              placeholder={"Plaque : BA13 hydrofuge\nIsolation : laine de roche 120 mm\nSystème : Optima"}
+            />
+          </label>
 
           <label className="block space-y-1">
             <div className="text-xs text-slate-600">Remarques</div>

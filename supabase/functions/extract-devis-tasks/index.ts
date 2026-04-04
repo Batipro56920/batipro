@@ -13,10 +13,19 @@ type RequestBody = {
 
 type TaskLine = {
   title: string;
+  task_template_label: string | null;
+  description_technique: string | null;
+  caracteristiques: string[];
   lot: string | null;
   intervenant_name: string | null;
   quantity: number | null;
   unit: string | null;
+  unit_price_ht: number | null;
+  total_price_ht: number | null;
+  vat_rate: number | null;
+  estimated_cost_ht: number | null;
+  estimated_material_cost_ht: number | null;
+  estimated_labor_cost_ht: number | null;
   date: string | null;
   confidence: number;
   source_line: string;
@@ -91,6 +100,19 @@ function isNoiseTitle(title: string): boolean {
   ].some((bad) => t.includes(bad));
 }
 
+function normalizeText(value: unknown): string | null {
+  const raw = String(value ?? "").replace(/\s+/g, " ").trim();
+  return raw ? raw : null;
+}
+
+function normalizeCaracteristiques(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((item) => String(item ?? "").replace(/\s+/g, " ").trim())
+    .filter((item) => item.length > 0)
+    .slice(0, 20);
+}
+
 function validateLine(raw: any, lots: string[]): TaskLine | null {
   const title = String(raw?.title ?? "").replace(/\s+/g, " ").trim();
   if (!title || title.length < 3) return null;
@@ -104,10 +126,23 @@ function validateLine(raw: any, lots: string[]): TaskLine | null {
 
   return {
     title,
+    task_template_label: normalizeText(
+      raw?.task_template_label ?? raw?.library_task ?? raw?.task_library,
+    ),
+    description_technique: normalizeText(raw?.description_technique),
+    caracteristiques: normalizeCaracteristiques(raw?.caracteristiques ?? raw?.technical_features),
     lot,
     intervenant_name: intervenantName,
     quantity: toNumber(raw?.quantity),
     unit: normalizeUnit(raw?.unit),
+    unit_price_ht: toNumber(raw?.unit_price_ht ?? raw?.prix_unitaire_ht),
+    total_price_ht: toNumber(raw?.total_price_ht ?? raw?.montant_total_ht),
+    vat_rate: toNumber(raw?.vat_rate ?? raw?.tva_rate),
+    estimated_cost_ht: toNumber(raw?.estimated_cost_ht ?? raw?.cout_estime_ht),
+    estimated_material_cost_ht: toNumber(
+      raw?.estimated_material_cost_ht ?? raw?.cout_matiere_estime_ht,
+    ),
+    estimated_labor_cost_ht: toNumber(raw?.estimated_labor_cost_ht ?? raw?.cout_mo_estime_ht),
     date: isDate(raw?.date),
     confidence: confidence(raw?.confidence),
     source_line: sourceLine || title,
@@ -162,12 +197,22 @@ serve(async (req) => {
     "TaskLine = {title, lot, intervenant_name, quantity, unit, date, confidence, source_line}.",
   ].join("\n");
 
+  const refonteTaskPrompt = [
+    "Nouvelle logique tâches:",
+    "- task_template_label = référence bibliothèque stable et générique pour statistiques (ex: Doublage placo, Pose carrelage, Peinture mur).",
+    "- title = intitulé terrain simplifié court, format [type tâche] + [variante simple utile] + [localisation éventuelle].",
+    "- description_technique = résumé technique court ou null.",
+    "- caracteristiques = tableau de détails techniques séparés, sans les dupliquer dans title.",
+    "Extrais aussi unit_price_ht, total_price_ht, vat_rate, estimated_cost_ht, estimated_material_cost_ht, estimated_labor_cost_ht. Mets null si non déductible.",
+    "Nouveau TaskLine = {title, task_template_label, description_technique, caracteristiques, lot, intervenant_name, quantity, unit, unit_price_ht, total_price_ht, vat_rate, estimated_cost_ht, estimated_material_cost_ht, estimated_labor_cost_ht, date, confidence, source_line}.",
+  ].join("\n");
+
   const payload = {
     model,
     temperature: 0.1,
     response_format: { type: "json_object" },
     messages: [
-      { role: "system", content: prompt },
+      { role: "system", content: `${prompt}\n\n${refonteTaskPrompt}` },
       { role: "user", content: cleanedText.slice(0, 120000) },
     ],
   };

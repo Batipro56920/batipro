@@ -9,7 +9,7 @@ import {
   update,
   type TaskTemplateInput,
   type TaskTemplateRow,
-} from "../services/taskTemplates.service";
+} from "../services/taskLibrary.service";
 import { useI18n } from "../i18n";
 
 export default function BibliothequeTasksPage() {
@@ -187,6 +187,7 @@ export default function BibliothequeTasksPage() {
                 <th className="px-4 py-3 text-left font-medium">{t("bibliothequeTasks.headers.unit")}</th>
                 <th className="px-4 py-3 text-left font-medium">{t("bibliothequeTasks.headers.defaultQuantity")}</th>
                 <th className="px-4 py-3 text-left font-medium">{t("bibliothequeTasks.headers.timePerUnit")}</th>
+                <th className="px-4 py-3 text-left font-medium">Coût ref.</th>
                 <th className="px-4 py-3 text-left font-medium">{t("bibliothequeTasks.headers.updatedAt")}</th>
                 <th className="px-4 py-3 text-left font-medium">{t("common.actions.edit")}</th>
               </tr>
@@ -196,12 +197,32 @@ export default function BibliothequeTasksPage() {
                 <tr key={row.id} className="border-t">
                   <td className="px-4 py-3">
                     <div className="font-medium">{row.titre}</div>
+                    {row.description_technique ? (
+                      <div className="text-xs text-slate-500 line-clamp-2">{row.description_technique}</div>
+                    ) : null}
+                    {row.caracteristiques.length > 0 ? (
+                      <div className="mt-1 flex flex-wrap gap-1">
+                        {row.caracteristiques.slice(0, 3).map((item) => (
+                          <span
+                            key={`${row.id}-${item}`}
+                            className="rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[11px] text-slate-600"
+                          >
+                            {item}
+                          </span>
+                        ))}
+                      </div>
+                    ) : null}
                     {row.remarques ? <div className="text-xs text-slate-500 truncate">{row.remarques}</div> : null}
                   </td>
                   <td className="px-4 py-3">{row.lot ?? "-"}</td>
                   <td className="px-4 py-3">{row.unite ?? "-"}</td>
                   <td className="px-4 py-3">{row.quantite_defaut ?? "-"}</td>
                   <td className="px-4 py-3">{row.temps_prevu_par_unite_h ?? "-"}</td>
+                  <td className="px-4 py-3">
+                    {row.cout_reference_unitaire_ht !== null
+                      ? `${Math.round(Number(row.cout_reference_unitaire_ht) * 100) / 100} €`
+                      : "-"}
+                  </td>
                   <td className="px-4 py-3">
                     {row.updated_at ? new Date(row.updated_at).toLocaleDateString(locale) : "-"}
                   </td>

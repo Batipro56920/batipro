@@ -72,6 +72,13 @@ function isEmptyIntervenant(line: Pick<PreviewRow, "intervenant_id" | "intervena
   return !name || name === "aucun" || name === "none" || name === "-";
 }
 
+function parsePreviewNumber(value: string): number | null {
+  const raw = value.trim().replace(",", ".");
+  if (!raw) return null;
+  const next = Number(raw);
+  return Number.isFinite(next) ? next : null;
+}
+
 export default function DevisImportDrawer({ open, chantierId, intervenants, onClose, onImported }: Props) {
   const [step, setStep] = useState<1 | 2>(1);
   const [file, setFile] = useState<File | null>(null);
@@ -321,6 +328,8 @@ export default function DevisImportDrawer({ open, chantierId, intervenants, onCl
           designation: row.source_line,
           unite: row.unit,
           quantite: row.quantity,
+          prix_unitaire_ht: row.unit_price_ht,
+          tva_rate: row.vat_rate,
           generer_tache: true,
           titre_tache: row.title,
           date_prevue: row.date,
@@ -338,6 +347,9 @@ export default function DevisImportDrawer({ open, chantierId, intervenants, onCl
           chantier_id: chantierId,
           titre: row.title,
           titre_terrain: row.title,
+          task_template_label: row.task_template_label ?? row.title,
+          description_technique: row.description_technique,
+          caracteristiques: row.caracteristiques,
           libelle_devis_original: row.source_line,
           devis_ligne_id: createdLigne.id,
           corps_etat: row.lot,
@@ -347,6 +359,16 @@ export default function DevisImportDrawer({ open, chantierId, intervenants, onCl
           quantite: row.quantity ?? 1,
           unite: row.unit,
           temps_prevu_h: plannedHours,
+          prix_unitaire_devis_ht: row.unit_price_ht,
+          montant_total_devis_ht:
+            row.total_price_ht ??
+            (row.unit_price_ht !== null && row.quantity !== null
+              ? Math.round(row.unit_price_ht * row.quantity * 100) / 100
+              : null),
+          tva_taux_devis: row.vat_rate,
+          cout_estime_ht: row.estimated_cost_ht,
+          cout_matiere_estime_ht: row.estimated_material_cost_ht,
+          cout_mo_estime_ht: row.estimated_labor_cost_ht,
         });
         createdTaskIds.push(createdTask.id);
 
@@ -512,14 +534,18 @@ export default function DevisImportDrawer({ open, chantierId, intervenants, onCl
               </div>
 
               <div className="rounded-xl border overflow-auto">
-                <table className="min-w-[980px] w-full text-sm">
+                <table className="min-w-[1320px] w-full text-sm">
                   <thead className="bg-slate-50 text-slate-600 text-xs">
                     <tr>
                       <th className="p-2 text-left">Inclure</th>
                       <th className="p-2 text-left">Titre terrain</th>
+                      <th className="p-2 text-left">Bibliothèque</th>
+                      <th className="p-2 text-left">Caractéristiques</th>
                       <th className="p-2 text-left">Lot</th>
                       <th className="p-2 text-left">Qté</th>
                       <th className="p-2 text-left">Unité</th>
+                      <th className="p-2 text-left">PU HT</th>
+                      <th className="p-2 text-left">Total HT</th>
                       <th className="p-2 text-left">Intervenant</th>
                       <th className="p-2 text-left">Conf.</th>
                       <th className="p-2 text-left">Source</th>
@@ -548,6 +574,33 @@ export default function DevisImportDrawer({ open, chantierId, intervenants, onCl
                           </div>
                         </td>
                         <td className="p-2">
+                          <input
+                            className="w-[180px] rounded-lg border px-2 py-1.5 text-sm"
+                            value={row.task_template_label ?? ""}
+                            onChange={(event) =>
+                              updateRow(row.id, {
+                                task_template_label: event.target.value.trim() || null,
+                              })
+                            }
+                            placeholder="Ex: Doublage placo"
+                          />
+                        </td>
+                        <td className="p-2">
+                          <textarea
+                            className="min-h-[72px] w-[220px] rounded-lg border px-2 py-1.5 text-sm"
+                            value={(row.caracteristiques ?? []).join("\n")}
+                            onChange={(event) =>
+                              updateRow(row.id, {
+                                caracteristiques: event.target.value
+                                  .split("\n")
+                                  .map((item) => item.trim())
+                                  .filter(Boolean),
+                              })
+                            }
+                            placeholder="1 caractéristique par ligne"
+                          />
+                        </td>
+                        <td className="p-2">
                           <select
                             className="w-full rounded-lg border px-2 py-1.5 text-sm"
                             value={row.lot ?? ""}
@@ -565,11 +618,7 @@ export default function DevisImportDrawer({ open, chantierId, intervenants, onCl
                           <input
                             className="w-[88px] rounded-lg border px-2 py-1.5 text-sm"
                             value={row.quantity ?? ""}
-                            onChange={(event) => {
-                              const raw = event.target.value.trim().replace(",", ".");
-                              const next = raw === "" ? null : Number(raw);
-                              updateRow(row.id, { quantity: Number.isFinite(next as number) ? (next as number) : null });
-                            }}
+                            onChange={(event) => updateRow(row.id, { quantity: parsePreviewNumber(event.target.value) })}
                           />
                         </td>
                         <td className="p-2">
@@ -585,6 +634,24 @@ export default function DevisImportDrawer({ open, chantierId, intervenants, onCl
                               </option>
                             ))}
                           </select>
+                        </td>
+                        <td className="p-2">
+                          <input
+                            className="w-[100px] rounded-lg border px-2 py-1.5 text-sm"
+                            value={row.unit_price_ht ?? ""}
+                            onChange={(event) =>
+                              updateRow(row.id, { unit_price_ht: parsePreviewNumber(event.target.value) })
+                            }
+                          />
+                        </td>
+                        <td className="p-2">
+                          <input
+                            className="w-[110px] rounded-lg border px-2 py-1.5 text-sm"
+                            value={row.total_price_ht ?? ""}
+                            onChange={(event) =>
+                              updateRow(row.id, { total_price_ht: parsePreviewNumber(event.target.value) })
+                            }
+                          />
                         </td>
                         <td className="p-2">
                           <select

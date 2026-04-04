@@ -142,8 +142,10 @@ import DevisImportDrawer, { type DevisImportResult } from "../components/chantie
 import TaskTemplateDrawer from "../components/TaskTemplateDrawer";
 import {
   create as createTaskTemplate,
+  list as listTaskLibraryTemplates,
   type TaskTemplateInput,
-} from "../services/taskTemplates.service";
+  type TaskTemplateRow,
+} from "../services/taskLibrary.service";
 import { createChantierTemplateFromChantier } from "../services/chantierTemplates.service";
 import {
   CHANTIER_TAB_FEATURES,
@@ -233,6 +235,50 @@ function isChantierTabEnabled(
   const feature = CHANTIER_TAB_FEATURES[tabKey];
   if (!feature) return true;
   return !enabledModules || enabledModules.has(feature);
+}
+
+function getTaskDisplayTitle(task: ChantierTaskRow): string {
+  return (
+    String((task as any).titre_terrain ?? "").trim() ||
+    stripLegacyPrefix(String(task.titre ?? "")) ||
+    "Sans titre"
+  );
+}
+
+function getTaskLibraryLabel(task: ChantierTaskRow): string {
+  return (
+    String((task as any).task_template_label ?? "").trim() ||
+    String(task.titre ?? "").trim() ||
+    String(task.lot ?? task.corps_etat ?? "").trim() ||
+    "Tâche chantier"
+  );
+}
+
+function taskPriorityMeta(priority: unknown) {
+  const normalized = String(priority ?? "").trim().toLowerCase();
+  if (normalized === "urgente") {
+    return { label: "Urgente", className: "border-red-200 bg-red-50 text-red-700" };
+  }
+  if (normalized === "haute") {
+    return { label: "Haute", className: "border-amber-200 bg-amber-50 text-amber-700" };
+  }
+  if (normalized === "basse") {
+    return { label: "Basse", className: "border-slate-200 bg-slate-50 text-slate-600" };
+  }
+  return { label: "Normale", className: "border-blue-200 bg-blue-50 text-blue-700" };
+}
+
+function formatTaskMoney(value: unknown): string {
+  const parsed = toNumberOrNull(value);
+  if (parsed === null) return "—";
+  return `${Math.round(parsed * 100) / 100} €`;
+}
+
+function parseTaskCaracteristiquesText(value: string): string[] {
+  return String(value ?? "")
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0);
 }
 
 function taskStepStatusLabel(status: ChantierTaskStepStatus) {
@@ -552,6 +598,27 @@ export default function ChantierPage() {
   }, []);
 
   useEffect(() => {
+    let alive = true;
+
+    async function loadTaskLibraryTemplates() {
+      try {
+        const rows = await listTaskLibraryTemplates();
+        if (!alive) return;
+        setTaskLibraryTemplates(rows);
+      } catch {
+        if (!alive) return;
+        setTaskLibraryTemplates([]);
+      }
+    }
+
+    void loadTaskLibraryTemplates();
+
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  useEffect(() => {
     if (isChantierTabEnabled(tab, enabledChantierModules)) return;
     setTab("accueil");
   }, [enabledChantierModules, tab]);
@@ -688,6 +755,14 @@ export default function ChantierPage() {
   const [newLotDraftName, setNewLotDraftName] = useState("");
   const [newTaskZoneId, setNewTaskZoneId] = useState("");
   const [newTaskStepName, setNewTaskStepName] = useState("");
+  const [newTaskTemplateId, setNewTaskTemplateId] = useState("");
+  const [newTaskTemplateLabel, setNewTaskTemplateLabel] = useState("");
+  const [newTaskDescriptionTechnique, setNewTaskDescriptionTechnique] = useState("");
+  const [newTaskCaracteristiques, setNewTaskCaracteristiques] = useState("");
+  const [newTaskPriorite, setNewTaskPriorite] = useState<"basse" | "normale" | "haute" | "urgente">("normale");
+  const [newTaskPrixUnitaireDevisHt, setNewTaskPrixUnitaireDevisHt] = useState("");
+  const [newTaskMontantTotalDevisHt, setNewTaskMontantTotalDevisHt] = useState("");
+  const [newTaskCoutEstimeHt, setNewTaskCoutEstimeHt] = useState("");
   const [newTaskStatus, setNewTaskStatus] = useState<TaskStatus>("A_FAIRE");
   const [newTaskQualityStatus, setNewTaskQualityStatus] = useState<TaskQualityStatus>("a_faire");
   const [newAssignedIntervenantIds, setNewAssignedIntervenantIds] = useState<string[]>([]);
@@ -708,6 +783,14 @@ export default function ChantierPage() {
   const [editLotDraftName, setEditLotDraftName] = useState("");
   const [editTaskZoneId, setEditTaskZoneId] = useState("");
   const [editTaskStepName, setEditTaskStepName] = useState("");
+  const [editTaskTemplateId, setEditTaskTemplateId] = useState("");
+  const [editTaskTemplateLabel, setEditTaskTemplateLabel] = useState("");
+  const [editTaskDescriptionTechnique, setEditTaskDescriptionTechnique] = useState("");
+  const [editTaskCaracteristiques, setEditTaskCaracteristiques] = useState("");
+  const [editTaskPriorite, setEditTaskPriorite] = useState<"basse" | "normale" | "haute" | "urgente">("normale");
+  const [editTaskPrixUnitaireDevisHt, setEditTaskPrixUnitaireDevisHt] = useState("");
+  const [editTaskMontantTotalDevisHt, setEditTaskMontantTotalDevisHt] = useState("");
+  const [editTaskCoutEstimeHt, setEditTaskCoutEstimeHt] = useState("");
   const [editStatus, setEditStatus] = useState<TaskStatus>("A_FAIRE");
   const [editTaskQualityStatus, setEditTaskQualityStatus] = useState<TaskQualityStatus>("a_faire");
   const [editTaskRepriseReason, setEditTaskRepriseReason] = useState("");
@@ -723,6 +806,8 @@ export default function ChantierPage() {
   const [taskTemplateSeed, setTaskTemplateSeed] = useState<TaskTemplateInput | null>(null);
   const [taskTemplateSaving, setTaskTemplateSaving] = useState(false);
   const [taskTemplateError, setTaskTemplateError] = useState<string | null>(null);
+  const [taskLibraryTemplates, setTaskLibraryTemplates] = useState<TaskTemplateRow[]>([]);
+  const [taskDetailOpenId, setTaskDetailOpenId] = useState<string | null>(null);
   const [chantierTemplateSaving, setChantierTemplateSaving] = useState(false);
 
   // Devis
@@ -2480,11 +2565,115 @@ export default function ChantierPage() {
     return map;
   }, [zones]);
 
+  const taskLibraryTemplateById = useMemo(() => {
+    const map = new Map<string, TaskTemplateRow>();
+    for (const row of taskLibraryTemplates) {
+      map.set(row.id, row);
+    }
+    return map;
+  }, [taskLibraryTemplates]);
+
   function resolveZoneName(zoneId: string | null | undefined): string {
     const cleanZoneId = String(zoneId ?? "").trim();
     if (!cleanZoneId) return "Sans zone";
     return zoneById.get(cleanZoneId)?.nom ?? "Zone inconnue";
   }
+
+  function resolveZonePath(zoneId: string | null | undefined): string {
+    const cleanZoneId = String(zoneId ?? "").trim();
+    if (!cleanZoneId) return "Sans zone";
+
+    const labels: string[] = [];
+    const visited = new Set<string>();
+    let currentId: string | null = cleanZoneId;
+
+    while (currentId && !visited.has(currentId)) {
+      visited.add(currentId);
+      const currentZone = zoneById.get(currentId);
+      if (!currentZone) break;
+      labels.unshift(currentZone.nom);
+      currentId = currentZone.parent_zone_id ?? null;
+    }
+
+    return labels.length > 0 ? labels.join(" > ") : resolveZoneName(cleanZoneId);
+  }
+
+  function applyTaskTemplateToNewTask(templateId: string) {
+    setNewTaskTemplateId(templateId);
+    const template = templateId ? taskLibraryTemplateById.get(templateId) ?? null : null;
+    if (!template) {
+      setNewTaskTemplateLabel("");
+      return;
+    }
+
+    setNewTaskTemplateLabel(template.titre ?? "");
+    setNewLotSelection(template.lot ?? "");
+    setNewCorpsEtat(template.lot ?? "");
+    setNewUnite(template.unite ?? "");
+    setNewTaskDescriptionTechnique(template.description_technique ?? "");
+    setNewTaskCaracteristiques((template.caracteristiques ?? []).join("\n"));
+    if (template.quantite_defaut !== null && template.quantite_defaut !== undefined) {
+      setNewQuantite(String(template.quantite_defaut));
+    }
+    if (
+      template.temps_prevu_par_unite_h !== null &&
+      template.temps_prevu_par_unite_h !== undefined
+    ) {
+      const qty = toNumberOrNull(newQuantite) ?? toNumberOrNull(template.quantite_defaut) ?? 1;
+      setNewTempsPrevuH(String(Math.round(qty * Number(template.temps_prevu_par_unite_h) * 100) / 100));
+    }
+    if (
+      template.cout_reference_unitaire_ht !== null &&
+      template.cout_reference_unitaire_ht !== undefined
+    ) {
+      const qty = toNumberOrNull(newQuantite) ?? toNumberOrNull(template.quantite_defaut) ?? 1;
+      setNewTaskCoutEstimeHt(
+        String(Math.round(qty * Number(template.cout_reference_unitaire_ht) * 100) / 100),
+      );
+    }
+    if (!newTitre.trim()) {
+      setNewTitre(template.titre ?? "");
+    }
+  }
+
+  function applyTaskTemplateToEditTask(templateId: string) {
+    setEditTaskTemplateId(templateId);
+    const template = templateId ? taskLibraryTemplateById.get(templateId) ?? null : null;
+    if (!template) {
+      setEditTaskTemplateLabel("");
+      return;
+    }
+
+    setEditTaskTemplateLabel(template.titre ?? "");
+    setEditLotSelection(template.lot ?? "");
+    setEditCorpsEtat(template.lot ?? "");
+    setEditUnite(template.unite ?? "");
+    setEditTaskDescriptionTechnique(template.description_technique ?? "");
+    setEditTaskCaracteristiques((template.caracteristiques ?? []).join("\n"));
+    if (
+      template.cout_reference_unitaire_ht !== null &&
+      template.cout_reference_unitaire_ht !== undefined
+    ) {
+      const qty = toNumberOrNull(editQuantite) ?? toNumberOrNull(template.quantite_defaut) ?? 1;
+      setEditTaskCoutEstimeHt(
+        String(Math.round(qty * Number(template.cout_reference_unitaire_ht) * 100) / 100),
+      );
+    }
+    if (!editTitre.trim()) {
+      setEditTitre(template.titre ?? "");
+    }
+  }
+
+  const activeTaskDetail = useMemo(
+    () => (taskDetailOpenId ? taskById.get(taskDetailOpenId) ?? null : null),
+    [taskById, taskDetailOpenId],
+  );
+
+  useEffect(() => {
+    if (!taskDetailOpenId) return;
+    if (activeTaskDetail) return;
+    setTaskDetailOpenId(null);
+  }, [activeTaskDetail, taskDetailOpenId]);
 
   const timeEntriesByTaskId = useMemo(() => {
     const grouped = new Map<string, ChantierTimeEntryRow[]>();
@@ -3094,16 +3283,47 @@ export default function ChantierPage() {
     const assignedIntervenantIds = uniqueIds(newAssignedIntervenantIds);
     const intervenant_id = assignedIntervenantIds[0] ?? null;
     const orderIndex = tasks.reduce((max, task) => Math.max(max, Number(task.order_index ?? 0)), -1) + 1;
+    const newTaskTemplateLabelValue =
+      newTaskTemplateLabel.trim() ||
+      taskLibraryTemplateById.get(newTaskTemplateId)?.titre ||
+      titre;
+    const parsedPrixUnitaireDevis = toNumberOrNull(newTaskPrixUnitaireDevisHt);
+    const parsedMontantTotalDevis =
+      toNumberOrNull(newTaskMontantTotalDevisHt) ??
+      (parsedPrixUnitaireDevis !== null ? parsedPrixUnitaireDevis * quantite : null);
+    const parsedCoutEstime =
+      toNumberOrNull(newTaskCoutEstimeHt) ??
+      (() => {
+        const coutReference =
+          taskLibraryTemplateById.get(newTaskTemplateId)?.cout_reference_unitaire_ht ?? null;
+        return coutReference === null ? null : coutReference * quantite;
+      })() ??
+      null;
+    const newTaskCaracteristiquesList = parseTaskCaracteristiquesText(newTaskCaracteristiques);
 
     const tempId = `temp-${crypto.randomUUID()}`;
     const optimistic: any = {
       id: tempId,
       chantier_id: id,
       titre,
+      titre_terrain: titre,
+      libelle_devis_original: null,
+      devis_ligne_id: null,
+      task_template_id: newTaskTemplateId || null,
+      task_template_label: newTaskTemplateLabelValue,
       corps_etat: lotName,
       lot: lotName,
       zone_id: newTaskZoneId || null,
       etape_metier: newTaskStepName.trim() || null,
+      description_technique: newTaskDescriptionTechnique.trim() || null,
+      caracteristiques: newTaskCaracteristiquesList,
+      priorite: newTaskPriorite,
+      prix_unitaire_devis_ht: parsedPrixUnitaireDevis,
+      montant_total_devis_ht: parsedMontantTotalDevis,
+      tva_taux_devis: null,
+      cout_estime_ht: parsedCoutEstime,
+      cout_matiere_estime_ht: null,
+      cout_mo_estime_ht: null,
       status: newTaskStatus,
       quality_status: newTaskQualityStatus,
       admin_validation_status: "non_verifie",
@@ -3128,10 +3348,19 @@ export default function ChantierPage() {
       const saved = await createTask({
         chantier_id: id,
         titre,
+        titre_terrain: titre,
+        task_template_id: newTaskTemplateId || null,
+        task_template_label: newTaskTemplateLabelValue,
         corps_etat: lotName,
         lot: lotName,
         zone_id: newTaskZoneId || null,
         etape_metier: newTaskStepName.trim() || null,
+        description_technique: newTaskDescriptionTechnique.trim() || null,
+        caracteristiques: newTaskCaracteristiquesList,
+        priorite: newTaskPriorite,
+        prix_unitaire_devis_ht: parsedPrixUnitaireDevis,
+        montant_total_devis_ht: parsedMontantTotalDevis,
+        cout_estime_ht: parsedCoutEstime,
         status: newTaskStatus,
         quality_status: newTaskQualityStatus,
         admin_validation_status: "non_verifie",
@@ -3149,11 +3378,16 @@ export default function ChantierPage() {
         reason: "Tâche créée",
         changes: {
           title: saved.titre,
+          titre_terrain: saved.titre_terrain,
+          task_template_id: saved.task_template_id,
+          task_template_label: saved.task_template_label,
           lot: saved.lot,
           zone_id: saved.zone_id,
           etape_metier: saved.etape_metier,
+          priorite: saved.priorite,
           quality_status: saved.quality_status,
           temps_prevu_h: saved.temps_prevu_h,
+          cout_estime_ht: saved.cout_estime_ht,
         },
       });
 
@@ -3172,6 +3406,14 @@ export default function ChantierPage() {
       setNewTaskQualityStatus("a_faire");
       setNewTaskZoneId("");
       setNewTaskStepName("");
+      setNewTaskTemplateId("");
+      setNewTaskTemplateLabel("");
+      setNewTaskDescriptionTechnique("");
+      setNewTaskCaracteristiques("");
+      setNewTaskPriorite("normale");
+      setNewTaskPrixUnitaireDevisHt("");
+      setNewTaskMontantTotalDevisHt("");
+      setNewTaskCoutEstimeHt("");
       setNewAssignedIntervenantIds([]);
       setNewQuantite("1");
       setNewUnite("");
@@ -3195,7 +3437,7 @@ export default function ChantierPage() {
 
   function startEditTask(t: ChantierTaskRow) {
     setEditingTaskId(t.id);
-    const baseTitre = stripLegacyPrefix(t.titre ?? "");
+    const baseTitre = getTaskDisplayTitle(t);
     const decoded = decodeQtyUnit(baseTitre);
     const q = toNumberOrNull((t as any).quantite);
     const rawUnite = (t as any).unite;
@@ -3207,6 +3449,18 @@ export default function ChantierPage() {
     setEditLotDraftName("");
     setEditTaskZoneId((t as any).zone_id ?? "");
     setEditTaskStepName((t as any).etape_metier ?? "");
+    setEditTaskTemplateId((t as any).task_template_id ?? "");
+    setEditTaskTemplateLabel(
+      String((t as any).task_template_label ?? "").trim() ||
+        String((t as any).titre ?? "").trim() ||
+        resolvedLotName,
+    );
+    setEditTaskDescriptionTechnique(String((t as any).description_technique ?? ""));
+    setEditTaskCaracteristiques(((t as any).caracteristiques ?? []).join("\n"));
+    setEditTaskPriorite(((t as any).priorite ?? "normale") as any);
+    setEditTaskPrixUnitaireDevisHt(toInputNumberString((t as any).prix_unitaire_devis_ht));
+    setEditTaskMontantTotalDevisHt(toInputNumberString((t as any).montant_total_devis_ht));
+    setEditTaskCoutEstimeHt(toInputNumberString((t as any).cout_estime_ht));
     setEditStatus((t.status ?? "A_FAIRE") as any);
     setEditTaskQualityStatus((t as any).quality_status ?? "a_faire");
     setEditTaskRepriseReason(String((t as any).reprise_reason ?? ""));
@@ -3222,6 +3476,14 @@ export default function ChantierPage() {
     setEditLotDraftName("");
     setEditTaskZoneId("");
     setEditTaskStepName("");
+    setEditTaskTemplateId("");
+    setEditTaskTemplateLabel("");
+    setEditTaskDescriptionTechnique("");
+    setEditTaskCaracteristiques("");
+    setEditTaskPriorite("normale");
+    setEditTaskPrixUnitaireDevisHt("");
+    setEditTaskMontantTotalDevisHt("");
+    setEditTaskCoutEstimeHt("");
     setEditTaskQualityStatus("a_faire");
     setEditTaskRepriseReason("");
     setEditAssignedIntervenantIds([]);
@@ -3276,7 +3538,11 @@ export default function ChantierPage() {
   }
 
   function openTaskTemplateDrawerFromTask(t: ChantierTaskRow) {
-    const titre = editTitre.trim() || stripLegacyPrefix(t.titre ?? "");
+    const titre =
+      editTaskTemplateLabel.trim() ||
+      String((t as any).task_template_label ?? "").trim() ||
+      editTitre.trim() ||
+      getTaskDisplayTitle(t);
     if (!titre) {
       setToast({ type: "error", msg: "Titre tâche manquant." });
       return;
@@ -3296,6 +3562,18 @@ export default function ChantierPage() {
       unite: (String(uniteRaw).trim() || null) as string | null,
       quantite_defaut: quantite > 0 ? quantite : 0,
       temps_prevu_par_unite_h: Number.isFinite(tempsParUnite) ? tempsParUnite : 0,
+      description_technique:
+        editTaskDescriptionTechnique.trim() ||
+        String((t as any).description_technique ?? "").trim() ||
+        null,
+      caracteristiques:
+        parseTaskCaracteristiquesText(editTaskCaracteristiques).length > 0
+          ? parseTaskCaracteristiquesText(editTaskCaracteristiques)
+          : ((t as any).caracteristiques ?? []),
+      cout_reference_unitaire_ht:
+        toNumberOrNull(editTaskCoutEstimeHt) !== null && quantite > 0
+          ? (toNumberOrNull(editTaskCoutEstimeHt) ?? 0) / quantite
+          : (t as any).prix_unitaire_devis_ht ?? null,
       remarques: ((t as any).remarques ?? null) as string | null,
     });
     setTaskTemplateError(null);
@@ -3314,6 +3592,7 @@ export default function ChantierPage() {
     setTaskTemplateError(null);
     try {
       await createTaskTemplate(payload);
+      setTaskLibraryTemplates(await listTaskLibraryTemplates());
       setToast({ type: "ok", msg: "Template ajouté à la bibliothèque." });
       closeTaskTemplateDrawer();
     } catch (err: any) {
@@ -3389,13 +3668,38 @@ export default function ChantierPage() {
         : editTaskQualityStatus === "a_reprendre"
           ? "a_reprendre"
           : "non_verifie";
+    const nextTaskTemplateLabel =
+      editTaskTemplateLabel.trim() ||
+      taskLibraryTemplateById.get(editTaskTemplateId)?.titre ||
+      titre;
+    const parsedPrixUnitaireDevis = toNumberOrNull(editTaskPrixUnitaireDevisHt);
+    const parsedMontantTotalDevis =
+      toNumberOrNull(editTaskMontantTotalDevisHt) ??
+      (parsedPrixUnitaireDevis !== null ? parsedPrixUnitaireDevis * quantite : null);
+    const parsedCoutEstime =
+      toNumberOrNull(editTaskCoutEstimeHt) ??
+      (() => {
+        const coutReference =
+          taskLibraryTemplateById.get(editTaskTemplateId)?.cout_reference_unitaire_ht ?? null;
+        return coutReference === null ? null : coutReference * quantite;
+      })() ??
+      null;
 
     const patch = {
       titre,
+      titre_terrain: titre,
+      task_template_id: editTaskTemplateId || null,
+      task_template_label: nextTaskTemplateLabel,
       corps_etat: lotName,
       lot: lotName,
       zone_id: editTaskZoneId || null,
       etape_metier: editTaskStepName.trim() || null,
+      description_technique: editTaskDescriptionTechnique.trim() || null,
+      caracteristiques: parseTaskCaracteristiquesText(editTaskCaracteristiques),
+      priorite: editTaskPriorite,
+      prix_unitaire_devis_ht: parsedPrixUnitaireDevis,
+      montant_total_devis_ht: parsedMontantTotalDevis,
+      cout_estime_ht: parsedCoutEstime,
       status: editStatus ?? "A_FAIRE",
       quality_status: editTaskQualityStatus,
       admin_validation_status: nextAdminValidationStatus,
@@ -3421,14 +3725,18 @@ export default function ChantierPage() {
         reason: "Tâche mise à jour",
         changes: {
           title: titre,
+          task_template_id: patch.task_template_id,
+          task_template_label: patch.task_template_label,
           lot: lotName,
           zone_id: patch.zone_id,
           etape_metier: patch.etape_metier,
+          priorite: patch.priorite,
           status: patch.status,
           quality_status: patch.quality_status,
           admin_validation_status: patch.admin_validation_status,
           reprise_reason: patch.reprise_reason,
           temps_prevu_h: patch.temps_prevu_h,
+          cout_estime_ht: patch.cout_estime_ht,
         },
       });
       setToast({ type: "ok", msg: "Tâche mise à jour." });
@@ -4095,6 +4403,293 @@ export default function ChantierPage() {
           {toast.msg}
         </div>
       )}
+
+      {activeTaskDetail ? (
+        <div className="fixed inset-0 z-40 bg-slate-900/40" onClick={() => setTaskDetailOpenId(null)}>
+          <aside
+            className="absolute inset-y-0 right-0 w-full max-w-5xl overflow-y-auto border-l border-slate-200 bg-white p-6 shadow-2xl"
+            onClick={(event) => event.stopPropagation()}
+          >
+            {(() => {
+              const detailTitle = getTaskDisplayTitle(activeTaskDetail);
+              const detailTemplateLabel = getTaskLibraryLabel(activeTaskDetail);
+              const detailLot = resolveTaskLotName(activeTaskDetail);
+              const detailAssignees = getTaskAssignedIntervenantNames(activeTaskDetail);
+              const detailProgress = computeTaskProgress(activeTaskDetail);
+              const detailPriority = taskPriorityMeta((activeTaskDetail as any).priorite);
+              const detailQuality = ((activeTaskDetail as any).quality_status ?? "a_faire") as TaskQualityStatus;
+              const detailDocs = (taskDocumentsByTaskId.get(activeTaskDetail.id) ?? [])
+                .map((docId) => documentsById.get(docId))
+                .filter((doc): doc is ChantierDocumentRow => Boolean(doc));
+              const detailSteps = taskStepsByTaskId.get(activeTaskDetail.id) ?? [];
+              const detailPrixVente = toNumberOrNull((activeTaskDetail as any).montant_total_devis_ht);
+              const detailCout = toNumberOrNull((activeTaskDetail as any).cout_estime_ht);
+              const detailMarge =
+                detailPrixVente !== null && detailCout !== null
+                  ? Math.round((detailPrixVente - detailCout) * 100) / 100
+                  : null;
+              const detailCaracteristiques = Array.isArray((activeTaskDetail as any).caracteristiques)
+                ? ((activeTaskDetail as any).caracteristiques as string[])
+                : [];
+
+              return (
+                <div className="space-y-5">
+                  <header className="flex flex-col gap-4 border-b border-slate-200 pb-4 lg:flex-row lg:items-start lg:justify-between">
+                    <div className="min-w-0">
+                      <div className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-400">
+                        Détail tâche
+                      </div>
+                      <h2 className="mt-2 text-2xl font-semibold text-slate-950">{detailTitle}</h2>
+                      <div className="mt-2 flex flex-wrap gap-2 text-xs text-slate-600">
+                        <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1">
+                          {detailTemplateLabel}
+                        </span>
+                        <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1">
+                          {detailLot}
+                        </span>
+                        <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1">
+                          ID {activeTaskDetail.id}
+                        </span>
+                      </div>
+                    </div>
+                    <div className="flex flex-wrap justify-end gap-2">
+                      <span
+                        className={[
+                          "rounded-full border px-3 py-2 text-xs font-medium",
+                          taskQualityBadgeClass(detailQuality),
+                        ].join(" ")}
+                      >
+                        {taskQualityLabel(detailQuality)}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setTaskDetailOpenId(null);
+                          startEditTask(activeTaskDetail);
+                          setTab("devis-taches");
+                        }}
+                        className="rounded-xl border px-4 py-2 text-sm hover:bg-slate-50"
+                      >
+                        Modifier
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => void applyTaskQualityDecision(activeTaskDetail, "valide_admin")}
+                        className="rounded-xl border border-emerald-200 px-4 py-2 text-sm text-emerald-700 hover:bg-emerald-50"
+                      >
+                        Valider
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => void applyTaskQualityDecision(activeTaskDetail, "a_reprendre")}
+                        className="rounded-xl border border-red-200 px-4 py-2 text-sm text-red-700 hover:bg-red-50"
+                      >
+                        Reprendre
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setTaskDetailOpenId(null)}
+                        className="rounded-xl bg-slate-900 px-4 py-2 text-sm text-white hover:bg-slate-800"
+                      >
+                        Fermer
+                      </button>
+                    </div>
+                  </header>
+
+                  <div className="grid gap-4 xl:grid-cols-2">
+                    <section className="rounded-3xl border border-slate-200 bg-slate-50/60 p-5">
+                      <div className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">
+                        1. Vue synthèse
+                      </div>
+                      <div className="mt-4 grid gap-3 text-sm text-slate-700 sm:grid-cols-2">
+                        <div className="rounded-2xl bg-white p-4">
+                          <div className="text-xs text-slate-500">Tâche bibliothèque</div>
+                          <div className="mt-1 font-semibold text-slate-950">{detailTemplateLabel}</div>
+                        </div>
+                        <div className="rounded-2xl bg-white p-4">
+                          <div className="text-xs text-slate-500">Lot</div>
+                          <div className="mt-1 font-semibold text-slate-950">{detailLot}</div>
+                        </div>
+                        <div className="rounded-2xl bg-white p-4">
+                          <div className="text-xs text-slate-500">Intervenants</div>
+                          <div className="mt-1 font-semibold text-slate-950">
+                            {detailAssignees.join(", ") || "—"}
+                          </div>
+                        </div>
+                        <div className="rounded-2xl bg-white p-4">
+                          <div className="text-xs text-slate-500">Priorité</div>
+                          <div className="mt-1">
+                            <span className={["rounded-full border px-3 py-1 text-xs font-semibold", detailPriority.className].join(" ")}>
+                              {detailPriority.label}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    </section>
+
+                    <section className="rounded-3xl border border-slate-200 bg-slate-50/60 p-5">
+                      <div className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">
+                        2. Localisation
+                      </div>
+                      <div className="mt-4 rounded-2xl bg-white p-4 text-sm font-medium text-slate-900">
+                        {resolveZonePath((activeTaskDetail as any).zone_id ?? null)}
+                      </div>
+                    </section>
+
+                    <section className="rounded-3xl border border-slate-200 bg-slate-50/60 p-5">
+                      <div className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">
+                        3. Production
+                      </div>
+                      <div className="mt-4 grid gap-3 text-sm text-slate-700 sm:grid-cols-2">
+                        <div className="rounded-2xl bg-white p-4">
+                          <div className="text-xs text-slate-500">Quantité</div>
+                          <div className="mt-1 font-semibold text-slate-950">
+                            {activeTaskDetail.quantite ?? "—"} {activeTaskDetail.unite ?? ""}
+                          </div>
+                        </div>
+                        <div className="rounded-2xl bg-white p-4">
+                          <div className="text-xs text-slate-500">Temps prévu / passé</div>
+                          <div className="mt-1 font-semibold text-slate-950">
+                            {Math.round(Number(activeTaskDetail.temps_prevu_h ?? 0) * 100) / 100} h ·{" "}
+                            {Math.round(Number(activeTaskDetail.temps_reel_h ?? 0) * 100) / 100} h
+                          </div>
+                        </div>
+                        <div className="rounded-2xl bg-white p-4">
+                          <div className="text-xs text-slate-500">Avancement</div>
+                          <div className="mt-1 font-semibold text-slate-950">
+                            {detailProgress.displayPercent}%
+                          </div>
+                        </div>
+                        <div className="rounded-2xl bg-white p-4">
+                          <div className="text-xs text-slate-500">Dates</div>
+                          <div className="mt-1 font-semibold text-slate-950">
+                            {activeTaskDetail.date_debut ?? activeTaskDetail.date ?? "—"} →{" "}
+                            {activeTaskDetail.date_fin ?? "—"}
+                          </div>
+                        </div>
+                      </div>
+                    </section>
+
+                    <section className="rounded-3xl border border-slate-200 bg-slate-50/60 p-5">
+                      <div className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">
+                        4. Technique
+                      </div>
+                      <div className="mt-4 space-y-3">
+                        <div className="rounded-2xl bg-white p-4">
+                          <div className="text-xs text-slate-500">Description technique</div>
+                          <div className="mt-1 text-sm text-slate-800">
+                            {(activeTaskDetail as any).description_technique || "—"}
+                          </div>
+                        </div>
+                        <div className="rounded-2xl bg-white p-4">
+                          <div className="text-xs text-slate-500">Caractéristiques</div>
+                          {detailCaracteristiques.length === 0 ? (
+                            <div className="mt-1 text-sm text-slate-500">—</div>
+                          ) : (
+                            <ul className="mt-2 space-y-1 text-sm text-slate-800">
+                              {detailCaracteristiques.map((item) => (
+                                <li key={`${activeTaskDetail.id}-${item}`}>• {item}</li>
+                              ))}
+                            </ul>
+                          )}
+                        </div>
+                        {String((activeTaskDetail as any).reprise_reason ?? "").trim() ? (
+                          <div className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+                            Reprise demandée : {(activeTaskDetail as any).reprise_reason}
+                          </div>
+                        ) : null}
+                      </div>
+                    </section>
+
+                    <section className="rounded-3xl border border-slate-200 bg-slate-50/60 p-5">
+                      <div className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">
+                        5. Budget
+                      </div>
+                      <div className="mt-4 grid gap-3 text-sm text-slate-700 sm:grid-cols-2">
+                        <div className="rounded-2xl bg-white p-4">
+                          <div className="text-xs text-slate-500">PU devis HT</div>
+                          <div className="mt-1 font-semibold text-slate-950">
+                            {formatTaskMoney((activeTaskDetail as any).prix_unitaire_devis_ht)}
+                          </div>
+                        </div>
+                        <div className="rounded-2xl bg-white p-4">
+                          <div className="text-xs text-slate-500">Total devis HT</div>
+                          <div className="mt-1 font-semibold text-slate-950">
+                            {formatTaskMoney(detailPrixVente)}
+                          </div>
+                        </div>
+                        <div className="rounded-2xl bg-white p-4">
+                          <div className="text-xs text-slate-500">Coût estimé HT</div>
+                          <div className="mt-1 font-semibold text-slate-950">
+                            {formatTaskMoney(detailCout)}
+                          </div>
+                        </div>
+                        <div className="rounded-2xl bg-white p-4">
+                          <div className="text-xs text-slate-500">Marge estimée</div>
+                          <div className="mt-1 font-semibold text-slate-950">
+                            {formatTaskMoney(detailMarge)}
+                          </div>
+                        </div>
+                      </div>
+                    </section>
+
+                    <section className="rounded-3xl border border-slate-200 bg-slate-50/60 p-5">
+                      <div className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">
+                        6. Documents et suivi
+                      </div>
+                      <div className="mt-4 space-y-3">
+                        <div className="rounded-2xl bg-white p-4">
+                          <div className="text-xs text-slate-500">Devis source</div>
+                          <div className="mt-1 text-sm text-slate-800">
+                            {(activeTaskDetail as any).libelle_devis_original ||
+                              (activeTaskDetail.devis_ligne_id
+                                ? `Ligne devis : ${activeTaskDetail.devis_ligne_id}`
+                                : "—")}
+                          </div>
+                        </div>
+                        <div className="rounded-2xl bg-white p-4">
+                          <div className="text-xs text-slate-500">Documents liés</div>
+                          {detailDocs.length === 0 ? (
+                            <div className="mt-1 text-sm text-slate-500">—</div>
+                          ) : (
+                            <div className="mt-2 flex flex-wrap gap-2">
+                              {detailDocs.map((doc) => (
+                                <span
+                                  key={doc.id}
+                                  className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs text-slate-700"
+                                >
+                                  {doc.title}
+                                </span>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                        <div className="rounded-2xl bg-white p-4">
+                          <div className="text-xs text-slate-500">Étapes opérationnelles</div>
+                          {detailSteps.length === 0 ? (
+                            <div className="mt-1 text-sm text-slate-500">—</div>
+                          ) : (
+                            <div className="mt-2 flex flex-wrap gap-2">
+                              {detailSteps.map((step) => (
+                                <span
+                                  key={step.id}
+                                  className={["rounded-full border px-3 py-1 text-xs", taskStepStatusBadgeClass(step.statut)].join(" ")}
+                                >
+                                  {step.titre}
+                                </span>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </section>
+                  </div>
+                </div>
+              );
+            })()}
+          </aside>
+        </div>
+      ) : null}
 
       <section className="sticky top-4 z-20 rounded-3xl border border-slate-200 bg-white/95 px-5 py-4 shadow-sm backdrop-blur">
         <div className="flex flex-col gap-4">
@@ -5014,13 +5609,46 @@ export default function ChantierPage() {
                     </div>
 
                     <form onSubmit={addTask} className="space-y-3">
+                      <div className="grid gap-2 md:grid-cols-[minmax(0,2fr)_220px]">
+                        <label className="space-y-1 text-xs text-slate-600">
+                          <div>Tâche bibliothèque</div>
+                          <select
+                            className="w-full rounded-xl border bg-white px-3 py-2 text-sm text-slate-900"
+                            value={newTaskTemplateId}
+                            onChange={(e) => applyTaskTemplateToNewTask(e.target.value)}
+                          >
+                            <option value="">Aucune référence bibliothèque</option>
+                            {taskLibraryTemplates.map((template) => (
+                              <option key={template.id} value={template.id}>
+                                {template.titre}
+                                {template.lot ? ` · ${template.lot}` : ""}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                        <label className="space-y-1 text-xs text-slate-600">
+                          <div>Priorité</div>
+                          <select
+                            className="w-full rounded-xl border bg-white px-3 py-2 text-sm text-slate-900"
+                            value={newTaskPriorite}
+                            onChange={(e) => setNewTaskPriorite(e.target.value as any)}
+                          >
+                            <option value="basse">Basse</option>
+                            <option value="normale">Normale</option>
+                            <option value="haute">Haute</option>
+                            <option value="urgente">Urgente</option>
+                          </select>
+                        </label>
+                      </div>
+
                       <div className="grid gap-2 md:grid-cols-10">
                         <label className="space-y-1 text-xs text-slate-600 md:col-span-4">
-                          <div>Intitule</div>
+                          <div>Intitulé simplifié</div>
                           <input
                             className="w-full rounded-xl border bg-white px-3 py-2 text-sm text-slate-900"
                             value={newTitre}
                             onChange={(e) => setNewTitre(e.target.value)}
+                            placeholder="Ex : Doublage placo hydrofuge salle d'eau"
                           />
                         </label>
                         <label className="space-y-1 text-xs text-slate-600 md:col-span-2">
@@ -5110,6 +5738,66 @@ export default function ChantierPage() {
                             placeholder="Ex : ossature, isolation, finitions"
                             value={newTaskStepName}
                             onChange={(e) => setNewTaskStepName(e.target.value)}
+                          />
+                        </label>
+                      </div>
+
+                      <div className="grid gap-2 md:grid-cols-[minmax(0,1fr)_180px_180px_180px]">
+                        <label className="space-y-1 text-xs text-slate-600">
+                          <div>Référence bibliothèque (tag)</div>
+                          <input
+                            className="w-full rounded-xl border bg-white px-3 py-2 text-sm text-slate-900"
+                            value={newTaskTemplateLabel}
+                            onChange={(e) => setNewTaskTemplateLabel(e.target.value)}
+                            placeholder="Ex : Doublage placo"
+                          />
+                        </label>
+                        <label className="space-y-1 text-xs text-slate-600">
+                          <div>PU devis HT</div>
+                          <input
+                            className="w-full rounded-xl border bg-white px-3 py-2 text-sm text-slate-900"
+                            inputMode="decimal"
+                            value={newTaskPrixUnitaireDevisHt}
+                            onChange={(e) => setNewTaskPrixUnitaireDevisHt(e.target.value)}
+                          />
+                        </label>
+                        <label className="space-y-1 text-xs text-slate-600">
+                          <div>Total devis HT</div>
+                          <input
+                            className="w-full rounded-xl border bg-white px-3 py-2 text-sm text-slate-900"
+                            inputMode="decimal"
+                            value={newTaskMontantTotalDevisHt}
+                            onChange={(e) => setNewTaskMontantTotalDevisHt(e.target.value)}
+                          />
+                        </label>
+                        <label className="space-y-1 text-xs text-slate-600">
+                          <div>Coût estimé HT</div>
+                          <input
+                            className="w-full rounded-xl border bg-white px-3 py-2 text-sm text-slate-900"
+                            inputMode="decimal"
+                            value={newTaskCoutEstimeHt}
+                            onChange={(e) => setNewTaskCoutEstimeHt(e.target.value)}
+                          />
+                        </label>
+                      </div>
+
+                      <div className="grid gap-2 md:grid-cols-2">
+                        <label className="space-y-1 text-xs text-slate-600">
+                          <div>Description technique</div>
+                          <textarea
+                            className="min-h-24 w-full rounded-xl border bg-white px-3 py-2 text-sm text-slate-900"
+                            value={newTaskDescriptionTechnique}
+                            onChange={(e) => setNewTaskDescriptionTechnique(e.target.value)}
+                            placeholder="Visible uniquement dans le détail de la tâche"
+                          />
+                        </label>
+                        <label className="space-y-1 text-xs text-slate-600">
+                          <div>Caractéristiques (1 par ligne)</div>
+                          <textarea
+                            className="min-h-24 w-full rounded-xl border bg-white px-3 py-2 text-sm text-slate-900"
+                            value={newTaskCaracteristiques}
+                            onChange={(e) => setNewTaskCaracteristiques(e.target.value)}
+                            placeholder={"BA13 hydrofuge\nLaine de roche 120 mm\nSystème Optima"}
                           />
                         </label>
                       </div>
@@ -5271,7 +5959,7 @@ export default function ChantierPage() {
               <div className="space-y-2">
                 {filteredTasks.map((t: any) => {
                   const isEditing = editingTaskId === t.id;
-                  const displayTitre = stripLegacyPrefix(t.titre ?? "");
+                  const displayTitre = getTaskDisplayTitle(t);
                   const decoded = decodeQtyUnit(displayTitre);
                   const displayTitreClean = decoded.cleanTitle || displayTitre;
                   const quantiteRaw = toNumberOrNull((t as any).quantite);
@@ -5303,10 +5991,18 @@ export default function ChantierPage() {
                     avancementPct < 40 ? "bg-amber-400" : avancementPct < 80 ? "bg-blue-500" : "bg-emerald-500";
                   const assignedNames = getTaskAssignedIntervenantNames(t);
                   const orderLabel = taskOrderLabelById.get(t.id) ?? Math.max(0, Number(t.order_index ?? 0)) + 1;
-                  const taskZoneLabel = resolveZoneName((t as any).zone_id ?? null);
+                  const taskZoneLabel = resolveZonePath((t as any).zone_id ?? null);
                   const taskQuality = ((t as any).quality_status ?? "a_faire") as TaskQualityStatus;
+                  const taskTemplateLabel = getTaskLibraryLabel(t);
+                  const priorityMeta = taskPriorityMeta((t as any).priorite);
                   const taskStep = String((t as any).etape_metier ?? "").trim();
                   const taskRepriseReason = String((t as any).reprise_reason ?? "").trim();
+                  const taskBudgetVente = toNumberOrNull((t as any).montant_total_devis_ht);
+                  const taskBudgetCout = toNumberOrNull((t as any).cout_estime_ht);
+                  const taskBudgetMarge =
+                    taskBudgetVente !== null && taskBudgetCout !== null
+                      ? Math.round((taskBudgetVente - taskBudgetCout) * 100) / 100
+                      : null;
 
                   return (
                     <div
@@ -5342,18 +6038,21 @@ export default function ChantierPage() {
                             <>
                               <div className="flex flex-wrap items-center gap-2">
                                 <span className="cursor-grab text-slate-300" aria-hidden="true">::</span>
-                                <div className="font-medium break-words">{displayTitreClean}</div>
+                                <div className="font-medium break-words text-slate-950">{displayTitreClean}</div>
+                                <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[11px] text-slate-600">
+                                  {taskTemplateLabel}
+                                </span>
+                                <span className={["rounded-full border px-2 py-0.5 text-[11px]", priorityMeta.className].join(" ")}>
+                                  Priorité {priorityMeta.label}
+                                </span>
                                 <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[11px] text-slate-600">
                                   #{orderLabel}
                                 </span>
                               </div>
                               <div className="text-xs text-slate-500">
-                                {resolveTaskLotName(t)} | Intervenants: {assignedNames.join(", ") || "—"}
+                                {resolveTaskLotName(t)} · {assignedNames.join(", ") || "Intervenant non affecté"} · {taskZoneLabel}
                               </div>
                               <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-slate-500">
-                                <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5">
-                                  Zone : {taskZoneLabel}
-                                </span>
                                 <span
                                   className={[
                                     "rounded-full border px-2 py-0.5",
@@ -5371,6 +6070,26 @@ export default function ChantierPage() {
                               <div className="text-xs text-slate-500 mt-1">
                                 {qtyLabel} / {tempsPrevuLabel} / {tempsPasseLabel}
                               </div>
+                              {(taskBudgetVente !== null || taskBudgetCout !== null) && (
+                                <div className="mt-2 flex flex-wrap gap-2 text-xs text-slate-500">
+                                  <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5">
+                                    Vente devis : {formatTaskMoney(taskBudgetVente)}
+                                  </span>
+                                  <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5">
+                                    Coût estimé : {formatTaskMoney(taskBudgetCout)}
+                                  </span>
+                                  <span
+                                    className={[
+                                      "rounded-full border px-2 py-0.5",
+                                      taskBudgetMarge !== null && taskBudgetMarge < 0
+                                        ? "border-red-200 bg-red-50 text-red-700"
+                                        : "border-emerald-200 bg-emerald-50 text-emerald-700",
+                                    ].join(" ")}
+                                  >
+                                    Marge estimée : {formatTaskMoney(taskBudgetMarge)}
+                                  </span>
+                                </div>
+                              )}
                               {taskRepriseReason && taskQuality === "a_reprendre" ? (
                                 <div className="mt-2 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
                                   Motif de reprise : {taskRepriseReason}
@@ -5401,13 +6120,22 @@ export default function ChantierPage() {
                                 </div>
                                 {!isAdjustingProgress ? (
                                   <div className="flex justify-end">
-                                    <button
-                                      type="button"
-                                      onClick={() => startTaskProgressEdit(t)}
-                                      className="rounded-lg border px-2 py-1 text-xs hover:bg-slate-50"
-                                    >
-                                      Ajuster
-                                    </button>
+                                    <div className="flex flex-wrap gap-2">
+                                      <button
+                                        type="button"
+                                        onClick={() => startTaskProgressEdit(t)}
+                                        className="rounded-lg border px-2 py-1 text-xs hover:bg-slate-50"
+                                      >
+                                        Ajuster
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => setTaskDetailOpenId(t.id)}
+                                        className="rounded-lg border px-2 py-1 text-xs hover:bg-slate-50"
+                                      >
+                                        Ouvrir détail
+                                      </button>
+                                    </div>
                                   </div>
                                 ) : (
                                   <div className="rounded-lg border bg-slate-50 p-2 space-y-2">
@@ -5459,9 +6187,41 @@ export default function ChantierPage() {
                             </>
                           ) : (
                             <div className="rounded-xl border bg-slate-50 p-3 space-y-3">
+                              <div className="grid gap-2 md:grid-cols-[minmax(0,2fr)_220px]">
+                                <label className="space-y-1 text-xs text-slate-600">
+                                  <div>Tâche bibliothèque</div>
+                                  <select
+                                    className="w-full rounded-xl border bg-white px-3 py-2 text-sm text-slate-900"
+                                    value={editTaskTemplateId}
+                                    onChange={(e) => applyTaskTemplateToEditTask(e.target.value)}
+                                  >
+                                    <option value="">Aucune référence bibliothèque</option>
+                                    {taskLibraryTemplates.map((template) => (
+                                      <option key={template.id} value={template.id}>
+                                        {template.titre}
+                                        {template.lot ? ` · ${template.lot}` : ""}
+                                      </option>
+                                    ))}
+                                  </select>
+                                </label>
+                                <label className="space-y-1 text-xs text-slate-600">
+                                  <div>Priorité</div>
+                                  <select
+                                    className="w-full rounded-xl border bg-white px-3 py-2 text-sm text-slate-900"
+                                    value={editTaskPriorite}
+                                    onChange={(e) => setEditTaskPriorite(e.target.value as any)}
+                                  >
+                                    <option value="basse">Basse</option>
+                                    <option value="normale">Normale</option>
+                                    <option value="haute">Haute</option>
+                                    <option value="urgente">Urgente</option>
+                                  </select>
+                                </label>
+                              </div>
+
                               <div className="grid gap-2 md:grid-cols-10">
                                 <label className="space-y-1 text-xs text-slate-600 md:col-span-3">
-                                  <div>Intitule</div>
+                                  <div>Intitulé simplifié</div>
                                   <input
                                     className="w-full rounded-xl border bg-white px-3 py-2 text-sm text-slate-900"
                                     value={editTitre}
@@ -5571,6 +6331,63 @@ export default function ChantierPage() {
                                     placeholder="Ex : ossature, isolation, finitions"
                                     value={editTaskStepName}
                                     onChange={(e) => setEditTaskStepName(e.target.value)}
+                                  />
+                                </label>
+                              </div>
+
+                              <div className="grid gap-2 md:grid-cols-[minmax(0,1fr)_180px_180px_180px]">
+                                <label className="space-y-1 text-xs text-slate-600">
+                                  <div>Référence bibliothèque (tag)</div>
+                                  <input
+                                    className="w-full rounded-xl border bg-white px-3 py-2 text-sm text-slate-900"
+                                    value={editTaskTemplateLabel}
+                                    onChange={(e) => setEditTaskTemplateLabel(e.target.value)}
+                                  />
+                                </label>
+                                <label className="space-y-1 text-xs text-slate-600">
+                                  <div>PU devis HT</div>
+                                  <input
+                                    className="w-full rounded-xl border bg-white px-3 py-2 text-sm text-slate-900"
+                                    inputMode="decimal"
+                                    value={editTaskPrixUnitaireDevisHt}
+                                    onChange={(e) => setEditTaskPrixUnitaireDevisHt(e.target.value)}
+                                  />
+                                </label>
+                                <label className="space-y-1 text-xs text-slate-600">
+                                  <div>Total devis HT</div>
+                                  <input
+                                    className="w-full rounded-xl border bg-white px-3 py-2 text-sm text-slate-900"
+                                    inputMode="decimal"
+                                    value={editTaskMontantTotalDevisHt}
+                                    onChange={(e) => setEditTaskMontantTotalDevisHt(e.target.value)}
+                                  />
+                                </label>
+                                <label className="space-y-1 text-xs text-slate-600">
+                                  <div>Coût estimé HT</div>
+                                  <input
+                                    className="w-full rounded-xl border bg-white px-3 py-2 text-sm text-slate-900"
+                                    inputMode="decimal"
+                                    value={editTaskCoutEstimeHt}
+                                    onChange={(e) => setEditTaskCoutEstimeHt(e.target.value)}
+                                  />
+                                </label>
+                              </div>
+
+                              <div className="grid gap-2 md:grid-cols-2">
+                                <label className="space-y-1 text-xs text-slate-600">
+                                  <div>Description technique</div>
+                                  <textarea
+                                    className="min-h-24 w-full rounded-xl border bg-white px-3 py-2 text-sm text-slate-900"
+                                    value={editTaskDescriptionTechnique}
+                                    onChange={(e) => setEditTaskDescriptionTechnique(e.target.value)}
+                                  />
+                                </label>
+                                <label className="space-y-1 text-xs text-slate-600">
+                                  <div>Caractéristiques (1 par ligne)</div>
+                                  <textarea
+                                    className="min-h-24 w-full rounded-xl border bg-white px-3 py-2 text-sm text-slate-900"
+                                    value={editTaskCaracteristiques}
+                                    onChange={(e) => setEditTaskCaracteristiques(e.target.value)}
                                   />
                                 </label>
                               </div>

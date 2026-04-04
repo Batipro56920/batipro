@@ -31,10 +31,19 @@ export const CONTROLLED_LOTS: ControlledLot[] = [
 
 export type TaskLine = {
   title: string;
+  task_template_label: string | null;
+  description_technique: string | null;
+  caracteristiques: string[];
   lot: ControlledLot | null;
   intervenant_name: string | null;
   quantity: number | null;
   unit: string | null;
+  unit_price_ht: number | null;
+  total_price_ht: number | null;
+  vat_rate: number | null;
+  estimated_cost_ht: number | null;
+  estimated_material_cost_ht: number | null;
+  estimated_labor_cost_ht: number | null;
   date: string | null;
   confidence: number;
   source_line: string;
@@ -95,6 +104,21 @@ function normalizeTitle(value: string): string {
   return title;
 }
 
+function normalizeTaskTemplateLabel(value: unknown): string | null {
+  const raw = normalizeTitle(String(value ?? ""));
+  if (!raw || raw.length < 3) return null;
+  if (isNoiseLine(raw)) return null;
+  return raw;
+}
+
+function normalizeCaracteristiques(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((item) => String(item ?? "").trim())
+    .filter((item) => item.length > 0)
+    .slice(0, 20);
+}
+
 function normalizeDate(value: unknown): string | null {
   const raw = String(value ?? "").trim();
   if (!raw) return null;
@@ -137,23 +161,47 @@ export function normalizeDevisText(rawText: string): string {
 
 function toTaskLine(input: any): TaskLine | null {
   const sourceLine = String(input?.source_line ?? input?.sourceLine ?? "").trim();
-  const title = normalizeTitle(String(input?.title ?? ""));
+  const title = normalizeTitle(String(input?.title ?? input?.simplified_title ?? ""));
   if (!title || title.length < 3) return null;
   if (isNoiseLine(title)) return null;
 
+  const taskTemplateLabel = normalizeTaskTemplateLabel(
+    input?.task_template_label ?? input?.library_task ?? input?.task_library,
+  );
+  const descriptionTechnique = String(input?.description_technique ?? "").trim() || null;
+  const caracteristiques = normalizeCaracteristiques(input?.caracteristiques ?? input?.technical_features);
   const quantity = parseNumber(input?.quantity);
   const unit = normalizeUnit(input?.unit ?? null);
   const lot = normalizeLot(input?.lot ?? null);
   const intervenantName = String(input?.intervenant_name ?? input?.intervenantName ?? "").trim() || null;
+  const unitPriceHt = parseNumber(input?.unit_price_ht ?? input?.prix_unitaire_ht);
+  const totalPriceHt = parseNumber(input?.total_price_ht ?? input?.montant_total_ht);
+  const vatRate = parseNumber(input?.vat_rate ?? input?.tva_rate);
+  const estimatedCostHt = parseNumber(input?.estimated_cost_ht ?? input?.cout_estime_ht);
+  const estimatedMaterialCostHt = parseNumber(
+    input?.estimated_material_cost_ht ?? input?.cout_matiere_estime_ht,
+  );
+  const estimatedLaborCostHt = parseNumber(
+    input?.estimated_labor_cost_ht ?? input?.cout_mo_estime_ht,
+  );
   const date = normalizeDate(input?.date);
   const confidence = normalizeConfidence(input?.confidence);
 
   return {
     title,
+    task_template_label: taskTemplateLabel,
+    description_technique: descriptionTechnique,
+    caracteristiques,
     lot,
     intervenant_name: intervenantName,
     quantity,
     unit,
+    unit_price_ht: unitPriceHt,
+    total_price_ht: totalPriceHt,
+    vat_rate: vatRate,
+    estimated_cost_ht: estimatedCostHt,
+    estimated_material_cost_ht: estimatedMaterialCostHt,
+    estimated_labor_cost_ht: estimatedLaborCostHt,
     date,
     confidence,
     source_line: sourceLine || title,
@@ -166,6 +214,7 @@ export function postProcessTaskLines(lines: TaskLine[]): TaskLine[] {
     if (!line.title || isNoiseLine(line.title)) continue;
     const key = [
       line.title.toLowerCase(),
+      line.task_template_label ?? "",
       line.lot ?? "",
       line.quantity ?? "",
       line.unit ?? "",
@@ -234,10 +283,19 @@ export function extractTasksFromDevisTextSimple(cleanedText: string): TaskLine[]
 
     out.push({
       title,
+      task_template_label: null,
+      description_technique: null,
+      caracteristiques: [],
       lot: currentLot ?? normalizeLot(title),
       intervenant_name: null,
       quantity: parseNumber(m[2]),
       unit: normalizeUnit(m[3] ?? null),
+      unit_price_ht: null,
+      total_price_ht: null,
+      vat_rate: null,
+      estimated_cost_ht: null,
+      estimated_material_cost_ht: null,
+      estimated_labor_cost_ht: null,
       date: null,
       confidence: 0.55,
       source_line: line,
