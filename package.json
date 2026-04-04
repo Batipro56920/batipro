@@ -8,6 +8,7 @@
     "build": "tsc -b && vite build",
     "lint": "eslint .",
     "preview": "vite preview",
+    "test:e2e": "node scripts/e2e-smoke.mjs",
     "supabase:deploy:functions": "supabase functions deploy chantier-access-admin --no-verify-jwt && supabase functions deploy generate-intervenant-link --no-verify-jwt && supabase functions deploy link-intervenant-user --no-verify-jwt",
     "supabase:deploy:all": "supabase functions deploy --no-verify-jwt"
   },
