@@ -50,6 +50,12 @@ export type IntervenantTask = {
   duration_days: number;
   order_index: number;
   intervenant_id: string | null;
+  zone_id: string | null;
+  zone_nom: string | null;
+  etape_metier: string | null;
+  quality_status: "a_faire" | "en_cours" | "termine_intervenant" | "valide_admin" | "a_reprendre";
+  admin_validation_status: "non_verifie" | "valide" | "a_reprendre";
+  reprise_reason: string | null;
   updated_at: string | null;
 };
 
@@ -292,6 +298,22 @@ function normalizeReservePriority(value: unknown): IntervenantReserve["priority"
   return "NORMALE";
 }
 
+function normalizeTaskQualityStatus(value: unknown): IntervenantTask["quality_status"] {
+  const v = String(value ?? "").trim().toLowerCase();
+  if (v === "en_cours") return "en_cours";
+  if (v === "termine_intervenant") return "termine_intervenant";
+  if (v === "valide_admin") return "valide_admin";
+  if (v === "a_reprendre") return "a_reprendre";
+  return "a_faire";
+}
+
+function normalizeTaskAdminValidationStatus(value: unknown): IntervenantTask["admin_validation_status"] {
+  const v = String(value ?? "").trim().toLowerCase();
+  if (v === "valide") return "valide";
+  if (v === "a_reprendre") return "a_reprendre";
+  return "non_verifie";
+}
+
 function mapConsigne(row: Record<string, unknown>): IntervenantConsigne {
   return {
     id: String(row.id ?? ""),
@@ -451,6 +473,12 @@ export async function intervenantGetTasks(token: string, chantierId: string): Pr
     duration_days: Math.max(1, asInt(row.duration_days, 1)),
     order_index: Math.max(0, asInt(row.order_index, 0)),
     intervenant_id: asNullableString(row.intervenant_id),
+    zone_id: asNullableString(row.zone_id),
+    zone_nom: asNullableString(row.zone_nom),
+    etape_metier: asNullableString(row.etape_metier),
+    quality_status: normalizeTaskQualityStatus(row.quality_status),
+    admin_validation_status: normalizeTaskAdminValidationStatus(row.admin_validation_status),
+    reprise_reason: asNullableString(row.reprise_reason),
     updated_at: asNullableString(row.updated_at),
   }));
 }

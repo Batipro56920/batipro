@@ -448,6 +448,37 @@ function reservePriorityWeight(priority: IntervenantReserve["priority"]): number
   return 2;
 }
 
+function taskQualityMeta(status: IntervenantTask["quality_status"]): {
+  label: string;
+  tone: "neutral" | "blue" | "green" | "amber" | "red";
+} {
+  if (status === "valide_admin") return { label: "Valide admin", tone: "green" };
+  if (status === "termine_intervenant") return { label: "Termine", tone: "blue" };
+  if (status === "en_cours") return { label: "En cours", tone: "blue" };
+  if (status === "a_reprendre") return { label: "A reprendre", tone: "red" };
+  return { label: "A faire", tone: "amber" };
+}
+
+function taskAdminValidationMeta(status: IntervenantTask["admin_validation_status"]): {
+  label: string;
+  tone: "neutral" | "blue" | "green" | "amber" | "red";
+} {
+  if (status === "valide") return { label: "Controle OK", tone: "green" };
+  if (status === "a_reprendre") return { label: "Reprise demandee", tone: "red" };
+  return { label: "Non verifie", tone: "neutral" };
+}
+
+function taskContextLabel(task: IntervenantTask, t: (key: string, params?: Record<string, string | number>) => string): string {
+  return [
+    resolveTaskLot(task, t),
+    task.etape_metier,
+    task.zone_nom,
+  ]
+    .map((value) => String(value ?? "").trim())
+    .filter(Boolean)
+    .join(" - ");
+}
+
 function compareReserves(a: IntervenantReserve, b: IntervenantReserve): number {
   if (a.status !== b.status) {
     if (a.status === "LEVEE") return 1;
@@ -1987,6 +2018,12 @@ export default function IntervenantPortalPage() {
                       <div className="mt-1 text-sm font-semibold text-slate-900" style={TITLE_CLAMP_STYLE}>
                         {item.task.titre}
                       </div>
+                      <div className="mt-2 flex flex-wrap items-center gap-2">
+                        <span className="text-xs text-slate-500">{taskContextLabel(item.task, t)}</span>
+                        <PortalBadge tone={taskQualityMeta(item.task.quality_status).tone}>
+                          {taskQualityMeta(item.task.quality_status).label}
+                        </PortalBadge>
+                      </div>
                       <div className="mt-1 text-xs text-slate-500">
                         {resolveTaskLot(item.task, t)} · {statusLabel(item.task.status, t)}
                         {anchorDate ? ` · ${formatPortalDate(anchorDate)}` : ""}
@@ -2299,12 +2336,18 @@ export default function IntervenantPortalPage() {
       ) : (
         prioritizedTasks.map((task) => {
           const progress = taskCurrentProgress(task);
+          const qualityMeta = taskQualityMeta(task.quality_status);
+          const adminMeta = taskAdminValidationMeta(task.admin_validation_status);
           return (
             <PortalCard key={task.id} tone="default" className="p-4">
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0 flex-1">
                   <div className="text-base font-semibold text-slate-950" style={TITLE_CLAMP_STYLE}>{task.titre}</div>
-                  <div className="mt-2 text-sm text-slate-500">{t("intervenantPortal.tasks.lot", { value: resolveTaskLot(task, t) })}</div>
+                  <div className="mt-2 text-sm text-slate-500">{t("intervenantPortal.tasks.lot", { value: taskContextLabel(task, t) })}</div>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    <PortalBadge tone={qualityMeta.tone}>{qualityMeta.label}</PortalBadge>
+                    <PortalBadge tone={adminMeta.tone}>{adminMeta.label}</PortalBadge>
+                  </div>
                 </div>
                 <PortalBadge tone={tabToneClass(task.status)}>{statusLabel(task.status, t)}</PortalBadge>
               </div>
@@ -2323,6 +2366,11 @@ export default function IntervenantPortalPage() {
                   <div className="h-2.5 rounded-full bg-blue-700 transition-all" style={{ width: `${Math.max(progress ? 6 : 0, Math.min(100, progress ?? 0))}%` }} />
                 </div>
               </div>
+              {task.admin_validation_status === "a_reprendre" && task.reprise_reason ? (
+                <div className="mt-4 rounded-[1rem] border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
+                  Motif reprise : {task.reprise_reason}
+                </div>
+              ) : null}
             </PortalCard>
           );
         })
@@ -2352,6 +2400,20 @@ export default function IntervenantPortalPage() {
                 <div className="mt-3 rounded-[1rem] border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-slate-700">
                   <div className="text-xs font-semibold uppercase tracking-[0.16em] text-blue-700">{t("intervenantPortal.time.selectedTask")}</div>
                   <div className="mt-1 font-semibold text-slate-900" style={TITLE_CLAMP_STYLE}>{selectedTimeTask.titre}</div>
+                  <div className="mt-2 text-xs text-slate-600">{taskContextLabel(selectedTimeTask, t)}</div>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    <PortalBadge tone={taskQualityMeta(selectedTimeTask.quality_status).tone}>
+                      {taskQualityMeta(selectedTimeTask.quality_status).label}
+                    </PortalBadge>
+                    <PortalBadge tone={taskAdminValidationMeta(selectedTimeTask.admin_validation_status).tone}>
+                      {taskAdminValidationMeta(selectedTimeTask.admin_validation_status).label}
+                    </PortalBadge>
+                  </div>
+                  {selectedTimeTask.admin_validation_status === "a_reprendre" && selectedTimeTask.reprise_reason ? (
+                    <div className="mt-3 rounded-[0.9rem] border border-red-200 bg-white px-3 py-2 text-xs text-red-700">
+                      Reprise : {selectedTimeTask.reprise_reason}
+                    </div>
+                  ) : null}
                   <div className="mt-2 text-xs text-slate-600">
                     {selectedTimeTaskProgress === null
                       ? t("intervenantPortal.time.noProgressRecorded")
@@ -2378,6 +2440,14 @@ export default function IntervenantPortalPage() {
                         <div className={task.id === timeTaskId ? "mt-1 text-xs text-blue-100" : "mt-1 text-xs text-slate-500"}>
                           {resolveTaskLot(task, t)} • {statusLabel(task.status, t)}
                         </div>
+                        <div className={task.id === timeTaskId ? "mt-2 text-xs text-blue-100" : "mt-2 text-xs text-slate-500"}>
+                          {taskContextLabel(task, t)} - {taskQualityMeta(task.quality_status).label}
+                        </div>
+                        {task.admin_validation_status === "a_reprendre" && task.reprise_reason ? (
+                          <div className={task.id === timeTaskId ? "mt-2 text-xs text-red-100" : "mt-2 text-xs text-red-600"}>
+                            Reprise : {task.reprise_reason}
+                          </div>
+                        ) : null}
                       </button>
                     ))
                   )}
