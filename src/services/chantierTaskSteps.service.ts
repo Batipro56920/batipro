@@ -107,7 +107,7 @@ export async function createTaskStep(input: {
 
 export async function updateTaskStep(
   id: string,
-  patch: { titre?: string; statut?: ChantierTaskStepStatus; ordre?: number },
+  patch: { titre?: string; statut?: ChantierTaskStepStatus; ordre?: number; commentaire?: string | null },
 ): Promise<ChantierTaskStepRow> {
   if (!id) throw new Error("id étape manquant.");
   const payload: Record<string, unknown> = {};
@@ -118,6 +118,7 @@ export async function updateTaskStep(
   }
   if (patch.statut !== undefined) payload.statut = normalizeStepStatus(patch.statut);
   if (patch.ordre !== undefined) payload.ordre = Number.isFinite(Number(patch.ordre)) ? Number(patch.ordre) : 0;
+  if (patch.commentaire !== undefined) payload.commentaire = String(patch.commentaire ?? "").trim() || null;
   payload.updated_at = new Date().toISOString();
 
   const { data, error } = await fromTaskSteps()

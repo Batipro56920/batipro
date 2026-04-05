@@ -13,6 +13,11 @@ import { createDevis, createDevisLigne, deleteDevis } from "../../services/devis
 import { createTask, deleteTasksByIds } from "../../services/chantierTasks.service";
 import { deleteDocument, linkDocumentToTask, uploadDocument } from "../../services/chantierDocuments.service";
 import { generateTerrainTaskTitle } from "../../services/taskTerrainTitlesOperational.service";
+import {
+  findBestTaskTemplateMatch,
+  list as listTaskLibraryTemplates,
+  type TaskTemplateRow,
+} from "../../services/taskLibrary.service";
 
 type ImportMode = "AI" | "SIMPLE";
 
@@ -21,6 +26,7 @@ type PreviewRow = TaskLine & {
   include: boolean;
   intervenant_id: string | null;
   showSource: boolean;
+  task_template_id: string | null;
 };
 
 export type DevisImportResult = {
@@ -89,6 +95,7 @@ export default function DevisImportDrawer({ open, chantierId, intervenants, onCl
   const [warning, setWarning] = useState<string | null>(null);
   const [mode, setMode] = useState<ImportMode>("AI");
   const [rows, setRows] = useState<PreviewRow[]>([]);
+  const [taskLibraryTemplates, setTaskLibraryTemplates] = useState<TaskTemplateRow[]>([]);
   const [bulkIntervenantId, setBulkIntervenantId] = useState("__NONE__");
   const [bulkToast, setBulkToast] = useState<string | null>(null);
   const bulkToastTimerRef = useRef<number | null>(null);
@@ -104,8 +111,27 @@ export default function DevisImportDrawer({ open, chantierId, intervenants, onCl
     setWarning(null);
     setMode("AI");
     setRows([]);
+    setTaskLibraryTemplates([]);
     setBulkIntervenantId("__NONE__");
     setBulkToast(null);
+  }, [open]);
+
+  useEffect(() => {
+    if (!open) return;
+    let alive = true;
+    void (async () => {
+      try {
+        const templates = await listTaskLibraryTemplates();
+        if (!alive) return;
+        setTaskLibraryTemplates(templates);
+      } catch {
+        if (!alive) return;
+        setTaskLibraryTemplates([]);
+      }
+    })();
+    return () => {
+      alive = false;
+    };
   }, [open]);
 
   const includedCount = useMemo(() => rows.filter((row) => row.include).length, [rows]);
@@ -173,13 +199,25 @@ export default function DevisImportDrawer({ open, chantierId, intervenants, onCl
         throw new Error("Aucune ligne de travaux détectée.");
       }
 
-      const previewRows: PreviewRow[] = extracted.map((line, index) => ({
-        ...line,
-        id: `row-${index}-${crypto.randomUUID()}`,
-        include: true,
-        intervenant_id: guessIntervenantId(line.intervenant_name, intervenants),
-        showSource: false,
-      }));
+      const previewRows: PreviewRow[] = extracted.map((line, index) => {
+        const matchedTemplate = findBestTaskTemplateMatch(line, taskLibraryTemplates);
+        return {
+          ...line,
+          id: `row-${index}-${crypto.randomUUID()}`,
+          include: true,
+          intervenant_id: guessIntervenantId(line.intervenant_name, intervenants),
+          showSource: false,
+          task_template_id: matchedTemplate?.id ?? null,
+          task_template_label: matchedTemplate?.titre ?? line.task_template_label ?? null,
+          estimated_cost_ht:
+            line.estimated_cost_ht ??
+            (matchedTemplate?.cout_reference_unitaire_ht !== null &&
+            matchedTemplate?.cout_reference_unitaire_ht !== undefined &&
+            line.quantity !== null
+              ? Math.round(Number(matchedTemplate.cout_reference_unitaire_ht) * line.quantity * 100) / 100
+              : null),
+        };
+      });
 
       setMode(extractedMode);
       setRows(previewRows);
@@ -347,6 +385,7 @@ export default function DevisImportDrawer({ open, chantierId, intervenants, onCl
           chantier_id: chantierId,
           titre: row.title,
           titre_terrain: row.title,
+          task_template_id: row.task_template_id,
           task_template_label: row.task_template_label ?? row.title,
           description_technique: row.description_technique,
           caracteristiques: row.caracteristiques,

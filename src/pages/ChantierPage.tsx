@@ -201,17 +201,6 @@ function statusBadge(status: string | null | undefined, t: (key: string) => stri
   return { label: t("common.chantierStatus.PREPARATION"), className: "bg-slate-50 text-slate-700 border-slate-200" };
 }
 
-function taskStatusLabel(s: ChantierTaskRow["status"], t: (key: string) => string) {
-  if (s === "FAIT") return t("common.taskStatus.FAIT");
-  if (s === "EN_COURS") return t("common.taskStatus.EN_COURS");
-  return t("common.taskStatus.A_FAIRE");
-}
-function taskStatusBadgeClass(s: ChantierTaskRow["status"]) {
-  if (s === "FAIT") return "bg-emerald-50 text-emerald-700 border-emerald-200";
-  if (s === "EN_COURS") return "bg-amber-50 text-amber-700 border-amber-200";
-  return "bg-slate-50 text-slate-700 border-slate-200";
-}
-
 function taskQualityLabel(status: TaskQualityStatus) {
   if (status === "en_cours") return "En cours";
   if (status === "termine_intervenant") return "Terminé intervenant";
@@ -226,6 +215,17 @@ function taskQualityBadgeClass(status: TaskQualityStatus) {
   if (status === "a_reprendre") return "bg-red-50 text-red-700 border-red-200";
   if (status === "en_cours") return "bg-amber-50 text-amber-700 border-amber-200";
   return "bg-slate-50 text-slate-700 border-slate-200";
+}
+
+function isTaskAdminValidated(task: Pick<ChantierTaskRow, "quality_status" | "admin_validation_status">) {
+  return task.quality_status === "valide_admin" || task.admin_validation_status === "valide";
+}
+
+function getTaskQualityResetStatus(task: Pick<ChantierTaskRow, "temps_reel_h" | "temps_prevu_h" | "progress_admin_offset_percent">): TaskQualityStatus {
+  const progress = computeTaskProgress(task).displayPercent;
+  if (progress >= 100) return "termine_intervenant";
+  if (progress > 0) return "en_cours";
+  return "a_faire";
 }
 
 function isChantierTabEnabled(
@@ -558,7 +558,6 @@ async function copyToClipboard(text: string) {
 export default function ChantierPage() {
   const { id } = useParams<{ id: string }>();
   const { locale, t } = useI18n();
-  const translate = t;
 
   const [item, setItem] = useState<ChantierRow | null>(null);
   const [loading, setLoading] = useState(true);
@@ -808,6 +807,9 @@ export default function ChantierPage() {
   const [taskTemplateError, setTaskTemplateError] = useState<string | null>(null);
   const [taskLibraryTemplates, setTaskLibraryTemplates] = useState<TaskTemplateRow[]>([]);
   const [taskDetailOpenId, setTaskDetailOpenId] = useState<string | null>(null);
+  const [taskDetailTab, setTaskDetailTab] = useState<
+    "synthese" | "technique" | "documents" | "etapes" | "reserves" | "remarques" | "historique"
+  >("synthese");
   const [chantierTemplateSaving, setChantierTemplateSaving] = useState(false);
 
   // Devis
@@ -872,6 +874,7 @@ export default function ChantierPage() {
   const [taskSteps, setTaskSteps] = useState<ChantierTaskStepRow[]>([]);
   const [taskStepsSchemaReady, setTaskStepsSchemaReady] = useState(true);
   const [taskStepDrafts, setTaskStepDrafts] = useState<Record<string, string>>({});
+  const [taskStepCommentDrafts, setTaskStepCommentDrafts] = useState<Record<string, string>>({});
   const [taskStepSavingId, setTaskStepSavingId] = useState<string | null>(null);
   const [taskStepDeletingId, setTaskStepDeletingId] = useState<string | null>(null);
   const [activityLogs, setActivityLogs] = useState<ChantierActivityLogRow[]>([]);
@@ -2675,6 +2678,14 @@ export default function ChantierPage() {
     setTaskDetailOpenId(null);
   }, [activeTaskDetail, taskDetailOpenId]);
 
+  useEffect(() => {
+    if (!taskDetailOpenId) {
+      setTaskDetailTab("synthese");
+      return;
+    }
+    setTaskDetailTab("synthese");
+  }, [taskDetailOpenId]);
+
   const timeEntriesByTaskId = useMemo(() => {
     const grouped = new Map<string, ChantierTimeEntryRow[]>();
     for (const entry of timeEntries) {
@@ -2819,6 +2830,18 @@ export default function ChantierPage() {
       map.get(step.task_id)?.push(step);
     }
     return map;
+  }, [taskSteps]);
+
+  useEffect(() => {
+    setTaskStepCommentDrafts((prev) => {
+      const next = { ...prev };
+      for (const step of taskSteps) {
+        if (next[step.id] === undefined) {
+          next[step.id] = step.commentaire ?? "";
+        }
+      }
+      return next;
+    });
   }, [taskSteps]);
 
   const filteredReserves = useMemo(() => {
@@ -2988,56 +3011,6 @@ export default function ChantierPage() {
 
     setToast({ type: "ok", msg: "Lot ajouté à la liste." });
     return cleanName;
-  }
-
-  async function toggleTaskDone(t: ChantierTaskRow) {
-    const nextStatus = t.status === "FAIT" ? "A_FAIRE" : "FAIT";
-    const nextQualityStatus = getQualityStatusFromTaskStatus(nextStatus);
-    setTasks((prev) =>
-      prev.map((x) =>
-        x.id === t.id
-          ? {
-              ...x,
-              status: nextStatus,
-              quality_status: nextQualityStatus,
-              admin_validation_status: nextQualityStatus === "termine_intervenant" ? "non_verifie" : x.admin_validation_status,
-            }
-          : x,
-      ),
-    );
-    try {
-      await updateTask(t.id, {
-        status: nextStatus,
-        quality_status: nextQualityStatus,
-        admin_validation_status: nextQualityStatus === "termine_intervenant" ? "non_verifie" : t.admin_validation_status,
-      });
-      await recordChantierActivity({
-        actionType: "status_changed",
-        entityType: "task",
-        entityId: t.id,
-        reason: "Statut tâche modifié depuis la liste",
-        changes: {
-          from_status: t.status,
-          to_status: nextStatus,
-          quality_status: nextQualityStatus,
-        },
-      });
-    } catch (e: any) {
-      setTasks((prev) =>
-        prev.map((x) =>
-          x.id === t.id
-            ? {
-                ...x,
-                status: t.status,
-                quality_status: t.quality_status,
-                admin_validation_status: t.admin_validation_status,
-              }
-            : x,
-        ),
-      );
-      setTasksError(e?.message ?? "Erreur lors de la mise à jour de la tâche.");
-      setToast({ type: "error", msg: e?.message ?? "Erreur mise à jour tâche." });
-    }
   }
 
   function onTaskProgressDraftChange(taskId: string, rawValue: string) {
@@ -3240,6 +3213,63 @@ export default function ChantierPage() {
       setToast({ type: "error", msg: e?.message ?? "Erreur suppression étape." });
     } finally {
       setTaskStepDeletingId(null);
+    }
+  }
+
+  function onTaskStepCommentDraftChange(stepId: string, value: string) {
+    setTaskStepCommentDrafts((prev) => ({ ...prev, [stepId]: value }));
+  }
+
+  async function saveTaskOperationalStepComment(step: ChantierTaskStepRow) {
+    const commentaire = String(taskStepCommentDrafts[step.id] ?? step.commentaire ?? "").trim();
+    setTaskStepSavingId(step.task_id);
+    try {
+      const saved = await updateTaskStep(step.id, { commentaire });
+      setTaskSteps((prev) => prev.map((row) => (row.id === saved.id ? saved : row)));
+      setTaskStepCommentDrafts((prev) => ({ ...prev, [step.id]: commentaire }));
+      await recordChantierActivity({
+        actionType: "updated",
+        entityType: "task_step",
+        entityId: saved.id,
+        reason: "Commentaire d'étape mis à jour",
+        changes: {
+          task_id: saved.task_id,
+          titre: saved.titre,
+          commentaire,
+        },
+      });
+      setToast({ type: "ok", msg: "Commentaire d'étape enregistré." });
+    } catch (e: any) {
+      setToast({ type: "error", msg: e?.message ?? "Erreur commentaire étape." });
+    } finally {
+      setTaskStepSavingId(null);
+    }
+  }
+
+  async function moveTaskOperationalStep(step: ChantierTaskStepRow, direction: -1 | 1) {
+    const siblings = [...(taskStepsByTaskId.get(step.task_id) ?? [])].sort((a, b) => a.ordre - b.ordre);
+    const index = siblings.findIndex((row) => row.id === step.id);
+    const targetIndex = index + direction;
+    if (index < 0 || targetIndex < 0 || targetIndex >= siblings.length) return;
+
+    const reordered = [...siblings];
+    const [moved] = reordered.splice(index, 1);
+    reordered.splice(targetIndex, 0, moved);
+
+    const before = taskSteps;
+    const updates = reordered.map((row, ordre) => ({ ...row, ordre }));
+    setTaskSteps((prev) =>
+      prev.map((row) => updates.find((candidate) => candidate.id === row.id) ?? row),
+    );
+    setTaskStepSavingId(step.task_id);
+    try {
+      await Promise.all(updates.map((row) => updateTaskStep(row.id, { ordre: row.ordre })));
+      setToast({ type: "ok", msg: "Ordre des étapes mis à jour." });
+    } catch (e: any) {
+      setTaskSteps(before);
+      setToast({ type: "error", msg: e?.message ?? "Erreur ordre étapes." });
+    } finally {
+      setTaskStepSavingId(null);
     }
   }
 
@@ -3489,7 +3519,10 @@ export default function ChantierPage() {
     setEditAssignedIntervenantIds([]);
   }
 
-  async function applyTaskQualityDecision(task: ChantierTaskRow, decision: "valide_admin" | "a_reprendre") {
+  async function applyTaskQualityDecision(
+    task: ChantierTaskRow,
+    decision: "valide_admin" | "a_reprendre" | "non_verifie",
+  ) {
     const repriseReason =
       decision === "a_reprendre"
         ? window.prompt("Motif de reprise ?", task.reprise_reason ?? "")?.trim() ?? ""
@@ -3500,12 +3533,17 @@ export default function ChantierPage() {
       return;
     }
 
-    const nextStatus = getTaskStatusFromQualityStatus(decision);
+    const nextQualityStatus =
+      decision === "non_verifie" ? getTaskQualityResetStatus(task) : decision;
+    const nextStatus =
+      decision === "non_verifie"
+        ? getStatusFromProgress(computeTaskProgress(task).displayPercent)
+        : getTaskStatusFromQualityStatus(nextQualityStatus);
     const nextAdminValidationStatus: ChantierTaskRow["admin_validation_status"] =
-      decision === "valide_admin" ? "valide" : "a_reprendre";
+      decision === "valide_admin" ? "valide" : decision === "a_reprendre" ? "a_reprendre" : "non_verifie";
     const patch = {
       status: nextStatus,
-      quality_status: decision,
+      quality_status: nextQualityStatus,
       admin_validation_status: nextAdminValidationStatus,
       validated_at: decision === "valide_admin" ? new Date().toISOString() : null,
       reprise_reason: decision === "a_reprendre" ? repriseReason : null,
@@ -3516,20 +3554,30 @@ export default function ChantierPage() {
     try {
       await updateTask(task.id, patch as any);
       await recordChantierActivity({
-        actionType: "validated",
+        actionType: decision === "non_verifie" ? "updated" : "validated",
         entityType: "task",
         entityId: task.id,
-        reason: decision === "valide_admin" ? "Tâche validée par admin" : "Tâche marquée à reprendre",
+        reason:
+          decision === "valide_admin"
+            ? "Tâche validée par admin"
+            : decision === "a_reprendre"
+              ? "Tâche marquée à reprendre"
+              : "Validation tâche retirée",
         changes: {
           from_quality_status: task.quality_status,
-          to_quality_status: decision,
+          to_quality_status: nextQualityStatus,
           admin_validation_status: patch.admin_validation_status,
           reprise_reason: patch.reprise_reason,
         },
       });
       setToast({
         type: "ok",
-        msg: decision === "valide_admin" ? "Tâche validée." : "Tâche marquée à reprendre.",
+        msg:
+          decision === "valide_admin"
+            ? "Tâche validée."
+            : decision === "a_reprendre"
+              ? "Tâche marquée à reprendre."
+              : "Validation retirée.",
       });
     } catch (e: any) {
       await refreshTasksOnly();
@@ -4428,6 +4476,25 @@ export default function ChantierPage() {
                 detailPrixVente !== null && detailCout !== null
                   ? Math.round((detailPrixVente - detailCout) * 100) / 100
                   : null;
+              const detailValidated = isTaskAdminValidated(activeTaskDetail);
+              const detailReserves = reserves.filter((reserve) => reserve.task_id === activeTaskDetail.id);
+              const detailConsignes = consignes.filter((consigne) => consigne.task_id === activeTaskDetail.id);
+              const detailTimeNotes = timeEntries.filter(
+                (entry) => entry.task_id === activeTaskDetail.id && String(entry.note ?? "").trim().length > 0,
+              );
+              const detailActivity = activityLogs.filter((log) => {
+                if (log.entity_type === "task" && log.entity_id === activeTaskDetail.id) return true;
+                return String((log.changes as any)?.task_id ?? "").trim() === activeTaskDetail.id;
+              });
+              const detailTabs = [
+                { key: "synthese", label: "Synthèse" },
+                { key: "technique", label: "Technique" },
+                { key: "documents", label: "Documents" },
+                { key: "etapes", label: "Étapes" },
+                { key: "reserves", label: "Réserves" },
+                { key: "remarques", label: "Remarques" },
+                { key: "historique", label: "Historique" },
+              ] as const;
               const detailCaracteristiques = Array.isArray((activeTaskDetail as any).caracteristiques)
                 ? ((activeTaskDetail as any).caracteristiques as string[])
                 : [];
@@ -4448,19 +4515,20 @@ export default function ChantierPage() {
                           {detailLot}
                         </span>
                         <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1">
-                          ID {activeTaskDetail.id}
+                          {resolveZonePath((activeTaskDetail as any).zone_id ?? null)}
                         </span>
                       </div>
                     </div>
                     <div className="flex flex-wrap justify-end gap-2">
-                      <span
-                        className={[
-                          "rounded-full border px-3 py-2 text-xs font-medium",
-                          taskQualityBadgeClass(detailQuality),
-                        ].join(" ")}
-                      >
-                        {taskQualityLabel(detailQuality)}
-                      </span>
+                      <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2 text-right">
+                        <div className="flex items-center justify-between gap-3">
+                          <div className="text-[11px] uppercase tracking-[0.16em] text-slate-400">Avancement</div>
+                          <span className={["rounded-full border px-2 py-0.5 text-[11px] font-semibold", detailPriority.className].join(" ")}>
+                            {detailPriority.label}
+                          </span>
+                        </div>
+                        <div className="mt-1 text-lg font-semibold text-slate-950">{detailProgress.displayPercent}%</div>
+                      </div>
                       <button
                         type="button"
                         onClick={() => {
@@ -4474,10 +4542,20 @@ export default function ChantierPage() {
                       </button>
                       <button
                         type="button"
-                        onClick={() => void applyTaskQualityDecision(activeTaskDetail, "valide_admin")}
-                        className="rounded-xl border border-emerald-200 px-4 py-2 text-sm text-emerald-700 hover:bg-emerald-50"
+                        onClick={() =>
+                          void applyTaskQualityDecision(
+                            activeTaskDetail,
+                            detailValidated ? "non_verifie" : "valide_admin",
+                          )
+                        }
+                        className={[
+                          "rounded-xl border px-4 py-2 text-sm",
+                          detailValidated
+                            ? "border-amber-200 text-amber-700 hover:bg-amber-50"
+                            : "border-emerald-200 text-emerald-700 hover:bg-emerald-50",
+                        ].join(" ")}
                       >
-                        Valider
+                        {detailValidated ? "Dévalider" : "Valider"}
                       </button>
                       <button
                         type="button"
@@ -4496,8 +4574,26 @@ export default function ChantierPage() {
                     </div>
                   </header>
 
+                  <nav className="flex flex-wrap gap-2">
+                    {detailTabs.map((entry) => (
+                      <button
+                        key={entry.key}
+                        type="button"
+                        onClick={() => setTaskDetailTab(entry.key)}
+                        className={[
+                          "rounded-full px-4 py-2 text-sm font-medium transition",
+                          taskDetailTab === entry.key
+                            ? "bg-slate-900 text-white"
+                            : "border border-slate-200 bg-white text-slate-700 hover:bg-slate-50",
+                        ].join(" ")}
+                      >
+                        {entry.label}
+                      </button>
+                    ))}
+                  </nav>
+
                   <div className="grid gap-4 xl:grid-cols-2">
-                    <section className="rounded-3xl border border-slate-200 bg-slate-50/60 p-5">
+                    <section className={taskDetailTab === "synthese" ? "rounded-3xl border border-slate-200 bg-slate-50/60 p-5" : "hidden"}>
                       <div className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">
                         1. Vue synthèse
                       </div>
@@ -4517,17 +4613,17 @@ export default function ChantierPage() {
                           </div>
                         </div>
                         <div className="rounded-2xl bg-white p-4">
-                          <div className="text-xs text-slate-500">Priorité</div>
+                          <div className="text-xs text-slate-500">Validation qualité</div>
                           <div className="mt-1">
-                            <span className={["rounded-full border px-3 py-1 text-xs font-semibold", detailPriority.className].join(" ")}>
-                              {detailPriority.label}
+                            <span className={["rounded-full border px-3 py-1 text-xs font-semibold", taskQualityBadgeClass(detailQuality)].join(" ")}>
+                              {detailValidated ? "Validée" : taskQualityLabel(detailQuality)}
                             </span>
                           </div>
                         </div>
                       </div>
                     </section>
 
-                    <section className="rounded-3xl border border-slate-200 bg-slate-50/60 p-5">
+                    <section className={taskDetailTab === "synthese" ? "rounded-3xl border border-slate-200 bg-slate-50/60 p-5" : "hidden"}>
                       <div className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">
                         2. Localisation
                       </div>
@@ -4536,7 +4632,7 @@ export default function ChantierPage() {
                       </div>
                     </section>
 
-                    <section className="rounded-3xl border border-slate-200 bg-slate-50/60 p-5">
+                    <section className={taskDetailTab === "synthese" ? "rounded-3xl border border-slate-200 bg-slate-50/60 p-5" : "hidden"}>
                       <div className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">
                         3. Production
                       </div>
@@ -4570,7 +4666,7 @@ export default function ChantierPage() {
                       </div>
                     </section>
 
-                    <section className="rounded-3xl border border-slate-200 bg-slate-50/60 p-5">
+                    <section className={taskDetailTab === "technique" ? "rounded-3xl border border-slate-200 bg-slate-50/60 p-5" : "hidden"}>
                       <div className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">
                         4. Technique
                       </div>
@@ -4601,7 +4697,7 @@ export default function ChantierPage() {
                       </div>
                     </section>
 
-                    <section className="rounded-3xl border border-slate-200 bg-slate-50/60 p-5">
+                    <section className={taskDetailTab === "synthese" ? "rounded-3xl border border-slate-200 bg-slate-50/60 p-5" : "hidden"}>
                       <div className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">
                         5. Budget
                       </div>
@@ -4633,9 +4729,30 @@ export default function ChantierPage() {
                       </div>
                     </section>
 
-                    <section className="rounded-3xl border border-slate-200 bg-slate-50/60 p-5">
-                      <div className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">
-                        6. Documents et suivi
+                    <section className={taskDetailTab === "documents" ? "rounded-3xl border border-slate-200 bg-slate-50/60 p-5" : "hidden"}>
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <div className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">
+                          Documents et suivi
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                          <button
+                            type="button"
+                            onClick={() => openTaskDocumentsModal(activeTaskDetail)}
+                            className="rounded-xl border px-3 py-2 text-xs hover:bg-white"
+                          >
+                            Lier un document
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setDocumentTaskId(activeTaskDetail.id);
+                              openDocumentModal();
+                            }}
+                            className="rounded-xl bg-slate-900 px-3 py-2 text-xs text-white hover:bg-slate-800"
+                          >
+                            Ajouter
+                          </button>
+                        </div>
                       </div>
                       <div className="mt-4 space-y-3">
                         <div className="rounded-2xl bg-white p-4">
@@ -4681,6 +4798,156 @@ export default function ChantierPage() {
                             </div>
                           )}
                         </div>
+                      </div>
+                    </section>
+
+                    <section className={taskDetailTab === "etapes" ? "rounded-3xl border border-slate-200 bg-slate-50/60 p-5 xl:col-span-2" : "hidden"}>
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <div className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">Étapes opérationnelles</div>
+                        <button
+                          type="button"
+                          onClick={() => void addTaskOperationalStep(activeTaskDetail)}
+                          disabled={taskStepSavingId === activeTaskDetail.id || !taskStepsSchemaReady}
+                          className="rounded-xl bg-slate-900 px-3 py-2 text-xs text-white hover:bg-slate-800 disabled:opacity-50"
+                        >
+                          Ajouter une étape
+                        </button>
+                      </div>
+                      <div className="mt-4 space-y-3">
+                        {!taskStepsSchemaReady ? (
+                          <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700">
+                            Migration étapes non appliquée.
+                          </div>
+                        ) : detailSteps.length === 0 ? (
+                          <div className="rounded-xl border border-dashed border-slate-200 bg-white px-3 py-3 text-sm text-slate-500">
+                            Aucune étape opérationnelle définie.
+                          </div>
+                        ) : (
+                          detailSteps.map((step, index) => (
+                            <div key={step.id} className="rounded-2xl border border-slate-200 bg-white p-4 space-y-3">
+                              <div className="flex flex-wrap items-center justify-between gap-2">
+                                <div className="flex items-center gap-2">
+                                  <span className={["rounded-full border px-3 py-1 text-xs font-semibold", taskStepStatusBadgeClass(step.statut)].join(" ")}>
+                                    {taskStepStatusLabel(step.statut)}
+                                  </span>
+                                  <span className="font-medium text-slate-900">{step.titre}</span>
+                                </div>
+                                <div className="flex flex-wrap gap-2">
+                                  <button type="button" onClick={() => void moveTaskOperationalStep(step, -1)} disabled={index === 0 || taskStepSavingId === step.task_id} className="rounded-lg border px-2 py-1 text-xs hover:bg-slate-50 disabled:opacity-50">Monter</button>
+                                  <button type="button" onClick={() => void moveTaskOperationalStep(step, 1)} disabled={index === detailSteps.length - 1 || taskStepSavingId === step.task_id} className="rounded-lg border px-2 py-1 text-xs hover:bg-slate-50 disabled:opacity-50">Descendre</button>
+                                  <button type="button" onClick={() => void toggleTaskOperationalStep(step)} disabled={taskStepSavingId === step.task_id} className="rounded-lg border px-2 py-1 text-xs hover:bg-slate-50 disabled:opacity-50">État</button>
+                                  <button type="button" onClick={() => void removeTaskOperationalStep(step)} disabled={taskStepDeletingId === step.id || taskStepSavingId === step.task_id} className="rounded-lg border border-red-200 px-2 py-1 text-xs text-red-700 hover:bg-red-50 disabled:opacity-50">Supprimer</button>
+                                </div>
+                              </div>
+                              <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]">
+                                <input
+                                  className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-900"
+                                  value={taskStepCommentDrafts[step.id] ?? step.commentaire ?? ""}
+                                  onChange={(event) => onTaskStepCommentDraftChange(step.id, event.target.value)}
+                                  placeholder="Commentaire d'étape"
+                                />
+                                <button type="button" onClick={() => void saveTaskOperationalStepComment(step)} disabled={taskStepSavingId === step.task_id} className="rounded-xl border px-3 py-2 text-xs hover:bg-slate-50 disabled:opacity-50">Enregistrer</button>
+                              </div>
+                            </div>
+                          ))
+                        )}
+                        <input
+                          className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900"
+                          placeholder="Nouvelle étape"
+                          value={taskStepDrafts[activeTaskDetail.id] ?? ""}
+                          onChange={(e) => onTaskStepDraftChange(activeTaskDetail.id, e.target.value)}
+                          disabled={taskStepSavingId === activeTaskDetail.id || !taskStepsSchemaReady}
+                        />
+                      </div>
+                    </section>
+
+                    <section className={taskDetailTab === "reserves" ? "rounded-3xl border border-slate-200 bg-slate-50/60 p-5 xl:col-span-2" : "hidden"}>
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <div className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">Réserves</div>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            openReserveDrawer(null);
+                            setReserveDraftTaskId(activeTaskDetail.id);
+                            setReserveDraftZoneId((activeTaskDetail as any).zone_id ?? "");
+                            setReserveDraftTitle(`Réserve - ${detailTitle}`);
+                          }}
+                          className="rounded-xl bg-slate-900 px-3 py-2 text-xs text-white hover:bg-slate-800"
+                        >
+                          Créer une réserve
+                        </button>
+                      </div>
+                      <div className="mt-4 space-y-3">
+                        {detailReserves.length === 0 ? (
+                          <div className="rounded-xl border border-dashed border-slate-200 bg-white px-3 py-3 text-sm text-slate-500">
+                            Aucune réserve liée.
+                          </div>
+                        ) : (
+                          detailReserves.map((reserve) => (
+                            <button key={reserve.id} type="button" onClick={() => openReserveDrawer(reserve)} className="w-full rounded-2xl border border-slate-200 bg-white p-4 text-left hover:bg-slate-50">
+                              <div className="font-medium text-slate-950">{reserve.title}</div>
+                              <div className="mt-1 text-sm text-slate-500">{reserve.description || "—"}</div>
+                            </button>
+                          ))
+                        )}
+                      </div>
+                    </section>
+
+                    <section className={taskDetailTab === "remarques" ? "rounded-3xl border border-slate-200 bg-slate-50/60 p-5" : "hidden"}>
+                      <div className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">Consignes liées</div>
+                      <div className="mt-4 space-y-3">
+                        {detailConsignes.length === 0 ? (
+                          <div className="rounded-xl border border-dashed border-slate-200 bg-white px-3 py-3 text-sm text-slate-500">
+                            Aucune consigne liée.
+                          </div>
+                        ) : (
+                          detailConsignes.map((row) => (
+                            <div key={row.id} className="rounded-2xl border border-slate-200 bg-white p-4">
+                              <div className="font-medium text-slate-950">{row.title}</div>
+                              <div className="mt-1 text-sm text-slate-600">{row.description || "—"}</div>
+                            </div>
+                          ))
+                        )}
+                      </div>
+                    </section>
+
+                    <section className={taskDetailTab === "remarques" ? "rounded-3xl border border-slate-200 bg-slate-50/60 p-5" : "hidden"}>
+                      <div className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">Retours chantier</div>
+                      <div className="mt-4 space-y-3">
+                        {detailTimeNotes.length === 0 ? (
+                          <div className="rounded-xl border border-dashed border-slate-200 bg-white px-3 py-3 text-sm text-slate-500">
+                            Aucun retour saisi.
+                          </div>
+                        ) : (
+                          detailTimeNotes.map((entry) => (
+                            <div key={entry.id} className="rounded-2xl border border-slate-200 bg-white p-4">
+                              <div className="text-xs text-slate-500">{entry.work_date} · {entry.duration_hours} h</div>
+                              <div className="mt-1 text-sm text-slate-700">{entry.note}</div>
+                            </div>
+                          ))
+                        )}
+                      </div>
+                    </section>
+
+                    <section className={taskDetailTab === "historique" ? "rounded-3xl border border-slate-200 bg-slate-50/60 p-5 xl:col-span-2" : "hidden"}>
+                      <div className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">Historique</div>
+                      <div className="mt-4 space-y-3">
+                        {detailActivity.length === 0 ? (
+                          <div className="rounded-2xl border border-dashed border-slate-200 bg-white p-4 text-sm text-slate-500">
+                            Aucun événement pour cette tâche.
+                          </div>
+                        ) : (
+                          detailActivity.map((log) => (
+                            <article key={log.id} className="rounded-2xl border border-slate-200 bg-white p-4">
+                              <div className="flex flex-wrap gap-2">
+                                <span className={["rounded-full border px-3 py-1 text-xs font-semibold", chantierActivityTone(log.entity_type)].join(" ")}>{chantierActivityEntityLabel(log.entity_type)}</span>
+                                <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-semibold text-slate-700">{chantierActivityActionLabel(log.action_type)}</span>
+                              </div>
+                              <div className="mt-3 text-sm font-medium text-slate-900">{log.reason || "Action tâche"}</div>
+                              <div className="mt-1 text-xs text-slate-500">{log.actor_name || "Utilisateur"} · {new Date(log.created_at).toLocaleString("fr-FR")}</div>
+                            </article>
+                          ))
+                        )}
                       </div>
                     </section>
                   </div>
@@ -5982,20 +6249,13 @@ export default function ChantierPage() {
                     ? Math.max(-100, Math.min(100, Math.round(parsedDraft)))
                     : offsetPct;
 
-                  const qtyLabel =
-                    quantiteValue === null ? "Qte: --" : `Qte: ${quantiteValue}${uniteValue ? ` ${uniteValue}` : ""}`;
-                  const tempsPrevuLabel =
-                    autoPct === null ? "Temps prevu: -- h" : `Temps prevu: ${Math.round((toNumberOrNull((t as any).temps_prevu_h) ?? 0) * 100) / 100} h`;
-                  const tempsPasseLabel = `Temps passe: ${tempsPasseDisplay} h`;
-                  const progressFillClass =
-                    avancementPct < 40 ? "bg-amber-400" : avancementPct < 80 ? "bg-blue-500" : "bg-emerald-500";
                   const assignedNames = getTaskAssignedIntervenantNames(t);
                   const orderLabel = taskOrderLabelById.get(t.id) ?? Math.max(0, Number(t.order_index ?? 0)) + 1;
                   const taskZoneLabel = resolveZonePath((t as any).zone_id ?? null);
                   const taskQuality = ((t as any).quality_status ?? "a_faire") as TaskQualityStatus;
+                  const taskValidated = isTaskAdminValidated(t);
                   const taskTemplateLabel = getTaskLibraryLabel(t);
                   const priorityMeta = taskPriorityMeta((t as any).priorite);
-                  const taskStep = String((t as any).etape_metier ?? "").trim();
                   const taskRepriseReason = String((t as any).reprise_reason ?? "").trim();
                   const taskBudgetVente = toNumberOrNull((t as any).montant_total_devis_ht);
                   const taskBudgetCout = toNumberOrNull((t as any).cout_estime_ht);
@@ -6025,20 +6285,19 @@ export default function ChantierPage() {
                       }}
                       onDragEnd={() => setDraggedTaskId(null)}
                     >
-                      <div className="flex flex-wrap items-start gap-3">
-                        <input
-                          type="checkbox"
-                          className="mt-1 shrink-0"
-                          checked={t.status === "FAIT"}
-                          onChange={() => toggleTaskDone(t)}
-                        />
-
-                        <div className="min-w-0 flex-1 basis-[18rem]">
+                      <div className="flex flex-wrap items-start gap-4">
+                        <div className="min-w-0 flex-1 basis-[22rem]">
                           {!isEditing ? (
                             <>
                               <div className="flex flex-wrap items-center gap-2">
                                 <span className="cursor-grab text-slate-300" aria-hidden="true">::</span>
-                                <div className="font-medium break-words text-slate-950">{displayTitreClean}</div>
+                                <button
+                                  type="button"
+                                  onClick={() => setTaskDetailOpenId(t.id)}
+                                  className="text-left font-medium break-words text-slate-950 hover:text-blue-700"
+                                >
+                                  {displayTitreClean}
+                                </button>
                                 <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[11px] text-slate-600">
                                   {taskTemplateLabel}
                                 </span>
@@ -6049,141 +6308,36 @@ export default function ChantierPage() {
                                   #{orderLabel}
                                 </span>
                               </div>
-                              <div className="text-xs text-slate-500">
-                                {resolveTaskLotName(t)} · {assignedNames.join(", ") || "Intervenant non affecté"} · {taskZoneLabel}
-                              </div>
-                              <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-slate-500">
-                                <span
-                                  className={[
-                                    "rounded-full border px-2 py-0.5",
-                                    taskQualityBadgeClass(taskQuality),
-                                  ].join(" ")}
-                                >
-                                  Qualité : {taskQualityLabel(taskQuality)}
-                                </span>
-                                {taskStep ? (
-                                  <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5">
-                                    Étape : {taskStep}
-                                  </span>
-                                ) : null}
-                              </div>
-                              <div className="text-xs text-slate-500 mt-1">
-                                {qtyLabel} / {tempsPrevuLabel} / {tempsPasseLabel}
-                              </div>
-                              {(taskBudgetVente !== null || taskBudgetCout !== null) && (
-                                <div className="mt-2 flex flex-wrap gap-2 text-xs text-slate-500">
-                                  <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5">
-                                    Vente devis : {formatTaskMoney(taskBudgetVente)}
-                                  </span>
-                                  <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5">
-                                    Coût estimé : {formatTaskMoney(taskBudgetCout)}
-                                  </span>
-                                  <span
-                                    className={[
-                                      "rounded-full border px-2 py-0.5",
-                                      taskBudgetMarge !== null && taskBudgetMarge < 0
-                                        ? "border-red-200 bg-red-50 text-red-700"
-                                        : "border-emerald-200 bg-emerald-50 text-emerald-700",
-                                    ].join(" ")}
-                                  >
-                                    Marge estimée : {formatTaskMoney(taskBudgetMarge)}
-                                  </span>
+                              <div className="mt-3 grid gap-3 md:grid-cols-2">
+                                <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
+                                  <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">Informations</div>
+                                  <div className="mt-3 grid gap-2 text-sm text-slate-700">
+                                    <div className="flex items-center justify-between gap-3"><span className="text-slate-500">Lot</span><span className="font-medium text-slate-950">{resolveTaskLotName(t)}</span></div>
+                                    <div className="flex items-center justify-between gap-3"><span className="text-slate-500">Intervenant</span><span className="text-right font-medium text-slate-950">{assignedNames.join(", ") || "Non affecté"}</span></div>
+                                    <div className="flex items-center justify-between gap-3"><span className="text-slate-500">Localisation</span><span className="text-right font-medium text-slate-950">{taskZoneLabel}</span></div>
+                                  </div>
                                 </div>
-                              )}
-                              {taskRepriseReason && taskQuality === "a_reprendre" ? (
-                                <div className="mt-2 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
-                                  Motif de reprise : {taskRepriseReason}
+                                <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
+                                  <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">Production</div>
+                                  <div className="mt-3 grid gap-2 text-sm text-slate-700">
+                                    <div className="flex items-center justify-between gap-3"><span className="text-slate-500">Quantité</span><span className="font-medium text-slate-950">{quantiteValue === null ? "—" : `${quantiteValue}${uniteValue ? ` ${uniteValue}` : ""}`}</span></div>
+                                    <div className="flex items-center justify-between gap-3"><span className="text-slate-500">Temps prévu</span><span className="font-medium text-slate-950">{autoPct === null ? "—" : `${Math.round((toNumberOrNull((t as any).temps_prevu_h) ?? 0) * 100) / 100} h`}</span></div>
+                                    <div className="flex items-center justify-between gap-3"><span className="text-slate-500">Temps passé</span><span className="font-medium text-slate-950">{tempsPasseDisplay} h</span></div>
+                                  </div>
+                                </div>
+                              </div>
+                              {taskBudgetMarge !== null ? (
+                                <div className="mt-2 text-xs">
+                                  <span className={["rounded-full border px-2 py-1", taskBudgetMarge < 0 ? "border-red-200 bg-red-50 text-red-700" : "border-emerald-200 bg-emerald-50 text-emerald-700"].join(" ")}>
+                                    {taskBudgetMarge < 0 ? "Budget en alerte" : "Budget OK"}
+                                  </span>
                                 </div>
                               ) : null}
-                              <div className="mt-2 space-y-1">
-                                <div className="flex items-center gap-2">
-                                  <div className="h-2 flex-1 overflow-hidden rounded-full bg-slate-200">
-                                    <div
-                                      className={["h-full transition-all", progressFillClass].join(" ")}
-                                      style={{ width: `${Math.max(0, Math.min(100, avancementPct))}%` }}
-                                    />
-                                  </div>
-                                  <span className="text-xs text-slate-600 tabular-nums">
-                                    {`${avancementPct}%`}
-                                  </span>
-                                  {hasOffset && (
-                                    <span className="rounded-full border border-blue-200 bg-blue-50 px-2 py-0.5 text-[11px] text-blue-700">
-                                      Ajuste admin ({offsetPct > 0 ? "+" : ""}
-                                      {offsetPct}%)
-                                    </span>
-                                  )}
+                              {taskRepriseReason && taskQuality === "a_reprendre" ? (
+                                <div className="mt-2 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
+                                  Reprise : {taskRepriseReason}
                                 </div>
-                                <div className="text-[11px] text-slate-500">
-                                  {autoPct === null
-                                    ? `Auto indisponible (temps prevu manquant) | Ajustement admin: ${offsetPct > 0 ? "+" : ""}${offsetPct}% | Final: ${avancementPct}%`
-                                    : `Auto: ${autoPct}% | Ajustement admin: ${offsetPct > 0 ? "+" : ""}${offsetPct}% | Final: ${avancementPct}%`}
-                                </div>
-                                {!isAdjustingProgress ? (
-                                  <div className="flex justify-end">
-                                    <div className="flex flex-wrap gap-2">
-                                      <button
-                                        type="button"
-                                        onClick={() => startTaskProgressEdit(t)}
-                                        className="rounded-lg border px-2 py-1 text-xs hover:bg-slate-50"
-                                      >
-                                        Ajuster
-                                      </button>
-                                      <button
-                                        type="button"
-                                        onClick={() => setTaskDetailOpenId(t.id)}
-                                        className="rounded-lg border px-2 py-1 text-xs hover:bg-slate-50"
-                                      >
-                                        Ouvrir détail
-                                      </button>
-                                    </div>
-                                  </div>
-                                ) : (
-                                  <div className="rounded-lg border bg-slate-50 p-2 space-y-2">
-                                    <div className="flex items-center justify-between text-[11px] text-slate-500">
-                                      <span>Ajustement (offset)</span>
-                                      <span>
-                                        {draftOffset > 0 ? "+" : ""}
-                                        {draftOffset}%
-                                      </span>
-                                    </div>
-                                    <input
-                                      type="range"
-                                      min={-100}
-                                      max={100}
-                                      step={1}
-                                      value={String(draftOffset)}
-                                      onChange={(e) => onTaskProgressDraftChange(t.id, e.target.value)}
-                                      className="w-full accent-blue-600"
-                                    />
-                                    <div className="flex flex-wrap justify-end gap-2">
-                                      <button
-                                        type="button"
-                                        onClick={() => void applyTaskProgressOffset(t)}
-                                        disabled={taskProgressSavingId === t.id}
-                                        className="rounded-lg border px-2 py-1 text-xs hover:bg-slate-50 disabled:opacity-60"
-                                      >
-                                        {taskProgressSavingId === t.id ? "..." : "Enregistrer"}
-                                      </button>
-                                      <button
-                                        type="button"
-                                        onClick={() => cancelTaskProgressEdit(t)}
-                                        disabled={taskProgressSavingId === t.id}
-                                        className="rounded-lg border px-2 py-1 text-xs hover:bg-slate-50 disabled:opacity-60"
-                                      >
-                                        Annuler
-                                      </button>
-                                      <button
-                                        type="button"
-                                        onClick={() => void resetTaskProgressOffset(t)}
-                                        disabled={taskProgressSavingId === t.id || !hasOffset}
-                                        className="rounded-lg border px-2 py-1 text-xs hover:bg-slate-50 disabled:opacity-60"
-                                      >
-                                        Auto
-                                      </button>
-                                    </div>
-                                  </div>
-                                )}
-                              </div>
+                              ) : null}
                             </>
                           ) : (
                             <div className="rounded-xl border bg-slate-50 p-3 space-y-3">
@@ -6470,172 +6624,96 @@ export default function ChantierPage() {
                           )}
                         </div>
 
-                        <span
-                          className={[
-                            "ml-auto shrink-0 self-start text-xs px-2 py-1 rounded-full border",
-                            taskStatusBadgeClass(t.status),
-                          ].join(" ")}
-                        >
-                          {taskStatusLabel(t.status, translate)}
-                        </span>
-                      </div>
-
-                      {(() => {
-                        const linkedIds = taskDocumentsByTaskId.get(t.id) ?? [];
-                        const linkedDocs = linkedIds
-                          .map((docId) => documentsById.get(docId))
-                          .filter((doc): doc is ChantierDocumentRow => Boolean(doc));
-                        const visibleDocs = linkedDocs.slice(0, 3);
-                        const extraCount = Math.max(0, linkedDocs.length - visibleDocs.length);
-
-                        return (
-                          <div className="mt-2 space-y-1">
-                            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                              <div className="text-xs text-slate-500 font-medium">Documents lies</div>
-                              <button
-                                type="button"
-                                onClick={() => openTaskDocumentsModal(t)}
-                                className="text-xs rounded-lg border px-2 py-1 hover:bg-slate-50"
-                              >
-                                Lier documents
-                              </button>
+                        {!isEditing ? (
+                          <div className="ml-auto w-full max-w-[250px] shrink-0 rounded-2xl border border-slate-200 bg-slate-50 p-3">
+                            <div className="flex items-end justify-between gap-3">
+                              <div>
+                                <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">Avancement</div>
+                                <div className="mt-1 text-2xl font-semibold text-slate-950">{avancementPct}%</div>
+                              </div>
+                              {taskValidated ? (
+                                <span className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-[11px] font-semibold text-emerald-700">
+                                  Validée
+                                </span>
+                              ) : null}
                             </div>
-                            <div className="flex flex-wrap gap-2">
-                              {linkedDocs.length === 0 ? (
-                                <span className="text-xs text-slate-500">Aucun</span>
-                              ) : (
-                                <>
-                                  {visibleDocs.map((doc) => (
-                                    <span
-                                      key={doc.id}
-                                      className="text-xs rounded-full border bg-slate-50 px-2 py-1 text-slate-700"
-                                    >
-                                      {doc.title}
-                                    </span>
-                                  ))}
-                                  {extraCount > 0 && (
-                                    <span className="text-xs rounded-full border bg-slate-50 px-2 py-1 text-slate-700">
-                                      +{extraCount}
-                                    </span>
-                                  )}
-                                </>
-                              )}
-                            </div>
-                          </div>
-                        );
-                      })()}
-
-                      <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 space-y-3">
-                        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                          <div>
-                            <div className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
-                              Étapes opérationnelles
-                            </div>
-                            <div className="mt-1 text-xs text-slate-500">
-                              Exemple : ossature, isolation, plaques, finitions.
-                            </div>
-                          </div>
-                          <div className="text-[11px] text-slate-500">
-                            {(taskStepsByTaskId.get(t.id) ?? []).length} étape
-                            {(taskStepsByTaskId.get(t.id) ?? []).length > 1 ? "s" : ""}
-                          </div>
-                        </div>
-
-                        {!taskStepsSchemaReady ? (
-                          <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700">
-                            Migration étapes non appliquée : pousse
-                            `20260402150000_chantier_task_steps_v1.sql` dans Supabase.
-                          </div>
-                        ) : null}
-
-                        <div className="space-y-2">
-                          {(taskStepsByTaskId.get(t.id) ?? []).length === 0 ? (
-                            <div className="rounded-xl border border-dashed border-slate-200 bg-white px-3 py-3 text-xs text-slate-500">
-                              Aucune étape opérationnelle définie.
-                            </div>
-                          ) : (
-                            (taskStepsByTaskId.get(t.id) ?? []).map((step) => (
+                            <div className="mt-3 h-2 overflow-hidden rounded-full bg-slate-200">
                               <div
-                                key={step.id}
-                                className="flex flex-col gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 sm:flex-row sm:items-center sm:justify-between"
-                              >
+                                className={["h-full transition-all", avancementPct >= 100 ? "bg-emerald-500" : "bg-blue-600"].join(" ")}
+                                style={{ width: `${Math.max(0, Math.min(100, avancementPct))}%` }}
+                              />
+                            </div>
+                            {!isAdjustingProgress ? (
+                              <div className="mt-3 flex flex-wrap justify-end gap-2">
                                 <button
                                   type="button"
-                                  onClick={() => void toggleTaskOperationalStep(step)}
-                                  disabled={taskStepSavingId === t.id || taskStepDeletingId === step.id}
-                                  className="flex min-w-0 items-center gap-2 text-left"
+                                  onClick={() =>
+                                    void applyTaskQualityDecision(
+                                      t,
+                                      taskValidated ? "non_verifie" : "valide_admin",
+                                    )
+                                  }
+                                  className={[
+                                    "rounded-xl border px-3 py-2 text-xs",
+                                    taskValidated
+                                      ? "border-amber-200 text-amber-700 hover:bg-amber-50"
+                                      : "border-emerald-200 text-emerald-700 hover:bg-emerald-50",
+                                  ].join(" ")}
                                 >
-                                  <span
-                                    className={[
-                                      "inline-flex shrink-0 rounded-full border px-2 py-0.5 text-[11px] font-medium",
-                                      taskStepStatusBadgeClass(step.statut),
-                                    ].join(" ")}
-                                  >
-                                    {taskStepStatusLabel(step.statut)}
-                                  </span>
-                                  <span className="truncate text-sm text-slate-900">{step.titre}</span>
+                                  {taskValidated ? "Dévalider" : "Valider"}
                                 </button>
                                 <button
                                   type="button"
-                                  onClick={() => void removeTaskOperationalStep(step)}
-                                  disabled={taskStepDeletingId === step.id || taskStepSavingId === t.id}
-                                  className="self-start rounded-lg border border-red-200 px-2 py-1 text-xs text-red-700 hover:bg-red-50 disabled:opacity-60 sm:self-auto"
+                                  onClick={() => startTaskProgressEdit(t)}
+                                  className="rounded-xl border px-3 py-2 text-xs hover:bg-slate-50"
                                 >
-                                  {taskStepDeletingId === step.id ? "..." : "Supprimer"}
+                                  Ajuster
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setTaskDetailOpenId(t.id)}
+                                  className="rounded-xl bg-slate-900 px-3 py-2 text-xs text-white hover:bg-slate-800"
+                                >
+                                  Ouvrir détail
                                 </button>
                               </div>
-                            ))
-                          )}
-                        </div>
-
-                        <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]">
-                          <input
-                            className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900"
-                            placeholder="Ajouter une étape : ex. isolation"
-                            value={taskStepDrafts[t.id] ?? ""}
-                            onChange={(e) => onTaskStepDraftChange(t.id, e.target.value)}
-                            disabled={taskStepSavingId === t.id || !taskStepsSchemaReady}
-                          />
-                          <button
-                            type="button"
-                            onClick={() => void addTaskOperationalStep(t)}
-                            disabled={taskStepSavingId === t.id || !taskStepsSchemaReady}
-                            className={[
-                              "rounded-xl px-3 py-2 text-sm",
-                              taskStepSavingId === t.id || !taskStepsSchemaReady
-                                ? "bg-slate-300 text-slate-700"
-                                : "bg-slate-900 text-white hover:bg-slate-800",
-                            ].join(" ")}
-                          >
-                            Ajouter étape
-                          </button>
-                        </div>
+                            ) : (
+                              <div className="mt-3 rounded-lg border bg-white p-2 space-y-2">
+                                <div className="flex items-center justify-between text-[11px] text-slate-500">
+                                  <span>Ajustement</span>
+                                  <span>
+                                    {draftOffset > 0 ? "+" : ""}
+                                    {draftOffset}%
+                                  </span>
+                                </div>
+                                <input
+                                  type="range"
+                                  min={-100}
+                                  max={100}
+                                  step={1}
+                                  value={String(draftOffset)}
+                                  onChange={(e) => onTaskProgressDraftChange(t.id, e.target.value)}
+                                  className="w-full accent-blue-600"
+                                />
+                                <div className="flex flex-wrap justify-end gap-2">
+                                  <button type="button" onClick={() => void applyTaskProgressOffset(t)} disabled={taskProgressSavingId === t.id} className="rounded-lg border px-2 py-1 text-xs hover:bg-slate-50 disabled:opacity-60">
+                                    {taskProgressSavingId === t.id ? "..." : "Enregistrer"}
+                                  </button>
+                                  <button type="button" onClick={() => cancelTaskProgressEdit(t)} disabled={taskProgressSavingId === t.id} className="rounded-lg border px-2 py-1 text-xs hover:bg-slate-50 disabled:opacity-60">
+                                    Annuler
+                                  </button>
+                                  <button type="button" onClick={() => void resetTaskProgressOffset(t)} disabled={taskProgressSavingId === t.id || !hasOffset} className="rounded-lg border px-2 py-1 text-xs hover:bg-slate-50 disabled:opacity-60">
+                                    Auto
+                                  </button>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        ) : null}
                       </div>
 
                       {!isEditing ? (
-                        <div className="flex flex-wrap justify-end gap-2">
-                          <button
-                            type="button"
-                            onClick={() => void applyTaskQualityDecision(t, "valide_admin")}
-                            className="text-sm rounded-xl border border-emerald-200 px-3 py-2 text-emerald-700 hover:bg-emerald-50"
-                          >
-                            Valider
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => void applyTaskQualityDecision(t, "a_reprendre")}
-                            className="text-sm rounded-xl border border-red-200 px-3 py-2 text-red-700 hover:bg-red-50"
-                          >
-                            À reprendre
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => startEditTask(t)}
-                            className="text-sm rounded-xl border px-3 py-2 hover:bg-slate-50"
-                          >
-                            Modifier
-                          </button>
-                        </div>
+                        <div className="hidden" />
                       ) : (
                         <div className="flex justify-end gap-2">
                           <button

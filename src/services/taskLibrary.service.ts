@@ -27,6 +27,71 @@ export type TaskTemplateInput = {
   cout_reference_unitaire_ht?: number | null;
 };
 
+function normalizeForMatch(value: unknown): string {
+  return String(value ?? "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function tokenizeForMatch(value: unknown): string[] {
+  return normalizeForMatch(value)
+    .split(" ")
+    .map((token) => token.trim())
+    .filter((token) => token.length >= 3);
+}
+
+export function findBestTaskTemplateMatch(
+  input: {
+    task_template_label?: string | null;
+    title?: string | null;
+    source_line?: string | null;
+    lot?: string | null;
+  },
+  templates: TaskTemplateRow[],
+): TaskTemplateRow | null {
+  if (!templates.length) return null;
+
+  const normalizedLabel = normalizeForMatch(input.task_template_label);
+  const normalizedTitle = normalizeForMatch(input.title);
+  const normalizedSource = normalizeForMatch(input.source_line);
+  const normalizedLot = normalizeForMatch(input.lot);
+
+  const titleTokens = new Set([
+    ...tokenizeForMatch(input.task_template_label),
+    ...tokenizeForMatch(input.title),
+    ...tokenizeForMatch(input.source_line),
+  ]);
+
+  let best: { row: TaskTemplateRow; score: number } | null = null;
+
+  for (const row of templates) {
+    const rowTitle = normalizeForMatch(row.titre);
+    const rowLot = normalizeForMatch(row.lot);
+    const rowTokens = tokenizeForMatch(row.titre);
+
+    let score = 0;
+    if (normalizedLabel && rowTitle === normalizedLabel) score += 200;
+    else if (normalizedTitle && rowTitle === normalizedTitle) score += 180;
+    else if (normalizedSource && rowTitle && normalizedSource.includes(rowTitle)) score += 120;
+
+    const overlap = rowTokens.filter((token) => titleTokens.has(token)).length;
+    score += overlap * 18;
+
+    if (normalizedLot && rowLot && normalizedLot === rowLot) score += 24;
+    if (normalizedLot && rowLot && normalizedLot !== rowLot) score -= 12;
+
+    if (!best || score > best.score) {
+      best = { row, score };
+    }
+  }
+
+  return best && best.score >= 36 ? best.row : null;
+}
+
 const SELECT_V2 = [
   "id",
   "titre",
