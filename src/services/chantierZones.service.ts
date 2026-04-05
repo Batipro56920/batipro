@@ -98,6 +98,17 @@ function sortZones(a: ChantierZoneRow, b: ChantierZoneRow) {
   return a.ordre - b.ordre || a.nom.localeCompare(b.nom, "fr", { sensitivity: "base" });
 }
 
+export function buildChantierZoneChildrenMap(zones: ChantierZoneRow[]): Map<string | null, ChantierZoneRow[]> {
+  const map = new Map<string | null, ChantierZoneRow[]>();
+  for (const zone of [...zones].sort(sortZones)) {
+    const key = zone.parent_zone_id ?? null;
+    const rows = map.get(key) ?? [];
+    rows.push(zone);
+    map.set(key, rows);
+  }
+  return map;
+}
+
 export function buildChantierZonePathMap(zones: ChantierZoneRow[]): Map<string, string> {
   const byId = new Map<string, ChantierZoneRow>();
   for (const zone of zones) byId.set(zone.id, zone);
@@ -186,6 +197,108 @@ export function buildChantierZoneTree(zones: ChantierZoneRow[]): ChantierZoneTre
   roots.sort(sortZones);
   decorateDepth(roots, 0);
   return roots;
+}
+
+export function collectDescendantZoneIds(zones: ChantierZoneRow[], zoneId: string): string[] {
+  const childrenByParent = buildChantierZoneChildrenMap(zones);
+  const collected: string[] = [];
+  const stack = [zoneId];
+
+  while (stack.length > 0) {
+    const currentId = stack.pop();
+    if (!currentId) continue;
+    collected.push(currentId);
+    for (const child of childrenByParent.get(currentId) ?? []) {
+      stack.push(child.id);
+    }
+  }
+
+  return collected;
+}
+
+export function collectDescendantPieceIds(zones: ChantierZoneRow[], zoneId: string | null | undefined): string[] {
+  const cleanZoneId = String(zoneId ?? "").trim();
+  if (!cleanZoneId) return [];
+  const zoneById = new Map(zones.map((zone) => [zone.id, zone]));
+
+  return collectDescendantZoneIds(zones, cleanZoneId)
+    .map((currentId) => zoneById.get(currentId) ?? null)
+    .filter((zone): zone is ChantierZoneRow => zone !== null && zoneTypeToLocalisationKind(zone.zone_type) === "piece")
+    .map((zone) => zone.id);
+}
+
+export function countDescendantPieces(zones: ChantierZoneRow[], zoneId: string): number {
+  return collectDescendantPieceIds(zones, zoneId).length;
+}
+
+function selectedSetEquals(selected: Set<string>, expected: string[]) {
+  if (selected.size !== expected.length) return false;
+  return expected.every((zoneId) => selected.has(zoneId));
+}
+
+export function findBestZoneAnchorForSelectedPieceIds(
+  selectedPieceIds: string[],
+  zones: ChantierZoneRow[],
+): string | null {
+  const normalized = Array.from(new Set(selectedPieceIds.map((id) => String(id ?? "").trim()).filter(Boolean)));
+  if (!normalized.length) return null;
+  if (normalized.length === 1) return normalized[0];
+
+  const selectedSet = new Set(normalized);
+  const candidates = [...zones]
+    .map((zone) => ({
+      zone,
+      pieceIds: collectDescendantPieceIds(zones, zone.id),
+    }))
+    .filter((entry) => entry.pieceIds.length > 0 && selectedSetEquals(selectedSet, entry.pieceIds))
+    .sort((a, b) => b.pieceIds.length - a.pieceIds.length);
+
+  if (!candidates.length) return null;
+
+  const exactByDepth = candidates.sort((a, b) => {
+    const depthA = buildChantierZonePathMap(zones).get(a.zone.id)?.split(" > ").length ?? 0;
+    const depthB = buildChantierZonePathMap(zones).get(b.zone.id)?.split(" > ").length ?? 0;
+    return depthB - depthA;
+  });
+
+  return exactByDepth[0]?.zone.id ?? null;
+}
+
+export function summarizeSelectedPieceIds(selectedPieceIds: string[], zones: ChantierZoneRow[]): string {
+  const normalized = Array.from(new Set(selectedPieceIds.map((id) => String(id ?? "").trim()).filter(Boolean)));
+  if (!normalized.length) return "Sans localisation";
+
+  const selectedSet = new Set(normalized);
+  const pathById = buildChantierZonePathMap(zones);
+
+  function collapse(zoneId: string): string[] {
+    const zone = zones.find((entry) => entry.id === zoneId);
+    if (!zone) return [];
+
+    const pieceIds = collectDescendantPieceIds(zones, zoneId);
+    if (pieceIds.length > 0 && selectedSetEquals(selectedSet, pieceIds)) {
+      return [pathById.get(zoneId) ?? zone.nom];
+    }
+
+    const children = zones
+      .filter((entry) => (entry.parent_zone_id ?? null) === zoneId)
+      .sort(sortZones);
+
+    if (!children.length) {
+      return selectedSet.has(zoneId) ? [pathById.get(zoneId) ?? zone.nom] : [];
+    }
+
+    return children.flatMap((child) => collapse(child.id));
+  }
+
+  const roots = zones
+    .filter((zone) => !zone.parent_zone_id)
+    .sort(sortZones);
+
+  const labels = roots.flatMap((root) => collapse(root.id));
+  if (labels.length === 1) return labels[0];
+  if (labels.length === 2) return labels.join(" · ");
+  return `${normalized.length} pièces sélectionnées`;
 }
 
 export function listValidZoneParents(zones: ChantierZoneRow[], zoneId: string | null): ChantierZoneRow[] {

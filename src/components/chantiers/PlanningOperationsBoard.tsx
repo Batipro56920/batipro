@@ -218,6 +218,12 @@ function validateDraft(draft: Draft) {
   return null;
 }
 
+function sortSegmentsByPlanning(a: PlanningCalendarSegment, b: PlanningCalendarSegment) {
+  if (a.start_date !== b.start_date) return a.start_date.localeCompare(b.start_date);
+  if ((a.intervenant_id ?? "") !== (b.intervenant_id ?? "")) return String(a.intervenant_id ?? "").localeCompare(String(b.intervenant_id ?? ""), "fr");
+  return a.order_in_day - b.order_in_day;
+}
+
 function BacklogCard({
   item,
   settings,
@@ -490,6 +496,27 @@ export default function PlanningOperationsBoard({ chantierId, chantierName, inte
   const selectedSegment = selectedSegmentId ? segmentById.get(selectedSegmentId) ?? null : null;
   const selectedTaskSegments = useMemo(() => (selectedTask ? segmentsByTask.get(selectedTask.id) ?? [] : []), [selectedTask, segmentsByTask]);
   const selectedTaskSummary = selectedTask ? taskSummaries.get(selectedTask.id) ?? null : null;
+  const createBlockValidationError = selectedTask ? validateDraft(newBlockDraft) : "Selectionne une tache a planifier.";
+
+  function resetNewBlockForm(task: PlanningCalendarTask, startDate?: string) {
+    setNewBlockDraft(defaultDraft(task, startDate ?? nextPlannableDate(visibleDays[0] ?? weekAnchor, settings)));
+  }
+
+  function upsertSegmentLocally(segment: PlanningCalendarSegment) {
+    setState((current) => {
+      if (!current) return current;
+      const nextSegments = [...current.segments.filter((item) => item.id !== segment.id), segment].sort(sortSegmentsByPlanning);
+      return { ...current, segments: nextSegments };
+    });
+  }
+
+  function removeSegmentsLocally(ids: string[]) {
+    if (!ids.length) return;
+    setState((current) => {
+      if (!current) return current;
+      return { ...current, segments: current.segments.filter((segment) => !ids.includes(segment.id)) };
+    });
+  }
 
   useEffect(() => {
     if (!selectedTask) return;
@@ -688,17 +715,19 @@ export default function PlanningOperationsBoard({ chantierId, chantierName, inte
         status: draft.status,
         comment: draft.comment.trim() || null,
       }, settings);
-      await loadPlanning(true);
+      upsertSegmentLocally(created);
       setSelectedTaskId(task.id);
       if (options?.keepOpen) {
         const nextDate = nextPlannableDate(addDaysToKey(computeEndDate(created.start_date, created.duration_days, settings), 1), settings);
         setSelectedSegmentId(null);
-        setNewBlockDraft(defaultDraft(task, nextDate));
+        resetNewBlockForm(task, nextDate);
       } else {
-        setSelectedSegmentId(created.id);
+        setSelectedSegmentId(null);
+        resetNewBlockForm(task, created.start_date);
       }
       setDrawerOpen(true);
       setNotice("Bloc planning cree.");
+      void loadPlanning(true);
     } catch (err: any) {
       setError(err?.message ?? "Erreur creation bloc.");
     } finally {
@@ -715,7 +744,7 @@ export default function PlanningOperationsBoard({ chantierId, chantierName, inte
     setSaving(true);
     setError(null);
     try {
-      await updatePlanningCalendarSegment(segment.id, {
+      const saved = await updatePlanningCalendarSegment(segment.id, {
         start_date: draft.start_date,
         duration_days: clampDurationDays(draft.duration_days),
         intervenant_id: draft.intervenant_id || null,
@@ -725,10 +754,11 @@ export default function PlanningOperationsBoard({ chantierId, chantierName, inte
         status: draft.status,
         comment: draft.comment.trim() || null,
       }, settings, { start_date: segment.start_date, duration_days: segment.duration_days });
-      await loadPlanning(true);
+      upsertSegmentLocally(saved);
       setSelectedSegmentId(segment.id);
       setDrawerOpen(true);
       setNotice("Bloc planning mis a jour.");
+      void loadPlanning(true);
     } catch (err: any) {
       setError(err?.message ?? "Erreur mise a jour bloc.");
     } finally {
@@ -742,9 +772,10 @@ export default function PlanningOperationsBoard({ chantierId, chantierName, inte
     setError(null);
     try {
       await deletePlanningCalendarSegments(ids);
-      await loadPlanning(true);
+      removeSegmentsLocally(ids);
       if (ids.includes(selectedSegmentId ?? "")) setSelectedSegmentId(null);
       setNotice(ids.length > 1 ? "Blocs supprimes." : "Bloc supprime.");
+      void loadPlanning(true);
     } catch (err: any) {
       setError(err?.message ?? "Erreur suppression bloc.");
     } finally {
@@ -1172,14 +1203,6 @@ export default function PlanningOperationsBoard({ chantierId, chantierName, inte
                 </div>
 
                 <div className="grid gap-2">
-                  <button type="button" className={buttonClass("primary")} disabled={saving} onClick={() => void createBlock(selectedTask, newBlockDraft)}>
-                    <Plus className="mr-1 inline h-4 w-4" />
-                    Planifier ce bloc
-                  </button>
-                  <button type="button" className={buttonClass()} disabled={saving} onClick={() => void createBlock(selectedTask, newBlockDraft, { keepOpen: true })}>
-                    <Plus className="mr-1 inline h-4 w-4" />
-                    Creer et continuer
-                  </button>
                   <button type="button" className={buttonClass()} disabled={saving} onClick={() => void applySuggestion(selectedTask)}>
                     <WandSparkles className="mr-1 inline h-4 w-4" />
                     Generer decoupage
@@ -1190,18 +1213,106 @@ export default function PlanningOperationsBoard({ chantierId, chantierName, inte
                   </div>
                 </div>
 
-                <div className="rounded-3xl border border-slate-200 bg-slate-50 p-3 space-y-3">
-                  <div className="text-sm font-semibold text-slate-900">Creer un bloc</div>
-                  <label className="block"><span className="mb-1 block text-xs font-medium text-slate-500">Intitule terrain</span><input className={inputClass()} value={newBlockDraft.title_override} onChange={(event) => setNewBlockDraft((current) => ({ ...current, title_override: event.target.value }))} /></label>
-                  <div className="grid gap-2 md:grid-cols-2">
-                    <label className="block"><span className="mb-1 block text-xs font-medium text-slate-500">Date</span><input type="date" className={inputClass()} value={newBlockDraft.start_date} onChange={(event) => setNewBlockDraft((current) => ({ ...current, start_date: event.target.value }))} /></label>
-                    <label className="block"><span className="mb-1 block text-xs font-medium text-slate-500">Intervenant</span><select className={inputClass()} value={newBlockDraft.intervenant_id} onChange={(event) => setNewBlockDraft((current) => ({ ...current, intervenant_id: event.target.value }))}><option value="">Non affecte</option>{intervenants.map((intervenant) => <option key={intervenant.id} value={intervenant.id}>{intervenant.nom}</option>)}</select></label>
-                    <label className="block"><span className="mb-1 block text-xs font-medium text-slate-500">Duree</span><select className={inputClass()} value={String(newBlockDraft.duration_days)} onChange={(event) => setNewBlockDraft((current) => ({ ...current, duration_days: Number(event.target.value) }))}>{DURATION_OPTIONS.map((value) => <option key={value} value={value}>{formatHours(computePlannedHours(value, settings))}</option>)}</select></label>
-                    <label className="block"><span className="mb-1 block text-xs font-medium text-slate-500">Statut initial</span><select className={inputClass()} value={newBlockDraft.status} onChange={(event) => setNewBlockDraft((current) => ({ ...current, status: event.target.value as PlanningBlockStatus }))}>{BLOCK_STATUS_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label>
+                <form
+                  className="rounded-3xl border border-slate-200 bg-slate-50 p-3"
+                  onSubmit={(event) => {
+                    event.preventDefault();
+                    void createBlock(selectedTask, newBlockDraft);
+                  }}
+                >
+                  <div className="space-y-3">
+                    <div>
+                      <div className="text-sm font-semibold text-slate-900">Creer un bloc</div>
+                      <div className="mt-1 text-xs text-slate-500">Renseigne les champs ci-dessous puis valide. Le bloc doit apparaitre immediatement dans la grille.</div>
+                    </div>
+                    <label className="block">
+                      <span className="mb-1 block text-xs font-medium text-slate-500">Intitule terrain</span>
+                      <input
+                        className={inputClass()}
+                        value={newBlockDraft.title_override}
+                        onChange={(event) => setNewBlockDraft((current) => ({ ...current, title_override: event.target.value }))}
+                        aria-invalid={!newBlockDraft.title_override.trim()}
+                      />
+                    </label>
+                    <div className="grid gap-2 md:grid-cols-2">
+                      <label className="block">
+                        <span className="mb-1 block text-xs font-medium text-slate-500">Date</span>
+                        <input
+                          type="date"
+                          className={inputClass()}
+                          value={newBlockDraft.start_date}
+                          onChange={(event) => setNewBlockDraft((current) => ({ ...current, start_date: event.target.value }))}
+                          aria-invalid={!newBlockDraft.start_date}
+                        />
+                      </label>
+                      <label className="block">
+                        <span className="mb-1 block text-xs font-medium text-slate-500">Intervenant</span>
+                        <select className={inputClass()} value={newBlockDraft.intervenant_id} onChange={(event) => setNewBlockDraft((current) => ({ ...current, intervenant_id: event.target.value }))}>
+                          <option value="">Non affecte</option>
+                          {intervenants.map((intervenant) => <option key={intervenant.id} value={intervenant.id}>{intervenant.nom}</option>)}
+                        </select>
+                      </label>
+                      <label className="block">
+                        <span className="mb-1 block text-xs font-medium text-slate-500">Duree</span>
+                        <select
+                          className={inputClass()}
+                          value={String(newBlockDraft.duration_days)}
+                          onChange={(event) => setNewBlockDraft((current) => ({ ...current, duration_days: Number(event.target.value) }))}
+                          aria-invalid={!Number.isFinite(newBlockDraft.duration_days) || newBlockDraft.duration_days <= 0}
+                        >
+                          {DURATION_OPTIONS.map((value) => <option key={value} value={value}>{formatHours(computePlannedHours(value, settings))}</option>)}
+                        </select>
+                      </label>
+                      <label className="block">
+                        <span className="mb-1 block text-xs font-medium text-slate-500">Statut initial</span>
+                        <select className={inputClass()} value={newBlockDraft.status} onChange={(event) => setNewBlockDraft((current) => ({ ...current, status: event.target.value as PlanningBlockStatus }))}>
+                          {BLOCK_STATUS_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+                        </select>
+                      </label>
+                    </div>
+                    <label className="block">
+                      <span className="mb-1 block text-xs font-medium text-slate-500">Avancement initial (%)</span>
+                      <input
+                        type="number"
+                        min="0"
+                        max="100"
+                        className={inputClass()}
+                        value={newBlockDraft.progress_percent}
+                        onChange={(event) => setNewBlockDraft((current) => ({ ...current, progress_percent: event.target.value }))}
+                        aria-invalid={parseProgress(newBlockDraft.progress_percent) < 0 || parseProgress(newBlockDraft.progress_percent) > 100}
+                      />
+                    </label>
+                    <label className="block">
+                      <span className="mb-1 block text-xs font-medium text-slate-500">Commentaire</span>
+                      <textarea className={`${inputClass()} min-h-[88px] resize-y`} value={newBlockDraft.comment} onChange={(event) => setNewBlockDraft((current) => ({ ...current, comment: event.target.value }))} />
+                    </label>
                   </div>
-                  <label className="block"><span className="mb-1 block text-xs font-medium text-slate-500">Avancement initial (%)</span><input type="number" min="0" max="100" className={inputClass()} value={newBlockDraft.progress_percent} onChange={(event) => setNewBlockDraft((current) => ({ ...current, progress_percent: event.target.value }))} /></label>
-                  <label className="block"><span className="mb-1 block text-xs font-medium text-slate-500">Commentaire</span><textarea className={`${inputClass()} min-h-[88px] resize-y`} value={newBlockDraft.comment} onChange={(event) => setNewBlockDraft((current) => ({ ...current, comment: event.target.value }))} /></label>
-                </div>
+
+                  <div className="sticky bottom-0 -mx-3 mt-4 border-t border-slate-200 bg-slate-50/95 px-3 pb-1 pt-3 backdrop-blur">
+                    {createBlockValidationError ? <div className="mb-3 rounded-2xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-700">{createBlockValidationError}</div> : null}
+                    {error ? <div className="mb-3 rounded-2xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{error}</div> : null}
+                    {notice && !selectedSegment ? <div className="mb-3 rounded-2xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-700">{notice}</div> : null}
+                    <div className="grid gap-2">
+                      <button type="submit" className={`${buttonClass("primary")} w-full justify-center`} disabled={saving || Boolean(createBlockValidationError)}>
+                        <Plus className="mr-1 inline h-4 w-4" />
+                        Creer le bloc
+                      </button>
+                      <div className="grid gap-2 sm:grid-cols-2">
+                        <button
+                          type="button"
+                          className={buttonClass()}
+                          disabled={saving || Boolean(createBlockValidationError)}
+                          onClick={() => void createBlock(selectedTask, newBlockDraft, { keepOpen: true })}
+                        >
+                          Creer et continuer
+                        </button>
+                        <button type="button" className={buttonClass("ghost")} disabled={saving} onClick={() => resetNewBlockForm(selectedTask, newBlockDraft.start_date)}>
+                          Reinitialiser
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </form>
 
                 <div className="space-y-2">
                   <div className="text-sm font-semibold text-slate-900">Blocs deja crees</div>

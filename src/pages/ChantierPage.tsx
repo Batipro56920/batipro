@@ -15,6 +15,7 @@ import {
   type TaskStatus,
 } from "../services/chantierTasks.service";
 import { listTaskAssigneeIdsByTaskIds, replaceTaskAssignees } from "../services/chantierTaskAssignees.service";
+import { listTaskZoneIdsByTaskIds, replaceTaskZoneIds } from "../services/chantierTaskZones.service";
 import { bulkUpdatePlanningTasks } from "../services/chantierPlanningTasks.service";
 import {
   createChantierTimeEntry,
@@ -116,11 +117,16 @@ import ChantierPhotosTab from "../components/chantiers/ChantierPhotosTab";
 import BudgetTab from "../components/chantiers/BudgetTab";
 import MessagerieTab from "../components/chantiers/MessagerieTab";
 import PilotageTab from "../components/chantiers/PilotageTab";
-import PreparationTab from "../components/chantiers/PreparationTab";
+import PreparationTreeTab from "../components/chantiers/PreparationTreeTab";
 import RapportsTab from "../components/chantiers/RapportsTab";
 import ReservePlanViewer from "../components/chantiers/ReservePlanViewer";
 import {
+  buildChantierZoneTree,
+  collectDescendantPieceIds,
+  findBestZoneAnchorForSelectedPieceIds,
   listChantierZones,
+  summarizeSelectedPieceIds,
+  type ChantierZoneTreeNode,
   type ChantierZoneRow,
 } from "../services/chantierZones.service";
 import {
@@ -146,6 +152,17 @@ import {
   type TaskTemplateInput,
   type TaskTemplateRow,
 } from "../services/taskLibrary.service";
+import {
+  getCurrentProfileFeaturePermissions,
+  hasProfileFeaturePermission,
+} from "../services/profileFeaturePermissions.service";
+import {
+  estimateTaskTemplatePreparation,
+  listTaskTemplatePreparationByTemplateIds,
+  replaceTaskTemplatePreparation,
+  type TaskTemplateEquipmentItemRow,
+  type TaskTemplateMaterialRatioRow,
+} from "../services/taskTemplatePreparation.service";
 import {
   CHANTIER_TAB_FEATURES,
   type CompanyFeatureModuleId,
@@ -369,6 +386,81 @@ function moveArrayItem<T>(items: T[], from: number, to: number): T[] {
   const [moved] = next.splice(from, 1);
   next.splice(to, 0, moved);
   return next;
+}
+
+function TaskZoneCheckboxTree({
+  nodes,
+  zones,
+  selectedPieceIds,
+  disabled,
+  onToggleZone,
+}: {
+  nodes: ChantierZoneTreeNode[];
+  zones: ChantierZoneRow[];
+  selectedPieceIds: string[];
+  disabled: boolean;
+  onToggleZone: (zoneId: string, checked: boolean) => void;
+}) {
+  const selectedSet = useMemo(() => new Set(selectedPieceIds), [selectedPieceIds]);
+
+  function ZoneNode({ node }: { node: ChantierZoneTreeNode }) {
+    const checkboxRef = useRef<HTMLInputElement | null>(null);
+    const descendantPieceIds = collectDescendantPieceIds(zones, node.id);
+    const checked = descendantPieceIds.length > 0 && descendantPieceIds.every((zoneId) => selectedSet.has(zoneId));
+    const partial = !checked && descendantPieceIds.some((zoneId) => selectedSet.has(zoneId));
+
+    useEffect(() => {
+      if (checkboxRef.current) checkboxRef.current.indeterminate = partial;
+    }, [partial]);
+
+    return (
+      <div className="space-y-2">
+        <label
+          className="flex items-start gap-3 rounded-2xl border border-slate-200 bg-white px-3 py-3"
+          style={{ marginLeft: `${node.depth * 16}px` }}
+        >
+          <input
+            ref={checkboxRef}
+            type="checkbox"
+            className="mt-1 h-4 w-4 accent-blue-600"
+            checked={checked}
+            disabled={disabled || descendantPieceIds.length === 0}
+            onChange={(event) => onToggleZone(node.id, event.target.checked)}
+          />
+          <div className="min-w-0 flex-1">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="truncate text-sm font-medium text-slate-950">{node.nom}</span>
+              <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[11px] text-slate-600">
+                {node.kind}
+              </span>
+              {descendantPieceIds.length > 1 ? (
+                <span className="rounded-full border border-blue-200 bg-blue-50 px-2 py-0.5 text-[11px] text-blue-700">
+                  {descendantPieceIds.length} pièces
+                </span>
+              ) : null}
+            </div>
+            <div className="mt-1 text-xs text-slate-500">{node.path}</div>
+          </div>
+        </label>
+
+        {node.children.length > 0 ? (
+          <div className="space-y-2">
+            {node.children.map((child) => (
+              <ZoneNode key={child.id} node={child} />
+            ))}
+          </div>
+        ) : null}
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-2">
+      {nodes.map((node) => (
+        <ZoneNode key={node.id} node={node} />
+      ))}
+    </div>
+  );
 }
 
 function isPublicAppUrlConfigError(error: unknown): boolean {
@@ -617,6 +709,29 @@ export default function ChantierPage() {
   }, []);
 
   useEffect(() => {
+    let alive = true;
+
+    async function loadPreparationPermission() {
+      try {
+        const result = await getCurrentProfileFeaturePermissions();
+        if (!alive) return;
+        setAdvancedPreparationEnabled(
+          hasProfileFeaturePermission(result.permissions, "task_library_preparation"),
+        );
+      } catch {
+        if (!alive) return;
+        setAdvancedPreparationEnabled(false);
+      }
+    }
+
+    void loadPreparationPermission();
+
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  useEffect(() => {
     if (isChantierTabEnabled(tab, enabledChantierModules)) return;
     setTab("accueil");
   }, [enabledChantierModules, tab]);
@@ -627,6 +742,7 @@ export default function ChantierPage() {
   const [tasksError, setTasksError] = useState<string | null>(null);
   const [tasksPlanningWarning, setTasksPlanningWarning] = useState<string | null>(null);
   const [taskAssigneeIdsByTaskId, setTaskAssigneeIdsByTaskId] = useState<Record<string, string[]>>({});
+  const [taskZoneIdsByTaskId, setTaskZoneIdsByTaskId] = useState<Record<string, string[]>>({});
 
   // Temps tab
   const [timeEntries, setTimeEntries] = useState<ChantierTimeEntryRow[]>([]);
@@ -806,6 +922,14 @@ export default function ChantierPage() {
   const [taskTemplateSaving, setTaskTemplateSaving] = useState(false);
   const [taskTemplateError, setTaskTemplateError] = useState<string | null>(null);
   const [taskLibraryTemplates, setTaskLibraryTemplates] = useState<TaskTemplateRow[]>([]);
+  const [advancedPreparationEnabled, setAdvancedPreparationEnabled] = useState(false);
+  const [taskTemplatePreparationSchemaReady, setTaskTemplatePreparationSchemaReady] = useState(true);
+  const [taskPreparationMaterialsByTemplateId, setTaskPreparationMaterialsByTemplateId] = useState<
+    Record<string, TaskTemplateMaterialRatioRow[]>
+  >({});
+  const [taskPreparationEquipmentByTemplateId, setTaskPreparationEquipmentByTemplateId] = useState<
+    Record<string, TaskTemplateEquipmentItemRow[]>
+  >({});
   const [taskDetailOpenId, setTaskDetailOpenId] = useState<string | null>(null);
   const [taskDetailTab, setTaskDetailTab] = useState<
     "synthese" | "technique" | "documents" | "etapes" | "reserves" | "remarques" | "historique"
@@ -1822,6 +1946,25 @@ export default function ChantierPage() {
     setTaskAssigneeIdsByTaskId(fallbackMap);
   }
 
+  async function refreshTaskZonesOnly(taskRows: ChantierTaskRow[]) {
+    const ids = taskRows.map((task) => task.id);
+    const grouped = await listTaskZoneIdsByTaskIds(ids);
+    const fallbackMap: Record<string, string[]> = {};
+
+    for (const task of taskRows) {
+      const explicitIds = uniqueIds(grouped[task.id] ?? []);
+      if (explicitIds.length > 0) {
+        fallbackMap[task.id] = explicitIds;
+        continue;
+      }
+
+      const fallbackZoneId = String((task as any).zone_id ?? "").trim();
+      fallbackMap[task.id] = fallbackZoneId ? uniqueIds(collectDescendantPieceIds(zones, fallbackZoneId)) : [];
+    }
+
+    setTaskZoneIdsByTaskId(fallbackMap);
+  }
+
   async function refreshZonesOnly() {
     if (!id) return;
     try {
@@ -1851,6 +1994,7 @@ export default function ChantierPage() {
     const tasksResult = await getTasksByChantierIdDetailed(id);
     setTasks(tasksResult.tasks);
     await refreshTaskAssigneesOnly(tasksResult.tasks);
+    await refreshTaskZonesOnly(tasksResult.tasks);
     await refreshTaskStepsOnly();
     setTasksPlanningWarning(
       tasksResult.planningColumnsMissing
@@ -2208,6 +2352,7 @@ export default function ChantierPage() {
           if (!alive) return;
           setTasks(tasksData.tasks);
           await refreshTaskAssigneesOnly(tasksData.tasks);
+          await refreshTaskZonesOnly(tasksData.tasks);
           setTasksPlanningWarning(
             tasksData.planningColumnsMissing
               ? `Migration planning manquante sur Supabase. Colonnes attendues sur public.chantier_tasks: ${tasksData.expectedPlanningColumns.join(", ")}.`
@@ -2218,6 +2363,7 @@ export default function ChantierPage() {
           setTasksError(e?.message ?? "Erreur lors du chargement des tâches.");
           setTasks([]);
           setTaskAssigneeIdsByTaskId({});
+          setTaskZoneIdsByTaskId({});
           setTasksPlanningWarning(null);
         } finally {
           if (alive) setTasksLoading(false);
@@ -2566,6 +2712,7 @@ export default function ChantierPage() {
     }
     return map;
   }, [zones]);
+  const zoneTreeNodes = useMemo(() => buildChantierZoneTree(zones), [zones]);
 
   const taskLibraryTemplateById = useMemo(() => {
     const map = new Map<string, TaskTemplateRow>();
@@ -2574,6 +2721,49 @@ export default function ChantierPage() {
     }
     return map;
   }, [taskLibraryTemplates]);
+
+  useEffect(() => {
+    if (!advancedPreparationEnabled) {
+      setTaskPreparationMaterialsByTemplateId({});
+      setTaskPreparationEquipmentByTemplateId({});
+      setTaskTemplatePreparationSchemaReady(true);
+      return;
+    }
+
+    const templateIds = Array.from(
+      new Set(tasks.map((task) => String(task.task_template_id ?? "").trim()).filter(Boolean)),
+    );
+
+    if (templateIds.length === 0) {
+      setTaskPreparationMaterialsByTemplateId({});
+      setTaskPreparationEquipmentByTemplateId({});
+      setTaskTemplatePreparationSchemaReady(true);
+      return;
+    }
+
+    let alive = true;
+
+    async function loadTaskPreparation() {
+      try {
+        const result = await listTaskTemplatePreparationByTemplateIds(templateIds);
+        if (!alive) return;
+        setTaskTemplatePreparationSchemaReady(result.schemaReady);
+        setTaskPreparationMaterialsByTemplateId(result.materialsByTemplateId);
+        setTaskPreparationEquipmentByTemplateId(result.equipmentByTemplateId);
+      } catch {
+        if (!alive) return;
+        setTaskTemplatePreparationSchemaReady(false);
+        setTaskPreparationMaterialsByTemplateId({});
+        setTaskPreparationEquipmentByTemplateId({});
+      }
+    }
+
+    void loadTaskPreparation();
+
+    return () => {
+      alive = false;
+    };
+  }, [advancedPreparationEnabled, tasks]);
 
   function resolveZoneName(zoneId: string | null | undefined): string {
     const cleanZoneId = String(zoneId ?? "").trim();
@@ -2598,6 +2788,22 @@ export default function ChantierPage() {
     }
 
     return labels.length > 0 ? labels.join(" > ") : resolveZoneName(cleanZoneId);
+  }
+
+  function getTaskPieceZoneIds(task: Pick<ChantierTaskRow, "id" | "zone_id">): string[] {
+    const explicitIds = uniqueIds(taskZoneIdsByTaskId[task.id] ?? []);
+    if (explicitIds.length > 0) return explicitIds;
+    const fallbackZoneId = String(task.zone_id ?? "").trim();
+    if (!fallbackZoneId) return [];
+    return uniqueIds(collectDescendantPieceIds(zones, fallbackZoneId));
+  }
+
+  function resolveTaskZoneSummary(task: Pick<ChantierTaskRow, "id" | "zone_id">): string {
+    const pieceIds = getTaskPieceZoneIds(task);
+    if (pieceIds.length > 0) {
+      return summarizeSelectedPieceIds(pieceIds, zones);
+    }
+    return resolveZonePath(task.zone_id ?? null);
   }
 
   function applyTaskTemplateToNewTask(templateId: string) {
@@ -2684,6 +2890,14 @@ export default function ChantierPage() {
     }
     setTaskDetailTab("synthese");
   }, [taskDetailOpenId]);
+
+  useEffect(() => {
+    if (!tasks.length) {
+      setTaskZoneIdsByTaskId({});
+      return;
+    }
+    void refreshTaskZonesOnly(tasks);
+  }, [tasks, zones]);
 
   const timeEntriesByTaskId = useMemo(() => {
     const grouped = new Map<string, ChantierTimeEntryRow[]>();
@@ -3391,6 +3605,13 @@ export default function ChantierPage() {
         temps_prevu_h: tempsPrevu,
         order_index: orderIndex,
       });
+      const savedPieceZoneIds = newTaskZoneId ? collectDescendantPieceIds(zones, newTaskZoneId) : [];
+      const savedAnchorZoneId = findBestZoneAnchorForSelectedPieceIds(savedPieceZoneIds, zones);
+      await replaceTaskZoneIds(saved.id, savedPieceZoneIds);
+      if (saved.zone_id !== savedAnchorZoneId) {
+        await updateTask(saved.id, { zone_id: savedAnchorZoneId });
+        (saved as any).zone_id = savedAnchorZoneId;
+      }
       await replaceTaskAssignees(saved.id, assignedIntervenantIds);
       await recordChantierActivity({
         actionType: "created",
@@ -3419,6 +3640,12 @@ export default function ChantierPage() {
         next[saved.id] = assignedIntervenantIds;
         return next;
       });
+      setTaskZoneIdsByTaskId((prev) => {
+        const next = { ...prev };
+        delete next[tempId];
+        next[saved.id] = savedPieceZoneIds;
+        return next;
+      });
 
       setNewTitre("");
       setNewCorpsEtat(lotName);
@@ -3445,6 +3672,11 @@ export default function ChantierPage() {
     } catch (e: any) {
       setTasks((prev) => prev.filter((t) => t.id !== tempId));
       setTaskAssigneeIdsByTaskId((prev) => {
+        const next = { ...prev };
+        delete next[tempId];
+        return next;
+      });
+      setTaskZoneIdsByTaskId((prev) => {
         const next = { ...prev };
         delete next[tempId];
         return next;
@@ -3576,31 +3808,51 @@ export default function ChantierPage() {
     }
   }
 
-  async function updateTaskZone(task: ChantierTaskRow, nextZoneIdRaw: string) {
-    const nextZoneId = String(nextZoneIdRaw ?? "").trim() || null;
-    const currentZoneId = String((task as any).zone_id ?? "").trim() || null;
-    if (currentZoneId === nextZoneId) return;
+  async function replaceTaskPieceZones(task: ChantierTaskRow, nextPieceZoneIds: string[]) {
+    const currentPieceZoneIds = getTaskPieceZoneIds(task);
+    const normalizedNextIds = uniqueIds(nextPieceZoneIds);
+    if (
+      normalizedNextIds.length === currentPieceZoneIds.length &&
+      normalizedNextIds.every((zoneId) => currentPieceZoneIds.includes(zoneId))
+    ) {
+      return;
+    }
+
+    const nextAnchorZoneId = findBestZoneAnchorForSelectedPieceIds(normalizedNextIds, zones);
+    const currentAnchorZoneId = String((task as any).zone_id ?? "").trim() || null;
 
     setTaskZoneSavingId(task.id);
+    setTaskZoneIdsByTaskId((prev) => ({ ...prev, [task.id]: normalizedNextIds }));
     setTasks((prev) =>
-      prev.map((row) => (row.id === task.id ? { ...row, zone_id: nextZoneId } : row)),
+      prev.map((row) => (row.id === task.id ? { ...row, zone_id: nextAnchorZoneId } : row)),
     );
 
     try {
-      await updateTask(task.id, { zone_id: nextZoneId });
+      await replaceTaskZoneIds(task.id, normalizedNextIds);
+      await updateTask(task.id, { zone_id: nextAnchorZoneId });
       await recordChantierActivity({
         actionType: "updated",
         entityType: "task",
         entityId: task.id,
-        reason: "Localisation tâche mise à jour",
+        reason: "Couverture localisation tâche mise à jour",
         changes: {
-          from_zone_id: currentZoneId,
-          to_zone_id: nextZoneId,
-          from_zone_path: resolveZonePath(currentZoneId),
-          to_zone_path: resolveZonePath(nextZoneId),
+          from_zone_id: currentAnchorZoneId,
+          to_zone_id: nextAnchorZoneId,
+          from_zone_path: resolveZonePath(currentAnchorZoneId),
+          to_zone_path: resolveZonePath(nextAnchorZoneId),
+          from_piece_zone_ids: currentPieceZoneIds,
+          to_piece_zone_ids: normalizedNextIds,
         },
       });
-      setToast({ type: "ok", msg: nextZoneId ? "Pièce liée à la tâche." : "Localisation retirée." });
+      setToast({
+        type: "ok",
+        msg:
+          normalizedNextIds.length === 0
+            ? "Localisation retirée."
+            : normalizedNextIds.length === 1
+              ? "1 pièce liée à la tâche."
+              : `${normalizedNextIds.length} pièces liées à la tâche.`,
+      });
     } catch (e: any) {
       await refreshTasksOnly();
       setToast({ type: "error", msg: e?.message ?? "Erreur mise à jour localisation." });
@@ -3663,7 +3915,14 @@ export default function ChantierPage() {
     setTaskTemplateSaving(true);
     setTaskTemplateError(null);
     try {
-      await createTaskTemplate(payload);
+      const { preparation_materials = [], preparation_equipment = [], ...basePayload } = payload;
+      const created = await createTaskTemplate(basePayload);
+      if (advancedPreparationEnabled) {
+        await replaceTaskTemplatePreparation(created.id, {
+          materials: preparation_materials,
+          equipment: preparation_equipment,
+        });
+      }
       setTaskLibraryTemplates(await listTaskLibraryTemplates());
       setToast({ type: "ok", msg: "Template ajouté à la bibliothèque." });
       closeTaskTemplateDrawer();
@@ -3734,6 +3993,8 @@ export default function ChantierPage() {
         return coutReference === null ? null : coutReference * quantite;
       })() ??
       null;
+    const nextTaskPieceZoneIds = editTaskZoneId ? collectDescendantPieceIds(zones, editTaskZoneId) : [];
+    const nextTaskAnchorZoneId = findBestZoneAnchorForSelectedPieceIds(nextTaskPieceZoneIds, zones);
 
     const patch = {
       titre,
@@ -3742,7 +4003,7 @@ export default function ChantierPage() {
       task_template_label: nextTaskTemplateLabel,
       corps_etat: lotName,
       lot: lotName,
-      zone_id: editTaskZoneId || null,
+      zone_id: nextTaskAnchorZoneId,
       etape_metier: editTaskStepName.trim() || null,
       description_technique: editTaskDescriptionTechnique.trim() || null,
       caracteristiques: parseTaskCaracteristiquesText(editTaskCaracteristiques),
@@ -3767,6 +4028,7 @@ export default function ChantierPage() {
 
     try {
       await updateTask(t.id, patch as any);
+      await replaceTaskZoneIds(t.id, nextTaskPieceZoneIds);
       await replaceTaskAssignees(t.id, editAssignedIntervenantIds);
       await recordChantierActivity({
         actionType: "updated",
@@ -3790,6 +4052,7 @@ export default function ChantierPage() {
         },
       });
       setToast({ type: "ok", msg: "Tâche mise à jour." });
+      setTaskZoneIdsByTaskId((prev) => ({ ...prev, [t.id]: nextTaskPieceZoneIds }));
       setEditingTaskId(null);
     } catch (e: any) {
       await refreshTasksOnly();
@@ -4269,47 +4532,59 @@ export default function ChantierPage() {
   const filteredMateriel =
     materielFilter === "__ALL__" ? materiel : materiel.filter((row) => row.statut === materielFilter);
   const overviewTab: { key: TabKey; label: string } = { key: "accueil", label: "Accueil" };
-  const preparerTabs = ([
-    { key: "preparer", label: "Préparer" },
+  const organisationTabs = ([
+    { key: "preparer", label: "Localisation" },
+    { key: "devis-taches", label: t("chantierPage.tasks") },
     { key: "intervenants", label: t("sidebar.intervenants") },
-    { key: "achats", label: "Approvisionnement" },
-    { key: "materiel", label: t("intervenantAccess.tabs.material") },
     { key: "documents", label: t("intervenantAccess.tabs.documents") },
   ] as Array<{ key: TabKey; label: string }>).filter((entry) =>
     isChantierTabEnabled(entry.key, enabledChantierModules),
   );
-  const executerTabs = ([
-    { key: "devis-taches", label: t("chantierPage.tasks") },
+  const productionTabs = ([
     { key: "planning", label: t("chantierTabs.planning") },
     { key: "photos", label: "Photos" },
     { key: "consignes", label: "Consignes" },
+    { key: "journal", label: "Journal" },
     { key: "messagerie", label: t("intervenantAccess.tabs.messaging") },
   ] as Array<{ key: TabKey; label: string }>).filter((entry) =>
     isChantierTabEnabled(entry.key, enabledChantierModules),
   );
-  const controlerTabs = ([
-    { key: "reserves", label: t("intervenantAccess.tabs.reserves") },
-    { key: "journal", label: "Journal" },
-    { key: "doe", label: "DOE" },
-    { key: "visite", label: "Visite" },
+  const ressourcesTabs = ([
+    { key: "achats", label: "Approvisionnement" },
+    { key: "materiel", label: t("intervenantAccess.tabs.material") },
   ] as Array<{ key: TabKey; label: string }>).filter((entry) =>
     isChantierTabEnabled(entry.key, enabledChantierModules),
   );
-  const piloterTabs = ([
+  const controleTabs = ([
+    { key: "reserves", label: t("intervenantAccess.tabs.reserves") },
+    { key: "visite", label: "Visite" },
+    { key: "doe", label: "DOE" },
+  ] as Array<{ key: TabKey; label: string }>).filter((entry) =>
+    isChantierTabEnabled(entry.key, enabledChantierModules),
+  );
+  const pilotageTabs = ([
     { key: "temps", label: t("chantierTabs.time") },
     { key: "budget", label: "Budget" },
-    { key: "pilotage", label: "Pilotage" },
+    { key: "pilotage", label: "Écarts" },
     { key: "rapports", label: "Rapports" },
   ] as Array<{ key: TabKey; label: string }>).filter((entry) =>
     isChantierTabEnabled(entry.key, enabledChantierModules),
   );
   const chantierTabSections = [
-    { title: "Préparer", tabs: preparerTabs },
-    { title: "Exécuter", tabs: executerTabs },
-    { title: "Contrôler", tabs: controlerTabs },
-    { title: "Piloter", tabs: piloterTabs },
+    { title: "Organisation", tabs: organisationTabs },
+    { title: "Production", tabs: productionTabs },
+    { title: "Ressources", tabs: ressourcesTabs },
+    { title: "Contrôle", tabs: controleTabs },
+    { title: "Pilotage", tabs: pilotageTabs },
   ].filter((section) => section.tabs.length > 0);
-  const chantierTabs = [overviewTab, ...preparerTabs, ...executerTabs, ...controlerTabs, ...piloterTabs];
+  const chantierTabs = [
+    overviewTab,
+    ...organisationTabs,
+    ...productionTabs,
+    ...ressourcesTabs,
+    ...controleTabs,
+    ...pilotageTabs,
+  ];
   const activeTabLabel = chantierTabs.find((entry) => entry.key === tab)?.label ?? "Rapports";
   const accueilPanel = (
     <div className="space-y-5">
@@ -4500,6 +4775,15 @@ export default function ChantierPage() {
               const detailCaracteristiques = Array.isArray((activeTaskDetail as any).caracteristiques)
                 ? ((activeTaskDetail as any).caracteristiques as string[])
                 : [];
+              const detailSelectedPieceIds = getTaskPieceZoneIds(activeTaskDetail);
+              const detailPreparationEstimate =
+                advancedPreparationEnabled && activeTaskDetail.task_template_id
+                  ? estimateTaskTemplatePreparation(
+                      activeTaskDetail,
+                      taskPreparationMaterialsByTemplateId[activeTaskDetail.task_template_id] ?? [],
+                      taskPreparationEquipmentByTemplateId[activeTaskDetail.task_template_id] ?? [],
+                    )
+                  : null;
 
               return (
                 <div className="space-y-5">
@@ -4517,7 +4801,7 @@ export default function ChantierPage() {
                           {detailLot}
                         </span>
                         <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1">
-                          {resolveZonePath((activeTaskDetail as any).zone_id ?? null)}
+                          {resolveTaskZoneSummary(activeTaskDetail)}
                         </span>
                       </div>
                     </div>
@@ -4631,25 +4915,41 @@ export default function ChantierPage() {
                       </div>
                       <div className="mt-4 space-y-3 rounded-2xl bg-white p-4">
                         <div className="text-sm font-medium text-slate-900">
-                          {resolveZonePath((activeTaskDetail as any).zone_id ?? null)}
+                          {resolveTaskZoneSummary(activeTaskDetail)}
                         </div>
                         {zones.length > 0 ? (
-                          <label className="block space-y-1 text-xs text-slate-500">
-                            <div>Lier à une pièce</div>
-                            <select
-                              className="w-full rounded-xl border bg-white px-3 py-2 text-sm text-slate-900"
-                              value={String((activeTaskDetail as any).zone_id ?? "")}
-                              onChange={(e) => void updateTaskZone(activeTaskDetail, e.target.value)}
+                          <>
+                            <div className="text-xs text-slate-500">
+                              Coche une pièce, un niveau ou un bâtiment. Les parents sélectionnent automatiquement toutes les pièces qu'ils contiennent.
+                            </div>
+                            <TaskZoneCheckboxTree
+                              nodes={zoneTreeNodes}
+                              zones={zones}
+                              selectedPieceIds={detailSelectedPieceIds}
                               disabled={taskZoneSavingId === activeTaskDetail.id}
-                            >
-                              <option value="">Sans zone</option>
-                              {zones.map((zone) => (
-                                <option key={zone.id} value={zone.id}>
-                                  {resolveZonePath(zone.id)}
-                                </option>
-                              ))}
-                            </select>
-                          </label>
+                              onToggleZone={(zoneId, checked) => {
+                                const descendantPieceIds = collectDescendantPieceIds(zones, zoneId);
+                                const nextIds = new Set(detailSelectedPieceIds);
+                                for (const pieceId of descendantPieceIds) {
+                                  if (checked) nextIds.add(pieceId);
+                                  else nextIds.delete(pieceId);
+                                }
+                                void replaceTaskPieceZones(activeTaskDetail, Array.from(nextIds));
+                              }}
+                            />
+                            {detailSelectedPieceIds.length > 0 ? (
+                              <div className="flex justify-end">
+                                <button
+                                  type="button"
+                                  onClick={() => void replaceTaskPieceZones(activeTaskDetail, [])}
+                                  disabled={taskZoneSavingId === activeTaskDetail.id}
+                                  className="rounded-xl border border-slate-200 px-3 py-2 text-xs text-slate-700 hover:bg-slate-50 disabled:opacity-60"
+                                >
+                                  Tout retirer
+                                </button>
+                              </div>
+                            ) : null}
+                          </>
                         ) : (
                           <div className="text-sm text-slate-500">
                             Crée d'abord une localisation dans l'arborescence du chantier.
@@ -4695,9 +4995,104 @@ export default function ChantierPage() {
                       </div>
                     </section>
 
+                    {advancedPreparationEnabled ? (
+                      <section className={taskDetailTab === "synthese" ? "rounded-3xl border border-blue-200 bg-blue-50/50 p-5" : "hidden"}>
+                        <div className="text-xs font-semibold uppercase tracking-[0.2em] text-blue-700">
+                          4. Préparation estimée
+                        </div>
+                        <div className="mt-1 text-sm text-slate-600">
+                          Prévision théorique de matériaux et matériel à partir de la tâche bibliothèque.
+                        </div>
+
+                        {!activeTaskDetail.task_template_id ? (
+                          <div className="mt-4 rounded-2xl border border-dashed border-slate-200 bg-white px-4 py-3 text-sm text-slate-500">
+                            Aucune tâche bibliothèque liée.
+                          </div>
+                        ) : !taskTemplatePreparationSchemaReady ? (
+                          <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-700">
+                            Migration préparation avancée non appliquée sur Supabase.
+                          </div>
+                        ) : !detailPreparationEstimate ? (
+                          <div className="mt-4 rounded-2xl border border-dashed border-slate-200 bg-white px-4 py-3 text-sm text-slate-500">
+                            Aucune donnée de préparation définie.
+                          </div>
+                        ) : (
+                          <div className="mt-4 space-y-4">
+                            {!detailPreparationEstimate.canEstimate ? (
+                              <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-700">
+                                Quantité chantier manquante ou unité incompatible avec les ratios de la bibliothèque.
+                              </div>
+                            ) : null}
+
+                            <div className="rounded-2xl bg-white p-4">
+                              <div className="text-xs text-slate-500">Matériaux estimés</div>
+                              {detailPreparationEstimate.materials.length === 0 ? (
+                                <div className="mt-2 text-sm text-slate-500">Aucun ratio compatible.</div>
+                              ) : (
+                                <div className="mt-3 space-y-3">
+                                  {detailPreparationEstimate.materials.map((item) => (
+                                    <div key={item.id} className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+                                      <div className="flex flex-wrap items-center justify-between gap-2">
+                                        <div className="font-medium text-slate-900">{item.material_name}</div>
+                                        <div className="text-sm font-semibold text-slate-950">
+                                          {item.estimated_quantity} {item.ratio_unit}
+                                        </div>
+                                      </div>
+                                      <div className="mt-1 text-xs text-slate-500">
+                                        Ratio {item.ratio_quantity} {item.ratio_unit} / {item.source_unit}
+                                        {item.loss_percent !== null ? ` • perte ${item.loss_percent}% incluse` : ""}
+                                      </div>
+                                      {item.notes ? <div className="mt-2 text-xs text-slate-600">{item.notes}</div> : null}
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+
+                            <div className="rounded-2xl bg-white p-4">
+                              <div className="text-xs text-slate-500">Matériel à prévoir</div>
+                              {detailPreparationEstimate.equipment.length === 0 ? (
+                                <div className="mt-2 text-sm text-slate-500">Aucun matériel défini.</div>
+                              ) : (
+                                <div className="mt-3 space-y-2">
+                                  {detailPreparationEstimate.equipment.map((item) => (
+                                    <div key={item.id} className="flex flex-wrap items-start justify-between gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-3">
+                                      <div>
+                                        <div className="font-medium text-slate-900">{item.equipment_name}</div>
+                                        <div className="mt-1 text-xs text-slate-500">
+                                          {item.is_required ? "Obligatoire" : "Recommandé"}
+                                          {item.default_quantity !== null
+                                            ? ` • ${item.default_quantity}${item.unit ? ` ${item.unit}` : ""}`
+                                            : ""}
+                                        </div>
+                                        {item.notes ? <div className="mt-1 text-xs text-slate-600">{item.notes}</div> : null}
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+
+                            {detailPreparationEstimate.incompatibleMaterials.length > 0 ? (
+                              <div className="rounded-2xl border border-slate-200 bg-white p-4">
+                                <div className="text-xs text-slate-500">Ratios non compatibles avec l’unité de la tâche</div>
+                                <div className="mt-2 flex flex-wrap gap-2">
+                                  {detailPreparationEstimate.incompatibleMaterials.map((item) => (
+                                    <span key={item.id} className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs text-slate-600">
+                                      {item.material_name} ({item.source_unit})
+                                    </span>
+                                  ))}
+                                </div>
+                              </div>
+                            ) : null}
+                          </div>
+                        )}
+                      </section>
+                    ) : null}
+
                     <section className={taskDetailTab === "technique" ? "rounded-3xl border border-slate-200 bg-slate-50/60 p-5" : "hidden"}>
                       <div className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">
-                        4. Technique
+                        5. Technique
                       </div>
                       <div className="mt-4 space-y-3">
                         <div className="rounded-2xl bg-white p-4">
@@ -4728,7 +5123,7 @@ export default function ChantierPage() {
 
                     <section className={taskDetailTab === "synthese" ? "rounded-3xl border border-slate-200 bg-slate-50/60 p-5" : "hidden"}>
                       <div className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">
-                        5. Budget
+                        6. Budget
                       </div>
                       <div className="mt-4 grid gap-3 text-sm text-slate-700 sm:grid-cols-2">
                         <div className="rounded-2xl bg-white p-4">
@@ -5064,12 +5459,37 @@ export default function ChantierPage() {
         ) : null}
         {tab === "accueil" && accueilPanel}
         {tab === "preparer" && id && (
-          <PreparationTab
+          <PreparationTreeTab
             chantierId={id}
             tasksCount={tasks.length}
             documentsCount={chantierDocuments.length || documents.length}
             intervenantsCount={intervenants.length}
             materielCount={materiel.length}
+            tasks={tasks.map((task) => ({
+              id: task.id,
+              titre: task.titre,
+              titre_terrain: (task as any).titre_terrain ?? null,
+              lot: task.lot ?? null,
+              zone_id: (task as any).zone_id ?? null,
+            }))}
+            taskZoneIdsByTaskId={taskZoneIdsByTaskId}
+            reserves={reserves.map((reserve) => ({
+              id: reserve.id,
+              title: reserve.title ?? null,
+              status: reserve.status ?? null,
+              zone_id: reserve.zone_id ?? null,
+            }))}
+            documents={documents.map((document) => ({
+              id: document.id,
+              title: document.title ?? null,
+              zone_id: (document as any).zone_id ?? null,
+            }))}
+            consignes={consignes.map((consigne) => ({
+              id: consigne.id,
+              title: consigne.title ?? null,
+              description: consigne.description ?? null,
+              zone_id: consigne.zone_id ?? null,
+            }))}
           />
         )}
         {tab === "achats" && id && (
@@ -6254,7 +6674,7 @@ export default function ChantierPage() {
                     : offsetPct;
 
                   const assignedNames = getTaskAssignedIntervenantNames(t);
-                  const taskZoneLabel = resolveZonePath((t as any).zone_id ?? null);
+                  const taskZoneLabel = resolveTaskZoneSummary(t);
                   const taskQuality = ((t as any).quality_status ?? "a_faire") as TaskQualityStatus;
                   const taskValidated = isTaskAdminValidated(t);
                   const taskTemplateLabel = getTaskLibraryLabel(t);
@@ -7864,6 +8284,7 @@ export default function ChantierPage() {
           saving={taskTemplateSaving}
           deleting={false}
           error={taskTemplateError}
+          advancedPreparationEnabled={advancedPreparationEnabled}
           onClose={closeTaskTemplateDrawer}
           onSave={saveTaskTemplateFromTask}
           onDelete={async () => {}}

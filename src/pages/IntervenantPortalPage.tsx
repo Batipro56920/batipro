@@ -1975,7 +1975,7 @@ export default function IntervenantPortalPage() {
   const terrainSummaryCard = (
     <PortalCard tone="default">
       <PortalSectionHeading
-        eyebrow="Exécuter"
+        eyebrow="Production"
         title="Aujourd'hui / Demain"
         subtitle="Vue terrain directe : tâches à faire, planning immédiat, consignes importantes."
         aside={<PortalBadge tone={unreadConsignesCount > 0 ? "amber" : "green"}>{unreadConsignesCount} consigne{unreadConsignesCount > 1 ? "s" : ""} non lue{unreadConsignesCount > 1 ? "s" : ""}</PortalBadge>}

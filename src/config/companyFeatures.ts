@@ -7,7 +7,12 @@ export type CompanyBusinessProfile =
 
 export type CompanyFeatureMode = "simple" | "avance";
 
-export type CompanyFeaturePillar = "preparer" | "executer" | "controler" | "piloter";
+export type CompanyFeaturePillar =
+  | "organisation"
+  | "production"
+  | "ressources"
+  | "controle"
+  | "pilotage";
 
 export type CompanyUserRole = "ADMIN" | "INTERVENANT";
 
@@ -89,32 +94,33 @@ export const COMPANY_FEATURE_MODE_OPTIONS: Array<{
 ];
 
 export const COMPANY_FEATURE_PILLAR_LABELS: Record<CompanyFeaturePillar, string> = {
-  preparer: "Préparer",
-  executer: "Exécuter",
-  controler: "Contrôler",
-  piloter: "Piloter",
+  organisation: "Organisation",
+  production: "Production",
+  ressources: "Ressources",
+  controle: "Contrôle",
+  pilotage: "Pilotage",
 };
 
 export const COMPANY_FEATURE_MODULES: CompanyFeatureModule[] = [
   {
     id: "preparation_chantier",
-    pillar: "preparer",
-    label: "Préparation chantier",
-    description: "Checklist de préparation et sauvegarde des modèles chantier.",
+    pillar: "organisation",
+    label: "Organisation chantier",
+    description: "Arborescence chantier, checklist de cadrage et base de préparation.",
     simpleMode: true,
     roles: ["ADMIN"],
   },
   {
     id: "zones_localisation",
-    pillar: "preparer",
-    label: "Zones / localisation",
+    pillar: "organisation",
+    label: "Localisation",
     description: "Structure du chantier par pièces, niveaux et zones d’intervention.",
     simpleMode: false,
     roles: ["ADMIN", "INTERVENANT"],
   },
   {
     id: "approvisionnement",
-    pillar: "preparer",
+    pillar: "ressources",
     label: "Approvisionnement",
     description: "Demandes d’achat, fournisseurs et suivi des livraisons.",
     simpleMode: true,
@@ -122,7 +128,7 @@ export const COMPANY_FEATURE_MODULES: CompanyFeatureModule[] = [
   },
   {
     id: "documents",
-    pillar: "preparer",
+    pillar: "organisation",
     label: "Documents",
     description: "Plans, pièces chantier, bibliothèque et documents partagés.",
     simpleMode: true,
@@ -130,7 +136,7 @@ export const COMPANY_FEATURE_MODULES: CompanyFeatureModule[] = [
   },
   {
     id: "taches",
-    pillar: "executer",
+    pillar: "organisation",
     label: "Tâches",
     description: "Création, affectation et suivi opérationnel des tâches.",
     simpleMode: true,
@@ -138,7 +144,7 @@ export const COMPANY_FEATURE_MODULES: CompanyFeatureModule[] = [
   },
   {
     id: "planning",
-    pillar: "executer",
+    pillar: "production",
     label: "Planning",
     description: "Vue planning chantier, dates, séquencement et charge.",
     simpleMode: true,
@@ -146,7 +152,7 @@ export const COMPANY_FEATURE_MODULES: CompanyFeatureModule[] = [
   },
   {
     id: "photos",
-    pillar: "executer",
+    pillar: "production",
     label: "Photos",
     description: "Photos avant, pendant, après et suivi visuel du terrain.",
     simpleMode: true,
@@ -154,7 +160,7 @@ export const COMPANY_FEATURE_MODULES: CompanyFeatureModule[] = [
   },
   {
     id: "consignes",
-    pillar: "executer",
+    pillar: "production",
     label: "Consignes",
     description: "Diffusion et suivi des consignes opérationnelles.",
     simpleMode: true,
@@ -162,7 +168,7 @@ export const COMPANY_FEATURE_MODULES: CompanyFeatureModule[] = [
   },
   {
     id: "messagerie",
-    pillar: "executer",
+    pillar: "production",
     label: "Messagerie",
     description: "Demandes d’information et échanges entre bureau et terrain.",
     simpleMode: true,
@@ -170,7 +176,7 @@ export const COMPANY_FEATURE_MODULES: CompanyFeatureModule[] = [
   },
   {
     id: "reserves",
-    pillar: "controler",
+    pillar: "controle",
     label: "Réserves",
     description: "Déclaration, suivi, correction et levée des réserves.",
     simpleMode: true,
@@ -178,15 +184,15 @@ export const COMPANY_FEATURE_MODULES: CompanyFeatureModule[] = [
   },
   {
     id: "validation_qualite",
-    pillar: "controler",
-    label: "Validation qualité",
-    description: "Contrôle admin, validation et demandes de reprise.",
+    pillar: "controle",
+    label: "Visites",
+    description: "Visites de contrôle, validation et demandes de reprise.",
     simpleMode: true,
     roles: ["ADMIN", "INTERVENANT"],
   },
   {
     id: "journal_chantier",
-    pillar: "controler",
+    pillar: "production",
     label: "Journal chantier",
     description: "Historique des actions, retours terrain et traçabilité.",
     simpleMode: false,
@@ -194,7 +200,7 @@ export const COMPANY_FEATURE_MODULES: CompanyFeatureModule[] = [
   },
   {
     id: "doe",
-    pillar: "controler",
+    pillar: "controle",
     label: "DOE",
     description: "Suivi des pièces et préparation du dossier des ouvrages exécutés.",
     simpleMode: false,
@@ -202,7 +208,7 @@ export const COMPANY_FEATURE_MODULES: CompanyFeatureModule[] = [
   },
   {
     id: "temps",
-    pillar: "piloter",
+    pillar: "pilotage",
     label: "Temps",
     description: "Saisie, consolidation et comparaison des temps prévus / réels.",
     simpleMode: true,
@@ -210,7 +216,7 @@ export const COMPANY_FEATURE_MODULES: CompanyFeatureModule[] = [
   },
   {
     id: "budget",
-    pillar: "piloter",
+    pillar: "pilotage",
     label: "Budget",
     description: "Budget chantier, marge, coût main-d'œuvre et coûts réels.",
     simpleMode: true,
@@ -218,7 +224,7 @@ export const COMPANY_FEATURE_MODULES: CompanyFeatureModule[] = [
   },
   {
     id: "ecarts",
-    pillar: "piloter",
+    pillar: "pilotage",
     label: "Écarts",
     description: "Avenants, changements, imprévus et impacts temps / coûts.",
     simpleMode: false,
@@ -226,7 +232,7 @@ export const COMPANY_FEATURE_MODULES: CompanyFeatureModule[] = [
   },
   {
     id: "rapports",
-    pillar: "piloter",
+    pillar: "pilotage",
     label: "Rapports",
     description: "Exports PDF client, rapports internes et archivage.",
     simpleMode: true,

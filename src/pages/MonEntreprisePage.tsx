@@ -17,6 +17,11 @@ import {
   uploadCompanyLogo,
   type CompanySettingsRow,
 } from "../services/companySettings.service";
+import {
+  getCurrentProfileFeaturePermissions,
+  hasProfileFeaturePermission,
+  setCurrentProfileFeaturePermission,
+} from "../services/profileFeaturePermissions.service";
 import { useI18n } from "../i18n";
 
 type CompanyFormState = {
@@ -87,6 +92,9 @@ export default function MonEntreprisePage() {
   const [logoPreviewUrl, setLogoPreviewUrl] = useState<string | null>(null);
   const [logoFile, setLogoFile] = useState<File | null>(null);
   const [selectedLogoPreviewUrl, setSelectedLogoPreviewUrl] = useState<string | null>(null);
+  const [advancedPreparationEnabled, setAdvancedPreparationEnabled] = useState(false);
+  const [profilePermissionSchemaReady, setProfilePermissionSchemaReady] = useState(true);
+  const [savingProfilePermission, setSavingProfilePermission] = useState(false);
 
   const modulesByPillar = useMemo(
     () => getModulesByPillar(getVisibleCompanyModules(featuresForm.feature_mode)),
@@ -111,10 +119,17 @@ export default function MonEntreprisePage() {
     setLoadingSettings(true);
     setSettingsError(null);
     try {
-      const settings = await getCompanySettings();
+      const [settings, profilePermissions] = await Promise.all([
+        getCompanySettings(),
+        getCurrentProfileFeaturePermissions(),
+      ]);
       setCompanySettings(settings);
       setCompanyForm(toCompanyForm(settings));
       setFeaturesForm(toCompanyFeaturesForm(settings));
+      setProfilePermissionSchemaReady(profilePermissions.schemaReady);
+      setAdvancedPreparationEnabled(
+        hasProfileFeaturePermission(profilePermissions.permissions, "task_library_preparation"),
+      );
 
       if (settings.logo_path) {
         try {
@@ -231,6 +246,28 @@ export default function MonEntreprisePage() {
       setSettingsError(err?.message ?? "Erreur enregistrement des fonctionnalités.");
     } finally {
       setSavingSettings(false);
+    }
+  }
+
+  async function onToggleCurrentProfilePreparationPermission() {
+    setSavingProfilePermission(true);
+    setSettingsError(null);
+    setSettingsNotice(null);
+    try {
+      const next = !advancedPreparationEnabled;
+      const permissions = await setCurrentProfileFeaturePermission("task_library_preparation", next);
+      setAdvancedPreparationEnabled(
+        hasProfileFeaturePermission(permissions, "task_library_preparation"),
+      );
+      setSettingsNotice(
+        next
+          ? "Préparation avancée activée pour ce profil admin."
+          : "Préparation avancée désactivée pour ce profil admin.",
+      );
+    } catch (err: any) {
+      setSettingsError(err?.message ?? "Erreur mise à jour permission profil.");
+    } finally {
+      setSavingProfilePermission(false);
     }
   }
 
@@ -505,6 +542,52 @@ export default function MonEntreprisePage() {
               </div>
             </div>
 
+            <div className="rounded-2xl border border-slate-200 bg-white p-4 space-y-3">
+              <div className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">
+                Permission profil
+              </div>
+              <div className="text-sm font-semibold text-slate-900">
+                Préparation avancée des tâches bibliothèque
+              </div>
+              <div className="text-sm text-slate-500">
+                Active pour ce profil admin l’accès aux ratios matériaux, au matériel à prévoir et à l’estimatif chantier.
+              </div>
+              {!profilePermissionSchemaReady ? (
+                <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700">
+                  Migration permissions profil non appliquée sur Supabase.
+                </div>
+              ) : null}
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <span
+                  className={[
+                    "rounded-full px-3 py-1 text-xs font-semibold",
+                    advancedPreparationEnabled
+                      ? "bg-emerald-100 text-emerald-700"
+                      : "bg-slate-100 text-slate-600",
+                  ].join(" ")}
+                >
+                  {advancedPreparationEnabled ? "Actif sur ce profil" : "Masqué sur ce profil"}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => void onToggleCurrentProfilePreparationPermission()}
+                  disabled={savingProfilePermission || !profilePermissionSchemaReady}
+                  className={[
+                    "rounded-xl px-4 py-2 text-sm",
+                    savingProfilePermission || !profilePermissionSchemaReady
+                      ? "bg-slate-300 text-slate-700"
+                      : "bg-slate-900 text-white hover:bg-slate-800",
+                  ].join(" ")}
+                >
+                  {savingProfilePermission
+                    ? t("common.states.saving")
+                    : advancedPreparationEnabled
+                      ? "Désactiver pour ce profil"
+                      : "Activer pour ce profil"}
+                </button>
+              </div>
+            </div>
+
             <button
               type="button"
               disabled={savingSettings}
@@ -526,11 +609,11 @@ export default function MonEntreprisePage() {
                 Réglages
               </div>
               <h2 className="mt-1 text-lg font-semibold text-slate-900">
-                Fonctionnalités par pilier
+                Fonctionnalités par catégorie
               </h2>
               <p className="mt-1 text-sm text-slate-500">
                 Désactivez un module pour le retirer des menus, des onglets chantier et bloquer
-                ses routes directes côté backoffice.
+                ses routes directes côté backoffice, sans changer son fonctionnement interne.
               </p>
             </div>
 

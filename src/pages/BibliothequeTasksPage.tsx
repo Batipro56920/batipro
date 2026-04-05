@@ -2,6 +2,10 @@ import { useEffect, useMemo, useState } from "react";
 import TaskTemplateDrawer from "../components/TaskTemplateDrawer";
 import Toast, { type ToastState } from "../components/chantiers/Toast";
 import {
+  getCurrentProfileFeaturePermissions,
+  hasProfileFeaturePermission,
+} from "../services/profileFeaturePermissions.service";
+import {
   create,
   duplicate,
   list,
@@ -10,6 +14,7 @@ import {
   type TaskTemplateInput,
   type TaskTemplateRow,
 } from "../services/taskLibrary.service";
+import { replaceTaskTemplatePreparation } from "../services/taskTemplatePreparation.service";
 import { useI18n } from "../i18n";
 
 export default function BibliothequeTasksPage() {
@@ -26,6 +31,7 @@ export default function BibliothequeTasksPage() {
   const [duplicateId, setDuplicateId] = useState<string | null>(null);
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [toast, setToast] = useState<ToastState>(null);
+  const [advancedPreparationEnabled, setAdvancedPreparationEnabled] = useState(false);
 
   useEffect(() => {
     if (!toast) return;
@@ -59,6 +65,29 @@ export default function BibliothequeTasksPage() {
     void refresh();
   }, []);
 
+  useEffect(() => {
+    let alive = true;
+
+    async function loadPermissions() {
+      try {
+        const result = await getCurrentProfileFeaturePermissions();
+        if (!alive) return;
+        setAdvancedPreparationEnabled(
+          hasProfileFeaturePermission(result.permissions, "task_library_preparation"),
+        );
+      } catch {
+        if (!alive) return;
+        setAdvancedPreparationEnabled(false);
+      }
+    }
+
+    void loadPermissions();
+
+    return () => {
+      alive = false;
+    };
+  }, []);
+
   function openCreateDrawer() {
     setActiveTemplate(null);
     setDrawerError(null);
@@ -82,12 +111,26 @@ export default function BibliothequeTasksPage() {
     setSaving(true);
     setDrawerError(null);
     try {
+      const { preparation_materials = [], preparation_equipment = [], ...basePayload } = payload;
+
       if (!activeTemplate) {
-        const created = await create(payload);
+        const created = await create(basePayload);
+        if (advancedPreparationEnabled) {
+          await replaceTaskTemplatePreparation(created.id, {
+            materials: preparation_materials,
+            equipment: preparation_equipment,
+          });
+        }
         setRows((prev) => [created, ...prev]);
         setToast({ type: "ok", msg: t("bibliothequeTasks.created") });
       } else {
-        const updated = await update(activeTemplate.id, payload);
+        const updated = await update(activeTemplate.id, basePayload);
+        if (advancedPreparationEnabled) {
+          await replaceTaskTemplatePreparation(updated.id, {
+            materials: preparation_materials,
+            equipment: preparation_equipment,
+          });
+        }
         setRows((prev) => prev.map((row) => (row.id === activeTemplate.id ? updated : row)));
         setToast({ type: "ok", msg: t("bibliothequeTasks.updated") });
       }
@@ -266,6 +309,7 @@ export default function BibliothequeTasksPage() {
         saving={saving}
         deleting={deleting}
         error={drawerError}
+        advancedPreparationEnabled={advancedPreparationEnabled}
         onClose={closeDrawer}
         onSave={onSaveDrawer}
         onDelete={onDeleteDrawer}

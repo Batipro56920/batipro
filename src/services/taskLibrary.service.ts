@@ -1,4 +1,9 @@
 import { supabase } from "../lib/supabaseClient";
+import {
+  duplicateTaskTemplatePreparation,
+  type TaskTemplateEquipmentItemInput,
+  type TaskTemplateMaterialRatioInput,
+} from "./taskTemplatePreparation.service";
 
 export type TaskTemplateRow = {
   id: string;
@@ -25,6 +30,8 @@ export type TaskTemplateInput = {
   description_technique?: string | null;
   caracteristiques?: string[];
   cout_reference_unitaire_ht?: number | null;
+  preparation_materials?: TaskTemplateMaterialRatioInput[];
+  preparation_equipment?: TaskTemplateEquipmentItemInput[];
 };
 
 function normalizeForMatch(value: unknown): string {
@@ -351,7 +358,7 @@ export async function remove(id: string): Promise<void> {
 
 export async function duplicate(id: string): Promise<TaskTemplateRow> {
   const source = await fetchSingle(id);
-  return create({
+  const duplicated = await create({
     titre: `${source.titre} (copie)`,
     lot: source.lot,
     unite: source.unite,
@@ -362,4 +369,12 @@ export async function duplicate(id: string): Promise<TaskTemplateRow> {
     caracteristiques: source.caracteristiques,
     cout_reference_unitaire_ht: source.cout_reference_unitaire_ht,
   });
+
+  try {
+    await duplicateTaskTemplatePreparation(source.id, duplicated.id);
+  } catch {
+    // Keep legacy duplication behavior even if advanced preparation is unavailable.
+  }
+
+  return duplicated;
 }
