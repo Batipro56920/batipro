@@ -19,7 +19,6 @@ import {
   updateChantierZone,
   zoneTypeToLocalisationKind,
   type ChantierLocalisationKind,
-  type ChantierZoneLocation,
   type ChantierZoneRow,
   type ChantierZoneTreeNode,
   type ChantierZoneUsageSummary,
@@ -39,12 +38,6 @@ const LOCALISATION_KIND_OPTIONS: Array<{ value: ChantierLocalisationKind; label:
   { value: "piece", label: "Piece" },
 ];
 
-const ZONE_LOCATION_OPTIONS: Array<{ value: ChantierZoneLocation; label: string }> = [
-  { value: "interieur", label: "Interieur" },
-  { value: "exterieur", label: "Exterieur" },
-  { value: "mixte", label: "Mixte" },
-];
-
 type PreparationTabProps = {
   chantierId: string;
   tasksCount: number;
@@ -62,10 +55,6 @@ function preparationProgress(checklist: ChantierPreparationChecklistRow) {
 
 function localisationKindLabel(kind: ChantierLocalisationKind) {
   return LOCALISATION_KIND_OPTIONS.find((entry) => entry.value === kind)?.label ?? "Localisation";
-}
-
-function emplacementLabel(value: ChantierZoneLocation) {
-  return ZONE_LOCATION_OPTIONS.find((entry) => entry.value === value)?.label ?? "Interieur";
 }
 
 function localisationKindBadgeClass(kind: ChantierLocalisationKind) {
@@ -194,7 +183,6 @@ export default function PreparationTab({
   const [zoneEditorParentId, setZoneEditorParentId] = useState<string | null>(null);
   const [zoneDraftName, setZoneDraftName] = useState("");
   const [zoneDraftKind, setZoneDraftKind] = useState<ChantierLocalisationKind>("batiment");
-  const [zoneDraftLocation, setZoneDraftLocation] = useState<ChantierZoneLocation>("interieur");
   const [zoneDraftMoveParentId, setZoneDraftMoveParentId] = useState("");
   const [zoneUsageSummary, setZoneUsageSummary] = useState<ChantierZoneUsageSummary | null>(null);
   const [zoneUsageLoading, setZoneUsageLoading] = useState(false);
@@ -269,6 +257,18 @@ export default function PreparationTab({
   }, [zones, selectedZoneId, zoneById]);
 
   useEffect(() => {
+    if (zones.length === 0) {
+      setZoneEditorMode("create");
+      setZoneEditorParentId(null);
+      setZoneDraftKind("batiment");
+      return;
+    }
+    if (zoneEditorMode === "create" && !zoneEditorParentId && !selectedZoneId) {
+      setZoneEditorMode(null);
+    }
+  }, [selectedZoneId, zoneEditorMode, zoneEditorParentId, zones.length]);
+
+  useEffect(() => {
     if (!selectedZoneId) {
       setZoneUsageSummary(null);
       return;
@@ -340,7 +340,6 @@ export default function PreparationTab({
     setZoneEditorParentId(null);
     setZoneDraftName("");
     setZoneDraftKind("batiment");
-    setZoneDraftLocation("interieur");
     setZoneDraftMoveParentId("");
   }
 
@@ -349,7 +348,6 @@ export default function PreparationTab({
     setZoneEditorParentId(parentZone?.id ?? null);
     setZoneDraftKind(suggestChildKind(parentZone));
     setZoneDraftName("");
-    setZoneDraftLocation(parentZone?.emplacement ?? "interieur");
     setZoneDraftMoveParentId(parentZone?.id ?? "");
   }
 
@@ -358,7 +356,6 @@ export default function PreparationTab({
     setZoneEditorParentId(zone.parent_zone_id ?? null);
     setZoneDraftName(zone.nom);
     setZoneDraftKind(zoneTypeToLocalisationKind(zone.zone_type));
-    setZoneDraftLocation(zone.emplacement);
     setZoneDraftMoveParentId(zone.parent_zone_id ?? "");
   }
 
@@ -383,10 +380,9 @@ export default function PreparationTab({
           nom: trimmedName,
           zone_type: localisationKindToZoneType(zoneDraftKind),
           niveau: zoneDraftKind === "niveau" ? trimmedName : null,
-          emplacement: zoneDraftLocation,
           ordre: siblingCount,
         });
-        setZones((current) => [...current, saved]);
+        await refreshZones();
         setSelectedZoneId(saved.id);
         setExpandedZoneIds((current) => ({
           ...current,
@@ -399,9 +395,8 @@ export default function PreparationTab({
           nom: trimmedName,
           zone_type: localisationKindToZoneType(zoneDraftKind),
           niveau: zoneDraftKind === "niveau" ? trimmedName : null,
-          emplacement: zoneDraftLocation,
         });
-        setZones((current) => current.map((zone) => (zone.id === saved.id ? saved : zone)));
+        await refreshZones();
         setSelectedZoneId(saved.id);
       }
       resetZoneEditor();
@@ -600,23 +595,7 @@ export default function PreparationTab({
                 photos, reserves, documents, remarques et analyses.
               </p>
             </div>
-            <div className="flex flex-wrap gap-2">
-              <button
-                type="button"
-                onClick={() => openCreateZone(null)}
-                disabled={zonesSaving || !zonesSchemaReady}
-                className="rounded-2xl bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800 disabled:opacity-50"
-              >
-                + Ajouter un element racine
-              </button>
-              <button
-                type="button"
-                onClick={() => void refreshZones()}
-                className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2 text-sm text-slate-700 hover:bg-slate-100"
-              >
-                {zonesLoading ? "Chargement..." : "Rafraichir"}
-              </button>
-            </div>
+            <div />
           </div>
 
           {!zonesSchemaReady ? (
@@ -633,15 +612,7 @@ export default function PreparationTab({
 
           <div className="mt-5 grid gap-4 xl:grid-cols-[minmax(0,1.05fr)_minmax(320px,0.95fr)]">
             <div className="rounded-3xl border border-slate-200 bg-slate-50/80 p-4">
-              <div className="flex items-center justify-between gap-3">
-                <div>
-                  <div className="text-sm font-semibold text-slate-900">Structure visible du chantier</div>
-                  <div className="text-xs text-slate-500">Clique un element pour agir dessus ou ajouter un enfant.</div>
-                </div>
-                <div className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-medium text-slate-600">
-                  {zones.length} element{zones.length > 1 ? "s" : ""}
-                </div>
-              </div>
+              <div className="text-sm font-semibold text-slate-900">Structure visible du chantier</div>
 
               <div className="mt-4 space-y-2">
                 {zonesLoading ? (
@@ -688,9 +659,6 @@ export default function PreparationTab({
                           localisationKindBadgeClass(zoneTypeToLocalisationKind(selectedZone.zone_type)),
                         ].join(" ")}>
                           {localisationKindLabel(zoneTypeToLocalisationKind(selectedZone.zone_type))}
-                        </span>
-                        <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[11px] text-slate-600">
-                          {emplacementLabel(selectedZone.emplacement)}
                         </span>
                       </div>
                       <div className="mt-3 text-xs uppercase tracking-[0.18em] text-slate-400">Chemin complet</div>
@@ -773,18 +741,10 @@ export default function PreparationTab({
                           ? "Renomme, deplace ou ajuste cet element sans perdre la structure."
                           : zoneEditorParentId
                           ? `Parent pre-rempli : ${resolveChantierZonePath(zoneEditorParentId, zonePathById)}`
-                          : "Creation a la racine du chantier."}
+                          : "Creation du premier element du chantier."}
                       </div>
                     </div>
-                    {zoneEditorMode ? (
-                      <button
-                        type="button"
-                        onClick={resetZoneEditor}
-                        className="rounded-xl border border-slate-200 px-3 py-2 text-xs text-slate-700 hover:bg-slate-50"
-                      >
-                        Fermer
-                      </button>
-                    ) : null}
+                    <div />
                   </div>
 
                   <div className="mt-4 grid gap-3">
@@ -821,21 +781,6 @@ export default function PreparationTab({
                       />
                     </label>
 
-                    <label className="space-y-1 text-xs text-slate-600">
-                      <div>Interieur / exterieur</div>
-                      <select
-                        value={zoneDraftLocation}
-                        onChange={(event) => setZoneDraftLocation(event.target.value as ChantierZoneLocation)}
-                        disabled={zonesSaving}
-                        className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-900"
-                      >
-                        {ZONE_LOCATION_OPTIONS.map((option) => (
-                          <option key={option.value} value={option.value}>
-                            {option.label}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
                     {zoneEditorMode === "edit" ? (
                       <label className="space-y-1 text-xs text-slate-600">
                         <div>Deplacer sous</div>
