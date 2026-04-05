@@ -800,6 +800,7 @@ export default function ChantierPage() {
   const [taskProgressDrafts, setTaskProgressDrafts] = useState<Record<string, string>>({});
   const [taskProgressSavingId, setTaskProgressSavingId] = useState<string | null>(null);
   const [taskProgressEditingId, setTaskProgressEditingId] = useState<string | null>(null);
+  const [taskZoneSavingId, setTaskZoneSavingId] = useState<string | null>(null);
   const [taskTemplateDrawerOpen, setTaskTemplateDrawerOpen] = useState(false);
   const [taskTemplateSeed, setTaskTemplateSeed] = useState<TaskTemplateInput | null>(null);
   const [taskTemplateSaving, setTaskTemplateSaving] = useState(false);
@@ -2696,14 +2697,6 @@ export default function ChantierPage() {
     return grouped;
   }, [timeEntries]);
 
-  const taskOrderLabelById = useMemo(() => {
-    const map = new Map<string, number>();
-    tasks.forEach((task, index) => {
-      map.set(task.id, index + 1);
-    });
-    return map;
-  }, [tasks]);
-
   function getTaskAssignedIntervenantIds(task: Pick<ChantierTaskRow, "id" | "intervenant_id">): string[] {
     const explicitIds = uniqueIds(taskAssigneeIdsByTaskId[task.id] ?? []);
     return explicitIds.length > 0 ? explicitIds : uniqueIds([task.intervenant_id]);
@@ -3580,6 +3573,39 @@ export default function ChantierPage() {
     } catch (e: any) {
       await refreshTasksOnly();
       setToast({ type: "error", msg: e?.message ?? "Erreur validation qualité." });
+    }
+  }
+
+  async function updateTaskZone(task: ChantierTaskRow, nextZoneIdRaw: string) {
+    const nextZoneId = String(nextZoneIdRaw ?? "").trim() || null;
+    const currentZoneId = String((task as any).zone_id ?? "").trim() || null;
+    if (currentZoneId === nextZoneId) return;
+
+    setTaskZoneSavingId(task.id);
+    setTasks((prev) =>
+      prev.map((row) => (row.id === task.id ? { ...row, zone_id: nextZoneId } : row)),
+    );
+
+    try {
+      await updateTask(task.id, { zone_id: nextZoneId });
+      await recordChantierActivity({
+        actionType: "updated",
+        entityType: "task",
+        entityId: task.id,
+        reason: "Localisation tâche mise à jour",
+        changes: {
+          from_zone_id: currentZoneId,
+          to_zone_id: nextZoneId,
+          from_zone_path: resolveZonePath(currentZoneId),
+          to_zone_path: resolveZonePath(nextZoneId),
+        },
+      });
+      setToast({ type: "ok", msg: nextZoneId ? "Pièce liée à la tâche." : "Localisation retirée." });
+    } catch (e: any) {
+      await refreshTasksOnly();
+      setToast({ type: "error", msg: e?.message ?? "Erreur mise à jour localisation." });
+    } finally {
+      setTaskZoneSavingId(null);
     }
   }
 
@@ -4603,8 +4629,35 @@ export default function ChantierPage() {
                       <div className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">
                         2. Localisation
                       </div>
-                      <div className="mt-4 rounded-2xl bg-white p-4 text-sm font-medium text-slate-900">
-                        {resolveZonePath((activeTaskDetail as any).zone_id ?? null)}
+                      <div className="mt-4 space-y-3 rounded-2xl bg-white p-4">
+                        <div className="text-sm font-medium text-slate-900">
+                          {resolveZonePath((activeTaskDetail as any).zone_id ?? null)}
+                        </div>
+                        {zones.length > 0 ? (
+                          <label className="block space-y-1 text-xs text-slate-500">
+                            <div>Lier à une pièce</div>
+                            <select
+                              className="w-full rounded-xl border bg-white px-3 py-2 text-sm text-slate-900"
+                              value={String((activeTaskDetail as any).zone_id ?? "")}
+                              onChange={(e) => void updateTaskZone(activeTaskDetail, e.target.value)}
+                              disabled={taskZoneSavingId === activeTaskDetail.id}
+                            >
+                              <option value="">Sans zone</option>
+                              {zones.map((zone) => (
+                                <option key={zone.id} value={zone.id}>
+                                  {resolveZonePath(zone.id)}
+                                </option>
+                              ))}
+                            </select>
+                          </label>
+                        ) : (
+                          <div className="text-sm text-slate-500">
+                            Crée d'abord une localisation dans l'arborescence du chantier.
+                          </div>
+                        )}
+                        {taskZoneSavingId === activeTaskDetail.id ? (
+                          <div className="text-xs text-slate-400">Enregistrement...</div>
+                        ) : null}
                       </div>
                     </section>
 
@@ -6201,12 +6254,10 @@ export default function ChantierPage() {
                     : offsetPct;
 
                   const assignedNames = getTaskAssignedIntervenantNames(t);
-                  const orderLabel = taskOrderLabelById.get(t.id) ?? Math.max(0, Number(t.order_index ?? 0)) + 1;
                   const taskZoneLabel = resolveZonePath((t as any).zone_id ?? null);
                   const taskQuality = ((t as any).quality_status ?? "a_faire") as TaskQualityStatus;
                   const taskValidated = isTaskAdminValidated(t);
                   const taskTemplateLabel = getTaskLibraryLabel(t);
-                  const priorityMeta = taskPriorityMeta((t as any).priorite);
                   const taskRepriseReason = String((t as any).reprise_reason ?? "").trim();
                   const taskBudgetVente = toNumberOrNull((t as any).montant_total_devis_ht);
                   const taskBudgetCout = toNumberOrNull((t as any).cout_estime_ht);
@@ -6251,12 +6302,6 @@ export default function ChantierPage() {
                                 </button>
                                 <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[11px] text-slate-600">
                                   {taskTemplateLabel}
-                                </span>
-                                <span className={["rounded-full border px-2 py-0.5 text-[11px]", priorityMeta.className].join(" ")}>
-                                  Priorité {priorityMeta.label}
-                                </span>
-                                <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[11px] text-slate-600">
-                                  #{orderLabel}
                                 </span>
                               </div>
                               <div className="mt-3 grid gap-3 md:grid-cols-2">
