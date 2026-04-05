@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import type { FormEvent } from "react";
 
 import type { ChantierTaskRow } from "../../services/chantierTasks.service";
-import type { ChantierZoneRow } from "../../services/chantierZones.service";
+import { buildChantierZonePathMap, type ChantierZoneRow } from "../../services/chantierZones.service";
 import { appendChantierActivityLog } from "../../services/chantierActivityLog.service";
 import {
   createChantierPurchaseRequest,
@@ -66,7 +66,7 @@ export default function ApprovisionnementTab({ chantierId, tasks, zones }: Appro
   const [comment, setComment] = useState("");
 
   const taskById = useMemo(() => new Map(tasks.map((task) => [task.id, task])), [tasks]);
-  const zoneById = useMemo(() => new Map(zones.map((zone) => [zone.id, zone.nom])), [zones]);
+  const zonePathById = useMemo(() => buildChantierZonePathMap(zones), [zones]);
 
   const summary = useMemo(() => {
     return {
@@ -325,7 +325,7 @@ export default function ApprovisionnementTab({ chantierId, tasks, zones }: Appro
               <option value="">Aucune zone</option>
               {zones.map((zone) => (
                 <option key={zone.id} value={zone.id}>
-                  {zone.nom}
+                  {zonePathById.get(zone.id) ?? zone.nom}
                 </option>
               ))}
             </select>
@@ -466,7 +466,7 @@ export default function ApprovisionnementTab({ chantierId, tasks, zones }: Appro
         ) : (
           requests.map((request) => {
             const linkedTask = request.task_id ? taskById.get(request.task_id) : null;
-            const linkedZone = request.zone_id ? zoneById.get(request.zone_id) : null;
+            const linkedZone = request.zone_id ? zonePathById.get(request.zone_id) ?? null : null;
 
             return (
               <article

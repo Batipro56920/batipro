@@ -11,7 +11,7 @@ import {
   type ChantierPhotoType,
 } from "../../services/chantierPhotos.service";
 import type { ChantierTaskRow } from "../../services/chantierTasks.service";
-import type { ChantierZoneRow } from "../../services/chantierZones.service";
+import { buildChantierZonePathMap, type ChantierZoneRow } from "../../services/chantierZones.service";
 
 type ChantierPhotosTabProps = {
   chantierId: string;
@@ -54,7 +54,7 @@ export default function ChantierPhotosTab({ chantierId, tasks, zones }: Chantier
   const [zoneFilter, setZoneFilter] = useState("");
 
   const taskById = useMemo(() => new Map(tasks.map((task) => [task.id, task])), [tasks]);
-  const zoneById = useMemo(() => new Map(zones.map((zone) => [zone.id, zone.nom])), [zones]);
+  const zonePathById = useMemo(() => buildChantierZonePathMap(zones), [zones]);
 
   const filteredPhotos = useMemo(() => {
     return photos.filter((photo) => {
@@ -240,7 +240,7 @@ export default function ChantierPhotosTab({ chantierId, tasks, zones }: Chantier
             <option value="">Toutes zones</option>
             {zones.map((zone) => (
               <option key={zone.id} value={zone.id}>
-                {zone.nom}
+                {zonePathById.get(zone.id) ?? zone.nom}
               </option>
             ))}
           </select>
@@ -338,7 +338,7 @@ export default function ChantierPhotosTab({ chantierId, tasks, zones }: Chantier
               <option value="">Aucune zone</option>
               {zones.map((zone) => (
                 <option key={zone.id} value={zone.id}>
-                  {zone.nom}
+                  {zonePathById.get(zone.id) ?? zone.nom}
                 </option>
               ))}
             </select>
@@ -395,7 +395,7 @@ export default function ChantierPhotosTab({ chantierId, tasks, zones }: Chantier
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
           {filteredPhotos.map((photo) => {
             const linkedTask = photo.task_id ? taskById.get(photo.task_id) : null;
-            const linkedZone = photo.zone_id ? zoneById.get(photo.zone_id) : null;
+            const linkedZone = photo.zone_id ? zonePathById.get(photo.zone_id) ?? null : null;
             const previewUrl = photoUrls[photo.id];
 
             return (

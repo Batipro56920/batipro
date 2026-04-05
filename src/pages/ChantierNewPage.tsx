@@ -1,13 +1,8 @@
 ﻿// src/pages/ChantierNewPage.tsx
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import type { ChantierStatus } from "../types/chantier";
 import { createChantier } from "../services/chantiers.service";
-import {
-  createChantierFromTemplate,
-  listChantierTemplates,
-  type ChantierTemplateRow,
-} from "../services/chantierTemplates.service";
 import { useI18n } from "../i18n";
 
 function todayISO() {
@@ -20,11 +15,6 @@ export default function ChantierNewPage() {
 
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
-  const [templates, setTemplates] = useState<ChantierTemplateRow[]>([]);
-  const [templatesSchemaReady, setTemplatesSchemaReady] = useState(true);
-  const [templatesLoading, setTemplatesLoading] = useState(true);
-  const [selectedTemplateId, setSelectedTemplateId] = useState("");
-
   const [form, setForm] = useState({
     nom: "",
     client: "",
@@ -38,31 +28,6 @@ export default function ChantierNewPage() {
     () => form.nom.trim().length > 0 && !loading,
     [form.nom, loading]
   );
-
-  useEffect(() => {
-    let alive = true;
-    setTemplatesLoading(true);
-
-    listChantierTemplates()
-      .then((result) => {
-        if (!alive) return;
-        setTemplates(result.templates);
-        setTemplatesSchemaReady(result.schemaReady);
-      })
-      .catch((error) => {
-        if (!alive) return;
-        setErrorMsg(error?.message ?? "Erreur chargement modèles chantier.");
-        setTemplates([]);
-      })
-      .finally(() => {
-        if (!alive) return;
-        setTemplatesLoading(false);
-      });
-
-    return () => {
-      alive = false;
-    };
-  }, []);
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -81,9 +46,7 @@ export default function ChantierNewPage() {
     };
 
     try {
-      const createdChantier = selectedTemplateId
-        ? await createChantierFromTemplate(selectedTemplateId, payload)
-        : await createChantier(payload);
+      const createdChantier = await createChantier(payload);
 
       navigate(`/chantiers/${createdChantier.id}`);
     } catch (error: any) {
@@ -211,34 +174,6 @@ export default function ChantierNewPage() {
               <option value="EN_COURS">{t("common.chantierStatus.EN_COURS")}</option>
               <option value="TERMINE">{t("common.chantierStatus.TERMINE")}</option>
             </select>
-          </div>
-
-          <div className="space-y-2">
-            <label className="text-sm font-medium">Modèle chantier</label>
-            <select
-              className="w-full rounded-xl border px-3 py-2 bg-white"
-              value={selectedTemplateId}
-              onChange={(e) => setSelectedTemplateId(e.target.value)}
-              disabled={templatesLoading || !templatesSchemaReady}
-            >
-              <option value="">
-                {templatesLoading ? "Chargement des modèles..." : "Sans modèle"}
-              </option>
-              {templates.map((template) => (
-                <option key={template.id} value={template.id}>
-                  {template.nom}
-                </option>
-              ))}
-            </select>
-            {!templatesSchemaReady ? (
-              <div className="text-xs text-amber-700">
-                Migration modèles chantier non appliquée sur Supabase.
-              </div>
-            ) : selectedTemplateId ? (
-              <div className="text-xs text-slate-500">
-                Zones, tâches, étapes et checklist seront copiées depuis ce modèle.
-              </div>
-            ) : null}
           </div>
         </div>
 
