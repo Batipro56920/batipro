@@ -125,17 +125,21 @@ export default function MonEntreprisePage() {
     setLoadingSettings(true);
     setSettingsError(null);
     try {
-      const [settings, profilePermissions] = await Promise.all([
-        getCompanySettings(),
-        getCurrentProfileFeaturePermissions(),
-      ]);
+      const settings = await getCompanySettings();
       setCompanySettings(settings);
       setCompanyForm(toCompanyForm(settings));
       setFeaturesForm(toCompanyFeaturesForm(settings));
-      setProfilePermissionSchemaReady(profilePermissions.schemaReady);
-      setAdvancedPreparationEnabled(
-        hasProfileFeaturePermission(profilePermissions.permissions, "task_library_preparation"),
-      );
+
+      try {
+        const profilePermissions = await getCurrentProfileFeaturePermissions();
+        setProfilePermissionSchemaReady(profilePermissions.schemaReady);
+        setAdvancedPreparationEnabled(
+          hasProfileFeaturePermission(profilePermissions.permissions, "task_library_preparation"),
+        );
+      } catch {
+        setProfilePermissionSchemaReady(false);
+        setAdvancedPreparationEnabled(false);
+      }
 
       if (settings.logo_path) {
         try {
@@ -214,6 +218,7 @@ export default function MonEntreprisePage() {
     setFeaturesForm((prev) => ({
       ...prev,
       business_profile: nextProfile,
+      mode_interface: getDefaultCompanyInterfaceMode(nextProfile),
       enabled_modules: getPresetFeatureModules(nextProfile),
     }));
   }

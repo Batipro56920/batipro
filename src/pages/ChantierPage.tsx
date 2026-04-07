@@ -4493,49 +4493,6 @@ export default function ChantierPage() {
     }
   }
 
-  /* ---------------- guards ---------------- */
-  if (!id) {
-    return (
-      <div className="rounded-2xl border bg-white p-6">
-        <div className="font-semibold">{t("chantierPage.notFoundTitle")}</div>
-        <div className="text-slate-500 text-sm mt-1">{t("chantierPage.missingId")}</div>
-        <div className="mt-4">
-          <Link to="/chantiers" className="rounded-xl border px-3 py-2 hover:bg-slate-50">
-            {t("chantierPage.backToChantiers")}
-          </Link>
-        </div>
-      </div>
-    );
-  }
-
-  if (loading) {
-    return (
-      <div className="rounded-2xl border bg-white p-6">
-        <div className="font-semibold">{t("common.states.loading")}</div>
-        <div className="text-slate-500 text-sm mt-1">{t("chantierPage.loadingMessage")}</div>
-      </div>
-    );
-  }
-
-  if (errorMsg) {
-    return (
-      <div className="rounded-2xl border border-red-200 bg-red-50 p-6 text-red-700">
-        {errorMsg}
-      </div>
-    );
-  }
-
-  if (!item) {
-    return (
-      <div className="rounded-2xl border bg-white p-6">
-        <div className="font-semibold">{t("chantierPage.notFoundTitle")}</div>
-        <div className="text-slate-500 text-sm mt-1">{t("chantierPage.notFoundMessage")}</div>
-      </div>
-    );
-  }
-
-  const filteredMateriel =
-    materielFilter === "__ALL__" ? materiel : materiel.filter((row) => row.statut === materielFilter);
   const overviewTab: { key: TabKey; label: string } = { key: "accueil", label: "Accueil" };
   const chantierTabDefinitions: Array<{
     title: string;
@@ -4641,6 +4598,49 @@ export default function ChantierPage() {
     setTab("accueil");
   }, [chantierTabs, tab]);
 
+  /* ---------------- guards ---------------- */
+  if (!id) {
+    return (
+      <div className="rounded-2xl border bg-white p-6">
+        <div className="font-semibold">{t("chantierPage.notFoundTitle")}</div>
+        <div className="text-slate-500 text-sm mt-1">{t("chantierPage.missingId")}</div>
+        <div className="mt-4">
+          <Link to="/chantiers" className="rounded-xl border px-3 py-2 hover:bg-slate-50">
+            {t("chantierPage.backToChantiers")}
+          </Link>
+        </div>
+      </div>
+    );
+  }
+
+  if (loading) {
+    return (
+      <div className="rounded-2xl border bg-white p-6">
+        <div className="font-semibold">{t("common.states.loading")}</div>
+        <div className="text-slate-500 text-sm mt-1">{t("chantierPage.loadingMessage")}</div>
+      </div>
+    );
+  }
+
+  if (errorMsg) {
+    return (
+      <div className="rounded-2xl border border-red-200 bg-red-50 p-6 text-red-700">
+        {errorMsg}
+      </div>
+    );
+  }
+
+  if (!item) {
+    return (
+      <div className="rounded-2xl border bg-white p-6">
+        <div className="font-semibold">{t("chantierPage.notFoundTitle")}</div>
+        <div className="text-slate-500 text-sm mt-1">{t("chantierPage.notFoundMessage")}</div>
+      </div>
+    );
+  }
+
+  const filteredMateriel =
+    materielFilter === "__ALL__" ? materiel : materiel.filter((row) => row.statut === materielFilter);
   const activeTabLabel = chantierTabs.find((entry) => entry.key === tab)?.label ?? "Rapports";
   const accueilPanel = (
     <div className="space-y-5">
