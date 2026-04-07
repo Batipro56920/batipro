@@ -133,6 +133,7 @@ function withDefaults(orgId: string, row?: Partial<CompanySettingsRow>): Company
 
 export async function getCompanySettings(): Promise<CompanySettingsRow> {
   const userId = await getCurrentUserId();
+  const localSettings = loadLocalSettings(userId);
   const { data, error } = await supabase
     .from(TABLE)
     .select("*")
@@ -141,7 +142,10 @@ export async function getCompanySettings(): Promise<CompanySettingsRow> {
 
   if (error) {
     if (isMissingCompanySettingsTableError(error)) {
-      return withDefaults(userId, loadLocalSettings(userId) ?? undefined);
+      return withDefaults(userId, localSettings ?? undefined);
+    }
+    if (localSettings) {
+      return withDefaults(userId, localSettings);
     }
     throw new Error(error.message);
   }
