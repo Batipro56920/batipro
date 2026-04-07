@@ -3,11 +3,14 @@ import { useLocation, useNavigate } from "react-router-dom";
 import {
   COMPANY_BUSINESS_PROFILE_OPTIONS,
   COMPANY_FEATURE_MODE_OPTIONS,
-  getModulesByPillar,
+  COMPANY_INTERFACE_MODE_OPTIONS,
+  getDefaultCompanyInterfaceMode,
+  getModulesByInterfaceMode,
   getPresetFeatureModules,
   getVisibleCompanyModules,
   type CompanyBusinessProfile,
   type CompanyFeatureMode,
+  type CompanyInterfaceMode,
   type CompanyFeatureModuleId,
 } from "../config/companyFeatures";
 import {
@@ -38,6 +41,7 @@ type CompanyFormState = {
 type CompanyFeaturesFormState = {
   business_profile: CompanyBusinessProfile;
   feature_mode: CompanyFeatureMode;
+  mode_interface: CompanyInterfaceMode;
   enabled_modules: CompanyFeatureModuleId[];
 };
 
@@ -58,6 +62,7 @@ function toCompanyFeaturesForm(settings: CompanySettingsRow): CompanyFeaturesFor
   return {
     business_profile: settings.business_profile,
     feature_mode: settings.feature_mode,
+    mode_interface: settings.mode_interface,
     enabled_modules: [...settings.enabled_modules],
   };
 }
@@ -87,6 +92,7 @@ export default function MonEntreprisePage() {
   const [featuresForm, setFeaturesForm] = useState<CompanyFeaturesFormState>({
     business_profile: "entreprise_renovation",
     feature_mode: "simple",
+    mode_interface: getDefaultCompanyInterfaceMode("entreprise_renovation"),
     enabled_modules: getPresetFeatureModules("entreprise_renovation"),
   });
   const [logoPreviewUrl, setLogoPreviewUrl] = useState<string | null>(null);
@@ -96,9 +102,9 @@ export default function MonEntreprisePage() {
   const [profilePermissionSchemaReady, setProfilePermissionSchemaReady] = useState(true);
   const [savingProfilePermission, setSavingProfilePermission] = useState(false);
 
-  const modulesByPillar = useMemo(
-    () => getModulesByPillar(getVisibleCompanyModules(featuresForm.feature_mode)),
-    [featuresForm.feature_mode],
+  const modulesBySection = useMemo(
+    () => getModulesByInterfaceMode(getVisibleCompanyModules(featuresForm.feature_mode), featuresForm.mode_interface),
+    [featuresForm.feature_mode, featuresForm.mode_interface],
   );
   const selectedProfileMeta = useMemo(
     () =>
@@ -109,10 +115,10 @@ export default function MonEntreprisePage() {
   );
   const activeModuleCount = useMemo(
     () => {
-      const visibleIds = new Set(modulesByPillar.flatMap((section) => section.modules.map((m) => m.id)));
+      const visibleIds = new Set(modulesBySection.flatMap((section) => section.modules.map((m) => m.id)));
       return featuresForm.enabled_modules.filter((moduleId) => visibleIds.has(moduleId)).length;
     },
-    [featuresForm.enabled_modules, modulesByPillar],
+    [featuresForm.enabled_modules, modulesBySection],
   );
 
   async function loadSettings() {
@@ -235,6 +241,7 @@ export default function MonEntreprisePage() {
       const saved = await upsertCompanySettings({
         business_profile: featuresForm.business_profile,
         feature_mode: featuresForm.feature_mode,
+        mode_interface: featuresForm.mode_interface,
         enabled_modules: featuresForm.enabled_modules,
       });
 
@@ -528,6 +535,30 @@ export default function MonEntreprisePage() {
               </div>
             </div>
 
+            <div className="space-y-2">
+              <div className="text-xs text-slate-600">Mode interface</div>
+              <div className="grid gap-2 sm:grid-cols-2">
+                {COMPANY_INTERFACE_MODE_OPTIONS.map((mode) => (
+                  <button
+                    key={mode.id}
+                    type="button"
+                    onClick={() =>
+                      setFeaturesForm((prev) => ({ ...prev, mode_interface: mode.id }))
+                    }
+                    className={[
+                      "rounded-2xl border p-3 text-left transition",
+                      featuresForm.mode_interface === mode.id
+                        ? "border-emerald-600 bg-emerald-50"
+                        : "border-slate-200 bg-slate-50 hover:bg-slate-100",
+                    ].join(" ")}
+                  >
+                    <div className="text-sm font-semibold text-slate-900">{mode.label}</div>
+                    <div className="mt-1 text-xs text-slate-500">{mode.description}</div>
+                  </button>
+                ))}
+              </div>
+            </div>
+
             <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
               <div className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">
                 Synthèse
@@ -537,8 +568,8 @@ export default function MonEntreprisePage() {
               </div>
               <div className="text-sm text-slate-600">modules activés</div>
               <div className="mt-3 text-xs text-slate-500">
-                L'architecture est pilotée par un registre central, ce qui permet d'ajouter de
-                nouveaux modules et de les rattacher ensuite aux rôles utilisateurs.
+                Les modules restent uniques. Seule leur organisation change pour coller au
+                métier visé et garder une navigation lisible.
               </div>
             </div>
 
@@ -618,8 +649,8 @@ export default function MonEntreprisePage() {
             </div>
 
             <div className="space-y-4">
-              {modulesByPillar.map((section) => (
-                <div key={section.pillar} className="rounded-2xl border border-slate-200 p-4">
+              {modulesBySection.map((section) => (
+                <div key={section.id} className="rounded-2xl border border-slate-200 p-4">
                   <div className="text-sm font-semibold text-slate-900">{section.label}</div>
                   <div className="mt-3 grid gap-3 lg:grid-cols-2">
                     {section.modules.map((module) => {

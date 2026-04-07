@@ -165,6 +165,7 @@ import {
 } from "../services/taskTemplatePreparation.service";
 import {
   CHANTIER_TAB_FEATURES,
+  type CompanyInterfaceMode,
   type CompanyFeatureModuleId,
 } from "../config/companyFeatures";
 import {
@@ -181,6 +182,7 @@ import { buildIntervenantLink } from "../lib/publicUrl";
 type TabKey =
   | "accueil"
   | "preparer"
+  | "localisation"
   | "devis-taches"
   | "photos"
   | "documents"
@@ -657,6 +659,7 @@ export default function ChantierPage() {
   const [tab, setTab] = useState<TabKey>("accueil");
   const [enabledChantierModules, setEnabledChantierModules] =
     useState<Set<CompanyFeatureModuleId> | null>(null);
+  const [companyInterfaceMode, setCompanyInterfaceMode] = useState<CompanyInterfaceMode>("terrain");
 
   // Toast
   const [toast, setToast] = useState<ToastState>(null);
@@ -674,9 +677,11 @@ export default function ChantierPage() {
         const settings = await getCompanySettings();
         if (!alive) return;
         setEnabledChantierModules(new Set(getEnabledCompanyModulesFromSettings(settings)));
+        setCompanyInterfaceMode(settings.mode_interface);
       } catch {
         if (!alive) return;
         setEnabledChantierModules(null);
+        setCompanyInterfaceMode("terrain");
       }
     }
 
@@ -4532,59 +4537,110 @@ export default function ChantierPage() {
   const filteredMateriel =
     materielFilter === "__ALL__" ? materiel : materiel.filter((row) => row.statut === materielFilter);
   const overviewTab: { key: TabKey; label: string } = { key: "accueil", label: "Accueil" };
-  const organisationTabs = ([
-    { key: "preparer", label: "Localisation" },
-    { key: "devis-taches", label: t("chantierPage.tasks") },
-    { key: "intervenants", label: t("sidebar.intervenants") },
-    { key: "documents", label: t("intervenantAccess.tabs.documents") },
-  ] as Array<{ key: TabKey; label: string }>).filter((entry) =>
-    isChantierTabEnabled(entry.key, enabledChantierModules),
-  );
-  const productionTabs = ([
-    { key: "planning", label: t("chantierTabs.planning") },
-    { key: "photos", label: "Photos" },
-    { key: "consignes", label: "Consignes" },
-    { key: "journal", label: "Journal" },
-    { key: "messagerie", label: t("intervenantAccess.tabs.messaging") },
-  ] as Array<{ key: TabKey; label: string }>).filter((entry) =>
-    isChantierTabEnabled(entry.key, enabledChantierModules),
-  );
-  const ressourcesTabs = ([
-    { key: "achats", label: "Approvisionnement" },
-    { key: "materiel", label: t("intervenantAccess.tabs.material") },
-  ] as Array<{ key: TabKey; label: string }>).filter((entry) =>
-    isChantierTabEnabled(entry.key, enabledChantierModules),
-  );
-  const controleTabs = ([
-    { key: "reserves", label: t("intervenantAccess.tabs.reserves") },
-    { key: "visite", label: "Visite" },
-    { key: "doe", label: "DOE" },
-  ] as Array<{ key: TabKey; label: string }>).filter((entry) =>
-    isChantierTabEnabled(entry.key, enabledChantierModules),
-  );
-  const pilotageTabs = ([
-    { key: "temps", label: t("chantierTabs.time") },
-    { key: "budget", label: "Budget" },
-    { key: "pilotage", label: "Écarts" },
-    { key: "rapports", label: "Rapports" },
-  ] as Array<{ key: TabKey; label: string }>).filter((entry) =>
-    isChantierTabEnabled(entry.key, enabledChantierModules),
-  );
-  const chantierTabSections = [
-    { title: "Organisation", tabs: organisationTabs },
-    { title: "Production", tabs: productionTabs },
-    { title: "Ressources", tabs: ressourcesTabs },
-    { title: "Contrôle", tabs: controleTabs },
-    { title: "Pilotage", tabs: pilotageTabs },
-  ].filter((section) => section.tabs.length > 0);
-  const chantierTabs = [
-    overviewTab,
-    ...organisationTabs,
-    ...productionTabs,
-    ...ressourcesTabs,
-    ...controleTabs,
-    ...pilotageTabs,
-  ];
+  const chantierTabDefinitions: Array<{
+    title: string;
+    tabs: Array<{ key: TabKey; label: string }>;
+  }> =
+    companyInterfaceMode === "pilotage"
+      ? [
+          {
+            title: "Organisation",
+            tabs: [
+              { key: "localisation", label: "Localisation" },
+              { key: "devis-taches", label: t("chantierPage.tasks") },
+              { key: "intervenants", label: t("sidebar.intervenants") },
+              { key: "documents", label: t("intervenantAccess.tabs.documents") },
+            ],
+          },
+          {
+            title: "Production",
+            tabs: [
+              { key: "planning", label: t("chantierTabs.planning") },
+              { key: "photos", label: "Photos" },
+              { key: "consignes", label: "Consignes" },
+              { key: "journal", label: "Journal" },
+              { key: "messagerie", label: t("intervenantAccess.tabs.messaging") },
+            ],
+          },
+          {
+            title: "Ressources",
+            tabs: [
+              { key: "achats", label: "Approvisionnement" },
+              { key: "materiel", label: t("intervenantAccess.tabs.material") },
+            ],
+          },
+          {
+            title: "Contrôle",
+            tabs: [
+              { key: "reserves", label: t("intervenantAccess.tabs.reserves") },
+              { key: "visite", label: "Visite" },
+              { key: "doe", label: "DOE" },
+            ],
+          },
+          {
+            title: "Pilotage",
+            tabs: [
+              { key: "temps", label: t("chantierTabs.time") },
+              { key: "budget", label: "Budget" },
+              { key: "pilotage", label: "Écarts" },
+              { key: "rapports", label: "Rapports" },
+            ],
+          },
+        ]
+      : [
+          {
+            title: "Organisation",
+            tabs: [
+              { key: "preparer", label: "Préparation de chantier" },
+              { key: "localisation", label: "Localisation" },
+              { key: "devis-taches", label: t("chantierPage.tasks") },
+              { key: "intervenants", label: t("sidebar.intervenants") },
+              { key: "achats", label: "Approvisionnement" },
+              { key: "materiel", label: t("intervenantAccess.tabs.material") },
+              { key: "documents", label: t("intervenantAccess.tabs.documents") },
+            ],
+          },
+          {
+            title: "Chantier",
+            tabs: [
+              { key: "planning", label: t("chantierTabs.planning") },
+              { key: "photos", label: "Photos" },
+              { key: "consignes", label: "Consignes" },
+              { key: "journal", label: "Journal" },
+              { key: "messagerie", label: t("intervenantAccess.tabs.messaging") },
+            ],
+          },
+          {
+            title: "Fin de chantier",
+            tabs: [
+              { key: "reserves", label: t("intervenantAccess.tabs.reserves") },
+              { key: "doe", label: "DOE" },
+              { key: "visite", label: "Visite" },
+            ],
+          },
+          {
+            title: "Administratif",
+            tabs: [
+              { key: "temps", label: t("chantierTabs.time") },
+              { key: "budget", label: "Budget" },
+              { key: "pilotage", label: "Écarts" },
+              { key: "rapports", label: "Rapports" },
+            ],
+          },
+        ];
+  const chantierTabSections = chantierTabDefinitions
+    .map((section) => ({
+      title: section.title,
+      tabs: section.tabs.filter((entry) => isChantierTabEnabled(entry.key, enabledChantierModules)),
+    }))
+    .filter((section) => section.tabs.length > 0);
+  const chantierTabs = [overviewTab, ...chantierTabSections.flatMap((section) => section.tabs)];
+
+  useEffect(() => {
+    if (chantierTabs.some((entry) => entry.key === tab)) return;
+    setTab("accueil");
+  }, [chantierTabs, tab]);
+
   const activeTabLabel = chantierTabs.find((entry) => entry.key === tab)?.label ?? "Rapports";
   const accueilPanel = (
     <div className="space-y-5">
@@ -5458,9 +5514,10 @@ export default function ChantierPage() {
           </button>
         ) : null}
         {tab === "accueil" && accueilPanel}
-        {tab === "preparer" && id && (
+        {(tab === "preparer" || tab === "localisation") && id && (
           <PreparationTreeTab
             chantierId={id}
+            view={tab === "preparer" ? "preparation" : "localisation"}
             tasksCount={tasks.length}
             documentsCount={chantierDocuments.length || documents.length}
             intervenantsCount={intervenants.length}

@@ -6,6 +6,7 @@ export type CompanyBusinessProfile =
   | "sous_traitant";
 
 export type CompanyFeatureMode = "simple" | "avance";
+export type CompanyInterfaceMode = "pilotage" | "terrain";
 
 export type CompanyFeaturePillar =
   | "organisation"
@@ -42,6 +43,12 @@ export type CompanyFeatureModule = {
   description: string;
   simpleMode: boolean;
   roles: CompanyUserRole[];
+};
+
+export type CompanyInterfaceSection = {
+  id: string;
+  label: string;
+  moduleIds: CompanyFeatureModuleId[];
 };
 
 export const COMPANY_BUSINESS_PROFILE_OPTIONS: Array<{
@@ -90,6 +97,23 @@ export const COMPANY_FEATURE_MODE_OPTIONS: Array<{
     id: "avance",
     label: "Avancé",
     description: "Affiche tous les modules et permet une configuration complète.",
+  },
+];
+
+export const COMPANY_INTERFACE_MODE_OPTIONS: Array<{
+  id: CompanyInterfaceMode;
+  label: string;
+  description: string;
+}> = [
+  {
+    id: "pilotage",
+    label: "Pilotage",
+    description: "Navigation orientee coordination, controle et suivi global du chantier.",
+  },
+  {
+    id: "terrain",
+    label: "Terrain",
+    description: "Navigation orientee preparation, execution quotidienne et fin de chantier.",
   },
 ];
 
@@ -303,8 +327,61 @@ const PROFILE_PRESETS: Record<CompanyBusinessProfile, CompanyFeatureModuleId[]> 
 
 const COMPANY_FEATURE_IDS = new Set(COMPANY_FEATURE_MODULES.map((module) => module.id));
 
+const COMPANY_INTERFACE_MODULE_LAYOUTS: Record<CompanyInterfaceMode, CompanyInterfaceSection[]> = {
+  pilotage: [
+    {
+      id: "organisation",
+      label: "Organisation",
+      moduleIds: ["preparation_chantier", "zones_localisation", "taches", "documents"],
+    },
+    {
+      id: "production",
+      label: "Production",
+      moduleIds: ["planning", "photos", "consignes", "journal_chantier", "messagerie"],
+    },
+    {
+      id: "ressources",
+      label: "Ressources",
+      moduleIds: ["approvisionnement"],
+    },
+    {
+      id: "controle",
+      label: "Controle",
+      moduleIds: ["reserves", "validation_qualite", "doe"],
+    },
+    {
+      id: "pilotage",
+      label: "Pilotage",
+      moduleIds: ["temps", "budget", "ecarts", "rapports"],
+    },
+  ],
+  terrain: [
+    {
+      id: "organisation",
+      label: "Organisation",
+      moduleIds: ["preparation_chantier", "zones_localisation", "taches", "approvisionnement", "documents"],
+    },
+    {
+      id: "chantier",
+      label: "Chantier",
+      moduleIds: ["planning", "photos", "consignes", "journal_chantier", "messagerie"],
+    },
+    {
+      id: "fin_chantier",
+      label: "Fin de chantier",
+      moduleIds: ["reserves", "doe", "validation_qualite"],
+    },
+    {
+      id: "administratif",
+      label: "Administratif",
+      moduleIds: ["temps", "budget", "ecarts", "rapports"],
+    },
+  ],
+};
+
 export const CHANTIER_TAB_FEATURES: Partial<Record<string, CompanyFeatureModuleId>> = {
   preparer: "preparation_chantier",
+  localisation: "zones_localisation",
   "devis-taches": "taches",
   photos: "photos",
   documents: "documents",
@@ -333,6 +410,23 @@ export function normalizeCompanyBusinessProfile(
 
 export function normalizeCompanyFeatureMode(value: string | null | undefined): CompanyFeatureMode {
   return value === "avance" ? "avance" : "simple";
+}
+
+export function getDefaultCompanyInterfaceMode(
+  businessProfile: CompanyBusinessProfile,
+): CompanyInterfaceMode {
+  return businessProfile === "architecte" || businessProfile === "maitre_oeuvre"
+    ? "pilotage"
+    : "terrain";
+}
+
+export function normalizeCompanyInterfaceMode(
+  value: string | null | undefined,
+  businessProfile: CompanyBusinessProfile,
+): CompanyInterfaceMode {
+  return value === "pilotage" || value === "terrain"
+    ? value
+    : getDefaultCompanyInterfaceMode(businessProfile);
 }
 
 export function getPresetFeatureModules(
@@ -399,5 +493,20 @@ export function getModulesByPillar(modules: CompanyFeatureModule[]) {
     pillar,
     label: COMPANY_FEATURE_PILLAR_LABELS[pillar],
     modules: modules.filter((module) => module.pillar === pillar),
+  }));
+}
+
+export function getModulesByInterfaceMode(
+  modules: CompanyFeatureModule[],
+  interfaceMode: CompanyInterfaceMode,
+) {
+  const modulesById = new Map(modules.map((module) => [module.id, module]));
+
+  return COMPANY_INTERFACE_MODULE_LAYOUTS[interfaceMode].map((section) => ({
+    id: section.id,
+    label: section.label,
+    modules: section.moduleIds
+      .map((moduleId) => modulesById.get(moduleId))
+      .filter((module): module is CompanyFeatureModule => Boolean(module)),
   }));
 }

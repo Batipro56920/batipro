@@ -1,11 +1,14 @@
 import { supabase } from "../lib/supabaseClient";
 import {
+  getDefaultCompanyInterfaceMode,
   getEffectiveCompanyFeatureModules,
   normalizeCompanyBusinessProfile,
   normalizeCompanyFeatureMode,
+  normalizeCompanyInterfaceMode,
   normalizeCompanyFeatureModules,
   type CompanyBusinessProfile,
   type CompanyFeatureMode,
+  type CompanyInterfaceMode,
   type CompanyFeatureModuleId,
 } from "../config/companyFeatures";
 
@@ -29,6 +32,7 @@ export type CompanySettingsRow = {
   secondary_color: string;
   business_profile: CompanyBusinessProfile;
   feature_mode: CompanyFeatureMode;
+  mode_interface: CompanyInterfaceMode;
   enabled_modules: CompanyFeatureModuleId[];
   created_at: string;
   updated_at: string;
@@ -102,6 +106,7 @@ function withDefaults(orgId: string, row?: Partial<CompanySettingsRow>): Company
   const logoPath = (rowAny?.logo_path ?? rowAny?.logo_url ?? null) as string | null;
   const businessProfile = normalizeCompanyBusinessProfile(rowAny?.business_profile);
   const featureMode = normalizeCompanyFeatureMode(rowAny?.feature_mode);
+  const interfaceMode = normalizeCompanyInterfaceMode(rowAny?.mode_interface, businessProfile);
   const enabledModules = normalizeCompanyFeatureModules(rowAny?.enabled_modules, businessProfile);
 
   return {
@@ -119,6 +124,7 @@ function withDefaults(orgId: string, row?: Partial<CompanySettingsRow>): Company
     secondary_color: normalizeHexColor(row?.secondary_color, "#0f172a"),
     business_profile: businessProfile,
     feature_mode: featureMode,
+    mode_interface: interfaceMode,
     enabled_modules: enabledModules,
     created_at: String(row?.created_at ?? ""),
     updated_at: String(row?.updated_at ?? ""),
@@ -160,6 +166,7 @@ export async function upsertCompanySettings(
       | "secondary_color"
       | "business_profile"
       | "feature_mode"
+      | "mode_interface"
       | "enabled_modules"
     >
   >,
@@ -170,6 +177,10 @@ export async function upsertCompanySettings(
   const businessProfile =
     patch.business_profile ?? currentLocal.business_profile ?? "entreprise_renovation";
   const featureMode = patch.feature_mode ?? currentLocal.feature_mode ?? "simple";
+  const interfaceMode =
+    patch.mode_interface ??
+    currentLocal.mode_interface ??
+    getDefaultCompanyInterfaceMode(businessProfile);
   const enabledModules =
     patch.enabled_modules ??
     normalizeCompanyFeatureModules(currentLocal.enabled_modules, businessProfile);
@@ -202,6 +213,7 @@ export async function upsertCompanySettings(
     ),
     business_profile: normalizeCompanyBusinessProfile(businessProfile),
     feature_mode: normalizeCompanyFeatureMode(featureMode),
+    mode_interface: normalizeCompanyInterfaceMode(interfaceMode, businessProfile),
     enabled_modules: normalizeCompanyFeatureModules(enabledModules, businessProfile),
   };
 

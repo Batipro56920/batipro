@@ -55,6 +55,7 @@ type PreparationConsigneLink = { id: string; title: string | null; description: 
 
 type PreparationTreeTabProps = {
   chantierId: string;
+  view?: "full" | "preparation" | "localisation";
   tasksCount: number;
   documentsCount: number;
   intervenantsCount: number;
@@ -330,6 +331,7 @@ function ZoneTreeBranch({
 
 export default function PreparationTreeTab({
   chantierId,
+  view = "full",
   tasksCount,
   documentsCount,
   intervenantsCount,
@@ -667,6 +669,7 @@ export default function PreparationTreeTab({
   return (
     <div className="space-y-6">
       <div className="grid gap-4 xl:grid-cols-[minmax(380px,0.95fr)_minmax(460px,1.05fr)]">
+        {view !== "localisation" ? (
         <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
           <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
             <div>
@@ -787,6 +790,8 @@ export default function PreparationTreeTab({
             </div>
           </div>
         </section>
+        ) : null}
+        {view !== "preparation" ? (
         <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
             <div>
@@ -856,6 +861,7 @@ export default function PreparationTreeTab({
             </div>
           </div>
         </section>
+        ) : null}
       </div>
 
       {detailZone && detailSummary ? (
