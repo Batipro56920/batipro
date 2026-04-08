@@ -4530,8 +4530,8 @@ export default function ChantierPage() {
             title: "Contrôle",
             tabs: [
               { key: "reserves", label: t("intervenantAccess.tabs.reserves") },
-              { key: "visite", label: "Visite" },
               { key: "doe", label: "DOE" },
+              { key: "visite", label: "Visites" },
             ],
           },
           {
@@ -4539,18 +4539,15 @@ export default function ChantierPage() {
             tabs: [
               { key: "temps", label: t("chantierTabs.time") },
               { key: "budget", label: "Budget" },
-              { key: "pilotage", label: "Écarts" },
               { key: "rapports", label: "Rapports" },
             ],
           },
         ]
       : [
           {
-            title: "Organisation",
+            title: "Préparer",
             tabs: [
-              { key: "preparer", label: "Préparation de chantier" },
-              { key: "localisation", label: "Localisation" },
-              { key: "devis-taches", label: t("chantierPage.tasks") },
+              { key: "preparer", label: "Préparer" },
               { key: "intervenants", label: t("sidebar.intervenants") },
               { key: "achats", label: "Approvisionnement" },
               { key: "materiel", label: t("intervenantAccess.tabs.material") },
@@ -4558,29 +4555,30 @@ export default function ChantierPage() {
             ],
           },
           {
-            title: "Chantier",
+            title: "Exécuter",
             tabs: [
+              { key: "devis-taches", label: t("chantierPage.tasks") },
               { key: "planning", label: t("chantierTabs.planning") },
               { key: "photos", label: "Photos" },
               { key: "consignes", label: "Consignes" },
-              { key: "journal", label: "Journal" },
               { key: "messagerie", label: t("intervenantAccess.tabs.messaging") },
             ],
           },
           {
-            title: "Fin de chantier",
+            title: "Contrôler",
             tabs: [
               { key: "reserves", label: t("intervenantAccess.tabs.reserves") },
+              { key: "journal", label: "Journal" },
               { key: "doe", label: "DOE" },
               { key: "visite", label: "Visite" },
             ],
           },
           {
-            title: "Administratif",
+            title: "Piloter",
             tabs: [
               { key: "temps", label: t("chantierTabs.time") },
               { key: "budget", label: "Budget" },
-              { key: "pilotage", label: "Écarts" },
+              { key: "pilotage", label: "Pilotage" },
               { key: "rapports", label: "Rapports" },
             ],
           },

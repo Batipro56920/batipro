@@ -17,7 +17,6 @@ begin
     check (progress_percent is null or (progress_percent >= 0 and progress_percent <= 100));
 end $$;
 
-drop function if exists public.recompute_task_logged_hours(uuid);
 create or replace function public.recompute_task_logged_hours(p_task_id uuid)
 returns void
 language plpgsql

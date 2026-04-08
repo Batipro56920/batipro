@@ -94,6 +94,35 @@ function saveLocalSettings(orgId: string, data: Partial<CompanySettingsRow>) {
   }
 }
 
+function getSettingsTimestamp(value: Partial<CompanySettingsRow> | null | undefined): number {
+  const raw = String(value?.updated_at ?? value?.created_at ?? "").trim();
+  const parsed = Date.parse(raw);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function loadLatestLocalSettings(): Partial<CompanySettingsRow> | null {
+  try {
+    const latest = Object.keys(localStorage)
+      .filter((key) => key.startsWith(`${LOCAL_SETTINGS_KEY}:`))
+      .map((key) => {
+        const raw = localStorage.getItem(key);
+        if (!raw) return null;
+        const parsed = JSON.parse(raw) as Partial<CompanySettingsRow>;
+        return { key, value: parsed };
+      })
+      .filter((entry): entry is { key: string; value: Partial<CompanySettingsRow> } => Boolean(entry))
+      .sort((left, right) => {
+        const leftTs = Date.parse(String(left.value.updated_at ?? left.value.created_at ?? 0));
+        const rightTs = Date.parse(String(right.value.updated_at ?? right.value.created_at ?? 0));
+        return rightTs - leftTs;
+      })[0];
+
+    return latest?.value ?? null;
+  } catch {
+    return null;
+  }
+}
+
 async function getCurrentUserId(): Promise<string> {
   const { data, error } = await supabase.auth.getUser();
   if (error) throw new Error(error.message);
@@ -132,7 +161,16 @@ function withDefaults(orgId: string, row?: Partial<CompanySettingsRow>): Company
 }
 
 export async function getCompanySettings(): Promise<CompanySettingsRow> {
-  const userId = await getCurrentUserId();
+  let userId: string;
+  try {
+    userId = await getCurrentUserId();
+  } catch {
+    const cached = loadLatestLocalSettings();
+    if (cached) {
+      return withDefaults(String(cached.organization_id ?? ""), cached);
+    }
+    throw new Error("Impossible de charger les réglages société.");
+  }
   const localSettings = loadLocalSettings(userId);
   const { data, error } = await supabase
     .from(TABLE)
@@ -147,10 +185,21 @@ export async function getCompanySettings(): Promise<CompanySettingsRow> {
     if (localSettings) {
       return withDefaults(userId, localSettings);
     }
+    const latestCached = loadLatestLocalSettings();
+    if (latestCached) {
+      return withDefaults(String(latestCached.organization_id ?? userId), latestCached);
+    }
     throw new Error(error.message);
   }
 
+  if (!data && localSettings) {
+    return withDefaults(userId, localSettings);
+  }
+
   const normalized = withDefaults(userId, (data ?? undefined) as Partial<CompanySettingsRow> | undefined);
+  if (localSettings && getSettingsTimestamp(localSettings) > getSettingsTimestamp(normalized)) {
+    return withDefaults(userId, localSettings);
+  }
   saveLocalSettings(userId, normalized);
   return normalized;
 }
@@ -242,9 +291,14 @@ export async function upsertCompanySettings(
     throw new Error(error.message);
   }
 
-  const normalized = withDefaults(userId, data as Partial<CompanySettingsRow>);
-  saveLocalSettings(userId, normalized);
-  return normalized;
+  const localSnapshot = withDefaults(userId, {
+    ...(data as Partial<CompanySettingsRow>),
+    ...payload,
+    updated_at: nowIso,
+    created_at: (data as any)?.created_at ?? currentLocal.created_at ?? nowIso,
+  });
+  saveLocalSettings(userId, localSnapshot);
+  return localSnapshot;
 }
 
 function fileToDataUrl(file: Blob): Promise<string> {

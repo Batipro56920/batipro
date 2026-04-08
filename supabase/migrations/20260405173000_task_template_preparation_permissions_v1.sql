@@ -11,7 +11,6 @@ begin
   end if;
 end $$;
 
-drop function if exists public.batipro_has_feature_permission(text);
 create or replace function public.batipro_has_feature_permission(p_key text)
 returns boolean
 language sql
@@ -29,7 +28,6 @@ $$;
 revoke all on function public.batipro_has_feature_permission(text) from public;
 grant execute on function public.batipro_has_feature_permission(text) to authenticated;
 
-drop function if exists public.batipro_can_access_task_library_preparation();
 create or replace function public.batipro_can_access_task_library_preparation()
 returns boolean
 language sql

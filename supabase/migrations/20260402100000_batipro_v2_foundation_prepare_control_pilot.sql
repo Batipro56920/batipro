@@ -205,7 +205,6 @@ create policy chantier_activity_log_auth_select
   to authenticated
   using (true);
 
-drop function if exists public.chantier_activity_log_insert(uuid, text, text, uuid, text, jsonb, text);
 create or replace function public.chantier_activity_log_insert(
   p_chantier_id uuid,
   p_action_type text,

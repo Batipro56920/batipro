@@ -332,7 +332,7 @@ const COMPANY_INTERFACE_MODULE_LAYOUTS: Record<CompanyInterfaceMode, CompanyInte
     {
       id: "organisation",
       label: "Organisation",
-      moduleIds: ["preparation_chantier", "zones_localisation", "taches", "documents"],
+      moduleIds: ["zones_localisation", "taches", "documents"],
     },
     {
       id: "production",
@@ -346,34 +346,34 @@ const COMPANY_INTERFACE_MODULE_LAYOUTS: Record<CompanyInterfaceMode, CompanyInte
     },
     {
       id: "controle",
-      label: "Controle",
-      moduleIds: ["reserves", "validation_qualite", "doe"],
+      label: "Contrôle",
+      moduleIds: ["reserves", "doe", "validation_qualite"],
     },
     {
       id: "pilotage",
       label: "Pilotage",
-      moduleIds: ["temps", "budget", "ecarts", "rapports"],
+      moduleIds: ["temps", "budget", "rapports"],
     },
   ],
   terrain: [
     {
-      id: "organisation",
-      label: "Organisation",
-      moduleIds: ["preparation_chantier", "zones_localisation", "taches", "approvisionnement", "documents"],
+      id: "preparer",
+      label: "Préparer",
+      moduleIds: ["preparation_chantier", "approvisionnement", "documents"],
     },
     {
-      id: "chantier",
-      label: "Chantier",
-      moduleIds: ["planning", "photos", "consignes", "journal_chantier", "messagerie"],
+      id: "executer",
+      label: "Exécuter",
+      moduleIds: ["taches", "planning", "photos", "consignes", "messagerie"],
     },
     {
-      id: "fin_chantier",
-      label: "Fin de chantier",
-      moduleIds: ["reserves", "doe", "validation_qualite"],
+      id: "controler",
+      label: "Contrôler",
+      moduleIds: ["reserves", "journal_chantier", "doe", "validation_qualite"],
     },
     {
-      id: "administratif",
-      label: "Administratif",
+      id: "piloter",
+      label: "Piloter",
       moduleIds: ["temps", "budget", "ecarts", "rapports"],
     },
   ],

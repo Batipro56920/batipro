@@ -88,7 +88,6 @@ create index if not exists terrain_feedback_history_feedback_idx
 
 alter table public.terrain_feedback_history enable row level security;
 
-drop function if exists public._terrain_feedback_is_admin();
 create or replace function public._terrain_feedback_is_admin()
 returns boolean
 language sql
@@ -144,7 +143,6 @@ set
   file_size_limit = excluded.file_size_limit,
   allowed_mime_types = excluded.allowed_mime_types;
 
-drop function if exists public._terrain_feedback_normalize_category(text);
 create or replace function public._terrain_feedback_normalize_category(p_value text)
 returns text
 language sql
@@ -165,7 +163,6 @@ as $$
   end;
 $$;
 
-drop function if exists public._terrain_feedback_normalize_urgency(text);
 create or replace function public._terrain_feedback_normalize_urgency(p_value text)
 returns text
 language sql
@@ -185,7 +182,6 @@ as $$
   end;
 $$;
 
-drop function if exists public._terrain_feedback_normalize_status(text);
 create or replace function public._terrain_feedback_normalize_status(p_value text)
 returns text
 language sql
@@ -207,7 +203,6 @@ as $$
   end;
 $$;
 
-drop function if exists public._terrain_feedback_history_insert(uuid, uuid, text, text, jsonb);
 create or replace function public._terrain_feedback_history_insert(
   p_feedback_id uuid,
   p_changed_by uuid,
@@ -239,7 +234,6 @@ $$;
 
 revoke all on function public._terrain_feedback_history_insert(uuid, uuid, text, text, jsonb) from public;
 
-drop function if exists public.intervenant_terrain_feedback_create(text, jsonb);
 create or replace function public.intervenant_terrain_feedback_create(
   p_token text,
   p_payload jsonb
@@ -336,7 +330,6 @@ $$;
 revoke all on function public.intervenant_terrain_feedback_create(text, jsonb) from public;
 grant execute on function public.intervenant_terrain_feedback_create(text, jsonb) to anon, authenticated;
 
-drop function if exists public.intervenant_terrain_feedback_list(text, uuid);
 create or replace function public.intervenant_terrain_feedback_list(
   p_token text,
   p_chantier_id uuid default null
@@ -429,7 +422,6 @@ $$;
 revoke all on function public.intervenant_terrain_feedback_list(text, uuid) from public;
 grant execute on function public.intervenant_terrain_feedback_list(text, uuid) to anon, authenticated;
 
-drop function if exists public.admin_terrain_feedback_update(uuid, jsonb);
 create or replace function public.admin_terrain_feedback_update(
   p_id uuid,
   p_patch jsonb

@@ -36,7 +36,6 @@ where
   or libelle_devis_original is null
   or btrim(libelle_devis_original) = '';
 
-drop function if exists public._chantier_task_display_title(public.chantier_tasks);
 create or replace function public._chantier_task_display_title(p_task public.chantier_tasks)
 returns text
 language sql

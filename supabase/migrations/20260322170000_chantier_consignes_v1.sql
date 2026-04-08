@@ -60,7 +60,6 @@ begin
   end if;
 end $$;
 
-drop function if exists public._chantier_consigne_is_admin();
 create or replace function public._chantier_consigne_is_admin()
 returns boolean
 language sql
