@@ -251,7 +251,7 @@ export async function loadChantierReportDataset(params: {
       (request) => request.statut_commande !== "livre" && request.statut_commande !== "annule",
     ).length,
     avenants_valides_ht: reportChangeOrders
-      .filter((row) => row.statut === "valide" || row.statut === "integre")
+      .filter((row) => row.statut === "valide" || row.statut === "realise")
       .reduce((sum, row) => sum + row.impact_cout_ht, 0),
     marge_reelle_pct: budget.margeReellePct,
     budget_depassement_ht: budget.depassementBudgetHt,

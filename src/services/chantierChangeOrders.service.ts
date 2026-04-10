@@ -1,6 +1,12 @@
 import { supabase } from "../lib/supabaseClient";
 
-export type ChantierChangeOrderStatus = "a_valider" | "valide" | "refuse" | "integre";
+export type ChantierChangeOrderStatus =
+  | "a_analyser"
+  | "a_chiffrer"
+  | "en_attente_validation"
+  | "valide"
+  | "refuse"
+  | "realise";
 
 export type ChantierChangeOrderType =
   | "travaux_supplementaires"
@@ -14,6 +20,7 @@ export type ChantierChangeOrderRow = {
   chantier_id: string;
   task_id: string | null;
   zone_id: string | null;
+  devis_ligne_id: string | null;
   type_ecart: ChantierChangeOrderType;
   titre: string;
   description: string | null;
@@ -31,6 +38,7 @@ export type ChantierChangeOrderInput = {
   chantier_id: string;
   task_id?: string | null;
   zone_id?: string | null;
+  devis_ligne_id?: string | null;
   type_ecart?: ChantierChangeOrderType;
   titre: string;
   description?: string | null;
@@ -46,6 +54,7 @@ const CHANGE_ORDER_SELECT = [
   "chantier_id",
   "task_id",
   "zone_id",
+  "devis_ligne_id",
   "type_ecart",
   "titre",
   "description",
@@ -93,10 +102,12 @@ function normalizeChangeOrderType(value: unknown): ChantierChangeOrderType {
 
 function normalizeChangeOrderStatus(value: unknown): ChantierChangeOrderStatus {
   const raw = String(value ?? "").trim();
+  if (raw === "a_chiffrer") return "a_chiffrer";
+  if (raw === "en_attente_validation" || raw === "a_valider") return "en_attente_validation";
   if (raw === "valide") return "valide";
   if (raw === "refuse") return "refuse";
-  if (raw === "integre") return "integre";
-  return "a_valider";
+  if (raw === "realise" || raw === "integre") return "realise";
+  return "a_analyser";
 }
 
 function normalizeChangeOrderRow(row: any): ChantierChangeOrderRow {
@@ -105,6 +116,7 @@ function normalizeChangeOrderRow(row: any): ChantierChangeOrderRow {
     chantier_id: String(row?.chantier_id ?? ""),
     task_id: row?.task_id ?? null,
     zone_id: row?.zone_id ?? null,
+    devis_ligne_id: row?.devis_ligne_id ?? null,
     type_ecart: normalizeChangeOrderType(row?.type_ecart),
     titre: String(row?.titre ?? "Écart chantier").trim() || "Écart chantier",
     description: row?.description ?? null,
@@ -131,6 +143,7 @@ function cleanChangeOrderPayload(payload: ChantierChangeOrderInput | ChantierCha
     ...payload,
     task_id: payload.task_id || null,
     zone_id: payload.zone_id || null,
+    devis_ligne_id: payload.devis_ligne_id || null,
     type_ecart: payload.type_ecart ? normalizeChangeOrderType(payload.type_ecart) : undefined,
     titre,
     description,

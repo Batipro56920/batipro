@@ -316,6 +316,8 @@ function chantierActivityEntityLabel(entityType: string) {
   if (entityType === "task_step") return "Étape";
   if (entityType === "reserve") return "Réserve";
   if (entityType === "consigne") return "Consigne";
+  if (entityType === "preparation_note") return "Note préparation";
+  if (entityType === "change_order") return "Imprévu";
   if (entityType === "message") return "Message";
   if (entityType === "time_entry") return "Temps";
   if (entityType === "materiel") return "Matériel";
@@ -339,6 +341,8 @@ function chantierActivityActionLabel(actionType: string) {
 function chantierActivityTone(entityType: string) {
   if (entityType === "reserve") return "border-red-200 bg-red-50 text-red-700";
   if (entityType === "task" || entityType === "task_step") return "border-blue-200 bg-blue-50 text-blue-700";
+  if (entityType === "preparation_note") return "border-indigo-200 bg-indigo-50 text-indigo-700";
+  if (entityType === "change_order") return "border-amber-200 bg-amber-50 text-amber-700";
   if (entityType === "message") return "border-indigo-200 bg-indigo-50 text-indigo-700";
   if (entityType === "time_entry") return "border-emerald-200 bg-emerald-50 text-emerald-700";
   if (entityType === "consigne") return "border-amber-200 bg-amber-50 text-amber-700";
@@ -5516,10 +5520,7 @@ export default function ChantierPage() {
           <PreparationTreeTab
             chantierId={id}
             view={tab === "preparer" ? "preparation" : "localisation"}
-            tasksCount={tasks.length}
-            documentsCount={chantierDocuments.length || documents.length}
-            intervenantsCount={intervenants.length}
-            materielCount={materiel.length}
+            chantierTasks={tasks}
             tasks={tasks.map((task) => ({
               id: task.id,
               titre: task.titre,
@@ -7872,6 +7873,8 @@ export default function ChantierPage() {
 
         {/* autres onglets placeholders */}
         {tab !== "accueil" &&
+          tab !== "preparer" &&
+          tab !== "localisation" &&
           tab !== "devis-taches" &&
           tab !== "intervenants" &&
           tab !== "documents" &&

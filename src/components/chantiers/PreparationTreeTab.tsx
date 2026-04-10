@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import type { FormEvent, ReactNode } from "react";
+import type { ChantierTaskRow } from "../../services/chantierTasks.service";
 
 import {
   getChantierPreparationChecklist,
@@ -26,6 +27,8 @@ import {
   type ChantierZoneRow,
   type ChantierZoneTreeNode,
 } from "../../services/chantierZones.service";
+import PreparationNotesPanel from "./PreparationNotesPanel";
+import PreparationUnforeseenPanel from "./PreparationUnforeseenPanel";
 
 const PREPARATION_FIELDS = [
   { key: "plans_disponibles", label: "Plans disponibles" },
@@ -56,10 +59,7 @@ type PreparationConsigneLink = { id: string; title: string | null; description: 
 type PreparationTreeTabProps = {
   chantierId: string;
   view?: "full" | "preparation" | "localisation";
-  tasksCount: number;
-  documentsCount: number;
-  intervenantsCount: number;
-  materielCount: number;
+  chantierTasks: ChantierTaskRow[];
   tasks: PreparationTaskLink[];
   taskZoneIdsByTaskId: Record<string, string[]>;
   reserves: PreparationReserveLink[];
@@ -332,22 +332,21 @@ function ZoneTreeBranch({
 export default function PreparationTreeTab({
   chantierId,
   view = "full",
-  tasksCount,
-  documentsCount,
-  intervenantsCount,
-  materielCount,
+  chantierTasks,
   tasks,
   taskZoneIdsByTaskId,
   reserves,
   documents,
   consignes,
 }: PreparationTreeTabProps) {
+  const [workspaceTab, setWorkspaceTab] = useState<
+    "localisation" | "notes" | "imprevus"
+  >("localisation");
   const [checklist, setChecklist] = useState<ChantierPreparationChecklistRow | null>(null);
   const [checklistSchemaReady, setChecklistSchemaReady] = useState(true);
   const [checklistLoading, setChecklistLoading] = useState(true);
   const [checklistSaving, setChecklistSaving] = useState(false);
   const [checklistError, setChecklistError] = useState<string | null>(null);
-  const [checklistComment, setChecklistComment] = useState("");
 
   const [zones, setZones] = useState<ChantierZoneRow[]>([]);
   const [zonesSchemaReady, setZonesSchemaReady] = useState(true);
@@ -378,7 +377,6 @@ export default function PreparationTreeTab({
     try {
       const result = await getChantierPreparationChecklist(chantierId);
       setChecklist(result.checklist);
-      setChecklistComment(result.checklist.commentaire ?? "");
       setChecklistSchemaReady(result.schemaReady);
     } catch (error: any) {
       setChecklistError(error?.message ?? "Erreur chargement preparation.");
@@ -450,28 +448,11 @@ export default function PreparationTreeTab({
     try {
       const saved = await upsertChantierPreparationChecklist(chantierId, {
         [field]: value,
-        commentaire: checklistComment,
       });
       setChecklist(saved);
-      setChecklistComment(saved.commentaire ?? "");
     } catch (error: any) {
       setChecklist(previous);
       setChecklistError(error?.message ?? "Erreur mise a jour checklist.");
-    } finally {
-      setChecklistSaving(false);
-    }
-  }
-
-  async function saveChecklistComment() {
-    if (!checklist) return;
-    setChecklistSaving(true);
-    setChecklistError(null);
-    try {
-      const saved = await upsertChantierPreparationChecklist(chantierId, { commentaire: checklistComment });
-      setChecklist(saved);
-      setChecklistComment(saved.commentaire ?? "");
-    } catch (error: any) {
-      setChecklistError(error?.message ?? "Erreur enregistrement commentaire.");
     } finally {
       setChecklistSaving(false);
     }
@@ -666,6 +647,21 @@ export default function PreparationTreeTab({
     };
   }, [consignes, detailZone, documents, reserves, taskZoneIdsByTaskId, tasks, zonePathById, zonePhotos, zones]);
 
+  useEffect(() => {
+    if (view === "localisation" && workspaceTab !== "localisation") {
+      setWorkspaceTab("localisation");
+    }
+  }, [view, workspaceTab]);
+
+  const workspaceTabs =
+    view === "localisation"
+      ? [{ id: "localisation" as const, label: "Arborescence chantier" }]
+      : [
+          { id: "localisation" as const, label: "Arborescence chantier" },
+          { id: "notes" as const, label: "Notes" },
+          { id: "imprevus" as const, label: "Imprévus" },
+        ];
+
   return (
     <div className="space-y-6">
       <div className="grid gap-4 xl:grid-cols-[minmax(380px,0.95fr)_minmax(460px,1.05fr)]">
@@ -742,126 +738,122 @@ export default function PreparationTreeTab({
               ))
             )}
           </div>
-
-          <div className="mt-5 space-y-3">
-            <label className="block text-xs font-medium uppercase tracking-[0.18em] text-slate-400">
-              Commentaire preparation
-            </label>
-            <textarea
-              value={checklistComment}
-              onChange={(event) => setChecklistComment(event.target.value)}
-              disabled={checklistSaving || !checklistSchemaReady}
-              className="min-h-[110px] w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-800 outline-none focus:border-blue-400 focus:bg-white"
-              placeholder="Noter les points bloquants, validations ou manques a traiter."
-            />
-            <div className="flex justify-end">
+        </section>
+        ) : null}
+        <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+          <div className="flex flex-wrap gap-2">
+            {workspaceTabs.map((tab) => (
               <button
+                key={tab.id}
                 type="button"
-                onClick={() => void saveChecklistComment()}
-                disabled={checklistSaving || !checklistSchemaReady}
+                onClick={() => setWorkspaceTab(tab.id)}
                 className={[
-                  "rounded-2xl px-4 py-2 text-sm font-medium",
-                  checklistSaving || !checklistSchemaReady
-                    ? "bg-slate-200 text-slate-500"
-                    : "bg-slate-900 text-white hover:bg-slate-800",
+                  "rounded-full border px-4 py-2 text-sm font-medium transition",
+                  workspaceTab === tab.id
+                    ? "border-slate-900 bg-slate-900 text-white"
+                    : "border-slate-200 bg-slate-50 text-slate-700 hover:bg-slate-100",
                 ].join(" ")}
               >
-                {checklistSaving ? "Enregistrement..." : "Enregistrer le commentaire"}
+                {tab.label}
               </button>
-            </div>
+            ))}
           </div>
 
-          <div className="mt-6 grid gap-3 sm:grid-cols-2">
-            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-              <div className="text-xs uppercase tracking-[0.18em] text-slate-400">Taches</div>
-              <div className="mt-2 text-2xl font-semibold text-slate-950">{tasksCount}</div>
-            </div>
-            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-              <div className="text-xs uppercase tracking-[0.18em] text-slate-400">Intervenants</div>
-              <div className="mt-2 text-2xl font-semibold text-slate-950">{intervenantsCount}</div>
-            </div>
-            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-              <div className="text-xs uppercase tracking-[0.18em] text-slate-400">Documents</div>
-              <div className="mt-2 text-2xl font-semibold text-slate-950">{documentsCount}</div>
-            </div>
-            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-              <div className="text-xs uppercase tracking-[0.18em] text-slate-400">Demandes materiel</div>
-              <div className="mt-2 text-2xl font-semibold text-slate-950">{materielCount}</div>
-            </div>
-          </div>
-        </section>
-        ) : null}
-        {view !== "preparation" ? (
-        <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-          <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-            <div>
-              <div className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-400">Localisation</div>
-              <h2 className="mt-1 text-xl font-semibold text-slate-950">Arborescence chantier</h2>
-              <p className="mt-2 max-w-xl text-sm text-slate-500">
-                La structure du chantier devient le socle pour rattacher ensuite les taches, photos, reserves,
-                documents et remarques.
-              </p>
-            </div>
-            <button
-              type="button"
-              onClick={openCreateRoot}
-              disabled={zonesSaving || !zonesSchemaReady}
-              className="rounded-xl border border-blue-200 bg-white px-3 py-2 text-sm font-medium text-blue-700 hover:bg-blue-50 disabled:opacity-60"
-            >
-              + Ajouter un batiment
-            </button>
-          </div>
+          {workspaceTab === "localisation" ? (
+            <>
+              <div className="mt-5 flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                <div>
+                  <div className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-400">
+                    Localisation
+                  </div>
+                  <h2 className="mt-1 text-xl font-semibold text-slate-950">
+                    Arborescence chantier
+                  </h2>
+                  <p className="mt-2 max-w-xl text-sm text-slate-500">
+                    La structure du chantier reste le socle pour rattacher les tâches,
+                    photos, réserves, documents et remarques.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={openCreateRoot}
+                  disabled={zonesSaving || !zonesSchemaReady}
+                  className="rounded-xl border border-blue-200 bg-white px-3 py-2 text-sm font-medium text-blue-700 hover:bg-blue-50 disabled:opacity-60"
+                >
+                  + Ajouter un bâtiment
+                </button>
+              </div>
 
-          {!zonesSchemaReady ? (
-            <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-              Migration localisations non appliquee sur Supabase.
+              {!zonesSchemaReady ? (
+                <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+                  Migration localisations non appliquée sur Supabase.
+                </div>
+              ) : null}
+
+              {zonesError ? (
+                <div className="mt-4 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                  {zonesError}
+                </div>
+              ) : null}
+
+              <div className="mt-5 rounded-3xl border border-slate-200 bg-slate-50/80 p-4">
+                <div className="text-sm font-semibold text-slate-900">
+                  Structure visible du chantier
+                </div>
+
+                {zoneEditorState?.mode === "create" && zoneEditorState.parentId === null ? (
+                  <div className="mt-4">{renderInlineEditor()}</div>
+                ) : null}
+
+                <div className="mt-4 space-y-2">
+                  {zonesLoading ? (
+                    <div className="rounded-2xl border border-slate-200 bg-white px-4 py-6 text-sm text-slate-500">
+                      Chargement de l'arborescence...
+                    </div>
+                  ) : zoneTree.length === 0 ? (
+                    <div className="rounded-2xl border border-dashed border-slate-200 bg-white px-4 py-8 text-center text-sm text-slate-500">
+                      Aucune localisation encore créée. Ajoute d'abord un bâtiment,
+                      puis ses niveaux et ses pièces.
+                    </div>
+                  ) : (
+                    zoneTree.map((node) => (
+                      <ZoneTreeBranch
+                        key={node.id}
+                        node={node}
+                        expandedZoneIds={expandedZoneIds}
+                        selectedZoneId={zoneDetailOpenId}
+                        editorState={zoneEditorState}
+                        zonesSaving={zonesSaving}
+                        onToggle={toggleZoneExpanded}
+                        onOpenDetail={setZoneDetailOpenId}
+                        onCreateChild={openCreateZone}
+                        onEdit={openEditZone}
+                        onDelete={removeZone}
+                        renderInlineEditor={renderInlineEditor}
+                      />
+                    ))
+                  )}
+                </div>
+              </div>
+            </>
+          ) : null}
+
+          {workspaceTab === "notes" ? (
+            <div className="mt-5">
+              <PreparationNotesPanel chantierId={chantierId} />
             </div>
           ) : null}
 
-          {zonesError ? (
-            <div className="mt-4 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-              {zonesError}
+          {workspaceTab === "imprevus" ? (
+            <div className="mt-5">
+              <PreparationUnforeseenPanel
+                chantierId={chantierId}
+                tasks={chantierTasks}
+                zones={zones}
+              />
             </div>
           ) : null}
-
-          <div className="mt-5 rounded-3xl border border-slate-200 bg-slate-50/80 p-4">
-            <div className="text-sm font-semibold text-slate-900">Structure visible du chantier</div>
-
-            {zoneEditorState?.mode === "create" && zoneEditorState.parentId === null ? (
-              <div className="mt-4">{renderInlineEditor()}</div>
-            ) : null}
-
-            <div className="mt-4 space-y-2">
-              {zonesLoading ? (
-                <div className="rounded-2xl border border-slate-200 bg-white px-4 py-6 text-sm text-slate-500">
-                  Chargement de l'arborescence...
-                </div>
-              ) : zoneTree.length === 0 ? (
-                <div className="rounded-2xl border border-dashed border-slate-200 bg-white px-4 py-8 text-center text-sm text-slate-500">
-                  Aucune localisation encore creee. Ajoute d'abord un batiment, puis ses niveaux et ses pieces.
-                </div>
-              ) : (
-                zoneTree.map((node) => (
-                  <ZoneTreeBranch
-                    key={node.id}
-                    node={node}
-                    expandedZoneIds={expandedZoneIds}
-                    selectedZoneId={zoneDetailOpenId}
-                    editorState={zoneEditorState}
-                    zonesSaving={zonesSaving}
-                    onToggle={toggleZoneExpanded}
-                    onOpenDetail={setZoneDetailOpenId}
-                    onCreateChild={openCreateZone}
-                    onEdit={openEditZone}
-                    onDelete={removeZone}
-                    renderInlineEditor={renderInlineEditor}
-                  />
-                ))
-              )}
-            </div>
-          </div>
         </section>
-        ) : null}
       </div>
 
       {detailZone && detailSummary ? (

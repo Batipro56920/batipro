@@ -286,7 +286,7 @@ export async function generateChantierReportPdfBlob(input: {
       y,
       "Avenants valides",
       dataset.changeOrders
-        .filter((changeOrder) => changeOrder.statut === "valide" || changeOrder.statut === "integre")
+        .filter((changeOrder) => changeOrder.statut === "valide" || changeOrder.statut === "realise")
         .slice(0, 30)
         .map((changeOrder) => formatChangeOrder(changeOrder, false)),
       "Aucun avenant valide sur la periode.",

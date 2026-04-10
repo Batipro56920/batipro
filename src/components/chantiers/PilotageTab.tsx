@@ -29,10 +29,12 @@ const CHANGE_ORDER_TYPES: Array<{ value: ChantierChangeOrderType; label: string 
 ];
 
 const STATUS_OPTIONS: Array<{ value: ChantierChangeOrderStatus; label: string }> = [
-  { value: "a_valider", label: "Ã€ valider" },
-  { value: "valide", label: "ValidÃ©" },
-  { value: "refuse", label: "RefusÃ©" },
-  { value: "integre", label: "IntÃ©grÃ©" },
+  { value: "a_analyser", label: "À analyser" },
+  { value: "a_chiffrer", label: "À chiffrer" },
+  { value: "en_attente_validation", label: "En attente validation" },
+  { value: "valide", label: "Validé" },
+  { value: "refuse", label: "Refusé" },
+  { value: "realise", label: "Réalisé" },
 ];
 
 function taskQualityLabel(status: string | null | undefined) {
@@ -44,8 +46,9 @@ function taskQualityLabel(status: string | null | undefined) {
 }
 
 function statusBadgeClass(status: ChantierChangeOrderStatus) {
-  if (status === "valide" || status === "integre") return "border-emerald-200 bg-emerald-50 text-emerald-700";
+  if (status === "valide" || status === "realise") return "border-emerald-200 bg-emerald-50 text-emerald-700";
   if (status === "refuse") return "border-red-200 bg-red-50 text-red-700";
+  if (status === "a_chiffrer") return "border-blue-200 bg-blue-50 text-blue-700";
   return "border-amber-200 bg-amber-50 text-amber-700";
 }
 
@@ -77,7 +80,7 @@ export default function PilotageTab({ chantierId, tasks, zones, heuresPrevuesCha
   const [description, setDescription] = useState("");
   const [impactTemps, setImpactTemps] = useState("");
   const [impactCout, setImpactCout] = useState("");
-  const [statut, setStatut] = useState<ChantierChangeOrderStatus>("a_valider");
+  const [statut, setStatut] = useState<ChantierChangeOrderStatus>("a_analyser");
 
   const taskById = useMemo(() => new Map(tasks.map((task) => [task.id, task])), [tasks]);
   const zonePathById = useMemo(() => buildChantierZonePathMap(zones), [zones]);
@@ -109,7 +112,7 @@ export default function PilotageTab({ chantierId, tasks, zones, heuresPrevuesCha
     [tasks],
   );
   const ecartsValides = useMemo(
-    () => changeOrders.filter((row) => row.statut === "valide" || row.statut === "integre"),
+    () => changeOrders.filter((row) => row.statut === "valide" || row.statut === "realise"),
     [changeOrders],
   );
   const impactTempsValide = useMemo(
@@ -177,7 +180,7 @@ export default function PilotageTab({ chantierId, tasks, zones, heuresPrevuesCha
     setDescription("");
     setImpactTemps("");
     setImpactCout("");
-    setStatut("a_valider");
+    setStatut("a_analyser");
   }
 
   async function recordChangeOrderActivity(actionType: string, row: ChantierChangeOrderRow, reason: string) {
@@ -437,7 +440,7 @@ export default function PilotageTab({ chantierId, tasks, zones, heuresPrevuesCha
 
                     <div className="mt-4 flex flex-wrap gap-2">
                       <button type="button" onClick={() => void changeStatus(row, "valide")} className="rounded-xl bg-emerald-600 px-3 py-2 text-xs font-medium text-white hover:bg-emerald-700" disabled={deletingId === row.id}>Valider</button>
-                      <button type="button" onClick={() => void changeStatus(row, "integre")} className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-medium text-emerald-700 hover:bg-emerald-100" disabled={deletingId === row.id}>IntÃ©grer</button>
+                      <button type="button" onClick={() => void changeStatus(row, "realise")} className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-medium text-emerald-700 hover:bg-emerald-100" disabled={deletingId === row.id}>Réalisé</button>
                       <button type="button" onClick={() => void changeStatus(row, "refuse")} className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs font-medium text-red-700 hover:bg-red-100" disabled={deletingId === row.id}>Refuser</button>
                       <button type="button" onClick={() => void removeChangeOrder(row)} className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50" disabled={deletingId === row.id}>{deletingId === row.id ? "Suppression..." : "Supprimer"}</button>
                     </div>
