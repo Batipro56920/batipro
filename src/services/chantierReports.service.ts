@@ -54,9 +54,11 @@ export type ChantierReportPurchaseItem = {
 export type ChantierReportChangeOrderItem = {
   id: string;
   titre: string;
+  type_ecart: string;
   statut: string;
   impact_temps_h: number;
   impact_cout_ht: number;
+  total_ht: number;
   created_at: string | null;
 };
 
@@ -233,9 +235,11 @@ export async function loadChantierReportDataset(params: {
   const reportChangeOrders: ChantierReportChangeOrderItem[] = filteredChangeOrders.map((row) => ({
     id: row.id,
     titre: row.titre,
+    type_ecart: row.type_ecart,
     statut: row.statut,
     impact_temps_h: normalizeNumber(row.impact_temps_h),
     impact_cout_ht: normalizeNumber(row.impact_cout_ht),
+    total_ht: normalizeNumber((row as any).total_ht),
     created_at: row.created_at,
   }));
 
@@ -251,8 +255,12 @@ export async function loadChantierReportDataset(params: {
       (request) => request.statut_commande !== "livre" && request.statut_commande !== "annule",
     ).length,
     avenants_valides_ht: reportChangeOrders
-      .filter((row) => row.statut === "valide" || row.statut === "realise")
-      .reduce((sum, row) => sum + row.impact_cout_ht, 0),
+      .filter(
+        (row) =>
+          row.type_ecart === "travaux_supplementaires" &&
+          ["valide_client", "en_cours", "termine", "facture"].includes(row.statut),
+      )
+      .reduce((sum, row) => sum + Number(row.total_ht ?? row.impact_cout_ht ?? 0), 0),
     marge_reelle_pct: budget.margeReellePct,
     budget_depassement_ht: budget.depassementBudgetHt,
   };

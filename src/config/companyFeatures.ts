@@ -27,6 +27,7 @@ export type CompanyFeatureModuleId =
   | "photos"
   | "consignes"
   | "messagerie"
+  | "notes_chantier"
   | "reserves"
   | "validation_qualite"
   | "journal_chantier"
@@ -129,16 +130,16 @@ export const COMPANY_FEATURE_MODULES: CompanyFeatureModule[] = [
   {
     id: "preparation_chantier",
     pillar: "organisation",
-    label: "Organisation chantier",
-    description: "Arborescence chantier, checklist de cadrage et base de préparation.",
+    label: "Préparer",
+    description: "Checklist de cadrage avant démarrage et validation des prérequis chantier.",
     simpleMode: true,
     roles: ["ADMIN"],
   },
   {
     id: "zones_localisation",
     pillar: "organisation",
-    label: "Localisation",
-    description: "Structure du chantier par pièces, niveaux et zones d’intervention.",
+    label: "Arborescence chantier",
+    description: "Structure du chantier par bâtiments, niveaux, pièces et zones d’intervention.",
     simpleMode: false,
     roles: ["ADMIN", "INTERVENANT"],
   },
@@ -199,6 +200,14 @@ export const COMPANY_FEATURE_MODULES: CompanyFeatureModule[] = [
     roles: ["ADMIN", "INTERVENANT"],
   },
   {
+    id: "notes_chantier",
+    pillar: "production",
+    label: "Notes",
+    description: "Notes terrain liées aux tâches, zones, documents et imprévus.",
+    simpleMode: true,
+    roles: ["ADMIN", "INTERVENANT"],
+  },
+  {
     id: "reserves",
     pillar: "controle",
     label: "Réserves",
@@ -249,8 +258,8 @@ export const COMPANY_FEATURE_MODULES: CompanyFeatureModule[] = [
   {
     id: "ecarts",
     pillar: "pilotage",
-    label: "Écarts",
-    description: "Avenants, changements, imprévus et impacts temps / coûts.",
+    label: "Imprévus / Travaux supplémentaires",
+    description: "Pertes chantier internes, TS client, avenants devis et impacts budgétaires.",
     simpleMode: false,
     roles: ["ADMIN"],
   },
@@ -275,6 +284,7 @@ const PROFILE_PRESETS: Record<CompanyBusinessProfile, CompanyFeatureModuleId[]> 
     "photos",
     "consignes",
     "messagerie",
+    "notes_chantier",
     "reserves",
     "validation_qualite",
     "journal_chantier",
@@ -292,6 +302,7 @@ const PROFILE_PRESETS: Record<CompanyBusinessProfile, CompanyFeatureModuleId[]> 
     "photos",
     "consignes",
     "messagerie",
+    "notes_chantier",
     "reserves",
     "validation_qualite",
     "journal_chantier",
@@ -308,6 +319,7 @@ const PROFILE_PRESETS: Record<CompanyBusinessProfile, CompanyFeatureModuleId[]> 
     "photos",
     "consignes",
     "messagerie",
+    "notes_chantier",
     "reserves",
     "validation_qualite",
     "temps",
@@ -337,7 +349,7 @@ const COMPANY_INTERFACE_MODULE_LAYOUTS: Record<CompanyInterfaceMode, CompanyInte
     {
       id: "production",
       label: "Production",
-      moduleIds: ["planning", "photos", "consignes", "journal_chantier", "messagerie"],
+      moduleIds: ["planning", "photos", "consignes", "journal_chantier", "messagerie", "notes_chantier"],
     },
     {
       id: "ressources",
@@ -352,19 +364,24 @@ const COMPANY_INTERFACE_MODULE_LAYOUTS: Record<CompanyInterfaceMode, CompanyInte
     {
       id: "pilotage",
       label: "Pilotage",
-      moduleIds: ["temps", "budget", "rapports"],
+      moduleIds: ["temps", "budget", "rapports", "ecarts"],
     },
   ],
   terrain: [
     {
       id: "preparer",
       label: "Préparer",
-      moduleIds: ["preparation_chantier", "approvisionnement", "documents"],
+      moduleIds: [
+        "preparation_chantier",
+        "approvisionnement",
+        "documents",
+        "zones_localisation",
+      ],
     },
     {
       id: "executer",
       label: "Exécuter",
-      moduleIds: ["taches", "planning", "photos", "consignes", "messagerie"],
+      moduleIds: ["taches", "planning", "photos", "consignes", "messagerie", "notes_chantier"],
     },
     {
       id: "controler",
@@ -374,7 +391,7 @@ const COMPANY_INTERFACE_MODULE_LAYOUTS: Record<CompanyInterfaceMode, CompanyInte
     {
       id: "piloter",
       label: "Piloter",
-      moduleIds: ["temps", "budget", "ecarts", "rapports"],
+      moduleIds: ["temps", "budget", "rapports", "ecarts"],
     },
   ],
 };
@@ -389,6 +406,7 @@ export const CHANTIER_TAB_FEATURES: Partial<Record<string, CompanyFeatureModuleI
   temps: "temps",
   budget: "budget",
   pilotage: "ecarts",
+  notes: "notes_chantier",
   reserves: "reserves",
   achats: "approvisionnement",
   materiel: "approvisionnement",

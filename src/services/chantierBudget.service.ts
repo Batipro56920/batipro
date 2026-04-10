@@ -247,8 +247,12 @@ export async function loadChantierBudgetDashboard(chantierId: string): Promise<C
   );
 
   const avenantsValidesHt = changeOrdersResult.changeOrders
-    .filter((row) => row.statut === "valide" || row.statut === "realise")
-    .reduce((sum, row) => sum + normalizeNumber(row.impact_cout_ht), 0);
+    .filter(
+      (row) =>
+        row.type_ecart === "travaux_supplementaires" &&
+        ["valide_client", "en_cours", "termine", "facture"].includes(row.statut),
+    )
+    .reduce((sum, row) => sum + normalizeNumber((row as any).total_ht ?? row.impact_cout_ht), 0);
   const chiffreAffairesPrevuHt = chiffreAffairesBaseHt + avenantsValidesHt;
   const coutMoPrevuHt = lots.reduce((sum, row) => sum + row.cout_mo_prevu_ht, 0);
   const coutMoReelHt = lots.reduce((sum, row) => sum + row.cout_mo_reel_ht, 0);

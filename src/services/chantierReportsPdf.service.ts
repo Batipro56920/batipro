@@ -268,7 +268,7 @@ export async function generateChantierReportPdfBlob(input: {
     y = drawBullets(
       pdf,
       y,
-      "Avenants / ecarts",
+      "Imprevus / travaux supplementaires",
       dataset.changeOrders.slice(0, 40).map((changeOrder) => formatChangeOrder(changeOrder, true)),
       "Aucun avenant ou ecart sur la periode.",
     );
@@ -286,7 +286,11 @@ export async function generateChantierReportPdfBlob(input: {
       y,
       "Avenants valides",
       dataset.changeOrders
-        .filter((changeOrder) => changeOrder.statut === "valide" || changeOrder.statut === "realise")
+        .filter(
+          (changeOrder) =>
+            changeOrder.type_ecart === "travaux_supplementaires" &&
+            ["valide_client", "en_cours", "termine", "facture"].includes(changeOrder.statut),
+        )
         .slice(0, 30)
         .map((changeOrder) => formatChangeOrder(changeOrder, false)),
       "Aucun avenant valide sur la periode.",

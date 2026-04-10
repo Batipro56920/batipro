@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
 import type { FormEvent, ReactNode } from "react";
-import type { ChantierTaskRow } from "../../services/chantierTasks.service";
 
 import {
   getChantierPreparationChecklist,
@@ -27,8 +26,6 @@ import {
   type ChantierZoneRow,
   type ChantierZoneTreeNode,
 } from "../../services/chantierZones.service";
-import PreparationNotesPanel from "./PreparationNotesPanel";
-import PreparationUnforeseenPanel from "./PreparationUnforeseenPanel";
 
 const PREPARATION_FIELDS = [
   { key: "plans_disponibles", label: "Plans disponibles" },
@@ -59,7 +56,6 @@ type PreparationConsigneLink = { id: string; title: string | null; description: 
 type PreparationTreeTabProps = {
   chantierId: string;
   view?: "full" | "preparation" | "localisation";
-  chantierTasks: ChantierTaskRow[];
   tasks: PreparationTaskLink[];
   taskZoneIdsByTaskId: Record<string, string[]>;
   reserves: PreparationReserveLink[];
@@ -332,16 +328,13 @@ function ZoneTreeBranch({
 export default function PreparationTreeTab({
   chantierId,
   view = "full",
-  chantierTasks,
   tasks,
   taskZoneIdsByTaskId,
   reserves,
   documents,
   consignes,
 }: PreparationTreeTabProps) {
-  const [workspaceTab, setWorkspaceTab] = useState<
-    "localisation" | "notes" | "imprevus"
-  >("localisation");
+  const [workspaceTab] = useState<"localisation">("localisation");
   const [checklist, setChecklist] = useState<ChantierPreparationChecklistRow | null>(null);
   const [checklistSchemaReady, setChecklistSchemaReady] = useState(true);
   const [checklistLoading, setChecklistLoading] = useState(true);
@@ -647,20 +640,6 @@ export default function PreparationTreeTab({
     };
   }, [consignes, detailZone, documents, reserves, taskZoneIdsByTaskId, tasks, zonePathById, zonePhotos, zones]);
 
-  useEffect(() => {
-    if (view === "localisation" && workspaceTab !== "localisation") {
-      setWorkspaceTab("localisation");
-    }
-  }, [view, workspaceTab]);
-
-  const workspaceTabs =
-    view === "localisation"
-      ? [{ id: "localisation" as const, label: "Arborescence chantier" }]
-      : [
-          { id: "localisation" as const, label: "Arborescence chantier" },
-          { id: "notes" as const, label: "Notes" },
-          { id: "imprevus" as const, label: "Imprévus" },
-        ];
 
   return (
     <div className="space-y-6">
@@ -741,23 +720,7 @@ export default function PreparationTreeTab({
         </section>
         ) : null}
         <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-          <div className="flex flex-wrap gap-2">
-            {workspaceTabs.map((tab) => (
-              <button
-                key={tab.id}
-                type="button"
-                onClick={() => setWorkspaceTab(tab.id)}
-                className={[
-                  "rounded-full border px-4 py-2 text-sm font-medium transition",
-                  workspaceTab === tab.id
-                    ? "border-slate-900 bg-slate-900 text-white"
-                    : "border-slate-200 bg-slate-50 text-slate-700 hover:bg-slate-100",
-                ].join(" ")}
-              >
-                {tab.label}
-              </button>
-            ))}
-          </div>
+          <div className="text-sm font-semibold text-slate-900">Arborescence chantier</div>
 
           {workspaceTab === "localisation" ? (
             <>
@@ -836,22 +799,6 @@ export default function PreparationTreeTab({
                 </div>
               </div>
             </>
-          ) : null}
-
-          {workspaceTab === "notes" ? (
-            <div className="mt-5">
-              <PreparationNotesPanel chantierId={chantierId} />
-            </div>
-          ) : null}
-
-          {workspaceTab === "imprevus" ? (
-            <div className="mt-5">
-              <PreparationUnforeseenPanel
-                chantierId={chantierId}
-                tasks={chantierTasks}
-                zones={zones}
-              />
-            </div>
           ) : null}
         </section>
       </div>
@@ -980,3 +927,5 @@ export default function PreparationTreeTab({
     </div>
   );
 }
+
+

@@ -117,6 +117,8 @@ import ChantierPhotosTab from "../components/chantiers/ChantierPhotosTab";
 import BudgetTab from "../components/chantiers/BudgetTab";
 import MessagerieTab from "../components/chantiers/MessagerieTab";
 import PilotageTab from "../components/chantiers/PilotageTab";
+import PreparationChecklistTab from "../components/chantiers/PreparationChecklistTab";
+import PreparationNotesPanel from "../components/chantiers/PreparationNotesPanel";
 import PreparationTreeTab from "../components/chantiers/PreparationTreeTab";
 import RapportsTab from "../components/chantiers/RapportsTab";
 import ReservePlanViewer from "../components/chantiers/ReservePlanViewer";
@@ -195,6 +197,7 @@ type TabKey =
   | "achats"
   | "materiel"
   | "consignes"
+  | "notes"
   | "journal"
   | "messagerie"
   | "rapports"
@@ -4519,8 +4522,9 @@ export default function ChantierPage() {
               { key: "planning", label: t("chantierTabs.planning") },
               { key: "photos", label: "Photos" },
               { key: "consignes", label: "Consignes" },
-              { key: "journal", label: "Journal" },
               { key: "messagerie", label: t("intervenantAccess.tabs.messaging") },
+              { key: "notes", label: "Notes" },
+              { key: "journal", label: "Journal" },
             ],
           },
           {
@@ -4544,6 +4548,7 @@ export default function ChantierPage() {
               { key: "temps", label: t("chantierTabs.time") },
               { key: "budget", label: "Budget" },
               { key: "rapports", label: "Rapports" },
+              { key: "pilotage", label: "Imprévus / Travaux supplémentaires" },
             ],
           },
         ]
@@ -4556,6 +4561,7 @@ export default function ChantierPage() {
               { key: "achats", label: "Approvisionnement" },
               { key: "materiel", label: t("intervenantAccess.tabs.material") },
               { key: "documents", label: t("intervenantAccess.tabs.documents") },
+              { key: "localisation", label: "Arborescence chantier" },
             ],
           },
           {
@@ -4566,6 +4572,7 @@ export default function ChantierPage() {
               { key: "photos", label: "Photos" },
               { key: "consignes", label: "Consignes" },
               { key: "messagerie", label: t("intervenantAccess.tabs.messaging") },
+              { key: "notes", label: "Notes" },
             ],
           },
           {
@@ -4582,8 +4589,8 @@ export default function ChantierPage() {
             tabs: [
               { key: "temps", label: t("chantierTabs.time") },
               { key: "budget", label: "Budget" },
-              { key: "pilotage", label: "Pilotage" },
               { key: "rapports", label: "Rapports" },
+              { key: "pilotage", label: "Imprévus / Travaux supplémentaires" },
             ],
           },
         ];
@@ -5516,11 +5523,11 @@ export default function ChantierPage() {
           </button>
         ) : null}
         {tab === "accueil" && accueilPanel}
-        {(tab === "preparer" || tab === "localisation") && id && (
+        {tab === "preparer" && id && <PreparationChecklistTab chantierId={id} />}
+        {tab === "localisation" && id && (
           <PreparationTreeTab
             chantierId={id}
-            view={tab === "preparer" ? "preparation" : "localisation"}
-            chantierTasks={tasks}
+            view="localisation"
             tasks={tasks.map((task) => ({
               id: task.id,
               titre: task.titre,
@@ -5548,6 +5555,14 @@ export default function ChantierPage() {
             }))}
           />
         )}
+        {tab === "notes" && id && (
+          <PreparationNotesPanel
+            chantierId={id}
+            tasks={tasks}
+            zones={zones}
+            documents={documents}
+          />
+        )}
         {tab === "achats" && id && (
           <ApprovisionnementTab chantierId={id} tasks={tasks} zones={zones} />
         )}
@@ -5556,7 +5571,6 @@ export default function ChantierPage() {
             chantierId={id}
             tasks={tasks}
             zones={zones}
-            heuresPrevuesChantier={tempsPrevues}
           />
         )}
         {tab === "budget" && id && <BudgetTab chantierId={id} />}
@@ -7885,6 +7899,7 @@ export default function ChantierPage() {
           tab !== "pilotage" &&
           tab !== "materiel" &&
           tab !== "consignes" &&
+          tab !== "notes" &&
           tab !== "planning" &&
           tab !== "journal" &&
           tab !== "messagerie" &&
