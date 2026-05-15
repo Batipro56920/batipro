@@ -85,6 +85,46 @@ export default function App() {
           }
         />
         <Route
+          path="/crm/factures"
+          element={
+            <RequireCompanyFeature profilePermissionKey="crm">
+              <CrmPage section="invoices" />
+            </RequireCompanyFeature>
+          }
+        />
+        <Route
+          path="/crm/achats"
+          element={
+            <RequireCompanyFeature profilePermissionKey="crm">
+              <CrmPage section="purchases" />
+            </RequireCompanyFeature>
+          }
+        />
+        <Route
+          path="/crm/contacts"
+          element={
+            <RequireCompanyFeature profilePermissionKey="crm">
+              <CrmPage section="contacts" />
+            </RequireCompanyFeature>
+          }
+        />
+        <Route
+          path="/crm/ressources"
+          element={
+            <RequireCompanyFeature profilePermissionKey="crm">
+              <CrmPage section="resources" />
+            </RequireCompanyFeature>
+          }
+        />
+        <Route
+          path="/crm/bibliotheque"
+          element={
+            <RequireCompanyFeature profilePermissionKey="crm">
+              <CrmPage section="library" />
+            </RequireCompanyFeature>
+          }
+        />
+        <Route
           path="/crm/agenda"
           element={
             <RequireCompanyFeature profilePermissionKey="crm">

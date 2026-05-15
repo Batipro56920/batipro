@@ -135,7 +135,32 @@ export type CrmQuoteRow = {
   conditions?: string | null;
   acompte_percent?: number | null;
   viewed_at?: string | null;
+  revision?: number | null;
+  archived_at?: string | null;
+  display_options?: Record<string, unknown> | null;
+  payment_terms_text?: string | null;
+  legal_mentions?: Record<string, unknown> | null;
+  waste_management?: Record<string, unknown> | null;
+  sent_at?: string | null;
+  last_reminder_at?: string | null;
+  signatory_name?: string | null;
+  client_comment?: string | null;
   chantier_id: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type CrmQuoteSectionRow = {
+  id: string;
+  quote_id: string;
+  parent_id: string | null;
+  title: string;
+  description: string | null;
+  section_type: "section" | "subsection";
+  ordre: number;
+  numbering: string | null;
+  show_total: boolean;
+  page_break_before: boolean;
   created_at: string;
   updated_at: string;
 };
@@ -153,6 +178,8 @@ export type CrmQuoteItemRow = {
   id: string;
   quote_id: string;
   lot_id: string | null;
+  section_id: string | null;
+  parent_item_id: string | null;
   lot: string | null;
   designation: string;
   description: string | null;
@@ -163,6 +190,13 @@ export type CrmQuoteItemRow = {
   ordre: number;
   task_template_id: string | null;
   supplier_id: string | null;
+  line_type: string;
+  family: string | null;
+  supplier_reference: string | null;
+  price_status: string;
+  show_to_client: boolean;
+  page_break_before: boolean;
+  numbering: string | null;
   cost_materials_ht: number;
   cost_labor_ht: number;
   cost_subcontracting_ht: number;
@@ -176,6 +210,68 @@ export type CrmQuoteItemRow = {
   sale_total_ht: number;
   technical_description: string | null;
   generate_task: boolean;
+  created_at: string;
+  updated_at: string;
+};
+
+export type CrmQuoteComponentRow = {
+  id: string;
+  quote_id: string;
+  quote_item_id: string;
+  component_type: "material" | "labor" | "subcontracting" | "equipment" | "fee" | "text";
+  family: string | null;
+  designation: string;
+  unit: string | null;
+  quantity: number;
+  purchase_unit_price_ht: number;
+  sale_unit_price_ht: number;
+  total_cost_ht: number;
+  total_sale_ht: number;
+  gross_margin_ht: number;
+  margin_rate: number;
+  tva_rate: number;
+  supplier_id: string | null;
+  supplier_reference: string | null;
+  price_status: string;
+  lead_time_days: number | null;
+  last_price_update_at: string | null;
+  ordre: number;
+  created_at: string;
+  updated_at: string;
+};
+
+export type CrmPaymentTermRow = {
+  id: string;
+  quote_id: string | null;
+  label: string;
+  percent: number | null;
+  amount_ht: number | null;
+  amount_ttc: number | null;
+  due_trigger: string | null;
+  due_date: string | null;
+  payment_methods: string[];
+  notes: string | null;
+  ordre: number;
+  created_at: string;
+  updated_at: string;
+};
+
+export type CrmPurchaseRow = {
+  id: string;
+  chantier_id: string | null;
+  quote_id: string | null;
+  quote_item_id: string | null;
+  supplier_id: string | null;
+  lot: string | null;
+  category: string;
+  label: string;
+  purchase_date: string | null;
+  amount_ht: number;
+  tva_rate: number;
+  amount_ttc: number;
+  status: string;
+  invoice_document_id: string | null;
+  notes: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -201,9 +297,12 @@ export type CrmQuoteResourceRow = {
 
 export type CrmQuoteEngineData = {
   quote: CrmQuoteRow;
+  sections: CrmQuoteSectionRow[];
   lots: CrmQuoteLotRow[];
   items: CrmQuoteItemRow[];
+  components: CrmQuoteComponentRow[];
   resources: CrmQuoteResourceRow[];
+  paymentTerms: CrmPaymentTermRow[];
   taskTemplates: TaskTemplateRow[];
 };
 
@@ -318,6 +417,7 @@ export type CrmDataset = {
   documents: CrmDocumentRow[];
   communications: CrmCommunicationRow[];
   invoices: CrmInvoiceRow[];
+  purchases: CrmPurchaseRow[];
   chantiers: ChantierRow[];
   taskTemplates: TaskTemplateRow[];
 };
@@ -353,14 +453,18 @@ const CRM_SELECTS = {
   opportunities:
     "id,prospect_id,client_id,stage_id,stage_key,nom_affaire,montant_estime,probabilite,echeance,responsable_id,prochaine_action,prochaine_action_date,notes,tags,status,lost_reason,chantier_id,created_at,updated_at,archived_at",
   quotes:
-    "id,quote_number,prospect_id,client_id,opportunity_id,statut,date_emission,valid_until,montant_ht,tva,montant_ttc,marge_estimee,lot,description,signature_status,accepted_at,refused_at,conditions,acompte_percent,viewed_at,chantier_id,created_at,updated_at",
+    "id,quote_number,prospect_id,client_id,opportunity_id,statut,date_emission,valid_until,montant_ht,tva,montant_ttc,marge_estimee,lot,description,signature_status,accepted_at,refused_at,conditions,acompte_percent,viewed_at,revision,archived_at,display_options,payment_terms_text,legal_mentions,waste_management,sent_at,last_reminder_at,signatory_name,client_comment,chantier_id,created_at,updated_at",
   quotesLegacy:
     "id,quote_number,prospect_id,client_id,opportunity_id,statut,date_emission,valid_until,montant_ht,tva,montant_ttc,marge_estimee,lot,description,signature_status,accepted_at,refused_at,chantier_id,created_at,updated_at",
+  quoteSections:
+    "id,quote_id,parent_id,title,description,section_type,ordre,numbering,show_total,page_break_before,created_at,updated_at",
   quoteLots: "id,quote_id,title,ordre,created_at,updated_at",
   quoteItems:
-    "id,quote_id,lot_id,lot,designation,description,quantite,unite,prix_unitaire_ht,total_ht,ordre,task_template_id,supplier_id,cost_materials_ht,cost_labor_ht,cost_subcontracting_ht,cost_fees_ht,labor_hours,labor_rate_ht,margin_rate,coefficient,tva_rate,sale_unit_price_ht,sale_total_ht,technical_description,generate_task,created_at,updated_at",
+    "id,quote_id,lot_id,section_id,parent_item_id,lot,designation,description,quantite,unite,prix_unitaire_ht,total_ht,ordre,task_template_id,supplier_id,line_type,family,supplier_reference,price_status,show_to_client,page_break_before,numbering,cost_materials_ht,cost_labor_ht,cost_subcontracting_ht,cost_fees_ht,labor_hours,labor_rate_ht,margin_rate,coefficient,tva_rate,sale_unit_price_ht,sale_total_ht,technical_description,generate_task,created_at,updated_at",
   quoteItemsLegacy:
     "id,quote_id,lot,designation,description,quantite,unite,prix_unitaire_ht,total_ht,ordre,created_at,updated_at",
+  quoteComponents:
+    "id,quote_id,quote_item_id,component_type,family,designation,unit,quantity,purchase_unit_price_ht,sale_unit_price_ht,total_cost_ht,total_sale_ht,gross_margin_ht,margin_rate,tva_rate,supplier_id,supplier_reference,price_status,lead_time_days,last_price_update_at,ordre,created_at,updated_at",
   quoteResources:
     "id,quote_id,quote_item_id,kind,label,supplier_id,quantity,unit,unit_cost_ht,tva_rate,margin_rate,total_cost_ht,sale_total_ht,notes,created_at,updated_at",
   tasks:
@@ -373,6 +477,10 @@ const CRM_SELECTS = {
     "id,prospect_id,client_id,opportunity_id,quote_id,type,direction,subject,body,occurred_at,created_at",
   invoices:
     "id,client_id,quote_id,chantier_id,type,invoice_number,amount_ht,amount_ttc,due_date,statut,paid_at,created_at,updated_at",
+  paymentTerms:
+    "id,quote_id,label,percent,amount_ht,amount_ttc,due_trigger,due_date,payment_methods,notes,ordre,created_at,updated_at",
+  purchases:
+    "id,chantier_id,quote_id,quote_item_id,supplier_id,lot,category,label,purchase_date,amount_ht,tva_rate,amount_ttc,status,invoice_document_id,notes,created_at,updated_at",
   stages: "id,key,label,ordre,probability_default,is_won,is_lost,is_active",
 } as const;
 
@@ -447,7 +555,7 @@ export async function ensureCrmDefaults() {
 
 export async function loadCrmDataset(): Promise<CrmDataset> {
   const stages = await ensureCrmDefaults();
-  const [prospects, clients, opportunities, quotes, tasks, appointments, sav, documents, communications, invoices, chantiers, taskTemplates] =
+  const [prospects, clients, opportunities, quotes, tasks, appointments, sav, documents, communications, invoices, purchases, chantiers, taskTemplates] =
     await Promise.all([
       selectTable<CrmProspectRow>("crm_prospects", CRM_SELECTS.prospects),
       selectTable<CrmClientRow>("crm_clients", CRM_SELECTS.clients),
@@ -459,10 +567,11 @@ export async function loadCrmDataset(): Promise<CrmDataset> {
       selectTable<CrmDocumentRow>("crm_documents", CRM_SELECTS.documents),
       selectTable<CrmCommunicationRow>("crm_communications", CRM_SELECTS.communications, "occurred_at"),
       selectTable<CrmInvoiceRow>("crm_invoices", CRM_SELECTS.invoices),
+      selectTable<CrmPurchaseRow>("crm_purchases", CRM_SELECTS.purchases),
       getChantiers(),
       listTaskTemplates().catch(() => []),
     ]);
-  return { prospects, clients, opportunities, quotes, tasks, appointments, sav, stages, documents, communications, invoices, chantiers, taskTemplates };
+  return { prospects, clients, opportunities, quotes, tasks, appointments, sav, stages, documents, communications, invoices, purchases, chantiers, taskTemplates };
 }
 
 async function maybeSingleById<T>(table: string, select: string, id: string | null | undefined): Promise<T | null> {
@@ -786,8 +895,17 @@ function normalizeQuoteItem(row: any): CrmQuoteItemRow {
   return {
     ...row,
     lot_id: row?.lot_id ?? null,
+    section_id: row?.section_id ?? null,
+    parent_item_id: row?.parent_item_id ?? null,
     task_template_id: row?.task_template_id ?? null,
     supplier_id: row?.supplier_id ?? null,
+    line_type: row?.line_type ?? "simple",
+    family: row?.family ?? null,
+    supplier_reference: row?.supplier_reference ?? null,
+    price_status: row?.price_status ?? "estimated",
+    show_to_client: row?.show_to_client ?? true,
+    page_break_before: row?.page_break_before ?? false,
+    numbering: row?.numbering ?? null,
     cost_materials_ht: numberOrZero(row?.cost_materials_ht),
     cost_labor_ht: numberOrZero(row?.cost_labor_ht),
     cost_subcontracting_ht: numberOrZero(row?.cost_subcontracting_ht),
@@ -809,19 +927,55 @@ function normalizeQuoteItem(row: any): CrmQuoteItemRow {
 export async function loadCrmQuoteEngineData(quoteId: string): Promise<CrmQuoteEngineData> {
   const quote = await maybeSingleByIdWithFallback<CrmQuoteRow>("crm_quotes", CRM_SELECTS.quotes, CRM_SELECTS.quotesLegacy, quoteId);
   if (!quote) throw new Error("Devis CRM introuvable.");
-  const [lots, items, resources, taskTemplates] = await Promise.all([
+  const [sections, lots, items, components, resources, paymentTerms, taskTemplates] = await Promise.all([
+    selectTable<CrmQuoteSectionRow>("crm_quote_sections", CRM_SELECTS.quoteSections, "ordre"),
     selectTable<CrmQuoteLotRow>("crm_quote_lots", CRM_SELECTS.quoteLots, "ordre"),
     selectTableWithFallback<CrmQuoteItemRow>("crm_quote_items", CRM_SELECTS.quoteItems, CRM_SELECTS.quoteItemsLegacy, "ordre"),
+    selectTable<CrmQuoteComponentRow>("crm_quote_components", CRM_SELECTS.quoteComponents, "ordre"),
     selectTable<CrmQuoteResourceRow>("crm_quote_resources", CRM_SELECTS.quoteResources),
+    selectTable<CrmPaymentTermRow>("crm_payment_terms", CRM_SELECTS.paymentTerms, "ordre"),
     listTaskTemplates().catch(() => []),
   ]);
   return {
     quote,
+    sections: sections.filter((row) => row.quote_id === quoteId).sort((a, b) => a.ordre - b.ordre),
     lots: lots.filter((row) => row.quote_id === quoteId).sort((a, b) => a.ordre - b.ordre),
     items: items.filter((row) => row.quote_id === quoteId).map(normalizeQuoteItem).sort((a, b) => a.ordre - b.ordre),
+    components: components.filter((row) => row.quote_id === quoteId).sort((a, b) => a.ordre - b.ordre),
     resources: resources.filter((row) => row.quote_id === quoteId),
+    paymentTerms: paymentTerms.filter((row) => row.quote_id === quoteId).sort((a, b) => a.ordre - b.ordre),
     taskTemplates,
   };
+}
+
+export async function createCrmQuoteSection(input: {
+  quote_id: string;
+  parent_id?: string | null;
+  title: string;
+  description?: string | null;
+  section_type?: "section" | "subsection";
+  ordre?: number | null;
+}) {
+  const organization_id = await currentOrgId();
+  const title = text(input.title);
+  if (!title) throw new Error("Titre de section obligatoire.");
+  const { data, error } = await crmDb
+    .from("crm_quote_sections")
+    .insert([
+      {
+        organization_id,
+        quote_id: input.quote_id,
+        parent_id: input.parent_id ?? null,
+        title,
+        description: text(input.description),
+        section_type: input.section_type ?? "section",
+        ordre: input.ordre ?? 0,
+      },
+    ])
+    .select(CRM_SELECTS.quoteSections)
+    .single();
+  if (error) throw error;
+  return data as CrmQuoteSectionRow;
 }
 
 export async function createCrmQuoteLot(input: { quote_id: string; title: string; ordre?: number | null }) {
@@ -840,6 +994,7 @@ export async function createCrmQuoteLot(input: { quote_id: string; title: string
 export async function createCrmQuoteItemFromTemplate(input: {
   quote_id: string;
   lot_id?: string | null;
+  section_id?: string | null;
   lot?: string | null;
   template?: TaskTemplateRow | null;
   designation?: string | null;
@@ -871,6 +1026,7 @@ export async function createCrmQuoteItemFromTemplate(input: {
     organization_id,
     quote_id: input.quote_id,
     lot_id: input.lot_id ?? null,
+    section_id: input.section_id ?? null,
     lot: text(input.lot) ?? template?.lot ?? null,
     designation: text(input.designation) ?? template?.titre ?? "Ouvrage",
     description: template?.remarques ?? null,
@@ -880,6 +1036,10 @@ export async function createCrmQuoteItemFromTemplate(input: {
     total_ht: totals.total_ht,
     ordre: input.ordre ?? 0,
     task_template_id: template?.id ?? null,
+    line_type: "composite",
+    family: template?.lot ?? null,
+    price_status: "estimated",
+    show_to_client: true,
     cost_materials_ht: totals.cost_materials_ht,
     cost_labor_ht: totals.cost_labor_ht,
     cost_subcontracting_ht: totals.cost_subcontracting_ht,
@@ -898,6 +1058,44 @@ export async function createCrmQuoteItemFromTemplate(input: {
   if (error) throw error;
   await recalculateCrmQuoteTotals(input.quote_id);
   return normalizeQuoteItem(data);
+}
+
+export async function createCrmQuoteComponent(input: Partial<CrmQuoteComponentRow> & { quote_id: string; quote_item_id: string }) {
+  const organization_id = await currentOrgId();
+  const quantity = numberOrZero(input.quantity ?? 1);
+  const purchaseUnit = numberOrZero(input.purchase_unit_price_ht);
+  const saleUnit = input.sale_unit_price_ht === undefined ? purchaseUnit * (1 + numberOrZero(input.margin_rate ?? 0) / 100) : numberOrZero(input.sale_unit_price_ht);
+  const totalCost = roundMoney(quantity * purchaseUnit);
+  const totalSale = roundMoney(quantity * saleUnit);
+  const grossMargin = roundMoney(totalSale - totalCost);
+  const marginRate = totalSale ? roundMoney((grossMargin / totalSale) * 100) : 0;
+  const row = {
+    organization_id,
+    quote_id: input.quote_id,
+    quote_item_id: input.quote_item_id,
+    component_type: input.component_type ?? "material",
+    family: text(input.family),
+    designation: text(input.designation) ?? "Composant",
+    unit: text(input.unit),
+    quantity,
+    purchase_unit_price_ht: purchaseUnit,
+    sale_unit_price_ht: roundMoney(saleUnit),
+    total_cost_ht: totalCost,
+    total_sale_ht: totalSale,
+    gross_margin_ht: grossMargin,
+    margin_rate: marginRate,
+    tva_rate: numberOrZero(input.tva_rate ?? 20),
+    supplier_id: input.supplier_id ?? null,
+    supplier_reference: text(input.supplier_reference),
+    price_status: text(input.price_status) ?? "estimated",
+    lead_time_days: input.lead_time_days ?? null,
+    last_price_update_at: input.last_price_update_at ?? null,
+    ordre: input.ordre ?? 0,
+  };
+  const { data, error } = await crmDb.from("crm_quote_components").insert([row]).select(CRM_SELECTS.quoteComponents).single();
+  if (error) throw error;
+  await recalculateCrmQuoteTotals(input.quote_id);
+  return data as CrmQuoteComponentRow;
 }
 
 export async function createCrmQuoteResource(input: Partial<CrmQuoteResourceRow> & { quote_id: string }) {
@@ -928,19 +1126,81 @@ export async function createCrmQuoteResource(input: Partial<CrmQuoteResourceRow>
   return data as CrmQuoteResourceRow;
 }
 
+export async function createCrmPaymentTerm(input: Partial<CrmPaymentTermRow> & { quote_id: string }) {
+  const organization_id = await currentOrgId();
+  const row = {
+    organization_id,
+    quote_id: input.quote_id,
+    label: text(input.label) ?? "Echeance",
+    percent: input.percent === undefined || input.percent === null ? null : numberOrZero(input.percent),
+    amount_ht: input.amount_ht === undefined || input.amount_ht === null ? null : numberOrZero(input.amount_ht),
+    amount_ttc: input.amount_ttc === undefined || input.amount_ttc === null ? null : numberOrZero(input.amount_ttc),
+    due_trigger: text(input.due_trigger),
+    due_date: input.due_date ?? null,
+    payment_methods: Array.isArray(input.payment_methods) ? input.payment_methods : [],
+    notes: text(input.notes),
+    ordre: input.ordre ?? 0,
+  };
+  const { data, error } = await crmDb.from("crm_payment_terms").insert([row]).select(CRM_SELECTS.paymentTerms).single();
+  if (error) throw error;
+  return data as CrmPaymentTermRow;
+}
+
+export async function createCrmPurchase(input: Partial<CrmPurchaseRow>) {
+  const organization_id = await currentOrgId();
+  const amountHt = numberOrZero(input.amount_ht);
+  const tvaRate = numberOrZero(input.tva_rate ?? 20);
+  const { data, error } = await crmDb
+    .from("crm_purchases")
+    .insert([
+      {
+        organization_id,
+        chantier_id: input.chantier_id ?? null,
+        quote_id: input.quote_id ?? null,
+        quote_item_id: input.quote_item_id ?? null,
+        supplier_id: input.supplier_id ?? null,
+        lot: text(input.lot),
+        category: text(input.category) ?? "materials",
+        label: text(input.label) ?? "Achat",
+        purchase_date: input.purchase_date ?? new Date().toISOString().slice(0, 10),
+        amount_ht: amountHt,
+        tva_rate: tvaRate,
+        amount_ttc: input.amount_ttc === undefined ? roundMoney(amountHt * (1 + tvaRate / 100)) : numberOrZero(input.amount_ttc),
+        status: text(input.status) ?? "planned",
+        invoice_document_id: input.invoice_document_id ?? null,
+        notes: text(input.notes),
+      },
+    ])
+    .select(CRM_SELECTS.purchases)
+    .single();
+  if (error) throw error;
+  return data as CrmPurchaseRow;
+}
+
 export async function recalculateCrmQuoteTotals(quoteId: string) {
   const engine = await loadCrmQuoteEngineData(quoteId);
-  const amountHt = roundMoney(engine.items.reduce((sum, row) => sum + Number(row.sale_total_ht ?? row.total_ht ?? 0), 0));
+  const componentsByItem = new Map<string, CrmQuoteComponentRow[]>();
+  for (const component of engine.components) {
+    componentsByItem.set(component.quote_item_id, [...(componentsByItem.get(component.quote_item_id) ?? []), component]);
+  }
+  const itemSaleTotal = (row: CrmQuoteItemRow) => {
+    const components = componentsByItem.get(row.id) ?? [];
+    return components.length
+      ? components.reduce((sum, component) => sum + Number(component.total_sale_ht ?? 0), 0)
+      : Number(row.sale_total_ht ?? row.total_ht ?? 0);
+  };
+  const itemCostTotal = (row: CrmQuoteItemRow) => {
+    const components = componentsByItem.get(row.id) ?? [];
+    return components.length
+      ? components.reduce((sum, component) => sum + Number(component.total_cost_ht ?? 0), 0)
+      : (Number(row.cost_materials_ht ?? 0) + Number(row.cost_labor_ht ?? 0) + Number(row.cost_subcontracting_ht ?? 0) + Number(row.cost_fees_ht ?? 0)) *
+          Number(row.quantite ?? 1);
+  };
+  const amountHt = roundMoney(engine.items.reduce((sum, row) => sum + itemSaleTotal(row), 0));
   const tvaAmount = roundMoney(
-    engine.items.reduce((sum, row) => sum + Number(row.sale_total_ht ?? row.total_ht ?? 0) * (Number(row.tva_rate ?? 20) / 100), 0),
+    engine.items.reduce((sum, row) => sum + itemSaleTotal(row) * (Number(row.tva_rate ?? 20) / 100), 0),
   );
-  const costTotal = engine.items.reduce(
-    (sum, row) =>
-      sum +
-      (Number(row.cost_materials_ht ?? 0) + Number(row.cost_labor_ht ?? 0) + Number(row.cost_subcontracting_ht ?? 0) + Number(row.cost_fees_ht ?? 0)) *
-        Number(row.quantite ?? 1),
-    0,
-  );
+  const costTotal = engine.items.reduce((sum, row) => sum + itemCostTotal(row), 0);
   return updateCrmQuote(quoteId, {
     montant_ht: amountHt,
     tva: amountHt ? roundMoney((tvaAmount / amountHt) * 100) : 20,
@@ -1186,9 +1446,12 @@ export async function transformAcceptedQuoteToChantier(input: {
   });
   const engine = await loadCrmQuoteEngineData(quote.id).catch(() => ({
     quote,
+    sections: [],
     lots: [],
     items: [],
+    components: [],
     resources: [],
+    paymentTerms: [],
     taskTemplates: [],
   } as CrmQuoteEngineData));
   const laborBudget = roundMoney(

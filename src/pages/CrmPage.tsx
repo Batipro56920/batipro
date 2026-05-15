@@ -8,8 +8,12 @@ import {
   createCrmInvoice,
   createCrmProspect,
   createCrmQuote,
+  createCrmPaymentTerm,
+  createCrmPurchase,
+  createCrmQuoteComponent,
   createCrmQuoteItemFromTemplate,
   createCrmQuoteLot,
+  createCrmQuoteSection,
   createCrmSav,
   createCrmTask,
   downloadCrmQuotePdf,
@@ -39,6 +43,11 @@ type CrmSection =
   | "clients"
   | "opportunities"
   | "quotes"
+  | "invoices"
+  | "purchases"
+  | "contacts"
+  | "resources"
+  | "library"
   | "agenda"
   | "sav"
   | "stats"
@@ -60,6 +69,7 @@ const EMPTY_DATASET: CrmDataset = {
   documents: [],
   communications: [],
   invoices: [],
+  purchases: [],
   chantiers: [],
   taskTemplates: [],
 };
@@ -70,6 +80,11 @@ const NAV: Array<{ key: CrmSection; label: string; href: string }> = [
   { key: "clients", label: "Clients", href: "/crm/clients" },
   { key: "opportunities", label: "Opportunités", href: "/crm/opportunites" },
   { key: "quotes", label: "Devis", href: "/crm/devis" },
+  { key: "invoices", label: "Factures", href: "/crm/factures" },
+  { key: "purchases", label: "Achats", href: "/crm/achats" },
+  { key: "contacts", label: "Contacts", href: "/crm/contacts" },
+  { key: "resources", label: "Ressources", href: "/crm/ressources" },
+  { key: "library", label: "BibliothÃ¨que", href: "/crm/bibliotheque" },
   { key: "agenda", label: "Agenda", href: "/crm/agenda" },
   { key: "sav", label: "SAV", href: "/crm/sav" },
   { key: "stats", label: "Statistiques", href: "/crm/statistiques" },
@@ -172,7 +187,7 @@ export default function CrmPage({ section = "dashboard" }: Props) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState("");
-  const [modal, setModal] = useState<null | "prospect" | "client" | "opportunity" | "quote" | "task" | "appointment" | "sav" | "document" | "invoice">(null);
+  const [modal, setModal] = useState<null | "prospect" | "client" | "opportunity" | "quote" | "task" | "appointment" | "sav" | "document" | "invoice" | "purchase">(null);
   const [dragOpportunityId, setDragOpportunityId] = useState<string | null>(null);
   const [quoteEngine, setQuoteEngine] = useState<CrmQuoteEngineData | null>(null);
   const [quoteEngineLoading, setQuoteEngineLoading] = useState(false);
@@ -271,6 +286,7 @@ export default function CrmPage({ section = "dashboard" }: Props) {
 
   async function addQuoteTemplateLine(payload: {
     quoteId: string;
+    sectionId: string;
     lotTitle: string;
     templateId: string;
     quantity: string;
@@ -287,6 +303,7 @@ export default function CrmPage({ section = "dashboard" }: Props) {
       await createCrmQuoteItemFromTemplate({
         quote_id: payload.quoteId,
         lot_id: lot.id,
+        section_id: payload.sectionId || null,
         lot: lot.title,
         template,
         quantity: payload.quantity,
@@ -296,6 +313,62 @@ export default function CrmPage({ section = "dashboard" }: Props) {
         ordre: existing?.items.length ?? 0,
       });
       await recalculateCrmQuoteTotals(payload.quoteId);
+      setQuoteEngine(await loadCrmQuoteEngineData(payload.quoteId));
+    });
+  }
+
+  async function addQuoteSection(payload: { quoteId: string; parentId?: string | null; title: string; sectionType: "section" | "subsection" }) {
+    await submitSafely(async () => {
+      await createCrmQuoteSection({
+        quote_id: payload.quoteId,
+        parent_id: payload.parentId ?? null,
+        title: payload.title,
+        section_type: payload.sectionType,
+        ordre: (quoteEngine?.sections.length ?? 0) + 1,
+      });
+      setQuoteEngine(await loadCrmQuoteEngineData(payload.quoteId));
+    });
+  }
+
+  async function addQuoteComponent(payload: {
+    quoteId: string;
+    itemId: string;
+    componentType: "material" | "labor" | "subcontracting" | "equipment" | "fee" | "text";
+    designation: string;
+    quantity: string;
+    unit: string;
+    purchaseUnitPrice: string;
+    saleUnitPrice: string;
+    tvaRate: string;
+  }) {
+    await submitSafely(async () => {
+      await createCrmQuoteComponent({
+        quote_id: payload.quoteId,
+        quote_item_id: payload.itemId,
+        component_type: payload.componentType,
+        designation: payload.designation,
+        quantity: Number(payload.quantity),
+        unit: payload.unit,
+        purchase_unit_price_ht: Number(payload.purchaseUnitPrice),
+        sale_unit_price_ht: Number(payload.saleUnitPrice),
+        tva_rate: Number(payload.tvaRate),
+      });
+      setQuoteEngine(await loadCrmQuoteEngineData(payload.quoteId));
+    });
+  }
+
+  async function addPaymentTerm(payload: { quoteId: string; label: string; percent: string; dueTrigger: string }) {
+    await submitSafely(async () => {
+      const percent = Number(payload.percent || 0);
+      await createCrmPaymentTerm({
+        quote_id: payload.quoteId,
+        label: payload.label,
+        percent,
+        amount_ht: Number(quoteEngine?.quote.montant_ht ?? 0) * (percent / 100),
+        amount_ttc: Number(quoteEngine?.quote.montant_ttc ?? 0) * (percent / 100),
+        due_trigger: payload.dueTrigger,
+        ordre: quoteEngine?.paymentTerms.length ?? 0,
+      });
       setQuoteEngine(await loadCrmQuoteEngineData(payload.quoteId));
     });
   }
@@ -409,6 +482,16 @@ export default function CrmPage({ section = "dashboard" }: Props) {
           query={query}
           setQuery={setQuery}
         />
+      ) : section === "invoices" ? (
+        <InvoicesView rows={data.invoices} clients={clientById} onCreate={() => setModal("invoice")} />
+      ) : section === "purchases" ? (
+        <PurchasesView rows={data.purchases} chantiers={data.chantiers} onCreate={() => setModal("purchase")} />
+      ) : section === "contacts" ? (
+        <ContactsView prospects={data.prospects} clients={data.clients} />
+      ) : section === "resources" ? (
+        <ResourcesView templates={data.taskTemplates} />
+      ) : section === "library" ? (
+        <ResourcesView templates={data.taskTemplates} />
       ) : section === "agenda" ? (
         <AgendaView tasks={data.tasks} appointments={data.appointments} onTask={() => setModal("task")} onAppointment={() => setModal("appointment")} onDone={(row) => submitSafely(async () => updateCrmTask(row.id, { statut: "terminee" }))} />
       ) : section === "sav" ? (
@@ -428,6 +511,7 @@ export default function CrmPage({ section = "dashboard" }: Props) {
       {modal === "sav" ? <SavForm data={data} saving={saving} onClose={() => setModal(null)} onSubmit={(payload) => submitSafely(() => createCrmSav(payload))} /> : null}
       {modal === "document" ? <DocumentForm data={data} saving={saving} onClose={() => setModal(null)} onSubmit={(payload) => submitSafely(() => createCrmDocument(payload))} /> : null}
       {modal === "invoice" ? <InvoiceForm data={data} saving={saving} onClose={() => setModal(null)} onSubmit={(payload) => submitSafely(() => createCrmInvoice(payload))} /> : null}
+      {modal === "purchase" ? <PurchaseForm data={data} saving={saving} onClose={() => setModal(null)} onSubmit={(payload) => submitSafely(() => createCrmPurchase(payload))} /> : null}
       {quoteEngine ? (
         <QuoteEngineModal
           engine={quoteEngine}
@@ -436,6 +520,9 @@ export default function CrmPage({ section = "dashboard" }: Props) {
           saving={saving}
           onClose={() => setQuoteEngine(null)}
           onAddLine={addQuoteTemplateLine}
+          onAddSection={addQuoteSection}
+          onAddComponent={addQuoteComponent}
+          onAddPaymentTerm={addPaymentTerm}
           onPdf={() => void downloadQuote(quoteEngine.quote)}
           onTransform={() => transformQuote(quoteEngine.quote)}
         />
@@ -781,6 +868,11 @@ function QuotesView({
   query: string;
   setQuery: (value: string) => void;
 }) {
+  const statusFilter = "tous";
+  const visibleRows = rows
+    .filter((row) => statusFilter === "tous" || row.statut === statusFilter)
+    .sort((a, b) => String(b.updated_at ?? "").localeCompare(String(a.updated_at ?? "")));
+  const pageRows = visibleRows.slice(0, 30);
   return (
     <ListShell title="Devis CRM" actionLabel="Créer un devis" query={query} setQuery={setQuery} onCreate={onCreate}>
       <div className="overflow-hidden rounded-2xl border bg-white">
@@ -789,7 +881,7 @@ function QuotesView({
             <tr>{["N°", "Client/prospect", "Montant", "Validité", "Statut", "Signature", "Actions"].map((h) => <th key={h} className="px-4 py-3 text-left font-medium">{h}</th>)}</tr>
           </thead>
           <tbody>
-            {rows.map((row) => (
+            {pageRows.map((row) => (
               <tr key={row.id} className="border-t align-top">
                 <td className="px-4 py-3 font-semibold">{row.quote_number}</td>
                 <td className="px-4 py-3">{entityLabel(clientById.get(row.client_id ?? "") ?? prospectById.get(row.prospect_id ?? ""))}</td>
@@ -824,6 +916,9 @@ function QuoteEngineModal({
   saving,
   onClose,
   onAddLine,
+  onAddSection,
+  onAddComponent,
+  onAddPaymentTerm,
   onPdf,
   onTransform,
 }: {
@@ -834,6 +929,7 @@ function QuoteEngineModal({
   onClose: () => void;
   onAddLine: (payload: {
     quoteId: string;
+    sectionId: string;
     lotTitle: string;
     templateId: string;
     quantity: string;
@@ -841,18 +937,44 @@ function QuoteEngineModal({
     coefficient: string;
     tvaRate: string;
   }) => void;
+  onAddSection: (payload: { quoteId: string; parentId?: string | null; title: string; sectionType: "section" | "subsection" }) => void;
+  onAddComponent: (payload: {
+    quoteId: string;
+    itemId: string;
+    componentType: "material" | "labor" | "subcontracting" | "equipment" | "fee" | "text";
+    designation: string;
+    quantity: string;
+    unit: string;
+    purchaseUnitPrice: string;
+    saleUnitPrice: string;
+    tvaRate: string;
+  }) => void;
+  onAddPaymentTerm: (payload: { quoteId: string; label: string; percent: string; dueTrigger: string }) => void;
   onPdf: () => void;
   onTransform: () => void;
 }) {
   const firstTemplate = templates[0];
   const [form, setForm] = useState<Record<string, string>>({
     lotTitle: firstTemplate?.lot ?? "Lot principal",
+    sectionId: "",
     templateId: firstTemplate?.id ?? "",
     quantity: String(firstTemplate?.quantite_defaut ?? 1),
     marginRate: "25",
     coefficient: "1",
     tvaRate: "20",
   });
+  const [sectionForm, setSectionForm] = useState<Record<string, string>>({ title: "", parentId: "", sectionType: "section" });
+  const [componentForm, setComponentForm] = useState<Record<string, string>>({
+    itemId: "",
+    componentType: "material",
+    designation: "",
+    quantity: "1",
+    unit: "u",
+    purchaseUnitPrice: "0",
+    saleUnitPrice: "0",
+    tvaRate: "20",
+  });
+  const [paymentForm, setPaymentForm] = useState<Record<string, string>>({ label: "Acompte signature", percent: "30", dueTrigger: "signature" });
   const selectedTemplate = templates.find((row) => row.id === form.templateId) ?? null;
   const debourse = engine.items.reduce(
     (sum, row) =>
@@ -882,6 +1004,41 @@ function QuoteEngineModal({
         </div>
 
         <section className="rounded-2xl border bg-white p-4">
+          <div className="font-semibold">Sections et sous-sections</div>
+          <form
+            className="mt-3 grid gap-3 md:grid-cols-[1fr_1fr_150px_auto]"
+            onSubmit={(event) => {
+              event.preventDefault();
+              onAddSection({
+                quoteId: engine.quote.id,
+                parentId: sectionForm.parentId || null,
+                title: sectionForm.title,
+                sectionType: sectionForm.sectionType === "subsection" ? "subsection" : "section",
+              });
+              setSectionForm({ title: "", parentId: "", sectionType: "section" });
+            }}
+          >
+            <Input form={sectionForm} setForm={setSectionForm} name="title" label="Titre" required />
+            <label className="block space-y-1 text-sm">
+              <div className="text-slate-600">Parent</div>
+              <select className="w-full rounded-xl border px-3 py-2" value={sectionForm.parentId} onChange={(event) => setSectionForm((prev) => ({ ...prev, parentId: event.target.value, sectionType: event.target.value ? "subsection" : "section" }))}>
+                <option value="">Aucun</option>
+                {engine.sections.filter((row) => !row.parent_id).map((row) => <option key={row.id} value={row.id}>{row.title}</option>)}
+              </select>
+            </label>
+            <Input form={sectionForm} setForm={setSectionForm} name="sectionType" label="Type" />
+            <div className="flex items-end">
+              <button disabled={saving || !sectionForm.title} className="rounded-xl bg-slate-900 px-4 py-2 text-sm text-white disabled:opacity-60">Ajouter</button>
+            </div>
+          </form>
+          <div className="mt-3 flex flex-wrap gap-2 text-xs">
+            {engine.sections.map((row) => (
+              <span key={row.id} className="rounded-full border bg-slate-50 px-3 py-1">{row.parent_id ? "Sous-section" : "Section"} · {row.title}</span>
+            ))}
+          </div>
+        </section>
+
+        <section className="rounded-2xl border bg-white p-4">
           <div className="font-semibold">Ajouter un ouvrage depuis la bibliotheque</div>
           <form
             className="mt-3 grid gap-3 md:grid-cols-[1fr_1.4fr_100px_100px_90px]"
@@ -889,6 +1046,7 @@ function QuoteEngineModal({
               event.preventDefault();
               onAddLine({
                 quoteId: engine.quote.id,
+                sectionId: form.sectionId,
                 lotTitle: form.lotTitle,
                 templateId: form.templateId,
                 quantity: form.quantity,
@@ -899,6 +1057,13 @@ function QuoteEngineModal({
             }}
           >
             <Input form={form} setForm={setForm} name="lotTitle" label="Lot" />
+            <label className="block space-y-1 text-sm">
+              <div className="text-slate-600">Section</div>
+              <select className="w-full rounded-xl border px-3 py-2" value={form.sectionId} onChange={(event) => setForm((prev) => ({ ...prev, sectionId: event.target.value }))}>
+                <option value="">Aucune</option>
+                {engine.sections.map((row) => <option key={row.id} value={row.id}>{row.parent_id ? "— " : ""}{row.title}</option>)}
+              </select>
+            </label>
             <label className="block space-y-1 text-sm">
               <div className="text-slate-600">Ouvrage bibliotheque</div>
               <select
@@ -937,6 +1102,71 @@ function QuoteEngineModal({
               </button>
             </div>
           </form>
+        </section>
+
+        <section className="rounded-2xl border bg-white p-4">
+          <div className="font-semibold">Composants d'ouvrage et conditions de paiement</div>
+          <div className="mt-3 grid gap-4 lg:grid-cols-2">
+            <form
+              className="grid gap-3"
+              onSubmit={(event) => {
+                event.preventDefault();
+                onAddComponent({
+                  quoteId: engine.quote.id,
+                  itemId: componentForm.itemId,
+                  componentType: componentForm.componentType as any,
+                  designation: componentForm.designation,
+                  quantity: componentForm.quantity,
+                  unit: componentForm.unit,
+                  purchaseUnitPrice: componentForm.purchaseUnitPrice,
+                  saleUnitPrice: componentForm.saleUnitPrice,
+                  tvaRate: componentForm.tvaRate,
+                });
+                setComponentForm((prev) => ({ ...prev, designation: "", purchaseUnitPrice: "0", saleUnitPrice: "0" }));
+              }}
+            >
+              <label className="block space-y-1 text-sm">
+                <div className="text-slate-600">Ouvrage</div>
+                <select className="w-full rounded-xl border px-3 py-2" value={componentForm.itemId} onChange={(event) => setComponentForm((prev) => ({ ...prev, itemId: event.target.value }))} required>
+                  <option value="">Selectionner</option>
+                  {engine.items.map((row) => <option key={row.id} value={row.id}>{row.designation}</option>)}
+                </select>
+              </label>
+              <div className="grid gap-3 md:grid-cols-2">
+                <Input form={componentForm} setForm={setComponentForm} name="componentType" label="Type" />
+                <Input form={componentForm} setForm={setComponentForm} name="designation" label="Designation composant" required />
+                <Input form={componentForm} setForm={setComponentForm} name="quantity" label="Quantite" type="number" />
+                <Input form={componentForm} setForm={setComponentForm} name="unit" label="Unite" />
+                <Input form={componentForm} setForm={setComponentForm} name="purchaseUnitPrice" label="Prix achat HT" type="number" />
+                <Input form={componentForm} setForm={setComponentForm} name="saleUnitPrice" label="Prix vente HT" type="number" />
+              </div>
+              <button disabled={saving || !componentForm.itemId || !componentForm.designation} className="justify-self-end rounded-xl border px-4 py-2 text-sm hover:bg-slate-50 disabled:opacity-60">Ajouter composant</button>
+            </form>
+            <form
+              className="grid content-start gap-3"
+              onSubmit={(event) => {
+                event.preventDefault();
+                onAddPaymentTerm({
+                  quoteId: engine.quote.id,
+                  label: paymentForm.label,
+                  percent: paymentForm.percent,
+                  dueTrigger: paymentForm.dueTrigger,
+                });
+              }}
+            >
+              <div className="grid gap-3 md:grid-cols-2">
+                <Input form={paymentForm} setForm={setPaymentForm} name="label" label="Echeance" />
+                <Input form={paymentForm} setForm={setPaymentForm} name="percent" label="Pourcentage" type="number" />
+                <Input form={paymentForm} setForm={setPaymentForm} name="dueTrigger" label="Declencheur" />
+              </div>
+              <button disabled={saving} className="justify-self-end rounded-xl border px-4 py-2 text-sm hover:bg-slate-50 disabled:opacity-60">Ajouter condition</button>
+              <div className="space-y-2 text-xs text-slate-600">
+                {engine.paymentTerms.map((row) => (
+                  <div key={row.id} className="rounded-xl border bg-slate-50 p-2">{row.label} · {row.percent ?? 0}% · {eur(row.amount_ttc ?? 0)} TTC</div>
+                ))}
+              </div>
+            </form>
+          </div>
         </section>
 
         <section className="overflow-hidden rounded-2xl border bg-white">
@@ -982,6 +1212,97 @@ function QuoteEngineModal({
         </div>
       </div>
     </CrmModal>
+  );
+}
+
+function InvoicesView({ rows, clients, onCreate }: { rows: CrmDataset["invoices"]; clients: Map<string, CrmClientRow>; onCreate: () => void }) {
+  return (
+    <ListShell title="Factures client" actionLabel="Nouvelle facture" query="" setQuery={() => undefined} onCreate={onCreate} hideSearch>
+      <div className="overflow-hidden rounded-2xl border bg-white">
+        <table className="w-full text-sm">
+          <thead className="bg-slate-50 text-slate-600">
+            <tr>{["Numero", "Client", "Type", "Montant", "Echeance", "Statut"].map((h) => <th key={h} className="px-4 py-3 text-left font-medium">{h}</th>)}</tr>
+          </thead>
+          <tbody>
+            {rows.map((row) => (
+              <tr key={row.id} className="border-t">
+                <td className="px-4 py-3 font-semibold">{row.invoice_number ?? "A numeroter"}</td>
+                <td className="px-4 py-3">{entityLabel(clients.get(row.client_id ?? ""))}</td>
+                <td className="px-4 py-3">{row.type}</td>
+                <td className="px-4 py-3">{eur(row.amount_ht)} HT<br /><span className="text-xs text-slate-500">{eur(row.amount_ttc)} TTC</span></td>
+                <td className="px-4 py-3">{dateOnly(row.due_date)}</td>
+                <td className="px-4 py-3"><span className={statusPill(row.statut)}>{row.statut}</span></td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </ListShell>
+  );
+}
+
+function PurchasesView({ rows, chantiers, onCreate }: { rows: CrmDataset["purchases"]; chantiers: CrmDataset["chantiers"]; onCreate: () => void }) {
+  const chantierById = new Map(chantiers.map((row) => [row.id, row]));
+  return (
+    <ListShell title="Achats / factures fournisseurs" actionLabel="Nouvel achat" query="" setQuery={() => undefined} onCreate={onCreate} hideSearch>
+      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+        {rows.map((row) => (
+          <div key={row.id} className="rounded-3xl border bg-white p-5">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <div className="font-semibold">{row.label}</div>
+                <div className="text-xs text-slate-500">{row.category} · {chantierById.get(row.chantier_id ?? "")?.nom ?? "Hors chantier"}</div>
+              </div>
+              <span className={statusPill(row.status)}>{row.status}</span>
+            </div>
+            <div className="mt-4 grid grid-cols-2 gap-2 text-sm">
+              <div className="rounded-2xl bg-slate-50 p-3">HT<br /><b>{eur(row.amount_ht)}</b></div>
+              <div className="rounded-2xl bg-slate-50 p-3">TTC<br /><b>{eur(row.amount_ttc)}</b></div>
+            </div>
+          </div>
+        ))}
+      </div>
+    </ListShell>
+  );
+}
+
+function ContactsView({ prospects, clients }: { prospects: CrmProspectRow[]; clients: CrmClientRow[] }) {
+  return (
+    <div className="grid gap-4 lg:grid-cols-2">
+      <section className="rounded-3xl border bg-white p-5">
+        <div className="font-semibold">Clients</div>
+        <div className="mt-4 space-y-2">
+          {clients.map((row) => <div key={row.id} className="rounded-2xl border bg-slate-50 p-3">{entityLabel(row)}<div className="text-xs text-slate-500">{row.email ?? row.telephone ?? "Sans contact"}</div></div>)}
+        </div>
+      </section>
+      <section className="rounded-3xl border bg-white p-5">
+        <div className="font-semibold">Prospects</div>
+        <div className="mt-4 space-y-2">
+          {prospects.map((row) => <div key={row.id} className="rounded-2xl border bg-slate-50 p-3">{entityLabel(row)}<div className="text-xs text-slate-500">{row.statut} · {row.email ?? row.telephone ?? "Sans contact"}</div></div>)}
+        </div>
+      </section>
+    </div>
+  );
+}
+
+function ResourcesView({ templates }: { templates: CrmDataset["taskTemplates"] }) {
+  return (
+    <ListShell title="Ressources / bibliotheque devis" actionLabel="Ouvrir bibliotheque" query="" setQuery={() => undefined} onCreate={() => { window.location.href = "/bibliotheque"; }} hideSearch>
+      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+        {templates.map((row) => (
+          <div key={row.id} className="rounded-3xl border bg-white p-5">
+            <div className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">{row.lot ?? "Sans famille"}</div>
+            <div className="mt-1 font-semibold">{row.titre}</div>
+            <div className="mt-3 grid grid-cols-3 gap-2 text-xs">
+              <div className="rounded-xl bg-slate-50 p-2">Unite<br /><b>{row.unite ?? "u"}</b></div>
+              <div className="rounded-xl bg-slate-50 p-2">Temps<br /><b>{row.temps_prevu_par_unite_h ?? 0}h</b></div>
+              <div className="rounded-xl bg-slate-50 p-2">Cout ref.<br /><b>{eur(row.cout_reference_unitaire_ht ?? 0)}</b></div>
+            </div>
+            {row.description_technique ? <p className="mt-3 text-sm text-slate-600">{row.description_technique}</p> : null}
+          </div>
+        ))}
+      </div>
+    </ListShell>
   );
 }
 
@@ -1285,6 +1606,41 @@ function InvoiceForm({ data, saving, onClose, onSubmit }: { data: CrmDataset; sa
           <Input form={form} setForm={setForm} name="due_date" label="Échéance" type="date" />
         </div>
         <Submit saving={saving} label="Créer facture" />
+      </form>
+    </CrmModal>
+  );
+}
+
+function PurchaseForm({ data, saving, onClose, onSubmit }: { data: CrmDataset; saving: boolean; onClose: () => void; onSubmit: (payload: any) => void }) {
+  const [form, setForm] = useState<Record<string, string>>({ category: "materials", status: "planned", tva_rate: "20" });
+  return (
+    <CrmModal title="Créer un achat fournisseur" onClose={onClose}>
+      <form onSubmit={(e) => { e.preventDefault(); onSubmit(form); }} className="space-y-4">
+        <div className="grid gap-4 md:grid-cols-2">
+          <label className="space-y-1 text-sm block">
+            <div className="text-slate-600">Chantier</div>
+            <select className="w-full rounded-xl border px-3 py-2" value={form.chantier_id ?? ""} onChange={(e) => setForm((p) => ({ ...p, chantier_id: e.target.value }))}>
+              <option value="">Aucun</option>
+              {data.chantiers.map((row) => <option key={row.id} value={row.id}>{row.nom}</option>)}
+            </select>
+          </label>
+          <label className="space-y-1 text-sm block">
+            <div className="text-slate-600">Devis CRM</div>
+            <select className="w-full rounded-xl border px-3 py-2" value={form.quote_id ?? ""} onChange={(e) => setForm((p) => ({ ...p, quote_id: e.target.value }))}>
+              <option value="">Aucun</option>
+              {data.quotes.map((row) => <option key={row.id} value={row.id}>{row.quote_number}</option>)}
+            </select>
+          </label>
+        </div>
+        <Input form={form} setForm={setForm} name="label" label="Libellé achat" required />
+        <div className="grid gap-4 md:grid-cols-4">
+          <Input form={form} setForm={setForm} name="category" label="Catégorie" />
+          <Input form={form} setForm={setForm} name="amount_ht" label="Montant HT" type="number" />
+          <Input form={form} setForm={setForm} name="tva_rate" label="TVA %" type="number" />
+          <Input form={form} setForm={setForm} name="status" label="Statut" />
+        </div>
+        <TextArea form={form} setForm={setForm} name="notes" label="Notes" />
+        <Submit saving={saving} label="Créer achat" />
       </form>
     </CrmModal>
   );

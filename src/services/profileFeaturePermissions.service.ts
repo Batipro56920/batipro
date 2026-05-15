@@ -10,6 +10,10 @@ export type ProfileFeaturePermissionKey =
   | CompanyFeatureModuleId
   | "intervenants"
   | "crm"
+  | "crm_prospects"
+  | "crm_clients"
+  | "crm_opportunities"
+  | "crm_quote_view"
   | "bibliotheque"
   | "statistiques"
   | "fournisseurs"
@@ -20,6 +24,11 @@ export type ProfileFeaturePermissionKey =
   | "crm_quote_margin"
   | "crm_quote_price_edit"
   | "crm_quote_transform"
+  | "crm_quote_delete"
+  | "crm_quote_send"
+  | "crm_quote_accept_refuse"
+  | "finance_margin_edit"
+  | "finance_purchases"
   | "chantier_financier_view"
   | "chantier_financier_edit"
   | "chantier_financier_margin"
@@ -49,6 +58,10 @@ const PROFILE_PERMISSION_KEYS: ProfileFeaturePermissionKey[] = [
   ...COMPANY_FEATURE_MODULES.map((module) => module.id),
   "intervenants",
   "crm",
+  "crm_prospects",
+  "crm_clients",
+  "crm_opportunities",
+  "crm_quote_view",
   "bibliotheque",
   "statistiques",
   "fournisseurs",
@@ -59,6 +72,11 @@ const PROFILE_PERMISSION_KEYS: ProfileFeaturePermissionKey[] = [
   "crm_quote_margin",
   "crm_quote_price_edit",
   "crm_quote_transform",
+  "crm_quote_delete",
+  "crm_quote_send",
+  "crm_quote_accept_refuse",
+  "finance_margin_edit",
+  "finance_purchases",
   "chantier_financier_view",
   "chantier_financier_edit",
   "chantier_financier_margin",
@@ -84,6 +102,26 @@ const EXTRA_PERMISSION_DEFINITIONS: Record<
     key: "crm",
     label: "CRM",
     description: "Accès au cockpit CRM, prospects, clients, opportunités, devis, agenda et SAV.",
+  },
+  crm_prospects: {
+    key: "crm_prospects",
+    label: "Gerer prospects",
+    description: "Creation, modification, qualification et archivage des prospects.",
+  },
+  crm_clients: {
+    key: "crm_clients",
+    label: "Gerer clients",
+    description: "Gestion du referentiel client unique et de l'historique commercial.",
+  },
+  crm_opportunities: {
+    key: "crm_opportunities",
+    label: "Gerer opportunites",
+    description: "Gestion du pipeline commercial et des opportunites.",
+  },
+  crm_quote_view: {
+    key: "crm_quote_view",
+    label: "Voir devis CRM",
+    description: "Acces aux listes et fiches devis CRM.",
   },
   bibliotheque: {
     key: "bibliotheque",
@@ -135,6 +173,31 @@ const EXTRA_PERMISSION_DEFINITIONS: Record<
     key: "crm_quote_transform",
     label: "Transformer devis en chantier",
     description: "Creation d'un chantier depuis un devis accepte avec budgets et taches.",
+  },
+  crm_quote_delete: {
+    key: "crm_quote_delete",
+    label: "Supprimer devis CRM",
+    description: "Suppression ou archivage definitif des devis.",
+  },
+  crm_quote_send: {
+    key: "crm_quote_send",
+    label: "Envoyer devis",
+    description: "Envoi, relance et generation du lien client securise.",
+  },
+  crm_quote_accept_refuse: {
+    key: "crm_quote_accept_refuse",
+    label: "Accepter / refuser devis",
+    description: "Changement du statut commercial apres retour client.",
+  },
+  finance_margin_edit: {
+    key: "finance_margin_edit",
+    label: "Modifier marges",
+    description: "Modification des coefficients, marges et prix de vente.",
+  },
+  finance_purchases: {
+    key: "finance_purchases",
+    label: "Gerer achats",
+    description: "Gestion des achats, commandes et factures fournisseurs.",
   },
   chantier_financier_view: {
     key: "chantier_financier_view",
@@ -224,6 +287,10 @@ export function getProfilePermissionSections(): ProfilePermissionSection[] {
       permissions: [
         EXTRA_PERMISSION_DEFINITIONS.intervenants,
         EXTRA_PERMISSION_DEFINITIONS.crm,
+        EXTRA_PERMISSION_DEFINITIONS.crm_prospects,
+        EXTRA_PERMISSION_DEFINITIONS.crm_clients,
+        EXTRA_PERMISSION_DEFINITIONS.crm_opportunities,
+        EXTRA_PERMISSION_DEFINITIONS.crm_quote_view,
         EXTRA_PERMISSION_DEFINITIONS.bibliotheque,
         EXTRA_PERMISSION_DEFINITIONS.statistiques,
         EXTRA_PERMISSION_DEFINITIONS.fournisseurs,
@@ -241,6 +308,11 @@ export function getProfilePermissionSections(): ProfilePermissionSection[] {
         EXTRA_PERMISSION_DEFINITIONS.crm_quote_margin,
         EXTRA_PERMISSION_DEFINITIONS.crm_quote_price_edit,
         EXTRA_PERMISSION_DEFINITIONS.crm_quote_transform,
+        EXTRA_PERMISSION_DEFINITIONS.crm_quote_delete,
+        EXTRA_PERMISSION_DEFINITIONS.crm_quote_send,
+        EXTRA_PERMISSION_DEFINITIONS.crm_quote_accept_refuse,
+        EXTRA_PERMISSION_DEFINITIONS.finance_margin_edit,
+        EXTRA_PERMISSION_DEFINITIONS.finance_purchases,
         EXTRA_PERMISSION_DEFINITIONS.chantier_financier_view,
         EXTRA_PERMISSION_DEFINITIONS.chantier_financier_edit,
         EXTRA_PERMISSION_DEFINITIONS.chantier_financier_margin,
