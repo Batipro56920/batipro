@@ -106,6 +106,12 @@ function directPasswordSignIn(email: string, password: string): Promise<DirectAu
   });
 }
 
+function isRecoveryUrl(): boolean {
+  if (typeof window === "undefined") return false;
+  const hash = String(window.location.hash ?? "");
+  return hash.includes("type=recovery") || hash.includes("access_token=");
+}
+
 async function persistSessionManually(session: {
   access_token: string;
   refresh_token: string;
@@ -184,8 +190,11 @@ export default function AuthPage() {
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [resetPassword, setResetPassword] = useState("");
 
-  const [mode, setMode] = useState<"login" | "signup">("login");
+  const [mode, setMode] = useState<"login" | "signup" | "forgot" | "reset">(() =>
+    isRecoveryUrl() ? "reset" : "login",
+  );
   const [loading, setLoading] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
 
@@ -202,9 +211,29 @@ export default function AuthPage() {
 
     // Si déjà connecté ? on renvoie vers l'app
     supabase.auth.getSession().then(({ data }) => {
-      if (data.session) navigate("/dashboard", { replace: true });
+      if (data.session && !isRecoveryUrl()) navigate("/dashboard", { replace: true });
     });
+
+    const { data: authSub } = supabase.auth.onAuthStateChange((event) => {
+      if (event === "PASSWORD_RECOVERY") {
+        setMode("reset");
+        setMsg(null);
+      }
+    });
+
+    return () => {
+      authSub.subscription.unsubscribe();
+    };
   }, [location.state, navigate]);
+
+  function buildPasswordResetRedirectUrl(): string {
+    const configured = String(import.meta.env.VITE_PUBLIC_APP_URL ?? "").trim().replace(/\/+$/, "");
+    if (configured) return `${configured}/login`;
+    if (typeof window !== "undefined") {
+      return `${window.location.origin.replace(/\/+$/, "")}/login`;
+    }
+    return "/login";
+  }
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -225,6 +254,38 @@ export default function AuthPage() {
         if (error) throw error;
         setMsg(t("auth.signupSuccess"));
         setMode("login");
+        return;
+      }
+
+      if (mode === "forgot") {
+        if (!email.trim()) {
+          setMsg(t("auth.emailRequired"));
+          return;
+        }
+
+        const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
+          redirectTo: buildPasswordResetRedirectUrl(),
+        });
+        if (error) throw error;
+        setMsg(t("auth.resetRequestSuccess"));
+        return;
+      }
+
+      if (mode === "reset") {
+        if (!resetPassword.trim()) {
+          setMsg(t("auth.resetPasswordRequired"));
+          return;
+        }
+
+        const { error } = await supabase.auth.updateUser({
+          password: resetPassword,
+        });
+        if (error) throw error;
+
+        setResetPassword("");
+        setPassword("");
+        setMode("login");
+        setMsg(t("auth.resetPasswordSuccess"));
         return;
       }
 
@@ -270,7 +331,13 @@ export default function AuthPage() {
         <div className="space-y-1">
           <div className="text-2xl font-bold">Batipro</div>
           <div className="text-slate-500 text-sm">
-            {mode === "login" ? t("auth.loginTitle") : t("auth.signupTitle")}
+            {mode === "login"
+              ? t("auth.loginTitle")
+              : mode === "signup"
+                ? t("auth.signupTitle")
+                : mode === "forgot"
+                  ? t("auth.forgotTitle")
+                  : t("auth.resetTitle")}
           </div>
         </div>
 
@@ -281,22 +348,36 @@ export default function AuthPage() {
         )}
 
         <form className="space-y-3" onSubmit={onSubmit}>
-          <input
-            className="w-full rounded-xl border px-3 py-2 text-sm"
-            placeholder={t("common.labels.email")}
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            type="email"
-            autoComplete="email"
-          />
-          <input
-            className="w-full rounded-xl border px-3 py-2 text-sm"
-            placeholder={t("auth.passwordPlaceholder")}
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            type="password"
-            autoComplete={mode === "login" ? "current-password" : "new-password"}
-          />
+          {mode !== "reset" && (
+            <input
+              className="w-full rounded-xl border px-3 py-2 text-sm"
+              placeholder={t("common.labels.email")}
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              type="email"
+              autoComplete="email"
+            />
+          )}
+          {(mode === "login" || mode === "signup") && (
+            <input
+              className="w-full rounded-xl border px-3 py-2 text-sm"
+              placeholder={t("auth.passwordPlaceholder")}
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              type="password"
+              autoComplete={mode === "login" ? "current-password" : "new-password"}
+            />
+          )}
+          {mode === "reset" && (
+            <input
+              className="w-full rounded-xl border px-3 py-2 text-sm"
+              placeholder={t("auth.resetPasswordPlaceholder")}
+              value={resetPassword}
+              onChange={(e) => setResetPassword(e.target.value)}
+              type="password"
+              autoComplete="new-password"
+            />
+          )}
 
           <button
             type="submit"
@@ -306,20 +387,38 @@ export default function AuthPage() {
               loading ? "bg-slate-300 text-slate-700" : "bg-slate-900 text-white hover:bg-slate-800",
             ].join(" ")}
           >
-            {loading ? "…" : mode === "login" ? t("auth.submitLogin") : t("auth.submitSignup")}
+            {loading
+              ? "…"
+              : mode === "login"
+                ? t("auth.submitLogin")
+                : mode === "signup"
+                  ? t("auth.submitSignup")
+                  : mode === "forgot"
+                    ? t("auth.submitForgot")
+                    : t("auth.submitReset")}
           </button>
         </form>
 
         <div className="text-sm text-slate-600">
           {mode === "login" ? (
-            <button
-              className="underline hover:text-slate-900"
-              onClick={() => setMode("signup")}
-              type="button"
-            >
-              {t("auth.goToSignup")}
-            </button>
-          ) : (
+            <>
+              <button
+                className="underline hover:text-slate-900"
+                onClick={() => setMode("signup")}
+                type="button"
+              >
+                {t("auth.goToSignup")}
+              </button>
+              <span className="mx-2 text-slate-300">•</span>
+              <button
+                className="underline hover:text-slate-900"
+                onClick={() => setMode("forgot")}
+                type="button"
+              >
+                {t("auth.goToForgot")}
+              </button>
+            </>
+          ) : mode === "reset" ? null : (
             <button
               className="underline hover:text-slate-900"
               onClick={() => setMode("login")}
