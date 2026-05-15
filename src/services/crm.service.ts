@@ -1102,6 +1102,20 @@ export async function createCrmQuoteComponent(input: Partial<CrmQuoteComponentRo
   return data as CrmQuoteComponentRow;
 }
 
+export async function updateCrmQuoteItem(id: string, patch: Partial<CrmQuoteItemRow>) {
+  const { data, error } = await crmDb.from("crm_quote_items").update(patch).eq("id", id).select(CRM_SELECTS.quoteItems).single();
+  if (error) throw error;
+  const row = normalizeQuoteItem(data);
+  await recalculateCrmQuoteTotals(row.quote_id);
+  return row;
+}
+
+export async function deleteCrmQuoteItem(id: string, quoteId: string) {
+  const { error } = await crmDb.from("crm_quote_items").delete().eq("id", id);
+  if (error) throw error;
+  await recalculateCrmQuoteTotals(quoteId);
+}
+
 export async function createCrmQuoteResource(input: Partial<CrmQuoteResourceRow> & { quote_id: string }) {
   const organization_id = await currentOrgId();
   const quantity = numberOrZero(input.quantity ?? 1);

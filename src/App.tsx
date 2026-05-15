@@ -1,4 +1,5 @@
 ﻿// src/App.tsx
+import { lazy, Suspense } from "react";
 import { Routes, Route, Navigate } from "react-router-dom";
 import LayoutShell from "./components/LayoutShell";
 import RequireAuth from "./components/RequireAuth";
@@ -7,7 +8,6 @@ import RequireCompanyFeature from "./components/RequireCompanyFeature";
 import AuthPage from "./pages/AuthPage";
 import DashboardPage from "./pages/DashboardPage";
 import CrmPage from "./pages/CrmPage";
-import CrmQuoteWorkspacePage from "./pages/CrmQuoteWorkspacePage";
 import ChantiersPage from "./pages/ChantiersPage";
 import ChantierNewPage from "./pages/ChantierNewPage";
 import ChantierPage from "./pages/ChantierPage";
@@ -23,6 +23,8 @@ import MonEntreprisePage from "./pages/MonEntreprisePage";
 import FournisseursPage from "./pages/FournisseursPage";
 import TerrainFeedbacksPage from "./pages/TerrainFeedbacksPage";
 import AppEntryPage from "./pages/AppEntryPage";
+
+const CrmQuoteWorkspacePage = lazy(() => import("./pages/CrmQuoteWorkspacePage"));
 
 export default function App() {
   return (
@@ -89,7 +91,9 @@ export default function App() {
           path="/crm/devis/:id/edit"
           element={
             <RequireCompanyFeature profilePermissionKey="crm">
-              <CrmQuoteWorkspacePage />
+              <Suspense fallback={<div className="rounded-3xl border bg-white p-8 text-center text-sm text-slate-500">Chargement du workspace devis...</div>}>
+                <CrmQuoteWorkspacePage />
+              </Suspense>
             </RequireCompanyFeature>
           }
         />

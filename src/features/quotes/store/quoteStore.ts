@@ -6,8 +6,10 @@ type QuoteState = {
   draft: QuoteDraft;
   dirty: boolean;
   setDraft: (draft: Partial<QuoteDraft>) => void;
+  replaceDraft: (draft: QuoteDraft) => void;
   addLine: (line: QuoteLine) => void;
   updateLine: (id: string, patch: Partial<QuoteLine>) => void;
+  deleteLine: (id: string) => void;
   reorderLines: (activeId: string, overId: string) => void;
   markSaved: () => void;
 };
@@ -27,6 +29,7 @@ export const useQuoteStore = create<QuoteState>((set) => ({
   draft: initialDraft,
   dirty: false,
   setDraft: (draft) => set((state) => ({ draft: { ...state.draft, ...draft }, dirty: true })),
+  replaceDraft: (draft) => set({ draft, dirty: false }),
   addLine: (line) => set((state) => ({ draft: { ...state.draft, lines: [...state.draft.lines, line] }, dirty: true })),
   updateLine: (id, patch) =>
     set((state) => ({
@@ -34,6 +37,11 @@ export const useQuoteStore = create<QuoteState>((set) => ({
         ...state.draft,
         lines: state.draft.lines.map((line) => (line.id === id ? { ...line, ...patch } : line)),
       },
+      dirty: true,
+    })),
+  deleteLine: (id) =>
+    set((state) => ({
+      draft: { ...state.draft, lines: state.draft.lines.filter((line) => line.id !== id) },
       dirty: true,
     })),
   reorderLines: (activeId, overId) =>

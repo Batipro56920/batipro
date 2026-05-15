@@ -1,4 +1,5 @@
 export type QuoteLineKind =
+  | "simple"
   | "section"
   | "subsection"
   | "text"
@@ -14,6 +15,7 @@ export type QuoteVatRate = 0 | 5.5 | 10 | 20;
 
 export type QuoteLine = {
   id: string;
+  persisted?: boolean;
   parentId: string | null;
   kind: QuoteLineKind;
   designation: string;
