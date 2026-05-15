@@ -33,9 +33,24 @@ export type ChantierRow = {
   cancelled_at?: string | null;
   deleted_at?: string | null;
   lifecycle_updated_at?: string | null;
+  crm_client_id?: string | null;
+  crm_prospect_id?: string | null;
+  crm_opportunity_id?: string | null;
+  crm_quote_id?: string | null;
+  crm_client_phone?: string | null;
+  crm_client_email?: string | null;
+  crm_project_description?: string | null;
+  signed_quote_amount_ht?: number | null;
+  signed_quote_tva?: number | null;
+  signed_quote_amount_ttc?: number | null;
+  budget_labor_planned_ht?: number | null;
+  budget_materials_planned_ht?: number | null;
+  budget_subcontracting_planned_ht?: number | null;
 };
 
 const CHANTIER_SELECT_V4 =
+  "id, nom, client, adresse, status, avancement, date_debut, date_fin_prevue, planning_start_date, planning_end_date, planning_skip_weekends, planning_hours_per_day, planning_day_capacity, planning_working_days, heures_prevues, heures_passees, created_at, completed_at, archived_at, cancelled_at, deleted_at, lifecycle_updated_at, crm_client_id, crm_prospect_id, crm_opportunity_id, crm_quote_id, crm_client_phone, crm_client_email, crm_project_description, signed_quote_amount_ht, signed_quote_tva, signed_quote_amount_ttc, budget_labor_planned_ht, budget_materials_planned_ht, budget_subcontracting_planned_ht" as const;
+const CHANTIER_SELECT_LIFECYCLE =
   "id, nom, client, adresse, status, avancement, date_debut, date_fin_prevue, planning_start_date, planning_end_date, planning_skip_weekends, planning_hours_per_day, planning_day_capacity, planning_working_days, heures_prevues, heures_passees, created_at, completed_at, archived_at, cancelled_at, deleted_at, lifecycle_updated_at" as const;
 const CHANTIER_SELECT_V3 =
   "id, nom, client, adresse, status, avancement, date_debut, date_fin_prevue, planning_start_date, planning_end_date, planning_skip_weekends, planning_hours_per_day, planning_day_capacity, planning_working_days, heures_prevues, heures_passees, created_at" as const;
@@ -87,6 +102,19 @@ function normalizeChantier(row: any): ChantierRow {
     cancelled_at: row.cancelled_at ?? null,
     deleted_at: row.deleted_at ?? null,
     lifecycle_updated_at: row.lifecycle_updated_at ?? null,
+    crm_client_id: row.crm_client_id ?? null,
+    crm_prospect_id: row.crm_prospect_id ?? null,
+    crm_opportunity_id: row.crm_opportunity_id ?? null,
+    crm_quote_id: row.crm_quote_id ?? null,
+    crm_client_phone: row.crm_client_phone ?? null,
+    crm_client_email: row.crm_client_email ?? null,
+    crm_project_description: row.crm_project_description ?? null,
+    signed_quote_amount_ht: row.signed_quote_amount_ht ?? null,
+    signed_quote_tva: row.signed_quote_tva ?? null,
+    signed_quote_amount_ttc: row.signed_quote_amount_ttc ?? null,
+    budget_labor_planned_ht: row.budget_labor_planned_ht ?? null,
+    budget_materials_planned_ht: row.budget_materials_planned_ht ?? null,
+    budget_subcontracting_planned_ht: row.budget_subcontracting_planned_ht ?? null,
   };
 }
 
@@ -128,7 +156,20 @@ function isMissingChantiersPlanningV2ColumnsError(error: any): boolean {
       msg.includes("archived_at") ||
       msg.includes("cancelled_at") ||
       msg.includes("deleted_at") ||
-      msg.includes("lifecycle_updated_at")
+      msg.includes("lifecycle_updated_at") ||
+      msg.includes("crm_client_id") ||
+      msg.includes("crm_prospect_id") ||
+      msg.includes("crm_opportunity_id") ||
+      msg.includes("crm_quote_id") ||
+      msg.includes("crm_client_phone") ||
+      msg.includes("crm_client_email") ||
+      msg.includes("crm_project_description") ||
+      msg.includes("signed_quote_amount_ht") ||
+      msg.includes("signed_quote_tva") ||
+      msg.includes("signed_quote_amount_ttc") ||
+      msg.includes("budget_labor_planned_ht") ||
+      msg.includes("budget_materials_planned_ht") ||
+      msg.includes("budget_subcontracting_planned_ht")
     )
   );
 }
@@ -152,6 +193,11 @@ export async function listChantiers(params: { scope?: ChantierScope } = {}): Pro
   const zero = await applyChantiersScope(qV4, scope);
   if (!zero.error) return (zero.data ?? []).map(normalizeChantier);
   if (!isMissingChantiersPlanningV2ColumnsError(zero.error)) throw zero.error;
+
+  const qLife = supabase.from("chantiers").select(CHANTIER_SELECT_LIFECYCLE).is("deleted_at", null).order("created_at", { ascending: false });
+  const life = await applyChantiersScope(qLife, scope);
+  if (!life.error) return (life.data ?? []).map(normalizeChantier);
+  if (!isMissingChantiersPlanningV2ColumnsError(life.error)) throw life.error;
 
   const qV3 = supabase.from("chantiers").select(CHANTIER_SELECT_V3).order("created_at", { ascending: false });
   const first = await applyChantiersScope(qV3, scope);
@@ -197,6 +243,13 @@ export async function getChantierById(id: string): Promise<ChantierRow> {
     return normalizeChantier(zero.data);
   }
   if (!isMissingChantiersPlanningV2ColumnsError(zero.error)) throw zero.error;
+
+  const life = await supabase.from("chantiers").select(CHANTIER_SELECT_LIFECYCLE).eq("id", id).maybeSingle();
+  if (!life.error) {
+    if (!life.data) throw new Error("Chantier introuvable.");
+    return normalizeChantier(life.data);
+  }
+  if (!isMissingChantiersPlanningV2ColumnsError(life.error)) throw life.error;
 
   const first = await supabase.from("chantiers").select(CHANTIER_SELECT_V3).eq("id", id).maybeSingle();
   if (!first.error) {
@@ -334,6 +387,19 @@ export async function updateChantier(
   delete patchV1.cancelled_at;
   delete patchV1.deleted_at;
   delete patchV1.lifecycle_updated_at;
+  delete patchV1.crm_client_id;
+  delete patchV1.crm_prospect_id;
+  delete patchV1.crm_opportunity_id;
+  delete patchV1.crm_quote_id;
+  delete patchV1.crm_client_phone;
+  delete patchV1.crm_client_email;
+  delete patchV1.crm_project_description;
+  delete patchV1.signed_quote_amount_ht;
+  delete patchV1.signed_quote_tva;
+  delete patchV1.signed_quote_amount_ttc;
+  delete patchV1.budget_labor_planned_ht;
+  delete patchV1.budget_materials_planned_ht;
+  delete patchV1.budget_subcontracting_planned_ht;
 
   const second = await supabase.from("chantiers").update(patchV1 as any).eq("id", id).select(CHANTIER_SELECT_V2).maybeSingle();
   if (!second.error) {

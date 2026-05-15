@@ -43,6 +43,11 @@ import {
   deleteIntervenant,
   type IntervenantRow,
 } from "../services/intervenants.service";
+import {
+  createCrmSav,
+  loadCrmChantierContext,
+  type CrmChantierContext,
+} from "../services/crm.service";
 
 import {
   listMaterielDemandesByChantierId,
@@ -666,6 +671,8 @@ export default function ChantierPage() {
   const { locale, t } = useI18n();
 
   const [item, setItem] = useState<ChantierRow | null>(null);
+  const [crmContext, setCrmContext] = useState<CrmChantierContext | null>(null);
+  const [crmContextLoading, setCrmContextLoading] = useState(false);
   const [loading, setLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [chantierActionSaving, setChantierActionSaving] = useState(false);
@@ -2494,6 +2501,31 @@ export default function ChantierPage() {
     };
   }, [id]);
 
+  useEffect(() => {
+    let alive = true;
+    async function loadContext() {
+      if (!item) {
+        setCrmContext(null);
+        return;
+      }
+      setCrmContextLoading(true);
+      try {
+        const context = await loadCrmChantierContext(item);
+        if (!alive) return;
+        setCrmContext(context);
+      } catch {
+        if (!alive) return;
+        setCrmContext(null);
+      } finally {
+        if (alive) setCrmContextLoading(false);
+      }
+    }
+    void loadContext();
+    return () => {
+      alive = false;
+    };
+  }, [item]);
+
   /* ---------------- load documents ---------------- */
   useEffect(() => {
     let alive = true;
@@ -2726,6 +2758,27 @@ export default function ChantierPage() {
     } catch (e: any) {
       setToast({ type: "error", msg: e?.message ?? "Suppression impossible." });
       setChantierActionSaving(false);
+    }
+  }
+
+  async function createSavFromChantier() {
+    if (!item) return;
+    const title = window.prompt("Titre du ticket SAV ?", `SAV - ${item.nom}`)?.trim();
+    if (!title) return;
+    try {
+      await createCrmSav({
+        chantier_id: item.id,
+        client_id: item.crm_client_id ?? null,
+        titre: title,
+        description: `Ticket SAV créé depuis le chantier ${item.nom}`,
+        urgence: "normale",
+        statut: "ouvert",
+      });
+      setToast({ type: "ok", msg: "Ticket SAV créé dans le CRM." });
+      const context = await loadCrmChantierContext(item);
+      setCrmContext(context);
+    } catch (e: any) {
+      setToast({ type: "error", msg: e?.message ?? "Création SAV impossible." });
     }
   }
 
@@ -4705,6 +4758,62 @@ export default function ChantierPage() {
             </div>
           </div>
         </div>
+      </section>
+
+      <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+          <div>
+            <div className="text-[11px] font-semibold uppercase tracking-[0.2em] text-blue-700">CRM</div>
+            <div className="mt-1 text-lg font-semibold text-slate-950">Continuité commerciale → chantier</div>
+            <div className="mt-1 text-sm text-slate-500">
+              Client, devis d'origine, opportunité, documents et SAV liés au chantier.
+            </div>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {item.crm_client_id ? (
+              <Link to="/crm/clients" className="rounded-xl border px-3 py-2 text-sm hover:bg-slate-50">Voir fiche client</Link>
+            ) : null}
+            {item.crm_quote_id ? (
+              <Link to="/crm/devis" className="rounded-xl border px-3 py-2 text-sm hover:bg-slate-50">Voir devis</Link>
+            ) : null}
+            {(item.status === "TERMINE" || item.status === "ARCHIVE") ? (
+              <button type="button" onClick={() => void createSavFromChantier()} className="rounded-xl border border-blue-200 bg-blue-50 px-3 py-2 text-sm text-blue-800 hover:bg-blue-100">
+                Créer ticket SAV
+              </button>
+            ) : null}
+          </div>
+        </div>
+        <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+          <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+            <div className="text-xs text-slate-500">Client lié</div>
+            <div className="mt-1 font-semibold text-slate-950">
+              {crmContextLoading ? "Chargement..." : crmContext?.client
+                ? [crmContext.client.prenom, crmContext.client.nom].filter(Boolean).join(" ") || crmContext.client.societe || item.client || "Client CRM"
+                : item.client || "Aucun client CRM"}
+            </div>
+            <div className="mt-1 text-xs text-slate-500">{item.crm_client_email ?? crmContext?.client?.email ?? "—"} · {item.crm_client_phone ?? crmContext?.client?.mobile ?? crmContext?.client?.telephone ?? "—"}</div>
+          </div>
+          <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+            <div className="text-xs text-slate-500">Devis d'origine</div>
+            <div className="mt-1 font-semibold text-slate-950">{crmContext?.quote?.quote_number ?? item.crm_quote_id ?? "—"}</div>
+            <div className="mt-1 text-xs text-slate-500">{Number(item.signed_quote_amount_ht ?? crmContext?.quote?.montant_ht ?? 0).toLocaleString("fr-FR")} € HT</div>
+          </div>
+          <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+            <div className="text-xs text-slate-500">Opportunité</div>
+            <div className="mt-1 font-semibold text-slate-950">{crmContext?.opportunity?.nom_affaire ?? item.crm_opportunity_id ?? "—"}</div>
+            <div className="mt-1 text-xs text-slate-500">{crmContext?.communications.length ?? 0} échange(s) commercial(aux)</div>
+          </div>
+          <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+            <div className="text-xs text-slate-500">Documents / SAV</div>
+            <div className="mt-1 font-semibold text-slate-950">{crmContext?.documents.length ?? 0} document(s)</div>
+            <div className="mt-1 text-xs text-slate-500">{crmContext?.sav.length ?? 0} ticket(s) SAV · {crmContext?.invoices.length ?? 0} facture(s)</div>
+          </div>
+        </div>
+        {item.crm_project_description ? (
+          <div className="mt-3 rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700">
+            {item.crm_project_description}
+          </div>
+        ) : null}
       </section>
 
       <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">

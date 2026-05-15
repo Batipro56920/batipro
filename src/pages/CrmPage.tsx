@@ -54,6 +54,7 @@ const EMPTY_DATASET: CrmDataset = {
   documents: [],
   communications: [],
   invoices: [],
+  chantiers: [],
 };
 
 const NAV: Array<{ key: CrmSection; label: string; href: string }> = [
@@ -205,6 +206,9 @@ export default function CrmPage({ section = "dashboard" }: Props) {
     overdueTasks: data.tasks.filter((row) => row.statut !== "terminee" && row.due_at && row.due_at.slice(0, 10) < today).length,
     appointmentsToday: data.appointments.filter((row) => row.starts_at.slice(0, 10) === today).length,
     openSav: data.sav.filter((row) => row.statut !== "clos").length,
+    chantierRevenue: data.chantiers.filter((row) => row.crm_quote_id).reduce((sum, row) => sum + Number(row.signed_quote_amount_ht ?? 0), 0),
+    crmActiveChantiers: data.chantiers.filter((row) => row.crm_quote_id && ["PREPARATION", "EN_COURS", "EN_PAUSE"].includes(row.status)).length,
+    crmFinishedChantiers: data.chantiers.filter((row) => row.crm_quote_id && row.status === "TERMINE").length,
   };
   const transformationRate = data.quotes.length ? Math.round((kpis.quotesSigned / data.quotes.length) * 100) : 0;
 
@@ -313,7 +317,7 @@ export default function CrmPage({ section = "dashboard" }: Props) {
           onTask={(row) => submitSafely(async () => createCrmTask({ prospect_id: row.id, type: "relance", titre: `Relancer ${entityLabel(row)}`, due_at: new Date().toISOString() }))}
         />
       ) : section === "clients" ? (
-        <ClientsView rows={filteredClients} query={query} setQuery={setQuery} onCreate={() => setModal("client")} />
+        <ClientsView rows={filteredClients} chantiers={data.chantiers} sav={data.sav} query={query} setQuery={setQuery} onCreate={() => setModal("client")} />
       ) : section === "opportunities" ? (
         <OpportunitiesView
           data={data}
@@ -546,12 +550,35 @@ function ProspectsView({
   );
 }
 
-function ClientsView({ rows, query, setQuery, onCreate }: { rows: CrmClientRow[]; query: string; setQuery: (value: string) => void; onCreate: () => void }) {
+function ClientsView({
+  rows,
+  chantiers,
+  sav,
+  query,
+  setQuery,
+  onCreate,
+}: {
+  rows: CrmClientRow[];
+  chantiers: CrmDataset["chantiers"];
+  sav: CrmDataset["sav"];
+  query: string;
+  setQuery: (value: string) => void;
+  onCreate: () => void;
+}) {
   return (
     <ListShell title="Clients" actionLabel="Ajouter un client" query={query} setQuery={setQuery} onCreate={onCreate}>
       <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
         {rows.map((row) => (
           <div key={row.id} className="rounded-3xl border bg-white p-5">
+            {(() => {
+              const clientChantiers = chantiers.filter((chantier) => chantier.crm_client_id === row.id);
+              const activeCount = clientChantiers.filter((chantier) => ["PREPARATION", "EN_COURS", "EN_PAUSE"].includes(chantier.status)).length;
+              const doneCount = clientChantiers.filter((chantier) => chantier.status === "TERMINE").length;
+              const archivedCount = clientChantiers.filter((chantier) => chantier.status === "ARCHIVE").length;
+              const amount = clientChantiers.reduce((sum, chantier) => sum + Number(chantier.signed_quote_amount_ht ?? 0), 0);
+              const savCount = sav.filter((ticket) => ticket.client_id === row.id).length;
+              return (
+                <>
             <div className="flex items-start justify-between gap-3">
               <div>
                 <div className="text-lg font-semibold">{entityLabel(row)}</div>
@@ -564,6 +591,16 @@ function ClientsView({ rows, query, setQuery, onCreate }: { rows: CrmClientRow[]
               <div>Téléphone : {row.mobile ?? row.telephone ?? "—"}</div>
               <div>Adresse : {row.adresse ?? "—"}</div>
             </div>
+            <div className="mt-4 grid grid-cols-2 gap-2 text-xs">
+              <div className="rounded-xl bg-slate-50 p-2">En cours : <span className="font-semibold">{activeCount}</span></div>
+              <div className="rounded-xl bg-slate-50 p-2">Terminés : <span className="font-semibold">{doneCount}</span></div>
+              <div className="rounded-xl bg-slate-50 p-2">Archivés : <span className="font-semibold">{archivedCount}</span></div>
+              <div className="rounded-xl bg-slate-50 p-2">SAV : <span className="font-semibold">{savCount}</span></div>
+            </div>
+            <div className="mt-2 rounded-xl border bg-slate-50 p-2 text-xs text-slate-600">Montant total chantiers : <span className="font-semibold text-slate-950">{eur(amount)}</span></div>
+                </>
+              );
+            })()}
           </div>
         ))}
       </div>
@@ -760,8 +797,12 @@ function StatsView({ data, kpis, transformationRate }: { data: CrmDataset; kpis:
     <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
       {[
         ["CA signé", eur(kpis.signedRevenue)],
+        ["CA transformé chantier", eur(kpis.chantierRevenue)],
         ["CA pipeline", eur(kpis.pipelineRevenue)],
         ["Taux transformation", `${transformationRate}%`],
+        ["Taux devis → chantier", `${data.quotes.length ? Math.round((data.chantiers.filter((row) => row.crm_quote_id).length / data.quotes.length) * 100) : 0}%`],
+        ["Chantiers actifs CRM", kpis.crmActiveChantiers],
+        ["Chantiers terminés CRM", kpis.crmFinishedChantiers],
         ["Délai signature", "à mesurer"],
         ["Nombre devis", data.quotes.length],
         ["Devis gagnés", kpis.quotesSigned],

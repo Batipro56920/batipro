@@ -14,7 +14,11 @@ export type ProfileFeaturePermissionKey =
   | "statistiques"
   | "fournisseurs"
   | "entreprise_parametres"
-  | "task_library_preparation";
+  | "task_library_preparation"
+  | "chantier_financier_view"
+  | "chantier_financier_edit"
+  | "chantier_financier_margin"
+  | "chantier_financier_billing";
 
 export type ProfileFeaturePermissions = Partial<Record<ProfileFeaturePermissionKey, boolean>>;
 
@@ -45,6 +49,10 @@ const PROFILE_PERMISSION_KEYS: ProfileFeaturePermissionKey[] = [
   "fournisseurs",
   "entreprise_parametres",
   "task_library_preparation",
+  "chantier_financier_view",
+  "chantier_financier_edit",
+  "chantier_financier_margin",
+  "chantier_financier_billing",
 ];
 
 const PROFILE_PERMISSION_KEY_SET = new Set<ProfileFeaturePermissionKey>(PROFILE_PERMISSION_KEYS);
@@ -92,6 +100,26 @@ const EXTRA_PERMISSION_DEFINITIONS: Record<
     label: "Bibliothèque avancée",
     description:
       "Accès aux ratios matériaux, au matériel à prévoir et aux estimatifs avancés des modèles de tâches.",
+  },
+  chantier_financier_view: {
+    key: "chantier_financier_view",
+    label: "Voir financier chantier",
+    description: "Acces aux budgets, couts reels, facturation et indicateurs financiers chantier.",
+  },
+  chantier_financier_edit: {
+    key: "chantier_financier_edit",
+    label: "Modifier financier chantier",
+    description: "Creation et modification des depenses, budgets, facturations et avenants financiers.",
+  },
+  chantier_financier_margin: {
+    key: "chantier_financier_margin",
+    label: "Voir marges",
+    description: "Affichage des marges previsionnelles et reelles.",
+  },
+  chantier_financier_billing: {
+    key: "chantier_financier_billing",
+    label: "Gerer facturation",
+    description: "Gestion des acomptes, situations, factures finales, encaissements et impayes.",
   },
 };
 
@@ -171,7 +199,13 @@ export function getProfilePermissionSections(): ProfilePermissionSection[] {
     {
       id: "avance",
       label: "Options avancées",
-      permissions: [EXTRA_PERMISSION_DEFINITIONS.task_library_preparation],
+      permissions: [
+        EXTRA_PERMISSION_DEFINITIONS.task_library_preparation,
+        EXTRA_PERMISSION_DEFINITIONS.chantier_financier_view,
+        EXTRA_PERMISSION_DEFINITIONS.chantier_financier_edit,
+        EXTRA_PERMISSION_DEFINITIONS.chantier_financier_margin,
+        EXTRA_PERMISSION_DEFINITIONS.chantier_financier_billing,
+      ],
     },
   ];
 }

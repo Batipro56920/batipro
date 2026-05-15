@@ -1,4 +1,4 @@
-import { createChantier, updateChantier, type ChantierRow } from "./chantiers.service";
+import { createChantier, getChantiers, updateChantier, type ChantierRow } from "./chantiers.service";
 import { supabase } from "../lib/supabaseClient";
 
 const crmDb = supabase as any;
@@ -242,6 +242,18 @@ export type CrmDataset = {
   documents: CrmDocumentRow[];
   communications: CrmCommunicationRow[];
   invoices: CrmInvoiceRow[];
+  chantiers: ChantierRow[];
+};
+
+export type CrmChantierContext = {
+  client: CrmClientRow | null;
+  prospect: CrmProspectRow | null;
+  opportunity: CrmOpportunityRow | null;
+  quote: CrmQuoteRow | null;
+  documents: CrmDocumentRow[];
+  communications: CrmCommunicationRow[];
+  sav: CrmSavRow[];
+  invoices: CrmInvoiceRow[];
 };
 
 const DEFAULT_STAGES = [
@@ -337,7 +349,7 @@ export async function ensureCrmDefaults() {
 
 export async function loadCrmDataset(): Promise<CrmDataset> {
   const stages = await ensureCrmDefaults();
-  const [prospects, clients, opportunities, quotes, tasks, appointments, sav, documents, communications, invoices] =
+  const [prospects, clients, opportunities, quotes, tasks, appointments, sav, documents, communications, invoices, chantiers] =
     await Promise.all([
       selectTable<CrmProspectRow>("crm_prospects", CRM_SELECTS.prospects),
       selectTable<CrmClientRow>("crm_clients", CRM_SELECTS.clients),
@@ -349,8 +361,60 @@ export async function loadCrmDataset(): Promise<CrmDataset> {
       selectTable<CrmDocumentRow>("crm_documents", CRM_SELECTS.documents),
       selectTable<CrmCommunicationRow>("crm_communications", CRM_SELECTS.communications, "occurred_at"),
       selectTable<CrmInvoiceRow>("crm_invoices", CRM_SELECTS.invoices),
+      getChantiers(),
     ]);
-  return { prospects, clients, opportunities, quotes, tasks, appointments, sav, stages, documents, communications, invoices };
+  return { prospects, clients, opportunities, quotes, tasks, appointments, sav, stages, documents, communications, invoices, chantiers };
+}
+
+async function maybeSingleById<T>(table: string, select: string, id: string | null | undefined): Promise<T | null> {
+  if (!id) return null;
+  const { data, error } = await crmDb.from(table).select(select).eq("id", id).maybeSingle();
+  if (error) {
+    if (isMissingCrmSchema(error)) return null;
+    throw error;
+  }
+  return (data ?? null) as T | null;
+}
+
+export async function loadCrmChantierContext(chantier: {
+  id: string;
+  crm_client_id?: string | null;
+  crm_prospect_id?: string | null;
+  crm_opportunity_id?: string | null;
+  crm_quote_id?: string | null;
+}): Promise<CrmChantierContext> {
+  const [client, prospect, opportunity, quote, documents, communications, sav, invoices] = await Promise.all([
+    maybeSingleById<CrmClientRow>("crm_clients", CRM_SELECTS.clients, chantier.crm_client_id),
+    maybeSingleById<CrmProspectRow>("crm_prospects", CRM_SELECTS.prospects, chantier.crm_prospect_id),
+    maybeSingleById<CrmOpportunityRow>("crm_opportunities", CRM_SELECTS.opportunities, chantier.crm_opportunity_id),
+    maybeSingleById<CrmQuoteRow>("crm_quotes", CRM_SELECTS.quotes, chantier.crm_quote_id),
+    selectTable<CrmDocumentRow>("crm_documents", CRM_SELECTS.documents).then((rows) =>
+      rows.filter(
+        (row) =>
+          row.chantier_id === chantier.id ||
+          row.client_id === chantier.crm_client_id ||
+          row.prospect_id === chantier.crm_prospect_id ||
+          row.opportunity_id === chantier.crm_opportunity_id ||
+          row.quote_id === chantier.crm_quote_id,
+      ),
+    ),
+    selectTable<CrmCommunicationRow>("crm_communications", CRM_SELECTS.communications, "occurred_at").then((rows) =>
+      rows.filter(
+        (row) =>
+          row.client_id === chantier.crm_client_id ||
+          row.prospect_id === chantier.crm_prospect_id ||
+          row.opportunity_id === chantier.crm_opportunity_id ||
+          row.quote_id === chantier.crm_quote_id,
+      ),
+    ),
+    selectTable<CrmSavRow>("crm_sav", CRM_SELECTS.sav).then((rows) =>
+      rows.filter((row) => row.chantier_id === chantier.id || row.client_id === chantier.crm_client_id),
+    ),
+    selectTable<CrmInvoiceRow>("crm_invoices", CRM_SELECTS.invoices).then((rows) =>
+      rows.filter((row) => row.chantier_id === chantier.id || row.client_id === chantier.crm_client_id || row.quote_id === chantier.crm_quote_id),
+    ),
+  ]);
+  return { client, prospect, opportunity, quote, documents, communications, sav, invoices };
 }
 
 export async function createCrmProspect(input: Partial<CrmProspectRow>) {
@@ -706,6 +770,19 @@ export async function transformAcceptedQuoteToChantier(input: {
   });
   await updateChantier(chantier.id, {
     heures_prevues: quote.montant_ht,
+    crm_client_id: client?.id ?? quote.client_id ?? null,
+    crm_prospect_id: prospect?.id ?? quote.prospect_id ?? null,
+    crm_opportunity_id: opportunity?.id ?? quote.opportunity_id ?? null,
+    crm_quote_id: quote.id,
+    crm_client_phone: account?.mobile ?? account?.telephone ?? null,
+    crm_client_email: account?.email ?? null,
+    crm_project_description: quote.description ?? opportunity?.notes ?? prospect?.description_besoin ?? null,
+    signed_quote_amount_ht: quote.montant_ht,
+    signed_quote_tva: quote.tva,
+    signed_quote_amount_ttc: quote.montant_ttc,
+    budget_labor_planned_ht: Math.round(Number(quote.montant_ht ?? 0) * 0.35 * 100) / 100,
+    budget_materials_planned_ht: Math.round(Number(quote.montant_ht ?? 0) * 0.35 * 100) / 100,
+    budget_subcontracting_planned_ht: Math.round(Number(quote.montant_ht ?? 0) * 0.15 * 100) / 100,
   } as any).catch(() => undefined);
   await updateCrmQuote(quote.id, { chantier_id: chantier.id, statut: "accepte", signature_status: "signe", accepted_at: quote.accepted_at ?? new Date().toISOString() });
   if (opportunity) {
