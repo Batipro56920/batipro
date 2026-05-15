@@ -1,15 +1,13 @@
 ﻿// src/services/pdfText.service.ts
 import { supabase } from "../lib/supabaseClient";
-import * as pdfjsLib from "pdfjs-dist";
-
-// ? Worker servi par Vite depuis /public/pdfjs/...
-pdfjsLib.GlobalWorkerOptions.workerSrc = "/pdfjs/pdf.worker.min.mjs";
+import { loadPdfJs } from "../lib/pdfjs";
 
 /** Extrait le texte d'un PDF texte (non scanné) */
 export async function extractTextFromPdf(file: File): Promise<string> {
   if (!file) throw new Error("Aucun fichier PDF fourni");
 
   const buffer = await file.arrayBuffer();
+  const pdfjsLib = await loadPdfJs();
 
   // ? Disable worker fallback: on veut une erreur si le worker n'est pas chargé
   // (sinon "fake worker" => extraction instable)

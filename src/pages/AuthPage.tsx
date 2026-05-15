@@ -5,6 +5,178 @@ import { supabase } from "../lib/supabaseClient";
 import { useI18n } from "../i18n";
 import { readStoredIntervenantToken } from "../utils/intervenantSession";
 
+function isTransientLoginError(error: unknown): boolean {
+  const message = String((error as any)?.message ?? "").toLowerCase();
+  return (
+    message.includes("load failed") ||
+    message.includes("failed to fetch") ||
+    message.includes("network") ||
+    message.includes("fetcherror")
+  );
+}
+
+function wait(ms: number): Promise<void> {
+  return new Promise((resolve) => window.setTimeout(resolve, ms));
+}
+
+function shouldPreferDirectAuth(): boolean {
+  if (typeof navigator === "undefined") return false;
+  const userAgent = navigator.userAgent.toLowerCase();
+  const isAppleMobile =
+    userAgent.includes("iphone") ||
+    userAgent.includes("ipad") ||
+    userAgent.includes("ipod") ||
+    (userAgent.includes("macintosh") && "ontouchend" in document);
+  const isWebKit = userAgent.includes("applewebkit");
+  const isOtherIosBrowser =
+    userAgent.includes("crios") ||
+    userAgent.includes("fxios") ||
+    userAgent.includes("edgios") ||
+    userAgent.includes("opios");
+  return isAppleMobile && isWebKit && !isOtherIosBrowser;
+}
+
+type DirectAuthPayload = {
+  access_token?: string;
+  refresh_token?: string;
+  expires_in?: number;
+  expires_at?: number;
+  token_type?: string;
+  user?: unknown;
+  error_description?: string;
+  msg?: string;
+};
+
+function buildSupabaseAuthUrl(): string {
+  const baseUrl = String(import.meta.env.VITE_SUPABASE_URL ?? "").trim().replace(/\/+$/, "");
+  return `${baseUrl}/auth/v1/token?grant_type=password`;
+}
+
+function buildSupabaseStorageKey(): string {
+  const baseUrl = String(import.meta.env.VITE_SUPABASE_URL ?? "").trim();
+  try {
+    const hostname = new URL(baseUrl).hostname;
+    return `sb-${hostname.split(".")[0]}-auth-token`;
+  } catch {
+    return "supabase-auth-token";
+  }
+}
+
+function getBrowserStorage(): Storage | null {
+  if (typeof window === "undefined") return null;
+  try {
+    return window.localStorage;
+  } catch {
+    return null;
+  }
+}
+
+function directPasswordSignIn(email: string, password: string): Promise<DirectAuthPayload> {
+  const apikey = String(import.meta.env.VITE_SUPABASE_ANON_KEY ?? "").trim();
+  const url = buildSupabaseAuthUrl();
+
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open("POST", url, true);
+    xhr.responseType = "text";
+    xhr.timeout = 15000;
+    xhr.setRequestHeader("Content-Type", "application/json");
+    xhr.setRequestHeader("apikey", apikey);
+    xhr.setRequestHeader("x-client-info", "batipro-auth-fallback");
+
+    xhr.onload = () => {
+      let payload: DirectAuthPayload = {};
+      try {
+        payload = xhr.responseText ? (JSON.parse(xhr.responseText) as DirectAuthPayload) : {};
+      } catch {
+        payload = {};
+      }
+
+      if (xhr.status >= 200 && xhr.status < 300) {
+        resolve(payload);
+        return;
+      }
+
+      reject(new Error(payload.error_description || payload.msg || `Auth error (${xhr.status})`));
+    };
+
+    xhr.onerror = () => reject(new Error("Load failed"));
+    xhr.ontimeout = () => reject(new Error("Load failed"));
+    xhr.send(JSON.stringify({ email, password }));
+  });
+}
+
+async function persistSessionManually(session: {
+  access_token: string;
+  refresh_token: string;
+  expires_in: number;
+  expires_at: number;
+  token_type: string;
+  user: unknown;
+}): Promise<void> {
+  const authClient = supabase.auth as any;
+  const storageKey = String(authClient.storageKey ?? buildSupabaseStorageKey()).trim() || buildSupabaseStorageKey();
+  const storage = authClient.storage ?? getBrowserStorage();
+  const userStorage = authClient.userStorage ?? storage;
+
+  if (!storage || typeof storage.setItem !== "function") {
+    throw new Error("Stockage de session indisponible.");
+  }
+
+  try {
+    storage.removeItem?.(`${storageKey}-code-verifier`);
+  } catch {
+    // Ignore local cleanup errors.
+  }
+
+  if (userStorage && typeof userStorage.setItem === "function" && session.user) {
+    userStorage.setItem(`${storageKey}-user`, JSON.stringify({ user: session.user }));
+    const mainSession = {
+      access_token: session.access_token,
+      refresh_token: session.refresh_token,
+      expires_in: session.expires_in,
+      expires_at: session.expires_at,
+      token_type: session.token_type,
+    };
+    storage.setItem(storageKey, JSON.stringify(mainSession));
+    return;
+  }
+
+  storage.setItem(storageKey, JSON.stringify(session));
+}
+
+async function persistDirectSession(payload: DirectAuthPayload): Promise<void> {
+  const accessToken = String(payload.access_token ?? "").trim();
+  const refreshToken = String(payload.refresh_token ?? "").trim();
+  if (!accessToken || !refreshToken) {
+    throw new Error("Session de connexion invalide.");
+  }
+
+  const expiresIn = Number(payload.expires_in ?? 3600);
+  const expiresAt =
+    Number(payload.expires_at ?? 0) || Math.floor(Date.now() / 1000) + (Number.isFinite(expiresIn) ? expiresIn : 3600);
+
+  const session = {
+    access_token: accessToken,
+    refresh_token: refreshToken,
+    expires_in: Number.isFinite(expiresIn) ? expiresIn : 3600,
+    expires_at: expiresAt,
+    token_type: String(payload.token_type ?? "bearer"),
+    user: payload.user ?? null,
+  };
+
+  const authClient = supabase.auth as any;
+  if (typeof authClient._saveSession === "function") {
+    await authClient._saveSession(session);
+  } else {
+    await persistSessionManually(session);
+  }
+
+  if (typeof authClient._notifyAllSubscribers === "function") {
+    await authClient._notifyAllSubscribers("SIGNED_IN", session);
+  }
+}
+
 export default function AuthPage() {
   const navigate = useNavigate();
   const location = useLocation();
@@ -56,17 +228,37 @@ export default function AuthPage() {
         return;
       }
 
-      const { error } = await supabase.auth.signInWithPassword({
+      const credentials = {
         email: email.trim(),
         password,
-      });
-      if (error) throw error;
+      };
+
+      if (shouldPreferDirectAuth()) {
+        const payload = await directPasswordSignIn(credentials.email, credentials.password);
+        await persistDirectSession(payload);
+      } else {
+        let signInResult = await supabase.auth.signInWithPassword(credentials);
+        if (signInResult.error && isTransientLoginError(signInResult.error)) {
+          await wait(400);
+          signInResult = await supabase.auth.signInWithPassword(credentials);
+        }
+        if (signInResult.error && isTransientLoginError(signInResult.error)) {
+          const payload = await directPasswordSignIn(credentials.email, credentials.password);
+          await persistDirectSession(payload);
+        } else if (signInResult.error) {
+          throw signInResult.error;
+        }
+      }
 
       // Si tu avais une redirection initiale
       const from = (location.state as any)?.from?.pathname ?? "/dashboard";
       navigate(from, { replace: true });
     } catch (err: any) {
-      setMsg(err?.message ?? t("auth.error"));
+      setMsg(
+        isTransientLoginError(err)
+          ? "Connexion au serveur impossible pour le moment. Recharge la page puis reessaie."
+          : err?.message ?? t("auth.error"),
+      );
     } finally {
       setLoading(false);
     }

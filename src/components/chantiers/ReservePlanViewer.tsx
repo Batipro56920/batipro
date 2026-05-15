@@ -1,8 +1,6 @@
 ﻿import { useEffect, useMemo, useRef, useState } from "react";
 import type { PointerEvent } from "react";
-import * as pdfjsLib from "pdfjs-dist";
-
-pdfjsLib.GlobalWorkerOptions.workerSrc = "/pdfjs/pdf.worker.min.mjs";
+import { loadPdfJs } from "../../lib/pdfjs";
 
 type MarkerTool = "POINT" | "LINE" | "CROSS" | "CHECK" | "TEXT";
 
@@ -321,11 +319,16 @@ export default function ReservePlanViewer({
     }
 
     let alive = true;
-    const loadingTask = pdfjsLib.getDocument(url);
+    let loadingTask: { promise: Promise<any>; destroy: () => Promise<void> } | null = null;
 
-    loadingTask.promise
+    void loadPdfJs()
+      .then((pdfjsLib) => {
+        if (!alive) return null;
+        loadingTask = pdfjsLib.getDocument(url);
+        return loadingTask.promise;
+      })
       .then((doc: any) => {
-        if (!alive) return;
+        if (!alive || !doc) return;
         setPdfDoc(doc);
         setPageCount(Math.max(1, Number(doc?.numPages ?? 1)));
         setPage(1);
@@ -339,7 +342,9 @@ export default function ReservePlanViewer({
 
     return () => {
       alive = false;
-      void loadingTask.destroy();
+      if (loadingTask) {
+        void loadingTask.destroy();
+      }
     };
   }, [isPdf, url]);
 

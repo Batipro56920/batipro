@@ -14,6 +14,16 @@ type AuthGateState = {
   denied: boolean;
 };
 
+function isTransientAuthNetworkError(error: unknown): boolean {
+  const message = String((error as any)?.message ?? "").toLowerCase();
+  return (
+    message.includes("load failed") ||
+    message.includes("failed to fetch") ||
+    message.includes("network") ||
+    message.includes("fetcherror")
+  );
+}
+
 export default function RequireAuth({ children }: { children: ReactNode }) {
   const location = useLocation();
   const { t } = useI18n();
@@ -63,8 +73,19 @@ export default function RequireAuth({ children }: { children: ReactNode }) {
           redirectTo: readStoredIntervenantToken() ? "/intervenant" : "/login",
           denied: true,
         });
-      } catch {
+      } catch (error) {
         if (!alive) return;
+
+        if (sessionExists && isTransientAuthNetworkError(error)) {
+          setGateState({
+            checking: false,
+            allowed: true,
+            redirectTo: "/login",
+            denied: false,
+          });
+          return;
+        }
+
         await supabase.auth.signOut();
         if (!alive) return;
         setGateState({

@@ -4,6 +4,35 @@ import type { Database } from "../types/supabase";
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL!;
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY!;
 
+function isTransientFetchFailure(error: unknown): boolean {
+  const message = String((error as any)?.message ?? "").toLowerCase();
+  return (
+    message.includes("load failed") ||
+    message.includes("failed to fetch") ||
+    message.includes("network") ||
+    message.includes("fetcherror")
+  );
+}
+
+function wait(ms: number): Promise<void> {
+  return new Promise((resolve) => window.setTimeout(resolve, ms));
+}
+
+async function supabaseFetchWithRetry(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
+  const fetchImpl = globalThis.fetch?.bind(globalThis);
+  if (!fetchImpl) {
+    throw new Error("Fetch API indisponible.");
+  }
+
+  try {
+    return await fetchImpl(input, init);
+  } catch (error) {
+    if (!isTransientFetchFailure(error)) throw error;
+    await wait(350);
+    return fetchImpl(input, init);
+  }
+}
+
 function createMemoryStorage(): Storage {
   const store = new Map<string, string>();
   return {
@@ -51,5 +80,8 @@ export const supabase = createClient<Database>(supabaseUrl, supabaseAnonKey, {
     autoRefreshToken: true,
     detectSessionInUrl: true,
     storage: safeAuthStorage,
+  },
+  global: {
+    fetch: supabaseFetchWithRetry,
   },
 });

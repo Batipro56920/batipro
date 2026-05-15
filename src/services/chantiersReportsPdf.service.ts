@@ -1,7 +1,5 @@
 import jsPDF from "jspdf";
-import * as pdfjsLib from "pdfjs-dist";
-
-pdfjsLib.GlobalWorkerOptions.workerSrc = "/pdfjs/pdf.worker.min.mjs";
+import { loadPdfJs } from "../lib/pdfjs";
 
 type VisiteActionInput = {
   action_text: string;
@@ -336,6 +334,7 @@ async function appendPdfSource(pdf: jsPDF, doc: DoeSourceDocument) {
     throw new Error(`Impossible de charger le document: ${doc.title}`);
   }
   const bytes = await response.arrayBuffer();
+  const pdfjsLib = await loadPdfJs();
   const loadingTask = pdfjsLib.getDocument({ data: bytes });
   const source = await loadingTask.promise;
   try {
