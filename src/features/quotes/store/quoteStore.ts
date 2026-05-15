@@ -1,3 +1,4 @@
+import { useMemo } from "react";
 import { create } from "zustand";
 import type { QuoteDraft, QuoteLine } from "../types";
 import { calculateQuoteTotals } from "../utils/quoteCalculations";
@@ -61,5 +62,6 @@ export const useQuoteStore = create<QuoteState>((set) => ({
 }));
 
 export function useQuoteTotals() {
-  return useQuoteStore((state) => calculateQuoteTotals(state.draft.lines));
+  const lines = useQuoteStore((state) => state.draft.lines);
+  return useMemo(() => calculateQuoteTotals(lines), [lines]);
 }
