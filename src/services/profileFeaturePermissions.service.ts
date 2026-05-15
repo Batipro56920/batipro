@@ -9,6 +9,7 @@ import {
 export type ProfileFeaturePermissionKey =
   | CompanyFeatureModuleId
   | "intervenants"
+  | "crm"
   | "bibliotheque"
   | "statistiques"
   | "fournisseurs"
@@ -38,6 +39,7 @@ export type ProfilePermissionSection = {
 const PROFILE_PERMISSION_KEYS: ProfileFeaturePermissionKey[] = [
   ...COMPANY_FEATURE_MODULES.map((module) => module.id),
   "intervenants",
+  "crm",
   "bibliotheque",
   "statistiques",
   "fournisseurs",
@@ -59,6 +61,11 @@ const EXTRA_PERMISSION_DEFINITIONS: Record<
     label: "Intervenants",
     description:
       "Accès à l’onglet intervenants dans les chantiers et à la page globale des intervenants.",
+  },
+  crm: {
+    key: "crm",
+    label: "CRM",
+    description: "Accès au cockpit CRM, prospects, clients, opportunités, devis, agenda et SAV.",
   },
   bibliotheque: {
     key: "bibliotheque",
@@ -153,6 +160,7 @@ export function getProfilePermissionSections(): ProfilePermissionSection[] {
       label: "Backoffice",
       permissions: [
         EXTRA_PERMISSION_DEFINITIONS.intervenants,
+        EXTRA_PERMISSION_DEFINITIONS.crm,
         EXTRA_PERMISSION_DEFINITIONS.bibliotheque,
         EXTRA_PERMISSION_DEFINITIONS.statistiques,
         EXTRA_PERMISSION_DEFINITIONS.fournisseurs,

@@ -6,6 +6,7 @@ import RequireCompanyFeature from "./components/RequireCompanyFeature";
 
 import AuthPage from "./pages/AuthPage";
 import DashboardPage from "./pages/DashboardPage";
+import CrmPage from "./pages/CrmPage";
 import ChantiersPage from "./pages/ChantiersPage";
 import ChantierNewPage from "./pages/ChantierNewPage";
 import ChantierPage from "./pages/ChantierPage";
@@ -43,6 +44,78 @@ export default function App() {
         }
       >
         <Route path="/dashboard" element={<DashboardPage />} />
+        <Route
+          path="/crm"
+          element={
+            <RequireCompanyFeature profilePermissionKey="crm">
+              <CrmPage section="dashboard" />
+            </RequireCompanyFeature>
+          }
+        />
+        <Route
+          path="/crm/prospects"
+          element={
+            <RequireCompanyFeature profilePermissionKey="crm">
+              <CrmPage section="prospects" />
+            </RequireCompanyFeature>
+          }
+        />
+        <Route
+          path="/crm/clients"
+          element={
+            <RequireCompanyFeature profilePermissionKey="crm">
+              <CrmPage section="clients" />
+            </RequireCompanyFeature>
+          }
+        />
+        <Route
+          path="/crm/opportunites"
+          element={
+            <RequireCompanyFeature profilePermissionKey="crm">
+              <CrmPage section="opportunities" />
+            </RequireCompanyFeature>
+          }
+        />
+        <Route
+          path="/crm/devis"
+          element={
+            <RequireCompanyFeature profilePermissionKey="crm">
+              <CrmPage section="quotes" />
+            </RequireCompanyFeature>
+          }
+        />
+        <Route
+          path="/crm/agenda"
+          element={
+            <RequireCompanyFeature profilePermissionKey="crm">
+              <CrmPage section="agenda" />
+            </RequireCompanyFeature>
+          }
+        />
+        <Route
+          path="/crm/sav"
+          element={
+            <RequireCompanyFeature profilePermissionKey="crm">
+              <CrmPage section="sav" />
+            </RequireCompanyFeature>
+          }
+        />
+        <Route
+          path="/crm/statistiques"
+          element={
+            <RequireCompanyFeature profilePermissionKey="crm">
+              <CrmPage section="stats" />
+            </RequireCompanyFeature>
+          }
+        />
+        <Route
+          path="/crm/parametres"
+          element={
+            <RequireCompanyFeature profilePermissionKey="crm">
+              <CrmPage section="settings" />
+            </RequireCompanyFeature>
+          }
+        />
 
         <Route path="/chantiers" element={<ChantiersPage />} />
         <Route path="/chantiers/nouveau" element={<ChantierNewPage />} />

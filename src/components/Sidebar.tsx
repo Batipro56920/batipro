@@ -10,6 +10,7 @@ import {
   Building2,
   Truck,
   TriangleAlert,
+  BriefcaseBusiness,
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import type { CompanyFeatureModuleId } from "../config/companyFeatures";
@@ -71,6 +72,12 @@ export default function Sidebar({ collapsed = false, onToggleCollapse }: Props) 
 
   const nav = [
     { to: "/dashboard", label: t("sidebar.dashboard"), icon: LayoutDashboard },
+    {
+      to: "/crm",
+      label: "CRM",
+      icon: BriefcaseBusiness,
+      permissionKey: "crm" as const,
+    },
     { to: "/chantiers", label: t("sidebar.chantiers"), icon: Hammer },
     {
       to: "/intervenants",
