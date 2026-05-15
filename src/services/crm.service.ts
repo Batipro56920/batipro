@@ -528,7 +528,6 @@ async function selectTable<T>(table: string, select: string, order = "created_at
 async function selectTableWithFallback<T>(table: string, select: string, fallbackSelect: string, order = "created_at"): Promise<T[]> {
   const { data, error } = await crmDb.from(table).select(select).order(order, { ascending: false });
   if (!error) return (data ?? []) as T[];
-  if (isMissingCrmSchema(error)) return [];
   const fallback = await crmDb.from(table).select(fallbackSelect).order(order, { ascending: false });
   if (fallback.error) {
     if (isMissingCrmSchema(fallback.error)) return [];
@@ -588,7 +587,6 @@ async function maybeSingleByIdWithFallback<T>(table: string, select: string, fal
   if (!id) return null;
   const { data, error } = await crmDb.from(table).select(select).eq("id", id).maybeSingle();
   if (!error) return (data ?? null) as T | null;
-  if (isMissingCrmSchema(error)) return null;
   const fallback = await crmDb.from(table).select(fallbackSelect).eq("id", id).maybeSingle();
   if (fallback.error) {
     if (isMissingCrmSchema(fallback.error)) return null;

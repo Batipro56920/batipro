@@ -2,6 +2,7 @@
 import { lazy, Suspense } from "react";
 import { Routes, Route, Navigate } from "react-router-dom";
 import LayoutShell from "./components/LayoutShell";
+import LazyRouteErrorBoundary from "./components/LazyRouteErrorBoundary";
 import RequireAuth from "./components/RequireAuth";
 import RequireCompanyFeature from "./components/RequireCompanyFeature";
 
@@ -91,9 +92,11 @@ export default function App() {
           path="/crm/devis/:id/edit"
           element={
             <RequireCompanyFeature profilePermissionKey="crm">
-              <Suspense fallback={<div className="rounded-3xl border bg-white p-8 text-center text-sm text-slate-500">Chargement du workspace devis...</div>}>
-                <CrmQuoteWorkspacePage />
-              </Suspense>
+              <LazyRouteErrorBoundary>
+                <Suspense fallback={<div className="rounded-3xl border bg-white p-8 text-center text-sm text-slate-500">Chargement du workspace devis...</div>}>
+                  <CrmQuoteWorkspacePage />
+                </Suspense>
+              </LazyRouteErrorBoundary>
             </RequireCompanyFeature>
           }
         />
