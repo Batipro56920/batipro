@@ -8,10 +8,15 @@ import {
   createCrmInvoice,
   createCrmProspect,
   createCrmQuote,
+  createCrmQuoteItemFromTemplate,
+  createCrmQuoteLot,
   createCrmSav,
   createCrmTask,
+  downloadCrmQuotePdf,
   loadCrmDataset,
+  loadCrmQuoteEngineData,
   moveCrmOpportunityStage,
+  recalculateCrmQuoteTotals,
   transformAcceptedQuoteToChantier,
   updateCrmProspect,
   updateCrmQuote,
@@ -24,6 +29,7 @@ import {
   type CrmOpportunityRow,
   type CrmProspectRow,
   type CrmQuoteRow,
+  type CrmQuoteEngineData,
   type CrmTaskRow,
 } from "../services/crm.service";
 
@@ -55,6 +61,7 @@ const EMPTY_DATASET: CrmDataset = {
   communications: [],
   invoices: [],
   chantiers: [],
+  taskTemplates: [],
 };
 
 const NAV: Array<{ key: CrmSection; label: string; href: string }> = [
@@ -167,6 +174,8 @@ export default function CrmPage({ section = "dashboard" }: Props) {
   const [query, setQuery] = useState("");
   const [modal, setModal] = useState<null | "prospect" | "client" | "opportunity" | "quote" | "task" | "appointment" | "sav" | "document" | "invoice">(null);
   const [dragOpportunityId, setDragOpportunityId] = useState<string | null>(null);
+  const [quoteEngine, setQuoteEngine] = useState<CrmQuoteEngineData | null>(null);
+  const [quoteEngineLoading, setQuoteEngineLoading] = useState(false);
 
   async function refresh() {
     setLoading(true);
@@ -246,6 +255,65 @@ export default function CrmPage({ section = "dashboard" }: Props) {
       const opportunity = row.opportunity_id ? opportunityById.get(row.opportunity_id) ?? null : null;
       await transformAcceptedQuoteToChantier({ quote: row.statut === "accepte" ? row : await updateCrmQuote(row.id, { statut: "accepte" }), prospect, client, opportunity });
     });
+  }
+
+  async function openQuoteEngine(row: CrmQuoteRow) {
+    setQuoteEngineLoading(true);
+    setError(null);
+    try {
+      setQuoteEngine(await loadCrmQuoteEngineData(row.id));
+    } catch (err: any) {
+      setError(err?.message ?? "Chargement du devis impossible.");
+    } finally {
+      setQuoteEngineLoading(false);
+    }
+  }
+
+  async function addQuoteTemplateLine(payload: {
+    quoteId: string;
+    lotTitle: string;
+    templateId: string;
+    quantity: string;
+    marginRate: string;
+    coefficient: string;
+    tvaRate: string;
+  }) {
+    await submitSafely(async () => {
+      const template = data.taskTemplates.find((row) => row.id === payload.templateId) ?? null;
+      const existing = await loadCrmQuoteEngineData(payload.quoteId).catch(() => null);
+      const lot =
+        existing?.lots.find((row) => row.title.toLowerCase() === payload.lotTitle.trim().toLowerCase()) ??
+        (await createCrmQuoteLot({ quote_id: payload.quoteId, title: payload.lotTitle || template?.lot || "Lot principal", ordre: existing?.lots.length ?? 0 }));
+      await createCrmQuoteItemFromTemplate({
+        quote_id: payload.quoteId,
+        lot_id: lot.id,
+        lot: lot.title,
+        template,
+        quantity: payload.quantity,
+        marginRate: payload.marginRate,
+        coefficient: payload.coefficient,
+        tvaRate: payload.tvaRate,
+        ordre: existing?.items.length ?? 0,
+      });
+      await recalculateCrmQuoteTotals(payload.quoteId);
+      setQuoteEngine(await loadCrmQuoteEngineData(payload.quoteId));
+    });
+  }
+
+  async function downloadQuote(row: CrmQuoteRow) {
+    setError(null);
+    try {
+      const engine = await loadCrmQuoteEngineData(row.id);
+      downloadCrmQuotePdf({
+        quote: engine.quote,
+        client: row.client_id ? clientById.get(row.client_id) ?? null : null,
+        prospect: row.prospect_id ? prospectById.get(row.prospect_id) ?? null : null,
+        lots: engine.lots,
+        items: engine.items,
+      });
+    } catch (err: any) {
+      setError(err?.message ?? "Generation PDF impossible.");
+    }
   }
 
   const header = (
@@ -336,6 +404,8 @@ export default function CrmPage({ section = "dashboard" }: Props) {
           onCreate={() => setModal("quote")}
           onStatus={(row, statut) => submitSafely(async () => updateCrmQuote(row.id, { statut }))}
           onTransform={transformQuote}
+          onOpen={openQuoteEngine}
+          onPdf={downloadQuote}
           query={query}
           setQuery={setQuery}
         />
@@ -358,6 +428,18 @@ export default function CrmPage({ section = "dashboard" }: Props) {
       {modal === "sav" ? <SavForm data={data} saving={saving} onClose={() => setModal(null)} onSubmit={(payload) => submitSafely(() => createCrmSav(payload))} /> : null}
       {modal === "document" ? <DocumentForm data={data} saving={saving} onClose={() => setModal(null)} onSubmit={(payload) => submitSafely(() => createCrmDocument(payload))} /> : null}
       {modal === "invoice" ? <InvoiceForm data={data} saving={saving} onClose={() => setModal(null)} onSubmit={(payload) => submitSafely(() => createCrmInvoice(payload))} /> : null}
+      {quoteEngine ? (
+        <QuoteEngineModal
+          engine={quoteEngine}
+          templates={data.taskTemplates}
+          loading={quoteEngineLoading}
+          saving={saving}
+          onClose={() => setQuoteEngine(null)}
+          onAddLine={addQuoteTemplateLine}
+          onPdf={() => void downloadQuote(quoteEngine.quote)}
+          onTransform={() => transformQuote(quoteEngine.quote)}
+        />
+      ) : null}
     </div>
   );
 }
@@ -683,6 +765,8 @@ function QuotesView({
   onCreate,
   onStatus,
   onTransform,
+  onOpen,
+  onPdf,
   query,
   setQuery,
 }: {
@@ -692,6 +776,8 @@ function QuotesView({
   onCreate: () => void;
   onStatus: (row: CrmQuoteRow, status: CrmQuoteRow["statut"]) => void;
   onTransform: (row: CrmQuoteRow) => void;
+  onOpen: (row: CrmQuoteRow) => void;
+  onPdf: (row: CrmQuoteRow) => void;
   query: string;
   setQuery: (value: string) => void;
 }) {
@@ -713,6 +799,8 @@ function QuotesView({
                 <td className="px-4 py-3">{row.signature_status}</td>
                 <td className="px-4 py-3">
                   <div className="flex flex-wrap gap-2">
+                    <button onClick={() => onOpen(row)} className="rounded-xl border border-blue-200 bg-blue-50 px-3 py-2 text-blue-800 hover:bg-blue-100">Chiffrage</button>
+                    <button onClick={() => onPdf(row)} className="rounded-xl border px-3 py-2 hover:bg-slate-50">PDF</button>
                     <button onClick={() => onStatus(row, "envoye")} className="rounded-xl border px-3 py-2 hover:bg-slate-50">Envoyer</button>
                     <button onClick={() => onStatus(row, "relance_1")} className="rounded-xl border px-3 py-2 hover:bg-slate-50">Relancer</button>
                     <button onClick={() => onStatus(row, "accepte")} className="rounded-xl border border-emerald-200 px-3 py-2 text-emerald-700 hover:bg-emerald-50">Accepter</button>
@@ -726,6 +814,174 @@ function QuotesView({
         </table>
       </div>
     </ListShell>
+  );
+}
+
+function QuoteEngineModal({
+  engine,
+  templates,
+  loading,
+  saving,
+  onClose,
+  onAddLine,
+  onPdf,
+  onTransform,
+}: {
+  engine: CrmQuoteEngineData;
+  templates: CrmDataset["taskTemplates"];
+  loading: boolean;
+  saving: boolean;
+  onClose: () => void;
+  onAddLine: (payload: {
+    quoteId: string;
+    lotTitle: string;
+    templateId: string;
+    quantity: string;
+    marginRate: string;
+    coefficient: string;
+    tvaRate: string;
+  }) => void;
+  onPdf: () => void;
+  onTransform: () => void;
+}) {
+  const firstTemplate = templates[0];
+  const [form, setForm] = useState<Record<string, string>>({
+    lotTitle: firstTemplate?.lot ?? "Lot principal",
+    templateId: firstTemplate?.id ?? "",
+    quantity: String(firstTemplate?.quantite_defaut ?? 1),
+    marginRate: "25",
+    coefficient: "1",
+    tvaRate: "20",
+  });
+  const selectedTemplate = templates.find((row) => row.id === form.templateId) ?? null;
+  const debourse = engine.items.reduce(
+    (sum, row) =>
+      sum +
+      (Number(row.cost_materials_ht ?? 0) + Number(row.cost_labor_ht ?? 0) + Number(row.cost_subcontracting_ht ?? 0) + Number(row.cost_fees_ht ?? 0)) *
+        Number(row.quantite ?? 1),
+    0,
+  );
+  const margin = Number(engine.quote.montant_ht ?? 0) - debourse;
+
+  return (
+    <CrmModal title={`Chiffrage BTP - ${engine.quote.quote_number}`} onClose={onClose}>
+      <div className="space-y-5">
+        {loading ? <div className="rounded-2xl border bg-slate-50 p-3 text-sm text-slate-500">Chargement...</div> : null}
+        <div className="grid gap-3 md:grid-cols-4">
+          {[
+            ["HT", eur(engine.quote.montant_ht)],
+            ["TTC", eur(engine.quote.montant_ttc)],
+            ["Debourse sec", eur(debourse)],
+            ["Marge", eur(margin)],
+          ].map(([label, value]) => (
+            <div key={label} className="rounded-2xl border bg-slate-50 p-4">
+              <div className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">{label}</div>
+              <div className="mt-1 text-lg font-semibold text-slate-950">{value}</div>
+            </div>
+          ))}
+        </div>
+
+        <section className="rounded-2xl border bg-white p-4">
+          <div className="font-semibold">Ajouter un ouvrage depuis la bibliotheque</div>
+          <form
+            className="mt-3 grid gap-3 md:grid-cols-[1fr_1.4fr_100px_100px_90px]"
+            onSubmit={(event) => {
+              event.preventDefault();
+              onAddLine({
+                quoteId: engine.quote.id,
+                lotTitle: form.lotTitle,
+                templateId: form.templateId,
+                quantity: form.quantity,
+                marginRate: form.marginRate,
+                coefficient: form.coefficient,
+                tvaRate: form.tvaRate,
+              });
+            }}
+          >
+            <Input form={form} setForm={setForm} name="lotTitle" label="Lot" />
+            <label className="block space-y-1 text-sm">
+              <div className="text-slate-600">Ouvrage bibliotheque</div>
+              <select
+                className="w-full rounded-xl border px-3 py-2"
+                value={form.templateId}
+                onChange={(event) => {
+                  const template = templates.find((row) => row.id === event.target.value);
+                  setForm((prev) => ({
+                    ...prev,
+                    templateId: event.target.value,
+                    lotTitle: template?.lot ?? prev.lotTitle,
+                    quantity: String(template?.quantite_defaut ?? prev.quantity ?? 1),
+                  }));
+                }}
+                required
+              >
+                <option value="">Selectionner</option>
+                {templates.map((row) => (
+                  <option key={row.id} value={row.id}>
+                    {row.lot ? `${row.lot} - ` : ""}{row.titre}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <Input form={form} setForm={setForm} name="quantity" label="Quantite" type="number" />
+            <Input form={form} setForm={setForm} name="marginRate" label="Marge %" type="number" />
+            <Input form={form} setForm={setForm} name="tvaRate" label="TVA" type="number" />
+            <div className="md:col-span-5 flex items-end justify-between gap-3">
+              <div className="text-xs text-slate-500">
+                {selectedTemplate
+                  ? `Base: ${selectedTemplate.unite ?? "u"} / ${eur(selectedTemplate.cout_reference_unitaire_ht ?? 0)} / ${selectedTemplate.temps_prevu_par_unite_h ?? 0}h`
+                  : "La bibliotheque existante sert de catalogue d'ouvrages."}
+              </div>
+              <button disabled={saving || !form.templateId} className="rounded-xl bg-slate-900 px-4 py-2 text-sm text-white disabled:opacity-60">
+                Ajouter ligne
+              </button>
+            </div>
+          </form>
+        </section>
+
+        <section className="overflow-hidden rounded-2xl border bg-white">
+          <table className="w-full text-sm">
+            <thead className="bg-slate-50 text-slate-600">
+              <tr>{["Lot / ouvrage", "Qte", "Debourse", "Marge", "TVA", "Total HT"].map((h) => <th key={h} className="px-4 py-3 text-left font-medium">{h}</th>)}</tr>
+            </thead>
+            <tbody>
+              {engine.items.map((row) => {
+                const lot = engine.lots.find((item) => item.id === row.lot_id)?.title ?? row.lot ?? "Sans lot";
+                const cost =
+                  (Number(row.cost_materials_ht ?? 0) + Number(row.cost_labor_ht ?? 0) + Number(row.cost_subcontracting_ht ?? 0) + Number(row.cost_fees_ht ?? 0)) *
+                  Number(row.quantite ?? 1);
+                return (
+                  <tr key={row.id} className="border-t align-top">
+                    <td className="px-4 py-3">
+                      <div className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">{lot}</div>
+                      <div className="font-medium">{row.designation}</div>
+                      {row.technical_description ? <div className="mt-1 text-xs text-slate-500">{row.technical_description}</div> : null}
+                    </td>
+                    <td className="px-4 py-3">{row.quantite} {row.unite ?? ""}</td>
+                    <td className="px-4 py-3">{eur(cost)}</td>
+                    <td className="px-4 py-3">{row.margin_rate}%</td>
+                    <td className="px-4 py-3">{row.tva_rate}%</td>
+                    <td className="px-4 py-3 font-semibold">{eur(row.sale_total_ht ?? row.total_ht)}</td>
+                  </tr>
+                );
+              })}
+              {!engine.items.length ? (
+                <tr>
+                  <td colSpan={6} className="px-4 py-6 text-center text-sm text-slate-500">
+                    Aucune ligne. Ajoutez des ouvrages depuis la bibliotheque pour obtenir un devis exploitable.
+                  </td>
+                </tr>
+              ) : null}
+            </tbody>
+          </table>
+        </section>
+
+        <div className="flex flex-wrap justify-end gap-2">
+          <button type="button" onClick={onPdf} className="rounded-xl border px-4 py-2 text-sm hover:bg-slate-50">Generer PDF</button>
+          <button type="button" onClick={onTransform} className="rounded-xl bg-slate-900 px-4 py-2 text-sm text-white">Transformer en chantier</button>
+        </div>
+      </div>
+    </CrmModal>
   );
 }
 

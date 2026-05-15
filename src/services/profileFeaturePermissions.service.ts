@@ -15,6 +15,11 @@ export type ProfileFeaturePermissionKey =
   | "fournisseurs"
   | "entreprise_parametres"
   | "task_library_preparation"
+  | "crm_quote_create"
+  | "crm_quote_edit"
+  | "crm_quote_margin"
+  | "crm_quote_price_edit"
+  | "crm_quote_transform"
   | "chantier_financier_view"
   | "chantier_financier_edit"
   | "chantier_financier_margin"
@@ -49,6 +54,11 @@ const PROFILE_PERMISSION_KEYS: ProfileFeaturePermissionKey[] = [
   "fournisseurs",
   "entreprise_parametres",
   "task_library_preparation",
+  "crm_quote_create",
+  "crm_quote_edit",
+  "crm_quote_margin",
+  "crm_quote_price_edit",
+  "crm_quote_transform",
   "chantier_financier_view",
   "chantier_financier_edit",
   "chantier_financier_margin",
@@ -100,6 +110,31 @@ const EXTRA_PERMISSION_DEFINITIONS: Record<
     label: "Bibliothèque avancée",
     description:
       "Accès aux ratios matériaux, au matériel à prévoir et aux estimatifs avancés des modèles de tâches.",
+  },
+  crm_quote_create: {
+    key: "crm_quote_create",
+    label: "Creer devis CRM",
+    description: "Creation de devis BTP depuis le CRM et rattachement aux clients/opportunites.",
+  },
+  crm_quote_edit: {
+    key: "crm_quote_edit",
+    label: "Modifier devis CRM",
+    description: "Modification des lots, ouvrages, quantites, TVA et conditions des devis.",
+  },
+  crm_quote_margin: {
+    key: "crm_quote_margin",
+    label: "Voir marges devis",
+    description: "Affichage des debourses, marges par ligne, par lot et globales.",
+  },
+  crm_quote_price_edit: {
+    key: "crm_quote_price_edit",
+    label: "Modifier prix devis",
+    description: "Modification des prix, coefficients, couts et taux de marge.",
+  },
+  crm_quote_transform: {
+    key: "crm_quote_transform",
+    label: "Transformer devis en chantier",
+    description: "Creation d'un chantier depuis un devis accepte avec budgets et taches.",
   },
   chantier_financier_view: {
     key: "chantier_financier_view",
@@ -201,6 +236,11 @@ export function getProfilePermissionSections(): ProfilePermissionSection[] {
       label: "Options avancées",
       permissions: [
         EXTRA_PERMISSION_DEFINITIONS.task_library_preparation,
+        EXTRA_PERMISSION_DEFINITIONS.crm_quote_create,
+        EXTRA_PERMISSION_DEFINITIONS.crm_quote_edit,
+        EXTRA_PERMISSION_DEFINITIONS.crm_quote_margin,
+        EXTRA_PERMISSION_DEFINITIONS.crm_quote_price_edit,
+        EXTRA_PERMISSION_DEFINITIONS.crm_quote_transform,
         EXTRA_PERMISSION_DEFINITIONS.chantier_financier_view,
         EXTRA_PERMISSION_DEFINITIONS.chantier_financier_edit,
         EXTRA_PERMISSION_DEFINITIONS.chantier_financier_margin,
