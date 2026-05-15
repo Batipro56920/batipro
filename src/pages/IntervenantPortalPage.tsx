@@ -68,12 +68,15 @@ import { useI18n } from "../i18n";
 import {
   clearStoredIntervenantChantierId,
   clearStoredIntervenantSession,
+  clearStoredIntervenantToken,
   extractIntervenantToken,
   persistIntervenantChantierId,
   persistIntervenantToken,
   readStoredIntervenantChantierId,
   readStoredIntervenantToken,
+  AUTH_SESSION_PORTAL_TOKEN,
 } from "../utils/intervenantSession";
+import { supabase } from "../lib/supabaseClient";
 
 type PortalTab = "accueil" | "consignes" | "reserves" | "temps" | "taches" | "planning" | "documents" | "materiel" | "messages" | "retours";
 type LoadState<T> = { loading: boolean; error: string | null; data: T };
@@ -135,6 +138,10 @@ function shouldQueueOfflineMutation(error: unknown): boolean {
     message.includes("fetcherror") ||
     message.includes("load failed")
   );
+}
+
+function isAuthSessionPortalToken(token: string | null | undefined): boolean {
+  return String(token ?? "").trim() === AUTH_SESSION_PORTAL_TOKEN;
 }
 
 function readNavigatorOnlineStatus(): boolean {
@@ -577,7 +584,11 @@ export default function IntervenantPortalPage() {
     async function bootstrap() {
       setBootLoading(true);
       setBootError(null);
-      const candidateToken = extractIntervenantToken(queryToken || readStoredIntervenantToken());
+      const legacyToken = extractIntervenantToken(queryToken || readStoredIntervenantToken());
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+      const candidateToken = legacyToken || (session?.user ? AUTH_SESSION_PORTAL_TOKEN : "");
       if (!candidateToken) {
         if (!alive) return;
         setToken("");
@@ -590,7 +601,8 @@ export default function IntervenantPortalPage() {
       }
       try {
         setToken(candidateToken);
-        persistIntervenantToken(candidateToken);
+        if (legacyToken) persistIntervenantToken(legacyToken);
+        else clearStoredIntervenantToken();
         setOfflineQueueCount(countIntervenantOfflineActions(candidateToken));
         const cachedPortal = readIntervenantOfflinePortalCache(candidateToken);
         if (!readNavigatorOnlineStatus() && cachedPortal?.chantiers?.length) {
@@ -656,11 +668,15 @@ export default function IntervenantPortalPage() {
       } catch (error) {
         if (!alive) return;
         const message = getErrorMessage(error, t("intervenantPortal.errors.portalLoad"));
-        if (isInvalidTokenError(message)) {
+        if (isInvalidTokenError(message) && !isAuthSessionPortalToken(candidateToken)) {
           clearStoredIntervenantSession();
           setToken("");
         }
-        if (LEGACY_FALLBACK_ENABLED && shouldFallbackToLegacy(error)) {
+        if (
+          LEGACY_FALLBACK_ENABLED &&
+          !isAuthSessionPortalToken(candidateToken) &&
+          shouldFallbackToLegacy(error)
+        ) {
           navigate(`/acces/${encodeURIComponent(candidateToken)}`, { replace: true });
           return;
         }
@@ -873,7 +889,7 @@ export default function IntervenantPortalPage() {
         intervenantReserveList(token, selectedChantierId),
       ]);
       if (!alive) return;
-      if (LEGACY_FALLBACK_ENABLED) {
+      if (LEGACY_FALLBACK_ENABLED && !isAuthSessionPortalToken(token)) {
         const fallbackError =
           (tasksResult.status === "rejected" && shouldFallbackToLegacy(tasksResult.reason) && tasksResult.reason) ||
           (documentsResult.status === "rejected" && shouldFallbackToLegacy(documentsResult.reason) && documentsResult.reason) ||
@@ -1015,12 +1031,18 @@ export default function IntervenantPortalPage() {
     };
   }, [bootError, bootLoading, chantiers, reloadTick, t, token]);
 
-  function logoutIntervenant() {
+  async function logoutIntervenant() {
+    const usingAuthSession = isAuthSessionPortalToken(token);
     clearStoredIntervenantSession();
     setToken("");
     setSessionInfo(null);
     setChantiers([]);
     setSelectedChantierId("");
+    if (usingAuthSession) {
+      try {
+        await supabase.auth.signOut();
+      } catch {}
+    }
     navigate("/", { replace: true });
   }
 
@@ -2736,6 +2758,9 @@ export default function IntervenantPortalPage() {
             <button
               type="button"
               onClick={() => {
+                if (isAuthSessionPortalToken(token)) {
+                  void supabase.auth.signOut();
+                }
                 clearStoredIntervenantSession();
                 setToken("");
                 setSessionInfo(null);

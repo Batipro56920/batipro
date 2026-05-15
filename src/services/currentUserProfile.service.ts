@@ -114,3 +114,47 @@ export async function getCurrentUserProfile(): Promise<CurrentUserProfile | null
 export function isAdminProfile(profile: CurrentUserProfile | null): boolean {
   return normalizeRole(profile?.role) === "ADMIN" || isWhitelistedAdminEmail(profile?.email);
 }
+
+export function isIntervenantProfile(profile: CurrentUserProfile | null): boolean {
+  return normalizeRole(profile?.role) === "INTERVENANT";
+}
+
+export async function hasLinkedIntervenantAccount(userId: string): Promise<boolean> {
+  if (!userId) return false;
+
+  const [directLink, junctionLink] = await Promise.all([
+    supabase
+      .from("intervenants")
+      .select("id", { head: true, count: "exact" })
+      .eq("user_id", userId),
+    supabase
+      .from("intervenant_users")
+      .select("user_id", { head: true, count: "exact" })
+      .eq("user_id", userId),
+  ]);
+
+  if (directLink.error) throw new Error(directLink.error.message);
+  if (junctionLink.error) throw new Error(junctionLink.error.message);
+
+  return Boolean((directLink.count ?? 0) > 0 || (junctionLink.count ?? 0) > 0);
+}
+
+export async function getCurrentUserHomeRoute(): Promise<"/dashboard" | "/intervenant" | "/login"> {
+  const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+  if (sessionError) throw sessionError;
+
+  let user = sessionData.session?.user ?? null;
+  if (!user) {
+    const { data: userData, error: userError } = await supabase.auth.getUser();
+    if (userError) throw userError;
+    user = userData.user;
+  }
+
+  if (!user?.id) return "/login";
+
+  const profile = await getCurrentUserProfile();
+  if (isAdminProfile(profile)) return "/dashboard";
+  if (isIntervenantProfile(profile)) return "/intervenant";
+  if (await hasLinkedIntervenantAccount(user.id)) return "/intervenant";
+  return "/login";
+}

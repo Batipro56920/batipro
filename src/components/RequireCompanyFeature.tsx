@@ -5,6 +5,11 @@ import {
   getCompanySettings,
   getEnabledCompanyModulesFromSettings,
 } from "../services/companySettings.service";
+import {
+  getCurrentProfileFeaturePermissions,
+  hasProfileFeaturePermission,
+  type ProfileFeaturePermissionKey,
+} from "../services/profileFeaturePermissions.service";
 
 type FeatureGateState = {
   checking: boolean;
@@ -13,9 +18,11 @@ type FeatureGateState = {
 
 export default function RequireCompanyFeature({
   moduleId,
+  profilePermissionKey,
   children,
 }: {
-  moduleId: CompanyFeatureModuleId;
+  moduleId?: CompanyFeatureModuleId;
+  profilePermissionKey?: ProfileFeaturePermissionKey;
   children: ReactNode;
 }) {
   const [gateState, setGateState] = useState<FeatureGateState>({
@@ -28,12 +35,28 @@ export default function RequireCompanyFeature({
 
     async function verifyFeatureAccess() {
       try {
-        const settings = await getCompanySettings();
-        const enabledModules = new Set(getEnabledCompanyModulesFromSettings(settings));
+        const [settings, profilePermissions] = await Promise.all([
+          moduleId ? getCompanySettings() : Promise.resolve(null),
+          moduleId || profilePermissionKey
+            ? getCurrentProfileFeaturePermissions()
+            : Promise.resolve(null),
+        ]);
+        const enabledModules = settings
+          ? new Set(getEnabledCompanyModulesFromSettings(settings))
+          : null;
+        const nextProfileKey = profilePermissionKey ?? moduleId ?? null;
+        const profileAllowed =
+          nextProfileKey && profilePermissions
+            ? hasProfileFeaturePermission(
+                profilePermissions.permissions,
+                nextProfileKey,
+                profilePermissions.role,
+              )
+            : true;
         if (!alive) return;
         setGateState({
           checking: false,
-          allowed: enabledModules.has(moduleId),
+          allowed: (!moduleId || !enabledModules || enabledModules.has(moduleId)) && profileAllowed,
         });
       } catch {
         if (!alive) return;
@@ -49,7 +72,7 @@ export default function RequireCompanyFeature({
     return () => {
       alive = false;
     };
-  }, [moduleId]);
+  }, [moduleId, profilePermissionKey]);
 
   if (gateState.checking) {
     return (

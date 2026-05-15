@@ -73,7 +73,11 @@ export default function BibliothequeTasksPage() {
         const result = await getCurrentProfileFeaturePermissions();
         if (!alive) return;
         setAdvancedPreparationEnabled(
-          hasProfileFeaturePermission(result.permissions, "task_library_preparation"),
+          hasProfileFeaturePermission(
+            result.permissions,
+            "task_library_preparation",
+            result.role,
+          ),
         );
       } catch {
         if (!alive) return;

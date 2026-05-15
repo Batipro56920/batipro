@@ -1,4 +1,4 @@
-import { supabase } from "../lib/supabaseClient";
+﻿import { supabase } from "../lib/supabaseClient";
 
 export type ChantierChangeOrderType = "imprevu" | "travaux_supplementaires";
 
@@ -153,20 +153,20 @@ export function getChangeOrderStatusOptions(
 ): Array<{ value: ChantierChangeOrderStatus; label: string }> {
   if (type === "travaux_supplementaires") {
     return [
-      { value: "a_chiffrer", label: "À chiffrer" },
+      { value: "a_chiffrer", label: "Ã€ chiffrer" },
       { value: "en_attente_validation_client", label: "En attente validation client" },
-      { value: "valide_client", label: "Validé client" },
-      { value: "refuse", label: "Refusé" },
+      { value: "valide_client", label: "ValidÃ© client" },
+      { value: "refuse", label: "RefusÃ©" },
       { value: "en_cours", label: "En cours" },
-      { value: "termine", label: "Terminé" },
-      { value: "facture", label: "Facturé" },
+      { value: "termine", label: "TerminÃ©" },
+      { value: "facture", label: "FacturÃ©" },
     ];
   }
 
   return [
-    { value: "a_analyser", label: "À analyser" },
+    { value: "a_analyser", label: "Ã€ analyser" },
     { value: "en_cours", label: "En cours" },
-    { value: "traite", label: "Traité" },
+    { value: "traite", label: "TraitÃ©" },
   ];
 }
 
@@ -203,7 +203,11 @@ function normalizeChangeOrderRow(row: any): ChantierChangeOrderRow {
   const quantite = normalizeNumber(row?.quantite);
   const prixUnitaireHt = normalizeNumber(row?.prix_unitaire_ht);
   const tvaRate = normalizeNumber(row?.tva_rate);
-  const computedTotalHt = roundMoney(quantite * prixUnitaireHt);
+  const impactCout = normalizeNumber(row?.impact_cout_ht);
+  const computedTotalHt =
+    type === "travaux_supplementaires" && (!quantite || !prixUnitaireHt)
+      ? roundMoney(impactCout)
+      : roundMoney(quantite * prixUnitaireHt);
   const computedTotalTtc = roundMoney(computedTotalHt * (1 + tvaRate / 100));
 
   return {
@@ -214,10 +218,10 @@ function normalizeChangeOrderRow(row: any): ChantierChangeOrderRow {
     devis_ligne_id: row?.devis_ligne_id ?? null,
     photo_ids: normalizePhotoIds(row?.photo_ids),
     type_ecart: type,
-    titre: String(row?.titre ?? "Imprévu chantier").trim() || "Imprévu chantier",
+    titre: String(row?.titre ?? "ImprÃ©vu chantier").trim() || "ImprÃ©vu chantier",
     description: row?.description ?? null,
     impact_temps_h: normalizeNumber(row?.impact_temps_h),
-    impact_cout_ht: normalizeNumber(row?.impact_cout_ht),
+    impact_cout_ht: impactCout,
     quantite,
     unite: String(row?.unite ?? "").trim() || null,
     prix_unitaire_ht: prixUnitaireHt,
@@ -246,7 +250,7 @@ function buildCleanChangeOrderPayload(
   const description = typeof payload.description === "string" ? payload.description.trim() || null : payload.description;
 
   if (Object.prototype.hasOwnProperty.call(payload, "titre") && !titre) {
-    throw new Error("Titre d'imprévu / TS obligatoire.");
+    throw new Error("Titre d'imprÃ©vu / TS obligatoire.");
   }
 
   const quantite = normalizeNumber(payload.quantite);
@@ -264,7 +268,7 @@ function buildCleanChangeOrderPayload(
       : "a_analyser";
 
   if (type === "travaux_supplementaires" && ["en_cours", "termine", "facture"].includes(nextStatus)) {
-    throw new Error("Un travaux supplémentaire doit d'abord être validé client.");
+    throw new Error("Un travaux supplÃ©mentaire doit d'abord Ãªtre validÃ© client.");
   }
 
   return {
@@ -287,6 +291,52 @@ function buildCleanChangeOrderPayload(
     client_validation_required: type === "travaux_supplementaires",
     statut: nextStatus,
   };
+}
+
+function toLegacyChangeOrderType(type: ChantierChangeOrderType) {
+  return type === "travaux_supplementaires" ? "travaux_supplementaires" : "imprevu_technique";
+}
+
+function toLegacyChangeOrderStatus(
+  type: ChantierChangeOrderType,
+  status: ChantierChangeOrderStatus,
+): string {
+  if (type === "travaux_supplementaires") {
+    if (status === "a_chiffrer") return "a_chiffrer";
+    if (status === "en_attente_validation_client") return "en_attente_validation";
+    if (status === "valide_client" || status === "en_cours") return "valide";
+    if (status === "termine" || status === "facture") return "realise";
+    if (status === "refuse") return "refuse";
+    return "a_chiffrer";
+  }
+
+  if (status === "traite") return "realise";
+  if (status === "refuse") return "refuse";
+  return "a_analyser";
+}
+
+function buildLegacyChangeOrderPayload(
+  payload: ReturnType<typeof buildCleanChangeOrderPayload>,
+  keepUndefined = false,
+) {
+  const legacyPayload = {
+    task_id: payload.task_id ?? null,
+    zone_id: payload.zone_id ?? null,
+    devis_ligne_id: payload.devis_ligne_id ?? null,
+    type_ecart: toLegacyChangeOrderType(payload.type_ecart),
+    titre: payload.titre,
+    description: payload.description ?? null,
+    impact_temps_h: payload.impact_temps_h ?? 0,
+    impact_cout_ht:
+      payload.type_ecart === "travaux_supplementaires"
+        ? payload.total_ht ?? payload.impact_cout_ht ?? 0
+        : payload.impact_cout_ht ?? 0,
+    statut: toLegacyChangeOrderStatus(payload.type_ecart, payload.statut),
+  } as Record<string, unknown>;
+
+  if (keepUndefined) return legacyPayload;
+
+  return Object.fromEntries(Object.entries(legacyPayload).filter(([, value]) => value !== undefined));
 }
 
 async function getChangeOrderById(id: string): Promise<ChantierChangeOrderRow | null> {
@@ -330,22 +380,28 @@ export async function createChantierChangeOrder(
 ): Promise<ChantierChangeOrderRow> {
   if (!payload.chantier_id) throw new Error("chantier_id manquant.");
 
+  const cleanedPayload = buildCleanChangeOrderPayload(
+    payload,
+    payload.type_ecart ? normalizeChangeOrderType(payload.type_ecart) : "imprevu",
+  );
+
   const { data, error } = await fromChangeOrders()
-    .insert([
-      buildCleanChangeOrderPayload(
-        payload,
-        payload.type_ecart ? normalizeChangeOrderType(payload.type_ecart) : "imprevu",
-      ),
-    ])
+    .insert([cleanedPayload])
     .select(CHANGE_ORDER_SELECT_V2)
     .maybeSingle();
 
   if (error) {
-    if (
-      isMissingChangeOrderSchemaError(error) ||
-      isMissingChangeOrderColumnError(error, ["photo_ids", "quantite", "total_ht", "client_validation_required"])
-    ) {
+    if (isMissingChangeOrderSchemaError(error)) {
       throw new Error("Migration imprévus / TS non appliquée sur Supabase.");
+    }
+    if (isMissingChangeOrderColumnError(error, ["photo_ids", "quantite", "total_ht", "client_validation_required"])) {
+      const legacy = await fromChangeOrders()
+        .insert([buildLegacyChangeOrderPayload(cleanedPayload)])
+        .select(CHANGE_ORDER_SELECT_V1)
+        .maybeSingle();
+      if (legacy.error) throw legacy.error;
+      if (!legacy.data) throw new Error("Création imprévu / TS OK mais ligne legacy non retournée.");
+      return normalizeChangeOrderRow(legacy.data);
     }
     throw error;
   }
@@ -386,11 +442,18 @@ export async function updateChantierChangeOrder(
     .maybeSingle();
 
   if (error) {
-    if (
-      isMissingChangeOrderSchemaError(error) ||
-      isMissingChangeOrderColumnError(error, ["photo_ids", "quantite", "total_ht", "client_validation_required"])
-    ) {
+    if (isMissingChangeOrderSchemaError(error)) {
       throw new Error("Migration imprévus / TS non appliquée sur Supabase.");
+    }
+    if (isMissingChangeOrderColumnError(error, ["photo_ids", "quantite", "total_ht", "client_validation_required"])) {
+      const legacy = await fromChangeOrders()
+        .update(buildLegacyChangeOrderPayload(patchWithApproval, true))
+        .eq("id", id)
+        .select(CHANGE_ORDER_SELECT_V1)
+        .maybeSingle();
+      if (legacy.error) throw legacy.error;
+      if (!legacy.data) throw new Error("Mise à jour imprévu / TS OK mais ligne legacy non retournée.");
+      return normalizeChangeOrderRow(legacy.data);
     }
     throw error;
   }
@@ -399,10 +462,12 @@ export async function updateChantierChangeOrder(
 }
 
 export async function deleteChantierChangeOrder(id: string): Promise<void> {
-  if (!id) throw new Error("id imprévu / TS manquant.");
+  if (!id) throw new Error("id imprÃ©vu / TS manquant.");
   const { error } = await fromChangeOrders().delete().eq("id", id);
   if (error) {
-    if (isMissingChangeOrderSchemaError(error)) throw new Error("Migration imprévus / TS non appliquée sur Supabase.");
+    if (isMissingChangeOrderSchemaError(error)) throw new Error("Migration imprÃ©vus / TS non appliquÃ©e sur Supabase.");
     throw error;
   }
 }
+
+

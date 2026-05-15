@@ -1,8 +1,21 @@
 import { supabase } from "../lib/supabaseClient";
+import {
+  COMPANY_FEATURE_MODULES,
+  COMPANY_FEATURE_PILLAR_LABELS,
+  type CompanyFeatureModuleId,
+  type CompanyFeaturePillar,
+} from "../config/companyFeatures";
 
-export type ProfileFeaturePermissionKey = "task_library_preparation";
+export type ProfileFeaturePermissionKey =
+  | CompanyFeatureModuleId
+  | "intervenants"
+  | "bibliotheque"
+  | "statistiques"
+  | "fournisseurs"
+  | "entreprise_parametres"
+  | "task_library_preparation";
 
-export type ProfileFeaturePermissions = Record<ProfileFeaturePermissionKey, boolean>;
+export type ProfileFeaturePermissions = Partial<Record<ProfileFeaturePermissionKey, boolean>>;
 
 export type ProfileFeaturePermissionsResult = {
   role: string | null;
@@ -10,8 +23,69 @@ export type ProfileFeaturePermissionsResult = {
   schemaReady: boolean;
 };
 
-const DEFAULT_PERMISSIONS: ProfileFeaturePermissions = {
-  task_library_preparation: false,
+export type ProfilePermissionDefinition = {
+  key: ProfileFeaturePermissionKey;
+  label: string;
+  description: string;
+};
+
+export type ProfilePermissionSection = {
+  id: string;
+  label: string;
+  permissions: ProfilePermissionDefinition[];
+};
+
+const PROFILE_PERMISSION_KEYS: ProfileFeaturePermissionKey[] = [
+  ...COMPANY_FEATURE_MODULES.map((module) => module.id),
+  "intervenants",
+  "bibliotheque",
+  "statistiques",
+  "fournisseurs",
+  "entreprise_parametres",
+  "task_library_preparation",
+];
+
+const PROFILE_PERMISSION_KEY_SET = new Set<ProfileFeaturePermissionKey>(PROFILE_PERMISSION_KEYS);
+
+const EXTRA_PERMISSION_DEFINITIONS: Record<
+  Exclude<
+    ProfileFeaturePermissionKey,
+    CompanyFeatureModuleId
+  >,
+  ProfilePermissionDefinition
+> = {
+  intervenants: {
+    key: "intervenants",
+    label: "Intervenants",
+    description:
+      "Accès à l’onglet intervenants dans les chantiers et à la page globale des intervenants.",
+  },
+  bibliotheque: {
+    key: "bibliotheque",
+    label: "Bibliothèque",
+    description: "Accès à la page bibliothèque et aux modèles de tâches du backoffice.",
+  },
+  statistiques: {
+    key: "statistiques",
+    label: "Statistiques",
+    description: "Accès à la page statistiques et aux synthèses globales de pilotage.",
+  },
+  fournisseurs: {
+    key: "fournisseurs",
+    label: "Fournisseurs",
+    description: "Accès à la base fournisseurs et aux réglages d’approvisionnement.",
+  },
+  entreprise_parametres: {
+    key: "entreprise_parametres",
+    label: "Paramètres entreprise",
+    description: "Accès aux paramètres entreprise, fonctionnalités et profils.",
+  },
+  task_library_preparation: {
+    key: "task_library_preparation",
+    label: "Bibliothèque avancée",
+    description:
+      "Accès aux ratios matériaux, au matériel à prévoir et aux estimatifs avancés des modèles de tâches.",
+  },
 };
 
 let supportsProfileFeaturePermissions: boolean | null = null;
@@ -24,20 +98,28 @@ function normalizeText(value: unknown): string | null {
 function normalizePermissions(raw: unknown): ProfileFeaturePermissions {
   const input =
     raw && typeof raw === "object" && !Array.isArray(raw) ? (raw as Record<string, unknown>) : {};
+  const output: ProfileFeaturePermissions = {};
 
-  return {
-    task_library_preparation: input.task_library_preparation === true,
-  };
+  for (const key of PROFILE_PERMISSION_KEYS) {
+    if (input[key] === true) output[key] = true;
+    if (input[key] === false) output[key] = false;
+  }
+
+  return output;
 }
 
 function isMissingFeaturePermissionsColumnError(error: unknown): boolean {
-  const code = String((error as any)?.code ?? "");
-  const msg = String((error as any)?.message ?? "").toLowerCase();
+  const code = String((error as { code?: string } | null)?.code ?? "");
+  const msg = String((error as { message?: string } | null)?.message ?? "").toLowerCase();
   if (code === "42703") return true;
   return (
     msg.includes("feature_permissions") &&
     (msg.includes("schema cache") || msg.includes("does not exist") || msg.includes("could not find"))
   );
+}
+
+function isAdminRole(role: string | null | undefined): boolean {
+  return String(role ?? "").trim().toUpperCase() === "ADMIN";
 }
 
 async function getCurrentUserId(): Promise<string | null> {
@@ -46,12 +128,52 @@ async function getCurrentUserId(): Promise<string | null> {
   return data.user?.id ?? null;
 }
 
+export function isCompanyModulePermissionKey(
+  key: ProfileFeaturePermissionKey,
+): key is CompanyFeatureModuleId {
+  return COMPANY_FEATURE_MODULES.some((module) => module.id === key);
+}
+
+export function getProfilePermissionSections(): ProfilePermissionSection[] {
+  const chantierSections = (Object.keys(COMPANY_FEATURE_PILLAR_LABELS) as CompanyFeaturePillar[]).map(
+    (pillar) => ({
+      id: pillar,
+      label: COMPANY_FEATURE_PILLAR_LABELS[pillar],
+      permissions: COMPANY_FEATURE_MODULES.filter((module) => module.pillar === pillar).map((module) => ({
+        key: module.id,
+        label: module.label,
+        description: module.description,
+      })),
+    }),
+  );
+
+  return [
+    {
+      id: "backoffice",
+      label: "Backoffice",
+      permissions: [
+        EXTRA_PERMISSION_DEFINITIONS.intervenants,
+        EXTRA_PERMISSION_DEFINITIONS.bibliotheque,
+        EXTRA_PERMISSION_DEFINITIONS.statistiques,
+        EXTRA_PERMISSION_DEFINITIONS.fournisseurs,
+        EXTRA_PERMISSION_DEFINITIONS.entreprise_parametres,
+      ],
+    },
+    ...chantierSections,
+    {
+      id: "avance",
+      label: "Options avancées",
+      permissions: [EXTRA_PERMISSION_DEFINITIONS.task_library_preparation],
+    },
+  ];
+}
+
 export async function getCurrentProfileFeaturePermissions(): Promise<ProfileFeaturePermissionsResult> {
   const userId = await getCurrentUserId();
   if (!userId) {
     return {
       role: null,
-      permissions: { ...DEFAULT_PERMISSIONS },
+      permissions: {},
       schemaReady: supportsProfileFeaturePermissions !== false,
     };
   }
@@ -74,7 +196,7 @@ export async function getCurrentProfileFeaturePermissions(): Promise<ProfileFeat
       if (fallback.error) throw new Error(fallback.error.message);
       return {
         role: normalizeText(fallback.data?.role),
-        permissions: { ...DEFAULT_PERMISSIONS },
+        permissions: {},
         schemaReady: false,
       };
     }
@@ -99,16 +221,17 @@ export async function setCurrentProfileFeaturePermission(
 ): Promise<ProfileFeaturePermissions> {
   const userId = await getCurrentUserId();
   if (!userId) throw new Error("Utilisateur non authentifié.");
+  if (!PROFILE_PERMISSION_KEY_SET.has(key)) throw new Error("Permission profil inconnue.");
 
   const current = await getCurrentProfileFeaturePermissions();
-  if (current.role?.toUpperCase() !== "ADMIN") {
+  if (!isAdminRole(current.role)) {
     throw new Error("Seul un profil ADMIN peut activer cette permission.");
   }
   if (!current.schemaReady) {
     throw new Error("Migration permissions profil non appliquée sur Supabase.");
   }
 
-  const nextPermissions = {
+  const nextPermissions: ProfileFeaturePermissions = {
     ...current.permissions,
     [key]: enabled,
   };
@@ -135,7 +258,11 @@ export async function setCurrentProfileFeaturePermission(
 export function hasProfileFeaturePermission(
   permissions: ProfileFeaturePermissions | null | undefined,
   key: ProfileFeaturePermissionKey,
+  role: string | null | undefined = "ADMIN",
 ): boolean {
-  if (!permissions) return false;
-  return permissions[key] === true;
+  const normalized = permissions ?? {};
+  if (isAdminRole(role)) {
+    return normalized[key] !== false;
+  }
+  return normalized[key] === true;
 }

@@ -1,7 +1,7 @@
 ﻿import { useCallback, useEffect, useMemo, useState } from "react";
 import type { Chantier } from "../types/chantier";
 import { supabase } from "./supabaseClient";
-import { listChantiers, type ChantierRow } from "../services/chantiers.service";
+import { deleteChantier, listChantiers, type ChantierRow } from "../services/chantiers.service";
 
 function mapRow(r: ChantierRow): Chantier {
   return {
@@ -31,7 +31,7 @@ export function useChantiers() {
     setLoading(true);
     setError(null);
     try {
-      const data = await listChantiers({ scope: "all" });
+      const data = await listChantiers({ scope: "actifs" });
       const mapped = (data ?? []).map(mapRow);
       setItems(mapped);
     } catch (e: any) {
@@ -106,9 +106,7 @@ export function useChantiers() {
       },
 
       async remove(id: string) {
-        const { error } = await supabase.from("chantiers").delete().eq("id", id);
-        if (error) throw error;
-
+        await deleteChantier(id);
         await refresh();
       },
     };

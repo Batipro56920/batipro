@@ -24,17 +24,6 @@ function optionalEnv(name: string) {
   return normalizeString(Deno.env.get(name) ?? "");
 }
 
-function parseAdminEmails() {
-  const raw =
-    Deno.env.get("ADMIN_EMAILS") ??
-    Deno.env.get("VITE_ADMIN_EMAILS") ??
-    "";
-  return raw
-    .split(/[,;\s]+/)
-    .map((v) => v.trim().toLowerCase())
-    .filter(Boolean);
-}
-
 function getBearerToken(req: Request) {
   const header = req.headers.get("authorization") ?? req.headers.get("Authorization") ?? "";
   if (!header.startsWith("Bearer ")) return null;
@@ -93,8 +82,8 @@ function resolvePublicAppUrl(req: Request) {
   return null;
 }
 
-function buildIntervenantAccessUrl(req: Request, token: string) {
-  const path = `/intervenant?token=${encodeURIComponent(token)}`;
+function buildInvitationUrl(req: Request, token: string) {
+  const path = `/intervenant/invitation?token=${encodeURIComponent(token)}`;
   const base = resolvePublicAppUrl(req);
   return base ? `${base}${path}` : path;
 }
@@ -121,69 +110,83 @@ serve(async (req) => {
       auth: { persistSession: false },
     });
 
-    const adminEmails = parseAdminEmails();
-    const userEmail = normalizeString(userData.user.email).toLowerCase();
-    let isAdmin = adminEmails.length > 0 && adminEmails.includes(userEmail);
+    const { data: profile, error: profileErr } = await admin
+      .from("profiles")
+      .select("role")
+      .eq("id", userData.user.id)
+      .maybeSingle();
 
-    if (!isAdmin) {
-      const { data: profile, error: profileErr } = await admin
-        .from("profiles")
-        .select("role")
-        .eq("id", userData.user.id)
-        .maybeSingle();
-
-      if (profileErr) return json({ error: profileErr.message }, 500);
-      isAdmin = String(profile?.role ?? "").toUpperCase() === "ADMIN";
-    }
-
-    if (!isAdmin) return json({ error: "Forbidden" }, 403);
+    if (profileErr) return json({ error: profileErr.message }, 500);
+    if (String(profile?.role ?? "").toUpperCase() !== "ADMIN") return json({ error: "Forbidden" }, 403);
 
     const body = await req.json().catch(() => null);
     if (!body || typeof body !== "object") return json({ error: "Invalid JSON" }, 400);
 
-    const chantierId = normalizeString((body as any).chantierId ?? (body as any).chantier_id);
-    if (!chantierId) return json({ error: "chantierId required" }, 400);
-
-    const intervenantIdRaw = (body as any).intervenantId ?? (body as any).intervenant_id;
-    const intervenantId = normalizeString(intervenantIdRaw) || null;
-
-    const roleRaw = normalizeString((body as any).role ?? "INTERVENANT").toUpperCase();
-    const role = roleRaw === "CLIENT" ? "CLIENT" : "INTERVENANT";
+    const intervenantId = normalizeString((body as any).intervenantId ?? (body as any).intervenant_id);
+    if (!intervenantId) return json({ error: "intervenantId required" }, 400);
 
     const expiresRaw = (body as any).expiresInDays ?? (body as any).expires_in_days;
     let expiresInDays = Number(expiresRaw);
-    if (!Number.isFinite(expiresInDays) || expiresInDays <= 0) expiresInDays = 7;
+    if (!Number.isFinite(expiresInDays) || expiresInDays <= 0) expiresInDays = 14;
     const expiresAt = new Date(Date.now() + expiresInDays * 86400000).toISOString();
 
-    let email = normalizeString((body as any).email).toLowerCase();
-    if (!email && intervenantId) {
-      const { data: itv, error: itvErr } = await admin
-        .from("intervenants")
-        .select("email")
-        .eq("id", intervenantId)
-        .maybeSingle();
+    const { data: intervenant, error: intervenantErr } = await admin
+      .from("intervenants")
+      .select("id, nom, email, user_id")
+      .eq("id", intervenantId)
+      .maybeSingle();
 
-      if (itvErr) return json({ error: itvErr.message }, 400);
-      email = normalizeString(itv?.email).toLowerCase();
+    if (intervenantErr) return json({ error: intervenantErr.message }, 400);
+    if (!intervenant) return json({ error: "intervenant_not_found" }, 404);
+
+    const email = normalizeString(intervenant.email).toLowerCase();
+    if (!email || !email.includes("@")) {
+      return json({ error: "intervenant_email_required" }, 400);
     }
 
-    if (!email) return json({ error: "email required" }, 400);
+    if (normalizeString(intervenant.user_id)) {
+      return json({ error: "intervenant_account_already_exists" }, 409);
+    }
 
     const token = generateToken(32);
 
-    const { error: insertErr } = await admin.from("chantier_access").insert({
-      chantier_id: chantierId,
+    const { error: revokeErr } = await admin
+      .from("intervenant_account_invitations")
+      .update({ revoked_at: new Date().toISOString() })
+      .eq("intervenant_id", intervenantId)
+      .is("used_at", null)
+      .is("revoked_at", null);
+
+    if (revokeErr) return json({ error: revokeErr.message }, 400);
+
+    const { error: insertErr } = await admin.from("intervenant_account_invitations").insert({
       intervenant_id: intervenantId,
       email,
-      role,
       token,
+      created_by: userData.user.id,
       expires_at: expiresAt,
     });
 
     if (insertErr) return json({ error: insertErr.message }, 400);
 
-    const accessUrl = buildIntervenantAccessUrl(req, token);
-    return json({ token, accessUrl, chantierId, intervenantId, expiresAt }, 200);
+    const { error: updateIntervenantErr } = await admin
+      .from("intervenants")
+      .update({ invitation_last_sent_at: new Date().toISOString() })
+      .eq("id", intervenantId);
+
+    if (updateIntervenantErr) return json({ error: updateIntervenantErr.message }, 400);
+
+    const accessUrl = buildInvitationUrl(req, token);
+    return json(
+      {
+        token,
+        accessUrl,
+        intervenantId,
+        email,
+        expiresAt,
+      },
+      200,
+    );
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown error";
     return json({ error: message }, 500);

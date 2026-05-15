@@ -1,9 +1,9 @@
 ﻿  // src/pages/ChantierPage.tsx
 import { Suspense, lazy, useEffect, useMemo, useRef, useState } from "react";
 import type { ChangeEvent, DragEvent, FormEvent } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 
-import { getChantierById, type ChantierRow } from "../services/chantiers.service";
+import { deleteChantier, getChantierById, updateChantierStatus, type ChantierRow } from "../services/chantiers.service";
 
 import {
   getTasksByChantierIdDetailed,
@@ -39,9 +39,7 @@ const PlanningTab = lazy(() => import("../components/chantiers/PlanningBoard"));
 import {
   listIntervenantsByChantierId,
   listIntervenants,
-  createIntervenant,
   attachIntervenantToChantier,
-  updateIntervenant,
   deleteIntervenant,
   type IntervenantRow,
 } from "../services/intervenants.service";
@@ -127,7 +125,6 @@ import {
   collectDescendantPieceIds,
   findBestZoneAnchorForSelectedPieceIds,
   listChantierZones,
-  summarizeSelectedPieceIds,
   type ChantierZoneTreeNode,
   type ChantierZoneRow,
 } from "../services/chantierZones.service";
@@ -157,6 +154,8 @@ import {
 import {
   getCurrentProfileFeaturePermissions,
   hasProfileFeaturePermission,
+  type ProfileFeaturePermissionKey,
+  type ProfileFeaturePermissions,
 } from "../services/profileFeaturePermissions.service";
 import {
   estimateTaskTemplatePreparation,
@@ -175,10 +174,6 @@ import {
   getEnabledCompanyModulesFromSettings,
 } from "../services/companySettings.service";
 import { useI18n } from "../i18n";
-
-// ENVOI ACCÈS (Edge Function via service)
-import { sendIntervenantAccess } from "../services/chantierAccessAdmin.service";
-import { buildIntervenantLink } from "../lib/publicUrl";
 
 /* ---------------- types ---------------- */
 type TabKey =
@@ -213,11 +208,23 @@ function clamp(n: number, min: number, max: number) {
 
 function statusBadge(status: string | null | undefined, t: (key: string) => string) {
   const s = status ?? "PREPARATION";
+  if (s === "BROUILLON") {
+    return { label: "Brouillon", className: "bg-zinc-50 text-zinc-700 border-zinc-200" };
+  }
   if (s === "EN_COURS") {
     return { label: t("common.chantierStatus.EN_COURS"), className: "bg-amber-50 text-amber-700 border-amber-200" };
   }
+  if (s === "EN_PAUSE") {
+    return { label: "En pause", className: "bg-orange-50 text-orange-700 border-orange-200" };
+  }
   if (s === "TERMINE") {
     return { label: t("common.chantierStatus.TERMINE"), className: "bg-emerald-50 text-emerald-700 border-emerald-200" };
+  }
+  if (s === "ARCHIVE") {
+    return { label: "Archivé", className: "bg-slate-100 text-slate-700 border-slate-300" };
+  }
+  if (s === "ANNULE") {
+    return { label: "Annulé", className: "bg-red-50 text-red-700 border-red-200" };
   }
   return { label: t("common.chantierStatus.PREPARATION"), className: "bg-slate-50 text-slate-700 border-slate-200" };
 }
@@ -252,7 +259,19 @@ function getTaskQualityResetStatus(task: Pick<ChantierTaskRow, "temps_reel_h" | 
 function isChantierTabEnabled(
   tabKey: TabKey,
   enabledModules: Set<CompanyFeatureModuleId> | null,
+  profilePermissions: ProfileFeaturePermissions,
+  profileRole: string | null,
 ) {
+  const profilePermissionKey: ProfileFeaturePermissionKey | null =
+    tabKey === "intervenants"
+      ? "intervenants"
+      : (CHANTIER_TAB_FEATURES[tabKey] ?? null);
+  if (
+    profilePermissionKey &&
+    !hasProfileFeaturePermission(profilePermissions, profilePermissionKey, profileRole)
+  ) {
+    return false;
+  }
   const feature = CHANTIER_TAB_FEATURES[tabKey];
   if (!feature) return true;
   return !enabledModules || enabledModules.has(feature);
@@ -472,11 +491,6 @@ function TaskZoneCheckboxTree({
   );
 }
 
-function isPublicAppUrlConfigError(error: unknown): boolean {
-  const msg = String((error as any)?.message ?? error ?? "");
-  return msg.includes("VITE_PUBLIC_APP_URL");
-}
-
 function reserveStatusBadge(status: string | null | undefined, t: (key: string) => string) {
   const s = status ?? "OUVERTE";
   if (s === "LEVEE") {
@@ -645,28 +659,24 @@ function getTaskStatusFromQualityStatus(status: TaskQualityStatus): TaskStatus {
   return "A_FAIRE";
 }
 
-async function copyToClipboard(text: string) {
-  try {
-    await navigator.clipboard.writeText(text);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
 /* ---------------- component ---------------- */
 export default function ChantierPage() {
   const { id } = useParams<{ id: string }>();
+  const navigate = useNavigate();
   const { locale, t } = useI18n();
 
   const [item, setItem] = useState<ChantierRow | null>(null);
   const [loading, setLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [chantierActionSaving, setChantierActionSaving] = useState(false);
 
   const [tab, setTab] = useState<TabKey>("accueil");
   const [enabledChantierModules, setEnabledChantierModules] =
     useState<Set<CompanyFeatureModuleId> | null>(null);
   const [companyInterfaceMode, setCompanyInterfaceMode] = useState<CompanyInterfaceMode>("terrain");
+  const [currentProfileRole, setCurrentProfileRole] = useState<string | null>("ADMIN");
+  const [currentProfilePermissions, setCurrentProfilePermissions] =
+    useState<ProfileFeaturePermissions>({});
 
   // Toast
   const [toast, setToast] = useState<ToastState>(null);
@@ -727,11 +737,19 @@ export default function ChantierPage() {
       try {
         const result = await getCurrentProfileFeaturePermissions();
         if (!alive) return;
+        setCurrentProfileRole(result.role);
+        setCurrentProfilePermissions(result.permissions);
         setAdvancedPreparationEnabled(
-          hasProfileFeaturePermission(result.permissions, "task_library_preparation"),
+          hasProfileFeaturePermission(
+            result.permissions,
+            "task_library_preparation",
+            result.role,
+          ),
         );
       } catch {
         if (!alive) return;
+        setCurrentProfileRole("ADMIN");
+        setCurrentProfilePermissions({});
         setAdvancedPreparationEnabled(false);
       }
     }
@@ -744,9 +762,9 @@ export default function ChantierPage() {
   }, []);
 
   useEffect(() => {
-    if (isChantierTabEnabled(tab, enabledChantierModules)) return;
+    if (isChantierTabEnabled(tab, enabledChantierModules, currentProfilePermissions, currentProfileRole)) return;
     setTab("accueil");
-  }, [enabledChantierModules, tab]);
+  }, [currentProfilePermissions, currentProfileRole, enabledChantierModules, tab]);
 
   // Tasks
   const [tasks, setTasks] = useState<ChantierTaskRow[]>([]);
@@ -858,22 +876,6 @@ export default function ChantierPage() {
   const [existingIntervenantQuery, setExistingIntervenantQuery] = useState("");
   const [attachingIntervenantId, setAttachingIntervenantId] = useState<string | null>(null);
 
-  // ENVOI ACCÈS (bouton "Envoyer accès")
-  const [sendingAccessId, setSendingAccessId] = useState<string | null>(null);
-
-  // Ajout intervenant
-  const [creatingIntervenant, setCreatingIntervenant] = useState(false);
-  const [newIntervenantNom, setNewIntervenantNom] = useState("");
-  const [newIntervenantEmail, setNewIntervenantEmail] = useState("");
-  const [newIntervenantTel, setNewIntervenantTel] = useState("");
-
-  // Edition intervenant (modal)
-  const [editingIntervenant, setEditingIntervenant] = useState<IntervenantRow | null>(null);
-  const [savingIntervenant, setSavingIntervenant] = useState(false);
-  const [editIntervenantNom, setEditIntervenantNom] = useState("");
-  const [editIntervenantEmail, setEditIntervenantEmail] = useState("");
-  const [editIntervenantTel, setEditIntervenantTel] = useState("");
-
   // Ajout tâche
   const [newTitre, setNewTitre] = useState("");
   const [, setNewCorpsEtat] = useState("");
@@ -946,6 +948,13 @@ export default function ChantierPage() {
   const [taskDetailTab, setTaskDetailTab] = useState<
     "synthese" | "technique" | "documents" | "etapes" | "reserves" | "remarques" | "historique"
   >("synthese");
+  const [techniqueEditing, setTechniqueEditing] = useState(false);
+  const [techniqueSaving, setTechniqueSaving] = useState(false);
+  const [techniqueDescription, setTechniqueDescription] = useState("");
+  const [techniqueCaracteristiques, setTechniqueCaracteristiques] = useState("");
+  const [techniqueMateriaux, setTechniqueMateriaux] = useState("");
+  const [techniqueContraintes, setTechniqueContraintes] = useState("");
+  const [techniquePointsControle, setTechniquePointsControle] = useState("");
 
   // Devis
   const [devis, setDevis] = useState<DevisRow[]>([]);
@@ -2690,6 +2699,36 @@ export default function ChantierPage() {
     [tasks],
   );
 
+  async function applyChantierLifecycle(status: ChantierRow["status"]) {
+    if (!item) return;
+    setChantierActionSaving(true);
+    try {
+      const updated = await updateChantierStatus(item.id, status);
+      setItem(updated);
+      setToast({ type: "ok", msg: "Statut chantier mis à jour." });
+    } catch (e: any) {
+      setToast({ type: "error", msg: e?.message ?? "Impossible de mettre à jour le chantier." });
+    } finally {
+      setChantierActionSaving(false);
+    }
+  }
+
+  async function softDeleteCurrentChantier() {
+    if (!item) return;
+    const expected = `SUPPRIMER ${item.nom}`;
+    const confirmation = window.prompt(`Confirmation forte requise. Tape exactement : ${expected}`);
+    if (confirmation !== expected) return;
+    setChantierActionSaving(true);
+    try {
+      await deleteChantier(item.id);
+      setToast({ type: "ok", msg: "Chantier supprimé logiquement." });
+      navigate("/chantiers");
+    } catch (e: any) {
+      setToast({ type: "error", msg: e?.message ?? "Suppression impossible." });
+      setChantierActionSaving(false);
+    }
+  }
+
   const intervenantById = useMemo(() => {
     const m = new Map<string, IntervenantRow>();
     for (const i of intervenants) m.set(i.id, i);
@@ -2810,10 +2849,25 @@ export default function ChantierPage() {
     return uniqueIds(collectDescendantPieceIds(zones, fallbackZoneId));
   }
 
+  function summarizeZoneLabels(labels: string[]): string {
+    const cleanLabels = labels.map((label) => label.trim()).filter(Boolean);
+    if (cleanLabels.length === 0) return "Sans zone";
+    if (cleanLabels.length <= 2) return cleanLabels.join(", ");
+    return `${cleanLabels.slice(0, 2).join(", ")} + ${cleanLabels.length - 2} autres`;
+  }
+
   function resolveTaskZoneSummary(task: Pick<ChantierTaskRow, "id" | "zone_id">): string {
     const pieceIds = getTaskPieceZoneIds(task);
     if (pieceIds.length > 0) {
-      return summarizeSelectedPieceIds(pieceIds, zones);
+      return summarizeZoneLabels(pieceIds.map((zoneId) => resolveZoneName(zoneId)));
+    }
+    return resolveZoneName(task.zone_id ?? null);
+  }
+
+  function resolveTaskZoneFullSummary(task: Pick<ChantierTaskRow, "id" | "zone_id">): string {
+    const pieceIds = getTaskPieceZoneIds(task);
+    if (pieceIds.length > 0) {
+      return summarizeZoneLabels(pieceIds.map((zoneId) => resolveZonePath(zoneId)));
     }
     return resolveZonePath(task.zone_id ?? null);
   }
@@ -2898,10 +2952,25 @@ export default function ChantierPage() {
   useEffect(() => {
     if (!taskDetailOpenId) {
       setTaskDetailTab("synthese");
+      setTechniqueEditing(false);
       return;
     }
     setTaskDetailTab("synthese");
+    setTechniqueEditing(false);
   }, [taskDetailOpenId]);
+
+  useEffect(() => {
+    if (!activeTaskDetail) return;
+    setTechniqueDescription(String((activeTaskDetail as any).description_technique ?? ""));
+    setTechniqueCaracteristiques(
+      Array.isArray((activeTaskDetail as any).caracteristiques)
+        ? ((activeTaskDetail as any).caracteristiques as string[]).join("\n")
+        : "",
+    );
+    setTechniqueMateriaux(String((activeTaskDetail as any).materiaux ?? ""));
+    setTechniqueContraintes(String((activeTaskDetail as any).contraintes ?? ""));
+    setTechniquePointsControle(String((activeTaskDetail as any).points_controle ?? ""));
+  }, [activeTaskDetail?.id, activeTaskDetail]);
 
   useEffect(() => {
     if (!tasks.length) {
@@ -3820,6 +3889,27 @@ export default function ChantierPage() {
     }
   }
 
+  async function saveTaskTechnique() {
+    if (!activeTaskDetail) return;
+    setTechniqueSaving(true);
+    try {
+      const updated = await updateTask(activeTaskDetail.id, {
+        description_technique: techniqueDescription.trim() || null,
+        caracteristiques: parseTaskCaracteristiquesText(techniqueCaracteristiques),
+        materiaux: techniqueMateriaux.trim() || null,
+        contraintes: techniqueContraintes.trim() || null,
+        points_controle: techniquePointsControle.trim() || null,
+      } as any);
+      setTasks((current) => current.map((task) => (task.id === updated.id ? updated : task)));
+      setTechniqueEditing(false);
+      setToast({ type: "ok", msg: "Technique enregistrée." });
+    } catch (e: any) {
+      setToast({ type: "error", msg: e?.message ?? "Erreur sauvegarde technique." });
+    } finally {
+      setTechniqueSaving(false);
+    }
+  }
+
   async function replaceTaskPieceZones(task: ChantierTaskRow, nextPieceZoneIds: string[]) {
     const currentPieceZoneIds = getTaskPieceZoneIds(task);
     const normalizedNextIds = uniqueIds(nextPieceZoneIds);
@@ -4075,47 +4165,6 @@ export default function ChantierPage() {
   }
 
   // ----- intervenants -----
-  function startEditIntervenant(i: IntervenantRow) {
-    setEditingIntervenant(i);
-    setEditIntervenantNom(i.nom ?? "");
-    setEditIntervenantEmail(i.email ?? "");
-    setEditIntervenantTel(i.telephone ?? "");
-  }
-  function cancelEditIntervenant() {
-    setEditingIntervenant(null);
-    setSavingIntervenant(false);
-  }
-
-  async function saveEditIntervenant() {
-    if (!editingIntervenant) return;
-
-    const nom = (editIntervenantNom ?? "").trim();
-    if (!nom) {
-      setToast({ type: "error", msg: "Le nom de l’intervenant est obligatoire." });
-      return;
-    }
-
-    setSavingIntervenant(true);
-    try {
-      const updated = await updateIntervenant(editingIntervenant.id, {
-        nom,
-        email: editIntervenantEmail.trim() || null,
-        telephone: editIntervenantTel.trim() || null,
-      });
-
-      setIntervenants((prev) =>
-        prev.map((x) => (x.id === updated.id ? updated : x)).sort((a, b) => a.nom.localeCompare(b.nom)),
-      );
-
-      setToast({ type: "ok", msg: "Intervenant mis à jour." });
-      setEditingIntervenant(null);
-    } catch (e: any) {
-      setToast({ type: "error", msg: e?.message ?? "Erreur mise à jour intervenant." });
-    } finally {
-      setSavingIntervenant(false);
-    }
-  }
-
   async function onDeleteIntervenant(i: IntervenantRow) {
     if (!id) return;
     const ok = confirm(`Retirer l’intervenant "${i.nom}" de ce chantier ?`);
@@ -4155,43 +4204,6 @@ export default function ChantierPage() {
     await persistTaskOrder(moveArrayItem(tasks, from, to));
   }
 
-  async function onCreateIntervenantFromTab(e: FormEvent) {
-    e.preventDefault();
-    if (!id) return;
-
-    const nom = newIntervenantNom.trim();
-    if (!nom) {
-      setToast({ type: "error", msg: "Nom intervenant obligatoire." });
-      return;
-    }
-
-    setCreatingIntervenant(true);
-    setIntervenantsError(null);
-
-    try {
-      await createIntervenant({
-        chantier_id: id,
-        nom,
-        email: newIntervenantEmail.trim() || null,
-        telephone: newIntervenantTel.trim() || null,
-      });
-
-      await Promise.all([refreshIntervenants(), refreshAllIntervenants()]);
-
-      setNewIntervenantNom("");
-      setNewIntervenantEmail("");
-      setNewIntervenantTel("");
-
-      setToast({ type: "ok", msg: "Intervenant ajouté au chantier." });
-    } catch (e: any) {
-      const message = e?.message ?? "Erreur création intervenant.";
-      setIntervenantsError(message);
-      setToast({ type: "error", msg: message });
-    } finally {
-      setCreatingIntervenant(false);
-    }
-  }
-
   async function onAttachExistingIntervenant(intervenant: IntervenantRow) {
     if (!id) return;
 
@@ -4208,49 +4220,6 @@ export default function ChantierPage() {
       setToast({ type: "error", msg: message });
     } finally {
       setAttachingIntervenantId(null);
-    }
-  }
-  // ----- ENVOI ACCÈS -----
-  // même si le mail ne part pas : on récupère le token et on construit le lien public côté front
-  async function onSendAccess(i: IntervenantRow) {
-    if (!id) return;
-
-    const email = (i.email ?? "").trim();
-    if (!email || !email.includes("@")) {
-      setToast({ type: "error", msg: "Email intervenant manquant ou invalide." });
-      return;
-    }
-
-    try {
-      setSendingAccessId(i.id);
-
-      const resp = await sendIntervenantAccess({
-        chantierId: id,
-        intervenantId: i.id,
-        // l'edge function va relire l'email en base si besoin, mais on peut aussi le passer
-        email,
-      });
-
-      const accessUrl = buildIntervenantLink(resp.token);
-      if (import.meta.env.DEV) {
-        console.log("Generated intervenant link:", accessUrl);
-      }
-
-      const copied = await copyToClipboard(accessUrl);
-      if (copied) {
-        setToast({ type: "ok", msg: `Lien d’accès copié. Tu peux l’envoyer à ${i.nom}.` });
-      } else {
-        // fallback simple (fonctionne partout)
-        window.prompt("Copie ce lien et envoie-le à l’intervenant :", accessUrl);
-        setToast({ type: "ok", msg: `Lien d’accès généré. Envoie-le à ${i.nom}.` });
-      }
-    } catch (e: any) {
-      const message = isPublicAppUrlConfigError(e)
-        ? e?.message ?? "VITE_PUBLIC_APP_URL manquant (à définir sur Vercel et en local)"
-        : e?.message ?? "Erreur lors de l’envoi de l’accès.";
-      setToast({ type: "error", msg: message });
-    } finally {
-      setSendingAccessId(null);
     }
   }
 
@@ -4597,7 +4566,14 @@ export default function ChantierPage() {
   const chantierTabSections = chantierTabDefinitions
     .map((section) => ({
       title: section.title,
-      tabs: section.tabs.filter((entry) => isChantierTabEnabled(entry.key, enabledChantierModules)),
+      tabs: section.tabs.filter((entry) =>
+        isChantierTabEnabled(
+          entry.key,
+          enabledChantierModules,
+          currentProfilePermissions,
+          currentProfileRole,
+        ),
+      ),
     }))
     .filter((section) => section.tabs.length > 0);
   const chantierTabs = [overviewTab, ...chantierTabSections.flatMap((section) => section.tabs)];
@@ -4666,11 +4642,66 @@ export default function ChantierPage() {
               <span>{t("chantierPage.end")} {item.date_fin_prevue ?? "—"}</span>
             </div>
           </div>
-          <div className="w-full max-w-xs rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
-            <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">{t("chantiers.progress")}</div>
-            <div className="mt-1 text-2xl font-semibold text-slate-950">{avancement}%</div>
-            <div className="mt-3 h-2 overflow-hidden rounded-full bg-slate-200">
-              <div className="h-full rounded-full bg-blue-600" style={{ width: `${avancement}%` }} />
+          <div className="grid w-full gap-3 lg:max-w-md">
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+              <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">{t("chantiers.progress")}</div>
+              <div className="mt-1 text-2xl font-semibold text-slate-950">{avancement}%</div>
+              <div className="mt-3 h-2 overflow-hidden rounded-full bg-slate-200">
+                <div className="h-full rounded-full bg-blue-600" style={{ width: `${avancement}%` }} />
+              </div>
+            </div>
+            <div className="rounded-2xl border border-slate-200 bg-white p-3">
+              <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">Cycle de vie</div>
+              <div className="mt-3 flex flex-wrap gap-2">
+                {item.status !== "TERMINE" ? (
+                  <button
+                    type="button"
+                    disabled={chantierActionSaving}
+                    onClick={() => void applyChantierLifecycle("TERMINE")}
+                    className="rounded-xl border px-3 py-2 text-xs hover:bg-slate-50 disabled:opacity-50"
+                  >
+                    Marquer terminé
+                  </button>
+                ) : null}
+                {item.status !== "ARCHIVE" ? (
+                  <button
+                    type="button"
+                    disabled={chantierActionSaving}
+                    onClick={() => void applyChantierLifecycle("ARCHIVE")}
+                    className="rounded-xl border px-3 py-2 text-xs hover:bg-slate-50 disabled:opacity-50"
+                  >
+                    Archiver
+                  </button>
+                ) : null}
+                {(item.status === "TERMINE" || item.status === "ARCHIVE" || item.status === "ANNULE") ? (
+                  <button
+                    type="button"
+                    disabled={chantierActionSaving}
+                    onClick={() => void applyChantierLifecycle("EN_COURS")}
+                    className="rounded-xl border px-3 py-2 text-xs hover:bg-slate-50 disabled:opacity-50"
+                  >
+                    Restaurer
+                  </button>
+                ) : null}
+                {item.status !== "ANNULE" ? (
+                  <button
+                    type="button"
+                    disabled={chantierActionSaving}
+                    onClick={() => void applyChantierLifecycle("ANNULE")}
+                    className="rounded-xl border border-red-200 px-3 py-2 text-xs text-red-700 hover:bg-red-50 disabled:opacity-50"
+                  >
+                    Annuler
+                  </button>
+                ) : null}
+                <button
+                  type="button"
+                  disabled={chantierActionSaving}
+                  onClick={() => void softDeleteCurrentChantier()}
+                  className="rounded-xl border border-red-300 px-3 py-2 text-xs font-semibold text-red-700 hover:bg-red-50 disabled:opacity-50"
+                >
+                  Supprimer
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -4980,7 +5011,7 @@ export default function ChantierPage() {
                       </div>
                       <div className="mt-4 space-y-3 rounded-2xl bg-white p-4">
                         <div className="text-sm font-medium text-slate-900">
-                          {resolveTaskZoneSummary(activeTaskDetail)}
+                          {resolveTaskZoneFullSummary(activeTaskDetail)}
                         </div>
                         {zones.length > 0 ? (
                           <>
@@ -5156,19 +5187,73 @@ export default function ChantierPage() {
                     ) : null}
 
                     <section className={taskDetailTab === "technique" ? "rounded-3xl border border-slate-200 bg-slate-50/60 p-5" : "hidden"}>
-                      <div className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">
-                        5. Technique
+                      <div className="flex flex-wrap items-center justify-between gap-3">
+                        <div className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">
+                          5. Technique
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                          {techniqueEditing ? (
+                            <>
+                              <button
+                                type="button"
+                                disabled={techniqueSaving}
+                                onClick={() => {
+                                  setTechniqueEditing(false);
+                                  setTechniqueDescription(String((activeTaskDetail as any).description_technique ?? ""));
+                                  setTechniqueCaracteristiques(detailCaracteristiques.join("\n"));
+                                  setTechniqueMateriaux(String((activeTaskDetail as any).materiaux ?? ""));
+                                  setTechniqueContraintes(String((activeTaskDetail as any).contraintes ?? ""));
+                                  setTechniquePointsControle(String((activeTaskDetail as any).points_controle ?? ""));
+                                }}
+                                className="rounded-xl border px-3 py-2 text-xs hover:bg-slate-50 disabled:opacity-50"
+                              >
+                                Annuler
+                              </button>
+                              <button
+                                type="button"
+                                disabled={techniqueSaving}
+                                onClick={() => void saveTaskTechnique()}
+                                className="rounded-xl bg-slate-900 px-3 py-2 text-xs text-white hover:bg-slate-800 disabled:opacity-50"
+                              >
+                                Enregistrer
+                              </button>
+                            </>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => setTechniqueEditing(true)}
+                              className="rounded-xl border px-3 py-2 text-xs hover:bg-slate-50"
+                            >
+                              Mode édition
+                            </button>
+                          )}
+                        </div>
                       </div>
                       <div className="mt-4 space-y-3">
                         <div className="rounded-2xl bg-white p-4">
                           <div className="text-xs text-slate-500">Description technique</div>
-                          <div className="mt-1 text-sm text-slate-800">
-                            {(activeTaskDetail as any).description_technique || "—"}
-                          </div>
+                          {techniqueEditing ? (
+                            <textarea
+                              className="mt-2 min-h-28 w-full rounded-xl border px-3 py-2 text-sm"
+                              value={techniqueDescription}
+                              onChange={(event) => setTechniqueDescription(event.target.value)}
+                            />
+                          ) : (
+                            <div className="mt-1 whitespace-pre-wrap text-sm text-slate-800">
+                              {(activeTaskDetail as any).description_technique || "—"}
+                            </div>
+                          )}
                         </div>
                         <div className="rounded-2xl bg-white p-4">
                           <div className="text-xs text-slate-500">Caractéristiques</div>
-                          {detailCaracteristiques.length === 0 ? (
+                          {techniqueEditing ? (
+                            <textarea
+                              className="mt-2 min-h-28 w-full rounded-xl border px-3 py-2 text-sm"
+                              value={techniqueCaracteristiques}
+                              onChange={(event) => setTechniqueCaracteristiques(event.target.value)}
+                              placeholder="Une caractéristique par ligne"
+                            />
+                          ) : detailCaracteristiques.length === 0 ? (
                             <div className="mt-1 text-sm text-slate-500">—</div>
                           ) : (
                             <ul className="mt-2 space-y-1 text-sm text-slate-800">
@@ -5178,6 +5263,26 @@ export default function ChantierPage() {
                             </ul>
                           )}
                         </div>
+                        {[
+                          ["Matériaux", "materiaux", techniqueMateriaux, setTechniqueMateriaux],
+                          ["Contraintes", "contraintes", techniqueContraintes, setTechniqueContraintes],
+                          ["Points de contrôle", "points_controle", techniquePointsControle, setTechniquePointsControle],
+                        ].map(([label, key, value, setter]) => (
+                          <div key={String(key)} className="rounded-2xl bg-white p-4">
+                            <div className="text-xs text-slate-500">{String(label)}</div>
+                            {techniqueEditing ? (
+                              <textarea
+                                className="mt-2 min-h-24 w-full rounded-xl border px-3 py-2 text-sm"
+                                value={String(value)}
+                                onChange={(event) => (setter as (next: string) => void)(event.target.value)}
+                              />
+                            ) : (
+                              <div className="mt-1 whitespace-pre-wrap text-sm text-slate-800">
+                                {String((activeTaskDetail as any)[String(key)] ?? "").trim() || "—"}
+                              </div>
+                            )}
+                          </div>
+                        ))}
                         {String((activeTaskDetail as any).reprise_reason ?? "").trim() ? (
                           <div className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
                             Reprise demandée : {(activeTaskDetail as any).reprise_reason}
@@ -5801,41 +5906,13 @@ export default function ChantierPage() {
               </div>
             )}
 
-            <form onSubmit={onCreateIntervenantFromTab} className="rounded-xl border bg-slate-50 p-4 space-y-3">
-              <div className="font-semibold text-sm">{t("intervenantsTab.addTitle")}</div>
-              <div className="grid gap-2 md:grid-cols-3">
-                <input
-                  className="rounded-xl border px-3 py-2 text-sm"
-                  placeholder={t("intervenantsTab.namePlaceholder")}
-                  value={newIntervenantNom}
-                  onChange={(e) => setNewIntervenantNom(e.target.value)}
-                />
-                <input
-                  className="rounded-xl border px-3 py-2 text-sm"
-                  placeholder={t("intervenantsTab.emailPlaceholder")}
-                  value={newIntervenantEmail}
-                  onChange={(e) => setNewIntervenantEmail(e.target.value)}
-                />
-                <input
-                  className="rounded-xl border px-3 py-2 text-sm"
-                  placeholder={t("intervenantsTab.phonePlaceholder")}
-                  value={newIntervenantTel}
-                  onChange={(e) => setNewIntervenantTel(e.target.value)}
-                />
-              </div>
-              <div className="flex justify-end">
-                <button
-                  type="submit"
-                  disabled={creatingIntervenant}
-                  className={[
-                    "rounded-xl px-4 py-2 text-sm",
-                    creatingIntervenant ? "bg-slate-300 text-slate-700" : "bg-slate-900 text-white hover:bg-slate-800",
-                  ].join(" ")}
-                >
-                  {creatingIntervenant ? t("intervenantsTab.creating") : `+ ${t("common.actions.add")}`}
-                </button>
-              </div>
-            </form>
+            <div className="rounded-xl border bg-slate-50 p-4 text-sm text-slate-600">
+              Les comptes intervenants se créent désormais depuis l’onglet global{" "}
+              <Link to="/intervenants" className="font-medium text-slate-900 underline underline-offset-2">
+                Intervenants
+              </Link>.
+              {" "}Ici, tu peux seulement rattacher ou retirer des intervenants existants à ce chantier.
+            </div>
 
             <div className="rounded-xl border bg-white p-4 space-y-3">
               <div className="font-semibold text-sm">Affecter un intervenant existant</div>
@@ -5900,32 +5977,17 @@ export default function ChantierPage() {
                     <div className="min-w-0">
                       <div className="font-medium truncate">{i.nom}</div>
                       <div className="text-xs text-slate-500">
+                        {[i.entreprise, i.metier].filter(Boolean).join(" • ") || "Aucune entreprise renseignée"}
+                      </div>
+                      <div className="text-xs text-slate-500">
                         {(i.email ?? "—")} • {(i.telephone ?? "—")}
+                      </div>
+                      <div className="mt-1 text-xs font-medium text-slate-600">
+                        {i.user_id ? "Compte intervenant actif" : "Compte intervenant non finalisé"}
                       </div>
                     </div>
 
                     <div className="flex gap-2">
-                      <button
-                        type="button"
-                        onClick={() => onSendAccess(i)}
-                        disabled={sendingAccessId === i.id}
-                        className={[
-                          "text-sm rounded-xl border px-3 py-2",
-                          sendingAccessId === i.id ? "bg-slate-100 text-slate-500" : "hover:bg-slate-50",
-                        ].join(" ")}
-                        title={i.email ? `${t("intervenantsTab.sendAccess")} ${i.email}` : t("common.labels.email")}
-                      >
-                        {sendingAccessId === i.id ? t("intervenantsTab.sending") : t("intervenantsTab.sendAccess")}
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={() => startEditIntervenant(i)}
-                        className="text-sm rounded-xl border px-3 py-2 hover:bg-slate-50"
-                      >
-                        {t("common.actions.edit")}
-                      </button>
-
                       <button
                         type="button"
                         onClick={() => onDeleteIntervenant(i)}
@@ -8636,83 +8698,6 @@ export default function ChantierPage() {
           </div>
         )}
 
-        {/* MODAL EDIT INTERVENANT */}
-        {editingIntervenant && (
-          <div
-            className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4"
-            onClick={() => {
-              if (!savingIntervenant) cancelEditIntervenant();
-            }}
-          >
-            <div className="w-full max-w-md rounded-2xl bg-white border p-4" onClick={(e) => e.stopPropagation()}>
-              <div className="flex items-center justify-between">
-                <div className="font-semibold">Modifier intervenant</div>
-                <button
-                  type="button"
-                  className="rounded-xl border px-2 py-1 text-sm hover:bg-slate-50"
-                  onClick={cancelEditIntervenant}
-                  disabled={savingIntervenant}
-                >
-                  ×
-                </button>
-              </div>
-
-              <div className="mt-3 space-y-3">
-                <div className="space-y-1">
-                  <div className="text-xs text-slate-600">Nom</div>
-                  <input
-                    className="w-full rounded-xl border px-3 py-2 text-sm"
-                    value={editIntervenantNom}
-                    onChange={(e) => setEditIntervenantNom(e.target.value)}
-                    placeholder="Nom"
-                  />
-                </div>
-
-                <div className="space-y-1">
-                  <div className="text-xs text-slate-600">Email</div>
-                  <input
-                    className="w-full rounded-xl border px-3 py-2 text-sm"
-                    value={editIntervenantEmail}
-                    onChange={(e) => setEditIntervenantEmail(e.target.value)}
-                    placeholder="Email (optionnel)"
-                  />
-                </div>
-
-                <div className="space-y-1">
-                  <div className="text-xs text-slate-600">Téléphone</div>
-                  <input
-                    className="w-full rounded-xl border px-3 py-2 text-sm"
-                    value={editIntervenantTel}
-                    onChange={(e) => setEditIntervenantTel(e.target.value)}
-                    placeholder="Téléphone (optionnel)"
-                  />
-                </div>
-              </div>
-
-              <div className="mt-4 flex justify-end gap-2">
-                <button
-                  type="button"
-                  className="rounded-xl border px-3 py-2 text-sm hover:bg-slate-50"
-                  onClick={cancelEditIntervenant}
-                  disabled={savingIntervenant}
-                >
-                  Annuler
-                </button>
-                <button
-                  type="button"
-                  className={[
-                    "rounded-xl px-4 py-2 text-sm",
-                    savingIntervenant ? "bg-slate-300 text-slate-700" : "bg-slate-900 text-white hover:bg-slate-800",
-                  ].join(" ")}
-                  onClick={saveEditIntervenant}
-                  disabled={savingIntervenant}
-                >
-                  {savingIntervenant ? "Enregistrement..." : "Enregistrer"}
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
     </div>
   );
 }

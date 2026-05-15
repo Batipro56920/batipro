@@ -11,7 +11,9 @@ import ChantierNewPage from "./pages/ChantierNewPage";
 import ChantierPage from "./pages/ChantierPage";
 import ChantierVisitesPage from "./pages/ChantierVisitesPage";
 import IntervenantAccessPage from "./pages/IntervenantAccessPage";
+import IntervenantInvitationPage from "./pages/IntervenantInvitationPage";
 import IntervenantPortalPage from "./pages/IntervenantPortalPage";
+import IntervenantDetailPage from "./pages/IntervenantDetailPage";
 import IntervenantsPage from "./pages/IntervenantsPage";
 import BibliothequeTasksPage from "./pages/BibliothequeTasksPage";
 import StatistiquesPage from "./pages/StatistiquesPage";
@@ -29,6 +31,7 @@ export default function App() {
 
       {/* Public - portail intervenant */}
       <Route path="/acces/:token" element={<IntervenantAccessPage />} />
+      <Route path="/intervenant/invitation" element={<IntervenantInvitationPage />} />
       <Route path="/intervenant" element={<IntervenantPortalPage />} />
 
       {/* Protégé */}
@@ -53,7 +56,22 @@ export default function App() {
           }
         />
 
-        <Route path="/intervenants" element={<IntervenantsPage />} />
+        <Route
+          path="/intervenants"
+          element={
+            <RequireCompanyFeature profilePermissionKey="intervenants">
+              <IntervenantsPage />
+            </RequireCompanyFeature>
+          }
+        />
+        <Route
+          path="/intervenants/:id"
+          element={
+            <RequireCompanyFeature profilePermissionKey="intervenants">
+              <IntervenantDetailPage />
+            </RequireCompanyFeature>
+          }
+        />
         <Route
           path="/retours-terrain"
           element={
@@ -65,7 +83,7 @@ export default function App() {
         <Route
           path="/bibliotheque"
           element={
-            <RequireCompanyFeature moduleId="documents">
+            <RequireCompanyFeature moduleId="documents" profilePermissionKey="bibliotheque">
               <BibliothequeTasksPage />
             </RequireCompanyFeature>
           }
@@ -73,17 +91,39 @@ export default function App() {
         <Route
           path="/statistiques"
           element={
-            <RequireCompanyFeature moduleId="rapports">
+            <RequireCompanyFeature moduleId="rapports" profilePermissionKey="statistiques">
               <StatistiquesPage />
             </RequireCompanyFeature>
           }
         />
-        <Route path="/entreprise" element={<MonEntreprisePage />} />
-        <Route path="/entreprise/fonctionnalites" element={<MonEntreprisePage />} />
+        <Route
+          path="/entreprise"
+          element={
+            <RequireCompanyFeature profilePermissionKey="entreprise_parametres">
+              <MonEntreprisePage />
+            </RequireCompanyFeature>
+          }
+        />
+        <Route
+          path="/entreprise/fonctionnalites"
+          element={
+            <RequireCompanyFeature profilePermissionKey="entreprise_parametres">
+              <MonEntreprisePage />
+            </RequireCompanyFeature>
+          }
+        />
+        <Route
+          path="/entreprise/profils"
+          element={
+            <RequireCompanyFeature profilePermissionKey="entreprise_parametres">
+              <MonEntreprisePage />
+            </RequireCompanyFeature>
+          }
+        />
         <Route
           path="/fournisseurs"
           element={
-            <RequireCompanyFeature moduleId="approvisionnement">
+            <RequireCompanyFeature moduleId="approvisionnement" profilePermissionKey="fournisseurs">
               <FournisseursPage />
             </RequireCompanyFeature>
           }

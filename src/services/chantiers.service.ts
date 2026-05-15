@@ -1,7 +1,7 @@
 ﻿// src/services/chantiers.service.ts
 import { supabase } from "../lib/supabaseClient";
 import type { ChantierStatus } from "../types/chantier";
-import { CHANTIER_EN_COURS_STATUSES } from "../lib/chantierRules";
+import { CHANTIER_ACTIVE_STATUSES, CHANTIER_EN_COURS_STATUSES } from "../lib/chantierRules";
 
 /* =========================================================
    TYPES
@@ -28,8 +28,15 @@ export type ChantierRow = {
   heures_passees: number | null;
 
   created_at?: string | null;
+  completed_at?: string | null;
+  archived_at?: string | null;
+  cancelled_at?: string | null;
+  deleted_at?: string | null;
+  lifecycle_updated_at?: string | null;
 };
 
+const CHANTIER_SELECT_V4 =
+  "id, nom, client, adresse, status, avancement, date_debut, date_fin_prevue, planning_start_date, planning_end_date, planning_skip_weekends, planning_hours_per_day, planning_day_capacity, planning_working_days, heures_prevues, heures_passees, created_at, completed_at, archived_at, cancelled_at, deleted_at, lifecycle_updated_at" as const;
 const CHANTIER_SELECT_V3 =
   "id, nom, client, adresse, status, avancement, date_debut, date_fin_prevue, planning_start_date, planning_end_date, planning_skip_weekends, planning_hours_per_day, planning_day_capacity, planning_working_days, heures_prevues, heures_passees, created_at" as const;
 const CHANTIER_SELECT_V2 =
@@ -39,9 +46,9 @@ const CHANTIER_SELECT_V1 =
 const CHANTIER_SELECT_LEGACY =
   "id, nom, client, adresse, status, avancement, date_debut, date_fin_prevue, heures_prevues, heures_passees, created_at" as const;
 
-export const CHANTIER_SELECT = CHANTIER_SELECT_V3;
+export const CHANTIER_SELECT = CHANTIER_SELECT_V4;
 
-export type ChantierScope = "all" | "en_cours";
+export type ChantierScope = "all" | "actifs" | "termines" | "archives" | "annules" | "en_cours";
 
 /* =========================================================
    HELPERS
@@ -75,12 +82,29 @@ function normalizeChantier(row: any): ChantierRow {
     heures_prevues: row.heures_prevues ?? 0,
     heures_passees: row.heures_passees ?? 0,
     created_at: row.created_at ?? null,
+    completed_at: row.completed_at ?? null,
+    archived_at: row.archived_at ?? null,
+    cancelled_at: row.cancelled_at ?? null,
+    deleted_at: row.deleted_at ?? null,
+    lifecycle_updated_at: row.lifecycle_updated_at ?? null,
   };
 }
 
 function applyChantiersScope(query: any, scope: ChantierScope) {
+  if (scope === "actifs") {
+    return query.in("status", [...CHANTIER_ACTIVE_STATUSES]);
+  }
   if (scope === "en_cours") {
     return query.in("status", [...CHANTIER_EN_COURS_STATUSES]);
+  }
+  if (scope === "termines") {
+    return query.eq("status", "TERMINE");
+  }
+  if (scope === "archives") {
+    return query.eq("status", "ARCHIVE");
+  }
+  if (scope === "annules") {
+    return query.eq("status", "ANNULE");
   }
   return query;
 }
@@ -99,7 +123,12 @@ function isMissingChantiersPlanningV2ColumnsError(error: any): boolean {
       msg.includes("planning_skip_weekends") ||
       msg.includes("planning_hours_per_day") ||
       msg.includes("planning_day_capacity") ||
-      msg.includes("planning_working_days")
+      msg.includes("planning_working_days") ||
+      msg.includes("completed_at") ||
+      msg.includes("archived_at") ||
+      msg.includes("cancelled_at") ||
+      msg.includes("deleted_at") ||
+      msg.includes("lifecycle_updated_at")
     )
   );
 }
@@ -118,6 +147,11 @@ function isMissingChantiersPlanningV1ColumnsError(error: any): boolean {
 
 export async function listChantiers(params: { scope?: ChantierScope } = {}): Promise<ChantierRow[]> {
   const scope = params.scope ?? "all";
+
+  const qV4 = supabase.from("chantiers").select(CHANTIER_SELECT_V4).is("deleted_at", null).order("created_at", { ascending: false });
+  const zero = await applyChantiersScope(qV4, scope);
+  if (!zero.error) return (zero.data ?? []).map(normalizeChantier);
+  if (!isMissingChantiersPlanningV2ColumnsError(zero.error)) throw zero.error;
 
   const qV3 = supabase.from("chantiers").select(CHANTIER_SELECT_V3).order("created_at", { ascending: false });
   const first = await applyChantiersScope(qV3, scope);
@@ -156,6 +190,13 @@ export async function getChantiers(): Promise<ChantierRow[]> {
 
 export async function getChantierById(id: string): Promise<ChantierRow> {
   if (!id) throw new Error("id manquant.");
+
+  const zero = await supabase.from("chantiers").select(CHANTIER_SELECT_V4).eq("id", id).maybeSingle();
+  if (!zero.error) {
+    if (!zero.data) throw new Error("Chantier introuvable.");
+    return normalizeChantier(zero.data);
+  }
+  if (!isMissingChantiersPlanningV2ColumnsError(zero.error)) throw zero.error;
 
   const first = await supabase.from("chantiers").select(CHANTIER_SELECT_V3).eq("id", id).maybeSingle();
   if (!first.error) {
@@ -268,7 +309,7 @@ export async function updateChantier(
 ): Promise<ChantierRow> {
   if (!id) throw new Error("id manquant.");
 
-  const first = await supabase.from("chantiers").update(patch as any).eq("id", id).select(CHANTIER_SELECT_V3).maybeSingle();
+  const first = await supabase.from("chantiers").update(patch as any).eq("id", id).select(CHANTIER_SELECT_V4).maybeSingle();
   if (!first.error) {
     if (!first.data) throw new Error("Mise a jour OK mais chantier non retourne.");
     return normalizeChantier(first.data);
@@ -288,6 +329,11 @@ export async function updateChantier(
   delete patchV1.planning_hours_per_day;
   delete patchV1.planning_day_capacity;
   delete patchV1.planning_working_days;
+  delete patchV1.completed_at;
+  delete patchV1.archived_at;
+  delete patchV1.cancelled_at;
+  delete patchV1.deleted_at;
+  delete patchV1.lifecycle_updated_at;
 
   const second = await supabase.from("chantiers").update(patchV1 as any).eq("id", id).select(CHANTIER_SELECT_V2).maybeSingle();
   if (!second.error) {
@@ -314,6 +360,47 @@ export async function updateChantier(
 export async function deleteChantier(id: string): Promise<void> {
   if (!id) throw new Error("id manquant.");
 
-  const { error } = await supabase.from("chantiers").delete().eq("id", id);
-  if (error) throw error;
+  const now = new Date().toISOString();
+  const first = await supabase
+    .from("chantiers")
+    .update({ status: "ARCHIVE", deleted_at: now, archived_at: now, lifecycle_updated_at: now })
+    .eq("id", id);
+  if (!first.error) return;
+  if (!isMissingChantiersPlanningV2ColumnsError(first.error)) throw first.error;
+
+  const fallback = await supabase.from("chantiers").delete().eq("id", id);
+  if (fallback.error) throw fallback.error;
+}
+
+export async function updateChantierStatus(id: string, status: ChantierStatus): Promise<ChantierRow> {
+  if (!id) throw new Error("id manquant.");
+  const now = new Date().toISOString();
+  const patch: Partial<ChantierRow> = {
+    status,
+    lifecycle_updated_at: now,
+    completed_at: status === "TERMINE" ? now : null,
+    archived_at: status === "ARCHIVE" ? now : null,
+    cancelled_at: status === "ANNULE" ? now : null,
+    deleted_at: null,
+  };
+  return updateChantier(id, patch);
+}
+
+export async function bulkUpdateChantiersStatus(ids: string[], status: ChantierStatus): Promise<void> {
+  const cleanIds = ids.filter(Boolean);
+  if (cleanIds.length === 0) return;
+  const now = new Date().toISOString();
+  const patch: Record<string, unknown> = {
+    status,
+    lifecycle_updated_at: now,
+    completed_at: status === "TERMINE" ? now : null,
+    archived_at: status === "ARCHIVE" ? now : null,
+    cancelled_at: status === "ANNULE" ? now : null,
+    deleted_at: null,
+  };
+  const first = await supabase.from("chantiers").update(patch).in("id", cleanIds);
+  if (!first.error) return;
+  if (!isMissingChantiersPlanningV2ColumnsError(first.error)) throw first.error;
+  const fallback = await supabase.from("chantiers").update({ status }).in("id", cleanIds);
+  if (fallback.error) throw fallback.error;
 }

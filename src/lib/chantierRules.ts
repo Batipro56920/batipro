@@ -1,6 +1,15 @@
 ﻿import type { Chantier, ChantierStatus, ChantierTask } from "../types/chantier";
 
-export const CHANTIER_STATUSES = ["PREPARATION", "EN_COURS", "TERMINE"] as const;
+export const CHANTIER_STATUSES = [
+  "BROUILLON",
+  "PREPARATION",
+  "EN_COURS",
+  "EN_PAUSE",
+  "TERMINE",
+  "ARCHIVE",
+  "ANNULE",
+] as const;
+export const CHANTIER_ACTIVE_STATUSES = ["PREPARATION", "EN_COURS", "EN_PAUSE"] as const;
 export const CHANTIER_EN_COURS_STATUSES = ["EN_COURS"] as const;
 
 export const TAB_KEYS = ["infos", "planning", "reserves", "documents"] as const;
@@ -22,12 +31,20 @@ export function computeAvancementFromTasks(tasks: ChantierTask[]) {
 
 export function chantierStatusBadge(status: ChantierStatus) {
   switch (status) {
+    case "BROUILLON":
+      return { label: "Brouillon", className: "bg-zinc-50 border-zinc-200 text-zinc-700" };
     case "PREPARATION":
       return { label: "Préparation", className: "bg-slate-50 border-slate-200 text-slate-700" };
     case "EN_COURS":
       return { label: "En cours", className: "bg-blue-50 border-blue-200 text-blue-800" };
+    case "EN_PAUSE":
+      return { label: "En pause", className: "bg-amber-50 border-amber-200 text-amber-800" };
     case "TERMINE":
       return { label: "Terminé", className: "bg-emerald-50 border-emerald-200 text-emerald-800" };
+    case "ARCHIVE":
+      return { label: "Archivé", className: "bg-slate-100 border-slate-300 text-slate-700" };
+    case "ANNULE":
+      return { label: "Annulé", className: "bg-red-50 border-red-200 text-red-800" };
   }
 }
 

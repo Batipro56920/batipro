@@ -1,5 +1,6 @@
 const STORAGE_TOKEN_KEY = "batipro_intervenant_token";
 const STORAGE_CHANTIER_KEY = "batipro_intervenant_chantier_id";
+export const AUTH_SESSION_PORTAL_TOKEN = "__AUTH_SESSION__";
 
 let memoryToken = "";
 let memoryChantierId = "";

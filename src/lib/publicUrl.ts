@@ -26,6 +26,19 @@ export function buildIntervenantLink(token: string): string {
   return path;
 }
 
+export function buildIntervenantInvitationLink(token: string): string {
+  const path = `/intervenant/invitation?token=${encodeURIComponent(token)}`;
+  const base = getPublicAppUrl();
+
+  if (base) return `${base}${path}`;
+
+  if (typeof window !== "undefined" && window.location?.href) {
+    return new URL(path, window.location.href).toString();
+  }
+
+  return path;
+}
+
 function normalizePublicUrl(value: string): string | null {
   const normalizedRaw = String(value ?? "").replace(/^['\"]|['\"]$/g, "").trim();
   if (!normalizedRaw || !normalizedRaw.startsWith("http")) return null;

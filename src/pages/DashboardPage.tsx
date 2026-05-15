@@ -79,13 +79,16 @@ export default function DashboardPage() {
     async function load() {
       setLoading(true);
       try {
-        const [chantiersResult, materielResult] = await Promise.all([
-          listChantiers({ scope: "all" }),
-          supabase
-            .from("materiel_demandes")
-            .select("id, chantier_id, titre, designation, statut, status, quantite, unite, created_at")
-            .order("created_at", { ascending: false }),
-        ]);
+        const chantiersResult = await listChantiers({ scope: "actifs" });
+        const activeChantierIds = chantiersResult.map((chantier) => chantier.id);
+        const materielResult =
+          activeChantierIds.length === 0
+            ? { data: [], error: null }
+            : await supabase
+                .from("materiel_demandes")
+                .select("id, chantier_id, titre, designation, statut, status, quantite, unite, created_at")
+                .in("chantier_id", activeChantierIds)
+                .order("created_at", { ascending: false });
         const alertsResult = await listDashboardAlerts(chantiersResult);
 
         if (!alive) return;

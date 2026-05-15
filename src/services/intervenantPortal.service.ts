@@ -1,4 +1,5 @@
 ﻿import { supabase } from "../lib/supabaseClient";
+import { AUTH_SESSION_PORTAL_TOKEN } from "../utils/intervenantSession";
 
 export type IntervenantChantier = {
   id: string;
@@ -225,6 +226,12 @@ function rpcMessage(error: unknown, fallback: string): string {
   return String((error as { message?: string } | null)?.message ?? fallback).trim() || fallback;
 }
 
+function normalizePortalToken(token: string | null | undefined): string | null {
+  const trimmed = String(token ?? "").trim();
+  if (!trimmed || trimmed === AUTH_SESSION_PORTAL_TOKEN) return null;
+  return trimmed;
+}
+
 function asNullableString(value: unknown): string | null {
   const text = String(value ?? "").trim();
   return text || null;
@@ -413,7 +420,7 @@ function parseChantier(row: Record<string, unknown>): IntervenantChantier {
 }
 
 export async function intervenantSession(token: string): Promise<IntervenantSessionInfo> {
-  const { data, error } = await (supabase as any).rpc("intervenant_session", { p_token: token });
+  const { data, error } = await (supabase as any).rpc("intervenant_session", { p_token: normalizePortalToken(token) });
   if (error) throw new Error(rpcMessage(error, "Session intervenant indisponible."));
 
   const row = (data ?? {}) as Record<string, unknown>;
@@ -440,7 +447,7 @@ export async function intervenantSession(token: string): Promise<IntervenantSess
 }
 
 export async function intervenantGetChantiers(token: string): Promise<IntervenantChantier[]> {
-  const { data, error } = await (supabase as any).rpc("intervenant_get_chantiers", { p_token: token });
+  const { data, error } = await (supabase as any).rpc("intervenant_get_chantiers", { p_token: normalizePortalToken(token) });
   if (error) throw new Error(rpcMessage(error, "Chargement chantiers impossible."));
 
   const rows = Array.isArray(data) ? data : [];
@@ -449,7 +456,7 @@ export async function intervenantGetChantiers(token: string): Promise<Intervenan
 
 export async function intervenantGetTasks(token: string, chantierId: string): Promise<IntervenantTask[]> {
   const { data, error } = await (supabase as any).rpc("intervenant_get_tasks", {
-    p_token: token,
+    p_token: normalizePortalToken(token),
     p_chantier_id: chantierId,
   });
   if (error) throw new Error(rpcMessage(error, "Chargement taches impossible."));
@@ -489,7 +496,7 @@ export async function intervenantUpdateTaskStatus(
   status: string,
 ): Promise<void> {
   const { error } = await (supabase as any).rpc("intervenant_update_task_status", {
-    p_token: token,
+    p_token: normalizePortalToken(token),
     p_task_id: taskId,
     p_status: status,
   });
@@ -503,7 +510,7 @@ export async function intervenantAddTaskComment(
   photos: unknown[] = [],
 ): Promise<void> {
   const { error } = await (supabase as any).rpc("intervenant_add_task_comment", {
-    p_token: token,
+    p_token: normalizePortalToken(token),
     p_task_id: taskId,
     p_message: message,
     p_photos: photos,
@@ -516,7 +523,7 @@ export async function intervenantGetDocuments(
   chantierId: string,
 ): Promise<IntervenantDocument[]> {
   const { data, error } = await (supabase as any).rpc("intervenant_get_documents", {
-    p_token: token,
+    p_token: normalizePortalToken(token),
     p_chantier_id: chantierId,
   });
   if (error) throw new Error(rpcMessage(error, "Chargement documents impossible."));
@@ -537,7 +544,7 @@ export async function intervenantGetDocuments(
 
 export async function intervenantGetPlanning(token: string, chantierId: string): Promise<IntervenantPlanning> {
   const { data, error } = await (supabase as any).rpc("intervenant_get_planning", {
-    p_token: token,
+    p_token: normalizePortalToken(token),
     p_chantier_id: chantierId,
   });
   if (error) throw new Error(rpcMessage(error, "Chargement planning impossible."));
@@ -577,7 +584,7 @@ export async function intervenantTimeCreate(
   },
 ): Promise<void> {
   const { error } = await (supabase as any).rpc("intervenant_time_create", {
-    p_token: token,
+    p_token: normalizePortalToken(token),
     p_payload: payload,
   });
   if (error) throw new Error(rpcMessage(error, "Creation temps impossible."));
@@ -585,7 +592,7 @@ export async function intervenantTimeCreate(
 
 export async function intervenantTimeDelete(token: string, timeEntryId: string): Promise<void> {
   const { error } = await (supabase as any).rpc("intervenant_time_delete", {
-    p_token: token,
+    p_token: normalizePortalToken(token),
     p_time_entry_id: timeEntryId,
   });
   if (error) throw new Error(rpcMessage(error, "Suppression temps impossible."));
@@ -593,7 +600,7 @@ export async function intervenantTimeDelete(token: string, timeEntryId: string):
 
 export async function intervenantTimeList(token: string, chantierId: string): Promise<IntervenantTimeEntry[]> {
   const { data, error } = await (supabase as any).rpc("intervenant_time_list", {
-    p_token: token,
+    p_token: normalizePortalToken(token),
     p_chantier_id: chantierId,
   });
   if (error) throw new Error(rpcMessage(error, "Chargement temps impossible."));
@@ -630,7 +637,7 @@ export async function intervenantMaterielCreate(
   },
 ): Promise<void> {
   const { error } = await (supabase as any).rpc("intervenant_materiel_create", {
-    p_token: token,
+    p_token: normalizePortalToken(token),
     p_payload: payload,
   });
   if (error) throw new Error(rpcMessage(error, "Creation demande materiel impossible."));
@@ -641,7 +648,7 @@ export async function intervenantMaterielList(
   chantierId: string,
 ): Promise<IntervenantMateriel[]> {
   const { data, error } = await (supabase as any).rpc("intervenant_materiel_list", {
-    p_token: token,
+    p_token: normalizePortalToken(token),
     p_chantier_id: chantierId,
   });
   if (error) throw new Error(rpcMessage(error, "Chargement materiel impossible."));
@@ -672,7 +679,7 @@ export async function intervenantDailyChecklistGet(
   checklistDate: string,
 ): Promise<IntervenantDailyChecklist> {
   const { data, error } = await (supabase as any).rpc("intervenant_daily_checklist_get", {
-    p_token: token,
+    p_token: normalizePortalToken(token),
     p_checklist_date: checklistDate,
   });
   if (error) throw new Error(rpcMessage(error, "Chargement checklist impossible."));
@@ -710,7 +717,7 @@ export async function intervenantDailyChecklistUpsert(
   },
 ): Promise<IntervenantDailyChecklist> {
   const { data, error } = await (supabase as any).rpc("intervenant_daily_checklist_upsert", {
-    p_token: token,
+    p_token: normalizePortalToken(token),
     p_payload: payload,
   });
   if (error) throw new Error(rpcMessage(error, "Enregistrement checklist impossible."));
@@ -743,7 +750,7 @@ export async function intervenantInformationRequestCreate(
   },
 ): Promise<IntervenantInformationRequest> {
   const { data, error } = await (supabase as any).rpc("intervenant_information_request_create", {
-    p_token: token,
+    p_token: normalizePortalToken(token),
     p_payload: payload,
   });
   if (error) throw new Error(rpcMessage(error, "Envoi demande d'information impossible."));
@@ -770,7 +777,7 @@ export async function intervenantInformationRequestList(
   chantierId: string,
 ): Promise<IntervenantInformationRequest[]> {
   const { data, error } = await (supabase as any).rpc("intervenant_information_request_list", {
-    p_token: token,
+    p_token: normalizePortalToken(token),
     p_chantier_id: chantierId,
   });
   if (error) throw new Error(rpcMessage(error, "Chargement demandes d'information impossible."));
@@ -803,7 +810,7 @@ export async function intervenantTerrainFeedbackCreate(
   },
 ): Promise<IntervenantTerrainFeedback> {
   const { data, error } = await (supabase as any).rpc("intervenant_terrain_feedback_create", {
-    p_token: token,
+    p_token: normalizePortalToken(token),
     p_payload: payload,
   });
   if (error) throw new Error(rpcMessage(error, "Creation retour terrain impossible."));
@@ -816,7 +823,7 @@ export async function intervenantTerrainFeedbackList(
   chantierId?: string | null,
 ): Promise<IntervenantTerrainFeedback[]> {
   const { data, error } = await (supabase as any).rpc("intervenant_terrain_feedback_list", {
-    p_token: token,
+    p_token: normalizePortalToken(token),
     p_chantier_id: chantierId ?? null,
   });
   if (error) throw new Error(rpcMessage(error, "Chargement retours terrain impossible."));
@@ -834,7 +841,7 @@ export async function intervenantTerrainFeedbackUploadPhoto(
   },
 ): Promise<IntervenantTerrainFeedbackAttachment> {
   const formData = new FormData();
-  formData.set("token", token);
+  formData.set("token", normalizePortalToken(token) ?? "");
   formData.set("chantier_id", payload.chantier_id);
   formData.set("feedback_id", payload.feedback_id);
   formData.set("file", payload.file);
@@ -861,7 +868,7 @@ export async function intervenantConsigneList(
   chantierId?: string | null,
 ): Promise<IntervenantConsigne[]> {
   const { data, error } = await (supabase as any).rpc("intervenant_consigne_list", {
-    p_token: token,
+    p_token: normalizePortalToken(token),
     p_chantier_id: chantierId ?? null,
   });
   if (error) throw new Error(rpcMessage(error, "Chargement consignes impossible."));
@@ -875,7 +882,7 @@ export async function intervenantConsigneMarkRead(
   consigneId: string,
 ): Promise<{ id: string; read_at: string | null }> {
   const { data, error } = await (supabase as any).rpc("intervenant_consigne_mark_read", {
-    p_token: token,
+    p_token: normalizePortalToken(token),
     p_consigne_id: consigneId,
   });
   if (error) throw new Error(rpcMessage(error, "Mise a jour lecture consigne impossible."));
@@ -892,7 +899,7 @@ export async function intervenantReserveList(
   chantierId?: string | null,
 ): Promise<IntervenantReserve[]> {
   const { data, error } = await (supabase as any).rpc("intervenant_reserve_list", {
-    p_token: token,
+    p_token: normalizePortalToken(token),
     p_chantier_id: chantierId ?? null,
   });
   if (error) throw new Error(rpcMessage(error, "Chargement reserves impossible."));
@@ -906,7 +913,7 @@ export async function intervenantReserveMarkLifted(
   reserveId: string,
 ): Promise<IntervenantReserve> {
   const { data, error } = await (supabase as any).rpc("intervenant_reserve_mark_lifted", {
-    p_token: token,
+    p_token: normalizePortalToken(token),
     p_reserve_id: reserveId,
   });
   if (error) throw new Error(rpcMessage(error, "Mise a jour reserve impossible."));

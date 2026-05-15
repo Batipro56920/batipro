@@ -4,6 +4,7 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { supabase } from "../lib/supabaseClient";
 import { useI18n } from "../i18n";
 import { readStoredIntervenantToken } from "../utils/intervenantSession";
+import { getCurrentUserHomeRoute } from "../services/currentUserProfile.service";
 
 function isTransientLoginError(error: unknown): boolean {
   const message = String((error as any)?.message ?? "").toLowerCase();
@@ -210,8 +211,11 @@ export default function AuthPage() {
     }
 
     // Si déjà connecté ? on renvoie vers l'app
-    supabase.auth.getSession().then(({ data }) => {
-      if (data.session && !isRecoveryUrl()) navigate("/dashboard", { replace: true });
+    supabase.auth.getSession().then(async ({ data }) => {
+      if (data.session && !isRecoveryUrl()) {
+        const nextRoute = await getCurrentUserHomeRoute();
+        navigate(nextRoute, { replace: true });
+      }
     });
 
     const { data: authSub } = supabase.auth.onAuthStateChange((event) => {
@@ -312,7 +316,9 @@ export default function AuthPage() {
       }
 
       // Si tu avais une redirection initiale
-      const from = (location.state as any)?.from?.pathname ?? "/dashboard";
+      const requestedPath = (location.state as any)?.from?.pathname;
+      const defaultRoute = await getCurrentUserHomeRoute();
+      const from = defaultRoute === "/dashboard" && requestedPath ? requestedPath : defaultRoute;
       navigate(from, { replace: true });
     } catch (err: any) {
       setMsg(

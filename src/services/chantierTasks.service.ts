@@ -31,6 +31,9 @@ export type ChantierTaskRow = {
   etape_metier: string | null;
   description_technique: string | null;
   caracteristiques: string[];
+  materiaux: string | null;
+  contraintes: string | null;
+  points_controle: string | null;
   priorite: TaskPriority;
   prix_unitaire_devis_ht: number | null;
   montant_total_devis_ht: number | null;
@@ -80,6 +83,9 @@ type CreateTaskPayload = {
   etape_metier?: string | null;
   description_technique?: string | null;
   caracteristiques?: string[];
+  materiaux?: string | null;
+  contraintes?: string | null;
+  points_controle?: string | null;
   priorite?: TaskPriority;
   prix_unitaire_devis_ht?: number | string | null;
   montant_total_devis_ht?: number | string | null;
@@ -130,6 +136,9 @@ type UpdateTaskPatch = Partial<
     | "etape_metier"
     | "description_technique"
     | "caracteristiques"
+    | "materiaux"
+    | "contraintes"
+    | "points_controle"
     | "priorite"
     | "prix_unitaire_devis_ht"
     | "montant_total_devis_ht"
@@ -171,6 +180,9 @@ const TASK_SELECT = [
   "etape_metier",
   "description_technique",
   "caracteristiques",
+  "materiaux",
+  "contraintes",
+  "points_controle",
   "priorite",
   "prix_unitaire_devis_ht",
   "montant_total_devis_ht",
@@ -324,6 +336,9 @@ function cleanPatch(patch: UpdateTaskPatch) {
   if (typeof cleaned.zone_id === "string") cleaned.zone_id = cleaned.zone_id.trim();
   if (typeof cleaned.etape_metier === "string") cleaned.etape_metier = cleaned.etape_metier.trim();
   if (typeof cleaned.description_technique === "string") cleaned.description_technique = cleaned.description_technique.trim();
+  if (typeof cleaned.materiaux === "string") cleaned.materiaux = cleaned.materiaux.trim();
+  if (typeof cleaned.contraintes === "string") cleaned.contraintes = cleaned.contraintes.trim();
+  if (typeof cleaned.points_controle === "string") cleaned.points_controle = cleaned.points_controle.trim();
   if (typeof cleaned.reprise_reason === "string") cleaned.reprise_reason = cleaned.reprise_reason.trim();
   if (typeof cleaned.unite === "string") cleaned.unite = cleaned.unite.trim();
 
@@ -338,6 +353,9 @@ function cleanPatch(patch: UpdateTaskPatch) {
   if (cleaned.zone_id === "") cleaned.zone_id = null;
   if (cleaned.etape_metier === "") cleaned.etape_metier = null;
   if (cleaned.description_technique === "") cleaned.description_technique = null;
+  if (cleaned.materiaux === "") cleaned.materiaux = null;
+  if (cleaned.contraintes === "") cleaned.contraintes = null;
+  if (cleaned.points_controle === "") cleaned.points_controle = null;
   if (cleaned.reprise_reason === "") cleaned.reprise_reason = null;
   if (cleaned.date_debut === "") cleaned.date_debut = null;
   if (cleaned.date_fin === "") cleaned.date_fin = null;
@@ -435,6 +453,9 @@ function normalizeTaskRow(row: any): ChantierTaskRow {
     etape_metier: row?.etape_metier ?? null,
     description_technique: row?.description_technique ?? null,
     caracteristiques: normalizeCaracteristiques(row?.caracteristiques),
+    materiaux: row?.materiaux ?? null,
+    contraintes: row?.contraintes ?? null,
+    points_controle: row?.points_controle ?? null,
     priorite: normalizeTaskPriority(row?.priorite),
     prix_unitaire_devis_ht: normalizeNumber(row?.prix_unitaire_devis_ht),
     montant_total_devis_ht: normalizeNumber(row?.montant_total_devis_ht),
@@ -522,6 +543,9 @@ function stripTaskV3Columns<T extends Record<string, unknown>>(payload: T): T {
   delete (next as Record<string, unknown>).task_template_label;
   delete (next as Record<string, unknown>).description_technique;
   delete (next as Record<string, unknown>).caracteristiques;
+  delete (next as Record<string, unknown>).materiaux;
+  delete (next as Record<string, unknown>).contraintes;
+  delete (next as Record<string, unknown>).points_controle;
   delete (next as Record<string, unknown>).priorite;
   delete (next as Record<string, unknown>).prix_unitaire_devis_ht;
   delete (next as Record<string, unknown>).montant_total_devis_ht;
@@ -545,6 +569,9 @@ function hasMissingTaskV3ColumnsError(error: { message?: string } | null): boole
     isMissingTaskColumnError(error, "task_template_label") ||
     isMissingTaskColumnError(error, "description_technique") ||
     isMissingTaskColumnError(error, "caracteristiques") ||
+    isMissingTaskColumnError(error, "materiaux") ||
+    isMissingTaskColumnError(error, "contraintes") ||
+    isMissingTaskColumnError(error, "points_controle") ||
     isMissingTaskColumnError(error, "priorite") ||
     isMissingTaskColumnError(error, "prix_unitaire_devis_ht") ||
     isMissingTaskColumnError(error, "montant_total_devis_ht") ||
@@ -643,6 +670,9 @@ export async function createTask(payload: CreateTaskPayload) {
     etape_metier: (payload.etape_metier ?? "").trim() || null,
     description_technique: (payload.description_technique ?? "").trim() || null,
     caracteristiques: normalizeCaracteristiques(payload.caracteristiques),
+    materiaux: (payload.materiaux ?? "").trim() || null,
+    contraintes: (payload.contraintes ?? "").trim() || null,
+    points_controle: (payload.points_controle ?? "").trim() || null,
     priorite: normalizeTaskPriority(payload.priorite),
     prix_unitaire_devis_ht: normalizeNumber(payload.prix_unitaire_devis_ht),
     montant_total_devis_ht: normalizeNumber(payload.montant_total_devis_ht),

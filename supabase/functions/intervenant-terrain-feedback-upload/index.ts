@@ -52,11 +52,19 @@ serve(async (req) => {
 
   try {
     const SUPABASE_URL = requireEnv("SUPABASE_URL");
+    const SUPABASE_ANON_KEY = requireEnv("SUPABASE_ANON_KEY");
     const SUPABASE_SERVICE_ROLE_KEY = requireEnv("SUPABASE_SERVICE_ROLE_KEY");
+    const authHeader = normalizeString(req.headers.get("authorization") ?? req.headers.get("Authorization"));
 
     const admin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
       auth: { persistSession: false },
     });
+    const sessionClient = authHeader
+      ? createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+          auth: { persistSession: false },
+          global: { headers: { Authorization: authHeader } },
+        })
+      : null;
 
     const formData = await req.formData();
     const token = normalizeString(formData.get("token"));
@@ -64,7 +72,7 @@ serve(async (req) => {
     const feedbackId = normalizeString(formData.get("feedback_id"));
     const file = formData.get("file");
 
-    if (!token) return json({ error: "token required" }, 400);
+    if (!token && !sessionClient) return json({ error: "auth required" }, 400);
     if (!chantierId) return json({ error: "chantier_id required" }, 400);
     if (!feedbackId) return json({ error: "feedback_id required" }, 400);
     if (!(file instanceof File)) return json({ error: "file required" }, 400);
@@ -76,8 +84,9 @@ serve(async (req) => {
       return json({ error: "unsupported_file_type" }, 400);
     }
 
-    const { data: accessData, error: accessError } = await (admin as any).rpc("_intervenant_assert_chantier_access", {
-      p_token: token,
+    const accessClient = token ? admin : sessionClient;
+    const { data: accessData, error: accessError } = await (accessClient as any).rpc("_intervenant_assert_chantier_access", {
+      p_token: token || null,
       p_chantier_id: chantierId,
     });
 

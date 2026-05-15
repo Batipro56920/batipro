@@ -18,6 +18,12 @@ import {
   getCompanySettings,
   getEnabledCompanyModulesFromSettings,
 } from "../services/companySettings.service";
+import {
+  getCurrentProfileFeaturePermissions,
+  hasProfileFeaturePermission,
+  type ProfileFeaturePermissionKey,
+  type ProfileFeaturePermissions,
+} from "../services/profileFeaturePermissions.service";
 
 type Props = {
   collapsed?: boolean;
@@ -29,18 +35,30 @@ export default function Sidebar({ collapsed = false, onToggleCollapse }: Props) 
   const [enabledModules, setEnabledModules] = useState<Set<CompanyFeatureModuleId> | null>(
     null,
   );
+  const [profilePermissions, setProfilePermissions] = useState<{
+    role: string | null;
+    permissions: ProfileFeaturePermissions;
+  } | null>(null);
 
   useEffect(() => {
     let alive = true;
 
     async function loadFeatureSettings() {
       try {
-        const settings = await getCompanySettings();
+        const [settings, profileResult] = await Promise.all([
+          getCompanySettings(),
+          getCurrentProfileFeaturePermissions(),
+        ]);
         if (!alive) return;
         setEnabledModules(new Set(getEnabledCompanyModulesFromSettings(settings)));
+        setProfilePermissions({
+          role: profileResult.role,
+          permissions: profileResult.permissions,
+        });
       } catch {
         if (!alive) return;
         setEnabledModules(null);
+        setProfilePermissions(null);
       }
     }
 
@@ -54,7 +72,12 @@ export default function Sidebar({ collapsed = false, onToggleCollapse }: Props) 
   const nav = [
     { to: "/dashboard", label: t("sidebar.dashboard"), icon: LayoutDashboard },
     { to: "/chantiers", label: t("sidebar.chantiers"), icon: Hammer },
-    { to: "/intervenants", label: t("sidebar.intervenants"), icon: Users },
+    {
+      to: "/intervenants",
+      label: t("sidebar.intervenants"),
+      icon: Users,
+      permissionKey: "intervenants" as const,
+    },
     {
       to: "/retours-terrain",
       label: t("sidebar.terrainFeedback"),
@@ -66,22 +89,41 @@ export default function Sidebar({ collapsed = false, onToggleCollapse }: Props) 
       label: t("sidebar.library"),
       icon: LibraryBig,
       feature: "documents" as const,
+      permissionKey: "bibliotheque" as const,
     },
     {
       to: "/statistiques",
       label: t("sidebar.statistics"),
       icon: ChartColumnBig,
       feature: "rapports" as const,
+      permissionKey: "statistiques" as const,
     },
     {
       to: "/fournisseurs",
       label: t("sidebar.suppliers"),
       icon: Truck,
       feature: "approvisionnement" as const,
+      permissionKey: "fournisseurs" as const,
     },
-    { to: "/entreprise", label: t("sidebar.company"), icon: Building2 },
+    {
+      to: "/entreprise",
+      label: t("sidebar.company"),
+      icon: Building2,
+      permissionKey: "entreprise_parametres" as const,
+    },
   ].filter(
-    (item) => !item.feature || !enabledModules || enabledModules.has(item.feature),
+    (item) => {
+      const featureAllowed = !item.feature || !enabledModules || enabledModules.has(item.feature);
+      const permissionKey = (item.permissionKey ?? item.feature ?? null) as ProfileFeaturePermissionKey | null;
+      const profileAllowed = !permissionKey || !profilePermissions
+        ? true
+        : hasProfileFeaturePermission(
+            profilePermissions.permissions,
+            permissionKey,
+            profilePermissions.role,
+          );
+      return featureAllowed && profileAllowed;
+    },
   );
 
   return (

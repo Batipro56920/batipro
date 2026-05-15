@@ -1,5 +1,5 @@
 import { supabase } from "../lib/supabaseClient";
-import { getChantiers, type ChantierRow } from "./chantiers.service";
+import { listChantiers, type ChantierRow } from "./chantiers.service";
 import type { IntervenantRow } from "./intervenants.service";
 import type { MaterielDemandeRow, MaterielStatus } from "./materielDemandes.service";
 import type { TaskStatus } from "./chantierTasks.service";
@@ -323,16 +323,20 @@ export async function loadStatisticsDataset(): Promise<StatisticsDataset> {
     infoRequestsRes,
     dailyChecklistsRes,
   ] = await Promise.all([
-    getChantiers(),
+    listChantiers({ scope: "actifs" }),
     fetchOptionalTable<IntervenantRow>(
       "intervenants",
-      "id, chantier_id, nom, email, telephone, created_at",
+      "id, chantier_id, nom, entreprise, metier, email, telephone, notes, user_id, created_at",
       (row) => ({
         id: String(row.id ?? ""),
         chantier_id: normalizeText(row.chantier_id),
         nom: String(row.nom ?? "Sans nom"),
+        entreprise: normalizeText((row as Record<string, unknown>).entreprise),
+        metier: normalizeText((row as Record<string, unknown>).metier),
         email: normalizeText(row.email),
         telephone: normalizeText(row.telephone),
+        notes: normalizeText((row as Record<string, unknown>).notes),
+        user_id: normalizeText((row as Record<string, unknown>).user_id),
         created_at: normalizeText(row.created_at),
       }),
       notes,
@@ -442,16 +446,20 @@ export async function loadStatisticsDataset(): Promise<StatisticsDataset> {
     ),
   ]);
 
+  const activeChantierIds = new Set(chantiers.map((chantier) => chantier.id));
+  const isActiveChantierRow = (row: { chantier_id?: string | null }) =>
+    Boolean(row.chantier_id && activeChantierIds.has(row.chantier_id));
+
   return {
     chantiers,
-    intervenants: intervenantsRes.rows,
-    tasks: tasksRes.rows,
-    timeEntries: timeEntriesRes.rows,
+    intervenants: intervenantsRes.rows.filter((row) => !row.chantier_id || activeChantierIds.has(row.chantier_id)),
+    tasks: tasksRes.rows.filter(isActiveChantierRow),
+    timeEntries: timeEntriesRes.rows.filter(isActiveChantierRow),
     taskAssignees: taskAssigneesRes.rows,
-    reserves: reservesRes.rows,
-    materielDemandes: materielRes.rows,
-    informationRequests: infoRequestsRes.rows,
-    dailyChecklists: dailyChecklistsRes.rows,
+    reserves: reservesRes.rows.filter(isActiveChantierRow),
+    materielDemandes: materielRes.rows.filter(isActiveChantierRow),
+    informationRequests: infoRequestsRes.rows.filter(isActiveChantierRow),
+    dailyChecklists: dailyChecklistsRes.rows.filter(isActiveChantierRow),
     availability: {
       tasks: tasksRes.available,
       timeEntries: timeEntriesRes.available,

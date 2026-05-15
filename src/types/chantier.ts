@@ -5,9 +5,13 @@
    ========================================================= */
 
 export type ChantierStatus =
+  | "BROUILLON"
   | "PREPARATION"
   | "EN_COURS"
-  | "TERMINE";
+  | "EN_PAUSE"
+  | "TERMINE"
+  | "ARCHIVE"
+  | "ANNULE";
 
 /* =========================================================
    PLANNING / TÂCHES
