@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import type { Dispatch, ReactNode, SetStateAction } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import {
   createCrmAppointment,
   createCrmClient,
@@ -182,6 +182,7 @@ function SelectEntity({
 }
 
 export default function CrmPage({ section = "dashboard" }: Props) {
+  const navigate = useNavigate();
   const [data, setData] = useState<CrmDataset>(EMPTY_DATASET);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -269,6 +270,13 @@ export default function CrmPage({ section = "dashboard" }: Props) {
       const client = row.client_id ? clientById.get(row.client_id) ?? null : null;
       const opportunity = row.opportunity_id ? opportunityById.get(row.opportunity_id) ?? null : null;
       await transformAcceptedQuoteToChantier({ quote: row.statut === "accepte" ? row : await updateCrmQuote(row.id, { statut: "accepte" }), prospect, client, opportunity });
+    });
+  }
+
+  async function createDraftQuoteAndOpen() {
+    await submitSafely(async () => {
+      const quote = await createCrmQuote({ statut: "brouillon", description: "Nouveau devis" });
+      navigate(`/crm/devis/${quote.id}/edit`);
     });
   }
 
@@ -406,7 +414,7 @@ export default function CrmPage({ section = "dashboard" }: Props) {
           <button type="button" onClick={() => setModal("prospect")} className="rounded-xl bg-slate-900 px-4 py-2 text-sm text-white hover:bg-slate-800">
             + Prospect
           </button>
-          <button type="button" onClick={() => setModal("quote")} className="rounded-xl border border-blue-200 bg-blue-50 px-4 py-2 text-sm text-blue-800 hover:bg-blue-100">
+          <button type="button" onClick={createDraftQuoteAndOpen} className="rounded-xl border border-blue-200 bg-blue-50 px-4 py-2 text-sm text-blue-800 hover:bg-blue-100">
             + Devis
           </button>
         </div>
@@ -474,7 +482,7 @@ export default function CrmPage({ section = "dashboard" }: Props) {
           rows={filteredQuotes}
           prospectById={prospectById}
           clientById={clientById}
-          onCreate={() => setModal("quote")}
+          onCreate={createDraftQuoteAndOpen}
           onStatus={(row, statut) => submitSafely(async () => updateCrmQuote(row.id, { statut }))}
           onTransform={transformQuote}
           onOpen={openQuoteEngine}
@@ -505,7 +513,6 @@ export default function CrmPage({ section = "dashboard" }: Props) {
       {modal === "prospect" ? <ProspectForm saving={saving} onClose={() => setModal(null)} onSubmit={(payload) => submitSafely(() => createCrmProspect(payload))} /> : null}
       {modal === "client" ? <ClientForm saving={saving} onClose={() => setModal(null)} onSubmit={(payload) => submitSafely(() => createCrmClient(payload))} /> : null}
       {modal === "opportunity" ? <OpportunityForm data={data} saving={saving} onClose={() => setModal(null)} onSubmit={(payload) => submitSafely(() => upsertCrmOpportunity(payload))} /> : null}
-      {modal === "quote" ? <QuoteForm data={data} saving={saving} onClose={() => setModal(null)} onSubmit={(payload) => submitSafely(() => createCrmQuote(payload))} /> : null}
       {modal === "task" ? <TaskForm data={data} saving={saving} onClose={() => setModal(null)} onSubmit={(payload) => submitSafely(() => createCrmTask(payload))} /> : null}
       {modal === "appointment" ? <AppointmentForm data={data} saving={saving} onClose={() => setModal(null)} onSubmit={(payload) => submitSafely(() => createCrmAppointment(payload))} /> : null}
       {modal === "sav" ? <SavForm data={data} saving={saving} onClose={() => setModal(null)} onSubmit={(payload) => submitSafely(() => createCrmSav(payload))} /> : null}
@@ -1488,7 +1495,7 @@ function OpportunityForm({ data, saving, onClose, onSubmit }: { data: CrmDataset
   );
 }
 
-function QuoteForm({ data, saving, onClose, onSubmit }: { data: CrmDataset; saving: boolean; onClose: () => void; onSubmit: (payload: Partial<CrmQuoteRow>) => void }) {
+export function QuoteForm({ data, saving, onClose, onSubmit }: { data: CrmDataset; saving: boolean; onClose: () => void; onSubmit: (payload: Partial<CrmQuoteRow>) => void }) {
   const [form, setForm] = useState<Record<string, string>>({ statut: "brouillon", montant_ht: "0", tva: "20" });
   return (
     <CrmModal title="Créer un devis CRM" onClose={onClose}>

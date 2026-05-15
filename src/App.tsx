@@ -7,6 +7,7 @@ import RequireCompanyFeature from "./components/RequireCompanyFeature";
 import AuthPage from "./pages/AuthPage";
 import DashboardPage from "./pages/DashboardPage";
 import CrmPage from "./pages/CrmPage";
+import CrmQuoteWorkspacePage from "./pages/CrmQuoteWorkspacePage";
 import ChantiersPage from "./pages/ChantiersPage";
 import ChantierNewPage from "./pages/ChantierNewPage";
 import ChantierPage from "./pages/ChantierPage";
@@ -81,6 +82,14 @@ export default function App() {
           element={
             <RequireCompanyFeature profilePermissionKey="crm">
               <CrmPage section="quotes" />
+            </RequireCompanyFeature>
+          }
+        />
+        <Route
+          path="/crm/devis/:id/edit"
+          element={
+            <RequireCompanyFeature profilePermissionKey="crm">
+              <CrmQuoteWorkspacePage />
             </RequireCompanyFeature>
           }
         />

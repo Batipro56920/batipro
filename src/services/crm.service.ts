@@ -995,10 +995,14 @@ export async function createCrmQuoteItemFromTemplate(input: {
   quote_id: string;
   lot_id?: string | null;
   section_id?: string | null;
+  lineType?: string | null;
   lot?: string | null;
   template?: TaskTemplateRow | null;
   designation?: string | null;
+  description?: string | null;
+  unit?: string | null;
   quantity?: unknown;
+  unitPriceHt?: unknown;
   tvaRate?: unknown;
   marginRate?: unknown;
   coefficient?: unknown;
@@ -1029,14 +1033,14 @@ export async function createCrmQuoteItemFromTemplate(input: {
     section_id: input.section_id ?? null,
     lot: text(input.lot) ?? template?.lot ?? null,
     designation: text(input.designation) ?? template?.titre ?? "Ouvrage",
-    description: template?.remarques ?? null,
+    description: text(input.description) ?? template?.remarques ?? null,
     quantite: totals.quantity,
-    unite: template?.unite ?? null,
-    prix_unitaire_ht: totals.prix_unitaire_ht,
-    total_ht: totals.total_ht,
+    unite: text(input.unit) ?? template?.unite ?? null,
+    prix_unitaire_ht: input.unitPriceHt === undefined ? totals.prix_unitaire_ht : numberOrZero(input.unitPriceHt),
+    total_ht: input.unitPriceHt === undefined ? totals.total_ht : roundMoney(numberOrZero(input.unitPriceHt) * totals.quantity),
     ordre: input.ordre ?? 0,
     task_template_id: template?.id ?? null,
-    line_type: "composite",
+    line_type: text(input.lineType) ?? (template ? "composite" : "simple"),
     family: template?.lot ?? null,
     price_status: "estimated",
     show_to_client: true,
@@ -1049,8 +1053,8 @@ export async function createCrmQuoteItemFromTemplate(input: {
     margin_rate: totals.margin_rate,
     coefficient: totals.coefficient,
     tva_rate: numberOrZero(input.tvaRate ?? 20),
-    sale_unit_price_ht: totals.sale_unit_price_ht,
-    sale_total_ht: totals.sale_total_ht,
+    sale_unit_price_ht: input.unitPriceHt === undefined ? totals.sale_unit_price_ht : numberOrZero(input.unitPriceHt),
+    sale_total_ht: input.unitPriceHt === undefined ? totals.sale_total_ht : roundMoney(numberOrZero(input.unitPriceHt) * totals.quantity),
     technical_description: template?.description_technique ?? null,
     generate_task: true,
   };
