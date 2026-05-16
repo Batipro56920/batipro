@@ -1,0 +1,12 @@
+import { Toaster, toast } from "sonner";
+
+export const batiproToast = {
+  success: (message: string) => toast.success(message),
+  error: (message: string) => toast.error(message),
+  info: (message: string) => toast.info(message),
+  warning: (message: string) => toast.warning(message),
+};
+
+export function ToastProvider() {
+  return <Toaster position="top-right" richColors closeButton />;
+}

@@ -1,0 +1,99 @@
+@import url("https://rsms.me/inter/inter.css");
+
+:root {
+  --bt-color-primary-dark: #0F2747;
+  --bt-color-primary-accent: #3B82F6;
+  --bt-color-background: #F8FAFC;
+  --bt-color-surface: #FFFFFF;
+  --bt-color-surface-secondary: #F1F5F9;
+  --bt-color-border: #E2E8F0;
+  --bt-color-text-primary: #0F172A;
+  --bt-color-text-secondary: #64748B;
+  --bt-color-success: #16A34A;
+  --bt-color-warning: #D97706;
+  --bt-color-danger: #DC2626;
+  --bt-color-info: #0EA5E9;
+
+  --bt-space-1: 4px;
+  --bt-space-2: 8px;
+  --bt-space-3: 12px;
+  --bt-space-4: 16px;
+  --bt-space-5: 20px;
+  --bt-space-6: 24px;
+  --bt-space-8: 32px;
+  --bt-space-10: 40px;
+  --bt-space-12: 48px;
+  --bt-space-16: 64px;
+
+  --bt-radius-input: 8px;
+  --bt-radius-card: 12px;
+  --bt-radius-dialog: 16px;
+  --bt-border-subtle: 1px solid var(--bt-color-border);
+  --bt-shadow-subtle: 0 1px 2px rgb(15 23 42 / 0.04);
+  --bt-shadow-card: 0 1px 2px rgb(15 23 42 / 0.04), 0 10px 24px rgb(15 23 42 / 0.04);
+  --bt-shadow-dialog: 0 24px 80px rgb(15 23 42 / 0.18);
+
+  --bt-motion-hover: 150ms;
+  --bt-motion-dialog: 180ms;
+  --bt-motion-ease: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+html {
+  font-family: Inter, Aptos, "Segoe UI", system-ui, -apple-system, sans-serif;
+}
+
+body {
+  background: var(--bt-color-background);
+  color: var(--bt-color-text-primary);
+  font-size: 14px;
+  line-height: 20px;
+}
+
+:focus-visible {
+  outline: 2px solid var(--bt-color-primary-accent);
+  outline-offset: 2px;
+}
+
+.bt-theme {
+  color: var(--bt-color-text-primary);
+}
+
+.bt-page-title {
+  font-size: 28px;
+  line-height: 36px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+.bt-section-title {
+  font-size: 20px;
+  line-height: 28px;
+  font-weight: 600;
+}
+
+.bt-card-title {
+  font-size: 16px;
+  line-height: 24px;
+  font-weight: 600;
+}
+
+.bt-meta {
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--bt-color-text-secondary);
+}
+
+@keyframes bt-fade-scale-in {
+  from {
+    opacity: 0;
+    transform: scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.bt-dialog-enter {
+  animation: bt-fade-scale-in var(--bt-motion-dialog) var(--bt-motion-ease);
+}

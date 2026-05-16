@@ -77,8 +77,22 @@ import {
   AUTH_SESSION_PORTAL_TOKEN,
 } from "../utils/intervenantSession";
 import { supabase } from "../lib/supabaseClient";
+import IntervenantDashboardSection from "../features/intervenant-portal/pages/IntervenantDashboardSection";
+import IntervenantDocumentsSection from "../features/intervenant-portal/pages/IntervenantDocumentsSection";
+import IntervenantEmptyStateSection from "../features/intervenant-portal/pages/IntervenantEmptyStateSection";
+import IntervenantEquipmentSection from "../features/intervenant-portal/pages/IntervenantEquipmentSection";
+import IntervenantFeedbackSection from "../features/intervenant-portal/pages/IntervenantFeedbackSection";
+import IntervenantInstructionsSection from "../features/intervenant-portal/pages/IntervenantInstructionsSection";
+import IntervenantMessagesSection from "../features/intervenant-portal/pages/IntervenantMessagesSection";
+import IntervenantPlanningSection from "../features/intervenant-portal/pages/IntervenantPlanningSection";
+import IntervenantProjectsSection from "../features/intervenant-portal/pages/IntervenantProjectsSection";
+import IntervenantProjectCard from "../features/intervenant-portal/components/IntervenantProjectCard";
+import IntervenantReservesSection from "../features/intervenant-portal/pages/IntervenantReservesSection";
+import IntervenantTasksSection from "../features/intervenant-portal/pages/IntervenantTasksSection";
+import IntervenantTimeSection from "../features/intervenant-portal/pages/IntervenantTimeSection";
+import type { IntervenantPortalTab } from "../features/intervenant-portal/types";
 
-type PortalTab = "accueil" | "consignes" | "reserves" | "temps" | "taches" | "planning" | "documents" | "materiel" | "messages" | "retours";
+type PortalTab = IntervenantPortalTab;
 type LoadState<T> = { loading: boolean; error: string | null; data: T };
 type DashboardTaskItem = { chantier: IntervenantChantier; task: IntervenantTask };
 type MobileGlobalTab = "home" | "sites" | "site";
@@ -2705,24 +2719,24 @@ export default function IntervenantPortalPage() {
 
   const activePanel =
     activeTab === "accueil"
-      ? homePanel
+      ? <IntervenantDashboardSection>{homePanel}</IntervenantDashboardSection>
       : activeTab === "consignes"
-        ? consignesPanel
+        ? <IntervenantInstructionsSection>{consignesPanel}</IntervenantInstructionsSection>
         : activeTab === "reserves"
-          ? reservesPanel
+          ? <IntervenantReservesSection>{reservesPanel}</IntervenantReservesSection>
       : activeTab === "taches"
-        ? tasksPanel
+        ? <IntervenantTasksSection>{tasksPanel}</IntervenantTasksSection>
         : activeTab === "temps"
-          ? timePanel
+          ? <IntervenantTimeSection>{timePanel}</IntervenantTimeSection>
           : activeTab === "planning"
-            ? planningPanel
+            ? <IntervenantPlanningSection>{planningPanel}</IntervenantPlanningSection>
             : activeTab === "documents"
-              ? documentsPanel
+              ? <IntervenantDocumentsSection>{documentsPanel}</IntervenantDocumentsSection>
               : activeTab === "materiel"
-                ? materielPanel
+                ? <IntervenantEquipmentSection>{materielPanel}</IntervenantEquipmentSection>
                 : activeTab === "retours"
-                  ? terrainFeedbackPanel
-                  : messagesPanel;
+                  ? <IntervenantFeedbackSection>{terrainFeedbackPanel}</IntervenantFeedbackSection>
+                  : <IntervenantMessagesSection>{messagesPanel}</IntervenantMessagesSection>;
 
   if (bootLoading) {
     return <div className="min-h-screen bg-slate-100 px-4 py-6 text-slate-700">{t("intervenantPortal.bootLoading")}</div>;
@@ -2819,12 +2833,19 @@ export default function IntervenantPortalPage() {
             <section className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm">
               <div className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">{t("intervenantPortal.sectionSites")}</div>
               <input className="mt-3 w-full rounded-2xl border border-slate-200 px-3 py-2 text-sm" value={sidebarChantierQuery} onChange={(e) => setSidebarChantierQuery(e.target.value)} placeholder={t("intervenantPortal.searchSitePlaceholder")} />
-              <div className="mt-3 max-h-[40vh] space-y-2 overflow-y-auto pr-1">
-                {filteredChantiers.length === 0 ? <div className="rounded-2xl border border-dashed border-slate-200 p-3 text-sm text-slate-500">{t("intervenantPortal.noSiteFound")}</div> : filteredChantiers.map((chantier) => {
-                  const selected = chantier.id === selectedChantierId;
-                  return <button key={chantier.id} type="button" onClick={() => chooseChantier(chantier.id)} className={["w-full rounded-2xl border px-3 py-3 text-left", selected ? "border-blue-600 bg-blue-600 text-white" : "border-slate-200 bg-white text-slate-900"].join(" ")}><div className="text-sm font-semibold">{chantier.nom}</div><div className={selected ? "mt-1 text-xs text-slate-200" : "mt-1 text-xs text-slate-500"}>{chantier.client || t("intervenantPortal.noClient")}</div></button>;
-                })}
-              </div>
+              <IntervenantProjectsSection>
+                <div className="mt-3 max-h-[40vh] space-y-2 overflow-y-auto pr-1">
+                  {filteredChantiers.length === 0 ? <div className="rounded-2xl border border-dashed border-slate-200 p-3 text-sm text-slate-500">{t("intervenantPortal.noSiteFound")}</div> : filteredChantiers.map((chantier) => (
+                    <IntervenantProjectCard
+                      key={chantier.id}
+                      chantier={chantier}
+                      selected={chantier.id === selectedChantierId}
+                      noClientLabel={t("intervenantPortal.noClient")}
+                      onClick={() => chooseChantier(chantier.id)}
+                    />
+                  ))}
+                </div>
+              </IntervenantProjectsSection>
             </section>
             <nav className="rounded-3xl border border-slate-200 bg-white p-3 shadow-sm">
               <div className="space-y-4">
@@ -2924,7 +2945,13 @@ export default function IntervenantPortalPage() {
             </section>
           ) : null}
           <section className={["rounded-3xl border border-slate-200 bg-white p-4 shadow-sm", mobileGlobalTab === "sites" || (mobileGlobalTab === "home" && activeTab === "accueil") ? "hidden md:block" : ""].join(" ")}><div className="flex flex-col gap-2 md:flex-row md:items-end md:justify-between"><div className="min-w-0"><div className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">{activeTab === "accueil" ? t("intervenantPortal.dashboardTitle") : t("intervenantPortal.selectedSite")}</div><div className="mt-1 text-lg font-semibold text-slate-900">{contentTitle}</div><div className="mt-1 text-sm text-slate-500">{contentSubtitle}</div>{activeTab !== "accueil" && activeChantier ? <div className="mt-2 text-xs text-slate-500">{activeChantier.client || t("intervenantPortal.noClient")}{activeChantier.adresse ? ` - ${activeChantier.adresse}` : ""}</div> : null}</div>{activeTab !== "accueil" && activeChantier ? <div className="text-sm text-slate-500">{t("intervenantPortal.progress", { value: activeChantier.avancement ?? 0 })}</div> : null}</div></section>
-          {chantiers.length === 0 ? <section className={["rounded-3xl border border-dashed border-slate-300 bg-white p-6 text-center shadow-sm", mobileGlobalTab === "sites" ? "hidden md:block" : ""].join(" ")}><div className="text-lg font-semibold text-slate-900">{t("intervenantPortal.noAccessibleSiteTitle")}</div><div className="mt-2 text-sm text-slate-500">{t("intervenantPortal.noAccessibleSiteMessage")}</div></section> : <section className={["rounded-3xl border border-slate-200 bg-white p-4 shadow-sm", mobileGlobalTab === "sites" ? "hidden md:block" : ""].join(" ")}>{activePanel}</section>}
+          {chantiers.length === 0 ? (
+            <IntervenantEmptyStateSection
+              title={t("intervenantPortal.noAccessibleSiteTitle")}
+              message={t("intervenantPortal.noAccessibleSiteMessage")}
+              className={mobileGlobalTab === "sites" ? "hidden md:block" : ""}
+            />
+          ) : <section className={["rounded-3xl border border-slate-200 bg-white p-4 shadow-sm", mobileGlobalTab === "sites" ? "hidden md:block" : ""].join(" ")}>{activePanel}</section>}
           {mobileQuickAction ? (
             <div className="fixed inset-0 z-50 bg-slate-100 md:hidden">
               <div className="flex min-h-screen flex-col px-3 pb-[max(1rem,env(safe-area-inset-bottom))] pt-[max(1rem,env(safe-area-inset-top))]">

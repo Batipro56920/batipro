@@ -1,0 +1,23 @@
+export type ChantierTabKey =
+  | "accueil"
+  | "preparer"
+  | "localisation"
+  | "devis-taches"
+  | "photos"
+  | "documents"
+  | "intervenants"
+  | "planning"
+  | "temps"
+  | "budget"
+  | "pilotage"
+  | "reserves"
+  | "achats"
+  | "materiel"
+  | "consignes"
+  | "notes"
+  | "journal"
+  | "messagerie"
+  | "rapports"
+  | "doe"
+  | "visite";
+

@@ -1,5 +1,7 @@
 ﻿@import "tailwindcss";
 
+@import "./design-system/theme/theme.css";
+
 :root {
   --safe-top: env(safe-area-inset-top);
   --safe-bottom: env(safe-area-inset-bottom);
@@ -7,10 +9,10 @@
   --color-primary-light: #93c5fd;
   --color-bg-soft: #eff6ff;
   --color-border-soft: #dbeafe;
-  --bt-bg: #f6f8fb;
+  --bt-bg: #F8FAFC;
   --bt-surface: #ffffff;
-  --bt-surface-muted: #f8fafc;
-  --bt-border: #dbe3ee;
+  --bt-surface-muted: #F1F5F9;
+  --bt-border: #E2E8F0;
   --bt-text: #0f172a;
   --bt-muted: #64748b;
   --bt-radius: 1rem;
@@ -196,7 +198,7 @@ select {
 
 .app-layout {
   display: grid;
-  grid-template-columns: 260px 1fr;
+  grid-template-columns: 248px 1fr;
   min-height: 100vh;
   min-height: 100svh;
   min-height: 100dvh;
@@ -205,11 +207,11 @@ select {
 }
 
 .app-layout.sidebar-collapsed {
-  grid-template-columns: 68px 1fr;
+  grid-template-columns: 72px 1fr;
 }
 
 .sidebar {
-  width: 260px;
+  width: 248px;
   height: 100vh;
   height: 100svh;
   height: 100dvh;
@@ -221,7 +223,7 @@ select {
 }
 
 .sidebar.collapsed {
-  width: 68px;
+  width: 72px;
 }
 
 .content,

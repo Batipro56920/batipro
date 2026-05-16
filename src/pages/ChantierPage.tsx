@@ -1,5 +1,5 @@
 ﻿  // src/pages/ChantierPage.tsx
-import { Suspense, lazy, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { ChangeEvent, DragEvent, FormEvent } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 
@@ -34,7 +34,6 @@ import {
 } from "../services/devis.service";
 
 import { decodeQtyUnit } from "../services/devisImport.service";
-const PlanningTab = lazy(() => import("../components/chantiers/PlanningBoard"));
 
 import {
   listIntervenantsByChantierId,
@@ -115,15 +114,6 @@ import {
 } from "../services/chantierDoe.service";
 import TaskDocumentsDrawer from "../components/chantiers/TaskDocumentsDrawer";
 import DocumentEditDrawer from "../components/chantiers/DocumentEditDrawer";
-import ApprovisionnementTab from "../components/chantiers/ApprovisionnementTab";
-import ChantierPhotosTab from "../components/chantiers/ChantierPhotosTab";
-import BudgetTab from "../components/chantiers/BudgetTab";
-import MessagerieTab from "../components/chantiers/MessagerieTab";
-import PilotageTab from "../components/chantiers/PilotageTab";
-import PreparationChecklistTab from "../components/chantiers/PreparationChecklistTab";
-import PreparationNotesPanel from "../components/chantiers/PreparationNotesPanel";
-import PreparationTreeTab from "../components/chantiers/PreparationTreeTab";
-import RapportsTab from "../components/chantiers/RapportsTab";
 import ReservePlanViewer from "../components/chantiers/ReservePlanViewer";
 import {
   buildChantierZoneTree,
@@ -146,8 +136,6 @@ import {
   listChantierActivityLogs,
   type ChantierActivityLogRow,
 } from "../services/chantierActivityLog.service";
-import VisiteTab from "../components/chantiers/VisiteTab";
-import DoeTab from "../components/chantiers/DoeTab";
 import DevisImportDrawer, { type DevisImportResult } from "../components/chantiers/DevisImportDrawer";
 import TaskTemplateDrawer from "../components/TaskTemplateDrawer";
 import {
@@ -179,30 +167,31 @@ import {
   getEnabledCompanyModulesFromSettings,
 } from "../services/companySettings.service";
 import { useI18n } from "../i18n";
+import type { ChantierTabKey } from "../features/chantiers/types";
+import { ChantierTabs as ChantierTabsNavigation } from "../features/chantiers/components/ChantierTabs";
+import ChantierDoeSection from "../features/chantiers/pages/ChantierDoeSection";
+import ChantierFinancialSection from "../features/chantiers/pages/ChantierFinancialSection";
+import ChantierEquipmentSection from "../features/chantiers/pages/ChantierEquipmentSection";
+import ChantierInstructionsSection from "../features/chantiers/pages/ChantierInstructionsSection";
+import ChantierIntervenantsSection from "../features/chantiers/pages/ChantierIntervenantsSection";
+import ChantierDocumentsSection from "../features/chantiers/pages/ChantierDocumentsSection";
+import ChantierJournalSection from "../features/chantiers/pages/ChantierJournalSection";
+import ChantierLocationSection from "../features/chantiers/pages/ChantierLocationSection";
+import ChantierMessagingSection from "../features/chantiers/pages/ChantierMessagingSection";
+import ChantierNotesSection from "../features/chantiers/pages/ChantierNotesSection";
+import ChantierPhotosSection from "../features/chantiers/pages/ChantierPhotosSection";
+import ChantierPlanningSection from "../features/chantiers/pages/ChantierPlanningSection";
+import ChantierPreparationSection from "../features/chantiers/pages/ChantierPreparationSection";
+import ChantierPurchasesSection from "../features/chantiers/pages/ChantierPurchasesSection";
+import ChantierReportsSection from "../features/chantiers/pages/ChantierReportsSection";
+import ChantierReservesSection from "../features/chantiers/pages/ChantierReservesSection";
+import ChantierTasksQuotesSection from "../features/chantiers/pages/ChantierTasksQuotesSection";
+import ChantierTimeSection from "../features/chantiers/pages/ChantierTimeSection";
+import ChantierUnforeseenSection from "../features/chantiers/pages/ChantierUnforeseenSection";
+import ChantierVisitSection from "../features/chantiers/pages/ChantierVisitSection";
 
 /* ---------------- types ---------------- */
-type TabKey =
-  | "accueil"
-  | "preparer"
-  | "localisation"
-  | "devis-taches"
-  | "photos"
-  | "documents"
-  | "intervenants"
-  | "planning"
-  | "temps"
-  | "budget"
-  | "pilotage"
-  | "reserves"
-  | "achats"
-  | "materiel"
-  | "consignes"
-  | "notes"
-  | "journal"
-  | "messagerie"
-  | "rapports"
-  | "doe"
-  | "visite";
+type TabKey = ChantierTabKey;
 
 type ToastState = { type: "ok" | "error"; msg: string } | null;
 
@@ -5679,50 +5668,12 @@ export default function ChantierPage() {
             </div>
           </div>
 
-          <button
-            type="button"
-            onClick={() => setTab(overviewTab.key)}
-            className={[
-              "w-full rounded-2xl border px-4 py-3 text-left text-sm font-medium transition",
-              tab === overviewTab.key
-                ? "border-blue-600 bg-blue-600 text-white shadow-sm"
-                : "border-slate-200 bg-slate-50/70 text-slate-700 hover:bg-slate-100",
-            ].join(" ")}
-          >
-            {overviewTab.label}
-          </button>
-
-          <div className="grid gap-3 xl:grid-cols-4">
-            {chantierTabSections.map((section) => (
-              <section
-                key={section.title}
-                className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4 shadow-sm"
-              >
-                <div className="space-y-3">
-                  <div className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-400">
-                    {section.title}
-                  </div>
-                  <nav className="flex flex-wrap gap-2">
-                    {section.tabs.map((entry) => (
-                      <button
-                        key={entry.key}
-                        type="button"
-                        onClick={() => setTab(entry.key)}
-                        className={[
-                          "rounded-full px-4 py-2 text-sm font-medium transition",
-                          tab === entry.key
-                            ? "bg-blue-600 text-white shadow-sm"
-                            : "border border-slate-200 bg-white text-slate-700 hover:bg-slate-50",
-                        ].join(" ")}
-                      >
-                        {entry.label}
-                      </button>
-                    ))}
-                  </nav>
-                </div>
-              </section>
-            ))}
-          </div>
+          <ChantierTabsNavigation
+            overviewTab={overviewTab}
+            sections={chantierTabSections}
+            activeTab={tab}
+            onChange={setTab}
+          />
         </div>
       </section>
 
@@ -5737,9 +5688,9 @@ export default function ChantierPage() {
           </button>
         ) : null}
         {tab === "accueil" && accueilPanel}
-        {tab === "preparer" && id && <PreparationChecklistTab chantierId={id} />}
+        {tab === "preparer" && id && <ChantierPreparationSection chantierId={id} />}
         {tab === "localisation" && id && (
-          <PreparationTreeTab
+          <ChantierLocationSection
             chantierId={id}
             view="localisation"
             tasks={tasks.map((task) => ({
@@ -5770,7 +5721,7 @@ export default function ChantierPage() {
           />
         )}
         {tab === "notes" && id && (
-          <PreparationNotesPanel
+          <ChantierNotesSection
             chantierId={id}
             tasks={tasks}
             zones={zones}
@@ -5778,18 +5729,19 @@ export default function ChantierPage() {
           />
         )}
         {tab === "achats" && id && (
-          <ApprovisionnementTab chantierId={id} tasks={tasks} zones={zones} />
+          <ChantierPurchasesSection chantierId={id} tasks={tasks} zones={zones} />
         )}
         {tab === "pilotage" && id && (
-          <PilotageTab
+          <ChantierUnforeseenSection
             chantierId={id}
             tasks={tasks}
             zones={zones}
           />
         )}
-        {tab === "budget" && id && <BudgetTab chantierId={id} />}
+        {tab === "budget" && id && <ChantierFinancialSection chantierId={id} />}
         {/* ---------------- ONGLET TEMPS ---------------- */}
         {tab === "temps" && (
+          <ChantierTimeSection>
           <div className="space-y-3">
             <div className="flex items-center justify-between">
               <div>
@@ -5985,10 +5937,12 @@ export default function ChantierPage() {
               )}
             </div>
           </div>
+          </ChantierTimeSection>
         )}
 
         {/* ---------------- ONGLET INTERVENANTS ---------------- */}
         {tab === "intervenants" && (
+          <ChantierIntervenantsSection>
           <div className="space-y-6">
             <div className="flex items-center justify-between">
               <div>
@@ -6110,10 +6064,12 @@ export default function ChantierPage() {
               )}
             </div>
           </div>
+          </ChantierIntervenantsSection>
         )}
 
         {/* ---------------- ONGLET DOCUMENTS ---------------- */}
         {tab === "documents" && (
+          <ChantierDocumentsSection>
           <div className="space-y-4">
             <div className="flex items-start justify-between gap-4">
               <div className="font-semibold section-title">{t("intervenantAccess.tabs.documents")}</div>
@@ -6225,10 +6181,12 @@ export default function ChantierPage() {
               </div>
             )}
           </div>
+          </ChantierDocumentsSection>
         )}
 
         {/* ---------------- ONGLET RÉSERVES ---------------- */}
         {tab === "reserves" && (
+          <ChantierReservesSection>
           <div className="space-y-4">
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
@@ -6333,10 +6291,12 @@ export default function ChantierPage() {
               </div>
             )}
           </div>
+          </ChantierReservesSection>
         )}
 
         {/* ---------------- ONGLET DEVIS & TÂCHES ---------------- */}
         {tab === "devis-taches" && (
+          <ChantierTasksQuotesSection>
           <div className="space-y-8">
             {/* DEVIS */}
             <section className="space-y-4">
@@ -7407,10 +7367,12 @@ export default function ChantierPage() {
               </div>
             </section>
           </div>
+          </ChantierTasksQuotesSection>
         )}
 
         {/* ---------------- ONGLET MATÉRIEL ---------------- */}
         {tab === "consignes" && (
+          <ChantierInstructionsSection>
           <div className="space-y-4">
             <div className="flex items-center justify-between">
               <div>
@@ -7681,10 +7643,12 @@ export default function ChantierPage() {
               )}
             </div>
           </div>
+          </ChantierInstructionsSection>
         )}
 
         {/* ---------------- ONGLET MATÉRIEL ---------------- */}
         {tab === "materiel" && (
+          <ChantierEquipmentSection>
           <div className="space-y-4">
             <div className="flex items-center justify-between">
               <div>
@@ -7902,111 +7866,32 @@ export default function ChantierPage() {
               )}
             </div>
           </div>
+          </ChantierEquipmentSection>
         )}
 
         {tab === "planning" && id && (
-          <Suspense
-            fallback={
-              <div className="rounded-2xl border border-slate-200 bg-white p-6 text-sm text-slate-500 shadow-sm">
-                Chargement du planning...
-              </div>
-            }
-          >
-            <PlanningTab chantierId={id} chantierName={item?.nom ?? null} intervenants={intervenants} />
-          </Suspense>
+          <ChantierPlanningSection chantierId={id} chantierName={item?.nom ?? null} intervenants={intervenants} />
         )}
 
         {tab === "photos" && id && (
-          <ChantierPhotosTab chantierId={id} tasks={tasks} zones={zones} />
+          <ChantierPhotosSection chantierId={id} tasks={tasks} zones={zones} />
         )}
 
         {tab === "journal" && (
-          <div className="space-y-4">
-            <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-              <div>
-                <div className="font-semibold section-title">Journal chantier</div>
-                <div className="text-sm text-slate-500">
-                  Historique des actions, validations, consignes, réserves et temps saisis.
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => void refreshActivityLogs()}
-                disabled={activityLogsLoading}
-                className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-60"
-              >
-                {activityLogsLoading ? "Chargement..." : "Rafraîchir"}
-              </button>
-            </div>
-
-            {!activityLogSchemaReady && (
-              <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-                Migration journal non appliquée : le tableau reste vide tant que
-                `20260402100000_batipro_v2_foundation_prepare_control_pilot.sql` n’est pas poussée sur Supabase.
-              </div>
-            )}
-
-            {activityLogsError && (
-              <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-                {activityLogsError}
-              </div>
-            )}
-
-            <div className="space-y-3">
-              {activityLogsLoading ? (
-                <div className="rounded-2xl border border-slate-200 bg-slate-50 p-5 text-sm text-slate-500">
-                  Chargement du journal...
-                </div>
-              ) : activityLogs.length === 0 ? (
-                <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-5 text-sm text-slate-500">
-                  Aucun événement journalisé pour ce chantier.
-                </div>
-              ) : (
-                activityLogs.map((log) => (
-                  <article
-                    key={log.id}
-                    className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm"
-                  >
-                    <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-                      <div className="min-w-0">
-                        <div className="flex flex-wrap gap-2">
-                          <span
-                            className={[
-                              "rounded-full border px-3 py-1 text-xs font-semibold",
-                              chantierActivityTone(log.entity_type),
-                            ].join(" ")}
-                          >
-                            {chantierActivityEntityLabel(log.entity_type)}
-                          </span>
-                          <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-semibold text-slate-700">
-                            {chantierActivityActionLabel(log.action_type)}
-                          </span>
-                        </div>
-                        <div className="mt-3 text-base font-semibold text-slate-900">
-                          {log.reason || "Action chantier"}
-                        </div>
-                        <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-sm text-slate-500">
-                          <span>{log.actor_name || "Utilisateur"}</span>
-                          {log.actor_role ? <span>{log.actor_role}</span> : null}
-                          <span>{new Date(log.created_at).toLocaleString("fr-FR")}</span>
-                        </div>
-                      </div>
-                    </div>
-
-                    {Object.keys(log.changes || {}).length > 0 ? (
-                      <pre className="mt-4 max-h-64 overflow-auto rounded-2xl bg-slate-950 px-4 py-3 text-xs leading-relaxed text-slate-100">
-                        {JSON.stringify(log.changes, null, 2)}
-                      </pre>
-                    ) : null}
-                  </article>
-                ))
-              )}
-            </div>
-          </div>
+          <ChantierJournalSection
+            logs={activityLogs}
+            loading={activityLogsLoading}
+            error={activityLogsError}
+            schemaReady={activityLogSchemaReady}
+            onRefresh={() => void refreshActivityLogs()}
+            entityLabel={chantierActivityEntityLabel}
+            actionLabel={chantierActivityActionLabel}
+            tone={chantierActivityTone}
+          />
         )}
 
         {tab === "messagerie" && id && (
-          <MessagerieTab
+          <ChantierMessagingSection
             chantierId={id}
             intervenants={intervenants}
             onActivityRefresh={() => void refreshActivityLogs()}
@@ -8014,7 +7899,7 @@ export default function ChantierPage() {
         )}
 
         {tab === "rapports" && item && (
-          <RapportsTab
+          <ChantierReportsSection
             chantier={item}
             onDocumentsRefresh={async () => {
               const data = await refreshChantierDocuments();
@@ -8026,7 +7911,7 @@ export default function ChantierPage() {
         )}
 
         {tab === "doe" && id && (
-          <DoeTab
+          <ChantierDoeSection
             chantierId={id}
             chantierName={item?.nom ?? "Chantier"}
             chantierAddress={(item as any)?.adresse ?? null}
@@ -8041,12 +7926,9 @@ export default function ChantierPage() {
         )}
 
         {tab === "visite" && id && (
-          <VisiteTab
+          <ChantierVisitSection
             chantierId={id}
-            chantierName={item?.nom ?? "Chantier"}
-            chantierReference={(item as any)?.reference ?? id}
-            chantierAddress={(item as any)?.adresse ?? null}
-            clientName={(item as any)?.client_nom ?? (item as any)?.client ?? null}
+            chantier={item}
             intervenants={intervenants}
             onDocumentsRefresh={async () => {
               const data = await refreshChantierDocuments();
