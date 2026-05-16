@@ -153,20 +153,20 @@ export function getChangeOrderStatusOptions(
 ): Array<{ value: ChantierChangeOrderStatus; label: string }> {
   if (type === "travaux_supplementaires") {
     return [
-      { value: "a_chiffrer", label: "Ã€ chiffrer" },
+      { value: "a_chiffrer", label: "À chiffrer" },
       { value: "en_attente_validation_client", label: "En attente validation client" },
-      { value: "valide_client", label: "ValidÃ© client" },
-      { value: "refuse", label: "RefusÃ©" },
+      { value: "valide_client", label: "Validé client" },
+      { value: "refuse", label: "Refusé" },
       { value: "en_cours", label: "En cours" },
-      { value: "termine", label: "TerminÃ©" },
-      { value: "facture", label: "FacturÃ©" },
+      { value: "termine", label: "Terminé" },
+      { value: "facture", label: "Facturé" },
     ];
   }
 
   return [
-    { value: "a_analyser", label: "Ã€ analyser" },
+    { value: "a_analyser", label: "À analyser" },
     { value: "en_cours", label: "En cours" },
-    { value: "traite", label: "TraitÃ©" },
+    { value: "traite", label: "Traité" },
   ];
 }
 
@@ -218,7 +218,7 @@ function normalizeChangeOrderRow(row: any): ChantierChangeOrderRow {
     devis_ligne_id: row?.devis_ligne_id ?? null,
     photo_ids: normalizePhotoIds(row?.photo_ids),
     type_ecart: type,
-    titre: String(row?.titre ?? "ImprÃ©vu chantier").trim() || "ImprÃ©vu chantier",
+    titre: String(row?.titre ?? "Imprévu chantier").trim() || "Imprévu chantier",
     description: row?.description ?? null,
     impact_temps_h: normalizeNumber(row?.impact_temps_h),
     impact_cout_ht: impactCout,
@@ -250,7 +250,7 @@ function buildCleanChangeOrderPayload(
   const description = typeof payload.description === "string" ? payload.description.trim() || null : payload.description;
 
   if (Object.prototype.hasOwnProperty.call(payload, "titre") && !titre) {
-    throw new Error("Titre d'imprÃ©vu / TS obligatoire.");
+    throw new Error("Titre d'imprévu / TS obligatoire.");
   }
 
   const quantite = normalizeNumber(payload.quantite);
@@ -268,7 +268,7 @@ function buildCleanChangeOrderPayload(
       : "a_analyser";
 
   if (type === "travaux_supplementaires" && ["en_cours", "termine", "facture"].includes(nextStatus)) {
-    throw new Error("Un travaux supplÃ©mentaire doit d'abord Ãªtre validÃ© client.");
+    throw new Error("Un travaux supplémentaire doit d'abord être validé client.");
   }
 
   return {
@@ -462,10 +462,10 @@ export async function updateChantierChangeOrder(
 }
 
 export async function deleteChantierChangeOrder(id: string): Promise<void> {
-  if (!id) throw new Error("id imprÃ©vu / TS manquant.");
+  if (!id) throw new Error("id imprévu / TS manquant.");
   const { error } = await fromChangeOrders().delete().eq("id", id);
   if (error) {
-    if (isMissingChangeOrderSchemaError(error)) throw new Error("Migration imprÃ©vus / TS non appliquÃ©e sur Supabase.");
+    if (isMissingChangeOrderSchemaError(error)) throw new Error("Migration imprévus / TS non appliquée sur Supabase.");
     throw error;
   }
 }

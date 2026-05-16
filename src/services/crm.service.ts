@@ -777,7 +777,8 @@ export async function moveCrmOpportunityStage(id: string, stage: CrmPipelineStag
 
 export async function createCrmQuote(input: Partial<CrmQuoteRow>) {
   const organization_id = await currentOrgId();
-  const quote_number = text(input.quote_number) ?? `DEV-${new Date().getFullYear()}-${Date.now().toString().slice(-6)}`;
+  const requestedQuoteNumber = text(input.quote_number) ?? `DEV-${new Date().getFullYear()}-${Date.now().toString().slice(-6)}`;
+  const quote_number = await resolveAvailableQuoteNumber(organization_id, requestedQuoteNumber);
   const montant_ht = numberOrZero(input.montant_ht);
   const tva = input.tva === undefined || input.tva === null ? 20 : numberOrZero(input.tva);
   const montant_ttc = input.montant_ttc === undefined ? Math.round(montant_ht * (1 + tva / 100) * 100) / 100 : numberOrZero(input.montant_ttc);
@@ -815,6 +816,26 @@ export async function createCrmQuote(input: Partial<CrmQuoteRow>) {
   const legacy = await crmDb.from("crm_quotes").select(CRM_SELECTS.quotesLegacy).eq("quote_number", quote_number).single();
   if (legacy.error) throw legacy.error;
   return legacy.data as CrmQuoteRow;
+}
+
+async function resolveAvailableQuoteNumber(organizationId: string, requestedQuoteNumber: string) {
+  const { data, error } = await crmDb.from("crm_quotes").select("quote_number").eq("organization_id", organizationId);
+  if (error) return requestedQuoteNumber;
+
+  const used = new Set((data ?? []).map((row: { quote_number: string | null }) => row.quote_number).filter(Boolean));
+  if (!used.has(requestedQuoteNumber)) return requestedQuoteNumber;
+
+  const match = requestedQuoteNumber.match(/^(.*?)(\d+)$/);
+  const prefix = match ? match[1] : `${requestedQuoteNumber}-`;
+  const initialNumber = match ? Number(match[2]) : 1;
+  const width = match ? match[2].length : 3;
+
+  for (let offset = 1; offset < 10000; offset += 1) {
+    const candidate = `${prefix}${String(initialNumber + offset).padStart(width, "0")}`;
+    if (!used.has(candidate)) return candidate;
+  }
+
+  return `${requestedQuoteNumber}-${Date.now().toString().slice(-6)}`;
 }
 
 export async function updateCrmQuote(id: string, patch: Partial<CrmQuoteRow>) {
