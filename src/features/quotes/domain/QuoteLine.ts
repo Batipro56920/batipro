@@ -1,5 +1,5 @@
 import type { QuoteLineKind, QuoteNodeType, QuoteVatRate } from "./QuoteEnums";
-import type { QuoteCompositeComponent } from "./QuoteComposite";
+import type { QuoteCompositeComponent, QuoteCompositePricingMode } from "./QuoteComposite";
 
 export type QuoteNodeBase = {
   id: string;
@@ -27,6 +27,9 @@ export type QuoteCompositeNode = QuoteNodeBase & {
   unit: string;
   vatRate: QuoteVatRate;
   reference: string | null;
+  pricingMode: QuoteCompositePricingMode;
+  targetMarginRate: number;
+  fixedSellingPriceHt: number | null;
   components: QuoteCompositeComponent[];
 };
 

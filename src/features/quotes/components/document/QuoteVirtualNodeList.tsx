@@ -22,6 +22,9 @@ import { useQuoteActions } from "../../hooks/useQuoteActions";
 import { useQuoteStore } from "../../store/quoteStore";
 import { QUOTE_VAT_RATES, type QuoteVatRate } from "../../domain/QuoteEnums";
 import type { QuoteNode } from "../../domain/QuoteSection";
+import { CompositeQuoteDialog } from "../dialogs/CompositeQuoteDialog";
+import type { QuoteCompositeNode } from "../../domain/QuoteLine";
+import { calculateCompositeSummary } from "../../application/quoteCompositeEngine";
 
 const QuoteRichTextField = lazy(() => import("./QuoteRichTextField").then((module) => ({ default: module.QuoteRichTextField })));
 
@@ -94,9 +97,11 @@ export function QuoteVirtualNodeList() {
 function QuoteNodeRow({ index, style, rows, collapsed, onToggleCollapse }: { index: number; style: React.CSSProperties } & RowProps) {
   const row = rows[index];
   const { updateNode, removeNode, moveNode, duplicateNode } = useQuoteActions();
+  const updateComposite = useQuoteStore((state) => state.updateComposite);
   const draggable = useDraggable({ id: row?.id ?? `row-${index}` });
   const droppable = useDroppable({ id: row?.id ?? `drop-${index}` });
   const [menuOpen, setMenuOpen] = useState(false);
+  const [compositeOpen, setCompositeOpen] = useState(false);
   if (!row) return null;
 
   const dragStyle = {
@@ -165,22 +170,41 @@ function QuoteNodeRow({ index, style, rows, collapsed, onToggleCollapse }: { ind
   }
 
   const isComposite = row.type === "composite";
+  const compositeSummary = isComposite ? calculateCompositeSummary(row) : null;
   const saleUnitPriceHt = isComposite ? getNodeSellHt(row) / Math.max(1, row.quantity) : row.saleUnitPriceHt;
   return (
-    <div ref={bindRefs} style={dragStyle} tabIndex={0} onKeyDown={handleKeyDown} onContextMenu={(event) => openMenu(event, setMenuOpen)} className="grid grid-cols-[2.5rem_4rem_1fr_5.5rem_4.5rem_6rem_5rem_7rem_7rem] items-center border-t px-3 hover:bg-slate-50">
-      <DragHandle attributes={draggable.attributes} listeners={draggable.listeners} />
-      <div className="text-slate-500">{row.number}</div>
-      <div>
-        <Input className="border-transparent bg-transparent" value={row.title} onChange={(event) => updateNode(row.id, { title: event.target.value } as Partial<QuoteNode>)} />
-        <div className="px-3 text-[11px] uppercase tracking-[0.12em] text-slate-400">{isComposite ? "Ouvrage composite" : row.kind}</div>
+    <>
+      <div ref={bindRefs} style={dragStyle} tabIndex={0} onKeyDown={handleKeyDown} onContextMenu={(event) => openMenu(event, setMenuOpen)} className="grid grid-cols-[2.5rem_4rem_1fr_5.5rem_4.5rem_6rem_5rem_7rem_7rem] items-center border-t px-3 hover:bg-slate-50">
+        <DragHandle attributes={draggable.attributes} listeners={draggable.listeners} />
+        <div className="text-slate-500">{row.number}</div>
+        <div>
+          <Input className="border-transparent bg-transparent" value={row.title} onChange={(event) => updateNode(row.id, { title: event.target.value } as Partial<QuoteNode>)} />
+          <div className="flex items-center gap-2 px-3 text-[11px] uppercase tracking-[0.12em] text-slate-400">
+            <span>{isComposite ? "Ouvrage composite" : row.kind}</span>
+            {isComposite ? <button className="text-blue-700 underline" onClick={() => setCompositeOpen(true)}>Configurer</button> : null}
+          </div>
+        </div>
+        <NumberInput value={row.quantity} onChange={(quantity) => updateNode(row.id, { quantity } as Partial<QuoteNode>)} />
+        <Input value={row.unit} onChange={(event) => updateNode(row.id, { unit: event.target.value } as Partial<QuoteNode>)} />
+        {!isComposite ? <NumberInput value={saleUnitPriceHt} onChange={(saleUnitPriceHt) => updateNode(row.id, { saleUnitPriceHt } as Partial<QuoteNode>)} /> : <div className="px-3 text-sm text-slate-500">{money(saleUnitPriceHt)}</div>}
+        <VatInput value={row.vatRate} onChange={(vatRate) => updateNode(row.id, { vatRate } as Partial<QuoteNode>)} />
+        <div className="text-right font-medium">
+          {money(getNodeSellHt(row))}
+          {compositeSummary ? <span className="block text-xs text-slate-400">Marge {compositeSummary.marginRate}%</span> : null}
+        </div>
+        <Actions id={row.id} menuOpen={menuOpen} setMenuOpen={setMenuOpen} onMove={moveNode} onDelete={removeNode} onDuplicate={duplicateNode} />
       </div>
-      <NumberInput value={row.quantity} onChange={(quantity) => updateNode(row.id, { quantity } as Partial<QuoteNode>)} />
-      <Input value={row.unit} onChange={(event) => updateNode(row.id, { unit: event.target.value } as Partial<QuoteNode>)} />
-      {!isComposite ? <NumberInput value={saleUnitPriceHt} onChange={(saleUnitPriceHt) => updateNode(row.id, { saleUnitPriceHt } as Partial<QuoteNode>)} /> : <div className="px-3 text-sm text-slate-500">{money(saleUnitPriceHt)}</div>}
-      <VatInput value={row.vatRate} onChange={(vatRate) => updateNode(row.id, { vatRate } as Partial<QuoteNode>)} />
-      <div className="text-right font-medium">{money(getNodeSellHt(row))}</div>
-      <Actions id={row.id} menuOpen={menuOpen} setMenuOpen={setMenuOpen} onMove={moveNode} onDelete={removeNode} onDuplicate={duplicateNode} />
-    </div>
+      {isComposite && compositeOpen ? (
+        <CompositeQuoteDialog
+          node={row as QuoteCompositeNode}
+          onClose={() => setCompositeOpen(false)}
+          onSave={(node) => {
+            updateComposite(node.id, () => node);
+            setCompositeOpen(false);
+          }}
+        />
+      ) : null}
+    </>
   );
 }
 

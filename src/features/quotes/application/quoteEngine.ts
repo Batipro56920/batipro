@@ -58,6 +58,9 @@ export function addTemplateQuoteNode(quote: Quote, template: TaskTemplateRow): Q
     unit: template.unite ?? "u",
     vatRate: quote.settings.defaultVatRate,
     reference: template.id,
+    pricingMode: "margin",
+    targetMarginRate: 0,
+    fixedSellingPriceHt: null,
     components: [
       {
         id: crypto.randomUUID(),
@@ -135,14 +138,28 @@ function createNode(type: QuoteNodeType, parentId: string | null, order: number,
   if (type === "subsection") return { ...base, type, title: "Nouvelle sous-section", children: [] } satisfies QuoteSubsectionNode;
   if (type === "text") return { ...base, type, title: "Texte libre", content: "Texte libre" } satisfies QuoteTextNode;
   if (type === "pagebreak") return { ...base, type, title: "Saut de page" } satisfies QuotePageBreakNode;
-  if (type === "composite") {
-    return { ...base, type, title: "Nouvel ouvrage", quantity: 1, unit: "u", vatRate, reference: null, components: [] } satisfies QuoteCompositeNode;
-  }
+  if (type === "composite") return createCompositeNode(base, vatRate);
   return { ...base, type: "line", title: defaultLineTitle(lineKind), kind: lineKind, quantity: 1, unit: lineKind === "main_oeuvre" ? "h" : "u", saleUnitPriceHt: 0, purchaseUnitPriceHt: 0, vatRate, reference: null } satisfies QuoteLineNode;
 }
 
 function defaultLineTitle(kind: QuoteLineKind) {
   return kind === "main_oeuvre" ? "Main-d'oeuvre" : kind === "sous_traitance" ? "Sous-traitance" : kind === "materiel" ? "Materiel" : kind === "divers" ? "Divers" : "Fourniture";
+}
+
+function createCompositeNode(base: { id: string; persistedId: null; parentId: string | null; order: number }, vatRate: QuoteVatRate): QuoteCompositeNode {
+  return {
+    ...base,
+    type: "composite",
+    title: "Nouvel ouvrage",
+    quantity: 1,
+    unit: "u",
+    vatRate,
+    reference: null,
+    pricingMode: "margin",
+    targetMarginRate: 25,
+    fixedSellingPriceHt: null,
+    components: [],
+  };
 }
 
 function findChildren(nodes: QuoteNode[], parentId: string): QuoteNode[] {

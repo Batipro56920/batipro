@@ -3,6 +3,7 @@ import type { QuoteCompositeNode, QuoteLineNode } from "../domain/QuoteLine";
 import type { QuoteNode } from "../domain/QuoteSection";
 import type { QuoteTotals } from "../domain/QuoteTotals";
 import type { QuoteVatRate } from "../domain/QuoteEnums";
+import { calculateCompositeSummary } from "./quoteCompositeEngine";
 
 function money(value: number): number {
   return Math.round((Number.isFinite(value) ? value : 0) * 100) / 100;
@@ -10,7 +11,7 @@ function money(value: number): number {
 
 export function getNodeSellHt(node: QuoteNode): number {
   if (node.type === "line") return money(Math.max(0, node.quantity) * Math.max(0, node.saleUnitPriceHt));
-  if (node.type === "composite") return money(Math.max(0, node.quantity) * getCompositeUnitSellHt(node));
+  if (node.type === "composite") return money(Math.max(0, node.quantity) * calculateCompositeSummary(node).sellingPrice);
   return 0;
 }
 
@@ -73,7 +74,7 @@ export function flattenQuoteNodes(nodes: QuoteNode[]): QuoteNode[] {
 }
 
 export function getCompositeUnitSellHt(node: QuoteCompositeNode): number {
-  return money(node.components.reduce((sum, component) => sum + Math.max(0, component.quantity) * Math.max(0, component.saleUnitPriceHt), 0));
+  return calculateCompositeSummary(node).sellingPrice;
 }
 
 export function getCompositeUnitDryCostHt(node: QuoteCompositeNode): number {

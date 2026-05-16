@@ -36,6 +36,7 @@ import {
   type CrmQuoteEngineData,
   type CrmTaskRow,
 } from "../services/crm.service";
+import { buildQuoteDefaults, getCompanyQuoteSettings } from "../features/quotes/infrastructure/companyQuoteSettingsRepository";
 
 type CrmSection =
   | "dashboard"
@@ -275,7 +276,21 @@ export default function CrmPage({ section = "dashboard" }: Props) {
 
   async function createDraftQuoteAndOpen() {
     await submitSafely(async () => {
-      const quote = await createCrmQuote({ statut: "brouillon", description: "Nouveau devis" });
+      const settings = await getCompanyQuoteSettings();
+      const defaults = buildQuoteDefaults(settings);
+      const quote = await createCrmQuote({
+        quote_number: defaults.quoteNumber,
+        statut: "brouillon",
+        description: "Nouveau devis",
+        valid_until: defaults.validUntil,
+        date_emission: new Date().toISOString().slice(0, 10),
+        tva: settings.defaultVatRate,
+        acompte_percent: settings.defaultDepositPercent,
+        payment_terms_text: settings.defaultPaymentTerms,
+        legal_mentions: { text: settings.defaultLegalMentions } as any,
+        waste_management: { text: settings.defaultWasteManagement } as any,
+        display_options: defaults.displayOptions as any,
+      });
       navigate(`/crm/devis/${quote.id}/edit`);
     });
   }

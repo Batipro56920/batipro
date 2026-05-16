@@ -7,10 +7,10 @@ import { QuoteTotalsPanel } from "../totals/QuoteTotalsPanel";
 import { QuoteOptionsDialog } from "../dialogs/QuoteOptionsDialog";
 import { QuotePreview } from "../document/QuotePreview";
 import type { QuoteAccountOption, QuoteProjectOption } from "../../domain/Quote";
-import type { TaskTemplateRow } from "../../../../services/taskLibrary.service";
+import type { CrmQuoteRow } from "../../../../services/crm.service";
 
 type Props = {
-  templates: TaskTemplateRow[];
+  oldQuotes: CrmQuoteRow[];
   clients: QuoteAccountOption[];
   prospects: QuoteAccountOption[];
   projects: QuoteProjectOption[];
@@ -20,7 +20,7 @@ type Props = {
   onClose: () => void;
 };
 
-export function QuoteWorkspace({ templates, clients, prospects, projects, saving, onSave, onSend, onClose }: Props) {
+export function QuoteWorkspace({ oldQuotes, clients, prospects, projects, saving, onSave, onSend, onClose }: Props) {
   const [mode, setMode] = useState<"edit" | "preview">("edit");
   const [optionsOpen, setOptionsOpen] = useState(false);
 
@@ -30,7 +30,7 @@ export function QuoteWorkspace({ templates, clients, prospects, projects, saving
       {optionsOpen ? <div className="absolute right-4 top-24 z-40"><QuoteOptionsDialog onClose={() => setOptionsOpen(false)} /></div> : null}
       <Group orientation="horizontal" className="min-h-[calc(100vh-5rem)]">
         <Panel defaultSize={20} minSize={14}>
-          <QuoteLibrarySidebar templates={templates} />
+          <QuoteLibrarySidebar oldQuotes={oldQuotes} />
         </Panel>
         <Separator className="w-1 bg-slate-200 hover:bg-blue-300" />
         <Panel defaultSize={58} minSize={35}>

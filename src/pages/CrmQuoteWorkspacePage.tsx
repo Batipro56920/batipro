@@ -17,7 +17,7 @@ export default function CrmQuoteWorkspacePage() {
 
   return (
     <QuoteWorkspace
-      templates={dataset.taskTemplates}
+      oldQuotes={dataset.quotes}
       clients={options.clients}
       prospects={options.prospects}
       projects={options.projects}

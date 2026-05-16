@@ -36,6 +36,14 @@ export function mapEngineToQuote(engine: CrmQuoteEngineData, dataset: CrmDataset
       ...DEFAULT_QUOTE_SETTINGS,
       defaultVatRate: normalizeVat(Number(displayOptions.default_vat_rate ?? engine.quote.tva ?? 20)),
       defaultDepositPercent: Number(engine.quote.acompte_percent ?? DEFAULT_QUOTE_SETTINGS.defaultDepositPercent),
+      showMargins: bool(displayOptions.show_margins, DEFAULT_QUOTE_SETTINGS.showMargins),
+      showReferences: bool(displayOptions.show_references, DEFAULT_QUOTE_SETTINGS.showReferences),
+      showVatColumn: bool(displayOptions.show_vat_column, DEFAULT_QUOTE_SETTINGS.showVatColumn),
+      showQuantityColumns: bool(displayOptions.show_quantity_columns, DEFAULT_QUOTE_SETTINGS.showQuantityColumns),
+      hideCompositeDetails: bool(displayOptions.hide_composite_details, DEFAULT_QUOTE_SETTINGS.hideCompositeDetails),
+      showVatCertificate: bool(displayOptions.show_vat_certificate, DEFAULT_QUOTE_SETTINGS.showVatCertificate),
+      showWasteManagement: bool(displayOptions.show_waste_management, DEFAULT_QUOTE_SETTINGS.showWasteManagement),
+      customNumbering: bool(displayOptions.custom_numbering, DEFAULT_QUOTE_SETTINGS.customNumbering),
     },
     nodes: mapItemsToNodes(engine.items),
     totals: {
@@ -69,6 +77,14 @@ export function mapQuoteToQuotePatch(quote: Quote): Partial<CrmQuoteRow> {
       site_address: quote.siteAddress,
       footer_notes: quote.footerNotes,
       default_vat_rate: quote.settings.defaultVatRate,
+      show_margins: quote.settings.showMargins,
+      show_references: quote.settings.showReferences,
+      show_vat_column: quote.settings.showVatColumn,
+      show_quantity_columns: quote.settings.showQuantityColumns,
+      hide_composite_details: quote.settings.hideCompositeDetails,
+      show_vat_certificate: quote.settings.showVatCertificate,
+      show_waste_management: quote.settings.showWasteManagement,
+      custom_numbering: quote.settings.customNumbering,
       work_start_date: quote.workStartDate,
       estimated_duration: quote.estimatedDuration,
       salesperson_id: quote.salespersonId,
@@ -198,6 +214,9 @@ function mapItemToNode(item: CrmQuoteItemRow): QuoteNode {
       unit: item.unite ?? "u",
       vatRate: normalizeVat(item.tva_rate),
       reference: item.task_template_id,
+      pricingMode: "margin",
+      targetMarginRate: Number(item.margin_rate ?? 25),
+      fixedSellingPriceHt: null,
       components: [],
     };
   }
@@ -294,4 +313,8 @@ function accountAddress(row: Pick<CrmProspectRow | CrmClientRow, "adresse" | "co
 
 function stringOrNull(value: unknown) {
   return typeof value === "string" && value.trim() ? value : null;
+}
+
+function bool(value: unknown, fallback: boolean): boolean {
+  return typeof value === "boolean" ? value : fallback;
 }

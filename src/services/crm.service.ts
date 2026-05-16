@@ -799,6 +799,12 @@ export async function createCrmQuote(input: Partial<CrmQuoteRow>) {
         marge_estimee: input.marge_estimee ?? null,
         lot: text(input.lot),
         description: text(input.description),
+        conditions: text(input.conditions),
+        acompte_percent: input.acompte_percent ?? null,
+        payment_terms_text: input.payment_terms_text ?? null,
+        legal_mentions: input.legal_mentions ?? null,
+        waste_management: input.waste_management ?? null,
+        display_options: input.display_options ?? null,
       },
     ])
     .select(CRM_SELECTS.quotes)
