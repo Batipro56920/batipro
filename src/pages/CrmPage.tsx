@@ -320,6 +320,7 @@ export default function CrmPage({ section = "dashboard" }: Props) {
         section={section}
         onRefresh={refresh}
         onCreateProspect={() => setModal("prospect")}
+        onCreateOpportunity={() => setModal("opportunity")}
         onCreateQuote={createDraftQuoteAndOpen}
       />
 
@@ -421,7 +422,6 @@ export default function CrmPage({ section = "dashboard" }: Props) {
     </div>
   );
 }
-
 
 
 

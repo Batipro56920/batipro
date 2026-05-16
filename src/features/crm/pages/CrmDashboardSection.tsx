@@ -1,5 +1,9 @@
-import { StatCard } from "../../../components/ui/design-system";
 import type { CrmClientRow, CrmDataset, CrmProspectRow, CrmQuoteRow } from "../../../services/crm.service";
+import { CrmActionCenter, type CrmActionItem } from "../components/CrmActionCenter";
+import { CrmAlertCenter, type CrmAlertItem } from "../components/CrmAlertCenter";
+import { CrmKpiGrid, type CrmKpiItem } from "../components/CrmKpiGrid";
+import { CrmPipelinePreview } from "../components/CrmPipelinePreview";
+import { CrmRecentActivity } from "../components/CrmRecentActivity";
 import { dateOnly, entityLabel, eur } from "../components/crmFormat";
 
 export default function CrmDashboardSection({
@@ -8,7 +12,6 @@ export default function CrmDashboardSection({
   transformationRate,
   prospectById,
   clientById,
-  quoteById,
   setModal,
 }: {
   data: CrmDataset;
@@ -22,108 +25,182 @@ export default function CrmDashboardSection({
 }) {
   const today = new Date().toISOString().slice(0, 10);
   const overdueTasks = data.tasks.filter((row) => row.statut !== "terminee" && row.due_at && row.due_at.slice(0, 10) < today);
+  const todayTasks = data.tasks.filter((row) => row.statut !== "terminee" && row.due_at?.slice(0, 10) === today);
   const todayAppointments = data.appointments.filter((row) => row.starts_at.slice(0, 10) === today);
-  const expiredQuotes = data.quotes.filter((row) => row.valid_until && row.valid_until < today && !["accepte", "refuse"].includes(row.statut));
-  const riskOpportunities = data.opportunities.filter((row) => row.status === "ouverte" && row.prochaine_action_date && row.prochaine_action_date < today);
+  const quotesToSend = data.quotes.filter((row) => ["brouillon", "en_preparation"].includes(row.statut));
+  const quotesToRelaunch = data.quotes.filter((row) => ["envoye", "relance_1", "relance_2"].includes(row.statut));
+  const refusedQuotes = data.quotes.filter((row) => row.statut === "refuse");
+  const openSav = data.sav.filter((row) => row.statut !== "clos");
+  const inactiveOpportunities = data.opportunities.filter((row) => row.status === "ouverte" && (!row.prochaine_action_date || row.prochaine_action_date < today));
+
+  const kpiItems: CrmKpiItem[] = [
+    {
+      key: "prospects",
+      label: "Prospects actifs",
+      value: String(kpis.activeProspects),
+      hint: "À qualifier, relancer ou convertir",
+      href: "/crm/prospects",
+      tone: kpis.activeProspects > 0 ? "info" : "normal",
+    },
+    {
+      key: "quotes",
+      label: "Devis en attente",
+      value: String(kpis.quotesPending),
+      hint: "Brouillons, envoyés ou en négociation",
+      href: "/crm/devis",
+      tone: kpis.quotesPending > 0 ? "warning" : "success",
+    },
+    {
+      key: "revenue",
+      label: "CA signé",
+      value: eur(kpis.signedRevenue),
+      hint: "Total HT des devis acceptés",
+      href: "/crm/devis",
+      tone: kpis.signedRevenue > 0 ? "success" : "normal",
+    },
+    {
+      key: "transform",
+      label: "Taux transformation",
+      value: `${transformationRate}%`,
+      hint: "Devis acceptés / devis totaux",
+      href: "/crm/statistiques",
+      tone: transformationRate >= 50 ? "success" : transformationRate > 0 ? "info" : "normal",
+    },
+    {
+      key: "overdue",
+      label: "Relances en retard",
+      value: String(kpis.overdueTasks),
+      hint: "Actions commerciales dépassées",
+      href: "/crm/agenda",
+      tone: kpis.overdueTasks > 0 ? "danger" : "success",
+    },
+    {
+      key: "sav",
+      label: "SAV ouverts",
+      value: String(kpis.openSav),
+      hint: "Tickets après chantier à suivre",
+      href: "/crm/sav",
+      tone: kpis.openSav > 0 ? "warning" : "success",
+    },
+  ];
+
+  const actionItems: CrmActionItem[] = [
+    ...overdueTasks.slice(0, 4).map((task) => ({
+      id: `task-overdue-${task.id}`,
+      title: task.titre,
+      meta: `${task.type} · échéance ${dateOnly(task.due_at)}`,
+      description: task.description ?? undefined,
+      tone: "danger" as const,
+    })),
+    ...todayTasks.slice(0, 3).map((task) => ({
+      id: `task-today-${task.id}`,
+      title: task.titre,
+      meta: `${task.type} · aujourd’hui`,
+      description: task.description ?? undefined,
+      tone: task.priorite === "haute" ? "warning" as const : "normal" as const,
+    })),
+    ...todayAppointments.slice(0, 3).map((appointment) => ({
+      id: `appointment-${appointment.id}`,
+      title: appointment.titre,
+      meta: `${appointment.type} · ${new Date(appointment.starts_at).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })}`,
+      description: appointment.notes ?? undefined,
+      tone: "info" as const,
+    })),
+    ...quotesToSend.slice(0, 2).map((quote) => ({
+      id: `quote-send-${quote.id}`,
+      title: `Devis à envoyer ${quote.quote_number}`,
+      meta: entityLabel(clientById.get(quote.client_id ?? "") ?? prospectById.get(quote.prospect_id ?? "")),
+      description: quote.description ?? undefined,
+      tone: "warning" as const,
+    })),
+    ...quotesToRelaunch.slice(0, 2).map((quote) => ({
+      id: `quote-relaunch-${quote.id}`,
+      title: `Devis à relancer ${quote.quote_number}`,
+      meta: entityLabel(clientById.get(quote.client_id ?? "") ?? prospectById.get(quote.prospect_id ?? "")),
+      description: quote.valid_until ? `Valide jusqu’au ${dateOnly(quote.valid_until)}` : undefined,
+      tone: "warning" as const,
+    })),
+  ].slice(0, 8);
+
+  const alertItems: CrmAlertItem[] = [
+    {
+      key: "overdue",
+      label: "Relances en retard",
+      value: overdueTasks.length,
+      description: "Tâches commerciales dépassées",
+      href: "/crm/agenda",
+      tone: overdueTasks.length > 0 ? "danger" : "normal",
+    },
+    {
+      key: "refused",
+      label: "Devis refusés",
+      value: refusedQuotes.length,
+      description: "À analyser pour améliorer le taux de signature",
+      href: "/crm/devis",
+      tone: refusedQuotes.length > 0 ? "warning" : "normal",
+    },
+    {
+      key: "sav",
+      label: "SAV ouverts",
+      value: openSav.length,
+      description: "Tickets client encore ouverts",
+      href: "/crm/sav",
+      tone: openSav.length > 0 ? "warning" : "normal",
+    },
+    {
+      key: "inactive",
+      label: "Opportunités sans activité",
+      value: inactiveOpportunities.length,
+      description: "Affaires ouvertes sans prochaine action",
+      href: "/crm/opportunites",
+      tone: inactiveOpportunities.length > 0 ? "warning" : "normal",
+    },
+  ];
+
+  const recentItems: CrmActionItem[] = [
+    ...data.quotes.slice(0, 5).map((quote) => ({
+      id: `recent-quote-${quote.id}`,
+      title: `Devis créé ${quote.quote_number}`,
+      meta: dateOnly(quote.created_at),
+      description: `${entityLabel(clientById.get(quote.client_id ?? "") ?? prospectById.get(quote.prospect_id ?? ""))} · ${eur(quote.montant_ht)}`,
+      tone: "info" as const,
+    })),
+    ...data.prospects.slice(0, 5).map((prospect) => ({
+      id: `recent-prospect-${prospect.id}`,
+      title: `Prospect ajouté : ${entityLabel(prospect)}`,
+      meta: dateOnly(prospect.created_at),
+      description: prospect.type_projet ?? prospect.email ?? undefined,
+      tone: "normal" as const,
+    })),
+    ...data.appointments.slice(0, 4).map((appointment) => ({
+      id: `recent-appointment-${appointment.id}`,
+      title: `RDV : ${appointment.titre}`,
+      meta: dateOnly(appointment.starts_at),
+      description: appointment.type,
+      tone: "info" as const,
+    })),
+    ...data.sav.slice(0, 4).map((sav) => ({
+      id: `recent-sav-${sav.id}`,
+      title: `SAV : ${sav.titre}`,
+      meta: dateOnly(sav.created_at),
+      description: sav.statut,
+      tone: "warning" as const,
+    })),
+  ]
+    .sort((a, b) => String(b.meta).localeCompare(String(a.meta), "fr"))
+    .slice(0, 8);
 
   return (
     <div className="space-y-5">
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
-        {[
-          ["Prospects actifs", kpis.activeProspects],
-          ["Nouveaux semaine", kpis.newProspectsWeek],
-          ["Devis attente", kpis.quotesPending],
-          ["CA signé", eur(kpis.signedRevenue)],
-          ["Taux transformation", `${transformationRate}%`],
-          ["CA opportunité", eur(kpis.pipelineRevenue)],
-          ["Relances retard", kpis.overdueTasks],
-          ["RDV du jour", kpis.appointmentsToday],
-          ["SAV ouverts", kpis.openSav],
-          ["Devis refusés", kpis.quotesRefused],
-        ].map(([label, value]) => (
-          <StatCard key={String(label)} label={String(label)} value={value} />
-        ))}
+      <CrmKpiGrid items={kpiItems} />
+
+      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_360px]">
+        <CrmActionCenter items={actionItems} onTask={() => setModal("task")} onAppointment={() => setModal("appointment")} />
+        <CrmAlertCenter items={alertItems} />
       </div>
 
-      <div className="grid gap-4 xl:grid-cols-[minmax(0,1.2fr)_minmax(0,0.8fr)]">
-        <section className="rounded-3xl border bg-white p-5">
-          <div className="flex items-center justify-between gap-3">
-            <div>
-              <div className="text-xs font-semibold uppercase tracking-[0.2em] text-blue-700">Mes actions aujourd’hui</div>
-              <h2 className="mt-1 text-lg font-semibold">Relances, appels, RDV, devis à envoyer</h2>
-            </div>
-            <div className="flex gap-2">
-              <button onClick={() => setModal("task")} className="rounded-xl border px-3 py-2 text-sm hover:bg-slate-50">+ Tâche</button>
-              <button onClick={() => setModal("appointment")} className="rounded-xl border px-3 py-2 text-sm hover:bg-slate-50">+ RDV</button>
-            </div>
-          </div>
-          <div className="mt-4 grid gap-3 lg:grid-cols-2">
-            {[...overdueTasks, ...data.tasks.filter((row) => row.due_at?.slice(0, 10) === today)].slice(0, 8).map((task) => (
-              <div key={task.id} className="rounded-2xl border bg-slate-50 p-3">
-                <div className="font-medium">{task.titre}</div>
-                <div className="mt-1 text-xs text-slate-500">{task.type} · {task.due_at ? dateOnly(task.due_at) : "Sans échéance"}</div>
-              </div>
-            ))}
-            {todayAppointments.slice(0, 4).map((rdv) => (
-              <div key={rdv.id} className="rounded-2xl border border-blue-200 bg-blue-50 p-3">
-                <div className="font-medium text-blue-950">{rdv.titre}</div>
-                <div className="mt-1 text-xs text-blue-700">{new Date(rdv.starts_at).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })}</div>
-              </div>
-            ))}
-          </div>
-        </section>
-
-        <section className="rounded-3xl border bg-white p-5">
-          <div className="text-xs font-semibold uppercase tracking-[0.2em] text-red-700">Alertes</div>
-          <div className="mt-4 space-y-2">
-            {expiredQuotes.map((quote) => (
-              <div key={quote.id} className="rounded-2xl border border-red-200 bg-red-50 p-3 text-sm text-red-800">
-                Devis expiré : {quote.quote_number} · {entityLabel(clientById.get(quote.client_id ?? "") ?? prospectById.get(quote.prospect_id ?? ""))}
-              </div>
-            ))}
-            {riskOpportunities.map((opp) => (
-              <div key={opp.id} className="rounded-2xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
-                Affaire à risque : {opp.nom_affaire} · action oubliée {dateOnly(opp.prochaine_action_date)}
-              </div>
-            ))}
-            {data.quotes.filter((quote) => quote.statut === "envoye" && quote.signature_status === "attente_signature").slice(0, 4).map((quote) => (
-              <div key={quote.id} className="rounded-2xl border bg-slate-50 p-3 text-sm text-slate-700">
-                Signature manquante : {quote.quote_number}
-              </div>
-            ))}
-            {expiredQuotes.length === 0 && riskOpportunities.length === 0 ? <div className="text-sm text-slate-500">Aucune alerte critique.</div> : null}
-          </div>
-        </section>
-      </div>
-
-      <PipelineMini data={data} quoteById={quoteById} />
+      <CrmPipelinePreview data={data} />
+      <CrmRecentActivity items={recentItems} />
     </div>
-  );
-}
-
-function PipelineMini({ data }: { data: CrmDataset; quoteById: Map<string, CrmQuoteRow> }) {
-  return (
-    <section className="rounded-3xl border bg-white p-5">
-      <div className="text-xs font-semibold uppercase tracking-[0.2em] text-blue-700">Pipeline commercial</div>
-      <div className="mt-4 grid gap-3 lg:grid-cols-4 xl:grid-cols-7">
-        {data.stages.slice(0, 7).map((stage) => {
-          const rows = data.opportunities.filter((row) => row.stage_key === stage.key);
-          return (
-            <div key={stage.id} className="rounded-2xl border bg-slate-50 p-3">
-              <div className="font-semibold text-slate-900">{stage.label}</div>
-              <div className="mt-1 text-xs text-slate-500">{rows.length} affaire(s) · {eur(rows.reduce((sum, row) => sum + row.montant_estime, 0))}</div>
-              <div className="mt-3 space-y-2">
-                {rows.slice(0, 3).map((row) => (
-                  <div key={row.id} className="rounded-xl bg-white p-3 text-sm shadow-sm">
-                    <div className="font-medium">{row.nom_affaire}</div>
-                    <div className="mt-1 text-xs text-slate-500">{eur(row.montant_estime)} · {row.probabilite}%</div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          );
-        })}
-      </div>
-    </section>
   );
 }

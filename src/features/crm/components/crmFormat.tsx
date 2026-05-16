@@ -5,12 +5,12 @@ export function eur(value: number | null | undefined) {
 }
 
 export function dateOnly(value: string | null | undefined) {
-  if (!value) return "â€”";
+  if (!value) return "—";
   return new Date(value).toLocaleDateString("fr-FR");
 }
 
 export function entityLabel(row: Pick<CrmProspectRow | CrmClientRow, "prenom" | "nom" | "societe" | "email"> | null | undefined) {
-  if (!row) return "â€”";
+  if (!row) return "—";
   return [row.prenom, row.nom].filter(Boolean).join(" ") || row.societe || row.email || "Sans nom";
 }
 
@@ -26,4 +26,3 @@ export function statusPill(status: string) {
         : "border-slate-200 bg-slate-50 text-slate-700",
   ].join(" ");
 }
-

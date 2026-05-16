@@ -1,40 +1,70 @@
 import { Link } from "react-router-dom";
-import { ModuleTabs } from "../../../components/ui/design-system";
+import { useState } from "react";
+import { ChevronDown } from "lucide-react";
 import type { CrmSection } from "../types";
 
-const CRM_NAV: Array<{ key: CrmSection; label: string; href: string }> = [
+const PRIMARY_NAV: Array<{ key: CrmSection; label: string; href: string }> = [
   { key: "dashboard", label: "Dashboard", href: "/crm" },
   { key: "prospects", label: "Prospects", href: "/crm/prospects" },
   { key: "clients", label: "Clients", href: "/crm/clients" },
-  { key: "opportunities", label: "OpportunitÃ©s", href: "/crm/opportunites" },
+  { key: "opportunities", label: "Opportunités", href: "/crm/opportunites" },
   { key: "quotes", label: "Devis", href: "/crm/devis" },
+  { key: "agenda", label: "Agenda", href: "/crm/agenda" },
+  { key: "sav", label: "SAV", href: "/crm/sav" },
+  { key: "stats", label: "Statistiques", href: "/crm/statistiques" },
+];
+
+const SECONDARY_NAV: Array<{ key: CrmSection; label: string; href: string }> = [
   { key: "invoices", label: "Factures", href: "/crm/factures" },
   { key: "purchases", label: "Achats", href: "/crm/achats" },
   { key: "contacts", label: "Contacts", href: "/crm/contacts" },
   { key: "resources", label: "Ressources", href: "/crm/ressources" },
-  { key: "library", label: "BibliothÃ¨que", href: "/crm/bibliotheque" },
-  { key: "agenda", label: "Agenda", href: "/crm/agenda" },
-  { key: "sav", label: "SAV", href: "/crm/sav" },
-  { key: "stats", label: "Statistiques", href: "/crm/statistiques" },
-  { key: "settings", label: "ParamÃ¨tres", href: "/crm/parametres" },
+  { key: "library", label: "Bibliothèque", href: "/crm/bibliotheque" },
+  { key: "settings", label: "Paramètres", href: "/crm/parametres" },
 ];
 
-export function CrmNavigation({ section }: { section: CrmSection }) {
+function navClass(active: boolean) {
+  return [
+    "shrink-0 rounded-xl px-3 py-2 text-sm font-medium transition",
+    active ? "bg-slate-950 text-white shadow-sm shadow-slate-950/10" : "text-slate-600 hover:bg-slate-50 hover:text-slate-950",
+  ].join(" ");
+}
+
+export function CrmNavigationTabs({ section }: { section: CrmSection }) {
+  const [open, setOpen] = useState(false);
+  const secondaryActive = SECONDARY_NAV.some((item) => item.key === section);
+
   return (
-    <ModuleTabs>
-      {CRM_NAV.map((item) => (
-        <Link
-          key={item.key}
-          to={item.href}
-          className={[
-            "shrink-0 rounded-xl px-3 py-2 text-sm font-medium transition",
-            section === item.key ? "bg-slate-950 text-white shadow-sm" : "text-slate-600 hover:bg-slate-50 hover:text-slate-950",
-          ].join(" ")}
-        >
-          {item.label}
-        </Link>
-      ))}
-    </ModuleTabs>
+    <div className="relative">
+      <nav className="flex items-center gap-1 overflow-x-auto rounded-2xl border border-slate-200 bg-white p-1.5 shadow-sm shadow-slate-950/[0.03]" aria-label="Navigation CRM">
+        {PRIMARY_NAV.map((item) => (
+          <Link key={item.key} to={item.href} className={navClass(section === item.key)}>
+            {item.label}
+          </Link>
+        ))}
+
+        <button type="button" onClick={() => setOpen((value) => !value)} className={`${navClass(secondaryActive)} flex items-center gap-1`}>
+          Plus
+          <ChevronDown className={`h-4 w-4 transition ${open ? "rotate-180" : ""}`} />
+        </button>
+      </nav>
+
+      {open ? (
+        <div className="absolute right-0 z-20 mt-2 w-56 rounded-2xl border border-slate-200 bg-white p-2 shadow-xl shadow-slate-950/10">
+          {SECONDARY_NAV.map((item) => (
+            <Link
+              key={item.key}
+              to={item.href}
+              onClick={() => setOpen(false)}
+              className={["block rounded-xl px-3 py-2 text-sm font-medium transition", section === item.key ? "bg-blue-50 text-blue-700" : "text-slate-600 hover:bg-slate-50 hover:text-slate-950"].join(" ")}
+            >
+              {item.label}
+            </Link>
+          ))}
+        </div>
+      ) : null}
+    </div>
   );
 }
 
+export const CrmNavigation = CrmNavigationTabs;
