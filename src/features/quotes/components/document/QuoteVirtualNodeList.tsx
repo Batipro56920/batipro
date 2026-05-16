@@ -17,7 +17,7 @@ import { ChevronDown, ChevronRight, GripVertical, MoreHorizontal, Trash2 } from 
 import { Button } from "../../../../components/ui/button";
 import { Input, Textarea } from "../../../../components/ui/input";
 import { numberQuoteNodes, type NumberedQuoteNode } from "../../application/quoteNumbering";
-import { getNodeSellHt } from "../../application/quoteCalculations";
+import { flattenQuoteNodes, getNodeSellHt } from "../../application/quoteCalculations";
 import { useQuoteActions } from "../../hooks/useQuoteActions";
 import { useQuoteStore } from "../../store/quoteStore";
 import { QUOTE_VAT_RATES, type QuoteVatRate } from "../../domain/QuoteEnums";
@@ -31,6 +31,8 @@ const QuoteRichTextField = lazy(() => import("./QuoteRichTextField").then((modul
 type RowProps = {
   rows: NumberedQuoteNode[];
   collapsed: string[];
+  activeNodeId: string | null;
+  onSelect: (id: string) => void;
   onToggleCollapse: (id: string) => void;
 };
 
@@ -47,6 +49,8 @@ const columns: Array<ColumnDef<NumberedQuoteNode>> = [
 
 export function QuoteVirtualNodeList() {
   const nodes = useQuoteStore((state) => state.quote.nodes);
+  const activeNodeId = useQuoteStore((state) => state.activeNodeId);
+  const setActiveNode = useQuoteStore((state) => state.setActiveNode);
   const moveNodeBefore = useQuoteStore((state) => state.moveNodeBefore);
   const [collapsed, setCollapsed] = useState<string[]>([]);
   const numberedRows = useMemo(() => numberQuoteNodes(nodes), [nodes]);
@@ -68,7 +72,7 @@ export function QuoteVirtualNodeList() {
     <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
       <div className="overflow-hidden rounded-2xl border border-slate-100 bg-white">
         <table className="w-full text-sm">
-          <thead className="bg-slate-50 text-slate-600">
+          <thead className="bg-blue-500 text-white">
             {table.getHeaderGroups().map((group) => (
               <tr key={group.id}>
                 {group.headers.map((header) => (
@@ -84,7 +88,7 @@ export function QuoteVirtualNodeList() {
           rowComponent={QuoteNodeRow as any}
           rowCount={rows.length}
           rowHeight={(index, props) => rowHeight(props.rows[index])}
-          rowProps={{ rows, collapsed, onToggleCollapse: toggleCollapse }}
+          rowProps={{ rows, collapsed, activeNodeId, onSelect: setActiveNode, onToggleCollapse: toggleCollapse }}
           overscanCount={10}
           className="h-[34rem]"
         />
@@ -94,10 +98,11 @@ export function QuoteVirtualNodeList() {
   );
 }
 
-function QuoteNodeRow({ index, style, rows, collapsed, onToggleCollapse }: { index: number; style: React.CSSProperties } & RowProps) {
+function QuoteNodeRow({ index, style, rows, collapsed, activeNodeId, onSelect, onToggleCollapse }: { index: number; style: React.CSSProperties } & RowProps) {
   const row = rows[index];
   const { updateNode, removeNode, moveNode, duplicateNode } = useQuoteActions();
   const updateComposite = useQuoteStore((state) => state.updateComposite);
+  const settings = useQuoteStore((state) => state.quote.settings);
   const draggable = useDraggable({ id: row?.id ?? `row-${index}` });
   const droppable = useDroppable({ id: row?.id ?? `drop-${index}` });
   const [menuOpen, setMenuOpen] = useState(false);
@@ -109,6 +114,7 @@ function QuoteNodeRow({ index, style, rows, collapsed, onToggleCollapse }: { ind
     transform: CSS.Translate.toString(draggable.transform),
     opacity: draggable.isDragging ? 0.55 : 1,
   };
+  const isActive = activeNodeId === row.id;
 
   function bindRefs(element: HTMLDivElement | null) {
     draggable.setNodeRef(element);
@@ -123,11 +129,13 @@ function QuoteNodeRow({ index, style, rows, collapsed, onToggleCollapse }: { ind
 
   if (row.type === "section") {
     const isCollapsed = collapsed.includes(row.id);
+    const subtotal = calculateSubtotal(row.children);
     return (
-      <div ref={bindRefs} style={dragStyle} tabIndex={0} onKeyDown={handleKeyDown} onContextMenu={(event) => openMenu(event, setMenuOpen)} className="grid grid-cols-[2.5rem_4rem_1fr_7rem] items-center border-t bg-slate-950 px-3 text-white">
+      <div ref={bindRefs} style={dragStyle} tabIndex={0} onClick={() => onSelect(row.id)} onKeyDown={handleKeyDown} onContextMenu={(event) => openMenu(event, setMenuOpen)} className={`grid grid-cols-[2.5rem_4rem_1fr_12rem_7rem] items-center border-t px-3 ${isActive ? "bg-blue-200" : "bg-blue-100"} text-slate-950`}>
         <DragHandle attributes={draggable.attributes} listeners={draggable.listeners} />
         <button className="flex items-center gap-1 font-semibold" onClick={() => onToggleCollapse(row.id)}>{isCollapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}{row.number}</button>
-        <Input className="border-transparent bg-transparent text-base font-semibold text-white focus:border-slate-700" value={row.title} onChange={(event) => updateNode(row.id, { title: event.target.value } as Partial<QuoteNode>)} />
+        <Input className="border-transparent bg-transparent text-base font-semibold focus:border-blue-300" value={row.title} onChange={(event) => updateNode(row.id, { title: event.target.value } as Partial<QuoteNode>)} />
+        <div className="text-right text-sm font-semibold">{settings.hideSectionTotals ? null : `Sous-total : ${money(subtotal)}`}</div>
         <Actions id={row.id} menuOpen={menuOpen} setMenuOpen={setMenuOpen} onMove={moveNode} onDelete={removeNode} onDuplicate={duplicateNode} />
       </div>
     );
@@ -135,11 +143,13 @@ function QuoteNodeRow({ index, style, rows, collapsed, onToggleCollapse }: { ind
 
   if (row.type === "subsection") {
     const isCollapsed = collapsed.includes(row.id);
+    const subtotal = calculateSubtotal(row.children);
     return (
-      <div ref={bindRefs} style={dragStyle} tabIndex={0} onKeyDown={handleKeyDown} onContextMenu={(event) => openMenu(event, setMenuOpen)} className="grid grid-cols-[2.5rem_4rem_1fr_7rem] items-center border-t bg-slate-100 px-3">
+      <div ref={bindRefs} style={dragStyle} tabIndex={0} onClick={() => onSelect(row.id)} onKeyDown={handleKeyDown} onContextMenu={(event) => openMenu(event, setMenuOpen)} className={`grid grid-cols-[2.5rem_4rem_1fr_12rem_7rem] items-center border-t px-3 ${isActive ? "bg-slate-200" : "bg-slate-100"}`}>
         <DragHandle attributes={draggable.attributes} listeners={draggable.listeners} />
         <button className="flex items-center gap-1 font-medium text-slate-500" onClick={() => onToggleCollapse(row.id)}>{isCollapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}{row.number}</button>
         <Input className="border-transparent bg-transparent font-semibold focus:border-slate-200" value={row.title} onChange={(event) => updateNode(row.id, { title: event.target.value } as Partial<QuoteNode>)} />
+        <div className="text-right text-sm font-semibold text-slate-600">{settings.hideSectionTotals ? null : `Sous-total : ${money(subtotal)}`}</div>
         <Actions id={row.id} menuOpen={menuOpen} setMenuOpen={setMenuOpen} onMove={moveNode} onDelete={removeNode} onDuplicate={duplicateNode} />
       </div>
     );
@@ -147,7 +157,7 @@ function QuoteNodeRow({ index, style, rows, collapsed, onToggleCollapse }: { ind
 
   if (row.type === "text") {
     return (
-      <div ref={bindRefs} style={dragStyle} tabIndex={0} onKeyDown={handleKeyDown} onContextMenu={(event) => openMenu(event, setMenuOpen)} className="grid grid-cols-[2.5rem_4rem_1fr_7rem] items-start border-t px-3 py-2">
+      <div ref={bindRefs} style={dragStyle} tabIndex={0} onClick={() => onSelect(row.id)} onKeyDown={handleKeyDown} onContextMenu={(event) => openMenu(event, setMenuOpen)} className={`grid grid-cols-[2.5rem_4rem_1fr_7rem] items-start border-t px-3 py-2 ${isActive ? "bg-blue-50" : ""}`}>
         <DragHandle attributes={draggable.attributes} listeners={draggable.listeners} />
         <div className="pt-2 text-slate-500">{row.number}</div>
         <Suspense fallback={<Textarea className="min-h-24" value={row.content} onChange={(event) => updateNode(row.id, { content: event.target.value, title: event.target.value } as Partial<QuoteNode>)} />}>
@@ -160,7 +170,7 @@ function QuoteNodeRow({ index, style, rows, collapsed, onToggleCollapse }: { ind
 
   if (row.type === "pagebreak") {
     return (
-      <div ref={bindRefs} style={dragStyle} tabIndex={0} onKeyDown={handleKeyDown} onContextMenu={(event) => openMenu(event, setMenuOpen)} className="grid grid-cols-[2.5rem_4rem_1fr_7rem] items-center border-t px-3">
+      <div ref={bindRefs} style={dragStyle} tabIndex={0} onClick={() => onSelect(row.id)} onKeyDown={handleKeyDown} onContextMenu={(event) => openMenu(event, setMenuOpen)} className={`grid grid-cols-[2.5rem_4rem_1fr_7rem] items-center border-t px-3 ${isActive ? "bg-blue-50" : ""}`}>
         <DragHandle attributes={draggable.attributes} listeners={draggable.listeners} />
         <div className="text-slate-500">{row.number}</div>
         <div className="rounded-xl border border-dashed border-slate-300 py-2 text-center text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Saut de page</div>
@@ -174,7 +184,7 @@ function QuoteNodeRow({ index, style, rows, collapsed, onToggleCollapse }: { ind
   const saleUnitPriceHt = isComposite ? getNodeSellHt(row) / Math.max(1, row.quantity) : row.saleUnitPriceHt;
   return (
     <>
-      <div ref={bindRefs} style={dragStyle} tabIndex={0} onKeyDown={handleKeyDown} onContextMenu={(event) => openMenu(event, setMenuOpen)} className="grid grid-cols-[2.5rem_4rem_1fr_5.5rem_4.5rem_6rem_5rem_7rem_7rem] items-center border-t px-3 hover:bg-slate-50">
+      <div ref={bindRefs} style={dragStyle} tabIndex={0} onClick={() => onSelect(row.id)} onKeyDown={handleKeyDown} onContextMenu={(event) => openMenu(event, setMenuOpen)} className={`grid grid-cols-[2.5rem_4rem_1fr_5.5rem_4.5rem_6rem_5rem_7rem_7rem] items-center border-t px-3 hover:bg-slate-50 ${isActive ? "bg-blue-50" : ""}`}>
         <DragHandle attributes={draggable.attributes} listeners={draggable.listeners} />
         <div className="text-slate-500">{row.number}</div>
         <div>
@@ -184,10 +194,10 @@ function QuoteNodeRow({ index, style, rows, collapsed, onToggleCollapse }: { ind
             {isComposite ? <button className="text-blue-700 underline" onClick={() => setCompositeOpen(true)}>Configurer</button> : null}
           </div>
         </div>
-        <NumberInput value={row.quantity} onChange={(quantity) => updateNode(row.id, { quantity } as Partial<QuoteNode>)} />
-        <Input value={row.unit} onChange={(event) => updateNode(row.id, { unit: event.target.value } as Partial<QuoteNode>)} />
+        {settings.showQuantityColumns ? <NumberInput value={row.quantity} onChange={(quantity) => updateNode(row.id, { quantity } as Partial<QuoteNode>)} /> : <div />}
+        {settings.showQuantityColumns ? <Input value={row.unit} onChange={(event) => updateNode(row.id, { unit: event.target.value } as Partial<QuoteNode>)} /> : <div />}
         {!isComposite ? <NumberInput value={saleUnitPriceHt} onChange={(saleUnitPriceHt) => updateNode(row.id, { saleUnitPriceHt } as Partial<QuoteNode>)} /> : <div className="px-3 text-sm text-slate-500">{money(saleUnitPriceHt)}</div>}
-        <VatInput value={row.vatRate} onChange={(vatRate) => updateNode(row.id, { vatRate } as Partial<QuoteNode>)} />
+        {settings.showVatColumn ? <VatInput value={row.vatRate} onChange={(vatRate) => updateNode(row.id, { vatRate } as Partial<QuoteNode>)} /> : <div />}
         <div className="text-right font-medium">
           {money(getNodeSellHt(row))}
           {compositeSummary ? <span className="block text-xs text-slate-400">Marge {compositeSummary.marginRate}%</span> : null}
@@ -276,6 +286,10 @@ function rowHeight(row: NumberedQuoteNode | undefined) {
   if (row.type === "text") return 150;
   if (row.type === "section" || row.type === "subsection") return 58;
   return 66;
+}
+
+function calculateSubtotal(nodes: QuoteNode[]) {
+  return flattenQuoteNodes(nodes).reduce((sum, node) => sum + getNodeSellHt(node), 0);
 }
 
 function openMenu(event: React.MouseEvent, setMenuOpen: (value: boolean) => void) {

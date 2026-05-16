@@ -4,9 +4,12 @@ export type QuoteSettings = {
   defaultVatRate: QuoteVatRate;
   defaultDepositPercent: number;
   showMargins: boolean;
+  showLineDiscounts: boolean;
   showReferences: boolean;
+  showStocks: boolean;
   showVatColumn: boolean;
   showQuantityColumns: boolean;
+  hideSectionTotals: boolean;
   hideCompositeDetails: boolean;
   showVatCertificate: boolean;
   showWasteManagement: boolean;
@@ -17,9 +20,12 @@ export const DEFAULT_QUOTE_SETTINGS: QuoteSettings = {
   defaultVatRate: 20,
   defaultDepositPercent: 30,
   showMargins: true,
+  showLineDiscounts: false,
   showReferences: false,
+  showStocks: false,
   showVatColumn: true,
   showQuantityColumns: true,
+  hideSectionTotals: false,
   hideCompositeDetails: false,
   showVatCertificate: false,
   showWasteManagement: true,

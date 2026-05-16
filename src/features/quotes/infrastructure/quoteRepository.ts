@@ -26,16 +26,21 @@ export async function saveQuote(quote: Quote, original: CrmQuoteEngineData) {
 
   const persisted = new Set(original.items.map((item) => item.id));
   const nextPersisted = new Set<string>();
+  const idMap = new Map<string, string>();
 
   for (const row of flattenQuoteForPersistence(quote)) {
     const patch = mapQuoteNodeToItemPatch(row.node, quote.id, row.order);
+    const parentItemId = row.node.parentId ? idMap.get(row.node.parentId) ?? null : null;
+    patch.parent_item_id = parentItemId;
     if (row.node.persistedId && persisted.has(row.node.persistedId)) {
       nextPersisted.add(row.node.persistedId);
+      idMap.set(row.node.id, row.node.persistedId);
       await updateCrmQuoteItem(row.node.persistedId, patch);
       continue;
     }
-    await createCrmQuoteItemFromTemplate({
+    const created = await createCrmQuoteItemFromTemplate({
       quote_id: quote.id,
+      parentItemId,
       lineType: patch.line_type,
       designation: patch.designation,
       description: patch.description,
@@ -45,6 +50,8 @@ export async function saveQuote(quote: Quote, original: CrmQuoteEngineData) {
       tvaRate: patch.tva_rate,
       ordre: row.order,
     });
+    nextPersisted.add(created.id);
+    idMap.set(row.node.id, created.id);
   }
 
   for (const item of original.items) {

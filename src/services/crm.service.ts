@@ -1009,6 +1009,7 @@ export async function createCrmQuoteItemFromTemplate(input: {
   quote_id: string;
   lot_id?: string | null;
   section_id?: string | null;
+  parentItemId?: string | null;
   lineType?: string | null;
   lot?: string | null;
   template?: TaskTemplateRow | null;
@@ -1045,6 +1046,7 @@ export async function createCrmQuoteItemFromTemplate(input: {
     quote_id: input.quote_id,
     lot_id: input.lot_id ?? null,
     section_id: input.section_id ?? null,
+    parent_item_id: input.parentItemId ?? null,
     lot: text(input.lot) ?? template?.lot ?? null,
     designation: text(input.designation) ?? template?.titre ?? "Ouvrage",
     description: text(input.description) ?? template?.remarques ?? null,

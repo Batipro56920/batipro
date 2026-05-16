@@ -5,6 +5,7 @@ import type { QuoteLineKind, QuoteStatus, QuoteVatRate } from "../domain/QuoteEn
 import type { QuoteLineNode, QuotePageBreakNode, QuoteTextNode } from "../domain/QuoteLine";
 import type { QuoteNode, QuoteSectionNode, QuoteSubsectionNode } from "../domain/QuoteSection";
 import { DEFAULT_QUOTE_SETTINGS } from "../domain/QuoteSettings";
+import { calculateCompositeSummary } from "../application/quoteCompositeEngine";
 import type { CrmClientRow, CrmDataset, CrmProspectRow, CrmQuoteEngineData, CrmQuoteItemRow, CrmQuoteRow } from "../../../services/crm.service";
 
 export function mapEngineToQuote(engine: CrmQuoteEngineData, dataset: CrmDataset): Quote {
@@ -37,9 +38,12 @@ export function mapEngineToQuote(engine: CrmQuoteEngineData, dataset: CrmDataset
       defaultVatRate: normalizeVat(Number(displayOptions.default_vat_rate ?? engine.quote.tva ?? 20)),
       defaultDepositPercent: Number(engine.quote.acompte_percent ?? DEFAULT_QUOTE_SETTINGS.defaultDepositPercent),
       showMargins: bool(displayOptions.show_margins, DEFAULT_QUOTE_SETTINGS.showMargins),
+      showLineDiscounts: bool(displayOptions.show_line_discounts, DEFAULT_QUOTE_SETTINGS.showLineDiscounts),
       showReferences: bool(displayOptions.show_references, DEFAULT_QUOTE_SETTINGS.showReferences),
+      showStocks: bool(displayOptions.show_stocks, DEFAULT_QUOTE_SETTINGS.showStocks),
       showVatColumn: bool(displayOptions.show_vat_column, DEFAULT_QUOTE_SETTINGS.showVatColumn),
       showQuantityColumns: bool(displayOptions.show_quantity_columns, DEFAULT_QUOTE_SETTINGS.showQuantityColumns),
+      hideSectionTotals: bool(displayOptions.hide_section_totals, DEFAULT_QUOTE_SETTINGS.hideSectionTotals),
       hideCompositeDetails: bool(displayOptions.hide_composite_details, DEFAULT_QUOTE_SETTINGS.hideCompositeDetails),
       showVatCertificate: bool(displayOptions.show_vat_certificate, DEFAULT_QUOTE_SETTINGS.showVatCertificate),
       showWasteManagement: bool(displayOptions.show_waste_management, DEFAULT_QUOTE_SETTINGS.showWasteManagement),
@@ -78,9 +82,12 @@ export function mapQuoteToQuotePatch(quote: Quote): Partial<CrmQuoteRow> {
       footer_notes: quote.footerNotes,
       default_vat_rate: quote.settings.defaultVatRate,
       show_margins: quote.settings.showMargins,
+      show_line_discounts: quote.settings.showLineDiscounts,
       show_references: quote.settings.showReferences,
+      show_stocks: quote.settings.showStocks,
       show_vat_column: quote.settings.showVatColumn,
       show_quantity_columns: quote.settings.showQuantityColumns,
+      hide_section_totals: quote.settings.hideSectionTotals,
       hide_composite_details: quote.settings.hideCompositeDetails,
       show_vat_certificate: quote.settings.showVatCertificate,
       show_waste_management: quote.settings.showWasteManagement,
@@ -125,8 +132,9 @@ export function mapQuoteNodeToItemPatch(node: QuoteNode, quoteId: string, order:
   }
 
   if (node.type === "composite") {
-    const saleUnit = node.components.reduce((sum, component) => sum + component.quantity * component.saleUnitPriceHt, 0);
-    const purchaseUnit = node.components.reduce((sum, component) => sum + component.quantity * component.purchaseUnitPriceHt, 0);
+    const summary = calculateCompositeSummary(node);
+    const saleUnit = summary.sellingPrice;
+    const purchaseUnit = summary.deboursSec;
     return {
       ...base,
       quantite: node.quantity,
@@ -167,11 +175,34 @@ export function mapDatasetToOptions(dataset: CrmDataset) {
 }
 
 function mapItemsToNodes(items: CrmQuoteItemRow[]): QuoteNode[] {
+  const sorted = [...items].sort((a, b) => Number(a.ordre ?? 0) - Number(b.ordre ?? 0));
+  if (!sorted.some((item) => item.parent_item_id)) return mapItemsToNodesByLegacyOrder(sorted);
+
+  const byId = new Map(sorted.map((item) => [item.id, mapItemToNode(item)]));
+  const roots: QuoteNode[] = [];
+
+  for (const item of sorted) {
+    const node = byId.get(item.id);
+    if (!node) continue;
+    const parent = item.parent_item_id ? byId.get(item.parent_item_id) : null;
+    if (parent && (parent.type === "section" || parent.type === "subsection")) {
+      node.parentId = parent.id;
+      parent.children.push(node);
+      continue;
+    }
+    node.parentId = null;
+    roots.push(node);
+  }
+
+  return reindexNodes(roots);
+}
+
+function mapItemsToNodesByLegacyOrder(items: CrmQuoteItemRow[]): QuoteNode[] {
   const roots: QuoteNode[] = [];
   let currentSection: QuoteSectionNode | null = null;
   let currentSubsection: QuoteSubsectionNode | null = null;
 
-  for (const item of [...items].sort((a, b) => Number(a.ordre ?? 0) - Number(b.ordre ?? 0))) {
+  for (const item of items) {
     const node = mapItemToNode(item);
     if (node.type === "section") {
       roots.push(node);

@@ -5,6 +5,7 @@ import type { QuoteLineKind, QuoteNodeType } from "../../domain/QuoteEnums";
 import { CompositeQuoteDialog } from "../dialogs/CompositeQuoteDialog";
 import { useState } from "react";
 import type { QuoteCompositeNode } from "../../domain/QuoteLine";
+import type { QuoteNode } from "../../domain/QuoteSection";
 import { useQuoteStore } from "../../store/quoteStore";
 
 const actions: Array<{ label: string; type: QuoteNodeType; kind?: QuoteLineKind }> = [
@@ -23,10 +24,10 @@ export function QuoteNodeToolbar() {
   const draftComposite = draftCompositeId ? findComposite(quote.nodes, draftCompositeId) : null;
 
   function createComposite() {
-    const beforeIds = new Set(quote.nodes.map((node) => node.id));
+    const beforeIds = new Set(flattenNodeIds(quote.nodes));
     addNode("composite");
     window.setTimeout(() => {
-      const next = useQuoteStore.getState().quote.nodes.find((node) => !beforeIds.has(node.id) && node.type === "composite");
+      const next = flattenNodes(useQuoteStore.getState().quote.nodes).find((node) => !beforeIds.has(node.id) && node.type === "composite");
       if (next?.type === "composite") setDraftCompositeId(next.id);
     });
   }
@@ -35,7 +36,7 @@ export function QuoteNodeToolbar() {
     <>
       <div className="flex flex-wrap gap-2">
         {actions.map((action) => (
-          <Button key={`${action.type}-${action.kind ?? "default"}`} variant="secondary" onClick={() => addNode(action.type, null, action.kind)}>
+          <Button key={`${action.type}-${action.kind ?? "default"}`} variant="secondary" onClick={() => addNode(action.type, undefined, action.kind)}>
             <Plus className="mr-1 h-4 w-4" />
             {action.label}
           </Button>
@@ -68,4 +69,12 @@ function findComposite(nodes: any[], id: string): QuoteCompositeNode | null {
     }
   }
   return null;
+}
+
+function flattenNodeIds(nodes: QuoteNode[]) {
+  return flattenNodes(nodes).map((node) => node.id);
+}
+
+function flattenNodes(nodes: QuoteNode[]): QuoteNode[] {
+  return nodes.flatMap((node) => (node.type === "section" || node.type === "subsection" ? [node, ...flattenNodes(node.children)] : [node]));
 }

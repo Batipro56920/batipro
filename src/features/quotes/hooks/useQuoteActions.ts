@@ -8,6 +8,7 @@ import type { QuoteLibraryItem } from "../domain/QuoteLibrary";
 export function useQuoteActions() {
   return {
     updateQuote: useQuoteStore((state) => state.updateQuote),
+    setActiveNode: useQuoteStore((state) => state.setActiveNode),
     addNode: useQuoteStore((state) => state.addNode) as (type: QuoteNodeType, parentId?: string | null, lineKind?: QuoteLineKind) => void,
     addTemplate: useQuoteStore((state) => state.addTemplate) as (template: TaskTemplateRow) => void,
     addLibraryItem: useQuoteStore((state) => state.addLibraryItem) as (item: QuoteLibraryItem) => void,

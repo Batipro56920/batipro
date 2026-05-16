@@ -25,7 +25,7 @@ export function QuoteOptionsDialog({ onClose }: Props) {
         <h2 className="font-semibold">Options devis</h2>
         <Button variant="ghost" onClick={onClose}>Fermer</Button>
       </div>
-      {(["showMargins", "showReferences", "showVatColumn", "showQuantityColumns", "hideCompositeDetails", "showVatCertificate", "showWasteManagement", "customNumbering"] as const).map((key) => (
+      {(["showMargins", "showLineDiscounts", "showReferences", "showStocks", "customNumbering", "showVatCertificate", "showWasteManagement", "showQuantityColumns", "showVatColumn", "hideCompositeDetails", "hideSectionTotals"] as const).map((key) => (
         <label key={key} className="flex items-center justify-between gap-3 rounded-xl px-2 py-2 text-sm hover:bg-slate-50">
           <span>{label(key)}</span>
           <input type="checkbox" checked={Boolean(settings[key])} onChange={() => toggle(key)} />
@@ -63,12 +63,15 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 function label(key: string) {
   return {
     showMargins: "Afficher les marges",
+    showLineDiscounts: "Afficher les remises par ligne",
     showReferences: "Afficher les references",
-    showVatColumn: "Afficher TVA",
-    showQuantityColumns: "Afficher quantites/unites",
-    hideCompositeDetails: "Cacher details ouvrages",
+    showStocks: "Afficher les stocks",
+    customNumbering: "Numerotation personnalisee",
     showVatCertificate: "Attestation TVA",
     showWasteManagement: "Gestion dechets",
-    customNumbering: "Numerotation personnalisee",
+    showQuantityColumns: "Afficher colonnes quantite/unite",
+    showVatColumn: "Afficher TVA",
+    hideCompositeDetails: "Cacher details ouvrages",
+    hideSectionTotals: "Cacher totaux des sections",
   }[key];
 }
