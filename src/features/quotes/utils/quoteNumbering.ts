@@ -14,7 +14,7 @@ export function applyQuoteNumbering(lines: QuoteLine[]): Array<QuoteLine & { num
         lineNumber = 0;
         return { ...line, number: String(section) };
       }
-      if (line.kind === "subsection") {
+      if (line.kind === "sous_section") {
         subsection += 1;
         lineNumber = 0;
         return { ...line, number: `${section || 1}.${subsection}` };

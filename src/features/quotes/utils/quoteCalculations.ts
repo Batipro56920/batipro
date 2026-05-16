@@ -5,7 +5,7 @@ function roundMoney(value: number): number {
 }
 
 export function getQuoteLineTotalHt(line: QuoteLine): number {
-  if (line.kind === "section" || line.kind === "subsection" || line.kind === "text" || line.kind === "page_break") {
+  if (line.kind === "section" || line.kind === "sous_section" || line.kind === "texte" || line.kind === "saut_page") {
     return 0;
   }
   return roundMoney(Math.max(0, line.quantity) * Math.max(0, line.unitPriceHt));

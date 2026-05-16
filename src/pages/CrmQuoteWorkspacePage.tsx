@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { QuoteWorkspace } from "../features/quotes/components/QuoteWorkspace";
 import { useQuoteStore } from "../features/quotes/store/quoteStore";
-import type { QuoteDraft, QuoteLine, QuoteLineKind, QuoteVatRate } from "../features/quotes/types";
+import type { QuoteAccountOption, QuoteChantierOption, QuoteDraft, QuoteLine, QuoteLineKind, QuoteVatRate } from "../features/quotes/types";
 import {
   createCrmQuoteItemFromTemplate,
   deleteCrmQuoteItem,
@@ -69,13 +69,16 @@ export default function CrmQuoteWorkspacePage() {
   }, [id]);
 
   const persistedIds = useMemo(() => new Set(engine?.items.map((item) => item.id) ?? []), [engine?.items]);
+  const clientOptions = useMemo(() => dataset.clients.map(mapAccountOption), [dataset.clients]);
+  const prospectOptions = useMemo(() => dataset.prospects.map(mapAccountOption), [dataset.prospects]);
+  const chantierOptions = useMemo(() => dataset.chantiers.map(mapChantierOption), [dataset.chantiers]);
 
   function insertTemplate(template: TaskTemplateRow) {
     addLine({
       id: crypto.randomUUID(),
       persisted: false,
       parentId: null,
-      kind: "composite",
+      kind: "ouvrage",
       designation: template.titre,
       quantity: template.quantite_defaut ?? 1,
       unit: template.unite ?? "u",
@@ -94,6 +97,19 @@ export default function CrmQuoteWorkspacePage() {
     try {
       await updateCrmQuote(engine.quote.id, {
         quote_number: draft.quoteNumber,
+        client_id: draft.clientId,
+        prospect_id: draft.prospectId,
+        chantier_id: draft.chantierId,
+        valid_until: draft.validUntil || null,
+        acompte_percent: draft.depositPercent,
+        payment_terms_text: draft.paymentTerms,
+        legal_mentions: { text: draft.legalMentions } as any,
+        waste_management: { text: draft.wasteManagement } as any,
+        display_options: {
+          project_address: draft.projectAddress,
+          footer_notes: draft.footerNotes,
+          default_vat_rate: draft.defaultVatRate,
+        } as any,
         description: draft.projectDescription,
       });
 
@@ -105,7 +121,7 @@ export default function CrmQuoteWorkspacePage() {
           await createCrmQuoteItemFromTemplate({
             quote_id: engine.quote.id,
             template,
-            lineType: line.kind,
+            lineType: toDbLineType(line.kind),
             designation: line.designation,
             quantity: line.quantity,
             unit: line.unit,
@@ -151,8 +167,12 @@ export default function CrmQuoteWorkspacePage() {
       {error ? <div className="mb-3 rounded-2xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</div> : null}
       <QuoteWorkspace
         templates={dataset.taskTemplates}
+        clients={clientOptions}
+        prospects={prospectOptions}
+        chantiers={chantierOptions}
         saving={saving}
         onClose={() => navigate("/crm/devis")}
+        onCancel={() => navigate("/crm/devis")}
         onSave={save}
         onSend={send}
         onInsertTemplate={insertTemplate}
@@ -170,14 +190,26 @@ function resolveAccount(dataset: CrmDataset, engine: CrmQuoteEngineData): CrmCli
 }
 
 function mapEngineToDraft(engine: CrmQuoteEngineData, account: CrmClientRow | CrmProspectRow | null): QuoteDraft {
+  const displayOptions = (engine.quote.display_options ?? {}) as Record<string, unknown>;
+  const legalMentions = (engine.quote.legal_mentions ?? {}) as Record<string, unknown>;
+  const wasteManagement = (engine.quote.waste_management ?? {}) as Record<string, unknown>;
   return {
     id: engine.quote.id,
     quoteNumber: engine.quote.quote_number,
     status: engine.quote.statut === "envoye" ? "sent" : engine.quote.statut === "accepte" ? "signed" : engine.quote.statut === "refuse" ? "refused" : "saved",
+    clientId: engine.quote.client_id,
+    prospectId: engine.quote.prospect_id,
+    chantierId: engine.quote.chantier_id,
     clientName: entityLabel(account),
-    projectAddress: [account?.adresse, account?.code_postal, account?.ville].filter(Boolean).join(" "),
+    projectAddress: String(displayOptions.project_address ?? [account?.adresse, account?.code_postal, account?.ville].filter(Boolean).join(" ")),
     projectDescription: engine.quote.description ?? "",
     validUntil: engine.quote.valid_until ?? "",
+    defaultVatRate: normalizeVat(Number(displayOptions.default_vat_rate ?? engine.quote.tva ?? 20)),
+    depositPercent: Number(engine.quote.acompte_percent ?? 30),
+    paymentTerms: engine.quote.payment_terms_text ?? engine.quote.conditions ?? "30% a la signature, solde selon avancement et reception des travaux.",
+    legalMentions: String(legalMentions.text ?? "Devis valable selon la date indiquee. Travaux soumis aux conditions generales de l'entreprise."),
+    wasteManagement: String(wasteManagement.text ?? "Gestion des dechets selon la reglementation applicable."),
+    footerNotes: String(displayOptions.footer_notes ?? ""),
     lines: engine.items.map(mapQuoteItemToLine),
   };
 }
@@ -200,23 +232,80 @@ function mapQuoteItemToLine(item: CrmQuoteItemRow): QuoteLine {
 }
 
 function mapLineToQuoteItemPatch(line: QuoteLine): Partial<CrmQuoteItemRow> {
+  const totalHt = line.quantity * line.unitPriceHt;
   return {
     designation: line.designation,
     quantite: line.quantity,
     unite: line.unit,
     prix_unitaire_ht: line.unitPriceHt,
     sale_unit_price_ht: line.unitPriceHt,
-    total_ht: line.quantity * line.unitPriceHt,
-    sale_total_ht: line.quantity * line.unitPriceHt,
+    total_ht: totalHt,
+    sale_total_ht: totalHt,
     tva_rate: line.vatRate,
-    line_type: line.kind,
+    line_type: toDbLineType(line.kind),
     ordre: line.order,
   };
 }
 
 function normalizeKind(value: string | null | undefined): QuoteLineKind {
-  const allowed: QuoteLineKind[] = ["section", "subsection", "text", "page_break", "material", "labor", "subcontracting", "equipment", "misc", "composite"];
-  return allowed.includes(value as QuoteLineKind) ? (value as QuoteLineKind) : "simple" as QuoteLineKind;
+  switch (value) {
+    case "section":
+      return "section";
+    case "subsection":
+    case "sous_section":
+      return "sous_section";
+    case "text":
+    case "texte":
+      return "texte";
+    case "page_break":
+    case "saut_page":
+      return "saut_page";
+    case "material":
+    case "fourniture":
+      return "fourniture";
+    case "labor":
+    case "main_oeuvre":
+      return "main_oeuvre";
+    case "subcontracting":
+    case "sous_traitance":
+      return "sous_traitance";
+    case "equipment":
+    case "materiel":
+      return "materiel";
+    case "misc":
+    case "divers":
+      return "divers";
+    case "composite":
+    case "ouvrage":
+      return "ouvrage";
+    default:
+      return "fourniture";
+  }
+}
+
+function toDbLineType(kind: QuoteLineKind): string {
+  switch (kind) {
+    case "sous_section":
+      return "subsection";
+    case "texte":
+      return "text";
+    case "saut_page":
+      return "page_break";
+    case "fourniture":
+      return "material";
+    case "main_oeuvre":
+      return "labor";
+    case "sous_traitance":
+      return "subcontracting";
+    case "materiel":
+      return "equipment";
+    case "ouvrage":
+      return "composite";
+    case "divers":
+      return "misc";
+    default:
+      return kind;
+  }
 }
 
 function normalizeVat(value: number | null | undefined): QuoteVatRate {
@@ -227,4 +316,25 @@ function normalizeVat(value: number | null | undefined): QuoteVatRate {
 function entityLabel(row: Pick<CrmProspectRow | CrmClientRow, "prenom" | "nom" | "societe" | "email"> | null | undefined) {
   if (!row) return "";
   return [row.prenom, row.nom].filter(Boolean).join(" ") || row.societe || row.email || "";
+}
+
+function mapAccountOption(row: CrmClientRow | CrmProspectRow): QuoteAccountOption {
+  return {
+    id: row.id,
+    label: entityLabel(row) || "Sans nom",
+    address: [row.adresse, row.code_postal, row.ville].filter(Boolean).join(" "),
+    phone: row.telephone ?? row.mobile ?? null,
+    email: row.email,
+  };
+}
+
+function mapChantierOption(row: CrmDataset["chantiers"][number]): QuoteChantierOption {
+  return {
+    id: row.id,
+    label: row.nom,
+    clientName: row.client ?? "",
+    address: row.adresse ?? "",
+    clientId: row.crm_client_id ?? null,
+    prospectId: row.crm_prospect_id ?? null,
+  };
 }

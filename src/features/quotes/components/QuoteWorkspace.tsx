@@ -7,17 +7,22 @@ import { QuoteLibraryPanel } from "./QuoteLibraryPanel";
 import { QuoteOptionsMenu } from "./QuoteOptionsMenu";
 import { QuotePdfPreview } from "./QuotePdfPreview";
 import { QuoteTotalsPanel } from "./QuoteTotalsPanel";
+import type { QuoteAccountOption, QuoteChantierOption } from "../types";
 
 type Props = {
   templates: TaskTemplateRow[];
+  clients: QuoteAccountOption[];
+  prospects: QuoteAccountOption[];
+  chantiers: QuoteChantierOption[];
   saving?: boolean;
   onClose?: () => void;
+  onCancel?: () => void;
   onSave?: () => void;
   onSend?: () => void;
   onInsertTemplate: (template: TaskTemplateRow) => void;
 };
 
-export function QuoteWorkspace({ templates, saving = false, onClose, onSave, onSend, onInsertTemplate }: Props) {
+export function QuoteWorkspace({ templates, clients, prospects, chantiers, saving = false, onClose, onCancel, onSave, onSend, onInsertTemplate }: Props) {
   const [mode, setMode] = useState<"edit" | "preview">("edit");
   const [optionsOpen, setOptionsOpen] = useState(false);
 
@@ -27,6 +32,7 @@ export function QuoteWorkspace({ templates, saving = false, onClose, onSave, onS
         mode={mode}
         saving={saving}
         onClose={onClose}
+        onCancel={onCancel}
         onModeChange={setMode}
         onSave={onSave}
         onSend={onSend}
@@ -39,7 +45,7 @@ export function QuoteWorkspace({ templates, saving = false, onClose, onSave, onS
         </Panel>
         <Separator className="w-1 bg-slate-200 hover:bg-blue-300" />
         <Panel defaultSize={58} minSize={35}>
-          {mode === "edit" ? <QuoteDocumentEditor /> : <QuotePdfPreview />}
+          {mode === "edit" ? <QuoteDocumentEditor clients={clients} prospects={prospects} chantiers={chantiers} /> : <QuotePdfPreview />}
         </Panel>
         <Separator className="w-1 bg-slate-200 hover:bg-blue-300" />
         <Panel defaultSize={22} minSize={16}>

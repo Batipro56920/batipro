@@ -1,4 +1,4 @@
-import { useQuoteTotals } from "../store/quoteStore";
+import { useQuoteStore, useQuoteTotals } from "../store/quoteStore";
 
 function money(value: number) {
   return value.toLocaleString("fr-FR", { style: "currency", currency: "EUR" });
@@ -6,6 +6,8 @@ function money(value: number) {
 
 export function QuoteTotalsPanel() {
   const totals = useQuoteTotals();
+  const depositPercent = useQuoteStore((state) => state.draft.depositPercent);
+  const depositAmount = totals.totalTtc * (Math.max(0, depositPercent) / 100);
   return (
     <aside className="h-full border-l bg-white p-4">
       <h2 className="font-semibold text-slate-950">Totaux</h2>
@@ -13,6 +15,8 @@ export function QuoteTotalsPanel() {
         <Row label="Total net HT" value={money(totals.totalHt)} />
         <Row label="TVA" value={money(totals.totalVat)} />
         <Row label="Total TTC" value={money(totals.totalTtc)} strong />
+        <Row label={`Acompte ${depositPercent}%`} value={money(depositAmount)} />
+        <Row label="Reste a facturer" value={money(totals.totalTtc - depositAmount)} />
         <Row label="Marge brute" value={money(totals.marginHt)} />
         <Row label="Taux marge" value={`${totals.marginRate}%`} />
       </div>

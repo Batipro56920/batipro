@@ -825,6 +825,16 @@ export async function updateCrmQuote(id: string, patch: Partial<CrmQuoteRow>) {
   delete legacyPatch.conditions;
   delete legacyPatch.acompte_percent;
   delete legacyPatch.viewed_at;
+  delete legacyPatch.revision;
+  delete legacyPatch.archived_at;
+  delete legacyPatch.display_options;
+  delete legacyPatch.payment_terms_text;
+  delete legacyPatch.legal_mentions;
+  delete legacyPatch.waste_management;
+  delete legacyPatch.sent_at;
+  delete legacyPatch.last_reminder_at;
+  delete legacyPatch.signatory_name;
+  delete legacyPatch.client_comment;
   const legacy = await crmDb.from("crm_quotes").update(legacyPatch).eq("id", id).select(CRM_SELECTS.quotesLegacy).single();
   if (legacy.error) throw legacy.error;
   return legacy.data as CrmQuoteRow;

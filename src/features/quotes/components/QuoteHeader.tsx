@@ -5,13 +5,14 @@ type Props = {
   mode: "edit" | "preview";
   saving?: boolean;
   onClose?: () => void;
+  onCancel?: () => void;
   onModeChange: (mode: "edit" | "preview") => void;
   onSave?: () => void;
   onSend?: () => void;
   onToggleOptions?: () => void;
 };
 
-export function QuoteHeader({ mode, saving = false, onClose, onModeChange, onSave, onSend, onToggleOptions }: Props) {
+export function QuoteHeader({ mode, saving = false, onClose, onCancel, onModeChange, onSave, onSend, onToggleOptions }: Props) {
   const { draft, dirty, markSaved } = useQuoteStore();
   return (
     <header className="sticky top-0 z-30 border-b bg-white/95 px-4 py-3 backdrop-blur">
@@ -34,7 +35,7 @@ export function QuoteHeader({ mode, saving = false, onClose, onModeChange, onSav
             <Settings className="mr-2 inline h-4 w-4" />
             Options
           </button>
-          <button className={neutralButton}>Annuler</button>
+          <button className={neutralButton} onClick={onCancel ?? onClose}>Annuler</button>
           <button className="rounded-xl bg-slate-900 px-3 py-2 text-sm text-white disabled:opacity-60" disabled={saving} onClick={onSave ?? markSaved}>
             {saving ? "Enregistrement..." : "Enregistrer"}
           </button>

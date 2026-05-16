@@ -1,15 +1,14 @@
 export type QuoteLineKind =
-  | "simple"
   | "section"
-  | "subsection"
-  | "text"
-  | "page_break"
-  | "material"
-  | "labor"
-  | "subcontracting"
-  | "equipment"
-  | "misc"
-  | "composite";
+  | "sous_section"
+  | "ouvrage"
+  | "fourniture"
+  | "main_oeuvre"
+  | "sous_traitance"
+  | "materiel"
+  | "divers"
+  | "texte"
+  | "saut_page";
 
 export type QuoteVatRate = 0 | 5.5 | 10 | 20;
 
@@ -41,9 +40,35 @@ export type QuoteDraft = {
   id: string | null;
   quoteNumber: string;
   status: "draft" | "saved" | "sent" | "signed" | "refused";
+  clientId: string | null;
+  prospectId: string | null;
+  chantierId: string | null;
   clientName: string;
   projectAddress: string;
   projectDescription: string;
   validUntil: string;
+  defaultVatRate: QuoteVatRate;
+  depositPercent: number;
+  paymentTerms: string;
+  legalMentions: string;
+  wasteManagement: string;
+  footerNotes: string;
   lines: QuoteLine[];
+};
+
+export type QuoteAccountOption = {
+  id: string;
+  label: string;
+  address: string;
+  phone?: string | null;
+  email?: string | null;
+};
+
+export type QuoteChantierOption = {
+  id: string;
+  label: string;
+  clientName: string;
+  address: string;
+  clientId?: string | null;
+  prospectId?: string | null;
 };
