@@ -37,19 +37,19 @@ export function CrmKpiGrid({ items }: { items: CrmKpiItem[] }) {
           <Link
             key={item.key}
             to={item.href}
-            className="group rounded-2xl border border-slate-200 bg-white p-4 shadow-sm shadow-slate-950/[0.03] transition hover:-translate-y-0.5 hover:border-blue-200 hover:shadow-md"
+            className="group rounded-2xl border border-slate-200 bg-white p-3 shadow-sm shadow-slate-950/[0.03] transition hover:-translate-y-0.5 hover:border-blue-200 hover:shadow-md"
           >
             <div className="flex items-start justify-between gap-3">
-              <span className={`rounded-xl border p-2 ${toneClasses[item.tone]}`}>
+              <span className={`rounded-lg border p-1.5 ${toneClasses[item.tone]}`}>
                 <Icon className="h-4 w-4" />
               </span>
               <span className="h-1.5 w-10 rounded-full bg-slate-100">
                 <span className={`block h-1.5 rounded-full ${item.tone === "danger" ? "w-full bg-red-500" : item.tone === "warning" ? "w-2/3 bg-amber-500" : "w-1/2 bg-blue-500"}`} />
               </span>
             </div>
-            <div className="mt-4 text-2xl font-bold tracking-tight text-slate-950">{item.value}</div>
+            <div className="mt-3 text-xl font-bold tracking-tight text-slate-950">{item.value}</div>
             <div className="mt-1 text-sm font-semibold text-slate-800">{item.label}</div>
-            <div className="mt-1 line-clamp-2 text-xs leading-5 text-slate-500">{item.hint}</div>
+            <div className="mt-0.5 line-clamp-2 text-xs leading-4 text-slate-500">{item.hint}</div>
           </Link>
         );
       })}

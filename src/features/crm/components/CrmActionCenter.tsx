@@ -1,3 +1,4 @@
+import { Link } from "react-router-dom";
 import { CalendarPlus, CheckCircle2, Plus } from "lucide-react";
 import { Button } from "../../../components/ui/button";
 import { CrmEmptyState } from "./CrmEmptyState";
@@ -7,6 +8,8 @@ export type CrmActionItem = {
   title: string;
   meta: string;
   description?: string;
+  href?: string;
+  disabledReason?: string;
   tone: "normal" | "info" | "warning" | "danger";
 };
 
@@ -49,19 +52,30 @@ export function CrmActionCenter({
         <CrmEmptyState title="Aucune action urgente" description="Votre suivi commercial est à jour." />
       ) : (
         <div className="space-y-2">
-          {items.map((item) => (
-            <div key={item.id} className="rounded-2xl border border-slate-200 bg-white p-3 transition hover:border-blue-200 hover:bg-blue-50/30">
+          {items.map((item) => {
+            const content = (
               <div className="flex items-start gap-3">
                 <span className={`mt-1.5 h-2.5 w-2.5 shrink-0 rounded-full ${dotClass[item.tone]}`} />
                 <div className="min-w-0 flex-1">
                   <div className="truncate text-sm font-semibold text-slate-950">{item.title}</div>
                   <div className="mt-0.5 text-xs text-slate-500">{item.meta}</div>
                   {item.description ? <div className="mt-2 line-clamp-2 text-sm text-slate-600">{item.description}</div> : null}
+                  {item.disabledReason ? <div className="mt-2 text-xs font-medium text-slate-400">{item.disabledReason}</div> : null}
                 </div>
                 <CheckCircle2 className="h-4 w-4 text-slate-300" />
               </div>
-            </div>
-          ))}
+            );
+
+            return item.href ? (
+              <Link key={item.id} to={item.href} className="block rounded-2xl border border-slate-200 bg-white p-3 transition hover:border-blue-200 hover:bg-blue-50/30">
+                {content}
+              </Link>
+            ) : (
+              <div key={item.id} className="rounded-2xl border border-slate-200 bg-white p-3 opacity-80">
+                {content}
+              </div>
+            );
+          })}
         </div>
       )}
     </section>

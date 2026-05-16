@@ -1,6 +1,5 @@
 import type { CrmDataset, CrmOpportunityRow } from "../../../services/crm.service";
 import { eur } from "./crmFormat";
-import { CrmEmptyState } from "./CrmEmptyState";
 
 const DEFAULT_STAGES = [
   { key: "lead", label: "Lead" },
@@ -32,12 +31,12 @@ export function CrmPipelinePreview({ data }: { data: CrmDataset }) {
         <div className="text-[11px] font-semibold uppercase tracking-[0.22em] text-blue-700">Pipeline commercial</div>
         <h2 className="mt-1 text-xl font-semibold tracking-tight text-slate-950">Affaires par étape</h2>
       </div>
-      <div className="grid gap-3 lg:grid-cols-4 xl:grid-cols-7">
+      <div className="grid gap-3 overflow-x-auto pb-1 lg:grid-cols-4 xl:grid-cols-7">
         {stages.map((stage) => {
           const rows = rowsForStage(data.opportunities, stage.key);
           const amount = rows.reduce((sum, row) => sum + Number(row.montant_estime ?? 0), 0);
           return (
-            <div key={stage.key} className="min-h-44 rounded-2xl border border-slate-200 bg-slate-50/70 p-3">
+            <div key={stage.key} className="min-w-56 rounded-2xl border border-slate-200 bg-slate-50/70 p-3">
               <div className="flex items-start justify-between gap-2">
                 <div className="min-w-0">
                   <div className="truncate text-sm font-semibold text-slate-950">{stage.label}</div>
@@ -47,7 +46,10 @@ export function CrmPipelinePreview({ data }: { data: CrmDataset }) {
               </div>
               <div className="mt-3 space-y-2">
                 {rows.length === 0 ? (
-                  <CrmEmptyState title="Vide" description="Aucune affaire à cette étape." />
+                  <div className="rounded-xl border border-dashed border-slate-200 bg-white/70 p-3 text-center text-xs text-slate-500">
+                    <div className="font-medium text-slate-700">Vide</div>
+                    <div className="mt-0.5">Aucune affaire.</div>
+                  </div>
                 ) : (
                   rows.slice(0, 3).map((row) => (
                     <div key={row.id} className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm shadow-slate-950/[0.02]">

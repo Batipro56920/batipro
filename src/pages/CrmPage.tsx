@@ -140,9 +140,6 @@ export default function CrmPage({ section = "dashboard" }: Props) {
   };
   const transformationRate = data.quotes.length ? Math.round((kpis.quotesSigned / data.quotes.length) * 100) : 0;
 
-  const filteredProspects = data.prospects.filter((row) =>
-    [entityLabel(row), row.email, row.telephone, row.ville, row.type_projet, row.statut].join(" ").toLowerCase().includes(query.toLowerCase()),
-  );
   const filteredClients = data.clients.filter((row) =>
     [entityLabel(row), row.email, row.telephone, row.ville, row.societe].join(" ").toLowerCase().includes(query.toLowerCase()),
   );
@@ -340,13 +337,15 @@ export default function CrmPage({ section = "dashboard" }: Props) {
         />
       ) : section === "prospects" ? (
         <CrmProspectsSection
-          rows={filteredProspects}
+          rows={data.prospects}
           query={query}
           setQuery={setQuery}
           onCreate={() => setModal("prospect")}
           onConvert={(row) => submitSafely(async () => convertProspectToClient(row))}
           onStatus={(row, statut) => submitSafely(async () => updateCrmProspect(row.id, { statut }))}
           onTask={(row) => submitSafely(async () => createCrmTask({ prospect_id: row.id, type: "relance", titre: `Relancer ${entityLabel(row)}`, due_at: new Date().toISOString() }))}
+          onCreateOpportunity={() => setModal("opportunity")}
+          onCreateQuote={createDraftQuoteAndOpen}
         />
       ) : section === "clients" ? (
         <CrmClientsSection rows={filteredClients} chantiers={data.chantiers} sav={data.sav} query={query} setQuery={setQuery} onCreate={() => setModal("client")} />
@@ -422,8 +421,6 @@ export default function CrmPage({ section = "dashboard" }: Props) {
     </div>
   );
 }
-
-
 
 
 

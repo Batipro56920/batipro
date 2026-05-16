@@ -111,6 +111,7 @@ export default function CrmDashboardSection({
       title: `Devis à envoyer ${quote.quote_number}`,
       meta: entityLabel(clientById.get(quote.client_id ?? "") ?? prospectById.get(quote.prospect_id ?? "")),
       description: quote.description ?? undefined,
+      href: `/crm/devis/${quote.id}/edit`,
       tone: "warning" as const,
     })),
     ...quotesToRelaunch.slice(0, 2).map((quote) => ({
@@ -118,6 +119,7 @@ export default function CrmDashboardSection({
       title: `Devis à relancer ${quote.quote_number}`,
       meta: entityLabel(clientById.get(quote.client_id ?? "") ?? prospectById.get(quote.prospect_id ?? "")),
       description: quote.valid_until ? `Valide jusqu’au ${dateOnly(quote.valid_until)}` : undefined,
+      href: `/crm/devis/${quote.id}/edit`,
       tone: "warning" as const,
     })),
   ].slice(0, 8);
