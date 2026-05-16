@@ -1,76 +1,93 @@
-import { useMemo } from "react";
 import { create } from "zustand";
-import type { QuoteDraft, QuoteLine } from "../types";
-import { calculateQuoteTotals } from "../utils/quoteCalculations";
+import { subscribeWithSelector } from "zustand/middleware";
+import {
+  addQuoteNode,
+  addTemplateQuoteNode,
+  applyQuoteClient,
+  applyQuoteProject,
+  applyQuoteProspect,
+  createEmptyQuote,
+  duplicateQuoteNode,
+  moveQuoteNode,
+  moveQuoteNodeBefore,
+  removeQuoteNode,
+  updateQuoteNode,
+  withTotals,
+} from "../application/quoteEngine";
+import type { Quote, QuoteAccountOption, QuoteProjectOption } from "../domain/Quote";
+import type { QuoteLineKind, QuoteNodeType } from "../domain/QuoteEnums";
+import type { QuoteNode } from "../domain/QuoteSection";
+import type { TaskTemplateRow } from "../../../services/taskLibrary.service";
 
-type QuoteState = {
-  draft: QuoteDraft;
-  dirty: boolean;
-  setDraft: (draft: Partial<QuoteDraft>) => void;
-  replaceDraft: (draft: QuoteDraft) => void;
-  addLine: (line: QuoteLine) => void;
-  updateLine: (id: string, patch: Partial<QuoteLine>) => void;
-  deleteLine: (id: string) => void;
-  reorderLines: (activeId: string, overId: string) => void;
-  markSaved: () => void;
+type SaveState = "idle" | "dirty" | "saving" | "saved" | "error";
+
+type QuoteStore = {
+  quote: Quote;
+  saveState: SaveState;
+  error: string | null;
+  hydrate: (quote: Quote) => void;
+  setSaveState: (state: SaveState, error?: string | null) => void;
+  updateQuote: (patch: Partial<Quote>) => void;
+  addNode: (type: QuoteNodeType, parentId?: string | null, lineKind?: QuoteLineKind) => void;
+  addTemplate: (template: TaskTemplateRow) => void;
+  updateNode: (nodeId: string, patch: Partial<QuoteNode>) => void;
+  removeNode: (nodeId: string) => void;
+  moveNode: (nodeId: string, direction: -1 | 1) => void;
+  moveNodeBefore: (nodeId: string, targetId: string) => void;
+  duplicateNode: (nodeId: string) => void;
+  selectClient: (client: QuoteAccountOption | null) => void;
+  selectProspect: (prospect: QuoteAccountOption | null) => void;
+  selectProject: (project: QuoteProjectOption | null) => void;
 };
 
-const initialDraft: QuoteDraft = {
-  id: null,
-  quoteNumber: "DEV-BROUILLON",
-  status: "draft",
-  clientId: null,
-  prospectId: null,
-  chantierId: null,
-  clientName: "",
-  projectAddress: "",
-  projectDescription: "",
-  validUntil: "",
-  defaultVatRate: 20,
-  depositPercent: 30,
-  paymentTerms: "30% a la signature, solde selon avancement et reception des travaux.",
-  legalMentions: "Devis valable selon la date indiquee. Travaux soumis aux conditions generales de l'entreprise.",
-  wasteManagement: "Gestion des dechets selon la reglementation applicable.",
-  footerNotes: "",
-  lines: [],
+export const useQuoteStore = create<QuoteStore>()(
+  subscribeWithSelector((set) => ({
+    quote: createEmptyQuote(null),
+    saveState: "idle",
+    error: null,
+    hydrate: (quote) => set({ quote: withTotals(quote), saveState: "saved", error: null }),
+    setSaveState: (saveState, error = null) => set({ saveState, error }),
+    updateQuote: (patch) => set((state) => ({ quote: withTotals({ ...state.quote, ...patch }), saveState: "dirty" })),
+    addNode: (type, parentId = null, lineKind = "fourniture") => set((state) => ({ quote: addQuoteNode(state.quote, type, parentId, lineKind), saveState: "dirty" })),
+    addTemplate: (template) => set((state) => ({ quote: addTemplateQuoteNode(state.quote, template), saveState: "dirty" })),
+    updateNode: (nodeId, patch) => set((state) => ({ quote: updateQuoteNode(state.quote, nodeId, patch), saveState: "dirty" })),
+    removeNode: (nodeId) => set((state) => ({ quote: removeQuoteNode(state.quote, nodeId), saveState: "dirty" })),
+    moveNode: (nodeId, direction) => set((state) => ({ quote: moveQuoteNode(state.quote, nodeId, direction), saveState: "dirty" })),
+    moveNodeBefore: (nodeId, targetId) => set((state) => ({ quote: moveQuoteNodeBefore(state.quote, nodeId, targetId), saveState: "dirty" })),
+    duplicateNode: (nodeId) => set((state) => ({ quote: duplicateQuoteNode(state.quote, nodeId), saveState: "dirty" })),
+    selectClient: (client) => set((state) => ({ quote: applyQuoteClient(state.quote, client), saveState: "dirty" })),
+    selectProspect: (prospect) => set((state) => ({ quote: applyQuoteProspect(state.quote, prospect), saveState: "dirty" })),
+    selectProject: (project) => set((state) => ({ quote: applyQuoteProject(state.quote, project), saveState: "dirty" })),
+  })),
+);
+
+export const quoteSelectors = {
+  quoteId: (state: QuoteStore) => state.quote.id,
+  quoteMeta: (state: QuoteStore) => ({
+    number: state.quote.number,
+    date: state.quote.date,
+    validityDate: state.quote.validityDate,
+    workStartDate: state.quote.workStartDate,
+    estimatedDuration: state.quote.estimatedDuration,
+    clientId: state.quote.clientId,
+    prospectId: state.quote.prospectId,
+    projectId: state.quote.projectId,
+    clientName: state.quote.clientName,
+    siteAddress: state.quote.siteAddress,
+    description: state.quote.description,
+  }),
+  nodes: (state: QuoteStore) => state.quote.nodes,
+  totals: (state: QuoteStore) => state.quote.totals,
+  texts: (state: QuoteStore) => ({
+    paymentTerms: state.quote.paymentTerms,
+    legalMentions: state.quote.legalMentions,
+    wasteManagement: state.quote.wasteManagement,
+    footerNotes: state.quote.footerNotes,
+  }),
+  header: (state: QuoteStore) => ({
+    number: state.quote.number,
+    status: state.quote.status,
+    saveState: state.saveState,
+  }),
+  error: (state: QuoteStore) => state.error,
 };
-
-export const useQuoteStore = create<QuoteState>((set) => ({
-  draft: initialDraft,
-  dirty: false,
-  setDraft: (draft) => set((state) => ({ draft: { ...state.draft, ...draft }, dirty: true })),
-  replaceDraft: (draft) => set({ draft, dirty: false }),
-  addLine: (line) => set((state) => ({ draft: { ...state.draft, lines: [...state.draft.lines, line] }, dirty: true })),
-  updateLine: (id, patch) =>
-    set((state) => ({
-      draft: {
-        ...state.draft,
-        lines: state.draft.lines.map((line) => (line.id === id ? { ...line, ...patch } : line)),
-      },
-      dirty: true,
-    })),
-  deleteLine: (id) =>
-    set((state) => ({
-      draft: { ...state.draft, lines: state.draft.lines.filter((line) => line.id !== id) },
-      dirty: true,
-    })),
-  reorderLines: (activeId, overId) =>
-    set((state) => {
-      const lines = [...state.draft.lines];
-      const from = lines.findIndex((line) => line.id === activeId);
-      const to = lines.findIndex((line) => line.id === overId);
-      if (from < 0 || to < 0) return state;
-      const [moved] = lines.splice(from, 1);
-      lines.splice(to, 0, moved);
-      return {
-        draft: { ...state.draft, lines: lines.map((line, index) => ({ ...line, order: index + 1 })) },
-        dirty: true,
-      };
-    }),
-  markSaved: () => set({ dirty: false }),
-}));
-
-export function useQuoteTotals() {
-  const lines = useQuoteStore((state) => state.draft.lines);
-  return useMemo(() => calculateQuoteTotals(lines), [lines]);
-}

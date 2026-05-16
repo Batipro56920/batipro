@@ -1,5 +1,8 @@
 import { Document, Page, StyleSheet, Text, View } from "@react-pdf/renderer";
-import type { QuoteDraft, QuoteLine, QuoteTotals } from "../types";
+import { numberQuoteNodes } from "../application/quoteNumbering";
+import { getNodeSellHt } from "../application/quoteCalculations";
+import type { Quote } from "../domain/Quote";
+import type { NumberedQuoteNode } from "../application/quoteNumbering";
 
 const styles = StyleSheet.create({
   page: { padding: 32, fontSize: 10, color: "#0f172a" },
@@ -11,43 +14,42 @@ const styles = StyleSheet.create({
   textLine: { paddingVertical: 5, color: "#475569" },
 });
 
-export function QuotePdfDocument({ draft, totals }: { draft: QuoteDraft; totals: QuoteTotals }) {
+export function QuotePdfDocument({ quote }: { quote: Quote }) {
   return (
     <Document>
       <Page size="A4" style={styles.page}>
-        <Text style={styles.title}>Devis {draft.quoteNumber}</Text>
+        <Text style={styles.title}>Devis {quote.number}</Text>
         <View style={styles.section}>
-          <Text>Client : {draft.clientName || "A definir"}</Text>
-          <Text>Adresse chantier : {draft.projectAddress || "A definir"}</Text>
+          <Text>Client : {quote.clientName || "A definir"}</Text>
+          <Text>Adresse chantier : {quote.siteAddress || "A definir"}</Text>
+          <Text>{quote.description}</Text>
         </View>
         <View style={styles.section}>
-          {draft.lines.map((line) => (
-            <QuotePdfLine key={line.id} line={line} />
-          ))}
+          {numberQuoteNodes(quote.nodes).map((node) => <PdfNode key={node.id} node={node} />)}
         </View>
         <View style={styles.section}>
-          <Text>Total HT : {totals.totalHt.toFixed(2)} EUR</Text>
-          <Text>Total TVA : {totals.totalVat.toFixed(2)} EUR</Text>
-          <Text>Total TTC : {totals.totalTtc.toFixed(2)} EUR</Text>
+          <Text>Total HT : {quote.totals.sellHt.toFixed(2)} EUR</Text>
+          <Text>Total TVA : {quote.totals.vat.toFixed(2)} EUR</Text>
+          <Text>Total TTC : {quote.totals.ttc.toFixed(2)} EUR</Text>
         </View>
         <View style={styles.section}>
-          <Text>Conditions : {draft.paymentTerms}</Text>
-          <Text>Mentions : {draft.legalMentions}</Text>
+          <Text>Conditions : {quote.paymentTerms}</Text>
+          <Text>Mentions : {quote.legalMentions}</Text>
         </View>
       </Page>
     </Document>
   );
 }
 
-function QuotePdfLine({ line }: { line: QuoteLine }) {
-  if (line.kind === "section") return <Text style={styles.sectionTitle}>{line.designation}</Text>;
-  if (line.kind === "sous_section") return <Text style={styles.subTitle}>{line.designation}</Text>;
-  if (line.kind === "texte") return <Text style={styles.textLine}>{line.designation}</Text>;
-  if (line.kind === "saut_page") return <Text style={styles.textLine}>--- Saut de page ---</Text>;
+function PdfNode({ node }: { node: NumberedQuoteNode }) {
+  if (node.type === "section") return <Text style={styles.sectionTitle}>{node.number} {node.title}</Text>;
+  if (node.type === "subsection") return <Text style={styles.subTitle}>{node.number} {node.title}</Text>;
+  if (node.type === "text") return <Text style={styles.textLine}>{node.title}</Text>;
+  if (node.type === "pagebreak") return <Text style={styles.textLine}>--- Saut de page ---</Text>;
   return (
     <View style={styles.row}>
-      <Text>{line.designation}</Text>
-      <Text>{(line.quantity * line.unitPriceHt).toFixed(2)} EUR HT</Text>
+      <Text>{node.number} {node.title}</Text>
+      <Text>{getNodeSellHt(node).toFixed(2)} EUR HT</Text>
     </View>
   );
 }
