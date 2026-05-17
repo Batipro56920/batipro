@@ -46,6 +46,11 @@ export type QuoteBuilderSettings = {
   showVatColumn: boolean;
   showQuantityColumns: boolean;
   hideSectionTotals: boolean;
+  showMargins: boolean;
+  showDiscounts: boolean;
+  showReferences: boolean;
+  showTypes: boolean;
+  hideCompositeDetails: boolean;
 };
 
 export type QuoteBuilderQuote = {

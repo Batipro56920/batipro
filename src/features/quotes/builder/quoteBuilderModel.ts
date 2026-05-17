@@ -36,7 +36,18 @@ export function createQuoteBuilderFromProject(project: ProjectRecord): QuoteBuil
     paymentTerms: "Acompte de 30% a la signature, solde selon avancement et reception.",
     legalMentions: "Devis valable selon la date indiquee. Travaux soumis aux conditions generales de l'entreprise.",
     footerNotes: "",
-    settings: { defaultVatRate: 20, depositPercent: 30, showVatColumn: true, showQuantityColumns: true, hideSectionTotals: false },
+    settings: {
+      defaultVatRate: 20,
+      depositPercent: 30,
+      showVatColumn: true,
+      showQuantityColumns: true,
+      hideSectionTotals: false,
+      showMargins: false,
+      showDiscounts: false,
+      showReferences: false,
+      showTypes: false,
+      hideCompositeDetails: false,
+    },
     nodes: source?.lines?.length ? mapVisitToQuoteNodes(source) : [createSection("Nouvelle section")],
   };
 }

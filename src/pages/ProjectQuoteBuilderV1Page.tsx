@@ -3,6 +3,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import { QuoteBuilderWorkspace } from "../features/quotes/builder/QuoteBuilderWorkspace";
 import { loadQuoteBuilder } from "../features/quotes/builder/quoteBuilderRepository";
 import { useQuoteBuilderStore } from "../features/quotes/builder/quoteBuilderStore";
+import { QuoteDocumentLoader } from "../features/quotes/builder/QuoteBuilderWorkspace";
 import { useProjectsData } from "../features/projects/hooks/useProjectsData";
 
 export default function ProjectQuoteBuilderV1Page() {
@@ -24,9 +25,7 @@ export default function ProjectQuoteBuilderV1Page() {
     };
   }, [hydrate, project, quoteId]);
 
-  if (loading || (project && !quote)) {
-    return <div className="rounded-3xl border bg-white p-8 text-center text-sm text-slate-500">Chargement du Quote Builder...</div>;
-  }
+  if (loading || (project && !quote)) return <QuoteDocumentLoader />;
 
   if (error || !project) {
     return <div className="rounded-3xl border border-red-200 bg-red-50 p-6 text-sm text-red-700">{error ?? "Projet introuvable."}</div>;
