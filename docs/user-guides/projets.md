@@ -99,6 +99,20 @@ Sur telephone, l'interface passe en une colonne avec :
 - import de documents depuis le telephone ;
 - sauvegarde locale automatique.
 
-## Generation pre-devis
+## Generation pre-devis et devis projet
 
-Le bouton `Creer pre-devis` enregistre la visite comme rendez-vous de chiffrage realise, conserve le releve structure dans les notes, puis ouvre la liste Devis pour poursuivre la transformation en devis classique.
+Le bouton `Creer pre-devis` enregistre la visite comme rendez-vous de chiffrage realise, conserve le releve structure, puis ouvre l'editeur devis du projet sur `/projets/:id/devis/nouveau`.
+
+Le devis est pre-rempli avec :
+
+- client ou prospect lie ;
+- adresse du projet ;
+- description du besoin ;
+- sections de la visite ;
+- taches et prestations relevees ;
+- unites et quantites calculees ;
+- notes techniques et contraintes.
+
+Depuis la fiche projet, le bouton `Creer devis` ouvre aussi l'editeur dedie du projet. Il ne redirige pas vers le module CRM Devis.
+
+Le module CRM Devis reste une vue transverse pour piloter l'ensemble des devis de l'entreprise.

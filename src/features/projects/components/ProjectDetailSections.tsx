@@ -108,7 +108,7 @@ export function ProjectSummaryTab({ project }: { project: ProjectRecord }) {
             <div className="rounded-2xl border border-slate-200 p-4">
               <div className="font-semibold text-slate-950">{quote.quote_number}</div>
               <div className="mt-1 text-sm text-slate-500">{quote.statut} - {formatCurrency(quote.montant_ht)}</div>
-              <Link to={`/crm/devis/${quote.id}/edit`} className="mt-3 inline-flex text-sm font-semibold text-blue-700 hover:text-blue-800">
+              <Link to={`/projets/${project.id}/devis/${quote.id}/edit`} className="mt-3 inline-flex text-sm font-semibold text-blue-700 hover:text-blue-800">
                 Ouvrir le devis
               </Link>
             </div>
@@ -186,7 +186,7 @@ export function ProjectVisitsTab({ project }: { project: ProjectRecord }) {
 export function ProjectQuotesTab({ project }: { project: ProjectRecord }) {
   const acceptedQuote = project.quotes.find((quote) => quote.statut === "accepte");
   return (
-    <Panel title="Devis" description="Pre-devis, devis final, variantes, signatures et relances." actions={<Link to="/crm/devis" className="text-sm font-semibold text-blue-700 hover:text-blue-800">Creer devis</Link>}>
+    <Panel title="Devis" description="Pre-devis, devis final, variantes, signatures et relances." actions={<Link to={`/projets/${project.id}/devis/nouveau`} className="text-sm font-semibold text-blue-700 hover:text-blue-800">Creer devis</Link>}>
       <div className="space-y-4">
         {acceptedQuote ? (
           <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800">
@@ -217,7 +217,7 @@ export function ProjectQuotesTab({ project }: { project: ProjectRecord }) {
                     <td className="px-4 py-3 text-right font-semibold">{formatCurrency(quote.montant_ht)}</td>
                     <td className="px-4 py-3 text-right font-semibold">{formatCurrency(quote.montant_ttc)}</td>
                     <td className="px-4 py-3 text-right">
-                      <Link to={`/crm/devis/${quote.id}/edit`} className="font-semibold text-blue-700 hover:text-blue-800">Ouvrir</Link>
+                      <Link to={`/projets/${project.id}/devis/${quote.id}/edit`} className="font-semibold text-blue-700 hover:text-blue-800">Ouvrir</Link>
                     </td>
                   </tr>
                 ))}

@@ -42,7 +42,7 @@ export function ProjectDetailHeader({ project }: { project: ProjectRecord }) {
             <CalendarPlus className="h-4 w-4" />
             Visite de chiffrage
           </Link>
-          <Link to={quote ? `/crm/devis/${quote.id}/edit` : "/crm/devis"} className="inline-flex h-9 items-center justify-center gap-2 rounded-xl bg-blue-600 px-3 text-sm font-medium text-white transition hover:bg-blue-700">
+          <Link to={quote ? `/projets/${project.id}/devis/${quote.id}/edit` : `/projets/${project.id}/devis/nouveau`} className="inline-flex h-9 items-center justify-center gap-2 rounded-xl bg-blue-600 px-3 text-sm font-medium text-white transition hover:bg-blue-700">
             <FileText className="h-4 w-4" />
             {quote ? "Ouvrir devis" : "Créer devis"}
           </Link>

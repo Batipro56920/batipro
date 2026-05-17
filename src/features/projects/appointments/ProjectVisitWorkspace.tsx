@@ -407,6 +407,9 @@ export function ProjectVisitWorkspace({ project, existingAppointment }: { projec
   async function saveVisit(status: VisitStatus) {
     setSaving(true);
     try {
+      if (status === "pre_devis") {
+        localStorage.setItem(`batipro.project-quote-source.${project.id}`, JSON.stringify(serializeDraft({ ...draft, status })));
+      }
       const startsAt = new Date(`${draft.date}T${draft.time || "09:00"}:00`);
       const endsAt = new Date(startsAt.getTime() + Number(draft.durationMinutes || 90) * 60_000);
       await createCrmAppointment({
@@ -423,7 +426,7 @@ export function ProjectVisitWorkspace({ project, existingAppointment }: { projec
       });
       localStorage.removeItem(storageKey);
       setSaveState("saved");
-      navigate(status === "pre_devis" ? "/crm/devis" : `/projets/${project.id}?tab=visits`);
+      navigate(status === "pre_devis" ? `/projets/${project.id}/devis/nouveau` : `/projets/${project.id}?tab=visits`);
     } catch {
       setSaveState("error");
     } finally {
