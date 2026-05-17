@@ -1,7 +1,7 @@
 ﻿  // src/pages/ChantierPage.tsx
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { ChangeEvent, DragEvent, FormEvent } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 
 import { deleteChantier, getChantierById, updateChantierStatus, type ChantierRow } from "../services/chantiers.service";
 
@@ -168,7 +168,8 @@ import {
 } from "../services/companySettings.service";
 import { useI18n } from "../i18n";
 import type { ChantierTabKey } from "../features/chantiers/types";
-import { ChantierTabs as ChantierTabsNavigation } from "../features/chantiers/components/ChantierTabs";
+import { ChantierPrimaryNav, type ChantierPrimarySection } from "../features/chantiers/navigation/ChantierPrimaryNav";
+import { ChantierSecondaryNav, type ChantierSecondaryItem } from "../features/chantiers/navigation/ChantierSecondaryNav";
 import ChantierDoeSection from "../features/chantiers/pages/ChantierDoeSection";
 import ChantierFinancialSection from "../features/chantiers/pages/ChantierFinancialSection";
 import ChantierEquipmentSection from "../features/chantiers/pages/ChantierEquipmentSection";
@@ -192,8 +193,29 @@ import ChantierVisitSection from "../features/chantiers/pages/ChantierVisitSecti
 
 /* ---------------- types ---------------- */
 type TabKey = ChantierTabKey;
+type ChantierDetailSectionKey = "cockpit" | "preparation" | "execution" | "financier" | "qualite-sav" | "crm" | "historique";
 
 type ToastState = { type: "ok" | "error"; msg: string } | null;
+
+function getChantierDetailSection(pathname: string): ChantierDetailSectionKey {
+  if (pathname.endsWith("/preparation")) return "preparation";
+  if (pathname.endsWith("/execution")) return "execution";
+  if (pathname.endsWith("/financier")) return "financier";
+  if (pathname.endsWith("/qualite-sav")) return "qualite-sav";
+  if (pathname.endsWith("/crm")) return "crm";
+  if (pathname.endsWith("/historique")) return "historique";
+  return "cockpit";
+}
+
+const DEFAULT_TAB_BY_CHANTIER_SECTION: Record<ChantierDetailSectionKey, TabKey> = {
+  cockpit: "accueil",
+  preparation: "accueil",
+  execution: "accueil",
+  financier: "accueil",
+  "qualite-sav": "accueil",
+  crm: "crm",
+  historique: "journal",
+};
 
 /* ---------------- helpers ---------------- */
 function clamp(n: number, min: number, max: number) {
@@ -656,8 +678,10 @@ function getTaskStatusFromQualityStatus(status: TaskQualityStatus): TaskStatus {
 /* ---------------- component ---------------- */
 export default function ChantierPage() {
   const { id } = useParams<{ id: string }>();
+  const location = useLocation();
   const navigate = useNavigate();
   const { locale, t } = useI18n();
+  const detailSection = getChantierDetailSection(location.pathname);
 
   const [item, setItem] = useState<ChantierRow | null>(null);
   const [crmContext, setCrmContext] = useState<CrmChantierContext | null>(null);
@@ -4512,14 +4536,21 @@ export default function ChantierPage() {
   }
 
   const overviewTab: { key: TabKey; label: string } = { key: "accueil", label: "Cockpit" };
-  const chantierTabDefinitions: Array<{
+  const chantierSectionDefinitions: Array<{
+    key: ChantierDetailSectionKey;
     title: string;
     tabs: Array<{ key: TabKey; label: string }>;
-  }> =
-    [
+  }> = [
       {
+        key: "cockpit",
+        title: "Cockpit",
+        tabs: [overviewTab],
+      },
+      {
+        key: "preparation",
         title: "Préparation",
         tabs: [
+          { key: "accueil", label: "Synthèse" },
           { key: "preparer", label: "Préparation" },
           { key: "intervenants", label: t("sidebar.intervenants") },
           { key: "achats", label: "Approvisionnement" },
@@ -4530,8 +4561,10 @@ export default function ChantierPage() {
         ],
       },
       {
+        key: "execution",
         title: "Exécution",
         tabs: [
+          { key: "accueil", label: "Synthèse" },
           { key: "devis-taches", label: t("chantierPage.tasks") },
           { key: "planning", label: t("chantierTabs.planning") },
           { key: "temps", label: t("chantierTabs.time") },
@@ -4542,8 +4575,10 @@ export default function ChantierPage() {
         ],
       },
       {
+        key: "financier",
         title: "Financier",
         tabs: [
+          { key: "accueil", label: "Synthèse" },
           { key: "budget", label: "Budget" },
           { key: "achats", label: "Achats" },
           { key: "pilotage", label: "Imprévus" },
@@ -4551,26 +4586,42 @@ export default function ChantierPage() {
         ],
       },
       {
+        key: "qualite-sav",
         title: "Qualité / SAV",
         tabs: [
+          { key: "accueil", label: "Synthèse" },
           { key: "reserves", label: t("intervenantAccess.tabs.reserves") },
+          { key: "crm", label: "SAV" },
           { key: "doe", label: "DOE" },
           { key: "visite", label: "Visites" },
         ],
       },
       {
+        key: "crm",
         title: "CRM",
-        tabs: [{ key: "crm", label: "CRM" }],
+        tabs: [
+          { key: "crm", label: "Synthèse" },
+          { key: "crm", label: "Client" },
+          { key: "crm", label: "Devis d'origine" },
+          { key: "crm", label: "Opportunité" },
+          { key: "crm", label: "Documents commerciaux" },
+          { key: "crm", label: "Échanges" },
+        ],
       },
       {
+        key: "historique",
         title: "Historique",
-        tabs: [{ key: "journal", label: "Historique" }],
+        tabs: [
+          { key: "journal", label: "Journal complet" },
+          { key: "journal", label: "Modifications" },
+          { key: "journal", label: "Activité utilisateurs" },
+        ],
       },
     ];
-  const chantierTabSections = chantierTabDefinitions
-    .map((section) => ({
-      title: section.title,
-      tabs: section.tabs.filter((entry) =>
+
+  const chantierSectionTabs = chantierSectionDefinitions.map((section) => ({
+    ...section,
+    tabs: section.tabs.filter((entry) =>
         isChantierTabEnabled(
           entry.key,
           enabledChantierModules,
@@ -4578,14 +4629,28 @@ export default function ChantierPage() {
           currentProfileRole,
         ),
       ),
-    }))
-    .filter((section) => section.tabs.length > 0);
-  const chantierTabs = [overviewTab, ...chantierTabSections.flatMap((section) => section.tabs)];
-
+  }));
+  const activeSectionTabs = chantierSectionTabs.find((section) => section.key === detailSection)?.tabs ?? [overviewTab];
+  const chantierTabs = detailSection === "cockpit" ? [overviewTab] : activeSectionTabs;
+  const chantierPrimarySections: ChantierPrimarySection[] = [
+    { key: "cockpit", label: "Cockpit", href: `/chantiers/${id}`, enabled: true },
+    { key: "preparation", label: "Préparation", href: `/chantiers/${id}/preparation`, enabled: Boolean(chantierSectionTabs.find((section) => section.key === "preparation")?.tabs.length) },
+    { key: "execution", label: "Exécution", href: `/chantiers/${id}/execution`, enabled: Boolean(chantierSectionTabs.find((section) => section.key === "execution")?.tabs.length) },
+    { key: "financier", label: "Financier", href: `/chantiers/${id}/financier`, enabled: Boolean(chantierSectionTabs.find((section) => section.key === "financier")?.tabs.length) },
+    { key: "qualite-sav", label: "Qualité / SAV", href: `/chantiers/${id}/qualite-sav`, enabled: Boolean(chantierSectionTabs.find((section) => section.key === "qualite-sav")?.tabs.length) },
+    { key: "crm", label: "CRM", href: `/chantiers/${id}/crm`, enabled: true },
+    { key: "historique", label: "Historique", href: `/chantiers/${id}/historique`, enabled: Boolean(chantierSectionTabs.find((section) => section.key === "historique")?.tabs.length) },
+  ];
+  const chantierSecondaryItems: ChantierSecondaryItem[] = activeSectionTabs.map((entry) => ({
+    id: `${detailSection}-${entry.label}`,
+    key: entry.key,
+    label: entry.label,
+    enabled: true,
+  }));
   useEffect(() => {
     if (chantierTabs.some((entry) => entry.key === tab)) return;
-    setTab("accueil");
-  }, [chantierTabs, tab]);
+    setTab(DEFAULT_TAB_BY_CHANTIER_SECTION[detailSection]);
+  }, [chantierTabs, detailSection, tab]);
 
   /* ---------------- guards ---------------- */
   if (!id) {
@@ -5718,12 +5783,13 @@ export default function ChantierPage() {
             </div>
           </div>
 
-          <ChantierTabsNavigation
-            overviewTab={overviewTab}
-            sections={chantierTabSections}
-            activeTab={tab}
-            onChange={setTab}
-          />
+          <div className="space-y-3">
+            <div className="text-xs text-slate-500">
+              Chantiers &gt; {item.nom} &gt; {chantierPrimarySections.find((section) => section.key === detailSection)?.label ?? "Cockpit"}
+            </div>
+            <ChantierPrimaryNav sections={chantierPrimarySections} />
+            <ChantierSecondaryNav items={chantierSecondaryItems} activeTab={tab} onChange={setTab} />
+          </div>
         </div>
       </section>
 

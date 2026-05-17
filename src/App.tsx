@@ -185,6 +185,12 @@ export default function App() {
         />
         <Route path="/chantiers/nouveau" element={<ChantierNewPage />} />
         <Route path="/chantiers/:id" element={<ChantierPage />} />
+        <Route path="/chantiers/:id/preparation" element={<ChantierPage />} />
+        <Route path="/chantiers/:id/execution" element={<ChantierPage />} />
+        <Route path="/chantiers/:id/financier" element={<ChantierPage />} />
+        <Route path="/chantiers/:id/qualite-sav" element={<ChantierPage />} />
+        <Route path="/chantiers/:id/crm" element={<ChantierPage />} />
+        <Route path="/chantiers/:id/historique" element={<ChantierPage />} />
         <Route
           path="/chantiers/:id/visites"
           element={
