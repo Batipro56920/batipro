@@ -1,46 +1,43 @@
 # Guide utilisateur - Fiche chantier
 
-La fiche chantier est organisée en sous-pages métier. L'URL `/chantiers/:id` reste le cockpit par défaut.
+La fiche chantier est organisée en 5 grandes pages métier. L'objectif est de limiter les clics et d'éviter les doublons entre cockpit, synthèse, journal et historique.
 
 ## Routes
 
-- `/chantiers/:id` : Cockpit chantier.
+- `/chantiers/:id` : Vue d'ensemble.
 - `/chantiers/:id/preparation` : Préparation.
-- `/chantiers/:id/execution` : Exécution.
+- `/chantiers/:id/production` : Production.
 - `/chantiers/:id/financier` : Financier.
-- `/chantiers/:id/qualite-sav` : Qualité / SAV.
-- `/chantiers/:id/crm` : Continuité commerciale.
-- `/chantiers/:id/historique` : Historique.
+- `/chantiers/:id/qualite-cloture` : Qualité / Clôture.
 
-## Header commun
+Les anciennes routes restent compatibles :
 
-Le header reste visible sur toutes les sous-pages. Il affiche le chantier, le client, l'adresse, le statut, les dates, l'avancement et les alertes critiques.
+- `/chantiers/:id/execution` redirige vers Production.
+- `/chantiers/:id/qualite-sav` redirige vers Qualité / Clôture.
+- `/chantiers/:id/crm` redirige vers Vue d'ensemble.
+- `/chantiers/:id/historique` redirige vers Vue d'ensemble.
 
-Les actions rapides permettent d'accéder aux actions principales sans chercher dans les modules :
+## Vue d'ensemble
 
-- modifier,
-- ajouter une tâche,
-- ajouter un intervenant,
-- ajouter un document,
-- ouvrir le menu actions.
+La vue d'ensemble regroupe les informations chantier, l'avancement, les alertes, les tâches urgentes, les jalons, le résumé budget, l'équipe, une continuité commerciale courte et l'activité récente.
 
-## Navigation principale
+## Préparation
 
-La navigation principale sépare les rôles métier :
+La préparation regroupe la localisation, les intervenants prévus, les documents de départ, les consignes, le matériel, l'approvisionnement et les validations avant démarrage.
 
-- **Cockpit** : vue de pilotage global.
-- **Préparation** : intervenants, approvisionnement, matériel, documents, consignes et localisation.
-- **Exécution** : tâches, planning, temps, photos, journal, messagerie.
-- **Financier** : budget, achats, imprévus, rapports.
-- **Qualité / SAV** : réserves, visites, DOE et SAV.
-- **CRM** : client, devis d'origine, opportunité, documents commerciaux et échanges.
-- **Historique** : journal complet et activité.
+## Production
+
+La production regroupe les tâches, le planning, les temps, les photos, la messagerie, les réserves ouvertes et le journal chantier intégré.
+
+## Financier
+
+Le financier regroupe le budget, les achats, les commandes, les imprévus / travaux supplémentaires, les devis / factures liés, la marge et les rapports financiers.
+
+## Qualité / Clôture
+
+Qualité / Clôture regroupe les réserves, les visites, le DOE, la conformité, le SAV et la clôture chantier.
 
 ## Permissions
 
-Les permissions existantes continuent de masquer les modules non autorisés. La navigation principale reste visible uniquement si au moins une section autorisée existe.
-
-## Notes produit
-
-Certaines sous-sections de synthèse réutilisent encore le cockpit existant pour éviter de dupliquer la logique métier. Les panneaux détaillés restent ceux de l'ancienne fiche chantier, mais ils sont maintenant rangés dans des routes plus lisibles.
+Les permissions existantes continuent de masquer les sections non autorisées. Les conducteurs voient les pages opérationnelles, les commerciaux disposent de la vue d'ensemble avec le bloc CRM, et le financier reste soumis aux droits existants.
 
