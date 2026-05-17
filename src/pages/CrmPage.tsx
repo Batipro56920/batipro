@@ -143,13 +143,6 @@ export default function CrmPage({ section = "dashboard" }: Props) {
   const filteredClients = data.clients.filter((row) =>
     [entityLabel(row), row.email, row.telephone, row.ville, row.societe].join(" ").toLowerCase().includes(query.toLowerCase()),
   );
-  const filteredQuotes = data.quotes.filter((row) =>
-    [row.quote_number, row.description, row.statut, entityLabel(clientById.get(row.client_id ?? "")), entityLabel(prospectById.get(row.prospect_id ?? ""))]
-      .join(" ")
-      .toLowerCase()
-      .includes(query.toLowerCase()),
-  );
-
   async function submitSafely(action: () => Promise<unknown>) {
     setSaving(true);
     setError(null);
@@ -361,7 +354,7 @@ export default function CrmPage({ section = "dashboard" }: Props) {
         />
       ) : section === "quotes" ? (
         <CrmQuotesSection
-          rows={filteredQuotes}
+          rows={data.quotes}
           prospectById={prospectById}
           clientById={clientById}
           onCreate={createDraftQuoteAndOpen}
@@ -369,8 +362,6 @@ export default function CrmPage({ section = "dashboard" }: Props) {
           onTransform={transformQuote}
           onOpen={openQuoteEngine}
           onPdf={downloadQuote}
-          query={query}
-          setQuery={setQuery}
         />
       ) : section === "invoices" ? (
         <CrmInvoicesSection rows={data.invoices} clients={clientById} onCreate={() => setModal("invoice")} />
@@ -421,8 +412,6 @@ export default function CrmPage({ section = "dashboard" }: Props) {
     </div>
   );
 }
-
-
 
 
 
