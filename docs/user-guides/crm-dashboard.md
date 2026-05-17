@@ -1,4 +1,4 @@
-# Guide utilisateur — Dashboard CRM Batipro
+# Guide utilisateur - Dashboard CRM Batipro
 
 Le CRM Batipro centralise le pilotage commercial : prospects, clients, opportunités, devis, relances, agenda et SAV.
 
@@ -6,15 +6,15 @@ Le CRM Batipro centralise le pilotage commercial : prospects, clients, opportuni
 
 Le header donne accès aux actions principales :
 
-- **Prospect** : ouvre le formulaire de création d’un prospect.
-- **Opportunité** : ouvre le formulaire de création d’une affaire commerciale.
-- **Devis** : crée un devis brouillon et ouvre l’espace de travail devis.
+- **Prospect** : ouvre le formulaire de création d'un prospect.
+- **Opportunité** : ouvre le formulaire de création d'une affaire commerciale.
+- **Devis** : crée un devis brouillon et ouvre l'espace de travail devis.
 - **Agenda** : ouvre les tâches commerciales et rendez-vous.
 - **Rafraîchir** : recharge les données CRM.
 
 ## Navigation
 
-Les onglets visibles couvrent les usages quotidiens :
+Les onglets visibles couvrent uniquement les usages CRM prioritaires :
 
 - **Dashboard** : cockpit commercial.
 - **Prospects** : suivi et qualification des nouveaux contacts.
@@ -24,7 +24,7 @@ Les onglets visibles couvrent les usages quotidiens :
 - **Agenda** : relances, tâches et rendez-vous.
 - **SAV** : tickets après chantier.
 
-Le menu **Plus** regroupe les sections moins fréquentes : contacts, ressources, bibliothèque CRM et paramètres CRM.
+Les routes secondaires restent accessibles par URL directe si nécessaire : `/crm/contacts`, `/crm/ressources`, `/crm/bibliotheque` et `/crm/parametres`. Elles ne sont plus affichées dans la navigation CRM principale.
 
 ## KPI
 
@@ -45,7 +45,7 @@ Ce bloc regroupe les actions prioritaires :
 - devis à envoyer,
 - devis à relancer.
 
-Si aucune action urgente n’existe, le dashboard affiche un état vide indiquant que le suivi commercial est à jour.
+Si aucune action urgente n'existe, le dashboard affiche un état vide indiquant que le suivi commercial est à jour.
 
 ## Points de vigilance
 
@@ -70,7 +70,7 @@ Le pipeline affiche les opportunités par étape :
 - Négociation,
 - Signature.
 
-Chaque colonne affiche le nombre d’affaires, le montant total estimé et les premières opportunités.
+Chaque colonne affiche le nombre d'affaires, le montant total estimé et les premières opportunités.
 
 ## Activité récente
 

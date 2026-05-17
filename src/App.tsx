@@ -9,7 +9,6 @@ import RequireCompanyFeature from "./components/RequireCompanyFeature";
 import AuthPage from "./pages/AuthPage";
 import DashboardPage from "./pages/DashboardPage";
 import CrmPage from "./pages/CrmPage";
-import ChantiersPage from "./pages/ChantiersPage";
 import ChantierNewPage from "./pages/ChantierNewPage";
 import ChantierPage from "./pages/ChantierPage";
 import ChantierVisitesPage from "./pages/ChantierVisitesPage";
@@ -26,6 +25,7 @@ import TerrainFeedbacksPage from "./pages/TerrainFeedbacksPage";
 import AppEntryPage from "./pages/AppEntryPage";
 
 const CrmQuoteWorkspacePage = lazy(() => import("./pages/CrmQuoteWorkspacePage"));
+const ChantiersPage = lazy(() => import("./pages/ChantiersPage"));
 
 export default function App() {
   return (
@@ -173,7 +173,16 @@ export default function App() {
           }
         />
 
-        <Route path="/chantiers" element={<ChantiersPage />} />
+        <Route
+          path="/chantiers"
+          element={
+            <LazyRouteErrorBoundary>
+              <Suspense fallback={<div className="rounded-3xl border bg-white p-8 text-center text-sm text-slate-500">Chargement des chantiers...</div>}>
+                <ChantiersPage />
+              </Suspense>
+            </LazyRouteErrorBoundary>
+          }
+        />
         <Route path="/chantiers/nouveau" element={<ChantierNewPage />} />
         <Route path="/chantiers/:id" element={<ChantierPage />} />
         <Route

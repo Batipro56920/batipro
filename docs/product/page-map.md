@@ -72,6 +72,13 @@ Ces fichiers n'etaient importes ni par les routes, ni par les composants actifs,
 - `/entreprise`, `/entreprise/fonctionnalites` et `/entreprise/profils` partagent `MonEntreprisePage`.
 - Les routes CRM partagent encore `CrmPage` comme orchestrateur, mais les vues principales sont maintenant extraites.
 
+## TODO navigation CRM secondaire
+
+- Contacts : a fusionner avec clients/prospects si la page ne porte pas une valeur metier distincte.
+- Ressources : clarifier le perimetre avant exposition dans la navigation.
+- Bibliotheque CRM : fusionner avec la Bibliotheque globale si aucun referentiel CRM dedie n'est maintenu.
+- Parametres CRM : deplacer dans Parametres / Mon entreprise pour eviter un doublon de configuration.
+
 ## Decoupage CRM realise
 
 Structure ajoutee :

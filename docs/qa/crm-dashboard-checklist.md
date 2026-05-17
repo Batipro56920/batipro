@@ -24,10 +24,11 @@
 ## Navigation
 
 - [ ] Les onglets principaux sont visibles.
-- [ ] Le menu `Plus` contient Contacts, Ressources, Bibliothèque CRM, Paramètres CRM.
+- [ ] Le menu `Plus` n'est plus affiché dans la navigation CRM.
+- [ ] Les routes `/crm/contacts`, `/crm/ressources`, `/crm/bibliotheque` et `/crm/parametres` restent accessibles par URL directe.
 - [ ] L’onglet actif est identifiable.
 - [ ] Aucune route CRM existante n’est supprimée.
-- [ ] Le menu `Plus` reste utilisable en tablette et mobile.
+- [ ] La navigation CRM reste utilisable en tablette et mobile sans menu secondaire.
 
 ## Dashboard
 
