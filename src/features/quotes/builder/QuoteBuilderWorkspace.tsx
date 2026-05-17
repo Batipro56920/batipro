@@ -35,6 +35,7 @@ export function QuoteBuilderWorkspace({ onClose }: Props) {
   const [libraryOpen, setLibraryOpen] = useState(false);
   const [optionsOpen, setOptionsOpen] = useState(false);
   const [compositeOpen, setCompositeOpen] = useState(false);
+  const [financialOpen, setFinancialOpen] = useState(false);
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
 
   const rows = useMemo(() => quote ? flattenQuoteBuilder(quote.nodes) : [], [quote]);
@@ -95,20 +96,20 @@ export function QuoteBuilderWorkspace({ onClose }: Props) {
       <QuoteTopbar quote={quote} mode={mode} saveState={saveState} libraryOpen={libraryOpen} onToggleLibrary={() => setLibraryOpen((open) => !open)} onModeChange={setMode} onClose={onClose} onSave={() => void save()} optionsOpen={optionsOpen} setOptionsOpen={setOptionsOpen} />
       {error ? <div className="mx-6 mt-3 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{error}</div> : null}
 
-      <main className="grid min-h-[calc(100vh-56px)] grid-cols-1 gap-0 xl:grid-cols-[auto_minmax(760px,1fr)_260px]">
+      <main className="grid min-h-[calc(100vh-56px)] grid-cols-1 gap-0 xl:grid-cols-[auto_minmax(760px,1fr)]">
         <QuoteLibraryPanel open={libraryOpen} onToggle={() => setLibraryOpen((open) => !open)} query={query} setQuery={setQuery} tab={libraryTab} setTab={setLibraryTab} items={library} onInsert={insertLibraryItem} />
         <section className="overflow-auto px-4 py-5 xl:px-6">
           {mode === "edit" ? (
-            <QuoteDocumentSurface quote={quote} rows={rows} table={table} sensors={sensors} onDragEnd={onDragEnd} updateQuote={updateQuote} updateNode={updateNode} removeNode={removeNode} addItem={addItem} addSection={addSection} addSubsection={addSubsection} />
+            <QuoteDocumentSurface quote={quote} rows={rows} table={table} totals={totals} sensors={sensors} onDragEnd={onDragEnd} updateQuote={updateQuote} updateNode={updateNode} removeNode={removeNode} addItem={addItem} addSection={addSection} addSubsection={addSubsection} onOpenFinancialDetails={() => setFinancialOpen(true)} />
           ) : (
             <QuotePreview quote={quote} rows={rows} totals={totals} />
           )}
         </section>
-        <QuoteTotalsPanel quote={quote} totals={totals} onPdf={() => downloadQuoteBuilderPdf(quote)} updateQuote={updateQuote} />
       </main>
 
       {optionsOpen ? <QuoteOptionsMenu quote={quote} updateQuote={updateQuote} onDraft={saveDraft} onPdf={() => downloadQuoteBuilderPdf(quote)} onClose={() => setOptionsOpen(false)} /> : null}
       {compositeOpen ? <CompositeDialog onClose={() => setCompositeOpen(false)} /> : null}
+      {financialOpen ? <FinancialDetailsDrawer quote={quote} totals={totals} onPdf={() => downloadQuoteBuilderPdf(quote)} updateQuote={updateQuote} onClose={() => setFinancialOpen(false)} /> : null}
     </div>
   );
 }
@@ -195,7 +196,7 @@ function QuoteLibraryPanel({ open, onToggle, query, setQuery, tab, setTab, items
   );
 }
 
-function QuoteDocumentSurface({ quote, rows, table, sensors, onDragEnd, updateQuote, updateNode, removeNode, addItem, addSection, addSubsection }: { quote: QuoteBuilderQuote; rows: QuoteBuilderFlatRow[]; table: ReturnType<typeof useReactTable<QuoteBuilderFlatRow>>; sensors: ReturnType<typeof useSensors>; onDragEnd: (event: DragEndEvent) => void; updateQuote: (patch: Partial<QuoteBuilderQuote>) => void; updateNode: (id: string, patch: Partial<QuoteBuilderNode>) => void; removeNode: (id: string) => void; addItem: (kind?: any) => void; addSection: () => void; addSubsection: () => void }) {
+function QuoteDocumentSurface({ quote, rows, table, totals, sensors, onDragEnd, updateQuote, updateNode, removeNode, addItem, addSection, addSubsection, onOpenFinancialDetails }: { quote: QuoteBuilderQuote; rows: QuoteBuilderFlatRow[]; table: ReturnType<typeof useReactTable<QuoteBuilderFlatRow>>; totals: ReturnType<typeof calculateQuoteBuilderTotals>; sensors: ReturnType<typeof useSensors>; onDragEnd: (event: DragEndEvent) => void; updateQuote: (patch: Partial<QuoteBuilderQuote>) => void; updateNode: (id: string, patch: Partial<QuoteBuilderNode>) => void; removeNode: (id: string) => void; addItem: (kind?: any) => void; addSection: () => void; addSubsection: () => void; onOpenFinancialDetails: () => void }) {
   const [editingText, setEditingText] = useState<TextPanelKey | null>(null);
   const wasteText = "Gestion des déchets selon la réglementation applicable.";
 
@@ -262,6 +263,20 @@ function QuoteDocumentSurface({ quote, rows, table, sensors, onDragEnd, updateQu
         </div>
       </div>
 
+      <div className="border-t border-slate-200 px-7 py-4">
+        <div className="ml-auto max-w-md rounded-xl border border-slate-200 bg-white">
+          <div className="space-y-2 p-4 text-sm">
+            <TotalRow label="Total HT" value={totals.totalHt} />
+            <TotalRow label="TVA" value={totals.totalVat} />
+            <TotalRow label="Total TTC" value={totals.totalTtc} strong />
+          </div>
+          <div className="flex items-center justify-between border-t border-slate-200 px-4 py-3">
+            <button type="button" onClick={onOpenFinancialDetails} className="text-sm font-semibold text-blue-700 hover:text-blue-800">Détails financiers</button>
+            <span className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">Résumé</span>
+          </div>
+        </div>
+      </div>
+
       <div className="border-t border-slate-200 bg-white px-7 py-5">
         <div className="grid gap-3 md:grid-cols-2">
           <CompactDocumentCard title="Conditions de paiement" summary={quote.paymentTerms} action="Modifier" onClick={() => setEditingText("paymentTerms")} />
@@ -276,25 +291,6 @@ function QuoteDocumentSurface({ quote, rows, table, sensors, onDragEnd, updateQu
       {editingText === "waste" ? <TextEditDrawer title="Gestion déchets" value={wasteText} onChange={() => undefined} onClose={() => setEditingText(null)} readOnly /> : null}
       {editingText === "footerNotes" ? <TextEditDrawer title="Notes de bas de page" value={quote.footerNotes} onChange={(footerNotes) => updateQuote({ footerNotes })} onClose={() => setEditingText(null)} /> : null}
     </div>
-  );
-}
-
-function QuoteTotalsPanel({ quote, totals, onPdf, updateQuote }: { quote: QuoteBuilderQuote; totals: ReturnType<typeof calculateQuoteBuilderTotals>; onPdf: () => void; updateQuote: (patch: Partial<QuoteBuilderQuote>) => void }) {
-  const [detailsOpen, setDetailsOpen] = useState(false);
-  return (
-    <aside className="hidden border-l border-slate-200 bg-slate-50 xl:block">
-      <div className="sticky top-14 h-[calc(100vh-56px)] overflow-auto p-3">
-        <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-          <div className="space-y-2 text-sm">
-            <TotalRow label="Total HT" value={totals.totalHt} />
-            <TotalRow label="TVA" value={totals.totalVat} />
-            <TotalRow label="Total TTC" value={totals.totalTtc} strong />
-          </div>
-          <button type="button" onClick={() => setDetailsOpen(true)} className="mt-4 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm font-semibold text-slate-800 transition hover:bg-slate-100">Détails financiers</button>
-        </div>
-      </div>
-      {detailsOpen ? <FinancialDetailsDrawer quote={quote} totals={totals} onPdf={onPdf} updateQuote={updateQuote} onClose={() => setDetailsOpen(false)} /> : null}
-    </aside>
   );
 }
 
