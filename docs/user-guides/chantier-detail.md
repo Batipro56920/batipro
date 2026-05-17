@@ -1,43 +1,62 @@
 # Guide utilisateur - Fiche chantier
 
-La fiche chantier est organisée en 5 grandes pages métier. L'objectif est de limiter les clics et d'éviter les doublons entre cockpit, synthèse, journal et historique.
+La fiche chantier est le cockpit production. Elle sert a piloter l'execution terrain apres acceptation du devis, sans remplacer le CRM ni le module Projet.
 
-## Routes
+## Navigation principale
 
-- `/chantiers/:id` : Vue d'ensemble.
-- `/chantiers/:id/preparation` : Préparation.
-- `/chantiers/:id/production` : Production.
+- `/chantiers/:id` : Cockpit.
+- `/chantiers/:id/preparation` : Preparation.
+- `/chantiers/:id/execution` : Execution.
 - `/chantiers/:id/financier` : Financier.
-- `/chantiers/:id/qualite-cloture` : Qualité / Clôture.
+- `/chantiers/:id/qualite` : Qualite.
+- `/chantiers/:id/documents` : Documents.
+- `/chantiers/:id/equipe` : Equipe.
+- `/chantiers/:id/sav` : SAV.
+- `/chantiers/:id/historique` : Historique.
 
-Les anciennes routes restent compatibles :
+Routes conservees pour compatibilite :
 
-- `/chantiers/:id/execution` redirige vers Production.
-- `/chantiers/:id/qualite-sav` redirige vers Qualité / Clôture.
-- `/chantiers/:id/crm` redirige vers Vue d'ensemble.
-- `/chantiers/:id/historique` redirige vers Vue d'ensemble.
+- `/chantiers/:id/production` redirige vers `/execution`.
+- `/chantiers/:id/qualite-cloture` redirige vers `/qualite`.
+- `/chantiers/:id/qualite-sav` redirige vers `/qualite`.
+- `/chantiers/:id/crm` redirige vers le cockpit.
 
-## Vue d'ensemble
+## Cockpit
 
-La vue d'ensemble regroupe les informations chantier, l'avancement, les alertes, les tâches urgentes, les jalons, le résumé budget, l'équipe, une continuité commerciale courte et l'activité récente.
+Le cockpit est l'unique synthese chantier. Il affiche les informations principales, l'avancement, les KPI operationnels, les alertes utiles, le resume des taches et l'activite recente.
 
-## Préparation
+## Preparation
 
-La préparation regroupe la localisation, les intervenants prévus, les documents de départ, les consignes, le matériel, l'approvisionnement et les validations avant démarrage.
+La preparation sert a rendre le chantier lancable : checklist, arborescence des zones, intervenants prevus, consignes, materiel et approvisionnement critique.
 
-## Production
+## Execution
 
-La production regroupe les tâches, le planning, les temps, les photos, la messagerie, les réserves ouvertes et le journal chantier intégré.
+L'execution regroupe le travail quotidien : taches, planning, temps, photos terrain, messagerie, notes et reserves ouvertes.
 
 ## Financier
 
-Le financier regroupe le budget, les achats, les commandes, les imprévus / travaux supplémentaires, les devis / factures liés, la marge et les rapports financiers.
+Le financier suit uniquement la production : budget, achats, commandes, imprevus, travaux supplementaires, marge et rapports.
 
-## Qualité / Clôture
+## Qualite
 
-Qualité / Clôture regroupe les réserves, les visites, le DOE, la conformité, le SAV et la clôture chantier.
+La qualite couvre les reserves, les visites, les controles et le DOE. Le SAV operationnel est separe dans son onglet dedie.
+
+## Documents
+
+Documents centralise tous les fichiers du chantier : plans, devis, avenants, photos, PV, DOE, documents client et pieces SAV.
+
+## Equipe
+
+Equipe donne une vue operationnelle des intervenants affectes au chantier et des affectations utiles a la production.
+
+## SAV
+
+SAV suit les tickets post-production rattaches au chantier. La vue CRM globale reste disponible dans le module CRM.
+
+## Historique
+
+Historique remplace les anciens doublons journal/historique. Il affiche la timeline d'audit du chantier.
 
 ## Permissions
 
-Les permissions existantes continuent de masquer les sections non autorisées. Les conducteurs voient les pages opérationnelles, les commerciaux disposent de la vue d'ensemble avec le bloc CRM, et le financier reste soumis aux droits existants.
-
+Les permissions existantes continuent de masquer les sections non autorisees. Le dirigeant voit tout, le conducteur pilote la production, le commercial reste en lecture limitee, l'intervenant utilise le portail simplifie, et l'administratif accede aux documents et au suivi autorise.

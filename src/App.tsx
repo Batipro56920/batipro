@@ -238,13 +238,17 @@ export default function App() {
         <Route path="/chantiers/nouveau" element={<ChantierNewPage />} />
         <Route path="/chantiers/:id" element={<ChantierPage />} />
         <Route path="/chantiers/:id/preparation" element={<ChantierPage />} />
-        <Route path="/chantiers/:id/production" element={<ChantierPage />} />
+        <Route path="/chantiers/:id/execution" element={<ChantierPage />} />
         <Route path="/chantiers/:id/financier" element={<ChantierPage />} />
-        <Route path="/chantiers/:id/qualite-cloture" element={<ChantierPage />} />
-        <Route path="/chantiers/:id/execution" element={<Navigate to="../production" replace />} />
-        <Route path="/chantiers/:id/qualite-sav" element={<Navigate to="../qualite-cloture" replace />} />
+        <Route path="/chantiers/:id/qualite" element={<ChantierPage />} />
+        <Route path="/chantiers/:id/documents" element={<ChantierPage />} />
+        <Route path="/chantiers/:id/equipe" element={<ChantierPage />} />
+        <Route path="/chantiers/:id/sav" element={<ChantierPage />} />
+        <Route path="/chantiers/:id/historique" element={<ChantierPage />} />
+        <Route path="/chantiers/:id/production" element={<Navigate to="../execution" replace />} />
+        <Route path="/chantiers/:id/qualite-cloture" element={<Navigate to="../qualite" replace />} />
+        <Route path="/chantiers/:id/qualite-sav" element={<Navigate to="../qualite" replace />} />
         <Route path="/chantiers/:id/crm" element={<Navigate to=".." replace />} />
-        <Route path="/chantiers/:id/historique" element={<Navigate to=".." replace />} />
         <Route
           path="/chantiers/:id/visites"
           element={

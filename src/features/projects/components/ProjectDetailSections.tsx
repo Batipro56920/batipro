@@ -9,7 +9,7 @@ function InfoGrid({ rows }: { rows: Array<[string, string | number | null | unde
       {rows.map(([label, value]) => (
         <div key={label} className="rounded-2xl border border-slate-100 bg-slate-50 p-4">
           <div className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">{label}</div>
-          <div className="mt-2 text-sm font-semibold text-slate-900">{value || "Non renseigné"}</div>
+          <div className="mt-2 text-sm font-semibold text-slate-900">{value || "Non renseigne"}</div>
         </div>
       ))}
     </div>
@@ -19,10 +19,10 @@ function InfoGrid({ rows }: { rows: Array<[string, string | number | null | unde
 function recentActivity(project: ProjectRecord) {
   const quote = getPrimaryQuote(project);
   return [
-    project.prospect ? ["Prospect créé", project.prospect.created_at] : null,
-    project.opportunity ? ["Projet créé", project.opportunity.created_at] : null,
+    project.prospect ? ["Prospect cree", project.prospect.created_at] : null,
+    project.opportunity ? ["Projet cree", project.opportunity.created_at] : null,
     quote ? [`Devis ${quote.quote_number}`, quote.created_at] : null,
-    project.chantiers[0] ? ["Chantier créé", project.chantiers[0].created_at] : null,
+    project.chantiers[0] ? ["Chantier cree", project.chantiers[0].created_at] : null,
     ...project.communications.slice(0, 5).map((communication) => [communication.subject || communication.type, communication.occurred_at] as [string, string]),
   ].filter(Boolean) as Array<[string, string | null | undefined]>;
 }
@@ -31,22 +31,22 @@ export function ProjectSummaryTab({ project }: { project: ProjectRecord }) {
   const quote = getPrimaryQuote(project);
   const chantier = project.chantiers[0] ?? null;
   const latestActivity = recentActivity(project)[0] ?? null;
-  const openFollowUps = project.tasks.filter((task) => task.statut !== "termine" && task.statut !== "terminé").length;
+  const openFollowUps = project.tasks.filter((task) => task.statut !== "termine" && task.statut !== "terminee").length;
 
   return (
     <div className="space-y-5">
-      <Panel title="Résumé projet" description="Accueil commercial du dossier, sans mélanger la préparation chantier.">
+      <Panel title="Resume projet" description="Accueil commercial du dossier, sans melanger la preparation chantier.">
         <div className="space-y-5">
           <InfoGrid
             rows={[
               ["Client", project.clientName],
               ["Adresse", project.address],
-              ["Commercial", project.salesperson || "À assigner"],
+              ["Commercial", project.salesperson || "A assigner"],
               ["Source", project.sourceLabel],
-              ["Budget estimé", formatCurrency(project.budgetEstimate)],
-              ["Échéance souhaitée", formatDate(project.desiredDeadline)],
+              ["Budget estimatif", formatCurrency(project.budgetEstimate)],
+              ["Echeance", formatDate(project.desiredDeadline)],
               ["Type projet", project.projectType],
-              ["Dernière activité", latestActivity ? `${latestActivity[0]} - ${formatDate(latestActivity[1])}` : "Aucune"],
+              ["Derniere activite", latestActivity ? `${latestActivity[0]} - ${formatDate(latestActivity[1])}` : "Aucune"],
             ]}
           />
 
@@ -56,7 +56,7 @@ export function ProjectSummaryTab({ project }: { project: ProjectRecord }) {
               ["Devis", project.quotes.length],
               ["Montant devis", formatCurrency(project.quoteAmount)],
               ["Documents", project.documents.length],
-              ["Relances ouvertes", openFollowUps],
+              ["Taches commerciales", openFollowUps],
               ["SAV", project.sav.length],
             ].map(([label, value]) => (
               <div key={label} className="rounded-2xl border border-slate-200 p-4">
@@ -69,76 +69,66 @@ export function ProjectSummaryTab({ project }: { project: ProjectRecord }) {
       </Panel>
 
       <div className="grid gap-5 xl:grid-cols-[1.25fr_0.75fr]">
-        <Panel title="Qualification rapide">
-          <div className="space-y-4 text-sm text-slate-700">
-            <div>
-              <div className="font-semibold text-slate-950">Besoin client</div>
-              <p className="mt-1 leading-6">{project.needDescription || "Besoin à qualifier lors du prochain échange."}</p>
-            </div>
-            <InfoGrid
-              rows={[
-                ["Budget client", formatCurrency(project.budgetEstimate)],
-                ["Délai souhaité", formatDate(project.desiredDeadline)],
-                ["Contraintes", project.notes],
-                ["Coordonnées", project.contactPhone || project.contactEmail],
-              ]}
-            />
-          </div>
+        <Panel title="Resume client">
+          <InfoGrid
+            rows={[
+              ["Telephone", project.contactPhone],
+              ["Email", project.contactEmail],
+              ["Contact principal", project.clientName],
+              ["Source lead", project.sourceLabel],
+            ]}
+          />
         </Panel>
 
-        <Panel title="Prochaines actions">
-          {project.nextAction ? (
-            <div className="rounded-2xl border border-blue-100 bg-blue-50 p-4">
-              <div className="text-sm font-semibold text-blue-950">{project.nextAction}</div>
-              <div className="mt-1 text-xs text-blue-700">{formatDate(project.nextActionDate)}</div>
-            </div>
-          ) : (
-            <EmptyProjectBlock title="Aucune action planifiée" description="Planifiez un RDV ou une relance pour garder le dossier actif." />
-          )}
+        <Panel title="Situation commerciale">
+          <InfoGrid
+            rows={[
+              ["Statut projet", project.status],
+              ["Budget connu", formatCurrency(project.budgetEstimate)],
+              ["Prochaine relance", formatDate(project.nextActionDate)],
+              ["Commercial", project.salesperson || "A assigner"],
+            ]}
+          />
         </Panel>
       </div>
 
       <div className="grid gap-5 xl:grid-cols-3">
-        <Panel title="Devis récent">
+        <Panel title="Derniere activite">
+          {latestActivity ? (
+            <div className="rounded-2xl border border-slate-200 p-4">
+              <div className="font-semibold text-slate-950">{latestActivity[0]}</div>
+              <div className="mt-1 text-sm text-slate-500">{formatDate(latestActivity[1])}</div>
+            </div>
+          ) : (
+            <EmptyProjectBlock title="Aucune activite" description="Les appels, mails, notes, visites et devis apparaissent ici." />
+          )}
+        </Panel>
+
+        <Panel title="Devis recent">
           {quote ? (
             <div className="rounded-2xl border border-slate-200 p-4">
               <div className="font-semibold text-slate-950">{quote.quote_number}</div>
-              <div className="mt-1 text-sm text-slate-500">{quote.statut} · {formatCurrency(quote.montant_ht)}</div>
+              <div className="mt-1 text-sm text-slate-500">{quote.statut} - {formatCurrency(quote.montant_ht)}</div>
               <Link to={`/crm/devis/${quote.id}/edit`} className="mt-3 inline-flex text-sm font-semibold text-blue-700 hover:text-blue-800">
                 Ouvrir le devis
               </Link>
             </div>
           ) : (
-            <EmptyProjectBlock title="Aucun devis" description="Créez un devis depuis le dossier projet." />
+            <EmptyProjectBlock title="Aucun devis" description="Creez un devis depuis le dossier projet." />
           )}
         </Panel>
 
-        <Panel title="Documents récents">
-          {project.documents.slice(0, 3).length ? (
-            <div className="space-y-2">
-              {project.documents.slice(0, 3).map((document) => (
-                <div key={document.id} className="rounded-xl border border-slate-200 p-3 text-sm">
-                  <div className="font-semibold text-slate-950">{document.nom}</div>
-                  <div className="text-xs text-slate-500">{document.type}</div>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <EmptyProjectBlock title="Aucun document" description="Photos, plans et pièces client apparaîtront ici." />
-          )}
-        </Panel>
-
-        <Panel title="Chantier lié">
+        <Panel title="Chantier lie">
           {chantier ? (
             <div className="rounded-2xl border border-slate-200 p-4">
               <div className="font-semibold text-slate-950">{chantier.nom}</div>
-              <div className="mt-1 text-sm text-slate-500">{chantier.adresse || "Adresse non renseignée"} · Avancement {chantier.avancement ?? 0}%</div>
+              <div className="mt-1 text-sm text-slate-500">{chantier.adresse || "Adresse non renseignee"} - Avancement {chantier.avancement ?? 0}%</div>
               <Link to={`/chantiers/${chantier.id}`} className="mt-3 inline-flex text-sm font-semibold text-blue-700 hover:text-blue-800">
                 Ouvrir chantier
               </Link>
             </div>
           ) : (
-            <EmptyProjectBlock title="Aucun chantier lié" description="Le chantier apparaît ici uniquement après création depuis un devis accepté." />
+            <EmptyProjectBlock title="Aucun chantier lie" description="Le chantier apparait ici uniquement apres creation depuis un devis accepte." />
           )}
         </Panel>
       </div>
@@ -148,29 +138,33 @@ export function ProjectSummaryTab({ project }: { project: ProjectRecord }) {
 
 export function ProjectVisitsTab({ project }: { project: ProjectRecord }) {
   return (
-    <Panel title="RDV / Visites" description="Préparer et suivre les visites commerciales et techniques." actions={<Link to={`/projets/${project.id}/rdv/nouveau`} className="text-sm font-semibold text-blue-700 hover:text-blue-800">Planifier RDV</Link>}>
+    <Panel title="Visites" description="Liste des visites terrain liees au dossier affaire." actions={<Link to={`/projets/${project.id}/rdv/nouveau`} className="text-sm font-semibold text-blue-700 hover:text-blue-800">Nouvelle visite</Link>}>
       <div className="space-y-5">
         {project.appointments.length ? (
-          <div className="space-y-3">
+          <div className="grid gap-3">
             {project.appointments.map((appointment) => (
               <div key={appointment.id} className="rounded-2xl border border-slate-200 p-4">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <div className="font-semibold text-slate-950">{appointment.titre}</div>
-                  <div className="text-xs text-slate-500">{formatDate(appointment.starts_at)}</div>
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <div className="font-semibold text-slate-950">{appointment.titre}</div>
+                    <div className="mt-1 text-sm text-slate-500">
+                      {formatDate(appointment.starts_at)} - {appointment.statut} - {appointment.type}
+                    </div>
+                  </div>
+                  <Link to={`/projets/${project.id}/rdv/${appointment.id}`} className="inline-flex h-8 items-center rounded-lg border border-slate-200 px-3 text-xs font-semibold text-slate-900 hover:bg-slate-50">
+                    Ouvrir
+                  </Link>
                 </div>
-                <p className="mt-2 text-sm text-slate-600">{appointment.compte_rendu || appointment.notes || "Compte-rendu à compléter."}</p>
-                <Link to={`/projets/${project.id}/rdv/${appointment.id}`} className="mt-3 inline-flex text-sm font-semibold text-blue-700 hover:text-blue-800">
-                  Ouvrir le RDV
-                </Link>
+                <p className="mt-3 line-clamp-2 text-sm text-slate-600">{appointment.compte_rendu || appointment.notes || "Compte-rendu a completer."}</p>
               </div>
             ))}
           </div>
         ) : (
-          <EmptyProjectBlock title="Aucune visite planifiée" description="Planifiez une visite pour qualifier le besoin, les contraintes et les métrés." />
+          <EmptyProjectBlock title="Aucune visite" description="Creez une visite terrain pour relever les besoins, contraintes, photos et metrees." />
         )}
 
         <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-          {["Checklist visite", "Photos visite", "Métrés", "Contraintes techniques", "Accès / stationnement", "Décisions prises", "Actions post-RDV", "Alimentation devis"].map((item) => (
+          {["Zones", "Constat technique", "Photos", "Metrees", "Contraintes", "Documents", "Decision", "Compte-rendu"].map((item) => (
             <div key={item} className="rounded-2xl bg-slate-50 p-4 text-sm font-semibold text-slate-800">{item}</div>
           ))}
         </div>
@@ -182,11 +176,11 @@ export function ProjectVisitsTab({ project }: { project: ProjectRecord }) {
 export function ProjectQuotesTab({ project }: { project: ProjectRecord }) {
   const acceptedQuote = project.quotes.find((quote) => quote.statut === "accepte");
   return (
-    <Panel title="Devis" description="Pré-devis, devis final, variantes, signatures et relances." actions={<Link to="/crm/devis" className="text-sm font-semibold text-blue-700 hover:text-blue-800">Créer devis</Link>}>
+    <Panel title="Devis" description="Pre-devis, devis final, variantes, signatures et relances." actions={<Link to="/crm/devis" className="text-sm font-semibold text-blue-700 hover:text-blue-800">Creer devis</Link>}>
       <div className="space-y-4">
         {acceptedQuote ? (
           <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800">
-            Devis accepté : l’action “Créer chantier” est disponible depuis le header projet.
+            Devis accepte : l'action Creer chantier est disponible depuis le header projet.
           </div>
         ) : null}
         {project.quotes.length ? (
@@ -194,10 +188,10 @@ export function ProjectQuotesTab({ project }: { project: ProjectRecord }) {
             <table className="min-w-full divide-y divide-slate-100 text-sm">
               <thead className="bg-slate-50 text-left text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">
                 <tr>
-                  <th className="px-4 py-3">Numéro</th>
+                  <th className="px-4 py-3">Numero</th>
                   <th className="px-4 py-3">Statut</th>
                   <th className="px-4 py-3">Signature</th>
-                  <th className="px-4 py-3">Validité</th>
+                  <th className="px-4 py-3">Validite</th>
                   <th className="px-4 py-3 text-right">HT</th>
                   <th className="px-4 py-3 text-right">TTC</th>
                   <th className="px-4 py-3 text-right">Actions</th>
@@ -221,7 +215,7 @@ export function ProjectQuotesTab({ project }: { project: ProjectRecord }) {
             </table>
           </div>
         ) : (
-          <EmptyProjectBlock title="Aucun devis lié" description="Créez un pré-devis ou un devis final depuis le projet." />
+          <EmptyProjectBlock title="Aucun devis lie" description="Creez un pre-devis ou un devis final depuis le projet." />
         )}
       </div>
     </Panel>
@@ -230,9 +224,9 @@ export function ProjectQuotesTab({ project }: { project: ProjectRecord }) {
 
 export function ProjectDocumentsTab({ project }: { project: ProjectRecord }) {
   return (
-    <Panel title="Documents" description="Centraliser les pièces commerciales et projet.">
+    <Panel title="Documents" description="Centraliser les pieces commerciales et projet.">
       <div className="mb-4 flex flex-wrap gap-2">
-        {["Photos", "Plans", "Documents client", "Emails", "Pièces devis", "Annexes"].map((category) => (
+        {["Photos", "Plans", "Documents client", "Emails", "Pieces devis", "Annexes"].map((category) => (
           <span key={category} className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">{category}</span>
         ))}
       </div>
@@ -241,12 +235,12 @@ export function ProjectDocumentsTab({ project }: { project: ProjectRecord }) {
           {project.documents.map((document) => (
             <div key={document.id} className="rounded-2xl border border-slate-200 p-4">
               <div className="font-semibold text-slate-950">{document.nom}</div>
-              <div className="mt-1 text-xs text-slate-500">{document.type} · {formatDate(document.created_at)}</div>
+              <div className="mt-1 text-xs text-slate-500">{document.type} - {formatDate(document.created_at)}</div>
             </div>
           ))}
         </div>
       ) : (
-        <EmptyProjectBlock title="Aucun document centralisé" description="Importez ou rattachez les documents commerciaux depuis les RDV et devis." />
+        <EmptyProjectBlock title="Aucun document centralise" description="Importez ou rattachez les documents commerciaux depuis les visites et devis." />
       )}
     </Panel>
   );
@@ -255,7 +249,7 @@ export function ProjectDocumentsTab({ project }: { project: ProjectRecord }) {
 export function ProjectActivityTab({ project }: { project: ProjectRecord }) {
   const events = recentActivity(project);
   return (
-    <Panel title="Activité" description="Timeline commerciale du projet.">
+    <Panel title="Activite" description="Timeline commerciale du projet.">
       {events.length ? (
         <div className="space-y-4">
           {events.map(([label, date], index) => (
@@ -269,7 +263,7 @@ export function ProjectActivityTab({ project }: { project: ProjectRecord }) {
           ))}
         </div>
       ) : (
-        <EmptyProjectBlock title="Aucune activité" description="Les appels, emails, RDV, devis et relances apparaîtront ici." />
+        <EmptyProjectBlock title="Aucune activite" description="Les appels, emails, RDV, devis et relances apparaitront ici." />
       )}
     </Panel>
   );
@@ -277,18 +271,18 @@ export function ProjectActivityTab({ project }: { project: ProjectRecord }) {
 
 export function ProjectSavTab({ project }: { project: ProjectRecord }) {
   return (
-    <Panel title="SAV" description="Vue légère des tickets liés au projet ou au client.">
+    <Panel title="SAV" description="Vue legere des tickets lies au projet ou au client.">
       {project.sav.length ? (
         <div className="space-y-3">
           {project.sav.map((ticket) => (
             <div key={ticket.id} className="rounded-2xl border border-slate-200 p-4">
               <div className="font-semibold text-slate-950">{ticket.titre}</div>
-              <div className="mt-1 text-sm text-slate-500">{ticket.statut} · {ticket.urgence} · {formatDate(ticket.created_at)}</div>
+              <div className="mt-1 text-sm text-slate-500">{ticket.statut} - {ticket.urgence} - {formatDate(ticket.created_at)}</div>
             </div>
           ))}
         </div>
       ) : (
-        <EmptyProjectBlock title="Aucun ticket SAV" description="Les demandes après chantier liées au client apparaîtront ici sans remplacer le module production SAV." />
+        <EmptyProjectBlock title="Aucun ticket SAV" description="Les demandes apres chantier liees au client apparaitront ici sans remplacer le module production SAV." />
       )}
     </Panel>
   );

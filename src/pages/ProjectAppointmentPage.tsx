@@ -1,5 +1,5 @@
 import { Link, useParams } from "react-router-dom";
-import { ProjectAppointmentWizard } from "../features/projects/appointments/ProjectAppointmentWizard";
+import { ProjectVisitWorkspace } from "../features/projects/appointments/ProjectVisitWorkspace";
 import { useProjectsData } from "../features/projects/hooks/useProjectsData";
 
 export default function ProjectAppointmentPage() {
@@ -11,7 +11,7 @@ export default function ProjectAppointmentPage() {
   if (loading) {
     return (
       <div className="rounded-3xl border border-slate-200 bg-white p-8 text-center text-sm text-slate-500 shadow-sm">
-        Chargement du RDV projet...
+        Chargement de la visite projet...
       </div>
     );
   }
@@ -24,7 +24,7 @@ export default function ProjectAppointmentPage() {
     return (
       <div className="rounded-3xl border border-slate-200 bg-white p-10 text-center shadow-sm">
         <div className="text-lg font-semibold text-slate-950">Projet introuvable</div>
-        <p className="mt-2 text-sm text-slate-500">Impossible de planifier un RDV sans projet lié.</p>
+        <p className="mt-2 text-sm text-slate-500">Impossible de planifier une visite sans projet lié.</p>
         <Link to="/projets" className="mt-5 inline-flex h-9 items-center justify-center rounded-xl bg-blue-600 px-3 text-sm font-semibold text-white hover:bg-blue-700">
           Retour aux projets
         </Link>
@@ -32,5 +32,5 @@ export default function ProjectAppointmentPage() {
     );
   }
 
-  return <ProjectAppointmentWizard project={project} existingAppointment={appointment} />;
+  return <ProjectVisitWorkspace project={project} existingAppointment={appointment} />;
 }

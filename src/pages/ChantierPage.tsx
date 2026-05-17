@@ -192,24 +192,41 @@ import ChantierVisitSection from "../features/chantiers/pages/ChantierVisitSecti
 
 /* ---------------- types ---------------- */
 type TabKey = ChantierTabKey;
-type ChantierDetailSectionKey = "overview" | "preparation" | "production" | "financier" | "qualite-cloture";
+type ChantierDetailSectionKey =
+  | "cockpit"
+  | "preparation"
+  | "execution"
+  | "financier"
+  | "qualite"
+  | "documents"
+  | "equipe"
+  | "sav"
+  | "historique";
 
 type ToastState = { type: "ok" | "error"; msg: string } | null;
 
 function getChantierDetailSection(pathname: string): ChantierDetailSectionKey {
   if (pathname.endsWith("/preparation")) return "preparation";
-  if (pathname.endsWith("/production")) return "production";
+  if (pathname.endsWith("/execution") || pathname.endsWith("/production")) return "execution";
   if (pathname.endsWith("/financier")) return "financier";
-  if (pathname.endsWith("/qualite-cloture")) return "qualite-cloture";
-  return "overview";
+  if (pathname.endsWith("/qualite") || pathname.endsWith("/qualite-cloture") || pathname.endsWith("/qualite-sav")) return "qualite";
+  if (pathname.endsWith("/documents")) return "documents";
+  if (pathname.endsWith("/equipe")) return "equipe";
+  if (pathname.endsWith("/sav")) return "sav";
+  if (pathname.endsWith("/historique")) return "historique";
+  return "cockpit";
 }
 
 const DEFAULT_TAB_BY_CHANTIER_SECTION: Record<ChantierDetailSectionKey, TabKey> = {
-  overview: "accueil",
-  preparation: "accueil",
-  production: "devis-taches",
-  financier: "accueil",
-  "qualite-cloture": "reserves",
+  cockpit: "accueil",
+  preparation: "preparer",
+  execution: "devis-taches",
+  financier: "budget",
+  qualite: "reserves",
+  documents: "documents",
+  equipe: "intervenants",
+  sav: "reserves",
+  historique: "journal",
 };
 
 /* ---------------- helpers ---------------- */
@@ -2782,7 +2799,7 @@ export default function ChantierPage() {
         urgence: "normale",
         statut: "ouvert",
       });
-      setToast({ type: "ok", msg: "Ticket SAV créé dans le CRM." });
+      setToast({ type: "ok", msg: "Ticket SAV créé." });
       const context = await loadCrmChantierContext(item);
       setCrmContext(context);
     } catch (e: any) {
@@ -4531,30 +4548,42 @@ export default function ChantierPage() {
   }
 
   const sectionRequiredTabs: Record<ChantierDetailSectionKey, TabKey[]> = {
-    overview: ["accueil"],
-    preparation: ["preparer", "intervenants", "achats", "materiel", "documents", "consignes", "localisation"],
-    production: ["devis-taches", "planning", "temps", "photos", "messagerie", "reserves", "journal"],
+    cockpit: ["accueil"],
+    preparation: ["preparer", "localisation", "intervenants", "materiel", "achats", "consignes"],
+    execution: ["devis-taches", "planning", "temps", "photos", "messagerie", "reserves"],
     financier: ["budget", "achats", "pilotage", "rapports"],
-    "qualite-cloture": ["reserves", "visite", "doe", "crm"],
+    qualite: ["reserves", "visite", "doe"],
+    documents: ["documents", "doe"],
+    equipe: ["intervenants", "planning", "temps"],
+    sav: ["reserves", "visite"],
+    historique: ["journal"],
   };
   const isSectionEnabled = (section: ChantierDetailSectionKey) =>
-    section === "overview" ||
+    section === "cockpit" ||
     sectionRequiredTabs[section].some((entry) =>
       isChantierTabEnabled(entry, enabledChantierModules, currentProfilePermissions, currentProfileRole),
     );
   const detailSectionLabels: Record<ChantierDetailSectionKey, string> = {
-    overview: "Vue d'ensemble",
+    cockpit: "Cockpit",
     preparation: "Préparation",
-    production: "Production",
+    execution: "Exécution",
     financier: "Financier",
-    "qualite-cloture": "Qualité / Clôture",
+    qualite: "Qualité",
+    documents: "Documents",
+    equipe: "Équipe",
+    sav: "SAV",
+    historique: "Historique",
   };
   const chantierPrimarySections: ChantierPrimarySection[] = [
-    { key: "overview", label: "Vue d'ensemble", href: `/chantiers/${id}`, enabled: true },
+    { key: "cockpit", label: "Cockpit", href: `/chantiers/${id}`, enabled: true },
     { key: "preparation", label: "Préparation", href: `/chantiers/${id}/preparation`, enabled: isSectionEnabled("preparation") },
-    { key: "production", label: "Production", href: `/chantiers/${id}/production`, enabled: isSectionEnabled("production") },
+    { key: "execution", label: "Exécution", href: `/chantiers/${id}/execution`, enabled: isSectionEnabled("execution") },
     { key: "financier", label: "Financier", href: `/chantiers/${id}/financier`, enabled: isSectionEnabled("financier") },
-    { key: "qualite-cloture", label: "Qualité / Clôture", href: `/chantiers/${id}/qualite-cloture`, enabled: isSectionEnabled("qualite-cloture") },
+    { key: "qualite", label: "Qualité", href: `/chantiers/${id}/qualite`, enabled: isSectionEnabled("qualite") },
+    { key: "documents", label: "Documents", href: `/chantiers/${id}/documents`, enabled: isSectionEnabled("documents") },
+    { key: "equipe", label: "Équipe", href: `/chantiers/${id}/equipe`, enabled: isSectionEnabled("equipe") },
+    { key: "sav", label: "SAV", href: `/chantiers/${id}/sav`, enabled: isSectionEnabled("sav") },
+    { key: "historique", label: "Historique", href: `/chantiers/${id}/historique`, enabled: isSectionEnabled("historique") },
   ];
   useEffect(() => {
     if (tab === DEFAULT_TAB_BY_CHANTIER_SECTION[detailSection]) return;
@@ -4685,62 +4714,6 @@ export default function ChantierPage() {
         </div>
       </section>
 
-      <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-        <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-          <div>
-            <div className="text-[11px] font-semibold uppercase tracking-[0.2em] text-blue-700">CRM</div>
-            <div className="mt-1 text-lg font-semibold text-slate-950">Continuité commerciale → chantier</div>
-            <div className="mt-1 text-sm text-slate-500">
-              Client, devis d'origine, opportunité, documents et SAV liés au chantier.
-            </div>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            {item.crm_client_id ? (
-              <Link to="/crm/clients" className="rounded-xl border px-3 py-2 text-sm hover:bg-slate-50">Voir fiche client</Link>
-            ) : null}
-            {item.crm_quote_id ? (
-              <Link to="/crm/devis" className="rounded-xl border px-3 py-2 text-sm hover:bg-slate-50">Voir devis</Link>
-            ) : null}
-            {(item.status === "TERMINE" || item.status === "ARCHIVE") ? (
-              <button type="button" onClick={() => void createSavFromChantier()} className="rounded-xl border border-blue-200 bg-blue-50 px-3 py-2 text-sm text-blue-800 hover:bg-blue-100">
-                Créer ticket SAV
-              </button>
-            ) : null}
-          </div>
-        </div>
-        <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-          <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-            <div className="text-xs text-slate-500">Client lié</div>
-            <div className="mt-1 font-semibold text-slate-950">
-              {crmContextLoading ? "Chargement..." : crmContext?.client
-                ? [crmContext.client.prenom, crmContext.client.nom].filter(Boolean).join(" ") || crmContext.client.societe || item.client || "Client CRM"
-                : item.client || "Aucun client CRM"}
-            </div>
-            <div className="mt-1 text-xs text-slate-500">{item.crm_client_email ?? crmContext?.client?.email ?? "—"} · {item.crm_client_phone ?? crmContext?.client?.mobile ?? crmContext?.client?.telephone ?? "—"}</div>
-          </div>
-          <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-            <div className="text-xs text-slate-500">Devis d'origine</div>
-            <div className="mt-1 font-semibold text-slate-950">{crmContext?.quote?.quote_number ?? item.crm_quote_id ?? "—"}</div>
-            <div className="mt-1 text-xs text-slate-500">{Number(item.signed_quote_amount_ht ?? crmContext?.quote?.montant_ht ?? 0).toLocaleString("fr-FR")} € HT</div>
-          </div>
-          <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-            <div className="text-xs text-slate-500">Opportunité</div>
-            <div className="mt-1 font-semibold text-slate-950">{crmContext?.opportunity?.nom_affaire ?? item.crm_opportunity_id ?? "—"}</div>
-            <div className="mt-1 text-xs text-slate-500">{crmContext?.communications.length ?? 0} échange(s) commercial(aux)</div>
-          </div>
-          <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-            <div className="text-xs text-slate-500">Documents / SAV</div>
-            <div className="mt-1 font-semibold text-slate-950">{crmContext?.documents.length ?? 0} document(s)</div>
-            <div className="mt-1 text-xs text-slate-500">{crmContext?.sav.length ?? 0} ticket(s) SAV · {crmContext?.invoices.length ?? 0} facture(s)</div>
-          </div>
-        </div>
-        {item.crm_project_description ? (
-          <div className="mt-3 rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700">
-            {item.crm_project_description}
-          </div>
-        ) : null}
-      </section>
-
       <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <div className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm">
           <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">{t("chantiers.progress")}</div>
@@ -4837,6 +4810,55 @@ export default function ChantierPage() {
               <div className="mt-1 text-2xl font-semibold text-slate-950">{lotOptions.length}</div>
             </div>
           </div>
+        </div>
+      </section>
+    </div>
+  );
+
+  const savPanel = (
+    <div className="space-y-4">
+      <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+          <div>
+            <div className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-400">SAV</div>
+            <div className="mt-1 text-lg font-semibold text-slate-950">Service après-chantier</div>
+            <div className="mt-1 text-sm text-slate-500">
+              Tickets post-production liés à ce chantier. La gestion commerciale globale reste dans le CRM.
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => void createSavFromChantier()}
+            className="rounded-xl border border-blue-200 bg-blue-50 px-3 py-2 text-sm font-medium text-blue-800 hover:bg-blue-100"
+          >
+            Créer ticket SAV
+          </button>
+        </div>
+
+        <div className="mt-4 space-y-3">
+          {crmContextLoading ? (
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-500">
+              Chargement des tickets SAV...
+            </div>
+          ) : (crmContext?.sav.length ?? 0) === 0 ? (
+            <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-5 text-sm text-slate-500">
+              Aucun ticket SAV lié à ce chantier.
+            </div>
+          ) : (
+            crmContext?.sav.map((ticket) => (
+              <article key={ticket.id} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
+                  <div className="min-w-0">
+                    <div className="font-semibold text-slate-950">{ticket.titre ?? "Ticket SAV"}</div>
+                    <div className="mt-1 text-sm text-slate-500 line-clamp-2">{ticket.description ?? "Aucune description."}</div>
+                  </div>
+                  <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-medium text-slate-600">
+                    {ticket.statut ?? "ouvert"}
+                  </span>
+                </div>
+              </article>
+            ))
+          )}
         </div>
       </section>
     </div>
@@ -5603,7 +5625,7 @@ export default function ChantierPage() {
                   <span className={["rounded-full border px-2 py-0.5 text-xs", badge.className].join(" ")}>{badge.label}</span>
                 </div>
                 <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-slate-500">
-                  <span>Vue : {activeTabLabel}</span>
+                  <span>Section : {activeTabLabel}</span>
                   <span>Conducteur : à assigner</span>
                   <span>Commercial : {crmContext?.opportunity?.responsable_id ? "Assigné" : "—"}</span>
                   <span>Début : {item.date_debut ?? "—"}</span>
@@ -5616,10 +5638,10 @@ export default function ChantierPage() {
               </div>
             </div>
             <div className="flex flex-wrap items-center gap-2">
-              <button type="button" onClick={() => setTab("preparer")} className="rounded-xl border border-slate-200 px-3 py-2 text-sm font-medium hover:bg-slate-50">Modifier</button>
+              <button type="button" onClick={() => navigate(`/chantiers/${id}/preparation`)} className="rounded-xl border border-slate-200 px-3 py-2 text-sm font-medium hover:bg-slate-50">Modifier</button>
               <button type="button" onClick={() => setTaskCreateDrawerOpen(true)} className="rounded-xl bg-blue-600 px-3 py-2 text-sm font-medium text-white hover:bg-blue-700">Ajouter tâche</button>
-              <button type="button" onClick={() => setTab("intervenants")} className="rounded-xl border border-slate-200 px-3 py-2 text-sm font-medium hover:bg-slate-50">Ajouter intervenant</button>
-              <button type="button" onClick={() => setTab("documents")} className="rounded-xl border border-slate-200 px-3 py-2 text-sm font-medium hover:bg-slate-50">Ajouter document</button>
+              <button type="button" onClick={() => navigate(`/chantiers/${id}/equipe`)} className="rounded-xl border border-slate-200 px-3 py-2 text-sm font-medium hover:bg-slate-50">Ajouter intervenant</button>
+              <button type="button" onClick={() => navigate(`/chantiers/${id}/documents`)} className="rounded-xl border border-slate-200 px-3 py-2 text-sm font-medium hover:bg-slate-50">Ajouter document</button>
               <details className="relative">
                 <summary className="cursor-pointer list-none rounded-xl border border-slate-200 px-3 py-2 text-sm font-medium hover:bg-slate-50">Actions</summary>
                 <div className="absolute right-0 z-30 mt-2 w-56 rounded-2xl border border-slate-200 bg-white p-2 shadow-xl shadow-slate-950/10">
@@ -5642,7 +5664,7 @@ export default function ChantierPage() {
       </section>
 
       <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-        {detailSection === "production" ? (
+        {detailSection === "execution" ? (
           <button
             type="button"
             onClick={() => setTaskCreateDrawerOpen(true)}
@@ -5651,7 +5673,7 @@ export default function ChantierPage() {
             + {t("chantierPage.addTask")}
           </button>
         ) : null}
-        {detailSection === "overview" && accueilPanel}
+        {detailSection === "cockpit" && accueilPanel}
         {detailSection === "preparation" && id && <ChantierPreparationSection chantierId={id} />}
         {detailSection === "preparation" && id && (
           <ChantierLocationSection
@@ -5684,7 +5706,7 @@ export default function ChantierPage() {
             }))}
           />
         )}
-        {detailSection === "production" && id && (
+        {detailSection === "execution" && id && (
           <ChantierNotesSection
             chantierId={id}
             tasks={tasks}
@@ -5704,7 +5726,7 @@ export default function ChantierPage() {
         )}
         {detailSection === "financier" && id && <ChantierFinancialSection chantierId={id} />}
         {/* ---------------- ONGLET TEMPS ---------------- */}
-        {detailSection === "production" && (
+        {detailSection === "execution" && (
           <ChantierTimeSection>
           <div className="space-y-3">
             <div className="flex items-center justify-between">
@@ -5905,7 +5927,7 @@ export default function ChantierPage() {
         )}
 
         {/* ---------------- ONGLET INTERVENANTS ---------------- */}
-        {detailSection === "preparation" && (
+        {(detailSection === "preparation" || detailSection === "equipe") && (
           <ChantierIntervenantsSection>
           <div className="space-y-6">
             <div className="flex items-center justify-between">
@@ -6032,7 +6054,7 @@ export default function ChantierPage() {
         )}
 
         {/* ---------------- ONGLET DOCUMENTS ---------------- */}
-        {detailSection === "preparation" && (
+        {detailSection === "documents" && (
           <ChantierDocumentsSection>
           <div className="space-y-4">
             <div className="flex items-start justify-between gap-4">
@@ -6149,7 +6171,7 @@ export default function ChantierPage() {
         )}
 
         {/* ---------------- ONGLET RÉSERVES ---------------- */}
-        {(detailSection === "production" || detailSection === "qualite-cloture") && (
+        {(detailSection === "execution" || detailSection === "qualite" || detailSection === "sav") && (
           <ChantierReservesSection>
           <div className="space-y-4">
             <div className="flex flex-wrap items-start justify-between gap-3">
@@ -6258,8 +6280,10 @@ export default function ChantierPage() {
           </ChantierReservesSection>
         )}
 
+        {detailSection === "sav" && savPanel}
+
         {/* ---------------- ONGLET DEVIS & TÂCHES ---------------- */}
-        {detailSection === "production" && (
+        {detailSection === "execution" && (
           <ChantierTasksQuotesSection>
           <div className="space-y-8">
             {/* DEVIS */}
@@ -7833,15 +7857,15 @@ export default function ChantierPage() {
           </ChantierEquipmentSection>
         )}
 
-        {detailSection === "production" && id && (
+        {detailSection === "execution" && id && (
           <ChantierPlanningSection chantierId={id} chantierName={item?.nom ?? null} intervenants={intervenants} />
         )}
 
-        {detailSection === "production" && id && (
+        {detailSection === "execution" && id && (
           <ChantierPhotosSection chantierId={id} tasks={tasks} zones={zones} />
         )}
 
-        {detailSection === "production" && (
+        {detailSection === "historique" && (
           <ChantierJournalSection
             logs={activityLogs}
             loading={activityLogsLoading}
@@ -7854,7 +7878,7 @@ export default function ChantierPage() {
           />
         )}
 
-        {detailSection === "production" && id && (
+        {detailSection === "execution" && id && (
           <ChantierMessagingSection
             chantierId={id}
             intervenants={intervenants}
@@ -7874,7 +7898,7 @@ export default function ChantierPage() {
           />
         )}
 
-        {detailSection === "qualite-cloture" && id && (
+        {(detailSection === "qualite" || detailSection === "documents") && id && (
           <ChantierDoeSection
             chantierId={id}
             chantierName={item?.nom ?? "Chantier"}
@@ -7889,7 +7913,7 @@ export default function ChantierPage() {
           />
         )}
 
-        {detailSection === "qualite-cloture" && id && (
+        {detailSection === "qualite" && id && (
           <ChantierVisitSection
             chantierId={id}
             chantier={item}

@@ -1,116 +1,99 @@
 # Module Projets
 
-Le module **Projets** appartient à la partie **Commerce** de Batipro. Il sert à gérer le dossier commercial avant la production chantier.
+Le module **Projets** appartient a la partie **Commerce** de Batipro. Il sert a piloter un dossier affaire concret jusqu'au devis puis a sa conversion chantier.
 
-## Rôle
+## Role
 
-Un projet suit le parcours :
+Parcours cible :
 
-Lead entrant -> Prospect -> Projet -> Qualification -> RDV / visite -> Devis -> Acceptation -> Chantier.
+Prospect -> Projet -> Visite technique -> Compte-rendu terrain -> Pre-devis / devis -> Acceptation -> Chantier -> SAV.
 
-Le CRM reste un cockpit transverse. Le chantier reste dans la partie Production.
+Le CRM reste independant pour le reporting, le pipeline global, les statistiques, les relances globales et la vue agenda.
 
 ## Liste des projets
 
-La page `/projets` affiche les dossiers commerciaux agrégés depuis les données existantes :
+La page `/projets` affiche les dossiers commerciaux agreges depuis les donnees existantes :
 
 - prospects ;
-- opportunités ;
+- opportunites ;
 - devis ;
-- chantiers liés ;
+- chantiers lies ;
 - documents ;
 - SAV client.
 
-Les KPI donnent une lecture rapide des projets actifs, devis en attente, relances, projets acceptés, projets perdus et CA pipeline.
-
 ## Fiche projet
 
-La page `/projets/:id` s’ouvre sur l’onglet **Résumé**.
+La page `/projets/:id` s'ouvre sur l'onglet **Resume**.
 
 Navigation projet :
 
-- Résumé ;
-- RDV / Visites ;
+- Resume ;
+- Visites ;
 - Devis ;
 - Documents ;
-- Activité ;
+- Activite ;
 - SAV.
 
-Les sections **Préparation chantier**, **Chantier** et **Historique** ne sont plus des sections principales. Le chantier apparaît seulement sous forme de petit bloc “Chantier lié” dans le Résumé si un chantier existe.
+Les sections Preparation chantier et Chantier ne sont pas des onglets Projet. Le chantier apparait seulement sous forme de bloc "Chantier lie" dans le Resume si un chantier existe.
 
-## Résumé
+## Resume
 
-Le Résumé affiche :
+Le Resume affiche :
 
-- informations projet ;
-- client, adresse, commercial, source, budget et échéance ;
-- KPI dossier : RDV, devis, montant devis, documents, relances ouvertes, SAV ;
-- qualification rapide ;
-- prochaines actions ;
-- devis récent ;
-- documents récents ;
-- chantier lié si disponible.
+- KPI dossier : visites, devis, documents, taches commerciales, SAV ;
+- resume client ;
+- situation commerciale ;
+- derniere activite ;
+- devis recent ;
+- chantier lie si disponible.
 
-## RDV / Visites
+## Visites
 
-L’onglet sert à préparer les visites commerciales et techniques :
+L'onglet Visites liste les visites terrain liees au projet.
 
-- liste des RDV ;
-- bouton de planification dans le projet ;
-- compte-rendu ;
-- checklist visite ;
-- photos ;
-- métrés ;
-- contraintes techniques ;
-- accès et stationnement ;
-- décisions prises ;
-- actions post-RDV.
+Le bouton `Nouvelle visite` ouvre `/projets/:id/rdv/nouveau`.
 
-Le bouton `Planifier RDV` ouvre `/projets/:id/rdv/nouveau`. Le RDV est créé depuis le dossier Projet avec un wizard structuré, puis synchronisé dans l’agenda CRM global comme événement transverse.
+La visite n'est plus un wizard lineaire. C'est une fiche terrain organisee par onglets :
 
-### Wizard RDV projet
+- Informations ;
+- Besoin client ;
+- Visite terrain ;
+- Photos ;
+- Documents ;
+- Decision / suite ;
+- Compte-rendu.
 
-Le wizard contient :
-
-- Renseignements : client, téléphone, email, adresse, commercial, date, heure, durée.
-- Description projet : type, besoin, zones, objectif, urgence, délai.
-- Tâches à vérifier : photos, métrés, accès, support, contraintes, plans, budget, décisions.
-- Contraintes : accès, stationnement, étage, copropriété, horaires, bruit, sécurité, eau/électricité, gravats.
-- Photos & documents : notes sur photos, plans, pièces client, devis concurrent et pièces manquantes.
-- Budget & décision : budget, fourchette, priorité, décision, options, prochaines actions, relance.
-- Synthèse : résumé automatique, points bloquants et actions.
-
-La sauvegarde brouillon est locale tant que le RDV n’est pas enregistré. À l’enregistrement, le RDV apparaît dans l’onglet RDV / Visites et dans l’agenda CRM.
+La visite enregistree est stockee dans `crm_appointments`, ce qui permet de l'afficher dans le projet et dans l'agenda CRM global.
 
 ## Devis
 
-L’onglet Devis centralise :
+L'onglet Devis centralise :
 
-- pré-devis ;
+- pre-devis ;
 - devis final ;
 - variantes ;
 - statut signature ;
 - relances ;
 - montants HT/TTC ;
-- validité.
+- validite.
 
-Si un devis est accepté, l’action “Créer chantier” devient disponible dans le header projet.
+Depuis une visite, le bouton `Creer pre-devis` renvoie vers le module Devis afin d'eviter la double saisie.
 
 ## Documents
 
-Catégories prévues :
+Categories prevues :
 
 - Photos ;
 - Plans ;
 - Documents client ;
 - Emails ;
-- Pièces devis ;
+- Pieces devis ;
 - Annexes.
 
-## Activité
+## Activite
 
-L’onglet Activité remplace l’ancien Historique. Il affiche la timeline commerciale : création prospect, projet, RDV, devis, relances, acceptation ou création chantier.
+L'onglet Activite remplace l'ancien Historique. Il affiche la timeline commerciale du dossier.
 
 ## SAV
 
-L’onglet SAV reste léger. Il affiche uniquement les tickets liés au projet ou au client, sans remplacer le module Production SAV.
+L'onglet SAV reste leger. Il affiche uniquement les tickets lies au projet ou au client, sans remplacer le module Production SAV.

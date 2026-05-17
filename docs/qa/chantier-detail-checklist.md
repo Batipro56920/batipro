@@ -2,37 +2,44 @@
 
 ## Routes
 
-- [ ] `/chantiers/:id` affiche Vue d'ensemble.
-- [ ] `/chantiers/:id/preparation` affiche Préparation.
-- [ ] `/chantiers/:id/production` affiche Production.
+- [ ] `/chantiers/:id` affiche Cockpit.
+- [ ] `/chantiers/:id/preparation` affiche Preparation.
+- [ ] `/chantiers/:id/execution` affiche Execution.
 - [ ] `/chantiers/:id/financier` affiche Financier.
-- [ ] `/chantiers/:id/qualite-cloture` affiche Qualité / Clôture.
-- [ ] `/chantiers/:id/execution` redirige vers `/production`.
-- [ ] `/chantiers/:id/qualite-sav` redirige vers `/qualite-cloture`.
-- [ ] `/chantiers/:id/crm` redirige vers `/chantiers/:id`.
-- [ ] `/chantiers/:id/historique` redirige vers `/chantiers/:id`.
+- [ ] `/chantiers/:id/qualite` affiche Qualite.
+- [ ] `/chantiers/:id/documents` affiche Documents.
+- [ ] `/chantiers/:id/equipe` affiche Equipe.
+- [ ] `/chantiers/:id/sav` affiche SAV.
+- [ ] `/chantiers/:id/historique` affiche Historique.
+- [ ] `/chantiers/:id/production` redirige vers `/execution`.
+- [ ] `/chantiers/:id/qualite-cloture` redirige vers `/qualite`.
+- [ ] `/chantiers/:id/qualite-sav` redirige vers `/qualite`.
+- [ ] `/chantiers/:id/crm` redirige vers le cockpit.
 
 ## Navigation
 
-- [ ] La navigation principale contient uniquement Vue d'ensemble, Préparation, Production, Financier, Qualité / Clôture.
-- [ ] CRM n'apparaît plus dans la navigation principale.
-- [ ] Historique n'apparaît plus dans la navigation principale.
-- [ ] Aucune sous-navigation horizontale secondaire n'est affichée.
+- [ ] La navigation principale contient uniquement Cockpit, Preparation, Execution, Financier, Qualite, Documents, Equipe, SAV, Historique.
+- [ ] CRM n'apparait plus dans la navigation chantier.
+- [ ] Il n'y a pas de sous-navigation secondaire visible.
 - [ ] Le breadcrumb affiche `Chantiers > Nom chantier > Section`.
+- [ ] Les actions header ouvrent les sections ou drawers pertinents.
 
-## Pages
+## Sections
 
-- [ ] Vue d'ensemble affiche les infos chantier, alertes, budget résumé, CRM court et activité récente.
-- [ ] Préparation affiche localisation, intervenants, documents, consignes, matériel et approvisionnement.
-- [ ] Production affiche tâches, planning, temps, photos, messagerie, réserves ouvertes et journal.
-- [ ] Financier affiche budget, achats, imprévus et rapports.
-- [ ] Qualité / Clôture affiche réserves, visites, DOE et SAV/conformité si disponibles.
+- [ ] Cockpit affiche une synthese unique sans bloc CRM complet.
+- [ ] Preparation affiche checklist, localisation, intervenants, materiel, consignes et approvisionnement critique.
+- [ ] Execution affiche taches, planning, temps, photos, messagerie, notes et reserves ouvertes.
+- [ ] Financier affiche budget, achats, imprevus, travaux supplementaires, marge et rapports.
+- [ ] Qualite affiche reserves, visites, controles et DOE.
+- [ ] Documents affiche la bibliotheque documentaire chantier.
+- [ ] Equipe affiche les intervenants affectes.
+- [ ] SAV affiche les tickets post-production et permet de creer un ticket.
+- [ ] Historique affiche le journal complet sans doublon avec Execution.
 
-## Non-régression
+## Non-regression
 
-- [ ] Les actions header restent accessibles.
-- [ ] Les permissions existantes masquent les modules non autorisés.
-- [ ] Les services/API ne sont pas modifiés.
+- [ ] Les services/API existants ne sont pas modifies.
+- [ ] Les permissions existantes masquent les modules non autorises.
+- [ ] Les actions sensibles existantes restent disponibles.
 - [ ] Responsive desktop/tablette/mobile correct.
 - [ ] `npm run build` passe.
-
