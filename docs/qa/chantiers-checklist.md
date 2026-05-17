@@ -21,17 +21,28 @@
 - [ ] Le filtre statut fonctionne.
 - [ ] Le filtre client fonctionne.
 - [ ] Le filtre période fonctionne.
+- [ ] Aucun filtre Commercial inutile n'est affiché.
+- [ ] Le filtre Responsable est désactivé clairement tant que la donnée n'est pas reliée.
 - [ ] Les vues Liste, Cartes, Planning et Kanban s'affichent.
 
 ## Actions
 
 - [ ] Ouvrir mène à la fiche chantier.
-- [ ] Terminer met à jour le statut.
-- [ ] Archiver met à jour le statut.
+- [ ] Terminer affiche une confirmation puis met à jour le statut.
+- [ ] Archiver affiche une confirmation puis met à jour le statut.
+- [ ] Annuler affiche une confirmation puis met à jour le statut.
 - [ ] Restaurer remet le chantier en cours.
 - [ ] Export télécharge un CSV.
-- [ ] Suppression est disponible uniquement sur les brouillons.
+- [ ] Supprimer affiche une confirmation et reste disponible uniquement sur les brouillons.
 - [ ] Les bulk actions marquer terminés, archiver et supprimer brouillons fonctionnent comme avant.
+
+## Affichage métier
+
+- [ ] Un budget `0` ou absent affiche `Budget non renseigné`.
+- [ ] Un budget positif affiche le montant formaté.
+- [ ] Un temps prévu `0` et consommé `0` affiche `Temps non planifié`.
+- [ ] Un temps existant affiche les heures normalement.
+- [ ] Les échéances dépassées utilisent le libellé `En retard`.
 
 ## Drawer et états
 
@@ -47,4 +58,3 @@
 - [ ] Aucun texte mal encodé n'apparaît.
 - [ ] Responsive desktop/tablette/mobile correct.
 - [ ] `npm run build` passe.
-

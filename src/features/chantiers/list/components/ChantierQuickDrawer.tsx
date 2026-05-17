@@ -2,7 +2,7 @@ import { X } from "lucide-react";
 import { useState } from "react";
 import { Button } from "../../../../components/ui/button";
 import type { ChantierDerived, ChantierListActions } from "../types";
-import { currency, shortDate } from "../utils/chantiersListUtils";
+import { budgetLabel, currency, shortDate, timeLabel } from "../utils/chantiersListUtils";
 import { ChantierProgress } from "./ChantierProgress";
 import { ChantierRowActions } from "./ChantierRowActions";
 import { ChantierStatusPill } from "./ChantierStatusPill";
@@ -70,11 +70,11 @@ export function ChantierQuickDrawer({ row, actions, onClose }: { row: ChantierDe
 function InfoGrid({ row }: { row: ChantierDerived }) {
   const items = [
     ["Adresse", row.adresse ?? "—"],
-    ["Budget", currency(row.budgetHt)],
+    ["Budget", budgetLabel(row.budgetHt)],
     ["Marge estimée", currency(row.estimatedMargin)],
     ["Date début", shortDate(row.date_debut ?? row.planning_start_date)],
     ["Date fin", shortDate(row.date_fin_prevue ?? row.planning_end_date)],
-    ["Temps", `${Number(row.heures_passees ?? 0).toFixed(0)}h / ${Number(row.heures_prevues ?? 0).toFixed(0)}h`],
+    ["Temps", timeLabel(row.heures_prevues, row.heures_passees)],
   ];
   return (
     <div className="grid gap-3 sm:grid-cols-2">
@@ -87,4 +87,3 @@ function InfoGrid({ row }: { row: ChantierDerived }) {
     </div>
   );
 }
-

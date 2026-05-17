@@ -15,36 +15,36 @@ export function ChantierTabs({
   onChange: (tab: ChantierTabKey) => void;
 }) {
   return (
-    <>
+    <div className="space-y-3">
       <button
         type="button"
         onClick={() => onChange(overviewTab.key)}
         className={[
-          "w-full rounded-2xl border px-4 py-3 text-left text-sm font-medium transition",
+          "rounded-xl px-3 py-2 text-left text-sm font-semibold transition",
           activeTab === overviewTab.key
-            ? "border-blue-600 bg-blue-600 text-white shadow-sm"
-            : "border-slate-200 bg-slate-50/70 text-slate-700 hover:bg-slate-100",
+            ? "bg-slate-950 text-white shadow-sm"
+            : "border border-slate-200 bg-white text-slate-700 hover:bg-slate-50",
         ].join(" ")}
       >
         {overviewTab.label}
       </button>
 
-      <div className="grid gap-3 xl:grid-cols-4">
+      <div className="flex gap-2 overflow-x-auto pb-1">
         {sections.map((section) => (
-          <section key={section.title} className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4 shadow-sm">
-            <div className="space-y-3">
-              <div className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-400">{section.title}</div>
-              <nav className="flex flex-wrap gap-2">
+          <section key={section.title} className="min-w-fit rounded-2xl border border-slate-200 bg-slate-50/70 p-2">
+            <div className="flex items-center gap-2">
+              <div className="px-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">{section.title}</div>
+              <nav className="flex gap-1">
                 {section.tabs.map((entry) => (
                   <button
                     key={entry.key}
                     type="button"
                     onClick={() => onChange(entry.key)}
                     className={[
-                      "rounded-full px-4 py-2 text-sm font-medium transition",
+                      "rounded-xl px-3 py-2 text-sm font-medium transition",
                       activeTab === entry.key
                         ? "bg-blue-600 text-white shadow-sm"
-                        : "border border-slate-200 bg-white text-slate-700 hover:bg-slate-50",
+                        : "bg-white text-slate-700 ring-1 ring-slate-200 hover:bg-slate-50",
                     ].join(" ")}
                   >
                     {entry.label}
@@ -55,6 +55,6 @@ export function ChantierTabs({
           </section>
         ))}
       </div>
-    </>
+    </div>
   );
 }

@@ -1,6 +1,6 @@
 import { CalendarDays, MapPin } from "lucide-react";
 import type { ChantierDerived, ChantierListActions } from "../types";
-import { currency, shortDate } from "../utils/chantiersListUtils";
+import { budgetLabel, shortDate, timeLabel } from "../utils/chantiersListUtils";
 import { ChantierProgress } from "./ChantierProgress";
 import { ChantierRowActions } from "./ChantierRowActions";
 import { ChantierStatusPill } from "./ChantierStatusPill";
@@ -25,12 +25,12 @@ export function ChantiersCardsView({ rows, onPreview, actions }: { rows: Chantie
             <ChantierProgress value={row.progress} />
           </div>
           <div className="mt-4 grid grid-cols-3 gap-2 text-sm">
-            <Metric label="Budget" value={currency(row.budgetHt)} />
-            <Metric label="Temps" value={`${Number(row.heures_passees ?? 0).toFixed(0)}h`} />
+            <Metric label="Budget" value={budgetLabel(row.budgetHt)} />
+            <Metric label="Temps" value={timeLabel(row.heures_prevues, row.heures_passees)} />
             <Metric label="Échéance" value={shortDate(row.date_fin_prevue ?? row.planning_end_date)} />
           </div>
           {row.isLate ? (
-            <div className="mt-4 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm font-medium text-red-700">Échéance dépassée</div>
+            <div className="mt-4 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm font-medium text-red-700">En retard</div>
           ) : null}
           <div className="mt-4">
             <ChantierRowActions row={row} actions={actions} />
@@ -52,4 +52,3 @@ function Metric({ label, value }: { label: string; value: string }) {
     </div>
   );
 }
-

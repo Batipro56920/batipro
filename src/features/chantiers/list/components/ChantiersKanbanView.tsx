@@ -1,5 +1,5 @@
 import type { ChantierDerived, ChantierListActions } from "../types";
-import { currency, shortDate } from "../utils/chantiersListUtils";
+import { budgetLabel, shortDate } from "../utils/chantiersListUtils";
 import { ChantierProgress } from "./ChantierProgress";
 import { ChantierRowActions } from "./ChantierRowActions";
 
@@ -35,7 +35,7 @@ export function ChantiersKanbanView({ rows, onPreview, actions }: { rows: Chanti
                   <ChantierProgress value={row.progress} />
                 </div>
                 <div className="mt-3 flex items-center justify-between text-xs text-slate-500">
-                  <span>{currency(row.budgetHt)}</span>
+                  <span>{budgetLabel(row.budgetHt)}</span>
                   <span>{shortDate(row.date_fin_prevue ?? row.planning_end_date)}</span>
                 </div>
                 <div className="mt-3">
@@ -49,4 +49,3 @@ export function ChantiersKanbanView({ rows, onPreview, actions }: { rows: Chanti
     </section>
   );
 }
-

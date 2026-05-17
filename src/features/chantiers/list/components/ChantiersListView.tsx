@@ -1,6 +1,6 @@
 import { Bell, Clock3, MapPin, Users } from "lucide-react";
 import type { ChantierDerived, ChantierListActions } from "../types";
-import { currency, shortDate } from "../utils/chantiersListUtils";
+import { budgetLabel, shortDate, timeLabel } from "../utils/chantiersListUtils";
 import { ChantierRowActions } from "./ChantierRowActions";
 import { ChantierStatusPill } from "./ChantierStatusPill";
 
@@ -41,13 +41,13 @@ export function ChantiersListView({ rows, selectedIds, onToggleSelection, onPrev
               </div>
             </div>
             <ChantierStatusPill status={row.status} />
-            <div className="text-sm font-semibold text-slate-900">{currency(row.budgetHt)}</div>
+            <div className="text-sm font-semibold text-slate-900">{budgetLabel(row.budgetHt)}</div>
             <div className="text-sm text-slate-600">
-              {Number(row.heures_passees ?? 0).toFixed(0)}h / {Number(row.heures_prevues ?? 0).toFixed(0)}h
+              {timeLabel(row.heures_prevues, row.heures_passees)}
             </div>
             <div className="text-sm text-slate-600">{shortDate(row.date_fin_prevue ?? row.planning_end_date)}</div>
             <div className="flex items-center gap-2">
-              {row.isLate ? <Badge icon={Bell} label="Retard" tone="red" /> : <Badge icon={Clock3} label="OK" tone="slate" />}
+              {row.isLate ? <Badge icon={Bell} label="En retard" tone="red" /> : <Badge icon={Clock3} label="À jour" tone="slate" />}
               <Badge icon={Users} label="Équipe" tone="blue" />
             </div>
             <ChantierRowActions row={row} actions={actions} />

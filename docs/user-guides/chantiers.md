@@ -13,7 +13,7 @@ La page **Production chantier** sert de cockpit opérationnel pour suivre les ch
 
 ## Recherche et filtres
 
-La recherche accepte un nom de chantier, client ou adresse. Les filtres permettent de limiter l'affichage par statut, client et période. Les filtres conducteur, commercial et type chantier sont préparés mais désactivés tant que les données correspondantes ne sont pas reliées.
+La recherche accepte un nom de chantier, client ou adresse. Les filtres permettent de limiter l'affichage par statut, client et période. Les filtres responsable et type chantier sont préparés mais désactivés tant que les données correspondantes ne sont pas reliées.
 
 ## Vues
 
@@ -25,13 +25,19 @@ La recherche accepte un nom de chantier, client ou adresse. Les filtres permette
 ## Actions
 
 - **Ouvrir** : accède à la fiche chantier complète.
-- **Terminer** : marque le chantier comme terminé.
-- **Archiver** : archive le chantier.
+- **Terminer** : demande confirmation puis marque le chantier comme terminé.
+- **Archiver** : demande confirmation puis archive le chantier.
+- **Annuler** : demande confirmation puis exclut le chantier du pilotage.
 - **Restaurer** : remet un chantier terminé, archivé ou annulé en cours.
 - **Export** : exporte le chantier en CSV.
-- **Supprimer** : disponible uniquement pour les brouillons, si la suppression logique est supportée.
+- **Supprimer** : demande confirmation et reste disponible uniquement pour les brouillons, si la suppression logique est supportée.
+
+## Règles d'affichage
+
+- Si aucun budget n'est renseigné ou si le montant vaut 0, la page affiche **Budget non renseigné**.
+- Si aucun temps prévu et aucun temps consommé ne sont renseignés, la page affiche **Temps non planifié**.
+- Les échéances dépassées sont indiquées avec le libellé **En retard**.
 
 ## Drawer rapide
 
 Un clic sur une ligne ou une carte ouvre un aperçu rapide avec les onglets Vue rapide, Tâches, Équipe, Documents et Alertes. Les onglets détaillés renvoient vers la fiche chantier complète lorsque les données détaillées ne sont pas disponibles dans la liste.
-

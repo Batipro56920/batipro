@@ -18,6 +18,6 @@ export type ChantierTabKey =
   | "journal"
   | "messagerie"
   | "rapports"
+  | "crm"
   | "doe"
   | "visite";
-

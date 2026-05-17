@@ -26,8 +26,8 @@ export type ChantierListActions = {
   onOpen: (row: ChantierRow) => void;
   onFinish: (row: ChantierRow) => void;
   onArchive: (row: ChantierRow) => void;
+  onCancel: (row: ChantierRow) => void;
   onRestore: (row: ChantierRow) => void;
   onDeleteDraft: (row: ChantierRow) => void;
   onExportRow: (row: ChantierRow) => void;
 };
-

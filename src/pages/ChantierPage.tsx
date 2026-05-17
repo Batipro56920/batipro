@@ -669,7 +669,7 @@ export default function ChantierPage() {
   const [tab, setTab] = useState<TabKey>("accueil");
   const [enabledChantierModules, setEnabledChantierModules] =
     useState<Set<CompanyFeatureModuleId> | null>(null);
-  const [companyInterfaceMode, setCompanyInterfaceMode] = useState<CompanyInterfaceMode>("terrain");
+  const [, setCompanyInterfaceMode] = useState<CompanyInterfaceMode>("terrain");
   const [currentProfileRole, setCurrentProfileRole] = useState<string | null>("ADMIN");
   const [currentProfilePermissions, setCurrentProfilePermissions] =
     useState<ProfileFeaturePermissions>({});
@@ -4511,100 +4511,62 @@ export default function ChantierPage() {
     }
   }
 
-  const overviewTab: { key: TabKey; label: string } = { key: "accueil", label: "Accueil" };
+  const overviewTab: { key: TabKey; label: string } = { key: "accueil", label: "Cockpit" };
   const chantierTabDefinitions: Array<{
     title: string;
     tabs: Array<{ key: TabKey; label: string }>;
   }> =
-    companyInterfaceMode === "pilotage"
-      ? [
-          {
-            title: "Organisation",
-            tabs: [
-              { key: "localisation", label: "Localisation" },
-              { key: "devis-taches", label: t("chantierPage.tasks") },
-              { key: "intervenants", label: t("sidebar.intervenants") },
-              { key: "documents", label: t("intervenantAccess.tabs.documents") },
-            ],
-          },
-          {
-            title: "Production",
-            tabs: [
-              { key: "planning", label: t("chantierTabs.planning") },
-              { key: "photos", label: "Photos" },
-              { key: "consignes", label: "Consignes" },
-              { key: "messagerie", label: t("intervenantAccess.tabs.messaging") },
-              { key: "notes", label: "Notes" },
-              { key: "journal", label: "Journal" },
-            ],
-          },
-          {
-            title: "Ressources",
-            tabs: [
-              { key: "achats", label: "Approvisionnement" },
-              { key: "materiel", label: t("intervenantAccess.tabs.material") },
-            ],
-          },
-          {
-            title: "Contrôle",
-            tabs: [
-              { key: "reserves", label: t("intervenantAccess.tabs.reserves") },
-              { key: "doe", label: "DOE" },
-              { key: "visite", label: "Visites" },
-            ],
-          },
-          {
-            title: "Pilotage",
-            tabs: [
-              { key: "temps", label: t("chantierTabs.time") },
-              { key: "budget", label: "Budget" },
-              { key: "rapports", label: "Rapports" },
-              { key: "pilotage", label: "Imprévus / Travaux supplémentaires" },
-            ],
-          },
-        ]
-      : [
-          {
-            title: "Préparer",
-            tabs: [
-              { key: "preparer", label: "Préparer" },
-              { key: "intervenants", label: t("sidebar.intervenants") },
-              { key: "achats", label: "Approvisionnement" },
-              { key: "materiel", label: t("intervenantAccess.tabs.material") },
-              { key: "documents", label: t("intervenantAccess.tabs.documents") },
-              { key: "localisation", label: "Arborescence chantier" },
-            ],
-          },
-          {
-            title: "Exécuter",
-            tabs: [
-              { key: "devis-taches", label: t("chantierPage.tasks") },
-              { key: "planning", label: t("chantierTabs.planning") },
-              { key: "photos", label: "Photos" },
-              { key: "consignes", label: "Consignes" },
-              { key: "messagerie", label: t("intervenantAccess.tabs.messaging") },
-              { key: "notes", label: "Notes" },
-            ],
-          },
-          {
-            title: "Contrôler",
-            tabs: [
-              { key: "reserves", label: t("intervenantAccess.tabs.reserves") },
-              { key: "journal", label: "Journal" },
-              { key: "doe", label: "DOE" },
-              { key: "visite", label: "Visite" },
-            ],
-          },
-          {
-            title: "Piloter",
-            tabs: [
-              { key: "temps", label: t("chantierTabs.time") },
-              { key: "budget", label: "Budget" },
-              { key: "rapports", label: "Rapports" },
-              { key: "pilotage", label: "Imprévus / Travaux supplémentaires" },
-            ],
-          },
-        ];
+    [
+      {
+        title: "Préparation",
+        tabs: [
+          { key: "preparer", label: "Préparation" },
+          { key: "intervenants", label: t("sidebar.intervenants") },
+          { key: "achats", label: "Approvisionnement" },
+          { key: "materiel", label: t("intervenantAccess.tabs.material") },
+          { key: "documents", label: t("intervenantAccess.tabs.documents") },
+          { key: "consignes", label: "Consignes" },
+          { key: "localisation", label: "Localisation" },
+        ],
+      },
+      {
+        title: "Exécution",
+        tabs: [
+          { key: "devis-taches", label: t("chantierPage.tasks") },
+          { key: "planning", label: t("chantierTabs.planning") },
+          { key: "temps", label: t("chantierTabs.time") },
+          { key: "photos", label: "Photos" },
+          { key: "journal", label: "Journal" },
+          { key: "messagerie", label: t("intervenantAccess.tabs.messaging") },
+          { key: "notes", label: "Notes" },
+        ],
+      },
+      {
+        title: "Financier",
+        tabs: [
+          { key: "budget", label: "Budget" },
+          { key: "achats", label: "Achats" },
+          { key: "pilotage", label: "Imprévus" },
+          { key: "rapports", label: "Rapports" },
+        ],
+      },
+      {
+        title: "Qualité / SAV",
+        tabs: [
+          { key: "reserves", label: t("intervenantAccess.tabs.reserves") },
+          { key: "doe", label: "DOE" },
+          { key: "visite", label: "Visites" },
+        ],
+      },
+      {
+        title: "CRM",
+        tabs: [{ key: "crm", label: "CRM" }],
+      },
+      {
+        title: "Historique",
+        tabs: [{ key: "journal", label: "Historique" }],
+      },
+    ];
   const chantierTabSections = chantierTabDefinitions
     .map((section) => ({
       title: section.title,
@@ -4902,6 +4864,66 @@ export default function ChantierPage() {
             </div>
           </div>
         </div>
+      </section>
+    </div>
+  );
+
+  const crmPanel = (
+    <div className="space-y-4">
+      <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+          <div>
+            <div className="text-[11px] font-semibold uppercase tracking-[0.2em] text-blue-700">CRM</div>
+            <div className="mt-1 text-lg font-semibold text-slate-950">Client, devis et historique commercial</div>
+            <div className="mt-1 text-sm text-slate-500">
+              Le CRM reste disponible sans prendre le dessus sur le pilotage production.
+            </div>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {item.crm_client_id ? (
+              <Link to="/crm/clients" className="rounded-xl border px-3 py-2 text-sm hover:bg-slate-50">Voir fiche client</Link>
+            ) : null}
+            {item.crm_quote_id ? (
+              <Link to="/crm/devis" className="rounded-xl border px-3 py-2 text-sm hover:bg-slate-50">Voir devis</Link>
+            ) : null}
+            {(item.status === "TERMINE" || item.status === "ARCHIVE") ? (
+              <button type="button" onClick={() => void createSavFromChantier()} className="rounded-xl border border-blue-200 bg-blue-50 px-3 py-2 text-sm text-blue-800 hover:bg-blue-100">
+                Créer ticket SAV
+              </button>
+            ) : null}
+          </div>
+        </div>
+        <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+          <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+            <div className="text-xs text-slate-500">Client lié</div>
+            <div className="mt-1 font-semibold text-slate-950">
+              {crmContextLoading ? "Chargement..." : crmContext?.client
+                ? [crmContext.client.prenom, crmContext.client.nom].filter(Boolean).join(" ") || crmContext.client.societe || item.client || "Client CRM"
+                : item.client || "Aucun client CRM"}
+            </div>
+            <div className="mt-1 text-xs text-slate-500">{item.crm_client_email ?? crmContext?.client?.email ?? "—"} · {item.crm_client_phone ?? crmContext?.client?.mobile ?? crmContext?.client?.telephone ?? "—"}</div>
+          </div>
+          <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+            <div className="text-xs text-slate-500">Devis d'origine</div>
+            <div className="mt-1 font-semibold text-slate-950">{crmContext?.quote?.quote_number ?? item.crm_quote_id ?? "—"}</div>
+            <div className="mt-1 text-xs text-slate-500">{Number(item.signed_quote_amount_ht ?? crmContext?.quote?.montant_ht ?? 0).toLocaleString("fr-FR")} € HT</div>
+          </div>
+          <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+            <div className="text-xs text-slate-500">Opportunité</div>
+            <div className="mt-1 font-semibold text-slate-950">{crmContext?.opportunity?.nom_affaire ?? item.crm_opportunity_id ?? "—"}</div>
+            <div className="mt-1 text-xs text-slate-500">{crmContext?.communications.length ?? 0} échange(s) commercial(aux)</div>
+          </div>
+          <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+            <div className="text-xs text-slate-500">Documents / SAV</div>
+            <div className="mt-1 font-semibold text-slate-950">{crmContext?.documents.length ?? 0} document(s)</div>
+            <div className="mt-1 text-xs text-slate-500">{crmContext?.sav.length ?? 0} ticket(s) SAV · {crmContext?.invoices.length ?? 0} facture(s)</div>
+          </div>
+        </div>
+        {item.crm_project_description ? (
+          <div className="mt-3 rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700">
+            {item.crm_project_description}
+          </div>
+        ) : null}
       </section>
     </div>
   );
@@ -5661,10 +5683,38 @@ export default function ChantierPage() {
                 <div className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-400">Chantier</div>
                 <h1 className="max-w-3xl text-2xl font-semibold leading-tight text-slate-950">{item.nom}</h1>
                 <div className="mt-1 flex flex-wrap items-center gap-2 text-sm text-slate-500">
-                  <span>Vue : {activeTabLabel}</span>
+                  <span>{item.client || "Client non renseigné"}</span>
+                  <span>·</span>
+                  <span>{item.adresse || "Adresse non renseignée"}</span>
                   <span className={["rounded-full border px-2 py-0.5 text-xs", badge.className].join(" ")}>{badge.label}</span>
                 </div>
+                <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-slate-500">
+                  <span>Vue : {activeTabLabel}</span>
+                  <span>Conducteur : à assigner</span>
+                  <span>Commercial : {crmContext?.opportunity?.responsable_id ? "Assigné" : "—"}</span>
+                  <span>Début : {item.date_debut ?? "—"}</span>
+                  <span>Fin : {item.date_fin_prevue ?? item.planning_end_date ?? "—"}</span>
+                  <span>Avancement : {avancement}%</span>
+                  <span className={alertCards.length ? "font-semibold text-red-700" : "font-semibold text-emerald-700"}>
+                    {alertCards.length ? `${alertCards.length} alerte(s)` : "Aucune alerte critique"}
+                  </span>
+                </div>
               </div>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <button type="button" onClick={() => setTab("preparer")} className="rounded-xl border border-slate-200 px-3 py-2 text-sm font-medium hover:bg-slate-50">Modifier</button>
+              <button type="button" onClick={() => setTaskCreateDrawerOpen(true)} className="rounded-xl bg-blue-600 px-3 py-2 text-sm font-medium text-white hover:bg-blue-700">Ajouter tâche</button>
+              <button type="button" onClick={() => setTab("intervenants")} className="rounded-xl border border-slate-200 px-3 py-2 text-sm font-medium hover:bg-slate-50">Ajouter intervenant</button>
+              <button type="button" onClick={() => setTab("documents")} className="rounded-xl border border-slate-200 px-3 py-2 text-sm font-medium hover:bg-slate-50">Ajouter document</button>
+              <details className="relative">
+                <summary className="cursor-pointer list-none rounded-xl border border-slate-200 px-3 py-2 text-sm font-medium hover:bg-slate-50">Actions</summary>
+                <div className="absolute right-0 z-30 mt-2 w-56 rounded-2xl border border-slate-200 bg-white p-2 shadow-xl shadow-slate-950/10">
+                  <button type="button" disabled={chantierActionSaving} onClick={() => void applyChantierLifecycle("TERMINE")} className="block w-full rounded-xl px-3 py-2 text-left text-sm hover:bg-slate-50 disabled:opacity-50">Marquer terminé</button>
+                  <button type="button" disabled={chantierActionSaving} onClick={() => void applyChantierLifecycle("ARCHIVE")} className="block w-full rounded-xl px-3 py-2 text-left text-sm hover:bg-slate-50 disabled:opacity-50">Archiver</button>
+                  <button type="button" disabled={chantierActionSaving} onClick={() => void applyChantierLifecycle("ANNULE")} className="block w-full rounded-xl px-3 py-2 text-left text-sm text-red-700 hover:bg-red-50 disabled:opacity-50">Annuler</button>
+                  <button type="button" disabled={chantierActionSaving} onClick={() => void softDeleteCurrentChantier()} className="block w-full rounded-xl px-3 py-2 text-left text-sm font-semibold text-red-700 hover:bg-red-50 disabled:opacity-50">Supprimer</button>
+                </div>
+              </details>
             </div>
           </div>
 
@@ -5688,6 +5738,7 @@ export default function ChantierPage() {
           </button>
         ) : null}
         {tab === "accueil" && accueilPanel}
+        {tab === "crm" && crmPanel}
         {tab === "preparer" && id && <ChantierPreparationSection chantierId={id} />}
         {tab === "localisation" && id && (
           <ChantierLocationSection

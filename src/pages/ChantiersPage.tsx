@@ -131,7 +131,6 @@ export default function ChantiersPage() {
 
   async function deleteDraft(row: ChantierRow) {
     if (row.status !== "BROUILLON") return;
-    if (!window.confirm(`Supprimer le brouillon "${row.nom}" ?`)) return;
     setSaving(true);
     setErrorMsg(null);
     try {
@@ -148,6 +147,7 @@ export default function ChantiersPage() {
     onOpen: (row: ChantierRow) => navigate(`/chantiers/${row.id}`),
     onFinish: (row: ChantierRow) => void updateStatus(row, "TERMINE"),
     onArchive: (row: ChantierRow) => void updateStatus(row, "ARCHIVE"),
+    onCancel: (row: ChantierRow) => void updateStatus(row, "ANNULE"),
     onRestore: (row: ChantierRow) => void updateStatus(row, "EN_COURS"),
     onDeleteDraft: (row: ChantierRow) => void deleteDraft(row),
     onExportRow: (row: ChantierRow) => exportChantiersCsv([row], `chantier-${row.nom}.csv`),

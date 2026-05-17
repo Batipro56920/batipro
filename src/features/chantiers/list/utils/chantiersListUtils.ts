@@ -10,6 +10,18 @@ export function currency(value: number | null | undefined) {
   return new Intl.NumberFormat("fr-FR", { style: "currency", currency: "EUR", maximumFractionDigits: 0 }).format(Number(value));
 }
 
+export function budgetLabel(value: number | null | undefined) {
+  if (value === null || value === undefined || Number.isNaN(Number(value)) || Number(value) <= 0) return "Budget non renseigné";
+  return currency(value);
+}
+
+export function timeLabel(planned: number | null | undefined, spent: number | null | undefined) {
+  const plannedValue = Number(planned ?? 0);
+  const spentValue = Number(spent ?? 0);
+  if (plannedValue <= 0 && spentValue <= 0) return "Temps non planifié";
+  return `${spentValue.toFixed(0)}h / ${plannedValue.toFixed(0)}h`;
+}
+
 export function shortDate(value: string | null | undefined) {
   if (!value) return "—";
   return new Intl.DateTimeFormat("fr-FR", { day: "2-digit", month: "short", year: "numeric" }).format(new Date(value));
@@ -107,4 +119,3 @@ function isInNextDays(value: string | null | undefined, days: number) {
   const now = Date.now();
   return date >= now && date <= now + days * 24 * 60 * 60 * 1000;
 }
-

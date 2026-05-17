@@ -50,7 +50,7 @@ export function ChantiersToolbar({ scope, onScope, filters, onFilters, clients, 
         </button>
       </div>
 
-      <div className="mt-3 grid gap-2 lg:grid-cols-[minmax(260px,1fr)_repeat(5,minmax(130px,170px))]">
+      <div className="mt-3 grid gap-2 lg:grid-cols-[minmax(260px,1fr)_repeat(4,minmax(130px,180px))]">
         <label className="relative">
           <Search className="pointer-events-none absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
           <Input className="pl-9" value={filters.query} onChange={(event) => onFilters({ ...filters, query: event.target.value })} placeholder="Rechercher chantier, client, adresse..." />
@@ -68,11 +68,8 @@ export function ChantiersToolbar({ scope, onScope, filters, onFilters, clients, 
             <option key={client} value={client}>{client}</option>
           ))}
         </select>
-        <select className="h-9 rounded-xl border border-slate-200 bg-white px-3 text-sm" value={filters.conducteur} onChange={(event) => onFilters({ ...filters, conducteur: event.target.value })} disabled title="Conducteur à relier aux profils chantier.">
-          <option value="">Conducteur</option>
-        </select>
-        <select className="h-9 rounded-xl border border-slate-200 bg-white px-3 text-sm" value={filters.commercial} onChange={(event) => onFilters({ ...filters, commercial: event.target.value })} disabled title="Commercial à relier au CRM.">
-          <option value="">Commercial</option>
+        <select className="h-9 rounded-xl border border-slate-200 bg-white px-3 text-sm" value={filters.conducteur} onChange={(event) => onFilters({ ...filters, conducteur: event.target.value })} disabled title="Responsable à relier aux profils chantier.">
+          <option value="">Responsable</option>
         </select>
         <select className="h-9 rounded-xl border border-slate-200 bg-white px-3 text-sm" value={filters.period} onChange={(event) => onFilters({ ...filters, period: event.target.value as ChantierListFilters["period"] })}>
           <option value="all">Toute période</option>
@@ -86,9 +83,9 @@ export function ChantiersToolbar({ scope, onScope, filters, onFilters, clients, 
         <select className="h-9 rounded-xl border border-slate-200 bg-white px-3 text-sm" value={filters.type} onChange={(event) => onFilters({ ...filters, type: event.target.value })} disabled title="Type chantier à brancher quand la donnée existe.">
           <option value="">Type chantier</option>
         </select>
-        <div className="flex rounded-xl border border-slate-200 bg-slate-50 p-1">
+        <div className="flex max-w-full overflow-x-auto rounded-xl border border-slate-200 bg-slate-50 p-1">
           {VIEWS.map((entry) => (
-            <button key={entry.key} type="button" onClick={() => onView(entry.key)} className={["rounded-lg px-3 py-1.5 text-sm font-medium transition", view === entry.key ? "bg-white text-slate-950 shadow-sm" : "text-slate-500 hover:text-slate-950"].join(" ")}>
+            <button key={entry.key} type="button" onClick={() => onView(entry.key)} className={["shrink-0 rounded-lg px-3 py-1.5 text-sm font-medium transition", view === entry.key ? "bg-white text-slate-950 shadow-sm" : "text-slate-500 hover:text-slate-950"].join(" ")}>
               {entry.label}
             </button>
           ))}
@@ -97,4 +94,3 @@ export function ChantiersToolbar({ scope, onScope, filters, onFilters, clients, 
     </section>
   );
 }
-
