@@ -16,9 +16,20 @@
 - [ ] La preparation chantier n'apparait pas comme section projet.
 - [ ] Le bouton `Visite de chiffrage` ne redirige pas vers CRM Agenda.
 
-## Visite de chiffrage
+## Onglet RDV / Visites
+
+- [ ] L'onglet affiche une liste simple de rendez-vous.
+- [ ] L'onglet n'affiche pas le pre-devis terrain.
+- [ ] L'onglet n'affiche pas la bibliotheque metier.
+- [ ] L'onglet n'affiche pas les metrees.
+- [ ] Chaque carte affiche type, date, client, adresse, commercial et statut.
+- [ ] Les actions ouvrir et modifier ouvrent l'ecran de visite.
+- [ ] Les actions dupliquer, replanifier et annuler sont desactivees clairement si non persistantes.
+
+## Ecran visite de chiffrage
 
 - [ ] La page affiche les informations RDV.
+- [ ] La navigation contient Informations, Description projet, Terrain / pre-devis, Contraintes, Budget, Synthese.
 - [ ] Une section peut etre ajoutee.
 - [ ] Une tache manuelle peut etre ajoutee.
 - [ ] Une note peut etre ajoutee.

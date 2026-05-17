@@ -29,7 +29,6 @@ function recentActivity(project: ProjectRecord) {
 
 export function ProjectSummaryTab({ project }: { project: ProjectRecord }) {
   const quote = getPrimaryQuote(project);
-  const chantier = project.chantiers[0] ?? null;
   const latestActivity = recentActivity(project)[0] ?? null;
   const openFollowUps = project.tasks.filter((task) => task.statut !== "termine" && task.statut !== "terminee").length;
 
@@ -118,18 +117,15 @@ export function ProjectSummaryTab({ project }: { project: ProjectRecord }) {
           )}
         </Panel>
 
-        <Panel title="Chantier lie">
-          {chantier ? (
-            <div className="rounded-2xl border border-slate-200 p-4">
-              <div className="font-semibold text-slate-950">{chantier.nom}</div>
-              <div className="mt-1 text-sm text-slate-500">{chantier.adresse || "Adresse non renseignee"} - Avancement {chantier.avancement ?? 0}%</div>
-              <Link to={`/chantiers/${chantier.id}`} className="mt-3 inline-flex text-sm font-semibold text-blue-700 hover:text-blue-800">
-                Ouvrir chantier
-              </Link>
-            </div>
-          ) : (
-            <EmptyProjectBlock title="Aucun chantier lie" description="Le chantier apparait ici uniquement apres creation depuis un devis accepte." />
-          )}
+        <Panel title="Qualification rapide">
+          <InfoGrid
+            rows={[
+              ["Type projet", project.projectType],
+              ["Besoin client", project.needDescription],
+              ["Urgence", project.prospect?.urgence],
+              ["Prochaine action", project.nextAction],
+            ]}
+          />
         </Panel>
       </div>
     </div>
@@ -138,7 +134,7 @@ export function ProjectSummaryTab({ project }: { project: ProjectRecord }) {
 
 export function ProjectVisitsTab({ project }: { project: ProjectRecord }) {
   return (
-    <Panel title="Visites de chiffrage" description="Mini pre-devis terrain lie au dossier affaire." actions={<Link to={`/projets/${project.id}/visites/nouveau`} className="text-sm font-semibold text-blue-700 hover:text-blue-800">Nouvelle visite de chiffrage</Link>}>
+    <Panel title="RDV / Visites" description="Pilotage simple des rendez-vous du dossier affaire." actions={<Link to={`/projets/${project.id}/visites/nouveau`} className="text-sm font-semibold text-blue-700 hover:text-blue-800">Nouvelle visite</Link>}>
       <div className="space-y-5">
         {project.appointments.length ? (
           <div className="grid gap-3">
@@ -150,24 +146,38 @@ export function ProjectVisitsTab({ project }: { project: ProjectRecord }) {
                     <div className="mt-1 text-sm text-slate-500">
                       {formatDate(appointment.starts_at)} - {appointment.statut} - {appointment.type}
                     </div>
+                    <div className="mt-2 grid gap-2 text-xs text-slate-500 sm:grid-cols-2 lg:grid-cols-4">
+                      <span>Client: {project.clientName}</span>
+                      <span>Adresse: {project.address || "Non renseignee"}</span>
+                      <span>Commercial: {project.salesperson || "A assigner"}</span>
+                      <span>Statut: {appointment.statut}</span>
+                    </div>
                   </div>
-                  <Link to={`/projets/${project.id}/visites/${appointment.id}`} className="inline-flex h-8 items-center rounded-lg border border-slate-200 px-3 text-xs font-semibold text-slate-900 hover:bg-slate-50">
-                    Ouvrir
-                  </Link>
+                  <div className="flex flex-wrap gap-2">
+                    <Link to={`/projets/${project.id}/visites/${appointment.id}`} className="inline-flex h-8 items-center rounded-lg border border-slate-200 px-3 text-xs font-semibold text-slate-900 hover:bg-slate-50">
+                      Ouvrir
+                    </Link>
+                    <Link to={`/projets/${project.id}/visites/${appointment.id}`} className="inline-flex h-8 items-center rounded-lg border border-slate-200 px-3 text-xs font-semibold text-slate-900 hover:bg-slate-50">
+                      Modifier
+                    </Link>
+                    <button type="button" disabled title="Duplication a connecter a la persistance des RDV projet." className="inline-flex h-8 items-center rounded-lg border border-slate-200 bg-slate-50 px-3 text-xs font-semibold text-slate-400">
+                      Dupliquer
+                    </button>
+                    <button type="button" disabled title="Replanification a connecter a la persistance des RDV projet." className="inline-flex h-8 items-center rounded-lg border border-slate-200 bg-slate-50 px-3 text-xs font-semibold text-slate-400">
+                      Replanifier
+                    </button>
+                    <button type="button" disabled title="Annulation a connecter a la persistance des RDV projet." className="inline-flex h-8 items-center rounded-lg border border-red-100 bg-red-50 px-3 text-xs font-semibold text-red-300">
+                      Annuler
+                    </button>
+                  </div>
                 </div>
                 <p className="mt-3 line-clamp-2 text-sm text-slate-600">{appointment.compte_rendu || appointment.notes || "Compte-rendu a completer."}</p>
               </div>
             ))}
           </div>
         ) : (
-          <EmptyProjectBlock title="Aucune visite de chiffrage" description="Creez une visite pour relever les sections, prestations, quantites, photos et notes qui alimenteront le pre-devis." />
+          <EmptyProjectBlock title="Aucun rendez-vous" description="Creez une visite de qualification, de chiffrage, de validation devis, de relance ou de SAV." />
         )}
-
-        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-          {["Sections", "Prestations", "Metrees", "Bibliotheque", "Photos", "Documents", "Notes techniques", "Pre-devis"].map((item) => (
-            <div key={item} className="rounded-2xl bg-slate-50 p-4 text-sm font-semibold text-slate-800">{item}</div>
-          ))}
-        </div>
       </div>
     </Panel>
   );

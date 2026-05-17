@@ -21,7 +21,23 @@ La fiche projet contient :
 
 La preparation chantier n'est pas geree dans Projet. Elle commence dans le module Chantiers apres acceptation d'un devis.
 
-## Visite de chiffrage
+## Onglet RDV / Visites
+
+L'onglet RDV / Visites est uniquement une liste de rendez-vous du projet.
+
+Il affiche pour chaque rendez-vous :
+
+- type de rendez-vous ;
+- date et heure ;
+- client ;
+- adresse ;
+- commercial ;
+- statut ;
+- actions ouvrir, modifier, dupliquer, replanifier et annuler.
+
+Il ne contient pas de sections, prestations, metrees ou bibliotheque. Ces outils appartiennent uniquement a l'ecran metier de visite de chiffrage.
+
+## Ecran visite de chiffrage
 
 Le bouton `Visite de chiffrage` ouvre `/projets/:id/visites/nouveau`.
 
@@ -30,7 +46,16 @@ Anciennes routes conservees :
 - `/projets/:id/rdv/nouveau`.
 - `/projets/:id/rdv/:rdvId`.
 
-La visite de chiffrage est un mini editeur de pre-devis terrain. Elle permet de construire pendant le rendez-vous :
+La visite de chiffrage est un outil terrain dedie, organise en etapes :
+
+- Informations ;
+- Description projet ;
+- Terrain / pre-devis ;
+- Contraintes chantier ;
+- Budget / decision ;
+- Synthese.
+
+L'etape Terrain / pre-devis permet de construire pendant le rendez-vous :
 
 - sections ;
 - prestations / taches ;
