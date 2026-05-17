@@ -1,21 +1,42 @@
+import { useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { ProjectDetailHeader } from "../features/projects/components/ProjectDetailHeader";
 import {
-  ProjectChantierSection,
-  ProjectDocumentsSection,
-  ProjectOverviewSection,
-  ProjectPreparationSection,
-  ProjectQuotesSection,
-  ProjectSavSection,
-  ProjectTimelineSection,
-  ProjectVisitsSection,
+  ProjectActivityTab,
+  ProjectDocumentsTab,
+  ProjectQuotesTab,
+  ProjectSavTab,
+  ProjectSummaryTab,
+  ProjectVisitsTab,
 } from "../features/projects/components/ProjectDetailSections";
 import { useProjectsData } from "../features/projects/hooks/useProjectsData";
+
+type ProjectTab = "summary" | "visits" | "quotes" | "documents" | "activity" | "sav";
+
+const TABS: Array<{ id: ProjectTab; label: string }> = [
+  { id: "summary", label: "Résumé" },
+  { id: "visits", label: "RDV / Visites" },
+  { id: "quotes", label: "Devis" },
+  { id: "documents", label: "Documents" },
+  { id: "activity", label: "Activité" },
+  { id: "sav", label: "SAV" },
+];
 
 export default function ProjectDetailPage() {
   const { id } = useParams();
   const { projectsById, loading, error } = useProjectsData();
   const project = id ? projectsById.get(id) : null;
+  const [activeTab, setActiveTab] = useState<ProjectTab>("summary");
+
+  const content = useMemo(() => {
+    if (!project) return null;
+    if (activeTab === "visits") return <ProjectVisitsTab project={project} />;
+    if (activeTab === "quotes") return <ProjectQuotesTab project={project} />;
+    if (activeTab === "documents") return <ProjectDocumentsTab project={project} />;
+    if (activeTab === "activity") return <ProjectActivityTab project={project} />;
+    if (activeTab === "sav") return <ProjectSavTab project={project} />;
+    return <ProjectSummaryTab project={project} />;
+  }, [activeTab, project]);
 
   if (loading) {
     return (
@@ -45,16 +66,30 @@ export default function ProjectDetailPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
       <ProjectDetailHeader project={project} />
-      <ProjectOverviewSection project={project} />
-      <ProjectVisitsSection project={project} />
-      <ProjectQuotesSection project={project} />
-      <ProjectDocumentsSection project={project} />
-      <ProjectPreparationSection project={project} />
-      <ProjectChantierSection project={project} />
-      <ProjectSavSection project={project} />
-      <ProjectTimelineSection project={project} />
+
+      <nav className="overflow-x-auto rounded-3xl border border-slate-200 bg-white p-2 shadow-sm" aria-label="Navigation projet">
+        <div className="flex min-w-max gap-1">
+          {TABS.map((tab) => (
+            <button
+              key={tab.id}
+              type="button"
+              onClick={() => setActiveTab(tab.id)}
+              className={[
+                "h-10 rounded-2xl px-4 text-sm font-semibold transition",
+                activeTab === tab.id
+                  ? "bg-slate-950 text-white shadow-sm"
+                  : "text-slate-600 hover:bg-slate-100 hover:text-slate-950",
+              ].join(" ")}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
+      </nav>
+
+      {content}
     </div>
   );
 }

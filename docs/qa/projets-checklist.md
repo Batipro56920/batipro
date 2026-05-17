@@ -4,41 +4,52 @@
 
 - `/projets` est accessible depuis la sidebar.
 - `/projets/:id` ouvre une fiche projet.
+- La fiche projet ouvre l’onglet Résumé par défaut.
+- Les onglets visibles sont : Résumé, RDV / Visites, Devis, Documents, Activité, SAV.
+- Les anciennes sections principales Préparation chantier, Chantier et Historique séparé ne sont plus affichées.
 - CRM, Devis et Chantiers restent accessibles.
-- Les permissions CRM continuent de protéger le module.
 
 ## Liste projets
 
 - Les KPI s’affichent sans erreur.
-- La recherche filtre par projet, client, adresse, type.
+- La recherche filtre par projet, client, adresse et type.
 - Le filtre statut fonctionne.
 - Le filtre type projet fonctionne.
 - Un projet s’ouvre depuis la table.
 - L’état vide affiche un CTA vers les prospects.
 
-## Fiche projet
+## Header fiche projet
 
-- Le header affiche nom, client, adresse, statut, montant, dates et commercial.
+- Le header affiche nom projet, client, adresse, statut, commercial, source, budget et échéance.
+- `Modifier` renvoie vers l’espace CRM adapté.
 - `Planifier RDV` ouvre `/crm/agenda`.
-- `Ouvrir devis` ouvre le devis lié si disponible.
-- `Créer devis` renvoie vers `/crm/devis` si aucun devis n’est lié.
-- `Ouvrir chantier` ouvre le chantier lié si disponible.
-- `Convertir chantier` est désactivé clairement sans chantier lié.
+- `Créer devis` ou `Ouvrir devis` fonctionne selon l’existence d’un devis.
+- `Relancer` ouvre `/crm/agenda`.
+- `Créer chantier` est disponible uniquement si un devis accepté existe.
+- Si un chantier existe déjà, le bouton devient `Ouvrir chantier`.
+- `Gagné` et `Perdu` sont désactivés tant que les mutations projet persistées ne sont pas branchées.
 
-## Sections
+## Onglet Résumé
 
-- Vue d’ensemble affiche les coordonnées et KPI dossier.
+- Informations projet visibles.
+- Qualification rapide visible.
+- Prochaines actions visibles.
+- Dernière activité visible.
+- Devis récent visible si disponible.
+- Documents récents visibles si disponibles.
+- Chantier lié affiché uniquement si un chantier existe.
+
+## Onglets métier
+
 - RDV / Visites affiche les rendez-vous existants ou un état vide.
-- Devis affiche les devis liés.
-- Documents affiche les documents liés ou un état vide.
-- Préparation chantier est visible mais contextualisée avant acceptation.
-- Chantier affiche le lien chantier si présent.
-- SAV affiche les tickets liés.
-- Historique affiche une timeline.
+- Devis affiche les devis liés avec montants HT/TTC et lien d’ouverture.
+- Documents affiche les catégories et documents liés.
+- Activité affiche la timeline commerciale.
+- SAV affiche uniquement les tickets liés au projet ou au client.
 
 ## Validation technique
 
 - `npm run build` passe.
-- Aucun bouton mort ajouté.
 - Aucune route existante cassée.
-- Aucune table Supabase nouvelle requise pour cette première couche project-centric.
+- Aucun service/API modifié pour cette refonte UI de fiche projet.
+- La séparation Commerce / Production est respectée.

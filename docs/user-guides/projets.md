@@ -1,50 +1,100 @@
 # Module Projets
 
-Le module **Projets** devient le dossier métier central avant-production de Batipro.
+Le module **Projets** appartient à la partie **Commerce** de Batipro. Il sert à gérer le dossier commercial avant la production chantier.
 
 ## Rôle
 
-Un projet regroupe le parcours complet :
+Un projet suit le parcours :
 
-Lead entrant -> Prospect -> Projet -> Qualification -> RDV / visite -> Devis -> Acceptation -> Préparation chantier -> Chantier -> Clôture -> SAV.
+Lead entrant -> Prospect -> Projet -> Qualification -> RDV / visite -> Devis -> Acceptation -> Chantier.
 
-Le CRM reste un cockpit transverse pour le pilotage commercial global. Le module Projets sert à suivre chaque dossier affaire individuellement.
+Le CRM reste un cockpit transverse. Le chantier reste dans la partie Production.
 
 ## Liste des projets
 
-La page `/projets` affiche :
+La page `/projets` affiche les dossiers commerciaux agrégés depuis les données existantes :
 
-- les projets actifs ;
-- les devis en attente ;
-- les projets à relancer ;
-- les projets acceptés ;
-- les projets perdus ;
-- le CA pipeline projet.
+- prospects ;
+- opportunités ;
+- devis ;
+- chantiers liés ;
+- documents ;
+- SAV client.
 
-Les projets sont construits à partir des données CRM existantes : prospects, opportunités, devis, chantiers et SAV. Cela évite la double saisie et prépare la migration vers un modèle projet dédié.
+Les KPI donnent une lecture rapide des projets actifs, devis en attente, relances, projets acceptés, projets perdus et CA pipeline.
 
 ## Fiche projet
 
-La fiche `/projets/:id` contient :
+La page `/projets/:id` s’ouvre sur l’onglet **Résumé**.
 
-- Vue d’ensemble : client, coordonnées, adresse, type projet, source, budget, prochaine action.
-- RDV / Visites : rendez-vous, compte-rendu, qualification technique.
-- Devis : devis liés au dossier.
-- Documents : pièces client, plans, photos, devis et annexes.
-- Préparation chantier : visible après acceptation.
-- Chantier : lien vers le chantier créé.
-- SAV : tickets liés au chantier ou au client.
-- Historique : timeline commerciale et opérationnelle.
+Navigation projet :
 
-## Actions
+- Résumé ;
+- RDV / Visites ;
+- Devis ;
+- Documents ;
+- Activité ;
+- SAV.
 
-- `Depuis prospect` ouvre le portefeuille prospects pour créer ou qualifier un lead.
-- `Nouveau devis` ouvre la vue devis CRM.
-- `Planifier RDV` ouvre l’agenda commercial.
-- `Ouvrir devis` ouvre le workspace du devis lié.
-- `Ouvrir chantier` ouvre le chantier lié si disponible.
-- `Convertir chantier` reste désactivé tant qu’aucun devis accepté n’a généré de chantier.
+Les sections **Préparation chantier**, **Chantier** et **Historique** ne sont plus des sections principales. Le chantier apparaît seulement sous forme de petit bloc “Chantier lié” dans le Résumé si un chantier existe.
 
-## Évolution prévue
+## Résumé
 
-La base actuelle réutilise les données CRM existantes. La prochaine étape structurante consiste à créer des tables dédiées aux projets et aux visites métier si la persistance complète des comptes-rendus de visite doit être séparée de l’agenda CRM.
+Le Résumé affiche :
+
+- informations projet ;
+- client, adresse, commercial, source, budget et échéance ;
+- KPI dossier : RDV, devis, montant devis, documents, relances ouvertes, SAV ;
+- qualification rapide ;
+- prochaines actions ;
+- devis récent ;
+- documents récents ;
+- chantier lié si disponible.
+
+## RDV / Visites
+
+L’onglet sert à préparer les visites commerciales et techniques :
+
+- liste des RDV ;
+- bouton de planification ;
+- compte-rendu ;
+- checklist visite ;
+- photos ;
+- métrés ;
+- contraintes techniques ;
+- accès et stationnement ;
+- décisions prises ;
+- actions post-RDV.
+
+## Devis
+
+L’onglet Devis centralise :
+
+- pré-devis ;
+- devis final ;
+- variantes ;
+- statut signature ;
+- relances ;
+- montants HT/TTC ;
+- validité.
+
+Si un devis est accepté, l’action “Créer chantier” devient disponible dans le header projet.
+
+## Documents
+
+Catégories prévues :
+
+- Photos ;
+- Plans ;
+- Documents client ;
+- Emails ;
+- Pièces devis ;
+- Annexes.
+
+## Activité
+
+L’onglet Activité remplace l’ancien Historique. Il affiche la timeline commerciale : création prospect, projet, RDV, devis, relances, acceptation ou création chantier.
+
+## SAV
+
+L’onglet SAV reste léger. Il affiche uniquement les tickets liés au projet ou au client, sans remplacer le module Production SAV.
