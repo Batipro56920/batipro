@@ -13,6 +13,7 @@ import type { QuoteBuilderFlatRow, QuoteBuilderNode, QuoteBuilderQuote, QuoteLib
 
 type Props = { onClose: () => void };
 type Mode = "edit" | "preview";
+type TextPanelKey = "paymentTerms" | "legalMentions" | "waste" | "footerNotes";
 
 export function QuoteBuilderWorkspace({ onClose }: Props) {
   const quote = useQuoteBuilderStore((state) => state.quote);
@@ -94,7 +95,7 @@ export function QuoteBuilderWorkspace({ onClose }: Props) {
       <QuoteTopbar quote={quote} mode={mode} saveState={saveState} libraryOpen={libraryOpen} onToggleLibrary={() => setLibraryOpen((open) => !open)} onModeChange={setMode} onClose={onClose} onSave={() => void save()} optionsOpen={optionsOpen} setOptionsOpen={setOptionsOpen} />
       {error ? <div className="mx-6 mt-3 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{error}</div> : null}
 
-      <main className="grid min-h-[calc(100vh-56px)] grid-cols-1 gap-0 xl:grid-cols-[auto_minmax(760px,1fr)_300px]">
+      <main className="grid min-h-[calc(100vh-56px)] grid-cols-1 gap-0 xl:grid-cols-[auto_minmax(760px,1fr)_260px]">
         <QuoteLibraryPanel open={libraryOpen} onToggle={() => setLibraryOpen((open) => !open)} query={query} setQuery={setQuery} tab={libraryTab} setTab={setLibraryTab} items={library} onInsert={insertLibraryItem} />
         <section className="overflow-auto px-4 py-5 xl:px-6">
           {mode === "edit" ? (
@@ -195,6 +196,9 @@ function QuoteLibraryPanel({ open, onToggle, query, setQuery, tab, setTab, items
 }
 
 function QuoteDocumentSurface({ quote, rows, table, sensors, onDragEnd, updateQuote, updateNode, removeNode, addItem, addSection, addSubsection }: { quote: QuoteBuilderQuote; rows: QuoteBuilderFlatRow[]; table: ReturnType<typeof useReactTable<QuoteBuilderFlatRow>>; sensors: ReturnType<typeof useSensors>; onDragEnd: (event: DragEndEvent) => void; updateQuote: (patch: Partial<QuoteBuilderQuote>) => void; updateNode: (id: string, patch: Partial<QuoteBuilderNode>) => void; removeNode: (id: string) => void; addItem: (kind?: any) => void; addSection: () => void; addSubsection: () => void }) {
+  const [editingText, setEditingText] = useState<TextPanelKey | null>(null);
+  const wasteText = "Gestion des déchets selon la réglementation applicable.";
+
   return (
     <div className="mx-auto max-w-[1080px] overflow-hidden rounded-sm border border-slate-200 bg-white shadow-sm">
       <div className="grid gap-6 p-7 lg:grid-cols-[1fr_360px]">
@@ -258,61 +262,108 @@ function QuoteDocumentSurface({ quote, rows, table, sensors, onDragEnd, updateQu
         </div>
       </div>
 
-      <div className="grid gap-6 p-7 md:grid-cols-2">
-        <TextPanel title="Conditions de paiement" value={quote.paymentTerms} onChange={(paymentTerms) => updateQuote({ paymentTerms })} />
-        <TextPanel title="Mentions légales" value={quote.legalMentions} onChange={(legalMentions) => updateQuote({ legalMentions })} />
-        <TextPanel title="Gestion des déchets" value="Gestion des déchets selon la réglementation applicable." onChange={() => undefined} />
-        <TextPanel title="Notes de bas de page" value={quote.footerNotes} onChange={(footerNotes) => updateQuote({ footerNotes })} />
+      <div className="border-t border-slate-200 bg-white px-7 py-5">
+        <div className="grid gap-3 md:grid-cols-2">
+          <CompactDocumentCard title="Conditions de paiement" summary={quote.paymentTerms} action="Modifier" onClick={() => setEditingText("paymentTerms")} />
+          <CompactDocumentCard title="Mentions légales" summary={quote.legalMentions ? `${countTextBlocks(quote.legalMentions)} bloc(s) configuré(s)` : "Aucune mention configurée"} action="Modifier" onClick={() => setEditingText("legalMentions")} />
+          <CompactDocumentCard title="Gestion déchets" summary="Gestion déchets configurée" action="Modifier" onClick={() => setEditingText("waste")} />
+          <CompactDocumentCard title="Notes de bas de page" summary={quote.footerNotes ? `${countTextBlocks(quote.footerNotes)} note(s) configurée(s)` : "Aucune note configurée"} action="Modifier" onClick={() => setEditingText("footerNotes")} />
+        </div>
       </div>
+
+      {editingText === "paymentTerms" ? <TextEditDrawer title="Conditions de paiement" value={quote.paymentTerms} onChange={(paymentTerms) => updateQuote({ paymentTerms })} onClose={() => setEditingText(null)} /> : null}
+      {editingText === "legalMentions" ? <TextEditDrawer title="Mentions légales" value={quote.legalMentions} onChange={(legalMentions) => updateQuote({ legalMentions })} onClose={() => setEditingText(null)} /> : null}
+      {editingText === "waste" ? <TextEditDrawer title="Gestion déchets" value={wasteText} onChange={() => undefined} onClose={() => setEditingText(null)} readOnly /> : null}
+      {editingText === "footerNotes" ? <TextEditDrawer title="Notes de bas de page" value={quote.footerNotes} onChange={(footerNotes) => updateQuote({ footerNotes })} onClose={() => setEditingText(null)} /> : null}
     </div>
   );
 }
 
 function QuoteTotalsPanel({ quote, totals, onPdf, updateQuote }: { quote: QuoteBuilderQuote; totals: ReturnType<typeof calculateQuoteBuilderTotals>; onPdf: () => void; updateQuote: (patch: Partial<QuoteBuilderQuote>) => void }) {
-  const [vatOpen, setVatOpen] = useState(false);
-  const [marginOpen, setMarginOpen] = useState(false);
+  const [detailsOpen, setDetailsOpen] = useState(false);
   return (
     <aside className="hidden border-l border-slate-200 bg-slate-50 xl:block">
       <div className="sticky top-14 h-[calc(100vh-56px)] overflow-auto p-3">
-        <div className="rounded-xl border border-slate-200 bg-white p-4">
+        <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
           <div className="space-y-2 text-sm">
             <TotalRow label="Total HT" value={totals.totalHt} />
             <TotalRow label="TVA" value={totals.totalVat} />
             <TotalRow label="Total TTC" value={totals.totalTtc} strong />
           </div>
-          <div className="my-4 -mx-4 flex justify-between bg-blue-600 px-4 py-3 text-base font-bold text-white"><span>Net à payer</span><span>{formatCurrency(totals.totalTtc)}</span></div>
+          <button type="button" onClick={() => setDetailsOpen(true)} className="mt-4 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm font-semibold text-slate-800 transition hover:bg-slate-100">Détails financiers</button>
+        </div>
+      </div>
+      {detailsOpen ? <FinancialDetailsDrawer quote={quote} totals={totals} onPdf={onPdf} updateQuote={updateQuote} onClose={() => setDetailsOpen(false)} /> : null}
+    </aside>
+  );
+}
+
+function FinancialDetailsDrawer({ quote, totals, onPdf, updateQuote, onClose }: { quote: QuoteBuilderQuote; totals: ReturnType<typeof calculateQuoteBuilderTotals>; onPdf: () => void; updateQuote: (patch: Partial<QuoteBuilderQuote>) => void; onClose: () => void }) {
+  return (
+    <div className="fixed inset-0 z-50 flex justify-end bg-slate-950/30">
+      <aside className="h-full w-full max-w-md overflow-auto bg-white p-6 shadow-2xl">
+        <div className="flex items-center justify-between">
+          <div>
+            <h2 className="text-lg font-semibold text-slate-950">Détails financiers</h2>
+            <p className="text-sm text-slate-500">Acompte, TVA, marge et PDF.</p>
+          </div>
+          <button type="button" onClick={onClose} className={iconButtonClass}><X className="h-4 w-4" /></button>
+        </div>
+        <div className="mt-6 rounded-xl border border-slate-200 p-4">
           <div className="space-y-2 text-sm">
+            <TotalRow label="Total HT" value={totals.totalHt} />
+            <TotalRow label="TVA" value={totals.totalVat} />
+            <TotalRow label="Total TTC" value={totals.totalTtc} strong />
             <TotalRow label={`Acompte ${quote.settings.depositPercent}%`} value={totals.depositTtc} />
             <TotalRow label="Reste à facturer" value={totals.remainingTtc} />
           </div>
           <label className="mt-4 block text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Acompte %</label>
           <NumberInput value={quote.settings.depositPercent} onChange={(depositPercent) => updateQuote({ settings: { ...quote.settings, depositPercent } })} />
-          <button type="button" onClick={onPdf} className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-slate-950 px-4 py-2.5 text-sm font-semibold text-white"><Download className="h-4 w-4" /> Générer PDF</button>
         </div>
+        <div className="mt-4 rounded-xl border border-slate-200 p-4">
+          <div className="grid grid-cols-3 border-b border-slate-200 pb-2 text-xs font-semibold text-slate-500"><span>Taux</span><span className="text-right">Base HT</span><span className="text-right">TVA</span></div>
+          {totals.vatBreakdown.map((item) => (
+            <div key={item.rate} className="grid grid-cols-3 py-2 text-sm text-slate-600"><span>{item.rate}%</span><span className="text-right">{formatCurrency(item.baseHt)}</span><span className="text-right">{formatCurrency(item.vat)}</span></div>
+          ))}
+        </div>
+        <div className="mt-4 rounded-xl border border-slate-200 p-4">
+          <TotalRow label="Marge brute" value={0} />
+          <div className="mt-2 flex justify-between text-sm text-slate-600"><span>Taux marge</span><span>À chiffrer</span></div>
+        </div>
+        <button type="button" onClick={onPdf} className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-slate-950 px-4 py-2.5 text-sm font-semibold text-white"><Download className="h-4 w-4" /> Générer PDF</button>
+      </aside>
+    </div>
+  );
+}
 
-        <button type="button" onClick={() => setVatOpen((open) => !open)} className="mt-3 flex w-full items-center justify-between rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700">
-          Ventilation TVA <ChevronDown className={`h-4 w-4 transition ${vatOpen ? "rotate-180" : ""}`} />
-        </button>
-        {vatOpen ? (
-          <div className="mt-2 rounded-xl border border-slate-200 bg-white p-4">
-            <div className="grid grid-cols-3 border-b border-slate-200 pb-2 text-xs font-semibold text-slate-500"><span>Taux</span><span className="text-right">Base HT</span><span className="text-right">TVA</span></div>
-            {totals.vatBreakdown.map((item) => (
-              <div key={item.rate} className="grid grid-cols-3 py-2 text-sm text-slate-600"><span>{item.rate}%</span><span className="text-right">{formatCurrency(item.baseHt)}</span><span className="text-right">{formatCurrency(item.vat)}</span></div>
-            ))}
-          </div>
-        ) : null}
-
-        <button type="button" onClick={() => setMarginOpen((open) => !open)} className="mt-3 flex w-full items-center justify-between rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700">
-          Marge <ChevronDown className={`h-4 w-4 transition ${marginOpen ? "rotate-180" : ""}`} />
-        </button>
-        {marginOpen ? (
-          <div className="mt-2 rounded-xl border border-slate-200 bg-white p-4">
-            <TotalRow label="Marge brute" value={0} />
-            <div className="mt-2 flex justify-between text-sm text-slate-600"><span>Taux marge</span><span>À chiffrer</span></div>
-          </div>
-        ) : null}
+function CompactDocumentCard({ title, summary, action, onClick }: { title: string; summary: string; action: string; onClick: () => void }) {
+  return (
+    <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="text-sm font-semibold text-slate-950">{title}</div>
+          <div className="mt-1 line-clamp-2 text-xs leading-5 text-slate-500">{summary || "Non configuré"}</div>
+        </div>
+        <button type="button" onClick={onClick} className="shrink-0 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-100">{action}</button>
       </div>
-    </aside>
+    </div>
+  );
+}
+
+function TextEditDrawer({ title, value, onChange, onClose, readOnly }: { title: string; value: string; onChange: (value: string) => void; onClose: () => void; readOnly?: boolean }) {
+  return (
+    <div className="fixed inset-0 z-50 flex justify-end bg-slate-950/30">
+      <aside className="h-full w-full max-w-lg bg-white p-6 shadow-2xl">
+        <div className="flex items-center justify-between">
+          <h2 className="text-lg font-semibold text-slate-950">{title}</h2>
+          <button type="button" onClick={onClose} className={iconButtonClass}><X className="h-4 w-4" /></button>
+        </div>
+        <textarea className="mt-6 min-h-[360px] w-full rounded-xl border border-slate-200 p-4 text-sm leading-6 outline-none focus:border-blue-300" value={value} onChange={(event) => onChange(event.target.value)} readOnly={readOnly} />
+        <div className="mt-4 flex justify-end">
+          <button type="button" onClick={onClose} className={primaryButtonClass}>Fermer</button>
+        </div>
+      </aside>
+    </div>
   );
 }
 
@@ -427,10 +478,6 @@ function Field({ value, onChange, placeholder, muted }: { value: string; onChang
   return <input className={`w-full rounded-lg border border-transparent px-3 py-3 text-sm outline-none hover:border-slate-200 focus:border-blue-300 ${muted ? "bg-slate-50" : "bg-white"}`} value={value} onChange={(event) => onChange(event.target.value)} placeholder={placeholder} />;
 }
 
-function TextPanel({ title, value, onChange }: { title: string; value: string; onChange: (value: string) => void }) {
-  return <label className="block"><span className="text-base font-semibold text-slate-950">{title}</span><textarea className="mt-3 min-h-24 w-full rounded-xl border border-slate-200 p-3 text-sm leading-6 outline-none focus:border-blue-300" value={value} onChange={(event) => onChange(event.target.value)} /></label>;
-}
-
 function NumberInput({ value, onChange }: { value: number; onChange: (value: number) => void }) {
   return <input className="h-8 w-full min-w-16 rounded border border-slate-200 px-2 text-right text-sm" type="number" step="0.01" value={value} onChange={(event) => onChange(Number(event.target.value))} />;
 }
@@ -449,6 +496,10 @@ function TotalRow({ label, value, strong }: { label: string; value: number; stro
 
 function Metric({ label, value }: { label: string; value: string }) {
   return <div className="rounded-xl bg-slate-50 p-3"><div className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">{label}</div><div className="mt-2 text-lg font-bold text-slate-950">{value}</div></div>;
+}
+
+function countTextBlocks(value: string) {
+  return value.split(/\n+/).map((line) => line.trim()).filter(Boolean).length || 1;
 }
 
 function formatCurrency(value: number) {
