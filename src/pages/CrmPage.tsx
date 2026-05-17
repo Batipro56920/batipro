@@ -140,9 +140,6 @@ export default function CrmPage({ section = "dashboard" }: Props) {
   };
   const transformationRate = data.quotes.length ? Math.round((kpis.quotesSigned / data.quotes.length) * 100) : 0;
 
-  const filteredClients = data.clients.filter((row) =>
-    [entityLabel(row), row.email, row.telephone, row.ville, row.societe].join(" ").toLowerCase().includes(query.toLowerCase()),
-  );
   async function submitSafely(action: () => Promise<unknown>) {
     setSaving(true);
     setError(null);
@@ -341,7 +338,17 @@ export default function CrmPage({ section = "dashboard" }: Props) {
           onCreateQuote={createDraftQuoteAndOpen}
         />
       ) : section === "clients" ? (
-        <CrmClientsSection rows={filteredClients} chantiers={data.chantiers} sav={data.sav} query={query} setQuery={setQuery} onCreate={() => setModal("client")} />
+        <CrmClientsSection
+          rows={data.clients}
+          chantiers={data.chantiers}
+          sav={data.sav}
+          quotes={data.quotes}
+          invoices={data.invoices}
+          documents={data.documents}
+          query={query}
+          setQuery={setQuery}
+          onCreate={() => setModal("client")}
+        />
       ) : section === "opportunities" ? (
         <CrmOpportunitiesSection
           data={data}
@@ -412,7 +419,6 @@ export default function CrmPage({ section = "dashboard" }: Props) {
     </div>
   );
 }
-
 
 
 
