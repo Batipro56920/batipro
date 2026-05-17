@@ -63,7 +63,7 @@ export default function CrmDashboardSection({
       label: "Taux transformation",
       value: `${transformationRate}%`,
       hint: "Devis acceptés / devis totaux",
-      href: "/crm/statistiques",
+      href: "/statistiques",
       tone: transformationRate >= 50 ? "success" : transformationRate > 0 ? "info" : "normal",
     },
     {

@@ -383,7 +383,7 @@ export default function CrmPage({ section = "dashboard" }: Props) {
       ) : section === "agenda" ? (
         <CrmAgendaSection tasks={data.tasks} appointments={data.appointments} onTask={() => setModal("task")} onAppointment={() => setModal("appointment")} onDone={(row) => submitSafely(async () => updateCrmTask(row.id, { statut: "terminee" }))} />
       ) : section === "sav" ? (
-        <CrmSavSection rows={data.sav} clients={clientById} onCreate={() => setModal("sav")} />
+        <CrmSavSection rows={data.sav} clients={clientById} chantiers={data.chantiers} onCreate={() => setModal("sav")} />
       ) : section === "stats" ? (
         <CrmStatsSection data={data} kpis={kpis} transformationRate={transformationRate} />
       ) : (
@@ -419,7 +419,6 @@ export default function CrmPage({ section = "dashboard" }: Props) {
     </div>
   );
 }
-
 
 
 

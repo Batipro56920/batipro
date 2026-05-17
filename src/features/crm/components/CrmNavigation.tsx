@@ -11,16 +11,13 @@ const PRIMARY_NAV: Array<{ key: CrmSection; label: string; href: string }> = [
   { key: "quotes", label: "Devis", href: "/crm/devis" },
   { key: "agenda", label: "Agenda", href: "/crm/agenda" },
   { key: "sav", label: "SAV", href: "/crm/sav" },
-  { key: "stats", label: "Statistiques", href: "/crm/statistiques" },
 ];
 
 const SECONDARY_NAV: Array<{ key: CrmSection; label: string; href: string }> = [
-  { key: "invoices", label: "Factures", href: "/crm/factures" },
-  { key: "purchases", label: "Achats", href: "/crm/achats" },
   { key: "contacts", label: "Contacts", href: "/crm/contacts" },
   { key: "resources", label: "Ressources", href: "/crm/ressources" },
-  { key: "library", label: "Bibliothèque", href: "/crm/bibliotheque" },
-  { key: "settings", label: "Paramètres", href: "/crm/parametres" },
+  { key: "library", label: "Bibliothèque CRM", href: "/crm/bibliotheque" },
+  { key: "settings", label: "Paramètres CRM", href: "/crm/parametres" },
 ];
 
 function navClass(active: boolean) {

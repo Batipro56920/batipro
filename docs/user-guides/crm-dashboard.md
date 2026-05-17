@@ -23,9 +23,8 @@ Les onglets visibles couvrent les usages quotidiens :
 - **Devis** : liste et actions devis.
 - **Agenda** : relances, tâches et rendez-vous.
 - **SAV** : tickets après chantier.
-- **Statistiques** : indicateurs commerciaux.
 
-Le menu **Plus** regroupe les sections moins fréquentes : factures, achats, contacts, ressources, bibliothèque et paramètres.
+Le menu **Plus** regroupe les sections moins fréquentes : contacts, ressources, bibliothèque CRM et paramètres CRM.
 
 ## KPI
 

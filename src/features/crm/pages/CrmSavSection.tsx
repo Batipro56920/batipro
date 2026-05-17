@@ -1,23 +1,58 @@
+import { useState } from "react";
 import type { CrmClientRow, CrmDataset } from "../../../services/crm.service";
-import { dateOnly, entityLabel, statusPill } from "../components/crmFormat";
-import ListShell from "../components/ListShell";
+import { SavEmptyState } from "../sav/components/SavEmptyState";
+import { SavHeader } from "../sav/components/SavHeader";
+import { SavKanban } from "../sav/components/SavKanban";
+import { SavKpiGrid } from "../sav/components/SavKpiGrid";
+import { SavList } from "../sav/components/SavList";
+import { SavPlanning } from "../sav/components/SavPlanning";
+import { SavTicketDrawer } from "../sav/components/SavTicketDrawer";
+import { SavToolbar } from "../sav/components/SavToolbar";
+import { useSavFilters } from "../sav/hooks/useSavFilters";
+import type { SavView, SavWithContext } from "../sav/types";
 
-export default function CrmSavSection({ rows, clients, onCreate }: { rows: CrmDataset["sav"]; clients: Map<string, CrmClientRow>; onCreate: () => void }) {
+export default function CrmSavSection({
+  rows,
+  clients,
+  chantiers,
+  onCreate,
+}: {
+  rows: CrmDataset["sav"];
+  clients: Map<string, CrmClientRow>;
+  chantiers: CrmDataset["chantiers"];
+  onCreate: () => void;
+}) {
+  const [view, setView] = useState<SavView>("list");
+  const [selectedTicket, setSelectedTicket] = useState<SavWithContext | null>(null);
+  const sav = useSavFilters(rows, { clients, chantiers });
+
   return (
-    <ListShell title="SAV / Après chantier" actionLabel="Créer ticket SAV" query="" setQuery={() => undefined} onCreate={onCreate} hideSearch>
-      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-        {rows.map((row) => (
-          <div key={row.id} className="rounded-3xl border bg-white p-5">
-            <div className="flex items-start justify-between gap-3">
-              <div className="font-semibold">{row.titre}</div>
-              <span className={statusPill(row.statut)}>{row.statut}</span>
-            </div>
-            <div className="mt-2 text-sm text-slate-500">{entityLabel(clients.get(row.client_id ?? ""))}</div>
-            <p className="mt-3 text-sm text-slate-700">{row.description ?? "—"}</p>
-            <div className="mt-3 text-xs text-slate-500">Urgence : {row.urgence} · Créé le {dateOnly(row.created_at)}</div>
-          </div>
-        ))}
-      </div>
-    </ListShell>
+    <div className="space-y-5">
+      <SavHeader onCreate={onCreate} />
+      <SavKpiGrid rows={sav.rowsWithContext} />
+      <SavToolbar
+        filters={sav.filters}
+        setFilters={sav.setFilters}
+        clients={sav.clients}
+        chantiers={sav.chantiers}
+        priorities={sav.priorities}
+        statuses={sav.statuses}
+        assignees={sav.assignees}
+        view={view}
+        setView={setView}
+      />
+
+      {sav.filteredRows.length === 0 ? (
+        <SavEmptyState onCreate={onCreate} />
+      ) : view === "kanban" ? (
+        <SavKanban rows={sav.filteredRows} onSelect={setSelectedTicket} />
+      ) : view === "planning" ? (
+        <SavPlanning rows={sav.filteredRows} onSelect={setSelectedTicket} />
+      ) : (
+        <SavList rows={sav.filteredRows} onSelect={setSelectedTicket} />
+      )}
+
+      <SavTicketDrawer ticket={selectedTicket} onClose={() => setSelectedTicket(null)} />
+    </div>
   );
 }

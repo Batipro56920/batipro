@@ -9,7 +9,6 @@
 - [ ] `/crm/devis` reste accessible.
 - [ ] `/crm/agenda` reste accessible.
 - [ ] `/crm/sav` reste accessible.
-- [ ] `/crm/statistiques` reste accessible.
 
 ## Header
 
@@ -25,7 +24,7 @@
 ## Navigation
 
 - [ ] Les onglets principaux sont visibles.
-- [ ] Le menu `Plus` contient Factures, Achats, Contacts, Ressources, Bibliothèque, Paramètres.
+- [ ] Le menu `Plus` contient Contacts, Ressources, Bibliothèque CRM, Paramètres CRM.
 - [ ] L’onglet actif est identifiable.
 - [ ] Aucune route CRM existante n’est supprimée.
 - [ ] Le menu `Plus` reste utilisable en tablette et mobile.
