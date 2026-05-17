@@ -1,8 +1,8 @@
-# QA - Editeur devis projet
+# QA - Quote Builder V1 projet
 
 ## Routes
 
-- [ ] `/projets/:projectId/devis/nouveau` ouvre l'editeur devis.
+- [ ] `/projets/:projectId/devis/nouveau` ouvre le Quote Builder V1.
 - [ ] `/projets/:projectId/devis/:quoteId/edit` ouvre l'editeur devis existant.
 - [ ] Le bouton `Creer devis` depuis un projet ne redirige pas vers `/crm/devis`.
 - [ ] Le bouton `Creer pre-devis` depuis une visite ouvre l'editeur projet.
@@ -22,26 +22,24 @@
 
 - [ ] Ajouter une section.
 - [ ] Ajouter une sous-section.
-- [ ] Ajouter une fourniture.
-- [ ] Ajouter une main d'oeuvre.
-- [ ] Ajouter un ouvrage.
-- [ ] Ajouter un texte libre.
+- [ ] Ajouter une ligne.
+- [ ] Supprimer une ligne.
+- [ ] Reordonner des lignes avec drag & drop.
 - [ ] Modifier quantite, unite, prix HT et TVA.
 - [ ] Verifier le recalcul HT / TVA / TTC.
-- [ ] Inserer une ligne depuis la bibliotheque.
+- [ ] Ajouter une ligne depuis la bibliotheque laterale.
 
 ## Sauvegarde et navigation
 
-- [ ] Enregistrer un nouveau brouillon projet.
+- [ ] Enregistrer un nouveau devis projet.
 - [ ] Fermer et revenir a la fiche projet.
 - [ ] Rouvrir le devis projet sans perdre les lignes.
 - [ ] Enregistrer un devis existant sans erreur.
 
-## Preview / PDF
+## PDF
 
-- [ ] Basculer en previsualisation.
-- [ ] Les notes internes ne polluent pas le rendu client si option masque active.
-- [ ] Les conditions de paiement et mentions apparaissent.
+- [ ] Export PDF minimal disponible.
+- [ ] Les lignes, totaux et conditions apparaissent dans le PDF.
 
 ## Responsive
 

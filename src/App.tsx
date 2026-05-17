@@ -29,7 +29,7 @@ const ChantiersPage = lazy(() => import("./pages/ChantiersPage"));
 const ProjectsPage = lazy(() => import("./pages/ProjectsPage"));
 const ProjectDetailPage = lazy(() => import("./pages/ProjectDetailPage"));
 const ProjectAppointmentPage = lazy(() => import("./pages/ProjectAppointmentPage"));
-const ProjectQuoteBuilderPage = lazy(() => import("./pages/ProjectQuoteBuilderPage"));
+const ProjectQuoteBuilderV1Page = lazy(() => import("./pages/ProjectQuoteBuilderV1Page"));
 
 export default function App() {
   return (
@@ -242,8 +242,8 @@ export default function App() {
           element={
             <RequireCompanyFeature profilePermissionKey="crm">
               <LazyRouteErrorBoundary>
-                <Suspense fallback={<div className="rounded-3xl border bg-white p-8 text-center text-sm text-slate-500">Chargement de l'editeur devis...</div>}>
-                  <ProjectQuoteBuilderPage />
+                <Suspense fallback={<div className="rounded-3xl border bg-white p-8 text-center text-sm text-slate-500">Chargement du Quote Builder...</div>}>
+                  <ProjectQuoteBuilderV1Page />
                 </Suspense>
               </LazyRouteErrorBoundary>
             </RequireCompanyFeature>
@@ -255,7 +255,7 @@ export default function App() {
             <RequireCompanyFeature profilePermissionKey="crm">
               <LazyRouteErrorBoundary>
                 <Suspense fallback={<div className="rounded-3xl border bg-white p-8 text-center text-sm text-slate-500">Chargement de l'editeur devis...</div>}>
-                  <ProjectQuoteBuilderPage />
+                  <ProjectQuoteBuilderV1Page />
                 </Suspense>
               </LazyRouteErrorBoundary>
             </RequireCompanyFeature>

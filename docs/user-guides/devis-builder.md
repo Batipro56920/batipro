@@ -1,6 +1,6 @@
-# Guide utilisateur - Editeur devis Batipro
+# Guide utilisateur - Quote Builder V1 Batipro
 
-L'editeur devis Batipro transforme une visite de chiffrage en devis professionnel sans double saisie.
+Le Quote Builder V1 devient la base officielle du futur moteur devis Batipro. L'ancien workspace devis n'est plus utilise pour creer un devis depuis un projet.
 
 ## Acces depuis un projet
 
@@ -11,6 +11,25 @@ Depuis une fiche projet :
 - `Creer pre-devis` depuis une visite de chiffrage ouvre aussi l'editeur projet.
 
 Le devis n'est pas cree depuis le CRM. Le CRM Devis reste une vue globale de suivi.
+
+## V1 actuelle
+
+La V1 couvre :
+
+- structure section > sous-section > ligne ;
+- edition quantite, unite, prix HT, TVA ;
+- calcul total HT / TVA / TTC avec `decimal.js` ;
+- table editable TanStack Table ;
+- drag & drop avec dnd-kit ;
+- import depuis visite de chiffrage ;
+- bibliotheque laterale ;
+- panneau totaux ;
+- conditions de paiement, mentions et notes ;
+- sauvegarde via couche repository ;
+- export PDF minimal ;
+- version mobile en cartes.
+
+La V1 n'est pas encore le module final : ouvrages composes avances, signature, envoi client et templates complets restent a construire sur ce modele.
 
 ## Donnees reprises automatiquement
 
