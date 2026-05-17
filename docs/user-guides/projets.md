@@ -56,7 +56,7 @@ Le Résumé affiche :
 L’onglet sert à préparer les visites commerciales et techniques :
 
 - liste des RDV ;
-- bouton de planification ;
+- bouton de planification dans le projet ;
 - compte-rendu ;
 - checklist visite ;
 - photos ;
@@ -65,6 +65,22 @@ L’onglet sert à préparer les visites commerciales et techniques :
 - accès et stationnement ;
 - décisions prises ;
 - actions post-RDV.
+
+Le bouton `Planifier RDV` ouvre `/projets/:id/rdv/nouveau`. Le RDV est créé depuis le dossier Projet avec un wizard structuré, puis synchronisé dans l’agenda CRM global comme événement transverse.
+
+### Wizard RDV projet
+
+Le wizard contient :
+
+- Renseignements : client, téléphone, email, adresse, commercial, date, heure, durée.
+- Description projet : type, besoin, zones, objectif, urgence, délai.
+- Tâches à vérifier : photos, métrés, accès, support, contraintes, plans, budget, décisions.
+- Contraintes : accès, stationnement, étage, copropriété, horaires, bruit, sécurité, eau/électricité, gravats.
+- Photos & documents : notes sur photos, plans, pièces client, devis concurrent et pièces manquantes.
+- Budget & décision : budget, fourchette, priorité, décision, options, prochaines actions, relance.
+- Synthèse : résumé automatique, points bloquants et actions.
+
+La sauvegarde brouillon est locale tant que le RDV n’est pas enregistré. À l’enregistrement, le RDV apparaît dans l’onglet RDV / Visites et dans l’agenda CRM.
 
 ## Devis
 

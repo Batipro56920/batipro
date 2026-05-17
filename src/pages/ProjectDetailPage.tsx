@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useParams, useSearchParams } from "react-router-dom";
 import { ProjectDetailHeader } from "../features/projects/components/ProjectDetailHeader";
 import {
   ProjectActivityTab,
@@ -24,9 +24,11 @@ const TABS: Array<{ id: ProjectTab; label: string }> = [
 
 export default function ProjectDetailPage() {
   const { id } = useParams();
+  const [searchParams] = useSearchParams();
   const { projectsById, loading, error } = useProjectsData();
   const project = id ? projectsById.get(id) : null;
-  const [activeTab, setActiveTab] = useState<ProjectTab>("summary");
+  const initialTab = TABS.some((tab) => tab.id === searchParams.get("tab")) ? (searchParams.get("tab") as ProjectTab) : "summary";
+  const [activeTab, setActiveTab] = useState<ProjectTab>(initialTab);
 
   const content = useMemo(() => {
     if (!project) return null;

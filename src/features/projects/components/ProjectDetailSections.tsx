@@ -148,7 +148,7 @@ export function ProjectSummaryTab({ project }: { project: ProjectRecord }) {
 
 export function ProjectVisitsTab({ project }: { project: ProjectRecord }) {
   return (
-    <Panel title="RDV / Visites" description="Préparer et suivre les visites commerciales et techniques." actions={<Link to="/crm/agenda" className="text-sm font-semibold text-blue-700 hover:text-blue-800">Planifier RDV</Link>}>
+    <Panel title="RDV / Visites" description="Préparer et suivre les visites commerciales et techniques." actions={<Link to={`/projets/${project.id}/rdv/nouveau`} className="text-sm font-semibold text-blue-700 hover:text-blue-800">Planifier RDV</Link>}>
       <div className="space-y-5">
         {project.appointments.length ? (
           <div className="space-y-3">
@@ -159,6 +159,9 @@ export function ProjectVisitsTab({ project }: { project: ProjectRecord }) {
                   <div className="text-xs text-slate-500">{formatDate(appointment.starts_at)}</div>
                 </div>
                 <p className="mt-2 text-sm text-slate-600">{appointment.compte_rendu || appointment.notes || "Compte-rendu à compléter."}</p>
+                <Link to={`/projets/${project.id}/rdv/${appointment.id}`} className="mt-3 inline-flex text-sm font-semibold text-blue-700 hover:text-blue-800">
+                  Ouvrir le RDV
+                </Link>
               </div>
             ))}
           </div>

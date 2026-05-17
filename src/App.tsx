@@ -28,6 +28,7 @@ const CrmQuoteWorkspacePage = lazy(() => import("./pages/CrmQuoteWorkspacePage")
 const ChantiersPage = lazy(() => import("./pages/ChantiersPage"));
 const ProjectsPage = lazy(() => import("./pages/ProjectsPage"));
 const ProjectDetailPage = lazy(() => import("./pages/ProjectDetailPage"));
+const ProjectAppointmentPage = lazy(() => import("./pages/ProjectAppointmentPage"));
 
 export default function App() {
   return (
@@ -194,6 +195,30 @@ export default function App() {
               <LazyRouteErrorBoundary>
                 <Suspense fallback={<div className="rounded-3xl border bg-white p-8 text-center text-sm text-slate-500">Chargement du projet...</div>}>
                   <ProjectDetailPage />
+                </Suspense>
+              </LazyRouteErrorBoundary>
+            </RequireCompanyFeature>
+          }
+        />
+        <Route
+          path="/projets/:id/rdv/nouveau"
+          element={
+            <RequireCompanyFeature profilePermissionKey="crm">
+              <LazyRouteErrorBoundary>
+                <Suspense fallback={<div className="rounded-3xl border bg-white p-8 text-center text-sm text-slate-500">Chargement du RDV projet...</div>}>
+                  <ProjectAppointmentPage />
+                </Suspense>
+              </LazyRouteErrorBoundary>
+            </RequireCompanyFeature>
+          }
+        />
+        <Route
+          path="/projets/:id/rdv/:rdvId"
+          element={
+            <RequireCompanyFeature profilePermissionKey="crm">
+              <LazyRouteErrorBoundary>
+                <Suspense fallback={<div className="rounded-3xl border bg-white p-8 text-center text-sm text-slate-500">Chargement du RDV projet...</div>}>
+                  <ProjectAppointmentPage />
                 </Suspense>
               </LazyRouteErrorBoundary>
             </RequireCompanyFeature>

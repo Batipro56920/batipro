@@ -22,7 +22,7 @@
 
 - Le header affiche nom projet, client, adresse, statut, commercial, source, budget et échéance.
 - `Modifier` renvoie vers l’espace CRM adapté.
-- `Planifier RDV` ouvre `/crm/agenda`.
+- `Planifier RDV` ouvre `/projets/:id/rdv/nouveau`.
 - `Créer devis` ou `Ouvrir devis` fonctionne selon l’existence d’un devis.
 - `Relancer` ouvre `/crm/agenda`.
 - `Créer chantier` est disponible uniquement si un devis accepté existe.
@@ -42,10 +42,24 @@
 ## Onglets métier
 
 - RDV / Visites affiche les rendez-vous existants ou un état vide.
+- RDV / Visites permet d’ouvrir un RDV existant via `/projets/:id/rdv/:rdvId`.
 - Devis affiche les devis liés avec montants HT/TTC et lien d’ouverture.
 - Documents affiche les catégories et documents liés.
 - Activité affiche la timeline commerciale.
 - SAV affiche uniquement les tickets liés au projet ou au client.
+
+## Wizard RDV projet
+
+- `/projets/:id/rdv/nouveau` charge le wizard.
+- `/projets/:id/rdv/:rdvId` charge le RDV existant si présent.
+- Les 7 étapes sont accessibles : Renseignements, Description projet, Tâches à vérifier, Contraintes, Photos & documents, Budget & décision, Synthèse.
+- Le bouton précédent/suivant fonctionne.
+- La sauvegarde brouillon reste dans le projet et ne redirige pas vers CRM.
+- `Marquer planifié` crée un événement `crm_appointments`.
+- `Enregistrer RDV` crée un événement `crm_appointments` avec compte-rendu structuré.
+- Après enregistrement, retour vers `/projets/:id?tab=visits`.
+- Le RDV apparaît dans l’onglet RDV / Visites après rechargement des données.
+- L’agenda CRM conserve son rôle de vue globale car il lit `crm_appointments`.
 
 ## Validation technique
 
