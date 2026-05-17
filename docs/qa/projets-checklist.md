@@ -1,58 +1,53 @@
-# QA - Module Projets
+# QA - Projets
 
-## Navigation
+## Routes
 
-- `/projets` est accessible depuis la sidebar.
-- `/projets/:id` ouvre une fiche projet.
-- La fiche projet ouvre l'onglet Resume par defaut.
-- Les onglets visibles sont : Resume, RDV / Visites, Devis, Documents, Activite, SAV.
-- Preparation chantier et Chantier ne sont pas des onglets Projet.
-- CRM, Devis et Chantiers restent accessibles.
+- [ ] `/projets` affiche la liste projets.
+- [ ] `/projets/:id` ouvre le resume projet.
+- [ ] `/projets/:id/visites/nouveau` ouvre une nouvelle visite de chiffrage.
+- [ ] `/projets/:id/visites/:visitId` ouvre une visite existante.
+- [ ] `/projets/:id/rdv/nouveau` reste compatible.
+- [ ] `/projets/:id/rdv/:rdvId` reste compatible.
 
-## Liste projets
+## Fiche projet
 
-- Les KPI s'affichent sans erreur.
-- La recherche filtre par projet, client, adresse et type.
-- Le filtre statut fonctionne.
-- Le filtre type projet fonctionne.
-- Un projet s'ouvre depuis la table.
-- L'etat vide affiche un CTA vers les prospects.
+- [ ] Les onglets visibles sont Resume, RDV / Visites, Devis, Documents, Activite, SAV.
+- [ ] Le chantier apparait uniquement comme lien si deja cree.
+- [ ] La preparation chantier n'apparait pas comme section projet.
+- [ ] Le bouton `Visite de chiffrage` ne redirige pas vers CRM Agenda.
 
-## Header fiche projet
+## Visite de chiffrage
 
-- Le header affiche nom projet, client, adresse, statut, commercial, source, budget et echeance.
-- `Modifier` renvoie vers l'espace CRM adapte.
-- `Planifier RDV` ouvre `/projets/:id/rdv/nouveau`.
-- `Creer devis` ou `Ouvrir devis` fonctionne selon l'existence d'un devis.
-- `Relancer` ouvre l'agenda CRM.
-- `Creer chantier` est disponible uniquement si un devis accepte existe.
-- Si un chantier existe deja, le bouton devient `Ouvrir chantier`.
+- [ ] La page affiche les informations RDV.
+- [ ] Une section peut etre ajoutee.
+- [ ] Une tache manuelle peut etre ajoutee.
+- [ ] Une note peut etre ajoutee.
+- [ ] Une tache peut etre inseree depuis la bibliotheque.
+- [ ] Unite `m2` calcule longueur x largeur.
+- [ ] Unite `m3` calcule longueur x largeur x hauteur.
+- [ ] Unite `ml` calcule longueur.
+- [ ] Unite `u` accepte une quantite manuelle.
+- [ ] Unite `h` accepte un nombre d'heures.
+- [ ] La quantite calculee peut etre modifiee manuellement.
+- [ ] Une note technique peut etre ajoutee sur une ligne.
+- [ ] Une photo peut etre rattachee a une ligne ou une section.
+- [ ] Un document peut etre importe.
+- [ ] Le resume affiche sections, taches, lignes bibliotheque et lignes a chiffrer.
+- [ ] `Creer pre-devis` enregistre la visite et ouvre les devis.
 
-## Onglets metier
+## Mobile terrain
 
-- Visites affiche les visites existantes ou un etat vide.
-- Une visite existante s'ouvre via `/projets/:id/rdv/:rdvId`.
-- Devis affiche les devis lies avec montants HT/TTC et lien d'ouverture.
-- Documents affiche les categories et documents lies.
-- Activite affiche la timeline commerciale.
-- SAV affiche uniquement les tickets lies au projet ou au client.
+- [ ] Sur telephone, l'interface est en une colonne.
+- [ ] Les actions rapides restent visibles en bas.
+- [ ] Aucun tableau large ni scroll horizontal.
+- [ ] `Prendre photo` utilise `input type=file accept=image/* capture=environment`.
+- [ ] Import galerie/document fonctionne.
+- [ ] Les images s'affichent en miniatures.
+- [ ] Le brouillon est sauvegarde localement et repris plus tard.
 
-## Fiche visite terrain
+## Non-regression
 
-- `/projets/:id/rdv/nouveau` charge la fiche visite terrain.
-- `/projets/:id/rdv/:rdvId` charge une visite existante si presente.
-- La fiche n'est pas un wizard lineaire.
-- Les onglets visibles sont : Informations, Besoin client, Visite terrain, Photos, Documents, Decision / suite, Compte-rendu.
-- `Sauvegarder` conserve le brouillon local.
-- `Planifier` cree un evenement `crm_appointments`.
-- `Marquer realisee` cree un evenement `crm_appointments` avec compte-rendu.
-- Apres enregistrement, retour vers `/projets/:id?tab=visits`.
-- La visite apparait dans l'onglet Visites apres rechargement des donnees.
-- L'agenda CRM conserve son role de vue globale car il lit `crm_appointments`.
-
-## Validation technique
-
-- `npm run build` passe.
-- Aucune route existante cassee.
-- Aucun service/API existant casse.
-- La separation Commerce / Production est respectee.
+- [ ] CRM Agenda reste disponible comme vue globale.
+- [ ] Le module Devis existant n'est pas casse.
+- [ ] Les services/API existants ne sont pas modifies hors creation d'evenement.
+- [ ] `npm run build` passe.

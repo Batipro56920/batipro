@@ -1,99 +1,79 @@
-# Module Projets
+# Guide utilisateur - Projets
 
-Le module **Projets** appartient a la partie **Commerce** de Batipro. Il sert a piloter un dossier affaire concret jusqu'au devis puis a sa conversion chantier.
+Le module Projets est le dossier commerce / avant-production. Il relie le prospect, les visites de chiffrage, les pre-devis, les devis, puis la creation chantier apres acceptation.
 
-## Role
+## Parcours cible
 
-Parcours cible :
+Prospect -> Projet -> Visite de chiffrage -> Pre-devis -> Devis -> Acceptation -> Chantier -> SAV.
 
-Prospect -> Projet -> Visite technique -> Compte-rendu terrain -> Pre-devis / devis -> Acceptation -> Chantier -> SAV.
-
-Le CRM reste independant pour le reporting, le pipeline global, les statistiques, les relances globales et la vue agenda.
-
-## Liste des projets
-
-La page `/projets` affiche les dossiers commerciaux agreges depuis les donnees existantes :
-
-- prospects ;
-- opportunites ;
-- devis ;
-- chantiers lies ;
-- documents ;
-- SAV client.
+Le CRM reste un cockpit transverse. Le Projet est le dossier affaire concret.
 
 ## Fiche projet
 
-La page `/projets/:id` s'ouvre sur l'onglet **Resume**.
+La fiche projet contient :
 
-Navigation projet :
-
-- Resume ;
-- Visites ;
-- Devis ;
-- Documents ;
-- Activite ;
+- Resume.
+- RDV / Visites.
+- Devis.
+- Documents.
+- Activite.
 - SAV.
 
-Les sections Preparation chantier et Chantier ne sont pas des onglets Projet. Le chantier apparait seulement sous forme de bloc "Chantier lie" dans le Resume si un chantier existe.
+La preparation chantier n'est pas geree dans Projet. Elle commence dans le module Chantiers apres acceptation d'un devis.
 
-## Resume
+## Visite de chiffrage
 
-Le Resume affiche :
+Le bouton `Visite de chiffrage` ouvre `/projets/:id/visites/nouveau`.
 
-- KPI dossier : visites, devis, documents, taches commerciales, SAV ;
-- resume client ;
-- situation commerciale ;
-- derniere activite ;
-- devis recent ;
-- chantier lie si disponible.
+Anciennes routes conservees :
 
-## Visites
+- `/projets/:id/rdv/nouveau`.
+- `/projets/:id/rdv/:rdvId`.
 
-L'onglet Visites liste les visites terrain liees au projet.
+La visite de chiffrage est un mini editeur de pre-devis terrain. Elle permet de construire pendant le rendez-vous :
 
-Le bouton `Nouvelle visite` ouvre `/projets/:id/rdv/nouveau`.
+- sections ;
+- prestations / taches ;
+- unites ;
+- dimensions ;
+- quantites calculees ;
+- notes techniques ;
+- photos et documents rattaches ;
+- lignes issues de la bibliotheque.
 
-La visite n'est plus un wizard lineaire. C'est une fiche terrain organisee par onglets :
+## Calculs terrain
 
-- Informations ;
-- Besoin client ;
-- Visite terrain ;
-- Photos ;
-- Documents ;
-- Decision / suite ;
-- Compte-rendu.
+Les quantites se calculent selon l'unite :
 
-La visite enregistree est stockee dans `crm_appointments`, ce qui permet de l'afficher dans le projet et dans l'agenda CRM global.
+- `m2` : longueur x largeur.
+- `m3` : longueur x largeur x hauteur.
+- `ml` : longueur.
+- `u` : quantite manuelle.
+- `h` : nombre d'heures.
 
-## Devis
+La quantite reste modifiable manuellement si le releve terrain doit etre ajuste.
 
-L'onglet Devis centralise :
+## Bibliotheque
 
-- pre-devis ;
-- devis final ;
-- variantes ;
-- statut signature ;
-- relances ;
-- montants HT/TTC ;
-- validite.
+La colonne bibliotheque permet de rechercher une tache existante et de l'inserer dans le pre-devis. Les informations reprises sont :
 
-Depuis une visite, le bouton `Creer pre-devis` renvoie vers le module Devis afin d'eviter la double saisie.
+- designation ;
+- unite ;
+- famille ;
+- prix HT de reference si disponible ;
+- description technique ou remarques.
 
-## Documents
+## Mobile terrain
 
-Categories prevues :
+Sur telephone, l'interface passe en une colonne avec :
 
-- Photos ;
-- Plans ;
-- Documents client ;
-- Emails ;
-- Pieces devis ;
-- Annexes.
+- barre haute sticky ;
+- actions rapides sticky en bas ;
+- cartes de sections et prestations ;
+- bouton `Prendre photo` utilisant la camera mobile ;
+- import de documents depuis le telephone ;
+- sauvegarde locale automatique.
 
-## Activite
+## Generation pre-devis
 
-L'onglet Activite remplace l'ancien Historique. Il affiche la timeline commerciale du dossier.
-
-## SAV
-
-L'onglet SAV reste leger. Il affiche uniquement les tickets lies au projet ou au client, sans remplacer le module Production SAV.
+Le bouton `Creer pre-devis` enregistre la visite comme rendez-vous de chiffrage realise, conserve le releve structure dans les notes, puis ouvre la liste Devis pour poursuivre la transformation en devis classique.

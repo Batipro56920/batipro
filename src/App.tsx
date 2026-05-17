@@ -213,11 +213,35 @@ export default function App() {
           }
         />
         <Route
+          path="/projets/:id/visites/nouveau"
+          element={
+            <RequireCompanyFeature profilePermissionKey="crm">
+              <LazyRouteErrorBoundary>
+                <Suspense fallback={<div className="rounded-3xl border bg-white p-8 text-center text-sm text-slate-500">Chargement de la visite de chiffrage...</div>}>
+                  <ProjectAppointmentPage />
+                </Suspense>
+              </LazyRouteErrorBoundary>
+            </RequireCompanyFeature>
+          }
+        />
+        <Route
           path="/projets/:id/rdv/:rdvId"
           element={
             <RequireCompanyFeature profilePermissionKey="crm">
               <LazyRouteErrorBoundary>
                 <Suspense fallback={<div className="rounded-3xl border bg-white p-8 text-center text-sm text-slate-500">Chargement du RDV projet...</div>}>
+                  <ProjectAppointmentPage />
+                </Suspense>
+              </LazyRouteErrorBoundary>
+            </RequireCompanyFeature>
+          }
+        />
+        <Route
+          path="/projets/:id/visites/:visitId"
+          element={
+            <RequireCompanyFeature profilePermissionKey="crm">
+              <LazyRouteErrorBoundary>
+                <Suspense fallback={<div className="rounded-3xl border bg-white p-8 text-center text-sm text-slate-500">Chargement de la visite de chiffrage...</div>}>
                   <ProjectAppointmentPage />
                 </Suspense>
               </LazyRouteErrorBoundary>

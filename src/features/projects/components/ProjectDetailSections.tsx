@@ -138,7 +138,7 @@ export function ProjectSummaryTab({ project }: { project: ProjectRecord }) {
 
 export function ProjectVisitsTab({ project }: { project: ProjectRecord }) {
   return (
-    <Panel title="Visites" description="Liste des visites terrain liees au dossier affaire." actions={<Link to={`/projets/${project.id}/rdv/nouveau`} className="text-sm font-semibold text-blue-700 hover:text-blue-800">Nouvelle visite</Link>}>
+    <Panel title="Visites de chiffrage" description="Mini pre-devis terrain lie au dossier affaire." actions={<Link to={`/projets/${project.id}/visites/nouveau`} className="text-sm font-semibold text-blue-700 hover:text-blue-800">Nouvelle visite de chiffrage</Link>}>
       <div className="space-y-5">
         {project.appointments.length ? (
           <div className="grid gap-3">
@@ -151,7 +151,7 @@ export function ProjectVisitsTab({ project }: { project: ProjectRecord }) {
                       {formatDate(appointment.starts_at)} - {appointment.statut} - {appointment.type}
                     </div>
                   </div>
-                  <Link to={`/projets/${project.id}/rdv/${appointment.id}`} className="inline-flex h-8 items-center rounded-lg border border-slate-200 px-3 text-xs font-semibold text-slate-900 hover:bg-slate-50">
+                  <Link to={`/projets/${project.id}/visites/${appointment.id}`} className="inline-flex h-8 items-center rounded-lg border border-slate-200 px-3 text-xs font-semibold text-slate-900 hover:bg-slate-50">
                     Ouvrir
                   </Link>
                 </div>
@@ -160,11 +160,11 @@ export function ProjectVisitsTab({ project }: { project: ProjectRecord }) {
             ))}
           </div>
         ) : (
-          <EmptyProjectBlock title="Aucune visite" description="Creez une visite terrain pour relever les besoins, contraintes, photos et metrees." />
+          <EmptyProjectBlock title="Aucune visite de chiffrage" description="Creez une visite pour relever les sections, prestations, quantites, photos et notes qui alimenteront le pre-devis." />
         )}
 
         <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-          {["Zones", "Constat technique", "Photos", "Metrees", "Contraintes", "Documents", "Decision", "Compte-rendu"].map((item) => (
+          {["Sections", "Prestations", "Metrees", "Bibliotheque", "Photos", "Documents", "Notes techniques", "Pre-devis"].map((item) => (
             <div key={item} className="rounded-2xl bg-slate-50 p-4 text-sm font-semibold text-slate-800">{item}</div>
           ))}
         </div>

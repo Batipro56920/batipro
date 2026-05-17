@@ -38,9 +38,9 @@ export function ProjectDetailHeader({ project }: { project: ProjectRecord }) {
             <Pencil className="h-4 w-4" />
             Modifier
           </Link>
-          <Link to={`/projets/${project.id}/rdv/nouveau`} className="inline-flex h-9 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-3 text-sm font-medium text-slate-900 transition hover:bg-slate-50">
+          <Link to={`/projets/${project.id}/visites/nouveau`} className="inline-flex h-9 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-3 text-sm font-medium text-slate-900 transition hover:bg-slate-50">
             <CalendarPlus className="h-4 w-4" />
-            Planifier RDV
+            Visite de chiffrage
           </Link>
           <Link to={quote ? `/crm/devis/${quote.id}/edit` : "/crm/devis"} className="inline-flex h-9 items-center justify-center gap-2 rounded-xl bg-blue-600 px-3 text-sm font-medium text-white transition hover:bg-blue-700">
             <FileText className="h-4 w-4" />
