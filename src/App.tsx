@@ -26,6 +26,8 @@ import AppEntryPage from "./pages/AppEntryPage";
 
 const CrmQuoteWorkspacePage = lazy(() => import("./pages/CrmQuoteWorkspacePage"));
 const ChantiersPage = lazy(() => import("./pages/ChantiersPage"));
+const ProjectsPage = lazy(() => import("./pages/ProjectsPage"));
+const ProjectDetailPage = lazy(() => import("./pages/ProjectDetailPage"));
 
 export default function App() {
   return (
@@ -169,6 +171,31 @@ export default function App() {
           element={
             <RequireCompanyFeature profilePermissionKey="crm">
               <CrmPage section="settings" />
+            </RequireCompanyFeature>
+          }
+        />
+
+        <Route
+          path="/projets"
+          element={
+            <RequireCompanyFeature profilePermissionKey="crm">
+              <LazyRouteErrorBoundary>
+                <Suspense fallback={<div className="rounded-3xl border bg-white p-8 text-center text-sm text-slate-500">Chargement des projets...</div>}>
+                  <ProjectsPage />
+                </Suspense>
+              </LazyRouteErrorBoundary>
+            </RequireCompanyFeature>
+          }
+        />
+        <Route
+          path="/projets/:id"
+          element={
+            <RequireCompanyFeature profilePermissionKey="crm">
+              <LazyRouteErrorBoundary>
+                <Suspense fallback={<div className="rounded-3xl border bg-white p-8 text-center text-sm text-slate-500">Chargement du projet...</div>}>
+                  <ProjectDetailPage />
+                </Suspense>
+              </LazyRouteErrorBoundary>
             </RequireCompanyFeature>
           }
         />

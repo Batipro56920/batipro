@@ -12,6 +12,7 @@ import {
   Truck,
   BriefcaseBusiness,
   FileText,
+  FolderKanban,
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import type { CompanyFeatureModuleId } from "../config/companyFeatures";
@@ -81,6 +82,13 @@ export default function Sidebar({ collapsed = false, onToggleCollapse, companyNa
       permissionKey: "crm" as const,
       group: "Commerce",
       end: true,
+    },
+    {
+      to: "/projets",
+      label: "Projets",
+      icon: FolderKanban,
+      permissionKey: "crm" as const,
+      group: "Commerce",
     },
     {
       to: "/crm/devis",

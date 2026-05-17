@@ -155,6 +155,21 @@ Les panneaux principaux sont encapsules sans changement visuel. La carte chantie
 
 ## Prochaines refontes recommandees
 
+## Module Projets ajoute
+
+Routes ajoutees :
+
+- `/projets` : liste premium des dossiers projets avant-production.
+- `/projets/:id` : fiche projet centrée dossier métier.
+
+Le module Projets agrège volontairement les données CRM existantes (`prospects`, `opportunities`, `quotes`, `chantiers`, `sav`, `documents`) pour éviter la création d’un doublon de référentiel avant validation du modèle. Il devient le point d’entrée dossier par dossier, tandis que CRM reste un cockpit transverse.
+
+Dette restante :
+
+- créer des tables dédiées `projects` et `project_visits` si les comptes-rendus de visite doivent être persistés hors agenda CRM ;
+- transformer progressivement `opportunities` en vue pipeline des projets ;
+- connecter l’action “convertir chantier” au flux devis accepté -> chantier lorsque le moteur projet dédié sera persistant.
+
 1. Deplacer progressivement les actions CRM vers `useCrmActions`.
 2. Deplacer le chargement dataset vers `useCrmData` quand les tests CRM seront stabilises.
 3. Lazy-loader les sections CRM les plus lourdes apres validation fonctionnelle.
