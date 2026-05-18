@@ -9,6 +9,7 @@ import {
   type CrmQuoteEngineData,
 } from "../../../services/crm.service";
 import { calculateQuoteBuilderTotals, flattenQuoteBuilder } from "./quoteBuilderCalculations";
+import { validateQuoteBuilderForDocumentEngine } from "./quoteBuilderDocumentAdapter";
 import { createQuoteBuilderFromEngine, createQuoteBuilderFromProject } from "./quoteBuilderModel";
 import type { QuoteBuilderFlatRow, QuoteBuilderQuote } from "./types";
 
@@ -21,6 +22,7 @@ export async function loadQuoteBuilder(project: ProjectRecord, quoteId?: string 
 }
 
 export async function saveQuoteBuilder(quote: QuoteBuilderQuote): Promise<QuoteBuilderQuote> {
+  validateQuoteBuilderForDocumentEngine(quote);
   const totals = calculateQuoteBuilderTotals(quote);
   const saved = quote.id ? await updateExistingQuote(quote, totals.totalHt) : await createNewQuote(quote, totals.totalHt, totals.totalTtc);
   writeLocalQuote(saved);
