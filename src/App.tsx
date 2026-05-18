@@ -20,7 +20,6 @@ import IntervenantsPage from "./pages/IntervenantsPage";
 import BibliothequeTasksPage from "./pages/BibliothequeTasksPage";
 import StatistiquesPage from "./pages/StatistiquesPage";
 import MonEntreprisePage from "./pages/MonEntreprisePage";
-import FournisseursPage from "./pages/FournisseursPage";
 import TerrainFeedbacksPage from "./pages/TerrainFeedbacksPage";
 import AppEntryPage from "./pages/AppEntryPage";
 
@@ -31,6 +30,7 @@ const ProjectDetailPage = lazy(() => import("./pages/ProjectDetailPage"));
 const ProjectAppointmentPage = lazy(() => import("./pages/ProjectAppointmentPage"));
 const ProjectQuoteBuilderV1Page = lazy(() => import("./pages/ProjectQuoteBuilderV1Page"));
 const InvoicesPage = lazy(() => import("./pages/InvoicesPage"));
+const FournisseursPage = lazy(() => import("./pages/FournisseursPage"));
 
 export default function App() {
   return (
@@ -388,7 +388,11 @@ export default function App() {
           path="/fournisseurs"
           element={
             <RequireCompanyFeature moduleId="approvisionnement" profilePermissionKey="fournisseurs">
-              <FournisseursPage />
+              <LazyRouteErrorBoundary>
+                <Suspense fallback={<div className="rounded-3xl border bg-white p-8 text-center text-sm text-slate-500">Chargement des fournisseurs...</div>}>
+                  <FournisseursPage />
+                </Suspense>
+              </LazyRouteErrorBoundary>
             </RequireCompanyFeature>
           }
         />

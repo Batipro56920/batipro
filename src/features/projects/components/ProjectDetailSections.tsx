@@ -2,6 +2,7 @@ import { Link } from "react-router-dom";
 import type { ProjectRecord } from "../types";
 import { EmptyProjectBlock, Panel, formatCurrency, formatDate } from "./ProjectShared";
 import { getPrimaryQuote } from "../hooks/useProjectsData";
+import { ProjectProfitabilityWidgets } from "./ProjectProfitabilityWidgets";
 
 function InfoGrid({ rows }: { rows: Array<[string, string | number | null | undefined]> }) {
   return (
@@ -64,6 +65,8 @@ export function ProjectSummaryTab({ project }: { project: ProjectRecord }) {
               </div>
             ))}
           </div>
+
+          <ProjectProfitabilityWidgets project={project} />
         </div>
       </Panel>
 

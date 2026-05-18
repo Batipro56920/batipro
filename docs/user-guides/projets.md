@@ -15,6 +15,7 @@ La fiche projet contient :
 - Resume.
 - RDV / Visites.
 - Devis.
+- Rentabilite.
 - Documents.
 - Activite.
 - SAV.
@@ -116,3 +117,25 @@ Le devis est pre-rempli avec :
 Depuis la fiche projet, le bouton `Creer devis` ouvre aussi l'editeur dedie du projet. Il ne redirige pas vers le module CRM Devis.
 
 Le module CRM Devis reste une vue transverse pour piloter l'ensemble des devis de l'entreprise.
+
+## Rentabilite projet
+
+L'onglet Rentabilite donne une lecture financiere V1 du dossier :
+
+- montant travaux vendu via le devis accepte ou le meilleur devis disponible ;
+- montant facture ;
+- montant encaisse ;
+- reste a facturer ;
+- reste a encaisser ;
+- achats / sous-traitance ;
+- main-d'oeuvre ;
+- marge brute ;
+- taux de marge.
+
+Le Resume projet affiche aussi trois widgets rapides :
+
+- Facturation ;
+- Paiement ;
+- Marge.
+
+Si les factures, achats ou temps reels ne sont pas encore connectes au backend, Batipro affiche une estimation locale indiquee comme telle. Cette base prepare la future rentabilite reliee aux factures, achats, temps et chantiers.

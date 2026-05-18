@@ -11,10 +11,13 @@
 
 ## Fiche projet
 
-- [ ] Les onglets visibles sont Resume, RDV / Visites, Devis, Documents, Activite, SAV.
+- [ ] Les onglets visibles sont Resume, RDV / Visites, Devis, Rentabilite, Documents, Activite, SAV.
 - [ ] Le chantier apparait uniquement comme lien si deja cree.
 - [ ] La preparation chantier n'apparait pas comme section projet.
 - [ ] Le bouton `Visite de chiffrage` ne redirige pas vers CRM Agenda.
+- [ ] Le Resume affiche les widgets Facturation, Paiement et Marge.
+- [ ] L'onglet Rentabilite affiche montant travaux, facture, encaisse, reste a encaisser, achats, main-d'oeuvre, marge et taux de marge.
+- [ ] Si le backend financier n'est pas pret, les valeurs estimees sont clairement signalees.
 
 ## Onglet RDV / Visites
 

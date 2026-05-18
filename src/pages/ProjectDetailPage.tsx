@@ -9,14 +9,16 @@ import {
   ProjectSummaryTab,
   ProjectVisitsTab,
 } from "../features/projects/components/ProjectDetailSections";
+import { ProjectProfitabilityTab } from "../features/projects/components/ProjectProfitabilityTab";
 import { useProjectsData } from "../features/projects/hooks/useProjectsData";
 
-type ProjectTab = "summary" | "visits" | "quotes" | "documents" | "activity" | "sav";
+type ProjectTab = "summary" | "visits" | "quotes" | "profitability" | "documents" | "activity" | "sav";
 
 const TABS: Array<{ id: ProjectTab; label: string }> = [
   { id: "summary", label: "Résumé" },
   { id: "visits", label: "RDV / Visites" },
   { id: "quotes", label: "Devis" },
+  { id: "profitability", label: "Rentabilite" },
   { id: "documents", label: "Documents" },
   { id: "activity", label: "Activité" },
   { id: "sav", label: "SAV" },
@@ -34,6 +36,7 @@ export default function ProjectDetailPage() {
     if (!project) return null;
     if (activeTab === "visits") return <ProjectVisitsTab project={project} />;
     if (activeTab === "quotes") return <ProjectQuotesTab project={project} />;
+    if (activeTab === "profitability") return <ProjectProfitabilityTab project={project} />;
     if (activeTab === "documents") return <ProjectDocumentsTab project={project} />;
     if (activeTab === "activity") return <ProjectActivityTab project={project} />;
     if (activeTab === "sav") return <ProjectSavTab project={project} />;
