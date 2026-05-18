@@ -45,7 +45,7 @@ Depuis une ligne ou une carte prospect :
 - **Email** : ouvre un email si une adresse existe.
 - **Tâche** : crée une tâche de relance.
 - **Opportunité** : ouvre la création d’opportunité.
-- **Devis** : crée un devis brouillon.
+- **Devis** : oriente vers le parcours Projet / Quote Builder.
 - **Convertir** : transforme le prospect en client.
 
 Les actions non finalisées sont désactivées avec une indication claire.

@@ -189,6 +189,7 @@ import ChantierTasksQuotesSection from "../features/chantiers/pages/ChantierTask
 import ChantierTimeSection from "../features/chantiers/pages/ChantierTimeSection";
 import ChantierUnforeseenSection from "../features/chantiers/pages/ChantierUnforeseenSection";
 import ChantierVisitSection from "../features/chantiers/pages/ChantierVisitSection";
+import { ReceptionReportPanel } from "../features/reception-reports";
 
 /* ---------------- types ---------------- */
 type TabKey = ChantierTabKey;
@@ -6282,7 +6283,7 @@ export default function ChantierPage() {
 
         {detailSection === "sav" && savPanel}
 
-        {/* ---------------- ONGLET DEVIS & TÂCHES ---------------- */}
+        {/* ---------------- ONGLET DEVIS & TACHES ---------------- */}
         {detailSection === "execution" && (
           <ChantierTasksQuotesSection>
           <div className="space-y-8">
@@ -7924,6 +7925,10 @@ export default function ChantierPage() {
               await refreshDoeDocumentIds();
             }}
           />
+        )}
+
+        {detailSection === "qualite" && item && (
+          <ReceptionReportPanel chantier={item} reserves={reserves} onReservesRefresh={refreshReserves} />
         )}
 
         {/* autres onglets placeholders */}

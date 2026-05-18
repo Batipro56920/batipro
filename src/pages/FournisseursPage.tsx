@@ -47,9 +47,13 @@ function toSupplierForm(row: SupplierRow): SupplierFormState {
   };
 }
 
-export default function FournisseursPage() {
+type FournisseursPageProps = {
+  initialTab?: "suppliers" | "orders";
+};
+
+export default function FournisseursPage({ initialTab = "suppliers" }: FournisseursPageProps) {
   const { t } = useI18n();
-  const [activeTab, setActiveTab] = useState<"suppliers" | "orders">("suppliers");
+  const [activeTab, setActiveTab] = useState<"suppliers" | "orders">(initialTab);
   const [loadingSuppliers, setLoadingSuppliers] = useState(true);
   const [savingSupplier, setSavingSupplier] = useState(false);
   const [suppliersError, setSuppliersError] = useState<string | null>(null);

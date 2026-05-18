@@ -16,7 +16,6 @@ export default function CrmQuotesSection({
   onCreate,
   onStatus,
   onTransform,
-  onOpen,
   onPdf,
 }: {
   rows: CrmQuoteRow[];
@@ -25,7 +24,6 @@ export default function CrmQuotesSection({
   onCreate: () => void;
   onStatus: (row: CrmQuoteRow, status: CrmQuoteRow["statut"]) => void;
   onTransform: (row: CrmQuoteRow) => void;
-  onOpen: (row: CrmQuoteRow) => void;
   onPdf: (row: CrmQuoteRow) => void;
 }) {
   const [selectedQuote, setSelectedQuote] = useState<QuoteWithParty | null>(null);
@@ -36,7 +34,7 @@ export default function CrmQuotesSection({
     globalQuery: "",
   });
 
-  const actions = { onCreate, onStatus, onTransform, onOpen, onPdf };
+  const actions = { onCreate, onStatus, onTransform, onPdf };
 
   return (
     <div className="space-y-5">

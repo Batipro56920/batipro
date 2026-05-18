@@ -8,12 +8,14 @@ export function QuotesHeader({ onCreate }: { onCreate: () => void }) {
         <div>
           <div className="text-[11px] font-semibold uppercase tracking-[0.22em] text-blue-700">CRM</div>
           <h2 className="mt-1 text-2xl font-bold tracking-tight text-slate-950">Devis</h2>
-          <p className="mt-1 max-w-2xl text-sm leading-6 text-slate-500">Pilotez vos devis, signatures et transformations chantier.</p>
+          <p className="mt-1 max-w-2xl text-sm leading-6 text-slate-500">
+            Suivez les devis, signatures et transformations chantier. La création et l'édition passent par le Quote Builder depuis un projet.
+          </p>
         </div>
         <div className="flex flex-wrap gap-2">
           <Button type="button" variant="primary" size="md" onClick={onCreate}>
             <FileText className="h-4 w-4" />
-            Nouveau devis
+            Créer depuis un projet
           </Button>
           <Button type="button" variant="secondary" size="md" disabled title="Import devis à finaliser">
             <Upload className="h-4 w-4" />

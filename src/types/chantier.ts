@@ -14,7 +14,7 @@ export type ChantierStatus =
   | "ANNULE";
 
 /* =========================================================
-   PLANNING / TÂCHES
+   PLANNING / TACHES
    ========================================================= */
 
 export type TaskStatus =

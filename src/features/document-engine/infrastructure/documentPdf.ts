@@ -56,6 +56,23 @@ export function createBusinessDocumentPdf(document: BusinessDocument) {
       y += 7;
       return;
     }
+    if (row.node.type === "text") {
+      pdf.setFont("helvetica", "normal");
+      pdf.setFontSize(8);
+      const lines = pdf.splitTextToSize(clean(row.node.content), 160);
+      pdf.text(lines, 22, y);
+      y += Math.max(7, lines.length * 4.5) + 2;
+      return;
+    }
+    if (row.node.type === "signature") {
+      pdf.setFont("helvetica", "bold");
+      pdf.setFontSize(8);
+      pdf.text(clean(row.node.title || "Signature"), 22, y);
+      pdf.setFont("helvetica", "normal");
+      pdf.text(clean(row.node.signerName || "A signer"), 70, y);
+      y += 9;
+      return;
+    }
     if (row.node.type === "line" || row.node.type === "composite") {
       pdf.setFont("helvetica", "normal");
       pdf.text(row.number, 18, y);

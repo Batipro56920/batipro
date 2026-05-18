@@ -1,8 +1,51 @@
 import type { ProjectRecord } from "../types";
+import { useEffect, useState } from "react";
 import { buildProjectProfitability, type ProjectProfitabilityMetrics } from "../utils/projectProfitability";
 
-export function ProjectProfitabilityWidgets({ project }: { project: ProjectRecord }) {
-  const metrics = buildProjectProfitability(project);
+export function ProjectProfitabilityWidgets({ project, metrics: providedMetrics }: { project?: ProjectRecord; metrics?: ProjectProfitabilityMetrics }) {
+  const [loadedMetrics, setLoadedMetrics] = useState<ProjectProfitabilityMetrics | null>(providedMetrics ?? null);
+
+  useEffect(() => {
+    if (providedMetrics) {
+      setLoadedMetrics(providedMetrics);
+      return;
+    }
+
+    if (!project) {
+      setLoadedMetrics(null);
+      return;
+    }
+
+    let active = true;
+    setLoadedMetrics(null);
+    buildProjectProfitability(project)
+      .then((metrics) => {
+        if (active) setLoadedMetrics(metrics);
+      })
+      .catch(() => {
+        if (active) setLoadedMetrics(null);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [project, providedMetrics]);
+
+  const metrics = providedMetrics ?? loadedMetrics;
+
+  if (!metrics) {
+    return (
+      <div className="grid gap-3 lg:grid-cols-3">
+        {["Facturation", "Paiement", "Marge"].map((title) => (
+          <div key={title} className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+            <div className="h-4 w-28 rounded bg-slate-100" />
+            <div className="mt-3 h-3 w-40 rounded bg-slate-100" />
+            <div className="mt-4 h-2 rounded-full bg-slate-100" />
+          </div>
+        ))}
+      </div>
+    );
+  }
 
   return (
     <div className="grid gap-3 lg:grid-cols-3">

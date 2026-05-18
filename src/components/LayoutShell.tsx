@@ -124,7 +124,7 @@ export default function LayoutShell() {
                 </summary>
                 <div className="absolute right-0 top-11 z-40 w-56 overflow-hidden rounded-2xl border border-slate-200 bg-white p-1 text-sm shadow-xl shadow-slate-950/10">
                   <Link to="/chantiers/nouveau" className="block rounded-xl px-3 py-2 text-slate-700 hover:bg-slate-50">Nouveau chantier</Link>
-                  <Link to="/crm/devis" className="block rounded-xl px-3 py-2 text-slate-700 hover:bg-slate-50">Nouveau devis</Link>
+                  <Link to="/projets" className="block rounded-xl px-3 py-2 text-slate-700 hover:bg-slate-50">Créer devis depuis projet</Link>
                   <Link to="/crm/prospects" className="block rounded-xl px-3 py-2 text-slate-700 hover:bg-slate-50">Nouveau prospect</Link>
                 </div>
               </details>

@@ -11,13 +11,13 @@ export function DashboardHeader() {
           <div className="min-w-0">
             <div className="text-[11px] font-semibold uppercase tracking-[0.24em] text-blue-700">Cockpit Batipro</div>
             <h1 className="mt-2 text-3xl font-bold tracking-tight text-slate-950">Bonjour Corentin</h1>
-            <p className="mt-1 max-w-2xl text-sm leading-6 text-slate-500">Voici l’état de votre activité aujourd’hui.</p>
+            <p className="mt-1 max-w-2xl text-sm leading-6 text-slate-500">Voici l'état de votre activité aujourd'hui.</p>
           </div>
           <div className="flex flex-wrap gap-2">
-            <Link to="/crm/devis">
+            <Link to="/projets">
               <Button variant="primary" size="md">
                 <FileText className="h-4 w-4" />
-                Nouveau devis
+                Créer devis depuis projet
               </Button>
             </Link>
             <Link to="/chantiers/nouveau">

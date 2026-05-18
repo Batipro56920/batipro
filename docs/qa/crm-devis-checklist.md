@@ -1,17 +1,18 @@
-# QA — Devis CRM Batipro
+# QA - Devis CRM Batipro
 
 ## Route
 
-- [ ] `/crm/devis` affiche la page Devis.
+- [ ] `/crm/devis` affiche la page de suivi transverse des devis.
 - [ ] Les autres routes CRM restent accessibles.
-- [ ] `CrmPage` continue d’orchestrer la page sans erreur.
+- [ ] `CrmPage` continue d'orchestrer la page sans erreur.
+- [ ] `/crm/devis/:id/edit` redirige sans ouvrir l'ancien workspace.
 
 ## Header
 
 - [ ] Badge CRM visible.
 - [ ] Titre `Devis` visible.
 - [ ] Sous-titre visible.
-- [ ] Bouton `Nouveau devis` crée un devis brouillon et ouvre le workspace.
+- [ ] Bouton `Créer depuis un projet` oriente vers `/projets`.
 - [ ] Bouton `Import` est désactivé clairement.
 - [ ] Bouton `Modèles` est désactivé clairement.
 
@@ -44,19 +45,19 @@
 
 ## Actions
 
-- [ ] Éditer ouvre `/crm/devis/:id/edit`.
+- [ ] Ouvrir projet renvoie vers le module Projets / Quote Builder.
 - [ ] Envoyer modifie le statut.
 - [ ] Relancer modifie le statut.
 - [ ] PDF déclenche la génération PDF existante.
 - [ ] Accepter modifie le statut.
 - [ ] Refuser modifie le statut.
-- [ ] Transformer chantier appelle l’action existante.
+- [ ] Transformer chantier appelle l'action existante.
 - [ ] Dupliquer est désactivé clairement si non implémenté.
 - [ ] Supprimer est désactivé clairement si non sécurisé.
 
 ## Drawer
 
-- [ ] Drawer s’ouvre au clic ligne.
+- [ ] Drawer s'ouvre au clic ligne.
 - [ ] Aperçu financier affiché.
 - [ ] Client affiché.
 - [ ] Projet affiché.
@@ -69,7 +70,7 @@
 
 - [ ] Aucun tableau vide brut.
 - [ ] Empty state premium visible si aucun devis filtré.
-- [ ] CTA Nouveau devis fonctionne.
+- [ ] CTA Créer depuis un projet fonctionne.
 - [ ] CTA Importer est désactivé clairement.
 
 ## Responsive

@@ -1,11 +1,11 @@
-# Guide utilisateur — Devis CRM Batipro
+# Guide utilisateur - Devis CRM Batipro
 
-La page **Devis** permet de piloter les devis commerciaux, leur signature et leur transformation en chantier.
+La page **Devis** permet de suivre les devis commerciaux, leur signature et leur transformation en chantier. La création et l'édition se font depuis un projet avec le Quote Builder.
 
 ## Header
 
-- **Nouveau devis** : crée un devis brouillon et ouvre le workspace devis.
-- **Import** : action préparée, désactivée tant que l’import n’est pas finalisé.
+- **Créer depuis un projet** : ouvre le module Projets, point d'entrée officiel pour créer ou modifier un devis.
+- **Import** : action préparée, désactivée tant que l'import n'est pas finalisé.
 - **Modèles** : accès préparé aux modèles de devis.
 
 ## KPI
@@ -46,7 +46,7 @@ La table affiche :
 
 Actions visibles :
 
-- **Éditer** : ouvre le workspace devis.
+- **Ouvrir projet** : renvoie vers le parcours Projet / Quote Builder.
 - **Envoyer** : passe le devis en statut envoyé.
 - **Relancer** : passe le devis en relance.
 
@@ -74,6 +74,7 @@ Un clic sur une ligne ouvre un drawer avec :
 
 ## Bonnes pratiques
 
+- Créer les devis depuis un projet pour conserver le lien prospect, visite, documents et futur chantier.
 - Finaliser les brouillons avant envoi.
 - Relancer les devis envoyés sans réponse.
 - Accepter un devis uniquement après accord client.

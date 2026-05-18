@@ -1,6 +1,6 @@
 # Guide utilisateur - Dashboard CRM Batipro
 
-Le CRM Batipro centralise le pilotage commercial : prospects, clients, opportunités, devis, relances, agenda et SAV.
+Le CRM Batipro centralise le pilotage commercial transverse : prospects, clients, opportunités, relances, agenda, suivi devis et SAV.
 
 ## Header CRM
 
@@ -8,7 +8,7 @@ Le header donne accès aux actions principales :
 
 - **Prospect** : ouvre le formulaire de création d'un prospect.
 - **Opportunité** : ouvre le formulaire de création d'une affaire commerciale.
-- **Devis** : crée un devis brouillon et ouvre l'espace de travail devis.
+- **Devis** : oriente vers les projets, où le Quote Builder est l'unique moteur de création et d'édition de devis.
 - **Agenda** : ouvre les tâches commerciales et rendez-vous.
 - **Rafraîchir** : recharge les données CRM.
 
@@ -20,7 +20,7 @@ Les onglets visibles couvrent uniquement les usages CRM prioritaires :
 - **Prospects** : suivi et qualification des nouveaux contacts.
 - **Clients** : référentiel client.
 - **Opportunités** : pipeline commercial.
-- **Devis** : liste et actions devis.
+- **Devis** : suivi transverse des devis existants.
 - **Agenda** : relances, tâches et rendez-vous.
 - **SAV** : tickets après chantier.
 

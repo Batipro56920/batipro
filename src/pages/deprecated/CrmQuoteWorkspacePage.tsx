@@ -1,6 +1,7 @@
+// Deprecated — ancienne page non routée conservée temporairement avant suppression définitive.
 import { useNavigate, useParams } from "react-router-dom";
-import { QuoteWorkspace } from "../features/quotes/components/workspace/QuoteWorkspace";
-import { useQuote } from "../features/quotes/hooks/useQuote";
+import { QuoteWorkspace } from "../../features/quotes/components/workspace/QuoteWorkspace";
+import { useQuote } from "../../features/quotes/hooks/useQuote";
 
 export default function CrmQuoteWorkspacePage() {
   const { id } = useParams();
@@ -23,7 +24,7 @@ export default function CrmQuoteWorkspacePage() {
       projects={options.projects}
       saving={saving}
       onSave={() => void save()}
-      onSend={() => window.alert("Envoi devis a finaliser : la sauvegarde reste disponible.")}
+      onSend={() => window.alert("Envoi devis à finaliser : la sauvegarde reste disponible.")}
       onClose={() => navigate("/crm/devis")}
     />
   );

@@ -8,11 +8,13 @@ export function QuotesEmptyState({ onCreate }: { onCreate: () => void }) {
         <FileText className="h-6 w-6" />
       </div>
       <h3 className="mt-4 text-lg font-semibold text-slate-950">Aucun devis pour le moment</h3>
-      <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-slate-500">Créez votre premier devis ou préparez un import de documents existants.</p>
+      <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-slate-500">
+        Créez un devis depuis un projet pour conserver un seul parcours commerce → devis → chantier.
+      </p>
       <div className="mt-5 flex flex-wrap justify-center gap-2">
         <Button type="button" variant="primary" size="md" onClick={onCreate}>
           <FileText className="h-4 w-4" />
-          Nouveau devis
+          Créer depuis un projet
         </Button>
         <Button type="button" variant="secondary" size="md" disabled title="Import devis à finaliser">
           <Upload className="h-4 w-4" />

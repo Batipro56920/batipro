@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Download, Plus, Save, Send } from "lucide-react";
 import { Button } from "../../../components/ui/button";
 import {
@@ -17,6 +17,8 @@ import {
   type DocumentItemKind,
 } from "../../document-engine";
 import type { SupplierRow } from "../../../services/suppliers.service";
+import type { ProductCatalogItem } from "../../product-catalog";
+import { getBestSupplierPrice, listProductCatalogItems } from "../../product-catalog";
 import type { PurchaseOrderRecord, PurchaseOrderStatus } from "../domain/types";
 import { PurchaseOrderStatusBadge } from "./PurchaseOrderStatusBadge";
 
@@ -30,14 +32,26 @@ export function PurchaseOrderEditor({
   order: PurchaseOrderRecord;
   suppliers: SupplierRow[];
   onChange: (order: PurchaseOrderRecord) => void;
-  onSave: (order: PurchaseOrderRecord) => void;
+  onSave: (order: PurchaseOrderRecord) => void | Promise<void>;
   onClose: () => void;
 }) {
   const [previewOpen, setPreviewOpen] = useState(false);
   const [sendOpen, setSendOpen] = useState(false);
+  const [productQuery, setProductQuery] = useState("");
+  const [products, setProducts] = useState<ProductCatalogItem[]>([]);
   const document = order.document;
   const totals = document.totals ?? calculateDocumentTotals(document);
   const rows = useMemo(() => flattenDocumentNodes(document.nodes), [document.nodes]);
+  const filteredProducts = useMemo(() => {
+    const query = productQuery.trim().toLowerCase();
+    return products
+      .filter((product) => !query || [product.designation, product.internalReference, product.brand, product.category].some((value) => String(value ?? "").toLowerCase().includes(query)))
+      .slice(0, 6);
+  }, [productQuery, products]);
+
+  useEffect(() => {
+    listProductCatalogItems().then(setProducts).catch(() => setProducts([]));
+  }, []);
 
   function updateOrder(patch: Partial<PurchaseOrderRecord>) {
     onChange({ ...order, ...patch, updatedAt: new Date().toISOString() });
@@ -62,6 +76,43 @@ export function PurchaseOrderEditor({
     const line = createDocumentLine(nextSection.id, kind, nextSection.type === "section" ? nextSection.children.length : 0);
     const nodes = section ? appendChild(document.nodes, section.id, line) : [{ ...nextSection, children: [line] }];
     updateDocument({ nodes });
+  }
+
+  function addCatalogProduct(product: ProductCatalogItem) {
+    const supplierId = order.supplierId ?? product.mainSupplierId;
+    const supplier = supplierId ? suppliers.find((row) => row.id === supplierId) : null;
+    const negotiated = getBestSupplierPrice(product, supplierId);
+    const section = document.nodes.find((node) => node.type === "section");
+    const nextSection = section ?? createDocumentSection("Produits catalogue", 0);
+    const line = {
+      ...createDocumentLine(nextSection.id, "fourniture", nextSection.type === "section" ? nextSection.children.length : 0),
+      title: product.designation,
+      description: product.internalReference ?? undefined,
+      quantity: 1,
+      unit: product.unit,
+      unitPriceHt: negotiated?.priceHt ?? product.standardPurchasePriceHt,
+      vatRate: product.vatRate,
+      costPriceHt: negotiated?.priceHt ?? product.standardPurchasePriceHt,
+      internalNotes: [
+        product.internalReference ? `Ref interne: ${product.internalReference}` : null,
+        product.manufacturerReference ? `Ref fabricant: ${product.manufacturerReference}` : null,
+        product.brand ? `Marque: ${product.brand}` : null,
+      ].filter(Boolean).join(" - "),
+    } as BusinessDocumentNode;
+    const nodes = section ? appendChild(document.nodes, section.id, line) : [{ ...nextSection, children: [line] }];
+    const recipient = supplier ?? (product.mainSupplierName ? { id: product.mainSupplierId, name: product.mainSupplierName, email: null, phone: null, address: null } : null);
+    const nextDocument = {
+      ...document,
+      nodes,
+      recipient: recipient
+        ? { ...document.recipient, id: recipient.id ?? null, displayName: recipient.name, email: recipient.email ?? null, phone: recipient.phone ?? null, address: recipient.address ?? null }
+        : document.recipient,
+    };
+    updateOrder({
+      supplierId: recipient?.id ?? order.supplierId ?? null,
+      supplierName: recipient?.name ?? order.supplierName ?? null,
+      document: { ...nextDocument, totals: calculateDocumentTotals(nextDocument) },
+    });
   }
 
   function selectSupplier(supplierId: string) {
@@ -111,6 +162,26 @@ export function PurchaseOrderEditor({
 
       <section className="mt-5 grid gap-5 xl:grid-cols-[minmax(0,1fr)_320px]">
         <div className="space-y-4">
+          <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
+            <div className="mb-3 flex items-center justify-between gap-3">
+              <div>
+                <div className="text-sm font-semibold text-slate-950">Catalogue produits</div>
+                <div className="text-xs text-slate-500">Insertion rapide avec prix, TVA, unite et fournisseur.</div>
+              </div>
+              <a href="/catalogue-produits" className="text-xs font-semibold text-blue-700 hover:text-blue-800">Ouvrir catalogue</a>
+            </div>
+            <input className={inputClass} placeholder="Rechercher produit, reference, marque..." value={productQuery} onChange={(event) => setProductQuery(event.target.value)} />
+            <div className="mt-3 grid gap-2 lg:grid-cols-2">
+              {filteredProducts.map((product) => (
+                <button key={product.id} type="button" onClick={() => addCatalogProduct(product)} className="rounded-xl border border-slate-200 bg-white p-3 text-left text-sm hover:border-blue-200 hover:bg-blue-50">
+                  <div className="font-semibold text-slate-950">{product.designation}</div>
+                  <div className="mt-1 text-xs text-slate-500">{product.category || "Sans categorie"} - {product.unit} - {formatCurrency(getBestSupplierPrice(product, order.supplierId)?.priceHt ?? product.standardPurchasePriceHt)} HT</div>
+                </button>
+              ))}
+              {!filteredProducts.length ? <div className="rounded-xl border border-dashed border-slate-200 bg-white p-3 text-sm text-slate-500">Aucun produit trouve.</div> : null}
+            </div>
+          </div>
+
           <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
             <label className={labelClass}>
               Fournisseur

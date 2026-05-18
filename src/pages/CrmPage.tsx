@@ -6,20 +6,13 @@ import {
   createCrmDocument,
   createCrmInvoice,
   createCrmProspect,
-  createCrmQuote,
-  createCrmPaymentTerm,
   createCrmPurchase,
-  createCrmQuoteComponent,
-  createCrmQuoteItemFromTemplate,
-  createCrmQuoteLot,
-  createCrmQuoteSection,
   createCrmSav,
   createCrmTask,
   downloadCrmQuotePdf,
   loadCrmDataset,
   loadCrmQuoteEngineData,
   moveCrmOpportunityStage,
-  recalculateCrmQuoteTotals,
   transformAcceptedQuoteToChantier,
   updateCrmProspect,
   updateCrmQuote,
@@ -28,9 +21,7 @@ import {
   convertProspectToClient,
   type CrmDataset,
   type CrmQuoteRow,
-  type CrmQuoteEngineData,
 } from "../services/crm.service";
-import { buildQuoteDefaults, getCompanyQuoteSettings } from "../features/quotes/infrastructure/companyQuoteSettingsRepository";
 import { ErrorAlert, LoadingState } from "../components/ui/design-system";
 import { CrmHeader } from "../features/crm/components/CrmHeader";
 import { entityLabel } from "../features/crm/components/crmFormat";
@@ -57,7 +48,6 @@ const CrmInvoiceDialog = lazy(() => import("../features/crm/dialogs/CrmInvoiceDi
 const CrmOpportunityDialog = lazy(() => import("../features/crm/dialogs/CrmOpportunityDialog"));
 const CrmProspectDialog = lazy(() => import("../features/crm/dialogs/CrmProspectDialog"));
 const CrmPurchaseDialog = lazy(() => import("../features/crm/dialogs/CrmPurchaseDialog"));
-const CrmQuoteDialog = lazy(() => import("../features/crm/dialogs/CrmQuoteDialog"));
 const CrmSavDialog = lazy(() => import("../features/crm/dialogs/CrmSavDialog"));
 const CrmTaskDialog = lazy(() => import("../features/crm/dialogs/CrmTaskDialog"));
 
@@ -93,8 +83,6 @@ export default function CrmPage({ section = "dashboard" }: Props) {
   const [query, setQuery] = useState("");
   const [modal, setModal] = useState<CrmModalKey | null>(null);
   const [dragOpportunityId, setDragOpportunityId] = useState<string | null>(null);
-  const [quoteEngine, setQuoteEngine] = useState<CrmQuoteEngineData | null>(null);
-  const [quoteEngineLoading, setQuoteEngineLoading] = useState(false);
 
   async function refresh() {
     setLoading(true);
@@ -164,125 +152,7 @@ export default function CrmPage({ section = "dashboard" }: Props) {
   }
 
   async function createDraftQuoteAndOpen() {
-    await submitSafely(async () => {
-      const settings = await getCompanyQuoteSettings();
-      const defaults = buildQuoteDefaults(settings);
-      const quote = await createCrmQuote({
-        quote_number: defaults.quoteNumber,
-        statut: "brouillon",
-        description: "Nouveau devis",
-        valid_until: defaults.validUntil,
-        date_emission: new Date().toISOString().slice(0, 10),
-        tva: settings.defaultVatRate,
-        acompte_percent: settings.defaultDepositPercent,
-        payment_terms_text: settings.defaultPaymentTerms,
-        legal_mentions: { text: settings.defaultLegalMentions } as any,
-        waste_management: { text: settings.defaultWasteManagement } as any,
-        display_options: defaults.displayOptions as any,
-      });
-      navigate(`/crm/devis/${quote.id}/edit`);
-    });
-  }
-
-  async function openQuoteEngine(row: CrmQuoteRow) {
-    setQuoteEngineLoading(true);
-    setError(null);
-    try {
-      setQuoteEngine(await loadCrmQuoteEngineData(row.id));
-    } catch (err: any) {
-      setError(err?.message ?? "Chargement du devis impossible.");
-    } finally {
-      setQuoteEngineLoading(false);
-    }
-  }
-
-  async function addQuoteTemplateLine(payload: {
-    quoteId: string;
-    sectionId: string;
-    lotTitle: string;
-    templateId: string;
-    quantity: string;
-    marginRate: string;
-    coefficient: string;
-    tvaRate: string;
-  }) {
-    await submitSafely(async () => {
-      const template = data.taskTemplates.find((row) => row.id === payload.templateId) ?? null;
-      const existing = await loadCrmQuoteEngineData(payload.quoteId).catch(() => null);
-      const lot =
-        existing?.lots.find((row) => row.title.toLowerCase() === payload.lotTitle.trim().toLowerCase()) ??
-        (await createCrmQuoteLot({ quote_id: payload.quoteId, title: payload.lotTitle || template?.lot || "Lot principal", ordre: existing?.lots.length ?? 0 }));
-      await createCrmQuoteItemFromTemplate({
-        quote_id: payload.quoteId,
-        lot_id: lot.id,
-        section_id: payload.sectionId || null,
-        lot: lot.title,
-        template,
-        quantity: payload.quantity,
-        marginRate: payload.marginRate,
-        coefficient: payload.coefficient,
-        tvaRate: payload.tvaRate,
-        ordre: existing?.items.length ?? 0,
-      });
-      await recalculateCrmQuoteTotals(payload.quoteId);
-      setQuoteEngine(await loadCrmQuoteEngineData(payload.quoteId));
-    });
-  }
-
-  async function addQuoteSection(payload: { quoteId: string; parentId?: string | null; title: string; sectionType: "section" | "subsection" }) {
-    await submitSafely(async () => {
-      await createCrmQuoteSection({
-        quote_id: payload.quoteId,
-        parent_id: payload.parentId ?? null,
-        title: payload.title,
-        section_type: payload.sectionType,
-        ordre: (quoteEngine?.sections.length ?? 0) + 1,
-      });
-      setQuoteEngine(await loadCrmQuoteEngineData(payload.quoteId));
-    });
-  }
-
-  async function addQuoteComponent(payload: {
-    quoteId: string;
-    itemId: string;
-    componentType: "material" | "labor" | "subcontracting" | "equipment" | "fee" | "text";
-    designation: string;
-    quantity: string;
-    unit: string;
-    purchaseUnitPrice: string;
-    saleUnitPrice: string;
-    tvaRate: string;
-  }) {
-    await submitSafely(async () => {
-      await createCrmQuoteComponent({
-        quote_id: payload.quoteId,
-        quote_item_id: payload.itemId,
-        component_type: payload.componentType,
-        designation: payload.designation,
-        quantity: Number(payload.quantity),
-        unit: payload.unit,
-        purchase_unit_price_ht: Number(payload.purchaseUnitPrice),
-        sale_unit_price_ht: Number(payload.saleUnitPrice),
-        tva_rate: Number(payload.tvaRate),
-      });
-      setQuoteEngine(await loadCrmQuoteEngineData(payload.quoteId));
-    });
-  }
-
-  async function addPaymentTerm(payload: { quoteId: string; label: string; percent: string; dueTrigger: string }) {
-    await submitSafely(async () => {
-      const percent = Number(payload.percent || 0);
-      await createCrmPaymentTerm({
-        quote_id: payload.quoteId,
-        label: payload.label,
-        percent,
-        amount_ht: Number(quoteEngine?.quote.montant_ht ?? 0) * (percent / 100),
-        amount_ttc: Number(quoteEngine?.quote.montant_ttc ?? 0) * (percent / 100),
-        due_trigger: payload.dueTrigger,
-        ordre: quoteEngine?.paymentTerms.length ?? 0,
-      });
-      setQuoteEngine(await loadCrmQuoteEngineData(payload.quoteId));
-    });
+    navigate("/projets");
   }
 
   async function downloadQuote(row: CrmQuoteRow) {
@@ -367,7 +237,6 @@ export default function CrmPage({ section = "dashboard" }: Props) {
           onCreate={createDraftQuoteAndOpen}
           onStatus={(row, statut) => submitSafely(async () => updateCrmQuote(row.id, { statut }))}
           onTransform={transformQuote}
-          onOpen={openQuoteEngine}
           onPdf={downloadQuote}
         />
       ) : section === "invoices" ? (
@@ -400,26 +269,10 @@ export default function CrmPage({ section = "dashboard" }: Props) {
         {modal === "document" ? <CrmDocumentDialog data={data} saving={saving} onClose={() => setModal(null)} onSubmit={(payload) => submitSafely(() => createCrmDocument(payload))} /> : null}
         {modal === "invoice" ? <CrmInvoiceDialog data={data} saving={saving} onClose={() => setModal(null)} onSubmit={(payload) => submitSafely(() => createCrmInvoice(payload))} /> : null}
         {modal === "purchase" ? <CrmPurchaseDialog data={data} saving={saving} onClose={() => setModal(null)} onSubmit={(payload) => submitSafely(() => createCrmPurchase(payload))} /> : null}
-        {quoteEngine ? (
-          <CrmQuoteDialog
-            engine={quoteEngine}
-            templates={data.taskTemplates}
-            loading={quoteEngineLoading}
-            saving={saving}
-            onClose={() => setQuoteEngine(null)}
-            onAddLine={addQuoteTemplateLine}
-            onAddSection={addQuoteSection}
-            onAddComponent={addQuoteComponent}
-            onAddPaymentTerm={addPaymentTerm}
-            onPdf={() => void downloadQuote(quoteEngine.quote)}
-            onTransform={() => transformQuote(quoteEngine.quote)}
-          />
-        ) : null}
       </Suspense>
     </div>
   );
 }
-
 
 
 

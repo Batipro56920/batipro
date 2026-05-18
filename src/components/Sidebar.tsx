@@ -14,6 +14,7 @@ import {
   FileText,
   ReceiptText,
   FolderKanban,
+  PackageSearch,
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import type { CompanyFeatureModuleId } from "../config/companyFeatures";
@@ -85,8 +86,8 @@ export default function Sidebar({ collapsed = false, onToggleCollapse, companyNa
       end: true,
     },
     {
-      to: "/projets",
-      label: "Projets",
+      to: "/crm/opportunites",
+      label: "Opportunités",
       icon: FolderKanban,
       permissionKey: "crm" as const,
       group: "Commerce",
@@ -103,9 +104,23 @@ export default function Sidebar({ collapsed = false, onToggleCollapse, companyNa
       label: "Factures",
       icon: ReceiptText,
       permissionKey: "crm" as const,
-      group: "Gestion",
+      group: "Commerce",
+    },
+    {
+      to: "/projets",
+      label: "Projets",
+      icon: FolderKanban,
+      permissionKey: "crm" as const,
+      group: "Production",
     },
     { to: "/chantiers", label: t("sidebar.chantiers"), icon: Hammer, group: "Production" },
+    {
+      to: "/crm/sav",
+      label: "SAV",
+      icon: ClipboardList,
+      permissionKey: "crm" as const,
+      group: "Production",
+    },
     {
       to: "/intervenants",
       label: t("sidebar.intervenants"),
@@ -126,7 +141,7 @@ export default function Sidebar({ collapsed = false, onToggleCollapse, companyNa
       icon: LibraryBig,
       feature: "documents" as const,
       permissionKey: "bibliotheque" as const,
-      group: "Ressources",
+      group: "Administration",
     },
     {
       to: "/fournisseurs",
@@ -134,11 +149,27 @@ export default function Sidebar({ collapsed = false, onToggleCollapse, companyNa
       icon: Truck,
       feature: "approvisionnement" as const,
       permissionKey: "fournisseurs" as const,
-      group: "Ressources",
+      group: "Achats",
+    },
+    {
+      to: "/bons-commande",
+      label: "Bons de commande",
+      icon: ReceiptText,
+      feature: "approvisionnement" as const,
+      permissionKey: "fournisseurs" as const,
+      group: "Achats",
+    },
+    {
+      to: "/catalogue-produits",
+      label: "Produits",
+      icon: PackageSearch,
+      feature: "approvisionnement" as const,
+      permissionKey: "fournisseurs" as const,
+      group: "Achats",
     },
     {
       to: "/statistiques",
-      label: t("sidebar.statistics"),
+      label: "Rentabilité / statistiques",
       icon: ChartColumnBig,
       feature: "rapports" as const,
       permissionKey: "statistiques" as const,
@@ -146,10 +177,10 @@ export default function Sidebar({ collapsed = false, onToggleCollapse, companyNa
     },
     {
       to: "/entreprise",
-      label: t("sidebar.company"),
+      label: "Paramètres",
       icon: Building2,
       permissionKey: "entreprise_parametres" as const,
-      group: "Paramètres",
+      group: "Administration",
     },
   ].filter(
     (item) => {

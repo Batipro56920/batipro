@@ -17,7 +17,7 @@
 - [ ] Le bouton `Rafraîchir` recharge les données.
 - [ ] Le bouton `Prospect` ouvre la modale prospect.
 - [ ] Le bouton `Opportunité` ouvre la modale opportunité.
-- [ ] Le bouton `Devis` crée un devis brouillon et ouvre le workspace.
+- [ ] Le bouton `Devis` oriente vers le parcours Projets / Quote Builder.
 - [ ] Le bouton `Agenda` navigue vers `/crm/agenda`.
 - [ ] Aucun bouton du header n’est mort.
 
@@ -37,7 +37,7 @@
 - [ ] Les KPI passent correctement en grille desktop/tablette/mobile.
 - [ ] Les KPI redirigent vers les modules associés.
 - [ ] Le bloc actions affiche les relances, RDV, tâches et devis si présents.
-- [ ] Les cartes `Devis à envoyer` ouvrent `/crm/devis/:id/edit`.
+- [ ] Les cartes `Devis à envoyer` ouvrent la page de suivi `/crm/devis`.
 - [ ] Si une action ne peut pas ouvrir une cible, l’état désactivé est explicite.
 - [ ] L’état vide `Aucune action urgente` s’affiche si aucune action n’est disponible.
 - [ ] Le bloc points de vigilance affiche les compteurs.
@@ -50,7 +50,7 @@
 
 ## Qualité
 
-- [ ] Aucun texte encodé de type `RafraÃ®chir`, `OpportunitÃ©s`, `BibliothÃ¨que`, `ParamÃ¨tres`.
+- [ ] Aucun texte encodé de type mojibake dans les libellés CRM.
 - [ ] Desktop lisible.
 - [ ] Tablette lisible.
 - [ ] Mobile empilé correctement.

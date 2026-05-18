@@ -1,14 +1,35 @@
+import { useEffect, useState } from "react";
 import type { ProjectRecord } from "../types";
+import type { ProjectProfitabilityMetrics } from "../utils/projectProfitability";
 import { buildProjectProfitability } from "../utils/projectProfitability";
 import { EmptyProjectBlock, Panel } from "./ProjectShared";
 import { ProjectProfitabilitySummary, ProjectProfitabilityWidgets, formatCurrency } from "./ProjectProfitabilityWidgets";
 
 export function ProjectProfitabilityTab({ project }: { project: ProjectRecord }) {
-  const metrics = buildProjectProfitability(project);
+  const [metrics, setMetrics] = useState<ProjectProfitabilityMetrics | null>(null);
+
+  useEffect(() => {
+    let alive = true;
+    setMetrics(null);
+    buildProjectProfitability(project)
+      .then((nextMetrics) => {
+        if (alive) setMetrics(nextMetrics);
+      })
+      .catch(() => {
+        if (alive) setMetrics(null);
+      });
+    return () => {
+      alive = false;
+    };
+  }, [project]);
+
+  if (!metrics) {
+    return <div className="rounded-3xl border border-slate-200 bg-white p-8 text-center text-sm text-slate-500">Chargement de la rentabilité...</div>;
+  }
 
   return (
     <div className="space-y-5">
-      <ProjectProfitabilityWidgets project={project} />
+      <ProjectProfitabilityWidgets metrics={metrics} />
       <ProjectProfitabilitySummary metrics={metrics} />
 
       <div className="grid gap-5 xl:grid-cols-[1.15fr_0.85fr]">

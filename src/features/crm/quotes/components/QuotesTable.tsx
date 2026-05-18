@@ -49,7 +49,7 @@ export function QuotesTable({
                 <td className="px-4 py-3 text-slate-600">—</td>
                 <td className="px-4 py-3" onClick={(event) => event.stopPropagation()}>
                   <div className="flex flex-wrap gap-1">
-                    <Link to={`/crm/devis/${row.id}/edit`} className="rounded-lg border border-blue-200 bg-blue-50 px-2 py-1 text-xs font-medium text-blue-800 hover:bg-blue-100">Éditer</Link>
+                    <Link to="/projets" className="rounded-lg border border-blue-200 bg-blue-50 px-2 py-1 text-xs font-medium text-blue-800 hover:bg-blue-100" title="Les devis s'éditent depuis le dossier projet avec le Quote Builder.">Ouvrir projet</Link>
                     <button type="button" onClick={() => actions.onStatus(row, "envoye")} className="rounded-lg border border-slate-200 px-2 py-1 text-xs font-medium hover:bg-slate-50">Envoyer</button>
                     <button type="button" onClick={() => actions.onStatus(row, "relance_1")} className="rounded-lg border border-slate-200 px-2 py-1 text-xs font-medium hover:bg-slate-50">Relancer</button>
                     <details className="relative">
@@ -61,7 +61,7 @@ export function QuotesTable({
                         <button type="button" onClick={() => actions.onStatus(row, "accepte")} className="block w-full rounded-xl px-3 py-2 text-left text-sm text-emerald-700 hover:bg-emerald-50">Accepter</button>
                         <button type="button" onClick={() => actions.onStatus(row, "refuse")} className="block w-full rounded-xl px-3 py-2 text-left text-sm text-red-700 hover:bg-red-50">Refuser</button>
                         <button type="button" onClick={() => actions.onTransform(row)} className="block w-full rounded-xl px-3 py-2 text-left text-sm hover:bg-slate-50">Transformer chantier</button>
-                        <button type="button" disabled className="block w-full rounded-xl px-3 py-2 text-left text-sm text-slate-400" title="Duplication à finaliser">Dupliquer</button>
+                        <button type="button" disabled className="block w-full rounded-xl px-3 py-2 text-left text-sm text-slate-400" title="Duplication à finaliser dans le Quote Builder">Dupliquer</button>
                         <button type="button" disabled className="block w-full rounded-xl px-3 py-2 text-left text-sm text-slate-400" title="Suppression à sécuriser">Supprimer</button>
                       </div>
                     </details>

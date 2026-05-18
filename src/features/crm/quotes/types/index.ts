@@ -17,6 +17,5 @@ export type QuoteActionHandlers = {
   onCreate: () => void;
   onStatus: (row: CrmQuoteRow, status: CrmQuoteRow["statut"]) => void;
   onTransform: (row: CrmQuoteRow) => void;
-  onOpen: (row: CrmQuoteRow) => void;
   onPdf: (row: CrmQuoteRow) => void;
 };

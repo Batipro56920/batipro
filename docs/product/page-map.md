@@ -2,13 +2,26 @@
 
 Audit etabli avant refonte page par page. Les pages actives ne doivent pas etre refondues sans etape dediee.
 
+## Priorite produit actuelle
+
+La priorite est la consolidation produit. Les nouvelles features sont gelees jusqu'a la fin des sprints de consolidation decrits dans `docs/product/consolidation-roadmap.md`.
+
+Axes obligatoires :
+
+- corriger l'encodage visible ;
+- faire du nouveau Quote Builder l'experience devis unique ;
+- reorganiser la sidebar en Commerce / Production / Achats / Admin ;
+- migrer les modules V1 localStorage vers Supabase ;
+- unifier les PDF et workflows email/signature via document-engine ;
+- refondre les modules V1 existants avant toute nouvelle fonctionnalite.
+
 ## Architecture de routage
 
 - Batipro utilise React Router, pas Next.js App Router ni Pages Router.
 - Le shell applicatif protege est porte par `RequireAuth` et `LayoutShell`.
 - Les routes CRM restent orchestrees par `CrmPage`, avec sections extraites dans `src/features/crm/pages`.
 - Les modales metier ne sont pas routees ; elles sont gerees par etat local dans les pages.
-- Le workspace devis est charge en lazy route via `CrmQuoteWorkspacePage`.
+- L'ancien workspace devis CRM est déprécié. Le Quote Builder projet est l'expérience devis active.
 
 ## Routes actives
 
@@ -25,7 +38,7 @@ Audit etabli avant refonte page par page. Les pages actives ne doivent pas etre 
 | CRM | `/crm/clients` | `CrmPage` |
 | CRM | `/crm/opportunites` | `CrmPage` |
 | CRM | `/crm/devis` | `CrmPage` |
-| CRM Devis | `/crm/devis/:id/edit` | `CrmQuoteWorkspacePage` |
+| CRM Devis legacy | `/crm/devis/:id/edit` | Redirection vers `/crm/devis` |
 | CRM | `/crm/factures` | `CrmPage` |
 | CRM | `/crm/achats` | `CrmPage` |
 | CRM | `/crm/contacts` | `CrmPage` |
@@ -155,6 +168,18 @@ Les panneaux principaux sont encapsules sans changement visuel. La carte chantie
 
 ## Prochaines refontes recommandees
 
+## Consolidation Sprint A
+
+- Navigation principale réorganisée en Commerce, Production, Achats, Pilotage et Administration.
+- Le Quote Builder projet devient l'unique parcours de création et d'édition devis.
+- `/crm/devis` reste une vue transverse de suivi des devis existants.
+- `/crm/devis/:id/edit` est conservée en compatibilité mais redirige vers la liste devis CRM.
+- Routes CRM secondaires non exposées dans la navigation : `/crm/contacts`, `/crm/ressources`, `/crm/bibliotheque`, `/crm/parametres`.
+- TODO produit : fusionner Contacts avec clients/prospects si non utile.
+- TODO produit : clarifier Ressources.
+- TODO produit : fusionner Bibliothèque CRM avec Bibliothèque globale.
+- TODO produit : déplacer Paramètres CRM dans Paramètres / Mon entreprise.
+
 ## Module Projets ajoute
 
 Routes ajoutees :
@@ -177,6 +202,6 @@ Dette restante :
 5. Deplacer le JSX complet des wrappers chantier lorsque le state correspondant sera sorti de `ChantierPage`.
 6. Extraire le chargement et les mutations du portail intervenant vers `useIntervenantPortalData` et `useIntervenantPortalActions`.
 7. Extraire les drawers chantier vers `src/features/chantiers/dialogs`.
-8. Stabiliser `CrmQuoteWorkspacePage` comme workspace devis unique.
+8. Surveiller les composants devis legacy conservés en `deprecated` et supprimer définitivement après une release stable.
 9. Harmoniser les routes entreprise en conservant les redirections historiques.
 10. Supprimer definitivement les fichiers deprecated apres une release stable et validation production.

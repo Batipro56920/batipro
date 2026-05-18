@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { FileCheck2, Plus } from "lucide-react";
 import { Button } from "../../../components/ui/button";
 import { PageHeader } from "../../../components/layout/PageHeader";
@@ -12,9 +12,15 @@ import { getPaidAmount } from "../application/invoicePayments";
 import { invoiceTypeLabel } from "../application/invoiceFactory";
 
 export default function InvoicesPage() {
-  const [invoices, setInvoices] = useState<InvoiceRecord[]>(() => listInvoices());
-  const [selectedId, setSelectedId] = useState<string | null>(invoices[0]?.id ?? null);
+  const [invoices, setInvoices] = useState<InvoiceRecord[]>([]);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const selected = invoices.find((invoice) => invoice.id === selectedId) ?? null;
+
+  useEffect(() => {
+    void refresh();
+  }, []);
 
   const stats = useMemo(() => {
     const totals = invoices.reduce((acc, invoice) => {
@@ -28,9 +34,25 @@ export default function InvoicesPage() {
     return totals;
   }, [invoices]);
 
-  function create(type: InvoiceType) {
-    const invoice = createAndSaveInvoice(type);
-    setInvoices(listInvoices());
+  async function refresh(selectFirst = true) {
+    setLoading(true);
+    setError(null);
+    try {
+      const rows = await listInvoices();
+      setInvoices(rows);
+      if (selectFirst) setSelectedId((current) => current ?? rows[0]?.id ?? null);
+    } catch (err: any) {
+      setError(err?.message ?? "Chargement des factures impossible.");
+      setInvoices([]);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function create(type: InvoiceType) {
+    const invoice = await createAndSaveInvoice(type);
+    const rows = await listInvoices();
+    setInvoices(rows);
     setSelectedId(invoice.id);
   }
 
@@ -38,10 +60,11 @@ export default function InvoicesPage() {
     setInvoices((current) => current.map((row) => row.id === invoice.id ? invoice : row));
   }
 
-  function save(invoice: InvoiceRecord) {
-    saveInvoice(invoice);
-    setInvoices(listInvoices());
-    setSelectedId(invoice.id);
+  async function save(invoice: InvoiceRecord) {
+    const saved = await saveInvoice(invoice);
+    const rows = await listInvoices();
+    setInvoices(rows);
+    setSelectedId(saved.id);
   }
 
   return (
@@ -53,14 +76,17 @@ export default function InvoicesPage() {
         actions={<InvoiceCreateActions onCreate={create} />}
       />
 
-      <section className="grid gap-4 md:grid-cols-4">
+      {error ? <div className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">{error}</div> : null}
+      {loading ? <div className="rounded-3xl border border-slate-200 bg-white p-8 text-center text-sm text-slate-500">Chargement des factures...</div> : null}
+
+      {!loading ? <section className="grid gap-4 md:grid-cols-4">
         <StatCard label="Factures" value={invoices.length} hint="Documents de facturation" />
         <StatCard label="Brouillons" value={stats.drafts} hint="A finaliser" />
         <StatCard label="CA facture" value={formatCurrency(stats.amount)} hint="Total TTC" />
         <StatCard label="Encaisse" value={formatCurrency(stats.paid)} hint={`${stats.overdue} en retard`} />
-      </section>
+      </section> : null}
 
-      <section className="grid gap-6 xl:grid-cols-[360px_minmax(0,1fr)]">
+      {!loading ? <section className="grid gap-6 xl:grid-cols-[360px_minmax(0,1fr)]">
         <aside className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm">
           <div className="mb-4 flex items-center gap-2 text-sm font-semibold text-slate-950"><FileCheck2 className="h-4 w-4 text-blue-600" /> Liste factures</div>
           <div className="space-y-2">
@@ -86,7 +112,7 @@ export default function InvoicesPage() {
         {selected ? <InvoiceEditor invoice={selected} onChange={update} onSave={save} /> : (
           <div className="rounded-3xl border border-dashed border-slate-200 bg-white p-10 text-center text-sm text-slate-500">Creez une facture pour commencer.</div>
         )}
-      </section>
+      </section> : null}
     </div>
   );
 }

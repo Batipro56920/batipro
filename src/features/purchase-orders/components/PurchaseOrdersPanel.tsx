@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { calculateDocumentTotals } from "../../document-engine";
 import type { SupplierRow } from "../../../services/suppliers.service";
 import { createAndSavePurchaseOrder, listPurchaseOrders, savePurchaseOrder } from "../infrastructure/purchaseOrderRepository";
@@ -7,21 +7,40 @@ import { PurchaseOrderEditor } from "./PurchaseOrderEditor";
 import { PurchaseOrderStatusBadge } from "./PurchaseOrderStatusBadge";
 
 export function PurchaseOrdersPanel({ suppliers }: { suppliers: SupplierRow[] }) {
-  const [orders, setOrders] = useState<PurchaseOrderRecord[]>(() => listPurchaseOrders());
+  const [orders, setOrders] = useState<PurchaseOrderRecord[]>([]);
   const [selectedOrder, setSelectedOrder] = useState<PurchaseOrderRecord | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const totals = useMemo(() => buildTotals(orders), [orders]);
 
-  function createOrder() {
+  useEffect(() => {
+    void refresh();
+  }, []);
+
+  async function refresh() {
+    setLoading(true);
+    setError(null);
+    try {
+      setOrders(await listPurchaseOrders());
+    } catch (err: any) {
+      setError(err?.message ?? "Chargement des bons de commande impossible.");
+      setOrders([]);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function createOrder() {
     const firstSupplier = suppliers[0] ?? null;
-    const order = createAndSavePurchaseOrder({ supplierId: firstSupplier?.id ?? null, supplierName: firstSupplier?.name ?? null });
-    setOrders(listPurchaseOrders());
+    const order = await createAndSavePurchaseOrder({ supplierId: firstSupplier?.id ?? null, supplierName: firstSupplier?.name ?? null });
+    setOrders(await listPurchaseOrders());
     setSelectedOrder(order);
   }
 
-  function save(order: PurchaseOrderRecord) {
-    savePurchaseOrder(order);
-    setOrders(listPurchaseOrders());
-    setSelectedOrder(order);
+  async function save(order: PurchaseOrderRecord) {
+    const saved = await savePurchaseOrder(order);
+    setOrders(await listPurchaseOrders());
+    setSelectedOrder(saved);
   }
 
   return (
@@ -37,6 +56,8 @@ export function PurchaseOrdersPanel({ suppliers }: { suppliers: SupplierRow[] })
             Nouveau bon de commande
           </button>
         </div>
+        {error ? <div className="mt-4 rounded-2xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</div> : null}
+        {loading ? <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-500">Chargement des bons de commande...</div> : null}
         <div className="mt-5 grid gap-3 md:grid-cols-3">
           <Metric label="Commandes" value={`${orders.length}`} />
           <Metric label="Achats HT" value={formatCurrency(totals.ht)} />
@@ -54,7 +75,7 @@ export function PurchaseOrdersPanel({ suppliers }: { suppliers: SupplierRow[] })
         />
       ) : null}
 
-      <div className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
+      {!loading ? <div className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
         <table className="min-w-full divide-y divide-slate-100 text-sm">
           <thead className="bg-slate-50 text-left text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">
             <tr>
@@ -94,7 +115,7 @@ export function PurchaseOrdersPanel({ suppliers }: { suppliers: SupplierRow[] })
             )}
           </tbody>
         </table>
-      </div>
+      </div> : null}
     </section>
   );
 }

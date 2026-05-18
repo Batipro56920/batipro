@@ -73,7 +73,7 @@ export async function createPlanningEntry(payload: {
     .overrideTypes<PlanningEntryRow>();
 
   if (error) throw new Error(error.message);
-  if (!data) throw new Error("Entrée planning introuvable.");
+  if (!data) throw new Error("EntrÃ©e planning introuvable.");
   return data;
 }
 
@@ -91,7 +91,7 @@ export async function updatePlanningEntry(
     .overrideTypes<PlanningEntryRow>();
 
   if (error) throw new Error(error.message);
-  if (!data) throw new Error("Entrée planning introuvable.");
+  if (!data) throw new Error("EntrÃ©e planning introuvable.");
   return data;
 }
 
@@ -121,11 +121,11 @@ export async function createDependency(payload: {
 }): Promise<TaskDependencyRow> {
   if (!payload.chantier_id) throw new Error("chantier_id manquant.");
   if (!payload.predecessor_task_id || !payload.successor_task_id) {
-    throw new Error("Dépendances invalides.");
+    throw new Error("DÃ©pendances invalides.");
   }
 
   if (payload.predecessor_task_id === payload.successor_task_id) {
-    throw new Error("Une tâche ne peut pas dépendre d'elle-même.");
+    throw new Error("Une tÃ¢che ne peut pas dÃ©pendre d'elle-mÃªme.");
   }
 
   const { data: existingDeps, error: depsError } = await supabase
@@ -160,7 +160,7 @@ export async function createDependency(payload: {
   };
 
   if (hasPath(payload.successor_task_id, payload.predecessor_task_id)) {
-    throw new Error("Dépendance circulaire détectée.");
+    throw new Error("DÃ©pendance circulaire dÃ©tectÃ©e.");
   }
 
   const { data, error } = await supabase
@@ -176,7 +176,7 @@ export async function createDependency(payload: {
     .overrideTypes<TaskDependencyRow>();
 
   if (error) throw new Error(error.message);
-  if (!data) throw new Error("Dépendance introuvable.");
+  if (!data) throw new Error("DÃ©pendance introuvable.");
   return data;
 }
 
@@ -200,6 +200,7 @@ export function checkIntervenantConflicts(entries: PlanningEntryRow[]) {
 export function checkDependencyViolations(entries: PlanningEntryRow[], deps: TaskDependencyRow[]) {
   return checkDependencyViolationsUtil(entries, deps);
 }
+
 
 
 

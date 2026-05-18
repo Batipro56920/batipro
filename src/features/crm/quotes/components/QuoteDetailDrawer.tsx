@@ -63,18 +63,18 @@ export function QuoteDetailDrawer({
           <section className="rounded-2xl border border-slate-200 p-4">
             <h4 className="text-sm font-semibold text-slate-950">Historique et notes</h4>
             <div className="mt-3 text-sm text-slate-600">Créé le {dateOnly(quote.created_at)} · Mis à jour le {dateOnly(quote.updated_at)}</div>
-            <div className="mt-3 rounded-xl border border-dashed border-slate-200 bg-slate-50 p-3 text-sm text-slate-500">Historique détaillé d’envoi, consultation et relance à connecter.</div>
+            <div className="mt-3 rounded-xl border border-dashed border-slate-200 bg-slate-50 p-3 text-sm text-slate-500">Historique détaillé d'envoi, consultation et relance à connecter.</div>
           </section>
 
           <div className="grid gap-2 sm:grid-cols-2">
-            <Link to={`/crm/devis/${quote.id}/edit`} className="rounded-xl border border-blue-200 bg-blue-50 px-3 py-2 text-center text-sm font-medium text-blue-800 hover:bg-blue-100">Éditer</Link>
+            <Link to="/projets" className="rounded-xl border border-blue-200 bg-blue-50 px-3 py-2 text-center text-sm font-medium text-blue-800 hover:bg-blue-100" title="Les devis s'éditent depuis le dossier projet avec le Quote Builder.">Ouvrir projet</Link>
             <button type="button" onClick={() => actions.onStatus(quote, "envoye")} className="rounded-xl border border-slate-200 px-3 py-2 text-sm font-medium hover:bg-slate-50">Envoyer</button>
             <button type="button" onClick={() => actions.onStatus(quote, "relance_1")} className="rounded-xl border border-slate-200 px-3 py-2 text-sm font-medium hover:bg-slate-50">Relancer</button>
             <button type="button" onClick={() => actions.onPdf(quote)} className="rounded-xl border border-slate-200 px-3 py-2 text-sm font-medium hover:bg-slate-50">PDF</button>
             <button type="button" onClick={() => actions.onStatus(quote, "accepte")} className="rounded-xl border border-emerald-200 px-3 py-2 text-sm font-medium text-emerald-700 hover:bg-emerald-50">Accepter</button>
             <button type="button" onClick={() => actions.onStatus(quote, "refuse")} className="rounded-xl border border-red-200 px-3 py-2 text-sm font-medium text-red-700 hover:bg-red-50">Refuser</button>
             <button type="button" onClick={() => actions.onTransform(quote)} className="rounded-xl bg-slate-950 px-3 py-2 text-sm font-medium text-white hover:bg-slate-800">Transformer chantier</button>
-            <button type="button" disabled className="rounded-xl border border-slate-200 px-3 py-2 text-sm font-medium text-slate-400" title="Duplication à finaliser">Dupliquer</button>
+            <button type="button" disabled className="rounded-xl border border-slate-200 px-3 py-2 text-sm font-medium text-slate-400" title="Duplication à finaliser dans le Quote Builder">Dupliquer</button>
           </div>
         </div>
       </aside>

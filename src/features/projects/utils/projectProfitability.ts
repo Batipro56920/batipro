@@ -25,15 +25,15 @@ export type ProjectProfitabilityMetrics = {
   dataMode: "real" | "mixed" | "estimated";
 };
 
-export function buildProjectProfitability(project: ProjectRecord): ProjectProfitabilityMetrics {
+export async function buildProjectProfitability(project: ProjectRecord): Promise<ProjectProfitabilityMetrics> {
   const acceptedQuote = project.quotes.find((quote) => quote.statut === "accepte") ?? null;
   const quoteSource = acceptedQuote ?? project.quotes[0] ?? null;
   const soldAmountHt = positiveNumber(acceptedQuote?.montant_ht ?? quoteSource?.montant_ht ?? estimateHt(project));
   const soldAmountTtc = positiveNumber(acceptedQuote?.montant_ttc ?? quoteSource?.montant_ttc ?? project.quoteAmount ?? soldAmountHt * 1.2);
-  const invoices = findProjectInvoices(project);
+  const invoices = await findProjectInvoices(project);
   const invoicedTtc = round(invoices.reduce((sum, invoice) => sum + invoiceTotalTtc(invoice), 0));
   const paidTtc = round(invoices.reduce((sum, invoice) => sum + getPaidAmount(invoice), 0));
-  const purchaseOrders = findProjectPurchaseOrders(project);
+  const purchaseOrders = await findProjectPurchaseOrders(project);
   const purchaseOrdersHt = round(purchaseOrders.reduce((sum, order) => sum + purchaseOrderTotalHt(order), 0));
   const productionCosts = getProductionCosts(project, soldAmountHt, purchaseOrdersHt);
   const grossMarginHt = round(soldAmountHt - productionCosts.purchasesHt - productionCosts.laborHt);
@@ -60,9 +60,10 @@ export function buildProjectProfitability(project: ProjectRecord): ProjectProfit
   };
 }
 
-function findProjectInvoices(project: ProjectRecord) {
+async function findProjectInvoices(project: ProjectRecord) {
   const quoteIds = new Set(project.quotes.map((quote) => quote.id));
-  return safeListInvoices().filter((invoice) => {
+  const invoices = await safeListInvoices();
+  return invoices.filter((invoice) => {
     if (invoice.projectId === project.id || invoice.document.projectId === project.id) return true;
     if (invoice.sourceQuoteId && quoteIds.has(invoice.sourceQuoteId)) return true;
     if (invoice.document.quoteId && quoteIds.has(invoice.document.quoteId)) return true;
@@ -70,18 +71,19 @@ function findProjectInvoices(project: ProjectRecord) {
   });
 }
 
-function safeListInvoices(): InvoiceRecord[] {
+async function safeListInvoices(): Promise<InvoiceRecord[]> {
   if (typeof window === "undefined") return [];
   try {
-    return listInvoices();
+    return await listInvoices();
   } catch {
     return [];
   }
 }
 
-function findProjectPurchaseOrders(project: ProjectRecord) {
+async function findProjectPurchaseOrders(project: ProjectRecord) {
   const chantierIds = new Set(project.chantiers.map((chantier) => chantier.id));
-  return safeListPurchaseOrders().filter((order) => {
+  const purchaseOrders = await safeListPurchaseOrders();
+  return purchaseOrders.filter((order) => {
     if (order.projectId === project.id || order.document.projectId === project.id) return true;
     if (order.chantierId && chantierIds.has(order.chantierId)) return true;
     if (order.document.chantierId && chantierIds.has(order.document.chantierId)) return true;
@@ -89,10 +91,10 @@ function findProjectPurchaseOrders(project: ProjectRecord) {
   });
 }
 
-function safeListPurchaseOrders(): PurchaseOrderRecord[] {
+async function safeListPurchaseOrders(): Promise<PurchaseOrderRecord[]> {
   if (typeof window === "undefined") return [];
   try {
-    return listPurchaseOrders();
+    return await listPurchaseOrders();
   } catch {
     return [];
   }
