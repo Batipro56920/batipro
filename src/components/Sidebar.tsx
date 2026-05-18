@@ -12,6 +12,7 @@ import {
   Truck,
   BriefcaseBusiness,
   FileText,
+  ReceiptText,
   FolderKanban,
 } from "lucide-react";
 import { useEffect, useState } from "react";
@@ -96,6 +97,13 @@ export default function Sidebar({ collapsed = false, onToggleCollapse, companyNa
       icon: FileText,
       permissionKey: "crm" as const,
       group: "Commerce",
+    },
+    {
+      to: "/factures",
+      label: "Factures",
+      icon: ReceiptText,
+      permissionKey: "crm" as const,
+      group: "Gestion",
     },
     { to: "/chantiers", label: t("sidebar.chantiers"), icon: Hammer, group: "Production" },
     {

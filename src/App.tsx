@@ -30,6 +30,7 @@ const ProjectsPage = lazy(() => import("./pages/ProjectsPage"));
 const ProjectDetailPage = lazy(() => import("./pages/ProjectDetailPage"));
 const ProjectAppointmentPage = lazy(() => import("./pages/ProjectAppointmentPage"));
 const ProjectQuoteBuilderV1Page = lazy(() => import("./pages/ProjectQuoteBuilderV1Page"));
+const InvoicesPage = lazy(() => import("./pages/InvoicesPage"));
 
 export default function App() {
   return (
@@ -109,6 +110,18 @@ export default function App() {
           element={
             <RequireCompanyFeature profilePermissionKey="crm">
               <CrmPage section="invoices" />
+            </RequireCompanyFeature>
+          }
+        />
+        <Route
+          path="/factures"
+          element={
+            <RequireCompanyFeature profilePermissionKey="crm">
+              <LazyRouteErrorBoundary>
+                <Suspense fallback={<div className="rounded-3xl border bg-white p-8 text-center text-sm text-slate-500">Chargement des factures...</div>}>
+                  <InvoicesPage />
+                </Suspense>
+              </LazyRouteErrorBoundary>
             </RequireCompanyFeature>
           }
         />
