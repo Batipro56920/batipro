@@ -30,6 +30,9 @@ export function createQuoteBuilderFromProject(project: ProjectRecord): QuoteBuil
     status: "draft",
     date: new Date().toISOString().slice(0, 10),
     validUntil: null,
+    workStartDate: null,
+    estimatedDurationValue: null,
+    estimatedDurationUnit: "semaines",
     clientName: project.clientName || "Client a renseigner",
     siteAddress: project.address ?? "",
     description: source?.needDescription || project.needDescription || project.name,
@@ -60,11 +63,22 @@ export function createQuoteBuilderFromEngine(engine: CrmQuoteEngineData, project
     status: engine.quote.statut === "envoye" ? "sent" : engine.quote.statut === "accepte" ? "accepted" : "saved",
     date: engine.quote.date_emission ?? new Date().toISOString().slice(0, 10),
     validUntil: engine.quote.valid_until,
+    workStartDate: readDisplayOption(engine.quote.display_options, "work_start_date"),
+    estimatedDurationValue: Number(readDisplayOption(engine.quote.display_options, "estimated_duration_value") ?? 0) || null,
+    estimatedDurationUnit: durationUnit(readDisplayOption(engine.quote.display_options, "estimated_duration_unit")),
     description: engine.quote.description ?? project.needDescription ?? project.name,
     paymentTerms: engine.quote.payment_terms_text ?? engine.quote.conditions ?? "Acompte de 30% a la signature, solde selon avancement et reception.",
     legalMentions: typeof engine.quote.legal_mentions === "object" && engine.quote.legal_mentions ? String((engine.quote.legal_mentions as Record<string, unknown>).text ?? "") : "",
     nodes: mapCrmItemsToQuoteNodes(engine.items),
   };
+}
+
+function readDisplayOption(options: unknown, key: string): string | null {
+  return typeof options === "object" && options ? String((options as Record<string, unknown>)[key] ?? "") || null : null;
+}
+
+function durationUnit(value: string | null): "jours" | "semaines" | "mois" {
+  return value === "jours" || value === "mois" ? value : "semaines";
 }
 
 export function createSection(title = "Section"): QuoteBuilderSection {

@@ -18,6 +18,17 @@ export type QuoteBuilderItem = {
   internalNote?: string;
   clientNote?: string;
   sourceLibraryId?: string | null;
+  compositeItems?: QuoteBuilderCompositeItem[];
+};
+
+export type QuoteBuilderCompositeItem = {
+  id: string;
+  kind: QuoteBuilderItemKind;
+  title: string;
+  quantity: number;
+  unit: QuoteBuilderUnit;
+  unitPriceHt: number;
+  vatRate: number;
 };
 
 export type QuoteBuilderSubsection = {
@@ -63,6 +74,9 @@ export type QuoteBuilderQuote = {
   status: QuoteBuilderStatus;
   date: string;
   validUntil: string | null;
+  workStartDate: string | null;
+  estimatedDurationValue: number | null;
+  estimatedDurationUnit: "jours" | "semaines" | "mois";
   clientName: string;
   siteAddress: string;
   description: string;

@@ -49,6 +49,9 @@ async function createNewQuote(quote: QuoteBuilderQuote, totalHt: number, totalTt
     display_options: {
       site_address: quote.siteAddress,
       footer_notes: quote.footerNotes,
+      work_start_date: quote.workStartDate,
+      estimated_duration_value: quote.estimatedDurationValue,
+      estimated_duration_unit: quote.estimatedDurationUnit,
       builder_v1: true,
       project_id: quote.projectId,
     } as any,
@@ -75,6 +78,9 @@ async function updateExistingQuote(quote: QuoteBuilderQuote, totalHt: number): P
     display_options: {
       site_address: quote.siteAddress,
       footer_notes: quote.footerNotes,
+      work_start_date: quote.workStartDate,
+      estimated_duration_value: quote.estimatedDurationValue,
+      estimated_duration_unit: quote.estimatedDurationUnit,
       builder_v1: true,
       project_id: quote.projectId,
     } as any,
