@@ -6,8 +6,8 @@ export function createReceptionReport(chantier: ChantierRow): ReceptionReportRec
   const now = new Date().toISOString();
   const today = now.slice(0, 10);
   const document = createEmptyBusinessDocument("reception_report");
-  const section = createDocumentSection("Reception du chantier", 0);
-  const text = createDocumentText(section.id, "Le client et l'entreprise constatent l'etat du chantier a la date de reception.", 0);
+  const section = createDocumentSection("Réception du chantier", 0);
+  const text = createDocumentText(section.id, "Le client et l'entreprise constatent l'état du chantier à la date de réception.", 0);
   const nodes = [{ ...section, children: [text] }];
   const nextDocument = {
     ...document,
@@ -15,7 +15,7 @@ export function createReceptionReport(chantier: ChantierRow): ReceptionReportRec
     status: "draft" as const,
     issueDate: today,
     chantierId: chantier.id,
-    title: "PV de reception",
+    title: "PV de réception",
     recipient: {
       ...document.recipient,
       displayName: chantier.client ?? "Client",
@@ -28,8 +28,8 @@ export function createReceptionReport(chantier: ChantierRow): ReceptionReportRec
     nodes,
     terms: {
       ...document.terms,
-      paymentTerms: "PV de reception du chantier.",
-      legalMentions: "La reception marque le point de depart des garanties legales applicables.",
+      paymentTerms: "PV de réception du chantier.",
+      legalMentions: "La réception marque le point de départ des garanties légales applicables.",
       depositPercent: null,
       depositAmount: null,
     },
@@ -53,9 +53,9 @@ export function createReceptionReport(chantier: ChantierRow): ReceptionReportRec
 }
 
 export function receptionDecisionLabel(decision: ReceptionReportDecision) {
-  if (decision === "without_reserves") return "Reception sans reserve";
-  if (decision === "with_reserves") return "Reception avec reserves";
-  return "Refus de reception";
+  if (decision === "without_reserves") return "Réception sans réserve";
+  if (decision === "with_reserves") return "Réception avec réserves";
+  return "Refus de réception";
 }
 
 function createReceptionReportNumber() {

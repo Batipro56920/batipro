@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { Plus, RefreshCw, Search, ShoppingCart } from "lucide-react";
 import { calculateDocumentTotals } from "../../document-engine";
 import type { SupplierRow } from "../../../services/suppliers.service";
 import { createAndSavePurchaseOrder, listPurchaseOrders, savePurchaseOrder } from "../infrastructure/purchaseOrderRepository";
@@ -11,7 +12,26 @@ export function PurchaseOrdersPanel({ suppliers }: { suppliers: SupplierRow[] })
   const [selectedOrder, setSelectedOrder] = useState<PurchaseOrderRecord | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [query, setQuery] = useState("");
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [supplierFilter, setSupplierFilter] = useState("all");
   const totals = useMemo(() => buildTotals(orders), [orders]);
+
+  const filteredOrders = useMemo(() => {
+    const text = query.trim().toLowerCase();
+    return orders.filter((order) => {
+      const matchesText = !text || [
+        order.document.number,
+        order.supplierName,
+        order.document.recipient.displayName,
+        order.deliveryAddress,
+        order.supplierReference,
+      ].some((value) => String(value ?? "").toLowerCase().includes(text));
+      const matchesStatus = statusFilter === "all" || order.status === statusFilter;
+      const matchesSupplier = supplierFilter === "all" || order.supplierId === supplierFilter;
+      return matchesText && matchesStatus && matchesSupplier;
+    });
+  }, [orders, query, statusFilter, supplierFilter]);
 
   useEffect(() => {
     void refresh();
@@ -50,11 +70,14 @@ export function PurchaseOrdersPanel({ suppliers }: { suppliers: SupplierRow[] })
           <div>
             <div className="text-xs font-semibold uppercase tracking-[0.18em] text-blue-600">Achats fournisseurs</div>
             <h2 className="mt-2 text-xl font-bold text-slate-950">Bons de commande</h2>
-            <p className="mt-1 text-sm text-slate-500">Commandes liees aux fournisseurs, projets, chantiers et a la rentabilite.</p>
+            <p className="mt-1 text-sm text-slate-500">Commandes liées aux fournisseurs, projets, chantiers et à la rentabilité.</p>
           </div>
-          <button type="button" onClick={createOrder} className="inline-flex h-10 items-center justify-center rounded-xl bg-blue-600 px-4 text-sm font-semibold text-white hover:bg-blue-700">
-            Nouveau bon de commande
-          </button>
+          <div className="flex flex-wrap gap-2">
+            <button type="button" onClick={() => void refresh()} className="inline-flex h-10 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 hover:bg-slate-50"><RefreshCw className="h-4 w-4" /> Rafraîchir</button>
+            <button type="button" onClick={() => void createOrder()} className="inline-flex h-10 items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 text-sm font-semibold text-white hover:bg-blue-700">
+              <Plus className="h-4 w-4" /> Nouveau bon de commande
+            </button>
+          </div>
         </div>
         {error ? <div className="mt-4 rounded-2xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</div> : null}
         {loading ? <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-500">Chargement des bons de commande...</div> : null}
@@ -64,6 +87,30 @@ export function PurchaseOrdersPanel({ suppliers }: { suppliers: SupplierRow[] })
           <Metric label="Achats TTC" value={formatCurrency(totals.ttc)} />
         </div>
       </div>
+
+      {!loading ? (
+        <div className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm">
+          <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_190px_220px]">
+            <label className="relative block">
+              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+              <input className={inputClassWithIcon} placeholder="Rechercher commande, fournisseur, référence..." value={query} onChange={(event) => setQuery(event.target.value)} />
+            </label>
+            <select className={selectClass} value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}>
+              <option value="all">Tous statuts</option>
+              <option value="draft">Brouillon</option>
+              <option value="sent">Envoyé</option>
+              <option value="confirmed">Confirmé</option>
+              <option value="partially_delivered">Livré partiellement</option>
+              <option value="delivered">Livré</option>
+              <option value="cancelled">Annulé</option>
+            </select>
+            <select className={selectClass} value={supplierFilter} onChange={(event) => setSupplierFilter(event.target.value)}>
+              <option value="all">Tous fournisseurs</option>
+              {suppliers.map((supplier) => <option key={supplier.id} value={supplier.id}>{supplier.name}</option>)}
+            </select>
+          </div>
+        </div>
+      ) : null}
 
       {selectedOrder ? (
         <PurchaseOrderEditor
@@ -90,7 +137,7 @@ export function PurchaseOrdersPanel({ suppliers }: { suppliers: SupplierRow[] })
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
-            {orders.length ? orders.map((order) => {
+            {filteredOrders.length ? filteredOrders.map((order) => {
               const orderTotals = order.document.totals ?? calculateDocumentTotals(order.document);
               return (
                 <tr key={order.id} className="hover:bg-slate-50">
@@ -98,7 +145,7 @@ export function PurchaseOrdersPanel({ suppliers }: { suppliers: SupplierRow[] })
                   <td className="px-4 py-3 text-slate-600">{order.supplierName || order.document.recipient.displayName || "-"}</td>
                   <td className="px-4 py-3 text-slate-500">{order.projectId || "-"}</td>
                   <td className="px-4 py-3 text-slate-500">{order.chantierId || "-"}</td>
-                  <td className="px-4 py-3 text-slate-500">{order.expectedDeliveryDate || "-"}</td>
+                  <td className="px-4 py-3 text-slate-500">{order.expectedDeliveryDate ? formatDate(order.expectedDeliveryDate) : "-"}</td>
                   <td className="px-4 py-3"><PurchaseOrderStatusBadge status={order.status} /></td>
                   <td className="px-4 py-3 text-right font-semibold">{formatCurrency(orderTotals.totalTtc)}</td>
                   <td className="px-4 py-3 text-right">
@@ -110,7 +157,14 @@ export function PurchaseOrdersPanel({ suppliers }: { suppliers: SupplierRow[] })
               );
             }) : (
               <tr>
-                <td colSpan={8} className="px-4 py-10 text-center text-sm text-slate-500">Aucun bon de commande fournisseur pour le moment.</td>
+                <td colSpan={8} className="px-4 py-12">
+                  <div className="mx-auto max-w-sm text-center">
+                    <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-blue-50 text-blue-700"><ShoppingCart className="h-5 w-5" /></div>
+                    <div className="mt-3 font-semibold text-slate-950">Aucun bon de commande</div>
+                    <div className="mt-1 text-sm text-slate-500">Créez une commande fournisseur ou ajustez vos filtres.</div>
+                    <button type="button" onClick={() => void createOrder()} className="mt-4 rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700">Nouveau bon de commande</button>
+                  </div>
+                </td>
               </tr>
             )}
           </tbody>
@@ -139,3 +193,10 @@ function buildTotals(orders: PurchaseOrderRecord[]) {
 function formatCurrency(value: number) {
   return new Intl.NumberFormat("fr-FR", { style: "currency", currency: "EUR", maximumFractionDigits: 0 }).format(value);
 }
+
+function formatDate(value: string) {
+  return new Date(value).toLocaleDateString("fr-FR");
+}
+
+const selectClass = "h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-700 outline-none focus:border-blue-300";
+const inputClassWithIcon = "h-10 w-full rounded-xl border border-slate-200 bg-white pl-10 pr-3 text-sm outline-none focus:border-blue-300";

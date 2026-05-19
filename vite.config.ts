@@ -5,6 +5,41 @@ import { VitePWA } from "vite-plugin-pwa";
 export default defineConfig({
   build: {
     target: ["es2020", "safari14"],
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (!id.includes("node_modules")) return undefined;
+          if (id.includes("@react-pdf")) {
+            return "react-pdf";
+          }
+          if (id.includes("pdfjs-dist")) {
+            return "pdf-viewer";
+          }
+          if (id.includes("jspdf") || id.includes("html2canvas")) {
+            return "pdf-export";
+          }
+          if (id.includes("recharts") || id.includes("d3-")) {
+            return "charts";
+          }
+          if (id.includes("@tiptap") || id.includes("prosemirror")) {
+            return "rich-text";
+          }
+          if (id.includes("@supabase")) {
+            return "supabase";
+          }
+          if (id.includes("@dnd-kit") || id.includes("@tanstack")) {
+            return "workspace";
+          }
+          if (id.includes("@radix-ui")) {
+            return "ui-radix";
+          }
+          if (id.includes("react") || id.includes("react-dom") || id.includes("react-router-dom")) {
+            return "react-vendor";
+          }
+          return undefined;
+        },
+      },
+    },
   },
   plugins: [
     react(),

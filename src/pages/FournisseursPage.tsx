@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { Building2, Plus, RefreshCw, Search, Truck } from "lucide-react";
 import {
   createSupplier,
   deleteSupplier,
@@ -73,6 +74,12 @@ export default function FournisseursPage({ initialTab = "suppliers" }: Fournisse
         .some((part) => part.includes(q)),
     );
   }, [search, suppliers]);
+  const supplierStats = useMemo(() => ({
+    total: suppliers.length,
+    active: suppliers.filter((row) => row.is_active).length,
+    inactive: suppliers.filter((row) => !row.is_active).length,
+    withEmail: suppliers.filter((row) => row.email).length,
+  }), [suppliers]);
 
   async function loadSuppliersData() {
     setLoadingSuppliers(true);
@@ -145,21 +152,29 @@ export default function FournisseursPage({ initialTab = "suppliers" }: Fournisse
   }
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-start justify-between gap-3">
+    <div className="space-y-5">
+      <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
         <div>
-          <h1 className="text-2xl font-bold">{t("fournisseurs.title")}</h1>
-          <p className="text-sm text-slate-500">Fournisseurs, bons de commande et achats lies a la rentabilite projet.</p>
+          <div className="text-xs font-semibold uppercase tracking-[0.18em] text-blue-600">Achats</div>
+          <h1 className="mt-2 text-2xl font-bold text-slate-950">{t("fournisseurs.title")}</h1>
+          <p className="mt-1 text-sm text-slate-500">Fournisseurs, bons de commande et achats liés à la rentabilité projet.</p>
         </div>
+        <div className="flex flex-wrap gap-2">
+          <button type="button" onClick={() => void loadSuppliersData()} className="inline-flex h-10 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 hover:bg-slate-50">
+            <RefreshCw className="h-4 w-4" /> Rafraîchir
+          </button>
         {activeTab === "suppliers" ? (
           <button
             type="button"
             onClick={openCreateSupplier}
-            className="rounded-xl bg-slate-900 text-white px-4 py-2 text-sm hover:bg-slate-800"
+            className="inline-flex h-10 items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 text-sm font-semibold text-white hover:bg-blue-700"
           >
-            + {t("fournisseurs.new")}
+            <Plus className="h-4 w-4" /> {t("fournisseurs.new")}
           </button>
         ) : null}
+        </div>
+      </div>
       </div>
 
       <nav className="flex w-fit rounded-2xl border border-slate-200 bg-white p-1 shadow-sm" aria-label="Navigation fournisseurs">
@@ -191,6 +206,15 @@ export default function FournisseursPage({ initialTab = "suppliers" }: Fournisse
       )}
 
       {activeTab === "orders" ? <PurchaseOrdersPanel suppliers={suppliers} /> : null}
+
+      {activeTab === "suppliers" ? (
+        <section className="grid gap-3 md:grid-cols-4">
+          <SupplierMetric icon={Building2} label="Fournisseurs" value={String(supplierStats.total)} />
+          <SupplierMetric icon={Truck} label="Actifs" value={String(supplierStats.active)} />
+          <SupplierMetric icon={Building2} label="Inactifs" value={String(supplierStats.inactive)} />
+          <SupplierMetric icon={Building2} label="Avec email" value={String(supplierStats.withEmail)} />
+        </section>
+      ) : null}
 
       {activeTab === "suppliers" && supplierFormOpen && (
         <div className="rounded-2xl border bg-white p-4 space-y-3">
@@ -301,21 +325,29 @@ export default function FournisseursPage({ initialTab = "suppliers" }: Fournisse
         </div>
       )}
 
-      {activeTab === "suppliers" ? <div className="rounded-2xl border bg-white p-4">
-        <input
-          className="w-full rounded-xl border px-3 py-2 text-sm"
-          placeholder={t("fournisseurs.searchPlaceholder")}
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-        />
+      {activeTab === "suppliers" ? <div className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm">
+        <label className="relative block">
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+          <input
+            className="h-10 w-full rounded-xl border border-slate-200 bg-white pl-10 pr-3 text-sm outline-none focus:border-blue-300"
+            placeholder={t("fournisseurs.searchPlaceholder")}
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
+        </label>
       </div> : null}
 
       {activeTab === "suppliers" && loadingSuppliers ? (
         <div className="rounded-2xl border bg-white p-6 text-sm text-slate-500">{t("common.states.loading")}</div>
       ) : activeTab === "suppliers" && filteredSuppliers.length === 0 ? (
-        <div className="rounded-2xl border bg-white p-6 text-sm text-slate-500">{t("fournisseurs.empty")}</div>
+        <div className="rounded-3xl border border-dashed border-slate-200 bg-white p-10 text-center">
+          <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-blue-50 text-blue-700"><Truck className="h-5 w-5" /></div>
+          <div className="mt-3 font-semibold text-slate-950">{t("fournisseurs.empty")}</div>
+          <div className="mt-1 text-sm text-slate-500">Ajoutez un fournisseur pour préparer les bons de commande.</div>
+          <button type="button" onClick={openCreateSupplier} className="mt-4 rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700">Nouveau fournisseur</button>
+        </div>
       ) : activeTab === "suppliers" ? (
-        <div className="rounded-2xl border bg-white overflow-hidden">
+        <div className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
           <table className="w-full text-sm">
             <thead className="bg-slate-50 text-slate-600">
               <tr>
@@ -372,6 +404,22 @@ export default function FournisseursPage({ initialTab = "suppliers" }: Fournisse
           </table>
         </div>
       ) : null}
+    </div>
+  );
+}
+
+function SupplierMetric({ icon: Icon, label, value }: { icon: typeof Building2; label: string; value: string }) {
+  return (
+    <div className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm">
+      <div className="flex items-center justify-between gap-3">
+        <div>
+          <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">{label}</div>
+          <div className="mt-2 text-xl font-bold text-slate-950">{value}</div>
+        </div>
+        <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-blue-50 text-blue-700">
+          <Icon className="h-5 w-5" />
+        </div>
+      </div>
     </div>
   );
 }

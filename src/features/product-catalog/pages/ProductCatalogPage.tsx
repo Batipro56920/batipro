@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { FileText, Plus, Trash2 } from "lucide-react";
+import { FileText, PackageSearch, Plus, RefreshCw, Trash2 } from "lucide-react";
 import type { SupplierRow } from "../../../services/suppliers.service";
 import { listSuppliers } from "../../../services/suppliers.service";
 import type { DocumentUnit } from "../../document-engine";
@@ -71,6 +71,12 @@ export default function ProductCatalogPage() {
 
   const categories = unique(products.map((product) => product.category));
   const brands = unique(products.map((product) => product.brand));
+  const stats = useMemo(() => ({
+    products: products.length,
+    suppliers: new Set(products.map((product) => product.mainSupplierId).filter(Boolean)).size,
+    documents: products.reduce((sum, product) => sum + product.documents.length, 0),
+    averagePurchase: products.length ? products.reduce((sum, product) => sum + product.standardPurchasePriceHt, 0) / products.length : 0,
+  }), [products]);
 
   async function saveProduct(product: ProductCatalogItem | ProductCatalogDraft) {
     await saveProductCatalogItem(product);
@@ -93,18 +99,30 @@ export default function ProductCatalogPage() {
             <h1 className="mt-2 text-2xl font-bold text-slate-950">Catalogue produits</h1>
             <p className="mt-1 text-sm text-slate-500">Produits, prix fournisseurs, documents techniques et future alimentation des bons de commande.</p>
           </div>
-          <button type="button" onClick={() => setEditing({ ...EMPTY_DRAFT })} className="inline-flex h-10 items-center justify-center rounded-xl bg-blue-600 px-4 text-sm font-semibold text-white hover:bg-blue-700">
-            <Plus className="mr-2 h-4 w-4" /> Nouveau produit
-          </button>
+          <div className="flex flex-wrap gap-2">
+            <button type="button" onClick={() => void refreshProducts()} className="inline-flex h-10 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 hover:bg-slate-50">
+              <RefreshCw className="h-4 w-4" /> Rafraîchir
+            </button>
+            <button type="button" onClick={() => setEditing({ ...EMPTY_DRAFT })} className="inline-flex h-10 items-center justify-center rounded-xl bg-blue-600 px-4 text-sm font-semibold text-white hover:bg-blue-700">
+              <Plus className="mr-2 h-4 w-4" /> Nouveau produit
+            </button>
+          </div>
         </div>
       </header>
 
       {error ? <div className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">{error}</div> : null}
       {loading ? <div className="rounded-3xl border border-slate-200 bg-white p-8 text-center text-sm text-slate-500">Chargement du catalogue produits...</div> : null}
 
+      {!loading ? <section className="grid gap-3 md:grid-cols-4">
+        <Metric label="Produits" value={String(stats.products)} />
+        <Metric label="Fournisseurs liés" value={String(stats.suppliers)} />
+        <Metric label="Documents" value={String(stats.documents)} />
+        <Metric label="Prix achat moyen" value={formatCurrency(stats.averagePurchase)} />
+      </section> : null}
+
       {!loading ? <section className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm">
         <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_180px_180px_180px_160px]">
-          <input className={inputClass} placeholder="Rechercher designation, reference, marque..." value={query} onChange={(event) => setQuery(event.target.value)} />
+          <input className={inputClass} placeholder="Rechercher désignation, référence, marque..." value={query} onChange={(event) => setQuery(event.target.value)} />
           <Select value={categoryFilter} onChange={setCategoryFilter} options={["all", ...categories]} labels={{ all: "Toutes categories" }} />
           <Select value={supplierFilter} onChange={setSupplierFilter} options={["all", ...suppliers.map((supplier) => supplier.id)]} labels={Object.fromEntries([["all", "Tous fournisseurs"], ...suppliers.map((supplier) => [supplier.id, supplier.name])])} />
           <Select value={brandFilter} onChange={setBrandFilter} options={["all", ...brands]} labels={{ all: "Toutes marques" }} />
@@ -153,7 +171,7 @@ export default function ProductCatalogPage() {
                 </td>
               </tr>
             ))}
-            {!filtered.length ? <tr><td colSpan={9} className="px-4 py-10 text-center text-sm text-slate-500">Aucun produit ne correspond aux filtres.</td></tr> : null}
+            {!filtered.length ? <tr><td colSpan={9} className="px-4 py-12"><EmptyCatalogState onCreate={() => setEditing({ ...EMPTY_DRAFT })} /></td></tr> : null}
           </tbody>
         </table>
       </section> : null}
@@ -187,16 +205,16 @@ function ProductForm({ product, suppliers, onCancel, onSave }: { product: Produc
       </div>
 
       <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-        <Field label="Designation" value={draft.designation} onChange={(designation) => patch({ designation })} className="xl:col-span-2" />
-        <Field label="Reference interne" value={draft.internalReference ?? ""} onChange={(internalReference) => patch({ internalReference })} />
-        <Field label="Reference fabricant" value={draft.manufacturerReference ?? ""} onChange={(manufacturerReference) => patch({ manufacturerReference })} />
+        <Field label="Désignation" value={draft.designation} onChange={(designation) => patch({ designation })} className="xl:col-span-2" />
+        <Field label="Référence interne" value={draft.internalReference ?? ""} onChange={(internalReference) => patch({ internalReference })} />
+        <Field label="Référence fabricant" value={draft.manufacturerReference ?? ""} onChange={(manufacturerReference) => patch({ manufacturerReference })} />
         <Field label="Marque" value={draft.brand ?? ""} onChange={(brand) => patch({ brand })} />
-        <Field label="Categorie" value={draft.category ?? ""} onChange={(category) => patch({ category })} />
-        <label className={labelClass}>Unite<Select className="mt-1" value={draft.unit} onChange={(unit) => patch({ unit: unit as DocumentUnit })} options={["u", "h", "ml", "m2", "m3", "forfait", "kg", "l"]} /></label>
+        <Field label="Catégorie" value={draft.category ?? ""} onChange={(category) => patch({ category })} />
+        <label className={labelClass}>Unité<Select className="mt-1" value={draft.unit} onChange={(unit) => patch({ unit: unit as DocumentUnit })} options={["u", "h", "ml", "m2", "m3", "forfait", "kg", "l"]} /></label>
         <NumberField label="TVA" value={draft.vatRate} onChange={(vatRate) => patch({ vatRate })} />
         <label className={labelClass}>Fournisseur principal<Select className="mt-1" value={draft.mainSupplierId ?? ""} onChange={selectMainSupplier} options={["", ...suppliers.map((supplier) => supplier.id)]} labels={Object.fromEntries([["", "Aucun"], ...suppliers.map((supplier) => [supplier.id, supplier.name])])} /></label>
         <NumberField label="Prix achat standard" value={draft.standardPurchasePriceHt} onChange={(standardPurchasePriceHt) => patch({ standardPurchasePriceHt })} />
-        <NumberField label="Prix vente conseille" value={draft.recommendedSalePriceHt} onChange={(recommendedSalePriceHt) => patch({ recommendedSalePriceHt })} />
+        <NumberField label="Prix vente conseillé" value={draft.recommendedSalePriceHt} onChange={(recommendedSalePriceHt) => patch({ recommendedSalePriceHt })} />
         <NumberField label="Marge cible %" value={draft.targetMarginRate} onChange={(targetMarginRate) => patch({ targetMarginRate })} />
       </div>
 
@@ -218,7 +236,7 @@ function SupplierPricesEditor({ prices, suppliers, onChange }: { prices: Product
   return (
     <div className="mt-5 rounded-2xl border border-slate-200 p-4">
       <div className="mb-3 flex items-center justify-between gap-3">
-        <div className="font-semibold text-slate-950">Prix negocies par fournisseur</div>
+        <div className="font-semibold text-slate-950">Prix négociés par fournisseur</div>
         <button type="button" className="rounded-xl border px-3 py-2 text-sm hover:bg-slate-50" onClick={addPrice}>Ajouter prix</button>
       </div>
       <div className="grid gap-3">
@@ -237,7 +255,7 @@ function SupplierPricesEditor({ prices, suppliers, onChange }: { prices: Product
             <SmallNumber value={price.deliveryLeadTimeDays ?? 0} onChange={(deliveryLeadTimeDays) => updatePrice(price.id, { deliveryLeadTimeDays })} placeholder="Delai j" />
           </div>
         ))}
-        {!prices.length ? <div className="rounded-xl border border-dashed border-slate-200 p-4 text-sm text-slate-500">Aucun prix negocie pour le moment.</div> : null}
+        {!prices.length ? <div className="rounded-xl border border-dashed border-slate-200 p-4 text-sm text-slate-500">Aucun prix négocié pour le moment.</div> : null}
       </div>
     </div>
   );
@@ -251,7 +269,7 @@ function ProductDocumentsEditor({ documents, onChange }: { documents: ProductCat
   return (
     <div className="mt-5 rounded-2xl border border-slate-200 p-4">
       <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
-        <div className="font-semibold text-slate-950">Documents lies</div>
+        <div className="font-semibold text-slate-950">Documents liés</div>
         <div className="flex flex-wrap gap-2">
           {(["technical_sheet", "manual", "sds", "certification", "photo"] as const).map((kind) => (
             <button key={kind} type="button" className="rounded-xl border px-3 py-2 text-xs font-semibold hover:bg-slate-50" onClick={() => addDocument(kind)}>
@@ -267,7 +285,7 @@ function ProductDocumentsEditor({ documents, onChange }: { documents: ProductCat
             <input className={`${inputClass} mt-2`} value={document.name} onChange={(event) => onChange(documents.map((row) => row.id === document.id ? { ...row, name: event.target.value } : row))} />
           </div>
         ))}
-        {!documents.length ? <div className="rounded-xl border border-dashed border-slate-200 p-4 text-sm text-slate-500">Aucun document lie.</div> : null}
+        {!documents.length ? <div className="rounded-xl border border-dashed border-slate-200 p-4 text-sm text-slate-500">Aucun document lié.</div> : null}
       </div>
     </div>
   );
@@ -307,6 +325,26 @@ function documentKindLabel(kind: ProductDocumentKind) {
 
 const labelClass = "block text-xs font-semibold uppercase tracking-[0.12em] text-slate-400";
 const inputClass = "h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm font-normal normal-case tracking-normal text-slate-950 outline-none focus:border-blue-300";
+
+function Metric({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm">
+      <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">{label}</div>
+      <div className="mt-2 text-xl font-bold text-slate-950">{value}</div>
+    </div>
+  );
+}
+
+function EmptyCatalogState({ onCreate }: { onCreate: () => void }) {
+  return (
+    <div className="mx-auto max-w-sm text-center">
+      <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-blue-50 text-blue-700"><PackageSearch className="h-5 w-5" /></div>
+      <div className="mt-3 font-semibold text-slate-950">Aucun produit trouvé</div>
+      <div className="mt-1 text-sm text-slate-500">Ajustez vos filtres ou créez une fiche produit.</div>
+      <button type="button" onClick={onCreate} className="mt-4 rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700">Nouveau produit</button>
+    </div>
+  );
+}
 
 function formatCurrency(value: number) {
   return new Intl.NumberFormat("fr-FR", { style: "currency", currency: "EUR", maximumFractionDigits: 2 }).format(value);

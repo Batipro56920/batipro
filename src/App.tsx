@@ -1,5 +1,5 @@
 ﻿// src/App.tsx
-import { lazy, Suspense } from "react";
+import { lazy, Suspense, type ReactNode } from "react";
 import { Routes, Route, Navigate } from "react-router-dom";
 import LayoutShell from "./components/LayoutShell";
 import LazyRouteErrorBoundary from "./components/LazyRouteErrorBoundary";
@@ -7,23 +7,16 @@ import RequireAuth from "./components/RequireAuth";
 import RequireCompanyFeature from "./components/RequireCompanyFeature";
 
 import AuthPage from "./pages/AuthPage";
-import DashboardPage from "./pages/DashboardPage";
-import CrmPage from "./pages/CrmPage";
-import ChantierNewPage from "./pages/ChantierNewPage";
-import ChantierPage from "./pages/ChantierPage";
-import ChantierVisitesPage from "./pages/ChantierVisitesPage";
 import IntervenantAccessPage from "./pages/IntervenantAccessPage";
 import IntervenantInvitationPage from "./pages/IntervenantInvitationPage";
-import IntervenantPortalPage from "./pages/IntervenantPortalPage";
-import IntervenantDetailPage from "./pages/IntervenantDetailPage";
-import IntervenantsPage from "./pages/IntervenantsPage";
-import BibliothequeTasksPage from "./pages/BibliothequeTasksPage";
-import StatistiquesPage from "./pages/StatistiquesPage";
-import MonEntreprisePage from "./pages/MonEntreprisePage";
-import TerrainFeedbacksPage from "./pages/TerrainFeedbacksPage";
 import AppEntryPage from "./pages/AppEntryPage";
 
+const DashboardPage = lazy(() => import("./pages/DashboardPage"));
+const CrmPage = lazy(() => import("./pages/CrmPage"));
 const ChantiersPage = lazy(() => import("./pages/ChantiersPage"));
+const ChantierNewPage = lazy(() => import("./pages/ChantierNewPage"));
+const ChantierPage = lazy(() => import("./pages/ChantierPage"));
+const ChantierVisitesPage = lazy(() => import("./pages/ChantierVisitesPage"));
 const ProjectsPage = lazy(() => import("./pages/ProjectsPage"));
 const ProjectDetailPage = lazy(() => import("./pages/ProjectDetailPage"));
 const ProjectAppointmentPage = lazy(() => import("./pages/ProjectAppointmentPage"));
@@ -31,6 +24,49 @@ const ProjectQuoteBuilderV1Page = lazy(() => import("./pages/ProjectQuoteBuilder
 const InvoicesPage = lazy(() => import("./pages/InvoicesPage"));
 const FournisseursPage = lazy(() => import("./pages/FournisseursPage"));
 const ProductCatalogPage = lazy(() => import("./features/product-catalog/pages/ProductCatalogPage"));
+const IntervenantPortalPage = lazy(() => import("./pages/IntervenantPortalPage"));
+const IntervenantDetailPage = lazy(() => import("./pages/IntervenantDetailPage"));
+const IntervenantsPage = lazy(() => import("./pages/IntervenantsPage"));
+const BibliothequeTasksPage = lazy(() => import("./pages/BibliothequeTasksPage"));
+const StatistiquesPage = lazy(() => import("./pages/StatistiquesPage"));
+const MonEntreprisePage = lazy(() => import("./pages/MonEntreprisePage"));
+const TerrainFeedbacksPage = lazy(() => import("./pages/TerrainFeedbacksPage"));
+
+function RouteSuspense({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <LazyRouteErrorBoundary>
+      <Suspense fallback={<div className="rounded-3xl border bg-white p-8 text-center text-sm text-slate-500">{label}</div>}>
+        {children}
+      </Suspense>
+    </LazyRouteErrorBoundary>
+  );
+}
+
+type CrmSection =
+  | "dashboard"
+  | "prospects"
+  | "clients"
+  | "opportunities"
+  | "quotes"
+  | "invoices"
+  | "purchases"
+  | "contacts"
+  | "resources"
+  | "library"
+  | "agenda"
+  | "sav"
+  | "stats"
+  | "settings";
+
+function CrmRoute({ section }: { section: CrmSection }) {
+  return (
+    <RequireCompanyFeature profilePermissionKey="crm">
+      <RouteSuspense label="Chargement du CRM...">
+        <CrmPage section={section} />
+      </RouteSuspense>
+    </RequireCompanyFeature>
+  );
+}
 
 export default function App() {
   return (
@@ -42,7 +78,7 @@ export default function App() {
       {/* Public - portail intervenant */}
       <Route path="/acces/:token" element={<IntervenantAccessPage />} />
       <Route path="/intervenant/invitation" element={<IntervenantInvitationPage />} />
-      <Route path="/intervenant" element={<IntervenantPortalPage />} />
+        <Route path="/intervenant" element={<RouteSuspense label="Chargement du portail intervenant..."><IntervenantPortalPage /></RouteSuspense>} />
 
       {/* Protégé */}
       <Route
@@ -52,56 +88,14 @@ export default function App() {
           </RequireAuth>
         }
       >
-        <Route path="/dashboard" element={<DashboardPage />} />
-        <Route
-          path="/crm"
-          element={
-            <RequireCompanyFeature profilePermissionKey="crm">
-              <CrmPage section="dashboard" />
-            </RequireCompanyFeature>
-          }
-        />
-        <Route
-          path="/crm/prospects"
-          element={
-            <RequireCompanyFeature profilePermissionKey="crm">
-              <CrmPage section="prospects" />
-            </RequireCompanyFeature>
-          }
-        />
-        <Route
-          path="/crm/clients"
-          element={
-            <RequireCompanyFeature profilePermissionKey="crm">
-              <CrmPage section="clients" />
-            </RequireCompanyFeature>
-          }
-        />
-        <Route
-          path="/crm/opportunites"
-          element={
-            <RequireCompanyFeature profilePermissionKey="crm">
-              <CrmPage section="opportunities" />
-            </RequireCompanyFeature>
-          }
-        />
-        <Route
-          path="/crm/devis"
-          element={
-            <RequireCompanyFeature profilePermissionKey="crm">
-              <CrmPage section="quotes" />
-            </RequireCompanyFeature>
-          }
-        />
+        <Route path="/dashboard" element={<RouteSuspense label="Chargement du dashboard..."><DashboardPage /></RouteSuspense>} />
+        <Route path="/crm" element={<CrmRoute section="dashboard" />} />
+        <Route path="/crm/prospects" element={<CrmRoute section="prospects" />} />
+        <Route path="/crm/clients" element={<CrmRoute section="clients" />} />
+        <Route path="/crm/opportunites" element={<CrmRoute section="opportunities" />} />
+        <Route path="/crm/devis" element={<CrmRoute section="quotes" />} />
         <Route path="/crm/devis/:id/edit" element={<Navigate to="/crm/devis" replace />} />
-        <Route
-          path="/crm/factures"
-          element={
-            <RequireCompanyFeature profilePermissionKey="crm">
-              <CrmPage section="invoices" />
-            </RequireCompanyFeature>
-          }
-        />
+        <Route path="/crm/factures" element={<CrmRoute section="invoices" />} />
         <Route
           path="/factures"
           element={
@@ -114,70 +108,14 @@ export default function App() {
             </RequireCompanyFeature>
           }
         />
-        <Route
-          path="/crm/achats"
-          element={
-            <RequireCompanyFeature profilePermissionKey="crm">
-              <CrmPage section="purchases" />
-            </RequireCompanyFeature>
-          }
-        />
-        <Route
-          path="/crm/contacts"
-          element={
-            <RequireCompanyFeature profilePermissionKey="crm">
-              <CrmPage section="contacts" />
-            </RequireCompanyFeature>
-          }
-        />
-        <Route
-          path="/crm/ressources"
-          element={
-            <RequireCompanyFeature profilePermissionKey="crm">
-              <CrmPage section="resources" />
-            </RequireCompanyFeature>
-          }
-        />
-        <Route
-          path="/crm/bibliotheque"
-          element={
-            <RequireCompanyFeature profilePermissionKey="crm">
-              <CrmPage section="library" />
-            </RequireCompanyFeature>
-          }
-        />
-        <Route
-          path="/crm/agenda"
-          element={
-            <RequireCompanyFeature profilePermissionKey="crm">
-              <CrmPage section="agenda" />
-            </RequireCompanyFeature>
-          }
-        />
-        <Route
-          path="/crm/sav"
-          element={
-            <RequireCompanyFeature profilePermissionKey="crm">
-              <CrmPage section="sav" />
-            </RequireCompanyFeature>
-          }
-        />
-        <Route
-          path="/crm/statistiques"
-          element={
-            <RequireCompanyFeature profilePermissionKey="crm">
-              <CrmPage section="stats" />
-            </RequireCompanyFeature>
-          }
-        />
-        <Route
-          path="/crm/parametres"
-          element={
-            <RequireCompanyFeature profilePermissionKey="crm">
-              <CrmPage section="settings" />
-            </RequireCompanyFeature>
-          }
-        />
+        <Route path="/crm/achats" element={<CrmRoute section="purchases" />} />
+        <Route path="/crm/contacts" element={<CrmRoute section="contacts" />} />
+        <Route path="/crm/ressources" element={<CrmRoute section="resources" />} />
+        <Route path="/crm/bibliotheque" element={<CrmRoute section="library" />} />
+        <Route path="/crm/agenda" element={<CrmRoute section="agenda" />} />
+        <Route path="/crm/sav" element={<CrmRoute section="sav" />} />
+        <Route path="/crm/statistiques" element={<CrmRoute section="stats" />} />
+        <Route path="/crm/parametres" element={<CrmRoute section="settings" />} />
 
         <Route
           path="/projets"
@@ -286,16 +224,16 @@ export default function App() {
             </LazyRouteErrorBoundary>
           }
         />
-        <Route path="/chantiers/nouveau" element={<ChantierNewPage />} />
-        <Route path="/chantiers/:id" element={<ChantierPage />} />
-        <Route path="/chantiers/:id/preparation" element={<ChantierPage />} />
-        <Route path="/chantiers/:id/execution" element={<ChantierPage />} />
-        <Route path="/chantiers/:id/financier" element={<ChantierPage />} />
-        <Route path="/chantiers/:id/qualite" element={<ChantierPage />} />
-        <Route path="/chantiers/:id/documents" element={<ChantierPage />} />
-        <Route path="/chantiers/:id/equipe" element={<ChantierPage />} />
-        <Route path="/chantiers/:id/sav" element={<ChantierPage />} />
-        <Route path="/chantiers/:id/historique" element={<ChantierPage />} />
+        <Route path="/chantiers/nouveau" element={<RouteSuspense label="Chargement du nouveau chantier..."><ChantierNewPage /></RouteSuspense>} />
+        <Route path="/chantiers/:id" element={<RouteSuspense label="Chargement du chantier..."><ChantierPage /></RouteSuspense>} />
+        <Route path="/chantiers/:id/preparation" element={<RouteSuspense label="Chargement du chantier..."><ChantierPage /></RouteSuspense>} />
+        <Route path="/chantiers/:id/execution" element={<RouteSuspense label="Chargement du chantier..."><ChantierPage /></RouteSuspense>} />
+        <Route path="/chantiers/:id/financier" element={<RouteSuspense label="Chargement du chantier..."><ChantierPage /></RouteSuspense>} />
+        <Route path="/chantiers/:id/qualite" element={<RouteSuspense label="Chargement du chantier..."><ChantierPage /></RouteSuspense>} />
+        <Route path="/chantiers/:id/documents" element={<RouteSuspense label="Chargement du chantier..."><ChantierPage /></RouteSuspense>} />
+        <Route path="/chantiers/:id/equipe" element={<RouteSuspense label="Chargement du chantier..."><ChantierPage /></RouteSuspense>} />
+        <Route path="/chantiers/:id/sav" element={<RouteSuspense label="Chargement du chantier..."><ChantierPage /></RouteSuspense>} />
+        <Route path="/chantiers/:id/historique" element={<RouteSuspense label="Chargement du chantier..."><ChantierPage /></RouteSuspense>} />
         <Route path="/chantiers/:id/production" element={<Navigate to="../execution" replace />} />
         <Route path="/chantiers/:id/qualite-cloture" element={<Navigate to="../qualite" replace />} />
         <Route path="/chantiers/:id/qualite-sav" element={<Navigate to="../qualite" replace />} />
@@ -304,7 +242,7 @@ export default function App() {
           path="/chantiers/:id/visites"
           element={
             <RequireCompanyFeature moduleId="validation_qualite">
-              <ChantierVisitesPage />
+              <RouteSuspense label="Chargement des visites chantier..."><ChantierVisitesPage /></RouteSuspense>
             </RequireCompanyFeature>
           }
         />
@@ -313,7 +251,7 @@ export default function App() {
           path="/intervenants"
           element={
             <RequireCompanyFeature profilePermissionKey="intervenants">
-              <IntervenantsPage />
+              <RouteSuspense label="Chargement des intervenants..."><IntervenantsPage /></RouteSuspense>
             </RequireCompanyFeature>
           }
         />
@@ -321,7 +259,7 @@ export default function App() {
           path="/intervenants/:id"
           element={
             <RequireCompanyFeature profilePermissionKey="intervenants">
-              <IntervenantDetailPage />
+              <RouteSuspense label="Chargement de l'intervenant..."><IntervenantDetailPage /></RouteSuspense>
             </RequireCompanyFeature>
           }
         />
@@ -329,7 +267,7 @@ export default function App() {
           path="/retours-terrain"
           element={
             <RequireCompanyFeature moduleId="journal_chantier">
-              <TerrainFeedbacksPage />
+              <RouteSuspense label="Chargement des retours terrain..."><TerrainFeedbacksPage /></RouteSuspense>
             </RequireCompanyFeature>
           }
         />
@@ -337,7 +275,7 @@ export default function App() {
           path="/bibliotheque"
           element={
             <RequireCompanyFeature moduleId="documents" profilePermissionKey="bibliotheque">
-              <BibliothequeTasksPage />
+              <RouteSuspense label="Chargement de la bibliothèque..."><BibliothequeTasksPage /></RouteSuspense>
             </RequireCompanyFeature>
           }
         />
@@ -345,7 +283,7 @@ export default function App() {
           path="/statistiques"
           element={
             <RequireCompanyFeature moduleId="rapports" profilePermissionKey="statistiques">
-              <StatistiquesPage />
+              <RouteSuspense label="Chargement des statistiques..."><StatistiquesPage /></RouteSuspense>
             </RequireCompanyFeature>
           }
         />
@@ -353,7 +291,7 @@ export default function App() {
           path="/entreprise"
           element={
             <RequireCompanyFeature profilePermissionKey="entreprise_parametres">
-              <MonEntreprisePage />
+              <RouteSuspense label="Chargement de Mon entreprise..."><MonEntreprisePage /></RouteSuspense>
             </RequireCompanyFeature>
           }
         />
@@ -361,7 +299,7 @@ export default function App() {
           path="/entreprise/fonctionnalites"
           element={
             <RequireCompanyFeature profilePermissionKey="entreprise_parametres">
-              <MonEntreprisePage />
+              <RouteSuspense label="Chargement de Mon entreprise..."><MonEntreprisePage /></RouteSuspense>
             </RequireCompanyFeature>
           }
         />
@@ -369,7 +307,7 @@ export default function App() {
           path="/entreprise/profils"
           element={
             <RequireCompanyFeature profilePermissionKey="entreprise_parametres">
-              <MonEntreprisePage />
+              <RouteSuspense label="Chargement de Mon entreprise..."><MonEntreprisePage /></RouteSuspense>
             </RequireCompanyFeature>
           }
         />

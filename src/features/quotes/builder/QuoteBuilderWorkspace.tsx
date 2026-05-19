@@ -4,7 +4,7 @@ import { DndContext, PointerSensor, useSensor, useSensors, type DragEndEvent } f
 import { SortableContext, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { flexRender, getCoreRowModel, useReactTable, type ColumnDef } from "@tanstack/react-table";
-import { BookOpen, ChevronDown, Download, Eye, GripVertical, Pencil, Save, Send, Settings2, Trash2, X } from "lucide-react";
+import { BookOpen, ChevronDown, Copy, Download, Eye, FileText, GripVertical, Pencil, Save, Send, Settings2, Trash2, X } from "lucide-react";
 import { calculateQuoteBuilderTotals, flattenQuoteBuilder } from "./quoteBuilderCalculations";
 import { DEFAULT_QUOTE_LIBRARY } from "./quoteBuilderLibrary";
 import { downloadQuoteBuilderPdf, getQuoteBuilderPdfBlob } from "./quoteBuilderPdf";
@@ -98,9 +98,18 @@ export function QuoteBuilderWorkspace({ onClose }: Props) {
     }, 0);
   }
 
+  function duplicateQuote() {
+    if (!quote) return;
+    updateQuote({
+      id: null,
+      number: `${quote.number}-COPIE`,
+      status: "draft",
+    });
+  }
+
   return (
     <div className="min-h-screen bg-slate-100 text-slate-900">
-      <QuoteTopbar quote={quote} mode={mode} saveState={saveState} libraryOpen={libraryOpen} onToggleLibrary={() => setLibraryOpen((open) => !open)} onModeChange={setMode} onClose={onClose} onSave={() => void save()} onSend={() => setSendOpen(true)} optionsOpen={optionsOpen} setOptionsOpen={setOptionsOpen} />
+      <QuoteTopbar quote={quote} mode={mode} saveState={saveState} libraryOpen={libraryOpen} onToggleLibrary={() => setLibraryOpen((open) => !open)} onModeChange={setMode} onClose={onClose} onSave={() => void save()} onSend={() => setSendOpen(true)} onDuplicate={duplicateQuote} onDownload={() => downloadQuoteBuilderPdf(quote)} optionsOpen={optionsOpen} setOptionsOpen={setOptionsOpen} />
       {error ? <div className="mx-6 mt-3 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{error}</div> : null}
 
       <main className="grid min-h-[calc(100vh-56px)] grid-cols-1 gap-0 xl:grid-cols-[auto_minmax(760px,1fr)]">
@@ -135,7 +144,7 @@ export function QuoteDocumentLoader() {
   );
 }
 
-function QuoteTopbar({ quote, mode, saveState, libraryOpen, optionsOpen, setOptionsOpen, onToggleLibrary, onModeChange, onClose, onSave, onSend }: { quote: QuoteBuilderQuote; mode: Mode; saveState: string; libraryOpen: boolean; optionsOpen: boolean; setOptionsOpen: (open: boolean) => void; onToggleLibrary: () => void; onModeChange: (mode: Mode) => void; onClose: () => void; onSave: () => void; onSend: () => void }) {
+function QuoteTopbar({ quote, mode, saveState, libraryOpen, optionsOpen, setOptionsOpen, onToggleLibrary, onModeChange, onClose, onSave, onSend, onDuplicate, onDownload }: { quote: QuoteBuilderQuote; mode: Mode; saveState: string; libraryOpen: boolean; optionsOpen: boolean; setOptionsOpen: (open: boolean) => void; onToggleLibrary: () => void; onModeChange: (mode: Mode) => void; onClose: () => void; onSave: () => void; onSend: () => void; onDuplicate: () => void; onDownload: () => void }) {
   return (
     <header className="sticky top-0 z-30 flex h-14 items-center justify-between border-b border-slate-200 bg-white px-4 shadow-sm">
       <div className="flex min-w-0 items-center gap-3">
@@ -143,11 +152,17 @@ function QuoteTopbar({ quote, mode, saveState, libraryOpen, optionsOpen, setOpti
         <div className="min-w-0">
           <div className="truncate text-lg font-semibold text-slate-950">Devis n° {quote.number}</div>
         </div>
-        <span className="hidden rounded-full border border-slate-200 px-2.5 py-1 text-xs font-semibold text-slate-500 sm:inline-flex">{saveStateLabel(saveState)}</span>
+        <span className={`hidden items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-semibold sm:inline-flex ${saveStateClass(saveState)}`}>
+          <span className="h-1.5 w-1.5 rounded-full bg-current" />
+          {saveStateLabel(saveState)}
+        </span>
         <button type="button" onClick={() => onModeChange("edit")} className={tabClass(mode === "edit")}><Pencil className="h-4 w-4" /> Edition</button>
         <button type="button" onClick={() => onModeChange("preview")} className={tabClass(mode === "preview")}><Eye className="h-4 w-4" /> Prévisualisation</button>
       </div>
       <div className="flex items-center gap-2">
+        <button type="button" onClick={onDuplicate} className="hidden h-10 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 lg:inline-flex"><Copy className="h-4 w-4" /> Dupliquer</button>
+        <button type="button" disabled title="Transformation facture à connecter au module Factures" className="hidden h-10 items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm font-semibold text-slate-400 xl:inline-flex"><FileText className="h-4 w-4" /> Transformer</button>
+        <button type="button" onClick={onDownload} className="hidden h-10 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 md:inline-flex"><Download className="h-4 w-4" /> Télécharger</button>
         <button type="button" onClick={() => setOptionsOpen(!optionsOpen)} className={secondaryButtonClass}><Settings2 className="h-4 w-4" /> Options <ChevronDown className="h-4 w-4" /></button>
         <button type="button" onClick={onSave} className={primaryButtonClass}><Save className="h-4 w-4" /> Enregistrer</button>
         <button type="button" onClick={onSend} className="inline-flex h-10 items-center gap-2 rounded-xl bg-emerald-600 px-4 text-sm font-semibold text-white shadow-sm hover:bg-emerald-700"><Send className="h-4 w-4" /> Envoyer</button>
@@ -747,6 +762,14 @@ function saveStateLabel(state: string) {
   if (state === "saved") return "Enregistré";
   if (state === "error") return "Erreur";
   return "Brouillon";
+}
+
+function saveStateClass(state: string) {
+  if (state === "dirty") return "border-amber-200 bg-amber-50 text-amber-700";
+  if (state === "saving") return "border-blue-200 bg-blue-50 text-blue-700";
+  if (state === "saved") return "border-emerald-200 bg-emerald-50 text-emerald-700";
+  if (state === "error") return "border-red-200 bg-red-50 text-red-700";
+  return "border-slate-200 bg-slate-50 text-slate-500";
 }
 
 function tabClass(active: boolean) {

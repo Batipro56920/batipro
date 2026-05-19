@@ -58,7 +58,7 @@ export function ProjectProfitabilityWidgets({ project, metrics: providedMetrics 
       <ProgressWidget
         title="Paiement"
         value={metrics.paymentProgress}
-        description={`${formatCurrency(metrics.paidTtc)} encaisses, ${formatCurrency(metrics.remainingToCollectTtc)} restants`}
+        description={`${formatCurrency(metrics.paidTtc)} encaissés, ${formatCurrency(metrics.remainingToCollectTtc)} restants`}
         tone="emerald"
       />
       <ProgressWidget
@@ -75,17 +75,17 @@ export function ProjectProfitabilitySummary({ metrics }: { metrics: ProjectProfi
   const rows = [
     ["Montant travaux", formatCurrency(metrics.soldAmountHt), "HT"],
     ["Achats", formatCurrency(metrics.purchasesHt), "HT"],
-    ["Main-d'oeuvre", formatCurrency(metrics.laborHt), "HT"],
+    ["Main d'œuvre", formatCurrency(metrics.laborHt), "HT"],
     ["Marge brute", formatCurrency(metrics.grossMarginHt), "HT"],
-    ["Taux de marge", formatPercent(metrics.marginRate), metrics.dataMode === "estimated" ? "estime" : metrics.dataMode],
+    ["Taux de marge", formatPercent(metrics.marginRate), metrics.dataMode === "estimated" ? "estimé" : metrics.dataMode],
   ];
 
   return (
     <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h3 className="text-base font-semibold text-slate-950">Synthese rentabilite</h3>
-          <p className="mt-1 text-sm text-slate-500">Vision travaux, couts et marge du dossier projet.</p>
+          <h3 className="text-base font-semibold text-slate-950">Synthèse rentabilité</h3>
+          <p className="mt-1 text-sm text-slate-500">Vision travaux, coûts et marge du dossier projet.</p>
         </div>
         <DataModeBadge mode={metrics.dataMode} />
       </div>
@@ -127,7 +127,7 @@ function ProgressWidget({ title, value, description, tone }: { title: string; va
 }
 
 function DataModeBadge({ mode }: { mode: ProjectProfitabilityMetrics["dataMode"] }) {
-  const label = mode === "real" ? "Donnees reelles" : mode === "mixed" ? "Donnees mixtes" : "Estimation V1";
+  const label = mode === "real" ? "Données réelles" : mode === "mixed" ? "Données mixtes" : "Estimation V1";
   const className = mode === "real"
     ? "border-emerald-200 bg-emerald-50 text-emerald-700"
     : mode === "mixed"

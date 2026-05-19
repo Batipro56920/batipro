@@ -314,6 +314,33 @@ function getTaskDisplayTitle(task: ChantierTaskRow): string {
   );
 }
 
+function CockpitFocusCard({
+  label,
+  value,
+  helper,
+  tone = "neutral",
+}: {
+  label: string;
+  value: string;
+  helper: string;
+  tone?: "neutral" | "blue" | "success" | "warning";
+}) {
+  const toneClass = {
+    neutral: "border-slate-200 bg-slate-50 text-slate-950",
+    blue: "border-blue-200 bg-blue-50 text-blue-900",
+    success: "border-emerald-200 bg-emerald-50 text-emerald-900",
+    warning: "border-amber-200 bg-amber-50 text-amber-900",
+  }[tone];
+
+  return (
+    <article className={`rounded-2xl border p-4 ${toneClass}`}>
+      <div className="text-[10px] font-semibold uppercase tracking-[0.14em] opacity-70">{label}</div>
+      <div className="mt-2 truncate text-lg font-bold">{value}</div>
+      <div className="mt-1 line-clamp-2 text-xs opacity-70">{helper}</div>
+    </article>
+  );
+}
+
 function getTaskLibraryLabel(task: ChantierTaskRow): string {
   return (
     String((task as any).task_template_label ?? "").trim() ||
@@ -4766,6 +4793,37 @@ export default function ChantierPage() {
               </span>
             ))
           )}
+        </div>
+      </section>
+
+      <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+        <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+          <div>
+            <div className="text-[11px] font-semibold uppercase tracking-[0.2em] text-blue-600">Cockpit terrain</div>
+            <div className="mt-1 text-lg font-semibold text-slate-950">Ce qui compte aujourd'hui</div>
+            <p className="mt-1 max-w-2xl text-sm text-slate-500">
+              Statut, planning, équipe, réserves, documents et PV de réception accessibles sans passer par les onglets profonds.
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Link to={`/chantiers/${id}/execution`} className="rounded-xl bg-blue-600 px-3 py-2 text-sm font-semibold text-white hover:bg-blue-700">
+              Ouvrir production
+            </Link>
+            <Link to={`/chantiers/${id}/documents`} className="rounded-xl border border-slate-200 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50">
+              Documents
+            </Link>
+            <Link to={`/chantiers/${id}/qualite`} className="rounded-xl border border-slate-200 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50">
+              PV / Réserves
+            </Link>
+          </div>
+        </div>
+        <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-6">
+          <CockpitFocusCard label="Statut" value={badge.label} helper={`${avancement}% d'avancement`} tone="blue" />
+          <CockpitFocusCard label="Planning" value={item.date_fin_prevue ?? "À planifier"} helper={item.date_debut ? `Début ${item.date_debut}` : "Date de début non renseignée"} />
+          <CockpitFocusCard label="Intervenants" value={`${intervenants.length}`} helper="Affectés au chantier" />
+          <CockpitFocusCard label="Réserves" value={`${reservesOuvertes}`} helper={reservesOuvertes > 0 ? "À lever" : "Aucune réserve ouverte"} tone={reservesOuvertes > 0 ? "warning" : "success"} />
+          <CockpitFocusCard label="Documents" value={`${documents.length}`} helper="Plans, DOE, photos, PV" />
+          <CockpitFocusCard label="PV réception" value={reservesOuvertes > 0 ? "À préparer" : "Prêt"} helper="Qualité / clôture" tone={reservesOuvertes > 0 ? "warning" : "success"} />
         </div>
       </section>
 

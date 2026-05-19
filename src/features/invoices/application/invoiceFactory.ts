@@ -62,7 +62,7 @@ function createEmptyInvoiceDocument(type: InvoiceType): BusinessDocument {
     dueDate: dueDate(30),
     terms: {
       ...document.terms,
-      paymentTerms: type === "deposit" ? "Acompte a regler a reception de facture." : "Paiement a reception de facture.",
+      paymentTerms: type === "deposit" ? "Acompte à régler à réception de facture." : "Paiement à réception de facture.",
     },
     totals: calculateDocumentTotals(document),
   };
