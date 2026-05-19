@@ -6,6 +6,7 @@ export type BusinessDocumentStatus =
   | "sent"
   | "viewed"
   | "accepted"
+  | "modification_requested"
   | "signed"
   | "refused"
   | "expired"

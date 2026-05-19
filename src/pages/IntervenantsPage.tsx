@@ -10,6 +10,7 @@ import {
   listIntervenantChantierLinks,
   listIntervenants,
   restoreIntervenant,
+  type IntervenantStatus,
   type IntervenantRow,
   updateIntervenant,
 } from "../services/intervenants.service";
@@ -27,6 +28,16 @@ type IntervenantFormState = {
   email: string;
   telephone: string;
   notes: string;
+  status: IntervenantStatus;
+  job_title: string;
+  hourly_cost_ht: string;
+  hourly_sale_price_ht: string;
+  entry_date: string;
+  is_active: boolean;
+  subcontractor_company: string;
+  specialty: string;
+  daily_rate_ht: string;
+  insurance: string;
 };
 
 const EMPTY_FORM: IntervenantFormState = {
@@ -36,6 +47,24 @@ const EMPTY_FORM: IntervenantFormState = {
   email: "",
   telephone: "",
   notes: "",
+  status: "subcontractor",
+  job_title: "",
+  hourly_cost_ht: "",
+  hourly_sale_price_ht: "",
+  entry_date: "",
+  is_active: true,
+  subcontractor_company: "",
+  specialty: "",
+  daily_rate_ht: "",
+  insurance: "",
+};
+
+const INTERVENANT_STATUS_LABELS: Record<IntervenantStatus, string> = {
+  employee: "Employé",
+  subcontractor: "Sous-traitant",
+  temporary_worker: "Intérimaire",
+  partner: "Partenaire",
+  other: "Autre",
 };
 
 export default function IntervenantsPage() {
@@ -118,6 +147,16 @@ export default function IntervenantsPage() {
       email: row.email ?? "",
       telephone: row.telephone ?? "",
       notes: row.notes ?? "",
+      status: row.status ?? "subcontractor",
+      job_title: row.job_title ?? "",
+      hourly_cost_ht: row.hourly_cost_ht == null ? "" : String(row.hourly_cost_ht),
+      hourly_sale_price_ht: row.hourly_sale_price_ht == null ? "" : String(row.hourly_sale_price_ht),
+      entry_date: row.entry_date ?? "",
+      is_active: row.is_active !== false,
+      subcontractor_company: row.subcontractor_company ?? row.entreprise ?? "",
+      specialty: row.specialty ?? row.metier ?? "",
+      daily_rate_ht: row.daily_rate_ht == null ? "" : String(row.daily_rate_ht),
+      insurance: row.insurance ?? "",
     });
   }
 
@@ -142,6 +181,16 @@ export default function IntervenantsPage() {
           email: form.email,
           telephone: form.telephone,
           notes: form.notes,
+          status: form.status,
+          job_title: form.job_title,
+          hourly_cost_ht: form.hourly_cost_ht,
+          hourly_sale_price_ht: form.hourly_sale_price_ht,
+          entry_date: form.entry_date,
+          is_active: form.is_active,
+          subcontractor_company: form.subcontractor_company,
+          specialty: form.specialty,
+          daily_rate_ht: form.daily_rate_ht,
+          insurance: form.insurance,
         });
       } else {
         await createIntervenant({
@@ -151,6 +200,16 @@ export default function IntervenantsPage() {
           email: form.email,
           telephone: form.telephone,
           notes: form.notes,
+          status: form.status,
+          job_title: form.job_title,
+          hourly_cost_ht: form.hourly_cost_ht,
+          hourly_sale_price_ht: form.hourly_sale_price_ht,
+          entry_date: form.entry_date,
+          is_active: form.is_active,
+          subcontractor_company: form.subcontractor_company,
+          specialty: form.specialty,
+          daily_rate_ht: form.daily_rate_ht,
+          insurance: form.insurance,
         });
       }
 
@@ -258,6 +317,7 @@ export default function IntervenantsPage() {
             <thead className="bg-slate-50 text-slate-600">
               <tr>
                 <th className="px-4 py-3 text-left font-medium">{t("common.labels.name")}</th>
+                <th className="px-4 py-3 text-left font-medium">Statut</th>
                 <th className="px-4 py-3 text-left font-medium">Entreprise</th>
                 <th className="px-4 py-3 text-left font-medium">Metier</th>
                 <th className="px-4 py-3 text-left font-medium">{t("common.labels.email")}</th>
@@ -279,6 +339,12 @@ export default function IntervenantsPage() {
                       </div>
                     ) : null}
                     {row.notes ? <div className="mt-1 text-xs text-slate-500 line-clamp-2">{row.notes}</div> : null}
+                  </td>
+                  <td className="px-4 py-3">
+                    <span className="inline-flex rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-medium">
+                      {INTERVENANT_STATUS_LABELS[row.status ?? "subcontractor"]}
+                    </span>
+                    {row.is_active === false ? <div className="mt-1 text-xs text-red-600">Inactif</div> : null}
                   </td>
                   <td className="px-4 py-3">{row.entreprise ?? "-"}</td>
                   <td className="px-4 py-3">{row.metier ?? "-"}</td>
@@ -417,6 +483,23 @@ export default function IntervenantsPage() {
                   />
                 </label>
                 <label className="space-y-1 text-sm">
+                  <div className="text-slate-600">Statut *</div>
+                  <select
+                    className="w-full rounded-xl border px-3 py-2"
+                    value={form.status}
+                    onChange={(e) =>
+                      setForm((prev) => ({ ...prev, status: e.target.value as IntervenantStatus }))
+                    }
+                    required
+                  >
+                    {Object.entries(INTERVENANT_STATUS_LABELS).map(([value, label]) => (
+                      <option key={value} value={value}>
+                        {label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="space-y-1 text-sm">
                   <div className="text-slate-600">Metier</div>
                   <input
                     className="w-full rounded-xl border px-3 py-2"
@@ -445,6 +528,102 @@ export default function IntervenantsPage() {
                   />
                 </label>
               </div>
+
+              {form.status === "employee" ? (
+                <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                  <div className="text-sm font-semibold text-slate-900">Informations salarié</div>
+                  <div className="mt-3 grid gap-4 md:grid-cols-2">
+                    <label className="space-y-1 text-sm">
+                      <div className="text-slate-600">Poste</div>
+                      <input
+                        className="w-full rounded-xl border px-3 py-2"
+                        value={form.job_title}
+                        onChange={(e) => setForm((prev) => ({ ...prev, job_title: e.target.value }))}
+                        placeholder="Chef d'équipe, plaquiste..."
+                      />
+                    </label>
+                    <label className="space-y-1 text-sm">
+                      <div className="text-slate-600">Date d'entrée</div>
+                      <input
+                        type="date"
+                        className="w-full rounded-xl border px-3 py-2"
+                        value={form.entry_date}
+                        onChange={(e) => setForm((prev) => ({ ...prev, entry_date: e.target.value }))}
+                      />
+                    </label>
+                    <label className="space-y-1 text-sm">
+                      <div className="text-slate-600">Coût horaire chargé</div>
+                      <input
+                        className="w-full rounded-xl border px-3 py-2"
+                        inputMode="decimal"
+                        value={form.hourly_cost_ht}
+                        onChange={(e) => setForm((prev) => ({ ...prev, hourly_cost_ht: e.target.value }))}
+                        placeholder="Ex: 32"
+                      />
+                    </label>
+                    <label className="space-y-1 text-sm">
+                      <div className="text-slate-600">Prix de vente horaire</div>
+                      <input
+                        className="w-full rounded-xl border px-3 py-2"
+                        inputMode="decimal"
+                        value={form.hourly_sale_price_ht}
+                        onChange={(e) => setForm((prev) => ({ ...prev, hourly_sale_price_ht: e.target.value }))}
+                        placeholder="Ex: 48"
+                      />
+                    </label>
+                    <label className="flex items-center gap-2 text-sm">
+                      <input
+                        type="checkbox"
+                        checked={form.is_active}
+                        onChange={(e) => setForm((prev) => ({ ...prev, is_active: e.target.checked }))}
+                      />
+                      <span>Actif</span>
+                    </label>
+                  </div>
+                </div>
+              ) : null}
+
+              {form.status === "subcontractor" ? (
+                <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                  <div className="text-sm font-semibold text-slate-900">Sous-traitant</div>
+                  <div className="mt-3 grid gap-4 md:grid-cols-2">
+                    <label className="space-y-1 text-sm">
+                      <div className="text-slate-600">Entreprise</div>
+                      <input
+                        className="w-full rounded-xl border px-3 py-2"
+                        value={form.subcontractor_company}
+                        onChange={(e) => setForm((prev) => ({ ...prev, subcontractor_company: e.target.value }))}
+                      />
+                    </label>
+                    <label className="space-y-1 text-sm">
+                      <div className="text-slate-600">Spécialité</div>
+                      <input
+                        className="w-full rounded-xl border px-3 py-2"
+                        value={form.specialty}
+                        onChange={(e) => setForm((prev) => ({ ...prev, specialty: e.target.value }))}
+                      />
+                    </label>
+                    <label className="space-y-1 text-sm">
+                      <div className="text-slate-600">Tarif journalier HT</div>
+                      <input
+                        className="w-full rounded-xl border px-3 py-2"
+                        inputMode="decimal"
+                        value={form.daily_rate_ht}
+                        onChange={(e) => setForm((prev) => ({ ...prev, daily_rate_ht: e.target.value }))}
+                      />
+                    </label>
+                    <label className="space-y-1 text-sm">
+                      <div className="text-slate-600">Assurance / documents</div>
+                      <input
+                        className="w-full rounded-xl border px-3 py-2"
+                        value={form.insurance}
+                        onChange={(e) => setForm((prev) => ({ ...prev, insurance: e.target.value }))}
+                        placeholder="Décennale, RC Pro, KBIS..."
+                      />
+                    </label>
+                  </div>
+                </div>
+              ) : null}
 
               <label className="block space-y-1 text-sm">
                 <div className="text-slate-600">{t("common.labels.notes")}</div>

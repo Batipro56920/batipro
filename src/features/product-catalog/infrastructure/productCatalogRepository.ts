@@ -18,6 +18,7 @@ type ProductCatalogRow = {
   standard_purchase_price_ht: number;
   recommended_sale_price_ht: number;
   target_margin_rate: number;
+  is_sellable?: boolean | null;
   supplier_prices: ProductCatalogItem["supplierPrices"];
   documents: ProductCatalogItem["documents"];
   price_history: ProductCatalogItem["priceHistory"];
@@ -33,7 +34,10 @@ export async function listProductCatalogItems(): Promise<ProductCatalogItem[]> {
     .order("designation", { ascending: true })
     .overrideTypes<ProductCatalogRow[]>();
 
-  if (error) throw new Error(error.message);
+  if (error) {
+    if (isMissingIsSellableColumn(error)) return listProductCatalogItemsLegacy();
+    throw new Error(error.message);
+  }
   if (data?.length) return data.map(fromRow);
 
   const seed = createSeedProducts();
@@ -49,7 +53,13 @@ export async function saveProductCatalogItem(input: ProductCatalogItem | Product
     : {
         ...input,
         id: crypto.randomUUID(),
-        priceHistory: [{ id: crypto.randomUUID(), priceHt: input.standardPurchasePriceHt, changedAt: now, source: "creation" }],
+        priceHistory: [{
+          id: crypto.randomUUID(),
+          purchasePriceHt: input.standardPurchasePriceHt,
+          salePriceHt: input.recommendedSalePriceHt,
+          changedAt: now,
+          source: "creation",
+        }],
         createdAt: now,
         updatedAt: now,
       };
@@ -61,7 +71,10 @@ export async function saveProductCatalogItem(input: ProductCatalogItem | Product
     .single()
     .overrideTypes<ProductCatalogRow>();
 
-  if (error) throw new Error(error.message);
+  if (error) {
+    if (isMissingIsSellableColumn(error)) return saveProductCatalogItemLegacy(product);
+    throw new Error(error.message);
+  }
   return fromRow(data);
 }
 
@@ -96,6 +109,7 @@ function fromRow(row: ProductCatalogRow): ProductCatalogItem {
     standardPurchasePriceHt: Number(row.standard_purchase_price_ht ?? 0),
     recommendedSalePriceHt: Number(row.recommended_sale_price_ht ?? 0),
     targetMarginRate: Number(row.target_margin_rate ?? 0),
+    isSellable: row.is_sellable !== false,
     supplierPrices: row.supplier_prices ?? [],
     documents: row.documents ?? [],
     priceHistory: row.price_history ?? [],
@@ -119,12 +133,49 @@ function toRow(product: ProductCatalogItem) {
     standard_purchase_price_ht: product.standardPurchasePriceHt,
     recommended_sale_price_ht: product.recommendedSalePriceHt,
     target_margin_rate: product.targetMarginRate,
+    is_sellable: product.isSellable,
     supplier_prices: product.supplierPrices as any,
     documents: product.documents as any,
     price_history: product.priceHistory as any,
     created_at: product.createdAt,
     updated_at: new Date().toISOString(),
   };
+}
+
+async function listProductCatalogItemsLegacy(): Promise<ProductCatalogItem[]> {
+  const { data, error } = await supabase
+    .from(TABLE as any)
+    .select("*")
+    .order("designation", { ascending: true })
+    .overrideTypes<Omit<ProductCatalogRow, "is_sellable">[]>();
+
+  if (error) throw new Error(error.message);
+  if (data?.length) return data.map((row) => fromRow({ ...row, is_sellable: true }));
+
+  const seed = createSeedProducts();
+  await Promise.all(seed.map((product) => saveProductCatalogItem(product)));
+  return seed;
+}
+
+async function saveProductCatalogItemLegacy(product: ProductCatalogItem) {
+  const row = toRow(product);
+  delete (row as Record<string, unknown>).is_sellable;
+
+  const { data, error } = await supabase
+    .from(TABLE as any)
+    .upsert(row, { onConflict: "id" })
+    .select("*")
+    .single()
+    .overrideTypes<Omit<ProductCatalogRow, "is_sellable">>();
+
+  if (error) throw new Error(error.message);
+  return fromRow({ ...data, is_sellable: product.isSellable });
+}
+
+function isMissingIsSellableColumn(error: { code?: string; message?: string } | null) {
+  const code = String(error?.code ?? "");
+  const msg = String(error?.message ?? "").toLowerCase();
+  return code === "42703" || (msg.includes("is_sellable") && (msg.includes("schema cache") || msg.includes("could not find")));
 }
 
 async function migrateLegacyProductsIfNeeded() {
@@ -172,9 +223,10 @@ function createSeedProducts(): ProductCatalogItem[] {
       standardPurchasePriceHt: 8.9,
       recommendedSalePriceHt: 13.5,
       targetMarginRate: 34,
+      isSellable: true,
       supplierPrices: [],
       documents: [{ id: crypto.randomUUID(), kind: "technical_sheet", name: "Fiche technique BA13", url: null }],
-      priceHistory: [{ id: crypto.randomUUID(), priceHt: 8.9, changedAt: now, source: "seed" }],
+      priceHistory: [{ id: crypto.randomUUID(), purchasePriceHt: 8.9, salePriceHt: 13.5, changedAt: now, source: "seed" }],
       createdAt: now,
       updatedAt: now,
     },
@@ -192,9 +244,10 @@ function createSeedProducts(): ProductCatalogItem[] {
       standardPurchasePriceHt: 18.5,
       recommendedSalePriceHt: 28,
       targetMarginRate: 34,
+      isSellable: true,
       supplierPrices: [],
       documents: [{ id: crypto.randomUUID(), kind: "sds", name: "FDS colle C2", url: null }],
-      priceHistory: [{ id: crypto.randomUUID(), priceHt: 18.5, changedAt: now, source: "seed" }],
+      priceHistory: [{ id: crypto.randomUUID(), purchasePriceHt: 18.5, salePriceHt: 28, changedAt: now, source: "seed" }],
       createdAt: now,
       updatedAt: now,
     },

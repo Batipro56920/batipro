@@ -10,4 +10,5 @@ export * from "./domain/defaults";
 export * from "./domain/documentTemplates";
 export * from "./domain/types";
 export * from "./infrastructure/documentPdf";
+export * from "./infrastructure/clientWorkflowRepository";
 export * from "./store/documentDraftStore";

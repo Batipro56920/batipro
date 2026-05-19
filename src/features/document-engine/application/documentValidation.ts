@@ -35,7 +35,7 @@ export const businessDocumentSchema = z.object({
   id: z.string().nullable(),
   kind: z.enum(["quote", "invoice", "credit_note", "purchase_order", "reception_report"]),
   number: z.string().min(1),
-  status: z.enum(["draft", "ready", "sent", "viewed", "accepted", "signed", "refused", "expired", "cancelled", "paid", "partially_paid", "overdue"]),
+  status: z.enum(["draft", "ready", "sent", "viewed", "accepted", "modification_requested", "signed", "refused", "expired", "cancelled", "paid", "partially_paid", "overdue"]),
   issueDate: z.string().min(1),
   recipient: documentPartySchema,
   company: documentPartySchema,

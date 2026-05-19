@@ -19,6 +19,7 @@ const EMPTY_DRAFT: ProductCatalogDraft = {
   standardPurchasePriceHt: 0,
   recommendedSalePriceHt: 0,
   targetMarginRate: 30,
+  isSellable: true,
   supplierPrices: [],
   documents: [],
 };
@@ -123,7 +124,7 @@ export default function ProductCatalogPage() {
       {!loading ? <section className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm">
         <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_180px_180px_180px_160px]">
           <input className={inputClass} placeholder="Rechercher désignation, référence, marque..." value={query} onChange={(event) => setQuery(event.target.value)} />
-          <Select value={categoryFilter} onChange={setCategoryFilter} options={["all", ...categories]} labels={{ all: "Toutes categories" }} />
+          <Select value={categoryFilter} onChange={setCategoryFilter} options={["all", ...categories]} labels={{ all: "Toutes catégories" }} />
           <Select value={supplierFilter} onChange={setSupplierFilter} options={["all", ...suppliers.map((supplier) => supplier.id)]} labels={Object.fromEntries([["all", "Tous fournisseurs"], ...suppliers.map((supplier) => [supplier.id, supplier.name])])} />
           <Select value={brandFilter} onChange={setBrandFilter} options={["all", ...brands]} labels={{ all: "Toutes marques" }} />
           <Select value={priceFilter} onChange={setPriceFilter} options={["all", "low", "mid", "high"]} labels={{ all: "Tous prix", low: "< 50 EUR", mid: "50-250 EUR", high: "> 250 EUR" }} />
@@ -137,10 +138,11 @@ export default function ProductCatalogPage() {
           <thead className="bg-slate-50 text-left text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">
             <tr>
               <th className="px-4 py-3">Produit</th>
-              <th className="px-4 py-3">Categorie</th>
+              <th className="px-4 py-3">Catégorie</th>
               <th className="px-4 py-3">Marque</th>
               <th className="px-4 py-3">Fournisseur</th>
               <th className="px-4 py-3">Unite</th>
+              <th className="px-4 py-3">Usage</th>
               <th className="px-4 py-3 text-right">Achat HT</th>
               <th className="px-4 py-3 text-right">Vente conseillee</th>
               <th className="px-4 py-3 text-right">Docs</th>
@@ -158,6 +160,7 @@ export default function ProductCatalogPage() {
                 <td className="px-4 py-3 text-slate-600">{product.brand || "-"}</td>
                 <td className="px-4 py-3 text-slate-600">{product.mainSupplierName || "-"}</td>
                 <td className="px-4 py-3 text-slate-600">{product.unit}</td>
+                <td className="px-4 py-3 text-slate-600">{product.isSellable ? "Acheté + vendable" : "Acheté uniquement"}</td>
                 <td className="px-4 py-3 text-right font-semibold">{formatCurrency(product.standardPurchasePriceHt)}</td>
                 <td className="px-4 py-3 text-right font-semibold">{formatCurrency(product.recommendedSalePriceHt)}</td>
                 <td className="px-4 py-3 text-right">{product.documents.length}</td>
@@ -171,7 +174,7 @@ export default function ProductCatalogPage() {
                 </td>
               </tr>
             ))}
-            {!filtered.length ? <tr><td colSpan={9} className="px-4 py-12"><EmptyCatalogState onCreate={() => setEditing({ ...EMPTY_DRAFT })} /></td></tr> : null}
+            {!filtered.length ? <tr><td colSpan={10} className="px-4 py-12"><EmptyCatalogState onCreate={() => setEditing({ ...EMPTY_DRAFT })} /></td></tr> : null}
           </tbody>
         </table>
       </section> : null}
@@ -216,6 +219,10 @@ function ProductForm({ product, suppliers, onCancel, onSave }: { product: Produc
         <NumberField label="Prix achat standard" value={draft.standardPurchasePriceHt} onChange={(standardPurchasePriceHt) => patch({ standardPurchasePriceHt })} />
         <NumberField label="Prix vente conseillé" value={draft.recommendedSalePriceHt} onChange={(recommendedSalePriceHt) => patch({ recommendedSalePriceHt })} />
         <NumberField label="Marge cible %" value={draft.targetMarginRate} onChange={(targetMarginRate) => patch({ targetMarginRate })} />
+        <label className={`${labelClass} flex items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2 normal-case tracking-normal text-slate-700`}>
+          <input type="checkbox" checked={draft.isSellable} onChange={(event) => patch({ isSellable: event.target.checked })} />
+          <span>Produit revendable / utilisable dans un ouvrage</span>
+        </label>
       </div>
 
       <SupplierPricesEditor prices={draft.supplierPrices} suppliers={suppliers} onChange={(supplierPrices) => patch({ supplierPrices })} />
@@ -271,7 +278,7 @@ function ProductDocumentsEditor({ documents, onChange }: { documents: ProductCat
       <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
         <div className="font-semibold text-slate-950">Documents liés</div>
         <div className="flex flex-wrap gap-2">
-          {(["technical_sheet", "manual", "sds", "certification", "photo"] as const).map((kind) => (
+          {(["technical_sheet", "manual", "sds", "certification", "photo", "other"] as const).map((kind) => (
             <button key={kind} type="button" className="rounded-xl border px-3 py-2 text-xs font-semibold hover:bg-slate-50" onClick={() => addDocument(kind)}>
               <FileText className="mr-1 inline h-3.5 w-3.5" /> {documentKindLabel(kind)}
             </button>
@@ -320,7 +327,8 @@ function documentKindLabel(kind: ProductDocumentKind) {
   if (kind === "manual") return "Notice";
   if (kind === "sds") return "FDS";
   if (kind === "certification") return "Certification";
-  return "Photo";
+  if (kind === "photo") return "Photo";
+  return "Autre";
 }
 
 const labelClass = "block text-xs font-semibold uppercase tracking-[0.12em] text-slate-400";

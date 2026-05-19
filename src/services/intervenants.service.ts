@@ -1,5 +1,7 @@
 import { supabase } from "../lib/supabaseClient";
 
+export type IntervenantStatus = "employee" | "subcontractor" | "temporary_worker" | "partner" | "other";
+
 export type IntervenantRow = {
   id: string;
   chantier_id: string | null;
@@ -12,6 +14,17 @@ export type IntervenantRow = {
   user_id: string | null;
   invitation_last_sent_at?: string | null;
   archived_at?: string | null;
+  status?: IntervenantStatus;
+  job_title?: string | null;
+  hourly_cost_ht?: number | null;
+  hourly_sale_price_ht?: number | null;
+  entry_date?: string | null;
+  is_active?: boolean | null;
+  subcontractor_company?: string | null;
+  specialty?: string | null;
+  daily_rate_ht?: number | null;
+  insurance?: string | null;
+  legal_documents?: unknown[] | null;
   created_at?: string | null;
 };
 
@@ -33,6 +46,10 @@ export type IntervenantInvitationPreview = {
 
 const INTERVENANT_SELECT =
   "id, chantier_id, nom, entreprise, metier, email, telephone, notes, user_id, invitation_last_sent_at, archived_at, created_at";
+const INTERVENANT_SELECT_V2 =
+  "id, chantier_id, nom, entreprise, metier, email, telephone, notes, user_id, invitation_last_sent_at, archived_at, status, job_title, hourly_cost_ht, hourly_sale_price_ht, entry_date, is_active, subcontractor_company, specialty, daily_rate_ht, insurance, legal_documents, created_at";
+
+let supportsBusinessColumns: boolean | null = null;
 
 function normalizeOptionalText(value: string | null | undefined) {
   const trimmed = String(value ?? "").trim();
@@ -42,6 +59,36 @@ function normalizeOptionalText(value: string | null | undefined) {
 function normalizeOptionalEmail(value: string | null | undefined) {
   const trimmed = String(value ?? "").trim().toLowerCase();
   return trimmed || null;
+}
+
+function normalizeOptionalNumber(value: unknown) {
+  if (value === null || value === undefined || value === "") return null;
+  const parsed = Number(String(value).replace(",", "."));
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function normalizeIntervenantStatus(value: unknown): IntervenantStatus {
+  const raw = String(value ?? "").trim();
+  if (raw === "employee" || raw === "subcontractor" || raw === "temporary_worker" || raw === "partner" || raw === "other") {
+    return raw;
+  }
+  return "subcontractor";
+}
+
+function getIntervenantSelect() {
+  return supportsBusinessColumns === false ? INTERVENANT_SELECT : INTERVENANT_SELECT_V2;
+}
+
+function normalizeIntervenantRow(row: any): IntervenantRow {
+  return {
+    ...(row as IntervenantRow),
+    status: normalizeIntervenantStatus(row?.status),
+    hourly_cost_ht: normalizeOptionalNumber(row?.hourly_cost_ht),
+    hourly_sale_price_ht: normalizeOptionalNumber(row?.hourly_sale_price_ht),
+    daily_rate_ht: normalizeOptionalNumber(row?.daily_rate_ht),
+    is_active: row?.is_active === false ? false : true,
+    legal_documents: Array.isArray(row?.legal_documents) ? row.legal_documents : [],
+  };
 }
 
 function sortIntervenants(rows: IntervenantRow[]) {
@@ -58,6 +105,18 @@ function sanitizeIntervenantPayload<T extends Record<string, unknown>>(input: T)
   if ("telephone" in payload) payload.telephone = normalizeOptionalText(payload.telephone as string | null | undefined);
   if ("notes" in payload) payload.notes = normalizeOptionalText(payload.notes as string | null | undefined);
   if ("chantier_id" in payload) payload.chantier_id = normalizeOptionalText(payload.chantier_id as string | null | undefined);
+  if ("status" in payload) payload.status = normalizeIntervenantStatus(payload.status);
+  if ("job_title" in payload) payload.job_title = normalizeOptionalText(payload.job_title as string | null | undefined);
+  if ("hourly_cost_ht" in payload) payload.hourly_cost_ht = normalizeOptionalNumber(payload.hourly_cost_ht);
+  if ("hourly_sale_price_ht" in payload) payload.hourly_sale_price_ht = normalizeOptionalNumber(payload.hourly_sale_price_ht);
+  if ("entry_date" in payload) payload.entry_date = normalizeOptionalText(payload.entry_date as string | null | undefined);
+  if ("is_active" in payload) payload.is_active = payload.is_active !== false;
+  if ("subcontractor_company" in payload) {
+    payload.subcontractor_company = normalizeOptionalText(payload.subcontractor_company as string | null | undefined);
+  }
+  if ("specialty" in payload) payload.specialty = normalizeOptionalText(payload.specialty as string | null | undefined);
+  if ("daily_rate_ht" in payload) payload.daily_rate_ht = normalizeOptionalNumber(payload.daily_rate_ht);
+  if ("insurance" in payload) payload.insurance = normalizeOptionalText(payload.insurance as string | null | undefined);
 
   return payload;
 }
@@ -65,12 +124,12 @@ function sanitizeIntervenantPayload<T extends Record<string, unknown>>(input: T)
 async function getIntervenantById(id: string) {
   const { data, error } = await supabase
     .from("intervenants")
-    .select(INTERVENANT_SELECT)
+    .select(getIntervenantSelect())
     .eq("id", id)
     .maybeSingle();
 
   if (error) throw error;
-  return (data ?? null) as IntervenantRow | null;
+  return data ? normalizeIntervenantRow(data) : null;
 }
 
 export async function getIntervenant(id: string) {
@@ -86,12 +145,12 @@ async function getIntervenantByEmail(email: string) {
 
   const { data, error } = await supabase
     .from("intervenants")
-    .select(INTERVENANT_SELECT)
+    .select(getIntervenantSelect())
     .filter("email", "ilike", normalizedEmail)
     .maybeSingle();
 
   if (error) throw error;
-  return (data ?? null) as IntervenantRow | null;
+  return data ? normalizeIntervenantRow(data) : null;
 }
 
 async function listLinkedIntervenantIdsByChantierId(chantierId: string) {
@@ -180,7 +239,7 @@ export async function listIntervenantsByChantierId(chantierId: string) {
   const [legacyRes, linkedIds] = await Promise.all([
     supabase
       .from("intervenants")
-      .select(INTERVENANT_SELECT)
+      .select(getIntervenantSelect())
       .eq("chantier_id", chantierId),
     listLinkedIntervenantIdsByChantierId(chantierId),
   ]);
@@ -188,21 +247,23 @@ export async function listIntervenantsByChantierId(chantierId: string) {
   if (legacyRes.error) throw legacyRes.error;
 
   const byId = new Map<string, IntervenantRow>();
-  for (const row of (legacyRes.data ?? []) as IntervenantRow[]) {
-    byId.set(row.id, { ...row, chantier_id: chantierId });
+  for (const row of (legacyRes.data ?? [])) {
+    const normalized = normalizeIntervenantRow(row);
+    byId.set(normalized.id, { ...normalized, chantier_id: chantierId });
   }
 
   const missingIds = linkedIds.filter((intervenantId) => !byId.has(intervenantId));
   if (missingIds.length > 0) {
     const linkedRowsRes = await supabase
       .from("intervenants")
-      .select(INTERVENANT_SELECT)
+      .select(getIntervenantSelect())
       .in("id", missingIds);
 
     if (linkedRowsRes.error) throw linkedRowsRes.error;
 
-    for (const row of (linkedRowsRes.data ?? []) as IntervenantRow[]) {
-      byId.set(row.id, { ...row, chantier_id: chantierId });
+    for (const row of (linkedRowsRes.data ?? [])) {
+      const normalized = normalizeIntervenantRow(row);
+      byId.set(normalized.id, { ...normalized, chantier_id: chantierId });
     }
   }
 
@@ -212,11 +273,11 @@ export async function listIntervenantsByChantierId(chantierId: string) {
 export async function listIntervenants() {
   const { data, error } = await supabase
     .from("intervenants")
-    .select(INTERVENANT_SELECT)
+    .select(getIntervenantSelect())
     .order("nom", { ascending: true });
 
   if (error) throw error;
-  return (data ?? []) as IntervenantRow[];
+  return (data ?? []).map(normalizeIntervenantRow);
 }
 
 export async function listIntervenantChantierLinks(intervenantId?: string) {
@@ -255,6 +316,16 @@ export async function createIntervenant(payload: {
   email?: string | null;
   telephone?: string | null;
   notes?: string | null;
+  status?: IntervenantStatus;
+  job_title?: string | null;
+  hourly_cost_ht?: number | string | null;
+  hourly_sale_price_ht?: number | string | null;
+  entry_date?: string | null;
+  is_active?: boolean | null;
+  subcontractor_company?: string | null;
+  specialty?: string | null;
+  daily_rate_ht?: number | string | null;
+  insurance?: string | null;
 }) {
   const cleaned = sanitizeIntervenantPayload(payload);
   const chantierId = normalizeOptionalText(cleaned.chantier_id as string | null | undefined);
@@ -307,12 +378,22 @@ export async function createIntervenant(payload: {
     email,
     telephone,
     notes,
+    status: normalizeIntervenantStatus(cleaned.status),
+    job_title: cleaned.job_title ?? null,
+    hourly_cost_ht: cleaned.hourly_cost_ht ?? null,
+    hourly_sale_price_ht: cleaned.hourly_sale_price_ht ?? null,
+    entry_date: cleaned.entry_date ?? null,
+    is_active: cleaned.is_active !== false,
+    subcontractor_company: cleaned.subcontractor_company ?? null,
+    specialty: cleaned.specialty ?? null,
+    daily_rate_ht: cleaned.daily_rate_ht ?? null,
+    insurance: cleaned.insurance ?? null,
   };
 
   const { data, error } = await supabase
     .from("intervenants")
     .insert([insertPayload])
-    .select(INTERVENANT_SELECT)
+    .select(getIntervenantSelect())
     .single();
 
   if (error) {
@@ -322,7 +403,7 @@ export async function createIntervenant(payload: {
     throw error;
   }
 
-  const created = data as IntervenantRow;
+  const created = normalizeIntervenantRow(data);
 
   if (chantierId) {
     await ensureIntervenantLinkedToChantier(chantierId, created.id);
@@ -335,7 +416,7 @@ export async function createIntervenant(payload: {
 
 export async function updateIntervenant(
   id: string,
-  patch: Partial<Pick<IntervenantRow, "nom" | "entreprise" | "metier" | "email" | "telephone" | "notes" | "archived_at">>,
+  patch: Record<string, unknown>,
 ) {
   if (!id) throw new Error("id intervenant manquant.");
 
@@ -348,11 +429,11 @@ export async function updateIntervenant(
     .from("intervenants")
     .update(cleaned)
     .eq("id", id)
-    .select(INTERVENANT_SELECT)
+    .select(getIntervenantSelect())
     .single();
 
   if (error) throw error;
-  return data as IntervenantRow;
+  return normalizeIntervenantRow(data);
 }
 
 export async function archiveIntervenant(id: string) {

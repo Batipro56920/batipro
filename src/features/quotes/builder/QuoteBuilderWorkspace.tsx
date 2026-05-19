@@ -6,7 +6,9 @@ import { CSS } from "@dnd-kit/utilities";
 import { flexRender, getCoreRowModel, useReactTable, type ColumnDef } from "@tanstack/react-table";
 import { BookOpen, ChevronDown, Copy, Download, Eye, FileText, GripVertical, Pencil, Save, Send, Settings2, Trash2, X } from "lucide-react";
 import { calculateQuoteBuilderTotals, flattenQuoteBuilder } from "./quoteBuilderCalculations";
+import { DocumentSendDialog } from "../../document-engine";
 import { DEFAULT_QUOTE_LIBRARY } from "./quoteBuilderLibrary";
+import { quoteBuilderToBusinessDocument } from "./quoteBuilderDocumentAdapter";
 import { downloadQuoteBuilderPdf, getQuoteBuilderPdfBlob } from "./quoteBuilderPdf";
 import { useQuoteBuilderStore } from "./quoteBuilderStore";
 import type { QuoteBuilderCompositeItem, QuoteBuilderFlatRow, QuoteBuilderItem, QuoteBuilderItemKind, QuoteBuilderNode, QuoteBuilderQuote, QuoteBuilderUnit, QuoteLibraryItem } from "./types";
@@ -533,6 +535,9 @@ function QuotePreview({ quote, rows, totals, onSend }: { quote: QuoteBuilderQuot
 }
 
 function QuoteSendDialog({ quote, onClose }: { quote: QuoteBuilderQuote; onClose: () => void }) {
+  void SendOption;
+  return <DocumentSendDialog document={quoteBuilderToBusinessDocument(quote)} onClose={onClose} onDownload={() => downloadQuoteBuilderPdf(quote)} />;
+/*
   const [recipient, setRecipient] = useState("");
   const [message, setMessage] = useState(`Bonjour,\n\nVeuillez trouver ci-joint votre devis ${quote.number}.\nVous pouvez le consulter, l'accepter, le signer ou demander une modification depuis le lien sécurisé.\n\nCordialement.`);
   const [signatureEnabled, setSignatureEnabled] = useState(true);
@@ -578,12 +583,13 @@ function QuoteSendDialog({ quote, onClose }: { quote: QuoteBuilderQuote; onClose
           <button type="button" onClick={() => downloadQuoteBuilderPdf(quote)} className={secondaryButtonClass}><Download className="h-4 w-4" /> Télécharger le PDF</button>
           <div className="flex gap-2">
             <button type="button" onClick={onClose} className={secondaryButtonClass}>Annuler</button>
-            <button type="button" disabled={!canSend} onClick={onClose} className={`inline-flex h-10 items-center gap-2 rounded-xl px-4 text-sm font-semibold text-white ${canSend ? "bg-emerald-600 hover:bg-emerald-700" : "bg-slate-300"}`}><Send className="h-4 w-4" /> Préparer l'envoi</button>
+            <button type="button" disabled={!canSend} onClick={onClose} className={`inline-flex h-10 items-center gap-2 rounded-xl px-4 text-sm font-semibold text-white ${canSend ? "bg-emerald-600 hover:bg-emerald-700" : "bg-slate-300"}`}><Send className="h-4 w-4" /> Ancien envoi désactivé</button>
           </div>
         </div>
       </div>
     </div>
   );
+*/
 }
 
 function SendOption({ checked, onChange, label, description }: { checked: boolean; onChange: (checked: boolean) => void; label: string; description: string }) {

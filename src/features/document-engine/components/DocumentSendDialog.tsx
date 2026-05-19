@@ -4,6 +4,7 @@ import { Download, Link2, Send, X } from "lucide-react";
 import { Button } from "../../../components/ui/button";
 import { getDocumentTemplate } from "../domain/documentTemplates";
 import type { BusinessDocument } from "../domain/types";
+import { sendBusinessDocument, type SendBusinessDocumentResult } from "../infrastructure/clientWorkflowRepository";
 
 export function DocumentSendDialog({
   document,
@@ -31,14 +32,43 @@ export function DocumentSendDialog({
     autoReminders: true,
   });
   const [sent, setSent] = useState(false);
+  const [sending, setSending] = useState(false);
+  const [feedback, setFeedback] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [result, setResult] = useState<SendBusinessDocumentResult | null>(null);
 
   async function submit() {
-    if (onSend) {
-      await onSend(payload);
-    } else {
-      openMailClient(payload);
+    setSending(true);
+    setError(null);
+    setFeedback(null);
+    setResult(null);
+    try {
+      console.info("[DocumentSendDialog] submit clicked", {
+        documentKind: document.kind,
+        documentId: document.id,
+        documentNumber: document.number,
+        recipient: payload.recipient,
+      });
+      const nextResult = await sendBusinessDocument(document, payload);
+      setResult(nextResult);
+      setPayload((prev) => ({ ...prev, clientLink: nextResult.clientLink }));
+      setFeedback(nextResult.email?.skipped ? "Lien client cree. Resend n'est pas configure, aucun email SMTP n'a ete envoye." : "Document envoye et workflow client active.");
+      if (onSend) {
+        await onSend({ ...payload, clientLink: nextResult.clientLink });
+      }
+      setSent(true);
+    } catch (err) {
+      console.error("[DocumentSendDialog] send-business-document failed", {
+        documentKind: document.kind,
+        documentId: document.id,
+        documentNumber: document.number,
+        recipient: payload.recipient,
+        error: err,
+      });
+      setError(err instanceof Error ? err.message : "Envoi du document impossible.");
+    } finally {
+      setSending(false);
     }
-    setSent(true);
   }
 
   return (
@@ -72,9 +102,18 @@ export function DocumentSendDialog({
             <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
               <div className="flex items-center gap-2 text-sm font-semibold text-slate-950"><Link2 className="h-4 w-4" /> Lien client sécurisé</div>
               <div className="mt-2 break-all rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs text-slate-600">{payload.clientLink}</div>
-              <p className="mt-2 text-xs text-slate-500">Ce lien est préparé côté document-engine. Le stockage tokenisé et l'envoi SMTP doivent être branchés sur le backend de production.</p>
+              <p className="mt-2 text-xs text-slate-500">Le lien final est retourné par la fonction Edge après création du workflow client.</p>
             </div>
-            {sent ? <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-3 text-sm font-medium text-emerald-700">Workflow préparé. Si aucun service email backend n'est fourni, le client email local a été ouvert.</div> : null}
+            {sent ? <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-3 text-sm font-medium text-emerald-700">{feedback ?? "Workflow client active."}</div> : null}
+            {result ? (
+              <div className="rounded-2xl border border-blue-200 bg-blue-50 p-4 text-sm text-blue-900">
+                <div className="font-semibold">Lien client cree</div>
+                <a className="mt-2 block break-all text-xs font-medium underline" href={result.clientLink} target="_blank" rel="noreferrer">{result.clientLink}</a>
+                <div className="mt-2 text-xs">Workflow: {result.workflowId} · Expiration: {new Date(result.expiresAt).toLocaleString("fr-FR")}</div>
+                {result.email?.error ? <div className="mt-2 text-xs text-red-700">Erreur email Resend: {result.email.error}</div> : null}
+              </div>
+            ) : null}
+            {error ? <div className="rounded-2xl border border-red-200 bg-red-50 p-3 text-sm font-medium text-red-700">{error}</div> : null}
           </div>
 
           <aside className="space-y-3 rounded-2xl bg-slate-50 p-4">
@@ -93,7 +132,7 @@ export function DocumentSendDialog({
           <Button type="button" variant="secondary" onClick={onDownload}><Download className="h-4 w-4" /> PDF</Button>
           <div className="flex gap-2">
             <Button type="button" variant="secondary" onClick={onClose}>Annuler</Button>
-            <Button type="button" variant="success" onClick={() => void submit()}><Send className="h-4 w-4" /> Envoyer</Button>
+            <Button type="button" variant="success" disabled={sending} onClick={() => void submit()}><Send className="h-4 w-4" /> {sending ? "Envoi..." : "Préparer l'envoi"}</Button>
           </div>
         </footer>
       </div>
@@ -133,10 +172,4 @@ function buildClientLink(document: BusinessDocument) {
   const base = typeof window !== "undefined" ? window.location.origin : "";
   const token = btoa(`${document.kind}:${document.id ?? document.number}`).replace(/=+$/g, "");
   return `${base}/documents/client/${encodeURIComponent(token)}`;
-}
-
-function openMailClient(payload: DocumentSendPayload) {
-  const body = `${payload.message}\n\nLien client : ${payload.clientLink}`;
-  const href = `mailto:${encodeURIComponent(payload.recipient)}?subject=${encodeURIComponent(payload.subject)}&body=${encodeURIComponent(body)}${payload.cc ? `&cc=${encodeURIComponent(payload.cc)}` : ""}`;
-  if (typeof window !== "undefined") window.location.href = href;
 }

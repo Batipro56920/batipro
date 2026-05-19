@@ -4,24 +4,57 @@ import { supabase } from "../lib/supabaseClient";
 export type TaskTemplateMaterialRatioRow = {
   id: string;
   task_template_id: string;
+  product_id: string | null;
   material_name: string;
   source_unit: string;
   ratio_quantity: number;
   ratio_unit: string;
   loss_percent: number | null;
+  supplier_id: string | null;
+  purchase_price_ht: number | null;
+  sale_price_ht: number | null;
+  price_source: string | null;
+  manual_override: boolean;
   notes: string | null;
   sort_order: number;
   created_at: string | null;
 };
 
 export type TaskTemplateMaterialRatioInput = {
+  product_id?: string | null;
   material_name: string;
   source_unit: string;
   ratio_quantity: number | null;
   ratio_unit: string;
   loss_percent?: number | null;
+  supplier_id?: string | null;
+  purchase_price_ht?: number | null;
+  sale_price_ht?: number | null;
+  price_source?: string | null;
+  manual_override?: boolean;
   notes?: string | null;
   sort_order?: number | null;
+};
+
+export type TaskTemplateLaborItemInput = {
+  id?: string;
+  resourceType: "manual" | "employee_role" | "subcontractor";
+  employeeId?: string | null;
+  intervenantId?: string | null;
+  duration: number | null;
+  unit: string;
+  hourlyCost: number | null;
+  hourlySalePrice: number | null;
+  note?: string | null;
+};
+
+export type TaskTemplateFeeItemInput = {
+  id?: string;
+  type: "equipment_rental" | "consumables" | "fixed_fee" | "other";
+  designation: string;
+  amountCostHt: number | null;
+  amountSaleHt: number | null;
+  note?: string | null;
 };
 
 export type TaskTemplateEquipmentItemRow = {
@@ -92,11 +125,17 @@ export type TaskPreparationEstimate = {
 const MATERIAL_SELECT = [
   "id",
   "task_template_id",
+  "product_id",
   "material_name",
   "source_unit",
   "ratio_quantity",
   "ratio_unit",
   "loss_percent",
+  "supplier_id",
+  "purchase_price_ht",
+  "sale_price_ht",
+  "price_source",
+  "manual_override",
   "notes",
   "sort_order",
   "created_at",
@@ -142,11 +181,17 @@ function normalizeMaterialRow(row: any): TaskTemplateMaterialRatioRow {
   return {
     id: String(row?.id ?? ""),
     task_template_id: String(row?.task_template_id ?? ""),
+    product_id: normalizeText(row?.product_id),
     material_name: String(row?.material_name ?? "").trim(),
     source_unit: String(row?.source_unit ?? "").trim(),
     ratio_quantity: normalizeNumber(row?.ratio_quantity) ?? 0,
     ratio_unit: String(row?.ratio_unit ?? "").trim(),
     loss_percent: normalizeNumber(row?.loss_percent),
+    supplier_id: normalizeText(row?.supplier_id),
+    purchase_price_ht: normalizeNumber(row?.purchase_price_ht),
+    sale_price_ht: normalizeNumber(row?.sale_price_ht),
+    price_source: normalizeText(row?.price_source),
+    manual_override: row?.manual_override === true,
     notes: normalizeText(row?.notes),
     sort_order: Math.max(0, Math.trunc(normalizeNumber(row?.sort_order) ?? 0)),
     created_at: normalizeText(row?.created_at),
@@ -176,15 +221,23 @@ function normalizeMaterialInput(
   const ratio_unit = String(item.ratio_unit ?? "").trim();
   const ratio_quantity = normalizeNumber(item.ratio_quantity);
   const loss_percent = normalizeNumber(item.loss_percent);
+  const purchase_price_ht = normalizeNumber(item.purchase_price_ht);
+  const sale_price_ht = normalizeNumber(item.sale_price_ht);
 
   if (!material_name || !source_unit || !ratio_unit || ratio_quantity === null) return null;
 
   return {
+    product_id: normalizeText(item.product_id),
     material_name,
     source_unit,
     ratio_quantity,
     ratio_unit,
     loss_percent,
+    supplier_id: normalizeText(item.supplier_id),
+    purchase_price_ht,
+    sale_price_ht,
+    price_source: normalizeText(item.price_source),
+    manual_override: item.manual_override === true,
     notes: normalizeText(item.notes),
     sort_order: Math.max(0, Math.trunc(normalizeNumber(item.sort_order) ?? index)),
   };

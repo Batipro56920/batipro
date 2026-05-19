@@ -31,6 +31,7 @@ const BibliothequeTasksPage = lazy(() => import("./pages/BibliothequeTasksPage")
 const StatistiquesPage = lazy(() => import("./pages/StatistiquesPage"));
 const MonEntreprisePage = lazy(() => import("./pages/MonEntreprisePage"));
 const TerrainFeedbacksPage = lazy(() => import("./pages/TerrainFeedbacksPage"));
+const ClientDocumentPage = lazy(() => import("./pages/ClientDocumentPage"));
 
 function RouteSuspense({ label, children }: { label: string; children: ReactNode }) {
   return (
@@ -79,6 +80,7 @@ export default function App() {
       <Route path="/acces/:token" element={<IntervenantAccessPage />} />
       <Route path="/intervenant/invitation" element={<IntervenantInvitationPage />} />
         <Route path="/intervenant" element={<RouteSuspense label="Chargement du portail intervenant..."><IntervenantPortalPage /></RouteSuspense>} />
+      <Route path="/documents/client/:token" element={<RouteSuspense label="Chargement du document client..."><ClientDocumentPage /></RouteSuspense>} />
 
       {/* Protégé */}
       <Route

@@ -1,6 +1,6 @@
 import type { DocumentUnit } from "../../document-engine";
 
-export type ProductDocumentKind = "technical_sheet" | "manual" | "sds" | "certification" | "photo";
+export type ProductDocumentKind = "technical_sheet" | "manual" | "sds" | "certification" | "photo" | "other";
 
 export type ProductSupplierPrice = {
   id: string;
@@ -36,9 +36,16 @@ export type ProductCatalogItem = {
   standardPurchasePriceHt: number;
   recommendedSalePriceHt: number;
   targetMarginRate: number;
+  isSellable: boolean;
   supplierPrices: ProductSupplierPrice[];
   documents: ProductDocument[];
-  priceHistory: Array<{ id: string; priceHt: number; changedAt: string; source: string }>;
+  priceHistory: Array<{
+    id: string;
+    purchasePriceHt: number | null;
+    salePriceHt: number | null;
+    changedAt: string;
+    source: string;
+  }>;
   createdAt: string;
   updatedAt: string;
 };

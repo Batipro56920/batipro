@@ -3,8 +3,12 @@ import type { TaskTemplateInput, TaskTemplateRow } from "../services/taskLibrary
 import {
   getTaskTemplatePreparation,
   type TaskTemplateEquipmentItemInput,
+  type TaskTemplateFeeItemInput,
+  type TaskTemplateLaborItemInput,
   type TaskTemplateMaterialRatioInput,
 } from "../services/taskTemplatePreparation.service";
+import type { ProductCatalogItem } from "../features/product-catalog";
+import { getBestSupplierPrice, listProductCatalogItems } from "../features/product-catalog";
 import { useI18n } from "../i18n";
 
 type Props = {
@@ -22,11 +26,17 @@ type Props = {
 
 type MaterialRatioDraft = {
   id: string;
+  product_id: string;
   material_name: string;
   source_unit: string;
   ratio_quantity: string;
   ratio_unit: string;
   loss_percent: string;
+  supplier_id: string;
+  purchase_price_ht: string;
+  sale_price_ht: string;
+  price_source: string;
+  manual_override: boolean;
   notes: string;
 };
 
@@ -37,6 +47,25 @@ type EquipmentDraft = {
   default_quantity: string;
   unit: string;
   notes: string;
+};
+
+type LaborDraft = {
+  id: string;
+  resourceType: "manual" | "employee_role" | "subcontractor";
+  duration: string;
+  unit: string;
+  hourlyCost: string;
+  hourlySalePrice: string;
+  note: string;
+};
+
+type FeeDraft = {
+  id: string;
+  type: "equipment_rental" | "consumables" | "fixed_fee" | "other";
+  designation: string;
+  amountCostHt: string;
+  amountSaleHt: string;
+  note: string;
 };
 
 function toField(value: number | null): string {
@@ -52,6 +81,10 @@ function parseNumberField(value: string): number | null {
   return Number.isFinite(parsed) ? parsed : null;
 }
 
+function parseDraftAmount(value: string): number {
+  return parseNumberField(value) ?? 0;
+}
+
 function createMaterialDraft(row?: {
   id?: string | null;
   material_name?: string | null;
@@ -63,12 +96,41 @@ function createMaterialDraft(row?: {
 }): MaterialRatioDraft {
   return {
     id: String(row?.id ?? crypto.randomUUID()),
+    product_id: String((row as any)?.product_id ?? ""),
     material_name: String(row?.material_name ?? ""),
     source_unit: String(row?.source_unit ?? ""),
     ratio_quantity: toField(row?.ratio_quantity ?? null),
     ratio_unit: String(row?.ratio_unit ?? ""),
     loss_percent: toField(row?.loss_percent ?? null),
+    supplier_id: String((row as any)?.supplier_id ?? ""),
+    purchase_price_ht: toField((row as any)?.purchase_price_ht ?? null),
+    sale_price_ht: toField((row as any)?.sale_price_ht ?? null),
+    price_source: String((row as any)?.price_source ?? "manual"),
+    manual_override: (row as any)?.manual_override === true,
     notes: String(row?.notes ?? ""),
+  };
+}
+
+function createLaborDraft(row?: Partial<TaskTemplateLaborItemInput>): LaborDraft {
+  return {
+    id: String(row?.id ?? crypto.randomUUID()),
+    resourceType: row?.resourceType ?? "manual",
+    duration: toField(row?.duration ?? null),
+    unit: String(row?.unit ?? "h"),
+    hourlyCost: toField(row?.hourlyCost ?? null),
+    hourlySalePrice: toField(row?.hourlySalePrice ?? null),
+    note: String(row?.note ?? ""),
+  };
+}
+
+function createFeeDraft(row?: Partial<TaskTemplateFeeItemInput>): FeeDraft {
+  return {
+    id: String(row?.id ?? crypto.randomUUID()),
+    type: row?.type ?? "other",
+    designation: String(row?.designation ?? ""),
+    amountCostHt: toField(row?.amountCostHt ?? null),
+    amountSaleHt: toField(row?.amountSaleHt ?? null),
+    note: String(row?.note ?? ""),
   };
 }
 
@@ -93,12 +155,24 @@ function createEquipmentDraft(row?: {
 function isMaterialDraftEmpty(row: MaterialRatioDraft) {
   return (
     !row.material_name.trim() &&
+    !row.product_id.trim() &&
     !row.source_unit.trim() &&
     !row.ratio_quantity.trim() &&
     !row.ratio_unit.trim() &&
     !row.loss_percent.trim() &&
+    !row.supplier_id.trim() &&
+    !row.purchase_price_ht.trim() &&
+    !row.sale_price_ht.trim() &&
     !row.notes.trim()
   );
+}
+
+function isLaborDraftEmpty(row: LaborDraft) {
+  return !row.duration.trim() && !row.hourlyCost.trim() && !row.hourlySalePrice.trim() && !row.note.trim();
+}
+
+function isFeeDraftEmpty(row: FeeDraft) {
+  return !row.designation.trim() && !row.amountCostHt.trim() && !row.amountSaleHt.trim() && !row.note.trim();
 }
 
 function isEquipmentDraftEmpty(row: EquipmentDraft) {
@@ -144,6 +218,9 @@ export default function TaskTemplateDrawer({
   const [remarques, setRemarques] = useState("");
   const [materialDrafts, setMaterialDrafts] = useState<MaterialRatioDraft[]>([]);
   const [equipmentDrafts, setEquipmentDrafts] = useState<EquipmentDraft[]>([]);
+  const [laborDrafts, setLaborDrafts] = useState<LaborDraft[]>([]);
+  const [feeDrafts, setFeeDrafts] = useState<FeeDraft[]>([]);
+  const [products, setProducts] = useState<ProductCatalogItem[]>([]);
   const [preparationLoading, setPreparationLoading] = useState(false);
   const [preparationSchemaReady, setPreparationSchemaReady] = useState(true);
   const [preparationError, setPreparationError] = useState<string | null>(null);
@@ -169,6 +246,21 @@ export default function TaskTemplateDrawer({
 
   useEffect(() => {
     if (!open) return;
+    let alive = true;
+    listProductCatalogItems()
+      .then((items) => {
+        if (alive) setProducts(items);
+      })
+      .catch(() => {
+        if (alive) setProducts([]);
+      });
+    return () => {
+      alive = false;
+    };
+  }, [open]);
+
+  useEffect(() => {
+    if (!open) return;
     if (template) {
       setTitre(template.titre ?? "");
       setLot(template.lot ?? "");
@@ -179,6 +271,8 @@ export default function TaskTemplateDrawer({
       setDescriptionTechnique(template.description_technique ?? "");
       setCaracteristiques((template.caracteristiques ?? []).join("\n"));
       setRemarques(template.remarques ?? "");
+      setLaborDrafts((template.labor_items ?? []).map((row) => createLaborDraft(row)));
+      setFeeDrafts((template.fee_items ?? []).map((row) => createFeeDraft(row)));
     } else {
       setTitre(initialValues?.titre ?? "");
       setLot(initialValues?.lot ?? "");
@@ -214,6 +308,8 @@ export default function TaskTemplateDrawer({
           }),
         ),
       );
+      setLaborDrafts((initialValues?.labor_items ?? []).map((row) => createLaborDraft(row)));
+      setFeeDrafts((initialValues?.fee_items ?? []).map((row) => createFeeDraft(row)));
     }
     setPreparationSchemaReady(true);
     setPreparationError(null);
@@ -273,6 +369,33 @@ export default function TaskTemplateDrawer({
 
   const busy = saving || deleting;
   const title = useMemo(() => (template ? `${t("common.actions.edit")} template` : t("bibliothequeTasks.new")), [t, template]);
+  const compositionTotals = useMemo(() => {
+    const materialCost = materialDrafts.reduce((sum, row) => {
+      const quantity = parseDraftAmount(row.ratio_quantity);
+      const lossMultiplier = 1 + parseDraftAmount(row.loss_percent) / 100;
+      return sum + quantity * lossMultiplier * parseDraftAmount(row.purchase_price_ht);
+    }, 0);
+    const materialSale = materialDrafts.reduce((sum, row) => {
+      const quantity = parseDraftAmount(row.ratio_quantity);
+      const lossMultiplier = 1 + parseDraftAmount(row.loss_percent) / 100;
+      return sum + quantity * lossMultiplier * parseDraftAmount(row.sale_price_ht);
+    }, 0);
+    const laborCost = laborDrafts.reduce(
+      (sum, row) => sum + parseDraftAmount(row.duration) * parseDraftAmount(row.hourlyCost),
+      0,
+    );
+    const laborSale = laborDrafts.reduce(
+      (sum, row) => sum + parseDraftAmount(row.duration) * parseDraftAmount(row.hourlySalePrice),
+      0,
+    );
+    const feeCost = feeDrafts.reduce((sum, row) => sum + parseDraftAmount(row.amountCostHt), 0);
+    const feeSale = feeDrafts.reduce((sum, row) => sum + parseDraftAmount(row.amountSaleHt), 0);
+    const cost = materialCost + laborCost + feeCost;
+    const sale = materialSale + laborSale + feeSale;
+    const margin = sale - cost;
+    const marginRate = sale > 0 ? (margin / sale) * 100 : 0;
+    return { materialCost, materialSale, laborCost, laborSale, feeCost, feeSale, cost, sale, margin, marginRate };
+  }, [materialDrafts, laborDrafts, feeDrafts]);
 
   if (!open) return null;
 
@@ -288,9 +411,48 @@ export default function TaskTemplateDrawer({
     );
   }
 
+  function updateLaborDraft(index: number, patch: Partial<LaborDraft>) {
+    setLaborDrafts((prev) =>
+      prev.map((row, rowIndex) => (rowIndex === index ? { ...row, ...patch } : row)),
+    );
+  }
+
+  function updateFeeDraft(index: number, patch: Partial<FeeDraft>) {
+    setFeeDrafts((prev) =>
+      prev.map((row, rowIndex) => (rowIndex === index ? { ...row, ...patch } : row)),
+    );
+  }
+
+  function applyProductToMaterial(index: number, productId: string) {
+    if (!productId) {
+      updateMaterialDraft(index, {
+        product_id: "",
+        supplier_id: "",
+        price_source: "manual",
+      });
+      return;
+    }
+    const product = products.find((item) => item.id === productId);
+    if (!product) return;
+    const bestPrice = getBestSupplierPrice(product);
+    updateMaterialDraft(index, {
+      product_id: product.id,
+      material_name: product.designation,
+      source_unit: product.unit,
+      ratio_unit: product.unit,
+      supplier_id: bestPrice?.supplierId ?? product.mainSupplierId ?? "",
+      purchase_price_ht: toField(bestPrice?.priceHt ?? product.standardPurchasePriceHt ?? null),
+      sale_price_ht: toField(product.recommendedSalePriceHt ?? null),
+      price_source: bestPrice ? "supplier_price" : "standard",
+      manual_override: false,
+    });
+  }
+
   function serializePreparation() {
     const preparationMaterials: TaskTemplateMaterialRatioInput[] = [];
     const preparationEquipment: TaskTemplateEquipmentItemInput[] = [];
+    const laborItems: TaskTemplateLaborItemInput[] = [];
+    const feeItems: TaskTemplateFeeItemInput[] = [];
 
     for (const [index, row] of materialDrafts.entries()) {
       if (isMaterialDraftEmpty(row)) continue;
@@ -311,13 +473,28 @@ export default function TaskTemplateDrawer({
       if (lossPercent !== null && (lossPercent < 0 || lossPercent > 100)) {
         throw new Error("La perte doit rester entre 0 et 100 %.");
       }
+      const purchasePrice =
+        row.purchase_price_ht.trim() === "" ? null : parseNumberField(row.purchase_price_ht);
+      const salePrice = row.sale_price_ht.trim() === "" ? null : parseNumberField(row.sale_price_ht);
+      if (row.purchase_price_ht.trim() !== "" && purchasePrice === null) {
+        throw new Error("Prix d'achat matériau invalide.");
+      }
+      if (row.sale_price_ht.trim() !== "" && salePrice === null) {
+        throw new Error("Prix de vente matériau invalide.");
+      }
 
       preparationMaterials.push({
+        product_id: row.product_id.trim() || null,
         material_name: row.material_name.trim(),
         source_unit: row.source_unit.trim(),
         ratio_quantity: ratioQuantity,
         ratio_unit: row.ratio_unit.trim(),
         loss_percent: lossPercent,
+        supplier_id: row.supplier_id.trim() || null,
+        purchase_price_ht: purchasePrice,
+        sale_price_ht: salePrice,
+        price_source: row.price_source.trim() || "manual",
+        manual_override: row.manual_override,
         notes: row.notes.trim() || null,
         sort_order: index,
       });
@@ -346,7 +523,48 @@ export default function TaskTemplateDrawer({
       });
     }
 
-    return { preparationMaterials, preparationEquipment };
+    for (const row of laborDrafts) {
+      if (isLaborDraftEmpty(row)) continue;
+      const duration = parseNumberField(row.duration);
+      const hourlyCost = row.hourlyCost.trim() === "" ? null : parseNumberField(row.hourlyCost);
+      const hourlySalePrice =
+        row.hourlySalePrice.trim() === "" ? null : parseNumberField(row.hourlySalePrice);
+      if (duration === null) throw new Error("Temps main d'oeuvre invalide.");
+      if (row.hourlyCost.trim() !== "" && hourlyCost === null) {
+        throw new Error("Coût horaire main d'oeuvre invalide.");
+      }
+      if (row.hourlySalePrice.trim() !== "" && hourlySalePrice === null) {
+        throw new Error("Prix de vente horaire main d'oeuvre invalide.");
+      }
+      laborItems.push({
+        id: row.id,
+        resourceType: row.resourceType,
+        duration,
+        unit: row.unit.trim() || "h",
+        hourlyCost,
+        hourlySalePrice,
+        note: row.note.trim() || null,
+      });
+    }
+
+    for (const row of feeDrafts) {
+      if (isFeeDraftEmpty(row)) continue;
+      const amountCostHt = row.amountCostHt.trim() === "" ? null : parseNumberField(row.amountCostHt);
+      const amountSaleHt = row.amountSaleHt.trim() === "" ? null : parseNumberField(row.amountSaleHt);
+      if (!row.designation.trim()) throw new Error("Désignation frais obligatoire.");
+      if (row.amountCostHt.trim() !== "" && amountCostHt === null) throw new Error("Coût frais invalide.");
+      if (row.amountSaleHt.trim() !== "" && amountSaleHt === null) throw new Error("Prix de vente frais invalide.");
+      feeItems.push({
+        id: row.id,
+        type: row.type,
+        designation: row.designation.trim(),
+        amountCostHt,
+        amountSaleHt,
+        note: row.note.trim() || null,
+      });
+    }
+
+    return { preparationMaterials, preparationEquipment, laborItems, feeItems };
   }
 
   async function handleSave() {
@@ -375,6 +593,8 @@ export default function TaskTemplateDrawer({
     let serializedPreparation: {
       preparationMaterials: TaskTemplateMaterialRatioInput[];
       preparationEquipment: TaskTemplateEquipmentItemInput[];
+      laborItems: TaskTemplateLaborItemInput[];
+      feeItems: TaskTemplateFeeItemInput[];
     };
 
     try {
@@ -403,6 +623,8 @@ export default function TaskTemplateDrawer({
       preparation_equipment: advancedPreparationEnabled
         ? serializedPreparation.preparationEquipment
         : undefined,
+      labor_items: advancedPreparationEnabled ? serializedPreparation.laborItems : undefined,
+      fee_items: advancedPreparationEnabled ? serializedPreparation.feeItems : undefined,
     };
 
     await onSave(payload);
@@ -610,6 +832,18 @@ export default function TaskTemplateDrawer({
                         </div>
 
                         <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-4">
+                          <select
+                            className="rounded-xl border bg-white px-3 py-2 text-sm xl:col-span-2"
+                            value={row.product_id}
+                            onChange={(e) => applyProductToMaterial(index, e.target.value)}
+                          >
+                            <option value="">Ligne libre / choisir produit catalogue</option>
+                            {products.map((product) => (
+                              <option key={product.id} value={product.id}>
+                                {product.designation}
+                              </option>
+                            ))}
+                          </select>
                           <input
                             className="rounded-xl border bg-white px-3 py-2 text-sm"
                             value={row.material_name}
@@ -651,6 +885,43 @@ export default function TaskTemplateDrawer({
                             onChange={(e) => updateMaterialDraft(index, { notes: e.target.value })}
                             placeholder="Remarque"
                           />
+                        </div>
+                        <div className="grid gap-2 md:grid-cols-4">
+                          <input
+                            className="rounded-xl border bg-white px-3 py-2 text-sm"
+                            inputMode="decimal"
+                            value={row.purchase_price_ht}
+                            onChange={(e) =>
+                              updateMaterialDraft(index, {
+                                purchase_price_ht: e.target.value,
+                                price_source: "manual",
+                                manual_override: true,
+                              })
+                            }
+                            placeholder="Prix achat HT"
+                          />
+                          <input
+                            className="rounded-xl border bg-white px-3 py-2 text-sm"
+                            inputMode="decimal"
+                            value={row.sale_price_ht}
+                            onChange={(e) =>
+                              updateMaterialDraft(index, {
+                                sale_price_ht: e.target.value,
+                                price_source: "manual",
+                                manual_override: true,
+                              })
+                            }
+                            placeholder="Prix vente HT"
+                          />
+                          <input
+                            className="rounded-xl border bg-white px-3 py-2 text-sm"
+                            value={row.supplier_id}
+                            onChange={(e) => updateMaterialDraft(index, { supplier_id: e.target.value })}
+                            placeholder="Fournisseur"
+                          />
+                          <div className="rounded-xl border bg-white px-3 py-2 text-xs text-slate-500">
+                            Source : {row.manual_override ? "manuel" : row.price_source || "manuel"}
+                          </div>
                         </div>
                       </div>
                     ))}
@@ -754,6 +1025,182 @@ export default function TaskTemplateDrawer({
                     ))}
                   </div>
                 )}
+              </div>
+
+              <div className="space-y-3 rounded-2xl border border-slate-200 bg-white p-4">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div>
+                    <div className="text-sm font-semibold text-slate-900">Main d'oeuvre</div>
+                    <div className="text-xs text-slate-500">Temps prévu, coût chargé et prix de vente horaire.</div>
+                  </div>
+                  <button
+                    type="button"
+                    className="rounded-xl border px-3 py-2 text-xs hover:bg-slate-50"
+                    onClick={() => setLaborDrafts((prev) => [...prev, createLaborDraft()])}
+                    disabled={busy}
+                  >
+                    Ajouter main d'oeuvre
+                  </button>
+                </div>
+                {laborDrafts.length === 0 ? (
+                  <div className="rounded-xl border border-dashed border-slate-200 px-4 py-3 text-sm text-slate-500">
+                    Aucune main d'oeuvre définie.
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {laborDrafts.map((row, index) => (
+                      <div key={row.id} className="grid gap-2 rounded-2xl border border-slate-200 bg-slate-50 p-3 md:grid-cols-6">
+                        <select
+                          className="rounded-xl border bg-white px-3 py-2 text-sm"
+                          value={row.resourceType}
+                          onChange={(e) =>
+                            updateLaborDraft(index, {
+                              resourceType: e.target.value as LaborDraft["resourceType"],
+                            })
+                          }
+                        >
+                          <option value="manual">Saisie manuelle</option>
+                          <option value="employee_role">Rôle salarié</option>
+                          <option value="subcontractor">Sous-traitant</option>
+                        </select>
+                        <input
+                          className="rounded-xl border bg-white px-3 py-2 text-sm"
+                          inputMode="decimal"
+                          value={row.duration}
+                          onChange={(e) => updateLaborDraft(index, { duration: e.target.value })}
+                          placeholder="Temps"
+                        />
+                        <input
+                          className="rounded-xl border bg-white px-3 py-2 text-sm"
+                          value={row.unit}
+                          onChange={(e) => updateLaborDraft(index, { unit: e.target.value })}
+                          placeholder="h"
+                        />
+                        <input
+                          className="rounded-xl border bg-white px-3 py-2 text-sm"
+                          inputMode="decimal"
+                          value={row.hourlyCost}
+                          onChange={(e) => updateLaborDraft(index, { hourlyCost: e.target.value })}
+                          placeholder="Coût horaire"
+                        />
+                        <input
+                          className="rounded-xl border bg-white px-3 py-2 text-sm"
+                          inputMode="decimal"
+                          value={row.hourlySalePrice}
+                          onChange={(e) => updateLaborDraft(index, { hourlySalePrice: e.target.value })}
+                          placeholder="PV horaire"
+                        />
+                        <button
+                          type="button"
+                          className="rounded-xl border border-red-200 px-3 py-2 text-sm text-red-700 hover:bg-red-50"
+                          onClick={() => setLaborDrafts((prev) => prev.filter((item) => item.id !== row.id))}
+                        >
+                          Supprimer
+                        </button>
+                        <input
+                          className="rounded-xl border bg-white px-3 py-2 text-sm md:col-span-6"
+                          value={row.note}
+                          onChange={(e) => updateLaborDraft(index, { note: e.target.value })}
+                          placeholder="Remarque"
+                        />
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              <div className="space-y-3 rounded-2xl border border-slate-200 bg-white p-4">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div>
+                    <div className="text-sm font-semibold text-slate-900">Matériel / frais</div>
+                    <div className="text-xs text-slate-500">Location, consommables, frais fixes et divers.</div>
+                  </div>
+                  <button
+                    type="button"
+                    className="rounded-xl border px-3 py-2 text-xs hover:bg-slate-50"
+                    onClick={() => setFeeDrafts((prev) => [...prev, createFeeDraft()])}
+                    disabled={busy}
+                  >
+                    Ajouter un frais
+                  </button>
+                </div>
+                {feeDrafts.length === 0 ? (
+                  <div className="rounded-xl border border-dashed border-slate-200 px-4 py-3 text-sm text-slate-500">
+                    Aucun frais défini.
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {feeDrafts.map((row, index) => (
+                      <div key={row.id} className="grid gap-2 rounded-2xl border border-slate-200 bg-slate-50 p-3 md:grid-cols-5">
+                        <select
+                          className="rounded-xl border bg-white px-3 py-2 text-sm"
+                          value={row.type}
+                          onChange={(e) => updateFeeDraft(index, { type: e.target.value as FeeDraft["type"] })}
+                        >
+                          <option value="equipment_rental">Location matériel</option>
+                          <option value="consumables">Consommables</option>
+                          <option value="fixed_fee">Frais fixe</option>
+                          <option value="other">Autre</option>
+                        </select>
+                        <input
+                          className="rounded-xl border bg-white px-3 py-2 text-sm"
+                          value={row.designation}
+                          onChange={(e) => updateFeeDraft(index, { designation: e.target.value })}
+                          placeholder="Désignation"
+                        />
+                        <input
+                          className="rounded-xl border bg-white px-3 py-2 text-sm"
+                          inputMode="decimal"
+                          value={row.amountCostHt}
+                          onChange={(e) => updateFeeDraft(index, { amountCostHt: e.target.value })}
+                          placeholder="Coût HT"
+                        />
+                        <input
+                          className="rounded-xl border bg-white px-3 py-2 text-sm"
+                          inputMode="decimal"
+                          value={row.amountSaleHt}
+                          onChange={(e) => updateFeeDraft(index, { amountSaleHt: e.target.value })}
+                          placeholder="PV HT"
+                        />
+                        <button
+                          type="button"
+                          className="rounded-xl border border-red-200 px-3 py-2 text-sm text-red-700 hover:bg-red-50"
+                          onClick={() => setFeeDrafts((prev) => prev.filter((item) => item.id !== row.id))}
+                        >
+                          Supprimer
+                        </button>
+                        <input
+                          className="rounded-xl border bg-white px-3 py-2 text-sm md:col-span-5"
+                          value={row.note}
+                          onChange={(e) => updateFeeDraft(index, { note: e.target.value })}
+                          placeholder="Remarque"
+                        />
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              <div className="rounded-2xl border border-slate-200 bg-white p-4">
+                <div className="text-sm font-semibold text-slate-900">Calcul automatique ouvrage</div>
+                <div className="mt-3 grid gap-3 text-sm md:grid-cols-4">
+                  <div className="rounded-xl bg-slate-50 p-3">
+                    <div className="text-xs text-slate-500">Prix de revient HT</div>
+                    <div className="font-semibold">{compositionTotals.cost.toFixed(2)} €</div>
+                  </div>
+                  <div className="rounded-xl bg-slate-50 p-3">
+                    <div className="text-xs text-slate-500">Prix vente conseillé HT</div>
+                    <div className="font-semibold">{compositionTotals.sale.toFixed(2)} €</div>
+                  </div>
+                  <div className="rounded-xl bg-slate-50 p-3">
+                    <div className="text-xs text-slate-500">Marge HT</div>
+                    <div className="font-semibold">{compositionTotals.margin.toFixed(2)} €</div>
+                  </div>
+                  <div className="rounded-xl bg-slate-50 p-3">
+                    <div className="text-xs text-slate-500">Taux marge</div>
+                    <div className="font-semibold">{compositionTotals.marginRate.toFixed(1)} %</div>
+                  </div>
+                </div>
               </div>
             </div>
           ) : null}

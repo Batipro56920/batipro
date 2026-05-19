@@ -8,6 +8,7 @@ import {
   getIntervenant,
   listIntervenantChantierLinks,
   restoreIntervenant,
+  type IntervenantStatus,
   type IntervenantRow,
   updateIntervenant,
 } from "../services/intervenants.service";
@@ -19,6 +20,24 @@ type FormState = {
   email: string;
   telephone: string;
   notes: string;
+  status: IntervenantStatus;
+  job_title: string;
+  hourly_cost_ht: string;
+  hourly_sale_price_ht: string;
+  entry_date: string;
+  is_active: boolean;
+  subcontractor_company: string;
+  specialty: string;
+  daily_rate_ht: string;
+  insurance: string;
+};
+
+const STATUS_LABELS: Record<IntervenantStatus, string> = {
+  employee: "Employé",
+  subcontractor: "Sous-traitant",
+  temporary_worker: "Intérimaire",
+  partner: "Partenaire",
+  other: "Autre",
 };
 
 export default function IntervenantDetailPage() {
@@ -26,7 +45,24 @@ export default function IntervenantDetailPage() {
   const [row, setRow] = useState<IntervenantRow | null>(null);
   const [chantiers, setChantiers] = useState<ChantierRow[]>([]);
   const [chantierIds, setChantierIds] = useState<string[]>([]);
-  const [form, setForm] = useState<FormState>({ nom: "", entreprise: "", metier: "", email: "", telephone: "", notes: "" });
+  const [form, setForm] = useState<FormState>({
+    nom: "",
+    entreprise: "",
+    metier: "",
+    email: "",
+    telephone: "",
+    notes: "",
+    status: "subcontractor",
+    job_title: "",
+    hourly_cost_ht: "",
+    hourly_sale_price_ht: "",
+    entry_date: "",
+    is_active: true,
+    subcontractor_company: "",
+    specialty: "",
+    daily_rate_ht: "",
+    insurance: "",
+  });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -61,6 +97,16 @@ export default function IntervenantDetailPage() {
         email: intervenant.email ?? "",
         telephone: intervenant.telephone ?? "",
         notes: intervenant.notes ?? "",
+        status: intervenant.status ?? "subcontractor",
+        job_title: intervenant.job_title ?? "",
+        hourly_cost_ht: intervenant.hourly_cost_ht == null ? "" : String(intervenant.hourly_cost_ht),
+        hourly_sale_price_ht: intervenant.hourly_sale_price_ht == null ? "" : String(intervenant.hourly_sale_price_ht),
+        entry_date: intervenant.entry_date ?? "",
+        is_active: intervenant.is_active !== false,
+        subcontractor_company: intervenant.subcontractor_company ?? intervenant.entreprise ?? "",
+        specialty: intervenant.specialty ?? intervenant.metier ?? "",
+        daily_rate_ht: intervenant.daily_rate_ht == null ? "" : String(intervenant.daily_rate_ht),
+        insurance: intervenant.insurance ?? "",
       });
     } catch (err: any) {
       setError(err?.message ?? "Chargement impossible.");
@@ -167,6 +213,21 @@ export default function IntervenantDetailPage() {
         <form className="rounded-2xl border bg-white p-5" onSubmit={onSubmit}>
           <div className="text-sm font-semibold text-slate-900">Infos générales</div>
           <div className="mt-4 grid gap-4 md:grid-cols-2">
+            <label className="space-y-1 text-sm">
+              <div className="text-slate-600">Statut *</div>
+              <select
+                className="w-full rounded-xl border px-3 py-2"
+                value={form.status}
+                onChange={(event) => setForm((prev) => ({ ...prev, status: event.target.value as IntervenantStatus }))}
+                required
+              >
+                {Object.entries(STATUS_LABELS).map(([value, label]) => (
+                  <option key={value} value={value}>
+                    {label}
+                  </option>
+                ))}
+              </select>
+            </label>
             {([
               ["nom", "Nom"],
               ["entreprise", "Entreprise"],
@@ -184,8 +245,63 @@ export default function IntervenantDetailPage() {
                   required={key === "nom"}
                 />
               </label>
-            ))}
+              ))}
           </div>
+          {form.status === "employee" ? (
+            <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+              <div className="text-sm font-semibold text-slate-900">Salarié</div>
+              <div className="mt-3 grid gap-4 md:grid-cols-2">
+                {([
+                  ["job_title", "Poste"],
+                  ["entry_date", "Date d'entrée"],
+                  ["hourly_cost_ht", "Coût horaire chargé"],
+                  ["hourly_sale_price_ht", "Prix de vente horaire"],
+                ] as const).map(([key, label]) => (
+                  <label key={key} className="space-y-1 text-sm">
+                    <div className="text-slate-600">{label}</div>
+                    <input
+                      className="w-full rounded-xl border px-3 py-2"
+                      value={form[key]}
+                      type={key === "entry_date" ? "date" : "text"}
+                      inputMode={key.includes("hourly") ? "decimal" : undefined}
+                      onChange={(event) => setForm((prev) => ({ ...prev, [key]: event.target.value }))}
+                    />
+                  </label>
+                ))}
+                <label className="flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={form.is_active}
+                    onChange={(event) => setForm((prev) => ({ ...prev, is_active: event.target.checked }))}
+                  />
+                  <span>Actif</span>
+                </label>
+              </div>
+            </div>
+          ) : null}
+          {form.status === "subcontractor" ? (
+            <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+              <div className="text-sm font-semibold text-slate-900">Sous-traitant</div>
+              <div className="mt-3 grid gap-4 md:grid-cols-2">
+                {([
+                  ["subcontractor_company", "Entreprise"],
+                  ["specialty", "Spécialité"],
+                  ["daily_rate_ht", "Tarif journalier HT"],
+                  ["insurance", "Assurance / documents"],
+                ] as const).map(([key, label]) => (
+                  <label key={key} className="space-y-1 text-sm">
+                    <div className="text-slate-600">{label}</div>
+                    <input
+                      className="w-full rounded-xl border px-3 py-2"
+                      value={form[key]}
+                      inputMode={key === "daily_rate_ht" ? "decimal" : undefined}
+                      onChange={(event) => setForm((prev) => ({ ...prev, [key]: event.target.value }))}
+                    />
+                  </label>
+                ))}
+              </div>
+            </div>
+          ) : null}
           <label className="mt-4 block space-y-1 text-sm">
             <div className="text-slate-600">Notes</div>
             <textarea
