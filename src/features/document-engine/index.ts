@@ -7,6 +7,7 @@ export * from "./components/DocumentSendDialog";
 export * from "./components/DocumentStatusBadge";
 export * from "./components/DocumentTotalsCard";
 export * from "./domain/defaults";
+export * from "./domain/documentTemplates";
 export * from "./domain/types";
 export * from "./infrastructure/documentPdf";
 export * from "./store/documentDraftStore";
