@@ -15,8 +15,11 @@ export default defineConfig({
           if (id.includes("pdfjs-dist")) {
             return "pdf-viewer";
           }
-          if (id.includes("jspdf") || id.includes("html2canvas")) {
-            return "pdf-export";
+          if (id.includes("jspdf")) {
+            return "jspdf";
+          }
+          if (id.includes("html2canvas")) {
+            return "html2canvas";
           }
           if (id.includes("recharts") || id.includes("d3-")) {
             return "charts";
