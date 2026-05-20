@@ -12,9 +12,9 @@ import {
   Truck,
   BriefcaseBusiness,
   FileText,
+  Handshake,
   ReceiptText,
   FolderKanban,
-  PackageSearch,
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import type { CompanyFeatureModuleId } from "../config/companyFeatures";
@@ -78,6 +78,14 @@ export default function Sidebar({ collapsed = false, onToggleCollapse, companyNa
   const nav = [
     { to: "/dashboard", label: t("sidebar.dashboard"), icon: LayoutDashboard, group: "Pilotage", end: true },
     {
+      to: "/statistiques",
+      label: "Rentabilité / statistiques",
+      icon: ChartColumnBig,
+      feature: "rapports" as const,
+      permissionKey: "statistiques" as const,
+      group: "Pilotage",
+    },
+    {
       to: "/crm",
       label: "CRM",
       icon: BriefcaseBusiness,
@@ -107,6 +115,13 @@ export default function Sidebar({ collapsed = false, onToggleCollapse, companyNa
       group: "Commerce",
     },
     {
+      to: "/crm/apporteurs",
+      label: "Apporteurs d’affaires",
+      icon: Handshake,
+      permissionKey: "crm" as const,
+      group: "Commerce",
+    },
+    {
       to: "/projets",
       label: "Projets",
       icon: FolderKanban,
@@ -129,21 +144,6 @@ export default function Sidebar({ collapsed = false, onToggleCollapse, companyNa
       group: "Production",
     },
     {
-      to: "/retours-terrain",
-      label: t("sidebar.terrainFeedback"),
-      icon: ClipboardList,
-      feature: "journal_chantier" as const,
-      group: "Production",
-    },
-    {
-      to: "/bibliotheque",
-      label: t("sidebar.library"),
-      icon: LibraryBig,
-      feature: "documents" as const,
-      permissionKey: "bibliotheque" as const,
-      group: "Administration",
-    },
-    {
       to: "/fournisseurs",
       label: t("sidebar.suppliers"),
       icon: Truck,
@@ -160,27 +160,19 @@ export default function Sidebar({ collapsed = false, onToggleCollapse, companyNa
       group: "Achats",
     },
     {
-      to: "/catalogue-produits",
-      label: "Produits",
-      icon: PackageSearch,
-      feature: "approvisionnement" as const,
-      permissionKey: "fournisseurs" as const,
-      group: "Achats",
-    },
-    {
-      to: "/statistiques",
-      label: "Rentabilité / statistiques",
-      icon: ChartColumnBig,
-      feature: "rapports" as const,
-      permissionKey: "statistiques" as const,
-      group: "Pilotage",
+      to: "/bibliotheque",
+      label: t("sidebar.library"),
+      icon: LibraryBig,
+      feature: "documents" as const,
+      permissionKey: "bibliotheque" as const,
+      group: "Ressources",
     },
     {
       to: "/entreprise",
       label: "Paramètres",
       icon: Building2,
       permissionKey: "entreprise_parametres" as const,
-      group: "Administration",
+      group: "Paramètres",
     },
   ].filter(
     (item) => {
