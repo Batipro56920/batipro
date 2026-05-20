@@ -159,6 +159,168 @@ export type Database = {
       chantier_tasks: AnyTable;
       chantiers: AnyTable;
       company_settings: AnyTable;
+      apporteurs_affaires: {
+        Row: {
+          id: string;
+          organization_id: string;
+          nom: string;
+          entreprise: string | null;
+          type: string;
+          telephone: string | null;
+          email: string | null;
+          commission_percent: number;
+          calculation_mode: string;
+          iban: string | null;
+          active: boolean;
+          notes: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          organization_id: string;
+          nom: string;
+          entreprise?: string | null;
+          type: string;
+          telephone?: string | null;
+          email?: string | null;
+          commission_percent?: number;
+          calculation_mode?: string;
+          iban?: string | null;
+          active?: boolean;
+          notes?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          organization_id?: string;
+          nom?: string;
+          entreprise?: string | null;
+          type?: string;
+          telephone?: string | null;
+          email?: string | null;
+          commission_percent?: number;
+          calculation_mode?: string;
+          iban?: string | null;
+          active?: boolean;
+          notes?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: DatabaseRelationship[];
+      };
+      apporteur_leads: {
+        Row: {
+          id: string;
+          organization_id: string;
+          apporteur_id: string | null;
+          client_name: string;
+          telephone: string | null;
+          project_address: string | null;
+          project_type: string | null;
+          estimated_amount: number;
+          comment: string | null;
+          date: string;
+          status: string;
+          commission_paid: boolean;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          organization_id: string;
+          apporteur_id?: string | null;
+          client_name: string;
+          telephone?: string | null;
+          project_address?: string | null;
+          project_type?: string | null;
+          estimated_amount?: number;
+          comment?: string | null;
+          date: string;
+          status?: string;
+          commission_paid?: boolean;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          organization_id?: string;
+          apporteur_id?: string | null;
+          client_name?: string;
+          telephone?: string | null;
+          project_address?: string | null;
+          project_type?: string | null;
+          estimated_amount?: number;
+          comment?: string | null;
+          date?: string;
+          status?: string;
+          commission_paid?: boolean;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: DatabaseRelationship[];
+      };
+      apporteur_documents: {
+        Row: {
+          id: string;
+          organization_id: string;
+          apporteur_id: string;
+          label: string;
+          file_path: string;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          organization_id: string;
+          apporteur_id: string;
+          label: string;
+          file_path: string;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          organization_id?: string;
+          apporteur_id?: string;
+          label?: string;
+          file_path?: string;
+          created_at?: string;
+        };
+        Relationships: DatabaseRelationship[];
+      };
+      apporteur_access: {
+        Row: {
+          id: string;
+          organization_id: string;
+          apporteur_id: string;
+          token: string;
+          expires_at: string | null;
+          revoked_at: string | null;
+          used_at: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          organization_id: string;
+          apporteur_id: string;
+          token: string;
+          expires_at?: string | null;
+          revoked_at?: string | null;
+          used_at?: string | null;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          organization_id?: string;
+          apporteur_id?: string;
+          token?: string;
+          expires_at?: string | null;
+          revoked_at?: string | null;
+          used_at?: string | null;
+          created_at?: string;
+        };
+        Relationships: DatabaseRelationship[];
+      };
       devis: AnyTable;
       devis_lignes: AnyTable;
       "devis-pdf": AnyTable;

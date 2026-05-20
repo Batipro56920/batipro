@@ -1,0 +1,88 @@
+﻿
+> batipro@0.0.0 build
+> tsc -b && vite build
+
+[36mvite v7.3.1 [32mbuilding client environment for production...[36m[39m
+transforming...
+[32mÔ£ô[39m 2523 modules transformed.
+rendering chunks...
+computing gzip size...
+[2mdist/[22m[32mindex.html                                    [39m[1m[2m  1.73 kB[22m[1m[22m[2m Ôöé gzip:   0.68 kB[22m
+[2mdist/[22m[35massets/index-D1A7UzHU.css                     [39m[1m[2m 91.57 kB[22m[1m[22m[2m Ôöé gzip:  16.01 kB[22m
+[2mdist/[22m[36massets/documentNodeFactory-DshSzVkH.js        [39m[1m[2m  0.56 kB[22m[1m[22m[2m Ôöé gzip:   0.31 kB[22m
+[2mdist/[22m[36massets/virtual_pwa-register-Ews_hFf7.js       [39m[1m[2m  0.73 kB[22m[1m[22m[2m Ôöé gzip:   0.45 kB[22m
+[2mdist/[22m[36massets/CrmClientDialog-Dkp3oUIX.js            [39m[1m[2m  0.90 kB[22m[1m[22m[2m Ôöé gzip:   0.53 kB[22m
+[2mdist/[22m[36massets/button-BynOnh4O.js                     [39m[1m[2m  0.94 kB[22m[1m[22m[2m Ôöé gzip:   0.50 kB[22m
+[2mdist/[22m[36massets/defaults-BuGE6Vpj.js                   [39m[1m[2m  1.10 kB[22m[1m[22m[2m Ôöé gzip:   0.64 kB[22m
+[2mdist/[22m[36massets/CrmDocumentDialog-DbPRXQmb.js          [39m[1m[2m  1.20 kB[22m[1m[22m[2m Ôöé gzip:   0.64 kB[22m
+[2mdist/[22m[36massets/CrmProspectDialog-Bz8xNrYF.js          [39m[1m[2m  1.26 kB[22m[1m[22m[2m Ôöé gzip:   0.66 kB[22m
+[2mdist/[22m[36massets/DocumentTotalsCard-DrYofOMi.js         [39m[1m[2m  1.39 kB[22m[1m[22m[2m Ôöé gzip:   0.62 kB[22m
+[2mdist/[22m[36massets/CrmTaskDialog-BUwbN63C.js              [39m[1m[2m  1.45 kB[22m[1m[22m[2m Ôöé gzip:   0.74 kB[22m
+[2mdist/[22m[36massets/CrmAppointmentDialog-Ce0MQHlb.js       [39m[1m[2m  1.46 kB[22m[1m[22m[2m Ôöé gzip:   0.74 kB[22m
+[2mdist/[22m[36massets/design-system-e2knH3zV.js              [39m[1m[2m  1.48 kB[22m[1m[22m[2m Ôöé gzip:   0.63 kB[22m
+[2mdist/[22m[36massets/CrmInvoiceDialog-DamFKeJI.js           [39m[1m[2m  1.49 kB[22m[1m[22m[2m Ôöé gzip:   0.78 kB[22m
+[2mdist/[22m[36massets/CrmOpportunityDialog-DO8iHFaQ.js       [39m[1m[2m  1.50 kB[22m[1m[22m[2m Ôöé gzip:   0.75 kB[22m
+[2mdist/[22m[36massets/suppliers.service-1gGlVdJq.js          [39m[1m[2m  1.51 kB[22m[1m[22m[2m Ôöé gzip:   0.58 kB[22m
+[2mdist/[22m[36massets/CrmSavDialog-DnhwQLay.js               [39m[1m[2m  1.57 kB[22m[1m[22m[2m Ôöé gzip:   0.80 kB[22m
+[2mdist/[22m[36massets/ChantierVisitesPage-CGuvM5Ag.js        [39m[1m[2m  1.83 kB[22m[1m[22m[2m Ôöé gzip:   0.83 kB[22m
+[2mdist/[22m[36massets/ProjectStatusBadge-DWWVBXVk.js         [39m[1m[2m  1.90 kB[22m[1m[22m[2m Ôöé gzip:   0.84 kB[22m
+[2mdist/[22m[36massets/CrmPurchaseDialog-Bu9vjNQY.js          [39m[1m[2m  2.18 kB[22m[1m[22m[2m Ôöé gzip:   0.89 kB[22m
+[2mdist/[22m[36massets/purchaseOrderRepository-BYlJPvBR.js    [39m[1m[2m  2.52 kB[22m[1m[22m[2m Ôöé gzip:   1.03 kB[22m
+[2mdist/[22m[36massets/clientWorkflowRepository-DYwWwLkI.js   [39m[1m[2m  3.57 kB[22m[1m[22m[2m Ôöé gzip:   1.41 kB[22m
+[2mdist/[22m[36massets/CrmFormPrimitives-BFFGJNiR.js          [39m[1m[2m  3.66 kB[22m[1m[22m[2m Ôöé gzip:   1.12 kB[22m
+[2mdist/[22m[36massets/invoiceRepository-DvIq9y55.js          [39m[1m[2m  4.23 kB[22m[1m[22m[2m Ôöé gzip:   1.67 kB[22m
+[2mdist/[22m[36massets/productCatalogRepository-D3Fo_WDo.js   [39m[1m[2m  4.61 kB[22m[1m[22m[2m Ôöé gzip:   1.52 kB[22m
+[2mdist/[22m[36massets/apporteurs.service-DwaWvuuO.js         [39m[1m[2m  4.80 kB[22m[1m[22m[2m Ôöé gzip:   1.23 kB[22m
+[2mdist/[22m[36massets/ChantierNewPage-DlDeEzBF.js            [39m[1m[2m  5.11 kB[22m[1m[22m[2m Ôöé gzip:   1.48 kB[22m
+[2mdist/[22m[36massets/workbox-window.prod.es5-BIl4cyR9.js    [39m[1m[2m  5.76 kB[22m[1m[22m[2m Ôöé gzip:   2.37 kB[22m
+[2mdist/[22m[36massets/BibliothequeTasksPage-BTBMCDuP.js      [39m[1m[2m  7.26 kB[22m[1m[22m[2m Ôöé gzip:   2.28 kB[22m
+[2mdist/[22m[36massets/useProjectsData-R5z8aZ9Q.js            [39m[1m[2m  7.40 kB[22m[1m[22m[2m Ôöé gzip:   2.62 kB[22m
+[2mdist/[22m[36massets/ClientDocumentPage-K6urtcZa.js         [39m[1m[2m  7.58 kB[22m[1m[22m[2m Ôöé gzip:   2.54 kB[22m
+[2mdist/[22m[36massets/DocumentSendDialog-U22wnEl5.js         [39m[1m[2m  7.93 kB[22m[1m[22m[2m Ôöé gzip:   2.81 kB[22m
+[2mdist/[22m[36massets/ProjectsPage-C4pkQMKR.js               [39m[1m[2m  7.94 kB[22m[1m[22m[2m Ôöé gzip:   2.46 kB[22m
+[2mdist/[22m[36massets/IntervenantDetailPage-DzV6o04E.js      [39m[1m[2m  8.25 kB[22m[1m[22m[2m Ôöé gzip:   2.56 kB[22m
+[2mdist/[22m[36massets/ApporteurPortalPage-Bk4easSz.js        [39m[1m[2m 10.80 kB[22m[1m[22m[2m Ôöé gzip:   2.64 kB[22m
+[2mdist/[22m[36massets/chantiers.service-Dr6EtIcS.js          [39m[1m[2m 12.63 kB[22m[1m[22m[2m Ôöé gzip:   2.63 kB[22m
+[2mdist/[22m[36massets/taskLibrary.service-DR7qkKor.js        [39m[1m[2m 12.96 kB[22m[1m[22m[2m Ôöé gzip:   3.51 kB[22m
+[2mdist/[22m[36massets/chantierTasks.service-KXMyegk-.js      [39m[1m[2m 14.00 kB[22m[1m[22m[2m Ôöé gzip:   3.27 kB[22m
+[2mdist/[22m[36massets/TerrainFeedbacksPage-Rf6fwRc9.js       [39m[1m[2m 15.62 kB[22m[1m[22m[2m Ôöé gzip:   3.83 kB[22m
+[2mdist/[22m[36massets/ProductCatalogPage-C8Jqwulv.js         [39m[1m[2m 15.77 kB[22m[1m[22m[2m Ôöé gzip:   4.35 kB[22m
+[2mdist/[22m[36massets/documentPdf-DTBPKDQC.js                [39m[1m[2m 15.93 kB[22m[1m[22m[2m Ôöé gzip:   4.49 kB[22m
+[2mdist/[22m[36massets/InvoicesPage-ZqhlDHSh.js               [39m[1m[2m 15.98 kB[22m[1m[22m[2m Ôöé gzip:   4.64 kB[22m
+[2mdist/[22m[36massets/ApporteursAffairesPage-Bx_oZAi5.js     [39m[1m[2m 20.20 kB[22m[1m[22m[2m Ôöé gzip:   4.11 kB[22m
+[2mdist/[22m[36massets/IntervenantsPage-jbLcZM16.js           [39m[1m[2m 20.52 kB[22m[1m[22m[2m Ôöé gzip:   5.08 kB[22m
+[2mdist/[22m[36massets/purify.es-BpVZ_uCt.js                  [39m[1m[2m 21.79 kB[22m[1m[22m[2m Ôöé gzip:   8.63 kB[22m
+[2mdist/[22m[36massets/ui-radix-CPtRfDmP.js                   [39m[1m[2m 24.95 kB[22m[1m[22m[2m Ôöé gzip:   8.02 kB[22m
+[2mdist/[22m[36massets/ProjectAppointmentPage-BVOl7YBh.js     [39m[1m[2m 25.40 kB[22m[1m[22m[2m Ôöé gzip:   6.88 kB[22m
+[2mdist/[22m[36massets/DashboardPage-B1c8rv-A.js              [39m[1m[2m 26.85 kB[22m[1m[22m[2m Ôöé gzip:   7.20 kB[22m
+[2mdist/[22m[36massets/PageHeader-MfQI6E6r.js                 [39m[1m[2m 28.18 kB[22m[1m[22m[2m Ôöé gzip:   8.97 kB[22m
+[2mdist/[22m[36massets/TaskTemplateDrawer-BECeIxcf.js         [39m[1m[2m 28.37 kB[22m[1m[22m[2m Ôöé gzip:   6.06 kB[22m
+[2mdist/[22m[36massets/ChantiersPage-BNRTn3r-.js              [39m[1m[2m 29.66 kB[22m[1m[22m[2m Ôöé gzip:   8.30 kB[22m
+[2mdist/[22m[36massets/FournisseursPage-D3492q9G.js           [39m[1m[2m 30.70 kB[22m[1m[22m[2m Ôöé gzip:   7.07 kB[22m
+[2mdist/[22m[36massets/MonEntreprisePage-JfwScmvK.js          [39m[1m[2m 31.26 kB[22m[1m[22m[2m Ôöé gzip:   6.10 kB[22m
+[2mdist/[22m[36massets/ProjectDetailPage-1FjkVwTF.js          [39m[1m[2m 32.26 kB[22m[1m[22m[2m Ôöé gzip:   7.75 kB[22m
+[2mdist/[22m[36massets/crm.service-rBtsDwiX.js                [39m[1m[2m 33.48 kB[22m[1m[22m[2m Ôöé gzip:   8.89 kB[22m
+[2mdist/[22m[36massets/StatistiquesPage-CLriE9dg.js           [39m[1m[2m 49.96 kB[22m[1m[22m[2m Ôöé gzip:  12.35 kB[22m
+[2mdist/[22m[36massets/PlanningBoard-YgjKVdpS.js              [39m[1m[2m 55.99 kB[22m[1m[22m[2m Ôöé gzip:  14.33 kB[22m
+[2mdist/[22m[36massets/ProjectQuoteBuilderV1Page-B_QFEofD.js  [39m[1m[2m 64.58 kB[22m[1m[22m[2m Ôöé gzip:  17.48 kB[22m
+[2mdist/[22m[36massets/VisitesModule-DKpRXspr.js              [39m[1m[2m102.36 kB[22m[1m[22m[2m Ôöé gzip:  24.61 kB[22m
+[2mdist/[22m[36massets/documentDraftStore-D13WP1sL.js         [39m[1m[2m103.83 kB[22m[1m[22m[2m Ôöé gzip:  32.40 kB[22m
+[2mdist/[22m[36massets/IntervenantPortalPage-DabwMqnE.js      [39m[1m[2m109.17 kB[22m[1m[22m[2m Ôöé gzip:  21.96 kB[22m
+[2mdist/[22m[36massets/workspace-ougXt5Mv.js                  [39m[1m[2m119.20 kB[22m[1m[22m[2m Ôöé gzip:  35.10 kB[22m
+[2mdist/[22m[36massets/CrmPage-DtQm6_tw.js                    [39m[1m[2m136.91 kB[22m[1m[22m[2m Ôöé gzip:  25.52 kB[22m
+[2mdist/[22m[36massets/index-BYJ2tiGW.js                      [39m[1m[2m152.35 kB[22m[1m[22m[2m Ôöé gzip:  43.21 kB[22m
+[2mdist/[22m[36massets/index.es-CouVU9LN.js                   [39m[1m[2m158.62 kB[22m[1m[22m[2m Ôöé gzip:  52.95 kB[22m
+[2mdist/[22m[36massets/html2canvas-DXEQVQnt.js                [39m[1m[2m201.04 kB[22m[1m[22m[2m Ôöé gzip:  47.43 kB[22m
+[2mdist/[22m[36massets/supabase-DKKpzWxj.js                   [39m[1m[2m203.78 kB[22m[1m[22m[2m Ôöé gzip:  52.99 kB[22m
+[2mdist/[22m[36massets/react-vendor-D_a2DxV6.js               [39m[1m[2m269.30 kB[22m[1m[22m[2m Ôöé gzip:  87.29 kB[22m
+[2mdist/[22m[36massets/jspdf-C1m1o02P.js                      [39m[1m[2m353.05 kB[22m[1m[22m[2m Ôöé gzip: 116.01 kB[22m
+[2mdist/[22m[36massets/ChantierPage-B6cK028e.js               [39m[1m[2m457.20 kB[22m[1m[22m[2m Ôöé gzip: 102.43 kB[22m
+[2mdist/[22m[36massets/pdf-viewer-gU1MP09Q.js                 [39m[1m[2m495.07 kB[22m[1m[22m[2m Ôöé gzip: 148.38 kB[22m
+[32mÔ£ô built in 9.86s[39m
+
+PWA v1.2.0
+mode      generateSW
+precache  82 entries (3734.47 KiB)
+files generated
+  dist/sw.js
+  dist/workbox-1ef09536.js

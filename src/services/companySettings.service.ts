@@ -17,6 +17,26 @@ const LOGO_BUCKET = "chantier-documents";
 const MAX_LOGO_BYTES = 5 * 1024 * 1024;
 const LOCAL_SETTINGS_KEY = "batipro.company_settings.v1";
 
+export type CompanyChargeEntry = {
+  id: string;
+  name: string;
+  category: string;
+  type: "fixed" | "variable";
+  amount: number;
+  isTtc: boolean;
+  vatRecoverable: boolean;
+  frequency: "one_time" | "monthly" | "quarterly" | "annual";
+  start_date: string;
+  end_date: string | null;
+  allocation: "general" | "project" | "chantier";
+  comment: string;
+  active: boolean;
+};
+
+export type CompanyChargesSettings = {
+  entries: CompanyChargeEntry[];
+};
+
 export type CompanySettingsRow = {
   id: string;
   organization_id: string;
@@ -34,6 +54,7 @@ export type CompanySettingsRow = {
   feature_mode: CompanyFeatureMode;
   mode_interface: CompanyInterfaceMode;
   enabled_modules: CompanyFeatureModuleId[];
+  charges_exploitation?: CompanyChargesSettings | null;
   created_at: string;
   updated_at: string;
 };
@@ -74,6 +95,12 @@ function isMissingCompanySettingsTableError(error: { message?: string } | null):
     (msg.includes("relation") && msg.includes("company_settings")) ||
     msg.includes("does not exist")
   );
+}
+
+function isMissingCompanySettingsFieldError(error: { message?: string } | null): boolean {
+  const msg = String(error?.message ?? "").toLowerCase();
+  if (!msg) return false;
+  return msg.includes("column") && msg.includes("charges_exploitation") && msg.includes("does not exist");
 }
 
 function loadLocalSettings(orgId: string): Partial<CompanySettingsRow> | null {
@@ -155,6 +182,7 @@ function withDefaults(orgId: string, row?: Partial<CompanySettingsRow>): Company
     feature_mode: featureMode,
     mode_interface: interfaceMode,
     enabled_modules: enabledModules,
+    charges_exploitation: row?.charges_exploitation ?? null,
     created_at: String(row?.created_at ?? ""),
     updated_at: String(row?.updated_at ?? ""),
   };
@@ -221,6 +249,7 @@ export async function upsertCompanySettings(
       | "feature_mode"
       | "mode_interface"
       | "enabled_modules"
+      | "charges_exploitation"
     >
   >,
 ): Promise<CompanySettingsRow> {
@@ -268,6 +297,7 @@ export async function upsertCompanySettings(
     feature_mode: normalizeCompanyFeatureMode(featureMode),
     mode_interface: normalizeCompanyInterfaceMode(interfaceMode, businessProfile),
     enabled_modules: normalizeCompanyFeatureModules(enabledModules, businessProfile),
+    charges_exploitation: patch.charges_exploitation !== undefined ? patch.charges_exploitation : currentLocal.charges_exploitation ?? null,
   };
 
   const { data, error } = await supabase
@@ -277,7 +307,7 @@ export async function upsertCompanySettings(
     .single();
 
   if (error) {
-    if (isMissingCompanySettingsTableError(error)) {
+    if (isMissingCompanySettingsTableError(error) || isMissingCompanySettingsFieldError(error)) {
       const local = withDefaults(userId, loadLocalSettings(userId) ?? undefined);
       const fallback: Partial<CompanySettingsRow> = {
         ...local,

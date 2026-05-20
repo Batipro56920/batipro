@@ -48,6 +48,7 @@ async function createNewQuote(quote: QuoteBuilderQuote, totalHt: number, totalTt
     description: quote.description,
     payment_terms_text: quote.paymentTerms,
     legal_mentions: { text: quote.legalMentions } as any,
+    waste_management: defaultWasteManagement(),
     display_options: {
       site_address: quote.siteAddress,
       footer_notes: quote.footerNotes,
@@ -59,6 +60,7 @@ async function createNewQuote(quote: QuoteBuilderQuote, totalHt: number, totalTt
     } as any,
     acompte_percent: quote.settings.depositPercent,
   });
+  removeLocalQuote(quote.projectId, null);
   const next = { ...quote, id: created.id, number: created.quote_number, status: "saved" as const };
   await persistItems(next, null);
   return next;
@@ -77,6 +79,7 @@ async function updateExistingQuote(quote: QuoteBuilderQuote, totalHt: number): P
     tva: quote.settings.defaultVatRate,
     payment_terms_text: quote.paymentTerms,
     legal_mentions: { text: quote.legalMentions } as any,
+    waste_management: defaultWasteManagement(),
     display_options: {
       site_address: quote.siteAddress,
       footer_notes: quote.footerNotes,
@@ -173,6 +176,14 @@ function writeLocalQuote(quote: QuoteBuilderQuote) {
   localStorage.setItem(localKey(quote.projectId, quote.id), JSON.stringify(quote));
 }
 
+function removeLocalQuote(projectId: string, quoteId: string | null) {
+  localStorage.removeItem(localKey(projectId, quoteId));
+}
+
 function localKey(projectId: string, quoteId: string | null) {
   return `batipro.quote-builder.v1.${projectId}.${quoteId ?? "new"}`;
+}
+
+function defaultWasteManagement(): Record<string, unknown> {
+  return { included: false };
 }

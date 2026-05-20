@@ -34,6 +34,21 @@ function json(body: unknown, status = 200) {
   });
 }
 
+function jsonError(error: string, status = 400, details?: unknown) {
+  return json({ error, details: detailsToString(details) }, status);
+}
+
+function detailsToString(details: unknown) {
+  if (!details) return "";
+  if (typeof details === "string") return details;
+  if (details instanceof Error) return details.message;
+  try {
+    return JSON.stringify(details);
+  } catch {
+    return String(details);
+  }
+}
+
 function requireEnv(name: string) {
   const value = Deno.env.get(name) ?? "";
   if (!value) throw new Error(`Missing env: ${name}`);
@@ -109,6 +124,14 @@ function sourceKindFromDocument(kind: BusinessDocumentKind): SourceKind {
   return "quote";
 }
 
+function isBusinessDocumentKind(value: string): value is BusinessDocumentKind {
+  return ["quote", "invoice", "credit_note", "purchase_order", "reception_report"].includes(value);
+}
+
+function isSourceKind(value: string): value is SourceKind {
+  return ["quote", "invoice", "purchase_order", "reception_report"].includes(value);
+}
+
 async function createSignedToken(workflowId: string, expiresAt: string, secret: string) {
   const nonce = crypto.randomUUID();
   const payload = base64UrlEncodeString(JSON.stringify({ wid: workflowId, exp: Math.floor(Date.parse(expiresAt) / 1000), nonce }));
@@ -143,7 +166,7 @@ async function sendResendEmail(input: { to: string; cc?: string; subject: string
 
   const result = await response.json().catch(() => ({}));
   if (!response.ok) {
-    return { skipped: false, error: String((result as any).message ?? response.statusText) };
+    return { skipped: false, error: String((result as any).message ?? response.statusText), details: result };
   }
   return { skipped: false, error: null, id: (result as any).id ?? null };
 }
@@ -190,7 +213,7 @@ async function updateSourceStatus(admin: any, sourceKind: SourceKind, sourceId: 
 
 serve(async (req) => {
   if (req.method === "OPTIONS") return json({ ok: true });
-  if (req.method !== "POST") return json({ error: "Method not allowed" }, 405);
+  if (req.method !== "POST") return jsonError("Method not allowed", 405, req.method);
 
   try {
     const supabaseUrl = requireEnv("SUPABASE_URL");
@@ -198,30 +221,37 @@ serve(async (req) => {
     const serviceRoleKey = requireEnv("SUPABASE_SERVICE_ROLE_KEY");
     const tokenSecret = optionalEnv("DOCUMENT_TOKEN_SECRET") || requireEnv("SUPABASE_JWT_SECRET");
     const jwt = getBearerToken(req);
-    if (!jwt) return json({ error: "Unauthorized" }, 401);
+    if (!jwt) return jsonError("Unauthorized", 401, "Missing bearer token");
 
     const userClient = createClient(supabaseUrl, anonKey, { auth: { persistSession: false } });
     const { data: userData, error: userError } = await userClient.auth.getUser(jwt);
-    if (userError || !userData?.user) return json({ error: "Unauthorized" }, 401);
+    if (userError || !userData?.user) return jsonError("Unauthorized", 401, userError?.message ?? "No authenticated user");
 
     const body = (await req.json().catch(() => null)) as SendBody | null;
-    if (!body || typeof body !== "object") return json({ error: "Invalid JSON" }, 400);
-    if (!body.document || typeof body.document !== "object") return json({ error: "document required" }, 400);
+    if (!body || typeof body !== "object") return jsonError("Invalid JSON", 400, "Request body must be a JSON object");
+    if (!body.document || typeof body.document !== "object") return jsonError("document required", 400, "body.document must be an object");
 
     const document = body.document;
-    const documentKind = normalizeString(document.kind) as BusinessDocumentKind;
+    const rawDocumentKind = normalizeString(document.kind);
+    if (!isBusinessDocumentKind(rawDocumentKind)) {
+      return jsonError("documentKind required", 400, { documentKind: rawDocumentKind, allowed: ["quote", "invoice", "credit_note", "purchase_order", "reception_report"] });
+    }
+    const documentKind = rawDocumentKind;
     const documentNumber = normalizeString(document.number);
     const sourceId = normalizeString(body.sourceId ?? document.id);
     const sourceKind = body.sourceKind ?? sourceKindFromDocument(documentKind);
+    if (!isSourceKind(sourceKind)) {
+      return jsonError("sourceKind invalid", 400, { sourceKind, documentKind });
+    }
     const recipientEmail = normalizeEmail(body.recipient ?? (document.recipient as any)?.email);
     const subject = normalizeString(body.subject) || `Document ${documentNumber}`;
     const message = normalizeString(body.message);
     const expiresInDays = Number.isFinite(Number(body.expiresInDays)) ? Math.max(1, Math.min(90, Number(body.expiresInDays))) : 30;
     const tokenExpiresAt = new Date(Date.now() + expiresInDays * 86400000).toISOString();
 
-    if (!documentNumber) return json({ error: "document.number required" }, 400);
-    if (!sourceId) return json({ error: "sourceId required" }, 400);
-    if (!recipientEmail || !recipientEmail.includes("@")) return json({ error: "recipient email required" }, 400);
+    if (!documentNumber) return jsonError("documentNumber required", 400, { documentKind, sourceId, recipient: recipientEmail });
+    if (!sourceId) return jsonError("documentId required", 400, { documentKind, documentNumber, recipient: recipientEmail });
+    if (!recipientEmail || !recipientEmail.includes("@")) return jsonError("recipient required", 400, { documentKind, documentNumber, sourceId, recipient: recipientEmail });
 
     const admin = createClient(supabaseUrl, serviceRoleKey, { auth: { persistSession: false } });
     const now = new Date().toISOString();
@@ -263,7 +293,7 @@ serve(async (req) => {
       .select("*")
       .single();
 
-    if (insertError) return json({ error: insertError.message }, 400);
+    if (insertError) return jsonError("Workflow client non créé", 400, insertError);
 
     const publicAppUrl = resolvePublicAppUrl(req, body);
     const clientLink = `${publicAppUrl}/documents/client/${encodeURIComponent(token)}`;
@@ -293,6 +323,6 @@ serve(async (req) => {
 
     return json({ ok: true, workflowId: workflow.id, clientLink, expiresAt: tokenExpiresAt, email: emailResult });
   } catch (error) {
-    return json({ error: error instanceof Error ? error.message : "Unknown error" }, 500);
+    return jsonError(error instanceof Error ? error.message : "Unknown error", 500, error);
   }
 });

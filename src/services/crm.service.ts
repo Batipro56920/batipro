@@ -494,6 +494,21 @@ function numberOrZero(value: unknown): number {
   return Number.isFinite(n) ? n : 0;
 }
 
+function jsonObjectOrDefault(value: unknown): Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value) ? value as Record<string, unknown> : {};
+}
+
+function supabaseErrorBody(error: unknown) {
+  const record = error as Record<string, unknown>;
+  return {
+    message: typeof record?.message === "string" ? record.message : String(record?.message ?? ""),
+    details: record?.details ?? null,
+    hint: record?.hint ?? null,
+    code: record?.code ?? null,
+    raw: error,
+  };
+}
+
 function normalizeTags(value: unknown): string[] {
   if (Array.isArray(value)) return value.map((item) => String(item).trim()).filter(Boolean);
   return String(value ?? "")
@@ -782,35 +797,45 @@ export async function createCrmQuote(input: Partial<CrmQuoteRow>) {
   const montant_ht = numberOrZero(input.montant_ht);
   const tva = input.tva === undefined || input.tva === null ? 20 : numberOrZero(input.tva);
   const montant_ttc = input.montant_ttc === undefined ? Math.round(montant_ht * (1 + tva / 100) * 100) / 100 : numberOrZero(input.montant_ttc);
+  const display_options = jsonObjectOrDefault(input.display_options);
+  const legal_mentions = jsonObjectOrDefault(input.legal_mentions);
+  const waste_management = jsonObjectOrDefault(input.waste_management);
+  const row = {
+    organization_id,
+    quote_number,
+    prospect_id: input.prospect_id ?? null,
+    client_id: input.client_id ?? null,
+    opportunity_id: input.opportunity_id ?? null,
+    statut: input.statut ?? "brouillon",
+    date_emission: input.date_emission ?? new Date().toISOString().slice(0, 10),
+    valid_until: input.valid_until ?? null,
+    montant_ht,
+    tva,
+    montant_ttc,
+    marge_estimee: input.marge_estimee ?? null,
+    lot: text(input.lot),
+    description: text(input.description),
+    signature_status: input.signature_status ?? "attente_signature",
+    conditions: text(input.conditions),
+    acompte_percent: input.acompte_percent ?? 30,
+    revision: input.revision ?? 1,
+    payment_terms_text: input.payment_terms_text ?? null,
+    legal_mentions,
+    waste_management,
+    display_options,
+  };
   const query = await crmDb
     .from("crm_quotes")
-    .insert([
-      {
-        organization_id,
-        quote_number,
-        prospect_id: input.prospect_id ?? null,
-        client_id: input.client_id ?? null,
-        opportunity_id: input.opportunity_id ?? null,
-        statut: input.statut ?? "brouillon",
-        date_emission: input.date_emission ?? new Date().toISOString().slice(0, 10),
-        valid_until: input.valid_until ?? null,
-        montant_ht,
-        tva,
-        montant_ttc,
-        marge_estimee: input.marge_estimee ?? null,
-        lot: text(input.lot),
-        description: text(input.description),
-        conditions: text(input.conditions),
-        acompte_percent: input.acompte_percent ?? null,
-        payment_terms_text: input.payment_terms_text ?? null,
-        legal_mentions: input.legal_mentions ?? null,
-        waste_management: input.waste_management ?? null,
-        display_options: input.display_options ?? null,
-      },
-    ])
+    .insert([row])
     .select(CRM_SELECTS.quotes)
     .single();
   if (!query.error) return query.data as CrmQuoteRow;
+  console.error("[CRM] createCrmQuote failed", {
+    table: "crm_quotes",
+    operation: "insert",
+    payload: row,
+    error: supabaseErrorBody(query.error),
+  });
   if (!isMissingCrmSchema(query.error)) throw query.error;
 
   const legacy = await crmDb.from("crm_quotes").select(CRM_SELECTS.quotesLegacy).eq("quote_number", quote_number).single();
@@ -845,8 +870,21 @@ export async function updateCrmQuote(id: string, patch: Partial<CrmQuoteRow>) {
     const tva = patch.tva === undefined || patch.tva === null ? 20 : numberOrZero(patch.tva);
     next.montant_ttc = Math.round(montantHt * (1 + tva / 100) * 100) / 100;
   }
+  if (patch.acompte_percent === null) next.acompte_percent = 30;
+  if (patch.revision === null) next.revision = 1;
+  if ((patch as { signature_status?: string | null }).signature_status === null) next.signature_status = "attente_signature";
+  if (patch.display_options === null) next.display_options = {};
+  if (patch.legal_mentions === null) next.legal_mentions = {};
+  if (patch.waste_management === null) next.waste_management = {};
   const { data, error } = await crmDb.from("crm_quotes").update(next).eq("id", id).select(CRM_SELECTS.quotes).single();
   if (!error) return data as CrmQuoteRow;
+  console.error("[CRM] updateCrmQuote failed", {
+    table: "crm_quotes",
+    operation: "update",
+    id,
+    payload: next,
+    error: supabaseErrorBody(error),
+  });
   if (!isMissingCrmSchema(error)) throw error;
   const legacyPatch = { ...(next as Record<string, unknown>) };
   delete legacyPatch.conditions;

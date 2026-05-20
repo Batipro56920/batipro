@@ -3,7 +3,7 @@ import type { ReactNode } from "react";
 import { useParams } from "react-router-dom";
 import { CheckCircle2, Clock, FileText, MessageSquare, XCircle } from "lucide-react";
 import { Button } from "../components/ui/button";
-import { accessClientDocument, DocumentPreview, DocumentStatusBadge, type BusinessDocument, type ClientWorkflowEvent, type ClientWorkflowRecord } from "../features/document-engine";
+import { accessClientDocument, DocumentPreview, DocumentStatusBadge, downloadBusinessDocumentPdf, type BusinessDocument, type ClientWorkflowEvent, type ClientWorkflowRecord } from "../features/document-engine";
 
 type Feedback = { type: "success" | "error"; message: string } | null;
 
@@ -54,6 +54,15 @@ export default function ClientDocumentPage() {
       setDocument(result.document);
       setEvents(result.events);
       setFeedback({ type: "success", message: actionLabel(action) });
+      // If accepted, generate an accepted PDF (signed) for the client
+      if (action === "accept") {
+        try {
+          downloadBusinessDocumentPdf(result.document as BusinessDocument);
+        } catch (err) {
+          // ignore PDF generation errors but log
+          console.error("ClientDocumentPage: failed to generate accepted PDF", err);
+        }
+      }
     } catch (err) {
       setFeedback({ type: "error", message: err instanceof Error ? err.message : "Action impossible." });
     } finally {
@@ -80,8 +89,16 @@ export default function ClientDocumentPage() {
           <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.18em] text-blue-600"><FileText className="h-4 w-4" /> Portail client Batipro</div>
           <h1 className="mt-2 text-2xl font-semibold text-slate-950">{document.title} {document.number}</h1>
           <p className="mt-1 text-sm text-slate-500">Lien securise valable jusqu'au {formatDateTime(workflow.token_expires_at)}.</p>
+          <div className="mt-3 flex flex-wrap gap-3 text-sm text-slate-700">
+            <div className="rounded-lg bg-slate-50 px-3 py-2">Entreprise: <span className="font-semibold">{document.company.displayName}</span></div>
+            <div className="rounded-lg bg-slate-50 px-3 py-2">Client: <span className="font-semibold">{document.recipient.displayName}</span></div>
+            <div className="rounded-lg bg-slate-50 px-3 py-2">Montant: <span className="font-semibold">{formatCurrency(document.totals?.totalTtc ?? 0)}</span></div>
+          </div>
         </div>
-        <DocumentStatusBadge status={workflowStatusToDocumentStatus(workflow.status)} />
+        <div className="flex flex-col items-end gap-3">
+          <DocumentStatusBadge status={workflowStatusToDocumentStatus(workflow.status)} />
+          <div className="text-xs text-slate-500">{workflow.status === 'sent' ? 'Envoye' : workflow.status}</div>
+        </div>
       </div>
 
       {feedback ? <div className={`mb-5 rounded-lg border p-3 text-sm font-medium ${feedback.type === "error" ? "border-red-200 bg-red-50 text-red-700" : "border-emerald-200 bg-emerald-50 text-emerald-700"}`}>{feedback.message}</div> : null}
@@ -159,4 +176,8 @@ function eventLabel(type: string) {
 
 function formatDateTime(value: string) {
   return new Intl.DateTimeFormat("fr-FR", { dateStyle: "short", timeStyle: "short" }).format(new Date(value));
+}
+
+function formatCurrency(value: number) {
+  return new Intl.NumberFormat("fr-FR", { style: "currency", currency: "EUR" }).format(value || 0);
 }

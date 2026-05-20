@@ -44,6 +44,7 @@ export type SendBusinessDocumentResult = {
   email?: {
     skipped?: boolean;
     error?: string | null;
+    details?: unknown;
     id?: string | null;
   };
 };
@@ -52,6 +53,9 @@ const EXPECTED_SUPABASE_URL = "https://vhwtpwmzaidmlvqcyfep.supabase.co";
 
 export async function sendBusinessDocument(document: BusinessDocument, payload: DocumentSendPayload): Promise<SendBusinessDocumentResult> {
   const supabaseUrl = String(import.meta.env.VITE_SUPABASE_URL ?? "").trim().replace(/\/+$/, "");
+  if (!document.id) {
+    throw new Error("Document non enregistré: documentId absent. Enregistrez le devis avant l'envoi client.");
+  }
   console.info("[DocumentWorkflow] invoking send-business-document", {
     supabaseUrl,
     expectedSupabaseUrl: EXPECTED_SUPABASE_URL,
@@ -79,13 +83,15 @@ export async function sendBusinessDocument(document: BusinessDocument, payload: 
   });
 
   if (error) {
+    const contextBody = await readFunctionErrorContext(error.context);
     console.error("[DocumentWorkflow] send-business-document invoke error", {
       message: error.message,
       name: error.name,
       context: error.context,
+      body: contextBody,
       details: error,
     });
-    throw new Error(error.message);
+    throw new Error(contextBody?.error ? `${contextBody.error}${contextBody.details ? `: ${contextBody.details}` : ""}` : error.message);
   }
   if (!data?.ok) {
     console.error("[DocumentWorkflow] send-business-document returned error", data);
@@ -93,6 +99,22 @@ export async function sendBusinessDocument(document: BusinessDocument, payload: 
   }
   console.info("[DocumentWorkflow] send-business-document success", data);
   return data as SendBusinessDocumentResult;
+}
+
+async function readFunctionErrorContext(context: unknown): Promise<{ error?: string; details?: string } | null> {
+  if (!(context instanceof Response)) return null;
+  try {
+    const body = await context.clone().json();
+    if (body && typeof body === "object") return body as { error?: string; details?: string };
+  } catch {
+    try {
+      const text = await context.clone().text();
+      return text ? { error: text } : null;
+    } catch {
+      return null;
+    }
+  }
+  return null;
 }
 
 export async function accessClientDocument(token: string, action: ClientWorkflowAction = "view", input: { comment?: string; signerName?: string } = {}) {

@@ -18,6 +18,7 @@ import {
   getCompanySettings,
   upsertCompanySettings,
   uploadCompanyLogo,
+  type CompanyChargeEntry,
   type CompanySettingsRow,
 } from "../services/companySettings.service";
 import {
@@ -31,7 +32,7 @@ import {
 } from "../services/profileFeaturePermissions.service";
 import { useI18n } from "../i18n";
 
-type CompanySection = "identite" | "fonctionnalites" | "profils";
+type CompanySection = "identite" | "fonctionnalites" | "profils" | "charges";
 
 type CompanyFormState = {
   company_name: string;
@@ -73,10 +74,79 @@ function toCompanyFeaturesForm(settings: CompanySettingsRow): CompanyFeaturesFor
   };
 }
 
+const CHARGE_CATEGORY_OPTIONS = [
+  "assurances",
+  "véhicules",
+  "salaires",
+  "charges sociales",
+  "logiciels",
+  "comptabilité",
+  "banque",
+  "locaux",
+  "carburant",
+  "outillage",
+  "communication",
+  "sous-traitance",
+  "divers",
+];
+
+const FREQUENCY_OPTIONS = [
+  { value: "one_time" as const, label: "Ponctuelle" },
+  { value: "monthly" as const, label: "Mensuelle" },
+  { value: "quarterly" as const, label: "Trimestrielle" },
+  { value: "annual" as const, label: "Annuelle" },
+];
+
+const ALLOCATION_OPTIONS = [
+  { value: "general" as const, label: "Entreprise générale" },
+  { value: "project" as const, label: "Projet" },
+  { value: "chantier" as const, label: "Chantier" },
+];
+
+const DEFAULT_CHARGE_ENTRY: CompanyChargeEntry = {
+  id: "",
+  name: "",
+  category: "divers",
+  type: "fixed",
+  amount: 0,
+  isTtc: false,
+  vatRecoverable: false,
+  frequency: "monthly",
+  start_date: new Date().toISOString().slice(0, 10),
+  end_date: null,
+  allocation: "general",
+  comment: "",
+  active: true,
+};
+
 function getActiveSection(pathname: string): CompanySection {
   if (pathname.endsWith("/fonctionnalites")) return "fonctionnalites";
   if (pathname.endsWith("/profils")) return "profils";
+  if (pathname.endsWith("/charges")) return "charges";
   return "identite";
+}
+
+function formatCurrency(value: number) {
+  return new Intl.NumberFormat("fr-FR", { style: "currency", currency: "EUR" }).format(value);
+}
+
+function monthlyEquivalent(entry: CompanyChargeEntry) {
+  switch (entry.frequency) {
+    case "monthly":
+      return entry.amount;
+    case "quarterly":
+      return entry.amount / 3;
+    case "annual":
+      return entry.amount / 12;
+    case "one_time":
+    default:
+      return 0;
+  }
+}
+
+function annualEquivalent(entry: CompanyChargeEntry) {
+  if (entry.frequency === "annual") return entry.amount;
+  return monthlyEquivalent(entry) * 12;
 }
 
 export default function MonEntreprisePage() {
@@ -93,6 +163,12 @@ export default function MonEntreprisePage() {
   const [settingsNotice, setSettingsNotice] = useState<string | null>(null);
 
   const [companySettings, setCompanySettings] = useState<CompanySettingsRow | null>(null);
+  const [charges, setCharges] = useState<CompanyChargeEntry[]>([]);
+  const [editingCharge, setEditingCharge] = useState<CompanyChargeEntry | null>(null);
+  const [chargeForm, setChargeForm] = useState<CompanyChargeEntry>(DEFAULT_CHARGE_ENTRY);
+  const [chargesNotice, setChargesNotice] = useState<string | null>(null);
+  const [chargesError, setChargesError] = useState<string | null>(null);
+  const [savingCharges, setSavingCharges] = useState(false);
   const [companyForm, setCompanyForm] = useState<CompanyFormState>({
     company_name: "",
     address: "",
@@ -120,6 +196,12 @@ export default function MonEntreprisePage() {
     useState<ProfileFeaturePermissions>({});
 
   const profilePermissionSections = useMemo(() => getProfilePermissionSections(), []);
+  const fixedChargesMonthly = charges.filter((entry) => entry.type === "fixed" && entry.active).reduce((sum, entry) => sum + monthlyEquivalent(entry), 0);
+  const fixedChargesAnnual = charges.filter((entry) => entry.type === "fixed" && entry.active).reduce((sum, entry) => sum + annualEquivalent(entry), 0);
+  const variableChargesMonthly = charges.filter((entry) => entry.type === "variable" && entry.active).reduce((sum, entry) => sum + monthlyEquivalent(entry), 0);
+  const exploitationAnnual = fixedChargesAnnual + variableChargesMonthly * 12;
+  const exploitationMonthly = exploitationAnnual / 12;
+  const breakEvenMonthly = exploitationMonthly / 0.7;
   const modulesBySection = useMemo(
     () => getModulesByInterfaceMode(getVisibleCompanyModules(featuresForm.feature_mode), featuresForm.mode_interface),
     [featuresForm.feature_mode, featuresForm.mode_interface],
@@ -168,6 +250,7 @@ export default function MonEntreprisePage() {
       setCompanySettings(settings);
       setCompanyForm(toCompanyForm(settings));
       setFeaturesForm(toCompanyFeaturesForm(settings));
+      setCharges(settings.charges_exploitation?.entries ?? []);
 
       if (settings.logo_path) {
         try {
@@ -248,6 +331,72 @@ export default function MonEntreprisePage() {
     }
   }
 
+  async function onSaveChargesSettings() {
+    setSavingCharges(true);
+    setChargesError(null);
+    setChargesNotice(null);
+    try {
+      const saved = await upsertCompanySettings({
+        charges_exploitation: { entries: charges },
+      });
+      setCompanySettings(saved);
+      setCharges(saved.charges_exploitation?.entries ?? []);
+      setChargesNotice("Charges enregistrees.");
+    } catch (err: any) {
+      setChargesError(err?.message ?? "Impossible d'enregistrer les charges.");
+    } finally {
+      setSavingCharges(false);
+    }
+  }
+
+  function resetChargeForm() {
+    setEditingCharge(null);
+    setChargeForm(DEFAULT_CHARGE_ENTRY);
+    setChargesError(null);
+    setChargesNotice(null);
+  }
+
+  function onEditCharge(entry: CompanyChargeEntry) {
+    setEditingCharge(entry);
+    setChargeForm(entry);
+    setChargesError(null);
+    setChargesNotice(null);
+  }
+
+  function onDeleteCharge(id: string) {
+    setCharges((prev) => prev.filter((entry) => entry.id !== id));
+    setEditingCharge(null);
+    setChargeForm(DEFAULT_CHARGE_ENTRY);
+    setChargesNotice("Charge supprimee.");
+  }
+
+  function onSaveChargeDraft() {
+    if (!chargeForm.name.trim()) {
+      setChargesError("Le nom de la charge est requis.");
+      return;
+    }
+    if (chargeForm.amount <= 0) {
+      setChargesError("Le montant doit etre superieur a 0.");
+      return;
+    }
+
+    const nextEntry: CompanyChargeEntry = {
+      ...chargeForm,
+      id: editingCharge?.id || crypto.randomUUID(),
+    };
+
+    setCharges((prev) => {
+      if (editingCharge) {
+        return prev.map((entry) => (entry.id === editingCharge.id ? nextEntry : entry));
+      }
+      return [...prev, nextEntry];
+    });
+    setEditingCharge(null);
+    setChargeForm({ ...DEFAULT_CHARGE_ENTRY, start_date: chargeForm.start_date });
+    setChargesError(null);
+    setChargesNotice(editingCharge ? "Charge mise a jour." : "Charge ajoutee.");
+  }
+
   async function onToggleCurrentProfilePermission(key: ProfileFeaturePermissionKey) {
     setSavingProfilePermission(true);
     setSettingsError(null);
@@ -315,10 +464,11 @@ export default function MonEntreprisePage() {
       ) : null}
 
       <div className="rounded-2xl border border-slate-200 bg-white p-2">
-        <div className="grid gap-2 md:grid-cols-3">
+        <div className="grid gap-2 md:grid-cols-4">
           {[
             { key: "identite" as const, path: "/entreprise", eyebrow: "Mon entreprise", label: "Identite" },
             { key: "fonctionnalites" as const, path: "/entreprise/fonctionnalites", eyebrow: "Reglages", label: "Fonctionnalites" },
+            { key: "charges" as const, path: "/entreprise/charges", eyebrow: "Charges", label: "Charges fixes & exploitation" },
             { key: "profils" as const, path: "/entreprise/profils", eyebrow: "Profils", label: "Permissions" },
           ].map((section) => (
             <button
@@ -418,6 +568,189 @@ export default function MonEntreprisePage() {
                 </div>
               </div>
             </div>
+          </section>
+        </div>
+      ) : activeSection === "charges" ? (
+        <div className="grid gap-4 xl:grid-cols-[minmax(0,1.6fr)_minmax(280px,1fr)]">
+          <section className="rounded-2xl border bg-white p-4 space-y-4">
+            <div className="flex flex-wrap items-center justify-between gap-4">
+              <div>
+                <div className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">Charges fixes & exploitation</div>
+                <h2 className="mt-1 text-lg font-semibold text-slate-900">Gestion des charges</h2>
+                <p className="mt-1 text-sm text-slate-500">Suivez vos charges structurelles et preparez une rentabilite projet plus precise.</p>
+              </div>
+              <button
+                type="button"
+                onClick={resetChargeForm}
+                className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-2 text-sm text-slate-700 hover:bg-slate-100"
+              >
+                Nouvelle charge
+              </button>
+            </div>
+
+            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                <div className="text-xs uppercase tracking-[0.2em] text-slate-400">Charges fixes mensuelles</div>
+                <div className="mt-2 text-2xl font-semibold text-slate-950">{formatCurrency(fixedChargesMonthly)}</div>
+              </div>
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                <div className="text-xs uppercase tracking-[0.2em] text-slate-400">Charges fixes annuelles</div>
+                <div className="mt-2 text-2xl font-semibold text-slate-950">{formatCurrency(fixedChargesAnnual)}</div>
+              </div>
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                <div className="text-xs uppercase tracking-[0.2em] text-slate-400">Charges variables du mois</div>
+                <div className="mt-2 text-2xl font-semibold text-slate-950">{formatCurrency(variableChargesMonthly)}</div>
+              </div>
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                <div className="text-xs uppercase tracking-[0.2em] text-slate-400">Seuil de rentabilite mensuel estime</div>
+                <div className="mt-2 text-2xl font-semibold text-slate-950">{formatCurrency(breakEvenMonthly)}</div>
+              </div>
+            </div>
+
+            <div className="rounded-2xl border border-slate-200 bg-white p-4">
+              <div className="text-xs uppercase tracking-[0.2em] text-slate-400">Synthese exploitation</div>
+              <div className="mt-2 text-3xl font-semibold text-slate-950">{formatCurrency(exploitationAnnual)}</div>
+              <div className="mt-1 text-sm text-slate-500">Total charges d'exploitation annuelles estimees</div>
+            </div>
+
+            <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white">
+              <table className="min-w-full text-sm">
+                <thead className="bg-slate-50 text-slate-600">
+                  <tr>
+                    <th className="px-4 py-3 text-left font-medium">Nom</th>
+                    <th className="px-4 py-3 text-left font-medium">Categorie</th>
+                    <th className="px-4 py-3 text-left font-medium">Type</th>
+                    <th className="px-4 py-3 text-left font-medium">Frequence</th>
+                    <th className="px-4 py-3 text-right font-medium">Montant</th>
+                    <th className="px-4 py-3 text-left font-medium">Affectation</th>
+                    <th className="px-4 py-3 text-left font-medium">Statut</th>
+                    <th className="px-4 py-3 text-left font-medium">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {charges.map((entry) => (
+                    <tr key={entry.id} className="border-t text-slate-700">
+                      <td className="px-4 py-3">{entry.name}</td>
+                      <td className="px-4 py-3">{entry.category}</td>
+                      <td className="px-4 py-3">{entry.type === "fixed" ? "Fixe" : "Variable"}</td>
+                      <td className="px-4 py-3">{FREQUENCY_OPTIONS.find((item) => item.value === entry.frequency)?.label}</td>
+                      <td className="px-4 py-3 text-right">{formatCurrency(entry.amount)}</td>
+                      <td className="px-4 py-3">{ALLOCATION_OPTIONS.find((item) => item.value === entry.allocation)?.label}</td>
+                      <td className="px-4 py-3">{entry.active ? "Actif" : "Inactif"}</td>
+                      <td className="px-4 py-3 text-sm text-slate-500">
+                        <button type="button" onClick={() => onEditCharge(entry)} className="mr-2 text-blue-600 hover:underline">Modifier</button>
+                        <button type="button" onClick={() => onDeleteCharge(entry.id)} className="text-red-600 hover:underline">Supprimer</button>
+                      </td>
+                    </tr>
+                  ))}
+                  {charges.length === 0 ? (
+                    <tr>
+                      <td colSpan={8} className="px-4 py-6 text-center text-sm text-slate-500">Aucune charge definie.</td>
+                    </tr>
+                  ) : null}
+                </tbody>
+              </table>
+            </div>
+          </section>
+
+          <section className="rounded-2xl border bg-white p-4 space-y-4">
+            <div className="flex items-center justify-between gap-4">
+              <div>
+                <div className="text-xs uppercase tracking-[0.2em] text-slate-400">Editeur de charge</div>
+                <h2 className="mt-1 text-lg font-semibold text-slate-900">{editingCharge ? "Modifier une charge" : "Nouvelle charge"}</h2>
+              </div>
+              <div className="text-xs text-slate-500">Charges structurelles et de production</div>
+            </div>
+            <div className="space-y-3">
+              <label className="block text-sm text-slate-700">
+                <div className="mb-1 text-xs uppercase tracking-[0.18em] text-slate-500">Nom</div>
+                <input className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm" value={chargeForm.name} onChange={(event) => setChargeForm((prev) => ({ ...prev, name: event.target.value }))} />
+              </label>
+              <label className="block text-sm text-slate-700">
+                <div className="mb-1 text-xs uppercase tracking-[0.18em] text-slate-500">Categorie</div>
+                <select className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm" value={chargeForm.category} onChange={(event) => setChargeForm((prev) => ({ ...prev, category: event.target.value }))}>
+                  {CHARGE_CATEGORY_OPTIONS.map((category) => (
+                    <option key={category} value={category}>{category}</option>
+                  ))}
+                </select>
+              </label>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <label className="block text-sm text-slate-700">
+                  <div className="mb-1 text-xs uppercase tracking-[0.18em] text-slate-500">Type</div>
+                  <select className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm" value={chargeForm.type} onChange={(event) => setChargeForm((prev) => ({ ...prev, type: event.target.value as CompanyChargeEntry["type"] }))}>
+                    <option value="fixed">Charge fixe</option>
+                    <option value="variable">Charge variable</option>
+                  </select>
+                </label>
+                <label className="block text-sm text-slate-700">
+                  <div className="mb-1 text-xs uppercase tracking-[0.18em] text-slate-500">Montant</div>
+                  <input type="number" step="0.01" className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm" value={chargeForm.amount} onChange={(event) => setChargeForm((prev) => ({ ...prev, amount: Number(event.target.value) }))} />
+                </label>
+              </div>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <label className="block text-sm text-slate-700">
+                  <div className="mb-1 text-xs uppercase tracking-[0.18em] text-slate-500">HT ou TTC</div>
+                  <select className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm" value={chargeForm.isTtc ? "TTC" : "HT"} onChange={(event) => setChargeForm((prev) => ({ ...prev, isTtc: event.target.value === "TTC" }))}>
+                    <option value="HT">HT</option>
+                    <option value="TTC">TTC</option>
+                  </select>
+                </label>
+                <label className="block text-sm text-slate-700">
+                  <div className="mb-1 text-xs uppercase tracking-[0.18em] text-slate-500">TVA récupérable</div>
+                  <select className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm" value={chargeForm.vatRecoverable ? "oui" : "non"} onChange={(event) => setChargeForm((prev) => ({ ...prev, vatRecoverable: event.target.value === "oui" }))}>
+                    <option value="oui">Oui</option>
+                    <option value="non">Non</option>
+                  </select>
+                </label>
+              </div>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <label className="block text-sm text-slate-700">
+                  <div className="mb-1 text-xs uppercase tracking-[0.18em] text-slate-500">Fréquence</div>
+                  <select className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm" value={chargeForm.frequency} onChange={(event) => setChargeForm((prev) => ({ ...prev, frequency: event.target.value as CompanyChargeEntry["frequency"] }))}>
+                    {FREQUENCY_OPTIONS.map((option) => (
+                      <option key={option.value} value={option.value}>{option.label}</option>
+                    ))}
+                  </select>
+                </label>
+                <label className="block text-sm text-slate-700">
+                  <div className="mb-1 text-xs uppercase tracking-[0.18em] text-slate-500">Affectation</div>
+                  <select className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm" value={chargeForm.allocation} onChange={(event) => setChargeForm((prev) => ({ ...prev, allocation: event.target.value as CompanyChargeEntry["allocation"] }))}>
+                    {ALLOCATION_OPTIONS.map((option) => (
+                      <option key={option.value} value={option.value}>{option.label}</option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <label className="block text-sm text-slate-700">
+                  <div className="mb-1 text-xs uppercase tracking-[0.18em] text-slate-500">Date de début</div>
+                  <input type="date" className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm" value={chargeForm.start_date} onChange={(event) => setChargeForm((prev) => ({ ...prev, start_date: event.target.value }))} />
+                </label>
+                <label className="block text-sm text-slate-700">
+                  <div className="mb-1 text-xs uppercase tracking-[0.18em] text-slate-500">Date de fin</div>
+                  <input type="date" className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm" value={chargeForm.end_date ?? ""} onChange={(event) => setChargeForm((prev) => ({ ...prev, end_date: event.target.value || null }))} />
+                </label>
+              </div>
+              <label className="block text-sm text-slate-700">
+                <div className="mb-1 text-xs uppercase tracking-[0.18em] text-slate-500">Commentaire</div>
+                <textarea className="min-h-24 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm" value={chargeForm.comment} onChange={(event) => setChargeForm((prev) => ({ ...prev, comment: event.target.value }))} />
+              </label>
+              <label className="flex items-center gap-3 text-sm text-slate-700">
+                <input type="checkbox" checked={chargeForm.active} onChange={(event) => setChargeForm((prev) => ({ ...prev, active: event.target.checked }))} />
+                Charge active
+              </label>
+            </div>
+            {chargesError ? <div className="rounded-2xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">{chargesError}</div> : null}
+            {chargesNotice ? <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-700">{chargesNotice}</div> : null}
+            <div className="flex flex-wrap items-center gap-2">
+              <button type="button" onClick={onSaveChargeDraft} className="rounded-xl bg-slate-900 px-4 py-2 text-sm text-white hover:bg-slate-800">{editingCharge ? "Mettre a jour" : "Ajouter"}</button>
+              <button type="button" onClick={resetChargeForm} className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm text-slate-700 hover:bg-slate-50">Annuler</button>
+            </div>
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-600">
+              <div className="font-semibold text-slate-900">Préparation future</div>
+              <p className="mt-2">Cette section est preparee pour la future liaison a la rentabilite projet par repartition par CA, temps passe ou repartition manuelle.</p>
+            </div>
+            <button type="button" onClick={() => void onSaveChargesSettings()} disabled={savingCharges} className={['w-full rounded-xl px-4 py-2 text-sm', savingCharges ? 'bg-slate-300 text-slate-700' : 'bg-slate-900 text-white hover:bg-slate-800'].join(' ')}>{savingCharges ? t('common.states.saving') : 'Enregistrer les charges'}</button>
           </section>
         </div>
       ) : activeSection === "fonctionnalites" ? (

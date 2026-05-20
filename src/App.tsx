@@ -32,6 +32,8 @@ const StatistiquesPage = lazy(() => import("./pages/StatistiquesPage"));
 const MonEntreprisePage = lazy(() => import("./pages/MonEntreprisePage"));
 const TerrainFeedbacksPage = lazy(() => import("./pages/TerrainFeedbacksPage"));
 const ClientDocumentPage = lazy(() => import("./pages/ClientDocumentPage"));
+const ApporteursAffairesPage = lazy(() => import("./pages/ApporteursAffairesPage"));
+const ApporteurPortalPage = lazy(() => import("./pages/ApporteurPortalPage"));
 
 function RouteSuspense({ label, children }: { label: string; children: ReactNode }) {
   return (
@@ -81,6 +83,7 @@ export default function App() {
       <Route path="/intervenant/invitation" element={<IntervenantInvitationPage />} />
         <Route path="/intervenant" element={<RouteSuspense label="Chargement du portail intervenant..."><IntervenantPortalPage /></RouteSuspense>} />
       <Route path="/documents/client/:token" element={<RouteSuspense label="Chargement du document client..."><ClientDocumentPage /></RouteSuspense>} />
+      <Route path="/apporteur/:token" element={<RouteSuspense label="Chargement du portail apporteur..."><ApporteurPortalPage /></RouteSuspense>} />
 
       {/* Protégé */}
       <Route
@@ -98,6 +101,14 @@ export default function App() {
         <Route path="/crm/devis" element={<CrmRoute section="quotes" />} />
         <Route path="/crm/devis/:id/edit" element={<Navigate to="/crm/devis" replace />} />
         <Route path="/crm/factures" element={<CrmRoute section="invoices" />} />
+        <Route
+          path="/crm/apporteurs"
+          element={
+            <RequireCompanyFeature profilePermissionKey="crm">
+              <RouteSuspense label="Chargement des apporteurs..."><ApporteursAffairesPage /></RouteSuspense>
+            </RequireCompanyFeature>
+          }
+        />
         <Route
           path="/factures"
           element={
@@ -307,6 +318,14 @@ export default function App() {
         />
         <Route
           path="/entreprise/profils"
+          element={
+            <RequireCompanyFeature profilePermissionKey="entreprise_parametres">
+              <RouteSuspense label="Chargement de Mon entreprise..."><MonEntreprisePage /></RouteSuspense>
+            </RequireCompanyFeature>
+          }
+        />
+        <Route
+          path="/entreprise/charges"
           element={
             <RequireCompanyFeature profilePermissionKey="entreprise_parametres">
               <RouteSuspense label="Chargement de Mon entreprise..."><MonEntreprisePage /></RouteSuspense>

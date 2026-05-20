@@ -63,7 +63,25 @@ export const useQuoteBuilderStore = create<QuoteBuilderStore>((set, get) => ({
       const saved = await saveQuoteBuilder(quote);
       set({ quote: saved, saveState: "saved", error: null });
     } catch (error) {
-      set({ saveState: "error", error: error instanceof Error ? error.message : "Sauvegarde impossible." });
+      console.error("[QuoteBuilder] save failed", {
+        quoteId: quote.id,
+        quoteNumber: quote.number,
+        error,
+      });
+      set({ saveState: "error", error: quoteBuilderErrorMessage(error) });
     }
   },
 }));
+
+function quoteBuilderErrorMessage(error: unknown) {
+  if (error instanceof Error && error.message) return error.message;
+  if (typeof error === "object" && error) {
+    const record = error as Record<string, unknown>;
+    const parts = [record.message, record.details, record.hint, record.code]
+      .map((value) => typeof value === "string" ? value.trim() : "")
+      .filter(Boolean);
+    if (parts.length) return parts.join(" ");
+  }
+  if (typeof error === "string" && error.trim()) return error;
+  return "Sauvegarde impossible: erreur inconnue.";
+}

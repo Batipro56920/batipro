@@ -123,7 +123,7 @@ export default function Sidebar({ collapsed = false, onToggleCollapse, companyNa
     },
     {
       to: "/intervenants",
-      label: t("sidebar.intervenants"),
+      label: "Profils & accès",
       icon: Users,
       permissionKey: "intervenants" as const,
       group: "Production",
