@@ -876,8 +876,11 @@ export async function updateTask(id: string, patch: UpdateTaskPatch) {
 }
 
 export async function deleteTasksByIds(taskIds: string[]): Promise<void> {
-  const ids = (taskIds ?? []).filter(Boolean);
+  const ids = Array.from(new Set((taskIds ?? []).filter(Boolean)));
   if (!ids.length) return;
+
+  const { error: linkError } = await supabase.from("task_documents").delete().in("task_id", ids);
+  if (linkError) throw linkError;
 
   const { error } = await supabase.from("chantier_tasks").delete().in("id", ids);
   if (error) throw error;
