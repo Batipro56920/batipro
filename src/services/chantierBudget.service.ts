@@ -71,7 +71,12 @@ function fromBudgetSettings() {
 function normalizeNumber(value: unknown): number {
   if (value === null || value === undefined || value === "") return 0;
   if (typeof value === "string") {
-    const parsed = Number(value.trim().replace(",", "."));
+    const withoutSpaces = value.trim().replace(/[\s\u00A0]/g, "");
+    const raw =
+      withoutSpaces.includes(",") && withoutSpaces.includes(".")
+        ? withoutSpaces.replace(/\./g, "").replace(",", ".")
+        : withoutSpaces.replace(",", ".");
+    const parsed = Number(raw);
     return Number.isFinite(parsed) ? parsed : 0;
   }
   if (typeof value === "number") return Number.isFinite(value) ? value : 0;
@@ -253,6 +258,7 @@ export async function loadChantierBudgetDashboard(chantierId: string): Promise<C
         ["valide_client", "en_cours", "termine", "facture"].includes(row.statut),
     )
     .reduce((sum, row) => sum + normalizeNumber((row as any).total_ht ?? row.impact_cout_ht), 0);
+
   const chiffreAffairesPrevuHt = chiffreAffairesBaseHt + avenantsValidesHt;
   const coutMoPrevuHt = lots.reduce((sum, row) => sum + row.cout_mo_prevu_ht, 0);
   const coutMoReelHt = lots.reduce((sum, row) => sum + row.cout_mo_reel_ht, 0);
