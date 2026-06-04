@@ -24,6 +24,7 @@ const ProjectQuoteBuilderV1Page = lazy(() => import("./pages/ProjectQuoteBuilder
 const InvoicesPage = lazy(() => import("./pages/InvoicesPage"));
 const FinancialPage = lazy(() => import("./pages/FinancialPage"));
 const FournisseursPage = lazy(() => import("./pages/FournisseursPage"));
+const SupplierOutstandingPage = lazy(() => import("./pages/SupplierOutstandingPage"));
 const ProductCatalogPage = lazy(() => import("./features/product-catalog/pages/ProductCatalogPage"));
 const IntervenantPortalPage = lazy(() => import("./pages/IntervenantPortalPage"));
 const IntervenantDetailPage = lazy(() => import("./pages/IntervenantDetailPage"));
@@ -135,6 +136,14 @@ export default function App() {
           element={
             <RequireCompanyFeature moduleId="approvisionnement" profilePermissionKey="fournisseurs">
               <RouteSuspense label="Chargement des décaissements..."><FinancialPage /></RouteSuspense>
+            </RequireCompanyFeature>
+          }
+        />
+        <Route
+          path="/financier/encours-fournisseurs"
+          element={
+            <RequireCompanyFeature moduleId="approvisionnement" profilePermissionKey="fournisseurs">
+              <RouteSuspense label="Chargement des encours fournisseurs..."><SupplierOutstandingPage /></RouteSuspense>
             </RequireCompanyFeature>
           }
         />
