@@ -23,6 +23,7 @@ const ProjectAppointmentPage = lazy(() => import("./pages/ProjectAppointmentPage
 const ProjectQuoteBuilderV1Page = lazy(() => import("./pages/ProjectQuoteBuilderV1Page"));
 const InvoicesPage = lazy(() => import("./pages/InvoicesPage"));
 const FinancialPage = lazy(() => import("./pages/FinancialPage"));
+const FixedChargesPage = lazy(() => import("./pages/FixedChargesPage"));
 const FournisseursPage = lazy(() => import("./pages/FournisseursPage"));
 const SupplierOutstandingPage = lazy(() => import("./pages/SupplierOutstandingPage"));
 const ProductCatalogPage = lazy(() => import("./features/product-catalog/pages/ProductCatalogPage"));
@@ -168,6 +169,14 @@ export default function App() {
           element={
             <RequireCompanyFeature moduleId="rapports" profilePermissionKey="statistiques">
               <RouteSuspense label="Chargement de l'export comptable..."><FinancialPage /></RouteSuspense>
+            </RequireCompanyFeature>
+          }
+        />
+        <Route
+          path="/financier/charges-fixes"
+          element={
+            <RequireCompanyFeature profilePermissionKey="entreprise_parametres">
+              <RouteSuspense label="Chargement des charges fixes..."><FixedChargesPage /></RouteSuspense>
             </RequireCompanyFeature>
           }
         />
