@@ -85,6 +85,12 @@ function isMissingTableError(error: { message?: string } | null): boolean {
   );
 }
 
+function isMissingTaskDocumentsRelationError(error: { message?: string } | null): boolean {
+  const msg = (error?.message ?? "").toLowerCase();
+  if (!msg || !msg.includes("task_documents")) return false;
+  return msg.includes("does not exist") || msg.includes("schema cache") || msg.includes("relation");
+}
+
 export async function listByChantier(chantierId: string): Promise<ChantierDocumentRow[]> {
   if (!chantierId) throw new Error("chantierId manquant.");
 
@@ -431,6 +437,9 @@ export async function updateDocument(
 export async function deleteDocument(documentId: string, storagePath?: string | null): Promise<void> {
   if (!documentId) throw new Error("documentId manquant.");
 
+  const links = await supabase.from("task_documents").delete().eq("document_id", documentId);
+  if (links.error && !isMissingTaskDocumentsRelationError(links.error)) throw links.error;
+
   if (storagePath) {
     const { error: storageError } = await supabase.storage.from(DEFAULT_BUCKET).remove([storagePath]);
     if (storageError) throw storageError;
@@ -449,8 +458,6 @@ export async function linkDocumentToTask(taskId: string, documentId: string) {
     document_id: documentId,
   });
 
-  if (error) throw error;
+  if (error && !isMissingTaskDocumentsRelationError(error)) throw error;
 }
-
-
 
