@@ -175,14 +175,14 @@ export default function Sidebar({ collapsed = false, onToggleCollapse, companyNa
       group: "Achats",
     },
     {
-      to: "/factures",
+      to: "/financier/encaissements",
       label: "Encaissements",
       icon: Banknote,
       permissionKey: "crm" as const,
       group: "Financier",
     },
     {
-      to: "/bons-commande",
+      to: "/financier/decaissements",
       label: "Décaissements",
       icon: Wallet,
       feature: "approvisionnement" as const,
@@ -190,7 +190,7 @@ export default function Sidebar({ collapsed = false, onToggleCollapse, companyNa
       group: "Financier",
     },
     {
-      to: "/statistiques",
+      to: "/financier/tva",
       label: "TVA",
       icon: Landmark,
       feature: "rapports" as const,
@@ -198,7 +198,7 @@ export default function Sidebar({ collapsed = false, onToggleCollapse, companyNa
       group: "Financier",
     },
     {
-      to: "/statistiques",
+      to: "/financier/tresorerie",
       label: "Trésorerie",
       icon: TrendingUp,
       feature: "rapports" as const,
@@ -213,7 +213,7 @@ export default function Sidebar({ collapsed = false, onToggleCollapse, companyNa
       group: "Financier",
     },
     {
-      to: "/statistiques",
+      to: "/financier/export-comptable",
       label: "Export comptable",
       icon: FileSpreadsheet,
       feature: "rapports" as const,
