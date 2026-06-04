@@ -85,6 +85,22 @@ function fromPurchaseRequests() {
   return (supabase as any).from("chantier_purchase_requests");
 }
 
+function normalizeNumber(value: unknown): number | null {
+  if (value === null || value === undefined || value === "") return null;
+  if (typeof value === "string") {
+    const withoutSpaces = value.trim().replace(/[\s\u00A0]/g, "");
+    if (!withoutSpaces) return null;
+    const raw =
+      withoutSpaces.includes(",") && withoutSpaces.includes(".")
+        ? withoutSpaces.replace(/\./g, "").replace(",", ".")
+        : withoutSpaces.replace(",", ".");
+    const parsed = Number(raw);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
 function isMissingPurchaseSchemaError(error: unknown): boolean {
   const code = String((error as any)?.code ?? "");
   const msg = String((error as any)?.message ?? "").toLowerCase();
@@ -104,10 +120,10 @@ function normalizePurchaseRequestRow(row: any): ChantierPurchaseRequestRow {
     supplier_id: row?.supplier_id ?? null,
     supplier_name: row?.supplier_name ?? null,
     titre: String(row?.titre ?? "Demande approvisionnement").trim() || "Demande approvisionnement",
-    quantite: row?.quantite == null ? null : Number(row.quantite),
+    quantite: normalizeNumber(row?.quantite),
     unite: row?.unite ?? null,
-    cout_prevu_ht: Number.isFinite(Number(row?.cout_prevu_ht)) ? Number(row.cout_prevu_ht) : 0,
-    cout_reel_ht: Number.isFinite(Number(row?.cout_reel_ht)) ? Number(row.cout_reel_ht) : 0,
+    cout_prevu_ht: normalizeNumber(row?.cout_prevu_ht) ?? 0,
+    cout_reel_ht: normalizeNumber(row?.cout_reel_ht) ?? 0,
     statut_commande: (row?.statut_commande ?? "a_commander") as ChantierPurchaseRequestStatus,
     livraison_prevue_le: row?.livraison_prevue_le ?? null,
     recu: Boolean(row?.recu),
@@ -125,24 +141,9 @@ function cleanPurchasePayload(payload: ChantierPurchaseRequestInput | ChantierPu
   const unite = typeof payload.unite === "string" ? payload.unite.trim() || null : payload.unite;
   const commentaire =
     typeof payload.commentaire === "string" ? payload.commentaire.trim() || null : payload.commentaire;
-  const quantite =
-    payload.quantite == null
-      ? null
-      : Number.isFinite(Number(payload.quantite))
-        ? Number(payload.quantite)
-        : null;
-  const coutPrevu =
-    payload.cout_prevu_ht == null
-      ? 0
-      : Number.isFinite(Number(String(payload.cout_prevu_ht).replace(",", ".")))
-        ? Number(String(payload.cout_prevu_ht).replace(",", "."))
-        : 0;
-  const coutReel =
-    payload.cout_reel_ht == null
-      ? 0
-      : Number.isFinite(Number(String(payload.cout_reel_ht).replace(",", ".")))
-        ? Number(String(payload.cout_reel_ht).replace(",", "."))
-        : 0;
+  const quantite = normalizeNumber(payload.quantite);
+  const coutPrevu = normalizeNumber(payload.cout_prevu_ht) ?? 0;
+  const coutReel = normalizeNumber(payload.cout_reel_ht) ?? 0;
 
   if (Object.prototype.hasOwnProperty.call(payload, "titre") && !titre) {
     throw new Error("Titre de demande obligatoire.");
