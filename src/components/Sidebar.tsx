@@ -167,7 +167,7 @@ export default function Sidebar({ collapsed = false, onToggleCollapse, companyNa
       group: "Achats",
     },
     {
-      to: "/bons-commande",
+      to: "/financier/encours-fournisseurs",
       label: "Encours fournisseurs",
       icon: ChartColumnBig,
       feature: "approvisionnement" as const,
