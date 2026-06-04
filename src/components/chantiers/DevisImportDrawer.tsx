@@ -9,7 +9,7 @@ import {
   summarizeExtractedTasks,
   type TaskLine,
 } from "../../services/devisTasksExtraction.service";
-import { createDevis, createDevisLigne, deleteDevis } from "../../services/devis.service";
+import { createDevis, createDevisLigne, deleteDevis, deleteDevisLigne } from "../../services/devis.service";
 import { createTask, deleteTasksByIds } from "../../services/chantierTasks.service";
 import { deleteDocument, linkDocumentToTask, uploadDocument } from "../../services/chantierDocuments.service";
 import { generateTerrainTaskTitle } from "../../services/taskTerrainTitlesOperational.service";
@@ -338,6 +338,7 @@ export default function DevisImportDrawer({ open, chantierId, intervenants, onCl
     let createdDevisId: string | null = null;
     let createdDocument: { id: string; storage_path?: string | null } | null = null;
     const createdTaskIds: string[] = [];
+    const createdDevisLigneIds: string[] = [];
 
     try {
       const createdDevis = await createDevis({
@@ -372,6 +373,7 @@ export default function DevisImportDrawer({ open, chantierId, intervenants, onCl
           titre_tache: row.title,
           date_prevue: row.date,
         });
+        createdDevisLigneIds.push(createdLigne.id);
         ordre += 1;
 
         // If the imported unit is hours, reuse quantity as planned hours
@@ -435,6 +437,14 @@ export default function DevisImportDrawer({ open, chantierId, intervenants, onCl
         if (createdDocument?.id) await deleteDocument(createdDocument.id, createdDocument.storage_path ?? null);
       } catch (cleanupErr: any) {
         cleanupErrors.push(`Rollback document: ${cleanupErr?.message ?? cleanupErr}`);
+      }
+
+      try {
+        for (const ligneId of [...createdDevisLigneIds].reverse()) {
+          await deleteDevisLigne(ligneId);
+        }
+      } catch (cleanupErr: any) {
+        cleanupErrors.push(`Rollback lignes devis: ${cleanupErr?.message ?? cleanupErr}`);
       }
 
       try {
