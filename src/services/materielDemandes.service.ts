@@ -30,8 +30,10 @@ const TABLE = "materiel_demandes";
 
 function normalizeNumber(input: unknown): number {
   if (typeof input === "number" && Number.isFinite(input)) return input;
-  const raw = String(input ?? "").trim().replace(",", ".");
-  const n = Number(raw);
+  const raw = String(input ?? "").trim().replace(/[\s\u00a0\u202f]/g, "");
+  if (!raw) return NaN;
+  const normalized = raw.includes(",") ? raw.replace(/\./g, "").replace(",", ".") : raw;
+  const n = Number(normalized);
   if (!Number.isFinite(n)) return NaN;
   return n;
 }
