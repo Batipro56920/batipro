@@ -85,6 +85,14 @@ export default function Sidebar({ collapsed = false, onToggleCollapse, companyNa
   const nav = [
     { to: "/dashboard", label: t("sidebar.dashboard"), icon: LayoutDashboard, group: "Pilotage", end: true },
     {
+      to: "/statistiques",
+      label: "Rentabilité / statistiques",
+      icon: ChartColumnBig,
+      feature: "rapports" as const,
+      permissionKey: "statistiques" as const,
+      group: "Pilotage",
+    },
+    {
       to: "/crm",
       label: "CRM",
       icon: BriefcaseBusiness,
@@ -103,6 +111,13 @@ export default function Sidebar({ collapsed = false, onToggleCollapse, companyNa
       to: "/crm/devis",
       label: "Devis",
       icon: FileText,
+      permissionKey: "crm" as const,
+      group: "Commerce",
+    },
+    {
+      to: "/factures",
+      label: "Factures",
+      icon: ReceiptText,
       permissionKey: "crm" as const,
       group: "Commerce",
     },
