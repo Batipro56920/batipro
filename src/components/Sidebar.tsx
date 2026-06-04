@@ -12,6 +12,7 @@ import {
   Truck,
   BriefcaseBusiness,
   FileText,
+  Handshake,
   ReceiptText,
   FolderKanban,
   PackageSearch,
@@ -78,6 +79,14 @@ export default function Sidebar({ collapsed = false, onToggleCollapse, companyNa
   const nav = [
     { to: "/dashboard", label: t("sidebar.dashboard"), icon: LayoutDashboard, group: "Pilotage", end: true },
     {
+      to: "/statistiques",
+      label: "Rentabilité / statistiques",
+      icon: ChartColumnBig,
+      feature: "rapports" as const,
+      permissionKey: "statistiques" as const,
+      group: "Pilotage",
+    },
+    {
       to: "/crm",
       label: "CRM",
       icon: BriefcaseBusiness,
@@ -103,6 +112,13 @@ export default function Sidebar({ collapsed = false, onToggleCollapse, companyNa
       to: "/factures",
       label: "Factures",
       icon: ReceiptText,
+      permissionKey: "crm" as const,
+      group: "Commerce",
+    },
+    {
+      to: "/crm/apporteurs",
+      label: "Apporteurs d’affaires",
+      icon: Handshake,
       permissionKey: "crm" as const,
       group: "Commerce",
     },
@@ -136,14 +152,6 @@ export default function Sidebar({ collapsed = false, onToggleCollapse, companyNa
       group: "Production",
     },
     {
-      to: "/bibliotheque",
-      label: t("sidebar.library"),
-      icon: LibraryBig,
-      feature: "documents" as const,
-      permissionKey: "bibliotheque" as const,
-      group: "Administration",
-    },
-    {
       to: "/fournisseurs",
       label: t("sidebar.suppliers"),
       icon: Truck,
@@ -168,19 +176,19 @@ export default function Sidebar({ collapsed = false, onToggleCollapse, companyNa
       group: "Achats",
     },
     {
-      to: "/statistiques",
-      label: "Rentabilité / statistiques",
-      icon: ChartColumnBig,
-      feature: "rapports" as const,
-      permissionKey: "statistiques" as const,
-      group: "Pilotage",
+      to: "/bibliotheque",
+      label: t("sidebar.library"),
+      icon: LibraryBig,
+      feature: "documents" as const,
+      permissionKey: "bibliotheque" as const,
+      group: "Ressources",
     },
     {
       to: "/entreprise",
       label: "Paramètres",
       icon: Building2,
       permissionKey: "entreprise_parametres" as const,
-      group: "Administration",
+      group: "Paramètres",
     },
   ].filter(
     (item) => {
