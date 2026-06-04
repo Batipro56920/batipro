@@ -50,7 +50,10 @@ export type TaskLine = {
 };
 
 const NOISE_PATTERNS = [
-  /\b(total|sous-?total|tva|ttc|ht|remise)\b/i,
+  /\b(total|sous-?total|ttc|remise)\b/i,
+  /^\s*(?:tva|ht)\b/i,
+  /\bmontant\s+(?:ht|ttc)\b/i,
+  /\btaux\s+tva\b/i,
   /\b(client|adresse|devis|référence|reference|conditions|validité|validite)\b/i,
   /\b(page)\b/i,
   /\b(siret|siren|iban|bic)\b/i,
@@ -72,7 +75,15 @@ const LOT_PATTERNS: Array<{ lot: ControlledLot; pattern: RegExp }> = [
 
 function parseNumber(value: unknown): number | null {
   if (value === null || value === undefined || value === "") return null;
-  const n = Number(String(value).trim().replace(/\s/g, "").replace(",", "."));
+  if (typeof value === "number") return Number.isFinite(value) ? value : null;
+
+  const raw = String(value)
+    .trim()
+    .replace(/[€%]/g, "")
+    .replace(/[\s\u00a0\u202f]/g, "");
+  if (!raw) return null;
+  const normalized = raw.includes(",") ? raw.replace(/\./g, "").replace(",", ".") : raw;
+  const n = Number(normalized);
   return Number.isFinite(n) ? n : null;
 }
 
@@ -123,7 +134,15 @@ function normalizeDate(value: unknown): string | null {
   const raw = String(value ?? "").trim();
   if (!raw) return null;
   if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return raw;
-  return null;
+
+  const match = raw.match(/^(\d{1,2})[/.\-](\d{1,2})[/.\-](\d{2}|\d{4})$/);
+  if (!match) return null;
+
+  const day = Number(match[1]);
+  const month = Number(match[2]);
+  const year = Number(match[3].length === 2 ? `20${match[3]}` : match[3]);
+  if (day < 1 || day > 31 || month < 1 || month > 12 || year < 2000 || year > 2100) return null;
+  return `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
 }
 
 function normalizeLot(value: string | null | undefined): ControlledLot | null {
