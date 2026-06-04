@@ -30,7 +30,12 @@ function normalizeText(value: unknown): string | null {
 
 function normalizeNumber(value: unknown): number | null {
   if (value === null || value === undefined || value === "") return null;
-  const n = Number(value);
+  if (typeof value === "number") return Number.isFinite(value) ? value : null;
+
+  const raw = String(value).trim().replace(/[\s\u00a0\u202f]/g, "");
+  if (!raw) return null;
+  const normalized = raw.includes(",") ? raw.replace(/\./g, "").replace(",", ".") : raw;
+  const n = Number(normalized);
   return Number.isFinite(n) ? n : null;
 }
 
