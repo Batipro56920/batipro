@@ -22,54 +22,51 @@ jobs:
         run: |
           python - <<'PY'
           from pathlib import Path
+          import re
 
           path = Path('src/services/devisTasksExtraction.service.ts')
           raw = path.read_bytes()
           has_bom = raw.startswith(b'\xef\xbb\xbf')
           text = raw.decode('utf-8-sig')
+          original = text
 
-          replacements = [
-              (
-                  '  /\\b(total|sous-?total|tva|ttc|ht|remise)\\b/i,',
-                  '  /\\b(total|sous-?total|ttc|remise)\\b/i,',
-              ),
-              (
-                  '''function parseNumber(value: unknown): number | null {
-  if (value === null || value === undefined || value === "") return null;
-  const n = Number(String(value).trim().replace(/\s/g, "").replace(",", "."));
-  return Number.isFinite(n) ? n : null;
-}
-''',
-                  '''function parseNumber(value: unknown): number | null {
+          text = text.replace(
+              '  /\\b(total|sous-?total|tva|ttc|ht|remise)\\b/i,',
+              '  /\\b(total|sous-?total|ttc|remise)\\b/i,',
+          )
+
+          parse_number_new = '''function parseNumber(value: unknown): number | null {
   if (value === null || value === undefined || value === "") return null;
   const raw = String(value)
     .trim()
-    .replace(/[\s\u00A0]/g, "")
+    .replace(/[\\s\\u00A0]/g, "")
     .replace(/€/g, "");
   if (!raw) return null;
 
   const normalized = raw.includes(",")
-    ? raw.replace(/\./g, "").replace(",", ".")
-    : raw.replace(/,(?=\d{3}\b)/g, "");
+    ? raw.replace(/\\./g, "").replace(",", ".")
+    : raw.replace(/,(?=\\d{3}\\b)/g, "");
   const n = Number(normalized);
   return Number.isFinite(n) ? n : null;
 }
-''',
-              ),
-              (
-                  '''function normalizeDate(value: unknown): string | null {
-  const raw = String(value ?? "").trim();
-  if (!raw) return null;
-  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return raw;
-  return null;
-}
-''',
-                  '''function normalizeDate(value: unknown): string | null {
-  const raw = String(value ?? "").trim();
-  if (!raw) return null;
-  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return raw;
 
-  const french = raw.match(/^(\d{1,2})[\/.-](\d{1,2})[\/.-](\d{4})$/);
+function normalizeConfidence'''
+          text, parse_count = re.subn(
+              r'function parseNumber\(value: unknown\): number \| null \{.*?\}\n\nfunction normalizeConfidence',
+              parse_number_new,
+              text,
+              count=1,
+              flags=re.S,
+          )
+          if parse_count != 1:
+              raise SystemExit('parseNumber block not found; refusing to patch.')
+
+          normalize_date_new = '''function normalizeDate(value: unknown): string | null {
+  const raw = String(value ?? "").trim();
+  if (!raw) return null;
+  if (/^\\d{4}-\\d{2}-\\d{2}$/.test(raw)) return raw;
+
+  const french = raw.match(/^(\\d{1,2})[\\/.-](\\d{1,2})[\\/.-](\\d{4})$/);
   if (french) {
     const day = Number(french[1]);
     const month = Number(french[2]);
@@ -82,21 +79,25 @@ jobs:
 
   return null;
 }
-''',
-              ),
-          ]
 
-          for old, new in replacements:
-              if new in text:
-                  continue
-              if old not in text:
-                  raise SystemExit(f'Target block not found; refusing to patch: {old[:80]}')
-              text = text.replace(old, new, 1)
+function normalizeLot'''
+          text, date_count = re.subn(
+              r'function normalizeDate\(value: unknown\): string \| null \{.*?\}\n\nfunction normalizeLot',
+              normalize_date_new,
+              text,
+              count=1,
+              flags=re.S,
+          )
+          if date_count != 1:
+              raise SystemExit('normalizeDate block not found; refusing to patch.')
 
-          out = text.encode('utf-8')
-          if has_bom:
-              out = b'\xef\xbb\xbf' + out
-          path.write_bytes(out)
+          if text == original:
+              print('No extraction changes needed.')
+          else:
+              out = text.encode('utf-8')
+              if has_bom:
+                  out = b'\xef\xbb\xbf' + out
+              path.write_bytes(out)
           PY
 
       - name: Remove temporary workflow and commit patch
