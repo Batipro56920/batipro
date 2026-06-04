@@ -206,7 +206,7 @@ export default function Sidebar({ collapsed = false, onToggleCollapse, companyNa
       group: "Financier",
     },
     {
-      to: "/entreprise/charges",
+      to: "/financier/charges-fixes",
       label: "Charges fixes",
       icon: Calculator,
       permissionKey: "entreprise_parametres" as const,
