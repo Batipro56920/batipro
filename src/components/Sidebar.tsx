@@ -1,8 +1,11 @@
 ﻿import { NavLink } from "react-router-dom";
 import {
+  Banknote,
+  Calculator,
   ChevronLeft,
   ChevronRight,
   ClipboardList,
+  FileSpreadsheet,
   LayoutDashboard,
   Hammer,
   Users,
@@ -13,9 +16,12 @@ import {
   BriefcaseBusiness,
   FileText,
   Handshake,
+  Landmark,
   ReceiptText,
   FolderKanban,
   PackageSearch,
+  TrendingUp,
+  Wallet,
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import type { CompanyFeatureModuleId } from "../config/companyFeatures";
@@ -78,28 +84,6 @@ export default function Sidebar({ collapsed = false, onToggleCollapse, companyNa
 
   const nav = [
     { to: "/dashboard", label: t("sidebar.dashboard"), icon: LayoutDashboard, group: "Pilotage", end: true },
-    {
-      to: "/statistiques",
-      label: "Rentabilité / statistiques",
-      icon: ChartColumnBig,
-      feature: "rapports" as const,
-      permissionKey: "statistiques" as const,
-      group: "Gestion",
-    },
-    {
-      to: "/factures",
-      label: "Factures",
-      icon: ReceiptText,
-      permissionKey: "crm" as const,
-      group: "Gestion",
-    },
-    {
-      to: "/entreprise/charges",
-      label: "Charges fixes",
-      icon: ChartColumnBig,
-      permissionKey: "entreprise_parametres" as const,
-      group: "Gestion",
-    },
     {
       to: "/crm",
       label: "CRM",
@@ -183,6 +167,60 @@ export default function Sidebar({ collapsed = false, onToggleCollapse, companyNa
       group: "Achats",
     },
     {
+      to: "/bons-commande",
+      label: "Encours fournisseurs",
+      icon: ChartColumnBig,
+      feature: "approvisionnement" as const,
+      permissionKey: "fournisseurs" as const,
+      group: "Achats",
+    },
+    {
+      to: "/factures",
+      label: "Encaissements",
+      icon: Banknote,
+      permissionKey: "crm" as const,
+      group: "Financier",
+    },
+    {
+      to: "/bons-commande",
+      label: "Décaissements",
+      icon: Wallet,
+      feature: "approvisionnement" as const,
+      permissionKey: "fournisseurs" as const,
+      group: "Financier",
+    },
+    {
+      to: "/statistiques",
+      label: "TVA",
+      icon: Landmark,
+      feature: "rapports" as const,
+      permissionKey: "statistiques" as const,
+      group: "Financier",
+    },
+    {
+      to: "/statistiques",
+      label: "Trésorerie",
+      icon: TrendingUp,
+      feature: "rapports" as const,
+      permissionKey: "statistiques" as const,
+      group: "Financier",
+    },
+    {
+      to: "/entreprise/charges",
+      label: "Charges fixes",
+      icon: Calculator,
+      permissionKey: "entreprise_parametres" as const,
+      group: "Financier",
+    },
+    {
+      to: "/statistiques",
+      label: "Export comptable",
+      icon: FileSpreadsheet,
+      feature: "rapports" as const,
+      permissionKey: "statistiques" as const,
+      group: "Financier",
+    },
+    {
       to: "/bibliotheque",
       label: t("sidebar.library"),
       icon: LibraryBig,
@@ -192,7 +230,7 @@ export default function Sidebar({ collapsed = false, onToggleCollapse, companyNa
     },
     {
       to: "/entreprise",
-      label: "Paramètres",
+      label: "Mon entreprise",
       icon: Building2,
       permissionKey: "entreprise_parametres" as const,
       group: "Paramètres",
@@ -254,7 +292,7 @@ export default function Sidebar({ collapsed = false, onToggleCollapse, companyNa
               {group.items.map((item) => {
                 const Icon = item.icon;
                 return (
-                  <li key={item.to}>
+                  <li key={`${item.group}-${item.label}-${item.to}`}>
                     <NavLink
                       to={item.to}
                       end={Boolean(item.end)}
