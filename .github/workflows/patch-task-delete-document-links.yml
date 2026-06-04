@@ -1,0 +1,78 @@
+name: Temporary Patch Task Document Link Cleanup
+
+on:
+  push:
+    branches:
+      - dev
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: dev
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Patch deleteTasksByIds link cleanup
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path('src/services/chantierTasks.service.ts')
+          raw = path.read_bytes()
+          has_bom = raw.startswith(b'\xef\xbb\xbf')
+          text = raw.decode('utf-8-sig')
+
+          old = "\n".join([
+              'export async function deleteTasksByIds(taskIds: string[]): Promise<void> {',
+              '  const ids = (taskIds ?? []).filter(Boolean);',
+              '  if (!ids.length) return;',
+              '',
+              '  const { error } = await supabase.from("chantier_tasks").delete().in("id", ids);',
+              '  if (error) throw error;',
+              '}',
+          ])
+
+          new = "\n".join([
+              'export async function deleteTasksByIds(taskIds: string[]): Promise<void> {',
+              '  const ids = Array.from(new Set((taskIds ?? []).filter(Boolean)));',
+              '  if (!ids.length) return;',
+              '',
+              '  const { error: linkError } = await supabase.from("task_documents").delete().in("task_id", ids);',
+              '  if (linkError) throw linkError;',
+              '',
+              '  const { error } = await supabase.from("chantier_tasks").delete().in("id", ids);',
+              '  if (error) throw error;',
+              '}',
+          ])
+
+          if new in text:
+              print('Patch already present.')
+          elif old in text:
+              text = text.replace(old, new, 1)
+          else:
+              raise SystemExit('Target deleteTasksByIds block not found; refusing to patch.')
+
+          out = text.encode('utf-8')
+          if has_bom:
+              out = b'\xef\xbb\xbf' + out
+          path.write_bytes(out)
+          PY
+
+      - name: Remove temporary workflow and commit patch
+        run: |
+          rm .github/workflows/patch-task-delete-document-links.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/services/chantierTasks.service.ts .github/workflows/patch-task-delete-document-links.yml
+          if git diff --cached --quiet; then
+            echo "No patch changes to commit."
+          else
+            git commit -m "fix: remove task document links before deleting tasks"
+            git push origin HEAD:dev
+          fi
