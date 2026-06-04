@@ -265,8 +265,8 @@ export async function updateReserve(
 }
 
 export async function setReserveStatus(id: string, status: ReserveStatus): Promise<ChantierReserveRow> {
-  const patch: { status: ReserveStatus; levee_at?: string } = { status };
-  if (status === "LEVEE") patch.levee_at = new Date().toISOString();
+  const patch: { status: ReserveStatus; levee_at?: string | null } = { status };
+  patch.levee_at = status === "LEVEE" ? new Date().toISOString() : null;
   return updateReserve(id, patch);
 }
 
