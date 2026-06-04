@@ -127,7 +127,11 @@ function isMissingChangeOrderColumnError(error: unknown, columns: string[]) {
 function normalizeNumber(value: unknown): number {
   if (value === null || value === undefined || value === "") return 0;
   if (typeof value === "string") {
-    const raw = value.trim().replace(",", ".");
+    const withoutSpaces = value.trim().replace(/[\s\u00A0]/g, "");
+    const raw =
+      withoutSpaces.includes(",") && withoutSpaces.includes(".")
+        ? withoutSpaces.replace(/\./g, "").replace(",", ".")
+        : withoutSpaces.replace(",", ".");
     if (!raw) return 0;
     const parsed = Number(raw);
     return Number.isFinite(parsed) ? parsed : 0;
@@ -469,5 +473,4 @@ export async function deleteChantierChangeOrder(id: string): Promise<void> {
     throw error;
   }
 }
-
 
