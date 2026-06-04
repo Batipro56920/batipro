@@ -22,6 +22,7 @@ const ProjectDetailPage = lazy(() => import("./pages/ProjectDetailPage"));
 const ProjectAppointmentPage = lazy(() => import("./pages/ProjectAppointmentPage"));
 const ProjectQuoteBuilderV1Page = lazy(() => import("./pages/ProjectQuoteBuilderV1Page"));
 const InvoicesPage = lazy(() => import("./pages/InvoicesPage"));
+const FinancialPage = lazy(() => import("./pages/FinancialPage"));
 const FournisseursPage = lazy(() => import("./pages/FournisseursPage"));
 const ProductCatalogPage = lazy(() => import("./features/product-catalog/pages/ProductCatalogPage"));
 const IntervenantPortalPage = lazy(() => import("./pages/IntervenantPortalPage"));
@@ -118,6 +119,46 @@ export default function App() {
                   <InvoicesPage />
                 </Suspense>
               </LazyRouteErrorBoundary>
+            </RequireCompanyFeature>
+          }
+        />
+        <Route
+          path="/financier/encaissements"
+          element={
+            <RequireCompanyFeature profilePermissionKey="crm">
+              <RouteSuspense label="Chargement des encaissements..."><FinancialPage /></RouteSuspense>
+            </RequireCompanyFeature>
+          }
+        />
+        <Route
+          path="/financier/decaissements"
+          element={
+            <RequireCompanyFeature moduleId="approvisionnement" profilePermissionKey="fournisseurs">
+              <RouteSuspense label="Chargement des décaissements..."><FinancialPage /></RouteSuspense>
+            </RequireCompanyFeature>
+          }
+        />
+        <Route
+          path="/financier/tva"
+          element={
+            <RequireCompanyFeature moduleId="rapports" profilePermissionKey="statistiques">
+              <RouteSuspense label="Chargement de la TVA..."><FinancialPage /></RouteSuspense>
+            </RequireCompanyFeature>
+          }
+        />
+        <Route
+          path="/financier/tresorerie"
+          element={
+            <RequireCompanyFeature moduleId="rapports" profilePermissionKey="statistiques">
+              <RouteSuspense label="Chargement de la trésorerie..."><FinancialPage /></RouteSuspense>
+            </RequireCompanyFeature>
+          }
+        />
+        <Route
+          path="/financier/export-comptable"
+          element={
+            <RequireCompanyFeature moduleId="rapports" profilePermissionKey="statistiques">
+              <RouteSuspense label="Chargement de l'export comptable..."><FinancialPage /></RouteSuspense>
             </RequireCompanyFeature>
           }
         />
@@ -375,4 +416,3 @@ export default function App() {
     </Routes>
   );
 }
-
