@@ -764,16 +764,32 @@ export async function createTask(payload: CreateTaskPayload) {
   if (!isMissingTaskPlanningColumnsError(baseError)) throw baseError;
 
   const legacyInsert = stripTaskV2Columns({ ...baseInsert });
-  delete (legacyInsert as Record<string, unknown>).devis_ligne_id;
 
   const fallback = await supabase
     .from("chantier_tasks")
     .insert([legacyInsert])
+    .select(`${TASK_SELECT_LEGACY},devis_ligne_id`)
+    .single();
+
+  if (!fallback.error) {
+    return normalizeTaskRow(fallback.data);
+  }
+
+  if (!isMissingTaskColumnError(fallback.error, "devis_ligne_id")) {
+    throw fallback.error;
+  }
+
+  const legacyInsertWithoutDevisLine = { ...legacyInsert };
+  delete (legacyInsertWithoutDevisLine as Record<string, unknown>).devis_ligne_id;
+
+  const fallbackWithoutDevisLine = await supabase
+    .from("chantier_tasks")
+    .insert([legacyInsertWithoutDevisLine])
     .select(TASK_SELECT_LEGACY)
     .single();
 
-  if (fallback.error) throw fallback.error;
-  return normalizeTaskRow(fallback.data);
+  if (fallbackWithoutDevisLine.error) throw fallbackWithoutDevisLine.error;
+  return normalizeTaskRow(fallbackWithoutDevisLine.data);
 }
 
 export async function updateTask(id: string, patch: UpdateTaskPatch) {
