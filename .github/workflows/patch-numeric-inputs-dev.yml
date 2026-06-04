@@ -1,0 +1,167 @@
+name: Patch numeric input parsing on dev
+
+on:
+  push:
+    branches: [dev]
+    paths:
+      - '.github/workflows/patch-numeric-inputs-dev.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: dev
+      - name: Patch numeric parsing
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          def replace_exact(path, old, new):
+              p = Path(path)
+              text = p.read_text(encoding='utf-8-sig')
+              if old not in text:
+                  raise SystemExit(f'pattern not found in {path}: {old[:80]!r}')
+              text = text.replace(old, new, 1)
+              p.write_text(text, encoding='utf-8')
+
+          replace_exact(
+              'src/services/chantierTimeEntries.service.ts',
+              '''function normalizeNumber(value: unknown): number | null {
+  if (value === null || value === undefined || value === "") return null;
+  const n = Number(value);
+  return Number.isFinite(n) ? n : null;
+}
+''',
+              '''function normalizeNumber(value: unknown): number | null {
+  if (value === null || value === undefined || value === "") return null;
+  if (typeof value === "number") return Number.isFinite(value) ? value : null;
+
+  const raw = String(value).trim().replace(/[\\s\\u00a0\\u202f]/g, "");
+  if (!raw) return null;
+  const normalized = raw.includes(",") ? raw.replace(/\\./g, "").replace(",", ".") : raw;
+  const n = Number(normalized);
+  return Number.isFinite(n) ? n : null;
+}
+'''
+          )
+
+          replace_exact(
+              'src/services/materielDemandes.service.ts',
+              '''function normalizeNumber(input: unknown): number {
+  if (typeof input === "number" && Number.isFinite(input)) return input;
+  const raw = String(input ?? "").trim().replace(",", ".");
+  const n = Number(raw);
+  if (!Number.isFinite(n)) return NaN;
+  return n;
+}
+''',
+              '''function normalizeNumber(input: unknown): number {
+  if (typeof input === "number" && Number.isFinite(input)) return input;
+  const raw = String(input ?? "").trim().replace(/[\\s\\u00a0\\u202f]/g, "");
+  if (!raw) return NaN;
+  const normalized = raw.includes(",") ? raw.replace(/\\./g, "").replace(",", ".") : raw;
+  const n = Number(normalized);
+  if (!Number.isFinite(n)) return NaN;
+  return n;
+}
+'''
+          )
+
+          replace_exact(
+              'src/pages/ChantierPage.tsx',
+              '''function toNumberOrNull(v: unknown) {
+  if (v === null || v === undefined || v === "") return null;
+  if (typeof v === "string") {
+    const raw = v.trim().replace(",", ".");
+    if (!raw) return null;
+    const n = Number(raw);
+    return Number.isFinite(n) ? n : null;
+  }
+  if (typeof v === "number") return Number.isFinite(v) ? v : null;
+  return null;
+}
+''',
+              '''function toNumberOrNull(v: unknown) {
+  if (v === null || v === undefined || v === "") return null;
+  if (typeof v === "number") return Number.isFinite(v) ? v : null;
+  if (typeof v === "string") {
+    const raw = v.trim().replace(/[\\s\\u00a0\\u202f]/g, "");
+    if (!raw) return null;
+    const normalized = raw.includes(",") ? raw.replace(/\\./g, "").replace(",", ".") : raw;
+    const n = Number(normalized);
+    return Number.isFinite(n) ? n : null;
+  }
+  return null;
+}
+'''
+          )
+
+          replace_exact(
+              'src/pages/IntervenantPortalPage.tsx',
+              '''function formatQuantity(value: number | null, unit: string | null, locale: string, empty = "0"): string {
+  if (value === null) return empty;
+  const formatted = value.toLocaleString(locale, { maximumFractionDigits: 2 });
+  return unit ? `${formatted} ${unit}` : formatted;
+}
+''',
+              '''function formatQuantity(value: number | null, unit: string | null, locale: string, empty = "0"): string {
+  if (value === null) return empty;
+  const formatted = value.toLocaleString(locale, { maximumFractionDigits: 2 });
+  return unit ? `${formatted} ${unit}` : formatted;
+}
+
+function parsePortalNumber(value: unknown): number | null {
+  if (value === null || value === undefined || value === "") return null;
+  if (typeof value === "number") return Number.isFinite(value) ? value : null;
+  const raw = String(value).trim().replace(/[\\s\\u00a0\\u202f]/g, "");
+  if (!raw) return null;
+  const normalized = raw.includes(",") ? raw.replace(/\\./g, "").replace(",", ".") : raw;
+  const parsed = Number(normalized);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+'''
+          )
+
+          replace_exact(
+              'src/pages/IntervenantPortalPage.tsx',
+              '''    const hours = Number(String(timeHours).replace(",", "."));
+    if (!Number.isFinite(hours) || hours <= 0) {
+''',
+              '''    const hours = parsePortalNumber(timeHours);
+    if (hours === null || hours <= 0) {
+'''
+          )
+          replace_exact(
+              'src/pages/IntervenantPortalPage.tsx',
+              '''    const progressValue = Number(String(timeProgressPercent).replace(",", "."));
+    if (!Number.isFinite(progressValue) || progressValue < 0 || progressValue > 100) {
+''',
+              '''    const progressValue = parsePortalNumber(timeProgressPercent);
+    if (progressValue === null || progressValue < 0 || progressValue > 100) {
+'''
+          )
+          replace_exact(
+              'src/pages/IntervenantPortalPage.tsx',
+              '''    const quantityValue = materielQuantite.trim() ? Number(String(materielQuantite).replace(",", ".")) : null;
+    if (quantityValue !== null && (!Number.isFinite(quantityValue) || quantityValue <= 0)) {
+''',
+              '''    const quantityValue = materielQuantite.trim() ? parsePortalNumber(materielQuantite) : null;
+    if (quantityValue !== null && quantityValue <= 0) {
+'''
+          )
+
+          Path('.github/workflows/patch-numeric-inputs-dev.yml').unlink()
+          PY
+      - name: Commit patch
+        run: |
+          git config user.name "batipro-agent"
+          git config user.email "batipro-agent@users.noreply.github.com"
+          git add src/services/chantierTimeEntries.service.ts src/services/materielDemandes.service.ts src/pages/ChantierPage.tsx src/pages/IntervenantPortalPage.tsx .github/workflows/patch-numeric-inputs-dev.yml
+          git commit -m "fix: accept French decimal inputs"
+          git push origin dev
