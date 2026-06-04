@@ -629,8 +629,17 @@ export async function updatePlanningCalendarTask(
 }
 
 export async function deletePlanningCalendarTasks(taskIds: string[]): Promise<void> {
-  const ids = taskIds.filter(Boolean);
+  const ids = Array.from(new Set(taskIds.filter(Boolean)));
   if (!ids.length) return;
+
+  for (const tableName of SEGMENT_TABLE_CANDIDATES) {
+    const { error } = await segmentsTable(tableName).delete().in("task_id", ids);
+    if (error && !isMissingTable(error, tableName)) throw new Error(error.message);
+  }
+
+  const { error: documentLinkError } = await supabase.from("task_documents").delete().in("task_id", ids);
+  if (documentLinkError) throw new Error(documentLinkError.message);
+
   const { error } = await supabase.from("chantier_tasks").delete().in("id", ids);
   if (error) throw new Error(error.message);
 }
