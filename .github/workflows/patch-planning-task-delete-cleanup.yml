@@ -1,0 +1,82 @@
+name: Temporary Patch Planning Task Delete Cleanup
+
+on:
+  push:
+    branches:
+      - dev
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: dev
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Patch planning task deletion cleanup
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path('src/services/chantierPlanningCalendar.service.ts')
+          raw = path.read_bytes()
+          has_bom = raw.startswith(b'\xef\xbb\xbf')
+          text = raw.decode('utf-8-sig')
+
+          old = "\n".join([
+              'export async function deletePlanningCalendarTasks(taskIds: string[]): Promise<void> {',
+              '  const ids = taskIds.filter(Boolean);',
+              '  if (!ids.length) return;',
+              '  const { error } = await supabase.from("chantier_tasks").delete().in("id", ids);',
+              '  if (error) throw new Error(error.message);',
+              '}',
+          ])
+
+          new = "\n".join([
+              'export async function deletePlanningCalendarTasks(taskIds: string[]): Promise<void> {',
+              '  const ids = Array.from(new Set(taskIds.filter(Boolean)));',
+              '  if (!ids.length) return;',
+              '',
+              '  for (const tableName of SEGMENT_TABLE_CANDIDATES) {',
+              '    const { error } = await segmentsTable(tableName).delete().in("task_id", ids);',
+              '    if (error && !isMissingTable(error, tableName)) throw new Error(error.message);',
+              '  }',
+              '',
+              '  const { error: documentLinkError } = await supabase.from("task_documents").delete().in("task_id", ids);',
+              '  if (documentLinkError) throw new Error(documentLinkError.message);',
+              '',
+              '  const { error } = await supabase.from("chantier_tasks").delete().in("id", ids);',
+              '  if (error) throw new Error(error.message);',
+              '}',
+          ])
+
+          if new in text:
+              print('Patch already present.')
+          elif old in text:
+              text = text.replace(old, new, 1)
+          else:
+              raise SystemExit('Target deletePlanningCalendarTasks block not found; refusing to patch.')
+
+          out = text.encode('utf-8')
+          if has_bom:
+              out = b'\xef\xbb\xbf' + out
+          path.write_bytes(out)
+          PY
+
+      - name: Remove temporary workflow and commit patch
+        run: |
+          rm .github/workflows/patch-planning-task-delete-cleanup.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/services/chantierPlanningCalendar.service.ts .github/workflows/patch-planning-task-delete-cleanup.yml
+          if git diff --cached --quiet; then
+            echo "No patch changes to commit."
+          else
+            git commit -m "fix: cleanup planning task relations before delete"
+            git push origin HEAD:dev
+          fi
