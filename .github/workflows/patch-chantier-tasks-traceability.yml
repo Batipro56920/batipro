@@ -28,55 +28,59 @@ jobs:
           has_bom = raw.startswith(b'\xef\xbb\xbf')
           text = raw.decode('utf-8-sig')
 
-          old = '''  const legacyInsert = stripTaskV2Columns({ ...baseInsert });
-  delete (legacyInsert as Record<string, unknown>).devis_ligne_id;
+          old = "\n".join([
+              '  const legacyInsert = stripTaskV2Columns({ ...baseInsert });',
+              '  delete (legacyInsert as Record<string, unknown>).devis_ligne_id;',
+              '',
+              '  const fallback = await supabase',
+              '    .from("chantier_tasks")',
+              '    .insert([legacyInsert])',
+              '    .select(TASK_SELECT_LEGACY)',
+              '    .single();',
+              '',
+              '  if (fallback.error) throw fallback.error;',
+              '  return normalizeTaskRow(fallback.data);',
+              '',
+          ])
 
-  const fallback = await supabase
-    .from("chantier_tasks")
-    .insert([legacyInsert])
-    .select(TASK_SELECT_LEGACY)
-    .single();
-
-  if (fallback.error) throw fallback.error;
-  return normalizeTaskRow(fallback.data);
-'''
-
-          new = '''  const legacyInsert = stripTaskV2Columns({ ...baseInsert });
-
-  const fallback = await supabase
-    .from("chantier_tasks")
-    .insert([legacyInsert])
-    .select(`${TASK_SELECT_LEGACY},devis_ligne_id`)
-    .single();
-
-  if (!fallback.error) {
-    return normalizeTaskRow(fallback.data);
-  }
-
-  if (!isMissingTaskColumnError(fallback.error, "devis_ligne_id")) {
-    throw fallback.error;
-  }
-
-  const legacyInsertWithoutDevisLine = { ...legacyInsert };
-  delete (legacyInsertWithoutDevisLine as Record<string, unknown>).devis_ligne_id;
-
-  const fallbackWithoutDevisLine = await supabase
-    .from("chantier_tasks")
-    .insert([legacyInsertWithoutDevisLine])
-    .select(TASK_SELECT_LEGACY)
-    .single();
-
-  if (fallbackWithoutDevisLine.error) throw fallbackWithoutDevisLine.error;
-  return normalizeTaskRow(fallbackWithoutDevisLine.data);
-'''
+          new = "\n".join([
+              '  const legacyInsert = stripTaskV2Columns({ ...baseInsert });',
+              '',
+              '  const fallback = await supabase',
+              '    .from("chantier_tasks")',
+              '    .insert([legacyInsert])',
+              '    .select(`${TASK_SELECT_LEGACY},devis_ligne_id`)',
+              '    .single();',
+              '',
+              '  if (!fallback.error) {',
+              '    return normalizeTaskRow(fallback.data);',
+              '  }',
+              '',
+              '  if (!isMissingTaskColumnError(fallback.error, "devis_ligne_id")) {',
+              '    throw fallback.error;',
+              '  }',
+              '',
+              '  const legacyInsertWithoutDevisLine = { ...legacyInsert };',
+              '  delete (legacyInsertWithoutDevisLine as Record<string, unknown>).devis_ligne_id;',
+              '',
+              '  const fallbackWithoutDevisLine = await supabase',
+              '    .from("chantier_tasks")',
+              '    .insert([legacyInsertWithoutDevisLine])',
+              '    .select(TASK_SELECT_LEGACY)',
+              '    .single();',
+              '',
+              '  if (fallbackWithoutDevisLine.error) throw fallbackWithoutDevisLine.error;',
+              '  return normalizeTaskRow(fallbackWithoutDevisLine.data);',
+              '',
+          ])
 
           if old not in text:
-            raise SystemExit('Target fallback block not found; refusing to patch.')
+              raise SystemExit('Target fallback block not found; refusing to patch.')
 
           text = text.replace(old, new, 1)
           out = text.encode('utf-8')
           if has_bom:
-            out = b'\xef\xbb\xbf' + out
+              out = b'\xef\xbb\xbf' + out
           path.write_bytes(out)
           PY
 
