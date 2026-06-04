@@ -68,7 +68,12 @@ function isMissingFinanceSchema(error: unknown): boolean {
 }
 
 function numberValue(value: unknown): number {
-  const n = Number(String(value ?? "0").replace(",", "."));
+  const withoutSpaces = String(value ?? "0").trim().replace(/[\s\u00A0]/g, "");
+  const raw =
+    withoutSpaces.includes(",") && withoutSpaces.includes(".")
+      ? withoutSpaces.replace(/\./g, "").replace(",", ".")
+      : withoutSpaces.replace(",", ".");
+  const n = Number(raw);
   return Number.isFinite(n) ? n : 0;
 }
 
