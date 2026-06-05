@@ -27,11 +27,7 @@ export async function listInvoices(): Promise<InvoiceRecord[]> {
     .overrideTypes<InvoiceRow[]>();
 
   if (error) throw new Error(error.message);
-  if (data?.length) return data.map(fromRow);
-
-  const initial = [createInvoice("deposit"), createInvoice("intermediate"), createInvoice("final")];
-  await Promise.all(initial.map((invoice) => saveInvoice(invoice)));
-  return initial;
+  return (data ?? []).map(fromRow);
 }
 
 export async function getInvoice(id: string) {

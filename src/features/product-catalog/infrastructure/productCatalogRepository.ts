@@ -38,11 +38,7 @@ export async function listProductCatalogItems(): Promise<ProductCatalogItem[]> {
     if (isMissingIsSellableColumn(error)) return listProductCatalogItemsLegacy();
     throw new Error(error.message);
   }
-  if (data?.length) return data.map(fromRow);
-
-  const seed = createSeedProducts();
-  await Promise.all(seed.map((product) => saveProductCatalogItem(product)));
-  return seed;
+  return (data ?? []).map(fromRow);
 }
 
 export async function saveProductCatalogItem(input: ProductCatalogItem | ProductCatalogDraft) {
@@ -150,11 +146,7 @@ async function listProductCatalogItemsLegacy(): Promise<ProductCatalogItem[]> {
     .overrideTypes<Omit<ProductCatalogRow, "is_sellable">[]>();
 
   if (error) throw new Error(error.message);
-  if (data?.length) return data.map((row) => fromRow({ ...row, is_sellable: true }));
-
-  const seed = createSeedProducts();
-  await Promise.all(seed.map((product) => saveProductCatalogItem(product)));
-  return seed;
+  return (data ?? []).map((row) => fromRow({ ...row, is_sellable: true }));
 }
 
 async function saveProductCatalogItemLegacy(product: ProductCatalogItem) {
@@ -204,52 +196,4 @@ function removeLegacyProducts() {
   if (typeof window !== "undefined") {
     window.localStorage.removeItem(LEGACY_STORAGE_KEY);
   }
-}
-
-function createSeedProducts(): ProductCatalogItem[] {
-  const now = new Date().toISOString();
-  return [
-    {
-      id: crypto.randomUUID(),
-      designation: "Plaque BA13 standard",
-      internalReference: "PLACO-BA13",
-      manufacturerReference: "BA13-2500",
-      brand: "Placo",
-      category: "Platrerie",
-      unit: "u",
-      vatRate: 20,
-      mainSupplierId: null,
-      mainSupplierName: "Fournisseur principal",
-      standardPurchasePriceHt: 8.9,
-      recommendedSalePriceHt: 13.5,
-      targetMarginRate: 34,
-      isSellable: true,
-      supplierPrices: [],
-      documents: [{ id: crypto.randomUUID(), kind: "technical_sheet", name: "Fiche technique BA13", url: null }],
-      priceHistory: [{ id: crypto.randomUUID(), purchasePriceHt: 8.9, salePriceHt: 13.5, changedAt: now, source: "seed" }],
-      createdAt: now,
-      updatedAt: now,
-    },
-    {
-      id: crypto.randomUUID(),
-      designation: "Colle carrelage C2",
-      internalReference: "COL-C2",
-      manufacturerReference: "C2-25KG",
-      brand: "Weber",
-      category: "Carrelage",
-      unit: "u",
-      vatRate: 20,
-      mainSupplierId: null,
-      mainSupplierName: "Fournisseur principal",
-      standardPurchasePriceHt: 18.5,
-      recommendedSalePriceHt: 28,
-      targetMarginRate: 34,
-      isSellable: true,
-      supplierPrices: [],
-      documents: [{ id: crypto.randomUUID(), kind: "sds", name: "FDS colle C2", url: null }],
-      priceHistory: [{ id: crypto.randomUUID(), purchasePriceHt: 18.5, salePriceHt: 28, changedAt: now, source: "seed" }],
-      createdAt: now,
-      updatedAt: now,
-    },
-  ];
 }
