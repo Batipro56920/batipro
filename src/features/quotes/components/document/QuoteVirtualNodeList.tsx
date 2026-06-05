@@ -1,4 +1,4 @@
-import { lazy, Suspense, useMemo, useState } from "react";
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import {
   DndContext,
   KeyboardSensor,
@@ -27,6 +27,20 @@ import type { QuoteCompositeNode } from "../../domain/QuoteLine";
 import { calculateCompositeSummary } from "../../application/quoteCompositeEngine";
 
 const QuoteRichTextField = lazy(() => import("./QuoteRichTextField").then((module) => ({ default: module.QuoteRichTextField })));
+
+function parseFrenchNumber(value: string) {
+  const text = value.trim();
+  if (!text) return 0;
+  const normalized = text.includes(",")
+    ? text.replace(/\s/g, "").replace(/\./g, "").replace(",", ".")
+    : text.replace(/\s/g, "");
+  const parsed = Number(normalized);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function formatNumberInputValue(value: number) {
+  return Number.isFinite(value) ? String(value) : "0";
+}
 
 type RowProps = {
   rows: NumberedQuoteNode[];
@@ -258,7 +272,33 @@ function Actions({
 }
 
 function NumberInput({ value, onChange }: { value: number; onChange: (value: number) => void }) {
-  return <Input type="number" value={Number.isFinite(value) ? value : 0} onChange={(event) => onChange(Number(event.target.value))} />;
+  const [text, setText] = useState(formatNumberInputValue(value));
+  const editingRef = useRef(false);
+
+  useEffect(() => {
+    if (!editingRef.current) {
+      setText(formatNumberInputValue(value));
+    }
+  }, [value]);
+
+  return (
+    <Input
+      inputMode="decimal"
+      value={text}
+      onFocus={() => {
+        editingRef.current = true;
+      }}
+      onChange={(event) => {
+        const nextValue = event.target.value;
+        setText(nextValue);
+        onChange(parseFrenchNumber(nextValue));
+      }}
+      onBlur={() => {
+        editingRef.current = false;
+        setText(formatNumberInputValue(parseFrenchNumber(text)));
+      }}
+    />
+  );
 }
 
 function VatInput({ value, onChange }: { value: QuoteVatRate; onChange: (value: QuoteVatRate) => void }) {
