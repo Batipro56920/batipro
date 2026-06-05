@@ -289,7 +289,7 @@ export async function updateApporteurLead(
 
   const response = await supabase
     .from("apporteur_leads")
-    .update(payload)
+    .update(payload as any)
     .eq("id", id)
     .eq("organization_id", organization_id)
     .select("*")
@@ -300,7 +300,7 @@ export async function updateApporteurLead(
     delete (fallbackPayload as Record<string, unknown>).crm_prospect_id;
     const fallback = await supabase
       .from("apporteur_leads")
-      .update(fallbackPayload)
+      .update(fallbackPayload as any)
       .eq("id", id)
       .eq("organization_id", organization_id)
       .select("*")
