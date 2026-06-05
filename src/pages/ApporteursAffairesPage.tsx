@@ -20,6 +20,7 @@ import type {
   ApporteurType,
   ApporteurAccessTokenRow,
 } from "../services/apporteurs.service";
+import { createCrmProspect } from "../services/crm.service";
 
 const APPORTREUR_TYPES: { value: ApporteurType; label: string }[] = [
   { value: "agent_immobilier", label: "Agent immobilier" },
@@ -323,6 +324,52 @@ export default function ApporteursAffairesPage() {
     }
   }
 
+  async function onCreateCrmProspectFromLead(lead: ApporteurLeadRow) {
+    if (lead.crm_prospect_id) {
+      setNotice("Ce lead est déjà relié à un prospect CRM.");
+      return;
+    }
+    setSaving(true);
+    setError(null);
+    setNotice(null);
+    try {
+      const apporteur = apporteurs.find((row) => row.id === lead.apporteur_id);
+      const apporteurLabel = [apporteur?.nom, apporteur?.entreprise].filter(Boolean).join(" - ") || null;
+      const description = [
+        lead.comment,
+        lead.project_address ? `Adresse projet : ${lead.project_address}` : null,
+        apporteurLabel ? `Apporteur : ${apporteurLabel}` : null,
+      ].filter(Boolean).join("\n");
+
+      const prospect = await createCrmProspect({
+        type: "particulier",
+        nom: lead.client_name,
+        telephone: lead.telephone,
+        adresse: lead.project_address,
+        source_acquisition: "Apporteur d'affaires",
+        apporteur_affaire: apporteurLabel,
+        budget_estime: lead.estimated_amount || null,
+        type_projet: lead.project_type,
+        description_besoin: description || null,
+        notes: lead.comment,
+        tags: ["apporteur"],
+        statut: lead.status === "nouveau" ? "a_qualifier" : "qualifie",
+      });
+
+      await updateApporteurLead(lead.id, {
+        crm_prospect_id: prospect.id,
+        status: lead.status === "nouveau" ? "contacte" : lead.status,
+      });
+
+      setNotice("Prospect CRM créé depuis le lead apporteur.");
+      await refreshData();
+    } catch (err: any) {
+      setError(err?.message ?? "Impossible de créer le prospect CRM depuis ce lead.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
   if (loading) {
     return <div className="rounded-2xl border bg-white p-8 text-sm text-slate-500">Chargement des apporteurs...</div>;
   }
@@ -588,6 +635,7 @@ export default function ApporteursAffairesPage() {
                     <td className="px-4 py-3">{lead.date}</td>
                     <td className="px-4 py-3 text-sm text-slate-500">
                       <button type="button" onClick={() => onEditLead(lead)} className="mr-2 text-blue-600 hover:underline">Modifier</button>
+                      <button type="button" disabled={saving || Boolean(lead.crm_prospect_id)} onClick={() => void onCreateCrmProspectFromLead(lead)} className="mr-2 text-emerald-700 hover:underline disabled:text-slate-400">{lead.crm_prospect_id ? "Prospect créé" : "Créer prospect CRM"}</button>
                       <button type="button" onClick={() => void onRemoveLead(lead.id)} className="text-red-600 hover:underline">Supprimer</button>
                     </td>
                   </tr>
