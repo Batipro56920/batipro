@@ -238,7 +238,14 @@ function asNullableString(value: unknown): string | null {
 }
 
 function asNullableNumber(value: unknown): number | null {
-  const n = Number(value);
+  if (value === null || value === undefined) return null;
+  if (typeof value === "number") return Number.isFinite(value) ? value : null;
+  const text = String(value).trim();
+  if (!text) return null;
+  const normalized = text.includes(",")
+    ? text.replace(/\s/g, "").replace(/\./g, "").replace(",", ".")
+    : text.replace(/\s/g, "");
+  const n = Number(normalized);
   return Number.isFinite(n) ? n : null;
 }
 
