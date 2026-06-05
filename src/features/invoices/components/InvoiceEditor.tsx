@@ -128,7 +128,7 @@ function PaymentPanel({ invoice, onAdd }: { invoice: InvoiceRecord; onAdd: (paym
       <div className="font-semibold text-slate-950">Paiements</div>
       <div className="mt-2 text-slate-500">Encaissé : {formatCurrency(getPaidAmount(invoice))} · Reste : {formatCurrency(getRemainingAmount(invoice))}</div>
       <div className="mt-4 grid gap-2">
-        <input className={inputClass} type="number" placeholder="Montant" value={amount} onChange={(event) => setAmount(event.target.value)} />
+        <input className={inputClass} inputMode="decimal" placeholder="Montant" value={amount} onChange={(event) => setAmount(event.target.value)} />
         <input className={inputClass} type="date" value={paidAt} onChange={(event) => setPaidAt(event.target.value)} />
         <select className={inputClass} value={method} onChange={(event) => setMethod(event.target.value as InvoicePayment["method"])}>
           <option value="transfer">Virement</option>
@@ -139,8 +139,9 @@ function PaymentPanel({ invoice, onAdd }: { invoice: InvoiceRecord; onAdd: (paym
         </select>
         <input className={inputClass} placeholder="Référence" value={reference} onChange={(event) => setReference(event.target.value)} />
         <Button variant="secondary" onClick={() => {
-          if (!amount) return;
-          onAdd({ amount: Number(amount), paidAt, method, reference });
+          const parsedAmount = parseFrenchNumber(amount);
+          if (parsedAmount === null || parsedAmount <= 0) return;
+          onAdd({ amount: parsedAmount, paidAt, method, reference });
           setAmount("");
           setReference("");
         }}>Ajouter paiement</Button>
@@ -178,6 +179,16 @@ function appendChild(nodes: BusinessDocumentNode[], parentId: string, child: Bus
 }
 
 const inputClass = "h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm outline-none focus:border-blue-300";
+
+function parseFrenchNumber(value: string) {
+  const text = value.trim();
+  if (!text) return null;
+  const normalized = text.includes(",")
+    ? text.replace(/\s/g, "").replace(/\./g, "").replace(",", ".")
+    : text.replace(/\s/g, "");
+  const parsed = Number(normalized);
+  return Number.isFinite(parsed) ? parsed : null;
+}
 
 function formatCurrency(value: number) {
   return new Intl.NumberFormat("fr-FR", { style: "currency", currency: "EUR" }).format(value);
