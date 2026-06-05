@@ -87,7 +87,7 @@ function createDepositInvoiceNodes(quote: BusinessDocument, quoteTotals: ReturnT
       collapsed: false,
       children: vatBreakdown
         .filter((item) => item.baseHt > 0)
-        .map((item, index) => ({
+        .map((item, index): BusinessDocumentNode => ({
           id: crypto.randomUUID(),
           type: "line",
           parentId: sectionId,
