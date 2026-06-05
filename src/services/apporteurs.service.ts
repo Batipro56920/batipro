@@ -41,6 +41,7 @@ export type ApporteurLeadRow = {
   id: string;
   organization_id: string;
   apporteur_id: string | null;
+  crm_prospect_id?: string | null;
   client_name: string;
   telephone: string | null;
   project_address: string | null;
@@ -273,6 +274,7 @@ export async function updateApporteurLead(
     status: ApporteurLeadStatus;
     commission_paid: boolean;
     apporteur_id: string;
+    crm_prospect_id: string | null;
   }>,
 ): Promise<ApporteurLeadRow> {
   const organization_id = await getOrganizationId();
@@ -293,8 +295,28 @@ export async function updateApporteurLead(
     .select("*")
     .single();
 
+  if (response.error && "crm_prospect_id" in payload && isMissingCrmProspectIdColumn(response.error)) {
+    const fallbackPayload = { ...payload };
+    delete (fallbackPayload as Record<string, unknown>).crm_prospect_id;
+    const fallback = await supabase
+      .from("apporteur_leads")
+      .update(fallbackPayload)
+      .eq("id", id)
+      .eq("organization_id", organization_id)
+      .select("*")
+      .single();
+    if (fallback.error) throw new Error(fallback.error.message);
+    return fallback.data as ApporteurLeadRow;
+  }
+
   if (response.error) throw new Error(response.error.message);
   return response.data as ApporteurLeadRow;
+}
+
+function isMissingCrmProspectIdColumn(error: { code?: string; message?: string } | null) {
+  const code = String(error?.code ?? "");
+  const msg = String(error?.message ?? "").toLowerCase();
+  return code === "42703" || (msg.includes("crm_prospect_id") && (msg.includes("schema cache") || msg.includes("could not find") || msg.includes("column")));
 }
 
 export async function deleteApporteurLead(id: string): Promise<void> {
