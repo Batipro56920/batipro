@@ -76,6 +76,26 @@ function createDepositInvoiceNodes(quote: BusinessDocument, quoteTotals: ReturnT
   const vatBreakdown = quoteTotals.vatBreakdown.length
     ? quoteTotals.vatBreakdown
     : [{ rate: quote.settings.defaultVatRate, baseHt: quoteTotals.totalHt, vatAmount: quoteTotals.totalVat }];
+  const depositLines = vatBreakdown
+    .filter((item) => item.baseHt > 0)
+    .map((item, index): BusinessDocumentNode => ({
+      id: crypto.randomUUID(),
+      type: "line",
+      parentId: sectionId,
+      order: index,
+      title: `Acompte ${percent}% - TVA ${item.rate}%`,
+      description: `Selon devis ${quote.number}`,
+      kind: "divers",
+      quantity: 1,
+      unit: "forfait",
+      unitPriceHt: roundMoney(item.baseHt * percent / 100),
+      vatRate: item.rate,
+    }))
+    .filter((line) => line.type !== "line" || line.unitPriceHt > 0);
+
+  if (!depositLines.length) {
+    throw new Error("Impossible de créer une facture d'acompte sans montant positif.");
+  }
 
   return [
     {
@@ -85,21 +105,7 @@ function createDepositInvoiceNodes(quote: BusinessDocument, quoteTotals: ReturnT
       order: 0,
       title: `Acompte ${percent}%`,
       collapsed: false,
-      children: vatBreakdown
-        .filter((item) => item.baseHt > 0)
-        .map((item, index): BusinessDocumentNode => ({
-          id: crypto.randomUUID(),
-          type: "line",
-          parentId: sectionId,
-          order: index,
-          title: `Acompte ${percent}% - TVA ${item.rate}%`,
-          description: `Selon devis ${quote.number}`,
-          kind: "divers",
-          quantity: 1,
-          unit: "forfait",
-          unitPriceHt: roundMoney(item.baseHt * percent / 100),
-          vatRate: item.rate,
-        })),
+      children: depositLines,
     },
   ];
 }
