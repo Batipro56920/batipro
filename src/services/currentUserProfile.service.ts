@@ -45,7 +45,6 @@ function buildFallbackProfile(user: User): CurrentUserProfile {
   const email = normalizeText(user.email);
   const role =
     normalizeRole(user.app_metadata?.role) ??
-    normalizeRole(user.user_metadata?.role) ??
     (isWhitelistedAdminEmail(email) ? "ADMIN" : null);
   const displayName =
     normalizeText(user.user_metadata?.display_name) ??
