@@ -27,7 +27,7 @@ const DEFAULT_LEAD_FORM = {
   telephone: "",
   project_address: "",
   project_type: "",
-  estimated_amount: 0,
+  estimated_amount: "0",
   comment: "",
   date: new Date().toISOString().slice(0, 10),
   status: "nouveau" as ApporteurLeadStatus,
@@ -35,6 +35,16 @@ const DEFAULT_LEAD_FORM = {
 
 function formatCurrency(value: number) {
   return new Intl.NumberFormat("fr-FR", { style: "currency", currency: "EUR" }).format(value || 0);
+}
+
+function parseFrenchNumber(value: string) {
+  const text = value.trim();
+  if (!text) return 0;
+  const normalized = text.includes(",")
+    ? text.replace(/\s/g, "").replace(/\./g, "").replace(",", ".")
+    : text.replace(/\s/g, "");
+  const parsed = Number(normalized);
+  return Number.isFinite(parsed) ? parsed : 0;
 }
 
 function commissionAmount(lead: ApporteurLeadRow, apporteur: ApporteurAffaireRow | null) {
@@ -116,7 +126,7 @@ export default function ApporteurPortalPage() {
         telephone: leadForm.telephone || null,
         project_address: leadForm.project_address || null,
         project_type: leadForm.project_type || null,
-        estimated_amount: Number(leadForm.estimated_amount) || 0,
+        estimated_amount: parseFrenchNumber(leadForm.estimated_amount),
         comment: leadForm.comment || null,
         date: leadForm.date,
         status: leadForm.status,
@@ -192,7 +202,7 @@ export default function ApporteurPortalPage() {
               </label>
               <label className="space-y-1 text-sm text-slate-700">
                 <div>Montant estimé</div>
-                <input type="number" step="0.01" className="w-full rounded-2xl border border-slate-200 px-3 py-2 text-sm" value={leadForm.estimated_amount} onChange={(e) => setLeadForm((prev) => ({ ...prev, estimated_amount: Number(e.target.value) }))} />
+                <input inputMode="decimal" className="w-full rounded-2xl border border-slate-200 px-3 py-2 text-sm" value={leadForm.estimated_amount} onChange={(e) => setLeadForm((prev) => ({ ...prev, estimated_amount: e.target.value }))} />
               </label>
               <label className="space-y-1 text-sm text-slate-700">
                 <div>Statut</div>
