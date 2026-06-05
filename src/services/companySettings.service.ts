@@ -57,6 +57,7 @@ export type CompanySettingsRow = {
   charges_exploitation?: CompanyChargesSettings | null;
   created_at: string;
   updated_at: string;
+  persistence_status?: "supabase" | "local_fallback";
 };
 
 export type CompanyBrandingPdf = {
@@ -185,7 +186,12 @@ function withDefaults(orgId: string, row?: Partial<CompanySettingsRow>): Company
     charges_exploitation: row?.charges_exploitation ?? null,
     created_at: String(row?.created_at ?? ""),
     updated_at: String(row?.updated_at ?? ""),
+    persistence_status: row?.persistence_status ?? "supabase",
   };
+}
+
+function withPersistenceStatus(row: CompanySettingsRow, status: CompanySettingsRow["persistence_status"]): CompanySettingsRow {
+  return { ...row, persistence_status: status };
 }
 
 export async function getCompanySettings(): Promise<CompanySettingsRow> {
@@ -195,7 +201,7 @@ export async function getCompanySettings(): Promise<CompanySettingsRow> {
   } catch {
     const cached = loadLatestLocalSettings();
     if (cached) {
-      return withDefaults(String(cached.organization_id ?? ""), cached);
+      return withPersistenceStatus(withDefaults(String(cached.organization_id ?? ""), cached), "local_fallback");
     }
     throw new Error("Impossible de charger les réglages société.");
   }
@@ -208,28 +214,28 @@ export async function getCompanySettings(): Promise<CompanySettingsRow> {
 
   if (error) {
     if (isMissingCompanySettingsTableError(error)) {
-      return withDefaults(userId, localSettings ?? undefined);
+      return withPersistenceStatus(withDefaults(userId, localSettings ?? undefined), "local_fallback");
     }
     if (localSettings) {
-      return withDefaults(userId, localSettings);
+      return withPersistenceStatus(withDefaults(userId, localSettings), "local_fallback");
     }
     const latestCached = loadLatestLocalSettings();
     if (latestCached) {
-      return withDefaults(String(latestCached.organization_id ?? userId), latestCached);
+      return withPersistenceStatus(withDefaults(String(latestCached.organization_id ?? userId), latestCached), "local_fallback");
     }
     throw new Error(error.message);
   }
 
   if (!data && localSettings) {
-    return withDefaults(userId, localSettings);
+    return withPersistenceStatus(withDefaults(userId, localSettings), "local_fallback");
   }
 
   const normalized = withDefaults(userId, (data ?? undefined) as Partial<CompanySettingsRow> | undefined);
   if (localSettings && getSettingsTimestamp(localSettings) > getSettingsTimestamp(normalized)) {
-    return withDefaults(userId, localSettings);
+    return withPersistenceStatus(withDefaults(userId, localSettings), "local_fallback");
   }
   saveLocalSettings(userId, normalized);
-  return normalized;
+  return withPersistenceStatus(normalized, "supabase");
 }
 
 export async function upsertCompanySettings(
@@ -316,7 +322,7 @@ export async function upsertCompanySettings(
         updated_at: nowIso,
       };
       saveLocalSettings(userId, fallback);
-      return withDefaults(userId, fallback);
+      return withPersistenceStatus(withDefaults(userId, fallback), "local_fallback");
     }
     throw new Error(error.message);
   }
@@ -328,7 +334,7 @@ export async function upsertCompanySettings(
     created_at: (data as any)?.created_at ?? currentLocal.created_at ?? nowIso,
   });
   saveLocalSettings(userId, localSnapshot);
-  return localSnapshot;
+  return withPersistenceStatus(localSnapshot, "supabase");
 }
 
 function fileToDataUrl(file: Blob): Promise<string> {
