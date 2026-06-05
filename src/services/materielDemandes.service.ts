@@ -70,7 +70,7 @@ function mapRow(row: Record<string, unknown>): MaterielDemandeRow {
     intervenant_nom: (row.intervenant_nom as string | null | undefined) ?? null,
     titre,
     designation: String(row.designation ?? titre),
-    quantite: Number(row.quantite ?? 0) || 0,
+    quantite: normalizeNumber(row.quantite) || 0,
     unite: (row.unite as string | null | undefined) ?? null,
     commentaire,
     remarques: (row.remarques as string | null | undefined) ?? commentaire ?? null,
