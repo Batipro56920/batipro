@@ -55,7 +55,7 @@ const DEFAULT_APPORTEUR_FORM = {
   type: "partenaire" as ApporteurType,
   telephone: "",
   email: "",
-  commission_percent: 10,
+  commission_percent: "10",
   calculation_mode: "sur_estime" as ApporteurCalculationMode,
   iban: "",
   active: true,
@@ -68,7 +68,7 @@ const DEFAULT_LEAD_FORM = {
   telephone: "",
   project_address: "",
   project_type: "",
-  estimated_amount: 0,
+  estimated_amount: "0",
   comment: "",
   apporteur_id: "",
   date: new Date().toISOString().slice(0, 10),
@@ -77,6 +77,16 @@ const DEFAULT_LEAD_FORM = {
 
 function formatCurrency(value: number) {
   return new Intl.NumberFormat("fr-FR", { style: "currency", currency: "EUR" }).format(value || 0);
+}
+
+function parseFrenchNumber(value: string) {
+  const text = value.trim();
+  if (!text) return 0;
+  const normalized = text.includes(",")
+    ? text.replace(/\s/g, "").replace(/\./g, "").replace(",", ".")
+    : text.replace(/\s/g, "");
+  const parsed = Number(normalized);
+  return Number.isFinite(parsed) ? parsed : 0;
 }
 
 function calculateCommission(lead: ApporteurLeadRow, apporteur?: ApporteurAffaireRow) {
@@ -181,7 +191,7 @@ export default function ApporteursAffairesPage() {
         type: apporteurForm.type,
         telephone: apporteurForm.telephone || null,
         email: apporteurForm.email || null,
-        commission_percent: Number(apporteurForm.commission_percent) || 0,
+        commission_percent: parseFrenchNumber(apporteurForm.commission_percent),
         calculation_mode: apporteurForm.calculation_mode,
         iban: apporteurForm.iban || null,
         active: apporteurForm.active,
@@ -216,7 +226,7 @@ export default function ApporteursAffairesPage() {
       type: apporteur.type,
       telephone: apporteur.telephone ?? "",
       email: apporteur.email ?? "",
-      commission_percent: apporteur.commission_percent,
+      commission_percent: String(apporteur.commission_percent ?? 0),
       calculation_mode: apporteur.calculation_mode,
       iban: apporteur.iban ?? "",
       active: apporteur.active,
@@ -270,7 +280,7 @@ export default function ApporteursAffairesPage() {
         telephone: leadForm.telephone || null,
         project_address: leadForm.project_address || null,
         project_type: leadForm.project_type || null,
-        estimated_amount: Number(leadForm.estimated_amount) || 0,
+        estimated_amount: parseFrenchNumber(leadForm.estimated_amount),
         comment: leadForm.comment || null,
         date: leadForm.date,
         status: leadForm.status,
@@ -299,7 +309,7 @@ export default function ApporteursAffairesPage() {
       telephone: lead.telephone ?? "",
       project_address: lead.project_address ?? "",
       project_type: lead.project_type ?? "",
-      estimated_amount: lead.estimated_amount,
+      estimated_amount: String(lead.estimated_amount ?? 0),
       comment: lead.comment ?? "",
       apporteur_id: lead.apporteur_id ?? "",
       date: lead.date.slice(0, 10),
@@ -513,7 +523,7 @@ export default function ApporteursAffairesPage() {
             </label>
             <label className="space-y-1 text-sm">
               <div className="text-xs text-slate-600">Commission %</div>
-              <input type="number" step="0.1" className="w-full rounded-xl border px-3 py-2 text-sm" value={apporteurForm.commission_percent} onChange={(e) => setApporteurForm((prev) => ({ ...prev, commission_percent: Number(e.target.value) }))} />
+              <input inputMode="decimal" className="w-full rounded-xl border px-3 py-2 text-sm" value={apporteurForm.commission_percent} onChange={(e) => setApporteurForm((prev) => ({ ...prev, commission_percent: e.target.value }))} />
             </label>
             <label className="space-y-1 text-sm">
               <div className="text-xs text-slate-600">Mode de calcul</div>
@@ -570,7 +580,7 @@ export default function ApporteursAffairesPage() {
             </label>
             <label className="space-y-1 text-sm">
               <div className="text-xs text-slate-600">Montant estimé</div>
-              <input type="number" step="0.01" className="w-full rounded-xl border px-3 py-2 text-sm" value={leadForm.estimated_amount} onChange={(e) => setLeadForm((prev) => ({ ...prev, estimated_amount: Number(e.target.value) }))} />
+              <input inputMode="decimal" className="w-full rounded-xl border px-3 py-2 text-sm" value={leadForm.estimated_amount} onChange={(e) => setLeadForm((prev) => ({ ...prev, estimated_amount: e.target.value }))} />
             </label>
             <label className="space-y-1 text-sm">
               <div className="text-xs text-slate-600">Statut</div>
