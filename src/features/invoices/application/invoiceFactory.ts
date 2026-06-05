@@ -1,4 +1,4 @@
-import { calculateDocumentTotals, createEmptyBusinessDocument, type BusinessDocument } from "../../document-engine";
+import { calculateDocumentTotals, createEmptyBusinessDocument, type BusinessDocument, type BusinessDocumentNode } from "../../document-engine";
 import type { InvoiceRecord, InvoiceType } from "../domain/types";
 
 export function createInvoice(type: InvoiceType = "deposit", sourceQuote?: BusinessDocument): InvoiceRecord {
@@ -21,6 +21,7 @@ export function createInvoice(type: InvoiceType = "deposit", sourceQuote?: Busin
 export function createInvoiceDocumentFromQuote(quote: BusinessDocument, type: InvoiceType): BusinessDocument {
   const quoteTotals = quote.totals ?? calculateDocumentTotals(quote);
   const isCreditNote = type === "credit_note";
+  const depositPercent = quote.terms.depositPercent ?? 30;
   const document = {
     ...quote,
     id: null,
@@ -34,19 +35,20 @@ export function createInvoiceDocumentFromQuote(quote: BusinessDocument, type: In
     terms: {
       ...quote.terms,
       paymentTerms: type === "deposit"
-        ? `Facture d'acompte de ${quote.terms.depositPercent ?? 30}% selon devis ${quote.number}.`
+        ? `Facture d'acompte de ${depositPercent}% selon devis ${quote.number}.`
         : type === "final"
           ? `Facture finale selon devis ${quote.number}.`
           : type === "credit_note"
             ? `Avoir relatif au devis ${quote.number}.`
             : `Facture intermediaire selon avancement du devis ${quote.number}.`,
       depositAmount: null,
-      depositPercent: type === "deposit" ? quote.terms.depositPercent ?? 30 : null,
+      depositPercent: null,
     },
     totals: undefined,
   };
 
   if (type === "deposit") {
+    document.nodes = createDepositInvoiceNodes(quote, quoteTotals, depositPercent);
     document.description = `Acompte sur devis ${quote.number} - montant de reference ${formatCurrency(quoteTotals.totalTtc)} TTC.`;
   }
 
@@ -68,6 +70,40 @@ function createEmptyInvoiceDocument(type: InvoiceType): BusinessDocument {
   };
 }
 
+function createDepositInvoiceNodes(quote: BusinessDocument, quoteTotals: ReturnType<typeof calculateDocumentTotals>, depositPercent: number): BusinessDocumentNode[] {
+  const percent = Math.max(0, Math.min(100, depositPercent || 0));
+  const sectionId = crypto.randomUUID();
+  const vatBreakdown = quoteTotals.vatBreakdown.length
+    ? quoteTotals.vatBreakdown
+    : [{ rate: quote.settings.defaultVatRate, baseHt: quoteTotals.totalHt, vatAmount: quoteTotals.totalVat }];
+
+  return [
+    {
+      id: sectionId,
+      type: "section",
+      parentId: null,
+      order: 0,
+      title: `Acompte ${percent}%`,
+      collapsed: false,
+      children: vatBreakdown
+        .filter((item) => item.baseHt > 0)
+        .map((item, index) => ({
+          id: crypto.randomUUID(),
+          type: "line",
+          parentId: sectionId,
+          order: index,
+          title: `Acompte ${percent}% - TVA ${item.rate}%`,
+          description: `Selon devis ${quote.number}`,
+          kind: "divers",
+          quantity: 1,
+          unit: "forfait",
+          unitPriceHt: roundMoney(item.baseHt * percent / 100),
+          vatRate: item.rate,
+        })),
+    },
+  ];
+}
+
 export function invoiceTypeLabel(type: InvoiceType) {
   if (type === "deposit") return "Facture d'acompte";
   if (type === "intermediate") return "Facture intermediaire";
@@ -84,6 +120,10 @@ function dueDate(days: number) {
   const date = new Date();
   date.setDate(date.getDate() + days);
   return date.toISOString().slice(0, 10);
+}
+
+function roundMoney(value: number) {
+  return Math.round((value + Number.EPSILON) * 100) / 100;
 }
 
 function formatCurrency(value: number) {
