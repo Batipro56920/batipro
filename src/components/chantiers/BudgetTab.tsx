@@ -35,6 +35,16 @@ function formatHours(value: number) {
   return `${new Intl.NumberFormat("fr-FR", { maximumFractionDigits: 1 }).format(Number(value) || 0)} h`;
 }
 
+function parseFrenchNumber(value: string, fallback = 0) {
+  const text = value.trim();
+  if (!text) return fallback;
+  const normalized = text.includes(",")
+    ? text.replace(/\s/g, "").replace(/\./g, "").replace(",", ".")
+    : text.replace(/\s/g, "");
+  const parsed = Number(normalized);
+  return Number.isFinite(parsed) ? parsed : fallback;
+}
+
 function marginToneClass(value: number, target: number) {
   if (value < target) return "text-red-700";
   if (value < target + 5) return "text-amber-700";
@@ -137,8 +147,8 @@ export default function BudgetTab({ chantierId }: BudgetTabProps) {
         supplier_name: expenseForm.supplier_name,
         category: expenseForm.category,
         description: expenseForm.description,
-        amount_ht: Number(expenseForm.amount_ht || 0),
-        tva: Number(expenseForm.tva || 20),
+        amount_ht: parseFrenchNumber(expenseForm.amount_ht),
+        tva: parseFrenchNumber(expenseForm.tva, 20),
         status: expenseForm.status as any,
       });
       setExpenseForm({ supplier_name: "", category: "materiaux", description: "", amount_ht: "", tva: "20", status: "prevu" });
@@ -159,8 +169,8 @@ export default function BudgetTab({ chantierId }: BudgetTabProps) {
         chantier_id: chantierId,
         type: billingForm.type as any,
         label: billingForm.label,
-        amount_ht: Number(billingForm.amount_ht || 0),
-        amount_ttc: Number(billingForm.amount_ttc || billingForm.amount_ht || 0),
+        amount_ht: parseFrenchNumber(billingForm.amount_ht),
+        amount_ttc: parseFrenchNumber(billingForm.amount_ttc || billingForm.amount_ht),
         payment_status: billingForm.payment_status as any,
       });
       setBillingForm({ type: "acompte", label: "", amount_ht: "", amount_ttc: "", payment_status: "a_facturer" });
@@ -180,7 +190,7 @@ export default function BudgetTab({ chantierId }: BudgetTabProps) {
       await createChantierFinancialChangeOrder({
         chantier_id: chantierId,
         description: changeOrderForm.description,
-        amount_ht: Number(changeOrderForm.amount_ht || 0),
+        amount_ht: parseFrenchNumber(changeOrderForm.amount_ht),
         status: changeOrderForm.status as any,
       });
       setChangeOrderForm({ description: "", amount_ht: "", status: "propose" });
