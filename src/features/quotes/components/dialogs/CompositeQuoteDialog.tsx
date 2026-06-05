@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useRef, useMemo, useState } from "react";
 import { Copy, Plus, Trash2, X } from "lucide-react";
 import { Button } from "../../../../components/ui/button";
 import { Card } from "../../../../components/ui/card";
@@ -32,6 +32,20 @@ const tabs: Array<{ kind: QuoteComponentKind; label: string }> = [
   { kind: "sous_traitance", label: "Sous-traitance" },
   { kind: "divers", label: "Divers" },
 ];
+
+function parseFrenchNumber(value: string) {
+  const text = value.trim();
+  if (!text) return 0;
+  const normalized = text.includes(",")
+    ? text.replace(/\s/g, "").replace(/\./g, "").replace(",", ".")
+    : text.replace(/\s/g, "");
+  const parsed = Number(normalized);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function formatNumberInputValue(value: number) {
+  return Number.isFinite(value) ? String(value) : "0";
+}
 
 export function CompositeQuoteDialog({ node, onClose, onSave }: Props) {
   const [draft, setDraft] = useState(node);
@@ -153,7 +167,34 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 }
 
 function NumberInput({ value, onChange, disabled = false }: { value: number; onChange: (value: number) => void; disabled?: boolean }) {
-  return <Input type="number" disabled={disabled} value={Number.isFinite(value) ? value : 0} onChange={(event) => onChange(Number(event.target.value))} />;
+  const [text, setText] = useState(formatNumberInputValue(value));
+  const editingRef = useRef(false);
+
+  useEffect(() => {
+    if (!editingRef.current) {
+      setText(formatNumberInputValue(value));
+    }
+  }, [value]);
+
+  return (
+    <Input
+      disabled={disabled}
+      inputMode="decimal"
+      value={text}
+      onFocus={() => {
+        editingRef.current = true;
+      }}
+      onChange={(event) => {
+        const nextValue = event.target.value;
+        setText(nextValue);
+        onChange(parseFrenchNumber(nextValue));
+      }}
+      onBlur={() => {
+        editingRef.current = false;
+        setText(formatNumberInputValue(parseFrenchNumber(text)));
+      }}
+    />
+  );
 }
 
 function SummaryRow({ label, value, strong = false }: { label: string; value: string; strong?: boolean }) {
