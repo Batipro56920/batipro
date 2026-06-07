@@ -373,13 +373,13 @@ export default function ApporteursAffairesPage() {
     }
   }
 
-  if (loading) return <div className="rounded-2xl border bg-white p-8 text-sm text-slate-500">Chargement des apporteurs...</div>;
+  if (loading) return <div className="bt-card rounded-xl p-8 text-sm text-slate-500">Chargement des apporteurs...</div>;
 
   return (
-    <div className="space-y-5">
-      <header className="flex flex-col gap-4 border-b border-slate-200 pb-5 lg:flex-row lg:items-end lg:justify-between">
+    <div className="bt-page space-y-5">
+      <header className="flex flex-col gap-4 border-b border-slate-200 pb-4 lg:flex-row lg:items-end lg:justify-between">
         <div>
-          <div className="text-xs font-semibold uppercase tracking-[0.18em] text-blue-600">Commerce</div>
+          <div className="section-title text-xs font-semibold uppercase tracking-[0.16em]">Commerce</div>
           <h1 className="mt-1 text-2xl font-bold text-slate-950">Apporteurs d'affaires</h1>
           <p className="mt-1 text-sm text-slate-500">Partenaires, leads transmis, conversion CRM et commissions à suivre.</p>
         </div>
@@ -389,8 +389,8 @@ export default function ApporteursAffairesPage() {
         </div>
       </header>
 
-      {error ? <div className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</div> : null}
-      {notice ? <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-700">{notice}</div> : null}
+      {error ? <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</div> : null}
+      {notice ? <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-700">{notice}</div> : null}
 
       <section className="grid gap-3 md:grid-cols-5">
         <Metric label="Apporteurs actifs" value={String(apporteurs.filter((row) => row.active).length)} />
@@ -402,14 +402,14 @@ export default function ApporteursAffairesPage() {
 
       <section className="grid gap-5 xl:grid-cols-[380px_minmax(0,1fr)]">
         <aside className="space-y-4">
-          <div className="rounded-2xl border border-slate-200 bg-white p-3">
-            <div className="px-2 pb-2 text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Apporteurs</div>
+          <div className="bt-card rounded-xl bg-white p-3">
+            <div className="px-2 pb-2 text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Apporteurs</div>
             <div className="space-y-2">
               {apporteurs.map((apporteur) => {
                 const active = apporteur.id === selectedApporteurId;
                 const leadCount = leads.filter((lead) => lead.apporteur_id === apporteur.id).length;
                 return (
-                  <button key={apporteur.id} type="button" onClick={() => { setSelectedApporteurId(apporteur.id); resetLeadForm(apporteur.id); }} className={["w-full rounded-xl border px-3 py-3 text-left transition", active ? "border-blue-300 bg-blue-50" : "border-transparent hover:border-slate-200 hover:bg-slate-50"].join(" ")}>
+                  <button key={apporteur.id} type="button" onClick={() => { setSelectedApporteurId(apporteur.id); resetLeadForm(apporteur.id); }} className={["w-full rounded-lg border px-3 py-3 text-left transition", active ? "border-blue-500 bg-blue-50" : "border-transparent hover:border-slate-200 hover:bg-slate-50"].join(" ")}>
                     <div className="flex items-start justify-between gap-2">
                       <div className="min-w-0"><div className="truncate text-sm font-semibold text-slate-950">{apporteur.nom}</div><div className="mt-0.5 truncate text-xs text-slate-500">{apporteur.entreprise || optionLabel(APPORTREUR_TYPES, apporteur.type)}</div></div>
                       <span className={apporteur.active ? "status-ok" : "status-muted"}>{apporteur.active ? "Actif" : "Inactif"}</span>
@@ -418,7 +418,7 @@ export default function ApporteursAffairesPage() {
                   </button>
                 );
               })}
-              {!apporteurs.length ? <div className="rounded-xl border border-dashed border-slate-200 p-4 text-sm text-slate-500">Aucun apporteur enregistré.</div> : null}
+              {!apporteurs.length ? <div className="rounded-lg border border-dashed border-slate-200 p-4 text-sm text-slate-500">Aucun apporteur enregistré.</div> : null}
             </div>
           </div>
 
@@ -437,13 +437,13 @@ export default function ApporteursAffairesPage() {
         </aside>
 
         <div className="space-y-5">
-          <section className="rounded-2xl border border-slate-200 bg-white p-5">
+          <section className="bt-card rounded-xl bg-white p-5">
             {selectedApporteur ? (
               <div className="grid gap-5 lg:grid-cols-[1fr_340px]">
                 <div>
                   <div className="flex flex-wrap items-start justify-between gap-3">
-                    <div><div className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Partenaire sélectionné</div><h2 className="mt-1 text-xl font-semibold text-slate-950">{selectedApporteur.nom}</h2><p className="mt-1 text-sm text-slate-500">{selectedApporteur.entreprise || optionLabel(APPORTREUR_TYPES, selectedApporteur.type)}</p></div>
-                    <div className="flex flex-wrap gap-2"><button type="button" onClick={() => onEditApporteur(selectedApporteur)} className={secondaryButtonClass}>Modifier</button><button type="button" onClick={() => void onGenerateToken(selectedApporteur.id)} className={secondaryButtonClass}>Générer lien</button><button type="button" disabled={saving} onClick={() => void onRemoveApporteur(selectedApporteur.id)} className="rounded-xl border border-red-200 bg-red-50 px-4 py-2 text-sm font-semibold text-red-700 hover:bg-red-100 disabled:opacity-60">Supprimer</button></div>
+                    <div><div className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Partenaire sélectionné</div><h2 className="mt-1 text-xl font-semibold text-slate-950">{selectedApporteur.nom}</h2><p className="mt-1 text-sm text-slate-500">{selectedApporteur.entreprise || optionLabel(APPORTREUR_TYPES, selectedApporteur.type)}</p></div>
+                    <div className="flex flex-wrap gap-2"><button type="button" onClick={() => onEditApporteur(selectedApporteur)} className={secondaryButtonClass}>Modifier</button><button type="button" onClick={() => void onGenerateToken(selectedApporteur.id)} className={secondaryButtonClass}>Générer lien</button><button type="button" disabled={saving} onClick={() => void onRemoveApporteur(selectedApporteur.id)} className="rounded-lg border border-red-200 bg-red-50 px-4 py-2 text-sm font-semibold text-red-700 hover:bg-red-100 disabled:opacity-60">Supprimer</button></div>
                   </div>
                   <div className="mt-5 grid gap-3 sm:grid-cols-3">
                     <Info label="Type" value={optionLabel(APPORTREUR_TYPES, selectedApporteur.type)} />
@@ -453,11 +453,11 @@ export default function ApporteursAffairesPage() {
                     <Info label="Email" value={selectedApporteur.email || "-"} />
                     <Info label="IBAN" value={selectedApporteur.iban || "-"} />
                   </div>
-                  {accessTokens[selectedApporteur.id] ? <div className="mt-4 rounded-xl border border-blue-100 bg-blue-50 p-3 text-xs text-blue-900"><div className="font-semibold">Lien public apporteur</div><div className="mt-1 break-all">{portalLink(accessTokens[selectedApporteur.id])}</div></div> : null}
+                  {accessTokens[selectedApporteur.id] ? <div className="mt-4 rounded-lg border border-blue-100 bg-blue-50 p-3 text-xs text-blue-900"><div className="font-semibold">Lien public apporteur</div><div className="mt-1 break-all">{portalLink(accessTokens[selectedApporteur.id])}</div></div> : null}
                 </div>
-                <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
                   <div className="text-sm font-semibold text-slate-950">Documents de paiement</div>
-                  {documents.filter((document) => document.apporteur_id === selectedApporteur.id).length ? <ul className="mt-3 space-y-2 text-sm text-slate-600">{documents.filter((document) => document.apporteur_id === selectedApporteur.id).map((document) => <li key={document.id} className="flex items-center justify-between gap-3 rounded-lg bg-white px-3 py-2 ring-1 ring-slate-200"><span>{document.label}</span><a href={document.file_path} target="_blank" rel="noreferrer" className="text-blue-700 underline">Ouvrir</a></li>)}</ul> : <div className="mt-3 text-sm text-slate-500">Aucun document rattaché.</div>}
+                  {documents.filter((document) => document.apporteur_id === selectedApporteur.id).length ? <ul className="mt-3 space-y-2 text-sm text-slate-600">{documents.filter((document) => document.apporteur_id === selectedApporteur.id).map((document) => <li key={document.id} className="flex items-center justify-between gap-3 rounded-md bg-white px-3 py-2 ring-1 ring-slate-200"><span>{document.label}</span><a href={document.file_path} target="_blank" rel="noreferrer" className="text-blue-700 underline">Ouvrir</a></li>)}</ul> : <div className="mt-3 text-sm text-slate-500">Aucun document rattaché.</div>}
                 </div>
               </div>
             ) : <div className="text-sm text-slate-500">Sélectionnez ou créez un apporteur.</div>}
@@ -480,24 +480,24 @@ export default function ApporteursAffairesPage() {
         </div>
       </section>
 
-      <section className="rounded-2xl border border-slate-200 bg-white p-4">
-        <div className="mb-4 flex flex-wrap items-center justify-between gap-3"><div><div className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Leads</div><h2 className="mt-1 text-lg font-semibold text-slate-950">Suivi commercial et commissions</h2></div><select className={selectClass} value={selectedApporteurId} onChange={(event) => setSelectedApporteurId(event.target.value)}><option value="">Tous les apporteurs</option>{apporteurs.map((row) => <option key={row.id} value={row.id}>{row.nom}</option>)}</select></div>
-        <div className="overflow-x-auto"><table className="min-w-full text-sm text-slate-700"><thead className="bg-slate-50 text-slate-600"><tr><Th>Client</Th><Th>Apporteur</Th><Th>Montant</Th><Th>Statut</Th><Th>Commission</Th><Th>CRM</Th><Th>Actions</Th></tr></thead><tbody>{filteredLeads.map((lead) => { const apporteur = apporteurs.find((row) => row.id === lead.apporteur_id); return <tr key={lead.id} className="border-t border-slate-100"><Td><div className="font-semibold text-slate-950">{lead.client_name}</div><div className="text-xs text-slate-500">{lead.telephone || lead.project_address || "-"}</div></Td><Td>{apporteur?.nom ?? "-"}</Td><Td>{formatCurrency(lead.estimated_amount)}</Td><Td><span className={`rounded-full px-2.5 py-1 text-xs font-semibold ring-1 ${statusClass(lead.status)}`}>{optionLabel(LEAD_STATUSES, lead.status)}</span></Td><Td>{formatCurrency(calculateCommission(lead, apporteur ?? undefined))}</Td><Td>{lead.crm_prospect_id ? "Prospect créé" : "À convertir"}</Td><Td><div className="flex flex-wrap gap-2"><button type="button" onClick={() => onEditLead(lead)} className="text-blue-700 hover:underline">Modifier</button><button type="button" disabled={saving || Boolean(lead.crm_prospect_id)} onClick={() => void onCreateCrmProspectFromLead(lead)} className="text-emerald-700 hover:underline disabled:text-slate-400">Créer prospect</button><button type="button" onClick={() => void onRemoveLead(lead.id)} className="text-red-600 hover:underline">Supprimer</button></div></Td></tr>; })}{!filteredLeads.length ? <tr><td colSpan={7} className="px-4 py-8 text-center text-sm text-slate-500">Aucun lead trouvé.</td></tr> : null}</tbody></table></div>
+      <section className="bt-card rounded-xl bg-white p-4">
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3"><div><div className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Leads</div><h2 className="mt-1 text-lg font-semibold text-slate-950">Suivi commercial et commissions</h2></div><select className={selectClass} value={selectedApporteurId} onChange={(event) => setSelectedApporteurId(event.target.value)}><option value="">Tous les apporteurs</option>{apporteurs.map((row) => <option key={row.id} value={row.id}>{row.nom}</option>)}</select></div>
+        <div className="overflow-x-auto"><table className="bt-table min-w-full"><thead><tr><Th>Client</Th><Th>Apporteur</Th><Th>Montant</Th><Th>Statut</Th><Th>Commission</Th><Th>CRM</Th><Th>Actions</Th></tr></thead><tbody>{filteredLeads.map((lead) => { const apporteur = apporteurs.find((row) => row.id === lead.apporteur_id); return <tr key={lead.id}><Td><div className="font-semibold text-slate-950">{lead.client_name}</div><div className="text-xs text-slate-500">{lead.telephone || lead.project_address || "-"}</div></Td><Td>{apporteur?.nom ?? "-"}</Td><Td>{formatCurrency(lead.estimated_amount)}</Td><Td><span className={`rounded-full px-2.5 py-1 text-xs font-semibold ring-1 ${statusClass(lead.status)}`}>{optionLabel(LEAD_STATUSES, lead.status)}</span></Td><Td>{formatCurrency(calculateCommission(lead, apporteur ?? undefined))}</Td><Td>{lead.crm_prospect_id ? "Prospect créé" : "À convertir"}</Td><Td><div className="flex flex-wrap gap-2"><button type="button" onClick={() => onEditLead(lead)} className="font-medium text-blue-700 hover:underline">Modifier</button><button type="button" disabled={saving || Boolean(lead.crm_prospect_id)} onClick={() => void onCreateCrmProspectFromLead(lead)} className="font-medium text-emerald-700 hover:underline disabled:text-slate-400">Créer prospect</button><button type="button" onClick={() => void onRemoveLead(lead.id)} className="font-medium text-red-600 hover:underline">Supprimer</button></div></Td></tr>; })}{!filteredLeads.length ? <tr><td colSpan={7} className="px-4 py-8 text-center text-sm text-slate-500">Aucun lead trouvé.</td></tr> : null}</tbody></table></div>
       </section>
     </div>
   );
 }
 
 function Metric({ label, value }: { label: string; value: string }) {
-  return <div className="rounded-2xl border border-slate-200 bg-white p-4"><div className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">{label}</div><div className="mt-2 text-2xl font-bold text-slate-950">{value}</div></div>;
+  return <div className="bt-card rounded-xl bg-white p-4"><div className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">{label}</div><div className="mt-2 text-xl font-bold text-slate-950">{value}</div></div>;
 }
 
 function FormPanel({ title, children }: { title: string; children: ReactNode }) {
-  return <section className="rounded-2xl border border-slate-200 bg-white p-4"><h2 className="text-sm font-semibold text-slate-950">{title}</h2><div className="mt-4">{children}</div></section>;
+  return <section className="bt-card rounded-xl bg-white p-4"><h2 className="text-sm font-semibold text-slate-950">{title}</h2><div className="mt-4">{children}</div></section>;
 }
 
 function Info({ label, value }: { label: string; value: string }) {
-  return <div className="rounded-xl bg-slate-50 p-3"><div className="text-xs text-slate-500">{label}</div><div className="mt-1 truncate text-sm font-semibold text-slate-900">{value}</div></div>;
+  return <div className="rounded-lg border border-slate-100 bg-slate-50 p-3"><div className="text-xs text-slate-500">{label}</div><div className="mt-1 truncate text-sm font-semibold text-slate-900">{value}</div></div>;
 }
 
 function Input({ label, value, onChange, type = "text", inputMode }: { label: string; value: string; onChange: (value: string) => void; type?: string; inputMode?: "decimal" }) {
@@ -513,14 +513,14 @@ function Select({ label, value, onChange, options, placeholder }: { label: strin
 }
 
 function Th({ children }: { children: ReactNode }) {
-  return <th className="px-4 py-3 text-left font-medium">{children}</th>;
+  return <th>{children}</th>;
 }
 
 function Td({ children }: { children: ReactNode }) {
-  return <td className="px-4 py-3 align-top">{children}</td>;
+  return <td className="align-top">{children}</td>;
 }
 
-const inputClass = "w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-blue-300";
-const selectClass = "rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 outline-none focus:border-blue-300";
-const primaryButtonClass = "rounded-xl bg-slate-950 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800 disabled:bg-slate-300 disabled:text-slate-600";
-const secondaryButtonClass = "rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50";
+const inputClass = "w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100";
+const selectClass = "rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100";
+const primaryButtonClass = "rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:bg-slate-300 disabled:text-slate-600";
+const secondaryButtonClass = "rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700";
