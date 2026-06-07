@@ -259,7 +259,14 @@ function Field({ label, value, onChange, type = "text" }: { label: string; value
 }
 
 function NumberCell({ value, onChange }: { value: number; onChange: (value: number) => void }) {
-  return <input className={`${cellClass} text-right`} type="number" value={value} onChange={(event) => onChange(Number(event.target.value))} />;
+  return (
+    <input
+      className={`${cellClass} text-right`}
+      inputMode="decimal"
+      value={value}
+      onChange={(event) => onChange(parseFrenchNumber(event.target.value))}
+    />
+  );
 }
 
 function isItem(node: BusinessDocumentNode): node is DocumentItemNode {
@@ -285,6 +292,16 @@ function appendChild(nodes: BusinessDocumentNode[], parentId: string, child: Bus
 const labelClass = "block text-xs font-semibold uppercase tracking-[0.12em] text-slate-400";
 const inputClass = "mt-1 h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm font-normal normal-case tracking-normal text-slate-950 outline-none focus:border-blue-300";
 const cellClass = "h-9 w-full rounded-lg border border-transparent bg-transparent px-2 text-sm font-normal outline-none hover:border-slate-200 focus:border-blue-300";
+
+function parseFrenchNumber(value: string) {
+  const text = value.trim();
+  if (!text) return 0;
+  const normalized = text.includes(",")
+    ? text.replace(/\s/g, "").replace(/\./g, "").replace(",", ".")
+    : text.replace(/\s/g, "");
+  const parsed = Number(normalized);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
 
 function formatCurrency(value: number) {
   return new Intl.NumberFormat("fr-FR", { style: "currency", currency: "EUR" }).format(value);
