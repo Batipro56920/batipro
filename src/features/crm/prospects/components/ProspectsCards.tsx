@@ -1,15 +1,15 @@
 import type { CrmProspectRow } from "../../../../services/crm.service";
-import { buildCrmWorkflowSteps, CrmWorkflowSteps } from "../../components/CrmWorkflowSteps";
+import { buildCrmWorkflowSteps, CrmWorkflowSteps, type CrmWorkflowStepKey } from "../../components/CrmWorkflowSteps";
 import { entityLabel, eur } from "../../components/crmFormat";
 import { ProspectStatusBadge } from "./ProspectStatusBadge";
 import type { ProspectActionHandlers } from "../types";
 
 function workflowForProspect(row: CrmProspectRow) {
-  const done = ["prospect" as const];
+  const done: CrmWorkflowStepKey[] = ["prospect"];
   const isQualified = ["qualifie", "devis_en_cours", "negociation", "gagne"].includes(row.statut);
-  if (isQualified) done.push("opportunity" as const);
-  if (["devis_en_cours", "negociation", "gagne"].includes(row.statut)) done.push("visit" as const, "prequote" as const);
-  if (["negociation", "gagne"].includes(row.statut)) done.push("quote" as const);
+  if (isQualified) done.push("opportunity");
+  if (["devis_en_cours", "negociation", "gagne"].includes(row.statut)) done.push("visit", "prequote");
+  if (["negociation", "gagne"].includes(row.statut)) done.push("quote");
   return buildCrmWorkflowSteps(isQualified ? "visit" : "opportunity", done);
 }
 
