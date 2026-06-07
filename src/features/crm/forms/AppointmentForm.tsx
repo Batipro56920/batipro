@@ -1,10 +1,28 @@
 import { useState } from "react";
-import type { CrmAppointmentRow, CrmDataset } from "../../../services/crm.service";
+import type { CrmAppointmentRow, CrmDataset, CrmProspectRow } from "../../../services/crm.service";
+import { entityLabel } from "../components/crmFormat";
 import { CrmModal, Input, SelectEntity, Submit, TextArea } from "./CrmFormPrimitives";
 
+export default function AppointmentForm({
+  data,
+  saving,
+  initialProspect,
+  onClose,
+  onSubmit,
+}: {
+  data: CrmDataset;
+  saving: boolean;
+  initialProspect?: CrmProspectRow | null;
+  onClose: () => void;
+  onSubmit: (payload: Partial<CrmAppointmentRow>) => void;
+}) {
+  const [form, setForm] = useState<Record<string, string>>(() => ({
+    type: "rdv_commercial",
+    statut: "planifie",
+    prospect_id: initialProspect?.id ?? "",
+    titre: initialProspect ? `RDV commercial - ${entityLabel(initialProspect)}` : "",
+  }));
 
-export default function AppointmentForm({ data, saving, onClose, onSubmit }: { data: CrmDataset; saving: boolean; onClose: () => void; onSubmit: (payload: Partial<CrmAppointmentRow>) => void }) {
-  const [form, setForm] = useState<Record<string, string>>({ type: "rdv_commercial", statut: "planifie" });
   return (
     <CrmModal title="Créer un rendez-vous" onClose={onClose}>
       <form onSubmit={(e) => { e.preventDefault(); onSubmit(form as Partial<CrmAppointmentRow>); }} className="space-y-4">
