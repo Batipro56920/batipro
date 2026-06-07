@@ -41,6 +41,15 @@ function recentActivity(project: ProjectRecord) {
   ].filter(Boolean) as Array<[string, string | null | undefined]>;
 }
 
+function compactVisitSummary(value?: string | null) {
+  const cleaned = String(value ?? "")
+    .replace(/\s+/g, " ")
+    .replace(/\b(non renseigne|Non renseignee|A assigner)\b/g, "")
+    .trim();
+  if (!cleaned) return "Compte-rendu à compléter.";
+  return cleaned.length > 220 ? `${cleaned.slice(0, 220).trim()}...` : cleaned;
+}
+
 export function ProjectSummaryTab({ project }: { project: ProjectRecord }) {
   const quote = getPrimaryQuote(project);
   const latestActivity = recentActivity(project)[0] ?? null;
@@ -150,47 +159,31 @@ export function ProjectSummaryTab({ project }: { project: ProjectRecord }) {
 
 export function ProjectVisitsTab({ project }: { project: ProjectRecord }) {
   return (
-    <Panel title="RDV / Visites" description="Pilotage simple des rendez-vous du dossier affaire." actions={<Link to={`/projets/${project.id}/visites/nouveau`} className="text-sm font-semibold text-blue-700 hover:text-blue-800">Nouvelle visite</Link>}>
-      <div className="space-y-5">
+    <Panel title="RDV / Visites" description="Historique simple des rendez-vous commerciaux." actions={<Link to={`/projets/${project.id}/visites/nouveau`} className="text-sm font-semibold text-blue-700 hover:text-blue-800">Nouvelle visite</Link>}>
+      <div className="space-y-3">
         {project.appointments.length ? (
-          <div className="grid gap-3">
-            {project.appointments.map((appointment) => (
-              <div key={appointment.id} className="rounded-2xl border border-slate-200 p-4">
-                <div className="flex flex-wrap items-start justify-between gap-3">
-                  <div>
-                    <div className="font-semibold text-slate-950">{appointment.titre}</div>
-                    <div className="mt-1 text-sm text-slate-500">
-                      {formatDate(appointment.starts_at)} - {appointment.statut} - {appointment.type}
-                    </div>
-                    <div className="mt-2 grid gap-2 text-xs text-slate-500 sm:grid-cols-2 lg:grid-cols-4">
-                      <span>Client: {project.clientName}</span>
-                      <span>Adresse: {project.address || "Non renseignee"}</span>
-                      <span>Commercial: {project.salesperson || "A assigner"}</span>
-                      <span>Statut: {appointment.statut}</span>
-                    </div>
+          project.appointments.map((appointment) => (
+            <article key={appointment.id} className="rounded-2xl border border-slate-200 bg-white p-4">
+              <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <h3 className="font-semibold text-slate-950">{appointment.titre}</h3>
+                    <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-600">{appointment.statut}</span>
+                    <span className="rounded-full bg-blue-50 px-2.5 py-1 text-xs font-semibold text-blue-700">{appointment.type}</span>
                   </div>
-                  <div className="flex flex-wrap gap-2">
-                    <Link to={`/projets/${project.id}/visites/${appointment.id}`} className="inline-flex h-8 items-center rounded-lg border border-slate-200 px-3 text-xs font-semibold text-slate-900 hover:bg-slate-50">
-                      Ouvrir
-                    </Link>
-                    <Link to={`/projets/${project.id}/visites/${appointment.id}`} className="inline-flex h-8 items-center rounded-lg border border-slate-200 px-3 text-xs font-semibold text-slate-900 hover:bg-slate-50">
-                      Modifier
-                    </Link>
-                    <button type="button" disabled title="Duplication a connecter a la persistance des RDV projet." className="inline-flex h-8 items-center rounded-lg border border-slate-200 bg-slate-50 px-3 text-xs font-semibold text-slate-400">
-                      Dupliquer
-                    </button>
-                    <button type="button" disabled title="Replanification a connecter a la persistance des RDV projet." className="inline-flex h-8 items-center rounded-lg border border-slate-200 bg-slate-50 px-3 text-xs font-semibold text-slate-400">
-                      Replanifier
-                    </button>
-                    <button type="button" disabled title="Annulation a connecter a la persistance des RDV projet." className="inline-flex h-8 items-center rounded-lg border border-red-100 bg-red-50 px-3 text-xs font-semibold text-red-300">
-                      Annuler
-                    </button>
+                  <div className="mt-2 flex flex-wrap gap-x-5 gap-y-1 text-sm text-slate-500">
+                    <span>{formatDate(appointment.starts_at)}</span>
+                    <span>{project.clientName}</span>
+                    {project.address ? <span>{project.address}</span> : null}
                   </div>
                 </div>
-                <p className="mt-3 line-clamp-2 text-sm text-slate-600">{appointment.compte_rendu || appointment.notes || "Compte-rendu a completer."}</p>
+                <Link to={`/projets/${project.id}/visites/${appointment.id}`} className="inline-flex h-9 shrink-0 items-center justify-center rounded-xl border border-slate-200 px-3 text-sm font-semibold text-slate-900 hover:bg-slate-50">
+                  Ouvrir / modifier
+                </Link>
               </div>
-            ))}
-          </div>
+              <p className="mt-3 text-sm leading-6 text-slate-600">{compactVisitSummary(appointment.compte_rendu || appointment.notes)}</p>
+            </article>
+          ))
         ) : (
           <EmptyProjectBlock title="Aucun rendez-vous" description="Creez une visite de qualification, de chiffrage, de validation devis, de relance ou de SAV." />
         )}
