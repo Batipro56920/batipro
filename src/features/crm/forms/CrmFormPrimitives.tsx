@@ -93,6 +93,7 @@ export function CrmIdentityFields({ form, setForm }: { form: Record<string, stri
 }
 
 export function Input({ form, setForm, name, label, type = "text", required = false }: { form: Record<string, string>; setForm: Dispatch<SetStateAction<Record<string, string>>>; name: string; label: string; type?: string; required?: boolean }) {
+  const inputType = type === "number" ? "text" : type;
   return (
     <label className="block space-y-1 text-sm">
       <div className="text-slate-600">{label}</div>
@@ -100,7 +101,8 @@ export function Input({ form, setForm, name, label, type = "text", required = fa
         className="w-full rounded-xl border px-3 py-2"
         value={form[name] ?? ""}
         onChange={(event) => setForm((prev) => ({ ...prev, [name]: event.target.value }))}
-        type={type}
+        type={inputType}
+        inputMode={type === "number" ? "decimal" : undefined}
         required={required}
       />
     </label>
