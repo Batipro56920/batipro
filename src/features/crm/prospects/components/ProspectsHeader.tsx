@@ -1,4 +1,4 @@
-import { Upload, UserPlus, Target } from "lucide-react";
+import { CalendarDays, Upload, UserPlus } from "lucide-react";
 import { Button } from "../../../../components/ui/button";
 
 export function ProspectsHeader({
@@ -14,7 +14,7 @@ export function ProspectsHeader({
         <div>
           <div className="text-[11px] font-semibold uppercase tracking-[0.22em] text-blue-700">CRM</div>
           <h2 className="mt-1 text-2xl font-bold tracking-tight text-slate-950">Prospects</h2>
-          <p className="mt-1 max-w-2xl text-sm leading-6 text-slate-500">Gérez vos leads, demandes entrantes et opportunités commerciales.</p>
+          <p className="mt-1 max-w-2xl text-sm leading-6 text-slate-500">Gérez vos leads, demandes entrantes, prises de RDV et projets commerciaux.</p>
         </div>
         <div className="flex flex-wrap gap-2">
           <Button type="button" variant="primary" size="md" onClick={onCreate}>
@@ -26,8 +26,8 @@ export function ProspectsHeader({
             Import
           </Button>
           <Button type="button" variant="secondary" size="md" onClick={onCreateOpportunity}>
-            <Target className="h-4 w-4" />
-            Opportunité
+            <CalendarDays className="h-4 w-4" />
+            Prise de RDV
           </Button>
         </div>
       </div>
