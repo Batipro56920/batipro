@@ -9,6 +9,10 @@ import {
   type CrmQuoteEngineData,
 } from "../../../services/crm.service";
 import { loadLatestCrmVisitQuoteSource } from "../../../services/crmVisitReports.service";
+import {
+  getCurrentProfileFeaturePermissions,
+  hasProfileFeaturePermission,
+} from "../../../services/profileFeaturePermissions.service";
 import { calculateQuoteBuilderTotals, flattenQuoteBuilder } from "./quoteBuilderCalculations";
 import { validateQuoteBuilderForDocumentEngine } from "./quoteBuilderDocumentAdapter";
 import { createQuoteBuilderFromEngine, createQuoteBuilderFromProject } from "./quoteBuilderModel";
@@ -30,6 +34,7 @@ export async function loadQuoteBuilder(project: ProjectRecord, quoteId?: string 
 }
 
 export async function saveQuoteBuilder(quote: QuoteBuilderQuote): Promise<QuoteBuilderQuote> {
+  await assertQuoteBuilderSavePermission(quote);
   validateQuoteBuilderForDocumentEngine(quote);
   const totals = calculateQuoteBuilderTotals(quote);
   const saved = quote.id ? await updateExistingQuote(quote, totals.totalHt) : await createNewQuote(quote, totals.totalHt, totals.totalTtc);
@@ -39,6 +44,22 @@ export async function saveQuoteBuilder(quote: QuoteBuilderQuote): Promise<QuoteB
 
 export function saveQuoteBuilderDraft(quote: QuoteBuilderQuote) {
   writeLocalQuote(quote);
+}
+
+async function assertQuoteBuilderSavePermission(quote: QuoteBuilderQuote) {
+  const current = await getCurrentProfileFeaturePermissions();
+  const requiredPermission = quote.id ? "crm_quote_edit" : "crm_quote_create";
+  const allowed =
+    hasProfileFeaturePermission(current.permissions, "crm", current.role) &&
+    hasProfileFeaturePermission(current.permissions, requiredPermission, current.role);
+
+  if (!allowed) {
+    throw new Error(
+      quote.id
+        ? "Votre profil ne permet pas de modifier ce devis."
+        : "Votre profil ne permet pas de créer un devis.",
+    );
+  }
 }
 
 async function createNewQuote(quote: QuoteBuilderQuote, totalHt: number, totalTtc: number): Promise<QuoteBuilderQuote> {
