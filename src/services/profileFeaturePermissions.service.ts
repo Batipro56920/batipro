@@ -478,6 +478,16 @@ async function getCurrentUserId(): Promise<string | null> {
   return data.user?.id ?? null;
 }
 
+async function assertCurrentUserCanManageProfilePermissions() {
+  const current = await getCurrentProfileFeaturePermissions();
+  if (!isAdminRole(current.role)) {
+    throw new Error("Seul un profil ADMIN peut modifier les permissions profil.");
+  }
+  if (!current.schemaReady) {
+    throw new Error("Migration permissions profil non appliquée sur Supabase.");
+  }
+}
+
 export function isCompanyModulePermissionKey(
   key: ProfileFeaturePermissionKey,
 ): key is CompanyFeatureModuleId {
@@ -613,30 +623,36 @@ export async function setCurrentProfileFeaturePermission(
     [key]: enabled,
   };
 
-  return updateCurrentProfileFeaturePermissions(nextPermissions);
+  return updateProfileFeaturePermissionsForUser(userId, nextPermissions);
 }
 
 export async function setCurrentProfileFeaturePermissionPreset(
   presetId: BusinessProfilePresetId,
 ): Promise<ProfileFeaturePermissions> {
-  const preset = getBusinessProfilePermissionPreset(presetId);
-  if (!preset) throw new Error("Profil métier inconnu.");
-  return updateCurrentProfileFeaturePermissions(normalizePresetPermissions(preset.permissions));
-}
-
-async function updateCurrentProfileFeaturePermissions(
-  nextPermissions: ProfileFeaturePermissions,
-): Promise<ProfileFeaturePermissions> {
   const userId = await getCurrentUserId();
   if (!userId) throw new Error("Utilisateur non authentifié.");
+  return setProfileFeaturePermissionPresetForUser(userId, presetId);
+}
 
-  const current = await getCurrentProfileFeaturePermissions();
-  if (!isAdminRole(current.role)) {
-    throw new Error("Seul un profil ADMIN peut modifier les permissions profil.");
-  }
-  if (!current.schemaReady) {
-    throw new Error("Migration permissions profil non appliquée sur Supabase.");
-  }
+export async function setProfileFeaturePermissionPresetForUser(
+  userId: string,
+  presetId: BusinessProfilePresetId,
+): Promise<ProfileFeaturePermissions> {
+  const targetUserId = String(userId ?? "").trim();
+  if (!targetUserId) throw new Error("Utilisateur cible manquant.");
+  const preset = getBusinessProfilePermissionPreset(presetId);
+  if (!preset) throw new Error("Profil métier inconnu.");
+  return updateProfileFeaturePermissionsForUser(
+    targetUserId,
+    normalizePresetPermissions(preset.permissions),
+  );
+}
+
+async function updateProfileFeaturePermissionsForUser(
+  userId: string,
+  nextPermissions: ProfileFeaturePermissions,
+): Promise<ProfileFeaturePermissions> {
+  await assertCurrentUserCanManageProfilePermissions();
 
   const { data, error } = await (supabase as any)
     .from("profiles")
