@@ -8,6 +8,7 @@ import {
   updateCrmQuoteItem,
   type CrmQuoteEngineData,
 } from "../../../services/crm.service";
+import { loadLatestCrmVisitQuoteSource } from "../../../services/crmVisitReports.service";
 import { calculateQuoteBuilderTotals, flattenQuoteBuilder } from "./quoteBuilderCalculations";
 import { validateQuoteBuilderForDocumentEngine } from "./quoteBuilderDocumentAdapter";
 import { createQuoteBuilderFromEngine, createQuoteBuilderFromProject } from "./quoteBuilderModel";
@@ -16,7 +17,14 @@ import type { QuoteBuilderFlatRow, QuoteBuilderQuote } from "./types";
 export async function loadQuoteBuilder(project: ProjectRecord, quoteId?: string | null): Promise<QuoteBuilderQuote> {
   const local = readLocalQuote(project.id, quoteId ?? null);
   if (local) return local;
-  if (!quoteId) return createQuoteBuilderFromProject(project);
+  if (!quoteId) {
+    const source = await loadLatestCrmVisitQuoteSource({
+      opportunity_id: project.opportunity?.id ?? null,
+      prospect_id: project.prospect?.id ?? null,
+      client_id: project.client?.id ?? null,
+    });
+    return createQuoteBuilderFromProject(project, source);
+  }
   const engine = await loadCrmQuoteEngineData(quoteId);
   return createQuoteBuilderFromEngine(engine, project);
 }
