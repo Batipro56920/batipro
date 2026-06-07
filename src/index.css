@@ -131,6 +131,29 @@ body {
   border-color: #fecaca;
 }
 
+.status-ok,
+.status-muted {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: 0.25rem 0.625rem;
+  font-size: 0.75rem;
+  font-weight: 700;
+  line-height: 1rem;
+}
+
+.status-ok {
+  background: #ecfdf5;
+  color: #047857;
+  border: 1px solid #a7f3d0;
+}
+
+.status-muted {
+  background: #f1f5f9;
+  color: #64748b;
+  border: 1px solid #cbd5e1;
+}
+
 input,
 textarea,
 select {
@@ -307,5 +330,4 @@ select {
     justify-content: center;
   }
 }
-
 
