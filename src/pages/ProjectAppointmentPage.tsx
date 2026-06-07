@@ -10,10 +10,7 @@ export default function ProjectAppointmentPage() {
   const project = id ? projectsById.get(id) : null;
   const appointmentId = rdvId ?? visitId;
   const appointment = appointmentId && project ? project.appointments.find((item) => item.id === appointmentId) ?? null : null;
-
-  if (searchParams.get("preparation") === "devis") {
-    return <ProjectVisitQuotePrepPage />;
-  }
+  const shouldPrepareQuote = searchParams.get("preparation") === "devis" || (visitId && appointment?.statut === "realise" && searchParams.get("edit") !== "1");
 
   if (loading) {
     return (
@@ -37,6 +34,10 @@ export default function ProjectAppointmentPage() {
         </Link>
       </div>
     );
+  }
+
+  if (shouldPrepareQuote) {
+    return <ProjectVisitQuotePrepPage />;
   }
 
   return <ProjectVisitWorkspace project={project} existingAppointment={appointment} />;
