@@ -101,8 +101,8 @@ export default function Sidebar({ collapsed = false, onToggleCollapse, companyNa
       end: true,
     },
     {
-      to: "/crm/opportunites",
-      label: "Opportunités",
+      to: "/projets",
+      label: "Projets commerciaux",
       icon: FolderKanban,
       permissionKey: "crm" as const,
       group: "Commerce",
@@ -127,13 +127,6 @@ export default function Sidebar({ collapsed = false, onToggleCollapse, companyNa
       icon: Handshake,
       permissionKey: "crm" as const,
       group: "Commerce",
-    },
-    {
-      to: "/projets",
-      label: "Projets",
-      icon: FolderKanban,
-      permissionKey: "crm" as const,
-      group: "Production",
     },
     { to: "/chantiers", label: t("sidebar.chantiers"), icon: Hammer, group: "Production" },
     {
