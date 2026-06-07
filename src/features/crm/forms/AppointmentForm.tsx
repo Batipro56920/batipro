@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, type FormEvent } from "react";
 import type { CrmAppointmentRow, CrmDataset, CrmProspectRow } from "../../../services/crm.service";
 import { entityLabel } from "../components/crmFormat";
 import { CrmModal, Input, Submit, TextArea } from "./CrmFormPrimitives";
@@ -23,9 +23,21 @@ export default function AppointmentForm({
     titre: initialProspect ? `RDV commercial - ${entityLabel(initialProspect)}` : "",
   }));
 
+  function submitAppointment(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    onSubmit({
+      type: form.type || "rdv_commercial",
+      statut: form.statut || "planifie",
+      prospect_id: form.prospect_id || null,
+      titre: form.titre,
+      starts_at: form.starts_at,
+      notes: form.notes || null,
+    });
+  }
+
   return (
     <CrmModal title="Créer un rendez-vous" onClose={onClose}>
-      <form onSubmit={(e) => { e.preventDefault(); onSubmit(form as Partial<CrmAppointmentRow>); }} className="space-y-4">
+      <form onSubmit={submitAppointment} className="space-y-4">
         <Input form={form} setForm={setForm} name="titre" label="Titre" required />
         <label className="block space-y-1 text-sm">
           <div className="text-slate-600">Prospect</div>
