@@ -141,7 +141,7 @@ export default function Sidebar({ collapsed = false, onToggleCollapse, companyNa
       label: "Profils & accès",
       icon: Users,
       permissionKey: "intervenants" as const,
-      group: "Production",
+      group: "Ressources",
     },
     {
       to: "/retours-terrain",
