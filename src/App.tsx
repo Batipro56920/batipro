@@ -30,6 +30,7 @@ const ProductCatalogPage = lazy(() => import("./features/product-catalog/pages/P
 const IntervenantPortalPage = lazy(() => import("./pages/IntervenantPortalPage"));
 const IntervenantDetailPage = lazy(() => import("./pages/IntervenantDetailPage"));
 const IntervenantsPage = lazy(() => import("./pages/IntervenantsPage"));
+const ProfileAccessPresetsPage = lazy(() => import("./pages/ProfileAccessPresetsPage"));
 const BibliothequeTasksPage = lazy(() => import("./pages/BibliothequeTasksPage"));
 const StatistiquesPage = lazy(() => import("./pages/StatistiquesPage"));
 const MonEntreprisePage = lazy(() => import("./pages/MonEntreprisePage"));
@@ -324,6 +325,14 @@ export default function App() {
           element={
             <RequireCompanyFeature profilePermissionKey="intervenants">
               <RouteSuspense label="Chargement des intervenants..."><IntervenantsPage /></RouteSuspense>
+            </RequireCompanyFeature>
+          }
+        />
+        <Route
+          path="/ressources/profils-types"
+          element={
+            <RequireCompanyFeature profilePermissionKey="entreprise_parametres">
+              <RouteSuspense label="Chargement des profils types..."><ProfileAccessPresetsPage /></RouteSuspense>
             </RequireCompanyFeature>
           }
         />
