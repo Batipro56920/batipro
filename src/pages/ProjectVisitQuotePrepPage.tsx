@@ -80,7 +80,7 @@ export default function ProjectVisitQuotePrepPage() {
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
-            <Link to={`/projets/${project.id}/visites/${appointment.id}`} className="inline-flex h-10 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-900 hover:bg-slate-50">
+            <Link to={`/projets/${project.id}/visites/${appointment.id}?edit=1`} className="inline-flex h-10 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-900 hover:bg-slate-50">
               <Pencil className="h-4 w-4" />
               Reprendre
             </Link>
@@ -132,7 +132,7 @@ export default function ProjectVisitQuotePrepPage() {
             <h2 className="font-semibold text-slate-950">Lignes reprises dans le devis</h2>
             <p className="mt-1 text-sm text-slate-500">Le devis sera pre-rempli avec ces lignes. Les prix et marges restent finalisables a la main.</p>
           </div>
-          <Link to={`/projets/${project.id}/visites/${appointment.id}`} className="inline-flex h-9 items-center gap-2 rounded-xl border border-slate-200 px-3 text-sm font-semibold text-slate-900 hover:bg-slate-50">
+          <Link to={`/projets/${project.id}/visites/${appointment.id}?edit=1`} className="inline-flex h-9 items-center gap-2 rounded-xl border border-slate-200 px-3 text-sm font-semibold text-slate-900 hover:bg-slate-50">
             <Plus className="h-4 w-4" />
             Ajuster
           </Link>
