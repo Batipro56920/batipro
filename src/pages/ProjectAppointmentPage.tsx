@@ -1,13 +1,19 @@
-import { Link, useParams } from "react-router-dom";
+import { Link, useParams, useSearchParams } from "react-router-dom";
 import { ProjectVisitWorkspace } from "../features/projects/appointments/ProjectVisitWorkspace";
 import { useProjectsData } from "../features/projects/hooks/useProjectsData";
+import ProjectVisitQuotePrepPage from "./ProjectVisitQuotePrepPage";
 
 export default function ProjectAppointmentPage() {
   const { id, rdvId, visitId } = useParams();
+  const [searchParams] = useSearchParams();
   const { projectsById, loading, error } = useProjectsData();
   const project = id ? projectsById.get(id) : null;
   const appointmentId = rdvId ?? visitId;
   const appointment = appointmentId && project ? project.appointments.find((item) => item.id === appointmentId) ?? null : null;
+
+  if (searchParams.get("preparation") === "devis") {
+    return <ProjectVisitQuotePrepPage />;
+  }
 
   if (loading) {
     return (
