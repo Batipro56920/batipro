@@ -54,6 +54,23 @@ export type ProfilePermissionSection = {
   permissions: ProfilePermissionDefinition[];
 };
 
+export type BusinessProfilePresetId =
+  | "dirigeant"
+  | "commercial"
+  | "conducteur_de_travaux"
+  | "comptable"
+  | "administratif"
+  | "intervenant_terrain"
+  | "sous_traitant";
+
+export type BusinessProfilePermissionPreset = {
+  id: BusinessProfilePresetId;
+  label: string;
+  roleLabel: string;
+  description: string;
+  permissions: ProfileFeaturePermissions;
+};
+
 const PROFILE_PERMISSION_KEYS: ProfileFeaturePermissionKey[] = [
   ...COMPANY_FEATURE_MODULES.map((module) => module.id),
   "intervenants",
@@ -84,6 +101,180 @@ const PROFILE_PERMISSION_KEYS: ProfileFeaturePermissionKey[] = [
 ];
 
 const PROFILE_PERMISSION_KEY_SET = new Set<ProfileFeaturePermissionKey>(PROFILE_PERMISSION_KEYS);
+
+export const BUSINESS_PROFILE_PERMISSION_PRESETS: BusinessProfilePermissionPreset[] = [
+  {
+    id: "dirigeant",
+    label: "Dirigeant / admin",
+    roleLabel: "Direction",
+    description: "Pilotage complet de l'entreprise, commerce, chantier, financier, ressources et paramètres.",
+    permissions: Object.fromEntries(PROFILE_PERMISSION_KEYS.map((key) => [key, true])) as ProfileFeaturePermissions,
+  },
+  {
+    id: "commercial",
+    label: "Commercial",
+    roleLabel: "Commerce",
+    description: "Prospection, clients, projets commerciaux, RDV, devis, envoi et transformation commerciale.",
+    permissions: {
+      crm: true,
+      crm_prospects: true,
+      crm_clients: true,
+      crm_opportunities: true,
+      crm_quote_view: true,
+      crm_quote_create: true,
+      crm_quote_edit: true,
+      crm_quote_send: true,
+      crm_quote_accept_refuse: true,
+      crm_quote_transform: true,
+      crm_quote_margin: false,
+      crm_quote_price_edit: false,
+      crm_quote_delete: false,
+      chantier_financier_view: false,
+      chantier_financier_edit: false,
+      chantier_financier_margin: false,
+      chantier_financier_billing: false,
+      finance_margin_edit: false,
+      finance_purchases: false,
+      fournisseurs: false,
+      statistiques: false,
+      entreprise_parametres: false,
+      intervenants: false,
+      bibliotheque: true,
+    },
+  },
+  {
+    id: "conducteur_de_travaux",
+    label: "Conducteur de travaux",
+    roleLabel: "Production chantier",
+    description: "Préparation, exécution, planning, tâches, documents, retours terrain, réserves et équipe chantier.",
+    permissions: {
+      intervenants: true,
+      bibliotheque: true,
+      task_library_preparation: true,
+      planification: true,
+      temps: true,
+      documents: true,
+      journal_chantier: true,
+      validation_qualite: true,
+      approvisionnement: true,
+      fournisseurs: true,
+      chantier_financier_view: true,
+      chantier_financier_edit: false,
+      chantier_financier_margin: false,
+      chantier_financier_billing: false,
+      crm: false,
+      statistiques: false,
+      entreprise_parametres: false,
+      finance_margin_edit: false,
+      finance_purchases: true,
+    },
+  },
+  {
+    id: "comptable",
+    label: "Comptable",
+    roleLabel: "Gestion financière",
+    description: "Factures, encaissements, décaissements, TVA, export comptable, fournisseurs et lecture financière chantier.",
+    permissions: {
+      crm: true,
+      crm_clients: true,
+      crm_quote_view: true,
+      crm_quote_create: false,
+      crm_quote_edit: false,
+      crm_quote_margin: false,
+      crm_quote_price_edit: false,
+      crm_quote_transform: false,
+      crm_quote_delete: false,
+      crm_quote_send: false,
+      crm_quote_accept_refuse: false,
+      fournisseurs: true,
+      statistiques: true,
+      chantier_financier_view: true,
+      chantier_financier_edit: true,
+      chantier_financier_margin: false,
+      chantier_financier_billing: true,
+      finance_margin_edit: false,
+      finance_purchases: true,
+      entreprise_parametres: false,
+      intervenants: false,
+      bibliotheque: false,
+    },
+  },
+  {
+    id: "administratif",
+    label: "Administratif",
+    roleLabel: "Support administratif",
+    description: "Clients, documents, suivi simple des devis et factures, sans réglage sensible ni marges.",
+    permissions: {
+      crm: true,
+      crm_prospects: true,
+      crm_clients: true,
+      crm_opportunities: true,
+      crm_quote_view: true,
+      crm_quote_create: false,
+      crm_quote_edit: false,
+      crm_quote_margin: false,
+      crm_quote_price_edit: false,
+      crm_quote_transform: false,
+      crm_quote_delete: false,
+      crm_quote_send: true,
+      crm_quote_accept_refuse: false,
+      bibliotheque: true,
+      documents: true,
+      chantier_financier_view: false,
+      chantier_financier_edit: false,
+      chantier_financier_margin: false,
+      chantier_financier_billing: true,
+      fournisseurs: false,
+      statistiques: false,
+      entreprise_parametres: false,
+      intervenants: false,
+    },
+  },
+  {
+    id: "intervenant_terrain",
+    label: "Intervenant terrain",
+    roleLabel: "Portail terrain",
+    description: "Accès terrain piloté par l'admin : chantiers, tâches, documents et retours affectés uniquement.",
+    permissions: {
+      planification: true,
+      temps: true,
+      documents: true,
+      journal_chantier: true,
+      validation_qualite: true,
+      crm: false,
+      intervenants: false,
+      fournisseurs: false,
+      statistiques: false,
+      entreprise_parametres: false,
+      chantier_financier_view: false,
+      chantier_financier_edit: false,
+      chantier_financier_margin: false,
+      chantier_financier_billing: false,
+    },
+  },
+  {
+    id: "sous_traitant",
+    label: "Sous-traitant",
+    roleLabel: "Partenaire chantier",
+    description: "Accès portail limité aux chantiers, documents et tâches explicitement affectés.",
+    permissions: {
+      planification: true,
+      documents: true,
+      journal_chantier: true,
+      validation_qualite: true,
+      temps: false,
+      crm: false,
+      intervenants: false,
+      fournisseurs: false,
+      statistiques: false,
+      entreprise_parametres: false,
+      chantier_financier_view: false,
+      chantier_financier_edit: false,
+      chantier_financier_margin: false,
+      chantier_financier_billing: false,
+    },
+  },
+];
 
 const EXTRA_PERMISSION_DEFINITIONS: Record<
   Exclude<
@@ -241,6 +432,14 @@ function normalizePermissions(raw: unknown): ProfileFeaturePermissions {
   return output;
 }
 
+function normalizePresetPermissions(raw: ProfileFeaturePermissions): ProfileFeaturePermissions {
+  const output: ProfileFeaturePermissions = {};
+  for (const key of PROFILE_PERMISSION_KEYS) {
+    output[key] = raw[key] === true;
+  }
+  return output;
+}
+
 function isMissingFeaturePermissionsColumnError(error: unknown): boolean {
   const code = String((error as { code?: string } | null)?.code ?? "");
   const msg = String((error as { message?: string } | null)?.message ?? "").toLowerCase();
@@ -265,6 +464,12 @@ export function isCompanyModulePermissionKey(
   key: ProfileFeaturePermissionKey,
 ): key is CompanyFeatureModuleId {
   return COMPANY_FEATURE_MODULES.some((module) => module.id === key);
+}
+
+export function getBusinessProfilePermissionPreset(
+  presetId: BusinessProfilePresetId,
+): BusinessProfilePermissionPreset | null {
+  return BUSINESS_PROFILE_PERMISSION_PRESETS.find((preset) => preset.id === presetId) ?? null;
 }
 
 export function getProfilePermissionSections(): ProfilePermissionSection[] {
@@ -390,9 +595,34 @@ export async function setCurrentProfileFeaturePermission(
     [key]: enabled,
   };
 
+  return updateCurrentProfileFeaturePermissions(nextPermissions);
+}
+
+export async function setCurrentProfileFeaturePermissionPreset(
+  presetId: BusinessProfilePresetId,
+): Promise<ProfileFeaturePermissions> {
+  const preset = getBusinessProfilePermissionPreset(presetId);
+  if (!preset) throw new Error("Profil métier inconnu.");
+  return updateCurrentProfileFeaturePermissions(normalizePresetPermissions(preset.permissions));
+}
+
+async function updateCurrentProfileFeaturePermissions(
+  nextPermissions: ProfileFeaturePermissions,
+): Promise<ProfileFeaturePermissions> {
+  const userId = await getCurrentUserId();
+  if (!userId) throw new Error("Utilisateur non authentifié.");
+
+  const current = await getCurrentProfileFeaturePermissions();
+  if (!isAdminRole(current.role)) {
+    throw new Error("Seul un profil ADMIN peut modifier les permissions profil.");
+  }
+  if (!current.schemaReady) {
+    throw new Error("Migration permissions profil non appliquée sur Supabase.");
+  }
+
   const { data, error } = await (supabase as any)
     .from("profiles")
-    .update({ feature_permissions: nextPermissions })
+    .update({ feature_permissions: normalizePermissions(nextPermissions) })
     .eq("id", userId)
     .select("feature_permissions")
     .maybeSingle();
