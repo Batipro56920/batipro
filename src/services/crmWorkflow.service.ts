@@ -44,7 +44,24 @@ async function findStage(stageKey: string): Promise<CrmPipelineStageRow | null> 
   return (data ?? null) as CrmPipelineStageRow | null;
 }
 
+export async function findOpenProjectForProspect(prospectId: string): Promise<CrmOpportunityRow | null> {
+  const { data, error } = await crmDb
+    .from("crm_opportunities")
+    .select(OPPORTUNITY_SELECT)
+    .eq("prospect_id", prospectId)
+    .order("created_at", { ascending: true })
+    .limit(1)
+    .maybeSingle();
+  if (error) return null;
+  return (data ?? null) as CrmOpportunityRow | null;
+}
+
 export async function createOpportunityForProspect(prospect: CrmProspectRow, patch: Partial<CrmOpportunityRow> = {}) {
+  const existing = await findOpenProjectForProspect(prospect.id);
+  if (existing) {
+    const stageKey = text(patch.stage_key) ?? existing.stage_key ?? "qualification";
+    return updateCrmOpportunityStageByKey(existing.id, stageKey, patch);
+  }
   const stageKey = text(patch.stage_key) ?? "qualification";
   const targetStage = await findStage(stageKey);
   return upsertCrmOpportunity({
