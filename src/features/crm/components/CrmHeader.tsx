@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import { CalendarDays, RefreshCw, Target, UserPlus } from "lucide-react";
+import { CalendarDays, FolderKanban, RefreshCw, UserPlus } from "lucide-react";
 import { Button } from "../../../components/ui/button";
 import type { CrmSection } from "../types";
 import { CrmNavigationTabs } from "./CrmNavigation";
@@ -8,7 +8,6 @@ export function CrmDashboardHeader({
   section,
   onRefresh,
   onCreateProspect,
-  onCreateOpportunity,
   onCreateQuote,
 }: {
   section: CrmSection;
@@ -27,7 +26,7 @@ export function CrmDashboardHeader({
               <div className="text-[11px] font-semibold uppercase tracking-[0.24em] text-blue-700">CRM Admin</div>
               <h1 className="mt-2 text-3xl font-bold tracking-tight text-slate-950">CRM Batipro</h1>
               <p className="mt-1 max-w-3xl text-sm leading-6 text-slate-500">
-                Pilotez vos prospects, devis, relances et clients depuis un seul espace.
+                Pilotez vos prospects, projets commerciaux, devis, relances et clients depuis un seul espace.
               </p>
             </div>
             <div className="flex flex-wrap gap-2">
@@ -43,10 +42,12 @@ export function CrmDashboardHeader({
                 <UserPlus className="h-4 w-4" />
                 Prospect
               </Button>
-              <Button type="button" variant="secondary" size="md" onClick={onCreateOpportunity}>
-                <Target className="h-4 w-4" />
-                Opportunité
-              </Button>
+              <Link to="/projets">
+                <Button type="button" variant="secondary" size="md">
+                  <FolderKanban className="h-4 w-4" />
+                  Projets commerciaux
+                </Button>
+              </Link>
               <Button type="button" variant="secondary" size="md" onClick={onCreateQuote}>
                 + Devis
               </Button>
