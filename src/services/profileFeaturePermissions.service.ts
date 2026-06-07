@@ -127,7 +127,7 @@ export const BUSINESS_PROFILE_PERMISSION_PRESETS: BusinessProfilePermissionPrese
       crm_quote_accept_refuse: true,
       crm_quote_transform: true,
       crm_quote_margin: false,
-      crm_quote_price_edit: false,
+      crm_quote_price_edit: true,
       crm_quote_delete: false,
       chantier_financier_view: false,
       chantier_financier_edit: false,
