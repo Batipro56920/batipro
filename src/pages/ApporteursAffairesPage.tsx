@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import {
   createApporteurAffaire,
-  createApporteurLead,
   createApporteurAccessToken,
+  createApporteurLead,
   deleteApporteurAffaire,
   deleteApporteurLead,
   getApporteurAccessTokens,
@@ -13,12 +13,12 @@ import {
   updateApporteurLead,
 } from "../services/apporteurs.service";
 import type {
+  ApporteurAccessTokenRow,
   ApporteurAffaireRow,
   ApporteurCalculationMode,
   ApporteurLeadRow,
   ApporteurLeadStatus,
   ApporteurType,
-  ApporteurAccessTokenRow,
 } from "../services/apporteurs.service";
 import { createCrmProspect } from "../services/crm.service";
 
@@ -91,10 +91,34 @@ function parseFrenchNumber(value: string) {
 
 function calculateCommission(lead: ApporteurLeadRow, apporteur?: ApporteurAffaireRow) {
   if (!apporteur) return 0;
-  if (apporteur.calculation_mode === "fixe") {
-    return apporteur.commission_percent || 0;
-  }
+  if (apporteur.calculation_mode === "fixe") return apporteur.commission_percent || 0;
   return Math.round((lead.estimated_amount * (apporteur.commission_percent / 100)) * 100) / 100;
+}
+
+function statusLabel(status: ApporteurLeadStatus) {
+  return LEAD_STATUSES.find((item) => item.value === status)?.label ?? status;
+}
+
+function typeLabel(type: ApporteurType) {
+  return APPORTREUR_TYPES.find((item) => item.value === type)?.label ?? type;
+}
+
+function calculationModeLabel(mode: ApporteurCalculationMode) {
+  return CALCULATION_MODES.find((item) => item.value === mode)?.label ?? mode;
+}
+
+function statusClass(status: ApporteurLeadStatus) {
+  if (status === "paye") return "bg-emerald-50 text-emerald-700 ring-emerald-200";
+  if (status === "commission_a_payer" || status === "signe") return "bg-amber-50 text-amber-700 ring-amber-200";
+  if (status === "perdu") return "bg-red-50 text-red-700 ring-red-200";
+  if (status === "devis_envoye" || status === "contacte") return "bg-blue-50 text-blue-700 ring-blue-200";
+  return "bg-slate-100 text-slate-700 ring-slate-200";
+}
+
+function portalLink(tokenRow?: ApporteurAccessTokenRow) {
+  if (!tokenRow) return "";
+  const origin = typeof window === "undefined" ? "" : window.location.origin;
+  return `${origin}/apporteur/${tokenRow.token}`;
 }
 
 export default function ApporteursAffairesPage() {
@@ -102,58 +126,41 @@ export default function ApporteursAffairesPage() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
-
   const [apporteurs, setApporteurs] = useState<ApporteurAffaireRow[]>([]);
   const [leads, setLeads] = useState<ApporteurLeadRow[]>([]);
   const [documents, setDocuments] = useState([] as { id: string; label: string; file_path: string }[]);
   const [accessTokens, setAccessTokens] = useState<Record<string, ApporteurAccessTokenRow>>({});
-
   const [selectedApporteurId, setSelectedApporteurId] = useState<string>("");
   const [apporteurForm, setApporteurForm] = useState<typeof DEFAULT_APPORTEUR_FORM>(DEFAULT_APPORTEUR_FORM);
   const [editingApporteurId, setEditingApporteurId] = useState<string | null>(null);
   const [leadForm, setLeadForm] = useState<typeof DEFAULT_LEAD_FORM>(DEFAULT_LEAD_FORM);
   const [editingLeadId, setEditingLeadId] = useState<string | null>(null);
 
+  const selectedApporteur = useMemo(
+    () => apporteurs.find((row) => row.id === selectedApporteurId) ?? null,
+    [apporteurs, selectedApporteurId],
+  );
+
   const filteredLeads = useMemo(
     () => (selectedApporteurId ? leads.filter((row) => row.apporteur_id === selectedApporteurId) : leads),
     [leads, selectedApporteurId],
   );
 
-  const totalLeads = filteredLeads.length;
-  const totalCommission = filteredLeads.reduce((sum, lead) => sum + calculateCommission(lead, apporteurs.find((ap) => ap.id === lead.apporteur_id) ?? undefined), 0);
-  const unpaidCommission = filteredLeads.filter((lead) => lead.status !== "paye").reduce((sum, lead) => sum + calculateCommission(lead, apporteurs.find((ap) => ap.id === lead.apporteur_id) ?? undefined), 0);
+  const stats = useMemo(() => {
+    const totalCommission = filteredLeads.reduce((sum, lead) => sum + calculateCommission(lead, apporteurs.find((ap) => ap.id === lead.apporteur_id) ?? undefined), 0);
+    const unpaidCommission = filteredLeads
+      .filter((lead) => lead.status !== "paye")
+      .reduce((sum, lead) => sum + calculateCommission(lead, apporteurs.find((ap) => ap.id === lead.apporteur_id) ?? undefined), 0);
+    const converted = filteredLeads.filter((lead) => Boolean(lead.crm_prospect_id)).length;
+    return { totalCommission, unpaidCommission, converted };
+  }, [apporteurs, filteredLeads]);
 
   useEffect(() => {
-    async function loadData() {
-      setLoading(true);
-      setError(null);
-      try {
-        const [apporteursData, leadsData, documentsData, tokens] = await Promise.all([
-          getApporteursAffaires(),
-          getApporteurLeads(),
-          getApporteurDocuments(),
-          getApporteurAccessTokens(),
-        ]);
-        setApporteurs(apporteursData);
-        setLeads(leadsData);
-        setDocuments(documentsData);
-        setAccessTokens(
-          tokens.reduce((acc, token) => {
-            acc[token.apporteur_id] = token;
-            return acc;
-          }, {} as Record<string, ApporteurAccessTokenRow>),
-        );
-      } catch (err: any) {
-        setError(err?.message ?? "Impossible de charger les apporteurs.");
-      } finally {
-        setLoading(false);
-      }
-    }
-
-    void loadData();
+    void refreshData(true);
   }, []);
 
-  async function refreshData() {
+  async function refreshData(initial = false) {
+    if (initial) setLoading(true);
     setError(null);
     setNotice(null);
     try {
@@ -166,15 +173,27 @@ export default function ApporteursAffairesPage() {
       setApporteurs(apporteursData);
       setLeads(leadsData);
       setDocuments(documentsData);
-      setAccessTokens(
-        tokens.reduce((acc, token) => {
-          acc[token.apporteur_id] = token;
-          return acc;
-        }, {} as Record<string, ApporteurAccessTokenRow>),
-      );
+      setAccessTokens(tokens.reduce((acc, token) => ({ ...acc, [token.apporteur_id]: token }), {} as Record<string, ApporteurAccessTokenRow>));
+      setSelectedApporteurId((current) => current || apporteursData[0]?.id || "");
     } catch (err: any) {
-      setError(err?.message ?? "Impossible de rafraîchir les données.");
+      setError(err?.message ?? "Impossible de charger les apporteurs.");
+    } finally {
+      if (initial) setLoading(false);
     }
+  }
+
+  function resetApporteurForm() {
+    setEditingApporteurId(null);
+    setApporteurForm(DEFAULT_APPORTEUR_FORM);
+    setError(null);
+    setNotice(null);
+  }
+
+  function resetLeadForm(apporteurId = selectedApporteurId) {
+    setEditingLeadId(null);
+    setLeadForm({ ...DEFAULT_LEAD_FORM, apporteur_id: apporteurId });
+    setError(null);
+    setNotice(null);
   }
 
   async function onSaveApporteur() {
@@ -182,9 +201,7 @@ export default function ApporteursAffairesPage() {
     setError(null);
     setNotice(null);
     try {
-      if (!apporteurForm.nom.trim()) {
-        throw new Error("Le nom de l'apporteur est requis.");
-      }
+      if (!apporteurForm.nom.trim()) throw new Error("Le nom de l'apporteur est requis.");
       const payload = {
         nom: apporteurForm.nom,
         entreprise: apporteurForm.entreprise || null,
@@ -197,19 +214,14 @@ export default function ApporteursAffairesPage() {
         active: apporteurForm.active,
         notes: apporteurForm.notes || null,
       };
-
-      let result: ApporteurAffaireRow;
-      if (editingApporteurId) {
-        result = await updateApporteurAffaire(editingApporteurId, payload);
-      } else {
-        result = await createApporteurAffaire(payload);
-      }
-
+      const result = editingApporteurId
+        ? await updateApporteurAffaire(editingApporteurId, payload)
+        : await createApporteurAffaire(payload);
       setNotice(editingApporteurId ? "Apporteur mis à jour." : "Apporteur créé.");
-      setEditingApporteurId(null);
-      setApporteurForm(DEFAULT_APPORTEUR_FORM);
+      resetApporteurForm();
       await refreshData();
       setSelectedApporteurId(result.id);
+      resetLeadForm(result.id);
     } catch (err: any) {
       setError(err?.message ?? "Impossible d'enregistrer l'apporteur.");
     } finally {
@@ -217,7 +229,7 @@ export default function ApporteursAffairesPage() {
     }
   }
 
-  async function onEditApporteur(apporteur: ApporteurAffaireRow) {
+  function onEditApporteur(apporteur: ApporteurAffaireRow) {
     setEditingApporteurId(apporteur.id);
     setApporteurForm({
       id: apporteur.id,
@@ -232,8 +244,7 @@ export default function ApporteursAffairesPage() {
       active: apporteur.active,
       notes: apporteur.notes ?? "",
     });
-    setError(null);
-    setNotice(null);
+    setSelectedApporteurId(apporteur.id);
   }
 
   async function onRemoveApporteur(id: string) {
@@ -285,14 +296,10 @@ export default function ApporteursAffairesPage() {
         date: leadForm.date,
         status: leadForm.status,
       };
-      if (editingLeadId) {
-        await updateApporteurLead(editingLeadId, payload);
-      } else {
-        await createApporteurLead(payload);
-      }
+      if (editingLeadId) await updateApporteurLead(editingLeadId, payload);
+      else await createApporteurLead(payload);
       setNotice(editingLeadId ? "Lead mis à jour." : "Lead ajouté.");
-      setEditingLeadId(null);
-      setLeadForm({ ...DEFAULT_LEAD_FORM, apporteur_id: leadForm.apporteur_id });
+      resetLeadForm(leadForm.apporteur_id);
       await refreshData();
     } catch (err: any) {
       setError(err?.message ?? "Impossible d'enregistrer le lead.");
@@ -301,7 +308,7 @@ export default function ApporteursAffairesPage() {
     }
   }
 
-  async function onEditLead(lead: ApporteurLeadRow) {
+  function onEditLead(lead: ApporteurLeadRow) {
     setEditingLeadId(lead.id);
     setLeadForm({
       id: lead.id,
@@ -315,8 +322,7 @@ export default function ApporteursAffairesPage() {
       date: lead.date.slice(0, 10),
       status: lead.status,
     });
-    setError(null);
-    setNotice(null);
+    if (lead.apporteur_id) setSelectedApporteurId(lead.apporteur_id);
   }
 
   async function onRemoveLead(id: string) {
@@ -350,7 +356,6 @@ export default function ApporteursAffairesPage() {
         lead.project_address ? `Adresse projet : ${lead.project_address}` : null,
         apporteurLabel ? `Apporteur : ${apporteurLabel}` : null,
       ].filter(Boolean).join("\n");
-
       const prospect = await createCrmProspect({
         type: "particulier",
         nom: lead.client_name,
@@ -365,12 +370,10 @@ export default function ApporteursAffairesPage() {
         tags: ["apporteur"],
         statut: lead.status === "nouveau" ? "a_qualifier" : "qualifie",
       });
-
       await updateApporteurLead(lead.id, {
         crm_prospect_id: prospect.id,
         status: lead.status === "nouveau" ? "contacte" : lead.status,
       });
-
       setNotice("Prospect CRM créé depuis le lead apporteur.");
       await refreshData();
     } catch (err: any) {
@@ -386,276 +389,203 @@ export default function ApporteursAffairesPage() {
 
   return (
     <div className="space-y-5">
-      <div>
-        <h1 className="text-2xl font-bold">Apporteurs d’affaires</h1>
-        <p className="text-slate-500">Centralisez vos partenaires, leads transmis et commissions.</p>
-      </div>
+      <header className="flex flex-col gap-4 border-b border-slate-200 pb-5 lg:flex-row lg:items-end lg:justify-between">
+        <div>
+          <div className="text-xs font-semibold uppercase tracking-[0.18em] text-blue-600">Commerce</div>
+          <h1 className="mt-1 text-2xl font-bold text-slate-950">Apporteurs d'affaires</h1>
+          <p className="mt-1 text-sm text-slate-500">Partenaires, leads transmis, conversion CRM et commissions à suivre.</p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <button type="button" onClick={() => void refreshData()} className={secondaryButtonClass}>Rafraîchir</button>
+          <button type="button" onClick={resetApporteurForm} className={primaryButtonClass}>Nouvel apporteur</button>
+        </div>
+      </header>
 
       {error ? <div className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</div> : null}
       {notice ? <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-700">{notice}</div> : null}
 
-      <div className="grid gap-4 xl:grid-cols-[1.4fr_minmax(320px,0.8fr)]">
-        <section className="rounded-2xl border bg-white p-4 space-y-4">
-          <div className="flex flex-wrap items-center justify-between gap-4">
-            <div>
-              <div className="text-xs uppercase tracking-[0.2em] text-slate-400">Apporteurs</div>
-              <h2 className="mt-1 text-lg font-semibold text-slate-900">Liste des apporteurs</h2>
+      <section className="grid gap-3 md:grid-cols-4">
+        <Metric label="Apporteurs actifs" value={String(apporteurs.filter((row) => row.active).length)} />
+        <Metric label="Leads suivis" value={String(filteredLeads.length)} />
+        <Metric label="Prospects CRM" value={String(stats.converted)} />
+        <Metric label="Commissions dues" value={formatCurrency(stats.unpaidCommission)} />
+      </section>
+
+      <section className="grid gap-5 xl:grid-cols-[380px_minmax(0,1fr)]">
+        <aside className="space-y-4">
+          <div className="rounded-2xl border border-slate-200 bg-white p-3">
+            <div className="px-2 pb-2 text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Apporteurs</div>
+            <div className="space-y-2">
+              {apporteurs.map((apporteur) => {
+                const active = apporteur.id === selectedApporteurId;
+                const leadCount = leads.filter((lead) => lead.apporteur_id === apporteur.id).length;
+                return (
+                  <button
+                    key={apporteur.id}
+                    type="button"
+                    onClick={() => { setSelectedApporteurId(apporteur.id); resetLeadForm(apporteur.id); }}
+                    className={[
+                      "w-full rounded-xl border px-3 py-3 text-left transition",
+                      active ? "border-blue-300 bg-blue-50" : "border-transparent hover:border-slate-200 hover:bg-slate-50",
+                    ].join(" ")}
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <div className="truncate text-sm font-semibold text-slate-950">{apporteur.nom}</div>
+                        <div className="mt-0.5 truncate text-xs text-slate-500">{apporteur.entreprise || typeLabel(apporteur.type)}</div>
+                      </div>
+                      <span className={apporteur.active ? "status-ok" : "status-muted"}>{apporteur.active ? "Actif" : "Inactif"}</span>
+                    </div>
+                    <div className="mt-2 flex items-center justify-between text-xs text-slate-500">
+                      <span>{leadCount} lead{leadCount > 1 ? "s" : ""}</span>
+                      <span>{apporteur.calculation_mode === "fixe" ? formatCurrency(apporteur.commission_percent) : `${apporteur.commission_percent}%`}</span>
+                    </div>
+                  </button>
+                );
+              })}
+              {!apporteurs.length ? <div className="rounded-xl border border-dashed border-slate-200 p-4 text-sm text-slate-500">Aucun apporteur enregistré.</div> : null}
             </div>
-            <button
-              type="button"
-              onClick={() => {
-                setEditingApporteurId(null);
-                setApporteurForm(DEFAULT_APPORTEUR_FORM);
-                setError(null);
-                setNotice(null);
-              }}
-              className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-2 text-sm text-slate-700 hover:bg-slate-100"
-            >
-              Nouveau apporteur
-            </button>
           </div>
 
-          <div className="grid gap-3 md:grid-cols-2">
-            {apporteurs.map((apporteur) => {
-              const tokenRow = accessTokens[apporteur.id];
-              return (
-                <div key={apporteur.id} className="rounded-2xl border border-slate-200 p-4">
-                  <div className="flex items-start justify-between gap-3">
+          <FormPanel title={editingApporteurId ? "Modifier l'apporteur" : "Créer un apporteur"}>
+            <div className="grid gap-3">
+              <Input label="Nom" value={apporteurForm.nom} onChange={(value) => setApporteurForm((prev) => ({ ...prev, nom: value }))} />
+              <Input label="Entreprise" value={apporteurForm.entreprise} onChange={(value) => setApporteurForm((prev) => ({ ...prev, entreprise: value }))} />
+              <div className="grid gap-3 sm:grid-cols-2">
+                <Select label="Type" value={apporteurForm.type} onChange={(value) => setApporteurForm((prev) => ({ ...prev, type: value as ApporteurType }))} options={APPORTREUR_TYPES} />
+                <Select label="Calcul" value={apporteurForm.calculation_mode} onChange={(value) => setApporteurForm((prev) => ({ ...prev, calculation_mode: value as ApporteurCalculationMode }))} options={CALCULATION_MODES} />
+              </div>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <Input label="Téléphone" value={apporteurForm.telephone} onChange={(value) => setApporteurForm((prev) => ({ ...prev, telephone: value }))} />
+                <Input label="Email" value={apporteurForm.email} onChange={(value) => setApporteurForm((prev) => ({ ...prev, email: value }))} />
+              </div>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <Input label="Commission" value={apporteurForm.commission_percent} onChange={(value) => setApporteurForm((prev) => ({ ...prev, commission_percent: value }))} inputMode="decimal" />
+                <Input label="IBAN" value={apporteurForm.iban} onChange={(value) => setApporteurForm((prev) => ({ ...prev, iban: value }))} />
+              </div>
+              <label className="flex items-center gap-3 text-sm text-slate-700">
+                <input type="checkbox" checked={apporteurForm.active} onChange={(e) => setApporteurForm((prev) => ({ ...prev, active: e.target.checked }))} />
+                Actif
+              </label>
+              <Textarea label="Notes" value={apporteurForm.notes} onChange={(value) => setApporteurForm((prev) => ({ ...prev, notes: value }))} />
+              <div className="flex flex-wrap gap-2">
+                <button type="button" disabled={saving} onClick={() => void onSaveApporteur()} className={primaryButtonClass}>{editingApporteurId ? "Mettre à jour" : "Créer"}</button>
+                <button type="button" onClick={resetApporteurForm} className={secondaryButtonClass}>Réinitialiser</button>
+              </div>
+            </div>
+          </FormPanel>
+        </aside>
+
+        <div className="space-y-5">
+          <section className="rounded-2xl border border-slate-200 bg-white p-5">
+            {selectedApporteur ? (
+              <div className="grid gap-5 lg:grid-cols-[1fr_340px]">
+                <div>
+                  <div className="flex flex-wrap items-start justify-between gap-3">
                     <div>
-                      <div className="text-sm font-semibold text-slate-900">{apporteur.nom}</div>
-                      <div className="mt-1 text-sm text-slate-500">{apporteur.entreprise || "-"}</div>
+                      <div className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Partenaire sélectionné</div>
+                      <h2 className="mt-1 text-xl font-semibold text-slate-950">{selectedApporteur.nom}</h2>
+                      <p className="mt-1 text-sm text-slate-500">{selectedApporteur.entreprise || typeLabel(selectedApporteur.type)}</p>
                     </div>
-                    <span className={['rounded-full px-3 py-1 text-xs font-semibold', apporteur.active ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-600'].join(' ')}>
-                      {apporteur.active ? 'Actif' : 'Inactif'}
-                    </span>
+                    <div className="flex flex-wrap gap-2">
+                      <button type="button" onClick={() => onEditApporteur(selectedApporteur)} className={secondaryButtonClass}>Modifier</button>
+                      <button type="button" onClick={() => void onGenerateToken(selectedApporteur.id)} className={secondaryButtonClass}>Générer lien</button>
+                    </div>
                   </div>
-                  <div className="mt-3 space-y-2 text-sm text-slate-600">
-                    <div>Type: {APPORTREUR_TYPES.find((item) => item.value === apporteur.type)?.label}</div>
-                    <div>Commission: {apporteur.commission_percent}%</div>
-                    <div>Mode: {CALCULATION_MODES.find((item) => item.value === apporteur.calculation_mode)?.label}</div>
-                    <div>Téléphone: {apporteur.telephone || '—'}</div>
-                    <div>Email: {apporteur.email || '—'}</div>
+                  <div className="mt-5 grid gap-3 sm:grid-cols-3">
+                    <Info label="Type" value={typeLabel(selectedApporteur.type)} />
+                    <Info label="Commission" value={selectedApporteur.calculation_mode === "fixe" ? formatCurrency(selectedApporteur.commission_percent) : `${selectedApporteur.commission_percent}%`} />
+                    <Info label="Mode" value={calculationModeLabel(selectedApporteur.calculation_mode)} />
+                    <Info label="Téléphone" value={selectedApporteur.telephone || "-"} />
+                    <Info label="Email" value={selectedApporteur.email || "-"} />
+                    <Info label="IBAN" value={selectedApporteur.iban || "-"} />
                   </div>
-                  <div className="mt-4 flex flex-wrap gap-2">
-                    <button type="button" onClick={() => { onEditApporteur(apporteur); }} className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700 hover:bg-slate-100">Modifier</button>
-                    <button type="button" onClick={() => void onRemoveApporteur(apporteur.id)} className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 hover:bg-red-100">Supprimer</button>
-                    <button type="button" onClick={() => void onGenerateToken(apporteur.id)} className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700 hover:bg-slate-100">Générer lien</button>
-                  </div>
-                  {tokenRow ? (
-                    <div className="mt-3 rounded-2xl border border-slate-200 bg-slate-50 p-3 text-xs text-slate-600">
-                      <div className="font-semibold text-slate-900">Lien public apporteur</div>
-                      <div className="mt-2 break-all">{window.location.origin}/apporteur/{tokenRow.token}</div>
+                  {accessTokens[selectedApporteur.id] ? (
+                    <div className="mt-4 rounded-xl border border-blue-100 bg-blue-50 p-3 text-xs text-blue-900">
+                      <div className="font-semibold">Lien public apporteur</div>
+                      <div className="mt-1 break-all">{portalLink(accessTokens[selectedApporteur.id])}</div>
                     </div>
                   ) : null}
                 </div>
-              );
-            })}
-            {apporteurs.length === 0 ? (
-              <div className="rounded-2xl border border-dashed border-slate-200 p-6 text-sm text-slate-500">Aucun apporteur enregistré pour le moment.</div>
-            ) : null}
-          </div>
-        </section>
-
-        <section className="rounded-2xl border bg-white p-4 space-y-4">
-          <div className="text-xs uppercase tracking-[0.2em] text-slate-400">Récapitulatif</div>
-          <div className="grid gap-3 sm:grid-cols-2">
-            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-              <div className="text-xs uppercase tracking-[0.18em] text-slate-500">Apporteurs</div>
-              <div className="mt-2 text-3xl font-semibold text-slate-950">{apporteurs.length}</div>
-            </div>
-            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-              <div className="text-xs uppercase tracking-[0.18em] text-slate-500">Leads</div>
-              <div className="mt-2 text-3xl font-semibold text-slate-950">{totalLeads}</div>
-            </div>
-            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-              <div className="text-xs uppercase tracking-[0.18em] text-slate-500">Commission totale estimée</div>
-              <div className="mt-2 text-3xl font-semibold text-slate-950">{formatCurrency(totalCommission)}</div>
-            </div>
-            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-              <div className="text-xs uppercase tracking-[0.18em] text-slate-500">Commission non payée</div>
-              <div className="mt-2 text-3xl font-semibold text-slate-950">{formatCurrency(unpaidCommission)}</div>
-            </div>
-          </div>
-
-          <div className="rounded-2xl border border-slate-200 bg-white p-4">
-            <div className="text-sm font-semibold text-slate-900">Documents</div>
-            {documents.length ? (
-              <ul className="mt-3 space-y-2 text-sm text-slate-600">
-                {documents.map((document) => (
-                  <li key={document.id} className="flex items-center justify-between gap-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
-                    <span>{document.label}</span>
-                    <a href={document.file_path} target="_blank" rel="noreferrer" className="text-slate-700 underline">Ouvrir</a>
-                  </li>
-                ))}
-              </ul>
+                <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                  <div className="text-sm font-semibold text-slate-950">Documents de paiement</div>
+                  {documents.filter((document: any) => document.apporteur_id === selectedApporteur.id).length ? (
+                    <ul className="mt-3 space-y-2 text-sm text-slate-600">
+                      {documents.filter((document: any) => document.apporteur_id === selectedApporteur.id).map((document) => (
+                        <li key={document.id} className="flex items-center justify-between gap-3 rounded-lg bg-white px-3 py-2 ring-1 ring-slate-200">
+                          <span>{document.label}</span>
+                          <a href={document.file_path} target="_blank" rel="noreferrer" className="text-blue-700 underline">Ouvrir</a>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : <div className="mt-3 text-sm text-slate-500">Aucun document rattaché.</div>}
+                </div>
+              </div>
             ) : (
-              <div className="mt-3 text-sm text-slate-500">Aucun document de paiement enregistré.</div>
+              <div className="text-sm text-slate-500">Sélectionnez ou créez un apporteur.</div>
             )}
-          </div>
-        </section>
-      </div>
+          </section>
 
-      <div className="grid gap-4 xl:grid-cols-[1.2fr_0.8fr]">
-        <section className="rounded-2xl border bg-white p-4 space-y-4">
-          <div className="text-xs uppercase tracking-[0.2em] text-slate-400">Formulaire apporteur</div>
-          <div className="grid gap-3 md:grid-cols-2">
-            <label className="space-y-1 text-sm">
-              <div className="text-xs text-slate-600">Nom</div>
-              <input className="w-full rounded-xl border px-3 py-2 text-sm" value={apporteurForm.nom} onChange={(e) => setApporteurForm((prev) => ({ ...prev, nom: e.target.value }))} />
-            </label>
-            <label className="space-y-1 text-sm">
-              <div className="text-xs text-slate-600">Entreprise</div>
-              <input className="w-full rounded-xl border px-3 py-2 text-sm" value={apporteurForm.entreprise} onChange={(e) => setApporteurForm((prev) => ({ ...prev, entreprise: e.target.value }))} />
-            </label>
-            <label className="space-y-1 text-sm">
-              <div className="text-xs text-slate-600">Type</div>
-              <select className="w-full rounded-xl border px-3 py-2 text-sm" value={apporteurForm.type} onChange={(e) => setApporteurForm((prev) => ({ ...prev, type: e.target.value as ApporteurType }))}>
-                {APPORTREUR_TYPES.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
-              </select>
-            </label>
-            <label className="space-y-1 text-sm">
-              <div className="text-xs text-slate-600">Téléphone</div>
-              <input className="w-full rounded-xl border px-3 py-2 text-sm" value={apporteurForm.telephone} onChange={(e) => setApporteurForm((prev) => ({ ...prev, telephone: e.target.value }))} />
-            </label>
-            <label className="space-y-1 text-sm">
-              <div className="text-xs text-slate-600">Email</div>
-              <input className="w-full rounded-xl border px-3 py-2 text-sm" value={apporteurForm.email} onChange={(e) => setApporteurForm((prev) => ({ ...prev, email: e.target.value }))} />
-            </label>
-            <label className="space-y-1 text-sm">
-              <div className="text-xs text-slate-600">Commission %</div>
-              <input inputMode="decimal" className="w-full rounded-xl border px-3 py-2 text-sm" value={apporteurForm.commission_percent} onChange={(e) => setApporteurForm((prev) => ({ ...prev, commission_percent: e.target.value }))} />
-            </label>
-            <label className="space-y-1 text-sm">
-              <div className="text-xs text-slate-600">Mode de calcul</div>
-              <select className="w-full rounded-xl border px-3 py-2 text-sm" value={apporteurForm.calculation_mode} onChange={(e) => setApporteurForm((prev) => ({ ...prev, calculation_mode: e.target.value as ApporteurCalculationMode }))}>
-                {CALCULATION_MODES.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
-              </select>
-            </label>
-            <label className="space-y-1 text-sm">
-              <div className="text-xs text-slate-600">IBAN</div>
-              <input className="w-full rounded-xl border px-3 py-2 text-sm" value={apporteurForm.iban} onChange={(e) => setApporteurForm((prev) => ({ ...prev, iban: e.target.value }))} />
-            </label>
-            <label className="flex items-center gap-3 text-sm text-slate-700">
-              <input type="checkbox" checked={apporteurForm.active} onChange={(e) => setApporteurForm((prev) => ({ ...prev, active: e.target.checked }))} />
-              Actif
-            </label>
-            <label className="space-y-1 text-sm md:col-span-2">
-              <div className="text-xs text-slate-600">Notes</div>
-              <textarea className="w-full rounded-xl border px-3 py-2 text-sm" value={apporteurForm.notes} onChange={(e) => setApporteurForm((prev) => ({ ...prev, notes: e.target.value }))} />
-            </label>
-          </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <button type="button" disabled={saving} onClick={() => void onSaveApporteur()} className="rounded-xl bg-slate-900 px-4 py-2 text-sm text-white hover:bg-slate-800 disabled:bg-slate-300 disabled:text-slate-600">{editingApporteurId ? "Mettre à jour" : "Créer"}</button>
-            <button type="button" onClick={() => { setEditingApporteurId(null); setApporteurForm(DEFAULT_APPORTEUR_FORM); }} className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm text-slate-700 hover:bg-slate-50">Réinitialiser</button>
-          </div>
-        </section>
-
-        <section className="rounded-2xl border bg-white p-4 space-y-4">
-          <div className="text-xs uppercase tracking-[0.2em] text-slate-400">Leads apportés</div>
-          <div className="grid gap-3 md:grid-cols-2">
-            <label className="space-y-1 text-sm">
-              <div className="text-xs text-slate-600">Apporteur</div>
-              <select className="w-full rounded-xl border px-3 py-2 text-sm" value={leadForm.apporteur_id} onChange={(e) => setLeadForm((prev) => ({ ...prev, apporteur_id: e.target.value }))}>
-                <option value="">Sélectionner un apporteur</option>
-                {apporteurs.map((apporteur) => (
-                  <option key={apporteur.id} value={apporteur.id}>{apporteur.nom}</option>
-                ))}
-              </select>
-            </label>
-            <label className="space-y-1 text-sm">
-              <div className="text-xs text-slate-600">Date</div>
-              <input type="date" className="w-full rounded-xl border px-3 py-2 text-sm" value={leadForm.date} onChange={(e) => setLeadForm((prev) => ({ ...prev, date: e.target.value }))} />
-            </label>
-            <label className="space-y-1 text-sm md:col-span-2">
-              <div className="text-xs text-slate-600">Client</div>
-              <input className="w-full rounded-xl border px-3 py-2 text-sm" value={leadForm.client_name} onChange={(e) => setLeadForm((prev) => ({ ...prev, client_name: e.target.value }))} />
-            </label>
-            <label className="space-y-1 text-sm">
-              <div className="text-xs text-slate-600">Téléphone</div>
-              <input className="w-full rounded-xl border px-3 py-2 text-sm" value={leadForm.telephone} onChange={(e) => setLeadForm((prev) => ({ ...prev, telephone: e.target.value }))} />
-            </label>
-            <label className="space-y-1 text-sm">
-              <div className="text-xs text-slate-600">Type de projet</div>
-              <input className="w-full rounded-xl border px-3 py-2 text-sm" value={leadForm.project_type} onChange={(e) => setLeadForm((prev) => ({ ...prev, project_type: e.target.value }))} />
-            </label>
-            <label className="space-y-1 text-sm">
-              <div className="text-xs text-slate-600">Montant estimé</div>
-              <input inputMode="decimal" className="w-full rounded-xl border px-3 py-2 text-sm" value={leadForm.estimated_amount} onChange={(e) => setLeadForm((prev) => ({ ...prev, estimated_amount: e.target.value }))} />
-            </label>
-            <label className="space-y-1 text-sm">
-              <div className="text-xs text-slate-600">Statut</div>
-              <select className="w-full rounded-xl border px-3 py-2 text-sm" value={leadForm.status} onChange={(e) => setLeadForm((prev) => ({ ...prev, status: e.target.value as ApporteurLeadStatus }))}>
-                {LEAD_STATUSES.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
-              </select>
-            </label>
-            <label className="space-y-1 text-sm md:col-span-2">
-              <div className="text-xs text-slate-600">Adresse projet</div>
-              <input className="w-full rounded-xl border px-3 py-2 text-sm" value={leadForm.project_address} onChange={(e) => setLeadForm((prev) => ({ ...prev, project_address: e.target.value }))} />
-            </label>
-            <label className="space-y-1 text-sm md:col-span-2">
-              <div className="text-xs text-slate-600">Commentaire</div>
-              <textarea className="w-full rounded-xl border px-3 py-2 text-sm" value={leadForm.comment} onChange={(e) => setLeadForm((prev) => ({ ...prev, comment: e.target.value }))} />
-            </label>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            <button type="button" disabled={saving} onClick={() => void onSaveLead()} className="rounded-xl bg-slate-900 px-4 py-2 text-sm text-white hover:bg-slate-800 disabled:bg-slate-300 disabled:text-slate-600">{editingLeadId ? "Enregistrer le lead" : "Ajouter le lead"}</button>
-            <button type="button" onClick={() => { setEditingLeadId(null); setLeadForm(DEFAULT_LEAD_FORM); }} className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm text-slate-700 hover:bg-slate-50">Réinitialiser</button>
-          </div>
-        </section>
-      </div>
-
-      <section className="rounded-2xl border bg-white p-4">
-        <div className="mb-5 flex flex-wrap items-center justify-between gap-4">
-          <div>
-            <div className="text-xs uppercase tracking-[0.2em] text-slate-400">Leads</div>
-            <h2 className="mt-1 text-lg font-semibold text-slate-900">Tous les leads</h2>
-          </div>
-          <div className="flex items-center gap-3">
-            <label className="text-sm text-slate-600">Filtrer par apporteur :</label>
-            <select className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm" value={selectedApporteurId} onChange={(e) => setSelectedApporteurId(e.target.value)}>
-              <option value="">Tous</option>
-              {apporteurs.map((row) => <option key={row.id} value={row.id}>{row.nom}</option>)}
-            </select>
-          </div>
+          <FormPanel title={editingLeadId ? "Modifier le lead" : "Ajouter un lead apporté"}>
+            <div className="grid gap-3 md:grid-cols-2">
+              <Select label="Apporteur" value={leadForm.apporteur_id || selectedApporteurId} onChange={(value) => setLeadForm((prev) => ({ ...prev, apporteur_id: value }))} options={apporteurs.map((apporteur) => ({ value: apporteur.id, label: apporteur.nom }))} placeholder="Sélectionner" />
+              <Input label="Date" type="date" value={leadForm.date} onChange={(value) => setLeadForm((prev) => ({ ...prev, date: value }))} />
+              <Input label="Client" value={leadForm.client_name} onChange={(value) => setLeadForm((prev) => ({ ...prev, client_name: value }))} />
+              <Input label="Téléphone" value={leadForm.telephone} onChange={(value) => setLeadForm((prev) => ({ ...prev, telephone: value }))} />
+              <Input label="Type de projet" value={leadForm.project_type} onChange={(value) => setLeadForm((prev) => ({ ...prev, project_type: value }))} />
+              <Input label="Montant estimé" inputMode="decimal" value={leadForm.estimated_amount} onChange={(value) => setLeadForm((prev) => ({ ...prev, estimated_amount: value }))} />
+              <Select label="Statut interne" value={leadForm.status} onChange={(value) => setLeadForm((prev) => ({ ...prev, status: value as ApporteurLeadStatus }))} options={LEAD_STATUSES} />
+              <Input label="Adresse projet" value={leadForm.project_address} onChange={(value) => setLeadForm((prev) => ({ ...prev, project_address: value }))} />
+              <div className="md:col-span-2"><Textarea label="Commentaire" value={leadForm.comment} onChange={(value) => setLeadForm((prev) => ({ ...prev, comment: value }))} /></div>
+            </div>
+            <div className="mt-4 flex flex-wrap gap-2">
+              <button type="button" disabled={saving} onClick={() => void onSaveLead()} className={primaryButtonClass}>{editingLeadId ? "Enregistrer le lead" : "Ajouter le lead"}</button>
+              <button type="button" onClick={() => resetLeadForm()} className={secondaryButtonClass}>Réinitialiser</button>
+            </div>
+          </FormPanel>
         </div>
+      </section>
 
+      <section className="rounded-2xl border border-slate-200 bg-white p-4">
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <div className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Leads</div>
+            <h2 className="mt-1 text-lg font-semibold text-slate-950">Suivi commercial et commissions</h2>
+          </div>
+          <select className={selectClass} value={selectedApporteurId} onChange={(e) => setSelectedApporteurId(e.target.value)}>
+            <option value="">Tous les apporteurs</option>
+            {apporteurs.map((row) => <option key={row.id} value={row.id}>{row.nom}</option>)}
+          </select>
+        </div>
         <div className="overflow-x-auto">
           <table className="min-w-full text-sm text-slate-700">
             <thead className="bg-slate-50 text-slate-600">
               <tr>
-                <th className="px-4 py-3 text-left font-medium">Client</th>
-                <th className="px-4 py-3 text-left font-medium">Apporteur</th>
-                <th className="px-4 py-3 text-left font-medium">Montant</th>
-                <th className="px-4 py-3 text-left font-medium">Statut</th>
-                <th className="px-4 py-3 text-left font-medium">Commission</th>
-                <th className="px-4 py-3 text-left font-medium">Date</th>
-                <th className="px-4 py-3 text-left font-medium">Actions</th>
+                <Th>Client</Th><Th>Apporteur</Th><Th>Montant</Th><Th>Statut</Th><Th>Commission</Th><Th>CRM</Th><Th>Actions</Th>
               </tr>
             </thead>
             <tbody>
               {filteredLeads.map((lead) => {
                 const apporteur = apporteurs.find((row) => row.id === lead.apporteur_id);
                 return (
-                  <tr key={lead.id} className="border-t border-slate-200">
-                    <td className="px-4 py-3">{lead.client_name}</td>
-                    <td className="px-4 py-3">{apporteur?.nom ?? "-"}</td>
-                    <td className="px-4 py-3">{formatCurrency(lead.estimated_amount)}</td>
-                    <td className="px-4 py-3">{LEAD_STATUSES.find((item) => item.value === lead.status)?.label}</td>
-                    <td className="px-4 py-3">{formatCurrency(calculateCommission(lead, apporteur ?? undefined))}</td>
-                    <td className="px-4 py-3">{lead.date}</td>
-                    <td className="px-4 py-3 text-sm text-slate-500">
-                      <button type="button" onClick={() => onEditLead(lead)} className="mr-2 text-blue-600 hover:underline">Modifier</button>
-                      <button type="button" disabled={saving || Boolean(lead.crm_prospect_id)} onClick={() => void onCreateCrmProspectFromLead(lead)} className="mr-2 text-emerald-700 hover:underline disabled:text-slate-400">{lead.crm_prospect_id ? "Prospect créé" : "Créer prospect CRM"}</button>
-                      <button type="button" onClick={() => void onRemoveLead(lead.id)} className="text-red-600 hover:underline">Supprimer</button>
-                    </td>
+                  <tr key={lead.id} className="border-t border-slate-100">
+                    <Td><div className="font-semibold text-slate-950">{lead.client_name}</div><div className="text-xs text-slate-500">{lead.telephone || lead.project_address || "-"}</div></Td>
+                    <Td>{apporteur?.nom ?? "-"}</Td>
+                    <Td>{formatCurrency(lead.estimated_amount)}</Td>
+                    <Td><span className={`rounded-full px-2.5 py-1 text-xs font-semibold ring-1 ${statusClass(lead.status)}`}>{statusLabel(lead.status)}</span></Td>
+                    <Td>{formatCurrency(calculateCommission(lead, apporteur ?? undefined))}</Td>
+                    <Td>{lead.crm_prospect_id ? "Prospect créé" : "À convertir"}</Td>
+                    <Td>
+                      <div className="flex flex-wrap gap-2">
+                        <button type="button" onClick={() => onEditLead(lead)} className="text-blue-700 hover:underline">Modifier</button>
+                        <button type="button" disabled={saving || Boolean(lead.crm_prospect_id)} onClick={() => void onCreateCrmProspectFromLead(lead)} className="text-emerald-700 hover:underline disabled:text-slate-400">Créer prospect</button>
+                        <button type="button" onClick={() => void onRemoveLead(lead.id)} className="text-red-600 hover:underline">Supprimer</button>
+                      </div>
+                    </Td>
                   </tr>
                 );
               })}
-              {filteredLeads.length === 0 ? (
-                <tr>
-                  <td colSpan={7} className="px-4 py-8 text-center text-sm text-slate-500">Aucun lead trouvé.</td>
-                </tr>
-              ) : null}
+              {!filteredLeads.length ? <tr><td colSpan={7} className="px-4 py-8 text-center text-sm text-slate-500">Aucun lead trouvé.</td></tr> : null}
             </tbody>
           </table>
         </div>
@@ -663,3 +593,40 @@ export default function ApporteursAffairesPage() {
     </div>
   );
 }
+
+function Metric({ label, value }: { label: string; value: string }) {
+  return <div className="rounded-2xl border border-slate-200 bg-white p-4"><div className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">{label}</div><div className="mt-2 text-2xl font-bold text-slate-950">{value}</div></div>;
+}
+
+function FormPanel({ title, children }: { title: string; children: React.ReactNode }) {
+  return <section className="rounded-2xl border border-slate-200 bg-white p-4"><h2 className="text-sm font-semibold text-slate-950">{title}</h2><div className="mt-4">{children}</div></section>;
+}
+
+function Info({ label, value }: { label: string; value: string }) {
+  return <div className="rounded-xl bg-slate-50 p-3"><div className="text-xs text-slate-500">{label}</div><div className="mt-1 truncate text-sm font-semibold text-slate-900">{value}</div></div>;
+}
+
+function Input({ label, value, onChange, type = "text", inputMode }: { label: string; value: string; onChange: (value: string) => void; type?: string; inputMode?: "decimal" }) {
+  return <label className="block text-sm"><span className="text-xs font-medium text-slate-600">{label}</span><input type={type} inputMode={inputMode} className={`${inputClass} mt-1`} value={value} onChange={(event) => onChange(event.target.value)} /></label>;
+}
+
+function Textarea({ label, value, onChange }: { label: string; value: string; onChange: (value: string) => void }) {
+  return <label className="block text-sm"><span className="text-xs font-medium text-slate-600">{label}</span><textarea className={`${inputClass} mt-1 min-h-20`} value={value} onChange={(event) => onChange(event.target.value)} /></label>;
+}
+
+function Select({ label, value, onChange, options, placeholder }: { label: string; value: string; onChange: (value: string) => void; options: Array<{ value: string; label: string }>; placeholder?: string }) {
+  return <label className="block text-sm"><span className="text-xs font-medium text-slate-600">{label}</span><select className={`${selectClass} mt-1 w-full`} value={value} onChange={(event) => onChange(event.target.value)}>{placeholder ? <option value="">{placeholder}</option> : null}{options.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label>;
+}
+
+function Th({ children }: { children: React.ReactNode }) {
+  return <th className="px-4 py-3 text-left font-medium">{children}</th>;
+}
+
+function Td({ children }: { children: React.ReactNode }) {
+  return <td className="px-4 py-3 align-top">{children}</td>;
+}
+
+const inputClass = "w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-blue-300";
+const selectClass = "rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 outline-none focus:border-blue-300";
+const primaryButtonClass = "rounded-xl bg-slate-950 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800 disabled:bg-slate-300 disabled:text-slate-600";
+const secondaryButtonClass = "rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50";
