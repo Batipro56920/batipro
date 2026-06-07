@@ -5,7 +5,6 @@ import {
   createCrmClient,
   createCrmDocument,
   createCrmInvoice,
-  createCrmProspect,
   createCrmPurchase,
   createCrmSav,
   createCrmTask,
@@ -22,6 +21,7 @@ import {
   type CrmDataset,
   type CrmQuoteRow,
 } from "../services/crm.service";
+import { createProspectWithInitialOpportunity } from "../services/crmWorkflow.service";
 import { ErrorAlert, LoadingState } from "../components/ui/design-system";
 import { CrmHeader } from "../features/crm/components/CrmHeader";
 import { entityLabel } from "../features/crm/components/crmFormat";
@@ -51,9 +51,7 @@ const CrmPurchaseDialog = lazy(() => import("../features/crm/dialogs/CrmPurchase
 const CrmSavDialog = lazy(() => import("../features/crm/dialogs/CrmSavDialog"));
 const CrmTaskDialog = lazy(() => import("../features/crm/dialogs/CrmTaskDialog"));
 
-type Props = {
-  section?: CrmSection;
-};
+type Props = { section?: CrmSection };
 
 const EMPTY_DATASET: CrmDataset = {
   prospects: [],
@@ -71,8 +69,6 @@ const EMPTY_DATASET: CrmDataset = {
   chantiers: [],
   taskTemplates: [],
 };
-
-
 
 export default function CrmPage({ section = "dashboard" }: Props) {
   const navigate = useNavigate();
@@ -173,72 +169,20 @@ export default function CrmPage({ section = "dashboard" }: Props) {
 
   return (
     <div className="bt-page">
-      <CrmHeader
-        section={section}
-        onRefresh={refresh}
-        onCreateProspect={() => setModal("prospect")}
-        onCreateOpportunity={() => setModal("opportunity")}
-        onCreateQuote={createDraftQuoteAndOpen}
-      />
-
+      <CrmHeader section={section} onRefresh={refresh} onCreateProspect={() => setModal("prospect")} onCreateOpportunity={() => setModal("opportunity")} onCreateQuote={createDraftQuoteAndOpen} />
       {error ? <ErrorAlert message={error} /> : null}
       {loading ? (
         <LoadingState label="Chargement du CRM..." />
       ) : section === "dashboard" ? (
-        <CrmDashboardSection
-          data={data}
-          kpis={kpis}
-          transformationRate={transformationRate}
-          prospectById={prospectById}
-          clientById={clientById}
-          quoteById={quoteById}
-          setModal={setModal}
-          setError={setError}
-        />
+        <CrmDashboardSection data={data} kpis={kpis} transformationRate={transformationRate} prospectById={prospectById} clientById={clientById} quoteById={quoteById} setModal={setModal} setError={setError} />
       ) : section === "prospects" ? (
-        <CrmProspectsSection
-          rows={data.prospects}
-          query={query}
-          setQuery={setQuery}
-          onCreate={() => setModal("prospect")}
-          onConvert={(row) => submitSafely(async () => convertProspectToClient(row))}
-          onStatus={(row, statut) => submitSafely(async () => updateCrmProspect(row.id, { statut }))}
-          onTask={(row) => submitSafely(async () => createCrmTask({ prospect_id: row.id, type: "relance", titre: `Relancer ${entityLabel(row)}`, due_at: new Date().toISOString() }))}
-          onCreateOpportunity={() => setModal("opportunity")}
-          onCreateQuote={createDraftQuoteAndOpen}
-        />
+        <CrmProspectsSection rows={data.prospects} query={query} setQuery={setQuery} onCreate={() => setModal("prospect")} onConvert={(row) => submitSafely(async () => convertProspectToClient(row))} onStatus={(row, statut) => submitSafely(async () => updateCrmProspect(row.id, { statut }))} onTask={(row) => submitSafely(async () => createCrmTask({ prospect_id: row.id, type: "relance", titre: `Relancer ${entityLabel(row)}`, due_at: new Date().toISOString() }))} onCreateOpportunity={() => setModal("opportunity")} onCreateQuote={createDraftQuoteAndOpen} />
       ) : section === "clients" ? (
-        <CrmClientsSection
-          rows={data.clients}
-          chantiers={data.chantiers}
-          sav={data.sav}
-          quotes={data.quotes}
-          invoices={data.invoices}
-          documents={data.documents}
-          query={query}
-          setQuery={setQuery}
-          onCreate={() => setModal("client")}
-        />
+        <CrmClientsSection rows={data.clients} chantiers={data.chantiers} sav={data.sav} quotes={data.quotes} invoices={data.invoices} documents={data.documents} query={query} setQuery={setQuery} onCreate={() => setModal("client")} />
       ) : section === "opportunities" ? (
-        <CrmOpportunitiesSection
-          data={data}
-          prospectById={prospectById}
-          clientById={clientById}
-          dragOpportunityId={dragOpportunityId}
-          setDragOpportunityId={setDragOpportunityId}
-          onMove={(opportunity, stage) => submitSafely(async () => moveCrmOpportunityStage(opportunity.id, stage))}
-          onCreate={() => setModal("opportunity")}
-        />
+        <CrmOpportunitiesSection data={data} prospectById={prospectById} clientById={clientById} dragOpportunityId={dragOpportunityId} setDragOpportunityId={setDragOpportunityId} onMove={(opportunity, stage) => submitSafely(async () => moveCrmOpportunityStage(opportunity.id, stage))} onCreate={() => setModal("opportunity")} />
       ) : section === "quotes" ? (
-        <CrmQuotesSection
-          rows={data.quotes}
-          prospectById={prospectById}
-          clientById={clientById}
-          onCreate={createDraftQuoteAndOpen}
-          onStatus={(row, statut) => submitSafely(async () => updateCrmQuote(row.id, { statut }))}
-          onTransform={transformQuote}
-          onPdf={downloadQuote}
-        />
+        <CrmQuotesSection rows={data.quotes} prospectById={prospectById} clientById={clientById} onCreate={createDraftQuoteAndOpen} onStatus={(row, statut) => submitSafely(async () => updateCrmQuote(row.id, { statut }))} onTransform={transformQuote} onPdf={downloadQuote} />
       ) : section === "invoices" ? (
         <CrmInvoicesSection rows={data.invoices} clients={clientById} onCreate={() => setModal("invoice")} />
       ) : section === "purchases" ? (
@@ -260,7 +204,7 @@ export default function CrmPage({ section = "dashboard" }: Props) {
       )}
 
       <Suspense fallback={null}>
-        {modal === "prospect" ? <CrmProspectDialog saving={saving} onClose={() => setModal(null)} onSubmit={(payload) => submitSafely(() => createCrmProspect(payload))} /> : null}
+        {modal === "prospect" ? <CrmProspectDialog saving={saving} onClose={() => setModal(null)} onSubmit={(payload) => submitSafely(() => createProspectWithInitialOpportunity(payload))} /> : null}
         {modal === "client" ? <CrmClientDialog saving={saving} onClose={() => setModal(null)} onSubmit={(payload) => submitSafely(() => createCrmClient(payload))} /> : null}
         {modal === "opportunity" ? <CrmOpportunityDialog data={data} saving={saving} onClose={() => setModal(null)} onSubmit={(payload) => submitSafely(() => upsertCrmOpportunity(payload))} /> : null}
         {modal === "task" ? <CrmTaskDialog data={data} saving={saving} onClose={() => setModal(null)} onSubmit={(payload) => submitSafely(() => createCrmTask(payload))} /> : null}
@@ -273,20 +217,3 @@ export default function CrmPage({ section = "dashboard" }: Props) {
     </div>
   );
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
