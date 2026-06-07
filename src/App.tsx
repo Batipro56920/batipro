@@ -100,7 +100,7 @@ export default function App() {
         <Route path="/crm" element={<CrmRoute section="dashboard" />} />
         <Route path="/crm/prospects" element={<CrmRoute section="prospects" />} />
         <Route path="/crm/clients" element={<CrmRoute section="clients" />} />
-        <Route path="/crm/opportunites" element={<CrmRoute section="opportunities" />} />
+        <Route path="/crm/opportunites" element={<Navigate to="/projets" replace />} />
         <Route path="/crm/devis" element={<CrmRoute section="quotes" />} />
         <Route path="/crm/devis/:id/edit" element={<Navigate to="/crm/devis" replace />} />
         <Route path="/crm/factures" element={<CrmRoute section="invoices" />} />
