@@ -48,7 +48,7 @@ export function createInvoiceDocumentFromQuote(quote: BusinessDocument, type: In
   };
 
   if (type === "deposit") {
-    document.nodes = createDepositInvoiceNodes(quote, quoteTotals, depositPercent);
+    document.nodes = createDepositInvoiceNodes(quote, depositPercent);
     document.description = `Acompte sur devis ${quote.number} - montant de reference ${formatCurrency(quoteTotals.totalTtc)} TTC.`;
   }
 
@@ -70,44 +70,48 @@ function createEmptyInvoiceDocument(type: InvoiceType): BusinessDocument {
   };
 }
 
-function createDepositInvoiceNodes(quote: BusinessDocument, quoteTotals: ReturnType<typeof calculateDocumentTotals>, depositPercent: number): BusinessDocumentNode[] {
+function createDepositInvoiceNodes(quote: BusinessDocument, depositPercent: number): BusinessDocumentNode[] {
   const percent = Math.max(0, Math.min(100, depositPercent || 0));
-  const sectionId = crypto.randomUUID();
-  const vatBreakdown = quoteTotals.vatBreakdown.length
-    ? quoteTotals.vatBreakdown
-    : [{ rate: quote.settings.defaultVatRate, baseHt: quoteTotals.totalHt, vatAmount: quoteTotals.totalVat }];
-  const depositLines = vatBreakdown
-    .filter((item) => item.baseHt > 0)
-    .map((item, index): BusinessDocumentNode => ({
-      id: crypto.randomUUID(),
-      type: "line",
-      parentId: sectionId,
-      order: index,
-      title: `Acompte ${percent}% - TVA ${item.rate}%`,
-      description: `Selon devis ${quote.number}`,
-      kind: "divers",
-      quantity: 1,
-      unit: "forfait",
-      unitPriceHt: roundMoney(item.baseHt * percent / 100),
-      vatRate: item.rate,
-    }))
-    .filter((line) => line.type !== "line" || line.unitPriceHt > 0);
+  const nodes = quote.nodes.map((node, index) => cloneNodeForDepositInvoice(node, null, index, percent));
 
-  if (!depositLines.length) {
+  if (!hasPositiveInvoiceAmount(nodes)) {
     throw new Error("Impossible de créer une facture d'acompte sans montant positif.");
   }
 
-  return [
-    {
-      id: sectionId,
-      type: "section",
-      parentId: null,
-      order: 0,
-      title: `Acompte ${percent}%`,
-      collapsed: false,
-      children: depositLines,
-    },
-  ];
+  return nodes;
+}
+
+function cloneNodeForDepositInvoice(node: BusinessDocumentNode, parentId: string | null, order: number, percent: number): BusinessDocumentNode {
+  const id = crypto.randomUUID();
+  if (node.type === "section" || node.type === "subsection") {
+    return {
+      ...node,
+      id,
+      parentId,
+      order,
+      children: node.children.map((child, index) => cloneNodeForDepositInvoice(child, id, index, percent)),
+    };
+  }
+
+  return {
+    ...node,
+    id,
+    parentId,
+    order,
+    unitPriceHt: roundMoney(node.unitPriceHt * percent / 100),
+    components: node.components?.map((component) => ({
+      ...component,
+      id: crypto.randomUUID(),
+      unitPriceHt: roundMoney(component.unitPriceHt * percent / 100),
+    })),
+  };
+}
+
+function hasPositiveInvoiceAmount(nodes: BusinessDocumentNode[]): boolean {
+  return nodes.some((node) => {
+    if (node.type === "section" || node.type === "subsection") return hasPositiveInvoiceAmount(node.children);
+    return node.quantity * node.unitPriceHt > 0;
+  });
 }
 
 export function invoiceTypeLabel(type: InvoiceType) {
