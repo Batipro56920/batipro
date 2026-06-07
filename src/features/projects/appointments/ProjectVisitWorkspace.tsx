@@ -3,7 +3,10 @@ import { Link, useNavigate } from "react-router-dom";
 import { ArrowLeft, Camera, CheckCircle2, FileText, Library, Plus, Save, Search, Trash2 } from "lucide-react";
 import { Button } from "../../../components/ui/button";
 import { createCrmAppointment, type CrmAppointmentRow } from "../../../services/crm.service";
+import { loadCrmVisitReportDraft, saveCrmVisitReport } from "../../../services/crmVisitReports.service";
+import { createOpportunityForProspect, updateCrmAppointment, updateCrmOpportunityStageByKey } from "../../../services/crmWorkflow.service";
 import { list as listTaskTemplates, type TaskTemplateRow } from "../../../services/taskLibrary.service";
+import { VISIT_DRAFT_MARKER } from "../../crm/utils/appointmentDraftStorage";
 import type { ProjectRecord } from "../types";
 
 type StepKey = "info" | "description" | "estimating" | "constraints" | "budget" | "summary";
@@ -38,7 +41,12 @@ type VisitAttachment = {
   name: string;
   targetLineId: string | null;
   comment: string;
-  previewUrl?: string;
+  previewUrl?: string | null;
+  file?: File | null;
+  storagePath?: string | null;
+  url?: string | null;
+  mimeType?: string | null;
+  sizeBytes?: number | null;
 };
 
 type VisitDraft = {
@@ -128,10 +136,43 @@ function quantity(line: EstimateLine) {
   return Number(line.quantity || 0);
 }
 
+function appointmentVisitStatus(appointment?: CrmAppointmentRow | null): VisitStatus {
+  if (!appointment) return "brouillon";
+  if (appointment.type.includes("pre_devis")) return "pre_devis";
+  if (appointment.statut === "realise") return "realisee";
+  return "planifiee";
+}
+
+function normalizeVisitStatus(status: string | null | undefined): VisitStatus {
+  if (status === "planifiee" || status === "realisee" || status === "pre_devis") return status;
+  return status === "brouillon" ? "brouillon" : "planifiee";
+}
+
+function appointmentDurationMinutes(appointment?: CrmAppointmentRow | null) {
+  if (!appointment?.ends_at) return 90;
+  const start = new Date(appointment.starts_at).getTime();
+  const end = new Date(appointment.ends_at).getTime();
+  const minutes = Math.round((end - start) / 60_000);
+  return Number.isFinite(minutes) && minutes > 0 ? minutes : 90;
+}
+
+function parseStoredDraft(value: string | null | undefined): Partial<VisitDraft> | null {
+  if (!value) return null;
+  const markerIndex = value.lastIndexOf(VISIT_DRAFT_MARKER);
+  const jsonText = markerIndex >= 0 ? value.slice(markerIndex + VISIT_DRAFT_MARKER.length) : value.trim().startsWith("{") ? value : "";
+  if (!jsonText) return null;
+  try {
+    return JSON.parse(jsonText) as Partial<VisitDraft>;
+  } catch {
+    return null;
+  }
+}
+
 function initialDraft(project: ProjectRecord, appointment?: CrmAppointmentRow | null): VisitDraft {
   const start = appointment ? new Date(appointment.starts_at) : null;
-  return {
-    status: appointment ? "planifiee" : "brouillon",
+  const stored = parseStoredDraft(appointment?.notes) ?? parseStoredDraft(appointment?.compte_rendu);
+  const base: VisitDraft = {
+    status: appointmentVisitStatus(appointment),
     client: project.clientName,
     phone: project.contactPhone ?? "",
     email: project.contactEmail ?? "",
@@ -139,7 +180,7 @@ function initialDraft(project: ProjectRecord, appointment?: CrmAppointmentRow | 
     contactOnSite: project.clientName,
     date: start ? start.toISOString().slice(0, 10) : today(),
     time: start ? start.toTimeString().slice(0, 5) : "09:00",
-    durationMinutes: 90,
+    durationMinutes: appointmentDurationMinutes(appointment),
     salesperson: project.salesperson ?? "",
     projectType: project.projectType ?? "",
     clientObjective: "",
@@ -170,12 +211,13 @@ function initialDraft(project: ProjectRecord, appointment?: CrmAppointmentRow | 
     lines: [],
     attachments: [],
   };
+  return stored ? { ...base, ...stored, lines: stored.lines ?? base.lines, attachments: stored.attachments ?? base.attachments } : base;
 }
 
 function serializeDraft(draft: VisitDraft) {
   return {
     ...draft,
-    attachments: draft.attachments.map(({ previewUrl: _previewUrl, ...attachment }) => attachment),
+    attachments: draft.attachments.map(({ previewUrl: _previewUrl, file: _file, ...attachment }) => attachment),
   };
 }
 
@@ -221,6 +263,29 @@ function buildReport(project: ProjectRecord, draft: VisitDraft) {
     `Photos: ${draft.attachments.filter((item) => item.kind === "photo").length}`,
     `Documents: ${draft.attachments.filter((item) => item.kind === "document").length}`,
   ].join("\n");
+}
+
+function appointmentTypeFor(status: VisitStatus) {
+  return status === "pre_devis" ? "visite_chiffrage_pre_devis" : "visite_chiffrage";
+}
+
+function appointmentStatusFor(status: VisitStatus) {
+  return status === "realisee" || status === "pre_devis" ? "realise" : "planifie";
+}
+
+function visitQuoteSource(draft: VisitDraft) {
+  const serialized = serializeDraft(draft);
+  return { needDescription: serialized.needDescription, lines: serialized.lines };
+}
+
+function opportunityStageForVisitStatus(status: VisitStatus) {
+  return status === "realisee" || status === "pre_devis" ? "chiffrage" : "visite";
+}
+
+function opportunityNextActionFor(status: VisitStatus) {
+  if (status === "pre_devis") return "Finaliser le pre-devis";
+  if (status === "realisee") return "Preparer le devis";
+  return "Realiser la visite terrain";
 }
 
 function Field({ label, children }: { label: string; children: ReactNode }) {
@@ -280,17 +345,31 @@ export function ProjectVisitWorkspace({ project, existingAppointment }: { projec
 
   useEffect(() => {
     let alive = true;
-    listTaskTemplates()
-      .then((rows) => {
-        if (alive) setLibrary(rows);
-      })
-      .catch(() => {
-        if (alive) setLibrary([]);
-      });
+    listTaskTemplates().then((rows) => alive && setLibrary(rows)).catch(() => alive && setLibrary([]));
     return () => {
       alive = false;
     };
   }, []);
+
+  useEffect(() => {
+    let alive = true;
+    if (!existingAppointment?.id) return;
+    loadCrmVisitReportDraft(existingAppointment.id)
+      .then((stored) => {
+        if (!alive || !stored) return;
+        setDraft((current) => ({
+          ...current,
+          ...stored,
+          status: normalizeVisitStatus(stored.status),
+          lines: stored.lines?.length ? stored.lines as EstimateLine[] : current.lines,
+          attachments: stored.attachments?.length ? stored.attachments as VisitAttachment[] : current.attachments,
+        }));
+      })
+      .catch(() => undefined);
+    return () => {
+      alive = false;
+    };
+  }, [existingAppointment?.id]);
 
   const sections = useMemo(() => draft.lines.filter((line) => line.type === "section"), [draft.lines]);
   const tasks = useMemo(() => draft.lines.filter((line) => line.type === "task"), [draft.lines]);
@@ -400,6 +479,9 @@ export function ProjectVisitWorkspace({ project, existingAppointment }: { projec
       targetLineId: selectedLineId,
       comment: "",
       previewUrl: kind === "photo" ? URL.createObjectURL(file) : undefined,
+      file,
+      mimeType: file.type || null,
+      sizeBytes: file.size,
     }));
     setDraft((current) => ({ ...current, attachments: [...current.attachments, ...attachments] }));
   }
@@ -407,26 +489,90 @@ export function ProjectVisitWorkspace({ project, existingAppointment }: { projec
   async function saveVisit(status: VisitStatus) {
     setSaving(true);
     try {
-      if (status === "pre_devis") {
-        localStorage.setItem(`batipro.project-quote-source.${project.id}`, JSON.stringify(serializeDraft({ ...draft, status })));
-      }
       const startsAt = new Date(`${draft.date}T${draft.time || "09:00"}:00`);
       const endsAt = new Date(startsAt.getTime() + Number(draft.durationMinutes || 90) * 60_000);
-      await createCrmAppointment({
+      const nextDraft = { ...draft, status };
+      const serializedDraft = serializeDraft(nextDraft);
+      const quoteSource = visitQuoteSource(nextDraft);
+      const opportunity = project.opportunity ?? (project.prospect ? await createOpportunityForProspect(project.prospect, { stage_key: "visite", probabilite: 40, prochaine_action: "Finaliser le compte rendu de visite" }) : null);
+      const targetProjectId = opportunity ? `opportunity-${opportunity.id}` : project.id;
+      if (status === "pre_devis") {
+        localStorage.setItem(`batipro.project-quote-source.${targetProjectId}`, JSON.stringify(quoteSource));
+      }
+      const payload = {
         prospect_id: project.prospect?.id ?? null,
         client_id: project.client?.id ?? null,
-        opportunity_id: project.opportunity?.id ?? null,
-        type: status === "pre_devis" ? "visite_chiffrage_pre_devis" : "visite_chiffrage",
+        opportunity_id: opportunity?.id ?? null,
+        type: appointmentTypeFor(status),
         titre: `Visite chiffrage - ${project.name}`,
         starts_at: startsAt.toISOString(),
         ends_at: endsAt.toISOString(),
-        statut: status === "planifiee" ? "planifie" : "realise",
-        notes: JSON.stringify(serializeDraft({ ...draft, status }), null, 2),
-        compte_rendu: report,
+        statut: appointmentStatusFor(status),
+        notes: `Visite terrain Batipro${VISIT_DRAFT_MARKER}${JSON.stringify(serializedDraft)}`,
+        compte_rendu: buildReport(project, nextDraft),
+      };
+      const savedAppointment = existingAppointment
+        ? await updateCrmAppointment(existingAppointment.id, payload)
+        : await createCrmAppointment(payload);
+      await saveCrmVisitReport({
+        appointment_id: savedAppointment.id,
+        prospect_id: project.prospect?.id ?? null,
+        client_id: project.client?.id ?? null,
+        opportunity_id: opportunity?.id ?? null,
+        status,
+        client_name: nextDraft.client,
+        phone: nextDraft.phone,
+        email: nextDraft.email,
+        address: nextDraft.address,
+        contact_on_site: nextDraft.contactOnSite,
+        visit_date: nextDraft.date,
+        visit_time: nextDraft.time,
+        duration_minutes: nextDraft.durationMinutes,
+        salesperson: nextDraft.salesperson,
+        project_type: nextDraft.projectType,
+        client_objective: nextDraft.clientObjective,
+        need_description: nextDraft.needDescription,
+        urgency: nextDraft.urgency,
+        desired_deadline: nextDraft.desiredDeadline,
+        zones: nextDraft.zones,
+        constraints: {
+          access: nextDraft.access,
+          parking: nextDraft.parking,
+          floor: nextDraft.floor,
+          condominium: nextDraft.condominium,
+          schedule: nextDraft.schedule,
+          nuisance: nextDraft.nuisance,
+          safety: nextDraft.safety,
+          waste: nextDraft.waste,
+          water: nextDraft.water,
+          electricity: nextDraft.electricity,
+          authorizations: nextDraft.authorizations,
+          notes: nextDraft.constraintNotes,
+        },
+        budget: {
+          known: nextDraft.budgetKnown,
+          range: nextDraft.budgetRange,
+          priceSensitivity: nextDraft.priceSensitivity,
+          decisionMaker: nextDraft.decisionMaker,
+          decisionOnSite: nextDraft.decisionOnSite,
+          objections: nextDraft.objections,
+        },
+        next_action: nextDraft.nextAction,
+        follow_up_date: nextDraft.followUpDate,
+        report_text: buildReport(project, nextDraft),
+        quote_source: quoteSource,
+        lines: nextDraft.lines,
+        attachments: nextDraft.attachments,
       });
+      if (opportunity) {
+        await updateCrmOpportunityStageByKey(opportunity.id, opportunityStageForVisitStatus(status), {
+          prochaine_action: opportunityNextActionFor(status),
+          prochaine_action_date: status === "realisee" || status === "pre_devis" ? nextDraft.followUpDate || null : nextDraft.date,
+        });
+      }
       localStorage.removeItem(storageKey);
       setSaveState("saved");
-      navigate(status === "pre_devis" ? `/projets/${project.id}/devis/nouveau` : `/projets/${project.id}?tab=visits`);
+      navigate(status === "pre_devis" ? `/projets/${targetProjectId}/devis/nouveau` : status === "realisee" ? `/projets/${targetProjectId}/visites/${savedAppointment.id}` : `/projets/${targetProjectId}?tab=visits`);
     } catch {
       setSaveState("error");
     } finally {
@@ -467,11 +613,6 @@ export function ProjectVisitWorkspace({ project, existingAppointment }: { projec
             <input className={inputClass} inputMode="decimal" value={line.height ?? ""} onChange={(event) => patchLine(line.id, { height: toNumber(event.target.value), manualQuantity: false })} />
           </Field>
         ) : null}
-        {["ml", "m2", "m3"].includes(line.unit) ? (
-          <Field label="Quantite calculee">
-            <input className={inputClass} inputMode="decimal" value={line.quantity || ""} onChange={(event) => patchLine(line.id, { quantity: Number(event.target.value.replace(",", ".")) || 0, manualQuantity: true })} />
-          </Field>
-        ) : null}
       </div>
     );
   }
@@ -490,10 +631,8 @@ export function ProjectVisitWorkspace({ project, existingAppointment }: { projec
             <p className="mt-1 truncate text-sm text-slate-500">{draft.client} - {draft.address || "Adresse a renseigner"}</p>
           </div>
           <div className="flex shrink-0 flex-col items-end gap-2">
-            <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">
-              {saveState === "saved" ? "enregistre" : saveState === "error" ? "erreur" : draft.status}
-            </span>
-            <Button size="sm" variant="secondary" disabled={saving} onClick={() => localStorage.setItem(storageKey, JSON.stringify(serializeDraft(draft)))}>
+            <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">{saveState === "saved" ? "enregistre" : saveState === "error" ? "erreur" : draft.status}</span>
+            <Button size="sm" variant="secondary" disabled={saving} onClick={() => saveVisit("brouillon")}>
               <Save className="h-4 w-4" />
               Enregistrer
             </Button>
@@ -501,17 +640,7 @@ export function ProjectVisitWorkspace({ project, existingAppointment }: { projec
         </div>
         <nav className="mt-4 flex gap-2 overflow-x-auto pb-1">
           {steps.map((item) => (
-            <button
-              key={item.key}
-              type="button"
-              onClick={() => setStep(item.key)}
-              className={[
-                "shrink-0 rounded-full px-3 py-2 text-xs font-semibold transition",
-                step === item.key ? "bg-slate-950 text-white" : "border border-slate-200 bg-white text-slate-600",
-              ].join(" ")}
-            >
-              {item.label}
-            </button>
+            <button key={item.key} type="button" onClick={() => setStep(item.key)} className={["shrink-0 rounded-full px-3 py-2 text-xs font-semibold transition", step === item.key ? "bg-slate-950 text-white" : "border border-slate-200 bg-white text-slate-600"].join(" ")}>{item.label}</button>
           ))}
         </nav>
       </header>
@@ -621,7 +750,7 @@ export function ProjectVisitWorkspace({ project, existingAppointment }: { projec
                       <Field label="Temps estime / prix indicatif">
                         <div className="grid gap-2 sm:grid-cols-2">
                           <input className={inputClass} inputMode="decimal" placeholder="h" value={selectedLine.estimatedHours ?? ""} onChange={(event) => patchLine(selectedLine.id, { estimatedHours: toNumber(event.target.value) })} />
-                          <input className={inputClass} inputMode="decimal" placeholder="€ HT" value={selectedLine.priceHintHt ?? ""} onChange={(event) => patchLine(selectedLine.id, { priceHintHt: toNumber(event.target.value) })} />
+                          <input className={inputClass} inputMode="decimal" placeholder="EUR HT" value={selectedLine.priceHintHt ?? ""} onChange={(event) => patchLine(selectedLine.id, { priceHintHt: toNumber(event.target.value) })} />
                         </div>
                       </Field>
                       <Field label="Notes techniques"><textarea className={textareaClass} value={selectedLine.technicalNotes} onChange={(event) => patchLine(selectedLine.id, { technicalNotes: event.target.value })} /></Field>
@@ -641,19 +770,7 @@ export function ProjectVisitWorkspace({ project, existingAppointment }: { projec
         {step === "constraints" ? (
           <section className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm md:p-5">
             <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-              {[
-                ["Acces", "access"],
-                ["Stationnement", "parking"],
-                ["Etage", "floor"],
-                ["Copropriete", "condominium"],
-                ["Horaires", "schedule"],
-                ["Nuisances", "nuisance"],
-                ["Securite", "safety"],
-                ["Evacuation gravats", "waste"],
-                ["Alimentation eau", "water"],
-                ["Alimentation electrique", "electricity"],
-                ["Autorisations", "authorizations"],
-              ].map(([label, key]) => (
+              {[["Acces", "access"], ["Stationnement", "parking"], ["Etage", "floor"], ["Copropriete", "condominium"], ["Horaires", "schedule"], ["Nuisances", "nuisance"], ["Securite", "safety"], ["Evacuation gravats", "waste"], ["Alimentation eau", "water"], ["Alimentation electrique", "electricity"], ["Autorisations", "authorizations"]].map(([label, key]) => (
                 <Field key={key} label={label}>
                   <input className={inputClass} value={String(draft[key as keyof VisitDraft] ?? "")} onChange={(event) => patch(key as keyof VisitDraft, event.target.value as never)} />
                 </Field>
