@@ -51,6 +51,10 @@ function quoteStatusToProjectStatus(quotes: CrmQuoteRow[]): ProjectStatus | null
   return null;
 }
 
+function isChantierLinkedToQuotes(chantier: ChantierRow, quotes: CrmQuoteRow[]) {
+  return quotes.some((quote) => chantier.crm_quote_id === quote.id || chantier.id === quote.chantier_id);
+}
+
 function opportunityStatus(stageKey: string, status: string, lostReason: string | null): ProjectStatus {
   const normalized = `${stageKey} ${status}`.toLowerCase();
   if (lostReason || normalized.includes("perdu") || normalized.includes("lost")) return "perdu";
@@ -122,7 +126,12 @@ export function buildProjects(dataset: CrmDataset): ProjectRecord[] {
     const client = opportunity.client_id ? clientsById.get(opportunity.client_id) ?? null : prospect?.client_id ? clientsById.get(prospect.client_id) ?? null : null;
     if (prospect) usedProspects.add(prospect.id);
     const quotes = dataset.quotes.filter((quote) => quote.opportunity_id === opportunity.id);
-    const chantiers = dataset.chantiers.filter((chantier) => chantier.crm_opportunity_id === opportunity.id || chantier.id === opportunity.chantier_id);
+    const chantiers = dataset.chantiers.filter(
+      (chantier) =>
+        chantier.crm_opportunity_id === opportunity.id ||
+        chantier.id === opportunity.chantier_id ||
+        isChantierLinkedToQuotes(chantier, quotes),
+    );
     const sav = dataset.sav.filter((ticket) => chantiers.some((chantier) => chantier.id === ticket.chantier_id) || (client && ticket.client_id === client.id));
     const tasks = dataset.tasks.filter((task) => task.opportunity_id === opportunity.id || (prospect && task.prospect_id === prospect.id) || (client && task.client_id === client.id));
     const appointments = dataset.appointments.filter((appointment) => appointment.opportunity_id === opportunity.id || (prospect && appointment.prospect_id === prospect.id) || (client && appointment.client_id === client.id));
@@ -175,7 +184,12 @@ export function buildProjects(dataset: CrmDataset): ProjectRecord[] {
     if (usedProspects.has(prospect.id)) continue;
     const client = prospect.client_id ? clientsById.get(prospect.client_id) ?? null : null;
     const quotes = dataset.quotes.filter((quote) => quote.prospect_id === prospect.id || (client && quote.client_id === client.id));
-    const chantiers = dataset.chantiers.filter((chantier) => chantier.crm_prospect_id === prospect.id || (client && chantier.crm_client_id === client.id));
+    const chantiers = dataset.chantiers.filter(
+      (chantier) =>
+        chantier.crm_prospect_id === prospect.id ||
+        (client && chantier.crm_client_id === client.id) ||
+        isChantierLinkedToQuotes(chantier, quotes),
+    );
     const sav = dataset.sav.filter((ticket) => client && ticket.client_id === client.id);
 
     projects.push({
