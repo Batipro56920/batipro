@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { createInvoice } from "../../invoices/application/invoiceFactory";
+import type { InvoiceType } from "../../invoices/domain/types";
 import { saveInvoice } from "../../invoices/infrastructure/invoiceRepository";
 import { quoteBuilderToBusinessDocument } from "../../quotes/builder/quoteBuilderDocumentAdapter";
 import { createQuoteBuilderFromEngine } from "../../quotes/builder/quoteBuilderModel";
@@ -9,6 +10,12 @@ import type { ProjectRecord } from "../types";
 import { EmptyProjectBlock, Panel, formatCurrency, formatDate } from "./ProjectShared";
 import { getPrimaryQuote } from "../hooks/useProjectsData";
 import { ProjectProfitabilityWidgets } from "./ProjectProfitabilityWidgets";
+
+const PROJECT_INVOICE_ACTIONS: Array<{ type: InvoiceType; label: string; title: string }> = [
+  { type: "deposit", label: "Acompte", title: "Creer une facture d'acompte depuis ce devis" },
+  { type: "intermediate", label: "Situation", title: "Creer une facture de situation depuis ce devis" },
+  { type: "final", label: "Finale", title: "Creer une facture finale depuis ce devis" },
+];
 
 function InfoGrid({ rows }: { rows: Array<[string, string | number | null | undefined]> }) {
   return (
@@ -194,24 +201,25 @@ export function ProjectVisitsTab({ project }: { project: ProjectRecord }) {
 
 export function ProjectQuotesTab({ project }: { project: ProjectRecord }) {
   const navigate = useNavigate();
-  const [billingQuoteId, setBillingQuoteId] = useState<string | null>(null);
+  const [billingKey, setBillingKey] = useState<string | null>(null);
   const [billingError, setBillingError] = useState<string | null>(null);
   const acceptedQuote = project.quotes.find((quote) => quote.statut === "accepte");
 
-  async function createDepositInvoiceFromQuote(quoteId: string) {
-    setBillingQuoteId(quoteId);
+  async function createInvoiceFromQuote(quoteId: string, invoiceType: InvoiceType) {
+    const actionKey = `${quoteId}:${invoiceType}`;
+    setBillingKey(actionKey);
     setBillingError(null);
     try {
       const engine = await loadCrmQuoteEngineData(quoteId);
       const quoteBuilder = createQuoteBuilderFromEngine(engine, project);
       const document = quoteBuilderToBusinessDocument(quoteBuilder);
-      const invoice = createInvoice("deposit", document);
+      const invoice = createInvoice(invoiceType, document);
       await saveInvoice(invoice);
       navigate("/factures");
     } catch (error) {
       setBillingError(error instanceof Error ? error.message : "Creation de facture impossible depuis ce devis.");
     } finally {
-      setBillingQuoteId(null);
+      setBillingKey(null);
     }
   }
 
@@ -244,7 +252,6 @@ export function ProjectQuotesTab({ project }: { project: ProjectRecord }) {
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {project.quotes.map((quote) => {
-                  const isBilling = billingQuoteId === quote.id;
                   const canBill = Number(quote.montant_ttc ?? 0) > 0;
                   return (
                     <tr key={quote.id}>
@@ -255,17 +262,24 @@ export function ProjectQuotesTab({ project }: { project: ProjectRecord }) {
                       <td className="px-4 py-3 text-right font-semibold">{formatCurrency(quote.montant_ht)}</td>
                       <td className="px-4 py-3 text-right font-semibold">{formatCurrency(quote.montant_ttc)}</td>
                       <td className="px-4 py-3 text-right">
-                        <div className="flex flex-wrap justify-end gap-3">
-                          <Link to={`/projets/${project.id}/devis/${quote.id}/edit`} className="font-semibold text-blue-700 hover:text-blue-800">Ouvrir</Link>
-                          <button
-                            type="button"
-                            onClick={() => void createDepositInvoiceFromQuote(quote.id)}
-                            disabled={isBilling || !canBill}
-                            title={canBill ? "Creer une facture d'acompte depuis ce devis" : "Le devis doit avoir un montant TTC positif"}
-                            className="font-semibold text-emerald-700 hover:text-emerald-800 disabled:text-slate-400"
-                          >
-                            {isBilling ? "Creation..." : "Facturer acompte"}
-                          </button>
+                        <div className="flex flex-wrap justify-end gap-2">
+                          <Link to={`/projets/${project.id}/devis/${quote.id}/edit`} className="inline-flex h-8 items-center font-semibold text-blue-700 hover:text-blue-800">Ouvrir</Link>
+                          {PROJECT_INVOICE_ACTIONS.map((action) => {
+                            const actionKey = `${quote.id}:${action.type}`;
+                            const isBilling = billingKey === actionKey;
+                            return (
+                              <button
+                                key={action.type}
+                                type="button"
+                                onClick={() => void createInvoiceFromQuote(quote.id, action.type)}
+                                disabled={isBilling || !canBill}
+                                title={canBill ? action.title : "Le devis doit avoir un montant TTC positif"}
+                                className="inline-flex h-8 items-center rounded-lg border border-slate-200 px-2.5 text-xs font-semibold text-slate-700 hover:border-emerald-200 hover:bg-emerald-50 hover:text-emerald-700 disabled:bg-slate-50 disabled:text-slate-400"
+                              >
+                                {isBilling ? "Creation..." : action.label}
+                              </button>
+                            );
+                          })}
                         </div>
                       </td>
                     </tr>
