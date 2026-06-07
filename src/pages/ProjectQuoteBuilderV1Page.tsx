@@ -1,10 +1,14 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { QuoteBuilderWorkspace } from "../features/quotes/builder/QuoteBuilderWorkspace";
 import { loadQuoteBuilder } from "../features/quotes/builder/quoteBuilderRepository";
 import { useQuoteBuilderStore } from "../features/quotes/builder/quoteBuilderStore";
 import { QuoteDocumentLoader } from "../features/quotes/builder/QuoteBuilderWorkspace";
 import { useProjectsData } from "../features/projects/hooks/useProjectsData";
+import {
+  getCurrentProfileFeaturePermissions,
+  hasProfileFeaturePermission,
+} from "../services/profileFeaturePermissions.service";
 
 export default function ProjectQuoteBuilderV1Page() {
   const { projectId, quoteId } = useParams();
@@ -13,9 +17,34 @@ export default function ProjectQuoteBuilderV1Page() {
   const project = projectId ? projectsById.get(projectId) ?? null : null;
   const quote = useQuoteBuilderStore((state) => state.quote);
   const hydrate = useQuoteBuilderStore((state) => state.hydrate);
+  const [permissionLoading, setPermissionLoading] = useState(true);
+  const [permissionAllowed, setPermissionAllowed] = useState(false);
 
   useEffect(() => {
-    if (!project) return;
+    let cancelled = false;
+    async function verifyQuoteAccess() {
+      setPermissionLoading(true);
+      try {
+        const current = await getCurrentProfileFeaturePermissions();
+        const requiredPermission = quoteId ? "crm_quote_edit" : "crm_quote_create";
+        const allowed =
+          hasProfileFeaturePermission(current.permissions, "crm", current.role) &&
+          hasProfileFeaturePermission(current.permissions, requiredPermission, current.role);
+        if (!cancelled) setPermissionAllowed(allowed);
+      } catch {
+        if (!cancelled) setPermissionAllowed(false);
+      } finally {
+        if (!cancelled) setPermissionLoading(false);
+      }
+    }
+    void verifyQuoteAccess();
+    return () => {
+      cancelled = true;
+    };
+  }, [quoteId]);
+
+  useEffect(() => {
+    if (!project || !permissionAllowed) return;
     let cancelled = false;
     void loadQuoteBuilder(project, quoteId).then((loaded) => {
       if (!cancelled) hydrate(loaded);
@@ -23,7 +52,17 @@ export default function ProjectQuoteBuilderV1Page() {
     return () => {
       cancelled = true;
     };
-  }, [hydrate, project, quoteId]);
+  }, [hydrate, permissionAllowed, project, quoteId]);
+
+  if (permissionLoading) return <QuoteDocumentLoader />;
+
+  if (!permissionAllowed) {
+    return (
+      <div className="rounded-3xl border border-amber-200 bg-amber-50 p-6 text-sm text-amber-800">
+        Votre profil ne permet pas {quoteId ? "de modifier ce devis" : "de créer un devis"}.
+      </div>
+    );
+  }
 
   if (loading || (project && !quote)) return <QuoteDocumentLoader />;
 
