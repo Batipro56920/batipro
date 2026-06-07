@@ -12,6 +12,11 @@ import {
   type IntervenantRow,
   updateIntervenant,
 } from "../services/intervenants.service";
+import {
+  BUSINESS_PROFILE_PERMISSION_PRESETS,
+  setProfileFeaturePermissionPresetForUser,
+  type BusinessProfilePresetId,
+} from "../services/profileFeaturePermissions.service";
 
 type FormState = {
   nom: string;
@@ -65,7 +70,9 @@ export default function IntervenantDetailPage() {
   });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [savingPresetId, setSavingPresetId] = useState<BusinessProfilePresetId | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const [inviteUrl, setInviteUrl] = useState("");
 
   const chantierById = useMemo(() => {
@@ -124,9 +131,11 @@ export default function IntervenantDetailPage() {
     if (!row) return;
     setSaving(true);
     setError(null);
+    setNotice(null);
     try {
       const updated = await updateIntervenant(row.id, form);
       setRow(updated);
+      setNotice("Fiche intervenant mise à jour.");
     } catch (err: any) {
       setError(err?.message ?? "Enregistrement impossible.");
     } finally {
@@ -138,6 +147,7 @@ export default function IntervenantDetailPage() {
     if (!row) return;
     setSaving(true);
     setError(null);
+    setNotice(null);
     try {
       const data = await generateIntervenantInvitation(row.id);
       const url = String((data as any)?.accessUrl ?? "").trim();
@@ -145,6 +155,7 @@ export default function IntervenantDetailPage() {
       setInviteUrl(url);
       await navigator.clipboard.writeText(url);
       await refresh();
+      setNotice("Invitation générée et copiée.");
     } catch (err: any) {
       setError(err?.message ?? "Invitation impossible.");
     } finally {
@@ -156,13 +167,31 @@ export default function IntervenantDetailPage() {
     if (!row) return;
     setSaving(true);
     setError(null);
+    setNotice(null);
     try {
       const updated = row.archived_at ? await restoreIntervenant(row.id) : await archiveIntervenant(row.id);
       setRow(updated);
+      setNotice(row.archived_at ? "Intervenant restauré." : "Intervenant archivé.");
     } catch (err: any) {
       setError(err?.message ?? "Archivage impossible.");
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function onApplyPreset(presetId: BusinessProfilePresetId) {
+    if (!row?.user_id) return;
+    setSavingPresetId(presetId);
+    setError(null);
+    setNotice(null);
+    try {
+      await setProfileFeaturePermissionPresetForUser(row.user_id, presetId);
+      const preset = BUSINESS_PROFILE_PERMISSION_PRESETS.find((entry) => entry.id === presetId);
+      setNotice(`Profil type "${preset?.label ?? presetId}" appliqué au compte lié.`);
+    } catch (err: any) {
+      setError(err?.message ?? "Application du profil type impossible.");
+    } finally {
+      setSavingPresetId(null);
     }
   }
 
@@ -207,6 +236,7 @@ export default function IntervenantDetailPage() {
       </div>
 
       {error ? <div className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">{error}</div> : null}
+      {notice ? <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-700">{notice}</div> : null}
       {inviteUrl ? <div className="rounded-2xl border bg-slate-50 p-4 text-xs text-slate-600 break-all">{inviteUrl}</div> : null}
 
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_360px]">
@@ -328,6 +358,32 @@ export default function IntervenantDetailPage() {
                 Dernière invitation : {new Date(row.invitation_last_sent_at).toLocaleString("fr-FR")}
               </div>
             ) : null}
+          </section>
+
+          <section className="rounded-2xl border bg-white p-5">
+            <div className="text-sm font-semibold text-slate-900">Profil type</div>
+            {row.user_id ? (
+              <div className="mt-3 space-y-2">
+                {BUSINESS_PROFILE_PERMISSION_PRESETS.map((preset) => (
+                  <button
+                    key={preset.id}
+                    type="button"
+                    onClick={() => void onApplyPreset(preset.id)}
+                    disabled={savingPresetId !== null}
+                    className="w-full rounded-xl border border-slate-200 px-3 py-2 text-left text-sm hover:bg-slate-50 disabled:opacity-50"
+                  >
+                    <div className="font-medium text-slate-900">
+                      {savingPresetId === preset.id ? "Application..." : preset.label}
+                    </div>
+                    <div className="mt-0.5 text-xs text-slate-500">{preset.roleLabel}</div>
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-700">
+                Crée ou envoie d'abord l'invitation compte. Le profil type s'applique ensuite au compte utilisateur lié.
+              </div>
+            )}
           </section>
 
           <section className="rounded-2xl border bg-white p-5">
