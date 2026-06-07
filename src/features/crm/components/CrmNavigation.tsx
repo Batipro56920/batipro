@@ -4,7 +4,6 @@ import type { CrmSection } from "../types";
 const PRIMARY_NAV: Array<{ key?: CrmSection; label: string; href: string }> = [
   { key: "dashboard", label: "Dashboard", href: "/crm" },
   { key: "prospects", label: "Prospects", href: "/crm/prospects" },
-  { label: "Projets commerciaux", href: "/projets" },
   { key: "clients", label: "Clients", href: "/crm/clients" },
   { key: "quotes", label: "Devis", href: "/crm/devis" },
   { key: "agenda", label: "Agenda", href: "/crm/agenda" },
