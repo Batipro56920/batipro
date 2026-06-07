@@ -81,6 +81,7 @@ export default function CrmPage({ section = "dashboard" }: Props) {
   const [modal, setModal] = useState<CrmModalKey | null>(null);
   const [dragOpportunityId, setDragOpportunityId] = useState<string | null>(null);
   const [opportunityProspect, setOpportunityProspect] = useState<CrmProspectRow | null>(null);
+  const [appointmentProspect, setAppointmentProspect] = useState<CrmProspectRow | null>(null);
 
   async function refresh() {
     setLoading(true);
@@ -133,6 +134,7 @@ export default function CrmPage({ section = "dashboard" }: Props) {
       await action();
       setModal(null);
       setOpportunityProspect(null);
+      setAppointmentProspect(null);
       await refresh();
     } catch (err: any) {
       setError(err?.message ?? "Action CRM impossible.");
@@ -144,6 +146,11 @@ export default function CrmPage({ section = "dashboard" }: Props) {
   function openOpportunityModal(row?: CrmProspectRow) {
     setOpportunityProspect(row ?? null);
     setModal("opportunity");
+  }
+
+  function openAppointmentModal(row?: CrmProspectRow) {
+    setAppointmentProspect(row ?? null);
+    setModal("appointment");
   }
 
   async function transformQuote(row: CrmQuoteRow) {
@@ -184,7 +191,7 @@ export default function CrmPage({ section = "dashboard" }: Props) {
       ) : section === "dashboard" ? (
         <CrmDashboardSection data={data} kpis={kpis} transformationRate={transformationRate} prospectById={prospectById} clientById={clientById} quoteById={quoteById} setModal={setModal} setError={setError} />
       ) : section === "prospects" ? (
-        <CrmProspectsSection rows={data.prospects} query={query} setQuery={setQuery} onCreate={() => setModal("prospect")} onConvert={(row) => submitSafely(async () => convertProspectToClient(row))} onStatus={(row, statut) => submitSafely(async () => updateCrmProspect(row.id, { statut }))} onTask={(row) => submitSafely(async () => createCrmTask({ prospect_id: row.id, type: "relance", titre: `Relancer ${entityLabel(row)}`, due_at: new Date().toISOString() }))} onCreateOpportunity={openOpportunityModal} onCreateQuote={createDraftQuoteAndOpen} />
+        <CrmProspectsSection rows={data.prospects} query={query} setQuery={setQuery} onCreate={() => setModal("prospect")} onConvert={(row) => submitSafely(async () => convertProspectToClient(row))} onStatus={(row, statut) => submitSafely(async () => updateCrmProspect(row.id, { statut }))} onTask={(row) => submitSafely(async () => createCrmTask({ prospect_id: row.id, type: "relance", titre: `Relancer ${entityLabel(row)}`, due_at: new Date().toISOString() }))} onCreateOpportunity={openAppointmentModal} onCreateQuote={createDraftQuoteAndOpen} />
       ) : section === "clients" ? (
         <CrmClientsSection rows={data.clients} chantiers={data.chantiers} sav={data.sav} quotes={data.quotes} invoices={data.invoices} documents={data.documents} query={query} setQuery={setQuery} onCreate={() => setModal("client")} />
       ) : section === "opportunities" ? (
@@ -216,7 +223,7 @@ export default function CrmPage({ section = "dashboard" }: Props) {
         {modal === "client" ? <CrmClientDialog saving={saving} onClose={() => setModal(null)} onSubmit={(payload) => submitSafely(() => createCrmClient(payload))} /> : null}
         {modal === "opportunity" ? <CrmOpportunityDialog data={data} saving={saving} initialProspect={opportunityProspect} onClose={() => { setModal(null); setOpportunityProspect(null); }} onSubmit={(payload) => submitSafely(() => upsertCrmOpportunity(payload))} /> : null}
         {modal === "task" ? <CrmTaskDialog data={data} saving={saving} onClose={() => setModal(null)} onSubmit={(payload) => submitSafely(() => createCrmTask(payload))} /> : null}
-        {modal === "appointment" ? <CrmAppointmentDialog data={data} saving={saving} onClose={() => setModal(null)} onSubmit={(payload) => submitSafely(() => createCrmAppointment(payload))} /> : null}
+        {modal === "appointment" ? <CrmAppointmentDialog data={data} saving={saving} initialProspect={appointmentProspect} onClose={() => { setModal(null); setAppointmentProspect(null); }} onSubmit={(payload) => submitSafely(() => createCrmAppointment(payload))} /> : null}
         {modal === "sav" ? <CrmSavDialog data={data} saving={saving} onClose={() => setModal(null)} onSubmit={(payload) => submitSafely(() => createCrmSav(payload))} /> : null}
         {modal === "document" ? <CrmDocumentDialog data={data} saving={saving} onClose={() => setModal(null)} onSubmit={(payload) => submitSafely(() => createCrmDocument(payload))} /> : null}
         {modal === "invoice" ? <CrmInvoiceDialog data={data} saving={saving} onClose={() => setModal(null)} onSubmit={(payload) => submitSafely(() => createCrmInvoice(payload))} /> : null}
