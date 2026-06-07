@@ -75,6 +75,14 @@ function CrmRoute({ section }: { section: CrmSection }) {
   );
 }
 
+function ChantierBackofficeRoute({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <RequireCompanyFeature moduleId="preparation_chantier" profilePermissionKey="preparation_chantier">
+      <RouteSuspense label={label}>{children}</RouteSuspense>
+    </RequireCompanyFeature>
+  );
+}
+
 export default function App() {
   return (
     <Routes>
@@ -85,7 +93,7 @@ export default function App() {
       {/* Public - portail intervenant */}
       <Route path="/acces/:token" element={<IntervenantAccessPage />} />
       <Route path="/intervenant/invitation" element={<IntervenantInvitationPage />} />
-        <Route path="/intervenant" element={<RouteSuspense label="Chargement du portail intervenant..."><IntervenantPortalPage /></RouteSuspense>} />
+      <Route path="/intervenant" element={<RouteSuspense label="Chargement du portail intervenant..."><IntervenantPortalPage /></RouteSuspense>} />
       <Route path="/documents/client/:token" element={<RouteSuspense label="Chargement du document client..."><ClientDocumentPage /></RouteSuspense>} />
       <Route path="/apporteur/:token" element={<RouteSuspense label="Chargement du portail apporteur..."><ApporteurPortalPage /></RouteSuspense>} />
 
@@ -116,7 +124,7 @@ export default function App() {
         <Route
           path="/factures"
           element={
-            <RequireCompanyFeature profilePermissionKey="crm">
+            <RequireCompanyFeature profilePermissionKey="chantier_financier_billing">
               <LazyRouteErrorBoundary>
                 <Suspense fallback={<div className="rounded-3xl border bg-white p-8 text-center text-sm text-slate-500">Chargement des factures...</div>}>
                   <InvoicesPage />
@@ -128,7 +136,7 @@ export default function App() {
         <Route
           path="/financier/encaissements"
           element={
-            <RequireCompanyFeature profilePermissionKey="crm">
+            <RequireCompanyFeature profilePermissionKey="chantier_financier_billing">
               <RouteSuspense label="Chargement des encaissements..."><FinancialPage /></RouteSuspense>
             </RequireCompanyFeature>
           }
@@ -289,24 +297,18 @@ export default function App() {
 
         <Route
           path="/chantiers"
-          element={
-            <LazyRouteErrorBoundary>
-              <Suspense fallback={<div className="rounded-3xl border bg-white p-8 text-center text-sm text-slate-500">Chargement des chantiers...</div>}>
-                <ChantiersPage />
-              </Suspense>
-            </LazyRouteErrorBoundary>
-          }
+          element={<ChantierBackofficeRoute label="Chargement des chantiers..."><ChantiersPage /></ChantierBackofficeRoute>}
         />
-        <Route path="/chantiers/nouveau" element={<RouteSuspense label="Chargement du nouveau chantier..."><ChantierNewPage /></RouteSuspense>} />
-        <Route path="/chantiers/:id" element={<RouteSuspense label="Chargement du chantier..."><ChantierPage /></RouteSuspense>} />
-        <Route path="/chantiers/:id/preparation" element={<RouteSuspense label="Chargement du chantier..."><ChantierPage /></RouteSuspense>} />
-        <Route path="/chantiers/:id/execution" element={<RouteSuspense label="Chargement du chantier..."><ChantierPage /></RouteSuspense>} />
-        <Route path="/chantiers/:id/financier" element={<RouteSuspense label="Chargement du chantier..."><ChantierPage /></RouteSuspense>} />
-        <Route path="/chantiers/:id/qualite" element={<RouteSuspense label="Chargement du chantier..."><ChantierPage /></RouteSuspense>} />
-        <Route path="/chantiers/:id/documents" element={<RouteSuspense label="Chargement du chantier..."><ChantierPage /></RouteSuspense>} />
-        <Route path="/chantiers/:id/equipe" element={<RouteSuspense label="Chargement du chantier..."><ChantierPage /></RouteSuspense>} />
-        <Route path="/chantiers/:id/sav" element={<RouteSuspense label="Chargement du chantier..."><ChantierPage /></RouteSuspense>} />
-        <Route path="/chantiers/:id/historique" element={<RouteSuspense label="Chargement du chantier..."><ChantierPage /></RouteSuspense>} />
+        <Route path="/chantiers/nouveau" element={<ChantierBackofficeRoute label="Chargement du nouveau chantier..."><ChantierNewPage /></ChantierBackofficeRoute>} />
+        <Route path="/chantiers/:id" element={<ChantierBackofficeRoute label="Chargement du chantier..."><ChantierPage /></ChantierBackofficeRoute>} />
+        <Route path="/chantiers/:id/preparation" element={<ChantierBackofficeRoute label="Chargement du chantier..."><ChantierPage /></ChantierBackofficeRoute>} />
+        <Route path="/chantiers/:id/execution" element={<ChantierBackofficeRoute label="Chargement du chantier..."><ChantierPage /></ChantierBackofficeRoute>} />
+        <Route path="/chantiers/:id/financier" element={<ChantierBackofficeRoute label="Chargement du chantier..."><ChantierPage /></ChantierBackofficeRoute>} />
+        <Route path="/chantiers/:id/qualite" element={<ChantierBackofficeRoute label="Chargement du chantier..."><ChantierPage /></ChantierBackofficeRoute>} />
+        <Route path="/chantiers/:id/documents" element={<ChantierBackofficeRoute label="Chargement du chantier..."><ChantierPage /></ChantierBackofficeRoute>} />
+        <Route path="/chantiers/:id/equipe" element={<ChantierBackofficeRoute label="Chargement du chantier..."><ChantierPage /></ChantierBackofficeRoute>} />
+        <Route path="/chantiers/:id/sav" element={<ChantierBackofficeRoute label="Chargement du chantier..."><ChantierPage /></ChantierBackofficeRoute>} />
+        <Route path="/chantiers/:id/historique" element={<ChantierBackofficeRoute label="Chargement du chantier..."><ChantierPage /></ChantierBackofficeRoute>} />
         <Route path="/chantiers/:id/production" element={<Navigate to="../execution" replace />} />
         <Route path="/chantiers/:id/qualite-cloture" element={<Navigate to="../qualite" replace />} />
         <Route path="/chantiers/:id/qualite-sav" element={<Navigate to="../qualite" replace />} />
