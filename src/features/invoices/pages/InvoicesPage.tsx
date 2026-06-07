@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
-import { FileCheck2, Plus, RefreshCw, Search } from "lucide-react";
+import { Link } from "react-router-dom";
+import { ArrowRight, FileCheck2, RefreshCw, Search } from "lucide-react";
 import { Button } from "../../../components/ui/button";
 import { PageHeader } from "../../../components/layout/PageHeader";
 import { StatCard } from "../../../components/data/StatCard";
 import { calculateDocumentTotals } from "../../document-engine";
-import { createAndSaveInvoice, listInvoices, saveInvoice } from "../infrastructure/invoiceRepository";
-import type { InvoiceRecord, InvoiceType } from "../domain/types";
+import { listInvoices, saveInvoice } from "../infrastructure/invoiceRepository";
+import type { InvoiceRecord } from "../domain/types";
 import { InvoiceEditor } from "../components/InvoiceEditor";
 import { InvoiceStatusBadge } from "../components/InvoiceStatusBadge";
 import { getPaidAmount } from "../application/invoicePayments";
@@ -67,13 +68,6 @@ export default function InvoicesPage() {
     }
   }
 
-  async function create(type: InvoiceType) {
-    const invoice = await createAndSaveInvoice(type);
-    const rows = await listInvoices();
-    setInvoices(rows);
-    setSelectedId(invoice.id);
-  }
-
   function update(invoice: InvoiceRecord) {
     setInvoices((current) => current.map((row) => row.id === invoice.id ? invoice : row));
   }
@@ -90,8 +84,8 @@ export default function InvoicesPage() {
       <PageHeader
         eyebrow="Gestion"
         title="Factures"
-        description="Factures d'acompte, intermédiaires, finales et avoirs générées avec le moteur documentaire Batipro."
-        actions={<div className="flex flex-wrap gap-2"><Button variant="secondary" onClick={() => void refresh(false)}><RefreshCw className="h-4 w-4" /> Rafraîchir</Button><InvoiceCreateActions onCreate={create} /></div>}
+        description="Suivi des factures générées depuis les devis : acompte, situation, finale et avoir."
+        actions={<div className="flex flex-wrap gap-2"><Button variant="secondary" onClick={() => void refresh(false)}><RefreshCw className="h-4 w-4" /> Rafraîchir</Button><Link to="/crm/devis" className="inline-flex h-9 items-center justify-center gap-2 rounded-xl bg-blue-600 px-3 text-sm font-medium text-white shadow-sm shadow-blue-600/15 transition hover:bg-blue-700"><ArrowRight className="h-4 w-4" /> Facturer depuis un devis</Link></div>}
       />
 
       {error ? <div className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">{error}</div> : null}
@@ -106,6 +100,9 @@ export default function InvoicesPage() {
 
       {!loading ? (
         <section className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm">
+          <div className="mb-4 rounded-2xl border border-blue-100 bg-blue-50 p-4 text-sm text-blue-900">
+            La création d'une facture part du devis afin de conserver le client, le projet, les lignes, les montants et le lien commercial. Cette page sert au suivi, aux paiements et aux relances des factures déjà générées.
+          </div>
           <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_190px_190px]">
             <label className="relative block">
               <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
@@ -159,20 +156,11 @@ export default function InvoicesPage() {
         </aside>
 
         {selected ? <InvoiceEditor invoice={selected} onChange={update} onSave={save} /> : (
-          <div className="rounded-3xl border border-dashed border-slate-200 bg-white p-10 text-center text-sm text-slate-500">Créez une facture pour commencer.</div>
+          <div className="rounded-3xl border border-dashed border-slate-200 bg-white p-10 text-center text-sm text-slate-500">
+            Sélectionnez une facture existante ou générez-en une depuis un devis.
+          </div>
         )}
       </section> : null}
-    </div>
-  );
-}
-
-function InvoiceCreateActions({ onCreate }: { onCreate: (type: InvoiceType) => void }) {
-  return (
-    <div className="flex flex-wrap gap-2">
-      <Button variant="primary" onClick={() => onCreate("deposit")}><Plus className="h-4 w-4" /> Acompte</Button>
-      <Button variant="secondary" onClick={() => onCreate("intermediate")}>Intermédiaire</Button>
-      <Button variant="secondary" onClick={() => onCreate("final")}>Finale</Button>
-      <Button variant="secondary" onClick={() => onCreate("credit_note")}>Avoir</Button>
     </div>
   );
 }
