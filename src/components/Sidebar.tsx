@@ -144,6 +144,13 @@ export default function Sidebar({ collapsed = false, onToggleCollapse, companyNa
       group: "Ressources",
     },
     {
+      to: "/ressources/profils-types",
+      label: "Profils types",
+      icon: Users,
+      permissionKey: "entreprise_parametres" as const,
+      group: "Ressources",
+    },
+    {
       to: "/retours-terrain",
       label: t("sidebar.terrainFeedback"),
       icon: ClipboardList,
