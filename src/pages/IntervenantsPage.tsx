@@ -24,6 +24,7 @@ type IntervenantLinkRow = {
 type ProfileType =
   | "dirigeant"
   | "administratif"
+  | "commercial"
   | "comptable"
   | "chef_de_projet"
   | "conducteur_de_travaux"
@@ -92,6 +93,7 @@ const INTERVENANT_STATUS_LABELS: Record<IntervenantStatus, string> = {
 const PROFILE_TYPE_LABELS: Record<ProfileType, string> = {
   dirigeant: "Dirigeant",
   administratif: "Administratif",
+  commercial: "Commercial",
   comptable: "Comptable",
   chef_de_projet: "Chef de projet",
   conducteur_de_travaux: "Conducteur de travaux",
@@ -109,6 +111,7 @@ const PROFILE_FILTERS: Array<{ key: ProfileFilter; label: string }> = [
   { key: "sous_traitant", label: PROFILE_TYPE_LABELS.sous_traitant },
   { key: "conducteur_de_travaux", label: PROFILE_TYPE_LABELS.conducteur_de_travaux },
   { key: "chef_de_projet", label: PROFILE_TYPE_LABELS.chef_de_projet },
+  { key: "commercial", label: PROFILE_TYPE_LABELS.commercial },
   { key: "administratif", label: PROFILE_TYPE_LABELS.administratif },
   { key: "comptable", label: PROFILE_TYPE_LABELS.comptable },
   { key: "dirigeant", label: PROFILE_TYPE_LABELS.dirigeant },
@@ -825,6 +828,13 @@ function inferProfileType(row: IntervenantRow, roleSource: string): ProfileType 
   if (roleSource.includes("chef") && roleSource.includes("chantier")) return "chef_de_chantier";
   if (roleSource.includes("conducteur")) return "conducteur_de_travaux";
   if (roleSource.includes("projet")) return "chef_de_projet";
+  if (
+    roleSource.includes("commercial") ||
+    roleSource.includes("commerce") ||
+    roleSource.includes("charge d'affaires") ||
+    roleSource.includes("chargé d'affaires") ||
+    roleSource.includes("business developer")
+  ) return "commercial";
   if (roleSource.includes("compt")) return "comptable";
   if (roleSource.includes("admin")) return "administratif";
   if (roleSource.includes("dirigeant") || roleSource.includes("gerant") || roleSource.includes("gérant")) return "dirigeant";
