@@ -4,6 +4,7 @@ import type { InvoicePayment, InvoiceRecord, InvoiceType } from "../domain/types
 
 const TABLE = "invoices";
 const LEGACY_STORAGE_KEY = "batipro.invoices.v1";
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 type InvoiceRow = {
   id: string;
@@ -97,13 +98,17 @@ function toRow(invoice: InvoiceRecord) {
     type: invoice.type,
     status: invoice.status,
     document: invoice.document as any,
-    source_quote_id: invoice.sourceQuoteId ?? null,
-    project_id: invoice.projectId ?? null,
-    chantier_id: invoice.chantierId ?? null,
+    source_quote_id: uuidOrNull(invoice.sourceQuoteId),
+    project_id: uuidOrNull(invoice.projectId),
+    chantier_id: uuidOrNull(invoice.chantierId),
     payments: invoice.payments as any,
     created_at: invoice.createdAt,
     updated_at: new Date().toISOString(),
   };
+}
+
+function uuidOrNull(value?: string | null) {
+  return value && UUID_PATTERN.test(value) ? value : null;
 }
 
 async function migrateLegacyInvoicesIfNeeded() {
