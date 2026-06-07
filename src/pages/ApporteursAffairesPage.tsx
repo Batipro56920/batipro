@@ -443,7 +443,7 @@ export default function ApporteursAffairesPage() {
                 <div>
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div><div className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Partenaire sélectionné</div><h2 className="mt-1 text-xl font-semibold text-slate-950">{selectedApporteur.nom}</h2><p className="mt-1 text-sm text-slate-500">{selectedApporteur.entreprise || optionLabel(APPORTREUR_TYPES, selectedApporteur.type)}</p></div>
-                    <div className="flex flex-wrap gap-2"><button type="button" onClick={() => onEditApporteur(selectedApporteur)} className={secondaryButtonClass}>Modifier</button><button type="button" onClick={() => void onGenerateToken(selectedApporteur.id)} className={secondaryButtonClass}>Générer lien</button></div>
+                    <div className="flex flex-wrap gap-2"><button type="button" onClick={() => onEditApporteur(selectedApporteur)} className={secondaryButtonClass}>Modifier</button><button type="button" onClick={() => void onGenerateToken(selectedApporteur.id)} className={secondaryButtonClass}>Générer lien</button><button type="button" disabled={saving} onClick={() => void onRemoveApporteur(selectedApporteur.id)} className="rounded-xl border border-red-200 bg-red-50 px-4 py-2 text-sm font-semibold text-red-700 hover:bg-red-100 disabled:opacity-60">Supprimer</button></div>
                   </div>
                   <div className="mt-5 grid gap-3 sm:grid-cols-3">
                     <Info label="Type" value={optionLabel(APPORTREUR_TYPES, selectedApporteur.type)} />
