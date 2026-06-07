@@ -1,15 +1,40 @@
-import { Link } from "react-router-dom";
+import { useState } from "react";
+import { Link, useNavigate } from "react-router-dom";
 import { ArrowLeft, CalendarPlus, CheckCircle2, FileText, Hammer, Pencil, RefreshCw, XCircle } from "lucide-react";
+import { transformAcceptedQuoteToChantier } from "../../../services/crm.service";
 import type { ProjectRecord } from "../types";
 import { ProjectStatusBadge } from "./ProjectStatusBadge";
 import { formatCurrency, formatDate } from "./ProjectShared";
 import { getPrimaryQuote } from "../hooks/useProjectsData";
 
 export function ProjectDetailHeader({ project }: { project: ProjectRecord }) {
+  const navigate = useNavigate();
+  const [transformingChantier, setTransformingChantier] = useState(false);
+  const [chantierError, setChantierError] = useState<string | null>(null);
   const quote = getPrimaryQuote(project);
   const acceptedQuote = project.quotes.find((item) => item.statut === "accepte");
   const chantier = project.chantiers[0] ?? null;
+  const linkedChantierId = chantier?.id ?? acceptedQuote?.chantier_id ?? null;
   const editTarget = project.opportunity ? "/crm/opportunites" : "/crm/prospects";
+
+  async function createChantierFromAcceptedQuote() {
+    if (!acceptedQuote || transformingChantier) return;
+    setTransformingChantier(true);
+    setChantierError(null);
+    try {
+      const created = await transformAcceptedQuoteToChantier({
+        quote: acceptedQuote,
+        prospect: project.prospect,
+        client: project.client,
+        opportunity: project.opportunity,
+      });
+      navigate(`/chantiers/${created.id}`);
+    } catch (error) {
+      setChantierError(error instanceof Error ? error.message : "Creation du chantier impossible.");
+    } finally {
+      setTransformingChantier(false);
+    }
+  }
 
   return (
     <header className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
@@ -31,6 +56,7 @@ export function ProjectDetailHeader({ project }: { project: ProjectRecord }) {
             <span>Source {project.sourceLabel || "non renseignée"}</span>
             <span>Échéance {formatDate(project.desiredDeadline)}</span>
           </div>
+          {chantierError ? <div className="mt-3 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{chantierError}</div> : null}
         </div>
 
         <div className="flex flex-wrap gap-2">
@@ -50,16 +76,16 @@ export function ProjectDetailHeader({ project }: { project: ProjectRecord }) {
             <RefreshCw className="h-4 w-4" />
             Relancer
           </Link>
-          {chantier ? (
-            <Link to={`/chantiers/${chantier.id}`} className="inline-flex h-9 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-3 text-sm font-medium text-slate-900 transition hover:bg-slate-50">
+          {linkedChantierId ? (
+            <Link to={`/chantiers/${linkedChantierId}`} className="inline-flex h-9 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-3 text-sm font-medium text-slate-900 transition hover:bg-slate-50">
               <Hammer className="h-4 w-4" />
               Ouvrir chantier
             </Link>
           ) : acceptedQuote ? (
-            <Link to="/chantiers/nouveau" className="inline-flex h-9 items-center justify-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-3 text-sm font-medium text-emerald-700 transition hover:bg-emerald-100">
+            <button type="button" onClick={createChantierFromAcceptedQuote} disabled={transformingChantier} className="inline-flex h-9 items-center justify-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-3 text-sm font-medium text-emerald-700 transition hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-60">
               <Hammer className="h-4 w-4" />
-              Créer chantier
-            </Link>
+              {transformingChantier ? "Creation..." : "Créer chantier"}
+            </button>
           ) : (
             <button type="button" disabled title="Disponible uniquement après acceptation d’un devis." className="inline-flex h-9 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm font-medium text-slate-400">
               <Hammer className="h-4 w-4" />
