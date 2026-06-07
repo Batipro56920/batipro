@@ -73,6 +73,7 @@ type ProjectOption = {
   value: string;
   label: string;
   prospectId: string;
+  opportunityId: string | null;
   clientName: string;
   telephone: string | null;
   projectAddress: string | null;
@@ -155,6 +156,7 @@ export default function ApporteursAffairesPage() {
           value: `opportunity:${opportunity.id}`,
           label: `${opportunity.nom_affaire} - ${prospectName(prospect)}`,
           prospectId: String(opportunity.prospect_id),
+          opportunityId: opportunity.id,
           clientName: prospectName(prospect),
           telephone: prospect?.telephone ?? prospect?.mobile ?? null,
           projectAddress: prospect?.adresse ?? null,
@@ -169,6 +171,7 @@ export default function ApporteursAffairesPage() {
         value: `prospect:${prospect.id}`,
         label: `${prospectName(prospect)}${prospect.type_projet ? ` - ${prospect.type_projet}` : ""}`,
         prospectId: prospect.id,
+        opportunityId: null,
         clientName: prospectName(prospect),
         telephone: prospect.telephone ?? prospect.mobile ?? null,
         projectAddress: prospect.adresse ?? null,
@@ -192,7 +195,7 @@ export default function ApporteursAffairesPage() {
       const commission = calculateCommission(lead, apporteur);
       totalCommission += commission;
       if (lead.status !== "paye") unpaidCommission += commission;
-      if (lead.crm_prospect_id) converted += 1;
+      if (lead.crm_opportunity_id || lead.crm_prospect_id) converted += 1;
     }
     return { totalCommission, unpaidCommission, converted };
   }, [apporteurs, filteredLeads]);
@@ -347,7 +350,7 @@ export default function ApporteursAffairesPage() {
         status: leadForm.status,
       };
       const savedLead = editingLeadId ? await updateApporteurLead(editingLeadId, payload) : await createApporteurLead(payload);
-      await updateApporteurLead(savedLead.id, { crm_prospect_id: project.prospectId });
+      await updateApporteurLead(savedLead.id, { crm_prospect_id: project.prospectId, crm_opportunity_id: project.opportunityId });
       setNotice("Projet rattaché à l'apporteur.");
       resetLeadForm(leadForm.apporteur_id);
       await refreshData();
@@ -363,7 +366,7 @@ export default function ApporteursAffairesPage() {
     if (lead.apporteur_id) setSelectedApporteurId(lead.apporteur_id);
     setLeadForm({
       apporteur_id: lead.apporteur_id ?? "",
-      crm_project_id: lead.crm_prospect_id ? `prospect:${lead.crm_prospect_id}` : "",
+      crm_project_id: lead.crm_opportunity_id ? `opportunity:${lead.crm_opportunity_id}` : lead.crm_prospect_id ? `prospect:${lead.crm_prospect_id}` : "",
       date: lead.date.slice(0, 10),
       status: lead.status,
       comment: lead.comment ?? "",
@@ -520,7 +523,7 @@ export default function ApporteursAffairesPage() {
 
       <section className="bt-card rounded-xl bg-white p-4">
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3"><div><div className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Projets apportés</div><h2 className="mt-1 text-lg font-semibold text-slate-950">Suivi commercial et commissions</h2></div><select className={selectClass} value={selectedApporteurId} onChange={(event) => setSelectedApporteurId(event.target.value)}><option value="">Tous les apporteurs</option>{apporteurs.map((row) => <option key={row.id} value={row.id}>{row.nom}</option>)}</select></div>
-        <div className="overflow-x-auto"><table className="bt-table min-w-full"><thead><tr><Th>Projet / client</Th><Th>Apporteur</Th><Th>Montant</Th><Th>Statut</Th><Th>Commission</Th><Th>CRM</Th><Th>Actions</Th></tr></thead><tbody>{filteredLeads.map((lead) => { const apporteur = apporteurs.find((row) => row.id === lead.apporteur_id); return <tr key={lead.id}><Td><div className="font-semibold text-slate-950">{lead.client_name}</div><div className="text-xs text-slate-500">{lead.project_type || lead.project_address || lead.telephone || "-"}</div></Td><Td>{apporteur?.nom ?? "-"}</Td><Td>{formatCurrency(lead.estimated_amount)}</Td><Td><span className={`rounded-full px-2.5 py-1 text-xs font-semibold ring-1 ${statusClass(lead.status)}`}>{optionLabel(LEAD_STATUSES, lead.status)}</span></Td><Td>{formatCurrency(calculateCommission(lead, apporteur ?? undefined))}</Td><Td>{lead.crm_prospect_id ? "Projet lié" : "À convertir"}</Td><Td><div className="flex flex-wrap gap-2"><button type="button" onClick={() => onEditLead(lead)} className="font-medium text-blue-700 hover:underline">Modifier</button><button type="button" disabled={saving || Boolean(lead.crm_prospect_id)} onClick={() => void onCreateCrmProspectFromLead(lead)} className="font-medium text-emerald-700 hover:underline disabled:text-slate-400">Créer prospect</button><button type="button" onClick={() => void onRemoveLead(lead.id)} className="font-medium text-red-600 hover:underline">Supprimer</button></div></Td></tr>; })}{!filteredLeads.length ? <tr><td colSpan={7} className="px-4 py-8 text-center text-sm text-slate-500">Aucun projet rattaché.</td></tr> : null}</tbody></table></div>
+        <div className="overflow-x-auto"><table className="bt-table min-w-full"><thead><tr><Th>Projet / client</Th><Th>Apporteur</Th><Th>Montant</Th><Th>Statut</Th><Th>Commission</Th><Th>CRM</Th><Th>Actions</Th></tr></thead><tbody>{filteredLeads.map((lead) => { const apporteur = apporteurs.find((row) => row.id === lead.apporteur_id); const linked = Boolean(lead.crm_opportunity_id || lead.crm_prospect_id); return <tr key={lead.id}><Td><div className="font-semibold text-slate-950">{lead.client_name}</div><div className="text-xs text-slate-500">{lead.project_type || lead.project_address || lead.telephone || "-"}</div></Td><Td>{apporteur?.nom ?? "-"}</Td><Td>{formatCurrency(lead.estimated_amount)}</Td><Td><span className={`rounded-full px-2.5 py-1 text-xs font-semibold ring-1 ${statusClass(lead.status)}`}>{optionLabel(LEAD_STATUSES, lead.status)}</span></Td><Td>{formatCurrency(calculateCommission(lead, apporteur ?? undefined))}</Td><Td>{linked ? "Projet lié" : "À convertir"}</Td><Td><div className="flex flex-wrap gap-2"><button type="button" onClick={() => onEditLead(lead)} className="font-medium text-blue-700 hover:underline">Modifier</button><button type="button" disabled={saving || linked} onClick={() => void onCreateCrmProspectFromLead(lead)} className="font-medium text-emerald-700 hover:underline disabled:text-slate-400">Créer prospect</button><button type="button" onClick={() => void onRemoveLead(lead.id)} className="font-medium text-red-600 hover:underline">Supprimer</button></div></Td></tr>; })}{!filteredLeads.length ? <tr><td colSpan={7} className="px-4 py-8 text-center text-sm text-slate-500">Aucun projet rattaché.</td></tr> : null}</tbody></table></div>
       </section>
 
       {showApporteurLayer ? (
