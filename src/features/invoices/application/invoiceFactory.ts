@@ -93,24 +93,29 @@ function cloneNodeForDepositInvoice(node: BusinessDocumentNode, parentId: string
     };
   }
 
-  return {
-    ...node,
-    id,
-    parentId,
-    order,
-    unitPriceHt: roundMoney(node.unitPriceHt * percent / 100),
-    components: node.components?.map((component) => ({
-      ...component,
-      id: crypto.randomUUID(),
-      unitPriceHt: roundMoney(component.unitPriceHt * percent / 100),
-    })),
-  };
+  if (node.type === "line" || node.type === "composite") {
+    return {
+      ...node,
+      id,
+      parentId,
+      order,
+      unitPriceHt: roundMoney(node.unitPriceHt * percent / 100),
+      components: node.components?.map((component) => ({
+        ...component,
+        id: crypto.randomUUID(),
+        unitPriceHt: roundMoney(component.unitPriceHt * percent / 100),
+      })),
+    };
+  }
+
+  return { ...node, id, parentId, order };
 }
 
 function hasPositiveInvoiceAmount(nodes: BusinessDocumentNode[]): boolean {
   return nodes.some((node) => {
     if (node.type === "section" || node.type === "subsection") return hasPositiveInvoiceAmount(node.children);
-    return node.quantity * node.unitPriceHt > 0;
+    if (node.type === "line" || node.type === "composite") return node.quantity * node.unitPriceHt > 0;
+    return false;
   });
 }
 
