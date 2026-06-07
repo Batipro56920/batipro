@@ -1,7 +1,17 @@
 import type { CrmProspectRow } from "../../../../services/crm.service";
+import { buildCrmWorkflowSteps, CrmWorkflowSteps } from "../../components/CrmWorkflowSteps";
 import { entityLabel, eur } from "../../components/crmFormat";
 import { ProspectStatusBadge } from "./ProspectStatusBadge";
 import type { ProspectActionHandlers } from "../types";
+
+function workflowForProspect(row: CrmProspectRow) {
+  const done = ["prospect" as const];
+  const isQualified = ["qualifie", "devis_en_cours", "negociation", "gagne"].includes(row.statut);
+  if (isQualified) done.push("opportunity" as const);
+  if (["devis_en_cours", "negociation", "gagne"].includes(row.statut)) done.push("visit" as const, "prequote" as const);
+  if (["negociation", "gagne"].includes(row.statut)) done.push("quote" as const);
+  return buildCrmWorkflowSteps(isQualified ? "visit" : "opportunity", done);
+}
 
 export function ProspectsCards({ rows, actions, onSelect }: { rows: CrmProspectRow[]; actions: ProspectActionHandlers; onSelect: (row: CrmProspectRow) => void }) {
   return (
@@ -21,6 +31,9 @@ export function ProspectsCards({ rows, actions, onSelect }: { rows: CrmProspectR
             <div className="mt-4 rounded-2xl bg-slate-50 p-3 text-sm">
               <div className="text-xs text-slate-500">Budget estimé</div>
               <div className="mt-1 font-semibold text-slate-950">{row.budget_estime ? eur(row.budget_estime) : "—"}</div>
+            </div>
+            <div className="mt-3">
+              <CrmWorkflowSteps compact steps={workflowForProspect(row).slice(0, 5)} />
             </div>
           </button>
           <div className="mt-3 flex flex-wrap gap-2">
