@@ -307,7 +307,26 @@ function NumberField({ label, value, onChange }: { label: string; value: number;
 }
 
 function SmallNumber({ value, onChange, placeholder, className = "" }: { value: number; onChange: (value: number) => void; placeholder?: string; className?: string }) {
-  return <input className={`${inputClass} ${className}`} type="number" placeholder={placeholder} value={value} onChange={(event) => onChange(Number(event.target.value))} />;
+  const [text, setText] = useState(formatNumberInputValue(value));
+
+  useEffect(() => {
+    setText(formatNumberInputValue(value));
+  }, [value]);
+
+  return (
+    <input
+      className={`${inputClass} ${className}`}
+      inputMode="decimal"
+      placeholder={placeholder}
+      value={text}
+      onChange={(event) => {
+        const nextValue = event.target.value;
+        setText(nextValue);
+        onChange(parseFrenchNumber(nextValue));
+      }}
+      onBlur={() => setText(formatNumberInputValue(parseFrenchNumber(text)))}
+    />
+  );
 }
 
 function Select({ value, onChange, options, labels = {}, className = "" }: { value: string; onChange: (value: string) => void; options: string[]; labels?: Record<string, string>; className?: string }) {
@@ -356,4 +375,18 @@ function EmptyCatalogState({ onCreate }: { onCreate: () => void }) {
 
 function formatCurrency(value: number) {
   return new Intl.NumberFormat("fr-FR", { style: "currency", currency: "EUR", maximumFractionDigits: 2 }).format(value);
+}
+
+function parseFrenchNumber(value: string) {
+  const text = value.trim();
+  if (!text) return 0;
+  const normalized = text.includes(",")
+    ? text.replace(/\s/g, "").replace(/\./g, "").replace(",", ".")
+    : text.replace(/\s/g, "");
+  const parsed = Number(normalized);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function formatNumberInputValue(value: number) {
+  return Number.isFinite(value) ? String(value).replace(".", ",") : "0";
 }
