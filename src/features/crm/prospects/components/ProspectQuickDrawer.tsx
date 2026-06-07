@@ -1,8 +1,35 @@
 import { X } from "lucide-react";
 import type { CrmProspectRow } from "../../../../services/crm.service";
+import { buildCrmWorkflowSteps, CrmWorkflowSteps, type CrmWorkflowStepKey } from "../../components/CrmWorkflowSteps";
 import { dateOnly, entityLabel, eur } from "../../components/crmFormat";
 import { ProspectStatusBadge } from "./ProspectStatusBadge";
 import type { ProspectActionHandlers } from "../types";
+
+function workflowForProspect(prospect: CrmProspectRow) {
+  const done: CrmWorkflowStepKey[] = ["prospect"];
+  const qualified = ["qualifie", "devis_en_cours", "negociation", "gagne"].includes(prospect.statut);
+  const quoteStarted = ["devis_en_cours", "negociation", "gagne"].includes(prospect.statut);
+  const quoteSent = ["negociation", "gagne"].includes(prospect.statut);
+  const won = prospect.statut === "gagne";
+
+  if (qualified) done.push("opportunity");
+  if (quoteStarted) done.push("visit", "prequote");
+  if (quoteSent) done.push("quote");
+  if (won) done.push("chantier");
+
+  const current: CrmWorkflowStepKey = !qualified ? "opportunity" : !quoteStarted ? "visit" : !quoteSent ? "quote" : !won ? "chantier" : "invoice";
+  return buildCrmWorkflowSteps(current, done);
+}
+
+function nextAction(prospect: CrmProspectRow) {
+  if (prospect.statut === "nouveau" || prospect.statut === "a_qualifier") return "Qualifier le besoin et planifier la visite terrain.";
+  if (prospect.statut === "qualifie") return "Realiser la visite terrain puis preparer le pre-devis.";
+  if (prospect.statut === "devis_en_cours") return "Finaliser le devis et l'envoyer au client.";
+  if (prospect.statut === "negociation") return "Relancer le client et traiter les objections.";
+  if (prospect.statut === "gagne") return "Preparer le chantier et la facturation.";
+  if (prospect.statut === "perdu") return "Archiver ou noter la raison de perte.";
+  return "Continuer le suivi commercial.";
+}
 
 export function ProspectQuickDrawer({
   prospect,
@@ -17,7 +44,7 @@ export function ProspectQuickDrawer({
 
   return (
     <div className="fixed inset-0 z-40 flex justify-end bg-slate-950/20" role="dialog" aria-modal="true">
-      <aside className="h-full w-full max-w-xl overflow-y-auto border-l border-slate-200 bg-white shadow-2xl shadow-slate-950/20">
+      <aside className="h-full w-full max-w-2xl overflow-y-auto border-l border-slate-200 bg-white shadow-2xl shadow-slate-950/20">
         <div className="sticky top-0 z-10 border-b border-slate-200 bg-white/95 p-5 backdrop-blur">
           <div className="flex items-start justify-between gap-3">
             <div>
@@ -34,6 +61,13 @@ export function ProspectQuickDrawer({
         </div>
 
         <div className="space-y-4 p-5">
+          <CrmWorkflowSteps steps={workflowForProspect(prospect)} />
+
+          <section className="rounded-2xl border border-blue-100 bg-blue-50 p-4">
+            <div className="text-xs font-semibold uppercase tracking-[0.16em] text-blue-700">Prochaine action</div>
+            <p className="mt-2 text-sm font-medium leading-6 text-slate-900">{nextAction(prospect)}</p>
+          </section>
+
           <section className="rounded-2xl border border-slate-200 p-4">
             <h4 className="text-sm font-semibold text-slate-950">Coordonnées</h4>
             <div className="mt-3 grid gap-2 text-sm text-slate-600">
@@ -57,7 +91,7 @@ export function ProspectQuickDrawer({
           <section className="rounded-2xl border border-slate-200 p-4">
             <h4 className="text-sm font-semibold text-slate-950">Historique</h4>
             <div className="mt-3 text-sm text-slate-600">Créé le {dateOnly(prospect.created_at)} · Mis à jour le {dateOnly(prospect.updated_at)}</div>
-            <div className="mt-3 rounded-xl border border-dashed border-slate-200 bg-slate-50 p-3 text-sm text-slate-500">Tâches, devis et activité détaillée seront reliés ici lors de la fiche complète.</div>
+            <div className="mt-3 rounded-xl border border-dashed border-slate-200 bg-slate-50 p-3 text-sm text-slate-500">Les visites, devis et chantiers reliés seront affichés ici dans la fiche complète.</div>
           </section>
 
           <div className="grid gap-2 sm:grid-cols-2">
