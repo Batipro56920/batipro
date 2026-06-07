@@ -306,12 +306,14 @@ function nextActionFor(status: VisitStatus) {
 
 export function ProjectVisitWorkspaceStable({ project, existingAppointment }: { project: ProjectRecord; existingAppointment?: CrmAppointmentRow | null }) {
   const navigate = useNavigate();
-  const storageKey = `batipro.project-visit-estimate.${existingAppointment?.id ?? project.id}`;
+  const [currentAppointment, setCurrentAppointment] = useState<CrmAppointmentRow | null>(existingAppointment ?? null);
+  const appointmentId = currentAppointment?.id ?? existingAppointment?.id ?? null;
+  const storageKey = `batipro.project-visit-estimate.${appointmentId ?? project.id}`;
   const [step, setStep] = useState<StepKey>("estimating");
   const [draft, setDraft] = useState<VisitDraft>(() => {
-    const base = initialDraft(project, existingAppointment);
+    const base = initialDraft(project, currentAppointment ?? existingAppointment);
     const stored = localStorage.getItem(storageKey);
-    if (!stored || existingAppointment) return base;
+    if (!stored || currentAppointment || existingAppointment) return base;
     try {
       return { ...base, ...JSON.parse(stored) };
     } catch {
@@ -323,6 +325,10 @@ export function ProjectVisitWorkspaceStable({ project, existingAppointment }: { 
   const [saveState, setSaveState] = useState<"draft" | "saved" | "error">("draft");
 
   useEffect(() => {
+    if (existingAppointment?.id) setCurrentAppointment(existingAppointment);
+  }, [existingAppointment?.id, existingAppointment]);
+
+  useEffect(() => {
     const timer = window.setTimeout(() => {
       localStorage.setItem(storageKey, JSON.stringify(serializeDraft(draft)));
       setSaveState("draft");
@@ -332,8 +338,10 @@ export function ProjectVisitWorkspaceStable({ project, existingAppointment }: { 
 
   useEffect(() => {
     let alive = true;
-    if (!existingAppointment?.id) return;
-    loadCrmVisitReportDraft(existingAppointment.id).then((stored) => {
+    if (!appointmentId) return () => {
+      alive = false;
+    };
+    loadCrmVisitReportDraft(appointmentId).then((stored) => {
       if (!alive || !stored) return;
       setDraft((current) => ({
         ...current,
@@ -346,7 +354,7 @@ export function ProjectVisitWorkspaceStable({ project, existingAppointment }: { 
     return () => {
       alive = false;
     };
-  }, [existingAppointment?.id]);
+  }, [appointmentId]);
 
   const sections = useMemo(() => draft.lines.filter((line) => line.type === "section"), [draft.lines]);
   const tasks = useMemo(() => draft.lines.filter((line) => line.type === "task"), [draft.lines]);
@@ -425,7 +433,9 @@ export function ProjectVisitWorkspaceStable({ project, existingAppointment }: { 
         notes: `Visite terrain Batipro${VISIT_DRAFT_MARKER}${JSON.stringify(serialized)}`,
         compte_rendu: reportText(project, nextDraft),
       };
-      const saved = existingAppointment ? await updateCrmAppointment(existingAppointment.id, payload) : await createCrmAppointment(payload);
+      const appointmentToUpdate = currentAppointment ?? existingAppointment ?? null;
+      const saved = appointmentToUpdate ? await updateCrmAppointment(appointmentToUpdate.id, payload) : await createCrmAppointment(payload);
+      setCurrentAppointment(saved);
       await saveCrmVisitReport({
         appointment_id: saved.id,
         prospect_id: project.prospect?.id ?? null,
