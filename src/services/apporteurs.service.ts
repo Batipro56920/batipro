@@ -393,7 +393,7 @@ export async function createApporteurLeadPortal(jwt: string, input: {
   estimated_amount: number;
   comment?: string | null;
   date: string;
-  status: ApporteurLeadStatus;
+  status?: ApporteurLeadStatus;
 }): Promise<ApporteurLeadRow> {
   const portalClient = createPortalClient(jwt);
   const payload = {
@@ -406,7 +406,7 @@ export async function createApporteurLeadPortal(jwt: string, input: {
     estimated_amount: Number(input.estimated_amount) || 0,
     comment: input.comment?.trim() || null,
     date: input.date,
-    status: input.status,
+    status: "nouveau" as ApporteurLeadStatus,
     commission_paid: false,
   };
 
