@@ -118,8 +118,8 @@ export default function Sidebar({ collapsed = false, onToggleCollapse, companyNa
       to: "/factures",
       label: "Factures",
       icon: ReceiptText,
-      permissionKey: "crm" as const,
-      group: "Commerce",
+      permissionKey: "chantier_financier_billing" as const,
+      group: "Financier",
     },
     {
       to: "/crm/apporteurs",
@@ -128,7 +128,14 @@ export default function Sidebar({ collapsed = false, onToggleCollapse, companyNa
       permissionKey: "crm" as const,
       group: "Commerce",
     },
-    { to: "/chantiers", label: t("sidebar.chantiers"), icon: Hammer, group: "Production" },
+    {
+      to: "/chantiers",
+      label: t("sidebar.chantiers"),
+      icon: Hammer,
+      feature: "preparation_chantier" as const,
+      permissionKey: "preparation_chantier" as const,
+      group: "Production",
+    },
     {
       to: "/crm/sav",
       label: "SAV",
@@ -193,7 +200,7 @@ export default function Sidebar({ collapsed = false, onToggleCollapse, companyNa
       to: "/financier/encaissements",
       label: "Encaissements",
       icon: Banknote,
-      permissionKey: "crm" as const,
+      permissionKey: "chantier_financier_billing" as const,
       group: "Financier",
     },
     {
