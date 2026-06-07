@@ -1,7 +1,25 @@
 import { Link, useParams, useSearchParams } from "react-router-dom";
 import { ProjectVisitWorkspaceStable } from "../features/projects/appointments/ProjectVisitWorkspaceStable";
 import { useProjectsData } from "../features/projects/hooks/useProjectsData";
+import type { ProjectRecord } from "../features/projects/types";
+import type { CrmAppointmentRow } from "../services/crm.service";
 import ProjectVisitQuotePrepPage from "./ProjectVisitQuotePrepPage";
+
+function isProjectVisitAppointment(appointment: CrmAppointmentRow) {
+  return appointment.type === "visite_chiffrage" || appointment.type === "visite_chiffrage_pre_devis";
+}
+
+function resolveProjectVisitAppointment(project: ProjectRecord, appointmentId?: string) {
+  if (appointmentId) {
+    return project.appointments.find((item) => item.id === appointmentId) ?? null;
+  }
+
+  return (
+    project.appointments
+      .filter(isProjectVisitAppointment)
+      .sort((a, b) => String(a.created_at ?? a.starts_at).localeCompare(String(b.created_at ?? b.starts_at)))[0] ?? null
+  );
+}
 
 export default function ProjectAppointmentPage() {
   const { id, rdvId, visitId } = useParams();
@@ -9,7 +27,7 @@ export default function ProjectAppointmentPage() {
   const { projectsById, loading, error } = useProjectsData();
   const project = id ? projectsById.get(id) : null;
   const appointmentId = rdvId ?? visitId;
-  const appointment = appointmentId && project ? project.appointments.find((item) => item.id === appointmentId) ?? null : null;
+  const appointment = project ? resolveProjectVisitAppointment(project, appointmentId) : null;
   const shouldPrepareQuote = searchParams.get("preparation") === "devis" || (visitId && appointment?.statut === "realise" && searchParams.get("edit") !== "1");
 
   if (loading) {
