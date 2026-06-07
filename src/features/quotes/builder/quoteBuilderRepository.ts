@@ -18,6 +18,10 @@ import { validateQuoteBuilderForDocumentEngine } from "./quoteBuilderDocumentAda
 import { createQuoteBuilderFromEngine, createQuoteBuilderFromProject } from "./quoteBuilderModel";
 import type { QuoteBuilderFlatRow, QuoteBuilderQuote } from "./types";
 
+type QuoteSaveAccess = {
+  canEditPrices: boolean;
+};
+
 export async function loadQuoteBuilder(project: ProjectRecord, quoteId?: string | null): Promise<QuoteBuilderQuote> {
   const local = readLocalQuote(project.id, quoteId ?? null);
   if (local) return local;
@@ -34,10 +38,12 @@ export async function loadQuoteBuilder(project: ProjectRecord, quoteId?: string 
 }
 
 export async function saveQuoteBuilder(quote: QuoteBuilderQuote): Promise<QuoteBuilderQuote> {
-  await assertQuoteBuilderSavePermission(quote);
+  const access = await assertQuoteBuilderSavePermission(quote);
   validateQuoteBuilderForDocumentEngine(quote);
   const totals = calculateQuoteBuilderTotals(quote);
-  const saved = quote.id ? await updateExistingQuote(quote, totals.totalHt) : await createNewQuote(quote, totals.totalHt, totals.totalTtc);
+  const saved = quote.id
+    ? await updateExistingQuote(quote, totals.totalHt, access)
+    : await createNewQuote(quote, totals.totalHt, totals.totalTtc, access);
   writeLocalQuote(saved);
   return saved;
 }
@@ -46,7 +52,7 @@ export function saveQuoteBuilderDraft(quote: QuoteBuilderQuote) {
   writeLocalQuote(quote);
 }
 
-async function assertQuoteBuilderSavePermission(quote: QuoteBuilderQuote) {
+async function assertQuoteBuilderSavePermission(quote: QuoteBuilderQuote): Promise<QuoteSaveAccess> {
   const current = await getCurrentProfileFeaturePermissions();
   const requiredPermission = quote.id ? "crm_quote_edit" : "crm_quote_create";
   const allowed =
@@ -60,9 +66,19 @@ async function assertQuoteBuilderSavePermission(quote: QuoteBuilderQuote) {
         : "Votre profil ne permet pas de créer un devis.",
     );
   }
+
+  return {
+    canEditPrices: hasProfileFeaturePermission(current.permissions, "crm_quote_price_edit", current.role),
+  };
 }
 
-async function createNewQuote(quote: QuoteBuilderQuote, totalHt: number, totalTtc: number): Promise<QuoteBuilderQuote> {
+async function createNewQuote(
+  quote: QuoteBuilderQuote,
+  totalHt: number,
+  totalTtc: number,
+  access: QuoteSaveAccess,
+): Promise<QuoteBuilderQuote> {
+  assertQuotePricePermission(quote, null, access);
   const created = await createCrmQuote({
     quote_number: quote.number,
     client_id: quote.clientId,
@@ -95,7 +111,13 @@ async function createNewQuote(quote: QuoteBuilderQuote, totalHt: number, totalTt
   return next;
 }
 
-async function updateExistingQuote(quote: QuoteBuilderQuote, totalHt: number): Promise<QuoteBuilderQuote> {
+async function updateExistingQuote(
+  quote: QuoteBuilderQuote,
+  totalHt: number,
+  access: QuoteSaveAccess,
+): Promise<QuoteBuilderQuote> {
+  const engine = await loadCrmQuoteEngineData(quote.id!);
+  assertQuotePricePermission(quote, engine, access);
   await updateCrmQuote(quote.id!, {
     quote_number: quote.number,
     client_id: quote.clientId,
@@ -120,9 +142,35 @@ async function updateExistingQuote(quote: QuoteBuilderQuote, totalHt: number): P
     } as any,
     acompte_percent: quote.settings.depositPercent,
   });
-  const engine = await loadCrmQuoteEngineData(quote.id!);
   await persistItems(quote, engine);
   return { ...quote, status: "saved" };
+}
+
+function assertQuotePricePermission(
+  quote: QuoteBuilderQuote,
+  original: CrmQuoteEngineData | null,
+  access: QuoteSaveAccess,
+) {
+  if (access.canEditPrices) return;
+
+  const originalPrices = new Map<string, number>();
+  for (const item of original?.items ?? []) {
+    originalPrices.set(item.id, readPersistedItemUnitPrice(item));
+  }
+
+  for (const row of flattenQuoteBuilder(quote.nodes)) {
+    if (row.node.type !== "item") continue;
+    const previousPrice = row.node.persistedId ? originalPrices.get(row.node.persistedId) : 0;
+    const nextPrice = Number(row.node.unitPriceHt || 0);
+    if (Math.abs(nextPrice - Number(previousPrice ?? 0)) > 0.009) {
+      throw new Error("Votre profil ne permet pas de modifier les prix de vente du devis.");
+    }
+  }
+}
+
+function readPersistedItemUnitPrice(item: CrmQuoteEngineData["items"][number]): number {
+  const raw = item as Record<string, unknown>;
+  return Number(raw.sale_unit_price_ht ?? raw.prix_unitaire_ht ?? raw.unit_price_ht ?? 0) || 0;
 }
 
 async function persistItems(quote: QuoteBuilderQuote, original: CrmQuoteEngineData | null) {
