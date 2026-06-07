@@ -27,23 +27,12 @@ const DEFAULT_LEAD_FORM = {
   telephone: "",
   project_address: "",
   project_type: "",
-  estimated_amount: "0",
   comment: "",
   date: new Date().toISOString().slice(0, 10),
 };
 
 function formatCurrency(value: number) {
   return new Intl.NumberFormat("fr-FR", { style: "currency", currency: "EUR" }).format(value || 0);
-}
-
-function parseFrenchNumber(value: string) {
-  const text = value.trim();
-  if (!text) return 0;
-  const normalized = text.includes(",")
-    ? text.replace(/\s/g, "").replace(/\./g, "").replace(",", ".")
-    : text.replace(/\s/g, "");
-  const parsed = Number(normalized);
-  return Number.isFinite(parsed) ? parsed : 0;
 }
 
 function commissionAmount(lead: ApporteurLeadRow, apporteur: ApporteurAffaireRow | null) {
@@ -118,6 +107,7 @@ export default function ApporteurPortalPage() {
     try {
       if (!portalData.apporteur) throw new Error("Apporteur non trouvé.");
       if (!leadForm.client_name.trim()) throw new Error("Le nom du client est requis.");
+      if (!leadForm.telephone.trim()) throw new Error("Le téléphone du client est requis.");
       if (!jwt) throw new Error("Accès non autorisé.");
       await createApporteurLeadPortal(jwt, {
         apporteur_id: portalData.apporteur.id,
@@ -126,156 +116,109 @@ export default function ApporteurPortalPage() {
         telephone: leadForm.telephone || null,
         project_address: leadForm.project_address || null,
         project_type: leadForm.project_type || null,
-        estimated_amount: parseFrenchNumber(leadForm.estimated_amount),
+        estimated_amount: 0,
         comment: leadForm.comment || null,
         date: leadForm.date,
       });
-      setActNotice("Lead ajouté.");
+      setActNotice("Client transmis. L'équipe prendra le relais.");
       setLeadForm(DEFAULT_LEAD_FORM);
       const accessResult = await checkApporteurToken(token);
       const refreshed = await getApporteurPortalData(jwt, accessResult.apporteur_id);
       setPortalData(refreshed);
     } catch (err: any) {
-      setActError(err?.message ?? "Impossible d'ajouter le lead.");
+      setActError(err?.message ?? "Impossible de transmettre le client.");
     } finally {
       setActSaving(false);
     }
   }
 
   if (loading) {
-    return <PublicShell><div className="rounded-3xl border bg-white p-8 text-center text-sm text-slate-500">Chargement du portail apporteur...</div></PublicShell>;
+    return <PublicShell><div className="bt-card rounded-xl p-8 text-center text-sm text-slate-500">Chargement du portail apporteur...</div></PublicShell>;
   }
 
   if (portalError) {
-    return <PublicShell><div className="rounded-3xl border border-red-200 bg-red-50 p-8 text-center text-sm text-red-700">{portalError}</div></PublicShell>;
+    return <PublicShell><div className="rounded-xl border border-red-200 bg-red-50 p-8 text-center text-sm text-red-700">{portalError}</div></PublicShell>;
   }
 
   return (
     <PublicShell>
-      <div className="space-y-6">
-        <header className="rounded-3xl border border-slate-200 bg-white p-6">
-          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-            <div>
-              <div className="text-xs uppercase tracking-[0.2em] text-slate-400">Portail apporteur</div>
-              <h1 className="mt-3 text-2xl font-semibold text-slate-950">{portalData.apporteur?.nom || "Apporteur"}</h1>
-              <p className="mt-2 text-sm text-slate-500">Ajoutez des leads, suivez vos commissions et téléchargez vos documents.</p>
-            </div>
-            <div className="grid gap-3 sm:grid-cols-3">
-              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm">
-                <div className="text-xs text-slate-500">Leads</div>
-                <div className="mt-2 text-lg font-semibold text-slate-950">{portalData.leads.length}</div>
-              </div>
-              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm">
-                <div className="text-xs text-slate-500">Commission payée</div>
-                <div className="mt-2 text-lg font-semibold text-slate-950">{formatCurrency(paidCommission)}</div>
-              </div>
-              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm">
-                <div className="text-xs text-slate-500">Commission due</div>
-                <div className="mt-2 text-lg font-semibold text-slate-950">{formatCurrency(unpaidCommission)}</div>
-              </div>
-            </div>
+      <div className="space-y-5">
+        <header className="flex flex-col gap-4 border-b border-slate-200 pb-4 lg:flex-row lg:items-end lg:justify-between">
+          <div>
+            <div className="section-title text-xs font-semibold uppercase tracking-[0.16em]">Portail apporteur</div>
+            <h1 className="mt-1 text-2xl font-bold text-slate-950">{portalData.apporteur?.nom || "Apporteur"}</h1>
+            <p className="mt-1 text-sm text-slate-500">Transmettez les coordonnées client. Batipro reprend ensuite le suivi commercial.</p>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-3">
+            <Metric label="Clients transmis" value={String(portalData.leads.length)} />
+            <Metric label="Commission due" value={formatCurrency(unpaidCommission)} />
+            <Metric label="Commission payée" value={formatCurrency(paidCommission)} />
           </div>
         </header>
 
-        <div className="grid gap-4 xl:grid-cols-[1.2fr_0.8fr]">
-          <section className="rounded-3xl border border-slate-200 bg-white p-6">
-            <div className="text-sm font-semibold text-slate-900">Ajouter un lead</div>
-            <div className="mt-5 grid gap-4 md:grid-cols-2">
-              <label className="space-y-1 text-sm text-slate-700">
-                <div>Client</div>
-                <input className="w-full rounded-2xl border border-slate-200 px-3 py-2 text-sm" value={leadForm.client_name} onChange={(e) => setLeadForm((prev) => ({ ...prev, client_name: e.target.value }))} />
-              </label>
-              <label className="space-y-1 text-sm text-slate-700">
-                <div>Téléphone</div>
-                <input className="w-full rounded-2xl border border-slate-200 px-3 py-2 text-sm" value={leadForm.telephone} onChange={(e) => setLeadForm((prev) => ({ ...prev, telephone: e.target.value }))} />
-              </label>
-              <label className="space-y-1 text-sm text-slate-700">
-                <div>Adresse projet</div>
-                <input className="w-full rounded-2xl border border-slate-200 px-3 py-2 text-sm" value={leadForm.project_address} onChange={(e) => setLeadForm((prev) => ({ ...prev, project_address: e.target.value }))} />
-              </label>
-              <label className="space-y-1 text-sm text-slate-700">
-                <div>Type projet</div>
-                <input className="w-full rounded-2xl border border-slate-200 px-3 py-2 text-sm" value={leadForm.project_type} onChange={(e) => setLeadForm((prev) => ({ ...prev, project_type: e.target.value }))} />
-              </label>
-              <label className="space-y-1 text-sm text-slate-700">
-                <div>Montant estimé</div>
-                <input inputMode="decimal" className="w-full rounded-2xl border border-slate-200 px-3 py-2 text-sm" value={leadForm.estimated_amount} onChange={(e) => setLeadForm((prev) => ({ ...prev, estimated_amount: e.target.value }))} />
-              </label>
-              <label className="space-y-1 text-sm text-slate-700">
-                <div>Date</div>
-                <input type="date" className="w-full rounded-2xl border border-slate-200 px-3 py-2 text-sm" value={leadForm.date} onChange={(e) => setLeadForm((prev) => ({ ...prev, date: e.target.value }))} />
-              </label>
-              <label className="md:col-span-2 space-y-1 text-sm text-slate-700">
-                <div>Commentaire</div>
-                <textarea className="w-full rounded-2xl border border-slate-200 px-3 py-2 text-sm" value={leadForm.comment} onChange={(e) => setLeadForm((prev) => ({ ...prev, comment: e.target.value }))} />
-              </label>
+        <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_360px]">
+          <section className="bt-card rounded-xl bg-white p-5">
+            <div className="text-sm font-semibold text-slate-950">Transmettre un client</div>
+            <div className="mt-4 grid gap-3 md:grid-cols-2">
+              <Input label="Nom du client" value={leadForm.client_name} onChange={(value) => setLeadForm((prev) => ({ ...prev, client_name: value }))} />
+              <Input label="Téléphone" value={leadForm.telephone} onChange={(value) => setLeadForm((prev) => ({ ...prev, telephone: value }))} />
+              <Input label="Adresse du projet" value={leadForm.project_address} onChange={(value) => setLeadForm((prev) => ({ ...prev, project_address: value }))} />
+              <Input label="Nature des travaux" value={leadForm.project_type} onChange={(value) => setLeadForm((prev) => ({ ...prev, project_type: value }))} />
+              <div className="md:col-span-2"><Textarea label="Informations utiles" value={leadForm.comment} onChange={(value) => setLeadForm((prev) => ({ ...prev, comment: value }))} /></div>
             </div>
-            {actError ? <div className="mt-4 rounded-2xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">{actError}</div> : null}
-            {actNotice ? <div className="mt-4 rounded-2xl border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-700">{actNotice}</div> : null}
-            <div className="mt-5 flex flex-wrap gap-3">
-              <button type="button" disabled={actSaving} onClick={() => void onSubmitLead()} className="rounded-2xl bg-slate-900 px-4 py-2 text-sm text-white hover:bg-slate-800 disabled:bg-slate-300">Ajouter le lead</button>
-              <button type="button" onClick={() => setLeadForm(DEFAULT_LEAD_FORM)} className="rounded-2xl border border-slate-200 bg-white px-4 py-2 text-sm text-slate-700 hover:bg-slate-50">Réinitialiser</button>
+            {actError ? <div className="mt-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">{actError}</div> : null}
+            {actNotice ? <div className="mt-4 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-700">{actNotice}</div> : null}
+            <div className="mt-5 flex flex-wrap gap-2">
+              <button type="button" disabled={actSaving} onClick={() => void onSubmitLead()} className={primaryButtonClass}>Transmettre le client</button>
+              <button type="button" onClick={() => setLeadForm(DEFAULT_LEAD_FORM)} className={secondaryButtonClass}>Réinitialiser</button>
             </div>
           </section>
 
           <aside className="space-y-4">
-            <section className="rounded-3xl border border-slate-200 bg-white p-6">
-              <div className="text-sm font-semibold text-slate-900">Vos commissions</div>
-              <div className="mt-5 grid gap-3">
-                <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                  <div className="text-xs uppercase tracking-[0.18em] text-slate-500">Commission due</div>
-                  <div className="mt-2 text-xl font-semibold text-slate-950">{formatCurrency(unpaidCommission)}</div>
-                </div>
-                <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                  <div className="text-xs uppercase tracking-[0.18em] text-slate-500">Commission payée</div>
-                  <div className="mt-2 text-xl font-semibold text-slate-950">{formatCurrency(paidCommission)}</div>
-                </div>
-              </div>
-            </section>
-            <section className="rounded-3xl border border-slate-200 bg-white p-6">
-              <div className="text-sm font-semibold text-slate-900">Documents</div>
+            <section className="bt-card rounded-xl bg-white p-4">
+              <div className="text-sm font-semibold text-slate-950">Documents</div>
               {portalData.documents.length ? (
-                <ul className="mt-4 space-y-3 text-sm text-slate-600">
+                <ul className="mt-3 space-y-2 text-sm text-slate-600">
                   {portalData.documents.map((document) => (
-                    <li key={document.id} className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
+                    <li key={document.id} className="rounded-lg border border-slate-200 bg-slate-50 p-3">
                       <div className="font-semibold text-slate-900">{document.label}</div>
-                      <a href={document.file_path} target="_blank" rel="noreferrer" className="mt-2 inline-block text-blue-600 underline">Télécharger</a>
+                      <a href={document.file_path} target="_blank" rel="noreferrer" className="mt-2 inline-block text-blue-700 underline">Télécharger</a>
                     </li>
                   ))}
                 </ul>
               ) : (
-                <div className="mt-4 text-sm text-slate-500">Aucun document disponible pour le moment.</div>
+                <div className="mt-3 text-sm text-slate-500">Aucun document disponible pour le moment.</div>
               )}
             </section>
           </aside>
         </div>
 
-        <section className="rounded-3xl border border-slate-200 bg-white p-6">
-          <div className="text-sm font-semibold text-slate-900">Vos leads</div>
-          <div className="mt-4 overflow-x-auto">
-            <table className="min-w-full text-sm text-slate-700">
-              <thead className="bg-slate-50 text-slate-600">
+        <section className="bt-card rounded-xl bg-white p-4">
+          <div className="mb-4"><div className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Suivi</div><h2 className="mt-1 text-lg font-semibold text-slate-950">Clients transmis</h2></div>
+          <div className="overflow-x-auto">
+            <table className="bt-table min-w-full">
+              <thead>
                 <tr>
-                  <th className="px-4 py-3 text-left">Client</th>
-                  <th className="px-4 py-3 text-left">Montant</th>
-                  <th className="px-4 py-3 text-left">Statut</th>
-                  <th className="px-4 py-3 text-left">Commission</th>
-                  <th className="px-4 py-3 text-left">Date</th>
+                  <th>Client</th>
+                  <th>Projet</th>
+                  <th>Statut</th>
+                  <th>Commission</th>
+                  <th>Date</th>
                 </tr>
               </thead>
               <tbody>
                 {portalData.leads.map((lead) => (
-                  <tr key={lead.id} className="border-t border-slate-200">
-                    <td className="px-4 py-3">{lead.client_name}</td>
-                    <td className="px-4 py-3">{formatCurrency(lead.estimated_amount)}</td>
-                    <td className="px-4 py-3">{LEAD_STATUSES.find((item) => item.value === lead.status)?.label}</td>
-                    <td className="px-4 py-3">{formatCurrency(commissionAmount(lead, portalData.apporteur))}</td>
-                    <td className="px-4 py-3">{lead.date}</td>
+                  <tr key={lead.id}>
+                    <td className="align-top"><div className="font-semibold text-slate-950">{lead.client_name}</div><div className="text-xs text-slate-500">{lead.telephone || "-"}</div></td>
+                    <td className="align-top"><div>{lead.project_type || "-"}</div><div className="text-xs text-slate-500">{lead.project_address || ""}</div></td>
+                    <td className="align-top">{LEAD_STATUSES.find((item) => item.value === lead.status)?.label}</td>
+                    <td className="align-top">{formatCurrency(commissionAmount(lead, portalData.apporteur))}</td>
+                    <td className="align-top">{lead.date}</td>
                   </tr>
                 ))}
                 {portalData.leads.length === 0 ? (
                   <tr>
-                    <td colSpan={5} className="px-4 py-6 text-center text-sm text-slate-500">Aucun lead enregistré pour le moment.</td>
+                    <td colSpan={5} className="px-4 py-6 text-center text-sm text-slate-500">Aucun client transmis pour le moment.</td>
                   </tr>
                 ) : null}
               </tbody>
@@ -290,3 +233,19 @@ export default function ApporteurPortalPage() {
 function PublicShell({ children }: { children: ReactNode }) {
   return <main className="min-h-screen bg-slate-100 px-4 py-6 text-slate-950 lg:px-8"><div className="mx-auto max-w-7xl">{children}</div></main>;
 }
+
+function Metric({ label, value }: { label: string; value: string }) {
+  return <div className="bt-card rounded-xl bg-white p-4"><div className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">{label}</div><div className="mt-2 text-lg font-bold text-slate-950">{value}</div></div>;
+}
+
+function Input({ label, value, onChange }: { label: string; value: string; onChange: (value: string) => void }) {
+  return <label className="block text-sm"><span className="text-xs font-medium text-slate-600">{label}</span><input className={`${inputClass} mt-1`} value={value} onChange={(event) => onChange(event.target.value)} /></label>;
+}
+
+function Textarea({ label, value, onChange }: { label: string; value: string; onChange: (value: string) => void }) {
+  return <label className="block text-sm"><span className="text-xs font-medium text-slate-600">{label}</span><textarea className={`${inputClass} mt-1 min-h-24`} value={value} onChange={(event) => onChange(event.target.value)} /></label>;
+}
+
+const inputClass = "w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100";
+const primaryButtonClass = "rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:bg-slate-300 disabled:text-slate-600";
+const secondaryButtonClass = "rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700";
