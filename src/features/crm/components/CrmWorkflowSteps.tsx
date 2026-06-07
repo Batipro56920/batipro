@@ -8,7 +8,7 @@ export type CrmWorkflowStep = {
 
 const DEFAULT_STEPS: Array<{ key: CrmWorkflowStepKey; label: string }> = [
   { key: "prospect", label: "Prospect" },
-  { key: "opportunity", label: "Opportunite" },
+  { key: "opportunity", label: "Projet" },
   { key: "visit", label: "Visite" },
   { key: "prequote", label: "Pre-devis" },
   { key: "quote", label: "Devis" },
@@ -26,7 +26,7 @@ export function buildCrmWorkflowSteps(current: CrmWorkflowStepKey = "prospect", 
 export function CrmWorkflowSteps({ steps, compact = false }: { steps: CrmWorkflowStep[]; compact?: boolean }) {
   return (
     <div className={compact ? "rounded-2xl bg-slate-50 p-3" : "rounded-3xl border border-slate-200 bg-white p-4 shadow-sm"}>
-      {!compact ? <div className="mb-3 text-sm font-semibold text-slate-950">Avancement métier</div> : null}
+      {!compact ? <div className="mb-3 text-sm font-semibold text-slate-950">Avancement metier</div> : null}
       <div className="flex gap-2 overflow-x-auto pb-1">
         {steps.map((step, index) => (
           <div key={step.key} className="flex shrink-0 items-center gap-2">
@@ -37,10 +37,10 @@ export function CrmWorkflowSteps({ steps, compact = false }: { steps: CrmWorkflo
               <span className={[
                 "flex h-5 w-5 items-center justify-center rounded-full text-[10px]",
                 step.state === "done" ? "bg-emerald-600 text-white" : step.state === "current" ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-400",
-              ].join(" ")}>{step.state === "done" ? "✓" : index + 1}</span>
+              ].join(" ")}>{step.state === "done" ? "OK" : index + 1}</span>
               <span>{step.label}</span>
             </div>
-            {index < steps.length - 1 ? <span className="text-slate-300">→</span> : null}
+            {index < steps.length - 1 ? <span className="text-slate-300">/</span> : null}
           </div>
         ))}
       </div>
