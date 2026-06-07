@@ -1,7 +1,7 @@
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { ArrowLeft, ClipboardCheck, FileText, Pencil, Plus } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
-import { loadCrmVisitReportDraft, type CrmVisitReportDraft } from "../services/crm.service";
+import { loadCrmVisitReportDraft, type CrmVisitReportDraft } from "../services/crmVisitReports.service";
 import { VISIT_DRAFT_MARKER } from "../features/crm/utils/appointmentDraftStorage";
 import { useProjectsData } from "../features/projects/hooks/useProjectsData";
 
