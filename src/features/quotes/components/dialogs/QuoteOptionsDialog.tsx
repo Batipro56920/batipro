@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import { Button } from "../../../../components/ui/button";
 import { Card } from "../../../../components/ui/card";
 import { useQuoteActions } from "../../hooks/useQuoteActions";
@@ -35,9 +36,9 @@ export function QuoteOptionsDialog({ onClose }: Props) {
         <h3 className="text-sm font-semibold text-slate-950">Parametres entreprise</h3>
         {company.settings ? (
           <div className="mt-3 space-y-3">
-            <Field label="TVA defaut"><Input type="number" value={company.settings.defaultVatRate} onChange={(event) => void company.update({ defaultVatRate: Number(event.target.value) as any })} /></Field>
-            <Field label="Acompte %"><Input type="number" value={company.settings.defaultDepositPercent} onChange={(event) => void company.update({ defaultDepositPercent: Number(event.target.value) })} /></Field>
-            <Field label="Validite jours"><Input type="number" value={company.settings.defaultValidityDays} onChange={(event) => void company.update({ defaultValidityDays: Number(event.target.value) })} /></Field>
+            <Field label="TVA defaut"><DecimalInput value={company.settings.defaultVatRate} onChange={(defaultVatRate) => void company.update({ defaultVatRate: defaultVatRate as any })} /></Field>
+            <Field label="Acompte %"><DecimalInput value={company.settings.defaultDepositPercent} onChange={(defaultDepositPercent) => void company.update({ defaultDepositPercent })} /></Field>
+            <Field label="Validite jours"><DecimalInput value={company.settings.defaultValidityDays} onChange={(defaultValidityDays) => void company.update({ defaultValidityDays })} /></Field>
             <Field label="Prefixe devis"><Input value={company.settings.quoteNumberPrefix} onChange={(event) => void company.update({ quoteNumberPrefix: event.target.value })} /></Field>
             <Field label="Conditions paiement"><Textarea className="min-h-20" value={company.settings.defaultPaymentTerms} onChange={(event) => void company.update({ defaultPaymentTerms: event.target.value })} /></Field>
             <Field label="Mentions legales"><Textarea className="min-h-20" value={company.settings.defaultLegalMentions} onChange={(event) => void company.update({ defaultLegalMentions: event.target.value })} /></Field>
@@ -48,6 +49,27 @@ export function QuoteOptionsDialog({ onClose }: Props) {
         )}
       </div>
     </Card>
+  );
+}
+
+function DecimalInput({ value, onChange }: { value: number; onChange: (value: number) => void }) {
+  const [text, setText] = useState(formatNumberInputValue(value));
+
+  useEffect(() => {
+    setText(formatNumberInputValue(value));
+  }, [value]);
+
+  return (
+    <Input
+      inputMode="decimal"
+      value={text}
+      onChange={(event) => {
+        const nextValue = event.target.value;
+        setText(nextValue);
+        onChange(parseFrenchNumber(nextValue));
+      }}
+      onBlur={() => setText(formatNumberInputValue(parseFrenchNumber(text)))}
+    />
   );
 }
 
@@ -74,4 +96,18 @@ function label(key: string) {
     hideCompositeDetails: "Cacher details ouvrages",
     hideSectionTotals: "Cacher totaux des sections",
   }[key];
+}
+
+function parseFrenchNumber(value: string) {
+  const text = value.trim();
+  if (!text) return 0;
+  const normalized = text.includes(",")
+    ? text.replace(/\s/g, "").replace(/\./g, "").replace(",", ".")
+    : text.replace(/\s/g, "");
+  const parsed = Number(normalized);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function formatNumberInputValue(value: number) {
+  return Number.isFinite(value) ? String(value).replace(".", ",") : "0";
 }
