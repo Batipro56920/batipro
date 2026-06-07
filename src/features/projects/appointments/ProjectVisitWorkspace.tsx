@@ -111,9 +111,19 @@ function today() {
 }
 
 function toNumber(value: unknown): number | null {
-  if (value === null || value === undefined || value === "") return null;
-  const next = Number(String(value).replace(",", "."));
+  if (value === null || value === undefined) return null;
+  const raw = String(value).trim();
+  if (!raw || raw === "," || raw === ".") return null;
+  const compact = raw.replace(/[\s\u202f]/g, "");
+  const normalized = compact.includes(",") && compact.includes(".")
+    ? compact.replace(/\./g, "").replace(",", ".")
+    : compact.replace(",", ".");
+  const next = Number(normalized);
   return Number.isFinite(next) ? next : null;
+}
+
+function numberText(value: number | null | undefined) {
+  return value === null || value === undefined || Number.isNaN(Number(value)) ? "" : String(value).replace(".", ",");
 }
 
 function normalizeUnit(value: string | null | undefined): Unit {
@@ -136,26 +146,6 @@ function quantity(line: EstimateLine) {
   return Number(line.quantity || 0);
 }
 
-function appointmentVisitStatus(appointment?: CrmAppointmentRow | null): VisitStatus {
-  if (!appointment) return "brouillon";
-  if (appointment.type.includes("pre_devis")) return "pre_devis";
-  if (appointment.statut === "realise") return "realisee";
-  return "planifiee";
-}
-
-function normalizeVisitStatus(status: string | null | undefined): VisitStatus {
-  if (status === "planifiee" || status === "realisee" || status === "pre_devis") return status;
-  return status === "brouillon" ? "brouillon" : "planifiee";
-}
-
-function appointmentDurationMinutes(appointment?: CrmAppointmentRow | null) {
-  if (!appointment?.ends_at) return 90;
-  const start = new Date(appointment.starts_at).getTime();
-  const end = new Date(appointment.ends_at).getTime();
-  const minutes = Math.round((end - start) / 60_000);
-  return Number.isFinite(minutes) && minutes > 0 ? minutes : 90;
-}
-
 function parseStoredDraft(value: string | null | undefined): Partial<VisitDraft> | null {
   if (!value) return null;
   const markerIndex = value.lastIndexOf(VISIT_DRAFT_MARKER);
@@ -168,9 +158,28 @@ function parseStoredDraft(value: string | null | undefined): Partial<VisitDraft>
   }
 }
 
+function appointmentVisitStatus(appointment?: CrmAppointmentRow | null): VisitStatus {
+  if (!appointment) return "brouillon";
+  if (String(appointment.type ?? "").includes("pre_devis")) return "pre_devis";
+  if (appointment.statut === "realise") return "realisee";
+  return "planifiee";
+}
+
+function normalizeVisitStatus(status: string | null | undefined): VisitStatus {
+  if (status === "brouillon" || status === "planifiee" || status === "realisee" || status === "pre_devis") return status;
+  return "planifiee";
+}
+
+function appointmentDurationMinutes(appointment?: CrmAppointmentRow | null) {
+  if (!appointment?.ends_at) return 90;
+  const start = new Date(appointment.starts_at).getTime();
+  const end = new Date(appointment.ends_at).getTime();
+  const minutes = Math.round((end - start) / 60_000);
+  return Number.isFinite(minutes) && minutes > 0 ? minutes : 90;
+}
+
 function initialDraft(project: ProjectRecord, appointment?: CrmAppointmentRow | null): VisitDraft {
   const start = appointment ? new Date(appointment.starts_at) : null;
-  const stored = parseStoredDraft(appointment?.notes) ?? parseStoredDraft(appointment?.compte_rendu);
   const base: VisitDraft = {
     status: appointmentVisitStatus(appointment),
     client: project.clientName,
@@ -211,7 +220,15 @@ function initialDraft(project: ProjectRecord, appointment?: CrmAppointmentRow | 
     lines: [],
     attachments: [],
   };
-  return stored ? { ...base, ...stored, lines: stored.lines ?? base.lines, attachments: stored.attachments ?? base.attachments } : base;
+  const stored = parseStoredDraft(appointment?.notes) ?? parseStoredDraft(appointment?.compte_rendu);
+  if (!stored) return base;
+  return {
+    ...base,
+    ...stored,
+    status: normalizeVisitStatus(stored.status),
+    lines: Array.isArray(stored.lines) ? (stored.lines as EstimateLine[]) : base.lines,
+    attachments: Array.isArray(stored.attachments) ? (stored.attachments as VisitAttachment[]) : base.attachments,
+  };
 }
 
 function serializeDraft(draft: VisitDraft) {
@@ -273,11 +290,6 @@ function appointmentStatusFor(status: VisitStatus) {
   return status === "realisee" || status === "pre_devis" ? "realise" : "planifie";
 }
 
-function visitQuoteSource(draft: VisitDraft) {
-  const serialized = serializeDraft(draft);
-  return { needDescription: serialized.needDescription, lines: serialized.lines };
-}
-
 function opportunityStageForVisitStatus(status: VisitStatus) {
   return status === "realisee" || status === "pre_devis" ? "chiffrage" : "visite";
 }
@@ -316,14 +328,16 @@ function FileCapture({ onFiles }: { onFiles: (files: FileList | null, kind: "pho
 
 export function ProjectVisitWorkspace({ project, existingAppointment }: { project: ProjectRecord; existingAppointment?: CrmAppointmentRow | null }) {
   const navigate = useNavigate();
-  const storageKey = `batipro.project-visit-estimate.${existingAppointment?.id ?? project.id}`;
+  const [currentAppointment, setCurrentAppointment] = useState<CrmAppointmentRow | null>(existingAppointment ?? null);
+  const storageKey = `batipro.project-visit-estimate.${currentAppointment?.id ?? existingAppointment?.id ?? project.id}`;
   const [step, setStep] = useState<StepKey>("info");
   const [draft, setDraft] = useState<VisitDraft>(() => {
     const base = initialDraft(project, existingAppointment);
-    const stored = localStorage.getItem(storageKey);
+    const stored = localStorage.getItem(`batipro.project-visit-estimate.${existingAppointment?.id ?? project.id}`);
     if (!stored || existingAppointment) return base;
     try {
-      return { ...base, ...JSON.parse(stored) };
+      const parsed = JSON.parse(stored) as Partial<VisitDraft>;
+      return { ...base, ...parsed, lines: parsed.lines ?? base.lines, attachments: parsed.attachments ?? base.attachments };
     } catch {
       return base;
     }
@@ -334,6 +348,7 @@ export function ProjectVisitWorkspace({ project, existingAppointment }: { projec
   const [libraryFamily, setLibraryFamily] = useState("__ALL__");
   const [saving, setSaving] = useState(false);
   const [saveState, setSaveState] = useState<"draft" | "saved" | "error">("draft");
+  const [numericDrafts, setNumericDrafts] = useState<Record<string, string>>({});
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -353,8 +368,9 @@ export function ProjectVisitWorkspace({ project, existingAppointment }: { projec
 
   useEffect(() => {
     let alive = true;
-    if (!existingAppointment?.id) return;
-    loadCrmVisitReportDraft(existingAppointment.id)
+    const appointmentId = currentAppointment?.id ?? existingAppointment?.id;
+    if (!appointmentId) return () => { alive = false; };
+    loadCrmVisitReportDraft(appointmentId)
       .then((stored) => {
         if (!alive || !stored) return;
         setDraft((current) => ({
@@ -369,7 +385,7 @@ export function ProjectVisitWorkspace({ project, existingAppointment }: { projec
     return () => {
       alive = false;
     };
-  }, [existingAppointment?.id]);
+  }, [currentAppointment?.id, existingAppointment?.id]);
 
   const sections = useMemo(() => draft.lines.filter((line) => line.type === "section"), [draft.lines]);
   const tasks = useMemo(() => draft.lines.filter((line) => line.type === "task"), [draft.lines]);
@@ -401,6 +417,32 @@ export function ProjectVisitWorkspace({ project, existingAppointment }: { projec
     }));
   }
 
+  function numericKey(lineId: string, field: keyof EstimateLine) {
+    return `${lineId}:${String(field)}`;
+  }
+
+  function numericValue(line: EstimateLine, field: keyof EstimateLine, value: number | null | undefined) {
+    return numericDrafts[numericKey(line.id, field)] ?? numberText(value);
+  }
+
+  function patchNumericLine(id: string, field: keyof EstimateLine, raw: string, extra: Partial<EstimateLine> = {}) {
+    setNumericDrafts((current) => ({ ...current, [numericKey(id, field)]: raw }));
+    const parsed = toNumber(raw);
+    if (raw.trim() === "") {
+      patchLine(id, { ...extra, [field]: field === "quantity" ? 0 : null } as Partial<EstimateLine>);
+      return;
+    }
+    if (parsed !== null) patchLine(id, { ...extra, [field]: parsed } as Partial<EstimateLine>);
+  }
+
+  function commitNumericLine(id: string, field: keyof EstimateLine) {
+    setNumericDrafts((current) => {
+      const next = { ...current };
+      delete next[numericKey(id, field)];
+      return next;
+    });
+  }
+
   function addSection(title = "Nouvelle section") {
     const line: EstimateLine = {
       id: uid("section"),
@@ -418,13 +460,16 @@ export function ProjectVisitWorkspace({ project, existingAppointment }: { projec
     setDraft((current) => ({ ...current, lines: [...current.lines, line] }));
     setSelectedLineId(line.id);
     setStep("estimating");
+    return line.id;
   }
 
   function addTask(source?: Partial<EstimateLine>) {
+    const sectionId = activeSectionId ?? uid("section");
+    const shouldCreateSection = !activeSectionId;
     const line: EstimateLine = {
       id: uid("task"),
       type: "task",
-      parentId: activeSectionId,
+      parentId: sectionId,
       title: source?.title ?? "Nouvelle tache / prestation",
       unit: source?.unit ?? "m2",
       quantity: source?.quantity ?? 0,
@@ -441,13 +486,19 @@ export function ProjectVisitWorkspace({ project, existingAppointment }: { projec
       variants: "",
       attentionPoints: "",
     };
-    setDraft((current) => ({ ...current, lines: [...current.lines, line] }));
+    setDraft((current) => ({
+      ...current,
+      lines: [
+        ...current.lines,
+        ...(shouldCreateSection ? [{ id: sectionId, type: "section" as const, parentId: null, title: "Nouvelle section", unit: "u" as const, quantity: 0, manualQuantity: false, technicalNotes: "", constraints: "", variants: "", attentionPoints: "" }] : []),
+        line,
+      ],
+    }));
     setSelectedLineId(line.id);
     setStep("estimating");
   }
 
   function addFromLibrary(template: TaskTemplateRow) {
-    if (!activeSectionId && sections.length === 0) addSection("Zone a chiffrer");
     addTask({
       title: template.titre,
       unit: normalizeUnit(template.unite),
@@ -493,7 +544,7 @@ export function ProjectVisitWorkspace({ project, existingAppointment }: { projec
       const endsAt = new Date(startsAt.getTime() + Number(draft.durationMinutes || 90) * 60_000);
       const nextDraft = { ...draft, status };
       const serializedDraft = serializeDraft(nextDraft);
-      const quoteSource = visitQuoteSource(nextDraft);
+      const quoteSource = { needDescription: serializedDraft.needDescription, lines: serializedDraft.lines };
       const opportunity = project.opportunity ?? (project.prospect ? await createOpportunityForProspect(project.prospect, { stage_key: "visite", probabilite: 40, prochaine_action: "Finaliser le compte rendu de visite" }) : null);
       const targetProjectId = opportunity ? `opportunity-${opportunity.id}` : project.id;
       if (status === "pre_devis") {
@@ -511,69 +562,56 @@ export function ProjectVisitWorkspace({ project, existingAppointment }: { projec
         notes: `Visite terrain Batipro${VISIT_DRAFT_MARKER}${JSON.stringify(serializedDraft)}`,
         compte_rendu: buildReport(project, nextDraft),
       };
-      const savedAppointment = existingAppointment
-        ? await updateCrmAppointment(existingAppointment.id, payload)
-        : await createCrmAppointment(payload);
-      await saveCrmVisitReport({
-        appointment_id: savedAppointment.id,
-        prospect_id: project.prospect?.id ?? null,
-        client_id: project.client?.id ?? null,
-        opportunity_id: opportunity?.id ?? null,
-        status,
-        client_name: nextDraft.client,
-        phone: nextDraft.phone,
-        email: nextDraft.email,
-        address: nextDraft.address,
-        contact_on_site: nextDraft.contactOnSite,
-        visit_date: nextDraft.date,
-        visit_time: nextDraft.time,
-        duration_minutes: nextDraft.durationMinutes,
-        salesperson: nextDraft.salesperson,
-        project_type: nextDraft.projectType,
-        client_objective: nextDraft.clientObjective,
-        need_description: nextDraft.needDescription,
-        urgency: nextDraft.urgency,
-        desired_deadline: nextDraft.desiredDeadline,
-        zones: nextDraft.zones,
-        constraints: {
-          access: nextDraft.access,
-          parking: nextDraft.parking,
-          floor: nextDraft.floor,
-          condominium: nextDraft.condominium,
-          schedule: nextDraft.schedule,
-          nuisance: nextDraft.nuisance,
-          safety: nextDraft.safety,
-          waste: nextDraft.waste,
-          water: nextDraft.water,
-          electricity: nextDraft.electricity,
-          authorizations: nextDraft.authorizations,
-          notes: nextDraft.constraintNotes,
-        },
-        budget: {
-          known: nextDraft.budgetKnown,
-          range: nextDraft.budgetRange,
-          priceSensitivity: nextDraft.priceSensitivity,
-          decisionMaker: nextDraft.decisionMaker,
-          decisionOnSite: nextDraft.decisionOnSite,
-          objections: nextDraft.objections,
-        },
-        next_action: nextDraft.nextAction,
-        follow_up_date: nextDraft.followUpDate,
-        report_text: buildReport(project, nextDraft),
-        quote_source: quoteSource,
-        lines: nextDraft.lines,
-        attachments: nextDraft.attachments,
-      });
+      const appointmentToUpdate = currentAppointment ?? existingAppointment ?? null;
+      const savedAppointment = appointmentToUpdate ? await updateCrmAppointment(appointmentToUpdate.id, payload) : await createCrmAppointment(payload);
+      setCurrentAppointment(savedAppointment);
+      try {
+        await saveCrmVisitReport({
+          appointment_id: savedAppointment.id,
+          prospect_id: project.prospect?.id ?? null,
+          client_id: project.client?.id ?? null,
+          opportunity_id: opportunity?.id ?? null,
+          status,
+          client_name: nextDraft.client,
+          phone: nextDraft.phone,
+          email: nextDraft.email,
+          address: nextDraft.address,
+          contact_on_site: nextDraft.contactOnSite,
+          visit_date: nextDraft.date,
+          visit_time: nextDraft.time,
+          duration_minutes: nextDraft.durationMinutes,
+          salesperson: nextDraft.salesperson,
+          project_type: nextDraft.projectType,
+          client_objective: nextDraft.clientObjective,
+          need_description: nextDraft.needDescription,
+          urgency: nextDraft.urgency,
+          desired_deadline: nextDraft.desiredDeadline,
+          zones: nextDraft.zones,
+          constraints: { access: nextDraft.access, parking: nextDraft.parking, floor: nextDraft.floor, condominium: nextDraft.condominium, schedule: nextDraft.schedule, nuisance: nextDraft.nuisance, safety: nextDraft.safety, waste: nextDraft.waste, water: nextDraft.water, electricity: nextDraft.electricity, authorizations: nextDraft.authorizations, notes: nextDraft.constraintNotes },
+          budget: { known: nextDraft.budgetKnown, range: nextDraft.budgetRange, priceSensitivity: nextDraft.priceSensitivity, decisionMaker: nextDraft.decisionMaker, decisionOnSite: nextDraft.decisionOnSite, objections: nextDraft.objections },
+          next_action: nextDraft.nextAction,
+          follow_up_date: nextDraft.followUpDate,
+          report_text: buildReport(project, nextDraft),
+          quote_source: quoteSource,
+          lines: nextDraft.lines,
+          attachments: nextDraft.attachments,
+        });
+      } catch (error) {
+        console.warn("Sauvegarde visite structuree indisponible, fallback rendez-vous conserve", error);
+      }
       if (opportunity) {
         await updateCrmOpportunityStageByKey(opportunity.id, opportunityStageForVisitStatus(status), {
           prochaine_action: opportunityNextActionFor(status),
           prochaine_action_date: status === "realisee" || status === "pre_devis" ? nextDraft.followUpDate || null : nextDraft.date,
         });
       }
-      localStorage.removeItem(storageKey);
+      setDraft(nextDraft);
       setSaveState("saved");
-      navigate(status === "pre_devis" ? `/projets/${targetProjectId}/devis/nouveau` : status === "realisee" ? `/projets/${targetProjectId}/visites/${savedAppointment.id}` : `/projets/${targetProjectId}?tab=visits`);
-    } catch {
+      if (status === "brouillon") return;
+      localStorage.removeItem(storageKey);
+      navigate(status === "pre_devis" ? `/projets/${targetProjectId}/devis/nouveau` : `/projets/${targetProjectId}/visites/${savedAppointment.id}/preparation-devis`);
+    } catch (error) {
+      console.error("Erreur sauvegarde visite terrain", error);
       setSaveState("error");
     } finally {
       setSaving(false);
@@ -595,24 +633,39 @@ export function ProjectVisitWorkspace({ project, existingAppointment }: { projec
         </Field>
         {line.unit === "u" || line.unit === "h" ? (
           <Field label={line.unit === "h" ? "Heures" : "Quantite"}>
-            <input className={inputClass} inputMode="decimal" value={line.quantity || ""} onChange={(event) => patchLine(line.id, { quantity: Number(event.target.value.replace(",", ".")) || 0, manualQuantity: true })} />
+            <input className={inputClass} inputMode="decimal" value={numericValue(line, "quantity", line.quantity)} onChange={(event) => patchNumericLine(line.id, "quantity", event.target.value, { manualQuantity: true })} onBlur={() => commitNumericLine(line.id, "quantity")} />
           </Field>
         ) : null}
         {["ml", "m2", "m3"].includes(line.unit) ? (
           <Field label="Longueur">
-            <input className={inputClass} inputMode="decimal" value={line.length ?? ""} onChange={(event) => patchLine(line.id, { length: toNumber(event.target.value), manualQuantity: false })} />
+            <input className={inputClass} inputMode="decimal" value={numericValue(line, "length", line.length)} onChange={(event) => patchNumericLine(line.id, "length", event.target.value, { manualQuantity: false })} onBlur={() => commitNumericLine(line.id, "length")} />
           </Field>
         ) : null}
         {["m2", "m3"].includes(line.unit) ? (
           <Field label="Largeur">
-            <input className={inputClass} inputMode="decimal" value={line.width ?? ""} onChange={(event) => patchLine(line.id, { width: toNumber(event.target.value), manualQuantity: false })} />
+            <input className={inputClass} inputMode="decimal" value={numericValue(line, "width", line.width)} onChange={(event) => patchNumericLine(line.id, "width", event.target.value, { manualQuantity: false })} onBlur={() => commitNumericLine(line.id, "width")} />
           </Field>
         ) : null}
         {line.unit === "m3" ? (
           <Field label="Hauteur">
-            <input className={inputClass} inputMode="decimal" value={line.height ?? ""} onChange={(event) => patchLine(line.id, { height: toNumber(event.target.value), manualQuantity: false })} />
+            <input className={inputClass} inputMode="decimal" value={numericValue(line, "height", line.height)} onChange={(event) => patchNumericLine(line.id, "height", event.target.value, { manualQuantity: false })} onBlur={() => commitNumericLine(line.id, "height")} />
           </Field>
         ) : null}
+        {["ml", "m2", "m3"].includes(line.unit) ? (
+          <Field label="Quantite calculee / forcee">
+            <input className={inputClass} inputMode="decimal" value={numericValue(line, "quantity", line.quantity)} onChange={(event) => patchNumericLine(line.id, "quantity", event.target.value, { manualQuantity: true })} onBlur={() => commitNumericLine(line.id, "quantity")} />
+          </Field>
+        ) : null}
+      </div>
+    );
+  }
+
+  function ActionButtons() {
+    return (
+      <div className="flex flex-wrap gap-2">
+        <Button variant="secondary" disabled={saving} onClick={() => saveVisit("brouillon")}><Save className="h-4 w-4" />Enregistrer</Button>
+        <Button variant="success" disabled={saving} onClick={() => saveVisit("realisee")}><CheckCircle2 className="h-4 w-4" />Terminer visite</Button>
+        <Button variant="primary" disabled={saving} onClick={() => saveVisit("pre_devis")}><FileText className="h-4 w-4" />Creer pre-devis</Button>
       </div>
     );
   }
@@ -632,10 +685,8 @@ export function ProjectVisitWorkspace({ project, existingAppointment }: { projec
           </div>
           <div className="flex shrink-0 flex-col items-end gap-2">
             <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">{saveState === "saved" ? "enregistre" : saveState === "error" ? "erreur" : draft.status}</span>
-            <Button size="sm" variant="secondary" disabled={saving} onClick={() => saveVisit("brouillon")}>
-              <Save className="h-4 w-4" />
-              Enregistrer
-            </Button>
+            <div className="hidden lg:block"><ActionButtons /></div>
+            <div className="lg:hidden"><Button size="sm" variant="secondary" disabled={saving} onClick={() => saveVisit("brouillon")}><Save className="h-4 w-4" />Enregistrer</Button></div>
           </div>
         </div>
         <nav className="mt-4 flex gap-2 overflow-x-auto pb-1">
@@ -656,7 +707,7 @@ export function ProjectVisitWorkspace({ project, existingAppointment }: { projec
               <Field label="Contact sur place"><input className={inputClass} value={draft.contactOnSite} onChange={(event) => patch("contactOnSite", event.target.value)} /></Field>
               <Field label="Date"><input type="date" className={inputClass} value={draft.date} onChange={(event) => patch("date", event.target.value)} /></Field>
               <Field label="Heure"><input type="time" className={inputClass} value={draft.time} onChange={(event) => patch("time", event.target.value)} /></Field>
-              <Field label="Duree minutes"><input type="number" className={inputClass} value={draft.durationMinutes} onChange={(event) => patch("durationMinutes", Number(event.target.value))} /></Field>
+              <Field label="Duree minutes"><input className={inputClass} inputMode="numeric" value={draft.durationMinutes} onChange={(event) => patch("durationMinutes", Number(event.target.value) || 90)} /></Field>
               <Field label="Commercial"><input className={inputClass} value={draft.salesperson} onChange={(event) => patch("salesperson", event.target.value)} /></Field>
             </div>
           </section>
@@ -712,7 +763,7 @@ export function ProjectVisitWorkspace({ project, existingAppointment }: { projec
               </div>
               <div className="mt-4 space-y-3">
                 {sections.length === 0 ? (
-                  <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-5 text-sm text-slate-500">Creez une section : Cuisine, Salle de bain, Facade...</div>
+                  <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-5 text-sm text-slate-500">Creez une section ou ajoutez directement une tache.</div>
                 ) : sections.map((section) => {
                   const children = tasks.filter((task) => task.parentId === section.id);
                   return (
@@ -749,8 +800,8 @@ export function ProjectVisitWorkspace({ project, existingAppointment }: { projec
                       {renderMeasurements(selectedLine)}
                       <Field label="Temps estime / prix indicatif">
                         <div className="grid gap-2 sm:grid-cols-2">
-                          <input className={inputClass} inputMode="decimal" placeholder="h" value={selectedLine.estimatedHours ?? ""} onChange={(event) => patchLine(selectedLine.id, { estimatedHours: toNumber(event.target.value) })} />
-                          <input className={inputClass} inputMode="decimal" placeholder="EUR HT" value={selectedLine.priceHintHt ?? ""} onChange={(event) => patchLine(selectedLine.id, { priceHintHt: toNumber(event.target.value) })} />
+                          <input className={inputClass} inputMode="decimal" placeholder="h" value={numericValue(selectedLine, "estimatedHours", selectedLine.estimatedHours)} onChange={(event) => patchNumericLine(selectedLine.id, "estimatedHours", event.target.value)} onBlur={() => commitNumericLine(selectedLine.id, "estimatedHours")} />
+                          <input className={inputClass} inputMode="decimal" placeholder="EUR HT" value={numericValue(selectedLine, "priceHintHt", selectedLine.priceHintHt)} onChange={(event) => patchNumericLine(selectedLine.id, "priceHintHt", event.target.value)} onBlur={() => commitNumericLine(selectedLine.id, "priceHintHt")} />
                         </div>
                       </Field>
                       <Field label="Notes techniques"><textarea className={textareaClass} value={selectedLine.technicalNotes} onChange={(event) => patchLine(selectedLine.id, { technicalNotes: event.target.value })} /></Field>
@@ -804,11 +855,7 @@ export function ProjectVisitWorkspace({ project, existingAppointment }: { projec
               <div className="rounded-2xl bg-slate-50 p-4"><div className="text-xs text-slate-500">Documents</div><div className="text-2xl font-bold">{draft.attachments.filter((item) => item.kind === "document").length}</div></div>
             </div>
             <pre className="mt-4 whitespace-pre-wrap rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm leading-6 text-slate-700">{report}</pre>
-            <div className="mt-4 flex flex-wrap gap-2">
-              <Button variant="secondary" disabled={saving} onClick={() => saveVisit("brouillon")}>Enregistrer brouillon</Button>
-              <Button variant="success" disabled={saving} onClick={() => saveVisit("realisee")}><CheckCircle2 className="h-4 w-4" />Terminer visite</Button>
-              <Button variant="primary" disabled={saving} onClick={() => saveVisit("pre_devis")}><FileText className="h-4 w-4" />Creer pre-devis</Button>
-            </div>
+            <div className="mt-4"><ActionButtons /></div>
           </section>
         ) : null}
       </main>
