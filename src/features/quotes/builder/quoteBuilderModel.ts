@@ -1,25 +1,10 @@
 import type { ProjectRecord } from "../../projects/types";
 import type { CrmQuoteEngineData, CrmQuoteItemRow } from "../../../services/crm.service";
+import type { CrmVisitQuoteSource } from "../../../services/crmVisitReports.service";
 import type { QuoteBuilderItem, QuoteBuilderItemKind, QuoteBuilderNode, QuoteBuilderQuote, QuoteBuilderSection, QuoteBuilderSubsection, QuoteBuilderUnit } from "./types";
 
-type VisitQuoteSource = {
-  needDescription?: string;
-  lines?: Array<{
-    id?: string;
-    type?: string;
-    parentId?: string | null;
-    title?: string;
-    unit?: string;
-    quantity?: number;
-    priceHintHt?: number | null;
-    technicalNotes?: string;
-    constraints?: string;
-    libraryId?: string | null;
-  }>;
-};
-
-export function createQuoteBuilderFromProject(project: ProjectRecord): QuoteBuilderQuote {
-  const source = readVisitQuoteSource(project.id);
+export function createQuoteBuilderFromProject(project: ProjectRecord, visitSource?: CrmVisitQuoteSource | null): QuoteBuilderQuote {
+  const source = visitSource ?? readVisitQuoteSource(project.id);
   return {
     id: null,
     projectId: project.id,
@@ -124,7 +109,7 @@ export function moveNode(quote: QuoteBuilderQuote, activeId: string, overId: str
   return { ...quote, nodes: moveInSiblings(quote.nodes, activeId, overId) };
 }
 
-function mapVisitToQuoteNodes(source: VisitQuoteSource): QuoteBuilderSection[] {
+function mapVisitToQuoteNodes(source: CrmVisitQuoteSource): QuoteBuilderSection[] {
   const sections = new Map<string, QuoteBuilderSection>();
   const roots: QuoteBuilderSection[] = [];
   for (const item of source.lines ?? []) {
@@ -270,11 +255,11 @@ function dbKind(value: string | null | undefined): QuoteBuilderItemKind {
   return "fourniture";
 }
 
-function readVisitQuoteSource(projectId: string): VisitQuoteSource | null {
+function readVisitQuoteSource(projectId: string): CrmVisitQuoteSource | null {
   const raw = localStorage.getItem(`batipro.project-quote-source.${projectId}`);
   if (!raw) return null;
   try {
-    return JSON.parse(raw) as VisitQuoteSource;
+    return JSON.parse(raw) as CrmVisitQuoteSource;
   } catch {
     return null;
   }
