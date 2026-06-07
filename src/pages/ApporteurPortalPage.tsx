@@ -30,7 +30,6 @@ const DEFAULT_LEAD_FORM = {
   estimated_amount: "0",
   comment: "",
   date: new Date().toISOString().slice(0, 10),
-  status: "nouveau" as ApporteurLeadStatus,
 };
 
 function formatCurrency(value: number) {
@@ -63,6 +62,7 @@ export default function ApporteurPortalPage() {
   const [leadForm, setLeadForm] = useState<typeof DEFAULT_LEAD_FORM>(DEFAULT_LEAD_FORM);
   const [actSaving, setActSaving] = useState(false);
   const [actNotice, setActNotice] = useState<string | null>(null);
+  const [actError, setActError] = useState<string | null>(null);
 
   const unpaidCommission = useMemo(() => portalData.leads.filter((lead) => lead.status !== "paye").reduce((sum, lead) => sum + commissionAmount(lead, portalData.apporteur), 0), [portalData]);
   const paidCommission = useMemo(() => portalData.leads.filter((lead) => lead.status === "paye").reduce((sum, lead) => sum + commissionAmount(lead, portalData.apporteur), 0), [portalData]);
@@ -129,7 +129,6 @@ export default function ApporteurPortalPage() {
         estimated_amount: parseFrenchNumber(leadForm.estimated_amount),
         comment: leadForm.comment || null,
         date: leadForm.date,
-        status: leadForm.status,
       });
       setActNotice("Lead ajouté.");
       setLeadForm(DEFAULT_LEAD_FORM);
@@ -142,8 +141,6 @@ export default function ApporteurPortalPage() {
       setActSaving(false);
     }
   }
-
-  const [actError, setActError] = useState<string | null>(null);
 
   if (loading) {
     return <PublicShell><div className="rounded-3xl border bg-white p-8 text-center text-sm text-slate-500">Chargement du portail apporteur...</div></PublicShell>;
@@ -205,18 +202,12 @@ export default function ApporteurPortalPage() {
                 <input inputMode="decimal" className="w-full rounded-2xl border border-slate-200 px-3 py-2 text-sm" value={leadForm.estimated_amount} onChange={(e) => setLeadForm((prev) => ({ ...prev, estimated_amount: e.target.value }))} />
               </label>
               <label className="space-y-1 text-sm text-slate-700">
-                <div>Statut</div>
-                <select className="w-full rounded-2xl border border-slate-200 px-3 py-2 text-sm" value={leadForm.status} onChange={(e) => setLeadForm((prev) => ({ ...prev, status: e.target.value as ApporteurLeadStatus }))}>
-                  {LEAD_STATUSES.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
-                </select>
+                <div>Date</div>
+                <input type="date" className="w-full rounded-2xl border border-slate-200 px-3 py-2 text-sm" value={leadForm.date} onChange={(e) => setLeadForm((prev) => ({ ...prev, date: e.target.value }))} />
               </label>
               <label className="md:col-span-2 space-y-1 text-sm text-slate-700">
                 <div>Commentaire</div>
                 <textarea className="w-full rounded-2xl border border-slate-200 px-3 py-2 text-sm" value={leadForm.comment} onChange={(e) => setLeadForm((prev) => ({ ...prev, comment: e.target.value }))} />
-              </label>
-              <label className="space-y-1 text-sm text-slate-700">
-                <div>Date</div>
-                <input type="date" className="w-full rounded-2xl border border-slate-200 px-3 py-2 text-sm" value={leadForm.date} onChange={(e) => setLeadForm((prev) => ({ ...prev, date: e.target.value }))} />
               </label>
             </div>
             {actError ? <div className="mt-4 rounded-2xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">{actError}</div> : null}
