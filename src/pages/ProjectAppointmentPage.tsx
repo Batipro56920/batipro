@@ -1,5 +1,5 @@
 import { Link, useParams, useSearchParams } from "react-router-dom";
-import { ProjectVisitWorkspace } from "../features/projects/appointments/ProjectVisitWorkspace";
+import { ProjectVisitWorkspaceStable } from "../features/projects/appointments/ProjectVisitWorkspaceStable";
 import { useProjectsData } from "../features/projects/hooks/useProjectsData";
 import ProjectVisitQuotePrepPage from "./ProjectVisitQuotePrepPage";
 
@@ -40,5 +40,5 @@ export default function ProjectAppointmentPage() {
     return <ProjectVisitQuotePrepPage />;
   }
 
-  return <ProjectVisitWorkspace project={project} existingAppointment={appointment} />;
+  return <ProjectVisitWorkspaceStable project={project} existingAppointment={appointment} />;
 }
