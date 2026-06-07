@@ -1,11 +1,11 @@
 import { Link } from "react-router-dom";
 import type { CrmSection } from "../types";
 
-const PRIMARY_NAV: Array<{ key: CrmSection; label: string; href: string }> = [
+const PRIMARY_NAV: Array<{ key?: CrmSection; label: string; href: string }> = [
   { key: "dashboard", label: "Dashboard", href: "/crm" },
   { key: "prospects", label: "Prospects", href: "/crm/prospects" },
+  { label: "Projets commerciaux", href: "/projets" },
   { key: "clients", label: "Clients", href: "/crm/clients" },
-  { key: "opportunities", label: "Opportunités", href: "/crm/opportunites" },
   { key: "quotes", label: "Devis", href: "/crm/devis" },
   { key: "agenda", label: "Agenda", href: "/crm/agenda" },
   { key: "sav", label: "SAV", href: "/crm/sav" },
@@ -22,7 +22,7 @@ export function CrmNavigationTabs({ section }: { section: CrmSection }) {
   return (
     <nav className="flex items-center gap-1 overflow-x-auto rounded-2xl border border-slate-200 bg-white p-1.5 shadow-sm shadow-slate-950/[0.03]" aria-label="Navigation CRM">
       {PRIMARY_NAV.map((item) => (
-        <Link key={item.key} to={item.href} className={navClass(section === item.key)}>
+        <Link key={item.href} to={item.href} className={navClass(Boolean(item.key && section === item.key))}>
           {item.label}
         </Link>
       ))}
