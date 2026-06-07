@@ -99,6 +99,8 @@ export type CrmVisitReportInput = CrmVisitReportDraft & {
   client_objective?: string | null;
   need_description?: string | null;
   desired_deadline?: string | null;
+  constraints?: Record<string, unknown>;
+  budget?: Record<string, unknown>;
   next_action?: string | null;
   follow_up_date?: string | null;
   report_text?: string | null;
@@ -176,8 +178,8 @@ export async function saveCrmVisitReport(input: CrmVisitReportInput) {
     urgency: text(input.urgency),
     desired_deadline: input.desired_deadline ?? input.desiredDeadline ?? null,
     zones: text(input.zones),
-    constraints: jsonObjectOrDefault((input as any).constraints),
-    budget: jsonObjectOrDefault((input as any).budget),
+    constraints: jsonObjectOrDefault(input.constraints),
+    budget: jsonObjectOrDefault(input.budget),
     next_action: text(input.next_action ?? input.nextAction),
     follow_up_date: input.follow_up_date ?? input.followUpDate ?? null,
     report_text: text(input.report_text),
