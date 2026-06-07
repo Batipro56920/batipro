@@ -155,7 +155,14 @@ function Field({ label, value, onChange, type = "text" }: { label: string; value
 }
 
 function NumberCell({ value, onChange }: { value: number; onChange: (value: number) => void }) {
-  return <input className={`${inputClass} text-right`} type="number" value={value} onChange={(event) => onChange(Number(event.target.value))} />;
+  return (
+    <input
+      className={`${inputClass} text-right`}
+      inputMode="decimal"
+      value={value}
+      onChange={(event) => onChange(parseFrenchNumber(event.target.value) ?? 0)}
+    />
+  );
 }
 
 function Line({ label, value }: { label: string; value: string }) {
