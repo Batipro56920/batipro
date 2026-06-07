@@ -1,7 +1,7 @@
 import { useState } from "react";
 import type { CrmAppointmentRow, CrmDataset, CrmProspectRow } from "../../../services/crm.service";
 import { entityLabel } from "../components/crmFormat";
-import { CrmModal, Input, SelectEntity, Submit, TextArea } from "./CrmFormPrimitives";
+import { CrmModal, Input, Submit, TextArea } from "./CrmFormPrimitives";
 
 export default function AppointmentForm({
   data,
@@ -27,11 +27,18 @@ export default function AppointmentForm({
     <CrmModal title="Créer un rendez-vous" onClose={onClose}>
       <form onSubmit={(e) => { e.preventDefault(); onSubmit(form as Partial<CrmAppointmentRow>); }} className="space-y-4">
         <Input form={form} setForm={setForm} name="titre" label="Titre" required />
-        <SelectEntity prospects={data.prospects} clients={data.clients} prospectId={form.prospect_id ?? ""} clientId={form.client_id ?? ""} setProspectId={(v) => setForm((p) => ({ ...p, prospect_id: v }))} setClientId={(v) => setForm((p) => ({ ...p, client_id: v }))} />
-        <div className="grid gap-4 md:grid-cols-3">
+        <label className="block space-y-1 text-sm">
+          <div className="text-slate-600">Prospect</div>
+          <select className="w-full rounded-xl border px-3 py-2" value={form.prospect_id ?? ""} onChange={(e) => setForm((prev) => ({ ...prev, prospect_id: e.target.value }))}>
+            <option value="">Aucun</option>
+            {data.prospects.map((row) => (
+              <option key={row.id} value={row.id}>{entityLabel(row)}</option>
+            ))}
+          </select>
+        </label>
+        <div className="grid gap-4 md:grid-cols-2">
           <Input form={form} setForm={setForm} name="type" label="Type" />
           <Input form={form} setForm={setForm} name="starts_at" label="Début" type="datetime-local" required />
-          <Input form={form} setForm={setForm} name="ends_at" label="Fin" type="datetime-local" />
         </div>
         <TextArea form={form} setForm={setForm} name="notes" label="Notes / compte rendu" />
         <Submit saving={saving} label="Créer RDV" />
