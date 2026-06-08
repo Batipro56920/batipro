@@ -2,13 +2,15 @@ import { corsHeaders, getAuthenticatedUser, getServiceClient, jsonResponse } fro
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
-  if (!["GET", "DELETE"].includes(req.method)) return jsonResponse({ error: "Méthode non supportée." }, 405);
+  if (req.method !== "POST") return jsonResponse({ error: "Méthode non supportée." }, 405);
 
   try {
     const user = await getAuthenticatedUser(req);
     const service = getServiceClient();
+    const body = await req.json().catch(() => ({}));
+    const action = String(body?.action ?? "status");
 
-    if (req.method === "DELETE") {
+    if (action === "disconnect") {
       await service.from("calendar_event_links").delete().eq("user_id", user.id).eq("provider", "google");
       await service.from("calendar_connections").delete().eq("user_id", user.id).eq("provider", "google");
       return jsonResponse({ connected: false, calendarEmail: null, calendarId: null, connectedAt: null, lastSyncAt: null });
