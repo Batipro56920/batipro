@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { AlertTriangle, CalendarDays, ChevronLeft, ChevronRight, RefreshCw, Users } from "lucide-react";
 import type { IntervenantRow } from "../../services/intervenants.service";
 import {
@@ -138,7 +138,7 @@ export default function DailyChantierPlanning({ chantierId, chantierName, interv
   const [loading, setLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
-  async function refresh() {
+  const refresh = useCallback(async () => {
     setLoading(true);
     setErrorMsg(null);
     try {
@@ -148,11 +148,11 @@ export default function DailyChantierPlanning({ chantierId, chantierName, interv
     } finally {
       setLoading(false);
     }
-  }
+  }, [chantierId]);
 
   useEffect(() => {
     void refresh();
-  }, [chantierId]);
+  }, [refresh]);
 
   const blocks = useMemo(() => buildDailyBlocks(state, selectedDate), [selectedDate, state]);
   const unplannedTasks = useMemo(() => {
