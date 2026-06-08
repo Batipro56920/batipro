@@ -84,9 +84,9 @@ export default function Sidebar({ collapsed = false, onToggleCollapse, companyNa
   const nav = [
     { to: "/dashboard", label: t("sidebar.dashboard"), icon: LayoutDashboard, group: "Pilotage", end: true },
     {
-      to: "/statistiques",
-      label: "Rentabilité / statistiques",
-      icon: ChartColumnBig,
+      to: "/rentabilite",
+      label: "Rentabilité",
+      icon: TrendingUp,
       feature: "rapports" as const,
       permissionKey: "statistiques" as const,
       group: "Pilotage",
@@ -147,6 +147,14 @@ export default function Sidebar({ collapsed = false, onToggleCollapse, companyNa
       label: "Profils types",
       icon: Users,
       permissionKey: "entreprise_parametres" as const,
+      group: "Ressources",
+    },
+    {
+      to: "/ressources/statistiques",
+      label: "Statistiques",
+      icon: ChartColumnBig,
+      feature: "rapports" as const,
+      permissionKey: "statistiques" as const,
       group: "Ressources",
     },
     {
