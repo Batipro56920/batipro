@@ -12,6 +12,7 @@ import IntervenantInvitationPage from "./pages/IntervenantInvitationPage";
 import AppEntryPage from "./pages/AppEntryPage";
 
 const DashboardPage = lazy(() => import("./pages/DashboardPage"));
+const RentabilitePage = lazy(() => import("./pages/RentabilitePage"));
 const CrmPage = lazy(() => import("./pages/CrmPage"));
 const ChantiersPage = lazy(() => import("./pages/ChantiersPage"));
 const ChantierNewPage = lazy(() => import("./pages/ChantierNewPage"));
@@ -83,6 +84,14 @@ function ChantierBackofficeRoute({ label, children }: { label: string; children:
   );
 }
 
+function StatistiquesRoute() {
+  return (
+    <RequireCompanyFeature moduleId="rapports" profilePermissionKey="statistiques">
+      <RouteSuspense label="Chargement des statistiques..."><StatistiquesPage /></RouteSuspense>
+    </RequireCompanyFeature>
+  );
+}
+
 export default function App() {
   return (
     <Routes>
@@ -106,6 +115,14 @@ export default function App() {
         }
       >
         <Route path="/dashboard" element={<RouteSuspense label="Chargement du dashboard..."><DashboardPage /></RouteSuspense>} />
+        <Route
+          path="/rentabilite"
+          element={
+            <RequireCompanyFeature moduleId="rapports" profilePermissionKey="statistiques">
+              <RouteSuspense label="Chargement de la rentabilité..."><RentabilitePage /></RouteSuspense>
+            </RequireCompanyFeature>
+          }
+        />
         <Route path="/crm" element={<CrmRoute section="dashboard" />} />
         <Route path="/crm/prospects" element={<CrmRoute section="prospects" />} />
         <Route path="/crm/clients" element={<CrmRoute section="clients" />} />
@@ -362,14 +379,8 @@ export default function App() {
             </RequireCompanyFeature>
           }
         />
-        <Route
-          path="/statistiques"
-          element={
-            <RequireCompanyFeature moduleId="rapports" profilePermissionKey="statistiques">
-              <RouteSuspense label="Chargement des statistiques..."><StatistiquesPage /></RouteSuspense>
-            </RequireCompanyFeature>
-          }
-        />
+        <Route path="/statistiques" element={<StatistiquesRoute />} />
+        <Route path="/ressources/statistiques" element={<StatistiquesRoute />} />
         <Route
           path="/entreprise"
           element={
