@@ -71,6 +71,13 @@ export type BusinessProfilePermissionPreset = {
   permissions: ProfileFeaturePermissions;
 };
 
+export type BusinessProfilePermissionPresetsResult = {
+  presets: BusinessProfilePermissionPreset[];
+  schemaReady: boolean;
+};
+
+const PROFILE_PERMISSION_PRESETS_TABLE = "profile_permission_presets";
+
 const PROFILE_PERMISSION_KEYS: ProfileFeaturePermissionKey[] = [
   ...COMPANY_FEATURE_MODULES.map((module) => module.id),
   "intervenants",
@@ -294,143 +301,36 @@ export const BUSINESS_PROFILE_PERMISSION_PRESETS: BusinessProfilePermissionPrese
   },
 ];
 
-const EXTRA_PERMISSION_DEFINITIONS: Record<
-  Exclude<
-    ProfileFeaturePermissionKey,
-    CompanyFeatureModuleId
-  >,
-  ProfilePermissionDefinition
-> = {
-  intervenants: {
-    key: "intervenants",
-    label: "Intervenants",
-    description:
-      "Accès à l’onglet intervenants dans les chantiers et à la page globale des intervenants.",
-  },
-  crm: {
-    key: "crm",
-    label: "CRM",
-    description: "Accès au cockpit CRM, prospects, clients, opportunités, devis, agenda et SAV.",
-  },
-  crm_prospects: {
-    key: "crm_prospects",
-    label: "Gerer prospects",
-    description: "Creation, modification, qualification et archivage des prospects.",
-  },
-  crm_clients: {
-    key: "crm_clients",
-    label: "Gerer clients",
-    description: "Gestion du referentiel client unique et de l'historique commercial.",
-  },
-  crm_opportunities: {
-    key: "crm_opportunities",
-    label: "Gerer opportunites",
-    description: "Gestion du pipeline commercial et des opportunites.",
-  },
-  crm_quote_view: {
-    key: "crm_quote_view",
-    label: "Voir devis CRM",
-    description: "Acces aux listes et fiches devis CRM.",
-  },
-  bibliotheque: {
-    key: "bibliotheque",
-    label: "Bibliothèque",
-    description: "Accès à la page bibliothèque et aux modèles de tâches du backoffice.",
-  },
-  statistiques: {
-    key: "statistiques",
-    label: "Statistiques",
-    description: "Accès à la page statistiques et aux synthèses globales de pilotage.",
-  },
-  fournisseurs: {
-    key: "fournisseurs",
-    label: "Fournisseurs",
-    description: "Accès à la base fournisseurs et aux réglages d’approvisionnement.",
-  },
-  entreprise_parametres: {
-    key: "entreprise_parametres",
-    label: "Paramètres entreprise",
-    description: "Accès aux paramètres entreprise, fonctionnalités et profils.",
-  },
-  task_library_preparation: {
-    key: "task_library_preparation",
-    label: "Bibliothèque avancée",
-    description:
-      "Accès aux ratios matériaux, au matériel à prévoir et aux estimatifs avancés des modèles de tâches.",
-  },
-  crm_quote_create: {
-    key: "crm_quote_create",
-    label: "Creer devis CRM",
-    description: "Creation de devis BTP depuis le CRM et rattachement aux clients/opportunites.",
-  },
-  crm_quote_edit: {
-    key: "crm_quote_edit",
-    label: "Modifier devis CRM",
-    description: "Modification des lots, ouvrages, quantites, TVA et conditions des devis.",
-  },
-  crm_quote_margin: {
-    key: "crm_quote_margin",
-    label: "Voir marges devis",
-    description: "Affichage des debourses, marges par ligne, par lot et globales.",
-  },
-  crm_quote_price_edit: {
-    key: "crm_quote_price_edit",
-    label: "Modifier prix devis",
-    description: "Modification des prix, coefficients, couts et taux de marge.",
-  },
-  crm_quote_transform: {
-    key: "crm_quote_transform",
-    label: "Transformer devis en chantier",
-    description: "Creation d'un chantier depuis un devis accepte avec budgets et taches.",
-  },
-  crm_quote_delete: {
-    key: "crm_quote_delete",
-    label: "Supprimer devis CRM",
-    description: "Suppression ou archivage definitif des devis.",
-  },
-  crm_quote_send: {
-    key: "crm_quote_send",
-    label: "Envoyer devis",
-    description: "Envoi, relance et generation du lien client securise.",
-  },
-  crm_quote_accept_refuse: {
-    key: "crm_quote_accept_refuse",
-    label: "Accepter / refuser devis",
-    description: "Changement du statut commercial apres retour client.",
-  },
-  finance_margin_edit: {
-    key: "finance_margin_edit",
-    label: "Modifier marges",
-    description: "Modification des coefficients, marges et prix de vente.",
-  },
-  finance_purchases: {
-    key: "finance_purchases",
-    label: "Gerer achats",
-    description: "Gestion des achats, commandes et factures fournisseurs.",
-  },
-  chantier_financier_view: {
-    key: "chantier_financier_view",
-    label: "Voir financier chantier",
-    description: "Acces aux budgets, couts reels, facturation et indicateurs financiers chantier.",
-  },
-  chantier_financier_edit: {
-    key: "chantier_financier_edit",
-    label: "Modifier financier chantier",
-    description: "Creation et modification des depenses, budgets, facturations et avenants financiers.",
-  },
-  chantier_financier_margin: {
-    key: "chantier_financier_margin",
-    label: "Voir marges",
-    description: "Affichage des marges previsionnelles et reelles.",
-  },
-  chantier_financier_billing: {
-    key: "chantier_financier_billing",
-    label: "Gerer facturation",
-    description: "Gestion des acomptes, situations, factures finales, encaissements et impayes.",
-  },
+const EXTRA_PERMISSION_DEFINITIONS: Record<Exclude<ProfileFeaturePermissionKey, CompanyFeatureModuleId>, ProfilePermissionDefinition> = {
+  intervenants: { key: "intervenants", label: "Intervenants", description: "Accès à l’onglet intervenants dans les chantiers et à la page globale des intervenants." },
+  crm: { key: "crm", label: "CRM", description: "Accès au cockpit CRM, prospects, clients, opportunités, devis, agenda et SAV." },
+  crm_prospects: { key: "crm_prospects", label: "Gerer prospects", description: "Creation, modification, qualification et archivage des prospects." },
+  crm_clients: { key: "crm_clients", label: "Gerer clients", description: "Gestion du referentiel client unique et de l'historique commercial." },
+  crm_opportunities: { key: "crm_opportunities", label: "Gerer opportunites", description: "Gestion du pipeline commercial et des opportunites." },
+  crm_quote_view: { key: "crm_quote_view", label: "Voir devis CRM", description: "Acces aux listes et fiches devis CRM." },
+  bibliotheque: { key: "bibliotheque", label: "Bibliothèque", description: "Accès à la page bibliothèque et aux modèles de tâches du backoffice." },
+  statistiques: { key: "statistiques", label: "Statistiques", description: "Accès à la page statistiques et aux synthèses globales de pilotage." },
+  fournisseurs: { key: "fournisseurs", label: "Fournisseurs", description: "Accès à la base fournisseurs et aux réglages d’approvisionnement." },
+  entreprise_parametres: { key: "entreprise_parametres", label: "Paramètres entreprise", description: "Accès aux paramètres entreprise, fonctionnalités et profils." },
+  task_library_preparation: { key: "task_library_preparation", label: "Bibliothèque avancée", description: "Accès aux ratios matériaux, au matériel à prévoir et aux estimatifs avancés des modèles de tâches." },
+  crm_quote_create: { key: "crm_quote_create", label: "Creer devis CRM", description: "Creation de devis BTP depuis le CRM et rattachement aux clients/opportunites." },
+  crm_quote_edit: { key: "crm_quote_edit", label: "Modifier devis CRM", description: "Modification des lots, ouvrages, quantites, TVA et conditions des devis." },
+  crm_quote_margin: { key: "crm_quote_margin", label: "Voir marges devis", description: "Affichage des debourses, marges par ligne, par lot et globales." },
+  crm_quote_price_edit: { key: "crm_quote_price_edit", label: "Modifier prix devis", description: "Modification des prix, coefficients, couts et taux de marge." },
+  crm_quote_transform: { key: "crm_quote_transform", label: "Transformer devis en chantier", description: "Creation d'un chantier depuis un devis accepte avec budgets et taches." },
+  crm_quote_delete: { key: "crm_quote_delete", label: "Supprimer devis CRM", description: "Suppression ou archivage definitif des devis." },
+  crm_quote_send: { key: "crm_quote_send", label: "Envoyer devis", description: "Envoi, relance et generation du lien client securise." },
+  crm_quote_accept_refuse: { key: "crm_quote_accept_refuse", label: "Accepter / refuser devis", description: "Changement du statut commercial apres retour client." },
+  finance_margin_edit: { key: "finance_margin_edit", label: "Modifier marges", description: "Modification des coefficients, marges et prix de vente." },
+  finance_purchases: { key: "finance_purchases", label: "Gerer achats", description: "Gestion des achats, commandes et factures fournisseurs." },
+  chantier_financier_view: { key: "chantier_financier_view", label: "Voir financier chantier", description: "Acces aux budgets, couts reels, facturation et indicateurs financiers chantier." },
+  chantier_financier_edit: { key: "chantier_financier_edit", label: "Modifier financier chantier", description: "Creation et modification des depenses, budgets, facturations et avenants financiers." },
+  chantier_financier_margin: { key: "chantier_financier_margin", label: "Voir marges", description: "Affichage des marges previsionnelles et reelles." },
+  chantier_financier_billing: { key: "chantier_financier_billing", label: "Gerer facturation", description: "Gestion des acomptes, situations, factures finales, encaissements et impayes." },
 };
 
 let supportsProfileFeaturePermissions: boolean | null = null;
+let supportsProfilePermissionPresetTemplates: boolean | null = null;
 
 function normalizeText(value: unknown): string | null {
   const text = String(value ?? "").trim();
@@ -438,23 +338,18 @@ function normalizeText(value: unknown): string | null {
 }
 
 function normalizePermissions(raw: unknown): ProfileFeaturePermissions {
-  const input =
-    raw && typeof raw === "object" && !Array.isArray(raw) ? (raw as Record<string, unknown>) : {};
+  const input = raw && typeof raw === "object" && !Array.isArray(raw) ? (raw as Record<string, unknown>) : {};
   const output: ProfileFeaturePermissions = {};
-
   for (const key of PROFILE_PERMISSION_KEYS) {
     if (input[key] === true) output[key] = true;
     if (input[key] === false) output[key] = false;
   }
-
   return output;
 }
 
 function normalizePresetPermissions(raw: ProfileFeaturePermissions): ProfileFeaturePermissions {
   const output: ProfileFeaturePermissions = {};
-  for (const key of PROFILE_PERMISSION_KEYS) {
-    output[key] = raw[key] === true;
-  }
+  for (const key of PROFILE_PERMISSION_KEYS) output[key] = raw[key] === true;
   return output;
 }
 
@@ -462,10 +357,14 @@ function isMissingFeaturePermissionsColumnError(error: unknown): boolean {
   const code = String((error as { code?: string } | null)?.code ?? "");
   const msg = String((error as { message?: string } | null)?.message ?? "").toLowerCase();
   if (code === "42703") return true;
-  return (
-    msg.includes("feature_permissions") &&
-    (msg.includes("schema cache") || msg.includes("does not exist") || msg.includes("could not find"))
-  );
+  return msg.includes("feature_permissions") && (msg.includes("schema cache") || msg.includes("does not exist") || msg.includes("could not find"));
+}
+
+function isMissingPresetTemplatesTableError(error: unknown): boolean {
+  const code = String((error as { code?: string } | null)?.code ?? "");
+  const msg = String((error as { message?: string } | null)?.message ?? "").toLowerCase();
+  if (["42P01", "42703"].includes(code)) return true;
+  return msg.includes(PROFILE_PERMISSION_PRESETS_TABLE) && (msg.includes("schema cache") || msg.includes("does not exist") || msg.includes("could not find") || msg.includes("relation"));
 }
 
 function isAdminRole(role: string | null | undefined): boolean {
@@ -480,38 +379,84 @@ async function getCurrentUserId(): Promise<string | null> {
 
 async function assertCurrentUserCanManageProfilePermissions() {
   const current = await getCurrentProfileFeaturePermissions();
-  if (!isAdminRole(current.role)) {
-    throw new Error("Seul un profil ADMIN peut modifier les permissions profil.");
-  }
-  if (!current.schemaReady) {
-    throw new Error("Migration permissions profil non appliquée sur Supabase.");
-  }
+  if (!isAdminRole(current.role)) throw new Error("Seul un profil ADMIN peut modifier les permissions profil.");
+  if (!current.schemaReady) throw new Error("Migration permissions profil non appliquée sur Supabase.");
 }
 
-export function isCompanyModulePermissionKey(
-  key: ProfileFeaturePermissionKey,
-): key is CompanyFeatureModuleId {
+function mergePresetTemplates(rows: Array<{ preset_id: string; permissions: unknown }> | null | undefined): BusinessProfilePermissionPreset[] {
+  const byId = new Map<string, ProfileFeaturePermissions>();
+  for (const row of rows ?? []) byId.set(String(row.preset_id), normalizePresetPermissions(normalizePermissions(row.permissions)));
+  return BUSINESS_PROFILE_PERMISSION_PRESETS.map((preset) => ({ ...preset, permissions: byId.get(preset.id) ?? normalizePresetPermissions(preset.permissions) }));
+}
+
+export function isCompanyModulePermissionKey(key: ProfileFeaturePermissionKey): key is CompanyFeatureModuleId {
   return COMPANY_FEATURE_MODULES.some((module) => module.id === key);
 }
 
-export function getBusinessProfilePermissionPreset(
-  presetId: BusinessProfilePresetId,
-): BusinessProfilePermissionPreset | null {
+export function getBusinessProfilePermissionPreset(presetId: BusinessProfilePresetId): BusinessProfilePermissionPreset | null {
   return BUSINESS_PROFILE_PERMISSION_PRESETS.find((preset) => preset.id === presetId) ?? null;
 }
 
+export async function listBusinessProfilePermissionPresets(): Promise<BusinessProfilePermissionPresetsResult> {
+  const userId = await getCurrentUserId();
+  if (!userId) return { presets: mergePresetTemplates(null), schemaReady: supportsProfilePermissionPresetTemplates !== false };
+
+  const query = await (supabase as any)
+    .from(PROFILE_PERMISSION_PRESETS_TABLE)
+    .select("preset_id, permissions")
+    .eq("organization_id", userId);
+
+  if (query.error) {
+    if (isMissingPresetTemplatesTableError(query.error)) {
+      supportsProfilePermissionPresetTemplates = false;
+      return { presets: mergePresetTemplates(null), schemaReady: false };
+    }
+    throw new Error(query.error.message);
+  }
+
+  supportsProfilePermissionPresetTemplates = true;
+  return { presets: mergePresetTemplates(query.data), schemaReady: true };
+}
+
+export async function saveBusinessProfilePermissionPreset(presetId: BusinessProfilePresetId, permissions: ProfileFeaturePermissions): Promise<ProfileFeaturePermissions> {
+  await assertCurrentUserCanManageProfilePermissions();
+  const userId = await getCurrentUserId();
+  if (!userId) throw new Error("Utilisateur non authentifié.");
+  if (!getBusinessProfilePermissionPreset(presetId)) throw new Error("Profil métier inconnu.");
+
+  const nextPermissions = normalizePresetPermissions(permissions);
+  const { data, error } = await (supabase as any)
+    .from(PROFILE_PERMISSION_PRESETS_TABLE)
+    .upsert(
+      {
+        organization_id: userId,
+        preset_id: presetId,
+        permissions: nextPermissions,
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: "organization_id,preset_id" },
+    )
+    .select("permissions")
+    .maybeSingle();
+
+  if (error) {
+    if (isMissingPresetTemplatesTableError(error)) {
+      supportsProfilePermissionPresetTemplates = false;
+      throw new Error("Migration modèles de profils types non appliquée sur Supabase.");
+    }
+    throw new Error(error.message);
+  }
+
+  supportsProfilePermissionPresetTemplates = true;
+  return normalizePresetPermissions(normalizePermissions(data?.permissions));
+}
+
 export function getProfilePermissionSections(): ProfilePermissionSection[] {
-  const chantierSections = (Object.keys(COMPANY_FEATURE_PILLAR_LABELS) as CompanyFeaturePillar[]).map(
-    (pillar) => ({
-      id: pillar,
-      label: COMPANY_FEATURE_PILLAR_LABELS[pillar],
-      permissions: COMPANY_FEATURE_MODULES.filter((module) => module.pillar === pillar).map((module) => ({
-        key: module.id,
-        label: module.label,
-        description: module.description,
-      })),
-    }),
-  );
+  const chantierSections = (Object.keys(COMPANY_FEATURE_PILLAR_LABELS) as CompanyFeaturePillar[]).map((pillar) => ({
+    id: pillar,
+    label: COMPANY_FEATURE_PILLAR_LABELS[pillar],
+    permissions: COMPANY_FEATURE_MODULES.filter((module) => module.pillar === pillar).map((module) => ({ key: module.id, label: module.label, description: module.description })),
+  }));
 
   return [
     {
@@ -557,13 +502,7 @@ export function getProfilePermissionSections(): ProfilePermissionSection[] {
 
 export async function getCurrentProfileFeaturePermissions(): Promise<ProfileFeaturePermissionsResult> {
   const userId = await getCurrentUserId();
-  if (!userId) {
-    return {
-      role: null,
-      permissions: {},
-      schemaReady: supportsProfileFeaturePermissions !== false,
-    };
-  }
+  if (!userId) return { role: null, permissions: {}, schemaReady: supportsProfileFeaturePermissions !== false };
 
   const query = await (supabase as any)
     .from("profiles")
@@ -574,86 +513,46 @@ export async function getCurrentProfileFeaturePermissions(): Promise<ProfileFeat
   if (query.error) {
     if (supportsProfileFeaturePermissions !== false && isMissingFeaturePermissionsColumnError(query.error)) {
       supportsProfileFeaturePermissions = false;
-      const fallback = await (supabase as any)
-        .from("profiles")
-        .select("role")
-        .eq("id", userId)
-        .maybeSingle();
-
+      const fallback = await (supabase as any).from("profiles").select("role").eq("id", userId).maybeSingle();
       if (fallback.error) throw new Error(fallback.error.message);
-      return {
-        role: normalizeText(fallback.data?.role),
-        permissions: {},
-        schemaReady: false,
-      };
+      return { role: normalizeText(fallback.data?.role), permissions: {}, schemaReady: false };
     }
-
     throw new Error(query.error.message);
   }
 
-  if (supportsProfileFeaturePermissions !== false) {
-    supportsProfileFeaturePermissions = true;
-  }
-
-  return {
-    role: normalizeText(query.data?.role),
-    permissions: normalizePermissions(query.data?.feature_permissions),
-    schemaReady: true,
-  };
+  if (supportsProfileFeaturePermissions !== false) supportsProfileFeaturePermissions = true;
+  return { role: normalizeText(query.data?.role), permissions: normalizePermissions(query.data?.feature_permissions), schemaReady: true };
 }
 
-export async function setCurrentProfileFeaturePermission(
-  key: ProfileFeaturePermissionKey,
-  enabled: boolean,
-): Promise<ProfileFeaturePermissions> {
+export async function setCurrentProfileFeaturePermission(key: ProfileFeaturePermissionKey, enabled: boolean): Promise<ProfileFeaturePermissions> {
   const userId = await getCurrentUserId();
   if (!userId) throw new Error("Utilisateur non authentifié.");
   if (!PROFILE_PERMISSION_KEY_SET.has(key)) throw new Error("Permission profil inconnue.");
 
   const current = await getCurrentProfileFeaturePermissions();
-  if (!isAdminRole(current.role)) {
-    throw new Error("Seul un profil ADMIN peut activer cette permission.");
-  }
-  if (!current.schemaReady) {
-    throw new Error("Migration permissions profil non appliquée sur Supabase.");
-  }
+  if (!isAdminRole(current.role)) throw new Error("Seul un profil ADMIN peut activer cette permission.");
+  if (!current.schemaReady) throw new Error("Migration permissions profil non appliquée sur Supabase.");
 
-  const nextPermissions: ProfileFeaturePermissions = {
-    ...current.permissions,
-    [key]: enabled,
-  };
-
-  return updateProfileFeaturePermissionsForUser(userId, nextPermissions);
+  return updateProfileFeaturePermissionsForUser(userId, { ...current.permissions, [key]: enabled });
 }
 
-export async function setCurrentProfileFeaturePermissionPreset(
-  presetId: BusinessProfilePresetId,
-): Promise<ProfileFeaturePermissions> {
+export async function setCurrentProfileFeaturePermissionPreset(presetId: BusinessProfilePresetId): Promise<ProfileFeaturePermissions> {
   const userId = await getCurrentUserId();
   if (!userId) throw new Error("Utilisateur non authentifié.");
   return setProfileFeaturePermissionPresetForUser(userId, presetId);
 }
 
-export async function setProfileFeaturePermissionPresetForUser(
-  userId: string,
-  presetId: BusinessProfilePresetId,
-): Promise<ProfileFeaturePermissions> {
+export async function setProfileFeaturePermissionPresetForUser(userId: string, presetId: BusinessProfilePresetId): Promise<ProfileFeaturePermissions> {
   const targetUserId = String(userId ?? "").trim();
   if (!targetUserId) throw new Error("Utilisateur cible manquant.");
-  const preset = getBusinessProfilePermissionPreset(presetId);
+  const { presets } = await listBusinessProfilePermissionPresets();
+  const preset = presets.find((entry) => entry.id === presetId) ?? getBusinessProfilePermissionPreset(presetId);
   if (!preset) throw new Error("Profil métier inconnu.");
-  return updateProfileFeaturePermissionsForUser(
-    targetUserId,
-    normalizePresetPermissions(preset.permissions),
-  );
+  return updateProfileFeaturePermissionsForUser(targetUserId, normalizePresetPermissions(preset.permissions));
 }
 
-async function updateProfileFeaturePermissionsForUser(
-  userId: string,
-  nextPermissions: ProfileFeaturePermissions,
-): Promise<ProfileFeaturePermissions> {
+async function updateProfileFeaturePermissionsForUser(userId: string, nextPermissions: ProfileFeaturePermissions): Promise<ProfileFeaturePermissions> {
   await assertCurrentUserCanManageProfilePermissions();
-
   const { data, error } = await (supabase as any)
     .from("profiles")
     .update({ feature_permissions: normalizePermissions(nextPermissions) })
@@ -673,14 +572,8 @@ async function updateProfileFeaturePermissionsForUser(
   return normalizePermissions(data?.feature_permissions);
 }
 
-export function hasProfileFeaturePermission(
-  permissions: ProfileFeaturePermissions | null | undefined,
-  key: ProfileFeaturePermissionKey,
-  role: string | null | undefined = "ADMIN",
-): boolean {
+export function hasProfileFeaturePermission(permissions: ProfileFeaturePermissions | null | undefined, key: ProfileFeaturePermissionKey, role: string | null | undefined = "ADMIN"): boolean {
   const normalized = permissions ?? {};
-  if (isAdminRole(role)) {
-    return normalized[key] !== false;
-  }
+  if (isAdminRole(role)) return normalized[key] !== false;
   return normalized[key] === true;
 }
