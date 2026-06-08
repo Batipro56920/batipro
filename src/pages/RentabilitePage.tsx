@@ -56,6 +56,24 @@ function buildSummary(invoices: InvoiceRecord[], purchaseOrders: PurchaseOrderRe
   };
 }
 
+function chartPercent(value: number, max: number) {
+  if (max <= 0) return 0;
+  return Math.max(6, Math.min(100, Math.round((Math.max(0, value) / max) * 100)));
+}
+
+function getHealthStatus(summary: ProfitabilitySummary) {
+  if (summary.invoicedTtc <= 0 && summary.purchasesTtc <= 0) {
+    return { label: "À alimenter", detail: "Aucune donnée financière exploitable pour le moment.", className: "bg-slate-100 text-slate-700" };
+  }
+  if (summary.cashPositionTtc < 0 || summary.estimatedMarginHt < 0) {
+    return { label: "À surveiller", detail: "Les achats engagés pèsent plus que les encaissements ou la marge.", className: "bg-red-50 text-red-700" };
+  }
+  if (summary.remainingTtc > summary.paidTtc && summary.paidTtc > 0) {
+    return { label: "Correct", detail: "La marge existe, mais une partie importante reste à encaisser.", className: "bg-amber-50 text-amber-700" };
+  }
+  return { label: "Sain", detail: "Les encaissements et la marge restent bien orientés.", className: "bg-emerald-50 text-emerald-700" };
+}
+
 export default function RentabilitePage() {
   const [invoices, setInvoices] = useState<InvoiceRecord[]>([]);
   const [purchaseOrders, setPurchaseOrders] = useState<PurchaseOrderRecord[]>([]);
@@ -127,6 +145,7 @@ export default function RentabilitePage() {
                 <FlowBlock label="Sorties engagées" value={formatCurrency(summary.purchasesTtc)} detail="Commandes fournisseurs" />
                 <FlowBlock label="Net prévisionnel" value={formatCurrency(summary.forecastNetTtc)} detail="Facturé - achats" strong />
               </div>
+              <SimpleFinancialChart summary={summary} />
               <div className="mt-4 rounded-lg border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700">
                 Position encaissée estimée : <span className="font-semibold text-slate-950">{formatCurrency(summary.cashPositionTtc)}</span> après achats engagés.
               </div>
@@ -169,6 +188,40 @@ function Metric({ label, value, detail, tone = "neutral" }: { label: string; val
 
 function FlowBlock({ label, value, detail, strong = false }: { label: string; value: string; detail: string; strong?: boolean }) {
   return <div className={strong ? "rounded-lg border border-blue-200 bg-blue-50 p-4" : "rounded-lg border border-slate-200 bg-slate-50 p-4"}><div className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">{label}</div><div className="mt-2 text-lg font-bold text-slate-950">{value}</div><div className="mt-1 text-xs text-slate-500">{detail}</div></div>;
+}
+
+function SimpleFinancialChart({ summary }: { summary: ProfitabilitySummary }) {
+  const health = getHealthStatus(summary);
+  const maxValue = Math.max(summary.paidTtc, summary.remainingTtc, summary.purchasesTtc, 1);
+  const rows = [
+    { label: "Encaissé", value: summary.paidTtc, className: "bg-emerald-500" },
+    { label: "À encaisser", value: summary.remainingTtc, className: "bg-amber-400" },
+    { label: "Achats engagés", value: summary.purchasesTtc, className: "bg-slate-400" },
+  ];
+
+  return (
+    <div className="mt-5 rounded-lg border border-slate-200 bg-white p-4">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <div className="text-sm font-semibold text-slate-950">Santé de l’entreprise</div>
+          <div className="text-xs text-slate-500">Lecture rapide des rentrées, restes à encaisser et achats.</div>
+        </div>
+        <div className={`rounded-full px-3 py-1 text-xs font-semibold ${health.className}`}>{health.label}</div>
+      </div>
+      <div className="mt-4 space-y-3">
+        {rows.map((row) => (
+          <div key={row.label} className="grid gap-2 sm:grid-cols-[120px_minmax(0,1fr)_100px] sm:items-center">
+            <div className="text-xs font-medium text-slate-600">{row.label}</div>
+            <div className="h-3 overflow-hidden rounded-full bg-slate-100">
+              <div className={`h-full rounded-full ${row.className}`} style={{ width: `${chartPercent(row.value, maxValue)}%` }} />
+            </div>
+            <div className="text-right text-xs font-semibold text-slate-900">{formatCurrency(row.value)}</div>
+          </div>
+        ))}
+      </div>
+      <div className="mt-4 rounded-lg bg-slate-50 p-3 text-xs text-slate-600">{health.detail}</div>
+    </div>
+  );
 }
 
 function WatchItem({ label, value, detail }: { label: string; value: string; detail: string }) {
