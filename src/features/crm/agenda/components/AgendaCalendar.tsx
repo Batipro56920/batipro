@@ -1,5 +1,4 @@
 import { useMemo, useState } from "react";
-import { CalendarDays, ChevronLeft, ChevronRight, Plus } from "lucide-react";
 import type { AgendaEvent, AgendaView } from "../types";
 
 const tones = {
@@ -111,9 +110,9 @@ export function AgendaCalendar({ events, onSelect, onCreate }: { events: AgendaE
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <div className="flex rounded-xl border border-slate-200 bg-white p-1">
-            <button type="button" onClick={() => move(-1)} className="rounded-lg p-1.5 text-slate-600 hover:bg-slate-50" aria-label="Période précédente"><ChevronLeft className="h-4 w-4" /></button>
+            <button type="button" onClick={() => move(-1)} className="rounded-lg px-2 py-1.5 text-slate-600 hover:bg-slate-50" aria-label="Période précédente">‹</button>
             <button type="button" onClick={() => setAnchor(new Date())} className="rounded-lg px-2.5 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50">Aujourd’hui</button>
-            <button type="button" onClick={() => move(1)} className="rounded-lg p-1.5 text-slate-600 hover:bg-slate-50" aria-label="Période suivante"><ChevronRight className="h-4 w-4" /></button>
+            <button type="button" onClick={() => move(1)} className="rounded-lg px-2 py-1.5 text-slate-600 hover:bg-slate-50" aria-label="Période suivante">›</button>
           </div>
           <div className="flex rounded-xl border border-slate-200 bg-white p-1">
             {(["day", "week", "month"] as AgendaView[]).map((item) => (
@@ -123,7 +122,7 @@ export function AgendaCalendar({ events, onSelect, onCreate }: { events: AgendaE
             ))}
           </div>
           <button type="button" onClick={onCreate} className="inline-flex h-9 items-center gap-1.5 rounded-xl border border-slate-200 px-3 text-sm font-medium hover:bg-slate-50">
-            <Plus className="h-4 w-4" />Créer
+            Créer
           </button>
         </div>
       </div>
@@ -131,7 +130,7 @@ export function AgendaCalendar({ events, onSelect, onCreate }: { events: AgendaE
       <div className="mt-4 overflow-hidden rounded-2xl border border-slate-200 bg-slate-50/60">
         {events.length === 0 ? (
           <div className="flex h-96 flex-col items-center justify-center bg-white text-center">
-            <CalendarDays className="h-8 w-8 text-slate-300" />
+            <div className="text-3xl text-slate-300">+</div>
             <div className="mt-3 font-semibold text-slate-900">Aucun événement</div>
             <div className="mt-1 text-sm text-slate-500">Créez une tâche ou un rendez-vous pour alimenter le calendrier.</div>
           </div>
