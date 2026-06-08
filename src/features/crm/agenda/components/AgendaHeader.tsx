@@ -1,20 +1,62 @@
-import { CalendarPlus, RefreshCw, Upload, CheckSquare } from "lucide-react";
+import { CalendarCheck, CalendarPlus, CheckSquare, Link2, RefreshCw, Unlink } from "lucide-react";
 import { Button } from "../../../../components/ui/button";
+import type { GoogleCalendarConnectionStatus } from "../../../../services/googleCalendar.service";
 
-export function AgendaHeader({ onTask, onAppointment }: { onTask: () => void; onAppointment: () => void }) {
+type Props = {
+  connection: GoogleCalendarConnectionStatus | null;
+  syncBusy: boolean;
+  syncDisabled: boolean;
+  onTask: () => void;
+  onAppointment: () => void;
+  onConnectGoogle: () => void;
+  onDisconnectGoogle: () => void;
+  onSyncGoogle: () => void;
+};
+
+export function AgendaHeader({
+  connection,
+  syncBusy,
+  syncDisabled,
+  onTask,
+  onAppointment,
+  onConnectGoogle,
+  onDisconnectGoogle,
+  onSyncGoogle,
+}: Props) {
+  const connected = connection?.connected === true;
   return (
     <header className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm shadow-slate-950/[0.03]">
-      <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
         <div>
           <div className="text-[11px] font-semibold uppercase tracking-[0.22em] text-blue-700">CRM</div>
           <h2 className="mt-1 text-2xl font-bold tracking-tight text-slate-950">Agenda commercial</h2>
-          <p className="mt-1 max-w-2xl text-sm leading-6 text-slate-500">Pilotez vos rendez-vous, relances et tâches commerciales.</p>
+          <p className="mt-1 max-w-2xl text-sm leading-6 text-slate-500">
+            Pilotez vos rendez-vous, relances et tâches commerciales, puis synchronisez-les avec Google Calendar.
+          </p>
+          <div className="mt-3 inline-flex flex-wrap items-center gap-2 rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
+            <CalendarCheck className="h-4 w-4 text-slate-500" />
+            {connected ? (
+              <>
+                <span className="font-semibold text-emerald-700">Google Calendar connecté</span>
+                <span>{connection?.calendarEmail || connection?.calendarId || "Agenda principal"}</span>
+                {connection?.lastSyncAt ? <span>Dernière synchro {new Date(connection.lastSyncAt).toLocaleString("fr-FR")}</span> : null}
+              </>
+            ) : (
+              <span>Google Calendar non connecté</span>
+            )}
+          </div>
         </div>
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap justify-start gap-2 lg:justify-end">
           <Button type="button" variant="secondary" size="md" onClick={onTask}><CheckSquare className="h-4 w-4" />Tâche</Button>
           <Button type="button" variant="primary" size="md" onClick={onAppointment}><CalendarPlus className="h-4 w-4" />RDV</Button>
-          <Button type="button" variant="secondary" size="md" onClick={onTask}><RefreshCw className="h-4 w-4" />Relance</Button>
-          <Button type="button" variant="secondary" size="md" disabled title="Import calendrier à finaliser"><Upload className="h-4 w-4" />Import calendrier</Button>
+          {connected ? (
+            <>
+              <Button type="button" variant="secondary" size="md" onClick={onSyncGoogle} disabled={syncBusy || syncDisabled}><RefreshCw className="h-4 w-4" />{syncBusy ? "Synchro..." : "Synchroniser"}</Button>
+              <Button type="button" variant="secondary" size="md" onClick={onDisconnectGoogle} disabled={syncBusy}><Unlink className="h-4 w-4" />Déconnecter</Button>
+            </>
+          ) : (
+            <Button type="button" variant="secondary" size="md" onClick={onConnectGoogle} disabled={syncBusy}><Link2 className="h-4 w-4" />Connecter Google</Button>
+          )}
         </div>
       </div>
     </header>
