@@ -143,13 +143,6 @@ export default function Sidebar({ collapsed = false, onToggleCollapse, companyNa
       group: "Ressources",
     },
     {
-      to: "/ressources/profils-types",
-      label: "Profils types",
-      icon: Users,
-      permissionKey: "entreprise_parametres" as const,
-      group: "Ressources",
-    },
-    {
       to: "/ressources/statistiques",
       label: "Statistiques",
       icon: ChartColumnBig,
@@ -249,6 +242,13 @@ export default function Sidebar({ collapsed = false, onToggleCollapse, companyNa
       feature: "documents" as const,
       permissionKey: "bibliotheque" as const,
       group: "Ressources",
+    },
+    {
+      to: "/ressources/profils-types",
+      label: "Profils types",
+      icon: Users,
+      permissionKey: "entreprise_parametres" as const,
+      group: "Paramètres",
     },
     {
       to: "/entreprise",
