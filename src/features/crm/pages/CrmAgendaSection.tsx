@@ -51,6 +51,14 @@ function buildCalendarSyncEvents(events: AgendaEvent[]): GoogleCalendarSyncEvent
   return syncEvents;
 }
 
+const DISCONNECTED_GOOGLE_CALENDAR: GoogleCalendarConnectionStatus = {
+  connected: false,
+  calendarEmail: null,
+  calendarId: null,
+  connectedAt: null,
+  lastSyncAt: null,
+};
+
 export default function CrmAgendaSection({
   tasks,
   appointments,
@@ -72,17 +80,19 @@ export default function CrmAgendaSection({
   const agenda = useAgendaData(tasks, appointments);
   const syncEvents = useMemo(() => buildCalendarSyncEvents(agenda.events), [agenda.events]);
 
-  const refreshConnection = useCallback(async () => {
+  const refreshConnection = useCallback(async (showError = false) => {
     try {
       setConnection(await getGoogleCalendarConnectionStatus());
     } catch (err: any) {
-      setSyncError(err?.message ?? "Impossible de vérifier Google Calendar.");
-      setConnection({ connected: false, calendarEmail: null, calendarId: null, connectedAt: null, lastSyncAt: null });
+      setConnection(DISCONNECTED_GOOGLE_CALENDAR);
+      if (showError) {
+        setSyncError(err?.message ?? "Impossible de vérifier Google Calendar.");
+      }
     }
   }, []);
 
   useEffect(() => {
-    void refreshConnection();
+    void refreshConnection(false);
   }, [refreshConnection]);
 
   async function connectGoogle() {
@@ -104,7 +114,7 @@ export default function CrmAgendaSection({
     setSyncNotice(null);
     try {
       await disconnectGoogleCalendar();
-      await refreshConnection();
+      await refreshConnection(true);
       setSyncNotice("Google Calendar déconnecté.");
     } catch (err: any) {
       setSyncError(err?.message ?? "Déconnexion Google Calendar impossible.");
@@ -119,7 +129,7 @@ export default function CrmAgendaSection({
     setSyncNotice(null);
     try {
       const result = await syncGoogleCalendarEvents(syncEvents);
-      await refreshConnection();
+      await refreshConnection(true);
       setSyncNotice(`${result.synced} événement(s) synchronisé(s) avec Google Calendar${result.skipped ? `, ${result.skipped} ignoré(s)` : ""}.`);
       if (result.errors.length) {
         setSyncError(`${result.errors.length} événement(s) n'ont pas pu être synchronisés.`);
