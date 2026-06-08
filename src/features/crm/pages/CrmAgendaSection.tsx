@@ -17,32 +17,38 @@ import { useAgendaData } from "../agenda/hooks/useAgendaData";
 import type { AgendaEvent } from "../agenda/types";
 
 function buildCalendarSyncEvents(events: AgendaEvent[]): GoogleCalendarSyncEvent[] {
-  return events.flatMap((event) => {
-    if (!event.date) return [];
+  const syncEvents: GoogleCalendarSyncEvent[] = [];
+
+  for (const event of events) {
+    if (!event.date) continue;
+
     if (event.source === "appointment" && event.appointment?.starts_at) {
-      return [{
-        sourceType: "crm_appointment" as const,
+      syncEvents.push({
+        sourceType: "crm_appointment",
         sourceId: event.appointment.id,
         title: event.title,
         startsAt: event.appointment.starts_at,
         endsAt: event.appointment.ends_at,
         description: event.description,
         url: `${window.location.origin}/crm/agenda`,
-      }];
+      });
+      continue;
     }
+
     if (event.source === "task" && event.task?.due_at) {
-      return [{
-        sourceType: "crm_task" as const,
+      syncEvents.push({
+        sourceType: "crm_task",
         sourceId: event.task.id,
         title: event.title,
         startsAt: event.task.due_at,
         endsAt: null,
         description: event.description,
         url: `${window.location.origin}/crm/agenda`,
-      }];
+      });
     }
-    return [];
-  });
+  }
+
+  return syncEvents;
 }
 
 export default function CrmAgendaSection({
