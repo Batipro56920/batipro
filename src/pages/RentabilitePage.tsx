@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { AlertTriangle, RefreshCw, TrendingUp } from "lucide-react";
 import { calculateDocumentTotals } from "../features/document-engine";
 import { getPaidAmount, getRemainingAmount } from "../features/invoices/application/invoicePayments";
@@ -175,7 +175,7 @@ function WatchItem({ label, value, detail }: { label: string; value: string; det
   return <div className="flex items-center justify-between gap-3 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2"><div><div className="font-medium text-slate-900">{label}</div><div className="text-xs text-slate-500">{detail}</div></div><div className="text-sm font-bold text-slate-950">{value}</div></div>;
 }
 
-function DataPanel({ title, empty, children }: { title: string; empty: string | null; children: React.ReactNode }) {
+function DataPanel({ title, empty, children }: { title: string; empty: string | null; children: ReactNode }) {
   return <section className="bt-card rounded-xl bg-white p-4"><div className="mb-3 text-sm font-semibold text-slate-950">{title}</div>{empty ? <div className="text-sm text-slate-500">{empty}</div> : <div className="space-y-2">{children}</div>}</section>;
 }
 
