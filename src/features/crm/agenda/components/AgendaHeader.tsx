@@ -10,14 +10,14 @@ type CalendarConnectionStatus = {
 };
 
 type Props = {
-  connection: CalendarConnectionStatus | null;
-  syncBusy: boolean;
-  syncDisabled: boolean;
+  connection?: CalendarConnectionStatus | null;
+  syncBusy?: boolean;
+  syncDisabled?: boolean;
   onTask: () => void;
   onAppointment: () => void;
-  onConnectGoogle: () => void;
-  onDisconnectGoogle: () => void;
-  onSyncGoogle: () => void;
+  onConnectGoogle?: () => void;
+  onDisconnectGoogle?: () => void;
+  onSyncGoogle?: () => void;
 };
 
 function formatSyncDate(value: string | null | undefined) {
@@ -26,9 +26,9 @@ function formatSyncDate(value: string | null | undefined) {
 }
 
 export function AgendaHeader({
-  connection,
-  syncBusy,
-  syncDisabled,
+  connection = null,
+  syncBusy = false,
+  syncDisabled = false,
   onTask,
   onAppointment,
   onConnectGoogle,
@@ -38,6 +38,7 @@ export function AgendaHeader({
   const connected = connection?.connected === true;
   const calendarLabel = connection?.calendarEmail || connection?.calendarId || "Agenda principal";
   const lastSync = formatSyncDate(connection?.lastSyncAt);
+  const googleReady = Boolean(onConnectGoogle && onDisconnectGoogle && onSyncGoogle);
 
   return (
     <header className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm shadow-slate-950/[0.03]">
@@ -67,16 +68,16 @@ export function AgendaHeader({
           </Button>
           {connected ? (
             <>
-              <Button type="button" variant="secondary" size="md" onClick={onSyncGoogle} disabled={syncBusy || syncDisabled}>
+              <Button type="button" variant="secondary" size="md" onClick={onSyncGoogle} disabled={!googleReady || syncBusy || syncDisabled}>
                 <RefreshCw className="h-4 w-4" />
                 {syncBusy ? "Synchro..." : "Synchroniser"}
               </Button>
-              <Button type="button" variant="secondary" size="md" onClick={onDisconnectGoogle} disabled={syncBusy}>
+              <Button type="button" variant="secondary" size="md" onClick={onDisconnectGoogle} disabled={!googleReady || syncBusy}>
                 Déconnecter
               </Button>
             </>
           ) : (
-            <Button type="button" variant="secondary" size="md" onClick={onConnectGoogle} disabled={syncBusy}>
+            <Button type="button" variant="secondary" size="md" onClick={onConnectGoogle} disabled={!googleReady || syncBusy}>
               <Upload className="h-4 w-4" />
               Connecter Google
             </Button>
