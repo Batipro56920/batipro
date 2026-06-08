@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import type { CrmAppointmentRow, CrmTaskRow } from "../../../services/crm.service";
 import {
   disconnectGoogleCalendar,
@@ -66,18 +66,18 @@ export default function CrmAgendaSection({
   const agenda = useAgendaData(tasks, appointments);
   const syncEvents = useMemo(() => buildCalendarSyncEvents(agenda.events), [agenda.events]);
 
-  async function refreshConnection() {
+  const refreshConnection = useCallback(async () => {
     try {
       setConnection(await getGoogleCalendarConnectionStatus());
     } catch (err: any) {
       setSyncError(err?.message ?? "Impossible de vérifier Google Calendar.");
       setConnection({ connected: false, calendarEmail: null, calendarId: null, connectedAt: null, lastSyncAt: null });
     }
-  }
+  }, []);
 
   useEffect(() => {
     void refreshConnection();
-  }, []);
+  }, [refreshConnection]);
 
   async function connectGoogle() {
     setSyncBusy(true);
