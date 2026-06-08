@@ -19,7 +19,7 @@ import type { AgendaEvent } from "../agenda/types";
 function buildCalendarSyncEvents(events: AgendaEvent[]): GoogleCalendarSyncEvent[] {
   return events.flatMap((event) => {
     if (!event.date) return [];
-    if (event.source === "appointment" && event.appointment) {
+    if (event.source === "appointment" && event.appointment?.starts_at) {
       return [{
         sourceType: "crm_appointment" as const,
         sourceId: event.appointment.id,
