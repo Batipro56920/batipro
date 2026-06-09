@@ -10,9 +10,12 @@ import {
 } from "../../../services/googleCalendar.service";
 import { AgendaCalendar } from "../agenda/components/AgendaCalendar";
 import { AgendaEventDrawer } from "../agenda/components/AgendaEventDrawer";
+import { AgendaGoogleCalendarFrame } from "../agenda/components/AgendaGoogleCalendarFrame";
 import { AgendaHeader } from "../agenda/components/AgendaHeader";
 import { useAgendaData } from "../agenda/hooks/useAgendaData";
 import type { AgendaEvent } from "../agenda/types";
+
+type AgendaDisplayMode = "batipro" | "google";
 
 function buildCalendarSyncEvents(events: AgendaEvent[]): GoogleCalendarSyncEvent[] {
   const syncEvents: GoogleCalendarSyncEvent[] = [];
@@ -73,6 +76,7 @@ export default function CrmAgendaSection({
   onDone: (row: CrmTaskRow) => void;
 }) {
   const [selectedEvent, setSelectedEvent] = useState<AgendaEvent | null>(null);
+  const [displayMode, setDisplayMode] = useState<AgendaDisplayMode>("batipro");
   const [connection, setConnection] = useState<GoogleCalendarConnectionStatus | null>(null);
   const [syncBusy, setSyncBusy] = useState(false);
   const [syncNotice, setSyncNotice] = useState<string | null>(null);
@@ -155,7 +159,26 @@ export default function CrmAgendaSection({
       />
       {syncNotice ? <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-2 text-sm text-emerald-700">{syncNotice}</div> : null}
       {syncError ? <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-2 text-sm text-red-700">{syncError}</div> : null}
-      <AgendaCalendar events={agenda.events} onSelect={setSelectedEvent} onCreate={onAppointment} />
+      <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-slate-200 bg-white p-2 shadow-sm shadow-slate-950/[0.03]">
+        {(["batipro", "google"] as AgendaDisplayMode[]).map((mode) => (
+          <button
+            key={mode}
+            type="button"
+            onClick={() => setDisplayMode(mode)}
+            className={[
+              "rounded-xl px-3 py-2 text-sm font-semibold transition",
+              displayMode === mode ? "bg-slate-950 text-white" : "text-slate-600 hover:bg-slate-50",
+            ].join(" ")}
+          >
+            {mode === "batipro" ? "Agenda Batipro" : "Vue Google Calendar"}
+          </button>
+        ))}
+      </div>
+      {displayMode === "google" ? (
+        <AgendaGoogleCalendarFrame connection={connection} syncBusy={syncBusy} onConnectGoogle={connectGoogle} />
+      ) : (
+        <AgendaCalendar events={agenda.events} onSelect={setSelectedEvent} onCreate={onAppointment} />
+      )}
       <AgendaEventDrawer
         event={selectedEvent}
         onClose={() => setSelectedEvent(null)}
