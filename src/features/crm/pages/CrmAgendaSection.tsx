@@ -29,6 +29,7 @@ function buildCalendarSyncEvents(events: AgendaEvent[]): GoogleCalendarSyncEvent
         title: event.title,
         startsAt: event.appointment.starts_at,
         endsAt: event.appointment.ends_at,
+        calendarScope: "crm",
         description: event.description,
         url: `${window.location.origin}/crm/agenda`,
       });
@@ -42,6 +43,7 @@ function buildCalendarSyncEvents(events: AgendaEvent[]): GoogleCalendarSyncEvent
         title: event.title,
         startsAt: event.task.due_at,
         endsAt: null,
+        calendarScope: "crm",
         description: event.description,
         url: `${window.location.origin}/crm/agenda`,
       });
