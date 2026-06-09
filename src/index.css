@@ -1,4 +1,4 @@
-﻿@import "tailwindcss";
+@import "tailwindcss";
 
 @import "./design-system/theme/theme.css";
 
@@ -274,6 +274,10 @@ select {
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
   padding-bottom: var(--safe-bottom);
+}
+
+.content-body > div > section.sticky.top-4 > div > div:first-child > div:last-child > :not(:first-child) {
+  display: none;
 }
 
 .sidebar-toggle {
