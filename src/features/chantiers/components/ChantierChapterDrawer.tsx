@@ -1,0 +1,77 @@
+import { useState } from "react";
+import type { ReactNode } from "react";
+
+type ChantierChapterDrawerProps = {
+  title: string;
+  subtitle: string;
+  actionLabel: string;
+  eyebrow?: string;
+  previewClassName?: string;
+  drawerMaxWidthClassName?: string;
+  children: ReactNode;
+};
+
+export default function ChantierChapterDrawer({
+  title,
+  subtitle,
+  actionLabel,
+  eyebrow = "Chantier",
+  previewClassName = "",
+  drawerMaxWidthClassName = "max-w-5xl",
+  children,
+}: ChantierChapterDrawerProps) {
+  const [open, setOpen] = useState(false);
+
+  return (
+    <>
+      <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+          <div>
+            <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">
+              {eyebrow}
+            </div>
+            <div className="mt-1 text-lg font-semibold text-slate-950">{title}</div>
+            <p className="mt-1 max-w-3xl text-sm text-slate-500">{subtitle}</p>
+          </div>
+          <button
+            type="button"
+            onClick={() => setOpen(true)}
+            className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-800 hover:bg-slate-50"
+          >
+            {actionLabel}
+          </button>
+        </div>
+        <div className={["batipro-chapter-preview mt-4", previewClassName].filter(Boolean).join(" ")}>
+          {children}
+        </div>
+      </section>
+
+      {open ? (
+        <div className="fixed inset-0 z-50 bg-slate-900/40 p-4" onClick={() => setOpen(false)}>
+          <aside
+            className={["ml-auto h-full w-full overflow-y-auto rounded-2xl bg-white p-5 shadow-2xl", drawerMaxWidthClassName].join(" ")}
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="sticky top-0 z-10 -mx-5 -mt-5 mb-5 flex items-start justify-between gap-3 border-b border-slate-200 bg-white px-5 py-4">
+              <div>
+                <div className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-400">
+                  {eyebrow}
+                </div>
+                <div className="mt-1 text-xl font-semibold text-slate-950">{title}</div>
+                <div className="mt-1 text-sm text-slate-500">{subtitle}</div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setOpen(false)}
+                className="rounded-xl border border-slate-200 px-3 py-2 text-sm hover:bg-slate-50"
+              >
+                Fermer
+              </button>
+            </div>
+            {children}
+          </aside>
+        </div>
+      ) : null}
+    </>
+  );
+}
