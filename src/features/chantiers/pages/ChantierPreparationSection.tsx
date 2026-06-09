@@ -1,6 +1,540 @@
-import PreparationChecklistTab from "../../../components/chantiers/PreparationChecklistTab";
+import { useEffect, useMemo, useState } from "react";
+import type { FormEvent } from "react";
 
-export default function ChantierPreparationSection({ chantierId }: { chantierId: string }) {
-  return <PreparationChecklistTab chantierId={chantierId} />;
+import DevisImportDrawer, { type DevisImportResult } from "../../../components/chantiers/DevisImportDrawer";
+import PreparationChecklistTab from "../../../components/chantiers/PreparationChecklistTab";
+import {
+  createTask,
+  getTasksByChantierIdDetailed,
+  type ChantierTaskRow,
+} from "../../../services/chantierTasks.service";
+import { replaceTaskAssignees } from "../../../services/chantierTaskAssignees.service";
+import {
+  listDevisByChantier,
+  listDevisLignes,
+  type DevisLigneRow,
+  type DevisRow,
+} from "../../../services/devis.service";
+import {
+  listIntervenantsByChantierId,
+  type IntervenantRow,
+} from "../../../services/intervenants.service";
+
+type ToastState = { type: "ok" | "error"; msg: string } | null;
+
+function toNumberOrNull(value: string) {
+  const raw = String(value ?? "").trim().replace(",", ".");
+  if (!raw) return null;
+  const parsed = Number(raw);
+  return Number.isFinite(parsed) ? parsed : null;
 }
 
+function displayTaskTitle(task: ChantierTaskRow) {
+  return String(task.titre_terrain ?? "").trim() || String(task.titre ?? "").trim() || "Tache chantier";
+}
+
+function displayTaskLot(task: ChantierTaskRow) {
+  return String(task.lot ?? task.corps_etat ?? "").trim() || "A classer";
+}
+
+function getTaskProgress(task: ChantierTaskRow) {
+  const expected = Number(task.temps_prevu_h ?? 0);
+  const done = Number(task.temps_reel_h ?? 0);
+  if (!Number.isFinite(expected) || expected <= 0) return null;
+  return Math.max(0, Math.min(100, Math.round((done / expected) * 100)));
+}
+
+export default function ChantierPreparationSection({ chantierId }: { chantierId: string }) {
+  const [tasks, setTasks] = useState<ChantierTaskRow[]>([]);
+  const [intervenants, setIntervenants] = useState<IntervenantRow[]>([]);
+  const [devis, setDevis] = useState<DevisRow[]>([]);
+  const [activeDevisId, setActiveDevisId] = useState<string | null>(null);
+  const [devisLignes, setDevisLignes] = useState<DevisLigneRow[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [devisLinesLoading, setDevisLinesLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [toast, setToast] = useState<ToastState>(null);
+  const [taskDrawerOpen, setTaskDrawerOpen] = useState(false);
+  const [devisImportOpen, setDevisImportOpen] = useState(false);
+  const [savingTask, setSavingTask] = useState(false);
+
+  const [taskTitle, setTaskTitle] = useState("");
+  const [taskLot, setTaskLot] = useState("");
+  const [taskQty, setTaskQty] = useState("1");
+  const [taskUnit, setTaskUnit] = useState("");
+  const [taskHours, setTaskHours] = useState("1");
+  const [taskIntervenantId, setTaskIntervenantId] = useState("");
+
+  useEffect(() => {
+    if (!toast) return;
+    const timer = window.setTimeout(() => setToast(null), 3500);
+    return () => window.clearTimeout(timer);
+  }, [toast]);
+
+  async function refreshPreparationData(preferredDevisId?: string | null) {
+    setLoading(true);
+    setError(null);
+    try {
+      const [taskResult, intervenantRows, devisRows] = await Promise.all([
+        getTasksByChantierIdDetailed(chantierId),
+        listIntervenantsByChantierId(chantierId),
+        listDevisByChantier(chantierId),
+      ]);
+      setTasks(taskResult.tasks);
+      setIntervenants(intervenantRows);
+      setDevis(devisRows);
+      if (preferredDevisId !== undefined) {
+        setActiveDevisId(preferredDevisId);
+      }
+    } catch (err: any) {
+      setError(err?.message ?? "Erreur chargement preparation chantier.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    void refreshPreparationData();
+  }, [chantierId]);
+
+  useEffect(() => {
+    let alive = true;
+
+    async function loadLines() {
+      if (!activeDevisId) {
+        setDevisLignes([]);
+        return;
+      }
+      setDevisLinesLoading(true);
+      try {
+        const rows = await listDevisLignes(activeDevisId);
+        if (!alive) return;
+        setDevisLignes(rows);
+      } catch (err: any) {
+        if (!alive) return;
+        setToast({ type: "error", msg: err?.message ?? "Erreur chargement lignes devis." });
+        setDevisLignes([]);
+      } finally {
+        if (alive) setDevisLinesLoading(false);
+      }
+    }
+
+    void loadLines();
+    return () => {
+      alive = false;
+    };
+  }, [activeDevisId]);
+
+  const taskStats = useMemo(() => {
+    return {
+      todo: tasks.filter((task) => task.status === "A_FAIRE").length,
+      running: tasks.filter((task) => task.status === "EN_COURS").length,
+      done: tasks.filter((task) => task.status === "FAIT").length,
+    };
+  }, [tasks]);
+
+  function resetTaskDraft() {
+    setTaskTitle("");
+    setTaskLot("");
+    setTaskQty("1");
+    setTaskUnit("");
+    setTaskHours("1");
+    setTaskIntervenantId("");
+  }
+
+  async function saveTask(event: FormEvent) {
+    event.preventDefault();
+    const title = taskTitle.trim();
+    const lot = taskLot.trim();
+    const qty = toNumberOrNull(taskQty) ?? 1;
+    const hours = taskHours.trim() ? toNumberOrNull(taskHours) : null;
+    const assignedIds = taskIntervenantId ? [taskIntervenantId] : [];
+
+    if (!title) {
+      setToast({ type: "error", msg: "Intitule de tache obligatoire." });
+      return;
+    }
+    if (qty <= 0) {
+      setToast({ type: "error", msg: "Quantite invalide." });
+      return;
+    }
+    if (taskHours.trim() && (hours === null || hours <= 0)) {
+      setToast({ type: "error", msg: "Temps prevu invalide." });
+      return;
+    }
+
+    setSavingTask(true);
+    try {
+      const created = await createTask({
+        chantier_id: chantierId,
+        titre: title,
+        titre_terrain: title,
+        corps_etat: lot || null,
+        lot: lot || null,
+        status: "A_FAIRE",
+        quality_status: "a_faire",
+        admin_validation_status: "non_verifie",
+        intervenant_id: taskIntervenantId || null,
+        quantite: qty,
+        unite: taskUnit.trim() || null,
+        temps_prevu_h: hours,
+        order_index: tasks.length,
+      });
+      if (assignedIds.length > 0) {
+        await replaceTaskAssignees(created.id, assignedIds);
+      }
+      await refreshPreparationData();
+      resetTaskDraft();
+      setTaskDrawerOpen(false);
+      setToast({ type: "ok", msg: "Tache ajoutee au chantier." });
+    } catch (err: any) {
+      setToast({ type: "error", msg: err?.message ?? "Erreur ajout tache." });
+    } finally {
+      setSavingTask(false);
+    }
+  }
+
+  async function onDevisImported(result: DevisImportResult) {
+    await refreshPreparationData(result.devisId);
+    setToast({
+      type: "ok",
+      msg: `Devis importe: ${result.linesInserted} ligne(s), ${result.tasksCreated} tache(s) creee(s).`,
+    });
+  }
+
+  return (
+    <div className="space-y-6">
+      {toast ? (
+        <div
+          className={[
+            "fixed bottom-6 right-6 z-50 rounded-xl border px-4 py-3 text-sm shadow-lg",
+            toast.type === "ok"
+              ? "border-emerald-200 bg-emerald-50 text-emerald-800"
+              : "border-red-200 bg-red-50 text-red-800",
+          ].join(" ")}
+        >
+          {toast.msg}
+        </div>
+      ) : null}
+
+      <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+          <div>
+            <div className="text-[11px] font-semibold uppercase tracking-[0.2em] text-blue-600">
+              Preparation chantier
+            </div>
+            <div className="mt-1 text-xl font-semibold text-slate-950">Taches et devis</div>
+            <p className="mt-1 max-w-3xl text-sm text-slate-500">
+              Ici on prepare le chantier: creation manuelle des taches, import du devis PDF et verification des lignes avant execution terrain.
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={() => setTaskDrawerOpen(true)}
+              className="rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700"
+            >
+              Creer une tache
+            </button>
+            <button
+              type="button"
+              onClick={() => setDevisImportOpen(true)}
+              className="rounded-xl border border-blue-200 bg-blue-50 px-4 py-2 text-sm font-semibold text-blue-800 hover:bg-blue-100"
+            >
+              Importer devis
+            </button>
+          </div>
+        </div>
+
+        <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+          <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+            <div className="text-xs text-slate-500">Taches</div>
+            <div className="mt-1 text-2xl font-semibold text-slate-950">{tasks.length}</div>
+          </div>
+          <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+            <div className="text-xs text-slate-500">A faire</div>
+            <div className="mt-1 text-2xl font-semibold text-slate-950">{taskStats.todo}</div>
+          </div>
+          <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+            <div className="text-xs text-slate-500">En cours</div>
+            <div className="mt-1 text-2xl font-semibold text-slate-950">{taskStats.running}</div>
+          </div>
+          <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+            <div className="text-xs text-slate-500">Terminees</div>
+            <div className="mt-1 text-2xl font-semibold text-slate-950">{taskStats.done}</div>
+          </div>
+          <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+            <div className="text-xs text-slate-500">Devis importes</div>
+            <div className="mt-1 text-2xl font-semibold text-slate-950">{devis.length}</div>
+          </div>
+        </div>
+
+        {error ? (
+          <div className="mt-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+            {error}
+          </div>
+        ) : null}
+      </section>
+
+      <section className="grid gap-4 xl:grid-cols-[minmax(0,1.25fr)_minmax(0,0.75fr)]">
+        <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <div className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-400">
+                Liste preparation
+              </div>
+              <div className="mt-1 text-lg font-semibold text-slate-950">Taches chantier</div>
+            </div>
+            <button
+              type="button"
+              onClick={() => setTaskDrawerOpen(true)}
+              className="rounded-xl border border-slate-200 px-3 py-2 text-sm font-medium hover:bg-slate-50"
+            >
+              Ajouter
+            </button>
+          </div>
+
+          <div className="mt-4 space-y-3">
+            {loading ? (
+              <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-5 text-sm text-slate-500">
+                Chargement des taches...
+              </div>
+            ) : tasks.length === 0 ? (
+              <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50 px-4 py-5 text-sm text-slate-500">
+                Aucune tache preparee. Cree une tache manuelle ou importe un devis.
+              </div>
+            ) : (
+              tasks.map((task) => {
+                const progress = getTaskProgress(task);
+                const assigned = task.intervenant_id
+                  ? intervenants.find((intervenant) => intervenant.id === task.intervenant_id)?.nom ?? "Intervenant"
+                  : "Non affecte";
+                return (
+                  <article key={task.id} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                    <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                      <div className="min-w-0">
+                        <div className="font-semibold text-slate-950">{displayTaskTitle(task)}</div>
+                        <div className="mt-1 flex flex-wrap gap-2 text-xs text-slate-500">
+                          <span>Lot: {displayTaskLot(task)}</span>
+                          <span>Intervenant: {assigned}</span>
+                          <span>
+                            Quantite: {task.quantite ?? "-"}{task.unite ? ` ${task.unite}` : ""}
+                          </span>
+                          <span>Temps prevu: {task.temps_prevu_h ?? "-"} h</span>
+                        </div>
+                      </div>
+                      <div className="min-w-[130px] rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700">
+                        {progress === null ? "Avancement -" : `${progress}%`}
+                      </div>
+                    </div>
+                  </article>
+                );
+              })
+            )}
+          </div>
+        </div>
+
+        <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <div className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-400">
+                Lecteur devis
+              </div>
+              <div className="mt-1 text-lg font-semibold text-slate-950">Devis importes</div>
+            </div>
+            <button
+              type="button"
+              onClick={() => setDevisImportOpen(true)}
+              className="rounded-xl border border-blue-200 bg-blue-50 px-3 py-2 text-sm font-medium text-blue-800 hover:bg-blue-100"
+            >
+              Importer
+            </button>
+          </div>
+
+          <div className="mt-4 space-y-3">
+            {loading ? (
+              <div className="text-sm text-slate-500">Chargement des devis...</div>
+            ) : devis.length === 0 ? (
+              <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50 px-4 py-5 text-sm text-slate-500">
+                Aucun devis importe sur ce chantier.
+              </div>
+            ) : (
+              devis.map((row) => {
+                const opened = activeDevisId === row.id;
+                return (
+                  <article key={row.id} className="rounded-2xl border border-slate-200 bg-white p-4">
+                    <button
+                      type="button"
+                      onClick={() => setActiveDevisId(opened ? null : row.id)}
+                      className="flex w-full items-start justify-between gap-3 text-left"
+                    >
+                      <span>
+                        <span className="block font-semibold text-slate-950">{row.nom || "Devis chantier"}</span>
+                        <span className="mt-1 block text-xs text-slate-500">
+                          {row.created_at ? new Date(row.created_at).toLocaleDateString("fr-FR") : "Date inconnue"}
+                        </span>
+                      </span>
+                      <span className="rounded-xl border border-slate-200 px-3 py-1 text-xs text-slate-600">
+                        {opened ? "Fermer" : "Lire"}
+                      </span>
+                    </button>
+
+                    {opened ? (
+                      <div className="mt-3 space-y-2 border-t border-slate-100 pt-3">
+                        {devisLinesLoading ? (
+                          <div className="text-sm text-slate-500">Chargement des lignes...</div>
+                        ) : devisLignes.length === 0 ? (
+                          <div className="text-sm text-slate-500">Aucune ligne de devis.</div>
+                        ) : (
+                          devisLignes.map((line) => (
+                            <div key={line.id} className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm">
+                              <div className="font-medium text-slate-950">{line.designation}</div>
+                              <div className="mt-1 text-xs text-slate-500">
+                                {(line.corps_etat ?? "Lot non renseigne")} | {line.quantite ?? "-"} {line.unite ?? ""}
+                                {line.generer_tache ? " | tache generee" : ""}
+                              </div>
+                            </div>
+                          ))
+                        )}
+                      </div>
+                    ) : null}
+                  </article>
+                );
+              })
+            )}
+          </div>
+        </div>
+      </section>
+
+      <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+        <div className="mb-4">
+          <div className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-400">
+            Checklist
+          </div>
+          <div className="mt-1 text-lg font-semibold text-slate-950">Preparation operationnelle</div>
+        </div>
+        <PreparationChecklistTab chantierId={chantierId} />
+      </section>
+
+      {taskDrawerOpen ? (
+        <div className="fixed inset-0 z-50 bg-slate-900/40 p-4" onClick={() => setTaskDrawerOpen(false)}>
+          <aside
+            className="ml-auto h-full w-full max-w-2xl overflow-y-auto rounded-2xl bg-white p-5 shadow-2xl"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="flex items-start justify-between gap-3 border-b border-slate-200 pb-4">
+              <div>
+                <div className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-400">
+                  Nouvelle tache
+                </div>
+                <div className="mt-1 text-xl font-semibold text-slate-950">Creation manuelle</div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setTaskDrawerOpen(false)}
+                className="rounded-xl border border-slate-200 px-3 py-2 text-sm hover:bg-slate-50"
+              >
+                Fermer
+              </button>
+            </div>
+
+            <form onSubmit={saveTask} className="mt-5 space-y-4">
+              <label className="block space-y-1 text-sm text-slate-700">
+                <span>Intitule de la tache</span>
+                <input
+                  className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"
+                  value={taskTitle}
+                  onChange={(event) => setTaskTitle(event.target.value)}
+                  placeholder="Ex: Pose receveur douche"
+                />
+              </label>
+
+              <div className="grid gap-3 md:grid-cols-2">
+                <label className="block space-y-1 text-sm text-slate-700">
+                  <span>Lot</span>
+                  <input
+                    className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"
+                    value={taskLot}
+                    onChange={(event) => setTaskLot(event.target.value)}
+                    placeholder="Ex: Plomberie"
+                  />
+                </label>
+                <label className="block space-y-1 text-sm text-slate-700">
+                  <span>Intervenant</span>
+                  <select
+                    className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm"
+                    value={taskIntervenantId}
+                    onChange={(event) => setTaskIntervenantId(event.target.value)}
+                  >
+                    <option value="">Non affecte</option>
+                    {intervenants.map((intervenant) => (
+                      <option key={intervenant.id} value={intervenant.id}>
+                        {intervenant.nom}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+
+              <div className="grid gap-3 md:grid-cols-3">
+                <label className="block space-y-1 text-sm text-slate-700">
+                  <span>Quantite</span>
+                  <input
+                    className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"
+                    inputMode="decimal"
+                    value={taskQty}
+                    onChange={(event) => setTaskQty(event.target.value)}
+                  />
+                </label>
+                <label className="block space-y-1 text-sm text-slate-700">
+                  <span>Unite</span>
+                  <input
+                    className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"
+                    value={taskUnit}
+                    onChange={(event) => setTaskUnit(event.target.value)}
+                    placeholder="m2, u, h..."
+                  />
+                </label>
+                <label className="block space-y-1 text-sm text-slate-700">
+                  <span>Temps prevu (h)</span>
+                  <input
+                    className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"
+                    inputMode="decimal"
+                    value={taskHours}
+                    onChange={(event) => setTaskHours(event.target.value)}
+                  />
+                </label>
+              </div>
+
+              <div className="flex justify-end gap-2 border-t border-slate-200 pt-4">
+                <button
+                  type="button"
+                  onClick={() => setTaskDrawerOpen(false)}
+                  className="rounded-xl border border-slate-200 px-4 py-2 text-sm hover:bg-slate-50"
+                  disabled={savingTask}
+                >
+                  Annuler
+                </button>
+                <button
+                  type="submit"
+                  className="rounded-xl bg-slate-900 px-4 py-2 text-sm text-white hover:bg-slate-800 disabled:opacity-50"
+                  disabled={savingTask}
+                >
+                  {savingTask ? "Creation..." : "Creer la tache"}
+                </button>
+              </div>
+            </form>
+          </aside>
+        </div>
+      ) : null}
+
+      <DevisImportDrawer
+        open={devisImportOpen}
+        chantierId={chantierId}
+        intervenants={intervenants}
+        onClose={() => setDevisImportOpen(false)}
+        onImported={onDevisImported}
+      />
+    </div>
+  );
+}
