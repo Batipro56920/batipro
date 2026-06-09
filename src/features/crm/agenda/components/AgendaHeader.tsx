@@ -37,7 +37,7 @@ export function AgendaHeader({
   onSyncGoogle,
 }: Props) {
   const connected = connection?.connected === true;
-  const calendarLabel = connection?.calendarEmail || connection?.calendarId || "Agenda principal";
+  const calendarLabel = connected ? connection?.calendarEmail || connection?.calendarId || "Batipro - CRM" : "Google non connecté";
   const lastSync = formatSyncDate(connection?.lastSyncAt);
   const googleReady = Boolean(onConnectGoogle && onDisconnectGoogle && onSyncGoogle);
   const handleConnectGoogle = onConnectGoogle ?? noop;
@@ -45,23 +45,18 @@ export function AgendaHeader({
   const handleSyncGoogle = onSyncGoogle ?? noop;
 
   return (
-    <header className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm shadow-slate-950/[0.03]">
-      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-        <div>
-          <div className="text-[11px] font-semibold uppercase tracking-[0.22em] text-blue-700">CRM</div>
-          <h2 className="mt-1 text-2xl font-bold tracking-tight text-slate-950">Agenda commercial</h2>
-          <p className="mt-1 max-w-2xl text-sm leading-6 text-slate-500">
-            Pilotez vos rendez-vous, relances et tâches commerciales, puis synchronisez-les avec Google Calendar.
-          </p>
-          <div className="mt-3 inline-flex flex-wrap items-center gap-2 rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
-            <span className={connected ? "font-semibold text-emerald-700" : "font-semibold text-slate-700"}>
-              {connected ? "Google Calendar connecté" : "Google Calendar non connecté"}
+    <header className="rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-sm shadow-slate-950/[0.03]">
+      <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
+            <h2 className="text-xl font-bold tracking-tight text-slate-950">Agenda commercial</h2>
+            <span className={connected ? "rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700" : "rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-600"}>
+              {calendarLabel}
             </span>
-            {connected ? <span>{calendarLabel}</span> : null}
-            {lastSync ? <span>Dernière synchro {lastSync}</span> : null}
+            {lastSync ? <span className="text-xs text-slate-400">Synchro {lastSync}</span> : null}
           </div>
         </div>
-        <div className="flex flex-wrap justify-start gap-2 lg:justify-end">
+        <div className="flex flex-wrap items-center gap-2">
           <Button type="button" variant="secondary" size="md" onClick={onTask}>
             <CheckSquare className="h-4 w-4" />
             Tâche
@@ -76,7 +71,7 @@ export function AgendaHeader({
                 <RefreshCw className="h-4 w-4" />
                 {syncBusy ? "Synchro..." : "Synchroniser"}
               </Button>
-              <Button type="button" variant="secondary" size="md" onClick={handleDisconnectGoogle} disabled={!googleReady || syncBusy}>
+              <Button type="button" variant="ghost" size="md" onClick={handleDisconnectGoogle} disabled={!googleReady || syncBusy}>
                 Déconnecter
               </Button>
             </>
