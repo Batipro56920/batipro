@@ -38,6 +38,12 @@ export default function ChantierChapterDrawer({
         .batipro-chapter-preview--tasks-quotes > div > :first-child > :not(:last-child) { display: none; }
         .batipro-chapter-preview--tasks-quotes > div > :last-child > :not(:last-child) { display: none; }
         .batipro-chapter-preview--tasks-quotes > div { gap: 1rem; }
+        .batipro-chapter-preview--financial > div > :not(:first-child),
+        .batipro-chapter-preview--unforeseen > div > :not(:first-child),
+        .batipro-chapter-preview--notes > div > :not(:last-child) { display: none; }
+        .batipro-chapter-preview--financial,
+        .batipro-chapter-preview--unforeseen,
+        .batipro-chapter-preview--notes { max-height: 320px; overflow: hidden; }
         .batipro-chapter-preview:empty::before {
           content: "Aucun element a afficher.";
           display: block;
