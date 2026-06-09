@@ -5,10 +5,12 @@ import DevisImportDrawer, { type DevisImportResult } from "../../../components/c
 import PreparationChecklistTab from "../../../components/chantiers/PreparationChecklistTab";
 import {
   createTask,
+  deleteTasksByIds,
   getTasksByChantierIdDetailed,
   type ChantierTaskRow,
 } from "../../../services/chantierTasks.service";
 import { replaceTaskAssignees } from "../../../services/chantierTaskAssignees.service";
+import { getCurrentUserProfile, isAdminProfile } from "../../../services/currentUserProfile.service";
 import {
   listDevisByChantier,
   listDevisLignes,
@@ -43,6 +45,11 @@ function getTaskProgress(task: ChantierTaskRow) {
   const done = Number(task.temps_reel_h ?? 0);
   if (!Number.isFinite(expected) || expected <= 0) return null;
   return Math.max(0, Math.min(100, Math.round((done / expected) * 100)));
+}
+
+function canCurrentRoleDeleteTasks(role: string | null | undefined) {
+  const normalized = String(role ?? "").trim().toUpperCase().replace(/[\s-]+/g, "_");
+  return ["ADMIN", "DIRIGEANT", "DIRECTION", "CONDUCTEUR_DE_TRAVAUX"].includes(normalized);
 }
 
 function Drawer({ title, subtitle, onClose, children }: {
@@ -93,6 +100,8 @@ export default function ChantierPreparationSection({ chantierId }: { chantierId:
   const [taskDrawerOpen, setTaskDrawerOpen] = useState(false);
   const [devisImportOpen, setDevisImportOpen] = useState(false);
   const [savingTask, setSavingTask] = useState(false);
+  const [deletingTaskId, setDeletingTaskId] = useState<string | null>(null);
+  const [canDeleteTasks, setCanDeleteTasks] = useState(false);
 
   const [taskTitle, setTaskTitle] = useState("");
   const [taskLot, setTaskLot] = useState("");
@@ -106,6 +115,23 @@ export default function ChantierPreparationSection({ chantierId }: { chantierId:
     const timer = window.setTimeout(() => setToast(null), 3500);
     return () => window.clearTimeout(timer);
   }, [toast]);
+
+  useEffect(() => {
+    let alive = true;
+    async function loadProfileRights() {
+      try {
+        const profile = await getCurrentUserProfile();
+        if (!alive) return;
+        setCanDeleteTasks(isAdminProfile(profile) || canCurrentRoleDeleteTasks(profile?.role));
+      } catch {
+        if (alive) setCanDeleteTasks(false);
+      }
+    }
+    void loadProfileRights();
+    return () => {
+      alive = false;
+    };
+  }, []);
 
   async function refreshPreparationData(preferredDevisId?: string | null) {
     setLoading(true);
@@ -170,7 +196,6 @@ export default function ChantierPreparationSection({ chantierId }: { chantierId:
   }, [tasks]);
 
   const lastDevis = devis[0] ?? null;
-  const latestTasks = tasks.slice(0, 3);
 
   function resetTaskDraft() {
     setTaskTitle("");
@@ -234,6 +259,30 @@ export default function ChantierPreparationSection({ chantierId }: { chantierId:
     }
   }
 
+  async function deleteTask(task: ChantierTaskRow) {
+    if (!canDeleteTasks) {
+      setToast({ type: "error", msg: "Suppression reservee aux profils admin et conducteur de travaux." });
+      return;
+    }
+
+    const title = displayTaskTitle(task);
+    const confirmed = window.confirm(
+      `Supprimer la tache "${title}" ?\n\nCette action retire la tache du chantier. Elle est reservee aux profils admin et conducteur de travaux.`,
+    );
+    if (!confirmed) return;
+
+    setDeletingTaskId(task.id);
+    try {
+      await deleteTasksByIds([task.id]);
+      await refreshPreparationData(activeDevisId);
+      setToast({ type: "ok", msg: "Tache supprimee." });
+    } catch (err: any) {
+      setToast({ type: "error", msg: err?.message ?? "Suppression impossible pour cette tache." });
+    } finally {
+      setDeletingTaskId(null);
+    }
+  }
+
   async function onDevisImported(result: DevisImportResult) {
     await refreshPreparationData(result.devisId);
     setActiveDrawer("quotes");
@@ -249,7 +298,7 @@ export default function ChantierPreparationSection({ chantierId }: { chantierId:
       title: "Taches",
       value: `${tasks.length}`,
       helper: `${taskStats.todo} a faire | ${taskStats.running} en cours | ${taskStats.done} terminees`,
-      action: "Ouvrir",
+      action: "Gerer",
     },
     {
       key: "quotes" as const,
@@ -290,7 +339,7 @@ export default function ChantierPreparationSection({ chantierId }: { chantierId:
             </div>
             <div className="mt-1 text-lg font-semibold text-slate-950">Organiser avant execution</div>
             <p className="mt-1 max-w-3xl text-sm text-slate-500">
-              Taches, devis et checklist restent ici. La production sert ensuite au temps, aux retours terrain et au suivi.
+              Taches, devis, checklist et localisation restent en preparation. Les formulaires s'ouvrent dans des panneaux dedies.
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
@@ -338,55 +387,18 @@ export default function ChantierPreparationSection({ chantierId }: { chantierId:
         ))}
       </section>
 
-      <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div>
-            <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">
-              Apercu preparation
-            </div>
-            <div className="mt-1 text-lg font-semibold text-slate-950">Dernieres taches</div>
-          </div>
-          <button
-            type="button"
-            onClick={() => setActiveDrawer("tasks")}
-            className="rounded-xl border border-slate-200 px-3 py-2 text-sm font-medium hover:bg-slate-50"
-          >
-            Voir toutes
-          </button>
-        </div>
-        <div className="mt-4 grid gap-3 lg:grid-cols-3">
-          {loading ? (
-            <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-5 text-sm text-slate-500 lg:col-span-3">
-              Chargement des taches...
-            </div>
-          ) : latestTasks.length === 0 ? (
-            <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50 px-4 py-5 text-sm text-slate-500 lg:col-span-3">
-              Aucune tache preparee. Cree une tache manuelle ou importe un devis.
-            </div>
-          ) : (
-            latestTasks.map((task) => {
-              const progress = getTaskProgress(task);
-              return (
-                <article key={task.id} className="rounded-xl border border-slate-200 bg-slate-50 p-3">
-                  <div className="font-medium text-slate-950">{displayTaskTitle(task)}</div>
-                  <div className="mt-1 text-xs text-slate-500">{displayTaskLot(task)}</div>
-                  <div className="mt-3 rounded-lg bg-white px-3 py-2 text-xs text-slate-600">
-                    {progress === null ? "Avancement non calcule" : `Avancement ${progress}%`}
-                  </div>
-                </article>
-              );
-            })
-          )}
-        </div>
-      </section>
-
       {activeDrawer === "tasks" ? (
         <Drawer
           title="Taches chantier"
-          subtitle="Lecture et preparation des taches avant execution terrain."
+          subtitle="Creation, lecture et suppression controlee des taches avant execution terrain."
           onClose={() => setActiveDrawer(null)}
         >
-          <div className="mb-4 flex justify-end">
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+            <div className="text-sm text-slate-500">
+              {canDeleteTasks
+                ? "Suppression disponible pour admin et conducteur de travaux."
+                : "Suppression reservee aux profils admin et conducteur de travaux."}
+            </div>
             <button
               type="button"
               onClick={() => setTaskDrawerOpen(true)}
@@ -420,8 +432,20 @@ export default function ChantierPreparationSection({ chantierId }: { chantierId:
                           <span>Temps prevu: {task.temps_prevu_h ?? "-"} h</span>
                         </div>
                       </div>
-                      <div className="min-w-[130px] rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700">
-                        {progress === null ? "Avancement -" : `${progress}%`}
+                      <div className="flex flex-wrap items-center gap-2 md:justify-end">
+                        <div className="min-w-[110px] rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700">
+                          {progress === null ? "Avancement -" : `${progress}%`}
+                        </div>
+                        {canDeleteTasks ? (
+                          <button
+                            type="button"
+                            onClick={() => void deleteTask(task)}
+                            disabled={deletingTaskId === task.id}
+                            className="rounded-xl border border-red-200 px-3 py-2 text-sm font-medium text-red-700 hover:bg-red-50 disabled:opacity-60"
+                          >
+                            {deletingTaskId === task.id ? "Suppression..." : "Supprimer"}
+                          </button>
+                        ) : null}
                       </div>
                     </div>
                   </article>
