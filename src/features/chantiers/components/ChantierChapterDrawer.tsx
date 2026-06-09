@@ -24,6 +24,27 @@ export default function ChantierChapterDrawer({
 
   return (
     <>
+      <style>{`
+        .batipro-chapter-preview > div > div:first-child { display: none; }
+        .batipro-chapter-preview--intervenants > div > :not(:last-child) { display: none; }
+        .batipro-chapter-preview--time > div > :not(:last-child) { display: none; }
+        .batipro-chapter-preview--reserves > div > :nth-child(1),
+        .batipro-chapter-preview--reserves > div > :nth-child(2) { display: none; }
+        .batipro-chapter-preview--documents table th:last-child,
+        .batipro-chapter-preview--documents table td:last-child { display: none; }
+        .batipro-chapter-preview--documents .overflow-hidden,
+        .batipro-chapter-preview--documents .overflow-x-auto { max-height: 280px; overflow: hidden; }
+        .batipro-chapter-preview--purchases > div > :not(:last-child) { display: none; }
+        .batipro-chapter-preview:empty::before {
+          content: "Aucun element a afficher.";
+          display: block;
+          border: 1px dashed #cbd5e1;
+          border-radius: 0.75rem;
+          padding: 1rem;
+          color: #64748b;
+          font-size: 0.875rem;
+        }
+      `}</style>
       <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
           <div>
