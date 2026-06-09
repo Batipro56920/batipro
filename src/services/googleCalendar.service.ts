@@ -8,12 +8,15 @@ export type GoogleCalendarConnectionStatus = {
   lastSyncAt: string | null;
 };
 
+export type GoogleCalendarScope = "crm" | "chantier" | "direction";
+
 export type GoogleCalendarSyncEvent = {
-  sourceType: "crm_task" | "crm_appointment" | "chantier_event";
+  sourceType: "crm_task" | "crm_appointment" | "chantier_event" | "direction_event";
   sourceId: string;
   title: string;
   startsAt: string;
   endsAt: string | null;
+  calendarScope?: GoogleCalendarScope;
   description?: string | null;
   location?: string | null;
   url?: string | null;
