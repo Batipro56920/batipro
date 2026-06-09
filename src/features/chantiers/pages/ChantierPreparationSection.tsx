@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import type { FormEvent } from "react";
+import type { FormEvent, ReactNode } from "react";
 
 import DevisImportDrawer, { type DevisImportResult } from "../../../components/chantiers/DevisImportDrawer";
 import PreparationChecklistTab from "../../../components/chantiers/PreparationChecklistTab";
@@ -21,6 +21,7 @@ import {
 } from "../../../services/intervenants.service";
 
 type ToastState = { type: "ok" | "error"; msg: string } | null;
+type DrawerKey = "tasks" | "quotes" | "checklist" | null;
 
 function toNumberOrNull(value: string) {
   const raw = String(value ?? "").trim().replace(",", ".");
@@ -44,6 +45,40 @@ function getTaskProgress(task: ChantierTaskRow) {
   return Math.max(0, Math.min(100, Math.round((done / expected) * 100)));
 }
 
+function Drawer({ title, subtitle, onClose, children }: {
+  title: string;
+  subtitle?: string;
+  onClose: () => void;
+  children: ReactNode;
+}) {
+  return (
+    <div className="fixed inset-0 z-50 bg-slate-900/40 p-4" onClick={onClose}>
+      <aside
+        className="ml-auto h-full w-full max-w-4xl overflow-y-auto rounded-2xl bg-white p-5 shadow-2xl"
+        onClick={(event) => event.stopPropagation()}
+      >
+        <div className="sticky top-0 z-10 -mx-5 -mt-5 mb-5 flex items-start justify-between gap-3 border-b border-slate-200 bg-white px-5 py-4">
+          <div>
+            <div className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-400">
+              Preparation chantier
+            </div>
+            <div className="mt-1 text-xl font-semibold text-slate-950">{title}</div>
+            {subtitle ? <div className="mt-1 text-sm text-slate-500">{subtitle}</div> : null}
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-xl border border-slate-200 px-3 py-2 text-sm hover:bg-slate-50"
+          >
+            Fermer
+          </button>
+        </div>
+        {children}
+      </aside>
+    </div>
+  );
+}
+
 export default function ChantierPreparationSection({ chantierId }: { chantierId: string }) {
   const [tasks, setTasks] = useState<ChantierTaskRow[]>([]);
   const [intervenants, setIntervenants] = useState<IntervenantRow[]>([]);
@@ -54,6 +89,7 @@ export default function ChantierPreparationSection({ chantierId }: { chantierId:
   const [devisLinesLoading, setDevisLinesLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [toast, setToast] = useState<ToastState>(null);
+  const [activeDrawer, setActiveDrawer] = useState<DrawerKey>(null);
   const [taskDrawerOpen, setTaskDrawerOpen] = useState(false);
   const [devisImportOpen, setDevisImportOpen] = useState(false);
   const [savingTask, setSavingTask] = useState(false);
@@ -133,6 +169,9 @@ export default function ChantierPreparationSection({ chantierId }: { chantierId:
     };
   }, [tasks]);
 
+  const lastDevis = devis[0] ?? null;
+  const latestTasks = tasks.slice(0, 3);
+
   function resetTaskDraft() {
     setTaskTitle("");
     setTaskLot("");
@@ -186,6 +225,7 @@ export default function ChantierPreparationSection({ chantierId }: { chantierId:
       await refreshPreparationData();
       resetTaskDraft();
       setTaskDrawerOpen(false);
+      setActiveDrawer("tasks");
       setToast({ type: "ok", msg: "Tache ajoutee au chantier." });
     } catch (err: any) {
       setToast({ type: "error", msg: err?.message ?? "Erreur ajout tache." });
@@ -196,14 +236,39 @@ export default function ChantierPreparationSection({ chantierId }: { chantierId:
 
   async function onDevisImported(result: DevisImportResult) {
     await refreshPreparationData(result.devisId);
+    setActiveDrawer("quotes");
     setToast({
       type: "ok",
       msg: `Devis importe: ${result.linesInserted} ligne(s), ${result.tasksCreated} tache(s) creee(s).`,
     });
   }
 
+  const chapterCards = [
+    {
+      key: "tasks" as const,
+      title: "Taches",
+      value: `${tasks.length}`,
+      helper: `${taskStats.todo} a faire | ${taskStats.running} en cours | ${taskStats.done} terminees`,
+      action: "Ouvrir",
+    },
+    {
+      key: "quotes" as const,
+      title: "Devis",
+      value: `${devis.length}`,
+      helper: lastDevis ? `Dernier import: ${lastDevis.nom}` : "Aucun devis importe",
+      action: "Lire",
+    },
+    {
+      key: "checklist" as const,
+      title: "Checklist",
+      value: "Prep",
+      helper: "Points de preparation operationnelle du chantier",
+      action: "Ouvrir",
+    },
+  ];
+
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
       {toast ? (
         <div
           className={[
@@ -217,15 +282,15 @@ export default function ChantierPreparationSection({ chantierId }: { chantierId:
         </div>
       ) : null}
 
-      <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+      <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
           <div>
-            <div className="text-[11px] font-semibold uppercase tracking-[0.2em] text-blue-600">
+            <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-blue-600">
               Preparation chantier
             </div>
-            <div className="mt-1 text-xl font-semibold text-slate-950">Taches et devis</div>
+            <div className="mt-1 text-lg font-semibold text-slate-950">Organiser avant execution</div>
             <p className="mt-1 max-w-3xl text-sm text-slate-500">
-              Ici on prepare le chantier: creation manuelle des taches, import du devis PDF et verification des lignes avant execution terrain.
+              Taches, devis et checklist restent ici. La production sert ensuite au temps, aux retours terrain et au suivi.
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
@@ -245,30 +310,6 @@ export default function ChantierPreparationSection({ chantierId }: { chantierId:
             </button>
           </div>
         </div>
-
-        <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
-          <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-            <div className="text-xs text-slate-500">Taches</div>
-            <div className="mt-1 text-2xl font-semibold text-slate-950">{tasks.length}</div>
-          </div>
-          <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-            <div className="text-xs text-slate-500">A faire</div>
-            <div className="mt-1 text-2xl font-semibold text-slate-950">{taskStats.todo}</div>
-          </div>
-          <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-            <div className="text-xs text-slate-500">En cours</div>
-            <div className="mt-1 text-2xl font-semibold text-slate-950">{taskStats.running}</div>
-          </div>
-          <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-            <div className="text-xs text-slate-500">Terminees</div>
-            <div className="mt-1 text-2xl font-semibold text-slate-950">{taskStats.done}</div>
-          </div>
-          <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-            <div className="text-xs text-slate-500">Devis importes</div>
-            <div className="mt-1 text-2xl font-semibold text-slate-950">{devis.length}</div>
-          </div>
-        </div>
-
         {error ? (
           <div className="mt-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
             {error}
@@ -276,32 +317,88 @@ export default function ChantierPreparationSection({ chantierId }: { chantierId:
         ) : null}
       </section>
 
-      <section className="grid gap-4 xl:grid-cols-[minmax(0,1.25fr)_minmax(0,0.75fr)]">
-        <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            <div>
-              <div className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-400">
-                Liste preparation
+      <section className="grid gap-3 md:grid-cols-3">
+        {chapterCards.map((card) => (
+          <article key={card.key} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">{card.title}</div>
+                <div className="mt-2 text-2xl font-semibold text-slate-950">{loading ? "..." : card.value}</div>
               </div>
-              <div className="mt-1 text-lg font-semibold text-slate-950">Taches chantier</div>
+              <button
+                type="button"
+                onClick={() => setActiveDrawer(card.key)}
+                className="rounded-xl border border-slate-200 px-3 py-2 text-sm font-medium hover:bg-slate-50"
+              >
+                {card.action}
+              </button>
             </div>
+            <div className="mt-3 text-sm text-slate-500">{loading ? "Chargement..." : card.helper}</div>
+          </article>
+        ))}
+      </section>
+
+      <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">
+              Apercu preparation
+            </div>
+            <div className="mt-1 text-lg font-semibold text-slate-950">Dernieres taches</div>
+          </div>
+          <button
+            type="button"
+            onClick={() => setActiveDrawer("tasks")}
+            className="rounded-xl border border-slate-200 px-3 py-2 text-sm font-medium hover:bg-slate-50"
+          >
+            Voir toutes
+          </button>
+        </div>
+        <div className="mt-4 grid gap-3 lg:grid-cols-3">
+          {loading ? (
+            <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-5 text-sm text-slate-500 lg:col-span-3">
+              Chargement des taches...
+            </div>
+          ) : latestTasks.length === 0 ? (
+            <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50 px-4 py-5 text-sm text-slate-500 lg:col-span-3">
+              Aucune tache preparee. Cree une tache manuelle ou importe un devis.
+            </div>
+          ) : (
+            latestTasks.map((task) => {
+              const progress = getTaskProgress(task);
+              return (
+                <article key={task.id} className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+                  <div className="font-medium text-slate-950">{displayTaskTitle(task)}</div>
+                  <div className="mt-1 text-xs text-slate-500">{displayTaskLot(task)}</div>
+                  <div className="mt-3 rounded-lg bg-white px-3 py-2 text-xs text-slate-600">
+                    {progress === null ? "Avancement non calcule" : `Avancement ${progress}%`}
+                  </div>
+                </article>
+              );
+            })
+          )}
+        </div>
+      </section>
+
+      {activeDrawer === "tasks" ? (
+        <Drawer
+          title="Taches chantier"
+          subtitle="Lecture et preparation des taches avant execution terrain."
+          onClose={() => setActiveDrawer(null)}
+        >
+          <div className="mb-4 flex justify-end">
             <button
               type="button"
               onClick={() => setTaskDrawerOpen(true)}
-              className="rounded-xl border border-slate-200 px-3 py-2 text-sm font-medium hover:bg-slate-50"
+              className="rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700"
             >
-              Ajouter
+              Creer une tache
             </button>
           </div>
-
-          <div className="mt-4 space-y-3">
-            {loading ? (
-              <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-5 text-sm text-slate-500">
-                Chargement des taches...
-              </div>
-            ) : tasks.length === 0 ? (
+          <div className="space-y-3">
+            {tasks.length === 0 ? (
               <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50 px-4 py-5 text-sm text-slate-500">
-                Aucune tache preparee. Cree une tache manuelle ou importe un devis.
+                Aucune tache preparee.
               </div>
             ) : (
               tasks.map((task) => {
@@ -332,29 +429,26 @@ export default function ChantierPreparationSection({ chantierId }: { chantierId:
               })
             )}
           </div>
-        </div>
+        </Drawer>
+      ) : null}
 
-        <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            <div>
-              <div className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-400">
-                Lecteur devis
-              </div>
-              <div className="mt-1 text-lg font-semibold text-slate-950">Devis importes</div>
-            </div>
+      {activeDrawer === "quotes" ? (
+        <Drawer
+          title="Lecteur devis"
+          subtitle="Lecture des devis importes et des lignes qui generent les taches."
+          onClose={() => setActiveDrawer(null)}
+        >
+          <div className="mb-4 flex justify-end">
             <button
               type="button"
               onClick={() => setDevisImportOpen(true)}
-              className="rounded-xl border border-blue-200 bg-blue-50 px-3 py-2 text-sm font-medium text-blue-800 hover:bg-blue-100"
+              className="rounded-xl border border-blue-200 bg-blue-50 px-4 py-2 text-sm font-semibold text-blue-800 hover:bg-blue-100"
             >
-              Importer
+              Importer devis
             </button>
           </div>
-
-          <div className="mt-4 space-y-3">
-            {loading ? (
-              <div className="text-sm text-slate-500">Chargement des devis...</div>
-            ) : devis.length === 0 ? (
+          <div className="space-y-3">
+            {devis.length === 0 ? (
               <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50 px-4 py-5 text-sm text-slate-500">
                 Aucun devis importe sur ce chantier.
               </div>
@@ -403,129 +497,112 @@ export default function ChantierPreparationSection({ chantierId }: { chantierId:
               })
             )}
           </div>
-        </div>
-      </section>
+        </Drawer>
+      ) : null}
 
-      <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-        <div className="mb-4">
-          <div className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-400">
-            Checklist
-          </div>
-          <div className="mt-1 text-lg font-semibold text-slate-950">Preparation operationnelle</div>
-        </div>
-        <PreparationChecklistTab chantierId={chantierId} />
-      </section>
+      {activeDrawer === "checklist" ? (
+        <Drawer
+          title="Checklist preparation"
+          subtitle="Points de controle a valider avant execution."
+          onClose={() => setActiveDrawer(null)}
+        >
+          <PreparationChecklistTab chantierId={chantierId} />
+        </Drawer>
+      ) : null}
 
       {taskDrawerOpen ? (
-        <div className="fixed inset-0 z-50 bg-slate-900/40 p-4" onClick={() => setTaskDrawerOpen(false)}>
-          <aside
-            className="ml-auto h-full w-full max-w-2xl overflow-y-auto rounded-2xl bg-white p-5 shadow-2xl"
-            onClick={(event) => event.stopPropagation()}
-          >
-            <div className="flex items-start justify-between gap-3 border-b border-slate-200 pb-4">
-              <div>
-                <div className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-400">
-                  Nouvelle tache
-                </div>
-                <div className="mt-1 text-xl font-semibold text-slate-950">Creation manuelle</div>
-              </div>
+        <Drawer
+          title="Creation manuelle"
+          subtitle="Ajouter une tache de preparation sans passer par la production."
+          onClose={() => setTaskDrawerOpen(false)}
+        >
+          <form onSubmit={saveTask} className="space-y-4">
+            <label className="block space-y-1 text-sm text-slate-700">
+              <span>Intitule de la tache</span>
+              <input
+                className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"
+                value={taskTitle}
+                onChange={(event) => setTaskTitle(event.target.value)}
+                placeholder="Ex: Pose receveur douche"
+              />
+            </label>
+
+            <div className="grid gap-3 md:grid-cols-2">
+              <label className="block space-y-1 text-sm text-slate-700">
+                <span>Lot</span>
+                <input
+                  className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"
+                  value={taskLot}
+                  onChange={(event) => setTaskLot(event.target.value)}
+                  placeholder="Ex: Plomberie"
+                />
+              </label>
+              <label className="block space-y-1 text-sm text-slate-700">
+                <span>Intervenant</span>
+                <select
+                  className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm"
+                  value={taskIntervenantId}
+                  onChange={(event) => setTaskIntervenantId(event.target.value)}
+                >
+                  <option value="">Non affecte</option>
+                  {intervenants.map((intervenant) => (
+                    <option key={intervenant.id} value={intervenant.id}>
+                      {intervenant.nom}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
+
+            <div className="grid gap-3 md:grid-cols-3">
+              <label className="block space-y-1 text-sm text-slate-700">
+                <span>Quantite</span>
+                <input
+                  className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"
+                  inputMode="decimal"
+                  value={taskQty}
+                  onChange={(event) => setTaskQty(event.target.value)}
+                />
+              </label>
+              <label className="block space-y-1 text-sm text-slate-700">
+                <span>Unite</span>
+                <input
+                  className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"
+                  value={taskUnit}
+                  onChange={(event) => setTaskUnit(event.target.value)}
+                  placeholder="m2, u, h..."
+                />
+              </label>
+              <label className="block space-y-1 text-sm text-slate-700">
+                <span>Temps prevu (h)</span>
+                <input
+                  className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"
+                  inputMode="decimal"
+                  value={taskHours}
+                  onChange={(event) => setTaskHours(event.target.value)}
+                />
+              </label>
+            </div>
+
+            <div className="flex justify-end gap-2 border-t border-slate-200 pt-4">
               <button
                 type="button"
                 onClick={() => setTaskDrawerOpen(false)}
-                className="rounded-xl border border-slate-200 px-3 py-2 text-sm hover:bg-slate-50"
+                className="rounded-xl border border-slate-200 px-4 py-2 text-sm hover:bg-slate-50"
+                disabled={savingTask}
               >
-                Fermer
+                Annuler
+              </button>
+              <button
+                type="submit"
+                className="rounded-xl bg-slate-900 px-4 py-2 text-sm text-white hover:bg-slate-800 disabled:opacity-50"
+                disabled={savingTask}
+              >
+                {savingTask ? "Creation..." : "Creer la tache"}
               </button>
             </div>
-
-            <form onSubmit={saveTask} className="mt-5 space-y-4">
-              <label className="block space-y-1 text-sm text-slate-700">
-                <span>Intitule de la tache</span>
-                <input
-                  className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"
-                  value={taskTitle}
-                  onChange={(event) => setTaskTitle(event.target.value)}
-                  placeholder="Ex: Pose receveur douche"
-                />
-              </label>
-
-              <div className="grid gap-3 md:grid-cols-2">
-                <label className="block space-y-1 text-sm text-slate-700">
-                  <span>Lot</span>
-                  <input
-                    className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"
-                    value={taskLot}
-                    onChange={(event) => setTaskLot(event.target.value)}
-                    placeholder="Ex: Plomberie"
-                  />
-                </label>
-                <label className="block space-y-1 text-sm text-slate-700">
-                  <span>Intervenant</span>
-                  <select
-                    className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm"
-                    value={taskIntervenantId}
-                    onChange={(event) => setTaskIntervenantId(event.target.value)}
-                  >
-                    <option value="">Non affecte</option>
-                    {intervenants.map((intervenant) => (
-                      <option key={intervenant.id} value={intervenant.id}>
-                        {intervenant.nom}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-              </div>
-
-              <div className="grid gap-3 md:grid-cols-3">
-                <label className="block space-y-1 text-sm text-slate-700">
-                  <span>Quantite</span>
-                  <input
-                    className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"
-                    inputMode="decimal"
-                    value={taskQty}
-                    onChange={(event) => setTaskQty(event.target.value)}
-                  />
-                </label>
-                <label className="block space-y-1 text-sm text-slate-700">
-                  <span>Unite</span>
-                  <input
-                    className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"
-                    value={taskUnit}
-                    onChange={(event) => setTaskUnit(event.target.value)}
-                    placeholder="m2, u, h..."
-                  />
-                </label>
-                <label className="block space-y-1 text-sm text-slate-700">
-                  <span>Temps prevu (h)</span>
-                  <input
-                    className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"
-                    inputMode="decimal"
-                    value={taskHours}
-                    onChange={(event) => setTaskHours(event.target.value)}
-                  />
-                </label>
-              </div>
-
-              <div className="flex justify-end gap-2 border-t border-slate-200 pt-4">
-                <button
-                  type="button"
-                  onClick={() => setTaskDrawerOpen(false)}
-                  className="rounded-xl border border-slate-200 px-4 py-2 text-sm hover:bg-slate-50"
-                  disabled={savingTask}
-                >
-                  Annuler
-                </button>
-                <button
-                  type="submit"
-                  className="rounded-xl bg-slate-900 px-4 py-2 text-sm text-white hover:bg-slate-800 disabled:opacity-50"
-                  disabled={savingTask}
-                >
-                  {savingTask ? "Creation..." : "Creer la tache"}
-                </button>
-              </div>
-            </form>
-          </aside>
-        </div>
+          </form>
+        </Drawer>
       ) : null}
 
       <DevisImportDrawer
