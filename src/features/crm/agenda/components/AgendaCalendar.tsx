@@ -98,6 +98,10 @@ export function AgendaCalendar({ events, onSelect, onCreate }: { events: AgendaE
     setAnchor(next);
   }
 
+  function handleEmptyDayAction(dayEvents: AgendaEvent[]) {
+    if (dayEvents.length === 0) onCreate();
+  }
+
   const currentMonth = anchor.getMonth();
   const today = dateKey(new Date());
 
@@ -133,14 +137,16 @@ export function AgendaCalendar({ events, onSelect, onCreate }: { events: AgendaE
           const outsideMonth = view === "month" && parseDateKey(day).getMonth() !== currentMonth;
           const isToday = day === today;
           return (
-            <button
+            <div
               key={day}
-              type="button"
-              onClick={() => {
-                if (dayEvents.length === 0) onCreate();
+              role="button"
+              tabIndex={0}
+              onDoubleClick={() => handleEmptyDayAction(dayEvents)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") handleEmptyDayAction(dayEvents);
               }}
               className={[
-                "min-h-[150px] border-b border-r border-slate-200 bg-white p-2 text-left align-top transition hover:bg-blue-50/30",
+                "min-h-[150px] border-b border-r border-slate-200 bg-white p-2 text-left align-top transition hover:bg-blue-50/30 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-inset",
                 outsideMonth ? "bg-slate-50/80 text-slate-400" : "",
                 view !== "day" ? "last:border-r-0" : "",
               ].join(" ")}
@@ -150,7 +156,7 @@ export function AgendaCalendar({ events, onSelect, onCreate }: { events: AgendaE
                 {dayEvents.slice(0, view === "month" ? 3 : 8).map((event) => <EventPill key={event.id} event={event} onSelect={onSelect} />)}
                 {dayEvents.length > (view === "month" ? 3 : 8) ? <div className="text-xs font-medium text-slate-500">+{dayEvents.length - (view === "month" ? 3 : 8)} autre(s)</div> : null}
               </div>
-            </button>
+            </div>
           );
         })}
       </div>
