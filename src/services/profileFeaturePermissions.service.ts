@@ -19,6 +19,7 @@ export type ProfileFeaturePermissionKey =
   | "fournisseurs"
   | "entreprise_parametres"
   | "task_library_preparation"
+  | "chatbot_raul"
   | "crm_quote_create"
   | "crm_quote_edit"
   | "crm_quote_margin"
@@ -91,6 +92,7 @@ const PROFILE_PERMISSION_KEYS: ProfileFeaturePermissionKey[] = [
   "fournisseurs",
   "entreprise_parametres",
   "task_library_preparation",
+  "chatbot_raul",
   "crm_quote_create",
   "crm_quote_edit",
   "crm_quote_margin",
@@ -136,6 +138,7 @@ export const BUSINESS_PROFILE_PERMISSION_PRESETS: BusinessProfilePermissionPrese
       crm_quote_margin: false,
       crm_quote_price_edit: true,
       crm_quote_delete: false,
+      chatbot_raul: false,
       chantier_financier_view: false,
       chantier_financier_edit: false,
       chantier_financier_margin: false,
@@ -171,6 +174,7 @@ export const BUSINESS_PROFILE_PERMISSION_PRESETS: BusinessProfilePermissionPrese
       intervenants: true,
       bibliotheque: true,
       task_library_preparation: true,
+      chatbot_raul: true,
       fournisseurs: true,
       chantier_financier_view: true,
       chantier_financier_edit: false,
@@ -200,6 +204,7 @@ export const BUSINESS_PROFILE_PERMISSION_PRESETS: BusinessProfilePermissionPrese
       crm_quote_delete: false,
       crm_quote_send: false,
       crm_quote_accept_refuse: false,
+      chatbot_raul: false,
       fournisseurs: true,
       statistiques: true,
       rapports: true,
@@ -236,6 +241,7 @@ export const BUSINESS_PROFILE_PERMISSION_PRESETS: BusinessProfilePermissionPrese
       crm_quote_accept_refuse: false,
       bibliotheque: true,
       documents: true,
+      chatbot_raul: false,
       chantier_financier_view: false,
       chantier_financier_edit: false,
       chantier_financier_margin: false,
@@ -262,6 +268,7 @@ export const BUSINESS_PROFILE_PERMISSION_PRESETS: BusinessProfilePermissionPrese
       documents: true,
       journal_chantier: true,
       validation_qualite: true,
+      chatbot_raul: true,
       crm: false,
       intervenants: false,
       fournisseurs: false,
@@ -288,6 +295,7 @@ export const BUSINESS_PROFILE_PERMISSION_PRESETS: BusinessProfilePermissionPrese
       journal_chantier: true,
       validation_qualite: true,
       temps: false,
+      chatbot_raul: false,
       crm: false,
       intervenants: false,
       fournisseurs: false,
@@ -313,6 +321,7 @@ const EXTRA_PERMISSION_DEFINITIONS: Record<Exclude<ProfileFeaturePermissionKey, 
   fournisseurs: { key: "fournisseurs", label: "Fournisseurs", description: "Accès à la base fournisseurs et aux réglages d’approvisionnement." },
   entreprise_parametres: { key: "entreprise_parametres", label: "Paramètres entreprise", description: "Accès aux paramètres entreprise, fonctionnalités et profils." },
   task_library_preparation: { key: "task_library_preparation", label: "Bibliothèque avancée", description: "Accès aux ratios matériaux, au matériel à prévoir et aux estimatifs avancés des modèles de tâches." },
+  chatbot_raul: { key: "chatbot_raul", label: "Chatbot Raul", description: "Accès à l'assistant conversationnel Raul dans Batipro." },
   crm_quote_create: { key: "crm_quote_create", label: "Creer devis CRM", description: "Creation de devis BTP depuis le CRM et rattachement aux clients/opportunites." },
   crm_quote_edit: { key: "crm_quote_edit", label: "Modifier devis CRM", description: "Modification des lots, ouvrages, quantites, TVA et conditions des devis." },
   crm_quote_margin: { key: "crm_quote_margin", label: "Voir marges devis", description: "Affichage des debourses, marges par ligne, par lot et globales." },
@@ -385,8 +394,12 @@ async function assertCurrentUserCanManageProfilePermissions() {
 
 function mergePresetTemplates(rows: Array<{ preset_id: string; permissions: unknown }> | null | undefined): BusinessProfilePermissionPreset[] {
   const byId = new Map<string, ProfileFeaturePermissions>();
-  for (const row of rows ?? []) byId.set(String(row.preset_id), normalizePresetPermissions(normalizePermissions(row.permissions)));
-  return BUSINESS_PROFILE_PERMISSION_PRESETS.map((preset) => ({ ...preset, permissions: byId.get(preset.id) ?? normalizePresetPermissions(preset.permissions) }));
+  for (const row of rows ?? []) byId.set(String(row.preset_id), normalizePermissions(row.permissions));
+  return BUSINESS_PROFILE_PERMISSION_PRESETS.map((preset) => {
+    const defaultPermissions = normalizePresetPermissions(preset.permissions);
+    const savedPermissions = byId.get(preset.id);
+    return { ...preset, permissions: savedPermissions ? { ...defaultPermissions, ...savedPermissions } : defaultPermissions };
+  });
 }
 
 export function isCompanyModulePermissionKey(key: ProfileFeaturePermissionKey): key is CompanyFeatureModuleId {
@@ -474,6 +487,11 @@ export function getProfilePermissionSections(): ProfilePermissionSection[] {
         EXTRA_PERMISSION_DEFINITIONS.fournisseurs,
         EXTRA_PERMISSION_DEFINITIONS.entreprise_parametres,
       ],
+    },
+    {
+      id: "assistants",
+      label: "Assistants",
+      permissions: [EXTRA_PERMISSION_DEFINITIONS.chatbot_raul],
     },
     ...chantierSections,
     {
