@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent } from "react";
-import { Bot, MessageCircle, Send, X } from "lucide-react";
+import { HardHat, Send, X } from "lucide-react";
 import { supabase } from "../lib/supabaseClient";
 import {
   getCurrentProfileFeaturePermissions,
@@ -19,6 +19,20 @@ const WELCOME_MESSAGE: RaulChatMessage = {
 function getErrorMessage(error: unknown) {
   const message = String((error as { message?: string } | null)?.message ?? "").trim();
   return message || "Raul n'a pas pu répondre pour le moment.";
+}
+
+function RaulAvatar({ compact = false }: { compact?: boolean }) {
+  return (
+    <span
+      className={[
+        "grid shrink-0 place-items-center rounded-xl border border-yellow-300 bg-yellow-400 text-slate-950 shadow-sm shadow-yellow-950/10",
+        compact ? "h-8 w-8" : "h-9 w-9",
+      ].join(" ")}
+      aria-hidden="true"
+    >
+      <HardHat className={compact ? "h-4 w-4" : "h-5 w-5"} />
+    </span>
+  );
 }
 
 export default function RaulChatbotWidget() {
@@ -93,12 +107,10 @@ export default function RaulChatbotWidget() {
         <section className="mb-3 flex h-[min(560px,calc(100dvh-7rem))] w-[min(380px,calc(100vw-2rem))] flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl shadow-slate-950/20">
           <header className="flex items-center justify-between gap-3 border-b border-slate-200 bg-slate-950 px-4 py-3 text-white">
             <div className="flex min-w-0 items-center gap-3">
-              <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-blue-500 text-white">
-                <Bot className="h-5 w-5" />
-              </span>
+              <RaulAvatar />
               <div className="min-w-0">
                 <div className="truncate text-sm font-semibold">Raul</div>
-                <div className="truncate text-xs text-slate-300">Assistant Batipro</div>
+                <div className="truncate text-xs text-slate-300">Assistant chantier Batipro</div>
               </div>
             </div>
             <button
@@ -159,10 +171,10 @@ export default function RaulChatbotWidget() {
       <button
         type="button"
         onClick={() => setOpen((value) => !value)}
-        className="ml-auto flex h-12 items-center gap-2 rounded-2xl bg-slate-950 px-4 text-sm font-semibold text-white shadow-xl shadow-slate-950/20 hover:bg-slate-800"
+        className="ml-auto flex h-12 items-center gap-2 rounded-2xl bg-slate-950 px-3 pr-4 text-sm font-semibold text-white shadow-xl shadow-slate-950/20 hover:bg-slate-800"
         aria-label={open ? "Fermer Raul" : "Ouvrir Raul"}
       >
-        <MessageCircle className="h-5 w-5" />
+        <RaulAvatar compact />
         Raul
       </button>
     </div>
