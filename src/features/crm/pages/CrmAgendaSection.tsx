@@ -8,11 +8,9 @@ import {
   type GoogleCalendarConnectionStatus,
   type GoogleCalendarSyncEvent,
 } from "../../../services/googleCalendar.service";
-import { AgendaActionCenter } from "../agenda/components/AgendaActionCenter";
 import { AgendaCalendar } from "../agenda/components/AgendaCalendar";
 import { AgendaEventDrawer } from "../agenda/components/AgendaEventDrawer";
 import { AgendaHeader } from "../agenda/components/AgendaHeader";
-import { AgendaKpiGrid } from "../agenda/components/AgendaKpiGrid";
 import { useAgendaData } from "../agenda/hooks/useAgendaData";
 import type { AgendaEvent } from "../agenda/types";
 
@@ -144,7 +142,7 @@ export default function CrmAgendaSection({
   }
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-3">
       <AgendaHeader
         connection={connection}
         syncBusy={syncBusy}
@@ -155,13 +153,9 @@ export default function CrmAgendaSection({
         onDisconnectGoogle={disconnectGoogle}
         onSyncGoogle={syncGoogle}
       />
-      {syncNotice ? <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-700">{syncNotice}</div> : null}
-      {syncError ? <div className="rounded-2xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">{syncError}</div> : null}
-      <AgendaKpiGrid kpis={agenda.kpis} />
-      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_380px]">
-        <AgendaCalendar events={agenda.events} onSelect={setSelectedEvent} onCreate={onAppointment} />
-        <AgendaActionCenter today={agenda.todayEvents} overdue={agenda.overdueTasks} week={agenda.weekEvents} relances={agenda.relances} onSelect={setSelectedEvent} />
-      </div>
+      {syncNotice ? <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-2 text-sm text-emerald-700">{syncNotice}</div> : null}
+      {syncError ? <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-2 text-sm text-red-700">{syncError}</div> : null}
+      <AgendaCalendar events={agenda.events} onSelect={setSelectedEvent} onCreate={onAppointment} />
       <AgendaEventDrawer
         event={selectedEvent}
         onClose={() => setSelectedEvent(null)}
