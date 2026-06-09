@@ -99,14 +99,14 @@ export function AgendaCalendar({ events, onSelect, onCreate }: { events: AgendaE
   }
 
   const currentMonth = anchor.getMonth();
+  const today = dateKey(new Date());
 
   return (
-    <section className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm shadow-slate-950/[0.03]">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+    <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm shadow-slate-950/[0.03]">
+      <div className="flex flex-col gap-3 border-b border-slate-200 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <div className="text-[11px] font-semibold uppercase tracking-[0.22em] text-blue-700">Calendrier</div>
-          <h3 className="mt-1 text-lg font-semibold text-slate-950">Vue commerciale</h3>
-          <div className="mt-1 text-sm text-slate-500">{view === "month" ? new Intl.DateTimeFormat("fr-FR", { month: "long", year: "numeric" }).format(anchor) : formatRange(days)}</div>
+          <h3 className="text-lg font-semibold text-slate-950">{view === "month" ? new Intl.DateTimeFormat("fr-FR", { month: "long", year: "numeric" }).format(anchor) : formatRange(days)}</h3>
+          <div className="mt-0.5 text-xs text-slate-500">{events.length} événement(s) Batipro</div>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <div className="flex rounded-xl border border-slate-200 bg-white p-1">
@@ -121,36 +121,38 @@ export function AgendaCalendar({ events, onSelect, onCreate }: { events: AgendaE
               </button>
             ))}
           </div>
-          <button type="button" onClick={onCreate} className="inline-flex h-9 items-center gap-1.5 rounded-xl border border-slate-200 px-3 text-sm font-medium hover:bg-slate-50">
+          <button type="button" onClick={onCreate} className="inline-flex h-9 items-center rounded-xl border border-slate-200 px-3 text-sm font-medium hover:bg-slate-50">
             Créer
           </button>
         </div>
       </div>
 
-      <div className="mt-4 overflow-hidden rounded-2xl border border-slate-200 bg-slate-50/60">
-        {events.length === 0 ? (
-          <div className="flex h-96 flex-col items-center justify-center bg-white text-center">
-            <div className="text-3xl text-slate-300">+</div>
-            <div className="mt-3 font-semibold text-slate-900">Aucun événement</div>
-            <div className="mt-1 text-sm text-slate-500">Créez une tâche ou un rendez-vous pour alimenter le calendrier.</div>
-          </div>
-        ) : (
-          <div className={view === "day" ? "grid grid-cols-1" : "grid grid-cols-7"}>
-            {days.map((day) => {
-              const dayEvents = eventsByDay.get(day) ?? [];
-              const outsideMonth = view === "month" && parseDateKey(day).getMonth() !== currentMonth;
-              return (
-                <div key={day} className={["min-h-[150px] border-b border-r border-slate-200 bg-white p-2 last:border-r-0", outsideMonth ? "bg-slate-50/80 text-slate-400" : ""].join(" ")}>
-                  <div className="mb-2 text-xs font-semibold capitalize text-slate-600">{formatDay(day)}</div>
-                  <div className="space-y-1.5">
-                    {dayEvents.slice(0, view === "month" ? 3 : 8).map((event) => <EventPill key={event.id} event={event} onSelect={onSelect} />)}
-                    {dayEvents.length > (view === "month" ? 3 : 8) ? <div className="text-xs font-medium text-slate-500">+{dayEvents.length - (view === "month" ? 3 : 8)} autre(s)</div> : null}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        )}
+      <div className={view === "day" ? "grid grid-cols-1" : "grid grid-cols-7"}>
+        {days.map((day) => {
+          const dayEvents = eventsByDay.get(day) ?? [];
+          const outsideMonth = view === "month" && parseDateKey(day).getMonth() !== currentMonth;
+          const isToday = day === today;
+          return (
+            <button
+              key={day}
+              type="button"
+              onClick={() => {
+                if (dayEvents.length === 0) onCreate();
+              }}
+              className={[
+                "min-h-[150px] border-b border-r border-slate-200 bg-white p-2 text-left align-top transition hover:bg-blue-50/30",
+                outsideMonth ? "bg-slate-50/80 text-slate-400" : "",
+                view !== "day" ? "last:border-r-0" : "",
+              ].join(" ")}
+            >
+              <div className={["mb-2 inline-flex rounded-full px-2 py-1 text-xs font-semibold capitalize", isToday ? "bg-blue-600 text-white" : "text-slate-600"].join(" ")}>{formatDay(day)}</div>
+              <div className="space-y-1.5">
+                {dayEvents.slice(0, view === "month" ? 3 : 8).map((event) => <EventPill key={event.id} event={event} onSelect={onSelect} />)}
+                {dayEvents.length > (view === "month" ? 3 : 8) ? <div className="text-xs font-medium text-slate-500">+{dayEvents.length - (view === "month" ? 3 : 8)} autre(s)</div> : null}
+              </div>
+            </button>
+          );
+        })}
       </div>
     </section>
   );
