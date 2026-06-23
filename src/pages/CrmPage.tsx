@@ -4,7 +4,6 @@ import {
   createCrmAppointment,
   createCrmClient,
   createCrmDocument,
-  createCrmInvoice,
   createCrmPurchase,
   createCrmSav,
   createCrmTask,
@@ -45,7 +44,6 @@ import type { CrmModalKey, CrmSection } from "../features/crm/types";
 const CrmAppointmentDialog = lazy(() => import("../features/crm/dialogs/CrmAppointmentDialog"));
 const CrmClientDialog = lazy(() => import("../features/crm/dialogs/CrmClientDialog"));
 const CrmDocumentDialog = lazy(() => import("../features/crm/dialogs/CrmDocumentDialog"));
-const CrmInvoiceDialog = lazy(() => import("../features/crm/dialogs/CrmInvoiceDialog"));
 const CrmOpportunityDialog = lazy(() => import("../features/crm/dialogs/CrmOpportunityDialog"));
 const CrmProspectDialog = lazy(() => import("../features/crm/dialogs/CrmProspectDialog"));
 const CrmPurchaseDialog = lazy(() => import("../features/crm/dialogs/CrmPurchaseDialog"));
@@ -199,7 +197,7 @@ export default function CrmPage({ section = "dashboard" }: Props) {
       ) : section === "quotes" ? (
         <CrmQuotesSection rows={data.quotes} prospectById={prospectById} clientById={clientById} onCreate={createDraftQuoteAndOpen} onStatus={(row, statut) => submitSafely(async () => updateCrmQuote(row.id, { statut }))} onTransform={transformQuote} onPdf={downloadQuote} />
       ) : section === "invoices" ? (
-        <CrmInvoicesSection rows={data.invoices} clients={clientById} onCreate={() => setModal("invoice")} />
+        <CrmInvoicesSection rows={data.invoices} clients={clientById} />
       ) : section === "purchases" ? (
         <CrmPurchasesSection rows={data.purchases} chantiers={data.chantiers} onCreate={() => setModal("purchase")} />
       ) : section === "contacts" ? (
@@ -226,7 +224,6 @@ export default function CrmPage({ section = "dashboard" }: Props) {
         {modal === "appointment" ? <CrmAppointmentDialog data={data} saving={saving} initialProspect={appointmentProspect} onClose={() => { setModal(null); setAppointmentProspect(null); }} onSubmit={(payload) => submitSafely(() => createCrmAppointment(payload))} /> : null}
         {modal === "sav" ? <CrmSavDialog data={data} saving={saving} onClose={() => setModal(null)} onSubmit={(payload) => submitSafely(() => createCrmSav(payload))} /> : null}
         {modal === "document" ? <CrmDocumentDialog data={data} saving={saving} onClose={() => setModal(null)} onSubmit={(payload) => submitSafely(() => createCrmDocument(payload))} /> : null}
-        {modal === "invoice" ? <CrmInvoiceDialog data={data} saving={saving} onClose={() => setModal(null)} onSubmit={(payload) => submitSafely(() => createCrmInvoice(payload))} /> : null}
         {modal === "purchase" ? <CrmPurchaseDialog data={data} saving={saving} onClose={() => setModal(null)} onSubmit={(payload) => submitSafely(() => createCrmPurchase(payload))} /> : null}
       </Suspense>
     </div>
