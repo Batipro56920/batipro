@@ -85,7 +85,7 @@ export default function InvoicesPage() {
         eyebrow="Gestion"
         title="Factures"
         description="Suivi des factures générées depuis les devis : acompte, situation, finale et avoir."
-        actions={<div className="flex flex-wrap gap-2"><Button variant="secondary" onClick={() => void refresh(false)}><RefreshCw className="h-4 w-4" /> Rafraîchir</Button><Link to="/crm/devis" className="inline-flex h-9 items-center justify-center gap-2 rounded-xl bg-blue-600 px-3 text-sm font-medium text-white shadow-sm shadow-blue-600/15 transition hover:bg-blue-700"><ArrowRight className="h-4 w-4" /> Facturer depuis un devis</Link></div>}
+        actions={<div className="flex flex-wrap gap-2"><Button variant="secondary" onClick={() => void refresh(false)}><RefreshCw className="h-4 w-4" /> Rafraîchir</Button><Link to="/projets" className="inline-flex h-9 items-center justify-center gap-2 rounded-xl bg-blue-600 px-3 text-sm font-medium text-white shadow-sm shadow-blue-600/15 transition hover:bg-blue-700"><ArrowRight className="h-4 w-4" /> Choisir un projet à facturer</Link></div>}
       />
 
       {error ? <div className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">{error}</div> : null}
@@ -101,7 +101,7 @@ export default function InvoicesPage() {
       {!loading ? (
         <section className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm">
           <div className="mb-4 rounded-2xl border border-blue-100 bg-blue-50 p-4 text-sm text-blue-900">
-            La création d'une facture part du devis afin de conserver le client, le projet, les lignes, les montants et le lien commercial. Cette page sert au suivi, aux paiements et aux relances des factures déjà générées.
+            La création d'une facture part du devis afin de conserver le client, le projet, les lignes, les montants et le lien commercial. Depuis un projet commercial, ouvrez l'onglet Devis puis choisissez Acompte, Situation ou Finale. Cette page sert au suivi, aux paiements et aux relances des factures déjà générées.
           </div>
           <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_190px_190px]">
             <label className="relative block">
@@ -157,7 +157,7 @@ export default function InvoicesPage() {
 
         {selected ? <InvoiceEditor invoice={selected} onChange={update} onSave={save} /> : (
           <div className="rounded-3xl border border-dashed border-slate-200 bg-white p-10 text-center text-sm text-slate-500">
-            Sélectionnez une facture existante ou générez-en une depuis un devis.
+            Sélectionnez une facture existante ou choisissez un projet commercial pour facturer un devis.
           </div>
         )}
       </section> : null}
