@@ -15,6 +15,7 @@ import {
 } from "../services/cocoDirectionAssistant.service";
 import { VISIT_DRAFT_MARKER } from "../features/crm/utils/appointmentDraftStorage";
 import { useProjectsData } from "../features/projects/hooks/useProjectsData";
+import { createQuoteBuilderFromCocoDraft, saveQuoteBuilder } from "../features/quotes/builder/quoteBuilderRepository";
 
 type AiDraftHistoryEntry = {
   id: string;
@@ -109,6 +110,7 @@ export default function ProjectVisitQuotePrepPage() {
   const [aiHistoryLoading, setAiHistoryLoading] = useState(false);
   const [aiPersistenceNotice, setAiPersistenceNotice] = useState<string | null>(null);
   const [aiLoading, setAiLoading] = useState(false);
+  const [aiCreatingQuote, setAiCreatingQuote] = useState(false);
   const [aiError, setAiError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -257,14 +259,24 @@ export default function ProjectVisitQuotePrepPage() {
     if (status === "ignored") setAiDraft(null);
   }
 
-  function openQuoteReview(status: CocoControlledDraftStatus) {
-    if (!project) return;
-    if (aiDraft) void recordAiDraftStatus(aiDraft, status);
-    navigate(`/projets/${project.id}/devis/nouveau`);
+  async function createQuoteFromAiDraft() {
+    if (!project || !aiDraft || aiDraft.kind !== "visit_quote_analysis" || !aiDraft.quoteLines.length || aiCreatingQuote) return;
+    setAiCreatingQuote(true);
+    setAiError(null);
+    try {
+      const quoteDraft = createQuoteBuilderFromCocoDraft(project, aiDraft);
+      const savedQuote = await saveQuoteBuilder(quoteDraft);
+      await recordAiDraftStatus(aiDraft, "validated");
+      navigate(`/projets/${project.id}/devis/${savedQuote.id}/edit`);
+    } catch (err) {
+      setAiError(err instanceof Error ? err.message : "Impossible de creer le devis brouillon depuis COCO.");
+    } finally {
+      setAiCreatingQuote(false);
+    }
   }
 
   async function prepareAiDraft() {
-    if (!project || !appointment || aiLoading) return;
+    if (!project || !appointment || aiLoading || aiCreatingQuote) return;
     setAiLoading(true);
     setAiError(null);
     try {
@@ -279,7 +291,7 @@ export default function ProjectVisitQuotePrepPage() {
   }
 
   async function prepareChantierTasksDraft() {
-    if (!project || !appointment || !latestQuoteDraft || aiLoading) return;
+    if (!project || !appointment || !latestQuoteDraft || aiLoading || aiCreatingQuote) return;
     setAiLoading(true);
     setAiError(null);
     try {
@@ -298,7 +310,7 @@ export default function ProjectVisitQuotePrepPage() {
   }
 
   async function preparePurchaseOrderDraft() {
-    if (!project || !appointment || !latestMaterialDraft || aiLoading) return;
+    if (!project || !appointment || !latestMaterialDraft || aiLoading || aiCreatingQuote) return;
     setAiLoading(true);
     setAiError(null);
     try {
@@ -395,7 +407,7 @@ export default function ProjectVisitQuotePrepPage() {
                 <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Assistant Chiffrage / Preparation / Achats COCO</div>
                 <h2 className="mt-1 font-semibold text-slate-950">Brouillons IA apres visite</h2>
                 <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600">
-                  COCO prepare des propositions exploitables en brouillon : pre-devis, besoins materiaux, taches chantier et achats fournisseurs. Rien n'est ecrit dans le devis final, les taches ou les achats avant validation admin.
+                  COCO prepare des propositions exploitables : pre-devis, besoins materiaux, taches chantier et achats fournisseurs. Le chiffrage peut creer un devis brouillon uniquement apres validation admin.
                 </p>
               </div>
             </div>
@@ -403,7 +415,7 @@ export default function ProjectVisitQuotePrepPage() {
               <button
                 type="button"
                 onClick={() => void prepareAiDraft()}
-                disabled={aiLoading || !readyForQuote}
+                disabled={aiLoading || aiCreatingQuote || !readyForQuote}
                 className="inline-flex h-10 items-center justify-center gap-2 rounded-xl bg-slate-950 px-3 text-sm font-semibold text-white hover:bg-slate-800 disabled:bg-slate-300"
               >
                 {aiLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Wand2 className="h-4 w-4" />}
@@ -412,7 +424,7 @@ export default function ProjectVisitQuotePrepPage() {
               <button
                 type="button"
                 onClick={() => void prepareChantierTasksDraft()}
-                disabled={aiLoading || !latestQuoteDraft}
+                disabled={aiLoading || aiCreatingQuote || !latestQuoteDraft}
                 className="inline-flex h-10 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-900 hover:bg-slate-50 disabled:bg-slate-100 disabled:text-slate-400"
               >
                 {aiLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <ListChecks className="h-4 w-4" />}
@@ -421,7 +433,7 @@ export default function ProjectVisitQuotePrepPage() {
               <button
                 type="button"
                 onClick={() => void preparePurchaseOrderDraft()}
-                disabled={aiLoading || !latestMaterialDraft}
+                disabled={aiLoading || aiCreatingQuote || !latestMaterialDraft}
                 className="inline-flex h-10 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-900 hover:bg-slate-50 disabled:bg-slate-100 disabled:text-slate-400"
               >
                 {aiLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <ShoppingCart className="h-4 w-4" />}
@@ -432,14 +444,14 @@ export default function ProjectVisitQuotePrepPage() {
 
           <div className="mt-4 rounded-2xl border border-blue-100 bg-blue-50 p-3 text-sm text-blue-900">
             <div className="flex items-center gap-2 font-semibold"><ShieldCheck className="h-4 w-4" /> Productivite controlee</div>
-            <p className="mt-1 text-xs leading-5">Le brouillon aide a pre-remplir la reflexion chiffrage, preparation et achats. Creation de devis, envoi client, chantier, planning, taches definitives, bons de commande et achats restent manuels.</p>
+            <p className="mt-1 text-xs leading-5">Le brouillon aide a pre-remplir la reflexion chiffrage, preparation et achats. Apres validation admin, COCO peut creer un devis brouillon standard ; envoi client, chantier, planning, taches definitives, bons de commande et achats restent dans leurs workflows metier.</p>
           </div>
 
           <div className="mt-4 grid gap-2 md:grid-cols-4">
             {[
               ["Preparer", "Generer une proposition depuis les donnees Batipro."],
               ["Revoir", "Controler sources, hypotheses, risques et lignes."],
-              ["Valider", "Marquer le brouillon comme revu, sans creation automatique."],
+              ["Valider", "Creer le devis brouillon pour le chiffrage, ou marquer le brouillon pret pour les autres modules."],
               ["Ignorer", "Ecarter la proposition sans toucher aux donnees."],
             ].map(([label, detail]) => (
               <div key={label} className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
@@ -593,15 +605,18 @@ export default function ProjectVisitQuotePrepPage() {
               <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-4">
                 <div className="text-sm text-slate-600">
                   <div className="font-semibold text-slate-950">Validation admin obligatoire</div>
-                  <div className="mt-1 text-xs">Les actions ci-dessous ne publient pas, n'envoient pas, ne creent pas de chantier, ne creent pas de taches et ne passent pas commande automatiquement.</div>
+                  <div className="mt-1 text-xs">Le chiffrage COCO cree un devis brouillon seulement apres validation admin. Les taches, achats, envois client et planning restent dans leurs modules de validation.</div>
                 </div>
                 <div className="flex flex-wrap gap-2">
-                  <button type="button" onClick={() => markAiDraft("reviewed")} className="inline-flex h-10 items-center rounded-xl border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-900 hover:bg-slate-50">Revoir</button>
-                  <button type="button" onClick={() => markAiDraft("ignored")} className="inline-flex h-10 items-center rounded-xl border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-900 hover:bg-slate-50">Ignorer</button>
+                  <button type="button" onClick={() => markAiDraft("reviewed")} disabled={aiCreatingQuote} className="inline-flex h-10 items-center rounded-xl border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-900 hover:bg-slate-50 disabled:opacity-60">Revoir</button>
+                  <button type="button" onClick={() => markAiDraft("ignored")} disabled={aiCreatingQuote} className="inline-flex h-10 items-center rounded-xl border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-900 hover:bg-slate-50 disabled:opacity-60">Ignorer</button>
                   {aiDraft.kind === "visit_quote_analysis" ? (
-                    <button type="button" onClick={() => openQuoteReview("validated")} className="inline-flex h-10 items-center rounded-xl bg-blue-600 px-3 text-sm font-semibold text-white hover:bg-blue-700">Valider en revue devis</button>
+                    <button type="button" onClick={() => void createQuoteFromAiDraft()} disabled={aiCreatingQuote || !aiDraft.quoteLines.length} className="inline-flex h-10 items-center gap-2 rounded-xl bg-blue-600 px-3 text-sm font-semibold text-white hover:bg-blue-700 disabled:bg-slate-300">
+                      {aiCreatingQuote ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+                      Valider et creer le devis brouillon
+                    </button>
                   ) : (
-                    <button type="button" onClick={() => markAiDraft("validated")} className="inline-flex h-10 items-center rounded-xl bg-blue-600 px-3 text-sm font-semibold text-white hover:bg-blue-700">Valider le brouillon {draftKindLabel(aiDraft).toLowerCase()}</button>
+                    <button type="button" onClick={() => markAiDraft("validated")} disabled={aiCreatingQuote} className="inline-flex h-10 items-center rounded-xl bg-blue-600 px-3 text-sm font-semibold text-white hover:bg-blue-700 disabled:bg-slate-300">Valider le brouillon {draftKindLabel(aiDraft).toLowerCase()}</button>
                   )}
                 </div>
               </div>
