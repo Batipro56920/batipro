@@ -148,7 +148,7 @@ function PaymentPanel({ invoice, hasUnsavedChanges, onAdd, onRemove }: { invoice
   const [paidAt, setPaidAt] = useState(new Date().toISOString().slice(0, 10));
   const [method, setMethod] = useState<InvoicePayment["method"]>("transfer");
   const [reference, setReference] = useState("");
-  const parsedAmount = parseFrenchNumber(amount);
+  const parsedAmount = parseCommittedFrenchNumber(amount);
   const canAddPayment = parsedAmount !== null && parsedAmount > 0 && Boolean(paidAt);
 
   return (
@@ -221,7 +221,7 @@ function NumberCell({ value, onChange }: { value: number; onChange: (value: numb
       value={draft}
       onBlur={() => {
         setFocused(false);
-        const parsed = parseFrenchNumber(draft);
+        const parsed = parseCommittedFrenchNumber(draft);
         if (parsed === null) {
           setDraft(formatEditableNumber(value));
           return;
@@ -231,7 +231,7 @@ function NumberCell({ value, onChange }: { value: number; onChange: (value: numb
       onChange={(event) => {
         const nextDraft = event.target.value;
         setDraft(nextDraft);
-        const parsed = parseFrenchNumber(nextDraft);
+        const parsed = parseCommittedFrenchNumber(nextDraft);
         if (parsed !== null) onChange(parsed);
       }}
       onFocus={() => setFocused(true)}
@@ -260,6 +260,12 @@ function appendChild(nodes: BusinessDocumentNode[], parentId: string, child: Bus
 }
 
 const inputClass = "h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm outline-none focus:border-blue-300";
+
+function parseCommittedFrenchNumber(value: string) {
+  const text = value.trim();
+  if (!text || /[,.]$/.test(text)) return null;
+  return parseFrenchNumber(text);
+}
 
 function parseFrenchNumber(value: string) {
   const text = value.trim();
