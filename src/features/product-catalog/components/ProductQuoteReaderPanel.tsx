@@ -50,16 +50,17 @@ export default function ProductQuoteReaderPanel({
       />
 
       {result ? (
-        <div className="mt-3 grid gap-2 text-sm md:grid-cols-4">
+        <div className="mt-3 grid gap-2 text-sm md:grid-cols-5">
           <ImportMetric label="Lignes détectées" value={result.extracted} />
           <ImportMetric label="Produits créés" value={result.createdProducts} />
+          <ImportMetric label="Produits mis à jour" value={result.updatedProducts} />
           <ImportMetric label="Fournisseurs créés" value={result.createdSuppliers} />
           <ImportMetric label="Doublons ignorés" value={result.skippedProducts} />
           {result.products.length ? (
-            <div className="md:col-span-4 rounded-2xl border border-emerald-100 bg-white p-3 text-emerald-700">
+            <div className="rounded-2xl border border-emerald-100 bg-white p-3 text-emerald-700 md:col-span-5">
               <div className="flex items-center gap-2 font-semibold"><CheckCircle2 className="h-4 w-4" /> Import terminé</div>
               <div className="mt-1 text-xs text-emerald-700/80">
-                Derniers produits : {result.products.slice(0, 5).map((product) => product.designation).join(", ")}
+                Derniers produits traités : {result.products.slice(0, 5).map((product) => product.designation).join(", ")}
                 {result.products.length > 5 ? "..." : ""}
               </div>
             </div>
