@@ -1,10 +1,11 @@
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { ArrowLeft, BrainCircuit, CheckCircle2, ClipboardCheck, FileText, Loader2, Pencil, Plus, ShieldCheck, Wand2, XCircle } from "lucide-react";
+import { ArrowLeft, BrainCircuit, CheckCircle2, ClipboardCheck, FileText, ListChecks, Loader2, Pencil, Plus, ShieldCheck, Wand2, XCircle } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { loadCrmVisitReportDraft, type CrmVisitReportDraft } from "../services/crmVisitReports.service";
 import {
   isCurrentUserCocoAdmin,
   listCocoControlledDrafts,
+  prepareCocoChantierTasksDraftFromQuoteDraft,
   prepareCocoVisitQuoteDraft,
   saveCocoControlledDraft,
   updateCocoControlledDraftStatus,
@@ -26,11 +27,13 @@ type AiDraftHistoryEntry = {
 const AI_DRAFT_STATUS_LABELS: Record<CocoControlledDraftStatus, string> = {
   prepared: "Préparé",
   reviewed: "À revoir",
-  validated: "Envoyé en revue devis",
+  validated: "Validé en revue admin",
   ignored: "Ignoré",
 };
 
 const AI_DRAFT_SOURCE_KIND = "crm_visit_quote_analysis";
+const AI_TASK_DRAFT_SOURCE_KIND = "crm_visit_chantier_tasks_preparation";
+const AI_DRAFT_SOURCE_KINDS = [AI_DRAFT_SOURCE_KIND, AI_TASK_DRAFT_SOURCE_KIND] as const;
 
 function parseFallbackDraft(notes: string | null | undefined): CrmVisitReportDraft | null {
   if (!notes?.includes(VISIT_DRAFT_MARKER)) return null;
@@ -65,6 +68,15 @@ function statusClass(status: CocoControlledDraftStatus) {
 
 function joinOrFallback(values: string[], fallback: string) {
   return values.length ? values.join(" - ") : fallback;
+}
+
+function draftSourceKind(draft: CocoControlledDraft) {
+  return draft.kind === "tasks" ? AI_TASK_DRAFT_SOURCE_KIND : AI_DRAFT_SOURCE_KIND;
+}
+
+function draftKindLabel(draft: CocoControlledDraft) {
+  if (draft.kind === "tasks") return "Préparation chantier";
+  return "Chiffrage";
 }
 
 function localHistoryEntry(draft: CocoControlledDraft, status: CocoControlledDraftStatus): AiDraftHistoryEntry {
@@ -142,18 +154,25 @@ export default function ProjectVisitQuotePrepPage() {
     let alive = true;
     if (!aiAllowed || !project || !appointment) return;
     setAiHistoryLoading(true);
-    listCocoControlledDrafts({ sourceKind: AI_DRAFT_SOURCE_KIND, sourceId: appointment.id, projectId: project.id, limit: 8 })
-      .then((records) => {
+    Promise.all(
+      AI_DRAFT_SOURCE_KINDS.map((sourceKind) => listCocoControlledDrafts({ sourceKind, sourceId: appointment.id, projectId: project.id, limit: 8 })),
+    )
+      .then((groups) => {
         if (!alive) return;
-        setAiDraftHistory(records.map((record) => ({
-          id: record.draft.id,
-          persistedId: record.id,
-          draft: record.draft,
-          status: record.status,
-          createdAt: record.createdAt,
-          persistence: "supabase" as const,
-        })));
-        setAiPersistenceNotice(records.length ? null : "Aucun historique IA persistant pour cette visite.");
+        const entries = groups
+          .flat()
+          .map((record) => ({
+            id: record.draft.id,
+            persistedId: record.id,
+            draft: record.draft,
+            status: record.status,
+            createdAt: record.createdAt,
+            persistence: "supabase" as const,
+          }))
+          .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt))
+          .slice(0, 10);
+        setAiDraftHistory(entries);
+        setAiPersistenceNotice(entries.length ? null : "Aucun historique IA persistant pour cette visite.");
       })
       .catch((err) => {
         if (!alive) return;
@@ -172,11 +191,15 @@ export default function ProjectVisitQuotePrepPage() {
   const attachments = draft?.attachments ?? [];
   const missingPrices = tasks.filter((line) => !Number(line.priceHintHt ?? 0)).length;
   const readyForQuote = tasks.length > 0;
+  const latestQuoteDraft = useMemo(() => {
+    if (aiDraft?.kind === "visit_quote_analysis" && aiDraft.quoteLines.length) return aiDraft;
+    return aiDraftHistory.find((entry) => entry.draft.kind === "visit_quote_analysis" && entry.status !== "ignored" && entry.draft.quoteLines.length)?.draft ?? null;
+  }, [aiDraft, aiDraftHistory]);
 
   function setLocalDraftHistory(entry: AiDraftHistoryEntry) {
     setAiDraftHistory((previous) => {
       const withoutSameDraft = previous.filter((item) => item.id !== entry.id);
-      return [entry, ...withoutSameDraft].slice(0, 8);
+      return [entry, ...withoutSameDraft].slice(0, 10);
     });
   }
 
@@ -202,7 +225,7 @@ export default function ProjectVisitQuotePrepPage() {
       }
 
       const saved = await saveCocoControlledDraft({
-        sourceKind: AI_DRAFT_SOURCE_KIND,
+        sourceKind: draftSourceKind(draftToUpdate),
         sourceId: appointment.id,
         projectId: project.id,
         draft: draftToUpdate,
@@ -241,6 +264,25 @@ export default function ProjectVisitQuotePrepPage() {
       await recordAiDraftStatus(prepared, "prepared");
     } catch (err) {
       setAiError(err instanceof Error ? err.message : "Impossible de preparer le brouillon IA.");
+    } finally {
+      setAiLoading(false);
+    }
+  }
+
+  async function prepareChantierTasksDraft() {
+    if (!project || !appointment || !latestQuoteDraft || aiLoading) return;
+    setAiLoading(true);
+    setAiError(null);
+    try {
+      const prepared = await prepareCocoChantierTasksDraftFromQuoteDraft({
+        quoteDraft: latestQuoteDraft,
+        project: project as unknown as Record<string, unknown>,
+        appointment: appointment as unknown as Record<string, unknown>,
+      });
+      setAiDraft(prepared);
+      await recordAiDraftStatus(prepared, "prepared");
+    } catch (err) {
+      setAiError(err instanceof Error ? err.message : "Impossible de preparer les taches chantier brouillon.");
     } finally {
       setAiLoading(false);
     }
@@ -322,34 +364,45 @@ export default function ProjectVisitQuotePrepPage() {
             <div className="flex items-start gap-3">
               <div className="rounded-2xl bg-slate-950 p-2 text-white"><BrainCircuit className="h-5 w-5" /></div>
               <div>
-                <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Assistant Chiffrage COCO</div>
-                <h2 className="mt-1 font-semibold text-slate-950">Brouillon IA apres visite</h2>
+                <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Assistant Chiffrage / Preparation COCO</div>
+                <h2 className="mt-1 font-semibold text-slate-950">Brouillons IA apres visite</h2>
                 <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600">
-                  COCO prepare une proposition de pre-devis avec sources, hypotheses, risques, temps et besoins materiaux. Rien n'est ecrit dans le devis final avant revue admin.
+                  COCO prepare des propositions exploitables en brouillon : pre-devis, besoins materiaux et taches chantier. Rien n'est ecrit dans le devis final ni dans les taches chantier avant validation admin.
                 </p>
               </div>
             </div>
-            <button
-              type="button"
-              onClick={() => void prepareAiDraft()}
-              disabled={aiLoading || !readyForQuote}
-              className="inline-flex h-10 items-center justify-center gap-2 rounded-xl bg-slate-950 px-3 text-sm font-semibold text-white hover:bg-slate-800 disabled:bg-slate-300"
-            >
-              {aiLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Wand2 className="h-4 w-4" />}
-              Preparer brouillon IA
-            </button>
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => void prepareAiDraft()}
+                disabled={aiLoading || !readyForQuote}
+                className="inline-flex h-10 items-center justify-center gap-2 rounded-xl bg-slate-950 px-3 text-sm font-semibold text-white hover:bg-slate-800 disabled:bg-slate-300"
+              >
+                {aiLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Wand2 className="h-4 w-4" />}
+                Pre-devis IA
+              </button>
+              <button
+                type="button"
+                onClick={() => void prepareChantierTasksDraft()}
+                disabled={aiLoading || !latestQuoteDraft}
+                className="inline-flex h-10 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-900 hover:bg-slate-50 disabled:bg-slate-100 disabled:text-slate-400"
+              >
+                {aiLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <ListChecks className="h-4 w-4" />}
+                Taches chantier brouillon
+              </button>
+            </div>
           </div>
 
           <div className="mt-4 rounded-2xl border border-blue-100 bg-blue-50 p-3 text-sm text-blue-900">
             <div className="flex items-center gap-2 font-semibold"><ShieldCheck className="h-4 w-4" /> Productivite controlee</div>
-            <p className="mt-1 text-xs leading-5">Le brouillon peut aider a pre-remplir la reflexion chiffrage. Validation, creation de devis, envoi client, chantier, planning et achats restent manuels.</p>
+            <p className="mt-1 text-xs leading-5">Le brouillon aide a pre-remplir la reflexion chiffrage et preparation. Creation de devis, envoi client, chantier, planning, taches definitives et achats restent manuels.</p>
           </div>
 
           <div className="mt-4 grid gap-2 md:grid-cols-4">
             {[
               ["Preparer", "Generer une proposition depuis les donnees Batipro."],
               ["Revoir", "Controler sources, hypotheses, risques et lignes."],
-              ["Valider", "Basculer vers la revue devis, sans creation automatique."],
+              ["Valider", "Marquer le brouillon comme revu, sans creation automatique."],
               ["Ignorer", "Ecarter la proposition sans toucher aux donnees."],
             ].map(([label, detail]) => (
               <div key={label} className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
@@ -366,7 +419,8 @@ export default function ProjectVisitQuotePrepPage() {
             <div className="mt-5 space-y-4">
               <div className="flex flex-col gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-4 lg:flex-row lg:items-start lg:justify-between">
                 <div>
-                  <h3 className="font-semibold text-slate-950">{aiDraft.title}</h3>
+                  <div className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">{draftKindLabel(aiDraft)}</div>
+                  <h3 className="mt-1 font-semibold text-slate-950">{aiDraft.title}</h3>
                   <p className="mt-1 text-xs text-slate-500">Genere le {new Date(aiDraft.generatedAt).toLocaleString("fr-FR")}</p>
                 </div>
                 <span className={["inline-flex w-fit items-center rounded-full border px-3 py-1 text-xs font-semibold", draftConfidenceClass(aiDraft.confidence)].join(" ")}>Confiance {aiDraft.confidence}</span>
@@ -395,6 +449,27 @@ export default function ProjectVisitQuotePrepPage() {
                   <ul className="mt-2 space-y-1 text-xs leading-5">
                     {aiDraft.risks.map((risk) => <li key={risk}>- {risk}</li>)}
                   </ul>
+                </div>
+              ) : null}
+
+              {aiDraft.chantierTasks.length ? (
+                <div className="overflow-hidden rounded-2xl border border-slate-200">
+                  <div className="border-b border-slate-200 bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-950">Taches chantier proposees en brouillon</div>
+                  <div className="divide-y divide-slate-100">
+                    {aiDraft.chantierTasks.map((task) => (
+                      <div key={`${task.suggestedOrder}-${task.title}`} className="grid gap-3 p-4 text-sm xl:grid-cols-[60px_minmax(0,1.2fr)_120px_120px] xl:items-start">
+                        <div className="text-xs font-semibold text-slate-400">#{task.suggestedOrder}</div>
+                        <div>
+                          <div className="font-semibold text-slate-950">{task.title}</div>
+                          <div className="mt-1 text-xs leading-5 text-slate-500">{task.lot || "Lot a confirmer"}{task.templateTitle ? ` - Bibliotheque: ${task.templateTitle}` : ""}</div>
+                          {task.materials.length ? <div className="mt-1 text-xs text-blue-700">Materiaux: {task.materials.join(" - ")}</div> : null}
+                          {task.pointsToVerify.length ? <div className="mt-1 text-xs text-amber-700">A verifier: {task.pointsToVerify.join(" - ")}</div> : null}
+                        </div>
+                        <div className="text-slate-600">{task.quantity ?? "Qte ?"} {task.unit ?? ""}</div>
+                        <div className="text-slate-600">{task.estimatedHours !== null ? `${task.estimatedHours.toLocaleString("fr-FR")} h` : "Temps a confirmer"}</div>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               ) : null}
 
@@ -450,12 +525,16 @@ export default function ProjectVisitQuotePrepPage() {
               <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-4">
                 <div className="text-sm text-slate-600">
                   <div className="font-semibold text-slate-950">Validation admin obligatoire</div>
-                  <div className="mt-1 text-xs">Les actions ci-dessous ne publient pas, n'envoient pas et ne creent pas de chantier automatiquement.</div>
+                  <div className="mt-1 text-xs">Les actions ci-dessous ne publient pas, n'envoient pas, ne creent pas de chantier et ne creent pas de taches automatiquement.</div>
                 </div>
                 <div className="flex flex-wrap gap-2">
                   <button type="button" onClick={() => markAiDraft("reviewed")} className="inline-flex h-10 items-center rounded-xl border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-900 hover:bg-slate-50">Revoir</button>
                   <button type="button" onClick={() => markAiDraft("ignored")} className="inline-flex h-10 items-center rounded-xl border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-900 hover:bg-slate-50">Ignorer</button>
-                  <button type="button" onClick={() => openQuoteReview("validated")} className="inline-flex h-10 items-center rounded-xl bg-blue-600 px-3 text-sm font-semibold text-white hover:bg-blue-700">Valider en revue devis</button>
+                  {aiDraft.kind === "tasks" ? (
+                    <button type="button" onClick={() => markAiDraft("validated")} className="inline-flex h-10 items-center rounded-xl bg-blue-600 px-3 text-sm font-semibold text-white hover:bg-blue-700">Valider le brouillon preparation</button>
+                  ) : (
+                    <button type="button" onClick={() => openQuoteReview("validated")} className="inline-flex h-10 items-center rounded-xl bg-blue-600 px-3 text-sm font-semibold text-white hover:bg-blue-700">Valider en revue devis</button>
+                  )}
                 </div>
               </div>
             </div>
@@ -471,7 +550,7 @@ export default function ProjectVisitQuotePrepPage() {
                 <div key={`${entry.id}-${entry.status}`} className="flex flex-col gap-2 rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm sm:flex-row sm:items-center sm:justify-between">
                   <div>
                     <div className="font-semibold text-slate-950">{entry.draft.title}</div>
-                    <div className="mt-1 text-xs text-slate-500">{new Date(entry.createdAt).toLocaleString("fr-FR")} - {entry.draft.quoteLines.length} ligne(s), {entry.draft.materialNeeds.length} besoin(s) materiaux - {entry.persistence === "supabase" ? "historique persistant" : "local"}</div>
+                    <div className="mt-1 text-xs text-slate-500">{new Date(entry.createdAt).toLocaleString("fr-FR")} - {draftKindLabel(entry.draft)} - {entry.draft.quoteLines.length} ligne(s), {entry.draft.chantierTasks.length} tache(s), {entry.draft.materialNeeds.length} besoin(s) materiaux - {entry.persistence === "supabase" ? "historique persistant" : "local"}</div>
                   </div>
                   <span className={["inline-flex w-fit rounded-full border px-3 py-1 text-xs font-semibold", statusClass(entry.status)].join(" ")}>{AI_DRAFT_STATUS_LABELS[entry.status]}</span>
                 </div>
