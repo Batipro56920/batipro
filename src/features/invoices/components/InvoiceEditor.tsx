@@ -25,6 +25,8 @@ type InvoiceEditorProps = {
 export function InvoiceEditor({ invoice, hasUnsavedChanges, onUnsavedChange, onChange, onSave }: InvoiceEditorProps) {
   const [previewOpen, setPreviewOpen] = useState(false);
   const [sendOpen, setSendOpen] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
   const document = invoice.document;
   const totals = document.totals ?? calculateDocumentTotals(document);
   const rows = useMemo(() => flattenDocumentNodes(document.nodes), [document.nodes]);
@@ -32,6 +34,7 @@ export function InvoiceEditor({ invoice, hasUnsavedChanges, onUnsavedChange, onC
 
   function updateDocument(patch: Partial<BusinessDocument>) {
     const nextDocument = { ...document, ...patch };
+    setSaveError(null);
     onUnsavedChange(invoice.id, true);
     onChange({ ...invoice, document: { ...nextDocument, totals: calculateDocumentTotals(nextDocument) }, updatedAt: new Date().toISOString() });
   }
@@ -54,20 +57,35 @@ export function InvoiceEditor({ invoice, hasUnsavedChanges, onUnsavedChange, onC
   }
 
   function addPayment(payment: Omit<InvoicePayment, "id">) {
+    setSaveError(null);
     onUnsavedChange(invoice.id, true);
     onChange(addInvoicePayment(invoice, payment));
   }
 
   function removePayment(paymentId: string) {
+    setSaveError(null);
     onUnsavedChange(invoice.id, true);
     onChange(removeInvoicePayment(invoice, paymentId));
   }
 
   async function save() {
+    if (saving) return;
+    setSaveError(null);
     const validation = validateBusinessDocument(document);
-    if (!validation.success) throw new Error(validation.error.issues.map((issue) => issue.message).join(", "));
-    await onSave(invoice);
-    onUnsavedChange(invoice.id, false);
+    if (!validation.success) {
+      setSaveError(validation.error.issues.map((issue) => issue.message).join(", "));
+      return;
+    }
+
+    setSaving(true);
+    try {
+      await onSave(invoice);
+      onUnsavedChange(invoice.id, false);
+    } catch (err) {
+      setSaveError(getErrorMessage(err, "Enregistrement de la facture impossible."));
+    } finally {
+      setSaving(false);
+    }
   }
 
   return (
@@ -87,9 +105,10 @@ export function InvoiceEditor({ invoice, hasUnsavedChanges, onUnsavedChange, onC
             <Button variant="secondary" onClick={() => setPreviewOpen((open) => !open)}>Aperçu</Button>
             <Button variant="secondary" onClick={() => downloadBusinessDocumentPdf(document)}><Download className="h-4 w-4" /> PDF</Button>
             <Button variant="secondary" onClick={() => setSendOpen(true)}><Send className="h-4 w-4" /> Envoyer</Button>
-            <Button variant="primary" onClick={save}><Save className="h-4 w-4" /> Enregistrer</Button>
+            <Button variant="primary" disabled={saving} onClick={save}><Save className="h-4 w-4" /> {saving ? "Enregistrement..." : "Enregistrer"}</Button>
           </div>
         </div>
+        {saveError ? <div className="mt-4 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700">{saveError}</div> : null}
       </header>
 
       <section className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_320px]">
@@ -309,6 +328,12 @@ function formatDate(value: string) {
   const parts = dateOnly.split("-");
   if (parts.length === 3) return `${parts[2]}/${parts[1]}/${parts[0]}`;
   return new Date(value).toLocaleDateString("fr-FR");
+}
+
+function getErrorMessage(err: unknown, fallback: string) {
+  if (err instanceof Error && err.message) return err.message;
+  if (typeof err === "string" && err.trim()) return err;
+  return fallback;
 }
 
 function formatCurrency(value: number) {
