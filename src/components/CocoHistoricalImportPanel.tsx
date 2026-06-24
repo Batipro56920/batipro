@@ -26,7 +26,13 @@ type ParsedHistoricalLine = {
 function parseFrenchNumber(value: unknown): number | null {
   const raw = String(value ?? "").replace(/\u00A0/g, " ").trim();
   if (!raw) return null;
-  const normalized = raw.replace(/\s/g, "").replace(/,/g, ".");
+  const compact = raw.replace(/\s/g, "");
+  const commaIndex = compact.lastIndexOf(",");
+  const dotIndex = compact.lastIndexOf(".");
+  const decimalIndex = Math.max(commaIndex, dotIndex);
+  const integerPart = decimalIndex >= 0 ? compact.slice(0, decimalIndex).replace(/[,.]/g, "") : compact.replace(/[,.]/g, "");
+  const decimalPart = decimalIndex >= 0 ? compact.slice(decimalIndex + 1).replace(/[,.]/g, "") : "";
+  const normalized = decimalPart ? `${integerPart}.${decimalPart}` : integerPart;
   const number = Number(normalized);
   return Number.isFinite(number) ? number : null;
 }
