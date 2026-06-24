@@ -1,7 +1,8 @@
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { ArrowLeft, ClipboardCheck, FileText, Pencil, Plus } from "lucide-react";
+import { ArrowLeft, BrainCircuit, CheckCircle2, ClipboardCheck, FileText, Loader2, Pencil, Plus, ShieldCheck, Wand2, XCircle } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { loadCrmVisitReportDraft, type CrmVisitReportDraft } from "../services/crmVisitReports.service";
+import { isCurrentUserCocoAdmin, prepareCocoVisitQuoteDraft, type CocoControlledDraft } from "../services/cocoDirectionAssistant.service";
 import { VISIT_DRAFT_MARKER } from "../features/crm/utils/appointmentDraftStorage";
 import { useProjectsData } from "../features/projects/hooks/useProjectsData";
 
@@ -18,6 +19,21 @@ function lineQuantity(line: NonNullable<CrmVisitReportDraft["lines"]>[number]) {
   return `${Number(line.quantity ?? 0).toLocaleString("fr-FR")} ${line.unit ?? "u"}`;
 }
 
+function formatCurrency(value: number | null | undefined) {
+  if (!Number.isFinite(Number(value))) return "A completer";
+  return `${Number(value).toLocaleString("fr-FR", { maximumFractionDigits: 0 })} EUR HT`;
+}
+
+function draftConfidenceClass(confidence: string) {
+  if (confidence === "haute") return "border-emerald-200 bg-emerald-50 text-emerald-800";
+  if (confidence === "faible") return "border-amber-200 bg-amber-50 text-amber-800";
+  return "border-blue-200 bg-blue-50 text-blue-800";
+}
+
+function joinOrFallback(values: string[], fallback: string) {
+  return values.length ? values.join(" - ") : fallback;
+}
+
 export default function ProjectVisitQuotePrepPage() {
   const { id, visitId } = useParams();
   const navigate = useNavigate();
@@ -26,6 +42,24 @@ export default function ProjectVisitQuotePrepPage() {
   const appointment = project?.appointments.find((item) => item.id === visitId) ?? null;
   const [draft, setDraft] = useState<CrmVisitReportDraft | null>(null);
   const [draftLoading, setDraftLoading] = useState(true);
+  const [aiAllowed, setAiAllowed] = useState(false);
+  const [aiDraft, setAiDraft] = useState<CocoControlledDraft | null>(null);
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiError, setAiError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let alive = true;
+    isCurrentUserCocoAdmin()
+      .then((allowed) => {
+        if (alive) setAiAllowed(allowed);
+      })
+      .catch(() => {
+        if (alive) setAiAllowed(false);
+      });
+    return () => {
+      alive = false;
+    };
+  }, []);
 
   useEffect(() => {
     let alive = true;
@@ -50,11 +84,29 @@ export default function ProjectVisitQuotePrepPage() {
     };
   }, [appointment, visitId]);
 
+  useEffect(() => {
+    setAiDraft(null);
+    setAiError(null);
+  }, [project?.id, appointment?.id, draft]);
+
   const sections = useMemo(() => (draft?.lines ?? []).filter((line) => line.type === "section"), [draft?.lines]);
   const tasks = useMemo(() => (draft?.lines ?? []).filter((line) => line.type === "task"), [draft?.lines]);
   const attachments = draft?.attachments ?? [];
   const missingPrices = tasks.filter((line) => !Number(line.priceHintHt ?? 0)).length;
   const readyForQuote = tasks.length > 0;
+
+  async function prepareAiDraft() {
+    if (!project || !appointment || aiLoading) return;
+    setAiLoading(true);
+    setAiError(null);
+    try {
+      setAiDraft(await prepareCocoVisitQuoteDraft({ project: project as unknown as Record<string, unknown>, appointment: appointment as unknown as Record<string, unknown>, visitDraft: draft as unknown as Record<string, unknown> | null }));
+    } catch (err) {
+      setAiError(err instanceof Error ? err.message : "Impossible de preparer le brouillon IA.");
+    } finally {
+      setAiLoading(false);
+    }
+  }
 
   if (loading || draftLoading) {
     return <div className="rounded-3xl border bg-white p-8 text-center text-sm text-slate-500">Chargement de la preparation devis...</div>;
@@ -125,6 +177,137 @@ export default function ProjectVisitQuotePrepPage() {
           </div>
         </div>
       </section>
+
+      {aiAllowed ? (
+        <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+            <div className="flex items-start gap-3">
+              <div className="rounded-2xl bg-slate-950 p-2 text-white"><BrainCircuit className="h-5 w-5" /></div>
+              <div>
+                <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Assistant Chiffrage COCO</div>
+                <h2 className="mt-1 font-semibold text-slate-950">Brouillon IA apres visite</h2>
+                <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600">
+                  COCO prepare une proposition de pre-devis avec sources, hypotheses, risques, temps et besoins materiaux. Rien n'est ecrit dans le devis final avant revue admin.
+                </p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => void prepareAiDraft()}
+              disabled={aiLoading || !readyForQuote}
+              className="inline-flex h-10 items-center justify-center gap-2 rounded-xl bg-slate-950 px-3 text-sm font-semibold text-white hover:bg-slate-800 disabled:bg-slate-300"
+            >
+              {aiLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Wand2 className="h-4 w-4" />}
+              Preparer brouillon IA
+            </button>
+          </div>
+
+          <div className="mt-4 rounded-2xl border border-blue-100 bg-blue-50 p-3 text-sm text-blue-900">
+            <div className="flex items-center gap-2 font-semibold"><ShieldCheck className="h-4 w-4" /> Productivite controlee</div>
+            <p className="mt-1 text-xs leading-5">Le brouillon peut aider a pre-remplir la reflexion chiffrage. Validation, creation de devis, envoi client, chantier, planning et achats restent manuels.</p>
+          </div>
+
+          {aiError ? <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">{aiError}</div> : null}
+
+          {aiDraft ? (
+            <div className="mt-5 space-y-4">
+              <div className="flex flex-col gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-4 lg:flex-row lg:items-start lg:justify-between">
+                <div>
+                  <h3 className="font-semibold text-slate-950">{aiDraft.title}</h3>
+                  <p className="mt-1 text-xs text-slate-500">Genere le {new Date(aiDraft.generatedAt).toLocaleString("fr-FR")}</p>
+                </div>
+                <span className={["inline-flex w-fit items-center rounded-full border px-3 py-1 text-xs font-semibold", draftConfidenceClass(aiDraft.confidence)].join(" ")}>Confiance {aiDraft.confidence}</span>
+              </div>
+
+              <div className="grid gap-3 lg:grid-cols-3">
+                <div className="rounded-2xl border border-slate-200 p-4">
+                  <div className="text-sm font-semibold text-slate-950">Sources utilisees</div>
+                  <ul className="mt-2 space-y-1 text-xs leading-5 text-slate-600">
+                    {(aiDraft.sourceSummary.length ? aiDraft.sourceSummary : ["Visite commerciale", "Bibliotheque Batipro", "Fournisseurs actifs"]).map((item) => <li key={item}>- {item}</li>)}
+                  </ul>
+                </div>
+                <div className="rounded-2xl border border-slate-200 p-4">
+                  <div className="text-sm font-semibold text-slate-950">Hypotheses</div>
+                  <p className="mt-2 text-xs leading-5 text-slate-600">{joinOrFallback(aiDraft.hypotheses, "Aucune hypothese explicite retournee.")}</p>
+                </div>
+                <div className="rounded-2xl border border-slate-200 p-4">
+                  <div className="text-sm font-semibold text-slate-950">Points a verifier</div>
+                  <p className="mt-2 text-xs leading-5 text-slate-600">{joinOrFallback(aiDraft.pointsToVerify, "Aucun point specifique retourne.")}</p>
+                </div>
+              </div>
+
+              {aiDraft.risks.length ? (
+                <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950">
+                  <div className="font-semibold">Risques signales</div>
+                  <ul className="mt-2 space-y-1 text-xs leading-5">
+                    {aiDraft.risks.map((risk) => <li key={risk}>- {risk}</li>)}
+                  </ul>
+                </div>
+              ) : null}
+
+              <div className="overflow-hidden rounded-2xl border border-slate-200">
+                <div className="border-b border-slate-200 bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-950">Lignes de pre-devis proposees</div>
+                {aiDraft.quoteLines.length ? (
+                  <div className="divide-y divide-slate-100">
+                    {aiDraft.quoteLines.map((line, index) => (
+                      <div key={`${line.title}-${index}`} className="grid gap-3 p-4 text-sm xl:grid-cols-[minmax(0,1.2fr)_110px_120px_130px] xl:items-start">
+                        <div>
+                          <div className="font-semibold text-slate-950">{line.title}</div>
+                          <div className="mt-1 text-xs leading-5 text-slate-500">{line.lot || "Lot a confirmer"} - Source: {line.source}</div>
+                          {line.templateTitle ? <div className="mt-1 text-xs text-blue-700">Bibliotheque: {line.templateTitle}</div> : null}
+                          {line.pointsToVerify.length ? <div className="mt-1 text-xs text-amber-700">A verifier: {line.pointsToVerify.join(" - ")}</div> : null}
+                        </div>
+                        <div className="text-slate-600">{line.quantity.toLocaleString("fr-FR")} {line.unit ?? "u"}</div>
+                        <div className="text-slate-600">{line.estimatedHours !== null ? `${line.estimatedHours.toLocaleString("fr-FR")} h` : "Temps a confirmer"}</div>
+                        <div className="font-semibold text-slate-950">{formatCurrency(line.totalHt ?? (line.unitPriceHt !== null ? line.unitPriceHt * line.quantity : null))}</div>
+                      </div>
+                    ))}
+                  </div>
+                ) : <div className="p-4 text-sm text-slate-500">Aucune ligne proposee par l'IA.</div>}
+              </div>
+
+              <div className="grid gap-4 xl:grid-cols-2">
+                <div className="rounded-2xl border border-slate-200 p-4">
+                  <div className="font-semibold text-slate-950">Besoins materiaux / fournisseurs</div>
+                  <div className="mt-3 space-y-2">
+                    {aiDraft.materialNeeds.length ? aiDraft.materialNeeds.map((need, index) => (
+                      <div key={`${need.designation}-${index}`} className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm">
+                        <div className="font-semibold text-slate-950">{need.designation}</div>
+                        <div className="mt-1 text-xs text-slate-500">{need.quantity ?? "Quantite a confirmer"} {need.unit ?? ""} - {need.supplierName ?? "Fournisseur a choisir"}</div>
+                      </div>
+                    )) : <div className="text-sm text-slate-500">Aucun besoin materiel structure retourne.</div>}
+                  </div>
+                </div>
+                <div className="rounded-2xl border border-slate-200 p-4">
+                  <div className="font-semibold text-slate-950">Actions proposees</div>
+                  <div className="mt-3 space-y-2">
+                    {aiDraft.proposedActions.length ? aiDraft.proposedActions.map((action, index) => (
+                      <div key={`${action.label}-${index}`} className="rounded-xl border border-slate-200 bg-white p-3 text-sm">
+                        <div className="flex items-center gap-2 font-semibold text-slate-950">
+                          {action.actionType === "ignore" ? <XCircle className="h-4 w-4 text-slate-400" /> : <CheckCircle2 className="h-4 w-4 text-emerald-600" />}
+                          {action.label}
+                        </div>
+                        <div className="mt-1 text-xs leading-5 text-slate-500">{action.module} - {action.detail}</div>
+                      </div>
+                    )) : <div className="text-sm text-slate-500">Aucune action structuree retournee.</div>}
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                <div className="text-sm text-slate-600">
+                  <div className="font-semibold text-slate-950">Validation admin obligatoire</div>
+                  <div className="mt-1 text-xs">Le bouton ouvre la revue devis existante. Il ne publie pas, n'envoie pas et ne cree pas de chantier automatiquement.</div>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <button type="button" onClick={() => setAiDraft(null)} className="inline-flex h-10 items-center rounded-xl border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-900 hover:bg-slate-50">Ignorer</button>
+                  <button type="button" onClick={() => navigate(`/projets/${project.id}/devis/nouveau`)} className="inline-flex h-10 items-center rounded-xl bg-blue-600 px-3 text-sm font-semibold text-white hover:bg-blue-700">Revoir / valider dans le devis</button>
+                </div>
+              </div>
+            </div>
+          ) : null}
+        </section>
+      ) : null}
 
       <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
         <div className="flex items-center justify-between gap-3">
