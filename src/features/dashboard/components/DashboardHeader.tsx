@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import { BriefcaseBusiness, CalendarPlus, FileText, UserPlus } from "lucide-react";
+import { BrainCircuit, BriefcaseBusiness, CalendarPlus, FileText, UserPlus } from "lucide-react";
 import { Button } from "../../../components/ui/button";
 
 export function DashboardHeader() {
@@ -14,6 +14,12 @@ export function DashboardHeader() {
             <p className="mt-1 max-w-2xl text-sm leading-6 text-slate-500">Voici l'état de votre activité aujourd'hui.</p>
           </div>
           <div className="flex flex-wrap gap-2">
+            <Link to="/assistant-direction">
+              <Button variant="secondary" size="md">
+                <BrainCircuit className="h-4 w-4" />
+                Assistant Direction
+              </Button>
+            </Link>
             <Link to="/projets">
               <Button variant="primary" size="md">
                 <FileText className="h-4 w-4" />
