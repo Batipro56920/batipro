@@ -68,21 +68,22 @@ function isCocoAdminEmail(email: string | null | undefined): boolean {
   return !!email && COCO_ADMIN_EMAILS.has(String(email).trim().toLowerCase());
 }
 
-function hasExplicitCocoPermission(profile: CurrentUserProfile | null): boolean {
-  return profile?.feature_permissions?.[PROFILE_PERMISSION_KEY] === true;
+function isCocoPermissionDisabled(profile: CurrentUserProfile | null): boolean {
+  return profile?.feature_permissions?.[PROFILE_PERMISSION_KEY] === false;
 }
 
 export function isCocoAdminProfile(profile: CurrentUserProfile | null): boolean {
-  return isAdminProfile(profile) && (hasExplicitCocoPermission(profile) || isCocoAdminEmail(profile?.email));
+  return isAdminProfile(profile) && !isCocoPermissionDisabled(profile);
 }
 
 export async function isCurrentUserCocoAdmin(): Promise<boolean> {
-  return isCocoAdminProfile(await getCurrentUserProfile());
+  const profile = await getCurrentUserProfile();
+  return isCocoAdminProfile(profile) || isCocoAdminEmail(profile?.email);
 }
 
 export async function loadCocoDirectionContext(): Promise<CocoDirectionContext> {
   const profile = await getCurrentUserProfile();
-  if (!isCocoAdminProfile(profile)) throw new Error("Assistant Direction COCO réservé au compte admin COCO.");
+  if (!isCocoAdminProfile(profile) && !isCocoAdminEmail(profile?.email)) throw new Error("Assistant Direction COCO réservé aux administrateurs.");
 
   const today = new Date().toISOString().slice(0, 10);
   const todayTime = dateTime(today);
