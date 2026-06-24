@@ -20,7 +20,7 @@ function lineQuantity(line: NonNullable<CrmVisitReportDraft["lines"]>[number]) {
 }
 
 function formatCurrency(value: number | null | undefined) {
-  if (!Number.isFinite(Number(value))) return "A completer";
+  if (value === null || value === undefined || !Number.isFinite(Number(value))) return "A completer";
   return `${Number(value).toLocaleString("fr-FR", { maximumFractionDigits: 0 })} EUR HT`;
 }
 
