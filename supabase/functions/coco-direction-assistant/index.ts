@@ -124,24 +124,11 @@ function sanitizeHistory(history: unknown): Array<{ role: ChatRole; content: str
     .slice(-12);
 }
 
-function cocoAdminEmails() {
-  return new Set(
-    optionalEnv("COCO_ADMIN_EMAILS")
-      .split(",")
-      .map((value) => value.trim().toLowerCase())
-      .filter(Boolean),
-  );
-}
-
-function isCocoAdminEmail(email: string | null | undefined) {
-  return !!email && cocoAdminEmails().has(String(email).trim().toLowerCase());
-}
-
-function profileCanUseAssistant(profile: ProfileRow | null, email: string | null | undefined) {
+function profileCanUseAssistant(profile: ProfileRow | null) {
   const role = String(profile?.role ?? "").trim().toUpperCase();
   if (role !== "ADMIN") return false;
   const permissions = profile?.feature_permissions && typeof profile.feature_permissions === "object" ? profile.feature_permissions : {};
-  return permissions[PROFILE_PERMISSION_KEY] !== false || isCocoAdminEmail(email);
+  return permissions[PROFILE_PERMISSION_KEY] !== false;
 }
 
 function extractOutputText(payload: any) {
@@ -172,7 +159,7 @@ async function assertCanUseAssistant(req: Request) {
   if (userError || !user?.id) return { allowed: false, status: 401, error: "Session utilisateur invalide." };
   const { data: profile, error: profileError } = await admin.from("profiles").select("role, feature_permissions").eq("id", user.id).maybeSingle();
   if (profileError) return { allowed: false, status: 500, error: "Lecture du profil impossible." };
-  if (!profileCanUseAssistant(profile as ProfileRow | null, user.email)) return { allowed: false, status: 403, error: "Assistant Direction COCO réservé aux administrateurs." };
+  if (!profileCanUseAssistant(profile as ProfileRow | null)) return { allowed: false, status: 403, error: "Assistant Direction COCO réservé aux administrateurs." };
   return { allowed: true, status: 200, error: null };
 }
 
