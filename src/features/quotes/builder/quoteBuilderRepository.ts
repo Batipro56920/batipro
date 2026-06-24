@@ -248,7 +248,7 @@ function cocoDraftToVisitQuoteSource(project: ProjectRecord, draft: CocoControll
   const lines: NonNullable<CrmVisitQuoteSource["lines"]> = [];
   const sectionIdsByLot = new Map<string, string>();
 
-  draft.quoteLines.forEach((line, index) => {
+  draft.quoteLines.forEach((line) => {
     const lot = cleanText(line.lot) ?? "Chiffrage COCO";
     let sectionId = sectionIdsByLot.get(lot);
     if (!sectionId) {
