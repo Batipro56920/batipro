@@ -24,6 +24,7 @@ export type ExtractedQuoteProduct = {
 export type ProductQuoteImportResult = {
   extracted: number;
   createdProducts: number;
+  updatedProducts: number;
   skippedProducts: number;
   createdSuppliers: number;
   products: ProductCatalogItem[];
@@ -50,33 +51,46 @@ export async function importProductsFromQuoteText(
 
   const extractedProducts = await extractProducts(cleanedText);
   const supplierByName = new Map(suppliers.map((supplier) => [normalizeKey(supplier.name), supplier]));
-  const productKeys = new Set(existingProducts.map((product) => productIdentityKey(product)));
+  const productByKey = buildProductIdentityIndex(existingProducts);
   const importedProducts: ProductCatalogItem[] = [];
   let createdSuppliers = 0;
+  let createdProducts = 0;
+  let updatedProducts = 0;
   let skippedProducts = 0;
 
   for (const extracted of extractedProducts) {
     const designation = normalizeText(extracted.designation);
     if (!designation) continue;
 
-    const duplicateKey = extractedProductIdentityKey(extracted);
-    if (productKeys.has(duplicateKey)) {
-      skippedProducts += 1;
-      continue;
-    }
-
+    const existingProduct = findExistingProduct(extracted, productByKey);
     const supplier = await resolveSupplier(extracted.supplier_name, supplierByName);
     if (supplier?.created) createdSuppliers += 1;
+
+    if (existingProduct) {
+      const nextProduct = mergeExtractedProduct(existingProduct, extracted, supplier?.row ?? null);
+      if (!nextProduct) {
+        skippedProducts += 1;
+        continue;
+      }
+
+      const savedProduct = await saveProductCatalogItem(nextProduct);
+      importedProducts.push(savedProduct);
+      indexProduct(savedProduct, productByKey);
+      updatedProducts += 1;
+      continue;
+    }
 
     const draft = toProductDraft(extracted, supplier?.row ?? null);
     const savedProduct = await saveProductCatalogItem(draft);
     importedProducts.push(savedProduct);
-    productKeys.add(productIdentityKey(savedProduct));
+    indexProduct(savedProduct, productByKey);
+    createdProducts += 1;
   }
 
   return {
     extracted: extractedProducts.length,
-    createdProducts: importedProducts.length,
+    createdProducts,
+    updatedProducts,
     skippedProducts,
     createdSuppliers,
     products: importedProducts,
@@ -138,6 +152,75 @@ function toProductDraft(extracted: ExtractedQuoteProduct, supplier: SupplierRow 
   };
 }
 
+function mergeExtractedProduct(
+  product: ProductCatalogItem,
+  extracted: ExtractedQuoteProduct,
+  supplier: SupplierRow | null,
+): ProductCatalogItem | null {
+  const purchasePrice = positiveNumber(extracted.purchase_price_ht);
+  const salePrice = positiveNumber(extracted.sale_price_ht) ?? computeSalePrice(purchasePrice, product.targetMarginRate || DEFAULT_MARGIN_RATE);
+  const supplierPrice = buildSupplierPrice(extracted, supplier, purchasePrice);
+  let changed = false;
+
+  const next: ProductCatalogItem = { ...product, supplierPrices: [...product.supplierPrices] };
+
+  if (!next.mainSupplierId && supplier?.id) {
+    next.mainSupplierId = supplier.id;
+    next.mainSupplierName = supplier.name;
+    changed = true;
+  } else if (!next.mainSupplierName && normalizeText(extracted.supplier_name)) {
+    next.mainSupplierName = normalizeText(extracted.supplier_name);
+    changed = true;
+  }
+
+  const supplierReference = normalizeText(extracted.supplier_reference);
+  if (!next.manufacturerReference && supplierReference) {
+    next.manufacturerReference = supplierReference;
+    changed = true;
+  }
+
+  const brand = normalizeText(extracted.brand);
+  if (!next.brand && brand) {
+    next.brand = brand;
+    changed = true;
+  }
+
+  const category = normalizeText(extracted.category);
+  if (!next.category && category) {
+    next.category = category;
+    changed = true;
+  }
+
+  const unit = normalizeUnit(extracted.unit);
+  if (next.unit === "u" && unit !== "u") {
+    next.unit = unit;
+    changed = true;
+  }
+
+  const vatRate = positiveNumber(extracted.vat_rate);
+  if ((!next.vatRate || next.vatRate === 0) && vatRate !== null) {
+    next.vatRate = vatRate;
+    changed = true;
+  }
+
+  if (next.standardPurchasePriceHt === 0 && purchasePrice !== null) {
+    next.standardPurchasePriceHt = purchasePrice;
+    changed = true;
+  }
+
+  if (next.recommendedSalePriceHt === 0 && salePrice !== null) {
+    next.recommendedSalePriceHt = salePrice;
+    changed = true;
+  }
+
+  if (supplierPrice && !hasSupplierPrice(next.supplierPrices, supplierPrice)) {
+    next.supplierPrices.push(supplierPrice);
+    changed = true;
+  }
+
+  return changed ? next : null;
+}
+
 function buildSupplierPrice(
   extracted: ExtractedQuoteProduct,
   supplier: SupplierRow | null,
@@ -159,20 +242,68 @@ function buildSupplierPrice(
   };
 }
 
-function productIdentityKey(product: ProductCatalogItem) {
-  return [
-    normalizeKey(product.designation),
-    normalizeKey(product.mainSupplierName),
-    normalizeKey(product.manufacturerReference),
-  ].join("|");
+function buildProductIdentityIndex(products: ProductCatalogItem[]) {
+  const index = new Map<string, ProductCatalogItem>();
+  products.forEach((product) => indexProduct(product, index));
+  return index;
 }
 
-function extractedProductIdentityKey(product: ExtractedQuoteProduct) {
-  return [
-    normalizeKey(product.designation),
-    normalizeKey(product.supplier_name),
-    normalizeKey(product.supplier_reference),
-  ].join("|");
+function indexProduct(product: ProductCatalogItem, index: Map<string, ProductCatalogItem>) {
+  for (const key of productIdentityKeys(product)) {
+    index.set(key, product);
+  }
+}
+
+function findExistingProduct(product: ExtractedQuoteProduct, index: Map<string, ProductCatalogItem>) {
+  for (const key of extractedProductIdentityKeys(product)) {
+    const existing = index.get(key);
+    if (existing) return existing;
+  }
+  return null;
+}
+
+function productIdentityKeys(product: ProductCatalogItem) {
+  const designation = normalizeKey(product.designation);
+  const reference = normalizeKey(product.manufacturerReference);
+  const keys = new Set<string>();
+
+  addProductIdentityKey(keys, designation, product.mainSupplierName, reference);
+  for (const supplierPrice of product.supplierPrices) {
+    addProductIdentityKey(keys, designation, supplierPrice.supplierName, reference);
+  }
+  if (reference) addProductIdentityKey(keys, designation, null, reference);
+
+  return Array.from(keys);
+}
+
+function extractedProductIdentityKeys(product: ExtractedQuoteProduct) {
+  const designation = normalizeKey(product.designation);
+  const reference = normalizeKey(product.supplier_reference);
+  const keys = new Set<string>();
+
+  addProductIdentityKey(keys, designation, product.supplier_name, reference);
+  if (reference) addProductIdentityKey(keys, designation, null, reference);
+
+  return Array.from(keys);
+}
+
+function addProductIdentityKey(keys: Set<string>, designation: string, supplierName: unknown, reference: string) {
+  if (!designation) return;
+  const supplier = normalizeKey(supplierName);
+  if (!supplier && !reference) return;
+  keys.add([designation, supplier, reference].join("|"));
+}
+
+function hasSupplierPrice(prices: ProductSupplierPrice[], candidate: ProductSupplierPrice) {
+  return prices.some((price) => {
+    const sameSupplier = candidate.supplierId
+      ? price.supplierId === candidate.supplierId
+      : normalizeKey(price.supplierName) === normalizeKey(candidate.supplierName);
+    return sameSupplier
+      && price.priceHt === candidate.priceHt
+      && normalizeKey(price.packaging) === normalizeKey(candidate.packaging)
+      && (price.minimumQuantity ?? null) === (candidate.minimumQuantity ?? null);
+  });
 }
 
 function normalizeText(value: unknown): string | null {
