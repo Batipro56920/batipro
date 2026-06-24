@@ -275,7 +275,7 @@ serve(async (req) => {
     }
   }
 
-  const message = normalizeMessage(body.message, 4000);
+  const message = normalizeMessage(body.message, 12000);
   if (!message) return json({ error: "Message manquant." }, 400);
   const result = await callOpenAI({
     instructions: optionalEnv("OPENAI_COCO_DIRECTION_SYSTEM_PROMPT") || DEFAULT_SYSTEM_PROMPT,
