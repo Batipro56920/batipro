@@ -151,7 +151,10 @@ function PaymentPanel({ invoice, hasUnsavedChanges, onAdd, onRemove }: { invoice
   const [method, setMethod] = useState<InvoicePayment["method"]>("transfer");
   const [reference, setReference] = useState("");
   const parsedAmount = parseCommittedFrenchNumber(amount);
-  const canAddPayment = parsedAmount !== null && parsedAmount > 0 && Boolean(paidAt);
+  const remainingAmount = getRemainingAmount(invoice);
+  const isInvoiceSettled = remainingAmount <= 0;
+  const exceedsRemainingAmount = !isInvoiceSettled && parsedAmount !== null && parsedAmount > remainingAmount;
+  const canAddPayment = parsedAmount !== null && parsedAmount > 0 && Boolean(paidAt) && !isInvoiceSettled && !exceedsRemainingAmount;
 
   useEffect(() => {
     setAmount("");
@@ -165,7 +168,7 @@ function PaymentPanel({ invoice, hasUnsavedChanges, onAdd, onRemove }: { invoice
       <div className="flex items-start justify-between gap-3">
         <div>
           <div className="font-semibold text-slate-950">Paiements</div>
-          <div className="mt-2 text-slate-500">Encaissé : {formatCurrency(getPaidAmount(invoice))} · Reste : {formatCurrency(getRemainingAmount(invoice))}</div>
+          <div className="mt-2 text-slate-500">Encaissé : {formatCurrency(getPaidAmount(invoice))} · Reste : {formatCurrency(remainingAmount)}</div>
         </div>
         {hasUnsavedChanges ? <span className="rounded-full bg-amber-100 px-2.5 py-1 text-xs font-semibold text-amber-800">Non enregistré</span> : null}
       </div>
@@ -190,6 +193,10 @@ function PaymentPanel({ invoice, hasUnsavedChanges, onAdd, onRemove }: { invoice
       </div>
       <div className="mt-4 grid gap-2">
         <input className={inputClass} inputMode="decimal" placeholder="Montant" value={amount} onChange={(event) => setAmount(event.target.value)} />
+        <div className="text-xs text-slate-500">
+          {isInvoiceSettled ? "Cette facture est déjà soldée." : `Reste dû actuel : ${formatCurrency(remainingAmount)}`}
+        </div>
+        {exceedsRemainingAmount ? <div className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs font-medium text-red-700">Le montant saisi dépasse le reste dû.</div> : null}
         <input className={inputClass} type="date" value={paidAt} onChange={(event) => setPaidAt(event.target.value)} />
         <select className={inputClass} value={method} onChange={(event) => setMethod(event.target.value as InvoicePayment["method"])}>
           <option value="transfer">Virement</option>
