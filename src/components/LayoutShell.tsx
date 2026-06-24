@@ -4,6 +4,7 @@ import { Link, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { Bell, CircleHelp, Menu, Plus, Search, UserRound, X } from "lucide-react";
 import Sidebar from "./Sidebar";
 import RaulChatbotWidget from "./RaulChatbotWidget";
+import CocoDirectionAssistantWidget from "./CocoDirectionAssistantWidget";
 import { supabase } from "../lib/supabaseClient";
 import { getCompanySettings } from "../services/companySettings.service";
 import { useI18n } from "../i18n";
@@ -189,10 +190,10 @@ export default function LayoutShell() {
           </div>
         </main>
       </div>
+      <CocoDirectionAssistantWidget />
       <RaulChatbotWidget />
     </div>
   );
 }
-
 
 
