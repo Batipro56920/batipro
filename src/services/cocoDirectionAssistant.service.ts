@@ -11,8 +11,6 @@ export type CocoDirectionContext = {
   datasets: Record<string, Array<Record<string, unknown>>>;
 };
 
-const COCO_NAME_PATTERN = /(^|[\s._-])coco($|[\s._-])/i;
-
 export const COCO_DIRECTION_QUICK_QUESTIONS = [
   { label: "Point hebdomadaire entreprise", prompt: "Fais-moi un point hebdomadaire de direction avec priorités, risques et décisions à prendre." },
   { label: "Carnet de commandes suffisant ?", prompt: "Analyse si le carnet de commandes semble suffisant pour les prochaines semaines et où relancer la prospection." },
@@ -64,10 +62,10 @@ function allowedCocoEmails(): Set<string> {
 
 export function isCocoAdminProfile(profile: CurrentUserProfile | null): boolean {
   if (!isAdminProfile(profile)) return false;
-  const email = text(profile?.email)?.toLowerCase() ?? "";
-  const name = text(profile?.display_name)?.toLowerCase() ?? "";
   const emails = allowedCocoEmails();
-  return Boolean(email && emails.has(email)) || COCO_NAME_PATTERN.test(email) || COCO_NAME_PATTERN.test(name);
+  if (!emails.size) return true;
+  const email = text(profile?.email)?.toLowerCase() ?? "";
+  return Boolean(email && emails.has(email));
 }
 
 export async function isCurrentUserCocoAdmin(): Promise<boolean> {
@@ -76,7 +74,7 @@ export async function isCurrentUserCocoAdmin(): Promise<boolean> {
 
 export async function loadCocoDirectionContext(): Promise<CocoDirectionContext> {
   const profile = await getCurrentUserProfile();
-  if (!isCocoAdminProfile(profile)) throw new Error("Assistant Direction COCO réservé au compte admin COCO.");
+  if (!isCocoAdminProfile(profile)) throw new Error("Assistant Direction COCO réservé aux admins autorisés.");
 
   const today = new Date().toISOString().slice(0, 10);
   const todayTime = dateTime(today);
