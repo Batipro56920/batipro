@@ -49,6 +49,23 @@ export type CocoChantierTaskDraft = {
   pointsToVerify: string[];
   confidence: CocoDraftConfidence;
 };
+export type CocoPurchaseOrderLineDraft = {
+  designation: string;
+  quantity: number | null;
+  unit: string | null;
+  sourceMaterialNeed: string;
+  confidence: CocoDraftConfidence;
+  pointsToVerify: string[];
+};
+export type CocoPurchaseOrderDraft = {
+  supplierId: string | null;
+  supplierName: string | null;
+  supplierCity: string | null;
+  title: string;
+  lines: CocoPurchaseOrderLineDraft[];
+  pointsToVerify: string[];
+  confidence: CocoDraftConfidence;
+};
 export type CocoDraftAction = {
   label: string;
   module: string;
@@ -69,6 +86,7 @@ export type CocoControlledDraft = {
   quoteLines: CocoVisitQuoteDraftLine[];
   materialNeeds: CocoMaterialNeedDraft[];
   chantierTasks: CocoChantierTaskDraft[];
+  purchaseOrders: CocoPurchaseOrderDraft[];
   proposedActions: CocoDraftAction[];
   adminValidationRequired: true;
   finalWriteBlocked: true;
@@ -461,6 +479,22 @@ function normalizeDraft(raw: Partial<CocoControlledDraft> | null | undefined): C
       pointsToVerify: safeArray(task?.pointsToVerify).map(String).filter(Boolean),
       confidence: normalizeDraftConfidence(task?.confidence),
     })),
+    purchaseOrders: safeArray(raw?.purchaseOrders).map((order: any) => ({
+      supplierId: text(order?.supplierId),
+      supplierName: text(order?.supplierName),
+      supplierCity: text(order?.supplierCity),
+      title: text(order?.title) ?? "Bon de commande fournisseur brouillon",
+      lines: safeArray(order?.lines).map((line: any) => ({
+        designation: text(line?.designation) ?? "Materiau a commander",
+        quantity: line?.quantity === null || line?.quantity === undefined ? null : number(line.quantity),
+        unit: text(line?.unit),
+        sourceMaterialNeed: text(line?.sourceMaterialNeed) ?? text(line?.designation) ?? "Besoin materiau COCO",
+        confidence: normalizeDraftConfidence(line?.confidence),
+        pointsToVerify: safeArray(line?.pointsToVerify).map(String).filter(Boolean),
+      })),
+      pointsToVerify: safeArray(order?.pointsToVerify).map(String).filter(Boolean),
+      confidence: normalizeDraftConfidence(order?.confidence),
+    })),
     proposedActions: safeArray(raw?.proposedActions).map((action: any) => ({
       label: text(action?.label) ?? "Revoir la proposition",
       module: text(action?.module) ?? "Assistant Direction COCO",
@@ -481,6 +515,27 @@ function lowerConfidence(values: CocoDraftConfidence[]): CocoDraftConfidence {
 
 function compactUnique(values: Array<string | null | undefined>): string[] {
   return Array.from(new Set(values.map((value) => text(value)).filter((value): value is string => Boolean(value))));
+}
+
+function normalizeSupplierName(value: string | null | undefined): string {
+  return String(value ?? "").trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+}
+
+function findSupplierForNeed(need: CocoMaterialNeedDraft, suppliers: SupplierRow[]): SupplierRow | null {
+  if (need.supplierId) {
+    const byId = suppliers.find((supplier) => supplier.id === need.supplierId);
+    if (byId) return byId;
+  }
+  const needSupplier = normalizeSupplierName(need.supplierName);
+  if (needSupplier) {
+    const byName = suppliers.find((supplier) => normalizeSupplierName(supplier.name) === needSupplier || normalizeSupplierName(supplier.name).includes(needSupplier));
+    if (byName) return byName;
+  }
+  const designation = normalizeSupplierName(`${need.designation} ${need.source}`);
+  return suppliers.find((supplier) => {
+    const specialty = normalizeSupplierName(supplier.specialty);
+    return Boolean(specialty && designation.includes(specialty));
+  }) ?? null;
 }
 
 export async function prepareCocoVisitQuoteDraft(input: { project: Record<string, unknown>; appointment: Record<string, unknown>; visitDraft: Record<string, unknown> | null }): Promise<CocoControlledDraft> {
@@ -609,6 +664,7 @@ export async function prepareCocoChantierTasksDraftFromQuoteDraft(input: { quote
     quoteLines: quoteDraft.quoteLines,
     materialNeeds: quoteDraft.materialNeeds,
     chantierTasks,
+    purchaseOrders: [],
     proposedActions: [
       {
         label: "Revoir les taches chantier brouillon",
@@ -623,6 +679,102 @@ export async function prepareCocoChantierTasksDraftFromQuoteDraft(input: { quote
         actionType: "validate",
         requiresAdminValidation: true,
         detail: "La creation definitive des taches devra passer par le module chantier apres acceptation du devis et validation admin.",
+      },
+    ],
+    adminValidationRequired: true,
+    finalWriteBlocked: true,
+  });
+}
+
+export async function prepareCocoPurchaseOrderDraftFromQuoteDraft(input: { quoteDraft: CocoControlledDraft; project?: Record<string, unknown> | null; appointment?: Record<string, unknown> | null }): Promise<CocoControlledDraft> {
+  await assertCocoAdmin();
+  const quoteDraft = normalizeDraft(input.quoteDraft);
+  if (!quoteDraft.materialNeeds.length) throw new Error("Aucun besoin materiau disponible pour preparer des achats brouillons.");
+
+  const suppliers = await listSuppliers().catch(() => []);
+  const activeSuppliers = suppliers.filter((supplier) => supplier.is_active !== false);
+  const grouped = new Map<string, { supplier: SupplierRow | null; supplierName: string | null; needs: CocoMaterialNeedDraft[] }>();
+
+  quoteDraft.materialNeeds.forEach((need) => {
+    const supplier = findSupplierForNeed(need, activeSuppliers);
+    const supplierName = supplier?.name ?? need.supplierName ?? null;
+    const key = supplier?.id ?? `supplier:${normalizeSupplierName(supplierName) || "a-choisir"}`;
+    const current = grouped.get(key) ?? { supplier, supplierName, needs: [] };
+    current.needs.push(need);
+    grouped.set(key, current);
+  });
+
+  const purchaseOrders = Array.from(grouped.values()).map((group): CocoPurchaseOrderDraft => {
+    const lines = group.needs.map((need): CocoPurchaseOrderLineDraft => ({
+      designation: need.designation,
+      quantity: need.quantity,
+      unit: need.unit,
+      sourceMaterialNeed: need.source,
+      confidence: need.confidence,
+      pointsToVerify: need.pointsToVerify,
+    }));
+    return {
+      supplierId: group.supplier?.id ?? null,
+      supplierName: group.supplier?.name ?? group.supplierName,
+      supplierCity: group.supplier?.city ?? null,
+      title: `Bon de commande brouillon - ${group.supplier?.name ?? group.supplierName ?? "fournisseur a choisir"}`,
+      lines,
+      pointsToVerify: compactUnique([
+        !group.supplier ? "Fournisseur a confirmer avant creation d'un bon de commande." : null,
+        ...group.needs.flatMap((need) => need.pointsToVerify),
+      ]),
+      confidence: lowerConfidence(lines.map((line) => line.confidence)),
+    };
+  });
+
+  const needsWithoutSupplier = purchaseOrders.filter((order) => !order.supplierId && !order.supplierName).length;
+  const linesCount = purchaseOrders.reduce((sum, order) => sum + order.lines.length, 0);
+
+  return normalizeDraft({
+    id: crypto.randomUUID(),
+    kind: "purchase_order",
+    title: "Brouillon achats fournisseurs depuis pre-devis COCO",
+    generatedAt: new Date().toISOString(),
+    sourceSummary: compactUnique([
+      "Besoins materiaux issus du brouillon de chiffrage COCO",
+      "Fournisseurs actifs Batipro quand disponibles",
+      input.project?.name ? `Projet commercial: ${String(input.project.name)}` : null,
+      input.appointment?.id ? "Visite commerciale rattachee" : null,
+    ]),
+    confidence: lowerConfidence(purchaseOrders.map((order) => order.confidence)),
+    hypotheses: [
+      "Les commandes sont regroupees par fournisseur pressenti a partir des besoins materiaux.",
+      "Les prix fournisseurs, references exactes, disponibilites et delais ne sont pas confirmes automatiquement.",
+      "Aucun bon de commande fournisseur n'est cree sans validation admin dans le module Achats.",
+    ],
+    pointsToVerify: compactUnique([
+      needsWithoutSupplier ? `${needsWithoutSupplier} groupe(s) d'achat sans fournisseur confirme.` : null,
+      "Verifier references fournisseur, prix, delais, conditions de livraison et adresse chantier avant commande.",
+      ...quoteDraft.pointsToVerify,
+    ]),
+    risks: compactUnique([
+      needsWithoutSupplier ? "Certains besoins materiaux n'ont pas de fournisseur fiable associe." : null,
+      "Risque de prix ou disponibilite fournisseur non confirme dans Batipro.",
+      ...quoteDraft.risks,
+    ]),
+    quoteLines: quoteDraft.quoteLines,
+    materialNeeds: quoteDraft.materialNeeds,
+    chantierTasks: quoteDraft.chantierTasks,
+    purchaseOrders,
+    proposedActions: [
+      {
+        label: "Revoir les bons de commande brouillons",
+        module: "Achats",
+        actionType: "review",
+        requiresAdminValidation: true,
+        detail: `${purchaseOrders.length} bon(s) fournisseur brouillon, ${linesCount} ligne(s) a verifier avant creation definitive.`,
+      },
+      {
+        label: "Valider plus tard dans le module Achats",
+        module: "Achats",
+        actionType: "validate",
+        requiresAdminValidation: true,
+        detail: "Aucune commande n'est envoyee ni creee automatiquement. La validation finale devra rester une action admin.",
       },
     ],
     adminValidationRequired: true,
