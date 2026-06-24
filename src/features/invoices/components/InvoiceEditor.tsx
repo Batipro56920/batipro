@@ -9,9 +9,9 @@ import { InvoiceStatusBadge } from "./InvoiceStatusBadge";
 const PAYMENT_METHOD_LABELS: Record<InvoicePayment["method"], string> = {
   transfer: "Virement",
   card: "Carte",
-  cash: "Especes",
-  cheque: "Cheque",
-  direct_debit: "Prelevement",
+  cash: "Espèces",
+  cheque: "Chèque",
+  direct_debit: "Prélèvement",
 };
 
 type InvoiceEditorProps = {
@@ -84,7 +84,7 @@ export function InvoiceEditor({ invoice, hasUnsavedChanges, onUnsavedChange, onC
             <p className="mt-1 text-sm text-slate-500">{document.title}</p>
           </div>
           <div className="flex flex-wrap gap-2">
-            <Button variant="secondary" onClick={() => setPreviewOpen((open) => !open)}>Preview</Button>
+            <Button variant="secondary" onClick={() => setPreviewOpen((open) => !open)}>Aperçu</Button>
             <Button variant="secondary" onClick={() => downloadBusinessDocumentPdf(document)}><Download className="h-4 w-4" /> PDF</Button>
             <Button variant="secondary" onClick={() => setSendOpen(true)}><Send className="h-4 w-4" /> Envoyer</Button>
             <Button variant="primary" onClick={save}><Save className="h-4 w-4" /> Enregistrer</Button>
@@ -110,7 +110,7 @@ export function InvoiceEditor({ invoice, hasUnsavedChanges, onUnsavedChange, onC
           <div className="overflow-x-auto rounded-2xl border border-slate-200">
             <div className="min-w-[520px]">
               <div className="grid grid-cols-[70px_1fr_110px_110px_120px] bg-blue-600 px-3 py-2 text-xs font-bold uppercase tracking-[0.12em] text-white">
-                <span>N</span><span>Designation</span><span className="text-right">Qte</span><span>PU HT</span><span className="text-right">Total HT</span>
+                <span>N</span><span>Désignation</span><span className="text-right">Qte</span><span>PU HT</span><span className="text-right">Total HT</span>
               </div>
               {rows.length ? rows.map((row) => (
                 <div key={row.id} className={`grid grid-cols-[70px_1fr_110px_110px_120px] items-center gap-2 border-t border-slate-100 px-3 py-2 text-sm ${row.node.type === "section" ? "bg-blue-50 font-bold" : row.node.type === "subsection" ? "bg-slate-50 font-semibold" : ""}`}>
@@ -147,7 +147,7 @@ export function InvoiceEditor({ invoice, hasUnsavedChanges, onUnsavedChange, onC
 
 function PaymentPanel({ invoice, hasUnsavedChanges, onAdd, onRemove }: { invoice: InvoiceRecord; hasUnsavedChanges: boolean; onAdd: (payment: Omit<InvoicePayment, "id">) => void; onRemove: (paymentId: string) => void }) {
   const [amount, setAmount] = useState("");
-  const [paidAt, setPaidAt] = useState(new Date().toISOString().slice(0, 10));
+  const [paidAt, setPaidAt] = useState(getTodayInputDate);
   const [method, setMethod] = useState<InvoicePayment["method"]>("transfer");
   const [reference, setReference] = useState("");
   const parsedAmount = parseCommittedFrenchNumber(amount);
@@ -155,7 +155,7 @@ function PaymentPanel({ invoice, hasUnsavedChanges, onAdd, onRemove }: { invoice
 
   useEffect(() => {
     setAmount("");
-    setPaidAt(new Date().toISOString().slice(0, 10));
+    setPaidAt(getTodayInputDate());
     setMethod("transfer");
     setReference("");
   }, [invoice.id]);
@@ -194,9 +194,9 @@ function PaymentPanel({ invoice, hasUnsavedChanges, onAdd, onRemove }: { invoice
         <select className={inputClass} value={method} onChange={(event) => setMethod(event.target.value as InvoicePayment["method"])}>
           <option value="transfer">Virement</option>
           <option value="card">Carte</option>
-          <option value="cash">Especes</option>
-          <option value="cheque">Cheque</option>
-          <option value="direct_debit">Prelevement</option>
+          <option value="cash">Espèces</option>
+          <option value="cheque">Chèque</option>
+          <option value="direct_debit">Prélèvement</option>
         </select>
         <input className={inputClass} placeholder="Référence" value={reference} onChange={(event) => setReference(event.target.value)} />
         <Button variant="secondary" disabled={!canAddPayment} onClick={() => {
@@ -288,6 +288,12 @@ function parseFrenchNumber(value: string) {
 
 function formatEditableNumber(value: number) {
   return Number.isFinite(value) ? String(value) : "0";
+}
+
+function getTodayInputDate() {
+  const now = new Date();
+  const localDate = new Date(now.getTime() - now.getTimezoneOffset() * 60_000);
+  return localDate.toISOString().slice(0, 10);
 }
 
 function formatDate(value: string) {
