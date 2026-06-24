@@ -55,6 +55,18 @@ export type CocoControlledDraft = {
   adminValidationRequired: true;
   finalWriteBlocked: true;
 };
+export type CocoControlledDraftStatus = "prepared" | "reviewed" | "validated" | "ignored";
+export type CocoControlledDraftRecord = {
+  id: string;
+  kind: CocoAssistantDraftKind;
+  status: CocoControlledDraftStatus;
+  sourceKind: string;
+  sourceId: string | null;
+  projectId: string | null;
+  draft: CocoControlledDraft;
+  createdAt: string;
+  updatedAt: string;
+};
 export type CocoDirectionContext = {
   generatedAt: string;
   profile: { displayName: string | null; email: string | null };
@@ -64,6 +76,7 @@ export type CocoDirectionContext = {
 };
 
 const PROFILE_PERMISSION_KEY = "assistant_coco_direction";
+const CONTROLLED_DRAFTS_TABLE = "ai_controlled_drafts";
 
 export const COCO_ASSISTANT_ARCHITECTURE = [
   { id: "direction", label: "Assistant Direction COCO", scope: "Pilotage global, anticipation, priorites, carnet de commandes, charge equipe et risques dirigeant." },
@@ -115,6 +128,10 @@ function dateTime(value: unknown): number {
   return Number.isFinite(parsed) ? parsed : Number.NaN;
 }
 
+function isUuid(value: unknown): value is string {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(String(value ?? ""));
+}
+
 function isMissingSchemaError(error: unknown): boolean {
   const code = String((error as { code?: string } | null)?.code ?? "");
   const message = String((error as { message?: string } | null)?.message ?? "").toLowerCase();
@@ -140,9 +157,127 @@ export async function isCurrentUserCocoAdmin(): Promise<boolean> {
   return isCocoAdminProfile(await getCurrentUserProfile());
 }
 
-export async function loadCocoDirectionContext(): Promise<CocoDirectionContext> {
+async function assertCocoAdmin() {
   const profile = await getCurrentUserProfile();
   if (!isCocoAdminProfile(profile)) throw new Error("Assistant Direction COCO réservé aux administrateurs.");
+  return profile;
+}
+
+function normalizeDraftStatus(value: unknown): CocoControlledDraftStatus {
+  if (value === "reviewed" || value === "validated" || value === "ignored") return value;
+  return "prepared";
+}
+
+function draftRecordFromRow(row: Record<string, unknown>): CocoControlledDraftRecord | null {
+  const payload = row.payload as Record<string, unknown> | null;
+  const rawDraft = payload?.draft ?? payload;
+  if (!rawDraft || typeof rawDraft !== "object") return null;
+  const draft = normalizeDraft(rawDraft as Partial<CocoControlledDraft>);
+  return {
+    id: String(row.id ?? draft.id),
+    kind: draft.kind,
+    status: normalizeDraftStatus(row.status),
+    sourceKind: text(row.source_kind) ?? "unknown",
+    sourceId: text(row.source_id),
+    projectId: text(row.project_id),
+    draft,
+    createdAt: text(row.created_at) ?? draft.generatedAt,
+    updatedAt: text(row.updated_at) ?? text(row.created_at) ?? draft.generatedAt,
+  };
+}
+
+export async function listCocoControlledDrafts(input: { sourceKind: string; sourceId?: string | null; projectId?: string | null; limit?: number }): Promise<CocoControlledDraftRecord[]> {
+  await assertCocoAdmin();
+  let query = (supabase as any)
+    .from(CONTROLLED_DRAFTS_TABLE)
+    .select("id, kind, status, source_kind, source_id, project_id, payload, created_at, updated_at")
+    .eq("source_kind", input.sourceKind)
+    .order("created_at", { ascending: false })
+    .limit(input.limit ?? 10);
+
+  if (isUuid(input.sourceId)) query = query.eq("source_id", input.sourceId);
+  else if (isUuid(input.projectId)) query = query.eq("project_id", input.projectId);
+
+  const result = await query;
+  if (result.error) {
+    if (isMissingSchemaError(result.error)) return [];
+    throw new Error(result.error.message);
+  }
+
+  return ((result.data ?? []) as Record<string, unknown>[])
+    .map(draftRecordFromRow)
+    .filter((entry): entry is CocoControlledDraftRecord => Boolean(entry));
+}
+
+export async function saveCocoControlledDraft(input: { sourceKind: string; sourceId?: string | null; projectId?: string | null; draft: CocoControlledDraft; status?: CocoControlledDraftStatus }): Promise<CocoControlledDraftRecord | null> {
+  await assertCocoAdmin();
+  const now = new Date().toISOString();
+  const status = input.status ?? "prepared";
+  const payload = {
+    draft: input.draft,
+    guardrails: {
+      adminValidationRequired: true,
+      finalWriteBlocked: true,
+      noFinalWrite: true,
+    },
+  };
+
+  const result = await (supabase as any)
+    .from(CONTROLLED_DRAFTS_TABLE)
+    .insert({
+      source_kind: input.sourceKind,
+      source_id: isUuid(input.sourceId) ? input.sourceId : null,
+      project_id: isUuid(input.projectId) ? input.projectId : null,
+      kind: input.draft.kind,
+      status,
+      title: input.draft.title,
+      confidence: input.draft.confidence,
+      source_summary: input.draft.sourceSummary,
+      hypotheses: input.draft.hypotheses,
+      points_to_verify: input.draft.pointsToVerify,
+      risks: input.draft.risks,
+      payload,
+      reviewed_at: status === "reviewed" ? now : null,
+      validated_at: status === "validated" ? now : null,
+      ignored_at: status === "ignored" ? now : null,
+    })
+    .select("id, kind, status, source_kind, source_id, project_id, payload, created_at, updated_at")
+    .maybeSingle();
+
+  if (result.error) {
+    if (isMissingSchemaError(result.error)) return null;
+    throw new Error(result.error.message);
+  }
+
+  return result.data ? draftRecordFromRow(result.data as Record<string, unknown>) : null;
+}
+
+export async function updateCocoControlledDraftStatus(input: { id: string; status: CocoControlledDraftStatus }): Promise<CocoControlledDraftRecord | null> {
+  await assertCocoAdmin();
+  if (!isUuid(input.id)) return null;
+  const now = new Date().toISOString();
+  const patch: Record<string, unknown> = { status: input.status, updated_at: now };
+  if (input.status === "reviewed") patch.reviewed_at = now;
+  if (input.status === "validated") patch.validated_at = now;
+  if (input.status === "ignored") patch.ignored_at = now;
+
+  const result = await (supabase as any)
+    .from(CONTROLLED_DRAFTS_TABLE)
+    .update(patch)
+    .eq("id", input.id)
+    .select("id, kind, status, source_kind, source_id, project_id, payload, created_at, updated_at")
+    .maybeSingle();
+
+  if (result.error) {
+    if (isMissingSchemaError(result.error)) return null;
+    throw new Error(result.error.message);
+  }
+
+  return result.data ? draftRecordFromRow(result.data as Record<string, unknown>) : null;
+}
+
+export async function loadCocoDirectionContext(): Promise<CocoDirectionContext> {
+  const profile = await assertCocoAdmin();
 
   const today = new Date().toISOString().slice(0, 10);
   const todayTime = dateTime(today);
@@ -295,8 +430,7 @@ function normalizeDraft(raw: Partial<CocoControlledDraft> | null | undefined): C
 }
 
 export async function prepareCocoVisitQuoteDraft(input: { project: Record<string, unknown>; appointment: Record<string, unknown>; visitDraft: Record<string, unknown> | null }): Promise<CocoControlledDraft> {
-  const profile = await getCurrentUserProfile();
-  if (!isCocoAdminProfile(profile)) throw new Error("Brouillon IA reserve aux administrateurs.");
+  await assertCocoAdmin();
 
   const visitLines = safeArray(input.visitDraft?.lines);
   const [templates, suppliers] = await Promise.all([
