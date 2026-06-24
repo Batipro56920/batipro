@@ -6,7 +6,11 @@ import {
   COCO_DIRECTION_QUICK_QUESTIONS,
   askCocoDirectionAssistant,
   isCocoAdminProfile,
+  listCocoControlledDrafts,
   loadCocoDirectionContext,
+  updateCocoControlledDraftStatus,
+  type CocoControlledDraftRecord,
+  type CocoControlledDraftStatus,
   type CocoDirectionChatMessage,
   type CocoDirectionContext,
 } from "../services/cocoDirectionAssistant.service";
@@ -21,12 +25,25 @@ const WELCOME_MESSAGE: CocoDirectionChatMessage = {
 
 const CONTROLLED_DRAFT_CATEGORIES = [
   { label: "Analyse apres visite", module: "Chiffrage", status: "Pilote actif", detail: "Pré-devis, temps, matériaux, fournisseurs, risques et points à vérifier." },
-  { label: "Taches chantier", module: "Preparation", status: "A cadrer", detail: "Taches et zones proposées depuis le devis ou la visite, sans creation automatique." },
+  { label: "Taches chantier", module: "Preparation", status: "Pilote actif", detail: "Taches et zones proposées depuis le devis ou la visite, sans creation automatique." },
   { label: "Planning previsionnel", module: "Preparation", status: "A cadrer", detail: "Projection de charge et jalons, distincte du planning officiel." },
   { label: "Besoins materiaux", module: "Achats", status: "Pilote actif", detail: "Besoins issus du chiffrage, fournisseurs suggérés, commande toujours manuelle." },
   { label: "Actions commerciales", module: "Commercial", status: "A cadrer", detail: "Relances, devis à suivre et périodes creuses en brouillon validable." },
   { label: "Checklist / compte rendu", module: "Suivi", status: "A cadrer", detail: "Synthèses et actions correctives à revoir avant intégration métier." },
 ] as const;
+
+const CONTROLLED_DRAFT_SOURCE_KINDS = [
+  "crm_visit_quote_analysis",
+  "crm_visit_chantier_tasks_preparation",
+  "crm_visit_purchase_order_preparation",
+] as const;
+
+const CONTROLLED_DRAFT_STATUS_LABELS: Record<CocoControlledDraftStatus, string> = {
+  prepared: "Préparé",
+  reviewed: "À revoir",
+  validated: "Validé",
+  ignored: "Ignoré",
+};
 
 function formatNumber(value: number, suffix = "") {
   return `${Math.round(value).toLocaleString("fr-FR")}${suffix}`;
@@ -35,6 +52,40 @@ function formatNumber(value: number, suffix = "") {
 function getErrorMessage(error: unknown) {
   const message = String((error as { message?: string } | null)?.message ?? "").trim();
   return message || "L'assistant direction n'a pas pu repondre pour le moment.";
+}
+
+function controlledDraftKindLabel(record: CocoControlledDraftRecord) {
+  if (record.kind === "tasks") return "Preparation";
+  if (record.kind === "purchase_order") return "Achats";
+  if (record.kind === "visit_quote_analysis") return "Chiffrage";
+  if (record.kind === "planning") return "Planning previsionnel";
+  if (record.kind === "commercial_action") return "Commercial";
+  if (record.kind === "checklist") return "Suivi";
+  return "Brouillon";
+}
+
+function controlledDraftSourceLabel(sourceKind: string) {
+  if (sourceKind === "crm_visit_quote_analysis") return "Visite chiffrage";
+  if (sourceKind === "crm_visit_chantier_tasks_preparation") return "Preparation chantier";
+  if (sourceKind === "crm_visit_purchase_order_preparation") return "Achats fournisseurs";
+  return sourceKind;
+}
+
+function controlledDraftStatusClass(status: CocoControlledDraftStatus) {
+  if (status === "validated") return "border-emerald-200 bg-emerald-50 text-emerald-800";
+  if (status === "ignored") return "border-slate-200 bg-slate-100 text-slate-600";
+  if (status === "reviewed") return "border-blue-200 bg-blue-50 text-blue-800";
+  return "border-amber-200 bg-amber-50 text-amber-800";
+}
+
+function controlledDraftMetrics(record: CocoControlledDraftRecord) {
+  const metrics = [
+    record.draft.quoteLines.length ? `${record.draft.quoteLines.length} ligne(s) devis` : null,
+    record.draft.materialNeeds.length ? `${record.draft.materialNeeds.length} besoin(s) materiaux` : null,
+    record.draft.chantierTasks.length ? `${record.draft.chantierTasks.length} tache(s)` : null,
+    record.draft.purchaseOrders.length ? `${record.draft.purchaseOrders.length} commande(s)` : null,
+  ].filter(Boolean);
+  return metrics.length ? metrics.join(" - ") : "Synthese brouillon";
 }
 
 function buildSummaryCards(context: CocoDirectionContext | null) {
@@ -54,6 +105,10 @@ export default function AssistantDirectionPage() {
   const [profile, setProfile] = useState<CurrentUserProfile | null>(null);
   const [context, setContext] = useState<CocoDirectionContext | null>(null);
   const [loadingContext, setLoadingContext] = useState(false);
+  const [controlledDrafts, setControlledDrafts] = useState<CocoControlledDraftRecord[]>([]);
+  const [controlledDraftsLoading, setControlledDraftsLoading] = useState(false);
+  const [controlledDraftsError, setControlledDraftsError] = useState<string | null>(null);
+  const [updatingDraftId, setUpdatingDraftId] = useState<string | null>(null);
   const [input, setInput] = useState("");
   const [messages, setMessages] = useState<CocoDirectionChatMessage[]>([WELCOME_MESSAGE]);
   const [sending, setSending] = useState(false);
@@ -69,7 +124,10 @@ export default function AssistantDirectionPage() {
         setProfile(currentProfile);
         const isAllowed = isCocoAdminProfile(currentProfile);
         setAccess(isAllowed ? "allowed" : "denied");
-        if (isAllowed) void refreshContext();
+        if (isAllowed) {
+          void refreshContext();
+          void refreshControlledDrafts();
+        }
       } catch {
         if (!alive) return;
         setAccess("denied");
@@ -95,6 +153,43 @@ export default function AssistantDirectionPage() {
       setError(getErrorMessage(err));
     } finally {
       setLoadingContext(false);
+    }
+  }
+
+  async function refreshControlledDrafts() {
+    setControlledDraftsLoading(true);
+    setControlledDraftsError(null);
+    try {
+      const groups = await Promise.all(
+        CONTROLLED_DRAFT_SOURCE_KINDS.map((sourceKind) => listCocoControlledDrafts({ sourceKind, limit: 6 })),
+      );
+      const nextDrafts = groups
+        .flat()
+        .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt))
+        .slice(0, 8);
+      setControlledDrafts(nextDrafts);
+    } catch (err) {
+      setControlledDrafts([]);
+      setControlledDraftsError(getErrorMessage(err));
+    } finally {
+      setControlledDraftsLoading(false);
+    }
+  }
+
+  async function updateControlledDraftStatus(record: CocoControlledDraftRecord, status: CocoControlledDraftStatus) {
+    setUpdatingDraftId(record.id);
+    setControlledDraftsError(null);
+    setControlledDrafts((current) => current.map((entry) => (entry.id === record.id ? { ...entry, status } : entry)));
+    try {
+      const updated = await updateCocoControlledDraftStatus({ id: record.id, status });
+      if (updated) {
+        setControlledDrafts((current) => current.map((entry) => (entry.id === updated.id ? updated : entry)));
+      }
+    } catch (err) {
+      setControlledDraftsError(getErrorMessage(err));
+      void refreshControlledDrafts();
+    } finally {
+      setUpdatingDraftId(null);
     }
   }
 
@@ -310,6 +405,64 @@ export default function AssistantDirectionPage() {
                   </div>
                   <div className="mt-1 text-[11px] font-medium text-blue-700">{draft.module}</div>
                   <p className="mt-1 text-xs leading-5 text-slate-600">{draft.detail}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm shadow-slate-950/[0.03]">
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2 text-sm font-semibold text-slate-950">
+                <ClipboardCheck className="h-4 w-4 text-emerald-600" /> Brouillons recents
+              </div>
+              <button
+                type="button"
+                onClick={() => void refreshControlledDrafts()}
+                disabled={controlledDraftsLoading}
+                className="inline-flex h-8 items-center gap-1 rounded-lg border border-slate-200 bg-white px-2 text-[11px] font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-60"
+              >
+                <RefreshCw className={["h-3 w-3", controlledDraftsLoading ? "animate-spin" : ""].join(" ")} />
+                Actualiser
+              </button>
+            </div>
+            <p className="mt-2 text-xs leading-5 text-slate-500">Suivi dirigeant des propositions IA historisees. Les boutons changent uniquement le statut du brouillon.</p>
+            {controlledDraftsError ? <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-2 text-xs text-amber-800">{controlledDraftsError}</div> : null}
+            <div className="mt-3 space-y-2">
+              {controlledDraftsLoading && !controlledDrafts.length ? (
+                <div className="flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 p-3 text-xs text-slate-500">
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" /> Chargement des brouillons...
+                </div>
+              ) : null}
+              {!controlledDraftsLoading && !controlledDrafts.length ? (
+                <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-xs leading-5 text-slate-500">Aucun brouillon controle historise pour le moment.</div>
+              ) : null}
+              {controlledDrafts.map((record) => (
+                <div key={record.id} className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <div className="truncate text-xs font-semibold text-slate-950">{record.draft.title}</div>
+                      <div className="mt-1 text-[11px] font-medium text-blue-700">{controlledDraftKindLabel(record)} - {controlledDraftSourceLabel(record.sourceKind)}</div>
+                    </div>
+                    <span className={["shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-semibold", controlledDraftStatusClass(record.status)].join(" ")}>{CONTROLLED_DRAFT_STATUS_LABELS[record.status]}</span>
+                  </div>
+                  <div className="mt-2 text-[11px] leading-5 text-slate-500">
+                    {controlledDraftMetrics(record)}<br />
+                    {new Date(record.createdAt).toLocaleString("fr-FR")}
+                  </div>
+                  {record.draft.pointsToVerify.length ? <div className="mt-2 line-clamp-2 text-[11px] leading-5 text-amber-700">A verifier: {record.draft.pointsToVerify.join(" - ")}</div> : null}
+                  <div className="mt-3 grid grid-cols-3 gap-1">
+                    {(["reviewed", "validated", "ignored"] as const).map((status) => (
+                      <button
+                        key={status}
+                        type="button"
+                        onClick={() => void updateControlledDraftStatus(record, status)}
+                        disabled={updatingDraftId === record.id || record.status === status}
+                        className="h-8 rounded-lg border border-slate-200 bg-white px-2 text-[11px] font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400"
+                      >
+                        {updatingDraftId === record.id ? "..." : CONTROLLED_DRAFT_STATUS_LABELS[status]}
+                      </button>
+                    ))}
+                  </div>
                 </div>
               ))}
             </div>
