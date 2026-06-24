@@ -51,8 +51,40 @@ function normalizeText(value: unknown): string | null {
 
 function toNumber(value: unknown): number | null {
   if (value === null || value === undefined || value === "") return null;
-  const n = Number(String(value).replace(/\s/g, "").replace(",", "."));
+  if (typeof value === "number") return Number.isFinite(value) ? value : null;
+
+  const compact = String(value)
+    .trim()
+    .replace(/[\s\u00a0\u202f]/g, "")
+    .replace(/[€%]/g, "");
+
+  if (!compact) return null;
+
+  const lastComma = compact.lastIndexOf(",");
+  const lastDot = compact.lastIndexOf(".");
+  let normalized = compact;
+
+  if (lastComma >= 0 && lastDot >= 0) {
+    normalized = lastComma > lastDot
+      ? compact.replace(/\./g, "").replace(",", ".")
+      : compact.replace(/,/g, "");
+  } else if (lastComma >= 0) {
+    normalized = compact.replace(",", ".");
+  } else if (lastDot >= 0 && looksLikeThousandsGroups(compact, ".")) {
+    normalized = compact.replace(/\./g, "");
+  }
+
+  const n = Number(normalized);
   return Number.isFinite(n) ? n : null;
+}
+
+function looksLikeThousandsGroups(value: string, separator: string): boolean {
+  const parts = value.split(separator);
+  if (parts.length < 2) return false;
+  const [first, ...rest] = parts;
+  return first.length >= 1
+    && first.length <= 3
+    && rest.every((part) => /^\d{3}$/.test(part));
 }
 
 function confidence(value: unknown): number {
