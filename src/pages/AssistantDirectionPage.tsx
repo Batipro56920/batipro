@@ -55,10 +55,17 @@ function getErrorMessage(error: unknown) {
 }
 
 function draftStatusLabel(status: CocoControlledDraftStatus) {
-  if (status === "reviewed") return "A revoir";
-  if (status === "validated") return "Valide";
+  if (status === "reviewed") return "Revu";
+  if (status === "validated") return "Pret pour revue metier";
   if (status === "ignored") return "Ignore";
   return "Prepare";
+}
+
+function draftStatusActionLabel(status: CocoControlledDraftStatus) {
+  if (status === "reviewed") return "Marquer revu";
+  if (status === "validated") return "Pret metier";
+  if (status === "ignored") return "Ignorer";
+  return draftStatusLabel(status);
 }
 
 function draftStatusClass(status: CocoControlledDraftStatus) {
@@ -320,7 +327,7 @@ export default function AssistantDirectionPage() {
               <span className={["inline-flex h-9 items-center rounded-lg border px-3 text-xs font-semibold", draftStatusClass(selectedDraft.status)].join(" ")}>{draftStatusLabel(selectedDraft.status)}</span>
               {CONTROLLED_DRAFT_NEXT_STATUSES.map((status) => (
                 <button key={status} type="button" onClick={() => void updateControlledDraftStatus(selectedDraft, status)} disabled={updatingDraftId === selectedDraft.id || selectedDraft.status === status} className="h-9 rounded-lg border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400">
-                  {updatingDraftId === selectedDraft.id ? "..." : draftStatusLabel(status)}
+                  {updatingDraftId === selectedDraft.id ? "..." : draftStatusActionLabel(status)}
                 </button>
               ))}
               <button type="button" onClick={() => setSelectedDraftId(null)} className="h-9 rounded-lg border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-700 hover:bg-slate-50">Fermer</button>
@@ -497,7 +504,7 @@ export default function AssistantDirectionPage() {
                 <RefreshCw className={["h-3 w-3", controlledDraftsLoading ? "animate-spin" : ""].join(" ")} /> Actualiser
               </button>
             </div>
-            <p className="mt-2 text-xs leading-5 text-slate-500">Suivi dirigeant des propositions IA historisees. Les boutons changent uniquement le statut du brouillon.</p>
+            <p className="mt-2 text-xs leading-5 text-slate-500">Suivi dirigeant des propositions IA historisees. Les boutons changent uniquement le statut du brouillon et ne creent ni devis, ni tache, ni planning, ni commande.</p>
             {controlledDraftsError ? <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-2 text-xs text-amber-800">{controlledDraftsError}</div> : null}
             <div className="mt-3 space-y-2">
               {controlledDraftsLoading && !controlledDrafts.length ? <div className="flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 p-3 text-xs text-slate-500"><Loader2 className="h-3.5 w-3.5 animate-spin" /> Chargement des brouillons...</div> : null}
@@ -516,7 +523,7 @@ export default function AssistantDirectionPage() {
                   <div className="mt-3 grid grid-cols-2 gap-1">
                     <button type="button" onClick={() => setSelectedDraftId(record.id)} className="h-8 rounded-lg border border-slate-200 bg-white px-2 text-[11px] font-semibold text-slate-700 hover:bg-slate-50">Details</button>
                     <button type="button" onClick={() => void updateControlledDraftStatus(record, "reviewed")} disabled={updatingDraftId === record.id || record.status === "reviewed"} className="h-8 rounded-lg border border-slate-200 bg-white px-2 text-[11px] font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400">
-                      {updatingDraftId === record.id ? "..." : "A revoir"}
+                      {updatingDraftId === record.id ? "..." : "Marquer revu"}
                     </button>
                   </div>
                 </div>
