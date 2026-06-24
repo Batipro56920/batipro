@@ -1,6 +1,6 @@
 import { useMemo, useState, type ChangeEvent, type FormEvent } from "react";
 import { Link } from "react-router-dom";
-import { ArrowLeft, ClipboardCheck, FileSpreadsheet, FileText, Loader2, ShieldCheck, Upload, X } from "lucide-react";
+import { ArrowLeft, FileSpreadsheet, FileText, Loader2, ShieldCheck, Upload, X } from "lucide-react";
 import {
   saveCocoControlledDraft,
   type CocoControlledDraft,
@@ -9,7 +9,7 @@ import {
 
 type HistoricalQuoteLine = CocoVisitQuoteDraftLine;
 type SaveState = "idle" | "saving" | "saved" | "local" | "error";
-type ImportStatus = "reading" | "ready" | "warning" | "error";
+type ImportStatus = "ready" | "warning" | "error";
 type ImportedHistoricalFile = {
   id: string;
   name: string;
@@ -72,6 +72,11 @@ function normalizeExtractedText(value: string) {
     .map((line) => cleanText(line))
     .filter(Boolean)
     .join("\n");
+}
+
+function containsMoney(value: string) {
+  MONEY_PATTERN.lastIndex = 0;
+  return MONEY_PATTERN.test(value);
 }
 
 function parseHistoricalQuoteText(rawText: string): HistoricalQuoteLine[] {
@@ -209,7 +214,7 @@ function buildSourceExcerpts(importedFiles: ImportedHistoricalFile[], fallbackTe
   const lines = importedFiles
     .flatMap((file) => file.extractedText.split(/\r?\n/).map((line) => ({ fileName: file.name, line: cleanText(line) })))
     .filter((entry) => entry.line.length >= 12)
-    .filter((entry) => MONEY_PATTERN.test(entry.line) || /devis|facture|total|ht|ttc|tva|acompte|main d.?oeuvre|fourniture/i.test(entry.line))
+    .filter((entry) => containsMoney(entry.line) || /devis|facture|total|ht|ttc|tva|acompte|main d.?oeuvre|fourniture/i.test(entry.line))
     .slice(0, MAX_SOURCE_EXCERPTS)
     .map((entry) => `${entry.fileName}: ${entry.line.slice(0, 220)}`);
 
