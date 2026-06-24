@@ -210,7 +210,7 @@ function updateNodeTree(nodes: BusinessDocumentNode[], nodeId: string, patch: Pa
 function appendChild(nodes: BusinessDocumentNode[], parentId: string, child: BusinessDocumentNode): BusinessDocumentNode[] {
   return nodes.map((node) => {
     if ((node.type === "section" || node.type === "subsection") && node.id === parentId) return { ...node, children: [...node.children, child] };
-    if (node.type === "section" || node.type === "subsection") return { ...node, children: appendChild(node.children, parentId) };
+    if (node.type === "section" || node.type === "subsection") return { ...node, children: appendChild(node.children, parentId, child) };
     return node;
   });
 }
