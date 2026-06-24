@@ -5,6 +5,7 @@ import { Bell, CircleHelp, Menu, Plus, Search, UserRound, X } from "lucide-react
 import Sidebar from "./Sidebar";
 import RaulChatbotWidget from "./RaulChatbotWidget";
 import CocoDirectionAssistantWidget from "./CocoDirectionAssistantWidget";
+import CocoHistoricalImportPanel from "./CocoHistoricalImportPanel";
 import { supabase } from "../lib/supabaseClient";
 import { getCompanySettings } from "../services/companySettings.service";
 import { useI18n } from "../i18n";
@@ -187,6 +188,7 @@ export default function LayoutShell() {
 
           <div className="content-body bg-[#F8FAFC] p-4 md:p-6">
             <Outlet />
+            {location.pathname === "/assistant-direction" ? <CocoHistoricalImportPanel /> : null}
           </div>
         </main>
       </div>
