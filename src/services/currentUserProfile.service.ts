@@ -8,6 +8,7 @@ export type CurrentUserProfile = {
   role: CurrentUserRole | null;
   display_name: string | null;
   email: string | null;
+  feature_permissions?: Record<string, unknown>;
 };
 
 const ADMIN_EMAILS = new Set(
@@ -25,6 +26,10 @@ function normalizeText(value: unknown): string | null {
 function normalizeRole(value: unknown): CurrentUserRole | null {
   const role = normalizeText(value);
   return role ? (role.toUpperCase() as CurrentUserRole) : null;
+}
+
+function normalizeFeaturePermissions(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : {};
 }
 
 function isWhitelistedAdminEmail(email: string | null | undefined): boolean {
@@ -56,6 +61,7 @@ function buildFallbackProfile(user: User): CurrentUserProfile {
     role,
     display_name: displayName,
     email,
+    feature_permissions: {},
   };
 }
 
@@ -63,6 +69,12 @@ function isMissingProfileRowError(error: unknown): boolean {
   const code = String((error as any)?.code ?? "");
   const msg = String((error as any)?.message ?? "").toLowerCase();
   return code === "PGRST116" || msg.includes("multiple (or no) rows returned");
+}
+
+function isMissingFeaturePermissionsColumnError(error: unknown): boolean {
+  const code = String((error as any)?.code ?? "");
+  const msg = String((error as any)?.message ?? "").toLowerCase();
+  return code === "42703" || (msg.includes("feature_permissions") && (msg.includes("schema cache") || msg.includes("does not exist") || msg.includes("could not find")));
 }
 
 export async function getCurrentUserProfile(): Promise<CurrentUserProfile | null> {
@@ -80,11 +92,21 @@ export async function getCurrentUserProfile(): Promise<CurrentUserProfile | null
   const fallbackProfile = buildFallbackProfile(user);
   const fallbackEmail = fallbackProfile.email;
 
-  const { data, error } = await (supabase as any)
+  let query = await (supabase as any)
     .from("profiles")
-    .select("id, role, display_name")
+    .select("id, role, display_name, feature_permissions")
     .eq("id", user.id)
     .maybeSingle();
+
+  if (query.error && isMissingFeaturePermissionsColumnError(query.error)) {
+    query = await (supabase as any)
+      .from("profiles")
+      .select("id, role, display_name")
+      .eq("id", user.id)
+      .maybeSingle();
+  }
+
+  const { data, error } = query;
 
   if (error) {
     if (isMissingProfileRowError(error)) {
@@ -107,6 +129,7 @@ export async function getCurrentUserProfile(): Promise<CurrentUserProfile | null
     role: normalizeRole(data.role) ?? fallbackProfile.role,
     display_name: normalizeText(data.display_name) ?? fallbackProfile.display_name,
     email: fallbackEmail,
+    feature_permissions: normalizeFeaturePermissions(data.feature_permissions),
   };
 }
 
