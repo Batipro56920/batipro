@@ -11,6 +11,14 @@ export type CocoDirectionContext = {
   datasets: Record<string, Array<Record<string, unknown>>>;
 };
 
+const PROFILE_PERMISSION_KEY = "assistant_coco_direction";
+const COCO_ADMIN_EMAILS = new Set(
+  String(import.meta.env.VITE_COCO_ADMIN_EMAILS ?? "")
+    .split(",")
+    .map((value) => value.trim().toLowerCase())
+    .filter(Boolean),
+);
+
 export const COCO_DIRECTION_QUICK_QUESTIONS = [
   { label: "Point hebdomadaire entreprise", prompt: "Fais-moi un point hebdomadaire de direction avec priorités, risques et décisions à prendre." },
   { label: "Carnet de commandes suffisant ?", prompt: "Analyse si le carnet de commandes semble suffisant pour les prochaines semaines et où relancer la prospection." },
@@ -56,8 +64,16 @@ async function safeRows(query: PromiseLike<{ data: Array<Record<string, unknown>
   throw result.error;
 }
 
+function isCocoAdminEmail(email: string | null | undefined): boolean {
+  return !!email && COCO_ADMIN_EMAILS.has(String(email).trim().toLowerCase());
+}
+
+function hasExplicitCocoPermission(profile: CurrentUserProfile | null): boolean {
+  return profile?.feature_permissions?.[PROFILE_PERMISSION_KEY] === true;
+}
+
 export function isCocoAdminProfile(profile: CurrentUserProfile | null): boolean {
-  return isAdminProfile(profile);
+  return isAdminProfile(profile) && (hasExplicitCocoPermission(profile) || isCocoAdminEmail(profile?.email));
 }
 
 export async function isCurrentUserCocoAdmin(): Promise<boolean> {
@@ -66,7 +82,7 @@ export async function isCurrentUserCocoAdmin(): Promise<boolean> {
 
 export async function loadCocoDirectionContext(): Promise<CocoDirectionContext> {
   const profile = await getCurrentUserProfile();
-  if (!isCocoAdminProfile(profile)) throw new Error("Assistant Direction COCO réservé aux administrateurs.");
+  if (!isCocoAdminProfile(profile)) throw new Error("Assistant Direction COCO réservé au compte admin COCO.");
 
   const today = new Date().toISOString().slice(0, 10);
   const todayTime = dateTime(today);
@@ -94,7 +110,7 @@ export async function loadCocoDirectionContext(): Promise<CocoDirectionContext> 
     return Number.isFinite(dueTime) && dueTime < todayTime;
   });
   const blockedTasks = openTasks.filter((row) => ["a_reprendre", "bloquee", "bloque"].includes(String(row.quality_status ?? "").toLowerCase()));
-  const pendingMaterialRequests = materialRequests.filter((row) => !["livree", "refusee", "livre", "refusee"].includes(String(row.statut ?? row.status ?? "").toLowerCase()));
+  const pendingMaterialRequests = materialRequests.filter((row) => !["livree", "refusee", "livre", "refuse"].includes(String(row.statut ?? row.status ?? "").toLowerCase()));
   const openQuotes = quotes.filter((row) => !["accepte", "refuse", "expire", "annule"].includes(String(row.statut ?? "").toLowerCase()));
   const quotesToFollowUp = openQuotes.filter((row) => {
     const referenceTime = dateTime(row.last_reminder_at) || dateTime(row.sent_at ?? row.date_emission ?? row.created_at);
