@@ -1,8 +1,8 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { createInvoice } from "../../invoices/application/invoiceFactory";
-import type { InvoiceType } from "../../invoices/domain/types";
-import { saveInvoice } from "../../invoices/infrastructure/invoiceRepository";
+import type { InvoiceRecord, InvoiceType } from "../../invoices/domain/types";
+import { listInvoices, saveInvoice } from "../../invoices/infrastructure/invoiceRepository";
 import { quoteBuilderToBusinessDocument } from "../../quotes/builder/quoteBuilderDocumentAdapter";
 import { createQuoteBuilderFromEngine } from "../../quotes/builder/quoteBuilderModel";
 import { loadCrmQuoteEngineData } from "../../../services/crm.service";
@@ -196,9 +196,43 @@ export function ProjectQuotesTab({ project }: { project: ProjectRecord }) {
   const navigate = useNavigate();
   const [billingKey, setBillingKey] = useState<string | null>(null);
   const [billingError, setBillingError] = useState<string | null>(null);
+  const [existingInvoices, setExistingInvoices] = useState<InvoiceRecord[]>([]);
   const acceptedQuote = project.quotes.find((quote) => quote.statut === "accepte");
 
+  useEffect(() => {
+    let alive = true;
+    listInvoices()
+      .then((rows) => {
+        if (alive) setExistingInvoices(rows);
+      })
+      .catch(() => {
+        if (alive) setExistingInvoices([]);
+      });
+    return () => {
+      alive = false;
+    };
+  }, [project.id]);
+
+  function getQuoteInvoices(quoteId: string, invoiceType?: InvoiceType) {
+    return existingInvoices.filter((invoice) => {
+      const matchesQuote = invoice.sourceQuoteId === quoteId || invoice.document.quoteId === quoteId;
+      const matchesType = !invoiceType || invoice.type === invoiceType;
+      return matchesQuote && matchesType && invoice.status !== "cancelled";
+    });
+  }
+
   async function createInvoiceFromQuote(quoteId: string, invoiceType: InvoiceType) {
+    const quote = project.quotes.find((item) => item.id === quoteId);
+    if (!quote) return;
+    if (quote.statut !== "accepte") {
+      setBillingError("La facturation est disponible uniquement depuis un devis accepté.");
+      return;
+    }
+    if (getQuoteInvoices(quoteId, invoiceType).length) {
+      setBillingError("Une facture de ce type existe déjà pour ce devis. Ouvrez /factures pour la consulter ou la modifier.");
+      return;
+    }
+
     const actionKey = `${quoteId}:${invoiceType}`;
     setBillingKey(actionKey);
     setBillingError(null);
@@ -207,7 +241,8 @@ export function ProjectQuotesTab({ project }: { project: ProjectRecord }) {
       const quoteBuilder = createQuoteBuilderFromEngine(engine, project);
       const document = quoteBuilderToBusinessDocument(quoteBuilder);
       const invoice = createInvoice(invoiceType, document);
-      await saveInvoice(invoice);
+      const savedInvoice = await saveInvoice(invoice);
+      setExistingInvoices((current) => [savedInvoice, ...current]);
       navigate("/factures");
     } catch (error) {
       setBillingError(error instanceof Error ? error.message : "Creation de facture impossible depuis ce devis.");
@@ -245,7 +280,8 @@ export function ProjectQuotesTab({ project }: { project: ProjectRecord }) {
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {project.quotes.map((quote) => {
-                  const canBill = Number(quote.montant_ttc ?? 0) > 0;
+                  const quoteInvoices = getQuoteInvoices(quote.id);
+                  const canBill = Number(quote.montant_ttc ?? 0) > 0 && quote.statut === "accepte";
                   return (
                     <tr key={quote.id}>
                       <td className="px-4 py-3 font-semibold text-slate-950">{quote.quote_number}</td>
@@ -257,16 +293,30 @@ export function ProjectQuotesTab({ project }: { project: ProjectRecord }) {
                       <td className="px-4 py-3 text-right">
                         <div className="flex flex-wrap justify-end gap-2">
                           <Link to={`/projets/${project.id}/devis/${quote.id}/edit`} className="inline-flex h-8 items-center font-semibold text-blue-700 hover:text-blue-800">Ouvrir</Link>
+                          {quoteInvoices.length ? (
+                            <Link to="/factures" className="inline-flex h-8 items-center rounded-lg border border-emerald-200 bg-emerald-50 px-2.5 text-xs font-semibold text-emerald-700 hover:bg-emerald-100">
+                              {quoteInvoices.length} facture{quoteInvoices.length > 1 ? "s" : ""}
+                            </Link>
+                          ) : null}
                           {PROJECT_INVOICE_ACTIONS.map((action) => {
                             const actionKey = `${quote.id}:${action.type}`;
                             const isBilling = billingKey === actionKey;
+                            const alreadyExists = getQuoteInvoices(quote.id, action.type).length > 0;
+                            const disabled = isBilling || !canBill || alreadyExists;
+                            const title = alreadyExists
+                              ? "Une facture de ce type existe déjà pour ce devis"
+                              : canBill
+                                ? action.title
+                                : quote.statut !== "accepte"
+                                  ? "Le devis doit être accepté avant facturation"
+                                  : "Le devis doit avoir un montant TTC positif";
                             return (
                               <button
                                 key={action.type}
                                 type="button"
                                 onClick={() => void createInvoiceFromQuote(quote.id, action.type)}
-                                disabled={isBilling || !canBill}
-                                title={canBill ? action.title : "Le devis doit avoir un montant TTC positif"}
+                                disabled={disabled}
+                                title={title}
                                 className="inline-flex h-8 items-center rounded-lg border border-slate-200 px-2.5 text-xs font-semibold text-slate-700 hover:border-emerald-200 hover:bg-emerald-50 hover:text-emerald-700 disabled:bg-slate-50 disabled:text-slate-400"
                               >
                                 {isBilling ? "Creation..." : action.label}
