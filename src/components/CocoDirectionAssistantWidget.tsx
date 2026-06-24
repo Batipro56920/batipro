@@ -11,7 +11,7 @@ import {
 
 const WELCOME_MESSAGE: CocoDirectionChatMessage = {
   role: "assistant",
-  content: "Bonjour COCO. Je suis ton Assistant Direction. Je travaille en lecture seule sur les données Batipro disponibles pour anticiper les risques chantier, planning, temps, matériel, commerce et trésorerie quand les données existent.",
+  content: "Bonjour. Je suis Assistant Direction COCO. Je travaille en lecture seule sur les données Batipro disponibles pour anticiper les risques chantier, planning, temps, matériel, commerce et trésorerie quand les données existent.",
 };
 
 function formatNumber(value: number, suffix = "") {
