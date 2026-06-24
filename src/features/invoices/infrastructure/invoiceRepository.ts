@@ -1,4 +1,5 @@
 import { supabase } from "../../../lib/supabaseClient";
+import type { BusinessDocument } from "../../document-engine";
 import { createInvoice } from "../application/invoiceFactory";
 import type { InvoicePayment, InvoiceRecord, InvoiceType } from "../domain/types";
 
@@ -55,8 +56,12 @@ export async function saveInvoice(invoice: InvoiceRecord) {
   return fromRow(data);
 }
 
-export async function createAndSaveInvoice(type: InvoiceType) {
-  const invoice = createInvoice(type);
+export async function createAndSaveInvoice(type: InvoiceType, sourceQuote?: BusinessDocument) {
+  if (!sourceQuote) {
+    throw new Error("La création directe d'une facture est désactivée. Ouvrez un projet commercial, onglet Devis, puis choisissez Acompte, Situation ou Finale.");
+  }
+
+  const invoice = createInvoice(type, sourceQuote);
   return saveInvoice(invoice);
 }
 
