@@ -1,1 +1,1 @@
-export { default } from "./IntervenantPortalV2Page";
+export { default } from "./IntervenantPortalV2StrictPage";
