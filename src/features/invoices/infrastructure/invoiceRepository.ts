@@ -6,7 +6,7 @@ import type { InvoicePayment, InvoiceRecord, InvoiceType } from "../domain/types
 
 const TABLE = "invoices";
 const LEGACY_STORAGE_KEY = "batipro.invoices.v1";
-const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{12}$/i;
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 type InvoiceRow = {
   id: string;
