@@ -92,20 +92,20 @@ export function InvoiceEditor({ invoice, hasUnsavedChanges, onUnsavedChange, onC
     <div className="space-y-6">
       <header className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-          <div>
+          <div className="min-w-0">
             <div className="text-xs font-semibold uppercase tracking-[0.18em] text-blue-600">Facturation</div>
-            <div className="mt-2 flex flex-wrap items-center gap-3">
-              <input className="rounded-xl border border-transparent text-2xl font-bold text-slate-950 outline-none hover:border-slate-200 focus:border-blue-300" value={document.number} onChange={(event) => updateDocument({ number: event.target.value })} />
+            <div className="mt-2 flex min-w-0 flex-col items-start gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:gap-3">
+              <input className="w-full min-w-0 rounded-xl border border-transparent text-xl font-bold text-slate-950 outline-none hover:border-slate-200 focus:border-blue-300 sm:w-auto sm:text-2xl" value={document.number} onChange={(event) => updateDocument({ number: event.target.value })} />
               <InvoiceStatusBadge status={invoice.status} />
               {hasUnsavedChanges ? <span className="rounded-full bg-amber-100 px-2.5 py-1 text-xs font-semibold text-amber-800">Non enregistré</span> : null}
             </div>
-            <p className="mt-1 text-sm text-slate-500">{document.title}</p>
+            <p className="mt-1 break-words text-sm text-slate-500">{document.title}</p>
           </div>
-          <div className="flex flex-wrap gap-2">
-            <Button variant="secondary" onClick={() => setPreviewOpen((open) => !open)}>Aperçu</Button>
-            <Button variant="secondary" onClick={() => downloadBusinessDocumentPdf(document)}><Download className="h-4 w-4" /> PDF</Button>
-            <Button variant="secondary" onClick={() => setSendOpen(true)}><Send className="h-4 w-4" /> Envoyer</Button>
-            <Button variant="primary" disabled={saving} onClick={save}><Save className="h-4 w-4" /> {saving ? "Enregistrement..." : "Enregistrer"}</Button>
+          <div className="grid w-full grid-cols-2 gap-2 sm:flex sm:flex-wrap lg:w-auto lg:justify-end">
+            <Button className="w-full sm:w-auto" variant="secondary" onClick={() => setPreviewOpen((open) => !open)}>Aperçu</Button>
+            <Button className="w-full sm:w-auto" variant="secondary" onClick={() => downloadBusinessDocumentPdf(document)}><Download className="h-4 w-4" /> PDF</Button>
+            <Button className="w-full sm:w-auto" variant="secondary" onClick={() => setSendOpen(true)}><Send className="h-4 w-4" /> Envoyer</Button>
+            <Button className="col-span-2 w-full sm:w-auto" variant="primary" disabled={saving} onClick={save}><Save className="h-4 w-4" /> {saving ? "Enregistrement..." : "Enregistrer"}</Button>
           </div>
         </div>
         {saveError ? <div className="mt-4 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700">{saveError}</div> : null}
