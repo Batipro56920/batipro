@@ -67,7 +67,7 @@ export function isCocoAdminProfile(profile: CurrentUserProfile | null): boolean 
   const email = text(profile?.email)?.toLowerCase() ?? "";
   const name = text(profile?.display_name)?.toLowerCase() ?? "";
   const emails = allowedCocoEmails();
-  return (email && emails.has(email)) || COCO_NAME_PATTERN.test(email) || COCO_NAME_PATTERN.test(name);
+  return Boolean(email && emails.has(email)) || COCO_NAME_PATTERN.test(email) || COCO_NAME_PATTERN.test(name);
 }
 
 export async function isCurrentUserCocoAdmin(): Promise<boolean> {
