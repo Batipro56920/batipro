@@ -15,6 +15,7 @@ import { invoiceTypeLabel } from "../application/invoiceFactory";
 export default function InvoicesPage() {
   const [invoices, setInvoices] = useState<InvoiceRecord[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [dirtyPaymentInvoiceIds, setDirtyPaymentInvoiceIds] = useState<Set<string>>(() => new Set());
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState("");
@@ -59,10 +60,12 @@ export default function InvoicesPage() {
     try {
       const rows = await listInvoices();
       setInvoices(rows);
+      setDirtyPaymentInvoiceIds(new Set());
       if (selectFirst) setSelectedId((current) => current ?? rows[0]?.id ?? null);
     } catch (err: any) {
       setError(err?.message ?? "Chargement des factures impossible.");
       setInvoices([]);
+      setDirtyPaymentInvoiceIds(new Set());
     } finally {
       setLoading(false);
     }
@@ -72,11 +75,21 @@ export default function InvoicesPage() {
     setInvoices((current) => current.map((row) => row.id === invoice.id ? invoice : row));
   }
 
+  function markPaymentsDirty(invoiceId: string, dirty: boolean) {
+    setDirtyPaymentInvoiceIds((current) => {
+      const next = new Set(current);
+      if (dirty) next.add(invoiceId);
+      else next.delete(invoiceId);
+      return next;
+    });
+  }
+
   async function save(invoice: InvoiceRecord) {
     const saved = await saveInvoice(invoice);
     const rows = await listInvoices();
     setInvoices(rows);
     setSelectedId(saved.id);
+    markPaymentsDirty(saved.id, false);
   }
 
   return (
@@ -137,6 +150,7 @@ export default function InvoicesPage() {
           <div className="space-y-2">
             {filteredInvoices.map((invoice) => {
               const totals = invoice.document.totals ?? calculateDocumentTotals(invoice.document);
+              const paymentsDirty = dirtyPaymentInvoiceIds.has(invoice.id);
               return (
                 <button key={invoice.id} type="button" onClick={() => setSelectedId(invoice.id)} className={`w-full rounded-2xl border p-3 text-left transition ${selectedId === invoice.id ? "border-blue-300 bg-blue-50" : "border-slate-200 hover:bg-slate-50"}`}>
                   <div className="flex items-start justify-between gap-2">
@@ -148,6 +162,7 @@ export default function InvoicesPage() {
                   </div>
                   <div className="mt-2 text-sm font-semibold text-slate-900">{formatCurrency(totals.totalTtc)}</div>
                   <div className="mt-1 text-xs text-slate-500">{invoice.document.recipient.displayName || "Client à définir"}</div>
+                  {paymentsDirty ? <div className="mt-2 inline-flex rounded-full bg-amber-100 px-2.5 py-1 text-xs font-semibold text-amber-800">Paiements non enregistrés</div> : null}
                 </button>
               );
             })}
@@ -155,7 +170,7 @@ export default function InvoicesPage() {
           </div>
         </aside>
 
-        {selected ? <InvoiceEditor invoice={selected} onChange={update} onSave={save} /> : (
+        {selected ? <InvoiceEditor invoice={selected} paymentsDirty={dirtyPaymentInvoiceIds.has(selected.id)} onPaymentsDirtyChange={markPaymentsDirty} onChange={update} onSave={save} /> : (
           <div className="rounded-3xl border border-dashed border-slate-200 bg-white p-10 text-center text-sm text-slate-500">
             Sélectionnez une facture existante ou choisissez un projet commercial pour facturer un devis.
           </div>
