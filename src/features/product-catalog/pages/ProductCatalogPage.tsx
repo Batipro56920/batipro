@@ -169,18 +169,18 @@ export default function ProductCatalogPage() {
 
       {editing ? <ProductForm product={editing} suppliers={suppliers} onCancel={() => setEditing(null)} onSave={saveProduct} /> : null}
 
-      {!loading ? <section className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
-        <table className="min-w-full divide-y divide-slate-100 text-sm">
+      {!loading ? <section className="overflow-x-auto rounded-3xl border border-slate-200 bg-white shadow-sm">
+        <table className="min-w-[980px] divide-y divide-slate-100 text-sm">
           <thead className="bg-slate-50 text-left text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">
             <tr>
               <th className="px-4 py-3">Produit</th>
               <th className="px-4 py-3">Catégorie</th>
               <th className="px-4 py-3">Marque</th>
               <th className="px-4 py-3">Fournisseur</th>
-              <th className="px-4 py-3">Unite</th>
+              <th className="px-4 py-3">Unité</th>
               <th className="px-4 py-3">Usage</th>
               <th className="px-4 py-3 text-right">Achat HT</th>
-              <th className="px-4 py-3 text-right">Vente conseillee</th>
+              <th className="px-4 py-3 text-right">Vente conseillée</th>
               <th className="px-4 py-3 text-right">Docs</th>
               <th className="px-4 py-3 text-right">Actions</th>
             </tr>
@@ -220,6 +220,10 @@ export default function ProductCatalogPage() {
 
 function ProductForm({ product, suppliers, onCancel, onSave }: { product: ProductCatalogItem | ProductCatalogDraft; suppliers: SupplierRow[]; onCancel: () => void; onSave: (product: ProductCatalogItem | ProductCatalogDraft) => void | Promise<void> }) {
   const [draft, setDraft] = useState(product);
+
+  useEffect(() => {
+    setDraft(product);
+  }, [product]);
 
   function patch(patch: Partial<ProductCatalogItem | ProductCatalogDraft>) {
     setDraft((current) => ({ ...current, ...patch }));
@@ -295,7 +299,7 @@ function SupplierPricesEditor({ prices, suppliers, onChange }: { prices: Product
             <input className={inputClass} type="date" value={price.endDate ?? ""} onChange={(event) => updatePrice(price.id, { endDate: event.target.value || null })} />
             <input className={inputClass} placeholder="Conditionnement" value={price.packaging ?? ""} onChange={(event) => updatePrice(price.id, { packaging: event.target.value || null })} />
             <SmallNumber value={price.minimumQuantity ?? 0} onChange={(minimumQuantity) => updatePrice(price.id, { minimumQuantity })} placeholder="Qte min" />
-            <SmallNumber value={price.deliveryLeadTimeDays ?? 0} onChange={(deliveryLeadTimeDays) => updatePrice(price.id, { deliveryLeadTimeDays })} placeholder="Delai j" />
+            <SmallNumber value={price.deliveryLeadTimeDays ?? 0} onChange={(deliveryLeadTimeDays) => updatePrice(price.id, { deliveryLeadTimeDays })} placeholder="Délai j" />
           </div>
         ))}
         {!prices.length ? <div className="rounded-xl border border-dashed border-slate-200 p-4 text-sm text-slate-500">Aucun prix négocié pour le moment.</div> : null}
