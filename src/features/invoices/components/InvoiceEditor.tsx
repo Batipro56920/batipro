@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { Download, Plus, Save, Send, Trash2 } from "lucide-react";
 import { Button } from "../../../components/ui/button";
 import { calculateDocumentTotals, createDocumentLine, createDocumentSection, DocumentPreview, DocumentSendDialog, DocumentTotalsCard, downloadBusinessDocumentPdf, flattenDocumentNodes, validateBusinessDocument, type BusinessDocument, type BusinessDocumentNode, type DocumentItemKind } from "../../document-engine";
@@ -14,18 +14,21 @@ const PAYMENT_METHOD_LABELS: Record<InvoicePayment["method"], string> = {
   direct_debit: "Prelevement",
 };
 
-export function InvoiceEditor({ invoice, onChange, onSave }: { invoice: InvoiceRecord; onChange: (invoice: InvoiceRecord) => void; onSave: (invoice: InvoiceRecord) => void | Promise<void> }) {
+type InvoiceEditorProps = {
+  invoice: InvoiceRecord;
+  paymentsDirty: boolean;
+  onPaymentsDirtyChange: (invoiceId: string, dirty: boolean) => void;
+  onChange: (invoice: InvoiceRecord) => void;
+  onSave: (invoice: InvoiceRecord) => void | Promise<void>;
+};
+
+export function InvoiceEditor({ invoice, paymentsDirty, onPaymentsDirtyChange, onChange, onSave }: InvoiceEditorProps) {
   const [previewOpen, setPreviewOpen] = useState(false);
   const [sendOpen, setSendOpen] = useState(false);
-  const [paymentsDirty, setPaymentsDirty] = useState(false);
   const document = invoice.document;
   const totals = document.totals ?? calculateDocumentTotals(document);
   const rows = useMemo(() => flattenDocumentNodes(document.nodes), [document.nodes]);
   const profitability = createProfitabilitySnapshot(invoice);
-
-  useEffect(() => {
-    setPaymentsDirty(false);
-  }, [invoice.id]);
 
   function updateDocument(patch: Partial<BusinessDocument>) {
     const nextDocument = { ...document, ...patch };
@@ -50,12 +53,12 @@ export function InvoiceEditor({ invoice, onChange, onSave }: { invoice: InvoiceR
   }
 
   function addPayment(payment: Omit<InvoicePayment, "id">) {
-    setPaymentsDirty(true);
+    onPaymentsDirtyChange(invoice.id, true);
     onChange(addInvoicePayment(invoice, payment));
   }
 
   function removePayment(paymentId: string) {
-    setPaymentsDirty(true);
+    onPaymentsDirtyChange(invoice.id, true);
     onChange(removeInvoicePayment(invoice, paymentId));
   }
 
@@ -63,7 +66,7 @@ export function InvoiceEditor({ invoice, onChange, onSave }: { invoice: InvoiceR
     const validation = validateBusinessDocument(document);
     if (!validation.success) throw new Error(validation.error.issues.map((issue) => issue.message).join(", "));
     await onSave(invoice);
-    setPaymentsDirty(false);
+    onPaymentsDirtyChange(invoice.id, false);
   }
 
   return (
