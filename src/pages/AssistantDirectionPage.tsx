@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
-import { AlertTriangle, BrainCircuit, Loader2, Lock, RefreshCw, Send, Sparkles } from "lucide-react";
+import { AlertTriangle, BrainCircuit, ClipboardCheck, Loader2, Lock, RefreshCw, Send, ShieldCheck, Sparkles } from "lucide-react";
 import { getCurrentUserProfile, type CurrentUserProfile } from "../services/currentUserProfile.service";
 import {
+  COCO_ASSISTANT_ARCHITECTURE,
   COCO_DIRECTION_QUICK_QUESTIONS,
   askCocoDirectionAssistant,
   isCocoAdminProfile,
@@ -17,6 +18,15 @@ const WELCOME_MESSAGE: CocoDirectionChatMessage = {
   content:
     "Bonjour. Je suis Assistant Direction COCO. Mon role : anticiper les risques entreprise a partir des donnees Batipro disponibles, puis te proposer des priorites claires sans modifier les donnees.",
 };
+
+const CONTROLLED_DRAFT_CATEGORIES = [
+  { label: "Analyse apres visite", module: "Chiffrage", status: "Pilote actif", detail: "Pré-devis, temps, matériaux, fournisseurs, risques et points à vérifier." },
+  { label: "Taches chantier", module: "Preparation", status: "A cadrer", detail: "Taches et zones proposées depuis le devis ou la visite, sans creation automatique." },
+  { label: "Planning previsionnel", module: "Preparation", status: "A cadrer", detail: "Projection de charge et jalons, distincte du planning officiel." },
+  { label: "Besoins materiaux", module: "Achats", status: "Pilote actif", detail: "Besoins issus du chiffrage, fournisseurs suggérés, commande toujours manuelle." },
+  { label: "Actions commerciales", module: "Commercial", status: "A cadrer", detail: "Relances, devis à suivre et périodes creuses en brouillon validable." },
+  { label: "Checklist / compte rendu", module: "Suivi", status: "A cadrer", detail: "Synthèses et actions correctives à revoir avant intégration métier." },
+] as const;
 
 function formatNumber(value: number, suffix = "") {
   return `${Math.round(value).toLocaleString("fr-FR")}${suffix}`;
@@ -176,11 +186,33 @@ export default function AssistantDirectionPage() {
             </div>
             <div className="rounded-lg border border-blue-100 bg-blue-50 px-4 py-3 text-sm text-blue-900">
               <div className="font-semibold">Garde-fou</div>
-              <div className="mt-1 text-xs leading-5">Analyse et recommande uniquement. Aucune donnee Batipro n'est modifiee sans validation humaine.</div>
+              <div className="mt-1 text-xs leading-5">Analyse, prepare et propose uniquement. Aucune donnee Batipro n'est modifiee sans validation humaine.</div>
             </div>
           </div>
         </div>
       </header>
+
+      <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm shadow-slate-950/[0.03]">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <div className="flex items-center gap-2 text-sm font-semibold text-slate-950">
+              <ShieldCheck className="h-4 w-4 text-emerald-600" /> Productivite controlee
+            </div>
+            <p className="mt-1 max-w-4xl text-sm leading-6 text-slate-600">
+              COCO peut analyser les donnees reelles, preparer des brouillons et pre-remplir la reflexion metier. Validation, envoi, creation definitive, suppression, planning officiel et commandes restent reserves a l'admin.
+            </p>
+          </div>
+          <span className="inline-flex w-fit rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-800">Validation admin obligatoire</span>
+        </div>
+        <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+          {COCO_ASSISTANT_ARCHITECTURE.map((assistant) => (
+            <div key={assistant.id} className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+              <div className="text-sm font-semibold text-slate-950">{assistant.label}</div>
+              <p className="mt-1 text-xs leading-5 text-slate-600">{assistant.scope}</p>
+            </div>
+          ))}
+        </div>
+      </section>
 
       <section className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_340px]">
         <div className="flex min-h-[620px] flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm shadow-slate-950/[0.03]">
@@ -264,6 +296,24 @@ export default function AssistantDirectionPage() {
               </div>
             </div>
           ) : null}
+
+          <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm shadow-slate-950/[0.03]">
+            <div className="flex items-center gap-2 text-sm font-semibold text-slate-950">
+              <ClipboardCheck className="h-4 w-4 text-blue-600" /> Brouillons controles
+            </div>
+            <div className="mt-3 space-y-2">
+              {CONTROLLED_DRAFT_CATEGORIES.map((draft) => (
+                <div key={`${draft.module}-${draft.label}`} className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="min-w-0 text-xs font-semibold text-slate-950">{draft.label}</div>
+                    <span className="shrink-0 rounded-full border border-slate-200 bg-white px-2 py-0.5 text-[10px] font-semibold text-slate-500">{draft.status}</span>
+                  </div>
+                  <div className="mt-1 text-[11px] font-medium text-blue-700">{draft.module}</div>
+                  <p className="mt-1 text-xs leading-5 text-slate-600">{draft.detail}</p>
+                </div>
+              ))}
+            </div>
+          </div>
 
           <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm shadow-slate-950/[0.03]">
             <div className="flex items-center gap-2 text-sm font-semibold text-slate-950">
