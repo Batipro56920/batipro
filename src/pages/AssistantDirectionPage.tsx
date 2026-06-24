@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState, type FormEvent } from "react";
-import { AlertTriangle, BrainCircuit, ClipboardCheck, Loader2, Lock, RefreshCw, Send, ShieldCheck, Sparkles } from "lucide-react";
+import { useEffect, useMemo, useState, type ChangeEvent, type FormEvent } from "react";
+import { AlertTriangle, BrainCircuit, ClipboardCheck, Loader2, Lock, Paperclip, RefreshCw, Send, ShieldCheck, Sparkles, X } from "lucide-react";
 import { getCurrentUserProfile, type CurrentUserProfile } from "../services/currentUserProfile.service";
 import {
   COCO_ASSISTANT_ARCHITECTURE,
@@ -16,6 +16,14 @@ import {
 } from "../services/cocoDirectionAssistant.service";
 
 type AccessState = "checking" | "allowed" | "denied";
+type CocoConversationAttachment = {
+  id: string;
+  name: string;
+  type: string;
+  size: number;
+  content: string;
+  truncated: boolean;
+};
 
 const WELCOME_MESSAGE: CocoDirectionChatMessage = {
   role: "assistant",
@@ -39,6 +47,9 @@ const CONTROLLED_DRAFT_SOURCE_KINDS = [
 ] as const;
 
 const CONTROLLED_DRAFT_NEXT_STATUSES = ["reviewed", "validated", "ignored"] as const;
+const ATTACHMENT_MAX_BYTES = 120_000;
+const ATTACHMENT_TOTAL_MAX_CHARS = 18_000;
+const TEXT_ATTACHMENT_EXTENSIONS = /\.(txt|md|csv|json|log|xml|html|htm|yaml|yml)$/i;
 
 function formatNumber(value: number, suffix = "") {
   return `${Math.round(value).toLocaleString("fr-FR")}${suffix}`;
@@ -49,9 +60,64 @@ function formatMaybeNumber(value: number | null | undefined, suffix = "") {
   return `${Number(value).toLocaleString("fr-FR")}${suffix}`;
 }
 
+function formatBytes(value: number) {
+  if (value >= 1_000_000) return `${(value / 1_000_000).toLocaleString("fr-FR", { maximumFractionDigits: 1 })} Mo`;
+  if (value >= 1_000) return `${Math.round(value / 1_000).toLocaleString("fr-FR")} Ko`;
+  return `${value.toLocaleString("fr-FR")} o`;
+}
+
 function getErrorMessage(error: unknown) {
   const message = String((error as { message?: string } | null)?.message ?? "").trim();
   return message || "L'assistant direction n'a pas pu repondre pour le moment.";
+}
+
+function canReadAsText(file: File) {
+  return file.type.startsWith("text/") || file.type === "application/json" || TEXT_ATTACHMENT_EXTENSIONS.test(file.name);
+}
+
+function readFileText(file: File): Promise<CocoConversationAttachment> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    const truncated = file.size > ATTACHMENT_MAX_BYTES;
+    reader.onload = () => {
+      resolve({
+        id: crypto.randomUUID(),
+        name: file.name,
+        type: file.type || "texte",
+        size: file.size,
+        content: String(reader.result ?? ""),
+        truncated,
+      });
+    };
+    reader.onerror = () => reject(new Error(`Lecture impossible : ${file.name}`));
+    reader.readAsText(file.slice(0, ATTACHMENT_MAX_BYTES));
+  });
+}
+
+function buildAttachmentContext(attachments: CocoConversationAttachment[]) {
+  let remaining = ATTACHMENT_TOTAL_MAX_CHARS;
+  const blocks: string[] = [];
+  for (const attachment of attachments) {
+    if (remaining <= 0) break;
+    const header = `--- Fichier: ${attachment.name} (${attachment.type}, ${formatBytes(attachment.size)}${attachment.truncated ? ", tronque" : ""}) ---`;
+    const available = Math.max(0, remaining - header.length - 32);
+    const content = attachment.content.slice(0, available);
+    blocks.push(`${header}\n${content}${content.length < attachment.content.length ? "\n[Contenu tronque]" : ""}`);
+    remaining -= header.length + content.length + 32;
+  }
+  return blocks.join("\n\n");
+}
+
+function buildMessageWithAttachments(message: string, attachments: CocoConversationAttachment[]) {
+  const cleanMessage = message.trim() || "Analyse les fichiers transmis et indique les implications utiles pour Batipro.";
+  if (!attachments.length) return cleanMessage;
+  return `${cleanMessage}\n\n[Fichiers transmis par l'utilisateur a COCO - lecture locale depuis le navigateur, non stockes dans Batipro]\n${buildAttachmentContext(attachments)}`;
+}
+
+function displayMessageWithAttachments(message: string, attachments: CocoConversationAttachment[]) {
+  const cleanMessage = message.trim() || "Analyse les fichiers transmis.";
+  if (!attachments.length) return cleanMessage;
+  return `${cleanMessage}\n\nFichiers transmis : ${attachments.map((attachment) => attachment.name).join(", ")}`;
 }
 
 function draftStatusLabel(status: CocoControlledDraftStatus) {
@@ -136,6 +202,9 @@ export default function AssistantDirectionPage() {
   const [controlledDraftsError, setControlledDraftsError] = useState<string | null>(null);
   const [selectedDraftId, setSelectedDraftId] = useState<string | null>(null);
   const [updatingDraftId, setUpdatingDraftId] = useState<string | null>(null);
+  const [attachments, setAttachments] = useState<CocoConversationAttachment[]>([]);
+  const [readingAttachments, setReadingAttachments] = useState(false);
+  const [attachmentError, setAttachmentError] = useState<string | null>(null);
   const [input, setInput] = useState("");
   const [messages, setMessages] = useState<CocoDirectionChatMessage[]>([WELCOME_MESSAGE]);
   const [sending, setSending] = useState(false);
@@ -218,9 +287,28 @@ export default function AssistantDirectionPage() {
     }
   }
 
-  async function askAssistant(content: string) {
+  async function handleAttachmentSelection(event: ChangeEvent<HTMLInputElement>) {
+    const files = Array.from(event.target.files ?? []);
+    event.target.value = "";
+    if (!files.length) return;
+    setReadingAttachments(true);
+    setAttachmentError(null);
+    try {
+      const readable = files.filter(canReadAsText);
+      const ignored = files.length - readable.length;
+      const nextAttachments = await Promise.all(readable.map(readFileText));
+      setAttachments((previous) => [...previous, ...nextAttachments].slice(0, 6));
+      if (ignored) setAttachmentError(`${ignored} fichier(s) ignores : seuls les fichiers texte, CSV, JSON, Markdown ou logs sont lus directement par COCO.`);
+    } catch (err) {
+      setAttachmentError(getErrorMessage(err));
+    } finally {
+      setReadingAttachments(false);
+    }
+  }
+
+  async function askAssistant(content: string, currentAttachments = attachments) {
     const cleanContent = content.trim();
-    if (!cleanContent || sending || access !== "allowed") return;
+    if ((!cleanContent && !currentAttachments.length) || sending || access !== "allowed") return;
 
     let activeContext = context;
     if (!activeContext) {
@@ -233,15 +321,19 @@ export default function AssistantDirectionPage() {
       }
     }
 
-    const nextMessages: CocoDirectionChatMessage[] = [...messages, { role: "user", content: cleanContent }];
+    const apiContent = buildMessageWithAttachments(cleanContent, currentAttachments);
+    const displayContent = displayMessageWithAttachments(cleanContent, currentAttachments);
+    const nextMessages: CocoDirectionChatMessage[] = [...messages, { role: "user", content: displayContent }];
     setMessages(nextMessages);
     setInput("");
+    setAttachments([]);
     setSending(true);
     setError(null);
+    setAttachmentError(null);
 
     try {
       const reply = await askCocoDirectionAssistant({
-        message: cleanContent,
+        message: apiContent,
         history: nextMessages,
         context: activeContext,
       });
@@ -455,12 +547,31 @@ export default function AssistantDirectionPage() {
           </div>
 
           <form onSubmit={handleSubmit} className="border-t border-slate-200 bg-white p-3">
+            {attachments.length ? (
+              <div className="mb-2 flex flex-wrap gap-2">
+                {attachments.map((attachment) => (
+                  <div key={attachment.id} className="inline-flex max-w-full items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-2 py-1 text-xs text-slate-600">
+                    <Paperclip className="h-3 w-3 shrink-0" />
+                    <span className="truncate">{attachment.name}</span>
+                    <span className="shrink-0 text-slate-400">{formatBytes(attachment.size)}</span>
+                    <button type="button" onClick={() => setAttachments((current) => current.filter((item) => item.id !== attachment.id))} className="grid h-5 w-5 place-items-center rounded hover:bg-slate-200" aria-label={`Retirer ${attachment.name}`}>
+                      <X className="h-3 w-3" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            ) : null}
+            {attachmentError ? <div className="mb-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">{attachmentError}</div> : null}
             <div className="flex items-end gap-2">
+              <label className="grid h-11 w-11 shrink-0 cursor-pointer place-items-center rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50" title="Ajouter un fichier texte a transmettre a COCO">
+                {readingAttachments ? <Loader2 className="h-4 w-4 animate-spin" /> : <Paperclip className="h-4 w-4" />}
+                <input type="file" multiple accept=".txt,.md,.csv,.json,.log,.xml,.html,.htm,.yaml,.yml,text/*,application/json" onChange={(event) => void handleAttachmentSelection(event)} className="sr-only" />
+              </label>
               <label className="min-w-0 flex-1">
                 <span className="sr-only">Question a l'Assistant Direction COCO</span>
                 <textarea value={input} onChange={(event) => setInput(event.target.value)} rows={3} className="max-h-40 min-h-16 w-full resize-none rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100" placeholder={suggestedPrompt} />
               </label>
-              <button type="submit" disabled={sending || loadingContext || !input.trim()} className="grid h-11 w-11 shrink-0 place-items-center rounded-lg bg-slate-950 text-white hover:bg-slate-800 disabled:bg-slate-200 disabled:text-slate-500" aria-label="Envoyer a l'assistant direction"><Send className="h-4 w-4" /></button>
+              <button type="submit" disabled={sending || loadingContext || readingAttachments || (!input.trim() && !attachments.length)} className="grid h-11 w-11 shrink-0 place-items-center rounded-lg bg-slate-950 text-white hover:bg-slate-800 disabled:bg-slate-200 disabled:text-slate-500" aria-label="Envoyer a l'assistant direction"><Send className="h-4 w-4" /></button>
             </div>
           </form>
         </div>
