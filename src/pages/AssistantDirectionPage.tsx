@@ -15,7 +15,7 @@ type AccessState = "checking" | "allowed" | "denied";
 const WELCOME_MESSAGE: CocoDirectionChatMessage = {
   role: "assistant",
   content:
-    "Bonjour COCO. Je suis l'Assistant Direction COCO. Mon role : anticiper les risques entreprise a partir des donnees Batipro disponibles, puis te proposer des priorites claires sans modifier les donnees.",
+    "Bonjour. Je suis Assistant Direction COCO. Mon role : anticiper les risques entreprise a partir des donnees Batipro disponibles, puis te proposer des priorites claires sans modifier les donnees.",
 };
 
 function formatNumber(value: number, suffix = "") {
@@ -146,13 +146,13 @@ export default function AssistantDirectionPage() {
             <Lock className="h-5 w-5" />
           </div>
           <div>
-            <h1 className="text-lg font-semibold">Acces reserve au compte admin COCO</h1>
+            <h1 className="text-lg font-semibold">Acces reserve aux administrateurs</h1>
             <p className="mt-2 text-sm leading-6">
-              Cette page est limitee au dirigeant/admin COCO. Le profil actuel
-              {profile?.email ? ` (${profile.email})` : ""} n'est pas reconnu comme compte COCO.
+              Assistant Direction COCO est reserve au role admin/dirigeant Batipro. Le profil actuel
+              {profile?.email ? ` (${profile.email})` : ""} n'a pas l'autorisation necessaire.
             </p>
             <p className="mt-2 text-sm leading-6">
-              Pour autoriser explicitement le compte COCO, renseigner <code>VITE_COCO_ADMIN_EMAILS</code> cote front et <code>COCO_ADMIN_EMAILS</code> cote Supabase Function avec l'email admin concerne.
+              Verifier que la ligne du compte dans <code>profiles</code> possede bien <code>role = ADMIN</code> et que la permission <code>assistant_coco_direction</code> n'est pas desactivee.
             </p>
           </div>
         </div>
