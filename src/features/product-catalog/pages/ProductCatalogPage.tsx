@@ -356,11 +356,15 @@ function SmallNumber({ value, onChange, placeholder, className = "" }: { value: 
       placeholder={placeholder}
       value={text}
       onChange={(event) => {
-        const nextValue = event.target.value;
-        setText(nextValue);
-        onChange(parseFrenchNumber(nextValue));
+        const nextText = event.target.value;
+        const nextValue = parseFrenchNumber(nextText);
+        setText(nextText);
+        if (nextValue !== null) onChange(nextValue);
       }}
-      onBlur={() => setText(formatNumberInputValue(parseFrenchNumber(text)))}
+      onBlur={() => {
+        const nextValue = parseFrenchNumber(text);
+        setText(formatNumberInputValue(nextValue ?? value));
+      }}
     />
   );
 }
@@ -413,14 +417,37 @@ function formatCurrency(value: number) {
   return new Intl.NumberFormat("fr-FR", { style: "currency", currency: "EUR", maximumFractionDigits: 2 }).format(value);
 }
 
-function parseFrenchNumber(value: string) {
+function parseFrenchNumber(value: string): number | null {
   const text = value.trim();
-  if (!text) return 0;
-  const normalized = text.includes(",")
-    ? text.replace(/\s/g, "").replace(/\./g, "").replace(",", ".")
-    : text.replace(/\s/g, "");
+  if (!text) return null;
+  if (/[,.]$/.test(text)) return null;
+
+  const compact = text.replace(/[\s\u00a0\u202f]/g, "");
+  const lastComma = compact.lastIndexOf(",");
+  const lastDot = compact.lastIndexOf(".");
+  let normalized = compact;
+
+  if (lastComma >= 0 && lastDot >= 0) {
+    normalized = lastComma > lastDot
+      ? compact.replace(/\./g, "").replace(",", ".")
+      : compact.replace(/,/g, "");
+  } else if (lastComma >= 0) {
+    normalized = compact.replace(",", ".");
+  } else if (lastDot >= 0 && looksLikeThousandsGroups(compact, ".")) {
+    normalized = compact.replace(/\./g, "");
+  }
+
   const parsed = Number(normalized);
-  return Number.isFinite(parsed) ? parsed : 0;
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function looksLikeThousandsGroups(value: string, separator: string): boolean {
+  const parts = value.split(separator);
+  if (parts.length < 2) return false;
+  const [first, ...rest] = parts;
+  return first.length >= 1
+    && first.length <= 3
+    && rest.every((part) => /^\d{3}$/.test(part));
 }
 
 function formatNumberInputValue(value: number) {
