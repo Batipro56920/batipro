@@ -7,16 +7,15 @@ const corsHeaders = {
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
-const COCO_NAME_PATTERN = /(^|[\s._-])coco($|[\s._-])/i;
 const PROFILE_PERMISSION_KEY = "assistant_coco_direction";
-const DEFAULT_SYSTEM_PROMPT = `Tu es l'assistant IA de direction du compte admin COCO dans Batipro.
+const DEFAULT_SYSTEM_PROMPT = `Tu es Assistant Direction COCO, l'assistant IA de direction du compte admin dans Batipro.
 
 Tu es le bras droit du dirigeant d'une entreprise de rénovation / bâtiment.
 Ton objectif principal est d'aider à piloter l'entreprise avec anticipation, rigueur et vision globale.
 
 Mot clé central : ANTICIPATION.
 
-Tu aides COCO à anticiper :
+Tu aides le dirigeant à anticiper :
 - le chiffre d'affaires
 - la trésorerie si les données existent
 - la charge de travail
@@ -85,7 +84,7 @@ Format attendu : commence par une synthèse dirigeant courte, hiérarchise les r
 type ChatRole = "user" | "assistant";
 type ChatMessage = { role?: ChatRole; content?: string };
 type RequestBody = { message?: string; history?: ChatMessage[]; context?: unknown };
-type ProfileRow = { role?: string | null; display_name?: string | null; feature_permissions?: Record<string, unknown> | null };
+type ProfileRow = { role?: string | null; feature_permissions?: Record<string, unknown> | null };
 
 function json(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), { status, headers: { ...corsHeaders, "Content-Type": "application/json" } });
@@ -134,11 +133,10 @@ function profileCanUseAssistant(profile: ProfileRow | null, email: string | null
   if (role !== "ADMIN") return false;
   const permissions = profile?.feature_permissions && typeof profile.feature_permissions === "object" ? profile.feature_permissions : {};
   if (permissions[PROFILE_PERMISSION_KEY] === false) return false;
-  const normalizedEmail = String(email ?? "").trim().toLowerCase();
-  const displayName = String(profile?.display_name ?? "").trim().toLowerCase();
   const emails = allowedCocoEmails();
-  if (normalizedEmail && emails.has(normalizedEmail)) return true;
-  return COCO_NAME_PATTERN.test(displayName) || COCO_NAME_PATTERN.test(normalizedEmail);
+  if (!emails.size) return true;
+  const normalizedEmail = String(email ?? "").trim().toLowerCase();
+  return Boolean(normalizedEmail && emails.has(normalizedEmail));
 }
 
 function extractOutputText(payload: any) {
@@ -167,9 +165,9 @@ async function assertCanUseAssistant(req: Request) {
   const { data: userData, error: userError } = await admin.auth.getUser(token);
   const user = userData.user ?? null;
   if (userError || !user?.id) return { allowed: false, status: 401, error: "Session utilisateur invalide." };
-  const { data: profile, error: profileError } = await admin.from("profiles").select("role, display_name, feature_permissions").eq("id", user.id).maybeSingle();
+  const { data: profile, error: profileError } = await admin.from("profiles").select("role, feature_permissions").eq("id", user.id).maybeSingle();
   if (profileError) return { allowed: false, status: 500, error: "Lecture du profil impossible." };
-  if (!profileCanUseAssistant(profile as ProfileRow | null, user.email ?? null)) return { allowed: false, status: 403, error: "Assistant Direction COCO réservé au compte admin COCO." };
+  if (!profileCanUseAssistant(profile as ProfileRow | null, user.email ?? null)) return { allowed: false, status: 403, error: "Assistant Direction COCO réservé aux admins autorisés." };
   return { allowed: true, status: 200, error: null };
 }
 
