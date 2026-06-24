@@ -1,6 +1,7 @@
 ﻿import { NavLink } from "react-router-dom";
 import {
   Banknote,
+  BrainCircuit,
   Calculator,
   ChevronLeft,
   ChevronRight,
@@ -83,6 +84,13 @@ export default function Sidebar({ collapsed = false, onToggleCollapse, companyNa
 
   const nav = [
     { to: "/dashboard", label: t("sidebar.dashboard"), icon: LayoutDashboard, group: "Pilotage", end: true },
+    {
+      to: "/assistant-direction",
+      label: "Assistant COCO",
+      icon: BrainCircuit,
+      group: "Pilotage",
+      adminOnly: true,
+    },
     {
       to: "/rentabilite",
       label: "Rentabilité",
@@ -259,6 +267,8 @@ export default function Sidebar({ collapsed = false, onToggleCollapse, companyNa
     },
   ].filter(
     (item) => {
+      const role = String(profilePermissions?.role ?? "").trim().toUpperCase();
+      const adminAllowed = !("adminOnly" in item && item.adminOnly) || role === "ADMIN";
       const featureAllowed = !item.feature || !enabledModules || enabledModules.has(item.feature);
       const permissionKey = (item.permissionKey ?? item.feature ?? null) as ProfileFeaturePermissionKey | null;
       const profileAllowed = !permissionKey || !profilePermissions
@@ -268,7 +278,7 @@ export default function Sidebar({ collapsed = false, onToggleCollapse, companyNa
             permissionKey,
             profilePermissions.role,
           );
-      return featureAllowed && profileAllowed;
+      return adminAllowed && featureAllowed && profileAllowed;
     },
   );
 
