@@ -8,7 +8,8 @@ import {
   updateCrmQuoteItem,
   type CrmQuoteEngineData,
 } from "../../../services/crm.service";
-import { loadLatestCrmVisitQuoteSource } from "../../../services/crmVisitReports.service";
+import { loadLatestCrmVisitQuoteSource, type CrmVisitQuoteSource } from "../../../services/crmVisitReports.service";
+import type { CocoControlledDraft } from "../../../services/cocoDirectionAssistant.service";
 import {
   getCurrentProfileFeaturePermissions,
   hasProfileFeaturePermission,
@@ -35,6 +36,10 @@ export async function loadQuoteBuilder(project: ProjectRecord, quoteId?: string 
   }
   const engine = await loadCrmQuoteEngineData(quoteId);
   return createQuoteBuilderFromEngine(engine, project);
+}
+
+export function createQuoteBuilderFromCocoDraft(project: ProjectRecord, draft: CocoControlledDraft): QuoteBuilderQuote {
+  return createQuoteBuilderFromProject(project, cocoDraftToVisitQuoteSource(project, draft));
 }
 
 export async function saveQuoteBuilder(quote: QuoteBuilderQuote): Promise<QuoteBuilderQuote> {
@@ -237,6 +242,61 @@ function rowToPersistence(row: QuoteBuilderFlatRow, quoteId: string, parentItemI
     tva_rate: row.node.vatRate,
     technical_description: row.node.internalNote ?? "",
   };
+}
+
+function cocoDraftToVisitQuoteSource(project: ProjectRecord, draft: CocoControlledDraft): CrmVisitQuoteSource {
+  const lines: NonNullable<CrmVisitQuoteSource["lines"]> = [];
+  const sectionIdsByLot = new Map<string, string>();
+
+  draft.quoteLines.forEach((line, index) => {
+    const lot = cleanText(line.lot) ?? "Chiffrage COCO";
+    let sectionId = sectionIdsByLot.get(lot);
+    if (!sectionId) {
+      sectionId = crypto.randomUUID();
+      sectionIdsByLot.set(lot, sectionId);
+      lines.push({ id: sectionId, type: "section", title: lot });
+    }
+
+    const quantity = positiveNumber(line.quantity) || 1;
+    const unitPriceHt = line.unitPriceHt ?? (line.totalHt !== null ? line.totalHt / quantity : null);
+    lines.push({
+      id: crypto.randomUUID(),
+      type: "task",
+      parentId: sectionId,
+      title: line.title,
+      unit: line.unit ?? "u",
+      quantity,
+      priceHintHt: unitPriceHt,
+      family: lot,
+      libraryId: line.templateId,
+      technicalNotes: compactNotes([
+        line.source ? `Source COCO: ${line.source}` : null,
+        line.templateTitle ? `Bibliotheque: ${line.templateTitle}` : null,
+        line.estimatedHours !== null ? `Temps estime: ${line.estimatedHours.toLocaleString("fr-FR")} h` : null,
+        ...line.assumptions.map((item) => `Hypothese: ${item}`),
+      ]),
+      constraints: compactNotes(line.pointsToVerify.map((item) => `A verifier: ${item}`)),
+    });
+  });
+
+  return {
+    needDescription: cleanText(project.needDescription) ?? draft.title,
+    lines,
+  };
+}
+
+function cleanText(value: unknown): string | null {
+  const cleaned = String(value ?? "").trim();
+  return cleaned || null;
+}
+
+function compactNotes(values: Array<string | null | undefined>) {
+  return values.map(cleanText).filter((value): value is string => Boolean(value)).join("\n");
+}
+
+function positiveNumber(value: unknown) {
+  const parsed = Number(value ?? 0);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : 0;
 }
 
 function readLocalQuote(projectId: string, quoteId: string | null): QuoteBuilderQuote | null {
