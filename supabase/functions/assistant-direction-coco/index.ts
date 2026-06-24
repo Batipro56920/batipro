@@ -177,7 +177,7 @@ function isCocoProfile(profile: ProfileRow | null, email: string | null, userId:
 
   if (normalizedEmail && allowedEmails.has(normalizedEmail)) return true;
   if (normalizedUserId && allowedUserIds.has(normalizedUserId)) return true;
-  return displayName.includes("coco") || normalizedEmail.includes("coco");
+  return displayName.includes("coco") || normalizedEmail.includes("coco") || displayName.includes("corentin") || normalizedEmail.includes("corentin");
 }
 
 function isMissingSchemaError(error: unknown): boolean {
