@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Download, Plus, Save, Send, Trash2 } from "lucide-react";
 import { Button } from "../../../components/ui/button";
 import { calculateDocumentTotals, createDocumentLine, createDocumentSection, DocumentPreview, DocumentSendDialog, DocumentTotalsCard, downloadBusinessDocumentPdf, flattenDocumentNodes, validateBusinessDocument, type BusinessDocument, type BusinessDocumentNode, type DocumentItemKind } from "../../document-engine";
@@ -14,13 +14,18 @@ const PAYMENT_METHOD_LABELS: Record<InvoicePayment["method"], string> = {
   direct_debit: "Prelevement",
 };
 
-export function InvoiceEditor({ invoice, onChange, onSave }: { invoice: InvoiceRecord; onChange: (invoice: InvoiceRecord) => void; onSave: (invoice: InvoiceRecord) => void }) {
+export function InvoiceEditor({ invoice, onChange, onSave }: { invoice: InvoiceRecord; onChange: (invoice: InvoiceRecord) => void; onSave: (invoice: InvoiceRecord) => void | Promise<void> }) {
   const [previewOpen, setPreviewOpen] = useState(false);
   const [sendOpen, setSendOpen] = useState(false);
+  const [paymentsDirty, setPaymentsDirty] = useState(false);
   const document = invoice.document;
   const totals = document.totals ?? calculateDocumentTotals(document);
   const rows = useMemo(() => flattenDocumentNodes(document.nodes), [document.nodes]);
   const profitability = createProfitabilitySnapshot(invoice);
+
+  useEffect(() => {
+    setPaymentsDirty(false);
+  }, [invoice.id]);
 
   function updateDocument(patch: Partial<BusinessDocument>) {
     const nextDocument = { ...document, ...patch };
@@ -45,17 +50,20 @@ export function InvoiceEditor({ invoice, onChange, onSave }: { invoice: InvoiceR
   }
 
   function addPayment(payment: Omit<InvoicePayment, "id">) {
+    setPaymentsDirty(true);
     onChange(addInvoicePayment(invoice, payment));
   }
 
   function removePayment(paymentId: string) {
+    setPaymentsDirty(true);
     onChange(removeInvoicePayment(invoice, paymentId));
   }
 
-  function save() {
+  async function save() {
     const validation = validateBusinessDocument(document);
     if (!validation.success) throw new Error(validation.error.issues.map((issue) => issue.message).join(", "));
-    onSave(invoice);
+    await onSave(invoice);
+    setPaymentsDirty(false);
   }
 
   return (
@@ -112,7 +120,7 @@ export function InvoiceEditor({ invoice, onChange, onSave }: { invoice: InvoiceR
 
         <aside className="space-y-4">
           <DocumentTotalsCard document={document} totals={totals} />
-          <PaymentPanel invoice={invoice} onAdd={addPayment} onRemove={removePayment} />
+          <PaymentPanel invoice={invoice} paymentsDirty={paymentsDirty} onAdd={addPayment} onRemove={removePayment} />
           <div className="rounded-2xl border border-slate-200 bg-white p-4 text-sm shadow-sm">
             <div className="font-semibold text-slate-950">Rentabilité projet</div>
             <div className="mt-3 space-y-2 text-slate-600">
@@ -130,15 +138,21 @@ export function InvoiceEditor({ invoice, onChange, onSave }: { invoice: InvoiceR
   );
 }
 
-function PaymentPanel({ invoice, onAdd, onRemove }: { invoice: InvoiceRecord; onAdd: (payment: Omit<InvoicePayment, "id">) => void; onRemove: (paymentId: string) => void }) {
+function PaymentPanel({ invoice, paymentsDirty, onAdd, onRemove }: { invoice: InvoiceRecord; paymentsDirty: boolean; onAdd: (payment: Omit<InvoicePayment, "id">) => void; onRemove: (paymentId: string) => void }) {
   const [amount, setAmount] = useState("");
   const [paidAt, setPaidAt] = useState(new Date().toISOString().slice(0, 10));
   const [method, setMethod] = useState<InvoicePayment["method"]>("transfer");
   const [reference, setReference] = useState("");
   return (
     <div className="rounded-2xl border border-slate-200 bg-white p-4 text-sm shadow-sm">
-      <div className="font-semibold text-slate-950">Paiements</div>
-      <div className="mt-2 text-slate-500">Encaissé : {formatCurrency(getPaidAmount(invoice))} · Reste : {formatCurrency(getRemainingAmount(invoice))}</div>
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <div className="font-semibold text-slate-950">Paiements</div>
+          <div className="mt-2 text-slate-500">Encaissé : {formatCurrency(getPaidAmount(invoice))} · Reste : {formatCurrency(getRemainingAmount(invoice))}</div>
+        </div>
+        {paymentsDirty ? <span className="rounded-full bg-amber-100 px-2.5 py-1 text-xs font-semibold text-amber-800">Non enregistré</span> : null}
+      </div>
+      {paymentsDirty ? <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-medium text-amber-800">Les changements de paiement seront validés à l'enregistrement de la facture.</div> : null}
       <div className="mt-4 space-y-2">
         {invoice.payments.length ? invoice.payments.map((payment) => (
           <div key={payment.id} className="rounded-xl border border-slate-100 bg-slate-50 p-3">
