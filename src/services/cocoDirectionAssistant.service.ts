@@ -7,6 +7,7 @@ export type CocoDirectionChatMessage = { role: "user" | "assistant"; content: st
 export type CocoDirectionRisk = { id: string; level: "danger" | "warning" | "info"; title: string; detail: string; module: string };
 export type CocoAssistantDraftKind = "visit_quote_analysis" | "quote" | "tasks" | "planning" | "materials" | "purchase_order" | "commercial_action" | "checklist";
 export type CocoDraftConfidence = "haute" | "moyenne" | "faible";
+export type CocoTaskDraftPriority = "basse" | "normale" | "haute" | "urgente";
 export type CocoVisitQuoteDraftLine = {
   title: string;
   lot: string | null;
@@ -32,6 +33,22 @@ export type CocoMaterialNeedDraft = {
   confidence: CocoDraftConfidence;
   pointsToVerify: string[];
 };
+export type CocoChantierTaskDraft = {
+  title: string;
+  lot: string | null;
+  sourceQuoteLineTitle: string | null;
+  unit: string | null;
+  quantity: number | null;
+  estimatedHours: number | null;
+  templateId: string | null;
+  templateTitle: string | null;
+  priority: CocoTaskDraftPriority;
+  suggestedOrder: number;
+  prerequisites: string[];
+  materials: string[];
+  pointsToVerify: string[];
+  confidence: CocoDraftConfidence;
+};
 export type CocoDraftAction = {
   label: string;
   module: string;
@@ -51,6 +68,7 @@ export type CocoControlledDraft = {
   risks: string[];
   quoteLines: CocoVisitQuoteDraftLine[];
   materialNeeds: CocoMaterialNeedDraft[];
+  chantierTasks: CocoChantierTaskDraft[];
   proposedActions: CocoDraftAction[];
   adminValidationRequired: true;
   finalWriteBlocked: true;
@@ -166,6 +184,16 @@ async function assertCocoAdmin() {
 function normalizeDraftStatus(value: unknown): CocoControlledDraftStatus {
   if (value === "reviewed" || value === "validated" || value === "ignored") return value;
   return "prepared";
+}
+
+function normalizeDraftConfidence(value: unknown): CocoDraftConfidence {
+  if (value === "haute" || value === "faible") return value;
+  return "moyenne";
+}
+
+function normalizeTaskPriority(value: unknown): CocoTaskDraftPriority {
+  if (value === "basse" || value === "haute" || value === "urgente") return value;
+  return "normale";
 }
 
 function draftRecordFromRow(row: Record<string, unknown>): CocoControlledDraftRecord | null {
@@ -388,7 +416,7 @@ function normalizeDraft(raw: Partial<CocoControlledDraft> | null | undefined): C
     title: text(raw?.title) ?? "Brouillon IA apres visite de chiffrage",
     generatedAt: text(raw?.generatedAt) ?? now,
     sourceSummary: safeArray(raw?.sourceSummary).map(String).filter(Boolean),
-    confidence: raw?.confidence === "haute" || raw?.confidence === "faible" ? raw.confidence : "moyenne",
+    confidence: normalizeDraftConfidence(raw?.confidence),
     hypotheses: safeArray(raw?.hypotheses).map(String).filter(Boolean),
     pointsToVerify: safeArray(raw?.pointsToVerify).map(String).filter(Boolean),
     risks: safeArray(raw?.risks).map(String).filter(Boolean),
@@ -403,7 +431,7 @@ function normalizeDraft(raw: Partial<CocoControlledDraft> | null | undefined): C
       templateId: text(line?.templateId),
       templateTitle: text(line?.templateTitle),
       source: text(line?.source) ?? "Visite commerciale",
-      confidence: line?.confidence === "haute" || line?.confidence === "faible" ? line.confidence : "moyenne",
+      confidence: normalizeDraftConfidence(line?.confidence),
       assumptions: safeArray(line?.assumptions).map(String).filter(Boolean),
       pointsToVerify: safeArray(line?.pointsToVerify).map(String).filter(Boolean),
     })),
@@ -414,8 +442,24 @@ function normalizeDraft(raw: Partial<CocoControlledDraft> | null | undefined): C
       supplierId: text(need?.supplierId),
       supplierName: text(need?.supplierName),
       source: text(need?.source) ?? "Analyse chiffrage",
-      confidence: need?.confidence === "haute" || need?.confidence === "faible" ? need.confidence : "moyenne",
+      confidence: normalizeDraftConfidence(need?.confidence),
       pointsToVerify: safeArray(need?.pointsToVerify).map(String).filter(Boolean),
+    })),
+    chantierTasks: safeArray(raw?.chantierTasks).map((task: any, index) => ({
+      title: text(task?.title) ?? "Tache chantier a preparer",
+      lot: text(task?.lot),
+      sourceQuoteLineTitle: text(task?.sourceQuoteLineTitle),
+      unit: text(task?.unit),
+      quantity: task?.quantity === null || task?.quantity === undefined ? null : number(task.quantity),
+      estimatedHours: task?.estimatedHours === null || task?.estimatedHours === undefined ? null : number(task.estimatedHours),
+      templateId: text(task?.templateId),
+      templateTitle: text(task?.templateTitle),
+      priority: normalizeTaskPriority(task?.priority),
+      suggestedOrder: Math.max(1, Math.trunc(number(task?.suggestedOrder) || index + 1)),
+      prerequisites: safeArray(task?.prerequisites).map(String).filter(Boolean),
+      materials: safeArray(task?.materials).map(String).filter(Boolean),
+      pointsToVerify: safeArray(task?.pointsToVerify).map(String).filter(Boolean),
+      confidence: normalizeDraftConfidence(task?.confidence),
     })),
     proposedActions: safeArray(raw?.proposedActions).map((action: any) => ({
       label: text(action?.label) ?? "Revoir la proposition",
@@ -427,6 +471,16 @@ function normalizeDraft(raw: Partial<CocoControlledDraft> | null | undefined): C
     adminValidationRequired: true,
     finalWriteBlocked: true,
   };
+}
+
+function lowerConfidence(values: CocoDraftConfidence[]): CocoDraftConfidence {
+  if (values.includes("faible")) return "faible";
+  if (values.includes("moyenne")) return "moyenne";
+  return "haute";
+}
+
+function compactUnique(values: Array<string | null | undefined>): string[] {
+  return Array.from(new Set(values.map((value) => text(value)).filter((value): value is string => Boolean(value))));
 }
 
 export async function prepareCocoVisitQuoteDraft(input: { project: Record<string, unknown>; appointment: Record<string, unknown>; visitDraft: Record<string, unknown> | null }): Promise<CocoControlledDraft> {
@@ -485,4 +539,93 @@ export async function prepareCocoVisitQuoteDraft(input: { project: Record<string
   const draft = (data as { draft?: Partial<CocoControlledDraft> } | null)?.draft;
   if (!draft) throw new Error("Brouillon IA vide pour la visite de chiffrage.");
   return normalizeDraft(draft);
+}
+
+export async function prepareCocoChantierTasksDraftFromQuoteDraft(input: { quoteDraft: CocoControlledDraft; project?: Record<string, unknown> | null; appointment?: Record<string, unknown> | null }): Promise<CocoControlledDraft> {
+  await assertCocoAdmin();
+  const quoteDraft = normalizeDraft(input.quoteDraft);
+  if (!quoteDraft.quoteLines.length) throw new Error("Aucune ligne de pre-devis disponible pour preparer les taches chantier.");
+
+  const chantierTasks = quoteDraft.quoteLines.map((line, index): CocoChantierTaskDraft => {
+    const materialMatches = quoteDraft.materialNeeds
+      .filter((need) => {
+        const lot = String(line.lot ?? "").toLowerCase();
+        const title = line.title.toLowerCase();
+        const source = String(need.source ?? "").toLowerCase();
+        const designation = need.designation.toLowerCase();
+        return Boolean(lot && (source.includes(lot) || designation.includes(lot))) || source.includes(title) || designation.includes(title);
+      })
+      .map((need) => need.designation);
+    return {
+      title: line.title,
+      lot: line.lot,
+      sourceQuoteLineTitle: line.title,
+      unit: line.unit,
+      quantity: line.quantity,
+      estimatedHours: line.estimatedHours,
+      templateId: line.templateId,
+      templateTitle: line.templateTitle,
+      priority: line.pointsToVerify.length || line.confidence === "faible" ? "haute" : "normale",
+      suggestedOrder: index + 1,
+      prerequisites: index === 0 ? ["Devis accepte et chantier cree par l'administrateur"] : ["Taches precedentes du meme lot a ordonnancer par l'administrateur"],
+      materials: compactUnique(materialMatches),
+      pointsToVerify: compactUnique([...line.pointsToVerify, ...line.assumptions]),
+      confidence: line.confidence,
+    };
+  });
+
+  const missingHours = chantierTasks.filter((task) => task.estimatedHours === null || task.estimatedHours <= 0).length;
+  const materialNeedsWithoutSupplier = quoteDraft.materialNeeds.filter((need) => !need.supplierId && !need.supplierName).length;
+  const totalHours = chantierTasks.reduce((sum, task) => sum + (task.estimatedHours ?? 0), 0);
+
+  return normalizeDraft({
+    id: crypto.randomUUID(),
+    kind: "tasks",
+    title: "Brouillon preparation chantier depuis pre-devis COCO",
+    generatedAt: new Date().toISOString(),
+    sourceSummary: compactUnique([
+      "Brouillon de chiffrage COCO valide en revue admin",
+      ...quoteDraft.sourceSummary,
+      input.project?.name ? `Projet commercial: ${String(input.project.name)}` : null,
+      input.appointment?.id ? "Visite commerciale rattachee" : null,
+    ]),
+    confidence: lowerConfidence(chantierTasks.map((task) => task.confidence)),
+    hypotheses: [
+      "Les taches sont deduites des lignes de pre-devis et devront etre confirmees apres acceptation du devis.",
+      "L'ordre propose est indicatif et ne remplace pas le planning officiel.",
+      "Les affectations intervenants, dates et zones chantier restent a definir par l'administrateur.",
+    ],
+    pointsToVerify: compactUnique([
+      missingHours ? `${missingHours} tache(s) sans temps prevu fiable.` : null,
+      materialNeedsWithoutSupplier ? `${materialNeedsWithoutSupplier} besoin(s) materiaux sans fournisseur confirme.` : null,
+      "Verifier les zones chantier, contraintes d'acces et documents avant creation definitive des taches.",
+      ...quoteDraft.pointsToVerify,
+    ]),
+    risks: compactUnique([
+      missingHours ? "Temps prevu incomplet pour certaines taches." : null,
+      materialNeedsWithoutSupplier ? "Fournisseurs ou achats a confirmer avant demarrage." : null,
+      ...quoteDraft.risks,
+    ]),
+    quoteLines: quoteDraft.quoteLines,
+    materialNeeds: quoteDraft.materialNeeds,
+    chantierTasks,
+    proposedActions: [
+      {
+        label: "Revoir les taches chantier brouillon",
+        module: "Preparation chantier",
+        actionType: "review",
+        requiresAdminValidation: true,
+        detail: `${chantierTasks.length} tache(s) proposee(s), ${totalHours ? `${totalHours.toLocaleString("fr-FR")} h prevues` : "temps a completer"}.`,
+      },
+      {
+        label: "Valider plus tard dans la preparation chantier",
+        module: "Preparation chantier",
+        actionType: "validate",
+        requiresAdminValidation: true,
+        detail: "La creation definitive des taches devra passer par le module chantier apres acceptation du devis et validation admin.",
+      },
+    ],
+    adminValidationRequired: true,
+    finalWriteBlocked: true,
+  });
 }
