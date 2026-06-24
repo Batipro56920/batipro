@@ -44,6 +44,11 @@ function formatNumber(value: number, suffix = "") {
   return `${Math.round(value).toLocaleString("fr-FR")}${suffix}`;
 }
 
+function formatMaybeNumber(value: number | null | undefined, suffix = "") {
+  if (value === null || value === undefined || !Number.isFinite(Number(value))) return "A verifier";
+  return `${Number(value).toLocaleString("fr-FR")}${suffix}`;
+}
+
 function getErrorMessage(error: unknown) {
   const message = String((error as { message?: string } | null)?.message ?? "").trim();
   return message || "L'assistant direction n'a pas pu repondre pour le moment.";
@@ -101,6 +106,19 @@ function buildSummaryCards(context: CocoDirectionContext | null) {
   ];
 }
 
+function TextListCard({ title, items, fallback }: { title: string; items: string[]; fallback: string }) {
+  return (
+    <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+      <div className="text-xs font-semibold text-slate-950">{title}</div>
+      {items.length ? (
+        <ul className="mt-2 space-y-1 text-xs leading-5 text-slate-600">
+          {items.map((item, index) => <li key={`${title}-${index}`}>- {item}</li>)}
+        </ul>
+      ) : <p className="mt-2 text-xs leading-5 text-slate-500">{fallback}</p>}
+    </div>
+  );
+}
+
 export default function AssistantDirectionPage() {
   const [access, setAccess] = useState<AccessState>("checking");
   const [profile, setProfile] = useState<CurrentUserProfile | null>(null);
@@ -109,6 +127,7 @@ export default function AssistantDirectionPage() {
   const [controlledDrafts, setControlledDrafts] = useState<CocoControlledDraftRecord[]>([]);
   const [controlledDraftsLoading, setControlledDraftsLoading] = useState(false);
   const [controlledDraftsError, setControlledDraftsError] = useState<string | null>(null);
+  const [selectedDraftId, setSelectedDraftId] = useState<string | null>(null);
   const [updatingDraftId, setUpdatingDraftId] = useState<string | null>(null);
   const [input, setInput] = useState("");
   const [messages, setMessages] = useState<CocoDirectionChatMessage[]>([WELCOME_MESSAGE]);
@@ -143,6 +162,10 @@ export default function AssistantDirectionPage() {
 
   const suggestedPrompt = useMemo(() => COCO_DIRECTION_QUICK_QUESTIONS[0]?.label ?? "Point hebdomadaire entreprise", []);
   const summaryCards = useMemo(() => buildSummaryCards(context), [context]);
+  const selectedDraft = useMemo(
+    () => controlledDrafts.find((record) => record.id === selectedDraftId) ?? null,
+    [controlledDrafts, selectedDraftId],
+  );
 
   async function refreshContext() {
     setLoadingContext(true);
@@ -285,6 +308,120 @@ export default function AssistantDirectionPage() {
         </div>
       </section>
 
+      {selectedDraft ? (
+        <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm shadow-slate-950/[0.03]">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+            <div className="min-w-0">
+              <div className="text-xs font-semibold uppercase tracking-[0.16em] text-blue-700">Revue de brouillon COCO</div>
+              <h2 className="mt-1 text-lg font-semibold text-slate-950">{selectedDraft.draft.title}</h2>
+              <p className="mt-1 text-xs text-slate-500">{draftKindLabel(selectedDraft.kind)} - {draftSourceLabel(selectedDraft.sourceKind)} - {new Date(selectedDraft.createdAt).toLocaleString("fr-FR")}</p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <span className={["inline-flex h-9 items-center rounded-lg border px-3 text-xs font-semibold", draftStatusClass(selectedDraft.status)].join(" ")}>{draftStatusLabel(selectedDraft.status)}</span>
+              {CONTROLLED_DRAFT_NEXT_STATUSES.map((status) => (
+                <button key={status} type="button" onClick={() => void updateControlledDraftStatus(selectedDraft, status)} disabled={updatingDraftId === selectedDraft.id || selectedDraft.status === status} className="h-9 rounded-lg border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400">
+                  {updatingDraftId === selectedDraft.id ? "..." : draftStatusLabel(status)}
+                </button>
+              ))}
+              <button type="button" onClick={() => setSelectedDraftId(null)} className="h-9 rounded-lg border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-700 hover:bg-slate-50">Fermer</button>
+            </div>
+          </div>
+
+          <div className="mt-4 rounded-lg border border-blue-100 bg-blue-50 p-3 text-xs leading-5 text-blue-900">
+            Cette revue reste un espace de controle. Changer le statut ne cree aucun devis final, aucune tache chantier, aucun planning officiel et aucune commande fournisseur.
+          </div>
+
+          <div className="mt-4 grid gap-3 lg:grid-cols-4">
+            <TextListCard title="Sources" items={selectedDraft.draft.sourceSummary} fallback="Aucune source detaillee." />
+            <TextListCard title="Hypotheses" items={selectedDraft.draft.hypotheses} fallback="Aucune hypothese detaillee." />
+            <TextListCard title="Points a verifier" items={selectedDraft.draft.pointsToVerify} fallback="Aucun point specifique." />
+            <TextListCard title="Risques" items={selectedDraft.draft.risks} fallback="Aucun risque specifique." />
+          </div>
+
+          {selectedDraft.draft.quoteLines.length ? (
+            <div className="mt-4 overflow-hidden rounded-lg border border-slate-200">
+              <div className="border-b border-slate-200 bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-950">Lignes de pre-devis proposees</div>
+              <div className="divide-y divide-slate-100">
+                {selectedDraft.draft.quoteLines.map((line, index) => (
+                  <div key={`${line.title}-${index}`} className="grid gap-2 p-4 text-sm lg:grid-cols-[minmax(0,1fr)_110px_110px_130px]">
+                    <div>
+                      <div className="font-semibold text-slate-950">{line.title}</div>
+                      <div className="mt-1 text-xs text-slate-500">{line.lot ?? "Lot a confirmer"} - Source: {line.source}</div>
+                    </div>
+                    <div className="text-slate-600">{formatMaybeNumber(line.quantity)} {line.unit ?? "u"}</div>
+                    <div className="text-slate-600">{formatMaybeNumber(line.estimatedHours, " h")}</div>
+                    <div className="font-semibold text-slate-950">{formatMaybeNumber(line.totalHt, " EUR HT")}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : null}
+
+          {selectedDraft.draft.chantierTasks.length ? (
+            <div className="mt-4 overflow-hidden rounded-lg border border-slate-200">
+              <div className="border-b border-slate-200 bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-950">Taches chantier proposees</div>
+              <div className="divide-y divide-slate-100">
+                {selectedDraft.draft.chantierTasks.map((task) => (
+                  <div key={`${task.suggestedOrder}-${task.title}`} className="grid gap-2 p-4 text-sm lg:grid-cols-[52px_minmax(0,1fr)_110px_110px]">
+                    <div className="text-xs font-semibold text-slate-400">#{task.suggestedOrder}</div>
+                    <div>
+                      <div className="font-semibold text-slate-950">{task.title}</div>
+                      <div className="mt-1 text-xs text-slate-500">{task.lot ?? "Lot a confirmer"}{task.templateTitle ? ` - ${task.templateTitle}` : ""}</div>
+                    </div>
+                    <div className="text-slate-600">{formatMaybeNumber(task.quantity)} {task.unit ?? ""}</div>
+                    <div className="text-slate-600">{formatMaybeNumber(task.estimatedHours, " h")}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : null}
+
+          {selectedDraft.draft.materialNeeds.length ? (
+            <div className="mt-4 grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+              {selectedDraft.draft.materialNeeds.map((need, index) => (
+                <div key={`${need.designation}-${index}`} className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm">
+                  <div className="font-semibold text-slate-950">{need.designation}</div>
+                  <div className="mt-1 text-xs text-slate-500">{formatMaybeNumber(need.quantity)} {need.unit ?? ""} - {need.supplierName ?? "Fournisseur a choisir"}</div>
+                </div>
+              ))}
+            </div>
+          ) : null}
+
+          {selectedDraft.draft.purchaseOrders.length ? (
+            <div className="mt-4 overflow-hidden rounded-lg border border-slate-200">
+              <div className="border-b border-slate-200 bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-950">Bons de commande fournisseurs brouillons</div>
+              <div className="divide-y divide-slate-100">
+                {selectedDraft.draft.purchaseOrders.map((order, index) => (
+                  <div key={`${order.title}-${index}`} className="p-4 text-sm">
+                    <div className="font-semibold text-slate-950">{order.title}</div>
+                    <div className="mt-1 text-xs text-slate-500">{order.supplierName ?? "Fournisseur a choisir"}{order.supplierCity ? ` - ${order.supplierCity}` : ""}</div>
+                    <div className="mt-3 grid gap-2 md:grid-cols-2">
+                      {order.lines.map((line, lineIndex) => (
+                        <div key={`${line.designation}-${lineIndex}`} className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+                          <div className="font-semibold text-slate-950">{line.designation}</div>
+                          <div className="mt-1 text-xs text-slate-500">{formatMaybeNumber(line.quantity)} {line.unit ?? ""} - Source: {line.sourceMaterialNeed}</div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : null}
+
+          {selectedDraft.draft.proposedActions.length ? (
+            <div className="mt-4 grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+              {selectedDraft.draft.proposedActions.map((action, index) => (
+                <div key={`${action.label}-${index}`} className="rounded-lg border border-slate-200 bg-white p-3 text-sm">
+                  <div className="font-semibold text-slate-950">{action.label}</div>
+                  <div className="mt-1 text-xs leading-5 text-slate-500">{action.module} - {action.detail}</div>
+                </div>
+              ))}
+            </div>
+          ) : null}
+        </section>
+      ) : null}
+
       <section className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_340px]">
         <div className="flex min-h-[620px] flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm shadow-slate-950/[0.03]">
           <div className="flex items-center justify-between gap-3 border-b border-slate-200 px-4 py-3">
@@ -376,12 +513,11 @@ export default function AssistantDirectionPage() {
                   </div>
                   <div className="mt-2 text-[11px] leading-5 text-slate-500">{draftMetrics(record)}<br />{new Date(record.createdAt).toLocaleString("fr-FR")}</div>
                   {record.draft.pointsToVerify.length ? <div className="mt-2 max-h-10 overflow-hidden text-[11px] leading-5 text-amber-700">A verifier: {record.draft.pointsToVerify.join(" - ")}</div> : null}
-                  <div className="mt-3 grid grid-cols-3 gap-1">
-                    {CONTROLLED_DRAFT_NEXT_STATUSES.map((status) => (
-                      <button key={status} type="button" onClick={() => void updateControlledDraftStatus(record, status)} disabled={updatingDraftId === record.id || record.status === status} className="h-8 rounded-lg border border-slate-200 bg-white px-2 text-[11px] font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400">
-                        {updatingDraftId === record.id ? "..." : draftStatusLabel(status)}
-                      </button>
-                    ))}
+                  <div className="mt-3 grid grid-cols-2 gap-1">
+                    <button type="button" onClick={() => setSelectedDraftId(record.id)} className="h-8 rounded-lg border border-slate-200 bg-white px-2 text-[11px] font-semibold text-slate-700 hover:bg-slate-50">Details</button>
+                    <button type="button" onClick={() => void updateControlledDraftStatus(record, "reviewed")} disabled={updatingDraftId === record.id || record.status === "reviewed"} className="h-8 rounded-lg border border-slate-200 bg-white px-2 text-[11px] font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400">
+                      {updatingDraftId === record.id ? "..." : "A revoir"}
+                    </button>
                   </div>
                 </div>
               ))}
