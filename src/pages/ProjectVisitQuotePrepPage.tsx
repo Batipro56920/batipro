@@ -1,11 +1,12 @@
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { ArrowLeft, BrainCircuit, CheckCircle2, ClipboardCheck, FileText, ListChecks, Loader2, Pencil, Plus, ShieldCheck, Wand2, XCircle } from "lucide-react";
+import { ArrowLeft, BrainCircuit, CheckCircle2, ClipboardCheck, FileText, ListChecks, Loader2, Pencil, Plus, ShieldCheck, ShoppingCart, Wand2, XCircle } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { loadCrmVisitReportDraft, type CrmVisitReportDraft } from "../services/crmVisitReports.service";
 import {
   isCurrentUserCocoAdmin,
   listCocoControlledDrafts,
   prepareCocoChantierTasksDraftFromQuoteDraft,
+  prepareCocoPurchaseOrderDraftFromQuoteDraft,
   prepareCocoVisitQuoteDraft,
   saveCocoControlledDraft,
   updateCocoControlledDraftStatus,
@@ -33,7 +34,8 @@ const AI_DRAFT_STATUS_LABELS: Record<CocoControlledDraftStatus, string> = {
 
 const AI_DRAFT_SOURCE_KIND = "crm_visit_quote_analysis";
 const AI_TASK_DRAFT_SOURCE_KIND = "crm_visit_chantier_tasks_preparation";
-const AI_DRAFT_SOURCE_KINDS = [AI_DRAFT_SOURCE_KIND, AI_TASK_DRAFT_SOURCE_KIND] as const;
+const AI_PURCHASE_DRAFT_SOURCE_KIND = "crm_visit_purchase_order_preparation";
+const AI_DRAFT_SOURCE_KINDS = [AI_DRAFT_SOURCE_KIND, AI_TASK_DRAFT_SOURCE_KIND, AI_PURCHASE_DRAFT_SOURCE_KIND] as const;
 
 function parseFallbackDraft(notes: string | null | undefined): CrmVisitReportDraft | null {
   if (!notes?.includes(VISIT_DRAFT_MARKER)) return null;
@@ -71,11 +73,14 @@ function joinOrFallback(values: string[], fallback: string) {
 }
 
 function draftSourceKind(draft: CocoControlledDraft) {
-  return draft.kind === "tasks" ? AI_TASK_DRAFT_SOURCE_KIND : AI_DRAFT_SOURCE_KIND;
+  if (draft.kind === "tasks") return AI_TASK_DRAFT_SOURCE_KIND;
+  if (draft.kind === "purchase_order") return AI_PURCHASE_DRAFT_SOURCE_KIND;
+  return AI_DRAFT_SOURCE_KIND;
 }
 
 function draftKindLabel(draft: CocoControlledDraft) {
   if (draft.kind === "tasks") return "Préparation chantier";
+  if (draft.kind === "purchase_order") return "Achats";
   return "Chiffrage";
 }
 
@@ -195,6 +200,10 @@ export default function ProjectVisitQuotePrepPage() {
     if (aiDraft?.kind === "visit_quote_analysis" && aiDraft.quoteLines.length) return aiDraft;
     return aiDraftHistory.find((entry) => entry.draft.kind === "visit_quote_analysis" && entry.status !== "ignored" && entry.draft.quoteLines.length)?.draft ?? null;
   }, [aiDraft, aiDraftHistory]);
+  const latestMaterialDraft = useMemo(() => {
+    if (aiDraft?.materialNeeds.length) return aiDraft;
+    return aiDraftHistory.find((entry) => entry.status !== "ignored" && entry.draft.materialNeeds.length)?.draft ?? null;
+  }, [aiDraft, aiDraftHistory]);
 
   function setLocalDraftHistory(entry: AiDraftHistoryEntry) {
     setAiDraftHistory((previous) => {
@@ -288,6 +297,25 @@ export default function ProjectVisitQuotePrepPage() {
     }
   }
 
+  async function preparePurchaseOrderDraft() {
+    if (!project || !appointment || !latestMaterialDraft || aiLoading) return;
+    setAiLoading(true);
+    setAiError(null);
+    try {
+      const prepared = await prepareCocoPurchaseOrderDraftFromQuoteDraft({
+        quoteDraft: latestMaterialDraft,
+        project: project as unknown as Record<string, unknown>,
+        appointment: appointment as unknown as Record<string, unknown>,
+      });
+      setAiDraft(prepared);
+      await recordAiDraftStatus(prepared, "prepared");
+    } catch (err) {
+      setAiError(err instanceof Error ? err.message : "Impossible de preparer les achats brouillon.");
+    } finally {
+      setAiLoading(false);
+    }
+  }
+
   if (loading || draftLoading) {
     return <div className="rounded-3xl border bg-white p-8 text-center text-sm text-slate-500">Chargement de la preparation devis...</div>;
   }
@@ -364,10 +392,10 @@ export default function ProjectVisitQuotePrepPage() {
             <div className="flex items-start gap-3">
               <div className="rounded-2xl bg-slate-950 p-2 text-white"><BrainCircuit className="h-5 w-5" /></div>
               <div>
-                <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Assistant Chiffrage / Preparation COCO</div>
+                <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Assistant Chiffrage / Preparation / Achats COCO</div>
                 <h2 className="mt-1 font-semibold text-slate-950">Brouillons IA apres visite</h2>
                 <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600">
-                  COCO prepare des propositions exploitables en brouillon : pre-devis, besoins materiaux et taches chantier. Rien n'est ecrit dans le devis final ni dans les taches chantier avant validation admin.
+                  COCO prepare des propositions exploitables en brouillon : pre-devis, besoins materiaux, taches chantier et achats fournisseurs. Rien n'est ecrit dans le devis final, les taches ou les achats avant validation admin.
                 </p>
               </div>
             </div>
@@ -390,12 +418,21 @@ export default function ProjectVisitQuotePrepPage() {
                 {aiLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <ListChecks className="h-4 w-4" />}
                 Taches chantier brouillon
               </button>
+              <button
+                type="button"
+                onClick={() => void preparePurchaseOrderDraft()}
+                disabled={aiLoading || !latestMaterialDraft}
+                className="inline-flex h-10 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-900 hover:bg-slate-50 disabled:bg-slate-100 disabled:text-slate-400"
+              >
+                {aiLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <ShoppingCart className="h-4 w-4" />}
+                Achats brouillon
+              </button>
             </div>
           </div>
 
           <div className="mt-4 rounded-2xl border border-blue-100 bg-blue-50 p-3 text-sm text-blue-900">
             <div className="flex items-center gap-2 font-semibold"><ShieldCheck className="h-4 w-4" /> Productivite controlee</div>
-            <p className="mt-1 text-xs leading-5">Le brouillon aide a pre-remplir la reflexion chiffrage et preparation. Creation de devis, envoi client, chantier, planning, taches definitives et achats restent manuels.</p>
+            <p className="mt-1 text-xs leading-5">Le brouillon aide a pre-remplir la reflexion chiffrage, preparation et achats. Creation de devis, envoi client, chantier, planning, taches definitives, bons de commande et achats restent manuels.</p>
           </div>
 
           <div className="mt-4 grid gap-2 md:grid-cols-4">
@@ -449,6 +486,37 @@ export default function ProjectVisitQuotePrepPage() {
                   <ul className="mt-2 space-y-1 text-xs leading-5">
                     {aiDraft.risks.map((risk) => <li key={risk}>- {risk}</li>)}
                   </ul>
+                </div>
+              ) : null}
+
+              {aiDraft.purchaseOrders.length ? (
+                <div className="overflow-hidden rounded-2xl border border-slate-200">
+                  <div className="border-b border-slate-200 bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-950">Bons de commande fournisseurs brouillons</div>
+                  <div className="divide-y divide-slate-100">
+                    {aiDraft.purchaseOrders.map((order, index) => (
+                      <div key={`${order.supplierName ?? "supplier"}-${index}`} className="p-4 text-sm">
+                        <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+                          <div>
+                            <div className="font-semibold text-slate-950">{order.title}</div>
+                            <div className="mt-1 text-xs text-slate-500">{order.supplierName ?? "Fournisseur a choisir"}{order.supplierCity ? ` - ${order.supplierCity}` : ""}</div>
+                          </div>
+                          <span className={["inline-flex w-fit rounded-full border px-3 py-1 text-xs font-semibold", draftConfidenceClass(order.confidence)].join(" ")}>Confiance {order.confidence}</span>
+                        </div>
+                        <div className="mt-3 space-y-2">
+                          {order.lines.map((line, lineIndex) => (
+                            <div key={`${line.designation}-${lineIndex}`} className="grid gap-2 rounded-xl border border-slate-200 bg-slate-50 p-3 md:grid-cols-[minmax(0,1fr)_120px]">
+                              <div>
+                                <div className="font-semibold text-slate-950">{line.designation}</div>
+                                <div className="mt-1 text-xs text-slate-500">Source: {line.sourceMaterialNeed}</div>
+                                {line.pointsToVerify.length ? <div className="mt-1 text-xs text-amber-700">A verifier: {line.pointsToVerify.join(" - ")}</div> : null}
+                              </div>
+                              <div className="text-slate-600">{line.quantity ?? "Qte ?"} {line.unit ?? ""}</div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               ) : null}
 
@@ -525,15 +593,15 @@ export default function ProjectVisitQuotePrepPage() {
               <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-4">
                 <div className="text-sm text-slate-600">
                   <div className="font-semibold text-slate-950">Validation admin obligatoire</div>
-                  <div className="mt-1 text-xs">Les actions ci-dessous ne publient pas, n'envoient pas, ne creent pas de chantier et ne creent pas de taches automatiquement.</div>
+                  <div className="mt-1 text-xs">Les actions ci-dessous ne publient pas, n'envoient pas, ne creent pas de chantier, ne creent pas de taches et ne passent pas commande automatiquement.</div>
                 </div>
                 <div className="flex flex-wrap gap-2">
                   <button type="button" onClick={() => markAiDraft("reviewed")} className="inline-flex h-10 items-center rounded-xl border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-900 hover:bg-slate-50">Revoir</button>
                   <button type="button" onClick={() => markAiDraft("ignored")} className="inline-flex h-10 items-center rounded-xl border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-900 hover:bg-slate-50">Ignorer</button>
-                  {aiDraft.kind === "tasks" ? (
-                    <button type="button" onClick={() => markAiDraft("validated")} className="inline-flex h-10 items-center rounded-xl bg-blue-600 px-3 text-sm font-semibold text-white hover:bg-blue-700">Valider le brouillon preparation</button>
-                  ) : (
+                  {aiDraft.kind === "visit_quote_analysis" ? (
                     <button type="button" onClick={() => openQuoteReview("validated")} className="inline-flex h-10 items-center rounded-xl bg-blue-600 px-3 text-sm font-semibold text-white hover:bg-blue-700">Valider en revue devis</button>
+                  ) : (
+                    <button type="button" onClick={() => markAiDraft("validated")} className="inline-flex h-10 items-center rounded-xl bg-blue-600 px-3 text-sm font-semibold text-white hover:bg-blue-700">Valider le brouillon {draftKindLabel(aiDraft).toLowerCase()}</button>
                   )}
                 </div>
               </div>
@@ -550,7 +618,7 @@ export default function ProjectVisitQuotePrepPage() {
                 <div key={`${entry.id}-${entry.status}`} className="flex flex-col gap-2 rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm sm:flex-row sm:items-center sm:justify-between">
                   <div>
                     <div className="font-semibold text-slate-950">{entry.draft.title}</div>
-                    <div className="mt-1 text-xs text-slate-500">{new Date(entry.createdAt).toLocaleString("fr-FR")} - {draftKindLabel(entry.draft)} - {entry.draft.quoteLines.length} ligne(s), {entry.draft.chantierTasks.length} tache(s), {entry.draft.materialNeeds.length} besoin(s) materiaux - {entry.persistence === "supabase" ? "historique persistant" : "local"}</div>
+                    <div className="mt-1 text-xs text-slate-500">{new Date(entry.createdAt).toLocaleString("fr-FR")} - {draftKindLabel(entry.draft)} - {entry.draft.quoteLines.length} ligne(s), {entry.draft.chantierTasks.length} tache(s), {entry.draft.purchaseOrders.length} commande(s), {entry.draft.materialNeeds.length} besoin(s) materiaux - {entry.persistence === "supabase" ? "historique persistant" : "local"}</div>
                   </div>
                   <span className={["inline-flex w-fit rounded-full border px-3 py-1 text-xs font-semibold", statusClass(entry.status)].join(" ")}>{AI_DRAFT_STATUS_LABELS[entry.status]}</span>
                 </div>
