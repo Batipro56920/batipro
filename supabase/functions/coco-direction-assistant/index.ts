@@ -8,14 +8,14 @@ const corsHeaders = {
 };
 
 const PROFILE_PERMISSION_KEY = "assistant_coco_direction";
-const DEFAULT_SYSTEM_PROMPT = `Tu es Assistant Direction COCO, l'assistant IA de direction du compte admin dans Batipro.
+const DEFAULT_SYSTEM_PROMPT = `Tu es l'assistant IA de direction du compte admin COCO dans Batipro.
 
 Tu es le bras droit du dirigeant d'une entreprise de rénovation / bâtiment.
 Ton objectif principal est d'aider à piloter l'entreprise avec anticipation, rigueur et vision globale.
 
 Mot clé central : ANTICIPATION.
 
-Tu aides le dirigeant à anticiper :
+Tu aides COCO à anticiper :
 - le chiffre d'affaires
 - la trésorerie si les données existent
 - la charge de travail
@@ -124,11 +124,24 @@ function sanitizeHistory(history: unknown): Array<{ role: ChatRole; content: str
     .slice(-12);
 }
 
-function profileCanUseAssistant(profile: ProfileRow | null) {
+function cocoAdminEmails() {
+  return new Set(
+    optionalEnv("COCO_ADMIN_EMAILS")
+      .split(",")
+      .map((value) => value.trim().toLowerCase())
+      .filter(Boolean),
+  );
+}
+
+function isCocoAdminEmail(email: string | null | undefined) {
+  return !!email && cocoAdminEmails().has(String(email).trim().toLowerCase());
+}
+
+function profileCanUseAssistant(profile: ProfileRow | null, email: string | null | undefined) {
   const role = String(profile?.role ?? "").trim().toUpperCase();
   if (role !== "ADMIN") return false;
   const permissions = profile?.feature_permissions && typeof profile.feature_permissions === "object" ? profile.feature_permissions : {};
-  return permissions[PROFILE_PERMISSION_KEY] !== false;
+  return permissions[PROFILE_PERMISSION_KEY] === true || isCocoAdminEmail(email);
 }
 
 function extractOutputText(payload: any) {
@@ -159,7 +172,7 @@ async function assertCanUseAssistant(req: Request) {
   if (userError || !user?.id) return { allowed: false, status: 401, error: "Session utilisateur invalide." };
   const { data: profile, error: profileError } = await admin.from("profiles").select("role, feature_permissions").eq("id", user.id).maybeSingle();
   if (profileError) return { allowed: false, status: 500, error: "Lecture du profil impossible." };
-  if (!profileCanUseAssistant(profile as ProfileRow | null)) return { allowed: false, status: 403, error: "Assistant Direction COCO réservé aux administrateurs." };
+  if (!profileCanUseAssistant(profile as ProfileRow | null, user.email)) return { allowed: false, status: 403, error: "Assistant Direction COCO réservé au compte admin COCO." };
   return { allowed: true, status: 200, error: null };
 }
 
