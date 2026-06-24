@@ -6,6 +6,22 @@ import { isCurrentUserCocoAdmin, prepareCocoVisitQuoteDraft, type CocoControlled
 import { VISIT_DRAFT_MARKER } from "../features/crm/utils/appointmentDraftStorage";
 import { useProjectsData } from "../features/projects/hooks/useProjectsData";
 
+type AiDraftStatus = "prepared" | "reviewed" | "validated" | "ignored";
+
+type AiDraftHistoryEntry = {
+  id: string;
+  draft: CocoControlledDraft;
+  status: AiDraftStatus;
+  createdAt: string;
+};
+
+const AI_DRAFT_STATUS_LABELS: Record<AiDraftStatus, string> = {
+  prepared: "Préparé",
+  reviewed: "À revoir",
+  validated: "Envoyé en revue devis",
+  ignored: "Ignoré",
+};
+
 function parseFallbackDraft(notes: string | null | undefined): CrmVisitReportDraft | null {
   if (!notes?.includes(VISIT_DRAFT_MARKER)) return null;
   try {
@@ -30,6 +46,13 @@ function draftConfidenceClass(confidence: string) {
   return "border-blue-200 bg-blue-50 text-blue-800";
 }
 
+function statusClass(status: AiDraftStatus) {
+  if (status === "validated") return "border-emerald-200 bg-emerald-50 text-emerald-800";
+  if (status === "ignored") return "border-slate-200 bg-slate-100 text-slate-600";
+  if (status === "reviewed") return "border-blue-200 bg-blue-50 text-blue-800";
+  return "border-amber-200 bg-amber-50 text-amber-800";
+}
+
 function joinOrFallback(values: string[], fallback: string) {
   return values.length ? values.join(" - ") : fallback;
 }
@@ -44,6 +67,7 @@ export default function ProjectVisitQuotePrepPage() {
   const [draftLoading, setDraftLoading] = useState(true);
   const [aiAllowed, setAiAllowed] = useState(false);
   const [aiDraft, setAiDraft] = useState<CocoControlledDraft | null>(null);
+  const [aiDraftHistory, setAiDraftHistory] = useState<AiDraftHistoryEntry[]>([]);
   const [aiLoading, setAiLoading] = useState(false);
   const [aiError, setAiError] = useState<string | null>(null);
 
@@ -86,6 +110,7 @@ export default function ProjectVisitQuotePrepPage() {
 
   useEffect(() => {
     setAiDraft(null);
+    setAiDraftHistory([]);
     setAiError(null);
   }, [project?.id, appointment?.id, draft]);
 
@@ -95,12 +120,38 @@ export default function ProjectVisitQuotePrepPage() {
   const missingPrices = tasks.filter((line) => !Number(line.priceHintHt ?? 0)).length;
   const readyForQuote = tasks.length > 0;
 
+  function updateAiDraftHistory(draftToUpdate: CocoControlledDraft, status: AiDraftStatus) {
+    setAiDraftHistory((previous) => {
+      const next: AiDraftHistoryEntry = {
+        id: draftToUpdate.id,
+        draft: draftToUpdate,
+        status,
+        createdAt: new Date().toISOString(),
+      };
+      const withoutSameDraft = previous.filter((entry) => entry.id !== draftToUpdate.id);
+      return [next, ...withoutSameDraft].slice(0, 6);
+    });
+  }
+
+  function markAiDraft(status: AiDraftStatus) {
+    if (!aiDraft) return;
+    updateAiDraftHistory(aiDraft, status);
+    if (status === "ignored") setAiDraft(null);
+  }
+
+  function openQuoteReview(status: AiDraftStatus) {
+    if (aiDraft) updateAiDraftHistory(aiDraft, status);
+    navigate(`/projets/${project?.id}/devis/nouveau`);
+  }
+
   async function prepareAiDraft() {
     if (!project || !appointment || aiLoading) return;
     setAiLoading(true);
     setAiError(null);
     try {
-      setAiDraft(await prepareCocoVisitQuoteDraft({ project: project as unknown as Record<string, unknown>, appointment: appointment as unknown as Record<string, unknown>, visitDraft: draft as unknown as Record<string, unknown> | null }));
+      const prepared = await prepareCocoVisitQuoteDraft({ project: project as unknown as Record<string, unknown>, appointment: appointment as unknown as Record<string, unknown>, visitDraft: draft as unknown as Record<string, unknown> | null });
+      setAiDraft(prepared);
+      updateAiDraftHistory(prepared, "prepared");
     } catch (err) {
       setAiError(err instanceof Error ? err.message : "Impossible de preparer le brouillon IA.");
     } finally {
@@ -207,6 +258,20 @@ export default function ProjectVisitQuotePrepPage() {
             <p className="mt-1 text-xs leading-5">Le brouillon peut aider a pre-remplir la reflexion chiffrage. Validation, creation de devis, envoi client, chantier, planning et achats restent manuels.</p>
           </div>
 
+          <div className="mt-4 grid gap-2 md:grid-cols-4">
+            {[
+              ["Preparer", "Generer une proposition depuis les donnees Batipro."],
+              ["Revoir", "Controler sources, hypotheses, risques et lignes."],
+              ["Valider", "Basculer vers la revue devis, sans creation automatique."],
+              ["Ignorer", "Ecarter la proposition sans toucher aux donnees."],
+            ].map(([label, detail]) => (
+              <div key={label} className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
+                <div className="text-sm font-semibold text-slate-950">{label}</div>
+                <div className="mt-1 text-xs leading-5 text-slate-500">{detail}</div>
+              </div>
+            ))}
+          </div>
+
           {aiError ? <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">{aiError}</div> : null}
 
           {aiDraft ? (
@@ -297,15 +362,31 @@ export default function ProjectVisitQuotePrepPage() {
               <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-4">
                 <div className="text-sm text-slate-600">
                   <div className="font-semibold text-slate-950">Validation admin obligatoire</div>
-                  <div className="mt-1 text-xs">Le bouton ouvre la revue devis existante. Il ne publie pas, n'envoie pas et ne cree pas de chantier automatiquement.</div>
+                  <div className="mt-1 text-xs">Les actions ci-dessous ne publient pas, n'envoient pas et ne creent pas de chantier automatiquement.</div>
                 </div>
                 <div className="flex flex-wrap gap-2">
-                  <button type="button" onClick={() => setAiDraft(null)} className="inline-flex h-10 items-center rounded-xl border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-900 hover:bg-slate-50">Ignorer</button>
-                  <button type="button" onClick={() => navigate(`/projets/${project.id}/devis/nouveau`)} className="inline-flex h-10 items-center rounded-xl bg-blue-600 px-3 text-sm font-semibold text-white hover:bg-blue-700">Revoir / valider dans le devis</button>
+                  <button type="button" onClick={() => markAiDraft("reviewed")} className="inline-flex h-10 items-center rounded-xl border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-900 hover:bg-slate-50">Revoir</button>
+                  <button type="button" onClick={() => markAiDraft("ignored")} className="inline-flex h-10 items-center rounded-xl border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-900 hover:bg-slate-50">Ignorer</button>
+                  <button type="button" onClick={() => openQuoteReview("validated")} className="inline-flex h-10 items-center rounded-xl bg-blue-600 px-3 text-sm font-semibold text-white hover:bg-blue-700">Valider en revue devis</button>
                 </div>
               </div>
             </div>
           ) : null}
+
+          <div className="mt-5 rounded-2xl border border-slate-200 bg-white p-4">
+            <div className="font-semibold text-slate-950">Historique des propositions IA</div>
+            <div className="mt-3 space-y-2">
+              {aiDraftHistory.length ? aiDraftHistory.map((entry) => (
+                <div key={`${entry.id}-${entry.status}`} className="flex flex-col gap-2 rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm sm:flex-row sm:items-center sm:justify-between">
+                  <div>
+                    <div className="font-semibold text-slate-950">{entry.draft.title}</div>
+                    <div className="mt-1 text-xs text-slate-500">{new Date(entry.createdAt).toLocaleString("fr-FR")} - {entry.draft.quoteLines.length} ligne(s), {entry.draft.materialNeeds.length} besoin(s) materiaux</div>
+                  </div>
+                  <span className={["inline-flex w-fit rounded-full border px-3 py-1 text-xs font-semibold", statusClass(entry.status)].join(" ")}>{AI_DRAFT_STATUS_LABELS[entry.status]}</span>
+                </div>
+              )) : <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50 p-3 text-sm text-slate-500">Aucune proposition IA preparee sur cette revue.</div>}
+            </div>
+          </div>
         </section>
       ) : null}
 
