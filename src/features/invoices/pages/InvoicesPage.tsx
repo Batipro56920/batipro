@@ -55,6 +55,11 @@ export default function InvoicesPage() {
   }, [invoices, query, statusFilter, typeFilter]);
 
   async function refresh(selectFirst = true) {
+    if (dirtyInvoiceIds.size > 0) {
+      const shouldDiscardChanges = typeof window !== "undefined" && window.confirm("Des modifications de facture ne sont pas enregistrées. Les perdre et rafraîchir les données ?");
+      if (!shouldDiscardChanges) return;
+    }
+
     setLoading(true);
     setError(null);
     try {
