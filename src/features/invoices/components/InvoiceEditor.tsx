@@ -16,13 +16,13 @@ const PAYMENT_METHOD_LABELS: Record<InvoicePayment["method"], string> = {
 
 type InvoiceEditorProps = {
   invoice: InvoiceRecord;
-  paymentsDirty: boolean;
-  onPaymentsDirtyChange: (invoiceId: string, dirty: boolean) => void;
+  hasUnsavedChanges: boolean;
+  onUnsavedChange: (invoiceId: string, dirty: boolean) => void;
   onChange: (invoice: InvoiceRecord) => void;
   onSave: (invoice: InvoiceRecord) => void | Promise<void>;
 };
 
-export function InvoiceEditor({ invoice, paymentsDirty, onPaymentsDirtyChange, onChange, onSave }: InvoiceEditorProps) {
+export function InvoiceEditor({ invoice, hasUnsavedChanges, onUnsavedChange, onChange, onSave }: InvoiceEditorProps) {
   const [previewOpen, setPreviewOpen] = useState(false);
   const [sendOpen, setSendOpen] = useState(false);
   const document = invoice.document;
@@ -32,6 +32,7 @@ export function InvoiceEditor({ invoice, paymentsDirty, onPaymentsDirtyChange, o
 
   function updateDocument(patch: Partial<BusinessDocument>) {
     const nextDocument = { ...document, ...patch };
+    onUnsavedChange(invoice.id, true);
     onChange({ ...invoice, document: { ...nextDocument, totals: calculateDocumentTotals(nextDocument) }, updatedAt: new Date().toISOString() });
   }
 
@@ -53,12 +54,12 @@ export function InvoiceEditor({ invoice, paymentsDirty, onPaymentsDirtyChange, o
   }
 
   function addPayment(payment: Omit<InvoicePayment, "id">) {
-    onPaymentsDirtyChange(invoice.id, true);
+    onUnsavedChange(invoice.id, true);
     onChange(addInvoicePayment(invoice, payment));
   }
 
   function removePayment(paymentId: string) {
-    onPaymentsDirtyChange(invoice.id, true);
+    onUnsavedChange(invoice.id, true);
     onChange(removeInvoicePayment(invoice, paymentId));
   }
 
@@ -66,7 +67,7 @@ export function InvoiceEditor({ invoice, paymentsDirty, onPaymentsDirtyChange, o
     const validation = validateBusinessDocument(document);
     if (!validation.success) throw new Error(validation.error.issues.map((issue) => issue.message).join(", "));
     await onSave(invoice);
-    onPaymentsDirtyChange(invoice.id, false);
+    onUnsavedChange(invoice.id, false);
   }
 
   return (
@@ -78,6 +79,7 @@ export function InvoiceEditor({ invoice, paymentsDirty, onPaymentsDirtyChange, o
             <div className="mt-2 flex flex-wrap items-center gap-3">
               <input className="rounded-xl border border-transparent text-2xl font-bold text-slate-950 outline-none hover:border-slate-200 focus:border-blue-300" value={document.number} onChange={(event) => updateDocument({ number: event.target.value })} />
               <InvoiceStatusBadge status={invoice.status} />
+              {hasUnsavedChanges ? <span className="rounded-full bg-amber-100 px-2.5 py-1 text-xs font-semibold text-amber-800">Non enregistré</span> : null}
             </div>
             <p className="mt-1 text-sm text-slate-500">{document.title}</p>
           </div>
@@ -123,7 +125,7 @@ export function InvoiceEditor({ invoice, paymentsDirty, onPaymentsDirtyChange, o
 
         <aside className="space-y-4">
           <DocumentTotalsCard document={document} totals={totals} />
-          <PaymentPanel invoice={invoice} paymentsDirty={paymentsDirty} onAdd={addPayment} onRemove={removePayment} />
+          <PaymentPanel invoice={invoice} hasUnsavedChanges={hasUnsavedChanges} onAdd={addPayment} onRemove={removePayment} />
           <div className="rounded-2xl border border-slate-200 bg-white p-4 text-sm shadow-sm">
             <div className="font-semibold text-slate-950">Rentabilité projet</div>
             <div className="mt-3 space-y-2 text-slate-600">
@@ -141,7 +143,7 @@ export function InvoiceEditor({ invoice, paymentsDirty, onPaymentsDirtyChange, o
   );
 }
 
-function PaymentPanel({ invoice, paymentsDirty, onAdd, onRemove }: { invoice: InvoiceRecord; paymentsDirty: boolean; onAdd: (payment: Omit<InvoicePayment, "id">) => void; onRemove: (paymentId: string) => void }) {
+function PaymentPanel({ invoice, hasUnsavedChanges, onAdd, onRemove }: { invoice: InvoiceRecord; hasUnsavedChanges: boolean; onAdd: (payment: Omit<InvoicePayment, "id">) => void; onRemove: (paymentId: string) => void }) {
   const [amount, setAmount] = useState("");
   const [paidAt, setPaidAt] = useState(new Date().toISOString().slice(0, 10));
   const [method, setMethod] = useState<InvoicePayment["method"]>("transfer");
@@ -156,9 +158,9 @@ function PaymentPanel({ invoice, paymentsDirty, onAdd, onRemove }: { invoice: In
           <div className="font-semibold text-slate-950">Paiements</div>
           <div className="mt-2 text-slate-500">Encaissé : {formatCurrency(getPaidAmount(invoice))} · Reste : {formatCurrency(getRemainingAmount(invoice))}</div>
         </div>
-        {paymentsDirty ? <span className="rounded-full bg-amber-100 px-2.5 py-1 text-xs font-semibold text-amber-800">Non enregistré</span> : null}
+        {hasUnsavedChanges ? <span className="rounded-full bg-amber-100 px-2.5 py-1 text-xs font-semibold text-amber-800">Non enregistré</span> : null}
       </div>
-      {paymentsDirty ? <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-medium text-amber-800">Les changements de paiement seront validés à l'enregistrement de la facture.</div> : null}
+      {hasUnsavedChanges ? <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-medium text-amber-800">Les modifications de la facture seront validées à l'enregistrement.</div> : null}
       <div className="mt-4 space-y-2">
         {invoice.payments.length ? invoice.payments.map((payment) => (
           <div key={payment.id} className="rounded-xl border border-slate-100 bg-slate-50 p-3">
