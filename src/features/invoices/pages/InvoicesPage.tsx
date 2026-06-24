@@ -87,8 +87,7 @@ export default function InvoicesPage() {
 
   async function save(invoice: InvoiceRecord) {
     const saved = await saveInvoice(invoice);
-    const rows = await listInvoices();
-    setInvoices(rows);
+    setInvoices((current) => current.map((row) => row.id === saved.id ? saved : row));
     setSelectedId(saved.id);
     markInvoiceDirty(saved.id, false);
   }
