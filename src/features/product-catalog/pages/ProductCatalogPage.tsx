@@ -3,8 +3,10 @@ import { FileText, PackageSearch, Plus, RefreshCw, Trash2 } from "lucide-react";
 import type { SupplierRow } from "../../../services/suppliers.service";
 import { listSuppliers } from "../../../services/suppliers.service";
 import type { DocumentUnit } from "../../document-engine";
+import ProductQuoteReaderPanel from "../components/ProductQuoteReaderPanel";
 import type { ProductCatalogDraft, ProductCatalogItem, ProductDocumentKind, ProductSupplierPrice } from "../domain/types";
 import { deleteProductCatalogItem, listProductCatalogItems, saveProductCatalogItem } from "../infrastructure/productCatalogRepository";
+import { importProductsFromQuoteText, type ProductQuoteImportResult } from "../services/productQuoteImport.service";
 
 const EMPTY_DRAFT: ProductCatalogDraft = {
   designation: "",
@@ -35,6 +37,9 @@ export default function ProductCatalogPage() {
   const [brandFilter, setBrandFilter] = useState("all");
   const [priceFilter, setPriceFilter] = useState("all");
   const [editing, setEditing] = useState<ProductCatalogItem | ProductCatalogDraft | null>(null);
+  const [quoteReaderOpen, setQuoteReaderOpen] = useState(false);
+  const [quoteImporting, setQuoteImporting] = useState(false);
+  const [quoteImportResult, setQuoteImportResult] = useState<ProductQuoteImportResult | null>(null);
 
   useEffect(() => {
     listSuppliers().then(setSuppliers).catch(() => setSuppliers([]));
@@ -91,6 +96,26 @@ export default function ProductCatalogPage() {
     setProducts(await listProductCatalogItems());
   }
 
+  async function importQuoteProducts(text: string) {
+    setQuoteImporting(true);
+    setError(null);
+    setQuoteImportResult(null);
+    try {
+      const result = await importProductsFromQuoteText(text, suppliers, products);
+      const [nextProducts, nextSuppliers] = await Promise.all([
+        listProductCatalogItems(),
+        listSuppliers(),
+      ]);
+      setProducts(nextProducts);
+      setSuppliers(nextSuppliers);
+      setQuoteImportResult(result);
+    } catch (err: any) {
+      setError(err?.message ?? "Import du devis fournisseur impossible.");
+    } finally {
+      setQuoteImporting(false);
+    }
+  }
+
   return (
     <div className="space-y-5">
       <header className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
@@ -104,12 +129,23 @@ export default function ProductCatalogPage() {
             <button type="button" onClick={() => void refreshProducts()} className="inline-flex h-10 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 hover:bg-slate-50">
               <RefreshCw className="h-4 w-4" /> Rafraîchir
             </button>
+            <button type="button" onClick={() => setQuoteReaderOpen((open) => !open)} className="inline-flex h-10 items-center justify-center gap-2 rounded-xl border border-blue-200 bg-blue-50 px-4 text-sm font-semibold text-blue-700 hover:bg-blue-100">
+              <FileText className="h-4 w-4" /> Lecteur devis
+            </button>
             <button type="button" onClick={() => setEditing({ ...EMPTY_DRAFT })} className="inline-flex h-10 items-center justify-center rounded-xl bg-blue-600 px-4 text-sm font-semibold text-white hover:bg-blue-700">
               <Plus className="mr-2 h-4 w-4" /> Nouveau produit
             </button>
           </div>
         </div>
       </header>
+
+      {quoteReaderOpen ? (
+        <ProductQuoteReaderPanel
+          busy={quoteImporting}
+          result={quoteImportResult}
+          onImport={importQuoteProducts}
+        />
+      ) : null}
 
       {error ? <div className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">{error}</div> : null}
       {loading ? <div className="rounded-3xl border border-slate-200 bg-white p-8 text-center text-sm text-slate-500">Chargement du catalogue produits...</div> : null}
