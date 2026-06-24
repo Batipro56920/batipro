@@ -73,7 +73,7 @@ export async function importProductsFromQuoteText(
         continue;
       }
 
-      const savedProduct = await saveProductCatalogItem(nextProduct);
+      const savedProduct = await saveProductCatalogItem(nextProduct, SOURCE_NOTE);
       importedProducts.push(savedProduct);
       indexProduct(savedProduct, productByKey);
       updatedProducts += 1;
@@ -81,7 +81,7 @@ export async function importProductsFromQuoteText(
     }
 
     const draft = toProductDraft(extracted, supplier?.row ?? null);
-    const savedProduct = await saveProductCatalogItem(draft);
+    const savedProduct = await saveProductCatalogItem(draft, SOURCE_NOTE);
     importedProducts.push(savedProduct);
     indexProduct(savedProduct, productByKey);
     createdProducts += 1;
