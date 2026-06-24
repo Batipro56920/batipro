@@ -51,7 +51,7 @@ function isCocoAdminProfile(profile: CurrentUserProfile | null): boolean {
   const displayName = normalize(profile?.display_name);
   const allowedEmails = envCocoEmails();
   if (email && allowedEmails.has(email)) return true;
-  return displayName.includes("coco") || email.includes("coco");
+  return displayName.includes("coco") || email.includes("coco") || displayName.includes("corentin") || email.includes("corentin");
 }
 
 function getErrorMessage(error: unknown) {
