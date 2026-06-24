@@ -33,6 +33,7 @@ const WELCOME_MESSAGE: CocoDirectionChatMessage = {
 
 const CONTROLLED_DRAFT_CATEGORIES = [
   { label: "Analyse apres visite", module: "Chiffrage", status: "Pilote actif", detail: "Pre-devis, temps, materiaux, fournisseurs, risques et points a verifier." },
+  { label: "Collecte historique", module: "Chiffrage", status: "Pilote actif", detail: "Anciens devis et factures recolles en brouillon, sans appel IA ni creation finale." },
   { label: "Taches chantier", module: "Preparation", status: "Pilote actif", detail: "Taches et zones proposees depuis le devis ou la visite, sans creation automatique." },
   { label: "Planning previsionnel", module: "Preparation", status: "A cadrer", detail: "Projection de charge et jalons, distincte du planning officiel." },
   { label: "Besoins materiaux", module: "Achats", status: "Pilote actif", detail: "Besoins issus du chiffrage, fournisseurs suggeres, commande toujours manuelle." },
@@ -44,6 +45,7 @@ const CONTROLLED_DRAFT_SOURCE_KINDS = [
   "crm_visit_quote_analysis",
   "crm_visit_chantier_tasks_preparation",
   "crm_visit_purchase_order_preparation",
+  "historical_document_import",
 ] as const;
 
 const CONTROLLED_DRAFT_NEXT_STATUSES = ["reviewed", "validated", "ignored"] as const;
@@ -145,6 +147,7 @@ function draftKindLabel(kind: string) {
   if (kind === "tasks") return "Preparation";
   if (kind === "purchase_order") return "Achats";
   if (kind === "visit_quote_analysis") return "Chiffrage";
+  if (kind === "quote") return "Chiffrage";
   if (kind === "planning") return "Planning previsionnel";
   if (kind === "commercial_action") return "Commercial";
   if (kind === "checklist") return "Suivi";
@@ -155,6 +158,7 @@ function draftSourceLabel(sourceKind: string) {
   if (sourceKind === "crm_visit_quote_analysis") return "Visite chiffrage";
   if (sourceKind === "crm_visit_chantier_tasks_preparation") return "Preparation chantier";
   if (sourceKind === "crm_visit_purchase_order_preparation") return "Achats fournisseurs";
+  if (sourceKind === "historical_document_import") return "Collecte historique";
   return sourceKind;
 }
 
