@@ -1,5 +1,6 @@
 import { calculateDocumentTotals } from "../../document-engine";
 import type { InvoicePayment, InvoiceProfitabilitySnapshot, InvoiceRecord } from "../domain/types";
+import { isBeforeLocalToday } from "./invoiceDates";
 
 export function addInvoicePayment(invoice: InvoiceRecord, payment: Omit<InvoicePayment, "id">): InvoiceRecord {
   const nextPayments = [...invoice.payments, { ...payment, id: crypto.randomUUID() }];
@@ -26,7 +27,7 @@ export function normalizeInvoiceStatus(invoice: InvoiceRecord): InvoiceRecord {
   if (totals.totalTtc > 0 && paid >= totals.totalTtc) return { ...invoice, status: "paid" };
   if (paid > 0) return { ...invoice, status: "partially_paid" };
   if (invoice.status === "draft") return invoice;
-  if (isPastDueDate(invoice.document.dueDate)) return { ...invoice, status: "overdue" };
+  if (isBeforeLocalToday(invoice.document.dueDate)) return { ...invoice, status: "overdue" };
   return { ...invoice, status: "sent" };
 }
 
@@ -43,11 +44,6 @@ export function createProfitabilitySnapshot(invoice: InvoiceRecord): InvoiceProf
     remainingToInvoiceTtc: 0,
     remainingToCollectTtc: round(Math.max(0, totals.totalTtc - paid)),
   };
-}
-
-function isPastDueDate(dueDate?: string | null) {
-  if (!dueDate) return false;
-  return dueDate < new Date().toISOString().slice(0, 10);
 }
 
 function round(value: number) {
