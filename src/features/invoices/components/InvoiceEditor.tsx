@@ -107,19 +107,21 @@ export function InvoiceEditor({ invoice, hasUnsavedChanges, onUnsavedChange, onC
             <Button variant="secondary" onClick={() => addLine("main_oeuvre")}><Plus className="h-4 w-4" /> Main d'oeuvre</Button>
           </div>
 
-          <div className="overflow-hidden rounded-2xl border border-slate-200">
-            <div className="grid grid-cols-[70px_1fr_110px_110px_120px] bg-blue-600 px-3 py-2 text-xs font-bold uppercase tracking-[0.12em] text-white">
-              <span>N</span><span>Designation</span><span className="text-right">Qte</span><span>PU HT</span><span className="text-right">Total HT</span>
-            </div>
-            {rows.length ? rows.map((row) => (
-              <div key={row.id} className={`grid grid-cols-[70px_1fr_110px_110px_120px] items-center gap-2 border-t border-slate-100 px-3 py-2 text-sm ${row.node.type === "section" ? "bg-blue-50 font-bold" : row.node.type === "subsection" ? "bg-slate-50 font-semibold" : ""}`}>
-                <span className="font-mono text-xs text-slate-500">{row.number}</span>
-                <input className="rounded-lg border border-transparent bg-transparent px-2 py-1 outline-none hover:border-slate-200 focus:border-blue-300" value={row.node.title} onChange={(event) => updateNode(row.id, { title: event.target.value })} />
-                {row.node.type === "line" || row.node.type === "composite" ? <NumberCell value={row.node.quantity} onChange={(quantity) => updateNode(row.id, { quantity } as Partial<BusinessDocumentNode>)} /> : <span />}
-                {row.node.type === "line" || row.node.type === "composite" ? <NumberCell value={row.node.unitPriceHt} onChange={(unitPriceHt) => updateNode(row.id, { unitPriceHt } as Partial<BusinessDocumentNode>)} /> : <span />}
-                <span className="text-right font-semibold">{row.node.type === "line" || row.node.type === "composite" ? formatCurrency(row.node.quantity * row.node.unitPriceHt) : ""}</span>
+          <div className="overflow-x-auto rounded-2xl border border-slate-200">
+            <div className="min-w-[520px]">
+              <div className="grid grid-cols-[70px_1fr_110px_110px_120px] bg-blue-600 px-3 py-2 text-xs font-bold uppercase tracking-[0.12em] text-white">
+                <span>N</span><span>Designation</span><span className="text-right">Qte</span><span>PU HT</span><span className="text-right">Total HT</span>
               </div>
-            )) : <div className="p-8 text-center text-sm text-slate-500">Ajoutez une section puis des lignes de facture.</div>}
+              {rows.length ? rows.map((row) => (
+                <div key={row.id} className={`grid grid-cols-[70px_1fr_110px_110px_120px] items-center gap-2 border-t border-slate-100 px-3 py-2 text-sm ${row.node.type === "section" ? "bg-blue-50 font-bold" : row.node.type === "subsection" ? "bg-slate-50 font-semibold" : ""}`}>
+                  <span className="font-mono text-xs text-slate-500">{row.number}</span>
+                  <input className="rounded-lg border border-transparent bg-transparent px-2 py-1 outline-none hover:border-slate-200 focus:border-blue-300" value={row.node.title} onChange={(event) => updateNode(row.id, { title: event.target.value })} />
+                  {row.node.type === "line" || row.node.type === "composite" ? <NumberCell value={row.node.quantity} onChange={(quantity) => updateNode(row.id, { quantity } as Partial<BusinessDocumentNode>)} /> : <span />}
+                  {row.node.type === "line" || row.node.type === "composite" ? <NumberCell value={row.node.unitPriceHt} onChange={(unitPriceHt) => updateNode(row.id, { unitPriceHt } as Partial<BusinessDocumentNode>)} /> : <span />}
+                  <span className="text-right font-semibold">{row.node.type === "line" || row.node.type === "composite" ? formatCurrency(row.node.quantity * row.node.unitPriceHt) : ""}</span>
+                </div>
+              )) : <div className="p-8 text-center text-sm text-slate-500">Ajoutez une section puis des lignes de facture.</div>}
+            </div>
           </div>
         </div>
 
@@ -150,6 +152,13 @@ function PaymentPanel({ invoice, hasUnsavedChanges, onAdd, onRemove }: { invoice
   const [reference, setReference] = useState("");
   const parsedAmount = parseCommittedFrenchNumber(amount);
   const canAddPayment = parsedAmount !== null && parsedAmount > 0 && Boolean(paidAt);
+
+  useEffect(() => {
+    setAmount("");
+    setPaidAt(new Date().toISOString().slice(0, 10));
+    setMethod("transfer");
+    setReference("");
+  }, [invoice.id]);
 
   return (
     <div className="rounded-2xl border border-slate-200 bg-white p-4 text-sm shadow-sm">
