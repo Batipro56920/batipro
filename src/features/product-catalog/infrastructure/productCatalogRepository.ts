@@ -41,21 +41,19 @@ export async function listProductCatalogItems(): Promise<ProductCatalogItem[]> {
   return (data ?? []).map(fromRow);
 }
 
-export async function saveProductCatalogItem(input: ProductCatalogItem | ProductCatalogDraft) {
+export async function saveProductCatalogItem(input: ProductCatalogItem | ProductCatalogDraft, priceHistorySource = "mise a jour") {
   const now = new Date().toISOString();
   const hasId = "id" in input;
   const product: ProductCatalogItem = hasId
-    ? { ...input, updatedAt: now }
+    ? {
+        ...input,
+        priceHistory: buildNextPriceHistory(input, now, priceHistorySource),
+        updatedAt: now,
+      }
     : {
         ...input,
         id: crypto.randomUUID(),
-        priceHistory: [{
-          id: crypto.randomUUID(),
-          purchasePriceHt: input.standardPurchasePriceHt,
-          salePriceHt: input.recommendedSalePriceHt,
-          changedAt: now,
-          source: "creation",
-        }],
+        priceHistory: [buildPriceHistoryEntry(input.standardPurchasePriceHt, input.recommendedSalePriceHt, now, "creation")],
         createdAt: now,
         updatedAt: now,
       };
@@ -162,6 +160,38 @@ async function saveProductCatalogItemLegacy(product: ProductCatalogItem) {
 
   if (error) throw new Error(error.message);
   return fromRow({ ...data, is_sellable: product.isSellable });
+}
+
+function buildNextPriceHistory(product: ProductCatalogItem, changedAt: string, source: string) {
+  const history = Array.isArray(product.priceHistory) ? product.priceHistory : [];
+  const lastEntry = history[history.length - 1];
+  const purchasePriceHt = normalizePrice(product.standardPurchasePriceHt);
+  const salePriceHt = normalizePrice(product.recommendedSalePriceHt);
+
+  if (lastEntry && samePrice(lastEntry.purchasePriceHt, purchasePriceHt) && samePrice(lastEntry.salePriceHt, salePriceHt)) {
+    return history;
+  }
+
+  return [...history, buildPriceHistoryEntry(purchasePriceHt, salePriceHt, changedAt, source)];
+}
+
+function buildPriceHistoryEntry(purchasePriceHt: number | null, salePriceHt: number | null, changedAt: string, source: string) {
+  return {
+    id: crypto.randomUUID(),
+    purchasePriceHt,
+    salePriceHt,
+    changedAt,
+    source,
+  };
+}
+
+function normalizePrice(value: unknown) {
+  const n = Number(value);
+  return Number.isFinite(n) ? Math.round(n * 100) / 100 : null;
+}
+
+function samePrice(a: unknown, b: unknown) {
+  return normalizePrice(a) === normalizePrice(b);
 }
 
 function isMissingIsSellableColumn(error: { code?: string; message?: string } | null) {
