@@ -24,12 +24,12 @@ const WELCOME_MESSAGE: CocoDirectionChatMessage = {
 };
 
 const CONTROLLED_DRAFT_CATEGORIES = [
-  { label: "Analyse apres visite", module: "Chiffrage", status: "Pilote actif", detail: "Pré-devis, temps, matériaux, fournisseurs, risques et points à vérifier." },
-  { label: "Taches chantier", module: "Preparation", status: "Pilote actif", detail: "Taches et zones proposées depuis le devis ou la visite, sans creation automatique." },
+  { label: "Analyse apres visite", module: "Chiffrage", status: "Pilote actif", detail: "Pre-devis, temps, materiaux, fournisseurs, risques et points a verifier." },
+  { label: "Taches chantier", module: "Preparation", status: "Pilote actif", detail: "Taches et zones proposees depuis le devis ou la visite, sans creation automatique." },
   { label: "Planning previsionnel", module: "Preparation", status: "A cadrer", detail: "Projection de charge et jalons, distincte du planning officiel." },
-  { label: "Besoins materiaux", module: "Achats", status: "Pilote actif", detail: "Besoins issus du chiffrage, fournisseurs suggérés, commande toujours manuelle." },
-  { label: "Actions commerciales", module: "Commercial", status: "A cadrer", detail: "Relances, devis à suivre et périodes creuses en brouillon validable." },
-  { label: "Checklist / compte rendu", module: "Suivi", status: "A cadrer", detail: "Synthèses et actions correctives à revoir avant intégration métier." },
+  { label: "Besoins materiaux", module: "Achats", status: "Pilote actif", detail: "Besoins issus du chiffrage, fournisseurs suggeres, commande toujours manuelle." },
+  { label: "Actions commerciales", module: "Commercial", status: "A cadrer", detail: "Relances, devis a suivre et periodes creuses en brouillon validable." },
+  { label: "Checklist / compte rendu", module: "Suivi", status: "A cadrer", detail: "Syntheses et actions correctives a revoir avant integration metier." },
 ] as const;
 
 const CONTROLLED_DRAFT_SOURCE_KINDS = [
@@ -38,12 +38,7 @@ const CONTROLLED_DRAFT_SOURCE_KINDS = [
   "crm_visit_purchase_order_preparation",
 ] as const;
 
-const CONTROLLED_DRAFT_STATUS_LABELS: Record<CocoControlledDraftStatus, string> = {
-  prepared: "Préparé",
-  reviewed: "À revoir",
-  validated: "Validé",
-  ignored: "Ignoré",
-};
+const CONTROLLED_DRAFT_NEXT_STATUSES = ["reviewed", "validated", "ignored"] as const;
 
 function formatNumber(value: number, suffix = "") {
   return `${Math.round(value).toLocaleString("fr-FR")}${suffix}`;
@@ -54,37 +49,43 @@ function getErrorMessage(error: unknown) {
   return message || "L'assistant direction n'a pas pu repondre pour le moment.";
 }
 
-function controlledDraftKindLabel(record: CocoControlledDraftRecord) {
-  if (record.kind === "tasks") return "Preparation";
-  if (record.kind === "purchase_order") return "Achats";
-  if (record.kind === "visit_quote_analysis") return "Chiffrage";
-  if (record.kind === "planning") return "Planning previsionnel";
-  if (record.kind === "commercial_action") return "Commercial";
-  if (record.kind === "checklist") return "Suivi";
-  return "Brouillon";
+function draftStatusLabel(status: CocoControlledDraftStatus) {
+  if (status === "reviewed") return "A revoir";
+  if (status === "validated") return "Valide";
+  if (status === "ignored") return "Ignore";
+  return "Prepare";
 }
 
-function controlledDraftSourceLabel(sourceKind: string) {
-  if (sourceKind === "crm_visit_quote_analysis") return "Visite chiffrage";
-  if (sourceKind === "crm_visit_chantier_tasks_preparation") return "Preparation chantier";
-  if (sourceKind === "crm_visit_purchase_order_preparation") return "Achats fournisseurs";
-  return sourceKind;
-}
-
-function controlledDraftStatusClass(status: CocoControlledDraftStatus) {
+function draftStatusClass(status: CocoControlledDraftStatus) {
   if (status === "validated") return "border-emerald-200 bg-emerald-50 text-emerald-800";
   if (status === "ignored") return "border-slate-200 bg-slate-100 text-slate-600";
   if (status === "reviewed") return "border-blue-200 bg-blue-50 text-blue-800";
   return "border-amber-200 bg-amber-50 text-amber-800";
 }
 
-function controlledDraftMetrics(record: CocoControlledDraftRecord) {
-  const metrics = [
-    record.draft.quoteLines.length ? `${record.draft.quoteLines.length} ligne(s) devis` : null,
-    record.draft.materialNeeds.length ? `${record.draft.materialNeeds.length} besoin(s) materiaux` : null,
-    record.draft.chantierTasks.length ? `${record.draft.chantierTasks.length} tache(s)` : null,
-    record.draft.purchaseOrders.length ? `${record.draft.purchaseOrders.length} commande(s)` : null,
-  ].filter(Boolean);
+function draftKindLabel(kind: string) {
+  if (kind === "tasks") return "Preparation";
+  if (kind === "purchase_order") return "Achats";
+  if (kind === "visit_quote_analysis") return "Chiffrage";
+  if (kind === "planning") return "Planning previsionnel";
+  if (kind === "commercial_action") return "Commercial";
+  if (kind === "checklist") return "Suivi";
+  return "Brouillon";
+}
+
+function draftSourceLabel(sourceKind: string) {
+  if (sourceKind === "crm_visit_quote_analysis") return "Visite chiffrage";
+  if (sourceKind === "crm_visit_chantier_tasks_preparation") return "Preparation chantier";
+  if (sourceKind === "crm_visit_purchase_order_preparation") return "Achats fournisseurs";
+  return sourceKind;
+}
+
+function draftMetrics(record: CocoControlledDraftRecord) {
+  const metrics: string[] = [];
+  if (record.draft.quoteLines.length) metrics.push(`${record.draft.quoteLines.length} ligne(s) devis`);
+  if (record.draft.materialNeeds.length) metrics.push(`${record.draft.materialNeeds.length} besoin(s) materiaux`);
+  if (record.draft.chantierTasks.length) metrics.push(`${record.draft.chantierTasks.length} tache(s)`);
+  if (record.draft.purchaseOrders.length) metrics.push(`${record.draft.purchaseOrders.length} commande(s)`);
   return metrics.length ? metrics.join(" - ") : "Synthese brouillon";
 }
 
@@ -163,11 +164,7 @@ export default function AssistantDirectionPage() {
       const groups = await Promise.all(
         CONTROLLED_DRAFT_SOURCE_KINDS.map((sourceKind) => listCocoControlledDrafts({ sourceKind, limit: 6 })),
       );
-      const nextDrafts = groups
-        .flat()
-        .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt))
-        .slice(0, 8);
-      setControlledDrafts(nextDrafts);
+      setControlledDrafts(groups.flat().sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt)).slice(0, 8));
     } catch (err) {
       setControlledDrafts([]);
       setControlledDraftsError(getErrorMessage(err));
@@ -182,9 +179,7 @@ export default function AssistantDirectionPage() {
     setControlledDrafts((current) => current.map((entry) => (entry.id === record.id ? { ...entry, status } : entry)));
     try {
       const updated = await updateCocoControlledDraftStatus({ id: record.id, status });
-      if (updated) {
-        setControlledDrafts((current) => current.map((entry) => (entry.id === updated.id ? updated : entry)));
-      }
+      if (updated) setControlledDrafts((current) => current.map((entry) => (entry.id === updated.id ? updated : entry)));
     } catch (err) {
       setControlledDraftsError(getErrorMessage(err));
       void refreshControlledDrafts();
@@ -220,11 +215,11 @@ export default function AssistantDirectionPage() {
         history: nextMessages,
         context: activeContext,
       });
-      setMessages((prev) => [...prev, { role: "assistant", content: reply }]);
+      setMessages((previous) => [...previous, { role: "assistant", content: reply }]);
     } catch (err) {
       const message = getErrorMessage(err);
       setError(message);
-      setMessages((prev) => [...prev, { role: "assistant", content: message }]);
+      setMessages((previous) => [...previous, { role: "assistant", content: message }]);
     } finally {
       setSending(false);
     }
@@ -236,29 +231,18 @@ export default function AssistantDirectionPage() {
   }
 
   if (access === "checking") {
-    return (
-      <div className="rounded-xl border border-slate-200 bg-white p-8 text-center text-sm text-slate-500">
-        Verification de l'acces a l'Assistant Direction COCO...
-      </div>
-    );
+    return <div className="rounded-xl border border-slate-200 bg-white p-8 text-center text-sm text-slate-500">Verification de l'acces a l'Assistant Direction COCO...</div>;
   }
 
   if (access === "denied") {
     return (
       <div className="mx-auto max-w-3xl rounded-xl border border-amber-200 bg-amber-50 p-6 text-amber-900">
         <div className="flex items-start gap-3">
-          <div className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-white text-amber-700">
-            <Lock className="h-5 w-5" />
-          </div>
+          <div className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-white text-amber-700"><Lock className="h-5 w-5" /></div>
           <div>
             <h1 className="text-lg font-semibold">Acces reserve aux administrateurs</h1>
-            <p className="mt-2 text-sm leading-6">
-              Assistant Direction COCO est reserve au role admin/dirigeant Batipro. Le profil actuel
-              {profile?.email ? ` (${profile.email})` : ""} n'a pas l'autorisation necessaire.
-            </p>
-            <p className="mt-2 text-sm leading-6">
-              Verifier que la ligne du compte dans <code>profiles</code> possede bien <code>role = ADMIN</code> et que la permission <code>assistant_coco_direction</code> n'est pas desactivee.
-            </p>
+            <p className="mt-2 text-sm leading-6">Assistant Direction COCO est reserve au role admin/dirigeant Batipro. Le profil actuel{profile?.email ? ` (${profile.email})` : ""} n'a pas l'autorisation necessaire.</p>
+            <p className="mt-2 text-sm leading-6">Verifier que la ligne du compte dans <code>profiles</code> possede bien <code>role = ADMIN</code> et que la permission <code>assistant_coco_direction</code> n'est pas desactivee.</p>
           </div>
         </div>
       </div>
@@ -271,13 +255,9 @@ export default function AssistantDirectionPage() {
         <div className="p-5 sm:p-6">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
             <div className="min-w-0">
-              <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-blue-700">
-                <BrainCircuit className="h-4 w-4" /> Assistant Direction COCO
-              </div>
+              <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-blue-700"><BrainCircuit className="h-4 w-4" /> Assistant Direction COCO</div>
               <h1 className="mt-2 text-3xl font-bold tracking-tight text-slate-950">Anticipation entreprise</h1>
-              <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-500">
-                Bras droit IA du dirigeant : chantiers, planning, temps, materiel, devis, charge, marge et tresorerie quand les donnees existent.
-              </p>
+              <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-500">Bras droit IA du dirigeant : chantiers, planning, temps, materiel, devis, charge, marge et tresorerie quand les donnees existent.</p>
             </div>
             <div className="rounded-lg border border-blue-100 bg-blue-50 px-4 py-3 text-sm text-blue-900">
               <div className="font-semibold">Garde-fou</div>
@@ -290,12 +270,8 @@ export default function AssistantDirectionPage() {
       <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm shadow-slate-950/[0.03]">
         <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
           <div>
-            <div className="flex items-center gap-2 text-sm font-semibold text-slate-950">
-              <ShieldCheck className="h-4 w-4 text-emerald-600" /> Productivite controlee
-            </div>
-            <p className="mt-1 max-w-4xl text-sm leading-6 text-slate-600">
-              COCO peut analyser les donnees reelles, preparer des brouillons et pre-remplir la reflexion metier. Validation, envoi, creation definitive, suppression, planning officiel et commandes restent reserves a l'admin.
-            </p>
+            <div className="flex items-center gap-2 text-sm font-semibold text-slate-950"><ShieldCheck className="h-4 w-4 text-emerald-600" /> Productivite controlee</div>
+            <p className="mt-1 max-w-4xl text-sm leading-6 text-slate-600">COCO peut analyser les donnees reelles, preparer des brouillons et pre-remplir la reflexion metier. Validation, envoi, creation definitive, suppression, planning officiel et commandes restent reserves a l'admin.</p>
           </div>
           <span className="inline-flex w-fit rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-800">Validation admin obligatoire</span>
         </div>
@@ -316,12 +292,7 @@ export default function AssistantDirectionPage() {
               <div className="text-sm font-semibold text-slate-950">Conversation direction</div>
               <div className="text-xs text-slate-500">Contexte Batipro reel charge en lecture seule a chaque question.</div>
             </div>
-            <button
-              type="button"
-              onClick={() => void refreshContext()}
-              disabled={loadingContext || sending}
-              className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
-            >
+            <button type="button" onClick={() => void refreshContext()} disabled={loadingContext || sending} className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60">
               <RefreshCw className={["h-3.5 w-3.5", loadingContext ? "animate-spin" : ""].join(" ")} /> Rafraichir
             </button>
           </div>
@@ -331,47 +302,21 @@ export default function AssistantDirectionPage() {
               const fromUser = message.role === "user";
               return (
                 <div key={`${message.role}-${index}`} className={fromUser ? "flex justify-end" : "flex justify-start"}>
-                  <div
-                    className={[
-                      "max-w-[88%] whitespace-pre-wrap rounded-xl px-4 py-3 text-sm leading-6",
-                      fromUser ? "bg-blue-600 text-white" : "border border-slate-200 bg-white text-slate-800",
-                    ].join(" ")}
-                  >
-                    {message.content}
-                  </div>
+                  <div className={["max-w-[88%] whitespace-pre-wrap rounded-xl px-4 py-3 text-sm leading-6", fromUser ? "bg-blue-600 text-white" : "border border-slate-200 bg-white text-slate-800"].join(" ")}>{message.content}</div>
                 </div>
               );
             })}
-            {sending || loadingContext ? (
-              <div className="flex items-center gap-2 text-xs text-slate-500">
-                <Loader2 className="h-4 w-4 animate-spin" /> {sending ? "L'assistant direction analyse les donnees Batipro..." : "Chargement du contexte Batipro..."}
-              </div>
-            ) : null}
-            {error ? (
-              <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">{error}</div>
-            ) : null}
+            {sending || loadingContext ? <div className="flex items-center gap-2 text-xs text-slate-500"><Loader2 className="h-4 w-4 animate-spin" /> {sending ? "L'assistant direction analyse les donnees Batipro..." : "Chargement du contexte Batipro..."}</div> : null}
+            {error ? <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">{error}</div> : null}
           </div>
 
           <form onSubmit={handleSubmit} className="border-t border-slate-200 bg-white p-3">
             <div className="flex items-end gap-2">
               <label className="min-w-0 flex-1">
                 <span className="sr-only">Question a l'Assistant Direction COCO</span>
-                <textarea
-                  value={input}
-                  onChange={(event) => setInput(event.target.value)}
-                  rows={3}
-                  className="max-h-40 min-h-16 w-full resize-none rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
-                  placeholder={suggestedPrompt}
-                />
+                <textarea value={input} onChange={(event) => setInput(event.target.value)} rows={3} className="max-h-40 min-h-16 w-full resize-none rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100" placeholder={suggestedPrompt} />
               </label>
-              <button
-                type="submit"
-                disabled={sending || loadingContext || !input.trim()}
-                className="grid h-11 w-11 shrink-0 place-items-center rounded-lg bg-slate-950 text-white hover:bg-slate-800 disabled:bg-slate-200 disabled:text-slate-500"
-                aria-label="Envoyer a l'assistant direction"
-              >
-                <Send className="h-4 w-4" />
-              </button>
+              <button type="submit" disabled={sending || loadingContext || !input.trim()} className="grid h-11 w-11 shrink-0 place-items-center rounded-lg bg-slate-950 text-white hover:bg-slate-800 disabled:bg-slate-200 disabled:text-slate-500" aria-label="Envoyer a l'assistant direction"><Send className="h-4 w-4" /></button>
             </div>
           </form>
         </div>
@@ -393,9 +338,7 @@ export default function AssistantDirectionPage() {
           ) : null}
 
           <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm shadow-slate-950/[0.03]">
-            <div className="flex items-center gap-2 text-sm font-semibold text-slate-950">
-              <ClipboardCheck className="h-4 w-4 text-blue-600" /> Brouillons controles
-            </div>
+            <div className="flex items-center gap-2 text-sm font-semibold text-slate-950"><ClipboardCheck className="h-4 w-4 text-blue-600" /> Brouillons controles</div>
             <div className="mt-3 space-y-2">
               {CONTROLLED_DRAFT_CATEGORIES.map((draft) => (
                 <div key={`${draft.module}-${draft.label}`} className="rounded-lg border border-slate-200 bg-slate-50 p-3">
@@ -412,54 +355,31 @@ export default function AssistantDirectionPage() {
 
           <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm shadow-slate-950/[0.03]">
             <div className="flex items-center justify-between gap-3">
-              <div className="flex items-center gap-2 text-sm font-semibold text-slate-950">
-                <ClipboardCheck className="h-4 w-4 text-emerald-600" /> Brouillons recents
-              </div>
-              <button
-                type="button"
-                onClick={() => void refreshControlledDrafts()}
-                disabled={controlledDraftsLoading}
-                className="inline-flex h-8 items-center gap-1 rounded-lg border border-slate-200 bg-white px-2 text-[11px] font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-60"
-              >
-                <RefreshCw className={["h-3 w-3", controlledDraftsLoading ? "animate-spin" : ""].join(" ")} />
-                Actualiser
+              <div className="flex items-center gap-2 text-sm font-semibold text-slate-950"><ClipboardCheck className="h-4 w-4 text-emerald-600" /> Brouillons recents</div>
+              <button type="button" onClick={() => void refreshControlledDrafts()} disabled={controlledDraftsLoading} className="inline-flex h-8 items-center gap-1 rounded-lg border border-slate-200 bg-white px-2 text-[11px] font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-60">
+                <RefreshCw className={["h-3 w-3", controlledDraftsLoading ? "animate-spin" : ""].join(" ")} /> Actualiser
               </button>
             </div>
             <p className="mt-2 text-xs leading-5 text-slate-500">Suivi dirigeant des propositions IA historisees. Les boutons changent uniquement le statut du brouillon.</p>
             {controlledDraftsError ? <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-2 text-xs text-amber-800">{controlledDraftsError}</div> : null}
             <div className="mt-3 space-y-2">
-              {controlledDraftsLoading && !controlledDrafts.length ? (
-                <div className="flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 p-3 text-xs text-slate-500">
-                  <Loader2 className="h-3.5 w-3.5 animate-spin" /> Chargement des brouillons...
-                </div>
-              ) : null}
-              {!controlledDraftsLoading && !controlledDrafts.length ? (
-                <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-xs leading-5 text-slate-500">Aucun brouillon controle historise pour le moment.</div>
-              ) : null}
+              {controlledDraftsLoading && !controlledDrafts.length ? <div className="flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 p-3 text-xs text-slate-500"><Loader2 className="h-3.5 w-3.5 animate-spin" /> Chargement des brouillons...</div> : null}
+              {!controlledDraftsLoading && !controlledDrafts.length ? <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-xs leading-5 text-slate-500">Aucun brouillon controle historise pour le moment.</div> : null}
               {controlledDrafts.map((record) => (
                 <div key={record.id} className="rounded-lg border border-slate-200 bg-slate-50 p-3">
                   <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0">
                       <div className="truncate text-xs font-semibold text-slate-950">{record.draft.title}</div>
-                      <div className="mt-1 text-[11px] font-medium text-blue-700">{controlledDraftKindLabel(record)} - {controlledDraftSourceLabel(record.sourceKind)}</div>
+                      <div className="mt-1 text-[11px] font-medium text-blue-700">{draftKindLabel(record.kind)} - {draftSourceLabel(record.sourceKind)}</div>
                     </div>
-                    <span className={["shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-semibold", controlledDraftStatusClass(record.status)].join(" ")}>{CONTROLLED_DRAFT_STATUS_LABELS[record.status]}</span>
+                    <span className={["shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-semibold", draftStatusClass(record.status)].join(" ")}>{draftStatusLabel(record.status)}</span>
                   </div>
-                  <div className="mt-2 text-[11px] leading-5 text-slate-500">
-                    {controlledDraftMetrics(record)}<br />
-                    {new Date(record.createdAt).toLocaleString("fr-FR")}
-                  </div>
-                  {record.draft.pointsToVerify.length ? <div className="mt-2 line-clamp-2 text-[11px] leading-5 text-amber-700">A verifier: {record.draft.pointsToVerify.join(" - ")}</div> : null}
+                  <div className="mt-2 text-[11px] leading-5 text-slate-500">{draftMetrics(record)}<br />{new Date(record.createdAt).toLocaleString("fr-FR")}</div>
+                  {record.draft.pointsToVerify.length ? <div className="mt-2 max-h-10 overflow-hidden text-[11px] leading-5 text-amber-700">A verifier: {record.draft.pointsToVerify.join(" - ")}</div> : null}
                   <div className="mt-3 grid grid-cols-3 gap-1">
-                    {(["reviewed", "validated", "ignored"] as const).map((status) => (
-                      <button
-                        key={status}
-                        type="button"
-                        onClick={() => void updateControlledDraftStatus(record, status)}
-                        disabled={updatingDraftId === record.id || record.status === status}
-                        className="h-8 rounded-lg border border-slate-200 bg-white px-2 text-[11px] font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400"
-                      >
-                        {updatingDraftId === record.id ? "..." : CONTROLLED_DRAFT_STATUS_LABELS[status]}
+                    {CONTROLLED_DRAFT_NEXT_STATUSES.map((status) => (
+                      <button key={status} type="button" onClick={() => void updateControlledDraftStatus(record, status)} disabled={updatingDraftId === record.id || record.status === status} className="h-8 rounded-lg border border-slate-200 bg-white px-2 text-[11px] font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400">
+                        {updatingDraftId === record.id ? "..." : draftStatusLabel(status)}
                       </button>
                     ))}
                   </div>
@@ -469,28 +389,16 @@ export default function AssistantDirectionPage() {
           </div>
 
           <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm shadow-slate-950/[0.03]">
-            <div className="flex items-center gap-2 text-sm font-semibold text-slate-950">
-              <Sparkles className="h-4 w-4 text-blue-600" /> Questions rapides
-            </div>
+            <div className="flex items-center gap-2 text-sm font-semibold text-slate-950"><Sparkles className="h-4 w-4 text-blue-600" /> Questions rapides</div>
             <div className="mt-3 flex flex-wrap gap-2">
               {COCO_DIRECTION_QUICK_QUESTIONS.map((question) => (
-                <button
-                  key={question.label}
-                  type="button"
-                  onClick={() => void askAssistant(question.prompt)}
-                  disabled={sending || loadingContext}
-                  className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-left text-xs font-medium text-slate-700 hover:border-blue-200 hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-60"
-                >
-                  {question.label}
-                </button>
+                <button key={question.label} type="button" onClick={() => void askAssistant(question.prompt)} disabled={sending || loadingContext} className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-left text-xs font-medium text-slate-700 hover:border-blue-200 hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-60">{question.label}</button>
               ))}
             </div>
           </div>
 
           <div className="rounded-xl border border-slate-200 bg-white p-4 text-sm shadow-sm shadow-slate-950/[0.03]">
-            <div className="flex items-center gap-2 font-semibold text-slate-950">
-              <AlertTriangle className="h-4 w-4 text-amber-500" /> Points analyses
-            </div>
+            <div className="flex items-center gap-2 font-semibold text-slate-950"><AlertTriangle className="h-4 w-4 text-amber-500" /> Points analyses</div>
             <ul className="mt-3 space-y-2 text-slate-600">
               <li>Avancement prevu vs reel des chantiers</li>
               <li>Temps prevu, temps passe et derives</li>
