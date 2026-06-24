@@ -12,6 +12,7 @@ import IntervenantInvitationPage from "./pages/IntervenantInvitationPage";
 import AppEntryPage from "./pages/AppEntryPage";
 
 const DashboardPage = lazy(() => import("./pages/DashboardPage"));
+const AssistantDirectionPage = lazy(() => import("./pages/AssistantDirectionPage"));
 const RentabilitePage = lazy(() => import("./pages/RentabilitePage"));
 const CrmPage = lazy(() => import("./pages/CrmPage"));
 const ChantiersPage = lazy(() => import("./pages/ChantiersPage"));
@@ -115,6 +116,7 @@ export default function App() {
         }
       >
         <Route path="/dashboard" element={<RouteSuspense label="Chargement du dashboard..."><DashboardPage /></RouteSuspense>} />
+        <Route path="/assistant-direction" element={<RouteSuspense label="Chargement de l'assistant direction..."><AssistantDirectionPage /></RouteSuspense>} />
         <Route
           path="/rentabilite"
           element={
