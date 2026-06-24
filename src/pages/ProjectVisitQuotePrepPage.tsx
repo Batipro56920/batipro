@@ -2,25 +2,35 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import { ArrowLeft, BrainCircuit, CheckCircle2, ClipboardCheck, FileText, Loader2, Pencil, Plus, ShieldCheck, Wand2, XCircle } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { loadCrmVisitReportDraft, type CrmVisitReportDraft } from "../services/crmVisitReports.service";
-import { isCurrentUserCocoAdmin, prepareCocoVisitQuoteDraft, type CocoControlledDraft } from "../services/cocoDirectionAssistant.service";
+import {
+  isCurrentUserCocoAdmin,
+  listCocoControlledDrafts,
+  prepareCocoVisitQuoteDraft,
+  saveCocoControlledDraft,
+  updateCocoControlledDraftStatus,
+  type CocoControlledDraft,
+  type CocoControlledDraftStatus,
+} from "../services/cocoDirectionAssistant.service";
 import { VISIT_DRAFT_MARKER } from "../features/crm/utils/appointmentDraftStorage";
 import { useProjectsData } from "../features/projects/hooks/useProjectsData";
 
-type AiDraftStatus = "prepared" | "reviewed" | "validated" | "ignored";
-
 type AiDraftHistoryEntry = {
   id: string;
+  persistedId: string | null;
   draft: CocoControlledDraft;
-  status: AiDraftStatus;
+  status: CocoControlledDraftStatus;
   createdAt: string;
+  persistence: "supabase" | "local";
 };
 
-const AI_DRAFT_STATUS_LABELS: Record<AiDraftStatus, string> = {
+const AI_DRAFT_STATUS_LABELS: Record<CocoControlledDraftStatus, string> = {
   prepared: "Préparé",
   reviewed: "À revoir",
   validated: "Envoyé en revue devis",
   ignored: "Ignoré",
 };
+
+const AI_DRAFT_SOURCE_KIND = "crm_visit_quote_analysis";
 
 function parseFallbackDraft(notes: string | null | undefined): CrmVisitReportDraft | null {
   if (!notes?.includes(VISIT_DRAFT_MARKER)) return null;
@@ -46,7 +56,7 @@ function draftConfidenceClass(confidence: string) {
   return "border-blue-200 bg-blue-50 text-blue-800";
 }
 
-function statusClass(status: AiDraftStatus) {
+function statusClass(status: CocoControlledDraftStatus) {
   if (status === "validated") return "border-emerald-200 bg-emerald-50 text-emerald-800";
   if (status === "ignored") return "border-slate-200 bg-slate-100 text-slate-600";
   if (status === "reviewed") return "border-blue-200 bg-blue-50 text-blue-800";
@@ -55,6 +65,17 @@ function statusClass(status: AiDraftStatus) {
 
 function joinOrFallback(values: string[], fallback: string) {
   return values.length ? values.join(" - ") : fallback;
+}
+
+function localHistoryEntry(draft: CocoControlledDraft, status: CocoControlledDraftStatus): AiDraftHistoryEntry {
+  return {
+    id: draft.id,
+    persistedId: null,
+    draft,
+    status,
+    createdAt: new Date().toISOString(),
+    persistence: "local",
+  };
 }
 
 export default function ProjectVisitQuotePrepPage() {
@@ -68,6 +89,8 @@ export default function ProjectVisitQuotePrepPage() {
   const [aiAllowed, setAiAllowed] = useState(false);
   const [aiDraft, setAiDraft] = useState<CocoControlledDraft | null>(null);
   const [aiDraftHistory, setAiDraftHistory] = useState<AiDraftHistoryEntry[]>([]);
+  const [aiHistoryLoading, setAiHistoryLoading] = useState(false);
+  const [aiPersistenceNotice, setAiPersistenceNotice] = useState<string | null>(null);
   const [aiLoading, setAiLoading] = useState(false);
   const [aiError, setAiError] = useState<string | null>(null);
 
@@ -111,8 +134,38 @@ export default function ProjectVisitQuotePrepPage() {
   useEffect(() => {
     setAiDraft(null);
     setAiDraftHistory([]);
+    setAiPersistenceNotice(null);
     setAiError(null);
   }, [project?.id, appointment?.id, draft]);
+
+  useEffect(() => {
+    let alive = true;
+    if (!aiAllowed || !project || !appointment) return;
+    setAiHistoryLoading(true);
+    listCocoControlledDrafts({ sourceKind: AI_DRAFT_SOURCE_KIND, sourceId: appointment.id, projectId: project.id, limit: 8 })
+      .then((records) => {
+        if (!alive) return;
+        setAiDraftHistory(records.map((record) => ({
+          id: record.draft.id,
+          persistedId: record.id,
+          draft: record.draft,
+          status: record.status,
+          createdAt: record.createdAt,
+          persistence: "supabase" as const,
+        })));
+        setAiPersistenceNotice(records.length ? null : "Aucun historique IA persistant pour cette visite.");
+      })
+      .catch((err) => {
+        if (!alive) return;
+        setAiPersistenceNotice(err instanceof Error ? err.message : "Historique IA persistant indisponible.");
+      })
+      .finally(() => {
+        if (alive) setAiHistoryLoading(false);
+      });
+    return () => {
+      alive = false;
+    };
+  }, [aiAllowed, appointment, project]);
 
   const sections = useMemo(() => (draft?.lines ?? []).filter((line) => line.type === "section"), [draft?.lines]);
   const tasks = useMemo(() => (draft?.lines ?? []).filter((line) => line.type === "task"), [draft?.lines]);
@@ -120,28 +173,62 @@ export default function ProjectVisitQuotePrepPage() {
   const missingPrices = tasks.filter((line) => !Number(line.priceHintHt ?? 0)).length;
   const readyForQuote = tasks.length > 0;
 
-  function updateAiDraftHistory(draftToUpdate: CocoControlledDraft, status: AiDraftStatus) {
+  function setLocalDraftHistory(entry: AiDraftHistoryEntry) {
     setAiDraftHistory((previous) => {
-      const next: AiDraftHistoryEntry = {
-        id: draftToUpdate.id,
-        draft: draftToUpdate,
-        status,
-        createdAt: new Date().toISOString(),
-      };
-      const withoutSameDraft = previous.filter((entry) => entry.id !== draftToUpdate.id);
-      return [next, ...withoutSameDraft].slice(0, 6);
+      const withoutSameDraft = previous.filter((item) => item.id !== entry.id);
+      return [entry, ...withoutSameDraft].slice(0, 8);
     });
   }
 
-  function markAiDraft(status: AiDraftStatus) {
+  async function recordAiDraftStatus(draftToUpdate: CocoControlledDraft, status: CocoControlledDraftStatus) {
+    const existing = aiDraftHistory.find((entry) => entry.id === draftToUpdate.id);
+    const localEntry: AiDraftHistoryEntry = {
+      ...(existing ?? localHistoryEntry(draftToUpdate, status)),
+      draft: draftToUpdate,
+      status,
+      createdAt: existing?.createdAt ?? new Date().toISOString(),
+    };
+    setLocalDraftHistory(localEntry);
+
+    if (!project || !appointment) return;
+    try {
+      if (existing?.persistedId) {
+        const updated = await updateCocoControlledDraftStatus({ id: existing.persistedId, status });
+        if (updated) {
+          setLocalDraftHistory({ ...localEntry, persistedId: updated.id, status: updated.status, createdAt: updated.createdAt, persistence: "supabase" });
+          setAiPersistenceNotice(null);
+        }
+        return;
+      }
+
+      const saved = await saveCocoControlledDraft({
+        sourceKind: AI_DRAFT_SOURCE_KIND,
+        sourceId: appointment.id,
+        projectId: project.id,
+        draft: draftToUpdate,
+        status,
+      });
+      if (saved) {
+        setLocalDraftHistory({ ...localEntry, persistedId: saved.id, status: saved.status, createdAt: saved.createdAt, persistence: "supabase" });
+        setAiPersistenceNotice(null);
+      } else {
+        setAiPersistenceNotice("Historique persistant non actif : appliquer la table Supabase ai_controlled_drafts. La proposition reste locale sur cette page.");
+      }
+    } catch (err) {
+      setAiPersistenceNotice(err instanceof Error ? err.message : "Historique IA persistant indisponible. La proposition reste locale sur cette page.");
+    }
+  }
+
+  function markAiDraft(status: CocoControlledDraftStatus) {
     if (!aiDraft) return;
-    updateAiDraftHistory(aiDraft, status);
+    void recordAiDraftStatus(aiDraft, status);
     if (status === "ignored") setAiDraft(null);
   }
 
-  function openQuoteReview(status: AiDraftStatus) {
-    if (aiDraft) updateAiDraftHistory(aiDraft, status);
-    navigate(`/projets/${project?.id}/devis/nouveau`);
+  function openQuoteReview(status: CocoControlledDraftStatus) {
+    if (!project) return;
+    if (aiDraft) void recordAiDraftStatus(aiDraft, status);
+    navigate(`/projets/${project.id}/devis/nouveau`);
   }
 
   async function prepareAiDraft() {
@@ -151,7 +238,7 @@ export default function ProjectVisitQuotePrepPage() {
     try {
       const prepared = await prepareCocoVisitQuoteDraft({ project: project as unknown as Record<string, unknown>, appointment: appointment as unknown as Record<string, unknown>, visitDraft: draft as unknown as Record<string, unknown> | null });
       setAiDraft(prepared);
-      updateAiDraftHistory(prepared, "prepared");
+      await recordAiDraftStatus(prepared, "prepared");
     } catch (err) {
       setAiError(err instanceof Error ? err.message : "Impossible de preparer le brouillon IA.");
     } finally {
@@ -272,6 +359,7 @@ export default function ProjectVisitQuotePrepPage() {
             ))}
           </div>
 
+          {aiPersistenceNotice ? <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">{aiPersistenceNotice}</div> : null}
           {aiError ? <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">{aiError}</div> : null}
 
           {aiDraft ? (
@@ -374,13 +462,16 @@ export default function ProjectVisitQuotePrepPage() {
           ) : null}
 
           <div className="mt-5 rounded-2xl border border-slate-200 bg-white p-4">
-            <div className="font-semibold text-slate-950">Historique des propositions IA</div>
+            <div className="flex items-center justify-between gap-3">
+              <div className="font-semibold text-slate-950">Historique des propositions IA</div>
+              {aiHistoryLoading ? <div className="text-xs text-slate-500">Chargement...</div> : null}
+            </div>
             <div className="mt-3 space-y-2">
               {aiDraftHistory.length ? aiDraftHistory.map((entry) => (
                 <div key={`${entry.id}-${entry.status}`} className="flex flex-col gap-2 rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm sm:flex-row sm:items-center sm:justify-between">
                   <div>
                     <div className="font-semibold text-slate-950">{entry.draft.title}</div>
-                    <div className="mt-1 text-xs text-slate-500">{new Date(entry.createdAt).toLocaleString("fr-FR")} - {entry.draft.quoteLines.length} ligne(s), {entry.draft.materialNeeds.length} besoin(s) materiaux</div>
+                    <div className="mt-1 text-xs text-slate-500">{new Date(entry.createdAt).toLocaleString("fr-FR")} - {entry.draft.quoteLines.length} ligne(s), {entry.draft.materialNeeds.length} besoin(s) materiaux - {entry.persistence === "supabase" ? "historique persistant" : "local"}</div>
                   </div>
                   <span className={["inline-flex w-fit rounded-full border px-3 py-1 text-xs font-semibold", statusClass(entry.status)].join(" ")}>{AI_DRAFT_STATUS_LABELS[entry.status]}</span>
                 </div>
