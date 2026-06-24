@@ -1,10 +1,18 @@
 import { useMemo, useState } from "react";
-import { Download, Plus, Save, Send } from "lucide-react";
+import { Download, Plus, Save, Send, Trash2 } from "lucide-react";
 import { Button } from "../../../components/ui/button";
 import { calculateDocumentTotals, createDocumentLine, createDocumentSection, DocumentPreview, DocumentSendDialog, DocumentTotalsCard, downloadBusinessDocumentPdf, flattenDocumentNodes, validateBusinessDocument, type BusinessDocument, type BusinessDocumentNode, type DocumentItemKind } from "../../document-engine";
-import { addInvoicePayment, createProfitabilitySnapshot, getPaidAmount, getRemainingAmount } from "../application/invoicePayments";
+import { addInvoicePayment, createProfitabilitySnapshot, getPaidAmount, getRemainingAmount, removeInvoicePayment } from "../application/invoicePayments";
 import type { InvoicePayment, InvoiceRecord } from "../domain/types";
 import { InvoiceStatusBadge } from "./InvoiceStatusBadge";
+
+const PAYMENT_METHOD_LABELS: Record<InvoicePayment["method"], string> = {
+  transfer: "Virement",
+  card: "Carte",
+  cash: "Especes",
+  cheque: "Cheque",
+  direct_debit: "Prelevement",
+};
 
 export function InvoiceEditor({ invoice, onChange, onSave }: { invoice: InvoiceRecord; onChange: (invoice: InvoiceRecord) => void; onSave: (invoice: InvoiceRecord) => void }) {
   const [previewOpen, setPreviewOpen] = useState(false);
@@ -38,6 +46,10 @@ export function InvoiceEditor({ invoice, onChange, onSave }: { invoice: InvoiceR
 
   function addPayment(payment: Omit<InvoicePayment, "id">) {
     onChange(addInvoicePayment(invoice, payment));
+  }
+
+  function removePayment(paymentId: string) {
+    onChange(removeInvoicePayment(invoice, paymentId));
   }
 
   function save() {
@@ -100,7 +112,7 @@ export function InvoiceEditor({ invoice, onChange, onSave }: { invoice: InvoiceR
 
         <aside className="space-y-4">
           <DocumentTotalsCard document={document} totals={totals} />
-          <PaymentPanel invoice={invoice} onAdd={addPayment} />
+          <PaymentPanel invoice={invoice} onAdd={addPayment} onRemove={removePayment} />
           <div className="rounded-2xl border border-slate-200 bg-white p-4 text-sm shadow-sm">
             <div className="font-semibold text-slate-950">Rentabilité projet</div>
             <div className="mt-3 space-y-2 text-slate-600">
@@ -118,7 +130,7 @@ export function InvoiceEditor({ invoice, onChange, onSave }: { invoice: InvoiceR
   );
 }
 
-function PaymentPanel({ invoice, onAdd }: { invoice: InvoiceRecord; onAdd: (payment: Omit<InvoicePayment, "id">) => void }) {
+function PaymentPanel({ invoice, onAdd, onRemove }: { invoice: InvoiceRecord; onAdd: (payment: Omit<InvoicePayment, "id">) => void; onRemove: (paymentId: string) => void }) {
   const [amount, setAmount] = useState("");
   const [paidAt, setPaidAt] = useState(new Date().toISOString().slice(0, 10));
   const [method, setMethod] = useState<InvoicePayment["method"]>("transfer");
@@ -127,6 +139,24 @@ function PaymentPanel({ invoice, onAdd }: { invoice: InvoiceRecord; onAdd: (paym
     <div className="rounded-2xl border border-slate-200 bg-white p-4 text-sm shadow-sm">
       <div className="font-semibold text-slate-950">Paiements</div>
       <div className="mt-2 text-slate-500">Encaissé : {formatCurrency(getPaidAmount(invoice))} · Reste : {formatCurrency(getRemainingAmount(invoice))}</div>
+      <div className="mt-4 space-y-2">
+        {invoice.payments.length ? invoice.payments.map((payment) => (
+          <div key={payment.id} className="rounded-xl border border-slate-100 bg-slate-50 p-3">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <div className="font-semibold text-slate-950">{formatCurrency(payment.amount)}</div>
+                <div className="mt-1 text-xs text-slate-500">{formatDate(payment.paidAt)} · {PAYMENT_METHOD_LABELS[payment.method]}</div>
+                {payment.reference ? <div className="mt-1 text-xs text-slate-500">Ref. {payment.reference}</div> : null}
+              </div>
+              <Button variant="ghost" size="sm" title="Retirer ce paiement" onClick={() => onRemove(payment.id)}>
+                <Trash2 className="h-4 w-4" />
+              </Button>
+            </div>
+          </div>
+        )) : (
+          <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50 p-3 text-xs text-slate-500">Aucun paiement enregistré.</div>
+        )}
+      </div>
       <div className="mt-4 grid gap-2">
         <input className={inputClass} inputMode="decimal" placeholder="Montant" value={amount} onChange={(event) => setAmount(event.target.value)} />
         <input className={inputClass} type="date" value={paidAt} onChange={(event) => setPaidAt(event.target.value)} />
@@ -165,7 +195,7 @@ function NumberCell({ value, onChange }: { value: number; onChange: (value: numb
   );
 }
 
-function Line({ label, value }: { label: string; value: string }) {
+function Line({ label, value }: { label: string }) {
   return <div className="flex justify-between gap-3"><span>{label}</span><span className="font-semibold text-slate-950">{value}</span></div>;
 }
 
@@ -195,6 +225,10 @@ function parseFrenchNumber(value: string) {
     : text.replace(/\s/g, "");
   const parsed = Number(normalized);
   return Number.isFinite(parsed) ? parsed : null;
+}
+
+function formatDate(value: string) {
+  return value ? new Date(value).toLocaleDateString("fr-FR") : "-";
 }
 
 function formatCurrency(value: number) {
