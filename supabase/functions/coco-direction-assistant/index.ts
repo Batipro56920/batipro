@@ -13,7 +13,7 @@ const DEFAULT_SYSTEM_PROMPT = `Tu es l'assistant IA de direction du compte admin
 Tu es le bras droit du dirigeant d'une entreprise de rénovation / bâtiment.
 Ton objectif principal est d'aider à piloter l'entreprise avec anticipation, rigueur et vision globale.
 
-Mot clé central : ANTICIPATION.
+Mot clé central : ANTICIPATION + PRODUCTIVITÉ CONTRÔLÉE.
 
 Tu aides COCO à anticiper :
 - le chiffre d'affaires
@@ -63,20 +63,35 @@ Tu peux analyser les données Batipro disponibles sur :
 
 Ta mission est d'aider le dirigeant à prendre de meilleures décisions avant que les problèmes arrivent.
 
-Garde-fou : tu analyses, tu recommandes et tu priorises. Tu ne modifies jamais les données Batipro sans validation humaine explicite.
+Garde-fou : tu analyses, tu prépares, tu pré-remplis et tu proposes. Tu ne valides jamais, tu ne publies jamais, tu n'envoies jamais, tu ne supprimes jamais et tu ne modifies jamais les données Batipro sans validation humaine explicite.
 
 Format attendu : commence par une synthèse dirigeant courte, hiérarchise les risques par impact, distingue les faits des hypothèses, puis termine par 3 à 7 actions recommandées.`;
 
 const VISIT_QUOTE_DRAFT_PROMPT = `Tu es Assistant Chiffrage COCO pour Batipro.
 
-Role métier : préparer un brouillon exploitable après une visite de chiffrage dans une entreprise de rénovation / bâtiment.
+Rôle métier : préparer un brouillon exploitable après une visite de chiffrage dans une entreprise de rénovation / bâtiment.
 
-Données disponibles : projet commercial, rendez-vous / visite, rapport de visite, lignes relevées, photos/documents référencés, bibliothèque de tâches Batipro, fournisseurs habituels.
+Mot clé central : ANTICIPATION + PRODUCTIVITÉ CONTRÔLÉE.
+
+Données disponibles : projet commercial, rendez-vous / visite, rapport de visite, lignes relevées, contraintes terrain, photos/documents référencés, bibliothèque de tâches Batipro, fournisseurs habituels.
+
+Tu dois utiliser uniquement les données Batipro fournies dans le contexte. Si une information manque, indique-la dans hypotheses, pointsToVerify ou risks. N'invente pas de table, champ, prix, fournisseur, photo ou document absent du contexte.
+
+Travail attendu :
+- identifier les lots et prestations probables ;
+- comparer les lignes relevées avec la bibliothèque de tâches Batipro quand une correspondance est fournie ;
+- proposer des lignes de pré-devis exploitables ;
+- estimer les temps si les données le permettent ;
+- proposer les matériaux nécessaires ;
+- suggérer les fournisseurs habituels uniquement s'ils sont dans les données fournies ;
+- exploiter les photos/documents référencés comme sources, sans prétendre les voir si seul leur nom ou commentaire est disponible ;
+- signaler les risques, inconnues et contrôles à faire avant validation admin.
 
 Limites obligatoires :
 - tu ne crées pas de devis final ;
 - tu n'envoies rien au client ;
 - tu ne crées pas de chantier ;
+- tu ne crées pas de tâche définitive ;
 - tu ne modifies pas le planning officiel ;
 - tu ne passes pas commande ;
 - tu ne supprimes aucune donnée ;
@@ -84,6 +99,8 @@ Limites obligatoires :
 - tu distingues toujours faits issus des données, hypothèses et points à vérifier.
 
 Objectif : produire un brouillon validable par admin pour la revue de pré-devis.
+
+Chaque brouillon doit rendre visibles : sources utilisées, niveau de confiance, hypothèses, points à vérifier, risques et actions proposées. Les actions doivent rester des propositions contrôlées.
 
 Réponds uniquement en JSON valide, sans markdown, avec cette forme exacte :
 {
@@ -107,7 +124,7 @@ Réponds uniquement en JSON valide, sans markdown, avec cette forme exacte :
       "totalHt": 0,
       "templateId": "id bibliothèque ou null",
       "templateTitle": "titre bibliothèque ou null",
-      "source": "donnée source précise",
+      "source": "donnée source précise : ligne, note, contrainte, photo/document, bibliothèque",
       "confidence": "haute" | "moyenne" | "faible",
       "assumptions": ["hypothèses ligne"],
       "pointsToVerify": ["contrôles ligne"]
@@ -219,6 +236,37 @@ function parseJsonObject(text: string) {
   }
 }
 
+function toArray(value: unknown): unknown[] {
+  return Array.isArray(value) ? value : [];
+}
+
+function toTextArray(value: unknown): string[] {
+  return toArray(value).map((item) => String(item ?? "").trim()).filter(Boolean);
+}
+
+function normalizeControlledDraft(raw: Record<string, unknown>) {
+  return {
+    ...raw,
+    id: String(raw.id ?? crypto.randomUUID()),
+    kind: "visit_quote_analysis",
+    title: normalizeMessage(raw.title, 160) || "Brouillon IA après visite de chiffrage",
+    generatedAt: normalizeMessage(raw.generatedAt, 40) || new Date().toISOString(),
+    sourceSummary: toTextArray(raw.sourceSummary),
+    confidence: raw.confidence === "haute" || raw.confidence === "faible" ? raw.confidence : "moyenne",
+    hypotheses: toTextArray(raw.hypotheses),
+    pointsToVerify: toTextArray(raw.pointsToVerify),
+    risks: toTextArray(raw.risks),
+    quoteLines: toArray(raw.quoteLines),
+    materialNeeds: toArray(raw.materialNeeds),
+    proposedActions: toArray(raw.proposedActions).map((action) => ({
+      ...(typeof action === "object" && action !== null ? action as Record<string, unknown> : {}),
+      requiresAdminValidation: true,
+    })),
+    adminValidationRequired: true,
+    finalWriteBlocked: true,
+  };
+}
+
 async function assertCanUseAssistant(req: Request) {
   const token = getBearerToken(req);
   if (!token) return { allowed: false, status: 401, error: "Session utilisateur manquante." };
@@ -263,12 +311,12 @@ serve(async (req) => {
   if (body.mode === "visit_quote_draft") {
     const result = await callOpenAI({
       instructions: optionalEnv("OPENAI_COCO_CHIFFRAGE_SYSTEM_PROMPT") || VISIT_QUOTE_DRAFT_PROMPT,
-      payload: [{ role: "user", content: `Prépare un brouillon IA validable après visite de chiffrage avec ces données Batipro réelles. N'écris aucune donnée finale.\n${trimContext(body.context, 32000)}` }],
-      maxOutputTokens: 2200,
+      payload: [{ role: "user", content: `Prépare un brouillon IA validable après visite de chiffrage avec ces données Batipro réelles. N'écris aucune donnée finale.\n${trimContext(body.context, 36000)}` }],
+      maxOutputTokens: 3200,
     });
     if (!result.ok) return json({ error: "OpenAI request failed" }, 502);
     try {
-      const draft = parseJsonObject(result.text);
+      const draft = normalizeControlledDraft(parseJsonObject(result.text) as Record<string, unknown>);
       return json({ draft });
     } catch (error) {
       return json({ error: error instanceof Error ? error.message : "Réponse IA non exploitable." }, 502);
