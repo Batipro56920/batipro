@@ -1,5 +1,6 @@
 import { calculateDocumentTotals, createEmptyBusinessDocument, type BusinessDocument, type BusinessDocumentNode } from "../../document-engine";
 import type { InvoiceRecord, InvoiceType } from "../domain/types";
+import { addLocalDays, getLocalInputDate } from "./invoiceDates";
 
 export function createInvoice(type: InvoiceType = "deposit", sourceQuote?: BusinessDocument): InvoiceRecord {
   const now = new Date().toISOString();
@@ -29,7 +30,7 @@ export function createInvoiceDocumentFromQuote(quote: BusinessDocument, type: In
     number: createInvoiceNumber(type),
     status: "draft" as const,
     title: invoiceTypeLabel(type),
-    issueDate: new Date().toISOString().slice(0, 10),
+    issueDate: getLocalInputDate(),
     dueDate: dueDate(30),
     quoteId: quote.id,
     terms: {
@@ -132,9 +133,7 @@ function createInvoiceNumber(type: InvoiceType) {
 }
 
 function dueDate(days: number) {
-  const date = new Date();
-  date.setDate(date.getDate() + days);
-  return date.toISOString().slice(0, 10);
+  return addLocalDays(days);
 }
 
 function roundMoney(value: number) {
