@@ -77,6 +77,12 @@ export function InvoiceEditor({ invoice, hasUnsavedChanges, onUnsavedChange, onC
       return;
     }
 
+    const overpaidAmount = getOverpaidAmount(invoice);
+    if (overpaidAmount > 0) {
+      setSaveError(`Les paiements dépassent le total TTC de ${formatCurrency(overpaidAmount)}. Retirez un paiement ou ajustez le montant avant d'enregistrer.`);
+      return;
+    }
+
     setSaving(true);
     try {
       await onSave(invoice);
@@ -171,6 +177,7 @@ function PaymentPanel({ invoice, hasUnsavedChanges, onAdd, onRemove }: { invoice
   const [reference, setReference] = useState("");
   const parsedAmount = parseCommittedFrenchNumber(amount);
   const remainingAmount = getRemainingAmount(invoice);
+  const overpaidAmount = getOverpaidAmount(invoice);
   const isInvoiceSettled = remainingAmount <= 0;
   const exceedsRemainingAmount = !isInvoiceSettled && parsedAmount !== null && parsedAmount > remainingAmount;
   const canAddPayment = parsedAmount !== null && parsedAmount > 0 && Boolean(paidAt) && !isInvoiceSettled && !exceedsRemainingAmount;
@@ -192,6 +199,7 @@ function PaymentPanel({ invoice, hasUnsavedChanges, onAdd, onRemove }: { invoice
         {hasUnsavedChanges ? <span className="rounded-full bg-amber-100 px-2.5 py-1 text-xs font-semibold text-amber-800">Non enregistré</span> : null}
       </div>
       {hasUnsavedChanges ? <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-medium text-amber-800">Les modifications de la facture seront validées à l'enregistrement.</div> : null}
+      {overpaidAmount > 0 ? <div className="mt-3 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs font-medium text-red-700">Les paiements dépassent le total TTC de {formatCurrency(overpaidAmount)}. Retirez un paiement ou ajustez la facture avant d'enregistrer.</div> : null}
       <div className="mt-4 space-y-2">
         {invoice.payments.length ? invoice.payments.map((payment) => (
           <div key={payment.id} className="rounded-xl border border-slate-100 bg-slate-50 p-3">
@@ -328,6 +336,15 @@ function formatDate(value: string) {
   const parts = dateOnly.split("-");
   if (parts.length === 3) return `${parts[2]}/${parts[1]}/${parts[0]}`;
   return new Date(value).toLocaleDateString("fr-FR");
+}
+
+function getOverpaidAmount(invoice: InvoiceRecord) {
+  const totals = invoice.document.totals ?? calculateDocumentTotals(invoice.document);
+  return roundMoney(Math.max(0, getPaidAmount(invoice) - totals.totalTtc));
+}
+
+function roundMoney(value: number) {
+  return Math.round((value + Number.EPSILON) * 100) / 100;
 }
 
 function getErrorMessage(err: unknown, fallback: string) {
