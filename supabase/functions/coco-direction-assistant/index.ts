@@ -8,6 +8,27 @@ const corsHeaders = {
 };
 
 const PROFILE_PERMISSION_KEY = "assistant_coco_direction";
+const SENSITIVE_CONTEXT_KEYS = new Set([
+  "previewUrl",
+  "signedUrl",
+  "publicUrl",
+  "downloadUrl",
+  "url",
+  "storagePath",
+  "storage_path",
+  "storageBucket",
+  "storage_bucket",
+  "file",
+  "content",
+  "base64",
+  "token",
+  "access_token",
+  "refresh_token",
+  "service_role",
+  "serviceRole",
+  "apikey",
+  "apiKey",
+]);
 const DEFAULT_SYSTEM_PROMPT = `Tu es l'assistant IA de direction du compte admin COCO dans Batipro.
 
 Tu es le bras droit du dirigeant d'une entreprise de rénovation / bâtiment.
@@ -218,8 +239,24 @@ function extractOutputText(payload: any) {
   return parts.join("\n").trim();
 }
 
+function sanitizeAiContext(value: unknown, depth = 0): unknown {
+  if (depth > 8) return "[Contexte tronqué]";
+  if (Array.isArray(value)) return value.slice(0, 300).map((item) => sanitizeAiContext(item, depth + 1));
+  if (!value || typeof value !== "object") return value;
+
+  const sanitized: Record<string, unknown> = {};
+  for (const [key, entry] of Object.entries(value as Record<string, unknown>)) {
+    if (SENSITIVE_CONTEXT_KEYS.has(key)) {
+      sanitized[`${key}Present`] = Boolean(entry);
+      continue;
+    }
+    sanitized[key] = sanitizeAiContext(entry, depth + 1);
+  }
+  return sanitized;
+}
+
 function trimContext(context: unknown, maxLength = 24000) {
-  const jsonContext = JSON.stringify(context ?? {});
+  const jsonContext = JSON.stringify(sanitizeAiContext(context) ?? {});
   if (jsonContext.length <= maxLength) return jsonContext;
   return `${jsonContext.slice(0, maxLength)}\n[Contexte tronqué côté assistant pour limiter la taille de requête]`;
 }
