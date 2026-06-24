@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Download, Plus, Save, Send, Trash2 } from "lucide-react";
 import { Button } from "../../../components/ui/button";
 import { calculateDocumentTotals, createDocumentLine, createDocumentSection, DocumentPreview, DocumentSendDialog, DocumentTotalsCard, downloadBusinessDocumentPdf, flattenDocumentNodes, validateBusinessDocument, type BusinessDocument, type BusinessDocumentNode, type DocumentItemKind } from "../../document-engine";
@@ -207,12 +207,34 @@ function Field({ label, value, onChange, type = "text" }: { label: string; value
 }
 
 function NumberCell({ value, onChange }: { value: number; onChange: (value: number) => void }) {
+  const [draft, setDraft] = useState(() => formatEditableNumber(value));
+  const [focused, setFocused] = useState(false);
+
+  useEffect(() => {
+    if (!focused) setDraft(formatEditableNumber(value));
+  }, [focused, value]);
+
   return (
     <input
       className={`${inputClass} text-right`}
       inputMode="decimal"
-      value={value}
-      onChange={(event) => onChange(parseFrenchNumber(event.target.value) ?? 0)}
+      value={draft}
+      onBlur={() => {
+        setFocused(false);
+        const parsed = parseFrenchNumber(draft);
+        if (parsed === null) {
+          setDraft(formatEditableNumber(value));
+          return;
+        }
+        setDraft(formatEditableNumber(parsed));
+      }}
+      onChange={(event) => {
+        const nextDraft = event.target.value;
+        setDraft(nextDraft);
+        const parsed = parseFrenchNumber(nextDraft);
+        if (parsed !== null) onChange(parsed);
+      }}
+      onFocus={() => setFocused(true)}
     />
   );
 }
@@ -247,6 +269,10 @@ function parseFrenchNumber(value: string) {
     : text.replace(/\s/g, "");
   const parsed = Number(normalized);
   return Number.isFinite(parsed) ? parsed : null;
+}
+
+function formatEditableNumber(value: number) {
+  return Number.isFinite(value) ? String(value) : "0";
 }
 
 function formatDate(value: string) {
