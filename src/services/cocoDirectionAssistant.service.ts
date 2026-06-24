@@ -56,16 +56,8 @@ async function safeRows(query: PromiseLike<{ data: Array<Record<string, unknown>
   throw result.error;
 }
 
-function allowedCocoEmails(): Set<string> {
-  return new Set(String(import.meta.env.VITE_COCO_ADMIN_EMAILS ?? "").split(",").map((value) => value.trim().toLowerCase()).filter(Boolean));
-}
-
 export function isCocoAdminProfile(profile: CurrentUserProfile | null): boolean {
-  if (!isAdminProfile(profile)) return false;
-  const emails = allowedCocoEmails();
-  if (!emails.size) return true;
-  const email = text(profile?.email)?.toLowerCase() ?? "";
-  return Boolean(email && emails.has(email));
+  return isAdminProfile(profile);
 }
 
 export async function isCurrentUserCocoAdmin(): Promise<boolean> {
@@ -74,7 +66,7 @@ export async function isCurrentUserCocoAdmin(): Promise<boolean> {
 
 export async function loadCocoDirectionContext(): Promise<CocoDirectionContext> {
   const profile = await getCurrentUserProfile();
-  if (!isCocoAdminProfile(profile)) throw new Error("Assistant Direction COCO réservé aux admins autorisés.");
+  if (!isCocoAdminProfile(profile)) throw new Error("Assistant Direction COCO réservé aux administrateurs.");
 
   const today = new Date().toISOString().slice(0, 10);
   const todayTime = dateTime(today);
