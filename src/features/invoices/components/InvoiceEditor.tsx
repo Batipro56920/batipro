@@ -143,6 +143,9 @@ function PaymentPanel({ invoice, paymentsDirty, onAdd, onRemove }: { invoice: In
   const [paidAt, setPaidAt] = useState(new Date().toISOString().slice(0, 10));
   const [method, setMethod] = useState<InvoicePayment["method"]>("transfer");
   const [reference, setReference] = useState("");
+  const parsedAmount = parseFrenchNumber(amount);
+  const canAddPayment = parsedAmount !== null && parsedAmount > 0 && Boolean(paidAt);
+
   return (
     <div className="rounded-2xl border border-slate-200 bg-white p-4 text-sm shadow-sm">
       <div className="flex items-start justify-between gap-3">
@@ -182,10 +185,10 @@ function PaymentPanel({ invoice, paymentsDirty, onAdd, onRemove }: { invoice: In
           <option value="direct_debit">Prelevement</option>
         </select>
         <input className={inputClass} placeholder="Référence" value={reference} onChange={(event) => setReference(event.target.value)} />
-        <Button variant="secondary" onClick={() => {
-          const parsedAmount = parseFrenchNumber(amount);
-          if (parsedAmount === null || parsedAmount <= 0) return;
-          onAdd({ amount: parsedAmount, paidAt, method, reference });
+        <Button variant="secondary" disabled={!canAddPayment} onClick={() => {
+          if (!canAddPayment) return;
+          const trimmedReference = reference.trim();
+          onAdd({ amount: parsedAmount, paidAt, method, ...(trimmedReference ? { reference: trimmedReference } : {}) });
           setAmount("");
           setReference("");
         }}>Ajouter paiement</Button>
@@ -242,7 +245,11 @@ function parseFrenchNumber(value: string) {
 }
 
 function formatDate(value: string) {
-  return value ? new Date(value).toLocaleDateString("fr-FR") : "-";
+  if (!value) return "-";
+  const [dateOnly] = value.split("T");
+  const parts = dateOnly.split("-");
+  if (parts.length === 3) return `${parts[2]}/${parts[1]}/${parts[0]}`;
+  return new Date(value).toLocaleDateString("fr-FR");
 }
 
 function formatCurrency(value: number) {
