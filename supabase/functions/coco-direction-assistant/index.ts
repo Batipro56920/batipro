@@ -63,27 +63,84 @@ Tu peux analyser les données Batipro disponibles sur :
 
 Ta mission est d'aider le dirigeant à prendre de meilleures décisions avant que les problèmes arrivent.
 
-Tu dois notamment répondre à ces questions :
-- Est-ce qu'on a assez de travail dans les semaines/mois à venir ?
-- Est-ce qu'on doit relancer la prospection ?
-- Quels devis doivent être relancés en priorité ?
-- Quels chantiers risquent de prendre du retard ?
-- Quels chantiers sont déjà en retard ?
-- Quels chantiers avancent moins vite que prévu ?
-- Quelles tâches bloquent l'avancement ?
-- Quels chantiers risquent de coûter plus cher que prévu ?
-- Quel retard risque d'impacter les chantiers suivants ?
-- Faut-il replanifier ?
-- Faut-il relancer un fournisseur ?
-- Faut-il renforcer l'équipe, embaucher ou sous-traiter ?
-
 Garde-fou : tu analyses, tu recommandes et tu priorises. Tu ne modifies jamais les données Batipro sans validation humaine explicite.
 
 Format attendu : commence par une synthèse dirigeant courte, hiérarchise les risques par impact, distingue les faits des hypothèses, puis termine par 3 à 7 actions recommandées.`;
 
+const VISIT_QUOTE_DRAFT_PROMPT = `Tu es Assistant Chiffrage COCO pour Batipro.
+
+Role métier : préparer un brouillon exploitable après une visite de chiffrage dans une entreprise de rénovation / bâtiment.
+
+Données disponibles : projet commercial, rendez-vous / visite, rapport de visite, lignes relevées, photos/documents référencés, bibliothèque de tâches Batipro, fournisseurs habituels.
+
+Limites obligatoires :
+- tu ne crées pas de devis final ;
+- tu n'envoies rien au client ;
+- tu ne crées pas de chantier ;
+- tu ne modifies pas le planning officiel ;
+- tu ne passes pas commande ;
+- tu ne supprimes aucune donnée ;
+- tu ne contournes jamais les permissions ;
+- tu distingues toujours faits issus des données, hypothèses et points à vérifier.
+
+Objectif : produire un brouillon validable par admin pour la revue de pré-devis.
+
+Réponds uniquement en JSON valide, sans markdown, avec cette forme exacte :
+{
+  "id": "string",
+  "kind": "visit_quote_analysis",
+  "title": "string",
+  "generatedAt": "ISO date string",
+  "sourceSummary": ["sources de données utilisées"],
+  "confidence": "haute" | "moyenne" | "faible",
+  "hypotheses": ["hypothèses explicites"],
+  "pointsToVerify": ["points à contrôler avant validation"],
+  "risks": ["risques métier ou chiffrage"],
+  "quoteLines": [
+    {
+      "title": "designation pré-devis",
+      "lot": "lot ou null",
+      "unit": "unité ou null",
+      "quantity": 1,
+      "estimatedHours": 0,
+      "unitPriceHt": 0,
+      "totalHt": 0,
+      "templateId": "id bibliothèque ou null",
+      "templateTitle": "titre bibliothèque ou null",
+      "source": "donnée source précise",
+      "confidence": "haute" | "moyenne" | "faible",
+      "assumptions": ["hypothèses ligne"],
+      "pointsToVerify": ["contrôles ligne"]
+    }
+  ],
+  "materialNeeds": [
+    {
+      "designation": "matériau ou besoin",
+      "quantity": 1,
+      "unit": "unité ou null",
+      "supplierId": "id fournisseur ou null",
+      "supplierName": "nom fournisseur ou null",
+      "source": "source précise",
+      "confidence": "haute" | "moyenne" | "faible",
+      "pointsToVerify": ["contrôles achat"]
+    }
+  ],
+  "proposedActions": [
+    {
+      "label": "action proposée",
+      "module": "module Batipro concerné",
+      "actionType": "prepare" | "review" | "validate" | "ignore",
+      "requiresAdminValidation": true,
+      "detail": "détail opérationnel"
+    }
+  ],
+  "adminValidationRequired": true,
+  "finalWriteBlocked": true
+}`;
+
 type ChatRole = "user" | "assistant";
 type ChatMessage = { role?: ChatRole; content?: string };
-type RequestBody = { message?: string; history?: ChatMessage[]; context?: unknown };
+type RequestBody = { mode?: "direction_chat" | "visit_quote_draft"; message?: string; history?: ChatMessage[]; context?: unknown };
 type ProfileRow = { role?: string | null; feature_permissions?: Record<string, unknown> | null };
 
 function json(body: unknown, status = 200) {
@@ -144,10 +201,22 @@ function extractOutputText(payload: any) {
   return parts.join("\n").trim();
 }
 
-function trimContext(context: unknown) {
+function trimContext(context: unknown, maxLength = 24000) {
   const jsonContext = JSON.stringify(context ?? {});
-  if (jsonContext.length <= 24000) return jsonContext;
-  return `${jsonContext.slice(0, 24000)}\n[Contexte tronqué côté assistant pour limiter la taille de requête]`;
+  if (jsonContext.length <= maxLength) return jsonContext;
+  return `${jsonContext.slice(0, maxLength)}\n[Contexte tronqué côté assistant pour limiter la taille de requête]`;
+}
+
+function parseJsonObject(text: string) {
+  const cleaned = text.trim().replace(/^```json\s*/i, "").replace(/^```\s*/i, "").replace(/```$/i, "").trim();
+  try {
+    return JSON.parse(cleaned);
+  } catch {
+    const first = cleaned.indexOf("{");
+    const last = cleaned.lastIndexOf("}");
+    if (first >= 0 && last > first) return JSON.parse(cleaned.slice(first, last + 1));
+    throw new Error("Réponse IA non exploitable en JSON.");
+  }
 }
 
 async function assertCanUseAssistant(req: Request) {
@@ -163,6 +232,22 @@ async function assertCanUseAssistant(req: Request) {
   return { allowed: true, status: 200, error: null };
 }
 
+async function callOpenAI(input: { instructions: string; payload: unknown; maxOutputTokens: number }) {
+  const response = await fetch("https://api.openai.com/v1/responses", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${requireEnv("OPENAI_API_KEY")}`, "Content-Type": "application/json" },
+    body: JSON.stringify({
+      model: optionalEnv("OPENAI_COCO_DIRECTION_MODEL") || optionalEnv("OPENAI_MODEL") || "gpt-4.1-mini",
+      instructions: input.instructions,
+      input: input.payload,
+      temperature: 0.2,
+      max_output_tokens: input.maxOutputTokens,
+    }),
+  });
+  if (!response.ok) return { ok: false, text: "", status: response.status };
+  return { ok: true, text: extractOutputText(await response.json()), status: response.status };
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
   if (req.method !== "POST") return json({ error: "Method not allowed" }, 405);
@@ -174,21 +259,31 @@ serve(async (req) => {
   }
   const access = await assertCanUseAssistant(req);
   if (!access.allowed) return json({ error: access.error }, access.status);
+
+  if (body.mode === "visit_quote_draft") {
+    const result = await callOpenAI({
+      instructions: optionalEnv("OPENAI_COCO_CHIFFRAGE_SYSTEM_PROMPT") || VISIT_QUOTE_DRAFT_PROMPT,
+      payload: [{ role: "user", content: `Prépare un brouillon IA validable après visite de chiffrage avec ces données Batipro réelles. N'écris aucune donnée finale.\n${trimContext(body.context, 32000)}` }],
+      maxOutputTokens: 2200,
+    });
+    if (!result.ok) return json({ error: "OpenAI request failed" }, 502);
+    try {
+      const draft = parseJsonObject(result.text);
+      return json({ draft });
+    } catch (error) {
+      return json({ error: error instanceof Error ? error.message : "Réponse IA non exploitable." }, 502);
+    }
+  }
+
   const message = normalizeMessage(body.message, 4000);
   if (!message) return json({ error: "Message manquant." }, 400);
-  const response = await fetch("https://api.openai.com/v1/responses", {
-    method: "POST",
-    headers: { Authorization: `Bearer ${requireEnv("OPENAI_API_KEY")}`, "Content-Type": "application/json" },
-    body: JSON.stringify({
-      model: optionalEnv("OPENAI_COCO_DIRECTION_MODEL") || optionalEnv("OPENAI_MODEL") || "gpt-4.1-mini",
-      instructions: optionalEnv("OPENAI_COCO_DIRECTION_SYSTEM_PROMPT") || DEFAULT_SYSTEM_PROMPT,
-      input: [{ role: "user", content: `Contexte Batipro disponible en lecture seule pour l'analyse direction :\n${trimContext(body.context)}` }, ...sanitizeHistory(body.history), { role: "user", content: message }],
-      temperature: 0.25,
-      max_output_tokens: 1200,
-    }),
+  const result = await callOpenAI({
+    instructions: optionalEnv("OPENAI_COCO_DIRECTION_SYSTEM_PROMPT") || DEFAULT_SYSTEM_PROMPT,
+    payload: [{ role: "user", content: `Contexte Batipro disponible en lecture seule pour l'analyse direction :\n${trimContext(body.context)}` }, ...sanitizeHistory(body.history), { role: "user", content: message }],
+    maxOutputTokens: 1200,
   });
-  if (!response.ok) return json({ error: "OpenAI request failed" }, 502);
-  const reply = extractOutputText(await response.json());
+  if (!result.ok) return json({ error: "OpenAI request failed" }, 502);
+  const reply = result.text;
   if (!reply) return json({ error: "Réponse vide de l'assistant direction." }, 502);
   return json({ reply });
 });
