@@ -1,8 +1,60 @@
 import { supabase } from "../lib/supabaseClient";
 import { getCurrentUserProfile, isAdminProfile, type CurrentUserProfile } from "./currentUserProfile.service";
+import { findBestTaskTemplateMatch, list as listTaskTemplates, type TaskTemplateRow } from "./taskLibrary.service";
+import { listSuppliers, type SupplierRow } from "./suppliers.service";
 
 export type CocoDirectionChatMessage = { role: "user" | "assistant"; content: string };
 export type CocoDirectionRisk = { id: string; level: "danger" | "warning" | "info"; title: string; detail: string; module: string };
+export type CocoAssistantDraftKind = "visit_quote_analysis" | "quote" | "tasks" | "planning" | "materials" | "purchase_order" | "commercial_action" | "checklist";
+export type CocoDraftConfidence = "haute" | "moyenne" | "faible";
+export type CocoVisitQuoteDraftLine = {
+  title: string;
+  lot: string | null;
+  unit: string | null;
+  quantity: number;
+  estimatedHours: number | null;
+  unitPriceHt: number | null;
+  totalHt: number | null;
+  templateId: string | null;
+  templateTitle: string | null;
+  source: string;
+  confidence: CocoDraftConfidence;
+  assumptions: string[];
+  pointsToVerify: string[];
+};
+export type CocoMaterialNeedDraft = {
+  designation: string;
+  quantity: number | null;
+  unit: string | null;
+  supplierId: string | null;
+  supplierName: string | null;
+  source: string;
+  confidence: CocoDraftConfidence;
+  pointsToVerify: string[];
+};
+export type CocoDraftAction = {
+  label: string;
+  module: string;
+  actionType: "prepare" | "review" | "validate" | "ignore";
+  requiresAdminValidation: boolean;
+  detail: string;
+};
+export type CocoControlledDraft = {
+  id: string;
+  kind: CocoAssistantDraftKind;
+  title: string;
+  generatedAt: string;
+  sourceSummary: string[];
+  confidence: CocoDraftConfidence;
+  hypotheses: string[];
+  pointsToVerify: string[];
+  risks: string[];
+  quoteLines: CocoVisitQuoteDraftLine[];
+  materialNeeds: CocoMaterialNeedDraft[];
+  proposedActions: CocoDraftAction[];
+  adminValidationRequired: true;
+  finalWriteBlocked: true;
+};
 export type CocoDirectionContext = {
   generatedAt: string;
   profile: { displayName: string | null; email: string | null };
@@ -12,6 +64,24 @@ export type CocoDirectionContext = {
 };
 
 const PROFILE_PERMISSION_KEY = "assistant_coco_direction";
+
+export const COCO_ASSISTANT_ARCHITECTURE = [
+  { id: "direction", label: "Assistant Direction COCO", scope: "Pilotage global, anticipation, priorites, carnet de commandes, charge equipe et risques dirigeant." },
+  { id: "chiffrage", label: "Assistant Chiffrage", scope: "Analyse visite, notes, photos, bibliotheque Batipro, pre-devis, temps et materiaux en brouillon." },
+  { id: "preparation", label: "Assistant Preparation chantier", scope: "Taches, zones, documents, checklists et planning previsionnel, sans ecrire dans le planning officiel." },
+  { id: "achats", label: "Assistant Achats", scope: "Besoins materiaux, fournisseurs habituels et bons de commande fournisseurs en brouillon." },
+  { id: "suivi", label: "Assistant Suivi chantier", scope: "Retards, derives, reserves, retours terrain et actions correctives proposees." },
+  { id: "commercial", label: "Assistant Commercial", scope: "Relances, devis a suivre, pipeline, periodes creuses et actions CRM proposees." },
+] as const;
+
+export const COCO_SPECIALIZED_SYSTEM_PROMPTS = {
+  direction: "Raisonner comme bras droit dirigeant Batipro. Distinguer faits, hypotheses et actions. Ne jamais modifier sans validation admin.",
+  chiffrage: "Analyser une visite de chiffrage Batipro. Produire des lignes de pre-devis, temps, materiaux, fournisseurs, risques et points a verifier. Tout reste brouillon validable.",
+  preparation: "Preparer un chantier Batipro a partir d'un devis ou d'une visite. Proposer taches, zones, documents, checklist et planning previsionnel en brouillon uniquement.",
+  achats: "Identifier les besoins d'achat Batipro, fournisseurs possibles et bons de commande brouillons. Ne jamais passer commande sans validation admin.",
+  suivi: "Analyser chantiers, retards, reserves et retours terrain. Proposer actions correctives tracables sans modifier les donnees finales.",
+  commercial: "Analyser CRM, devis et pipeline Batipro. Proposer relances et actions commerciales brouillons, sans envoyer de message client sans validation.",
+} as const;
 
 export const COCO_DIRECTION_QUICK_QUESTIONS = [
   { label: "Point hebdomadaire entreprise", prompt: "Fais-moi un point hebdomadaire de direction avec priorités, risques et décisions à prendre." },
@@ -145,9 +215,140 @@ export async function loadCocoDirectionContext(): Promise<CocoDirectionContext> 
 }
 
 export async function askCocoDirectionAssistant(input: { message: string; history: CocoDirectionChatMessage[]; context: CocoDirectionContext }): Promise<string> {
-  const { data, error } = await supabase.functions.invoke("coco-direction-assistant", { body: { message: input.message, history: input.history.slice(-10), context: input.context } });
+  const { data, error } = await supabase.functions.invoke("coco-direction-assistant", { body: { mode: "direction_chat", message: input.message, history: input.history.slice(-10), context: input.context } });
   if (error) throw error;
   const reply = String((data as { reply?: string } | null)?.reply ?? "").trim();
   if (!reply) throw new Error("Réponse vide de l'assistant direction.");
   return reply;
+}
+
+function templateToReference(row: TaskTemplateRow | null) {
+  if (!row) return null;
+  return {
+    id: row.id,
+    titre: row.titre,
+    lot: row.lot,
+    unite: row.unite,
+    quantite_defaut: row.quantite_defaut,
+    temps_prevu_par_unite_h: row.temps_prevu_par_unite_h,
+    cout_reference_unitaire_ht: row.cout_reference_unitaire_ht,
+    description_technique: row.description_technique,
+    remarques: row.remarques,
+  };
+}
+
+function supplierToReference(row: SupplierRow) {
+  return { id: row.id, name: row.name, specialty: row.specialty, city: row.city, notes: row.notes };
+}
+
+function safeArray(value: unknown): unknown[] {
+  return Array.isArray(value) ? value : [];
+}
+
+function normalizeDraft(raw: Partial<CocoControlledDraft> | null | undefined): CocoControlledDraft {
+  const now = new Date().toISOString();
+  return {
+    id: String(raw?.id ?? crypto.randomUUID()),
+    kind: raw?.kind ?? "visit_quote_analysis",
+    title: text(raw?.title) ?? "Brouillon IA apres visite de chiffrage",
+    generatedAt: text(raw?.generatedAt) ?? now,
+    sourceSummary: safeArray(raw?.sourceSummary).map(String).filter(Boolean),
+    confidence: raw?.confidence === "haute" || raw?.confidence === "faible" ? raw.confidence : "moyenne",
+    hypotheses: safeArray(raw?.hypotheses).map(String).filter(Boolean),
+    pointsToVerify: safeArray(raw?.pointsToVerify).map(String).filter(Boolean),
+    risks: safeArray(raw?.risks).map(String).filter(Boolean),
+    quoteLines: safeArray(raw?.quoteLines).map((line: any) => ({
+      title: text(line?.title) ?? "Prestation a chiffrer",
+      lot: text(line?.lot),
+      unit: text(line?.unit) ?? "u",
+      quantity: number(line?.quantity) || 1,
+      estimatedHours: line?.estimatedHours === null || line?.estimatedHours === undefined ? null : number(line.estimatedHours),
+      unitPriceHt: line?.unitPriceHt === null || line?.unitPriceHt === undefined ? null : number(line.unitPriceHt),
+      totalHt: line?.totalHt === null || line?.totalHt === undefined ? null : number(line.totalHt),
+      templateId: text(line?.templateId),
+      templateTitle: text(line?.templateTitle),
+      source: text(line?.source) ?? "Visite commerciale",
+      confidence: line?.confidence === "haute" || line?.confidence === "faible" ? line.confidence : "moyenne",
+      assumptions: safeArray(line?.assumptions).map(String).filter(Boolean),
+      pointsToVerify: safeArray(line?.pointsToVerify).map(String).filter(Boolean),
+    })),
+    materialNeeds: safeArray(raw?.materialNeeds).map((need: any) => ({
+      designation: text(need?.designation) ?? "Materiau a verifier",
+      quantity: need?.quantity === null || need?.quantity === undefined ? null : number(need.quantity),
+      unit: text(need?.unit),
+      supplierId: text(need?.supplierId),
+      supplierName: text(need?.supplierName),
+      source: text(need?.source) ?? "Analyse chiffrage",
+      confidence: need?.confidence === "haute" || need?.confidence === "faible" ? need.confidence : "moyenne",
+      pointsToVerify: safeArray(need?.pointsToVerify).map(String).filter(Boolean),
+    })),
+    proposedActions: safeArray(raw?.proposedActions).map((action: any) => ({
+      label: text(action?.label) ?? "Revoir la proposition",
+      module: text(action?.module) ?? "Assistant Direction COCO",
+      actionType: ["prepare", "review", "validate", "ignore"].includes(String(action?.actionType)) ? action.actionType : "review",
+      requiresAdminValidation: true,
+      detail: text(action?.detail) ?? "Action a valider par un administrateur avant toute ecriture metier.",
+    })),
+    adminValidationRequired: true,
+    finalWriteBlocked: true,
+  };
+}
+
+export async function prepareCocoVisitQuoteDraft(input: { project: Record<string, unknown>; appointment: Record<string, unknown>; visitDraft: Record<string, unknown> | null }): Promise<CocoControlledDraft> {
+  const profile = await getCurrentUserProfile();
+  if (!isCocoAdminProfile(profile)) throw new Error("Brouillon IA reserve aux administrateurs.");
+
+  const visitLines = safeArray(input.visitDraft?.lines);
+  const [templates, suppliers] = await Promise.all([
+    listTaskTemplates().catch(() => []),
+    listSuppliers().catch(() => []),
+  ]);
+  const templateMatches = visitLines.map((line: any) => {
+    const match = findBestTaskTemplateMatch({ title: line?.title, source_line: [line?.title, line?.technicalNotes, line?.constraints].filter(Boolean).join(" "), lot: line?.family }, templates);
+    return {
+      sourceLineId: line?.id ?? null,
+      sourceTitle: line?.title ?? null,
+      quantity: line?.quantity ?? null,
+      unit: line?.unit ?? null,
+      estimatedHoursFromVisit: line?.estimatedHours ?? null,
+      priceHintHtFromVisit: line?.priceHintHt ?? null,
+      template: templateToReference(match),
+    };
+  });
+
+  const sourceContext = {
+    prompt: COCO_SPECIALIZED_SYSTEM_PROMPTS.chiffrage,
+    guardrails: {
+      adminValidationRequired: true,
+      noFinalWrite: true,
+      forbiddenActions: ["creer_devis_final", "envoyer_devis", "creer_chantier", "modifier_planning_officiel", "passer_commande", "supprimer_donnee"],
+    },
+    project: {
+      id: input.project.id,
+      name: input.project.name,
+      clientName: input.project.clientName,
+      address: input.project.address,
+      projectType: input.project.projectType,
+      needDescription: input.project.needDescription,
+      budgetEstimate: input.project.budgetEstimate,
+      nextAction: input.project.nextAction,
+    },
+    appointment: input.appointment,
+    visitDraft: input.visitDraft,
+    batiproReferences: {
+      taskTemplateMatches: templateMatches,
+      activeSuppliers: suppliers.filter((row) => row.is_active !== false).slice(0, 80).map(supplierToReference),
+    },
+    expectedDraft: {
+      kind: "visit_quote_analysis",
+      mustInclude: ["sourceSummary", "confidence", "hypotheses", "pointsToVerify", "risks", "quoteLines", "materialNeeds", "proposedActions"],
+      validation: "L'administrateur doit revoir et valider avant creation definitive dans le devis Batipro.",
+    },
+  };
+
+  const { data, error } = await supabase.functions.invoke("coco-direction-assistant", { body: { mode: "visit_quote_draft", context: sourceContext } });
+  if (error) throw error;
+  const draft = (data as { draft?: Partial<CocoControlledDraft> } | null)?.draft;
+  if (!draft) throw new Error("Brouillon IA vide pour la visite de chiffrage.");
+  return normalizeDraft(draft);
 }
