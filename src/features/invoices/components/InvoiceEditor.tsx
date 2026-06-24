@@ -195,7 +195,7 @@ function NumberCell({ value, onChange }: { value: number; onChange: (value: numb
   );
 }
 
-function Line({ label, value }: { label: string }) {
+function Line({ label, value }: { label: string; value: string }) {
   return <div className="flex justify-between gap-3"><span>{label}</span><span className="font-semibold text-slate-950">{value}</span></div>;
 }
 
@@ -210,7 +210,7 @@ function updateNodeTree(nodes: BusinessDocumentNode[], nodeId: string, patch: Pa
 function appendChild(nodes: BusinessDocumentNode[], parentId: string, child: BusinessDocumentNode): BusinessDocumentNode[] {
   return nodes.map((node) => {
     if ((node.type === "section" || node.type === "subsection") && node.id === parentId) return { ...node, children: [...node.children, child] };
-    if (node.type === "section" || node.type === "subsection") return { ...node, children: appendChild(node.children, parentId, child) };
+    if (node.type === "section" || node.type === "subsection") return { ...node, children: appendChild(node.children, parentId) };
     return node;
   });
 }
