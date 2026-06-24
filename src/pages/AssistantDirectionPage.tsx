@@ -1,69 +1,51 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
-import { AlertTriangle, BrainCircuit, Loader2, Lock, Send, Sparkles } from "lucide-react";
-import { supabase } from "../lib/supabaseClient";
-import { getCurrentUserProfile, isAdminProfile, type CurrentUserProfile } from "../services/currentUserProfile.service";
-
-type DirectionMessage = {
-  role: "user" | "assistant";
-  content: string;
-};
+import { AlertTriangle, BrainCircuit, Loader2, Lock, RefreshCw, Send, Sparkles } from "lucide-react";
+import { getCurrentUserProfile, type CurrentUserProfile } from "../services/currentUserProfile.service";
+import {
+  COCO_DIRECTION_QUICK_QUESTIONS,
+  askCocoDirectionAssistant,
+  isCocoAdminProfile,
+  loadCocoDirectionContext,
+  type CocoDirectionChatMessage,
+  type CocoDirectionContext,
+} from "../services/cocoDirectionAssistant.service";
 
 type AccessState = "checking" | "allowed" | "denied";
 
-const QUICK_QUESTIONS = [
-  "Point hebdomadaire entreprise",
-  "Carnet de commandes suffisant ?",
-  "Devis à relancer",
-  "Chantiers à risque",
-  "Chantiers en retard ou susceptibles de l’être",
-  "Tâches bloquées ou en dérive",
-  "Avancement réel vs prévu",
-  "Charge planning à venir",
-  "Besoins humains",
-  "Besoins matériel",
-  "Impact des retards sur les prochains chantiers",
-  "Prévision CA",
-  "Priorités de la semaine",
-];
-
-const WELCOME_MESSAGE: DirectionMessage = {
+const WELCOME_MESSAGE: CocoDirectionChatMessage = {
   role: "assistant",
   content:
-    "Bonjour COCO. Je suis l’Assistant Direction COCO. Mon rôle : anticiper les risques entreprise à partir des données Batipro disponibles, puis te proposer des priorités claires sans modifier les données.",
+    "Bonjour COCO. Je suis l'Assistant Direction COCO. Mon role : anticiper les risques entreprise a partir des donnees Batipro disponibles, puis te proposer des priorites claires sans modifier les donnees.",
 };
 
-function normalize(value: unknown): string {
-  return String(value ?? "").trim().toLowerCase();
-}
-
-function envCocoEmails(): Set<string> {
-  return new Set(
-    String(import.meta.env.VITE_COCO_ADMIN_EMAILS ?? "")
-      .split(",")
-      .map((value) => normalize(value))
-      .filter(Boolean),
-  );
-}
-
-function isCocoAdminProfile(profile: CurrentUserProfile | null): boolean {
-  if (!isAdminProfile(profile)) return false;
-  const email = normalize(profile?.email);
-  const displayName = normalize(profile?.display_name);
-  const allowedEmails = envCocoEmails();
-  if (email && allowedEmails.has(email)) return true;
-  return displayName.includes("coco") || email.includes("coco") || displayName.includes("corentin") || email.includes("corentin");
+function formatNumber(value: number, suffix = "") {
+  return `${Math.round(value).toLocaleString("fr-FR")}${suffix}`;
 }
 
 function getErrorMessage(error: unknown) {
   const message = String((error as { message?: string } | null)?.message ?? "").trim();
-  return message || "L’assistant direction n’a pas pu répondre pour le moment.";
+  return message || "L'assistant direction n'a pas pu repondre pour le moment.";
+}
+
+function buildSummaryCards(context: CocoDirectionContext | null) {
+  if (!context) return [];
+  return [
+    { label: "Chantiers actifs", value: context.summary.activeChantiers, hint: `${context.summary.runningChantiers} en cours` },
+    { label: "Retards chantier", value: context.summary.lateChantiers, hint: "Fin prevue depassee" },
+    { label: "Taches en retard", value: context.summary.lateTasks, hint: `${context.summary.blockedTasks} bloquees / a reprendre` },
+    { label: "Temps consomme", value: formatNumber(context.summary.spentHours, " h"), hint: `${formatNumber(context.summary.plannedHours, " h")} prevues` },
+    { label: "Devis a relancer", value: context.summary.quotesToFollowUp, hint: `${context.summary.openQuotes} ouverts` },
+    { label: "Pipeline estime", value: formatNumber(context.summary.estimatedPipelineTtc, " EUR"), hint: "Devis + opportunites" },
+  ];
 }
 
 export default function AssistantDirectionPage() {
   const [access, setAccess] = useState<AccessState>("checking");
   const [profile, setProfile] = useState<CurrentUserProfile | null>(null);
+  const [context, setContext] = useState<CocoDirectionContext | null>(null);
+  const [loadingContext, setLoadingContext] = useState(false);
   const [input, setInput] = useState("");
-  const [messages, setMessages] = useState<DirectionMessage[]>([WELCOME_MESSAGE]);
+  const [messages, setMessages] = useState<CocoDirectionChatMessage[]>([WELCOME_MESSAGE]);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -75,7 +57,9 @@ export default function AssistantDirectionPage() {
         const currentProfile = await getCurrentUserProfile();
         if (!alive) return;
         setProfile(currentProfile);
-        setAccess(isCocoAdminProfile(currentProfile) ? "allowed" : "denied");
+        const isAllowed = isCocoAdminProfile(currentProfile);
+        setAccess(isAllowed ? "allowed" : "denied");
+        if (isAllowed) void refreshContext();
       } catch {
         if (!alive) return;
         setAccess("denied");
@@ -88,29 +72,49 @@ export default function AssistantDirectionPage() {
     };
   }, []);
 
-  const suggestedPrompt = useMemo(() => QUICK_QUESTIONS[0], []);
+  const suggestedPrompt = useMemo(() => COCO_DIRECTION_QUICK_QUESTIONS[0]?.label ?? "Point hebdomadaire entreprise", []);
+  const summaryCards = useMemo(() => buildSummaryCards(context), [context]);
+
+  async function refreshContext() {
+    setLoadingContext(true);
+    setError(null);
+    try {
+      setContext(await loadCocoDirectionContext());
+    } catch (err) {
+      setContext(null);
+      setError(getErrorMessage(err));
+    } finally {
+      setLoadingContext(false);
+    }
+  }
 
   async function askAssistant(content: string) {
     const cleanContent = content.trim();
     if (!cleanContent || sending || access !== "allowed") return;
 
-    const nextMessages: DirectionMessage[] = [...messages, { role: "user", content: cleanContent }];
+    let activeContext = context;
+    if (!activeContext) {
+      try {
+        activeContext = await loadCocoDirectionContext();
+        setContext(activeContext);
+      } catch (err) {
+        setError(getErrorMessage(err));
+        return;
+      }
+    }
+
+    const nextMessages: CocoDirectionChatMessage[] = [...messages, { role: "user", content: cleanContent }];
     setMessages(nextMessages);
     setInput("");
     setSending(true);
     setError(null);
 
     try {
-      const { data, error: invokeError } = await supabase.functions.invoke("assistant-direction-coco", {
-        body: {
-          message: cleanContent,
-          history: nextMessages.slice(-10),
-        },
+      const reply = await askCocoDirectionAssistant({
+        message: cleanContent,
+        history: nextMessages,
+        context: activeContext,
       });
-
-      if (invokeError) throw invokeError;
-      const reply = String((data as { reply?: string } | null)?.reply ?? "").trim();
-      if (!reply) throw new Error("Réponse vide de l’assistant direction.");
       setMessages((prev) => [...prev, { role: "assistant", content: reply }]);
     } catch (err) {
       const message = getErrorMessage(err);
@@ -129,7 +133,7 @@ export default function AssistantDirectionPage() {
   if (access === "checking") {
     return (
       <div className="rounded-xl border border-slate-200 bg-white p-8 text-center text-sm text-slate-500">
-        Vérification de l’accès à l’Assistant Direction COCO...
+        Verification de l'acces a l'Assistant Direction COCO...
       </div>
     );
   }
@@ -142,13 +146,13 @@ export default function AssistantDirectionPage() {
             <Lock className="h-5 w-5" />
           </div>
           <div>
-            <h1 className="text-lg font-semibold">Accès réservé au compte admin COCO</h1>
+            <h1 className="text-lg font-semibold">Acces reserve au compte admin COCO</h1>
             <p className="mt-2 text-sm leading-6">
-              Cette page est limitée au dirigeant/admin COCO. Le profil actuel
-              {profile?.email ? ` (${profile.email})` : ""} n’est pas reconnu comme compte COCO.
+              Cette page est limitee au dirigeant/admin COCO. Le profil actuel
+              {profile?.email ? ` (${profile.email})` : ""} n'est pas reconnu comme compte COCO.
             </p>
             <p className="mt-2 text-sm leading-6">
-              Pour autoriser explicitement le compte COCO, renseigner `VITE_COCO_ADMIN_EMAILS` côté front et `COCO_ADMIN_EMAILS` côté Supabase Function avec l’email admin concerné.
+              Pour autoriser explicitement le compte COCO, renseigner <code>VITE_COCO_ADMIN_EMAILS</code> cote front et <code>COCO_ADMIN_EMAILS</code> cote Supabase Function avec l'email admin concerne.
             </p>
           </div>
         </div>
@@ -167,12 +171,12 @@ export default function AssistantDirectionPage() {
               </div>
               <h1 className="mt-2 text-3xl font-bold tracking-tight text-slate-950">Anticipation entreprise</h1>
               <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-500">
-                Bras droit IA du dirigeant : chantiers, planning, temps, matériel, devis, charge, marge et trésorerie quand les données existent.
+                Bras droit IA du dirigeant : chantiers, planning, temps, materiel, devis, charge, marge et tresorerie quand les donnees existent.
               </p>
             </div>
             <div className="rounded-lg border border-blue-100 bg-blue-50 px-4 py-3 text-sm text-blue-900">
               <div className="font-semibold">Garde-fou</div>
-              <div className="mt-1 text-xs leading-5">Analyse et recommande uniquement. Aucune donnée Batipro n’est modifiée sans validation humaine.</div>
+              <div className="mt-1 text-xs leading-5">Analyse et recommande uniquement. Aucune donnee Batipro n'est modifiee sans validation humaine.</div>
             </div>
           </div>
         </div>
@@ -180,9 +184,19 @@ export default function AssistantDirectionPage() {
 
       <section className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_340px]">
         <div className="flex min-h-[620px] flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm shadow-slate-950/[0.03]">
-          <div className="border-b border-slate-200 px-4 py-3">
-            <div className="text-sm font-semibold text-slate-950">Conversation direction</div>
-            <div className="text-xs text-slate-500">Contexte Batipro réel chargé à chaque question.</div>
+          <div className="flex items-center justify-between gap-3 border-b border-slate-200 px-4 py-3">
+            <div>
+              <div className="text-sm font-semibold text-slate-950">Conversation direction</div>
+              <div className="text-xs text-slate-500">Contexte Batipro reel charge en lecture seule a chaque question.</div>
+            </div>
+            <button
+              type="button"
+              onClick={() => void refreshContext()}
+              disabled={loadingContext || sending}
+              className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              <RefreshCw className={["h-3.5 w-3.5", loadingContext ? "animate-spin" : ""].join(" ")} /> Rafraichir
+            </button>
           </div>
 
           <div className="flex-1 space-y-4 overflow-y-auto bg-slate-50 p-4">
@@ -201,9 +215,9 @@ export default function AssistantDirectionPage() {
                 </div>
               );
             })}
-            {sending ? (
+            {sending || loadingContext ? (
               <div className="flex items-center gap-2 text-xs text-slate-500">
-                <Loader2 className="h-4 w-4 animate-spin" /> L’assistant direction analyse les données Batipro...
+                <Loader2 className="h-4 w-4 animate-spin" /> {sending ? "L'assistant direction analyse les donnees Batipro..." : "Chargement du contexte Batipro..."}
               </div>
             ) : null}
             {error ? (
@@ -214,7 +228,7 @@ export default function AssistantDirectionPage() {
           <form onSubmit={handleSubmit} className="border-t border-slate-200 bg-white p-3">
             <div className="flex items-end gap-2">
               <label className="min-w-0 flex-1">
-                <span className="sr-only">Question à l’Assistant Direction COCO</span>
+                <span className="sr-only">Question a l'Assistant Direction COCO</span>
                 <textarea
                   value={input}
                   onChange={(event) => setInput(event.target.value)}
@@ -225,9 +239,9 @@ export default function AssistantDirectionPage() {
               </label>
               <button
                 type="submit"
-                disabled={sending || !input.trim()}
+                disabled={sending || loadingContext || !input.trim()}
                 className="grid h-11 w-11 shrink-0 place-items-center rounded-lg bg-slate-950 text-white hover:bg-slate-800 disabled:bg-slate-200 disabled:text-slate-500"
-                aria-label="Envoyer à l’assistant direction"
+                aria-label="Envoyer a l'assistant direction"
               >
                 <Send className="h-4 w-4" />
               </button>
@@ -236,20 +250,35 @@ export default function AssistantDirectionPage() {
         </div>
 
         <aside className="space-y-4">
+          {summaryCards.length ? (
+            <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm shadow-slate-950/[0.03]">
+              <div className="text-sm font-semibold text-slate-950">Lecture rapide</div>
+              <div className="mt-3 grid grid-cols-2 gap-2">
+                {summaryCards.map((card) => (
+                  <div key={card.label} className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+                    <div className="text-[11px] font-medium text-slate-500">{card.label}</div>
+                    <div className="mt-1 text-lg font-semibold text-slate-950">{card.value}</div>
+                    <div className="mt-1 text-[11px] text-slate-500">{card.hint}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : null}
+
           <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm shadow-slate-950/[0.03]">
             <div className="flex items-center gap-2 text-sm font-semibold text-slate-950">
               <Sparkles className="h-4 w-4 text-blue-600" /> Questions rapides
             </div>
             <div className="mt-3 flex flex-wrap gap-2">
-              {QUICK_QUESTIONS.map((question) => (
+              {COCO_DIRECTION_QUICK_QUESTIONS.map((question) => (
                 <button
-                  key={question}
+                  key={question.label}
                   type="button"
-                  onClick={() => void askAssistant(question)}
-                  disabled={sending}
+                  onClick={() => void askAssistant(question.prompt)}
+                  disabled={sending || loadingContext}
                   className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-left text-xs font-medium text-slate-700 hover:border-blue-200 hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-60"
                 >
-                  {question}
+                  {question.label}
                 </button>
               ))}
             </div>
@@ -257,18 +286,32 @@ export default function AssistantDirectionPage() {
 
           <div className="rounded-xl border border-slate-200 bg-white p-4 text-sm shadow-sm shadow-slate-950/[0.03]">
             <div className="flex items-center gap-2 font-semibold text-slate-950">
-              <AlertTriangle className="h-4 w-4 text-amber-500" /> Points analysés
+              <AlertTriangle className="h-4 w-4 text-amber-500" /> Points analyses
             </div>
             <ul className="mt-3 space-y-2 text-slate-600">
-              <li>Avancement prévu vs réel des chantiers</li>
-              <li>Temps prévu, temps passé et dérives</li>
+              <li>Avancement prevu vs reel des chantiers</li>
+              <li>Temps prevu, temps passe et derives</li>
               <li>Planning, retards et impact sur les prochains chantiers</li>
-              <li>Matériel, achats, fournisseurs et relances</li>
-              <li>Devis, prospection, carnet de commandes et CA prévisionnel</li>
-              <li>Charge équipe, besoin de sous-traitance ou d’embauche</li>
-              <li>Marge et trésorerie quand les données existent</li>
+              <li>Materiel, achats, fournisseurs et relances</li>
+              <li>Devis, prospection, carnet de commandes et CA previsionnel</li>
+              <li>Charge equipe, besoin de sous-traitance ou d'embauche</li>
+              <li>Marge et tresorerie quand les donnees existent</li>
             </ul>
           </div>
+
+          {context?.risks.length ? (
+            <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950 shadow-sm shadow-slate-950/[0.03]">
+              <div className="font-semibold">Signaux detectes</div>
+              <div className="mt-3 space-y-2">
+                {context.risks.slice(0, 5).map((risk) => (
+                  <div key={risk.id} className="rounded-lg bg-white/70 p-3">
+                    <div className="font-semibold">{risk.title}</div>
+                    <div className="mt-1 text-xs leading-5">{risk.detail}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : null}
         </aside>
       </section>
     </div>
