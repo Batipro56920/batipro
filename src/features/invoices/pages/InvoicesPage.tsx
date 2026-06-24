@@ -103,7 +103,7 @@ export default function InvoicesPage() {
         eyebrow="Gestion"
         title="Factures"
         description="Suivi des factures générées depuis les devis : acompte, situation, finale et avoir."
-        actions={<div className="flex flex-wrap gap-2"><Button variant="secondary" onClick={() => void refresh(false)}><RefreshCw className="h-4 w-4" /> Rafraîchir</Button><Link to="/projets" className="inline-flex h-9 items-center justify-center gap-2 rounded-xl bg-blue-600 px-3 text-sm font-medium text-white shadow-sm shadow-blue-600/15 transition hover:bg-blue-700"><ArrowRight className="h-4 w-4" /> Choisir un projet à facturer</Link></div>}
+        actions={<div className="flex flex-wrap gap-2"><Button variant="secondary" onClick={() => void refresh(false)}><RefreshCw className="h-4 w-4" /> Rafraîchir</Button><Link to="/projets?facturation=1" className="inline-flex h-9 items-center justify-center gap-2 rounded-xl bg-blue-600 px-3 text-sm font-medium text-white shadow-sm shadow-blue-600/15 transition hover:bg-blue-700"><ArrowRight className="h-4 w-4" /> Choisir un projet à facturer</Link></div>}
       />
 
       {error ? <div className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">{error}</div> : null}
