@@ -65,15 +65,6 @@ type DrawerTab = "infos" | "actions";
 type SignalType = "blocage" | "materiel" | "materiaux" | "information";
 type Tone = "neutral" | "blue" | "green" | "amber" | "red";
 
-type AdminTaskFields = IntervenantTask & {
-  description?: string | null;
-  contraintes?: string | null;
-  materiaux?: string | null;
-  points_controle?: string | null;
-  dependances?: string | null;
-  remarques_admin?: string | null;
-};
-
 type SiteData = {
   tasks: IntervenantTask[];
   documents: IntervenantDocument[];
@@ -85,12 +76,43 @@ type SiteData = {
   consignes: IntervenantConsigne[];
 };
 
-type TaskItem = { chantier: IntervenantChantier; data: SiteData; task: IntervenantTask };
-type AlertItem = { id: string; label: string; title: string; text: string; tone: Tone };
+type TaskItem = {
+  chantier: IntervenantChantier;
+  data: SiteData;
+  task: IntervenantTask;
+};
 
-const EMPTY_SITE_DATA: SiteData = { tasks: [], documents: [], timeEntries: [], feedbacks: [], reserves: [], infoRequests: [], materiels: [], consignes: [] };
+type AlertItem = {
+  id: string;
+  label: string;
+  title: string;
+  text: string;
+  tone: Tone;
+};
+
+type TaskExtraFields = IntervenantTask & {
+  description?: string | null;
+  description_technique?: string | null;
+  contraintes?: string | null;
+  materiaux?: string | null;
+  points_controle?: string | null;
+  dependances?: string | null;
+  remarques_admin?: string | null;
+};
+
+const EMPTY_SITE_DATA: SiteData = {
+  tasks: [],
+  documents: [],
+  timeEntries: [],
+  feedbacks: [],
+  reserves: [],
+  infoRequests: [],
+  materiels: [],
+  consignes: [],
+};
+
 const ADMIN_DOCUMENT_WORDS = ["devis", "facture", "doe", "administratif", "comptable", "avoir", "contrat", "assurance"];
-const PLAN_DOCUMENT_WORDS = ["plan", "croquis", "schema", "schema", "photo technique", "photo-technique"];
+const PLAN_DOCUMENT_WORDS = ["plan", "croquis", "schema", "photo technique", "photo-technique"];
 const USEFUL_DOCUMENT_WORDS = ["notice", "procedure", "technique", "fiche", "pose", "materiau", "materiaux", "securite", "mode operatoire"];
 const OPEN_MATERIEL_STATUSES = new Set(["en_attente", "validee"]);
 const inputClass = "w-full rounded-lg border border-slate-200 bg-white px-3 py-3 text-sm text-slate-900 outline-none placeholder:text-slate-400 focus:border-blue-300 focus:ring-4 focus:ring-blue-100";
@@ -134,8 +156,8 @@ function parseFrenchHours(value: string): number | null {
   return Number.isFinite(hours) && hours > 0 ? hours : null;
 }
 
-function adminFields(task: IntervenantTask): AdminTaskFields {
-  return task as AdminTaskFields;
+function taskExtra(task: IntervenantTask): TaskExtraFields {
+  return task as TaskExtraFields;
 }
 
 function taskDate(task: IntervenantTask) {
@@ -169,7 +191,7 @@ function materielTone(row: IntervenantMateriel): Tone {
 }
 
 function taskConstraint(task: IntervenantTask, consignes: IntervenantConsigne[] = []) {
-  const extra = adminFields(task);
+  const extra = taskExtra(task);
   const consigne = consignes.find((row) => row.task_id === task.id || (!!task.zone_id && row.zone_id === task.zone_id) || row.applies_to_all);
   return compactText(extra.contraintes, task.reprise_reason, consigne?.title, task.etape_metier) || "Aucune contrainte visible";
 }
@@ -358,7 +380,9 @@ export default function EmployeeFieldPortalV2Page() {
       }
     }
     void bootstrap();
-    return () => { alive = false; };
+    return () => {
+      alive = false;
+    };
   }, [navigate, queryChantierId, queryToken]);
 
   useEffect(() => {
@@ -380,7 +404,9 @@ export default function EmployeeFieldPortalV2Page() {
       setDataLoading(false);
     }
     void loadAllSites();
-    return () => { alive = false; };
+    return () => {
+      alive = false;
+    };
   }, [bootError, bootLoading, chantiers, reloadTick, token]);
 
   const selectedChantier = useMemo(() => chantiers.find((chantier) => chantier.id === selectedChantierId) ?? chantiers[0] ?? null, [chantiers, selectedChantierId]);
@@ -410,11 +436,7 @@ export default function EmployeeFieldPortalV2Page() {
     setActiveTab("chantiers");
   }
 
-  function openTask(task: IntervenantTask, tab: DrawerTab = "infos") {
-    setSelectedChantierId(task.chantier_id);
-    persistIntervenantChantierId(task.chantier_id);
-    setActiveTask(task);
-    setDrawerTab(tab);
+  function resetActionForm() {
     setActionMessage(null);
     setTimeHours("");
     setTimeComment("");
@@ -422,6 +444,14 @@ export default function EmployeeFieldPortalV2Page() {
     setSignalType("blocage");
     setSignalComment("");
     setPhotoFile(null);
+  }
+
+  function openTask(task: IntervenantTask, tab: DrawerTab = "infos") {
+    setSelectedChantierId(task.chantier_id);
+    persistIntervenantChantierId(task.chantier_id);
+    setActiveTask(task);
+    setDrawerTab(tab);
+    resetActionForm();
   }
 
   async function logoutIntervenant() {
@@ -528,6 +558,7 @@ export default function EmployeeFieldPortalV2Page() {
           <button type="button" onClick={logoutIntervenant} className="inline-flex h-10 w-10 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-500" aria-label="Se deconnecter"><LogOut className="h-4 w-4" /></button>
         </div>
       </header>
+
       <main className="mx-auto max-w-5xl space-y-3 px-3 py-3 sm:px-4">
         {dataLoading ? <Notice icon={<Loader2 className="h-4 w-4 animate-spin" />} text="Synchronisation des donnees admin..." tone="blue" /> : null}
         {dataError ? <Notice icon={<AlertTriangle className="h-4 w-4" />} text={dataError} tone="amber" /> : null}
@@ -537,14 +568,60 @@ export default function EmployeeFieldPortalV2Page() {
         {activeTab === "temps" ? <TimeView onOpenTask={openTask} selectedChantier={selectedChantier} taskItems={allTaskItems} today={today} /> : null}
         {activeTab === "retours" ? <FeedbacksView dataByChantier={dataByChantier} /> : null}
       </main>
-      {currentTask ? <TaskDrawer actionMessage={actionMessage} chantier={currentTaskChantier} close={() => setActiveTask(null)} completeTask={completeTask} consignes={currentTaskData.consignes} documents={taskDocuments(currentTask, currentTaskData.documents)} drawerTab={drawerTab} entries={currentTaskData.timeEntries.filter((entry) => entry.task_id === currentTask.id)} feedbacks={currentTaskData.feedbacks} materiels={currentTaskData.materiels.filter((row) => row.task_id === currentTask.id)} photoFile={photoFile} remarkText={remarkText} saving={savingAction} setDrawerTab={setDrawerTab} setPhotoFile={setPhotoFile} setRemarkText={setRemarkText} setSignalComment={setSignalComment} setSignalType={setSignalType} setTimeComment={setTimeComment} setTimeHours={setTimeHours} signalComment={signalComment} signalType={signalType} submitPhoto={submitPhoto} submitRemark={submitRemark} submitSignal={submitSignal} submitTime={submitTime} task={currentTask} timeComment={timeComment} timeHours={timeHours} /> : null}
+
+      {currentTask ? (
+        <TaskDrawer
+          actionMessage={actionMessage}
+          chantier={currentTaskChantier}
+          close={() => setActiveTask(null)}
+          completeTask={completeTask}
+          consignes={currentTaskData.consignes}
+          documents={taskDocuments(currentTask, currentTaskData.documents)}
+          drawerTab={drawerTab}
+          entries={currentTaskData.timeEntries.filter((entry) => entry.task_id === currentTask.id)}
+          feedbacks={currentTaskData.feedbacks}
+          materiels={currentTaskData.materiels.filter((row) => row.task_id === currentTask.id)}
+          photoFile={photoFile}
+          remarkText={remarkText}
+          saving={savingAction}
+          setDrawerTab={setDrawerTab}
+          setPhotoFile={setPhotoFile}
+          setRemarkText={setRemarkText}
+          setSignalComment={setSignalComment}
+          setSignalType={setSignalType}
+          setTimeComment={setTimeComment}
+          setTimeHours={setTimeHours}
+          signalComment={signalComment}
+          signalType={signalType}
+          submitPhoto={submitPhoto}
+          submitRemark={submitRemark}
+          submitSignal={submitSignal}
+          submitTime={submitTime}
+          task={currentTask}
+          timeComment={timeComment}
+          timeHours={timeHours}
+        />
+      ) : null}
       <BottomNav activeTab={activeTab} setActiveTab={setActiveTab} />
     </div>
   );
 }
 
 function HomeView({ alerts, mainChantier, mainConstraint, onOpenTask, todayHours, todayTasks }: { alerts: AlertItem[]; mainChantier: IntervenantChantier | null; mainConstraint: string; onOpenTask: (task: IntervenantTask, tab?: DrawerTab) => void; todayHours: number; todayTasks: TaskItem[] }) {
-  return <><Surface><div className="grid grid-cols-2 gap-2 sm:grid-cols-4"><Metric icon={<Building2 className="h-4 w-4" />} title="Chantier" value={mainChantier?.nom ?? "Non selectionne"} /><Metric icon={<ListChecks className="h-4 w-4" />} title="Taches" value={String(todayTasks.length)} /><Metric icon={<Clock3 className="h-4 w-4" />} title="Temps" value={formatHours(todayHours)} /><Metric icon={<AlertTriangle className="h-4 w-4" />} title="Contrainte" value={mainConstraint} /></div></Surface><Surface title="Taches du jour"><TaskList empty="Aucune tache prevue aujourd'hui." items={todayTasks} onOpenTask={onOpenTask} /></Surface><Surface title="Alertes utiles"><div className="mt-3 space-y-2">{alerts.length ? alerts.map((alert) => <NoteRow key={`${alert.label}-${alert.id}`} label={alert.label} text={alert.text} title={alert.title} tone={alert.tone} />) : <Empty>Aucune alerte bloquante.</Empty>}</div></Surface></>;
+  return (
+    <>
+      <Surface>
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+          <Metric icon={<Building2 className="h-4 w-4" />} title="Chantier" value={mainChantier?.nom ?? "Non selectionne"} />
+          <Metric icon={<ListChecks className="h-4 w-4" />} title="Taches" value={String(todayTasks.length)} />
+          <Metric icon={<Clock3 className="h-4 w-4" />} title="Temps" value={formatHours(todayHours)} />
+          <Metric icon={<AlertTriangle className="h-4 w-4" />} title="Contrainte" value={mainConstraint} />
+        </div>
+      </Surface>
+      <Surface title="Taches du jour"><TaskList empty="Aucune tache prevue aujourd'hui." items={todayTasks} onOpenTask={onOpenTask} /></Surface>
+      <Surface title="Alertes utiles"><div className="mt-3 space-y-2">{alerts.length ? alerts.map((alert) => <NoteRow key={`${alert.label}-${alert.id}`} label={alert.label} text={alert.text} title={alert.title} tone={alert.tone} />) : <Empty>Aucune alerte bloquante.</Empty>}</div></Surface>
+    </>
+  );
 }
 
 function ChantiersView(props: { chantiers: IntervenantChantier[]; dataByChantier: Record<string, SiteData>; onOpenTask: (task: IntervenantTask, tab?: DrawerTab) => void; onSelect: (chantierId: string) => void; planDocuments: IntervenantDocument[]; selectedChantier: IntervenantChantier | null; selectedData: SiteData; usefulDocuments: IntervenantDocument[] }) {
@@ -552,7 +629,60 @@ function ChantiersView(props: { chantiers: IntervenantChantier[]; dataByChantier
   const weekEnd = addDaysIso(today, 6);
   const doneTasks = props.selectedData.tasks.filter(isTaskDone);
   const openMateriels = props.selectedData.materiels.filter((row) => OPEN_MATERIEL_STATUSES.has(row.statut));
-  return <><Surface title="Chantiers"><div className="mt-3 space-y-2">{props.chantiers.map((chantier) => { const data = props.dataByChantier[chantier.id] ?? EMPTY_SITE_DATA; const remaining = data.tasks.filter((task) => !isTaskDone(task)).length; const active = chantier.id === props.selectedChantier?.id; return <button key={chantier.id} type="button" onClick={() => props.onSelect(chantier.id)} className={`w-full rounded-lg border px-3 py-3 text-left transition ${active ? "border-blue-300 bg-blue-50" : "border-slate-200 bg-slate-50 hover:border-blue-200"}`}><div className="flex items-start justify-between gap-3"><div className="min-w-0"><div className="text-sm font-semibold text-slate-950">{chantier.nom}</div><div className="mt-1 flex items-center gap-1 text-xs text-slate-500"><MapPin className="h-3.5 w-3.5 shrink-0" />{chantier.adresse ?? "Adresse non renseignee"}</div></div><Badge tone={active ? "blue" : "neutral"}>{chantier.status ?? "Actif"}</Badge></div><div className="mt-3 grid grid-cols-3 gap-2"><PlainFact label="Progression" value={`${chantierProgress(data, chantier)} %`} /><PlainFact label="Restantes" value={String(remaining)} /><PlainFact label="Docs" value={String(data.documents.filter(isFieldDocument).length)} /></div></button>; })}</div></Surface>{props.selectedChantier ? <Surface title="Detail chantier"><div className="mt-3 grid gap-3 sm:grid-cols-2"><InfoGroup title="Informations chantier"><PlainFact label="Nom" value={props.selectedChantier.nom} /><PlainFact label="Adresse" value={props.selectedChantier.adresse ?? "-"} /><PlainFact label="Statut" value={props.selectedChantier.status ?? "-"} /><PlainFact label="Responsables" value={props.selectedChantier.client ?? "Non renseigne"} /></InfoGroup><InfoGroup title="Consignes et acces">{props.selectedData.consignes.length ? props.selectedData.consignes.slice(0, 5).map((consigne) => <NoteRow key={consigne.id} title={consigne.title} text={consigne.description} tone={consigne.priority === "urgente" ? "red" : consigne.priority === "importante" ? "amber" : "neutral"} label="Consigne" />) : <Empty>Aucune consigne visible.</Empty>}</InfoGroup></div><Block title="Taches chantier" empty="Aucune tache visible."><SmallTaskGroup title="Aujourd'hui" tasks={props.selectedData.tasks.filter((task) => taskDate(task) === today && !isTaskDone(task))} chantier={props.selectedChantier} data={props.selectedData} onOpenTask={props.onOpenTask} /><SmallTaskGroup title="Cette semaine" tasks={props.selectedData.tasks.filter((task) => { const date = taskDate(task); return !!date && date >= today && date <= weekEnd && !isTaskDone(task); })} chantier={props.selectedChantier} data={props.selectedData} onOpenTask={props.onOpenTask} /><SmallTaskGroup title="Terminees" tasks={doneTasks.slice(0, 5)} chantier={props.selectedChantier} data={props.selectedData} onOpenTask={props.onOpenTask} /></Block><DocumentBlock title="Plans chantier" documents={props.planDocuments} empty="Aucun plan, croquis ou photo technique visible." /><DocumentBlock title="Documents utiles" documents={props.usefulDocuments} empty="Aucun document technique visible." /><Block title="Materiel et materiaux en attente" empty="Aucune demande materiel ouverte.">{openMateriels.slice(0, 5).map((row) => <NoteRow key={row.id} title={row.titre} text={compactText(row.task_titre, row.commentaire, row.admin_commentaire)} tone={materielTone(row)} label={row.statut} />)}</Block><Block title="Retours terrain recents" empty="Aucun retour recent.">{[...props.selectedData.feedbacks.map((feedback) => ({ id: feedback.id, title: feedback.title, text: feedback.description, tone: feedback.urgency === "urgente" || feedback.urgency === "critique" ? ("red" as Tone) : ("blue" as Tone), label: "Retour" })), ...props.selectedData.reserves.map((reserve) => ({ id: reserve.id, title: reserve.title, text: reserve.description ?? reserve.status, tone: reserve.priority === "URGENTE" ? ("red" as Tone) : ("amber" as Tone), label: "Reserve" }))].slice(0, 5).map((row) => <NoteRow key={row.id} title={row.title} text={row.text} tone={row.tone} label={row.label} />)}</Block></Surface> : null}</>;
+  return (
+    <>
+      <Surface title="Chantiers">
+        <div className="mt-3 space-y-2">
+          {props.chantiers.map((chantier) => {
+            const data = props.dataByChantier[chantier.id] ?? EMPTY_SITE_DATA;
+            const remaining = data.tasks.filter((task) => !isTaskDone(task)).length;
+            const active = chantier.id === props.selectedChantier?.id;
+            return (
+              <button key={chantier.id} type="button" onClick={() => props.onSelect(chantier.id)} className={`w-full rounded-lg border px-3 py-3 text-left transition ${active ? "border-blue-300 bg-blue-50" : "border-slate-200 bg-slate-50 hover:border-blue-200"}`}>
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="text-sm font-semibold text-slate-950">{chantier.nom}</div>
+                    <div className="mt-1 flex items-center gap-1 text-xs text-slate-500"><MapPin className="h-3.5 w-3.5 shrink-0" />{chantier.adresse ?? "Adresse non renseignee"}</div>
+                  </div>
+                  <Badge tone={active ? "blue" : "neutral"}>{chantier.status ?? "Actif"}</Badge>
+                </div>
+                <div className="mt-3 grid grid-cols-3 gap-2">
+                  <PlainFact label="Progression" value={`${chantierProgress(data, chantier)} %`} />
+                  <PlainFact label="Restantes" value={String(remaining)} />
+                  <PlainFact label="Docs" value={String(data.documents.filter(isFieldDocument).length)} />
+                </div>
+              </button>
+            );
+          })}
+        </div>
+      </Surface>
+
+      {props.selectedChantier ? (
+        <Surface title="Detail chantier">
+          <div className="mt-3 grid gap-3 sm:grid-cols-2">
+            <InfoGroup title="Informations chantier">
+              <PlainFact label="Nom" value={props.selectedChantier.nom} />
+              <PlainFact label="Adresse" value={props.selectedChantier.adresse ?? "-"} />
+              <PlainFact label="Statut" value={props.selectedChantier.status ?? "-"} />
+              <PlainFact label="Responsables" value={props.selectedChantier.client ?? "Non renseigne"} />
+            </InfoGroup>
+            <InfoGroup title="Consignes et acces">
+              {props.selectedData.consignes.length ? props.selectedData.consignes.slice(0, 5).map((consigne) => <NoteRow key={consigne.id} title={consigne.title} text={consigne.description} tone={consigne.priority === "urgente" ? "red" : consigne.priority === "importante" ? "amber" : "neutral"} label="Consigne" />) : <Empty>Aucune consigne visible.</Empty>}
+            </InfoGroup>
+          </div>
+          <Block title="Taches chantier" empty="Aucune tache visible.">
+            <SmallTaskGroup title="Aujourd'hui" tasks={props.selectedData.tasks.filter((task) => taskDate(task) === today && !isTaskDone(task))} chantier={props.selectedChantier} data={props.selectedData} onOpenTask={props.onOpenTask} />
+            <SmallTaskGroup title="Cette semaine" tasks={props.selectedData.tasks.filter((task) => { const date = taskDate(task); return !!date && date >= today && date <= weekEnd && !isTaskDone(task); })} chantier={props.selectedChantier} data={props.selectedData} onOpenTask={props.onOpenTask} />
+            <SmallTaskGroup title="Terminees" tasks={doneTasks.slice(0, 5)} chantier={props.selectedChantier} data={props.selectedData} onOpenTask={props.onOpenTask} />
+          </Block>
+          <DocumentBlock title="Plans chantier" documents={props.planDocuments} empty="Aucun plan, croquis ou photo technique visible." />
+          <DocumentBlock title="Documents utiles" documents={props.usefulDocuments} empty="Aucun document technique visible." />
+          <Block title="Materiel et materiaux en attente" empty="Aucune demande materiel ouverte.">{openMateriels.slice(0, 5).map((row) => <NoteRow key={row.id} title={row.titre} text={compactText(row.task_titre, row.commentaire, row.admin_commentaire)} tone={materielTone(row)} label={row.statut} />)}</Block>
+          <Block title="Retours terrain recents" empty="Aucun retour recent.">{[...props.selectedData.feedbacks.map((feedback) => ({ id: feedback.id, title: feedback.title, text: feedback.description, tone: feedback.urgency === "urgente" || feedback.urgency === "critique" ? ("red" as Tone) : ("blue" as Tone), label: "Retour" })), ...props.selectedData.reserves.map((reserve) => ({ id: reserve.id, title: reserve.title, text: reserve.description ?? reserve.status, tone: reserve.priority === "URGENTE" ? ("red" as Tone) : ("amber" as Tone), label: "Reserve" }))].slice(0, 5).map((row) => <NoteRow key={row.id} title={row.title} text={row.text} tone={row.tone} label={row.label} />)}</Block>
+        </Surface>
+      ) : null}
+    </>
+  );
 }
 
 function TasksView({ laterTasks, onOpenTask, todayTasks, weekTasks }: { laterTasks: TaskItem[]; onOpenTask: (task: IntervenantTask, tab?: DrawerTab) => void; todayTasks: TaskItem[]; weekTasks: TaskItem[] }) {
@@ -578,11 +708,53 @@ function TaskDrawer(props: { actionMessage: string | null; chantier: Intervenant
   const totalTime = props.entries.reduce((sum, entry) => sum + Number(entry.duration_hours ?? 0), 0);
   const linkedPlans = props.documents.filter(isPlanDocument);
   const linkedDocs = props.documents.filter((document) => isFieldDocument(document) && !isPlanDocument(document));
-  const task = adminFields(props.task);
+  const task = taskExtra(props.task);
   const taskConsignes = props.consignes.filter((row) => row.task_id === props.task.id || (!!props.task.zone_id && row.zone_id === props.task.zone_id) || row.applies_to_all);
   const referencePhotos = props.feedbacks.filter((feedback) => feedback.attachments.length > 0 && normalizeText(`${feedback.title} ${feedback.description}`).includes(normalizeText(props.task.titre)));
   const taskFeedbacks = props.feedbacks.filter((feedback) => normalizeText(`${feedback.title} ${feedback.description}`).includes(normalizeText(props.task.titre)));
-  return <div className="fixed inset-0 z-50 bg-slate-950/35"><div className="absolute inset-x-0 bottom-0 max-h-[92dvh] overflow-hidden rounded-t-2xl bg-white shadow-[0_-20px_60px_rgba(15,23,42,0.24)] sm:left-auto sm:right-4 sm:top-4 sm:h-[calc(100dvh-2rem)] sm:w-[460px] sm:rounded-2xl"><div className="flex items-start justify-between gap-3 border-b border-slate-200 px-4 py-4"><div className="min-w-0"><div className="truncate text-[11px] font-semibold uppercase text-blue-700">{props.chantier?.nom ?? "Chantier"}</div><h2 className="mt-1 text-base font-semibold text-slate-950">{props.task.titre}</h2></div><button className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-slate-200 text-slate-500" type="button" onClick={props.close} aria-label="Fermer"><X className="h-4 w-4" /></button></div><div className="grid grid-cols-2 gap-2 border-b border-slate-200 px-4 py-3"><button className={`rounded-lg px-4 py-2 text-sm font-semibold ${props.drawerTab === "infos" ? "bg-blue-700 text-white" : "bg-slate-100 text-slate-700"}`} type="button" onClick={() => props.setDrawerTab("infos")}>Informations</button><button className={`rounded-lg px-4 py-2 text-sm font-semibold ${props.drawerTab === "actions" ? "bg-blue-700 text-white" : "bg-slate-100 text-slate-700"}`} type="button" onClick={() => props.setDrawerTab("actions")}>Actions terrain</button></div><div className="h-[calc(92dvh-9rem)] overflow-y-auto px-4 py-4 sm:h-[calc(100dvh-11rem)]">{props.drawerTab === "infos" ? <div className="space-y-3"><div className="grid grid-cols-2 gap-2"><PlainFact label="Chantier" value={props.chantier?.nom ?? "-"} /><PlainFact label="Zone" value={props.task.zone_nom ?? "-"} /><PlainFact label="Lot" value={props.task.lot ?? props.task.corps_etat ?? "-"} /><PlainFact label="Statut" value={taskStatusLabel(props.task)} /><PlainFact label="Quantite" value={props.task.quantite === null ? "-" : `${props.task.quantite} ${props.task.unite ?? ""}`} /><PlainFact label="Realise" value={props.task.quantite_realisee === null ? "-" : `${props.task.quantite_realisee} ${props.task.unite ?? ""}`} /><PlainFact label="Temps prevu" value={formatHours(props.task.temps_prevu_h)} /><PlainFact label="Temps passe" value={formatHours(totalTime || props.task.temps_reel_h)} /></div><PlainFact label="Description" value={compactText(task.description, props.task.etape_metier, props.task.titre)} /><PlainFact label="Contraintes" value={taskConstraint(props.task, props.consignes)} /><PlainFact label="Materiaux" value={compactText(task.materiaux) || "Non renseigne"} /><PlainFact label="Points de controle" value={compactText(task.points_controle) || "Non renseigne"} /><PlainFact label="Dependances" value={compactText(task.dependances, props.task.date_debut || props.task.date_fin ? `${formatDate(props.task.date_debut)} - ${formatDate(props.task.date_fin)}` : null) || "Non renseignees"} /><PlainFact label="Remarques admin" value={compactText(task.remarques_admin, props.task.reprise_reason) || "Aucune remarque admin visible"} /><Block title="Consignes liees" empty="Aucune consigne liee.">{taskConsignes.map((consigne) => <NoteRow key={consigne.id} title={consigne.title} text={consigne.description} tone={consigne.priority === "urgente" ? "red" : consigne.priority === "importante" ? "amber" : "neutral"} label="Consigne" />)}</Block><DocumentBlock title="Plans lies" documents={linkedPlans} empty="Aucun plan lie visible." /><DocumentBlock title="Documents lies" documents={linkedDocs} empty="Aucun document lie visible." /><Block title="Temps saisis" empty="Aucun temps saisi sur cette tache.">{props.entries.slice(0, 5).map((entry) => <NoteRow key={entry.id} title={formatHours(entry.duration_hours)} text={compactText(formatDate(entry.work_date), entry.note)} tone="blue" label="Temps" />)}</Block><Block title="Materiel et materiaux" empty="Aucune demande liee.">{props.materiels.map((row) => <NoteRow key={row.id} title={row.titre} text={compactText(row.commentaire, row.admin_commentaire)} tone={materielTone(row)} label={row.statut} />)}</Block><Block title="Retours lies" empty="Aucun retour lie.">{taskFeedbacks.map((feedback) => <NoteRow key={feedback.id} title={feedback.title} text={feedback.description} tone={feedback.urgency === "urgente" || feedback.urgency === "critique" ? "red" : "blue"} label={feedback.category} />)}</Block><Block title="Photos reference" empty="Aucune photo reference visible.">{referencePhotos.map((feedback) => <NoteRow key={feedback.id} title={feedback.title} text={`${feedback.attachments.length} photo(s)`} tone="blue" label="Photo" />)}</Block></div> : <div className="space-y-3">{props.actionMessage ? <div className="rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-700">{props.actionMessage}</div> : null}<ActionForm title="Ajouter temps" onSubmit={props.submitTime} saving={props.saving}><input className={inputClass} inputMode="decimal" value={props.timeHours} onChange={(event) => props.setTimeHours(event.target.value)} placeholder="Duree ex : 1,5" /><textarea className={inputClass} value={props.timeComment} onChange={(event) => props.setTimeComment(event.target.value)} rows={2} placeholder="Commentaire optionnel" /></ActionForm><ActionForm title="Ajouter photo" onSubmit={props.submitPhoto} saving={props.saving} disabled={!props.photoFile}><input className={inputClass} type="file" accept="image/*" capture="environment" onChange={(event) => props.setPhotoFile(event.target.files?.[0] ?? null)} /></ActionForm><ActionForm title="Ajouter remarque" onSubmit={props.submitRemark} saving={props.saving} disabled={!props.remarkText.trim()}><textarea className={inputClass} value={props.remarkText} onChange={(event) => props.setRemarkText(event.target.value)} rows={3} placeholder="Remarque terrain" /></ActionForm><ActionForm title="Signaler" onSubmit={props.submitSignal} saving={props.saving}><select className={inputClass} value={props.signalType} onChange={(event) => props.setSignalType(event.target.value as SignalType)}><option value="blocage">Blocage</option><option value="materiel">Manque materiel</option><option value="materiaux">Manque materiaux</option><option value="information">Manque information</option></select><textarea className={inputClass} value={props.signalComment} onChange={(event) => props.setSignalComment(event.target.value)} rows={3} placeholder="Precision utile pour l'admin" /></ActionForm><button className="flex w-full items-center justify-center gap-2 rounded-lg bg-emerald-700 px-4 py-3 text-sm font-semibold text-white disabled:opacity-60" type="button" onClick={props.completeTask} disabled={props.saving}><CheckCircle2 className="h-4 w-4" />Marquer terminee</button></div>}</div></div></div>;
+  return (
+    <div className="fixed inset-0 z-50 bg-slate-950/35">
+      <div className="absolute inset-x-0 bottom-0 max-h-[92dvh] overflow-hidden rounded-t-2xl bg-white shadow-[0_-20px_60px_rgba(15,23,42,0.24)] sm:left-auto sm:right-4 sm:top-4 sm:h-[calc(100dvh-2rem)] sm:w-[460px] sm:rounded-2xl">
+        <div className="flex items-start justify-between gap-3 border-b border-slate-200 px-4 py-4">
+          <div className="min-w-0"><div className="truncate text-[11px] font-semibold uppercase text-blue-700">{props.chantier?.nom ?? "Chantier"}</div><h2 className="mt-1 text-base font-semibold text-slate-950">{props.task.titre}</h2></div>
+          <button className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-slate-200 text-slate-500" type="button" onClick={props.close} aria-label="Fermer"><X className="h-4 w-4" /></button>
+        </div>
+        <div className="grid grid-cols-2 gap-2 border-b border-slate-200 px-4 py-3">
+          <button className={`rounded-lg px-4 py-2 text-sm font-semibold ${props.drawerTab === "infos" ? "bg-blue-700 text-white" : "bg-slate-100 text-slate-700"}`} type="button" onClick={() => props.setDrawerTab("infos")}>Informations</button>
+          <button className={`rounded-lg px-4 py-2 text-sm font-semibold ${props.drawerTab === "actions" ? "bg-blue-700 text-white" : "bg-slate-100 text-slate-700"}`} type="button" onClick={() => props.setDrawerTab("actions")}>Actions terrain</button>
+        </div>
+        <div className="h-[calc(92dvh-9rem)] overflow-y-auto px-4 py-4 sm:h-[calc(100dvh-11rem)]">
+          {props.drawerTab === "infos" ? (
+            <div className="space-y-3">
+              <div className="grid grid-cols-2 gap-2"><PlainFact label="Chantier" value={props.chantier?.nom ?? "-"} /><PlainFact label="Zone" value={props.task.zone_nom ?? "-"} /><PlainFact label="Lot" value={props.task.lot ?? props.task.corps_etat ?? "-"} /><PlainFact label="Statut" value={taskStatusLabel(props.task)} /><PlainFact label="Quantite" value={props.task.quantite === null ? "-" : `${props.task.quantite} ${props.task.unite ?? ""}`} /><PlainFact label="Realise" value={props.task.quantite_realisee === null ? "-" : `${props.task.quantite_realisee} ${props.task.unite ?? ""}`} /><PlainFact label="Temps prevu" value={formatHours(props.task.temps_prevu_h)} /><PlainFact label="Temps passe" value={formatHours(totalTime || props.task.temps_reel_h)} /></div>
+              <PlainFact label="Description" value={compactText(task.description, task.description_technique, props.task.etape_metier, props.task.titre)} />
+              <PlainFact label="Contraintes" value={taskConstraint(props.task, props.consignes)} />
+              <PlainFact label="Materiaux" value={compactText(task.materiaux) || "Non renseigne"} />
+              <PlainFact label="Points de controle" value={compactText(task.points_controle) || "Non renseigne"} />
+              <PlainFact label="Dependances" value={compactText(task.dependances, props.task.date_debut || props.task.date_fin ? `${formatDate(props.task.date_debut)} - ${formatDate(props.task.date_fin)}` : null) || "Non renseignees"} />
+              <PlainFact label="Remarques admin" value={compactText(task.remarques_admin, props.task.reprise_reason) || "Aucune remarque admin visible"} />
+              <Block title="Consignes liees" empty="Aucune consigne liee.">{taskConsignes.map((consigne) => <NoteRow key={consigne.id} title={consigne.title} text={consigne.description} tone={consigne.priority === "urgente" ? "red" : consigne.priority === "importante" ? "amber" : "neutral"} label="Consigne" />)}</Block>
+              <DocumentBlock title="Plans lies" documents={linkedPlans} empty="Aucun plan lie visible." />
+              <DocumentBlock title="Documents lies" documents={linkedDocs} empty="Aucun document lie visible." />
+              <Block title="Temps saisis" empty="Aucun temps saisi sur cette tache.">{props.entries.slice(0, 5).map((entry) => <NoteRow key={entry.id} title={formatHours(entry.duration_hours)} text={compactText(formatDate(entry.work_date), entry.note)} tone="blue" label="Temps" />)}</Block>
+              <Block title="Materiel et materiaux" empty="Aucune demande liee.">{props.materiels.map((row) => <NoteRow key={row.id} title={row.titre} text={compactText(row.commentaire, row.admin_commentaire)} tone={materielTone(row)} label={row.statut} />)}</Block>
+              <Block title="Retours lies" empty="Aucun retour lie.">{taskFeedbacks.map((feedback) => <NoteRow key={feedback.id} title={feedback.title} text={feedback.description} tone={feedback.urgency === "urgente" || feedback.urgency === "critique" ? "red" : "blue"} label={feedback.category} />)}</Block>
+              <Block title="Photos reference" empty="Aucune photo reference visible.">{referencePhotos.map((feedback) => <NoteRow key={feedback.id} title={feedback.title} text={`${feedback.attachments.length} photo(s)`} tone="blue" label="Photo" />)}</Block>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {props.actionMessage ? <div className="rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-700">{props.actionMessage}</div> : null}
+              <ActionForm title="Ajouter temps" onSubmit={props.submitTime} saving={props.saving}><input className={inputClass} inputMode="decimal" value={props.timeHours} onChange={(event) => props.setTimeHours(event.target.value)} placeholder="Duree ex : 1,5" /><textarea className={inputClass} value={props.timeComment} onChange={(event) => props.setTimeComment(event.target.value)} rows={2} placeholder="Commentaire optionnel" /></ActionForm>
+              <ActionForm title="Ajouter photo" onSubmit={props.submitPhoto} saving={props.saving} disabled={!props.photoFile}><input className={inputClass} type="file" accept="image/*" capture="environment" onChange={(event) => props.setPhotoFile(event.target.files?.[0] ?? null)} /></ActionForm>
+              <ActionForm title="Ajouter remarque" onSubmit={props.submitRemark} saving={props.saving} disabled={!props.remarkText.trim()}><textarea className={inputClass} value={props.remarkText} onChange={(event) => props.setRemarkText(event.target.value)} rows={3} placeholder="Remarque terrain" /></ActionForm>
+              <ActionForm title="Signaler" onSubmit={props.submitSignal} saving={props.saving}><select className={inputClass} value={props.signalType} onChange={(event) => props.setSignalType(event.target.value as SignalType)}><option value="blocage">Blocage</option><option value="materiel">Manque materiel</option><option value="materiaux">Manque materiaux</option><option value="information">Manque information</option></select><textarea className={inputClass} value={props.signalComment} onChange={(event) => props.setSignalComment(event.target.value)} rows={3} placeholder="Precision utile pour l'admin" /></ActionForm>
+              <button className="flex w-full items-center justify-center gap-2 rounded-lg bg-emerald-700 px-4 py-3 text-sm font-semibold text-white disabled:opacity-60" type="button" onClick={props.completeTask} disabled={props.saving}><CheckCircle2 className="h-4 w-4" />Marquer terminee</button>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
 }
 
 function BottomNav({ activeTab, setActiveTab }: { activeTab: PortalTab; setActiveTab: (tab: PortalTab) => void }) {
