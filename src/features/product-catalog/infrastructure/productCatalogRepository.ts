@@ -202,7 +202,35 @@ function buildPriceHistoryEntry(purchasePriceHt: number | null, salePriceHt: num
 }
 
 function normalizePrice(value: unknown) {
-  const n = Number(value);
+  if (typeof value === "number") {
+    return Number.isFinite(value) ? Math.round(value * 100) / 100 : null;
+  }
+
+  const text = String(value ?? "")
+    .replace(/\u00a0/g, " ")
+    .replace(/[€]/g, "")
+    .trim();
+  if (!text) return null;
+  if (!/^-?[\d\s.,]+$/.test(text)) return null;
+
+  const compact = text.replace(/\s+/g, "");
+  const lastComma = compact.lastIndexOf(",");
+  const lastDot = compact.lastIndexOf(".");
+  let normalized = compact;
+
+  if (lastComma >= 0 && lastDot >= 0) {
+    normalized = lastComma > lastDot
+      ? compact.replace(/\./g, "").replace(",", ".")
+      : compact.replace(/,/g, "");
+  } else if (lastComma >= 0) {
+    normalized = compact.replace(",", ".");
+  } else if (lastDot >= 0) {
+    const parts = compact.split(".");
+    const isThousandsFormat = parts.length > 1 && parts.slice(1).every((part) => /^\d{3}$/.test(part));
+    normalized = isThousandsFormat ? parts.join("") : compact;
+  }
+
+  const n = Number(normalized);
   return Number.isFinite(n) ? Math.round(n * 100) / 100 : null;
 }
 
