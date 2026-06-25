@@ -328,26 +328,66 @@ function SupplierPricesEditor({ prices, suppliers, onChange }: { prices: Product
   return (
     <div className="mt-5 rounded-2xl border border-slate-200 p-4">
       <div className="mb-3 flex items-center justify-between gap-3">
-        <div className="font-semibold text-slate-950">Prix négociés par fournisseur</div>
+        <div>
+          <div className="font-semibold text-slate-950">Prix négociés par fournisseur</div>
+          <p className="mt-1 text-sm text-slate-500">Renseignez le prix d'achat fournisseur, la surface couverte par colis et le prix réellement exploitable au m² pour les devis.</p>
+        </div>
         <button type="button" className="rounded-xl border px-3 py-2 text-sm hover:bg-slate-50" onClick={addPrice}>Ajouter prix</button>
       </div>
       <div className="grid gap-3">
-        {prices.map((price) => (
-          <div key={price.id} className="grid gap-2 rounded-xl bg-slate-50 p-3 md:grid-cols-4 xl:grid-cols-10">
-            <Select value={price.supplierId ?? ""} onChange={(supplierId) => {
-              const supplier = suppliers.find((row) => row.id === supplierId);
-              updatePrice(price.id, { supplierId: supplier?.id ?? null, supplierName: supplier?.name ?? "" });
-            }} options={["", ...suppliers.map((supplier) => supplier.id)]} labels={Object.fromEntries([["", "Fournisseur"], ...suppliers.map((supplier) => [supplier.id, supplier.name])])} />
-            <SmallNumber value={price.priceHt} onChange={(priceHt) => updatePrice(price.id, { priceHt, pricePerM2Ht: price.coverageM2 ? priceHt : price.pricePerM2Ht ?? null })} placeholder="Prix HT" />
-            <SmallNumber value={price.coverageM2 ?? 0} onChange={(coverageM2) => updatePrice(price.id, { coverageM2, pricePerM2Ht: coverageM2 > 0 ? price.priceHt : null })} placeholder="m²/colis" />
-            <SmallNumber value={price.pricePerM2Ht ?? 0} onChange={(pricePerM2Ht) => updatePrice(price.id, { pricePerM2Ht })} placeholder="Prix m²" />
-            <SmallNumber value={price.discountPercent ?? 0} onChange={(discountPercent) => updatePrice(price.id, { discountPercent })} placeholder="Remise %" />
-            <input className={inputClass} type="date" value={price.startDate ?? ""} onChange={(event) => updatePrice(price.id, { startDate: event.target.value || null })} />
-            <input className={inputClass} type="date" value={price.endDate ?? ""} onChange={(event) => updatePrice(price.id, { endDate: event.target.value || null })} />
-            <input className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm font-normal normal-case tracking-normal text-slate-950 outline-none focus:border-blue-300 xl:col-span-2" placeholder="Conditionnement" value={price.packaging ?? ""} onChange={(event) => updatePrice(price.id, { packaging: event.target.value || null })} />
-            <SmallNumber value={price.deliveryLeadTimeDays ?? 0} onChange={(deliveryLeadTimeDays) => updatePrice(price.id, { deliveryLeadTimeDays })} placeholder="Délai j" />
+        {prices.map((price) => {
+          const displayedM2Price = price.pricePerM2Ht ?? (price.coverageM2 && price.coverageM2 > 0 ? price.priceHt : 0);
+          return (
+          <div key={price.id} className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+            <div className="mb-3 grid gap-2 md:grid-cols-3">
+              <div className="rounded-xl bg-white px-3 py-2 text-sm">
+                <div className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-400">Prix fournisseur</div>
+                <div className="mt-1 font-semibold text-slate-950">{formatCurrency(price.priceHt)}</div>
+              </div>
+              <div className="rounded-xl bg-white px-3 py-2 text-sm">
+                <div className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-400">Surface colis</div>
+                <div className="mt-1 font-semibold text-slate-950">{price.coverageM2 ? `${formatNumber(price.coverageM2)} m²` : "Non renseignée"}</div>
+              </div>
+              <div className="rounded-xl bg-blue-50 px-3 py-2 text-sm text-blue-800">
+                <div className="text-[11px] font-semibold uppercase tracking-[0.12em] text-blue-500">Prix achat m² HT</div>
+                <div className="mt-1 font-semibold">{displayedM2Price > 0 ? `${formatCurrency(displayedM2Price)}/m²` : "À renseigner"}</div>
+              </div>
+            </div>
+            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+              <FieldShell label="Fournisseur">
+                <Select value={price.supplierId ?? ""} onChange={(supplierId) => {
+                  const supplier = suppliers.find((row) => row.id === supplierId);
+                  updatePrice(price.id, { supplierId: supplier?.id ?? null, supplierName: supplier?.name ?? "" });
+                }} options={["", ...suppliers.map((supplier) => supplier.id)]} labels={Object.fromEntries([["", "Fournisseur"], ...suppliers.map((supplier) => [supplier.id, supplier.name])])} />
+              </FieldShell>
+              <FieldShell label="Prix fournisseur HT">
+                <SmallNumber value={price.priceHt} onChange={(priceHt) => updatePrice(price.id, { priceHt, pricePerM2Ht: price.coverageM2 ? price.pricePerM2Ht ?? priceHt : price.pricePerM2Ht ?? null })} placeholder="Prix HT" />
+              </FieldShell>
+              <FieldShell label="Surface colis m²">
+                <SmallNumber value={price.coverageM2 ?? 0} onChange={(coverageM2) => updatePrice(price.id, { coverageM2, pricePerM2Ht: coverageM2 > 0 ? price.pricePerM2Ht ?? price.priceHt : null })} placeholder="m²/colis" />
+              </FieldShell>
+              <FieldShell label="Prix achat m² HT">
+                <SmallNumber value={price.pricePerM2Ht ?? 0} onChange={(pricePerM2Ht) => updatePrice(price.id, { pricePerM2Ht })} placeholder="Prix m²" />
+              </FieldShell>
+              <FieldShell label="Remise %">
+                <SmallNumber value={price.discountPercent ?? 0} onChange={(discountPercent) => updatePrice(price.id, { discountPercent })} placeholder="Remise %" />
+              </FieldShell>
+              <FieldShell label="Début validité">
+                <input className={inputClass} type="date" value={price.startDate ?? ""} onChange={(event) => updatePrice(price.id, { startDate: event.target.value || null })} />
+              </FieldShell>
+              <FieldShell label="Fin validité">
+                <input className={inputClass} type="date" value={price.endDate ?? ""} onChange={(event) => updatePrice(price.id, { endDate: event.target.value || null })} />
+              </FieldShell>
+              <FieldShell label="Délai livraison j">
+                <SmallNumber value={price.deliveryLeadTimeDays ?? 0} onChange={(deliveryLeadTimeDays) => updatePrice(price.id, { deliveryLeadTimeDays })} placeholder="Délai j" />
+              </FieldShell>
+              <FieldShell label="Conditionnement" className="md:col-span-2 xl:col-span-4">
+                <input className={inputClass} placeholder="Ex : colis de 10 panneaux soit 6,48 m²" value={price.packaging ?? ""} onChange={(event) => updatePrice(price.id, { packaging: event.target.value || null })} />
+              </FieldShell>
+            </div>
           </div>
-        ))}
+          );
+        })}
         {!prices.length ? <div className="rounded-xl border border-dashed border-slate-200 p-4 text-sm text-slate-500">Aucun prix négocié pour le moment.</div> : null}
       </div>
     </div>
@@ -386,6 +426,10 @@ function ProductDocumentsEditor({ documents, onChange }: { documents: ProductCat
 
 function Field({ label, value, onChange, className = "" }: { label: string; value: string; onChange: (value: string) => void; className?: string }) {
   return <label className={`${labelClass} ${className}`}>{label}<input className={`${inputClass} mt-1`} value={value} onChange={(event) => onChange(event.target.value)} /></label>;
+}
+
+function FieldShell({ children, className = "", label }: { children: React.ReactNode; className?: string; label: string }) {
+  return <label className={`${labelClass} ${className}`}>{label}<div className="mt-1">{children}</div></label>;
 }
 
 function NumberField({ label, value, onChange }: { label: string; value: number; onChange: (value: number) => void }) {
