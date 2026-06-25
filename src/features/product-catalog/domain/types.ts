@@ -13,6 +13,8 @@ export type ProductSupplierPrice = {
   packaging: string | null;
   minimumQuantity: number | null;
   deliveryLeadTimeDays: number | null;
+  coverageM2?: number | null;
+  pricePerM2Ht?: number | null;
 };
 
 export type ProductDocument = {
