@@ -41,7 +41,7 @@ export function createInvoiceDocumentFromQuote(quote: BusinessDocument, type: In
           ? `Facture finale selon devis ${quote.number}.`
           : type === "credit_note"
             ? `Avoir relatif au devis ${quote.number}.`
-            : `Facture intermediaire selon avancement du devis ${quote.number}.`,
+            : `Facture intermédiaire selon avancement du devis ${quote.number}.`,
       depositAmount: null,
       depositPercent: null,
     },
@@ -122,7 +122,7 @@ function hasPositiveInvoiceAmount(nodes: BusinessDocumentNode[]): boolean {
 
 export function invoiceTypeLabel(type: InvoiceType) {
   if (type === "deposit") return "Facture d'acompte";
-  if (type === "intermediate") return "Facture intermediaire";
+  if (type === "intermediate") return "Facture intermédiaire";
   if (type === "final") return "Facture finale";
   return "Avoir";
 }
