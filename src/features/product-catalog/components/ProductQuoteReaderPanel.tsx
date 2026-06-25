@@ -15,20 +15,21 @@ export default function ProductQuoteReaderPanel({
   result: ProductQuoteImportResult | null;
   onImport: (text: string) => Promise<void> | void;
 }) {
-  const [text, setText] = useState("");
+  const [extractedText, setExtractedText] = useState("");
   const [fileName, setFileName] = useState<string | null>(null);
   const [extracting, setExtracting] = useState(false);
   const [fileError, setFileError] = useState<string | null>(null);
   const isWorking = busy || extracting;
-  const canImport = useMemo(() => text.trim().length >= 20 && !isWorking, [isWorking, text]);
+  const canImport = useMemo(() => extractedText.trim().length >= 20 && !isWorking, [extractedText, isWorking]);
 
   async function submit() {
     if (!canImport) return;
-    await onImport(text);
+    await onImport(extractedText);
   }
 
   async function onFileChange(file: File | null) {
     setFileError(null);
+    setExtractedText("");
     if (!file) return;
 
     if (file.type !== "application/pdf" && !file.name.toLowerCase().endsWith(".pdf")) {
@@ -40,14 +41,15 @@ export default function ProductQuoteReaderPanel({
     setExtracting(true);
     setFileName(file.name);
     try {
-      const extractedText = await extractPdfText(file);
-      if (extractedText.trim().length < 20) {
+      const text = await extractPdfText(file);
+      if (text.trim().length < 20) {
         throw new Error("Texte insuffisant dans ce PDF. Vérifiez que le devis n'est pas uniquement une image scannée.");
       }
-      setText(extractedText);
+      setExtractedText(text);
     } catch (err: any) {
       setFileError(err?.message ?? "Lecture du PDF impossible.");
       setFileName(null);
+      setExtractedText("");
     } finally {
       setExtracting(false);
     }
@@ -56,7 +58,7 @@ export default function ProductQuoteReaderPanel({
   function clearFile() {
     setFileName(null);
     setFileError(null);
-    setText("");
+    setExtractedText("");
   }
 
   return (
@@ -68,7 +70,7 @@ export default function ProductQuoteReaderPanel({
           </div>
           <h2 className="mt-3 text-base font-semibold text-slate-950">Créer automatiquement des produits depuis un devis fournisseur</h2>
           <p className="mt-1 max-w-3xl text-sm text-slate-600">
-            Importez un PDF fournisseur. Le lecteur extrait le texte, l'envoie à l'IA, rattache le fournisseur détecté, crée le fournisseur s'il manque, puis remplit prix, unité, TVA, marque, catégorie et référence quand l'information est présente.
+            Importez un PDF fournisseur. L'IA garde uniquement les lignes produits exploitables, puis crée ou met à jour les fiches avec fournisseur, désignation, quantité, unité, prix HT, TVA, marque, catégorie et référence quand ces informations sont présentes.
           </p>
         </div>
         <button
@@ -109,16 +111,32 @@ export default function ProductQuoteReaderPanel({
           {fileError ? <div className="mt-3 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">{fileError}</div> : null}
         </div>
 
-        <textarea
-          className="min-h-44 w-full rounded-2xl border border-blue-100 bg-white p-3 text-sm text-slate-900 outline-none focus:border-blue-300"
-          placeholder="Le texte extrait du PDF apparaît ici. Vous pouvez aussi coller le texte d'un devis fournisseur avant de créer les produits."
-          value={text}
-          disabled={isWorking}
-          onChange={(event) => {
-            setText(event.target.value);
-            if (fileName) setFileName(null);
-          }}
-        />
+        <div className="rounded-2xl border border-blue-100 bg-white p-4">
+          <div className="flex h-full min-h-40 flex-col justify-center rounded-xl bg-slate-50 px-4 py-5">
+            {extracting ? (
+              <div className="flex items-center gap-3 text-sm text-slate-600">
+                <Loader2 className="h-4 w-4 animate-spin text-blue-600" />
+                Lecture du PDF avant analyse IA...
+              </div>
+            ) : extractedText ? (
+              <div>
+                <div className="flex items-center gap-2 text-sm font-semibold text-emerald-700">
+                  <CheckCircle2 className="h-4 w-4" /> PDF prêt pour l'analyse IA
+                </div>
+                <p className="mt-2 text-sm text-slate-600">
+                  Le texte brut reste masqué. Au clic sur “Créer les produits”, l'IA ne renverra que les lignes produits utiles au catalogue fournisseur.
+                </p>
+              </div>
+            ) : (
+              <div>
+                <div className="text-sm font-semibold text-slate-950">Aucun devis sélectionné</div>
+                <p className="mt-2 text-sm text-slate-500">
+                  Sélectionnez un PDF. Le lecteur analysera ensuite les produits, quantités et prix sans afficher le contenu complet du devis.
+                </p>
+              </div>
+            )}
+          </div>
+        </div>
       </div>
 
       {result ? (
