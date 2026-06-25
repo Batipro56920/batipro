@@ -29,6 +29,7 @@ import {
   intervenantInformationRequestCreate,
   intervenantInformationRequestList,
   intervenantMaterielCreate,
+  intervenantMaterielList,
   intervenantReserveList,
   intervenantSession,
   intervenantTerrainFeedbackCreate,
@@ -41,6 +42,7 @@ import {
   type IntervenantConsigne,
   type IntervenantDocument,
   type IntervenantInformationRequest,
+  type IntervenantMateriel,
   type IntervenantReserve,
   type IntervenantSessionInfo,
   type IntervenantTask,
@@ -70,6 +72,7 @@ type SiteData = {
   feedbacks: IntervenantTerrainFeedback[];
   reserves: IntervenantReserve[];
   infoRequests: IntervenantInformationRequest[];
+  materiels: IntervenantMateriel[];
   consignes: IntervenantConsigne[];
 };
 
@@ -94,12 +97,14 @@ const EMPTY_SITE_DATA: SiteData = {
   feedbacks: [],
   reserves: [],
   infoRequests: [],
+  materiels: [],
   consignes: [],
 };
 
 const ADMIN_DOCUMENT_WORDS = ["devis", "facture", "doe", "administratif", "comptable", "avoir"];
 const PLAN_DOCUMENT_WORDS = ["plan", "croquis", "photo technique", "photo-technique"];
 const USEFUL_DOCUMENT_WORDS = ["notice", "procedure", "procédure", "technique", "fiche", "pose", "materiau", "materiaux", "securite", "sécurité"];
+const OPEN_MATERIEL_STATUSES = new Set(["en_attente", "validee"]);
 
 const inputClass =
   "w-full rounded-lg border border-slate-200 bg-white px-3 py-3 text-sm text-slate-900 outline-none placeholder:text-slate-400 focus:border-blue-300 focus:ring-4 focus:ring-blue-100";
@@ -165,6 +170,13 @@ function taskTone(task: IntervenantTask): Tone {
   if (isTaskDone(task)) return "green";
   if (task.quality_status === "a_reprendre") return "red";
   if (String(task.status ?? "").toUpperCase() === "EN_COURS" || task.quality_status === "en_cours") return "blue";
+  return "amber";
+}
+
+function materielTone(row: IntervenantMateriel): Tone {
+  if (row.statut === "livree") return "green";
+  if (row.statut === "refusee") return "red";
+  if (row.statut === "validee") return "blue";
   return "amber";
 }
 
@@ -243,13 +255,14 @@ async function safeLoad<T>(loader: () => Promise<T>, fallback: T, label: string)
 }
 
 async function loadSiteData(token: string, chantierId: string) {
-  const [tasks, documents, timeEntries, feedbacks, reserves, infoRequests, consignes] = await Promise.all([
+  const [tasks, documents, timeEntries, feedbacks, reserves, infoRequests, materiels, consignes] = await Promise.all([
     safeLoad(() => intervenantGetTasks(token, chantierId), [] as IntervenantTask[], "Taches indisponibles."),
     safeLoad(() => intervenantGetDocuments(token, chantierId), [] as IntervenantDocument[], "Documents indisponibles."),
     safeLoad(() => intervenantTimeList(token, chantierId), [] as IntervenantTimeEntry[], "Temps indisponible."),
     safeLoad(() => intervenantTerrainFeedbackList(token, chantierId), [] as IntervenantTerrainFeedback[], "Retours indisponibles."),
     safeLoad(() => intervenantReserveList(token, chantierId), [] as IntervenantReserve[], "Reserves indisponibles."),
     safeLoad(() => intervenantInformationRequestList(token, chantierId), [] as IntervenantInformationRequest[], "Demandes indisponibles."),
+    safeLoad(() => intervenantMaterielList(token, chantierId), [] as IntervenantMateriel[], "Materiel indisponible."),
     safeLoad(() => intervenantConsigneList(token, chantierId), [] as IntervenantConsigne[], "Consignes indisponibles."),
   ]);
 
@@ -261,9 +274,10 @@ async function loadSiteData(token: string, chantierId: string) {
       feedbacks: feedbacks.data,
       reserves: reserves.data,
       infoRequests: infoRequests.data,
+      materiels: materiels.data,
       consignes: consignes.data,
     },
-    error: [tasks, documents, timeEntries, feedbacks, reserves, infoRequests, consignes].map((result) => result.error).find(Boolean) ?? null,
+    error: [tasks, documents, timeEntries, feedbacks, reserves, infoRequests, materiels, consignes].map((result) => result.error).find(Boolean) ?? null,
   };
 }
 
@@ -432,6 +446,13 @@ export default function IntervenantPortalV2CompletePage() {
       text: reserve.description ?? reserve.status,
       tone: reserve.priority === "URGENTE" ? ("red" as Tone) : ("amber" as Tone),
     })));
+    const materielAlerts = siteDatas.flatMap((data) => data.materiels.filter((row) => OPEN_MATERIEL_STATUSES.has(row.statut)).map((row) => ({
+      id: row.id,
+      label: row.titre.toLowerCase().includes("materiaux") ? "Materiaux" : "Materiel",
+      title: row.titre,
+      text: compactText(row.task_titre, row.commentaire, row.admin_commentaire) || "Demande en attente cote admin.",
+      tone: materielTone(row),
+    })));
     const infoAlerts = siteDatas.flatMap((data) => data.infoRequests.filter((request) => request.status !== "traitee").map((request) => ({
       id: request.id,
       label: "Information",
@@ -447,7 +468,7 @@ export default function IntervenantPortalV2CompletePage() {
       tone: "blue" as Tone,
     }));
 
-    return [...feedbackAlerts, ...reserveAlerts, ...infoAlerts, ...docAlerts].slice(0, 6);
+    return [...feedbackAlerts, ...reserveAlerts, ...materielAlerts, ...infoAlerts, ...docAlerts].slice(0, 6);
   }, [dataByChantier, planDocuments]);
 
   const mainConstraint = alerts[0]?.title ?? selectedData.consignes.find((consigne) => consigne.priority !== "normale")?.title ?? "Aucune contrainte critique";
@@ -610,7 +631,7 @@ export default function IntervenantPortalV2CompletePage() {
       <header className="sticky top-0 z-30 border-b border-slate-200 bg-white/95 px-4 pt-[var(--safe-top)] backdrop-blur">
         <div className="mx-auto flex max-w-5xl items-center justify-between gap-3 py-3">
           <div className="min-w-0">
-            <div className="text-[11px] font-semibold uppercase text-blue-700">Portail terrain V2</div>
+            <div className="text-[11px] font-semibold uppercase text-blue-700">Portail terrain</div>
             <h1 className="truncate text-base font-semibold">{sessionInfo?.intervenant.nom ?? "Intervenant"}</h1>
           </div>
           <button type="button" onClick={logoutIntervenant} className="inline-flex h-10 w-10 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-500" aria-label="Se deconnecter">
@@ -652,6 +673,7 @@ export default function IntervenantPortalV2CompletePage() {
           drawerTab={drawerTab}
           entries={currentTaskData.timeEntries.filter((entry) => entry.task_id === currentTask.id)}
           feedbacks={currentTaskData.feedbacks}
+          materiels={currentTaskData.materiels.filter((row) => row.task_id === currentTask.id)}
           photoFile={photoFile}
           remarkText={remarkText}
           saving={savingAction}
@@ -708,6 +730,8 @@ function ChantiersView(props: { chantiers: IntervenantChantier[]; dataByChantier
   const doneTasks = props.selectedData.tasks.filter(isTaskDone);
   const today = todayIsoDate();
   const weekEnd = addDaysIso(today, 6);
+  const openMateriels = props.selectedData.materiels.filter((row) => OPEN_MATERIEL_STATUSES.has(row.statut));
+
   return (
     <>
       <Card>
@@ -759,8 +783,11 @@ function ChantiersView(props: { chantiers: IntervenantChantier[]; dataByChantier
           </Block>
           <DocumentBlock title="Plans chantier" documents={props.planDocuments} empty="Aucun plan, croquis ou photo technique visible." />
           <DocumentBlock title="Documents utiles" documents={props.usefulDocuments} empty="Aucun document technique visible." />
+          <Block title="Materiel et materiaux en attente" empty="Aucune demande materiel ouverte.">
+            {openMateriels.slice(0, 5).map((row) => <NoteRow key={row.id} title={row.titre} text={compactText(row.task_titre, row.commentaire, row.admin_commentaire)} tone={materielTone(row)} label={row.statut} />)}
+          </Block>
           <Block title="Retours terrain recents" empty="Aucun retour recent.">
-            {[...props.selectedData.feedbacks.map((feedback) => ({ id: feedback.id, title: feedback.title, text: feedback.description, tone: feedback.urgency === "urgente" || feedback.urgency === "critique" ? ("red" as Tone) : ("blue" as Tone) })), ...props.selectedData.reserves.map((reserve) => ({ id: reserve.id, title: reserve.title, text: reserve.description ?? reserve.status, tone: reserve.priority === "URGENTE" ? ("red" as Tone) : ("amber" as Tone) }))].slice(0, 5).map((row) => <NoteRow key={row.id} title={row.title} text={row.text} tone={row.tone} label="Suivi" />)}
+            {[...props.selectedData.feedbacks.map((feedback) => ({ id: feedback.id, title: feedback.title, text: feedback.description, tone: feedback.urgency === "urgente" || feedback.urgency === "critique" ? ("red" as Tone) : ("blue" as Tone), label: "Retour" })), ...props.selectedData.reserves.map((reserve) => ({ id: reserve.id, title: reserve.title, text: reserve.description ?? reserve.status, tone: reserve.priority === "URGENTE" ? ("red" as Tone) : ("amber" as Tone), label: "Reserve" }))].slice(0, 5).map((row) => <NoteRow key={row.id} title={row.title} text={row.text} tone={row.tone} label={row.label} />)}
           </Block>
         </Card>
       ) : null}
@@ -814,25 +841,28 @@ function FeedbacksView({ dataByChantier }: { dataByChantier: Record<string, Site
   const feedbacks = Object.values(dataByChantier).flatMap((data) => data.feedbacks);
   const reserves = Object.values(dataByChantier).flatMap((data) => data.reserves);
   const requests = Object.values(dataByChantier).flatMap((data) => data.infoRequests);
+  const materiels = Object.values(dataByChantier).flatMap((data) => data.materiels);
   return (
     <Card>
       <SectionHeader title="Retours" />
       <div className="mt-3 space-y-2">
         {feedbacks.map((feedback) => <NoteRow key={feedback.id} title={feedback.title} text={feedback.description} tone={feedback.urgency === "urgente" || feedback.urgency === "critique" ? "red" : "blue"} label={feedback.category} />)}
         {reserves.map((reserve) => <NoteRow key={reserve.id} title={reserve.title} text={reserve.description ?? reserve.status} tone={reserve.priority === "URGENTE" ? "red" : "amber"} label="Reserve" />)}
+        {materiels.map((row) => <NoteRow key={row.id} title={row.titre} text={compactText(row.task_titre, row.commentaire, row.admin_commentaire)} tone={materielTone(row)} label={row.statut} />)}
         {requests.map((request) => <NoteRow key={request.id} title={request.subject} text={request.message} tone="blue" label="Information" />)}
-        {feedbacks.length + reserves.length + requests.length === 0 ? <Empty>Aucun retour terrain.</Empty> : null}
+        {feedbacks.length + reserves.length + requests.length + materiels.length === 0 ? <Empty>Aucun retour terrain.</Empty> : null}
       </div>
     </Card>
   );
 }
 
-function TaskDrawer(props: { actionMessage: string | null; chantier: IntervenantChantier | null; close: () => void; completeTask: () => void; consignes: IntervenantConsigne[]; documents: IntervenantDocument[]; drawerTab: DrawerTab; entries: IntervenantTimeEntry[]; feedbacks: IntervenantTerrainFeedback[]; photoFile: File | null; remarkText: string; saving: boolean; setDrawerTab: (tab: DrawerTab) => void; setPhotoFile: (file: File | null) => void; setRemarkText: (value: string) => void; setSignalComment: (value: string) => void; setSignalType: (value: SignalType) => void; setTimeComment: (value: string) => void; setTimeHours: (value: string) => void; signalComment: string; signalType: SignalType; submitPhoto: (event: FormEvent<HTMLFormElement>) => void; submitRemark: (event: FormEvent<HTMLFormElement>) => void; submitSignal: (event: FormEvent<HTMLFormElement>) => void; submitTime: (event: FormEvent<HTMLFormElement>) => void; task: IntervenantTask; timeComment: string; timeHours: string }) {
+function TaskDrawer(props: { actionMessage: string | null; chantier: IntervenantChantier | null; close: () => void; completeTask: () => void; consignes: IntervenantConsigne[]; documents: IntervenantDocument[]; drawerTab: DrawerTab; entries: IntervenantTimeEntry[]; feedbacks: IntervenantTerrainFeedback[]; materiels: IntervenantMateriel[]; photoFile: File | null; remarkText: string; saving: boolean; setDrawerTab: (tab: DrawerTab) => void; setPhotoFile: (file: File | null) => void; setRemarkText: (value: string) => void; setSignalComment: (value: string) => void; setSignalType: (value: SignalType) => void; setTimeComment: (value: string) => void; setTimeHours: (value: string) => void; signalComment: string; signalType: SignalType; submitPhoto: (event: FormEvent<HTMLFormElement>) => void; submitRemark: (event: FormEvent<HTMLFormElement>) => void; submitSignal: (event: FormEvent<HTMLFormElement>) => void; submitTime: (event: FormEvent<HTMLFormElement>) => void; task: IntervenantTask; timeComment: string; timeHours: string }) {
   const totalTime = props.entries.reduce((sum, entry) => sum + Number(entry.duration_hours ?? 0), 0);
   const linkedPlans = props.documents.filter(isPlanDocument);
   const linkedDocs = props.documents.filter((document) => isFieldDocument(document) && !isPlanDocument(document));
   const taskConsignes = props.consignes.filter((row) => row.task_id === props.task.id || (!!props.task.zone_id && row.zone_id === props.task.zone_id) || row.applies_to_all);
   const referencePhotos = props.feedbacks.filter((feedback) => feedback.attachments.length > 0 && normalizeText(`${feedback.title} ${feedback.description}`).includes(normalizeText(props.task.titre)));
+  const taskFeedbacks = props.feedbacks.filter((feedback) => normalizeText(`${feedback.title} ${feedback.description}`).includes(normalizeText(props.task.titre)));
 
   return (
     <div className="fixed inset-0 z-50 bg-slate-950/35">
@@ -850,6 +880,9 @@ function TaskDrawer(props: { actionMessage: string | null; chantier: Intervenant
               <Block title="Consignes liees" empty="Aucune consigne liee.">{taskConsignes.map((consigne) => <NoteRow key={consigne.id} title={consigne.title} text={consigne.description} tone={consigne.priority === "urgente" ? "red" : consigne.priority === "importante" ? "amber" : "neutral"} label="Consigne" />)}</Block>
               <DocumentBlock title="Plans lies" documents={linkedPlans} empty="Aucun plan lie visible." />
               <DocumentBlock title="Documents lies" documents={linkedDocs} empty="Aucun document lie visible." />
+              <Block title="Temps saisis" empty="Aucun temps saisi sur cette tache.">{props.entries.slice(0, 5).map((entry) => <NoteRow key={entry.id} title={formatHours(entry.duration_hours)} text={compactText(formatDate(entry.work_date), entry.note)} tone="blue" label="Temps" />)}</Block>
+              <Block title="Materiel et materiaux" empty="Aucune demande liee.">{props.materiels.map((row) => <NoteRow key={row.id} title={row.titre} text={compactText(row.commentaire, row.admin_commentaire)} tone={materielTone(row)} label={row.statut} />)}</Block>
+              <Block title="Retours lies" empty="Aucun retour lie.">{taskFeedbacks.map((feedback) => <NoteRow key={feedback.id} title={feedback.title} text={feedback.description} tone={feedback.urgency === "urgente" || feedback.urgency === "critique" ? "red" : "blue"} label={feedback.category} />)}</Block>
               <Block title="Photos reference" empty="Aucune photo reference visible.">{referencePhotos.map((feedback) => <NoteRow key={feedback.id} title={feedback.title} text={`${feedback.attachments.length} photo(s)`} tone="blue" label="Photo" />)}</Block>
             </div>
           ) : (
