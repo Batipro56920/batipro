@@ -18,8 +18,10 @@ type ProductLine = {
   category: string | null;
   unit: string;
   quantity: number | null;
+  coverage_m2: number | null;
   purchase_price_ht: number | null;
   sale_price_ht: number | null;
+  package_price_ht: number | null;
   vat_rate: number | null;
   packaging: string | null;
   minimum_quantity: number | null;
@@ -48,6 +50,21 @@ function parseJsonPayload(content: string): unknown {
 function normalizeText(value: unknown): string | null {
   const text = String(value ?? "").replace(/\s+/g, " ").trim();
   return text ? text : null;
+}
+
+function cleanDesignation(value: unknown): string | null {
+  let text = normalizeText(value);
+  if (!text) return null;
+
+  text = text
+    .replace(/\s*-\s*colis\s+de\s+\d+.*$/i, "")
+    .replace(/\s+colis\s+de\s+\d+.*$/i, "")
+    .replace(/\s+soit\s+\d+(?:[,.]\d+)?\s*m(?:²|2).*$/i, "")
+    .replace(/\s+\d+(?:[,.]\d+)?\s*m(?:²|2)\s*$/i, "")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  return text || null;
 }
 
 function toNumber(value: unknown): number | null {
@@ -130,12 +147,13 @@ function isNoiseDesignation(value: string): boolean {
 }
 
 function validateLine(raw: any): ProductLine | null {
-  const designation = normalizeText(raw?.designation ?? raw?.label ?? raw?.title);
+  const designation = cleanDesignation(raw?.designation ?? raw?.label ?? raw?.title);
   if (!designation || designation.length < 3) return null;
   if (isNoiseDesignation(designation)) return null;
 
   const purchasePrice = toNumber(raw?.purchase_price_ht ?? raw?.prix_achat_ht ?? raw?.unit_purchase_price_ht);
   const salePrice = toNumber(raw?.sale_price_ht ?? raw?.prix_vente_ht ?? raw?.unit_sale_price_ht ?? raw?.unit_price_ht);
+  const coverageM2 = toNumber(raw?.coverage_m2 ?? raw?.surface_m2 ?? raw?.surface_colis_m2);
 
   return {
     designation,
@@ -145,8 +163,10 @@ function validateLine(raw: any): ProductLine | null {
     category: normalizeText(raw?.category ?? raw?.categorie ?? raw?.famille),
     unit: normalizeUnit(raw?.unit ?? raw?.unite),
     quantity: toNumber(raw?.quantity ?? raw?.quantite ?? raw?.qte),
+    coverage_m2: coverageM2,
     purchase_price_ht: purchasePrice,
     sale_price_ht: salePrice,
+    package_price_ht: toNumber(raw?.package_price_ht ?? raw?.prix_colis_ht ?? raw?.line_total_ht),
     vat_rate: toNumber(raw?.vat_rate ?? raw?.tva_rate ?? raw?.tva),
     packaging: normalizeText(raw?.packaging ?? raw?.conditionnement),
     minimum_quantity: toNumber(raw?.minimum_quantity ?? raw?.quantite_minimum ?? raw?.qte_min),
@@ -181,13 +201,18 @@ serve(async (req) => {
     "Tu lis le texte extrait d'un devis fournisseur BTP ou d'une grille de prix matériaux.",
     "Tu dois retourner uniquement les lignes produits exploitables pour créer des fiches catalogue fournisseur.",
     "Ignore strictement: main d'oeuvre, prestations seules, titres de sections, totaux, sous-totaux, TVA globale, conditions, adresses, client, mentions légales, règlements, acomptes, frais généraux et lignes sans produit identifiable.",
-    "Pour chaque produit, extrais seulement les informations nécessaires: supplier_name, designation, quantity, unit, purchase_price_ht, vat_rate, supplier_reference, brand, category, packaging, minimum_quantity, confidence, source_line.",
-    "quantity correspond à la quantité de la ligne du devis. purchase_price_ht correspond au prix unitaire HT fournisseur. Ne mets jamais le total de ligne dans purchase_price_ht.",
+    "designation doit être le nom lisible du produit uniquement. Retire le conditionnement de la désignation quand il existe, par exemple 'colis de 8 panneaux soit 6,48m2'.",
+    "packaging contient le conditionnement complet lisible, par exemple 'Colis de 8 panneaux'.",
+    "coverage_m2 contient la surface couverte par un colis ou paquet quand elle est indiquée, par exemple 6.48 pour 'soit 6,48m2'.",
+    "Pour les isolants, plaques, membranes, revêtements et produits vendus ensuite en m², mets unit = m2 et purchase_price_ht = prix unitaire HT au m². Ne mets pas le prix total du colis dans purchase_price_ht.",
+    "package_price_ht contient le prix HT du colis ou le total de ligne si disponible et différent du prix au m².",
+    "Pour chaque produit, extrais seulement les informations nécessaires: supplier_name, designation, quantity, unit, coverage_m2, purchase_price_ht, package_price_ht, vat_rate, supplier_reference, brand, category, packaging, minimum_quantity, confidence, source_line.",
+    "quantity correspond à la quantité de la ligne du devis. purchase_price_ht correspond au prix unitaire HT fournisseur dans l'unité de vente future, notamment m² si coverage_m2 existe.",
     "Si le document est un devis client avec prix de vente et pas un devis fournisseur, mets le prix unitaire dans sale_price_ht et laisse purchase_price_ht à null si le prix d'achat est incertain.",
     "unit doit être parmi: u, h, ml, m2, m3, forfait, kg, l.",
     "confidence entre 0 et 1.",
     "Réponds en JSON strict uniquement avec ce format: {\"products\": ProductLine[]}.",
-    "ProductLine = {supplier_name, designation, supplier_reference, brand, category, unit, quantity, purchase_price_ht, sale_price_ht, vat_rate, packaging, minimum_quantity, confidence, source_line}.",
+    "ProductLine = {supplier_name, designation, supplier_reference, brand, category, unit, quantity, coverage_m2, purchase_price_ht, sale_price_ht, package_price_ht, vat_rate, packaging, minimum_quantity, confidence, source_line}.",
   ].join("\n");
 
   const payload = {
