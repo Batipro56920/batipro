@@ -17,6 +17,7 @@ type ProductLine = {
   brand: string | null;
   category: string | null;
   unit: string;
+  quantity: number | null;
   purchase_price_ht: number | null;
   sale_price_ht: number | null;
   vat_rate: number | null;
@@ -143,6 +144,7 @@ function validateLine(raw: any): ProductLine | null {
     brand: normalizeText(raw?.brand ?? raw?.marque),
     category: normalizeText(raw?.category ?? raw?.categorie ?? raw?.famille),
     unit: normalizeUnit(raw?.unit ?? raw?.unite),
+    quantity: toNumber(raw?.quantity ?? raw?.quantite ?? raw?.qte),
     purchase_price_ht: purchasePrice,
     sale_price_ht: salePrice,
     vat_rate: toNumber(raw?.vat_rate ?? raw?.tva_rate ?? raw?.tva),
@@ -176,14 +178,16 @@ serve(async (req) => {
 
   const model = Deno.env.get("OPENAI_MODEL") || "gpt-4.1-mini";
   const prompt = [
-    "Tu extrais des produits depuis un devis fournisseur BTP ou une grille de prix matériaux.",
-    "Conserve uniquement les lignes qui correspondent à des produits, matériaux, fournitures ou équipements achetables.",
-    "Ignore strictement: main d'oeuvre, prestations seules, titres de sections, totaux, sous-totaux, TVA globale, conditions, adresses, client, mentions légales, frais généraux et lignes sans produit identifiable.",
-    "Remplis au maximum: designation, supplier_name, supplier_reference, brand, category, unit, purchase_price_ht, sale_price_ht, vat_rate, packaging, minimum_quantity, confidence, source_line.",
-    "Si un prix unitaire HT est présent dans un devis fournisseur, mets-le dans purchase_price_ht. Si le devis est un devis client avec prix de vente, mets-le dans sale_price_ht et laisse purchase_price_ht à null si incertain.",
+    "Tu lis le texte extrait d'un devis fournisseur BTP ou d'une grille de prix matériaux.",
+    "Tu dois retourner uniquement les lignes produits exploitables pour créer des fiches catalogue fournisseur.",
+    "Ignore strictement: main d'oeuvre, prestations seules, titres de sections, totaux, sous-totaux, TVA globale, conditions, adresses, client, mentions légales, règlements, acomptes, frais généraux et lignes sans produit identifiable.",
+    "Pour chaque produit, extrais seulement les informations nécessaires: supplier_name, designation, quantity, unit, purchase_price_ht, vat_rate, supplier_reference, brand, category, packaging, minimum_quantity, confidence, source_line.",
+    "quantity correspond à la quantité de la ligne du devis. purchase_price_ht correspond au prix unitaire HT fournisseur. Ne mets jamais le total de ligne dans purchase_price_ht.",
+    "Si le document est un devis client avec prix de vente et pas un devis fournisseur, mets le prix unitaire dans sale_price_ht et laisse purchase_price_ht à null si le prix d'achat est incertain.",
     "unit doit être parmi: u, h, ml, m2, m3, forfait, kg, l.",
     "confidence entre 0 et 1.",
     "Réponds en JSON strict uniquement avec ce format: {\"products\": ProductLine[]}.",
+    "ProductLine = {supplier_name, designation, supplier_reference, brand, category, unit, quantity, purchase_price_ht, sale_price_ht, vat_rate, packaging, minimum_quantity, confidence, source_line}.",
   ].join("\n");
 
   const payload = {
