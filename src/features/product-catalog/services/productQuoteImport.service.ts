@@ -132,10 +132,12 @@ async function resolveSupplier(
 }
 
 function toProductDraft(extracted: ExtractedQuoteProduct, supplier: SupplierRow | null): ProductCatalogDraft {
-  const purchasePrice = positiveNumber(extracted.purchase_price_ht);
-  const salePrice = positiveNumber(extracted.sale_price_ht) ?? computeSalePrice(purchasePrice, DEFAULT_MARGIN_RATE);
-  const supplierPrice = buildSupplierPrice(extracted, supplier, purchasePrice);
-  const unit = normalizeUnit(extracted.unit);
+  const supplierNegotiatedPrice = supplierPriceFromQuote(extracted);
+  const coverageM2 = positiveNumber(extracted.coverage_m2);
+  const catalogPurchasePrice = computeCoverageUnitPrice(supplierNegotiatedPrice, coverageM2) ?? supplierNegotiatedPrice;
+  const salePrice = positiveNumber(extracted.sale_price_ht) ?? computeSalePrice(catalogPurchasePrice, DEFAULT_MARGIN_RATE);
+  const supplierPrice = buildSupplierPrice(extracted, supplier, supplierNegotiatedPrice);
+  const unit = coverageM2 && coverageM2 > 0 ? "m2" : normalizeUnit(extracted.unit);
 
   return {
     designation: normalizeText(extracted.designation) ?? "Produit importé devis",
@@ -147,8 +149,8 @@ function toProductDraft(extracted: ExtractedQuoteProduct, supplier: SupplierRow 
     vatRate: positiveNumber(extracted.vat_rate) ?? 20,
     mainSupplierId: supplier?.id ?? null,
     mainSupplierName: supplier?.name ?? normalizeText(extracted.supplier_name),
-    standardPurchasePriceHt: purchasePrice ?? 0,
-    recommendedSalePriceHt: salePrice ?? purchasePrice ?? 0,
+    standardPurchasePriceHt: catalogPurchasePrice ?? 0,
+    recommendedSalePriceHt: salePrice ?? catalogPurchasePrice ?? 0,
     targetMarginRate: DEFAULT_MARGIN_RATE,
     isSellable: true,
     supplierPrices: supplierPrice ? [supplierPrice] : [],
@@ -161,9 +163,11 @@ function mergeExtractedProduct(
   extracted: ExtractedQuoteProduct,
   supplier: SupplierRow | null,
 ): ProductCatalogItem | null {
-  const purchasePrice = positiveNumber(extracted.purchase_price_ht);
-  const salePrice = positiveNumber(extracted.sale_price_ht) ?? computeSalePrice(purchasePrice, product.targetMarginRate || DEFAULT_MARGIN_RATE);
-  const supplierPrice = buildSupplierPrice(extracted, supplier, purchasePrice);
+  const supplierNegotiatedPrice = supplierPriceFromQuote(extracted);
+  const coverageM2 = positiveNumber(extracted.coverage_m2);
+  const catalogPurchasePrice = computeCoverageUnitPrice(supplierNegotiatedPrice, coverageM2) ?? supplierNegotiatedPrice;
+  const salePrice = positiveNumber(extracted.sale_price_ht) ?? computeSalePrice(catalogPurchasePrice, product.targetMarginRate || DEFAULT_MARGIN_RATE);
+  const supplierPrice = buildSupplierPrice(extracted, supplier, supplierNegotiatedPrice);
   let changed = false;
 
   const next: ProductCatalogItem = { ...product, supplierPrices: [...product.supplierPrices] };
@@ -195,7 +199,7 @@ function mergeExtractedProduct(
     changed = true;
   }
 
-  const unit = normalizeUnit(extracted.unit);
+  const unit = coverageM2 && coverageM2 > 0 ? "m2" : normalizeUnit(extracted.unit);
   if (next.unit === "u" && unit !== "u") {
     next.unit = unit;
     changed = true;
@@ -209,8 +213,8 @@ function mergeExtractedProduct(
 
   const isMainSupplierImport = productMainSupplierMatches(next, supplier, extracted.supplier_name);
 
-  if (purchasePrice !== null && (next.standardPurchasePriceHt === 0 || isMainSupplierImport) && !sameAmount(next.standardPurchasePriceHt, purchasePrice)) {
-    next.standardPurchasePriceHt = purchasePrice;
+  if (catalogPurchasePrice !== null && (next.standardPurchasePriceHt === 0 || isMainSupplierImport) && !sameAmount(next.standardPurchasePriceHt, catalogPurchasePrice)) {
+    next.standardPurchasePriceHt = catalogPurchasePrice;
     changed = true;
   }
 
@@ -230,21 +234,19 @@ function mergeExtractedProduct(
 function buildSupplierPrice(
   extracted: ExtractedQuoteProduct,
   supplier: SupplierRow | null,
-  purchasePrice: number | null,
+  supplierNegotiatedPrice: number | null,
 ): ProductSupplierPrice | null {
-  if (purchasePrice === null || purchasePrice <= 0) return null;
+  if (supplierNegotiatedPrice === null || supplierNegotiatedPrice <= 0) return null;
   if (!supplier && !normalizeText(extracted.supplier_name)) return null;
 
   const coverageM2 = positiveNumber(extracted.coverage_m2);
-  const pricePerM2 = coverageM2 && coverageM2 > 0
-    ? purchasePrice
-    : null;
+  const pricePerM2 = computeCoverageUnitPrice(supplierNegotiatedPrice, coverageM2);
 
   return {
     id: crypto.randomUUID(),
     supplierId: supplier?.id ?? null,
     supplierName: supplier?.name ?? normalizeText(extracted.supplier_name) ?? "",
-    priceHt: purchasePrice,
+    priceHt: supplierNegotiatedPrice,
     discountPercent: null,
     startDate: null,
     endDate: null,
@@ -317,7 +319,8 @@ function hasSupplierPrice(prices: ProductSupplierPrice[], candidate: ProductSupp
       && price.priceHt === candidate.priceHt
       && normalizeKey(price.packaging) === normalizeKey(candidate.packaging)
       && (price.minimumQuantity ?? null) === (candidate.minimumQuantity ?? null)
-      && (price.coverageM2 ?? null) === (candidate.coverageM2 ?? null);
+      && (price.coverageM2 ?? null) === (candidate.coverageM2 ?? null)
+      && (price.pricePerM2Ht ?? null) === (candidate.pricePerM2Ht ?? null);
   });
 }
 
@@ -360,6 +363,15 @@ function normalizeUnit(unit: unknown): DocumentUnit {
 function positiveNumber(value: unknown): number | null {
   const n = Number(value);
   return Number.isFinite(n) && n >= 0 ? n : null;
+}
+
+function supplierPriceFromQuote(extracted: ExtractedQuoteProduct): number | null {
+  return positiveNumber(extracted.purchase_price_ht) ?? positiveNumber(extracted.package_price_ht);
+}
+
+function computeCoverageUnitPrice(price: number | null, coverageM2: number | null): number | null {
+  if (price === null || coverageM2 === null || coverageM2 <= 0) return null;
+  return roundPrice(price / coverageM2);
 }
 
 function computeSalePrice(purchasePrice: number | null, marginRate: number): number | null {
