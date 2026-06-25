@@ -206,8 +206,10 @@ serve(async (req) => {
   });
 
   if (!aiRes.ok) {
-    const details = await aiRes.text();
-    return json({ ok: false, error: "OpenAI request failed", details }, 502);
+    const status = aiRes.status;
+    const details = await aiRes.text().catch(() => "");
+    console.error("extract-devis-products OpenAI request failed", { status, details: details.slice(0, 500) });
+    return json({ ok: false, error: "Lecture IA indisponible. Vérifiez la configuration OpenAI côté Supabase Functions." }, 502);
   }
 
   const completion = await aiRes.json();
