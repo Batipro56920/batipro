@@ -82,6 +82,14 @@ type TaskContext = {
   task: IntervenantTask;
 };
 
+type AlertItem = {
+  id: string;
+  label: string;
+  title: string;
+  text: string;
+  tone: Tone;
+};
+
 type TaskExtra = IntervenantTask & {
   description?: string | null;
   description_complete?: string | null;
@@ -101,8 +109,8 @@ const EMPTY_SITE_DATA: SiteData = {
 };
 
 const ADMIN_DOCUMENT_WORDS = ["devis", "facture", "doe", "administratif", "comptable", "avoir", "contrat", "assurance"];
-const PLAN_DOCUMENT_WORDS = ["plan", "croquis", "schema", "photo technique", "photo-technique"];
-const TECHNICAL_DOCUMENT_WORDS = ["notice", "procedure", "technique", "fiche", "pose", "materiau", "materiaux", "securite", "mode operatoire"];
+const PLAN_DOCUMENT_WORDS = ["plan", "plans", "croquis", "schema", "photo technique", "photo-technique"];
+const USEFUL_DOCUMENT_WORDS = ["notice", "procedure", "technique", "fiche", "pose", "materiau", "materiaux", "securite", "mode operatoire"];
 const OPEN_MATERIEL_STATUSES = new Set(["en_attente", "validee"]);
 const inputClass = "w-full rounded-lg border border-slate-200 bg-white px-3 py-3 text-sm text-slate-900 outline-none placeholder:text-slate-400 focus:border-blue-300 focus:ring-4 focus:ring-blue-100";
 
@@ -178,6 +186,11 @@ function taskConstraint(task: IntervenantTask, consignes: IntervenantConsigne[] 
   return compact(extra.contraintes, task.reprise_reason, consigne?.title, task.etape_metier) || "Aucune contrainte visible";
 }
 
+function taskDescription(task: IntervenantTask) {
+  const extra = taskExtra(task);
+  return compact(extra.description_complete, extra.description, extra.description_technique, task.points_controle, task.etape_metier, task.titre);
+}
+
 function sortTasks(a: IntervenantTask, b: IntervenantTask) {
   const doneDelta = Number(isTaskDone(a)) - Number(isTaskDone(b));
   if (doneDelta !== 0) return doneDelta;
@@ -206,7 +219,7 @@ function isPlanDocument(document: IntervenantDocument) {
 
 function isUsefulDocument(document: IntervenantDocument) {
   const text = documentSearchText(document);
-  return isFieldDocument(document) && !isPlanDocument(document) && (includesAny(text, TECHNICAL_DOCUMENT_WORDS) || !text);
+  return isFieldDocument(document) && !isPlanDocument(document) && (includesAny(text, USEFUL_DOCUMENT_WORDS) || text.length > 0);
 }
 
 function taskDocuments(task: IntervenantTask, documents: IntervenantDocument[]) {
@@ -218,9 +231,7 @@ function taskDocuments(task: IntervenantTask, documents: IntervenantDocument[]) 
 
 function taskPhotoCount(task: IntervenantTask, feedbacks: IntervenantTerrainFeedback[]) {
   const title = normalize(task.titre);
-  return feedbacks
-    .filter((feedback) => normalize(`${feedback.title} ${feedback.description}`).includes(title))
-    .reduce((sum, feedback) => sum + feedback.attachments.length, 0);
+  return feedbacks.filter((feedback) => normalize(`${feedback.title} ${feedback.description}`).includes(title)).reduce((sum, feedback) => sum + feedback.attachments.length, 0);
 }
 
 function taskTimeTotal(task: IntervenantTask, entries: IntervenantTimeEntry[]) {
@@ -585,7 +596,7 @@ export default function EmployeePortalV2Page() {
   );
 }
 
-function buildAlerts(dataByChantier: Record<string, SiteData>, planDocuments: IntervenantDocument[]) {
+function buildAlerts(dataByChantier: Record<string, SiteData>, planDocuments: IntervenantDocument[]): AlertItem[] {
   const siteDatas = Object.values(dataByChantier);
   const feedbackAlerts = siteDatas.flatMap((data) => data.feedbacks
     .filter((feedback) => feedback.status !== "traite" && ["blocage", "anomalie"].includes(feedback.category))
@@ -603,7 +614,7 @@ function buildAlerts(dataByChantier: Record<string, SiteData>, planDocuments: In
   return [...feedbackAlerts, ...reserveAlerts, ...materielAlerts, ...infoAlerts, ...docAlerts].slice(0, 6);
 }
 
-function HomeView({ alerts, mainChantier, mainConstraint, onOpenTask, todayHours, todayTasks }: { alerts: ReturnType<typeof buildAlerts>; mainChantier: IntervenantChantier | null; mainConstraint: string; onOpenTask: (task: IntervenantTask, tab?: DrawerTab) => void; todayHours: number; todayTasks: TaskContext[] }) {
+function HomeView({ alerts, mainChantier, mainConstraint, onOpenTask, todayHours, todayTasks }: { alerts: AlertItem[]; mainChantier: IntervenantChantier | null; mainConstraint: string; onOpenTask: (task: IntervenantTask, tab?: DrawerTab) => void; todayHours: number; todayTasks: TaskContext[] }) {
   return (
     <>
       <Surface>
@@ -624,6 +635,7 @@ function ChantiersView(props: { chantiers: IntervenantChantier[]; dataByChantier
   const today = todayIsoDate();
   const weekEnd = addDaysIso(today, 6);
   const doneTasks = props.selectedData.tasks.filter(isTaskDone);
+  const accessConstraint = props.selectedData.consignes.find((consigne) => normalize(`${consigne.title} ${consigne.description}`).includes("acces"));
   return (
     <>
       <Surface title="Chantiers">
@@ -660,8 +672,9 @@ function ChantiersView(props: { chantiers: IntervenantChantier[]; dataByChantier
               <PlainFact label="Adresse" value={props.selectedChantier.adresse ?? "-"} />
               <PlainFact label="Statut" value={props.selectedChantier.status ?? "-"} />
               <PlainFact label="Responsables" value={props.selectedChantier.client ?? "Non renseigne"} />
+              <PlainFact label="Contraintes acces" value={accessConstraint ? compact(accessConstraint.title, accessConstraint.description) : "Aucune contrainte d'acces visible"} />
             </InfoGroup>
-            <InfoGroup title="Consignes et contraintes">
+            <InfoGroup title="Consignes chantier">
               {props.selectedData.consignes.length ? props.selectedData.consignes.slice(0, 5).map((consigne) => <NoteRow key={consigne.id} title={consigne.title} text={consigne.description} tone={consigne.priority === "urgente" ? "red" : consigne.priority === "importante" ? "amber" : "neutral"} label="Consigne" />) : <Empty>Aucune consigne visible.</Empty>}
             </InfoGroup>
           </div>
@@ -721,7 +734,7 @@ function TaskDrawer(props: { actionMessage: string | null; chantier: Intervenant
           {props.drawerTab === "infos" ? (
             <div className="space-y-3">
               <div className="grid grid-cols-2 gap-2"><PlainFact label="Chantier" value={props.chantier?.nom ?? "-"} /><PlainFact label="Zone" value={props.task.zone_nom ?? "-"} /><PlainFact label="Lot" value={props.task.lot ?? props.task.corps_etat ?? "-"} /><PlainFact label="Statut" value={taskStatusLabel(props.task)} /><PlainFact label="Quantite" value={props.task.quantite === null ? "-" : `${props.task.quantite} ${props.task.unite ?? ""}`} /><PlainFact label="Unite" value={props.task.unite ?? "-"} /><PlainFact label="Temps prevu" value={formatHours(props.task.temps_prevu_h)} /><PlainFact label="Temps passe" value={formatHours(totalTime || props.task.temps_reel_h)} /></div>
-              <PlainFact label="Description" value={compact(extra.description_complete, extra.description, extra.description_technique, props.task.etape_metier, props.task.titre)} />
+              <PlainFact label="Description complete" value={taskDescription(props.task)} />
               <PlainFact label="Contraintes" value={taskConstraint(props.task, props.consignes)} />
               <PlainFact label="Dependances" value={compact(extra.dependances, props.task.date_debut || props.task.date_fin ? `${formatDate(props.task.date_debut)} - ${formatDate(props.task.date_fin)}` : null) || "Non renseignees"} />
               <PlainFact label="Remarques admin" value={compact(extra.remarques_admin, props.task.reprise_reason) || "Aucune remarque admin visible"} />
