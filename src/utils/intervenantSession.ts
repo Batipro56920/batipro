@@ -18,6 +18,21 @@ function getSafeStorage(): Storage | null {
   }
 }
 
+function rememberChantierFromValue(value: string) {
+  const raw = String(value ?? "").trim();
+  if (!raw) return;
+
+  try {
+    const url = new URL(raw);
+    const chantierId = url.searchParams.get("chantier_id")?.trim();
+    if (chantierId) persistIntervenantChantierId(chantierId);
+    return;
+  } catch {}
+
+  const queryMatch = raw.match(/[?&]chantier_id=([^&#]+)/i);
+  if (queryMatch?.[1]) persistIntervenantChantierId(decodeURIComponent(queryMatch[1]).trim());
+}
+
 export function readStoredIntervenantToken(): string {
   const storage = getSafeStorage();
   if (!storage) return memoryToken;
@@ -82,6 +97,8 @@ export function clearStoredIntervenantSession() {
 export function extractIntervenantToken(value: string): string {
   const raw = String(value ?? "").trim();
   if (!raw) return "";
+
+  rememberChantierFromValue(raw);
 
   try {
     const url = new URL(raw);
