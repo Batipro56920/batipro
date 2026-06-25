@@ -1,4 +1,4 @@
-﻿import { supabase } from "../lib/supabaseClient";
+import { supabase } from "../lib/supabaseClient";
 import { AUTH_SESSION_PORTAL_TOKEN } from "../utils/intervenantSession";
 
 export type IntervenantChantier = {
@@ -54,6 +54,10 @@ export type IntervenantTask = {
   zone_id: string | null;
   zone_nom: string | null;
   etape_metier: string | null;
+  description_technique: string | null;
+  materiaux: string | null;
+  contraintes: string | null;
+  points_controle: string | null;
   quality_status: "a_faire" | "en_cours" | "termine_intervenant" | "valide_admin" | "a_reprendre";
   admin_validation_status: "non_verifie" | "valide" | "a_reprendre";
   reprise_reason: string | null;
@@ -490,6 +494,10 @@ export async function intervenantGetTasks(token: string, chantierId: string): Pr
     zone_id: asNullableString(row.zone_id),
     zone_nom: asNullableString(row.zone_nom),
     etape_metier: asNullableString(row.etape_metier),
+    description_technique: asNullableString(row.description_technique),
+    materiaux: asNullableString(row.materiaux),
+    contraintes: asNullableString(row.contraintes),
+    points_controle: asNullableString(row.points_controle),
     quality_status: normalizeTaskQualityStatus(row.quality_status),
     admin_validation_status: normalizeTaskAdminValidationStatus(row.admin_validation_status),
     reprise_reason: asNullableString(row.reprise_reason),
