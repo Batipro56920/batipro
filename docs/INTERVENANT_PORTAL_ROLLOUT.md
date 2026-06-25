@@ -2,8 +2,9 @@
 
 ## Flow actif
 
-- Flow principal: `/intervenant?token=...`
-- Route active: `src/pages/IntervenantPortalPage.tsx` exporte `src/pages/EmployeePortalV2Page.tsx`
+- Flow public principal: `/intervenant?token=...`
+- Flow interne protege: `/portail/employe/*`
+- Route active: `src/pages/IntervenantPortalPage.tsx` exporte `src/pages/EmployeePortalV2Page.tsx`, lui-meme branche sur `src/pages/EmployeePortalFieldV2Page.tsx`
 - Token opaque stocke en base (`public.chantier_access`) ou session Supabase intervenant quand le compte est lie
 - Validation via RPC SQL `SECURITY DEFINER`
 - Cote intervenant: acces via RPC/services existants uniquement, sans logique de droits parallele cote front
@@ -13,6 +14,8 @@
 - `/acces/:token` reste disponible comme entree historique/fallback
 - `/acces/:token` redirige vers `/intervenant?token=...`, afin de conserver une seule experience terrain active
 - Le portail operationnel public reste `/intervenant`
+- `/portail` redirige vers `/portail/employe` pour l'acces employe authentifie
+- `/portail/employe/*` est protege par `RequireAuth`, sans layout admin, et force le contexte session Supabase plutot qu'un ancien token public stocke
 - Les alias internes `IntervenantPortalV2Page` et `IntervenantPortalV2StrictPage` pointent vers `EmployeePortalV2Page`
 - Ne pas recreer un portail autonome: la V2 lit les chantiers, taches, documents, temps, consignes, reserves, retours et demandes exposes par l'admin
 
@@ -33,7 +36,7 @@ Ces migrations versionnent ou corrigent notamment:
 
 ## UI livree
 
-### Intervenant `/intervenant`
+### Intervenant public `/intervenant`
 
 - Navigation basse mobile-first: `Accueil`, `Chantiers`, `Taches`, `Temps`, `Retours`
 - Accueil terrain: taches du jour, temps du jour, contrainte principale, alertes utiles
@@ -50,6 +53,14 @@ Ces migrations versionnent ou corrigent notamment:
   - drawer limite a la hauteur ecran avec scroll interne
   - cartes compactes et lisibles sans formulaire lourd en pleine page
 
+### Employe authentifie `/portail/employe/*`
+
+- Meme experience terrain V2 que le portail public
+- Acces protege par session Supabase via `RequireAuth`
+- Affichage plein ecran sans `LayoutShell` ni sidebar admin
+- Nettoyage des anciens tokens publics stockes avant chargement de la page interne
+- Suppression de toute query string interne `?token=...` avant rendu du portail, pour eviter de prioriser un contexte public sur la session connectee
+
 ### Admin `ChantierPage` et modules lies
 
 - Le portail ne modifie pas la navigation back-office
@@ -60,27 +71,30 @@ Ces migrations versionnent ou corrigent notamment:
 
 1. Token valide sur Safari iPhone / PWA
 2. Token invalide, expire ou revoque
-3. Compte intervenant lie avec session Supabase
-4. Token avec un seul chantier
-5. Token avec plusieurs chantiers + changement de chantier
-6. Accueil: taches du jour et alertes visibles sans ecran vide silencieux
-7. Chantiers: consignes, plans/documents utiles et retours recents visibles
-8. Taches: ouverture drawer, informations lisibles, documents lies visibles
-9. Temps: ajout `1,5 h`, `1 234,5 h`, `1.234,5 h`; refus de `1,`, `1.`, vide et negatif
-10. Photo terrain: upload depuis mobile, piece jointe visible dans les retours admin
-11. Signalement: blocage, manque materiel/materiaux, demande information
-12. Tache terminee: statut remonte sans casser la validation admin
-13. Retours/reserves/demandes: affichage et statuts lisibles
-14. Largeur iPhone: aucune action basse ni drawer ne chevauche le contenu
+3. Compte intervenant lie avec session Supabase sur `/portail/employe`
+4. Navigateur ayant deja un token public stocke, puis ouverture de `/portail/employe`: les donnees doivent venir de la session auth
+5. `/portail/employe?token=ancien_token`: l'URL doit etre nettoyee avant rendu et les donnees doivent venir de la session auth
+6. Token avec un seul chantier
+7. Token avec plusieurs chantiers + changement de chantier
+8. Accueil: taches du jour et alertes visibles sans ecran vide silencieux
+9. Chantiers: consignes, plans/documents utiles et retours recents visibles
+10. Taches: ouverture drawer, informations lisibles, documents lies visibles
+11. Temps: ajout `1,5 h`, `1 234,5 h`, `1.234,5 h`; refus de `1,`, `1.`, vide et negatif
+12. Photo terrain: upload depuis mobile, piece jointe visible dans les retours admin
+13. Signalement: blocage, manque materiel/materiaux, demande information
+14. Tache terminee: statut remonte sans casser la validation admin
+15. Retours/reserves/demandes: affichage et statuts lisibles
+16. Largeur iPhone: aucune action basse ni drawer ne chevauche le contenu
 
 ## Etat verification 2026-06-25
 
-- Route active confirmee: `/intervenant` charge `src/pages/IntervenantPortalPage.tsx`, qui exporte `EmployeePortalV2Page`.
+- Route publique active confirmee: `/intervenant` charge `src/pages/IntervenantPortalPage.tsx`, qui exporte `EmployeePortalV2Page`.
+- Route interne active confirmee: `/portail` redirige vers `/portail/employe`, puis `/portail/employe/*` charge `IntervenantPortalPage` derriere `RequireAuth`, sans layout admin.
 - Acces historique confirme: `/acces/:token` est une passerelle vers `/intervenant?token=...`, sans ancien portail a onglets.
 - Alias internes confirmes: `IntervenantPortalV2Page.tsx` et `IntervenantPortalV2StrictPage.tsx` exportent aussi `EmployeePortalV2Page`.
-- L'ancienne route interne `/portail/employe/*` et ses composants `EmployeePortalApp` / `InternalPortalPage` ne sont pas presents dans `src/App.tsx` sur `dev` au moment du controle.
-- Aucun fichier actif nomme `IntervenantPortalV2CompletePage`, `IntervenantPortalV2FinalPage`, `IntervenantPortalFieldV2Page`, `IntervenantPortalTerrainV2Page` ou `EmployeeFieldPortalV2Page` n'a ete trouve dans le flux route actuel pendant ce controle.
-- Le dernier statut Vercel runtime controle avant cette mise a jour documentaire etait `success`; les commits documentaires de clarification peuvent avoir un check Vercel en attente jusqu'a fin de deploiement.
+- Fichier actif confirme: `EmployeePortalV2Page.tsx` exporte `EmployeePortalFieldV2Page.tsx`.
+- Les anciens fichiers `IntervenantPortalV2CompletePage`, `IntervenantPortalV2FinalPage`, `IntervenantPortalFieldV2Page`, `IntervenantPortalTerrainV2Page` et `EmployeeFieldPortalV2Page` ne sont pas dans le flux route actuel.
+- Controle CI confirme: le commit de stabilisation interne `/portail/employe?token=...` `4ce5f2637a1a80f9cf7b4444094f0fa815230dac` est passe Vercel `success`.
 - Le fichier versionne `build-output.txt` sur `dev` montre un `npm run build` reussi avec generation du bundle `IntervenantPortalPage`.
 - Le clone GitHub et le raw GitHub restent bloques dans l'environnement agent par proxy `403`, donc le build local ne peut pas etre relance ici.
 
