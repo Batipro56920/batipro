@@ -10,7 +10,9 @@
 ## Compat legacy
 
 - `/acces/:token` reste disponible comme entree historique/fallback
+- `/acces/:token` redirige vers `/intervenant?token=...`, afin de conserver une seule experience terrain active
 - Le portail operationnel public reste `/intervenant`
+- Les alias internes `IntervenantPortalV2Page` et `IntervenantPortalV2StrictPage` pointent vers la meme V2 complete
 - Ne pas recreer un portail autonome: la V2 lit les chantiers, taches, documents, temps, consignes, reserves, retours et demandes exposes par l'admin
 
 ## Migration principale
@@ -63,7 +65,7 @@ Ces migrations versionnent ou corrigent notamment:
 6. Accueil: taches du jour et alertes visibles sans ecran vide silencieux
 7. Chantiers: consignes, plans/documents utiles et retours recents visibles
 8. Taches: ouverture drawer, informations lisibles, documents lies visibles
-9. Temps: ajout `1,5 h`, recharge liste, cumul coherent admin/intervenant
+9. Temps: ajout `1,5 h`, `1 234,5 h`, `1.234,5 h`; refus de `1,`, `1.`, vide et negatif
 10. Photo terrain: upload depuis mobile, piece jointe visible dans les retours admin
 11. Signalement: blocage, manque materiel/materiaux, demande information
 12. Tache terminee: statut remonte sans casser la validation admin
@@ -72,15 +74,17 @@ Ces migrations versionnent ou corrigent notamment:
 
 ## Etat verification 2026-06-25
 
-- Le commit portail terrain `0e7d41c7fd5c916c87e001f8b1ca89bbe8e6ad68` a un statut GitHub/Vercel `failure`.
-- Les logs Vercel detailles ne sont pas accessibles depuis l'environnement agent actuel.
-- Le fichier versionne `build-output.txt` sur `dev` montre un `npm run build` reussi avec generation du bundle `IntervenantPortalPage`, ce qui oriente le diagnostic vers une verification Vercel/CI ou environnement, pas vers une erreur TypeScript certaine dans le portail.
+- Route active confirmee: `/intervenant` charge `src/pages/IntervenantPortalPage.tsx`, qui exporte `IntervenantPortalV2CompletePage`.
+- Acces historique confirme: `/acces/:token` est une passerelle vers `/intervenant?token=...`, sans ancien portail a onglets.
+- Alias internes confirmes: `IntervenantPortalV2Page.tsx` et `IntervenantPortalV2StrictPage.tsx` exportent aussi `IntervenantPortalV2CompletePage`.
+- Aucun resultat de recherche GitHub ne remonte pour `IntervenantPortalV2FinalPage`, `IntervenantPortalFieldV2Page` ou `IntervenantPortalTerrainV2Page` sur `dev` pendant ce controle.
+- Le commit `b18cbd934641d4f5fbe73fef403029e655abb13a` a un statut GitHub/Vercel `success`.
+- Le fichier versionne `build-output.txt` sur `dev` montre un `npm run build` reussi avec generation du bundle `IntervenantPortalPage`.
 - Le clone GitHub et le raw GitHub restent bloques dans l'environnement agent par proxy `403`, donc le build local ne peut pas etre relance ici.
 
 ## Notes ops
 
-- Consulter le log Vercel du deploiement en echec avant nouvelle modification large du portail
-- Verifier les variables Vercel Preview/Production necessaires, sans exposer de secret
-- Redeployer Vercel apres correction de la cause exacte
+- Verifier les variables Vercel Preview/Production necessaires, sans exposer de secret, uniquement si un futur deploiement echoue
 - `supabase db push` doit rester manuel depuis un poste avec acces reseau direct Supabase
 - Ne pas appliquer automatiquement de SQL/RLS depuis l'agent
+- Ne pas reconstruire le portail intervenant sans cause code prouvee ou validation produit explicite
