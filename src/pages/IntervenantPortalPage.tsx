@@ -1,1 +1,1 @@
-export { default } from "./IntervenantPortalTerrainV2Page";
+export { default } from "./IntervenantPortalV2CompletePage";
