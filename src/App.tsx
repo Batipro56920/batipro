@@ -94,6 +94,16 @@ function StatistiquesRoute() {
   );
 }
 
+function EmployeePortalRoute() {
+  return (
+    <RequireAuth>
+      <RouteSuspense label="Chargement du portail employe...">
+        <IntervenantPortalPage />
+      </RouteSuspense>
+    </RequireAuth>
+  );
+}
+
 export default function App() {
   return (
     <Routes>
@@ -107,6 +117,10 @@ export default function App() {
       <Route path="/intervenant" element={<RouteSuspense label="Chargement du portail intervenant..."><IntervenantPortalPage /></RouteSuspense>} />
       <Route path="/documents/client/:token" element={<RouteSuspense label="Chargement du document client..."><ClientDocumentPage /></RouteSuspense>} />
       <Route path="/apporteur/:token" element={<RouteSuspense label="Chargement du portail apporteur..."><ApporteurPortalPage /></RouteSuspense>} />
+
+      {/* Portail employe V2 - protege, sans layout admin */}
+      <Route path="/portail" element={<Navigate to="/portail/employe" replace />} />
+      <Route path="/portail/employe/*" element={<EmployeePortalRoute />} />
 
       {/* Protégé */}
       <Route
