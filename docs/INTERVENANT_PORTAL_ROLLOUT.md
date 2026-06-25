@@ -80,7 +80,7 @@ Ces migrations versionnent ou corrigent notamment:
 - Alias internes confirmes: `IntervenantPortalV2Page.tsx` et `IntervenantPortalV2StrictPage.tsx` exportent aussi `EmployeeFieldPortalV2Page`.
 - L'ancienne route interne `/portail/employe/*` et ses composants `EmployeePortalApp` / `InternalPortalPage` ne sont pas presents dans `src/App.tsx` sur `dev` au moment du controle.
 - Aucun fichier actif nomme `IntervenantPortalV2CompletePage`, `IntervenantPortalV2FinalPage`, `IntervenantPortalFieldV2Page` ou `IntervenantPortalTerrainV2Page` n'a ete trouve dans le flux route actuel pendant ce controle.
-- Le dernier statut Vercel controle sur `dev` est `success`.
+- Le dernier statut Vercel runtime controle avant cette mise a jour documentaire etait `success`; les commits documentaires de clarification peuvent avoir un check Vercel en attente jusqu'a fin de deploiement.
 - Le fichier versionne `build-output.txt` sur `dev` montre un `npm run build` reussi avec generation du bundle `IntervenantPortalPage`.
 - Le clone GitHub et le raw GitHub restent bloques dans l'environnement agent par proxy `403`, donc le build local ne peut pas etre relance ici.
 
