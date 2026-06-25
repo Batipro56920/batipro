@@ -203,7 +203,9 @@ function mergeExtractedProduct(
     changed = true;
   }
 
-  if (next.standardPurchasePriceHt === 0 && purchasePrice !== null) {
+  const isMainSupplierImport = productMainSupplierMatches(next, supplier, extracted.supplier_name);
+
+  if (purchasePrice !== null && (next.standardPurchasePriceHt === 0 || isMainSupplierImport) && !sameAmount(next.standardPurchasePriceHt, purchasePrice)) {
     next.standardPurchasePriceHt = purchasePrice;
     changed = true;
   }
@@ -304,6 +306,16 @@ function hasSupplierPrice(prices: ProductSupplierPrice[], candidate: ProductSupp
       && normalizeKey(price.packaging) === normalizeKey(candidate.packaging)
       && (price.minimumQuantity ?? null) === (candidate.minimumQuantity ?? null);
   });
+}
+
+function productMainSupplierMatches(product: ProductCatalogItem, supplier: SupplierRow | null, supplierName: string | null) {
+  if (supplier?.id && product.mainSupplierId) return product.mainSupplierId === supplier.id;
+  const candidateName = normalizeKey(supplier?.name ?? supplierName);
+  return Boolean(candidateName && normalizeKey(product.mainSupplierName) === candidateName);
+}
+
+function sameAmount(a: unknown, b: unknown) {
+  return roundPrice(Number(a)) === roundPrice(Number(b));
 }
 
 function normalizeText(value: unknown): string | null {
