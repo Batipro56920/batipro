@@ -13,8 +13,10 @@ export type ExtractedQuoteProduct = {
   category: string | null;
   unit: DocumentUnit;
   quantity: number | null;
+  coverage_m2: number | null;
   purchase_price_ht: number | null;
   sale_price_ht: number | null;
+  package_price_ht: number | null;
   vat_rate: number | null;
   packaging: string | null;
   minimum_quantity: number | null;
@@ -133,6 +135,7 @@ function toProductDraft(extracted: ExtractedQuoteProduct, supplier: SupplierRow 
   const purchasePrice = positiveNumber(extracted.purchase_price_ht);
   const salePrice = positiveNumber(extracted.sale_price_ht) ?? computeSalePrice(purchasePrice, DEFAULT_MARGIN_RATE);
   const supplierPrice = buildSupplierPrice(extracted, supplier, purchasePrice);
+  const unit = normalizeUnit(extracted.unit);
 
   return {
     designation: normalizeText(extracted.designation) ?? "Produit importé devis",
@@ -140,7 +143,7 @@ function toProductDraft(extracted: ExtractedQuoteProduct, supplier: SupplierRow 
     manufacturerReference: normalizeText(extracted.supplier_reference),
     brand: normalizeText(extracted.brand),
     category: normalizeText(extracted.category) ?? "Matériaux",
-    unit: normalizeUnit(extracted.unit),
+    unit,
     vatRate: positiveNumber(extracted.vat_rate) ?? 20,
     mainSupplierId: supplier?.id ?? null,
     mainSupplierName: supplier?.name ?? normalizeText(extracted.supplier_name),
@@ -232,6 +235,11 @@ function buildSupplierPrice(
   if (purchasePrice === null || purchasePrice <= 0) return null;
   if (!supplier && !normalizeText(extracted.supplier_name)) return null;
 
+  const coverageM2 = positiveNumber(extracted.coverage_m2);
+  const pricePerM2 = coverageM2 && coverageM2 > 0
+    ? purchasePrice
+    : null;
+
   return {
     id: crypto.randomUUID(),
     supplierId: supplier?.id ?? null,
@@ -243,6 +251,8 @@ function buildSupplierPrice(
     packaging: normalizeText(extracted.packaging),
     minimumQuantity: positiveNumber(extracted.quantity) ?? positiveNumber(extracted.minimum_quantity),
     deliveryLeadTimeDays: null,
+    coverageM2,
+    pricePerM2Ht: pricePerM2,
   };
 }
 
@@ -306,7 +316,8 @@ function hasSupplierPrice(prices: ProductSupplierPrice[], candidate: ProductSupp
     return sameSupplier
       && price.priceHt === candidate.priceHt
       && normalizeKey(price.packaging) === normalizeKey(candidate.packaging)
-      && (price.minimumQuantity ?? null) === (candidate.minimumQuantity ?? null);
+      && (price.minimumQuantity ?? null) === (candidate.minimumQuantity ?? null)
+      && (price.coverageM2 ?? null) === (candidate.coverageM2 ?? null);
   });
 }
 
