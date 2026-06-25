@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 
 import EmployeePortalV2Page from "./EmployeePortalV2Page";
-import { clearStoredIntervenantToken } from "../utils/intervenantSession";
+import { clearStoredIntervenantSession } from "../utils/intervenantSession";
 
 export default function IntervenantPortalPage() {
   const { pathname, search } = useLocation();
@@ -16,7 +16,7 @@ export default function IntervenantPortalPage() {
       return;
     }
 
-    clearStoredIntervenantToken();
+    clearStoredIntervenantSession();
     if (search) {
       setReady(false);
       navigate(pathname, { replace: true });
