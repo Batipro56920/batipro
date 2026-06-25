@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { FileText, PackageSearch, Plus, RefreshCw, Trash2 } from "lucide-react";
+import { FileText, PackageSearch, Plus, RefreshCw, Trash2, X } from "lucide-react";
 import type { SupplierRow } from "../../../services/suppliers.service";
 import { listSuppliers } from "../../../services/suppliers.service";
 import type { DocumentUnit } from "../../document-engine";
@@ -167,8 +167,6 @@ export default function ProductCatalogPage() {
         </div>
       </section> : null}
 
-      {editing ? <ProductForm product={editing} suppliers={suppliers} onCancel={() => setEditing(null)} onSave={saveProduct} /> : null}
-
       {!loading ? <section className="overflow-x-auto rounded-3xl border border-slate-200 bg-white shadow-sm">
         <table className="min-w-[980px] divide-y divide-slate-100 text-sm">
           <thead className="bg-slate-50 text-left text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">
@@ -214,6 +212,42 @@ export default function ProductCatalogPage() {
           </tbody>
         </table>
       </section> : null}
+
+      {editing ? (
+        <ProductDrawer product={editing} suppliers={suppliers} onCancel={() => setEditing(null)} onSave={saveProduct} />
+      ) : null}
+    </div>
+  );
+}
+
+function ProductDrawer({ product, suppliers, onCancel, onSave }: { product: ProductCatalogItem | ProductCatalogDraft; suppliers: SupplierRow[]; onCancel: () => void; onSave: (product: ProductCatalogItem | ProductCatalogDraft) => void | Promise<void> }) {
+  useEffect(() => {
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") onCancel();
+    }
+
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [onCancel]);
+
+  return (
+    <div className="fixed inset-0 z-50 flex justify-end bg-slate-950/40 p-0 backdrop-blur-[2px] sm:p-4" role="dialog" aria-modal="true">
+      <button type="button" className="absolute inset-0 cursor-default" aria-label="Fermer la fiche produit" onClick={onCancel} />
+      <aside className="relative flex h-full w-full max-w-4xl flex-col overflow-hidden bg-white shadow-2xl sm:rounded-2xl">
+        <div className="flex items-start justify-between gap-4 border-b border-slate-200 px-5 py-4">
+          <div>
+            <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-blue-600">Catalogue produits</div>
+            <h2 className="mt-1 text-lg font-semibold text-slate-950">Fiche produit</h2>
+            <p className="mt-1 text-sm text-slate-500">Modification rapide sans quitter la liste.</p>
+          </div>
+          <button type="button" onClick={onCancel} className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200 text-slate-500 hover:bg-slate-50" aria-label="Fermer">
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+        <div className="min-h-0 flex-1 overflow-y-auto">
+          <ProductForm product={product} suppliers={suppliers} onCancel={onCancel} onSave={onSave} />
+        </div>
+      </aside>
     </div>
   );
 }
@@ -235,11 +269,11 @@ function ProductForm({ product, suppliers, onCancel, onSave }: { product: Produc
   }
 
   return (
-    <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+    <div className="p-5">
       <div className="mb-4 flex items-start justify-between gap-3">
         <div>
-          <h2 className="text-base font-semibold text-slate-950">Fiche produit</h2>
-          <p className="mt-1 text-sm text-slate-500">Informations produit, prix fournisseurs et documents techniques.</p>
+          <h3 className="text-base font-semibold text-slate-950">Informations produit</h3>
+          <p className="mt-1 text-sm text-slate-500">Prix fournisseurs, documents techniques et usage catalogue.</p>
         </div>
         <div className="flex gap-2">
           <button type="button" className="rounded-xl border px-3 py-2 text-sm hover:bg-slate-50" onClick={onCancel}>Annuler</button>
@@ -267,7 +301,7 @@ function ProductForm({ product, suppliers, onCancel, onSave }: { product: Produc
 
       <SupplierPricesEditor prices={draft.supplierPrices} suppliers={suppliers} onChange={(supplierPrices) => patch({ supplierPrices })} />
       <ProductDocumentsEditor documents={draft.documents} onChange={(documents) => patch({ documents })} />
-    </section>
+    </div>
   );
 }
 
