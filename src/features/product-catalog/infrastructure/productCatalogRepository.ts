@@ -136,6 +136,12 @@ function toRow(product: ProductCatalogItem) {
   };
 }
 
+function toLegacyRow(product: ProductCatalogItem) {
+  const row = toRow(product);
+  delete (row as Record<string, unknown>).is_sellable;
+  return row;
+}
+
 async function listProductCatalogItemsLegacy(): Promise<ProductCatalogItem[]> {
   const { data, error } = await supabase
     .from(TABLE as any)
@@ -148,12 +154,9 @@ async function listProductCatalogItemsLegacy(): Promise<ProductCatalogItem[]> {
 }
 
 async function saveProductCatalogItemLegacy(product: ProductCatalogItem) {
-  const row = toRow(product);
-  delete (row as Record<string, unknown>).is_sellable;
-
   const { data, error } = await supabase
     .from(TABLE as any)
-    .upsert(row, { onConflict: "id" })
+    .upsert(toLegacyRow(product), { onConflict: "id" })
     .select("*")
     .single()
     .overrideTypes<Omit<ProductCatalogRow, "is_sellable">>();
@@ -207,7 +210,15 @@ async function migrateLegacyProductsIfNeeded() {
   const { error } = await supabase
     .from(TABLE as any)
     .upsert(legacy.map(toRow), { onConflict: "id" });
-  if (error) throw new Error(error.message);
+
+  if (error) {
+    if (!isMissingIsSellableColumn(error)) throw new Error(error.message);
+    const { error: legacyError } = await supabase
+      .from(TABLE as any)
+      .upsert(legacy.map(toLegacyRow), { onConflict: "id" });
+    if (legacyError) throw new Error(legacyError.message);
+  }
+
   removeLegacyProducts();
 }
 
