@@ -3,7 +3,7 @@
 ## Flow actif
 
 - Flow principal: `/intervenant?token=...`
-- Route active: `src/pages/IntervenantPortalPage.tsx` exporte `src/pages/EmployeeFieldPortalV2Page.tsx`
+- Route active: `src/pages/IntervenantPortalPage.tsx` exporte `src/pages/EmployeePortalV2Page.tsx`
 - Token opaque stocke en base (`public.chantier_access`) ou session Supabase intervenant quand le compte est lie
 - Validation via RPC SQL `SECURITY DEFINER`
 - Cote intervenant: acces via RPC/services existants uniquement, sans logique de droits parallele cote front
@@ -13,7 +13,7 @@
 - `/acces/:token` reste disponible comme entree historique/fallback
 - `/acces/:token` redirige vers `/intervenant?token=...`, afin de conserver une seule experience terrain active
 - Le portail operationnel public reste `/intervenant`
-- Les alias internes `IntervenantPortalV2Page` et `IntervenantPortalV2StrictPage` pointent vers `EmployeeFieldPortalV2Page`
+- Les alias internes `IntervenantPortalV2Page` et `IntervenantPortalV2StrictPage` pointent vers `EmployeePortalV2Page`
 - Ne pas recreer un portail autonome: la V2 lit les chantiers, taches, documents, temps, consignes, reserves, retours et demandes exposes par l'admin
 
 ## Migration principale
@@ -75,11 +75,11 @@ Ces migrations versionnent ou corrigent notamment:
 
 ## Etat verification 2026-06-25
 
-- Route active confirmee: `/intervenant` charge `src/pages/IntervenantPortalPage.tsx`, qui exporte `EmployeeFieldPortalV2Page`.
+- Route active confirmee: `/intervenant` charge `src/pages/IntervenantPortalPage.tsx`, qui exporte `EmployeePortalV2Page`.
 - Acces historique confirme: `/acces/:token` est une passerelle vers `/intervenant?token=...`, sans ancien portail a onglets.
-- Alias internes confirmes: `IntervenantPortalV2Page.tsx` et `IntervenantPortalV2StrictPage.tsx` exportent aussi `EmployeeFieldPortalV2Page`.
+- Alias internes confirmes: `IntervenantPortalV2Page.tsx` et `IntervenantPortalV2StrictPage.tsx` exportent aussi `EmployeePortalV2Page`.
 - L'ancienne route interne `/portail/employe/*` et ses composants `EmployeePortalApp` / `InternalPortalPage` ne sont pas presents dans `src/App.tsx` sur `dev` au moment du controle.
-- Aucun fichier actif nomme `IntervenantPortalV2CompletePage`, `IntervenantPortalV2FinalPage`, `IntervenantPortalFieldV2Page` ou `IntervenantPortalTerrainV2Page` n'a ete trouve dans le flux route actuel pendant ce controle.
+- Aucun fichier actif nomme `IntervenantPortalV2CompletePage`, `IntervenantPortalV2FinalPage`, `IntervenantPortalFieldV2Page`, `IntervenantPortalTerrainV2Page` ou `EmployeeFieldPortalV2Page` n'a ete trouve dans le flux route actuel pendant ce controle.
 - Le dernier statut Vercel runtime controle avant cette mise a jour documentaire etait `success`; les commits documentaires de clarification peuvent avoir un check Vercel en attente jusqu'a fin de deploiement.
 - Le fichier versionne `build-output.txt` sur `dev` montre un `npm run build` reussi avec generation du bundle `IntervenantPortalPage`.
 - Le clone GitHub et le raw GitHub restent bloques dans l'environnement agent par proxy `403`, donc le build local ne peut pas etre relance ici.
