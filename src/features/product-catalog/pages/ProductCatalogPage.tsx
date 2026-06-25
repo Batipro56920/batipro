@@ -85,7 +85,7 @@ export default function ProductCatalogPage() {
   }), [products]);
 
   async function saveProduct(product: ProductCatalogItem | ProductCatalogDraft) {
-    await saveProductCatalogItem(product);
+    await saveProductCatalogItem(sanitizeProductCatalogInput(product));
     setProducts(await listProductCatalogItems());
     setEditing(null);
   }
@@ -394,6 +394,34 @@ function documentKindLabel(kind: ProductDocumentKind) {
   return "Autre";
 }
 
+function sanitizeProductCatalogInput<T extends ProductCatalogItem | ProductCatalogDraft>(product: T): T {
+  return {
+    ...product,
+    vatRate: nonNegativeNumber(product.vatRate, 20),
+    standardPurchasePriceHt: nonNegativeNumber(product.standardPurchasePriceHt, 0),
+    recommendedSalePriceHt: nonNegativeNumber(product.recommendedSalePriceHt, 0),
+    targetMarginRate: nonNegativeNumber(product.targetMarginRate, 0),
+    supplierPrices: product.supplierPrices.map((price) => ({
+      ...price,
+      priceHt: nonNegativeNumber(price.priceHt, 0),
+      discountPercent: nullableNonNegativeNumber(price.discountPercent),
+      minimumQuantity: nullableNonNegativeNumber(price.minimumQuantity),
+      deliveryLeadTimeDays: nullableNonNegativeNumber(price.deliveryLeadTimeDays),
+    })),
+  };
+}
+
+function nonNegativeNumber(value: unknown, fallback: number) {
+  const number = typeof value === "number" ? value : parseFrenchNumber(String(value ?? ""));
+  return number !== null && number >= 0 ? number : fallback;
+}
+
+function nullableNonNegativeNumber(value: unknown) {
+  if (value === null || value === undefined || value === "") return null;
+  const number = typeof value === "number" ? value : parseFrenchNumber(String(value));
+  return number !== null && number >= 0 ? number : null;
+}
+
 const labelClass = "block text-xs font-semibold uppercase tracking-[0.12em] text-slate-400";
 const inputClass = "h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm font-normal normal-case tracking-normal text-slate-950 outline-none focus:border-blue-300";
 
@@ -442,7 +470,7 @@ function parseFrenchNumber(value: string): number | null {
   }
 
   const parsed = Number(normalized);
-  return Number.isFinite(parsed) ? parsed : null;
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : null;
 }
 
 function looksLikeThousandsGroups(value: string, separator: string): boolean {
