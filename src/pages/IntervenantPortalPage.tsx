@@ -18,8 +18,11 @@ export default function IntervenantPortalPage() {
 
     clearStoredIntervenantToken();
     if (search) {
+      setReady(false);
       navigate(pathname, { replace: true });
+      return;
     }
+
     setReady(true);
   }, [isInternalPortal, navigate, pathname, search]);
 
