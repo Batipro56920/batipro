@@ -228,7 +228,7 @@ function buildSupplierPrice(
   supplier: SupplierRow | null,
   purchasePrice: number | null,
 ): ProductSupplierPrice | null {
-  if (purchasePrice === null) return null;
+  if (purchasePrice === null || purchasePrice <= 0) return null;
   if (!supplier && !normalizeText(extracted.supplier_name)) return null;
 
   return {
