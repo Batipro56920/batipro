@@ -12,6 +12,7 @@ export type ExtractedQuoteProduct = {
   brand: string | null;
   category: string | null;
   unit: DocumentUnit;
+  quantity: number | null;
   purchase_price_ht: number | null;
   sale_price_ht: number | null;
   vat_rate: number | null;
@@ -46,7 +47,7 @@ export async function importProductsFromQuoteText(
 ): Promise<ProductQuoteImportResult> {
   const cleanedText = quoteText.trim();
   if (cleanedText.length < 20) {
-    throw new Error("Collez le texte du devis avant de lancer le lecteur.");
+    throw new Error("Importez un devis PDF avant de lancer le lecteur.");
   }
 
   const extractedProducts = await extractProducts(cleanedText);
@@ -240,7 +241,7 @@ function buildSupplierPrice(
     startDate: null,
     endDate: null,
     packaging: normalizeText(extracted.packaging),
-    minimumQuantity: positiveNumber(extracted.minimum_quantity),
+    minimumQuantity: positiveNumber(extracted.quantity) ?? positiveNumber(extracted.minimum_quantity),
     deliveryLeadTimeDays: null,
   };
 }
