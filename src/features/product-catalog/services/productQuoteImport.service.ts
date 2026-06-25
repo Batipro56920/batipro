@@ -228,13 +228,14 @@ function buildSupplierPrice(
   supplier: SupplierRow | null,
   purchasePrice: number | null,
 ): ProductSupplierPrice | null {
-  if (!supplier && !normalizeText(extracted.supplier_name) && purchasePrice === null) return null;
+  if (purchasePrice === null) return null;
+  if (!supplier && !normalizeText(extracted.supplier_name)) return null;
 
   return {
     id: crypto.randomUUID(),
     supplierId: supplier?.id ?? null,
     supplierName: supplier?.name ?? normalizeText(extracted.supplier_name) ?? "",
-    priceHt: purchasePrice ?? 0,
+    priceHt: purchasePrice,
     discountPercent: null,
     startDate: null,
     endDate: null,
