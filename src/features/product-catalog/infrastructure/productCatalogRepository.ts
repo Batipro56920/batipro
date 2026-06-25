@@ -1,5 +1,5 @@
 import { supabase } from "../../../lib/supabaseClient";
-import type { ProductCatalogDraft, ProductCatalogItem } from "../domain/types";
+import type { ProductCatalogDraft, ProductCatalogItem, ProductSupplierPrice } from "../domain/types";
 
 const TABLE = "product_catalog_items";
 const LEGACY_STORAGE_KEY = "batipro.product-catalog.v1";
@@ -79,7 +79,7 @@ export async function deleteProductCatalogItem(id: string) {
 
 export function getBestSupplierPrice(product: ProductCatalogItem, supplierId?: string | null) {
   const today = new Date().toISOString().slice(0, 10);
-  const candidates = product.supplierPrices.filter((price) => {
+  const candidates = normalizeSupplierPrices(product.supplierPrices).filter((price) => {
     const supplierMatches = supplierId ? price.supplierId === supplierId : true;
     const startsOk = !price.startDate || price.startDate <= today;
     const endsOk = !price.endDate || price.endDate >= today;
@@ -104,7 +104,7 @@ function fromRow(row: ProductCatalogRow): ProductCatalogItem {
     recommendedSalePriceHt: Number(row.recommended_sale_price_ht ?? 0),
     targetMarginRate: Number(row.target_margin_rate ?? 0),
     isSellable: row.is_sellable !== false,
-    supplierPrices: row.supplier_prices ?? [],
+    supplierPrices: normalizeSupplierPrices(row.supplier_prices ?? []),
     documents: row.documents ?? [],
     priceHistory: row.price_history ?? [],
     createdAt: row.created_at,
@@ -128,7 +128,7 @@ function toRow(product: ProductCatalogItem) {
     recommended_sale_price_ht: product.recommendedSalePriceHt,
     target_margin_rate: product.targetMarginRate,
     is_sellable: product.isSellable,
-    supplier_prices: product.supplierPrices as any,
+    supplier_prices: normalizeSupplierPrices(product.supplierPrices) as any,
     documents: product.documents as any,
     price_history: product.priceHistory as any,
     created_at: product.createdAt,
@@ -163,6 +163,19 @@ async function saveProductCatalogItemLegacy(product: ProductCatalogItem) {
 
   if (error) throw new Error(error.message);
   return fromRow({ ...data, is_sellable: product.isSellable });
+}
+
+function normalizeSupplierPrices(prices: ProductSupplierPrice[]): ProductSupplierPrice[] {
+  if (!Array.isArray(prices)) return [];
+  return prices
+    .map((price) => {
+      const priceHt = normalizePrice(price.priceHt);
+      return priceHt === null ? null : { ...price, priceHt };
+    })
+    .filter((price): price is ProductSupplierPrice => {
+      if (!price || price.priceHt <= 0) return false;
+      return Boolean(String(price.supplierId ?? "").trim() || String(price.supplierName ?? "").trim());
+    });
 }
 
 function buildNextPriceHistory(product: ProductCatalogItem, changedAt: string, source: string) {
