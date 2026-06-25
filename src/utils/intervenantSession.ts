@@ -44,11 +44,18 @@ export function readStoredIntervenantToken(): string {
 }
 
 export function persistIntervenantToken(token: string) {
-  memoryToken = String(token ?? "").trim();
+  const nextToken = String(token ?? "").trim();
+  const previousToken = readStoredIntervenantToken();
+  const shouldResetChantier = Boolean(previousToken && nextToken && previousToken !== nextToken);
+
+  memoryToken = nextToken;
+  if (shouldResetChantier) memoryChantierId = "";
+
   const storage = getSafeStorage();
   if (!storage) return;
   try {
     storage.setItem(STORAGE_TOKEN_KEY, memoryToken);
+    if (shouldResetChantier) storage.removeItem(STORAGE_CHANTIER_KEY);
   } catch {}
 }
 
