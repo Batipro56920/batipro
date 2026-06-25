@@ -168,7 +168,7 @@ export default function ProductCatalogPage() {
       </section> : null}
 
       {!loading ? <section className="overflow-x-auto rounded-3xl border border-slate-200 bg-white shadow-sm">
-        <table className="min-w-[980px] divide-y divide-slate-100 text-sm">
+        <table className="min-w-[1120px] divide-y divide-slate-100 text-sm">
           <thead className="bg-slate-50 text-left text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">
             <tr>
               <th className="px-4 py-3">Produit</th>
@@ -178,17 +178,26 @@ export default function ProductCatalogPage() {
               <th className="px-4 py-3">Unité</th>
               <th className="px-4 py-3">Usage</th>
               <th className="px-4 py-3 text-right">Achat HT</th>
+              <th className="px-4 py-3 text-right">Prix m²</th>
               <th className="px-4 py-3 text-right">Vente conseillée</th>
               <th className="px-4 py-3 text-right">Docs</th>
               <th className="px-4 py-3 text-right">Actions</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
-            {filtered.map((product) => (
+            {filtered.map((product) => {
+              const mainPrice = getMainSupplierPrice(product);
+              return (
               <tr key={product.id} className="hover:bg-slate-50">
-                <td className="px-4 py-3">
-                  <div className="font-semibold text-slate-950">{product.designation}</div>
-                  <div className="text-xs text-slate-500">{product.internalReference || "-"} · Fab. {product.manufacturerReference || "-"}</div>
+                <td className="max-w-[340px] px-4 py-3">
+                  <div className="line-clamp-2 font-semibold text-slate-950">{product.designation}</div>
+                  <div className="mt-1 text-xs text-slate-500">{product.internalReference || "-"} · Fab. {product.manufacturerReference || "-"}</div>
+                  {mainPrice?.packaging || mainPrice?.coverageM2 ? (
+                    <div className="mt-1 text-xs text-slate-500">
+                      {mainPrice.packaging ? mainPrice.packaging : "Conditionnement"}
+                      {mainPrice.coverageM2 ? ` · ${formatNumber(mainPrice.coverageM2)} m²` : ""}
+                    </div>
+                  ) : null}
                 </td>
                 <td className="px-4 py-3 text-slate-600">{product.category || "-"}</td>
                 <td className="px-4 py-3 text-slate-600">{product.brand || "-"}</td>
@@ -196,6 +205,7 @@ export default function ProductCatalogPage() {
                 <td className="px-4 py-3 text-slate-600">{product.unit}</td>
                 <td className="px-4 py-3 text-slate-600">{product.isSellable ? "Acheté + vendable" : "Acheté uniquement"}</td>
                 <td className="px-4 py-3 text-right font-semibold">{formatCurrency(product.standardPurchasePriceHt)}</td>
+                <td className="px-4 py-3 text-right font-semibold">{formatM2Price(product)}</td>
                 <td className="px-4 py-3 text-right font-semibold">{formatCurrency(product.recommendedSalePriceHt)}</td>
                 <td className="px-4 py-3 text-right">{product.documents.length}</td>
                 <td className="px-4 py-3">
@@ -207,8 +217,9 @@ export default function ProductCatalogPage() {
                   </div>
                 </td>
               </tr>
-            ))}
-            {!filtered.length ? <tr><td colSpan={10} className="px-4 py-12"><EmptyCatalogState onCreate={() => setEditing({ ...EMPTY_DRAFT })} /></td></tr> : null}
+              );
+            })}
+            {!filtered.length ? <tr><td colSpan={11} className="px-4 py-12"><EmptyCatalogState onCreate={() => setEditing({ ...EMPTY_DRAFT })} /></td></tr> : null}
           </tbody>
         </table>
       </section> : null}
@@ -307,7 +318,7 @@ function ProductForm({ product, suppliers, onCancel, onSave }: { product: Produc
 
 function SupplierPricesEditor({ prices, suppliers, onChange }: { prices: ProductSupplierPrice[]; suppliers: SupplierRow[]; onChange: (prices: ProductSupplierPrice[]) => void }) {
   function addPrice() {
-    onChange([...prices, { id: crypto.randomUUID(), supplierId: null, supplierName: "", priceHt: 0, discountPercent: null, startDate: null, endDate: null, packaging: null, minimumQuantity: null, deliveryLeadTimeDays: null }]);
+    onChange([...prices, { id: crypto.randomUUID(), supplierId: null, supplierName: "", priceHt: 0, discountPercent: null, startDate: null, endDate: null, packaging: null, minimumQuantity: null, deliveryLeadTimeDays: null, coverageM2: null, pricePerM2Ht: null }]);
   }
 
   function updatePrice(id: string, patch: Partial<ProductSupplierPrice>) {
@@ -322,17 +333,18 @@ function SupplierPricesEditor({ prices, suppliers, onChange }: { prices: Product
       </div>
       <div className="grid gap-3">
         {prices.map((price) => (
-          <div key={price.id} className="grid gap-2 rounded-xl bg-slate-50 p-3 md:grid-cols-4 xl:grid-cols-8">
+          <div key={price.id} className="grid gap-2 rounded-xl bg-slate-50 p-3 md:grid-cols-4 xl:grid-cols-10">
             <Select value={price.supplierId ?? ""} onChange={(supplierId) => {
               const supplier = suppliers.find((row) => row.id === supplierId);
               updatePrice(price.id, { supplierId: supplier?.id ?? null, supplierName: supplier?.name ?? "" });
             }} options={["", ...suppliers.map((supplier) => supplier.id)]} labels={Object.fromEntries([["", "Fournisseur"], ...suppliers.map((supplier) => [supplier.id, supplier.name])])} />
-            <SmallNumber value={price.priceHt} onChange={(priceHt) => updatePrice(price.id, { priceHt })} placeholder="Prix HT" />
+            <SmallNumber value={price.priceHt} onChange={(priceHt) => updatePrice(price.id, { priceHt, pricePerM2Ht: price.coverageM2 ? priceHt : price.pricePerM2Ht ?? null })} placeholder="Prix HT" />
+            <SmallNumber value={price.coverageM2 ?? 0} onChange={(coverageM2) => updatePrice(price.id, { coverageM2, pricePerM2Ht: coverageM2 > 0 ? price.priceHt : null })} placeholder="m²/colis" />
+            <SmallNumber value={price.pricePerM2Ht ?? 0} onChange={(pricePerM2Ht) => updatePrice(price.id, { pricePerM2Ht })} placeholder="Prix m²" />
             <SmallNumber value={price.discountPercent ?? 0} onChange={(discountPercent) => updatePrice(price.id, { discountPercent })} placeholder="Remise %" />
             <input className={inputClass} type="date" value={price.startDate ?? ""} onChange={(event) => updatePrice(price.id, { startDate: event.target.value || null })} />
             <input className={inputClass} type="date" value={price.endDate ?? ""} onChange={(event) => updatePrice(price.id, { endDate: event.target.value || null })} />
-            <input className={inputClass} placeholder="Conditionnement" value={price.packaging ?? ""} onChange={(event) => updatePrice(price.id, { packaging: event.target.value || null })} />
-            <SmallNumber value={price.minimumQuantity ?? 0} onChange={(minimumQuantity) => updatePrice(price.id, { minimumQuantity })} placeholder="Qte min" />
+            <input className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm font-normal normal-case tracking-normal text-slate-950 outline-none focus:border-blue-300 xl:col-span-2" placeholder="Conditionnement" value={price.packaging ?? ""} onChange={(event) => updatePrice(price.id, { packaging: event.target.value || null })} />
             <SmallNumber value={price.deliveryLeadTimeDays ?? 0} onChange={(deliveryLeadTimeDays) => updatePrice(price.id, { deliveryLeadTimeDays })} placeholder="Délai j" />
           </div>
         ))}
@@ -441,6 +453,8 @@ function sanitizeProductCatalogInput<T extends ProductCatalogItem | ProductCatal
       discountPercent: nullableNonNegativeNumber(price.discountPercent),
       minimumQuantity: nullableNonNegativeNumber(price.minimumQuantity),
       deliveryLeadTimeDays: nullableNonNegativeNumber(price.deliveryLeadTimeDays),
+      coverageM2: nullableNonNegativeNumber(price.coverageM2),
+      pricePerM2Ht: nullableNonNegativeNumber(price.pricePerM2Ht),
     })),
   };
 }
@@ -479,8 +493,25 @@ function EmptyCatalogState({ onCreate }: { onCreate: () => void }) {
   );
 }
 
+function getMainSupplierPrice(product: ProductCatalogItem): ProductSupplierPrice | null {
+  const mainSupplierPrice = product.mainSupplierId
+    ? product.supplierPrices.find((price) => price.supplierId === product.mainSupplierId)
+    : null;
+  return mainSupplierPrice ?? product.supplierPrices[0] ?? null;
+}
+
+function formatM2Price(product: ProductCatalogItem) {
+  const supplierPrice = getMainSupplierPrice(product);
+  const pricePerM2 = supplierPrice?.pricePerM2Ht ?? (product.unit === "m2" ? product.standardPurchasePriceHt : null);
+  return pricePerM2 && pricePerM2 > 0 ? `${formatCurrency(pricePerM2)}/m²` : "-";
+}
+
 function formatCurrency(value: number) {
   return new Intl.NumberFormat("fr-FR", { style: "currency", currency: "EUR", maximumFractionDigits: 2 }).format(value);
+}
+
+function formatNumber(value: number) {
+  return new Intl.NumberFormat("fr-FR", { maximumFractionDigits: 2 }).format(value);
 }
 
 function parseFrenchNumber(value: string): number | null {
