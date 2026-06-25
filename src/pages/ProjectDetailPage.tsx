@@ -1,5 +1,5 @@
-import { useMemo, useState } from "react";
-import { Link, useParams, useSearchParams } from "react-router-dom";
+import { useEffect, useMemo, useState } from "react";
+import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { ProjectDetailHeader } from "../features/projects/components/ProjectDetailHeader";
 import {
   ProjectActivityTab,
@@ -24,13 +24,36 @@ const TABS: Array<{ id: ProjectTab; label: string }> = [
   { id: "sav", label: "SAV" },
 ];
 
+function readProjectTab(value: string | null): ProjectTab {
+  return TABS.some((tab) => tab.id === value) ? (value as ProjectTab) : "summary";
+}
+
 export default function ProjectDetailPage() {
   const { id } = useParams();
+  const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const { projectsById, loading, error } = useProjectsData();
   const project = id ? projectsById.get(id) : null;
-  const initialTab = TABS.some((tab) => tab.id === searchParams.get("tab")) ? (searchParams.get("tab") as ProjectTab) : "summary";
-  const [activeTab, setActiveTab] = useState<ProjectTab>(initialTab);
+  const tabFromUrl = readProjectTab(searchParams.get("tab"));
+  const [activeTab, setActiveTab] = useState<ProjectTab>(tabFromUrl);
+
+  useEffect(() => {
+    setActiveTab(tabFromUrl);
+  }, [tabFromUrl]);
+
+  function selectTab(tabId: ProjectTab) {
+    setActiveTab(tabId);
+    if (!id) return;
+
+    const nextSearchParams = new URLSearchParams(searchParams);
+    if (tabId === "summary") {
+      nextSearchParams.delete("tab");
+    } else {
+      nextSearchParams.set("tab", tabId);
+    }
+    const query = nextSearchParams.toString();
+    navigate(`/projets/${id}${query ? `?${query}` : ""}`, { replace: true });
+  }
 
   const content = useMemo(() => {
     if (!project) return null;
@@ -80,7 +103,7 @@ export default function ProjectDetailPage() {
             <button
               key={tab.id}
               type="button"
-              onClick={() => setActiveTab(tab.id)}
+              onClick={() => selectTab(tab.id)}
               className={[
                 "h-10 rounded-2xl px-4 text-sm font-semibold transition",
                 activeTab === tab.id
