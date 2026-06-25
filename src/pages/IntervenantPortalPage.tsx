@@ -1,11 +1,12 @@
 import { useEffect, useState } from "react";
-import { useLocation } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 
 import EmployeePortalV2Page from "./EmployeePortalV2Page";
 import { clearStoredIntervenantToken } from "../utils/intervenantSession";
 
 export default function IntervenantPortalPage() {
-  const { pathname } = useLocation();
+  const { pathname, search } = useLocation();
+  const navigate = useNavigate();
   const isInternalPortal = pathname.startsWith("/portail/employe");
   const [ready, setReady] = useState(!isInternalPortal);
 
@@ -16,8 +17,11 @@ export default function IntervenantPortalPage() {
     }
 
     clearStoredIntervenantToken();
+    if (search) {
+      navigate(pathname, { replace: true });
+    }
     setReady(true);
-  }, [isInternalPortal]);
+  }, [isInternalPortal, navigate, pathname, search]);
 
   if (!ready) {
     return (
