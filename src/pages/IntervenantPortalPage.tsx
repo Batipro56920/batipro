@@ -1,1 +1,1 @@
-export { default } from "./EmployeeFieldPortalV2Page";
+export { default } from "./EmployeePortalV2Page";
