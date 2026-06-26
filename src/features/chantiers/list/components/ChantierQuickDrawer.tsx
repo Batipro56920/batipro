@@ -1,4 +1,4 @@
-import { AlertTriangle, ArrowRight, ClipboardList, FileText, Users, X } from "lucide-react";
+import { AlertTriangle, ArrowRight, ClipboardList, FileText, Hammer, Users, X } from "lucide-react";
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { Button } from "../../../../components/ui/button";
@@ -101,6 +101,7 @@ export function ChantierQuickDrawer({ row, actions, onClose }: { row: ChantierDe
             <>
               <InfoGrid row={row} />
               <CommercialContext row={row} />
+              <QuickAccessPanel row={row} />
               <div className="rounded-2xl border border-slate-200 p-4">
                 <ChantierProgress value={row.progress} />
               </div>
@@ -149,6 +150,72 @@ export function ChantierQuickDrawer({ row, actions, onClose }: { row: ChantierDe
           )}
         </div>
       </aside>
+    </div>
+  );
+}
+
+function QuickAccessPanel({ row }: { row: ChantierDerived }) {
+  const links = [
+    {
+      label: "Préparer",
+      description: "Lots, préparation et cadrage chantier",
+      href: `/chantiers/${row.id}/preparation`,
+      icon: ClipboardList,
+    },
+    {
+      label: "Exécuter",
+      description: "Tâches, devis, avancement et temps",
+      href: `/chantiers/${row.id}/execution`,
+      icon: Hammer,
+    },
+    {
+      label: "Qualité",
+      description: "Réserves, contrôles et réception",
+      href: `/chantiers/${row.id}/qualite`,
+      icon: AlertTriangle,
+    },
+    {
+      label: "Documents",
+      description: "Plans, pièces liées et DOE",
+      href: `/chantiers/${row.id}/documents`,
+      icon: FileText,
+    },
+    {
+      label: "Équipe",
+      description: "Intervenants et accès terrain",
+      href: `/chantiers/${row.id}/equipe`,
+      icon: Users,
+    },
+  ];
+
+  return (
+    <div className="rounded-2xl border border-slate-200 p-4">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <h3 className="font-semibold text-slate-950">Accès rapides chantier</h3>
+          <p className="mt-1 text-sm text-slate-500">Ouvrir directement le bon espace métier du dossier.</p>
+        </div>
+      </div>
+      <div className="mt-4 grid gap-2 sm:grid-cols-2">
+        {links.map((link) => {
+          const Icon = link.icon;
+          return (
+            <Link
+              key={link.href}
+              to={link.href}
+              className="group flex items-start gap-3 rounded-2xl border border-slate-200 bg-white p-3 transition hover:border-blue-200 hover:bg-blue-50"
+            >
+              <span className="mt-0.5 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-slate-100 text-slate-600 transition group-hover:bg-white group-hover:text-blue-700">
+                <Icon className="h-4 w-4" />
+              </span>
+              <span className="min-w-0">
+                <span className="block text-sm font-semibold text-slate-950">{link.label}</span>
+                <span className="mt-0.5 block text-xs leading-5 text-slate-500">{link.description}</span>
+              </span>
+            </Link>
+          );
+        })}
+      </div>
     </div>
   );
 }
