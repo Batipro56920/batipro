@@ -302,6 +302,7 @@ export async function updateApporteurLead(
     project_address: input.project_address?.trim(),
     project_type: input.project_type?.trim(),
     comment: input.comment?.trim() || null,
+    commission_paid: input.status === undefined ? input.commission_paid : input.status === "paye",
   };
 
   const response = await supabase
