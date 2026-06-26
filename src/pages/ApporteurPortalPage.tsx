@@ -71,6 +71,10 @@ function commissionAmount(lead: ApporteurLeadRow, apporteur: ApporteurAffaireRow
   return Math.round((lead.estimated_amount * apporteur.commission_percent) / 100 * 100) / 100;
 }
 
+function isPayableCommissionStatus(status: ApporteurLeadStatus) {
+  return status === "signe" || status === "commission_a_payer";
+}
+
 export default function ApporteurPortalPage() {
   const params = useParams<{ token: string }>();
   const token = params.token ?? "";
@@ -83,7 +87,10 @@ export default function ApporteurPortalPage() {
   const [actNotice, setActNotice] = useState<string | null>(null);
   const [actError, setActError] = useState<string | null>(null);
 
-  const unpaidCommission = useMemo(() => portalData.leads.filter((lead) => lead.status !== "paye").reduce((sum, lead) => sum + commissionAmount(lead, portalData.apporteur), 0), [portalData]);
+  const unpaidCommission = useMemo(
+    () => portalData.leads.filter((lead) => isPayableCommissionStatus(lead.status)).reduce((sum, lead) => sum + commissionAmount(lead, portalData.apporteur), 0),
+    [portalData],
+  );
   const paidCommission = useMemo(() => portalData.leads.filter((lead) => lead.status === "paye").reduce((sum, lead) => sum + commissionAmount(lead, portalData.apporteur), 0), [portalData]);
 
   useEffect(() => {
