@@ -1,10 +1,14 @@
 import { useMemo, useState } from "react";
 import * as pdfjsLib from "pdfjs-dist";
 import pdfWorkerUrl from "pdfjs-dist/build/pdf.worker.mjs?url";
+import * as XLSX from "xlsx";
 import { CheckCircle2, FileText, Loader2, UploadCloud, X } from "lucide-react";
 import type { ProductQuoteImportResult } from "../services/productQuoteImport.service";
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
+
+const ACCEPTED_QUOTE_FILES = "application/pdf,.pdf,.xlsx,.xls,.csv,.txt,text/plain,text/csv";
+const SUPPORTED_FILE_LABEL = "PDF, Excel, CSV ou texte fournisseur";
 
 export default function ProductQuoteReaderPanel({
   busy,
@@ -32,8 +36,8 @@ export default function ProductQuoteReaderPanel({
     setExtractedText("");
     if (!file) return;
 
-    if (file.type !== "application/pdf" && !file.name.toLowerCase().endsWith(".pdf")) {
-      setFileError("Le lecteur produits accepte uniquement les devis PDF.");
+    if (!isSupportedQuoteFile(file)) {
+      setFileError(`Le lecteur produits accepte uniquement les ${SUPPORTED_FILE_LABEL}.`);
       setFileName(null);
       return;
     }
@@ -41,13 +45,13 @@ export default function ProductQuoteReaderPanel({
     setExtracting(true);
     setFileName(file.name);
     try {
-      const text = await extractPdfText(file);
+      const text = await extractQuoteText(file);
       if (text.trim().length < 20) {
-        throw new Error("Texte insuffisant dans ce PDF. Vérifiez que le devis n'est pas uniquement une image scannée.");
+        throw new Error("Texte insuffisant dans ce fichier. Vérifiez que le devis contient des lignes produits lisibles.");
       }
       setExtractedText(text);
     } catch (err: any) {
-      setFileError(err?.message ?? "Lecture du PDF impossible.");
+      setFileError(err?.message ?? "Lecture du devis fournisseur impossible.");
       setFileName(null);
       setExtractedText("");
     } finally {
@@ -70,7 +74,7 @@ export default function ProductQuoteReaderPanel({
           </div>
           <h2 className="mt-3 text-base font-semibold text-slate-950">Créer automatiquement des produits depuis un devis fournisseur</h2>
           <p className="mt-1 max-w-3xl text-sm text-slate-600">
-            Importez un PDF fournisseur. L'IA garde uniquement les lignes produits exploitables, puis crée ou met à jour les fiches avec fournisseur, désignation, quantité, unité, prix HT, TVA, marque, catégorie et référence quand ces informations sont présentes.
+            Importez un devis fournisseur PDF, Excel, CSV ou texte. L'IA garde uniquement les lignes produits exploitables, puis crée ou met à jour les fiches avec fournisseur, désignation, quantité, unité, prix HT, TVA, marque, catégorie et référence quand ces informations sont présentes.
           </p>
         </div>
         <button
@@ -80,7 +84,7 @@ export default function ProductQuoteReaderPanel({
           className="inline-flex h-10 items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 text-sm font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-blue-300"
         >
           {isWorking ? <Loader2 className="h-4 w-4 animate-spin" /> : <UploadCloud className="h-4 w-4" />}
-          {extracting ? "Lecture PDF..." : busy ? "Création en cours..." : "Créer les produits"}
+          {extracting ? "Lecture fichier..." : busy ? "Création en cours..." : "Créer les produits"}
         </button>
       </div>
 
@@ -88,11 +92,11 @@ export default function ProductQuoteReaderPanel({
         <div className="rounded-2xl border border-blue-100 bg-white p-3">
           <label className="flex min-h-40 cursor-pointer flex-col items-center justify-center rounded-xl border border-dashed border-blue-200 bg-blue-50/50 px-4 py-6 text-center hover:bg-blue-50">
             <FileText className="h-8 w-8 text-blue-600" />
-            <span className="mt-3 text-sm font-semibold text-slate-950">Importer un PDF devis</span>
-            <span className="mt-1 text-xs text-slate-500">PDF fournisseur ou grille tarifaire</span>
+            <span className="mt-3 text-sm font-semibold text-slate-950">Importer un devis fournisseur</span>
+            <span className="mt-1 text-xs text-slate-500">PDF, Excel, CSV ou fichier texte</span>
             <input
               type="file"
-              accept="application/pdf,.pdf"
+              accept={ACCEPTED_QUOTE_FILES}
               disabled={isWorking}
               className="sr-only"
               onChange={(event) => void onFileChange(event.target.files?.[0] ?? null)}
@@ -102,7 +106,7 @@ export default function ProductQuoteReaderPanel({
           {fileName ? (
             <div className="mt-3 flex items-center justify-between gap-2 rounded-xl border border-blue-100 bg-blue-50 px-3 py-2 text-sm text-blue-800">
               <span className="truncate">{fileName}</span>
-              <button type="button" disabled={isWorking} onClick={clearFile} className="rounded-lg p-1 hover:bg-white disabled:opacity-50" aria-label="Retirer le PDF">
+              <button type="button" disabled={isWorking} onClick={clearFile} className="rounded-lg p-1 hover:bg-white disabled:opacity-50" aria-label="Retirer le fichier">
                 <X className="h-4 w-4" />
               </button>
             </div>
@@ -116,12 +120,12 @@ export default function ProductQuoteReaderPanel({
             {extracting ? (
               <div className="flex items-center gap-3 text-sm text-slate-600">
                 <Loader2 className="h-4 w-4 animate-spin text-blue-600" />
-                Lecture du PDF avant analyse IA...
+                Lecture du fichier avant analyse IA...
               </div>
             ) : extractedText ? (
               <div>
                 <div className="flex items-center gap-2 text-sm font-semibold text-emerald-700">
-                  <CheckCircle2 className="h-4 w-4" /> PDF prêt pour l'analyse IA
+                  <CheckCircle2 className="h-4 w-4" /> Fichier prêt pour l'analyse IA
                 </div>
                 <p className="mt-2 text-sm text-slate-600">
                   Le texte brut reste masqué. Au clic sur “Créer les produits”, l'IA ne renverra que les lignes produits utiles au catalogue fournisseur.
@@ -131,7 +135,7 @@ export default function ProductQuoteReaderPanel({
               <div>
                 <div className="text-sm font-semibold text-slate-950">Aucun devis sélectionné</div>
                 <p className="mt-2 text-sm text-slate-500">
-                  Sélectionnez un PDF. Le lecteur analysera ensuite les produits, quantités et prix sans afficher le contenu complet du devis.
+                  Sélectionnez un fichier fournisseur. Le lecteur analysera ensuite les produits, quantités et prix sans afficher le contenu complet du devis.
                 </p>
               </div>
             )}
@@ -161,6 +165,26 @@ export default function ProductQuoteReaderPanel({
   );
 }
 
+function isSupportedQuoteFile(file: File): boolean {
+  const name = file.name.toLowerCase();
+  return [".pdf", ".xlsx", ".xls", ".csv", ".txt"].some((extension) => name.endsWith(extension))
+    || ["application/pdf", "text/plain", "text/csv", "application/vnd.ms-excel", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"].includes(file.type);
+}
+
+async function extractQuoteText(file: File): Promise<string> {
+  const name = file.name.toLowerCase();
+
+  if (name.endsWith(".pdf") || file.type === "application/pdf") {
+    return extractPdfText(file);
+  }
+
+  if (name.endsWith(".xlsx") || name.endsWith(".xls") || file.type.includes("spreadsheet") || file.type === "application/vnd.ms-excel") {
+    return extractSpreadsheetText(file);
+  }
+
+  return file.text();
+}
+
 async function extractPdfText(file: File): Promise<string> {
   const buffer = await file.arrayBuffer();
   const pdf = await pdfjsLib.getDocument({ data: buffer }).promise;
@@ -178,6 +202,21 @@ async function extractPdfText(file: File): Promise<string> {
 
   await pdf.destroy();
   return pages.join("\n");
+}
+
+async function extractSpreadsheetText(file: File): Promise<string> {
+  const buffer = await file.arrayBuffer();
+  const workbook = XLSX.read(buffer, { type: "array" });
+  const sheets = workbook.SheetNames
+    .map((sheetName) => {
+      const sheet = workbook.Sheets[sheetName];
+      if (!sheet) return "";
+      const csv = XLSX.utils.sheet_to_csv(sheet, { FS: ";" }).trim();
+      return csv ? `Feuille ${sheetName}\n${csv}` : "";
+    })
+    .filter(Boolean);
+
+  return sheets.join("\n\n");
 }
 
 function ImportMetric({ label, value }: { label: string; value: number }) {
