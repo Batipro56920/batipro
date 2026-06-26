@@ -49,7 +49,7 @@ export function QuotesTable({
                 <td className="px-4 py-3 text-slate-600">—</td>
                 <td className="px-4 py-3" onClick={(event) => event.stopPropagation()}>
                   <div className="flex flex-wrap gap-1">
-                    <Link to="/projets" className="rounded-lg border border-blue-200 bg-blue-50 px-2 py-1 text-xs font-medium text-blue-800 hover:bg-blue-100" title="Les devis s'éditent depuis le dossier projet avec le Quote Builder.">Ouvrir projet</Link>
+                    <Link to={row.projectPath} className="rounded-lg border border-blue-200 bg-blue-50 px-2 py-1 text-xs font-medium text-blue-800 hover:bg-blue-100" title="Ouvrir le dossier projet lié à ce devis.">Ouvrir projet</Link>
                     <button type="button" onClick={() => actions.onStatus(row, "envoye")} className="rounded-lg border border-slate-200 px-2 py-1 text-xs font-medium hover:bg-slate-50">Envoyer</button>
                     <button type="button" onClick={() => actions.onStatus(row, "relance_1")} className="rounded-lg border border-slate-200 px-2 py-1 text-xs font-medium hover:bg-slate-50">Relancer</button>
                     <details className="relative">
