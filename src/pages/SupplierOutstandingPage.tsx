@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
-import { ChartColumnBig, RefreshCw } from "lucide-react";
+import { Link } from "react-router-dom";
+import { ArrowRight, ChartColumnBig, RefreshCw } from "lucide-react";
 import { calculateDocumentTotals } from "../features/document-engine";
 import type { PurchaseOrderRecord } from "../features/purchase-orders";
-import { listPurchaseOrders } from "../features/purchase-orders";
+import { listPurchaseOrders, PurchaseOrderStatusBadge } from "../features/purchase-orders";
 
 export default function SupplierOutstandingPage() {
   const [orders, setOrders] = useState<PurchaseOrderRecord[]>([]);
@@ -27,7 +28,13 @@ export default function SupplierOutstandingPage() {
   }, []);
 
   const openOrders = useMemo(
-    () => orders.filter((order) => !["delivered", "cancelled"].includes(order.status)),
+    () => orders
+      .filter((order) => !["delivered", "cancelled"].includes(order.status))
+      .sort((a, b) => {
+        const lateDiff = Number(isLate(b.expectedDeliveryDate)) - Number(isLate(a.expectedDeliveryDate));
+        if (lateDiff !== 0) return lateDiff;
+        return deliverySortValue(a.expectedDeliveryDate) - deliverySortValue(b.expectedDeliveryDate);
+      }),
     [orders],
   );
   const stats = useMemo(() => {
@@ -67,13 +74,22 @@ export default function SupplierOutstandingPage() {
             </p>
           </div>
         </div>
-        <button
-          type="button"
-          onClick={() => void refresh()}
-          className="inline-flex h-10 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 hover:bg-slate-50"
-        >
-          <RefreshCw className="h-4 w-4" /> Rafraîchir
-        </button>
+        <div className="flex flex-wrap gap-2">
+          <Link
+            to="/crm/achats"
+            className="inline-flex h-10 items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 text-sm font-semibold text-white shadow-sm shadow-blue-600/15 hover:bg-blue-700"
+          >
+            Gérer les commandes
+            <ArrowRight className="h-4 w-4" />
+          </Link>
+          <button
+            type="button"
+            onClick={() => void refresh()}
+            className="inline-flex h-10 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+          >
+            <RefreshCw className="h-4 w-4" /> Rafraîchir
+          </button>
+        </div>
       </header>
 
       {error ? <div className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">{error}</div> : null}
@@ -89,18 +105,25 @@ export default function SupplierOutstandingPage() {
           </section>
 
           <section className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
-            <div className="border-b border-slate-100 p-4">
-              <h2 className="font-semibold text-slate-950">Commandes fournisseurs ouvertes</h2>
-              <p className="mt-1 text-sm text-slate-500">Vue dirigeant des engagements fournisseurs encore actifs.</p>
+            <div className="flex flex-col gap-3 border-b border-slate-100 p-4 sm:flex-row sm:items-start sm:justify-between">
+              <div>
+                <h2 className="font-semibold text-slate-950">Commandes fournisseurs ouvertes</h2>
+                <p className="mt-1 text-sm text-slate-500">Vue dirigeant des engagements fournisseurs encore actifs, classés par retard puis date de livraison.</p>
+              </div>
+              <Link to="/crm/achats" className="inline-flex h-9 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-700 hover:bg-slate-50">
+                Module Achats
+                <ArrowRight className="h-4 w-4" />
+              </Link>
             </div>
             <div className="overflow-x-auto p-4">
-              <table className="min-w-full text-sm">
+              <table className="min-w-[960px] text-sm">
                 <thead className="bg-slate-50 text-slate-600">
                   <tr>
                     <Th>Commande</Th>
                     <Th>Fournisseur</Th>
                     <Th>Statut</Th>
                     <Th>Livraison prévue</Th>
+                    <Th>Référence fournisseur</Th>
                     <Th align="right">HT</Th>
                     <Th align="right">TTC</Th>
                   </tr>
@@ -108,12 +131,19 @@ export default function SupplierOutstandingPage() {
                 <tbody>
                   {openOrders.map((order) => {
                     const totals = order.document.totals ?? calculateDocumentTotals(order.document);
+                    const late = isLate(order.expectedDeliveryDate);
                     return (
-                      <tr key={order.id} className="border-t border-slate-100">
-                        <Td>{order.document.number}</Td>
+                      <tr key={order.id} className={`border-t border-slate-100 ${late ? "bg-red-50/40" : ""}`}>
+                        <Td>
+                          <div className="font-semibold text-slate-950">{order.document.number}</div>
+                          <div className="mt-0.5 text-xs text-slate-500">{order.lot || order.document.title || "Commande fournisseur"}</div>
+                        </Td>
                         <Td>{order.supplierName || order.document.recipient.displayName || "Fournisseur à définir"}</Td>
-                        <Td>{order.status}</Td>
-                        <Td>{formatDate(order.expectedDeliveryDate)}</Td>
+                        <Td><PurchaseOrderStatusBadge status={order.status} /></Td>
+                        <Td>
+                          <span className={late ? "font-semibold text-red-700" : "text-slate-700"}>{formatDate(order.expectedDeliveryDate)}</span>
+                        </Td>
+                        <Td>{order.supplierReference || "-"}</Td>
                         <Td align="right">{formatCurrency(totals.totalHt)}</Td>
                         <Td align="right">{formatCurrency(totals.totalTtc)}</Td>
                       </tr>
@@ -122,6 +152,7 @@ export default function SupplierOutstandingPage() {
                   {!openOrders.length ? (
                     <tr>
                       <Td>Aucune commande fournisseur ouverte.</Td>
+                      <Td />
                       <Td />
                       <Td />
                       <Td />
@@ -162,6 +193,10 @@ function isLate(value: string | null) {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   return new Date(value) < today;
+}
+
+function deliverySortValue(value: string | null) {
+  return value ? new Date(value).getTime() : Number.MAX_SAFE_INTEGER;
 }
 
 function formatCurrency(value: number) {
