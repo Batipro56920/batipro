@@ -33,12 +33,16 @@ const DEFAULT_FILTERS: ChantierListFilters = {
   type: "",
 };
 
-export default function ChantiersPage() {
+type ChantiersPageProps = {
+  initialView?: ChantierListView;
+};
+
+export default function ChantiersPage({ initialView = "list" }: ChantiersPageProps) {
   const navigate = useNavigate();
 
   const [items, setItems] = useState<ChantierRow[]>([]);
   const [scope, setScope] = useState<ChantierListFilter>("actifs");
-  const [view, setView] = useState<ChantierListView>("list");
+  const [view, setView] = useState<ChantierListView>(initialView);
   const [filters, setFilters] = useState<ChantierListFilters>(DEFAULT_FILTERS);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [previewRow, setPreviewRow] = useState<ChantierDerived | null>(null);
