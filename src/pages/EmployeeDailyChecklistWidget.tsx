@@ -1,13 +1,15 @@
 import { useEffect, useMemo, useState } from "react";
 import { useLocation } from "react-router-dom";
-import { CheckCircle2, ClipboardCheck, Loader2, X } from "lucide-react";
+import { CalendarDays, CheckCircle2, ClipboardCheck, Loader2, MapPin, X } from "lucide-react";
 
 import { supabase } from "../lib/supabaseClient";
 import {
   intervenantDailyChecklistGet,
   intervenantDailyChecklistUpsert,
+  intervenantGetChantiers,
   intervenantTerrainFeedbackList,
   intervenantTimeList,
+  type IntervenantChantier,
   type IntervenantDailyChecklist,
 } from "../services/intervenantPortal.service";
 import {
@@ -67,6 +69,13 @@ function localIsoDate(value: string | null | undefined) {
   return value.slice(0, 10);
 }
 
+function formatChecklistDate(value: string) {
+  const parsed = new Date(`${value}T00:00:00`);
+  return Number.isNaN(parsed.getTime())
+    ? value
+    : parsed.toLocaleDateString("fr-FR", { weekday: "long", day: "2-digit", month: "long" });
+}
+
 function isSameDay(value: string | null | undefined, isoDate: string) {
   return localIsoDate(value) === isoDate || String(value ?? "").slice(0, 10) === isoDate;
 }
@@ -86,8 +95,10 @@ function currentStoredChantierId() {
 export default function EmployeeDailyChecklistWidget() {
   const { search } = useLocation();
   const checklistDate = useMemo(() => todayIso(), []);
+  const checklistDateLabel = useMemo(() => formatChecklistDate(checklistDate), [checklistDate]);
   const [token, setToken] = useState("");
   const [chantierId, setChantierId] = useState<string | null>(() => currentStoredChantierId());
+  const [chantiers, setChantiers] = useState<IntervenantChantier[]>([]);
   const [checklist, setChecklist] = useState<IntervenantDailyChecklist | null>(null);
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -128,6 +139,31 @@ export default function EmployeeDailyChecklistWidget() {
       alive = false;
     };
   }, [search]);
+
+  useEffect(() => {
+    if (!token) {
+      setChantiers([]);
+      return;
+    }
+
+    let alive = true;
+    async function loadChantiers() {
+      try {
+        const rows = await intervenantGetChantiers(token);
+        if (!alive) return;
+        setChantiers(rows);
+        const activeChantierId = currentStoredChantierId() ?? chantierId;
+        if (!activeChantierId && rows.length === 1) setChantierId(rows[0].id);
+      } catch {
+        if (alive) setChantiers([]);
+      }
+    }
+
+    void loadChantiers();
+    return () => {
+      alive = false;
+    };
+  }, [chantierId, token]);
 
   useEffect(() => {
     if (!token) return;
@@ -198,6 +234,8 @@ export default function EmployeeDailyChecklistWidget() {
   const total = CHECKLIST_ITEMS.length;
   const validated = Boolean(checklist?.validated_at);
   const payloadChantierId = chantierId ?? checklist?.chantier_id ?? null;
+  const activeChantier = chantiers.find((row) => row.id === payloadChantierId) ?? null;
+  const chantierLabel = activeChantier?.nom ?? (payloadChantierId ? "Chantier actif" : "Chantier non selectionne");
 
   async function saveValue(key: ChecklistKey, value: boolean) {
     if (!token) return;
@@ -261,6 +299,7 @@ export default function EmployeeDailyChecklistWidget() {
       >
         {loading ? <Loader2 className="h-4 w-4 animate-spin text-blue-700" /> : <ClipboardCheck className="h-4 w-4 text-blue-700" />}
         <span>Checklist jour</span>
+        <span className="hidden max-w-[10rem] truncate text-slate-500 sm:inline">{chantierLabel}</span>
         <span className={validated ? "text-emerald-700" : "text-slate-500"}>{completed}/{total}</span>
       </button>
     );
@@ -285,6 +324,29 @@ export default function EmployeeDailyChecklistWidget() {
           <X className="h-4 w-4" />
         </button>
       </div>
+
+      <div className="mt-3 grid gap-2 sm:grid-cols-2">
+        <div className="flex min-w-0 items-start gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
+          <MapPin className="mt-0.5 h-4 w-4 shrink-0 text-blue-700" />
+          <div className="min-w-0">
+            <div className="text-[11px] font-semibold uppercase text-slate-500">Chantier</div>
+            <div className="mt-0.5 truncate text-sm font-semibold text-slate-950">{chantierLabel}</div>
+          </div>
+        </div>
+        <div className="flex min-w-0 items-start gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
+          <CalendarDays className="mt-0.5 h-4 w-4 shrink-0 text-blue-700" />
+          <div className="min-w-0">
+            <div className="text-[11px] font-semibold uppercase text-slate-500">Date</div>
+            <div className="mt-0.5 truncate text-sm font-semibold text-slate-950">{checklistDateLabel}</div>
+          </div>
+        </div>
+      </div>
+
+      {!payloadChantierId ? (
+        <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+          Selectionne un chantier dans le portail avant de valider la journee.
+        </div>
+      ) : null}
 
       {error ? <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">{error}</div> : null}
 
