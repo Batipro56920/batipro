@@ -33,6 +33,29 @@ const DEFAULT_FILTERS: ChantierListFilters = {
   type: "",
 };
 
+const HEADER_BY_VIEW: Record<ChantierListView, { eyebrow: string; title: string; description: string }> = {
+  list: {
+    eyebrow: "Production",
+    title: "Production chantier",
+    description: "Pilotez vos chantiers, avancement, alertes et équipes.",
+  },
+  cards: {
+    eyebrow: "Production",
+    title: "Vue cartes chantiers",
+    description: "Balayez rapidement les chantiers actifs, clients, statuts et alertes.",
+  },
+  planning: {
+    eyebrow: "Planning",
+    title: "Planning chantiers",
+    description: "Visualisez les échéances chantier et ouvrez le dossier à piloter.",
+  },
+  kanban: {
+    eyebrow: "Pilotage",
+    title: "Kanban chantiers",
+    description: "Suivez les chantiers par statut sans mélanger planning et création de tâches.",
+  },
+};
+
 type ChantiersPageProps = {
   initialView?: ChantierListView;
 };
@@ -56,6 +79,7 @@ export default function ChantiersPage({ initialView = "list" }: ChantiersPagePro
   const metrics = useMemo(() => computeChantierMetrics(derivedRows), [derivedRows]);
   const clients = useMemo(() => uniqueClients(derivedRows), [derivedRows]);
   const selectedRows = useMemo(() => derivedRows.filter((item) => selectedIds.includes(item.id)), [derivedRows, selectedIds]);
+  const headerCopy = HEADER_BY_VIEW[view];
 
   async function refresh(nextScope = scope) {
     setLoading(true);
@@ -83,6 +107,10 @@ export default function ChantiersPage({ initialView = "list" }: ChantiersPagePro
   useEffect(() => {
     void refresh(scope);
   }, [scope]);
+
+  useEffect(() => {
+    setView(initialView);
+  }, [initialView]);
 
   function toggleSelection(id: string) {
     setSelectedIds((current) => (current.includes(id) ? current.filter((value) => value !== id) : [...current, id]));
@@ -159,7 +187,13 @@ export default function ChantiersPage({ initialView = "list" }: ChantiersPagePro
 
   return (
     <div className="space-y-5">
-      <ChantiersHeader onNew={() => navigate("/chantiers/nouveau")} onExport={() => exportChantiersCsv(visibleRows, "chantiers.csv")} />
+      <ChantiersHeader
+        eyebrow={headerCopy.eyebrow}
+        title={headerCopy.title}
+        description={headerCopy.description}
+        onNew={() => navigate("/chantiers/nouveau")}
+        onExport={() => exportChantiersCsv(visibleRows, "chantiers.csv")}
+      />
       <ChantiersKpiGrid metrics={metrics} />
       <ChantiersToolbar
         scope={scope}
