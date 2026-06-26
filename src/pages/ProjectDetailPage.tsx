@@ -32,7 +32,7 @@ export default function ProjectDetailPage() {
   const { id } = useParams();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const { projectsById, loading, error } = useProjectsData();
+  const { projectsById, loading, error, refresh } = useProjectsData();
   const project = id ? projectsById.get(id) : null;
   const tabFromUrl = readProjectTab(searchParams.get("tab"));
   const [activeTab, setActiveTab] = useState<ProjectTab>(tabFromUrl);
@@ -95,7 +95,7 @@ export default function ProjectDetailPage() {
 
   return (
     <div className="space-y-5">
-      <ProjectDetailHeader project={project} />
+      <ProjectDetailHeader project={project} onProjectUpdated={refresh} />
 
       <nav className="overflow-x-auto rounded-3xl border border-slate-200 bg-white p-2 shadow-sm" aria-label="Navigation projet">
         <div className="flex min-w-max gap-1">
