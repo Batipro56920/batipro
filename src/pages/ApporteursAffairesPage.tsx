@@ -88,12 +88,13 @@ function formatCurrency(value: number) {
 
 function parseFrenchNumber(value: string) {
   const text = value.trim();
-  if (!text) return 0;
+  if (!text || /[,.]$/.test(text) || text.startsWith("-")) return null;
   const normalized = text.includes(",")
     ? text.replace(/\s/g, "").replace(/\./g, "").replace(",", ".")
     : text.replace(/\s/g, "");
+  if (!/^\d+(\.\d+)?$/.test(normalized)) return null;
   const parsed = Number(normalized);
-  return Number.isFinite(parsed) ? parsed : 0;
+  return Number.isFinite(parsed) ? parsed : null;
 }
 
 function calculateCommission(lead: ApporteurLeadRow, apporteur?: ApporteurAffaireRow) {
@@ -282,13 +283,21 @@ export default function ApporteursAffairesPage() {
     setNotice(null);
     try {
       if (!apporteurForm.nom.trim()) throw new Error("Le nom de l'apporteur est requis.");
+      const commissionValue = parseFrenchNumber(apporteurForm.commission_percent);
+      if (commissionValue === null) {
+        throw new Error(
+          apporteurForm.calculation_mode === "fixe"
+            ? "Renseignez un prix par client valide et positif."
+            : "Renseignez un pourcentage négocié valide et positif.",
+        );
+      }
       const payload = {
         nom: apporteurForm.nom,
         entreprise: apporteurForm.entreprise || null,
         type: apporteurForm.type,
         telephone: apporteurForm.telephone || null,
         email: apporteurForm.email || null,
-        commission_percent: parseFrenchNumber(apporteurForm.commission_percent),
+        commission_percent: commissionValue,
         calculation_mode: apporteurForm.calculation_mode,
         iban: apporteurForm.iban || null,
         active: apporteurForm.active,
