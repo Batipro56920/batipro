@@ -363,12 +363,13 @@ export default function ApporteursAffairesPage() {
     setError(null);
     setNotice(null);
     try {
-      if (!leadForm.apporteur_id) throw new Error("Un apporteur doit être sélectionné.");
+      const apporteurId = leadForm.apporteur_id || selectedApporteurId;
+      if (!apporteurId) throw new Error("Un apporteur doit être sélectionné.");
       if (!leadForm.crm_project_id) throw new Error("Sélectionnez le projet CRM à rattacher.");
       const project = projectOptions.find((option) => option.value === leadForm.crm_project_id);
       if (!project) throw new Error("Projet CRM introuvable.");
       const payload = {
-        apporteur_id: leadForm.apporteur_id,
+        apporteur_id: apporteurId,
         client_name: project.clientName,
         telephone: project.telephone,
         project_address: project.projectAddress,
@@ -387,7 +388,7 @@ export default function ApporteursAffairesPage() {
           ? "Projet rattaché à l'apporteur et lié au CRM."
           : "Projet enregistré pour l'apporteur. La liaison CRM n'a pas pu être persistée sur ce schéma.",
       );
-      resetLeadForm(leadForm.apporteur_id);
+      resetLeadForm(apporteurId);
       await refreshData();
     } catch (err: any) {
       setError(err?.message ?? "Impossible de rattacher le projet.");
