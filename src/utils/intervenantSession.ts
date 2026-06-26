@@ -1,6 +1,7 @@
 const STORAGE_TOKEN_KEY = "batipro_intervenant_token";
 const STORAGE_CHANTIER_KEY = "batipro_intervenant_chantier_id";
 export const AUTH_SESSION_PORTAL_TOKEN = "__AUTH_SESSION__";
+export const INTERVENANT_CHANTIER_STORAGE_EVENT = "batipro:intervenant-chantier";
 
 let memoryToken = "";
 let memoryChantierId = "";
@@ -17,6 +18,13 @@ function getSafeStorage(): Storage | null {
   } catch {
     return null;
   }
+}
+
+function notifyIntervenantChantierChange(chantierId: string) {
+  if (typeof window === "undefined") return;
+  try {
+    window.dispatchEvent(new CustomEvent(INTERVENANT_CHANTIER_STORAGE_EVENT, { detail: { chantierId } }));
+  } catch {}
 }
 
 function rememberChantierFromValue(value: string) {
@@ -62,10 +70,16 @@ export function persistIntervenantToken(token: string) {
   pendingChantierIdForNextToken = "";
 
   const storage = getSafeStorage();
-  if (!storage) return;
+  if (!storage) {
+    if (shouldResetChantier) notifyIntervenantChantierChange("");
+    return;
+  }
   try {
     storage.setItem(STORAGE_TOKEN_KEY, memoryToken);
-    if (shouldResetChantier) storage.removeItem(STORAGE_CHANTIER_KEY);
+    if (shouldResetChantier) {
+      storage.removeItem(STORAGE_CHANTIER_KEY);
+      notifyIntervenantChantierChange("");
+    }
   } catch {}
 }
 
@@ -92,9 +106,13 @@ export function readStoredIntervenantChantierId(): string {
 export function persistIntervenantChantierId(chantierId: string) {
   memoryChantierId = String(chantierId ?? "").trim();
   const storage = getSafeStorage();
-  if (!storage) return;
+  if (!storage) {
+    notifyIntervenantChantierChange(memoryChantierId);
+    return;
+  }
   try {
     storage.setItem(STORAGE_CHANTIER_KEY, memoryChantierId);
+    notifyIntervenantChantierChange(memoryChantierId);
   } catch {}
 }
 
@@ -102,9 +120,13 @@ export function clearStoredIntervenantChantierId() {
   memoryChantierId = "";
   pendingChantierIdForNextToken = "";
   const storage = getSafeStorage();
-  if (!storage) return;
+  if (!storage) {
+    notifyIntervenantChantierChange("");
+    return;
+  }
   try {
     storage.removeItem(STORAGE_CHANTIER_KEY);
+    notifyIntervenantChantierChange("");
   } catch {}
 }
 
