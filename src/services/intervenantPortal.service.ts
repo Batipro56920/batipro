@@ -226,6 +226,16 @@ export type IntervenantReserve = {
   updated_at: string | null;
 };
 
+type IntervenantMaterielCreatePayload = {
+  chantier_id: string;
+  task_id?: string | null;
+  titre: string;
+  quantite?: number | null;
+  unite?: string | null;
+  commentaire?: string | null;
+  date_souhaitee?: string | null;
+};
+
 function rpcMessage(error: unknown, fallback: string): string {
   return String((error as { message?: string } | null)?.message ?? fallback).trim() || fallback;
 }
@@ -330,6 +340,26 @@ function normalizeTaskAdminValidationStatus(value: unknown): IntervenantTask["ad
   if (v === "valide") return "valide";
   if (v === "a_reprendre") return "a_reprendre";
   return "non_verifie";
+}
+
+function enrichMaterielPayload(payload: IntervenantMaterielCreatePayload): IntervenantMaterielCreatePayload {
+  if (payload.quantite !== undefined || payload.unite !== undefined) return payload;
+
+  const commentaire = String(payload.commentaire ?? "").trim();
+  if (!commentaire) return payload;
+
+  const match = commentaire.match(/^(\d+(?:[\s.]\d{3})*(?:[,.]\d+)?|\d+(?:[,.]\d+)?)\s+([A-Za-z0-9²³]+)\b/i);
+  if (!match) return payload;
+
+  const quantite = asNullableNumber(match[1]);
+  const unite = match[2]?.trim() || null;
+  if (!quantite || !unite) return payload;
+
+  return {
+    ...payload,
+    quantite,
+    unite,
+  };
 }
 
 function mapConsigne(row: Record<string, unknown>): IntervenantConsigne {
@@ -641,19 +671,11 @@ export async function intervenantTimeList(token: string, chantierId: string): Pr
 
 export async function intervenantMaterielCreate(
   token: string,
-  payload: {
-    chantier_id: string;
-    task_id?: string | null;
-    titre: string;
-    quantite?: number | null;
-    unite?: string | null;
-    commentaire?: string | null;
-    date_souhaitee?: string | null;
-  },
+  payload: IntervenantMaterielCreatePayload,
 ): Promise<void> {
   const { error } = await (supabase as any).rpc("intervenant_materiel_create", {
     p_token: normalizePortalToken(token),
-    p_payload: payload,
+    p_payload: enrichMaterielPayload(payload),
   });
   if (error) throw new Error(rpcMessage(error, "Creation demande materiel impossible."));
 }
