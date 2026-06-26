@@ -13,7 +13,7 @@ export function ChantiersPlanningView({ rows, onPreview }: { rows: ChantierDeriv
       <div className="mb-4 flex items-center justify-between">
         <div>
           <h2 className="text-base font-semibold text-slate-950">Planning chantiers</h2>
-          <p className="text-sm text-slate-500">Vue chronologique des echeances chantier avec acces direct au pilotage d'execution.</p>
+          <p className="text-sm text-slate-500">Vue chronologique des échéances chantier avec accès direct au pilotage d'exécution.</p>
         </div>
       </div>
       <div className="space-y-3">
@@ -22,7 +22,7 @@ export function ChantiersPlanningView({ rows, onPreview }: { rows: ChantierDeriv
             <div className="text-sm font-semibold text-slate-950">{shortDate(row.date_fin_prevue ?? row.planning_end_date)}</div>
             <div className="min-w-0">
               <div className="truncate font-semibold text-slate-950">{row.nom}</div>
-              <div className="truncate text-sm text-slate-500">{row.client ?? "Client non renseigne"}</div>
+              <div className="truncate text-sm text-slate-500">{row.client ?? "Client non renseigné"}</div>
             </div>
             <ChantierProgress value={row.progress} />
             <ChantierStatusPill status={row.status} />
@@ -33,7 +33,7 @@ export function ChantiersPlanningView({ rows, onPreview }: { rows: ChantierDeriv
                 className="inline-flex h-9 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-100"
               >
                 <Eye className="h-4 w-4" />
-                Apercu
+                Aperçu
               </button>
               <Link
                 to={`/chantiers/${row.id}/execution`}
