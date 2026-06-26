@@ -6,6 +6,8 @@ import { supabase } from "../lib/supabaseClient";
 import {
   intervenantDailyChecklistGet,
   intervenantDailyChecklistUpsert,
+  intervenantTerrainFeedbackList,
+  intervenantTimeList,
   type IntervenantDailyChecklist,
 } from "../services/intervenantPortal.service";
 import {
@@ -54,6 +56,19 @@ const CHECKLIST_ITEMS: ChecklistItem[] = [
 function todayIso() {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+function localIsoDate(value: string | null | undefined) {
+  if (!value) return "";
+  const parsed = new Date(value);
+  if (!Number.isNaN(parsed.getTime())) {
+    return `${parsed.getFullYear()}-${String(parsed.getMonth() + 1).padStart(2, "0")}-${String(parsed.getDate()).padStart(2, "0")}`;
+  }
+  return value.slice(0, 10);
+}
+
+function isSameDay(value: string | null | undefined, isoDate: string) {
+  return localIsoDate(value) === isoDate || String(value ?? "").slice(0, 10) === isoDate;
 }
 
 function checkedValue(checklist: IntervenantDailyChecklist | null, key: ChecklistKey) {
@@ -117,17 +132,53 @@ export default function EmployeeDailyChecklistWidget() {
   useEffect(() => {
     if (!token) return;
     let alive = true;
+
+    async function syncChecklistFromActivity(base: IntervenantDailyChecklist) {
+      const activeChantierId = currentStoredChantierId() ?? base.chantier_id ?? chantierId;
+      if (!activeChantierId) return base;
+
+      try {
+        const [timeEntries, feedbacks] = await Promise.all([
+          intervenantTimeList(token, activeChantierId),
+          intervenantTerrainFeedbackList(token, activeChantierId),
+        ]);
+        const hasTimeLogged = timeEntries.some(
+          (entry) => entry.work_date === checklistDate && Number(entry.duration_hours ?? 0) > 0,
+        );
+        const hasPhotoTaken = feedbacks.some(
+          (feedback) => isSameDay(feedback.created_at, checklistDate) && feedback.attachments.length > 0,
+        );
+        const hasTaskReported = feedbacks.some(
+          (feedback) => isSameDay(feedback.created_at, checklistDate) && feedback.category !== "photo",
+        );
+
+        const patch: ChecklistPayload = {
+          chantier_id: activeChantierId,
+          checklist_date: checklistDate,
+        };
+        if (hasTimeLogged && base.time_logged !== true) patch.time_logged = true;
+        if (hasPhotoTaken && base.photos_taken !== true) patch.photos_taken = true;
+        if (hasTaskReported && base.tasks_reported !== true) patch.tasks_reported = true;
+        const shouldSave = patch.time_logged === true || patch.photos_taken === true || patch.tasks_reported === true;
+        if (!shouldSave) return base;
+
+        return await intervenantDailyChecklistUpsert(token, patch);
+      } catch {
+        return base;
+      }
+    }
+
     async function loadChecklist() {
       setLoading(true);
       setError(null);
       try {
         const data = await intervenantDailyChecklistGet(token, checklistDate);
-        if (alive) {
-          setChecklist({
-            ...data,
-            chantier_id: data.chantier_id ?? chantierId,
-          });
-        }
+        const normalized = {
+          ...data,
+          chantier_id: data.chantier_id ?? chantierId,
+        };
+        const next = await syncChecklistFromActivity(normalized);
+        if (alive) setChecklist(next);
       } catch (loadError) {
         if (alive) setError(errorMessage(loadError, "Checklist jour indisponible."));
       } finally {
@@ -139,7 +190,7 @@ export default function EmployeeDailyChecklistWidget() {
     return () => {
       alive = false;
     };
-  }, [checklistDate, chantierId, token]);
+  }, [checklistDate, chantierId, open, token]);
 
   if (!token) return null;
 
