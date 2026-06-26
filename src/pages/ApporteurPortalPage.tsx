@@ -27,12 +27,23 @@ const DEFAULT_LEAD_FORM = {
   telephone: "",
   project_address: "",
   project_type: "",
+  estimated_amount: "",
   comment: "",
   date: new Date().toISOString().slice(0, 10),
 };
 
 function formatCurrency(value: number) {
   return new Intl.NumberFormat("fr-FR", { style: "currency", currency: "EUR" }).format(value || 0);
+}
+
+function parseFrenchNumber(value: string) {
+  const text = value.trim();
+  if (!text) return 0;
+  const normalized = text.includes(",")
+    ? text.replace(/\s/g, "").replace(/\./g, "").replace(",", ".")
+    : text.replace(/\s/g, "");
+  const parsed = Number(normalized);
+  return Number.isFinite(parsed) ? parsed : 0;
 }
 
 function commissionAmount(lead: ApporteurLeadRow, apporteur: ApporteurAffaireRow | null) {
@@ -116,7 +127,7 @@ export default function ApporteurPortalPage() {
         telephone: leadForm.telephone || null,
         project_address: leadForm.project_address || null,
         project_type: leadForm.project_type || null,
-        estimated_amount: 0,
+        estimated_amount: parseFrenchNumber(leadForm.estimated_amount),
         comment: leadForm.comment || null,
         date: leadForm.date,
       });
@@ -164,6 +175,7 @@ export default function ApporteurPortalPage() {
               <Input label="Téléphone" value={leadForm.telephone} onChange={(value) => setLeadForm((prev) => ({ ...prev, telephone: value }))} />
               <Input label="Adresse du projet" value={leadForm.project_address} onChange={(value) => setLeadForm((prev) => ({ ...prev, project_address: value }))} />
               <Input label="Nature des travaux" value={leadForm.project_type} onChange={(value) => setLeadForm((prev) => ({ ...prev, project_type: value }))} />
+              <Input label="Montant estimé des travaux" value={leadForm.estimated_amount} inputMode="decimal" onChange={(value) => setLeadForm((prev) => ({ ...prev, estimated_amount: value }))} />
               <div className="md:col-span-2"><Textarea label="Informations utiles" value={leadForm.comment} onChange={(value) => setLeadForm((prev) => ({ ...prev, comment: value }))} /></div>
             </div>
             {actError ? <div className="mt-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">{actError}</div> : null}
@@ -201,6 +213,7 @@ export default function ApporteurPortalPage() {
                 <tr>
                   <th>Client</th>
                   <th>Projet</th>
+                  <th>Montant estimé</th>
                   <th>Statut</th>
                   <th>Commission</th>
                   <th>Date</th>
@@ -211,6 +224,7 @@ export default function ApporteurPortalPage() {
                   <tr key={lead.id}>
                     <td className="align-top"><div className="font-semibold text-slate-950">{lead.client_name}</div><div className="text-xs text-slate-500">{lead.telephone || "-"}</div></td>
                     <td className="align-top"><div>{lead.project_type || "-"}</div><div className="text-xs text-slate-500">{lead.project_address || ""}</div></td>
+                    <td className="align-top">{formatCurrency(lead.estimated_amount)}</td>
                     <td className="align-top">{LEAD_STATUSES.find((item) => item.value === lead.status)?.label}</td>
                     <td className="align-top">{formatCurrency(commissionAmount(lead, portalData.apporteur))}</td>
                     <td className="align-top">{lead.date}</td>
@@ -218,7 +232,7 @@ export default function ApporteurPortalPage() {
                 ))}
                 {portalData.leads.length === 0 ? (
                   <tr>
-                    <td colSpan={5} className="px-4 py-6 text-center text-sm text-slate-500">Aucun client transmis pour le moment.</td>
+                    <td colSpan={6} className="px-4 py-6 text-center text-sm text-slate-500">Aucun client transmis pour le moment.</td>
                   </tr>
                 ) : null}
               </tbody>
@@ -238,8 +252,8 @@ function Metric({ label, value }: { label: string; value: string }) {
   return <div className="bt-card rounded-xl bg-white p-4"><div className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">{label}</div><div className="mt-2 text-lg font-bold text-slate-950">{value}</div></div>;
 }
 
-function Input({ label, value, onChange }: { label: string; value: string; onChange: (value: string) => void }) {
-  return <label className="block text-sm"><span className="text-xs font-medium text-slate-600">{label}</span><input className={`${inputClass} mt-1`} value={value} onChange={(event) => onChange(event.target.value)} /></label>;
+function Input({ label, value, onChange, inputMode }: { label: string; value: string; onChange: (value: string) => void; inputMode?: "decimal" }) {
+  return <label className="block text-sm"><span className="text-xs font-medium text-slate-600">{label}</span><input inputMode={inputMode} className={`${inputClass} mt-1`} value={value} onChange={(event) => onChange(event.target.value)} /></label>;
 }
 
 function Textarea({ label, value, onChange }: { label: string; value: string; onChange: (value: string) => void }) {
