@@ -1,5 +1,6 @@
 import { X } from "lucide-react";
 import { useState } from "react";
+import { Link } from "react-router-dom";
 import { Button } from "../../../../components/ui/button";
 import type { ChantierDerived, ChantierListActions } from "../types";
 import { budgetLabel, currency, shortDate, timeLabel } from "../utils/chantiersListUtils";
@@ -8,6 +9,59 @@ import { ChantierRowActions } from "./ChantierRowActions";
 import { ChantierStatusPill } from "./ChantierStatusPill";
 
 const TABS = ["Vue rapide", "Tâches", "Équipe", "Documents", "Alertes"] as const;
+
+function getProjectHref(row: ChantierDerived) {
+  if (row.crm_opportunity_id) return `/projets/opportunity-${row.crm_opportunity_id}`;
+  if (row.crm_prospect_id) return `/projets/prospect-${row.crm_prospect_id}`;
+  return null;
+}
+
+function CommercialContext({ row }: { row: ChantierDerived }) {
+  const projectHref = getProjectHref(row);
+  const quoteHref = projectHref && row.crm_quote_id ? `${projectHref}/devis/${row.crm_quote_id}/edit` : null;
+  const hasCommercialContext = Boolean(projectHref || row.crm_quote_id || row.signed_quote_amount_ht || row.crm_client_phone || row.crm_client_email);
+
+  if (!hasCommercialContext) {
+    return null;
+  }
+
+  return (
+    <div className="rounded-2xl border border-blue-100 bg-blue-50 p-4">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div className="min-w-0">
+          <h3 className="font-semibold text-blue-950">Dossier commercial</h3>
+          <div className="mt-2 grid gap-2 text-sm text-blue-900 sm:grid-cols-2">
+            <div>
+              <span className="text-blue-700/80">Devis signé</span>
+              <div className="font-semibold">{budgetLabel(row.signed_quote_amount_ht)}</div>
+            </div>
+            <div>
+              <span className="text-blue-700/80">Contact client</span>
+              <div className="font-semibold">{row.crm_client_phone || row.crm_client_email || "Non renseigné"}</div>
+            </div>
+          </div>
+        </div>
+        <div className="flex shrink-0 flex-wrap gap-2">
+          {projectHref ? (
+            <Link to={projectHref} className="inline-flex h-9 items-center rounded-xl border border-blue-200 bg-white px-3 text-sm font-semibold text-blue-800 hover:bg-blue-100">
+              Projet
+            </Link>
+          ) : null}
+          {quoteHref ? (
+            <Link to={quoteHref} className="inline-flex h-9 items-center rounded-xl border border-blue-200 bg-white px-3 text-sm font-semibold text-blue-800 hover:bg-blue-100">
+              Devis
+            </Link>
+          ) : null}
+          {row.crm_quote_id ? (
+            <Link to="/factures" className="inline-flex h-9 items-center rounded-xl border border-blue-200 bg-white px-3 text-sm font-semibold text-blue-800 hover:bg-blue-100">
+              Factures
+            </Link>
+          ) : null}
+        </div>
+      </div>
+    </div>
+  );
+}
 
 export function ChantierQuickDrawer({ row, actions, onClose }: { row: ChantierDerived | null; actions: ChantierListActions; onClose: () => void }) {
   const [tab, setTab] = useState<(typeof TABS)[number]>("Vue rapide");
@@ -46,6 +100,7 @@ export function ChantierQuickDrawer({ row, actions, onClose }: { row: ChantierDe
           {tab === "Vue rapide" ? (
             <>
               <InfoGrid row={row} />
+              <CommercialContext row={row} />
               <div className="rounded-2xl border border-slate-200 p-4">
                 <ChantierProgress value={row.progress} />
               </div>
