@@ -205,7 +205,7 @@ export default function TerrainFeedbacksPage() {
                 Vue chantier filtrée
               </div>
               <div className="mt-1 text-sm text-blue-900">
-                Retours terrain liés à {selectedChantier?.nom ?? "ce chantier"}.
+                Retours terrain liés à {selectedChantier?.nom ?? "ce chantier"}. Ouvre directement la zone utile pour traiter le sujet.
               </div>
             </div>
             <div className="flex flex-wrap gap-2">
@@ -213,7 +213,19 @@ export default function TerrainFeedbacksPage() {
                 to={`/chantiers/${filterChantierId}`}
                 className="rounded-xl bg-blue-700 px-3 py-2 text-sm font-semibold text-white hover:bg-blue-800"
               >
-                Ouvrir la fiche chantier
+                Fiche chantier
+              </Link>
+              <Link
+                to={`/chantiers/${filterChantierId}/execution`}
+                className="rounded-xl border border-blue-200 bg-white px-3 py-2 text-sm font-medium text-blue-800 hover:bg-blue-50"
+              >
+                Exécution
+              </Link>
+              <Link
+                to={`/chantiers/${filterChantierId}/qualite`}
+                className="rounded-xl border border-blue-200 bg-white px-3 py-2 text-sm font-medium text-blue-800 hover:bg-blue-50"
+              >
+                Qualité / réserves
               </Link>
               <button
                 type="button"
@@ -343,6 +355,28 @@ export default function TerrainFeedbacksPage() {
                       {row.created_at ? new Date(row.created_at).toLocaleString(locale) : t("common.states.unavailable")}
                     </div>
                     <div className="mt-4 whitespace-pre-wrap text-sm text-slate-700">{row.description}</div>
+                    {row.chantier ? (
+                      <div className="mt-4 flex flex-wrap gap-2">
+                        <Link
+                          to={`/chantiers/${row.chantier.id}`}
+                          className="rounded-xl border border-slate-200 px-3 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50"
+                        >
+                          Fiche chantier
+                        </Link>
+                        <Link
+                          to={`/chantiers/${row.chantier.id}/execution`}
+                          className="rounded-xl border border-blue-200 bg-blue-50 px-3 py-2 text-xs font-semibold text-blue-800 hover:bg-blue-100"
+                        >
+                          Traiter en exécution
+                        </Link>
+                        <Link
+                          to={`/chantiers/${row.chantier.id}/qualite`}
+                          className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-800 hover:bg-amber-100"
+                        >
+                          Qualité / réserves
+                        </Link>
+                      </div>
+                    ) : null}
                   </div>
                 </div>
 
@@ -442,6 +476,25 @@ export default function TerrainFeedbacksPage() {
                     <div className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">
                       {t("terrainFeedback.admin.processing")}
                     </div>
+                    {row.chantier ? (
+                      <div className="mt-3 rounded-2xl border border-slate-200 bg-slate-50 p-3">
+                        <div className="text-xs font-medium text-slate-500">Contexte chantier</div>
+                        <div className="mt-2 flex flex-wrap gap-2">
+                          <Link
+                            to={`/chantiers/${row.chantier.id}/execution`}
+                            className="rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-100"
+                          >
+                            Exécution
+                          </Link>
+                          <Link
+                            to={`/chantiers/${row.chantier.id}/qualite`}
+                            className="rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-100"
+                          >
+                            Réserves
+                          </Link>
+                        </div>
+                      </div>
+                    ) : null}
                     <div className="mt-4 space-y-4">
                       <label className="space-y-1 text-sm">
                         <div className="text-xs font-medium text-slate-500">{t("common.labels.status")}</div>
