@@ -2,12 +2,26 @@ import { Download, FileUp, Plus } from "lucide-react";
 import { PageHeader } from "../../../../components/layout/PageHeader";
 import { Button } from "../../../../components/ui/button";
 
-export function ChantiersHeader({ onNew, onExport }: { onNew: () => void; onExport: () => void }) {
+type Props = {
+  eyebrow?: string;
+  title?: string;
+  description?: string;
+  onNew: () => void;
+  onExport: () => void;
+};
+
+export function ChantiersHeader({
+  eyebrow = "Production",
+  title = "Production chantier",
+  description = "Pilotez vos chantiers, avancement, alertes et équipes.",
+  onNew,
+  onExport,
+}: Props) {
   return (
     <PageHeader
-      eyebrow="Production"
-      title="Production chantier"
-      description="Pilotez vos chantiers, avancement, alertes et équipes."
+      eyebrow={eyebrow}
+      title={title}
+      description={description}
       actions={
         <>
           <Button type="button" variant="secondary" onClick={onNew}>
@@ -27,4 +41,3 @@ export function ChantiersHeader({ onNew, onExport }: { onNew: () => void; onExpo
     />
   );
 }
-
