@@ -4,6 +4,7 @@ export const AUTH_SESSION_PORTAL_TOKEN = "__AUTH_SESSION__";
 
 let memoryToken = "";
 let memoryChantierId = "";
+let pendingChantierIdForNextToken = "";
 
 function getSafeStorage(): Storage | null {
   if (typeof window === "undefined") return null;
@@ -22,15 +23,22 @@ function rememberChantierFromValue(value: string) {
   const raw = String(value ?? "").trim();
   if (!raw) return;
 
+  const persistChantierFromLink = (chantierId: string) => {
+    const nextChantierId = String(chantierId ?? "").trim();
+    if (!nextChantierId) return;
+    pendingChantierIdForNextToken = nextChantierId;
+    persistIntervenantChantierId(nextChantierId);
+  };
+
   try {
     const url = new URL(raw);
     const chantierId = url.searchParams.get("chantier_id")?.trim();
-    if (chantierId) persistIntervenantChantierId(chantierId);
+    if (chantierId) persistChantierFromLink(chantierId);
     return;
   } catch {}
 
   const queryMatch = raw.match(/[?&]chantier_id=([^&#]+)/i);
-  if (queryMatch?.[1]) persistIntervenantChantierId(decodeURIComponent(queryMatch[1]).trim());
+  if (queryMatch?.[1]) persistChantierFromLink(decodeURIComponent(queryMatch[1]).trim());
 }
 
 export function readStoredIntervenantToken(): string {
@@ -46,10 +54,12 @@ export function readStoredIntervenantToken(): string {
 export function persistIntervenantToken(token: string) {
   const nextToken = String(token ?? "").trim();
   const previousToken = readStoredIntervenantToken();
-  const shouldResetChantier = Boolean(previousToken && nextToken && previousToken !== nextToken);
+  const hasFreshChantierContext = Boolean(pendingChantierIdForNextToken);
+  const shouldResetChantier = Boolean(previousToken && nextToken && previousToken !== nextToken && !hasFreshChantierContext);
 
   memoryToken = nextToken;
   if (shouldResetChantier) memoryChantierId = "";
+  pendingChantierIdForNextToken = "";
 
   const storage = getSafeStorage();
   if (!storage) return;
@@ -61,6 +71,7 @@ export function persistIntervenantToken(token: string) {
 
 export function clearStoredIntervenantToken() {
   memoryToken = "";
+  pendingChantierIdForNextToken = "";
   const storage = getSafeStorage();
   if (!storage) return;
   try {
@@ -89,6 +100,7 @@ export function persistIntervenantChantierId(chantierId: string) {
 
 export function clearStoredIntervenantChantierId() {
   memoryChantierId = "";
+  pendingChantierIdForNextToken = "";
   const storage = getSafeStorage();
   if (!storage) return;
   try {
@@ -103,6 +115,7 @@ export function clearStoredIntervenantSession() {
 
 export function extractIntervenantToken(value: string): string {
   const raw = String(value ?? "").trim();
+  pendingChantierIdForNextToken = "";
   if (!raw) return "";
 
   rememberChantierFromValue(raw);
