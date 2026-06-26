@@ -31,7 +31,7 @@ export function ProjectsHeader({ billingMode = false, onRefresh }: { billingMode
         ) : (
           <>
             <Link
-              to="/crm/prospects"
+              to="/crm/prospects?action=nouveau-prospect"
               className="inline-flex h-9 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-3 text-sm font-medium text-slate-900 shadow-sm transition hover:bg-slate-50"
             >
               <Plus className="h-4 w-4" />
