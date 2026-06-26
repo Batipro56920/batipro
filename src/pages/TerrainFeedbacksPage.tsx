@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { Link, useSearchParams } from "react-router-dom";
 import { getChantiers, type ChantierRow } from "../services/chantiers.service";
 import { listIntervenants, type IntervenantRow } from "../services/intervenants.service";
 import {
@@ -61,6 +62,8 @@ function urgencyTone(urgency: string) {
 
 export default function TerrainFeedbacksPage() {
   const { locale, t } = useI18n();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const urlChantierId = searchParams.get("chantierId") ?? "";
   const [rows, setRows] = useState<TerrainFeedbackRow[]>([]);
   const [chantiers, setChantiers] = useState<ChantierRow[]>([]);
   const [intervenants, setIntervenants] = useState<IntervenantRow[]>([]);
@@ -68,7 +71,7 @@ export default function TerrainFeedbacksPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [savingId, setSavingId] = useState<string | null>(null);
-  const [filterChantierId, setFilterChantierId] = useState("");
+  const [filterChantierId, setFilterChantierId] = useState(urlChantierId);
   const [filterIntervenantId, setFilterIntervenantId] = useState("");
   const [filterStatus, setFilterStatus] = useState<TerrainFeedbackStatus | "">("");
   const [filterCategory, setFilterCategory] = useState<TerrainFeedbackCategory | "">("");
@@ -79,6 +82,30 @@ export default function TerrainFeedbacksPage() {
     for (const item of responsibles) map.set(item.id, item.display_name);
     return map;
   }, [responsibles]);
+
+  const selectedChantier = useMemo(() => {
+    if (!filterChantierId) return null;
+    return (
+      chantiers.find((chantier) => chantier.id === filterChantierId) ??
+      rows.find((row) => row.chantier_id === filterChantierId)?.chantier ??
+      null
+    );
+  }, [chantiers, filterChantierId, rows]);
+
+  useEffect(() => {
+    setFilterChantierId((current) => (current === urlChantierId ? current : urlChantierId));
+  }, [urlChantierId]);
+
+  function applyChantierFilter(value: string) {
+    setFilterChantierId(value);
+    const nextParams = new URLSearchParams(searchParams);
+    if (value) {
+      nextParams.set("chantierId", value);
+    } else {
+      nextParams.delete("chantierId");
+    }
+    setSearchParams(nextParams, { replace: true });
+  }
 
   function syncDrafts(nextRows: TerrainFeedbackRow[]) {
     const nextDrafts: Record<string, DraftState> = {};
@@ -170,6 +197,36 @@ export default function TerrainFeedbacksPage() {
         </button>
       </div>
 
+      {filterChantierId ? (
+        <section className="rounded-3xl border border-blue-200 bg-blue-50 px-4 py-3 shadow-sm">
+          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+            <div>
+              <div className="text-xs font-semibold uppercase tracking-[0.18em] text-blue-700">
+                Vue chantier filtrée
+              </div>
+              <div className="mt-1 text-sm text-blue-900">
+                Retours terrain liés à {selectedChantier?.nom ?? "ce chantier"}.
+              </div>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Link
+                to={`/chantiers/${filterChantierId}`}
+                className="rounded-xl bg-blue-700 px-3 py-2 text-sm font-semibold text-white hover:bg-blue-800"
+              >
+                Ouvrir la fiche chantier
+              </Link>
+              <button
+                type="button"
+                onClick={() => applyChantierFilter("")}
+                className="rounded-xl border border-blue-200 bg-white px-3 py-2 text-sm font-medium text-blue-800 hover:bg-blue-50"
+              >
+                Voir tous les retours
+              </button>
+            </div>
+          </div>
+        </section>
+      ) : null}
+
       <section className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm">
         <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
           {t("terrainFeedback.admin.filters")}
@@ -180,7 +237,7 @@ export default function TerrainFeedbacksPage() {
             <select
               className="w-full rounded-2xl border border-slate-200 px-3 py-3 text-sm"
               value={filterChantierId}
-              onChange={(e) => setFilterChantierId(e.target.value)}
+              onChange={(e) => applyChantierFilter(e.target.value)}
             >
               <option value="">{t("terrainFeedback.admin.allSites")}</option>
               {chantiers.map((chantier) => (
@@ -276,7 +333,13 @@ export default function TerrainFeedbacksPage() {
                       </span>
                     </div>
                     <div className="mt-2 text-sm text-slate-500">
-                      {(row.chantier?.nom ?? t("common.states.unavailable"))} • {(row.author?.nom ?? t("common.states.unavailable"))} •{" "}
+                      {row.chantier ? (
+                        <Link to={`/chantiers/${row.chantier.id}`} className="font-medium text-blue-700 hover:underline">
+                          {row.chantier.nom}
+                        </Link>
+                      ) : (
+                        t("common.states.unavailable")
+                      )} • {(row.author?.nom ?? t("common.states.unavailable"))} •{" "}
                       {row.created_at ? new Date(row.created_at).toLocaleString(locale) : t("common.states.unavailable")}
                     </div>
                     <div className="mt-4 whitespace-pre-wrap text-sm text-slate-700">{row.description}</div>
@@ -292,7 +355,16 @@ export default function TerrainFeedbacksPage() {
                       <div className="mt-3 grid gap-3 md:grid-cols-2">
                         <div>
                           <div className="text-xs text-slate-500">{t("terrainFeedback.admin.site")}</div>
-                          <div className="mt-1 text-sm font-medium text-slate-900">{row.chantier?.nom ?? "-"}</div>
+                          {row.chantier ? (
+                            <Link
+                              to={`/chantiers/${row.chantier.id}`}
+                              className="mt-1 inline-flex text-sm font-medium text-blue-700 hover:underline"
+                            >
+                              {row.chantier.nom}
+                            </Link>
+                          ) : (
+                            <div className="mt-1 text-sm font-medium text-slate-900">-</div>
+                          )}
                         </div>
                         <div>
                           <div className="text-xs text-slate-500">{t("terrainFeedback.admin.author")}</div>
