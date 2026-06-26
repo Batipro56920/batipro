@@ -348,10 +348,16 @@ export default function ApporteursAffairesPage() {
         comment: leadForm.comment || null,
         date: leadForm.date,
         status: leadForm.status,
+        crm_prospect_id: project.prospectId,
+        crm_opportunity_id: project.opportunityId,
       };
       const savedLead = editingLeadId ? await updateApporteurLead(editingLeadId, payload) : await createApporteurLead(payload);
-      await updateApporteurLead(savedLead.id, { crm_prospect_id: project.prospectId, crm_opportunity_id: project.opportunityId });
-      setNotice("Projet rattaché à l'apporteur.");
+      const crmLinked = Boolean(savedLead.crm_opportunity_id || savedLead.crm_prospect_id);
+      setNotice(
+        crmLinked
+          ? "Projet rattaché à l'apporteur et lié au CRM."
+          : "Projet enregistré pour l'apporteur. La liaison CRM n'a pas pu être persistée sur ce schéma.",
+      );
       resetLeadForm(leadForm.apporteur_id);
       await refreshData();
     } catch (err: any) {
