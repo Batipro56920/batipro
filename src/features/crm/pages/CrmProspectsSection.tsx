@@ -21,6 +21,7 @@ export default function CrmProspectsSection({
   onStatus,
   onTask,
   onCreateOpportunity,
+  onCreateAppointment,
   onCreateQuote,
 }: {
   rows: CrmProspectRow[];
@@ -31,16 +32,17 @@ export default function CrmProspectsSection({
   onStatus: (row: CrmProspectRow, status: CrmProspectRow["statut"]) => void;
   onTask: (row: CrmProspectRow) => void;
   onCreateOpportunity: (row?: CrmProspectRow) => void;
+  onCreateAppointment: (row?: CrmProspectRow) => void;
   onCreateQuote: (row?: CrmProspectRow) => void;
 }) {
   const [view, setView] = useState<ProspectView>("list");
   const [selectedProspect, setSelectedProspect] = useState<CrmProspectRow | null>(null);
   const { filteredRows, filters, setFilters, sources, statuses, owners } = useProspectsFilters(rows, query);
-  const actions = useProspectActions({ onCreate, onConvert, onStatus, onTask, onCreateOpportunity, onCreateQuote });
+  const actions = useProspectActions({ onCreate, onConvert, onStatus, onTask, onCreateOpportunity, onCreateAppointment, onCreateQuote });
 
   return (
     <div className="space-y-5">
-      <ProspectsHeader onCreate={onCreate} onCreateOpportunity={() => onCreateOpportunity()} />
+      <ProspectsHeader onCreate={onCreate} onCreateOpportunity={() => onCreateOpportunity()} onCreateAppointment={() => onCreateAppointment()} />
       <ProspectsKpiGrid rows={rows} />
       <ProspectsFilterBar
         query={query}
@@ -64,7 +66,7 @@ export default function CrmProspectsSection({
         <ProspectsTable rows={filteredRows} actions={actions} onSelect={setSelectedProspect} />
       )}
 
-      <ProspectQuickDrawer prospect={selectedProspect} onClose={() => setSelectedProspect(null)} actions={{ onCreate, onConvert, onStatus, onTask, onCreateOpportunity, onCreateQuote }} />
+      <ProspectQuickDrawer prospect={selectedProspect} onClose={() => setSelectedProspect(null)} actions={actions} />
     </div>
   );
 }
