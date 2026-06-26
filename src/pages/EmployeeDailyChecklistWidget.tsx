@@ -11,6 +11,8 @@ import {
 import {
   AUTH_SESSION_PORTAL_TOKEN,
   extractIntervenantToken,
+  INTERVENANT_CHANTIER_STORAGE_EVENT,
+  readStoredIntervenantChantierId,
   readStoredIntervenantToken,
 } from "../utils/intervenantSession";
 
@@ -62,15 +64,34 @@ function errorMessage(error: unknown, fallback: string) {
   return String((error as { message?: string } | null)?.message ?? fallback).trim() || fallback;
 }
 
+function currentStoredChantierId() {
+  return readStoredIntervenantChantierId() || null;
+}
+
 export default function EmployeeDailyChecklistWidget() {
   const { search } = useLocation();
   const checklistDate = useMemo(() => todayIso(), []);
   const [token, setToken] = useState("");
+  const [chantierId, setChantierId] = useState<string | null>(() => currentStoredChantierId());
   const [checklist, setChecklist] = useState<IntervenantDailyChecklist | null>(null);
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [savingKey, setSavingKey] = useState<ChecklistKey | "validate" | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    function syncChantierId() {
+      setChantierId(currentStoredChantierId());
+    }
+
+    syncChantierId();
+    window.addEventListener(INTERVENANT_CHANTIER_STORAGE_EVENT, syncChantierId);
+    window.addEventListener("storage", syncChantierId);
+    return () => {
+      window.removeEventListener(INTERVENANT_CHANTIER_STORAGE_EVENT, syncChantierId);
+      window.removeEventListener("storage", syncChantierId);
+    };
+  }, []);
 
   useEffect(() => {
     let alive = true;
@@ -101,7 +122,12 @@ export default function EmployeeDailyChecklistWidget() {
       setError(null);
       try {
         const data = await intervenantDailyChecklistGet(token, checklistDate);
-        if (alive) setChecklist(data);
+        if (alive) {
+          setChecklist({
+            ...data,
+            chantier_id: data.chantier_id ?? chantierId,
+          });
+        }
       } catch (loadError) {
         if (alive) setError(errorMessage(loadError, "Checklist jour indisponible."));
       } finally {
@@ -113,19 +139,23 @@ export default function EmployeeDailyChecklistWidget() {
     return () => {
       alive = false;
     };
-  }, [checklistDate, token]);
+  }, [checklistDate, chantierId, token]);
 
   if (!token) return null;
 
   const completed = CHECKLIST_ITEMS.filter((item) => checkedValue(checklist, item.key)).length;
   const total = CHECKLIST_ITEMS.length;
   const validated = Boolean(checklist?.validated_at);
+  const payloadChantierId = chantierId ?? checklist?.chantier_id ?? null;
 
   async function saveValue(key: ChecklistKey, value: boolean) {
     if (!token) return;
+    const activeChantierId = currentStoredChantierId() ?? payloadChantierId;
+    setChantierId(activeChantierId);
     const previous = checklist;
     const optimistic = {
       ...(checklist ?? { checklist_date: checklistDate }),
+      chantier_id: activeChantierId,
       [key]: value,
     } as IntervenantDailyChecklist;
     setChecklist(optimistic);
@@ -133,7 +163,7 @@ export default function EmployeeDailyChecklistWidget() {
     setError(null);
     try {
       const next = await intervenantDailyChecklistUpsert(token, {
-        chantier_id: previous?.chantier_id ?? null,
+        chantier_id: activeChantierId,
         checklist_date: checklistDate,
         [key]: value,
       });
@@ -148,11 +178,13 @@ export default function EmployeeDailyChecklistWidget() {
 
   async function validateDay() {
     if (!token) return;
+    const activeChantierId = currentStoredChantierId() ?? payloadChantierId;
+    setChantierId(activeChantierId);
     setSavingKey("validate");
     setError(null);
     try {
       const payload: ChecklistPayload = {
-        chantier_id: checklist?.chantier_id ?? null,
+        chantier_id: activeChantierId,
         checklist_date: checklistDate,
         validate: true,
       };
