@@ -28,6 +28,18 @@ type ChecklistItem = {
   detail: string;
 };
 
+type ChecklistPayload = {
+  chantier_id?: string | null;
+  checklist_date: string;
+  photos_taken?: boolean | null;
+  tasks_reported?: boolean | null;
+  time_logged?: boolean | null;
+  has_equipment?: boolean | null;
+  has_materials?: boolean | null;
+  has_information?: boolean | null;
+  validate?: boolean;
+};
+
 const CHECKLIST_ITEMS: ChecklistItem[] = [
   { key: "photos_taken", label: "Photos prises", detail: "Photos utiles ajoutees au chantier ou a la tache." },
   { key: "tasks_reported", label: "Taches remontees", detail: "Avancement, blocage ou remarque signales si necessaire." },
@@ -139,10 +151,14 @@ export default function EmployeeDailyChecklistWidget() {
     setSavingKey("validate");
     setError(null);
     try {
-      const payload = CHECKLIST_ITEMS.reduce(
-        (acc, item) => ({ ...acc, [item.key]: checkedValue(checklist, item.key) }),
-        { chantier_id: checklist?.chantier_id ?? null, checklist_date: checklistDate, validate: true },
-      );
+      const payload: ChecklistPayload = {
+        chantier_id: checklist?.chantier_id ?? null,
+        checklist_date: checklistDate,
+        validate: true,
+      };
+      CHECKLIST_ITEMS.forEach((item) => {
+        payload[item.key] = checkedValue(checklist, item.key);
+      });
       const next = await intervenantDailyChecklistUpsert(token, payload);
       setChecklist(next);
     } catch (saveError) {
