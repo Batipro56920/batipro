@@ -17,7 +17,7 @@ export default function ProjectsPage() {
 
   return (
     <div className="space-y-6">
-      <ProjectsHeader onRefresh={refresh} />
+      <ProjectsHeader billingMode={billingMode} onRefresh={refresh} />
 
       {billingMode ? (
         <div className="rounded-3xl border border-blue-100 bg-blue-50 p-4 text-sm text-blue-900">
