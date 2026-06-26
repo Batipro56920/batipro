@@ -236,6 +236,8 @@ export async function createApporteurLead(input: {
   comment?: string | null;
   date: string;
   status: ApporteurLeadStatus;
+  crm_prospect_id?: string | null;
+  crm_opportunity_id?: string | null;
 }): Promise<ApporteurLeadRow> {
   const organization_id = await getOrganizationId();
   const payload = {
@@ -250,13 +252,26 @@ export async function createApporteurLead(input: {
     date: input.date,
     status: input.status,
     commission_paid: input.status === "paye",
+    crm_prospect_id: input.crm_prospect_id ?? null,
+    crm_opportunity_id: input.crm_opportunity_id ?? null,
   };
 
   const response = await supabase
     .from("apporteur_leads")
-    .insert(payload)
+    .insert(payload as any)
     .select("*")
     .single();
+
+  if (response.error && hasMissingApporteurLeadColumn(response.error, payload)) {
+    const fallbackPayload = stripCrmLinkColumns(payload);
+    const fallback = await supabase
+      .from("apporteur_leads")
+      .insert(fallbackPayload as any)
+      .select("*")
+      .single();
+    if (fallback.error) throw new Error(fallback.error.message);
+    return fallback.data as ApporteurLeadRow;
+  }
 
   if (response.error) throw new Error(response.error.message);
   return response.data as ApporteurLeadRow;
@@ -298,12 +313,7 @@ export async function updateApporteurLead(
     .single();
 
   if (response.error && hasMissingApporteurLeadColumn(response.error, payload)) {
-    const fallbackPayload = { ...payload };
-    for (const column of ["crm_prospect_id", "crm_opportunity_id"]) {
-      if (isMissingColumn(response.error, column)) {
-        delete (fallbackPayload as Record<string, unknown>)[column];
-      }
-    }
+    const fallbackPayload = stripCrmLinkColumns(payload);
     const fallback = await supabase
       .from("apporteur_leads")
       .update(fallbackPayload as any)
@@ -321,6 +331,13 @@ export async function updateApporteurLead(
 
 function hasMissingApporteurLeadColumn(error: { code?: string; message?: string } | null, payload: Record<string, unknown>) {
   return ["crm_prospect_id", "crm_opportunity_id"].some((column) => column in payload && isMissingColumn(error, column));
+}
+
+function stripCrmLinkColumns<T extends Record<string, unknown>>(payload: T): Omit<T, "crm_prospect_id" | "crm_opportunity_id"> {
+  const fallbackPayload = { ...payload };
+  delete fallbackPayload.crm_prospect_id;
+  delete fallbackPayload.crm_opportunity_id;
+  return fallbackPayload;
 }
 
 function isMissingColumn(error: { code?: string; message?: string } | null, column: string) {
