@@ -333,7 +333,7 @@ function hasMissingApporteurLeadColumn(error: { code?: string; message?: string 
   return ["crm_prospect_id", "crm_opportunity_id"].some((column) => column in payload && isMissingColumn(error, column));
 }
 
-function stripCrmLinkColumns<T extends Record<string, unknown>>(payload: T): Omit<T, "crm_prospect_id" | "crm_opportunity_id"> {
+function stripCrmLinkColumns(payload: Record<string, unknown>) {
   const fallbackPayload = { ...payload };
   delete fallbackPayload.crm_prospect_id;
   delete fallbackPayload.crm_opportunity_id;
