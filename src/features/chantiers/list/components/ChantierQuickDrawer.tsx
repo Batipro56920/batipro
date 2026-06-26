@@ -19,6 +19,8 @@ function getProjectHref(row: ChantierDerived) {
 function CommercialContext({ row }: { row: ChantierDerived }) {
   const projectHref = getProjectHref(row);
   const quoteHref = projectHref && row.crm_quote_id ? `${projectHref}/devis/${row.crm_quote_id}/edit` : null;
+  const quoteListHref = projectHref ? `${projectHref}?tab=quotes` : null;
+  const financialHref = `/chantiers/${row.id}/financier`;
   const hasCommercialContext = Boolean(projectHref || row.crm_quote_id || row.signed_quote_amount_ht || row.crm_client_phone || row.crm_client_email);
 
   if (!hasCommercialContext) {
@@ -52,11 +54,14 @@ function CommercialContext({ row }: { row: ChantierDerived }) {
               Devis
             </Link>
           ) : null}
-          {row.crm_quote_id ? (
-            <Link to="/factures" className="inline-flex h-9 items-center rounded-xl border border-blue-200 bg-white px-3 text-sm font-semibold text-blue-800 hover:bg-blue-100">
-              Factures
+          {quoteListHref ? (
+            <Link to={quoteListHref} className="inline-flex h-9 items-center rounded-xl border border-blue-200 bg-white px-3 text-sm font-semibold text-blue-800 hover:bg-blue-100">
+              Facturer
             </Link>
           ) : null}
+          <Link to={financialHref} className="inline-flex h-9 items-center rounded-xl border border-blue-200 bg-white px-3 text-sm font-semibold text-blue-800 hover:bg-blue-100">
+            Financier chantier
+          </Link>
         </div>
       </div>
     </div>
