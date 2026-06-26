@@ -11,6 +11,7 @@ export type QuoteFilters = {
 
 export type QuoteWithParty = CrmQuoteRow & {
   partyLabel: string;
+  projectPath: string;
 };
 
 export type QuoteActionHandlers = {
