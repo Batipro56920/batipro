@@ -94,6 +94,13 @@ async function getOrganizationId(): Promise<string> {
   return await getCurrentUserId();
 }
 
+function normalizePositiveOrZeroNumber(value: number, fieldLabel: string) {
+  if (!Number.isFinite(value) || value < 0) {
+    throw new Error(`${fieldLabel} invalide.`);
+  }
+  return value;
+}
+
 export async function getApporteursAffaires(): Promise<ApporteurAffaireRow[]> {
   const organization_id = await getOrganizationId();
   const response = await supabase
@@ -162,7 +169,7 @@ export async function createApporteurAffaire(input: {
     type: input.type,
     telephone: input.telephone?.trim() || null,
     email: input.email?.trim() || null,
-    commission_percent: Number(input.commission_percent) || 0,
+    commission_percent: normalizePositiveOrZeroNumber(input.commission_percent, "Commission apporteur"),
     calculation_mode: input.calculation_mode,
     iban: input.iban?.trim() || null,
     active: input.active,
@@ -202,6 +209,10 @@ export async function updateApporteurAffaire(
     telephone: input.telephone?.trim(),
     email: input.email?.trim(),
     iban: input.iban?.trim(),
+    commission_percent:
+      input.commission_percent === undefined
+        ? undefined
+        : normalizePositiveOrZeroNumber(input.commission_percent, "Commission apporteur"),
   };
 
   const response = await supabase
@@ -247,7 +258,7 @@ export async function createApporteurLead(input: {
     telephone: input.telephone?.trim() || null,
     project_address: input.project_address?.trim() || null,
     project_type: input.project_type?.trim() || null,
-    estimated_amount: Number(input.estimated_amount) || 0,
+    estimated_amount: normalizePositiveOrZeroNumber(input.estimated_amount, "Montant estimé"),
     comment: input.comment?.trim() || null,
     date: input.date,
     status: input.status,
@@ -302,6 +313,10 @@ export async function updateApporteurLead(
     project_address: input.project_address?.trim(),
     project_type: input.project_type?.trim(),
     comment: input.comment?.trim() || null,
+    estimated_amount:
+      input.estimated_amount === undefined
+        ? undefined
+        : normalizePositiveOrZeroNumber(input.estimated_amount, "Montant estimé"),
     commission_paid: input.status === undefined ? input.commission_paid : input.status === "paye",
   };
 
@@ -431,7 +446,7 @@ export async function createApporteurLeadPortal(jwt: string, input: {
     telephone: input.telephone?.trim() || null,
     project_address: input.project_address?.trim() || null,
     project_type: input.project_type?.trim() || null,
-    estimated_amount: Number(input.estimated_amount) || 0,
+    estimated_amount: normalizePositiveOrZeroNumber(input.estimated_amount, "Montant estimé"),
     comment: input.comment?.trim() || null,
     date: input.date,
     status: "nouveau" as ApporteurLeadStatus,
