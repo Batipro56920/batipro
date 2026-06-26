@@ -32,6 +32,7 @@ export default function BibliothequeTasksPage() {
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [toast, setToast] = useState<ToastState>(null);
   const [advancedPreparationEnabled, setAdvancedPreparationEnabled] = useState(false);
+  const [selectedLot, setSelectedLot] = useState("");
 
   useEffect(() => {
     if (!toast) return;
@@ -39,13 +40,63 @@ export default function BibliothequeTasksPage() {
     return () => window.clearTimeout(timer);
   }, [toast]);
 
+  const lotOptions = useMemo(() => {
+    return Array.from(
+      new Set(rows.map((row) => (row.lot ?? "").trim()).filter((lot) => lot.length > 0)),
+    ).sort((a, b) => a.localeCompare(b, locale));
+  }, [locale, rows]);
+
+  const libraryStats = useMemo(() => {
+    const withTime = rows.filter((row) => row.temps_prevu_par_unite_h !== null).length;
+    const withCost = rows.filter((row) => row.cout_reference_unitaire_ht !== null).length;
+    const withTechnicalDetail = rows.filter(
+      (row) => Boolean(row.description_technique) || row.caracteristiques.length > 0 || Boolean(row.remarques),
+    ).length;
+    const totalReferenceCost = rows.reduce((sum, row) => {
+      const unitCost = Number(row.cout_reference_unitaire_ht ?? 0);
+      const quantity = Number(row.quantite_defaut ?? 1);
+      return sum + unitCost * quantity;
+    }, 0);
+
+    return {
+      total: rows.length,
+      lots: lotOptions.length,
+      withTime,
+      withCost,
+      withTechnicalDetail,
+      totalReferenceCost,
+    };
+  }, [lotOptions.length, rows]);
+
   const filteredRows = useMemo(() => {
     const q = query.trim().toLowerCase();
-    if (!q) return rows;
     return rows.filter((row) => {
-      return (row.titre ?? "").toLowerCase().includes(q) || (row.lot ?? "").toLowerCase().includes(q);
+      if (selectedLot && (row.lot ?? "").trim() !== selectedLot) return false;
+      if (!q) return true;
+      const searchable = [
+        row.titre,
+        row.lot,
+        row.unite,
+        row.description_technique,
+        row.remarques,
+        ...row.caracteristiques,
+      ]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase();
+      return searchable.includes(q);
     });
-  }, [rows, query]);
+  }, [rows, query, selectedLot]);
+
+  function formatCurrency(value: number | null) {
+    if (value === null) return "-";
+    return new Intl.NumberFormat(locale, { style: "currency", currency: "EUR" }).format(value);
+  }
+
+  function formatHours(value: number | null) {
+    if (value === null) return "-";
+    return `${value.toLocaleString(locale)} h`;
+  }
 
   async function refresh() {
     setLoading(true);
@@ -207,13 +258,53 @@ export default function BibliothequeTasksPage() {
         </button>
       </div>
 
-      <div className="rounded-2xl border bg-white p-4">
+      <div className="grid gap-3 md:grid-cols-5">
+        <div className="rounded-2xl border bg-white p-4">
+          <div className="text-xs font-medium uppercase text-slate-500">Modèles</div>
+          <div className="mt-1 text-2xl font-bold text-slate-900">{libraryStats.total}</div>
+          <div className="text-xs text-slate-500">{libraryStats.lots} lots structurés</div>
+        </div>
+        <div className="rounded-2xl border bg-white p-4">
+          <div className="text-xs font-medium uppercase text-slate-500">Temps</div>
+          <div className="mt-1 text-2xl font-bold text-slate-900">{libraryStats.withTime}</div>
+          <div className="text-xs text-slate-500">avec temps unitaire</div>
+        </div>
+        <div className="rounded-2xl border bg-white p-4">
+          <div className="text-xs font-medium uppercase text-slate-500">Prix</div>
+          <div className="mt-1 text-2xl font-bold text-slate-900">{libraryStats.withCost}</div>
+          <div className="text-xs text-slate-500">avec coût de référence</div>
+        </div>
+        <div className="rounded-2xl border bg-white p-4">
+          <div className="text-xs font-medium uppercase text-slate-500">Technique</div>
+          <div className="mt-1 text-2xl font-bold text-slate-900">{libraryStats.withTechnicalDetail}</div>
+          <div className="text-xs text-slate-500">documentés pour chantier/devis</div>
+        </div>
+        <div className="rounded-2xl border bg-white p-4">
+          <div className="text-xs font-medium uppercase text-slate-500">Panier type</div>
+          <div className="mt-1 text-2xl font-bold text-slate-900">{formatCurrency(libraryStats.totalReferenceCost)}</div>
+          <div className="text-xs text-slate-500">base HT selon quantités défaut</div>
+        </div>
+      </div>
+
+      <div className="grid gap-3 rounded-2xl border bg-white p-4 md:grid-cols-[minmax(0,1fr)_240px]">
         <input
           className="w-full rounded-xl border px-3 py-2 text-sm"
           placeholder={t("bibliothequeTasks.searchPlaceholder")}
           value={query}
           onChange={(e) => setQuery(e.target.value)}
         />
+        <select
+          className="w-full rounded-xl border bg-white px-3 py-2 text-sm"
+          value={selectedLot}
+          onChange={(e) => setSelectedLot(e.target.value)}
+        >
+          <option value="">Tous les lots</option>
+          {lotOptions.map((lot) => (
+            <option key={lot} value={lot}>
+              {lot}
+            </option>
+          ))}
+        </select>
       </div>
 
       {error && (
@@ -225,86 +316,157 @@ export default function BibliothequeTasksPage() {
       ) : filteredRows.length === 0 ? (
         <div className="rounded-2xl border bg-white p-6 text-sm text-slate-500">{t("bibliothequeTasks.empty")}</div>
       ) : (
-        <div className="rounded-2xl border bg-white overflow-hidden">
-          <table className="w-full text-sm">
-            <thead className="bg-slate-50 text-slate-600">
-              <tr>
-                <th className="px-4 py-3 text-left font-medium">{t("bibliothequeTasks.headers.title")}</th>
-                <th className="px-4 py-3 text-left font-medium">{t("bibliothequeTasks.headers.lot")}</th>
-                <th className="px-4 py-3 text-left font-medium">{t("bibliothequeTasks.headers.unit")}</th>
-                <th className="px-4 py-3 text-left font-medium">{t("bibliothequeTasks.headers.defaultQuantity")}</th>
-                <th className="px-4 py-3 text-left font-medium">{t("bibliothequeTasks.headers.timePerUnit")}</th>
-                <th className="px-4 py-3 text-left font-medium">Coût ref.</th>
-                <th className="px-4 py-3 text-left font-medium">{t("bibliothequeTasks.headers.updatedAt")}</th>
-                <th className="px-4 py-3 text-left font-medium">{t("common.actions.edit")}</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filteredRows.map((row) => (
-                <tr key={row.id} className="border-t">
-                  <td className="px-4 py-3">
-                    <div className="font-medium">{row.titre}</div>
-                    {row.description_technique ? (
-                      <div className="text-xs text-slate-500 line-clamp-2">{row.description_technique}</div>
-                    ) : null}
-                    {row.caracteristiques.length > 0 ? (
-                      <div className="mt-1 flex flex-wrap gap-1">
-                        {row.caracteristiques.slice(0, 3).map((item) => (
-                          <span
-                            key={`${row.id}-${item}`}
-                            className="rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[11px] text-slate-600"
-                          >
-                            {item}
-                          </span>
-                        ))}
-                      </div>
-                    ) : null}
-                    {row.remarques ? <div className="text-xs text-slate-500 truncate">{row.remarques}</div> : null}
-                  </td>
-                  <td className="px-4 py-3">{row.lot ?? "-"}</td>
-                  <td className="px-4 py-3">{row.unite ?? "-"}</td>
-                  <td className="px-4 py-3">{row.quantite_defaut ?? "-"}</td>
-                  <td className="px-4 py-3">{row.temps_prevu_par_unite_h ?? "-"}</td>
-                  <td className="px-4 py-3">
-                    {row.cout_reference_unitaire_ht !== null
-                      ? `${Math.round(Number(row.cout_reference_unitaire_ht) * 100) / 100} €`
-                      : "-"}
-                  </td>
-                  <td className="px-4 py-3">
-                    {row.updated_at ? new Date(row.updated_at).toLocaleDateString(locale) : "-"}
-                  </td>
-                  <td className="px-4 py-3">
-                    <div className="flex flex-wrap gap-2">
-                      <button
-                        type="button"
-                        onClick={() => openEditDrawer(row)}
-                        className="rounded-lg border px-2 py-1 text-xs hover:bg-slate-50"
-                      >
-                        {t("common.actions.edit")}
-                      </button>
-                      <button
-                        type="button"
-                        disabled={duplicateId === row.id}
-                        onClick={() => onDuplicate(row.id)}
-                        className="rounded-lg border px-2 py-1 text-xs hover:bg-slate-50 disabled:opacity-50"
-                      >
-                        {duplicateId === row.id ? "Duplication..." : t("common.actions.duplicate")}
-                      </button>
-                      <button
-                        type="button"
-                        disabled={deleteId === row.id}
-                        onClick={() => onDeleteRow(row)}
-                        className="rounded-lg border border-red-200 text-red-700 px-2 py-1 text-xs hover:bg-red-50 disabled:opacity-50"
-                      >
-                        {deleteId === row.id ? t("common.states.deleting") : t("common.actions.delete")}
-                      </button>
-                    </div>
-                  </td>
+        <>
+          <div className="hidden rounded-2xl border bg-white overflow-hidden md:block">
+            <table className="w-full text-sm">
+              <thead className="bg-slate-50 text-slate-600">
+                <tr>
+                  <th className="px-4 py-3 text-left font-medium">{t("bibliothequeTasks.headers.title")}</th>
+                  <th className="px-4 py-3 text-left font-medium">{t("bibliothequeTasks.headers.lot")}</th>
+                  <th className="px-4 py-3 text-left font-medium">{t("bibliothequeTasks.headers.unit")}</th>
+                  <th className="px-4 py-3 text-left font-medium">{t("bibliothequeTasks.headers.defaultQuantity")}</th>
+                  <th className="px-4 py-3 text-left font-medium">{t("bibliothequeTasks.headers.timePerUnit")}</th>
+                  <th className="px-4 py-3 text-left font-medium">Coût ref.</th>
+                  <th className="px-4 py-3 text-left font-medium">{t("bibliothequeTasks.headers.updatedAt")}</th>
+                  <th className="px-4 py-3 text-left font-medium">{t("common.actions.edit")}</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody>
+                {filteredRows.map((row) => (
+                  <tr key={row.id} className="border-t">
+                    <td className="px-4 py-3">
+                      <div className="font-medium">{row.titre}</div>
+                      {row.description_technique ? (
+                        <div className="text-xs text-slate-500 line-clamp-2">{row.description_technique}</div>
+                      ) : null}
+                      {row.caracteristiques.length > 0 ? (
+                        <div className="mt-1 flex flex-wrap gap-1">
+                          {row.caracteristiques.slice(0, 3).map((item) => (
+                            <span
+                              key={`${row.id}-${item}`}
+                              className="rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[11px] text-slate-600"
+                            >
+                              {item}
+                            </span>
+                          ))}
+                        </div>
+                      ) : null}
+                      {row.remarques ? <div className="text-xs text-slate-500 truncate">{row.remarques}</div> : null}
+                    </td>
+                    <td className="px-4 py-3">{row.lot ?? "-"}</td>
+                    <td className="px-4 py-3">{row.unite ?? "-"}</td>
+                    <td className="px-4 py-3">{row.quantite_defaut ?? "-"}</td>
+                    <td className="px-4 py-3">{formatHours(row.temps_prevu_par_unite_h)}</td>
+                    <td className="px-4 py-3">{formatCurrency(row.cout_reference_unitaire_ht)}</td>
+                    <td className="px-4 py-3">
+                      {row.updated_at ? new Date(row.updated_at).toLocaleDateString(locale) : "-"}
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="flex flex-wrap gap-2">
+                        <button
+                          type="button"
+                          onClick={() => openEditDrawer(row)}
+                          className="rounded-lg border px-2 py-1 text-xs hover:bg-slate-50"
+                        >
+                          {t("common.actions.edit")}
+                        </button>
+                        <button
+                          type="button"
+                          disabled={duplicateId === row.id}
+                          onClick={() => onDuplicate(row.id)}
+                          className="rounded-lg border px-2 py-1 text-xs hover:bg-slate-50 disabled:opacity-50"
+                        >
+                          {duplicateId === row.id ? "Duplication..." : t("common.actions.duplicate")}
+                        </button>
+                        <button
+                          type="button"
+                          disabled={deleteId === row.id}
+                          onClick={() => onDeleteRow(row)}
+                          className="rounded-lg border border-red-200 text-red-700 px-2 py-1 text-xs hover:bg-red-50 disabled:opacity-50"
+                        >
+                          {deleteId === row.id ? t("common.states.deleting") : t("common.actions.delete")}
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <div className="space-y-3 md:hidden">
+            {filteredRows.map((row) => (
+              <div key={row.id} className="rounded-2xl border bg-white p-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <div className="font-semibold text-slate-900">{row.titre}</div>
+                    <div className="mt-1 text-xs text-slate-500">{row.lot ?? "Lot non renseigné"}</div>
+                  </div>
+                  <div className="rounded-full bg-slate-100 px-2 py-1 text-xs text-slate-600">
+                    {row.unite ?? "Unité ?"}
+                  </div>
+                </div>
+
+                {row.description_technique ? (
+                  <div className="mt-3 text-sm text-slate-600">{row.description_technique}</div>
+                ) : null}
+
+                {row.caracteristiques.length > 0 ? (
+                  <div className="mt-3 flex flex-wrap gap-1">
+                    {row.caracteristiques.slice(0, 4).map((item) => (
+                      <span
+                        key={`${row.id}-mobile-${item}`}
+                        className="rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[11px] text-slate-600"
+                      >
+                        {item}
+                      </span>
+                    ))}
+                  </div>
+                ) : null}
+
+                <div className="mt-4 grid grid-cols-3 gap-2 text-xs">
+                  <div className="rounded-xl bg-slate-50 p-2">
+                    <div className="text-slate-500">Quantité</div>
+                    <div className="font-semibold text-slate-900">{row.quantite_defaut ?? "-"}</div>
+                  </div>
+                  <div className="rounded-xl bg-slate-50 p-2">
+                    <div className="text-slate-500">Temps</div>
+                    <div className="font-semibold text-slate-900">{formatHours(row.temps_prevu_par_unite_h)}</div>
+                  </div>
+                  <div className="rounded-xl bg-slate-50 p-2">
+                    <div className="text-slate-500">Coût ref.</div>
+                    <div className="font-semibold text-slate-900">{formatCurrency(row.cout_reference_unitaire_ht)}</div>
+                  </div>
+                </div>
+
+                <div className="mt-4 flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={() => openEditDrawer(row)}
+                    className="rounded-lg border px-3 py-2 text-xs hover:bg-slate-50"
+                  >
+                    {t("common.actions.edit")}
+                  </button>
+                  <button
+                    type="button"
+                    disabled={duplicateId === row.id}
+                    onClick={() => onDuplicate(row.id)}
+                    className="rounded-lg border px-3 py-2 text-xs hover:bg-slate-50 disabled:opacity-50"
+                  >
+                    {duplicateId === row.id ? "Duplication..." : t("common.actions.duplicate")}
+                  </button>
+                  <button
+                    type="button"
+                    disabled={deleteId === row.id}
+                    onClick={() => onDeleteRow(row)}
+                    className="rounded-lg border border-red-200 px-3 py-2 text-xs text-red-700 hover:bg-red-50 disabled:opacity-50"
+                  >
+                    {deleteId === row.id ? t("common.states.deleting") : t("common.actions.delete")}
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </>
       )}
 
       <TaskTemplateDrawer
