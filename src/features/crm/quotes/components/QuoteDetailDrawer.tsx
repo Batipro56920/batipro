@@ -68,12 +68,13 @@ export function QuoteDetailDrawer({
 
           <div className="grid gap-2 sm:grid-cols-2">
             <Link to={quote.projectPath} className="rounded-xl border border-blue-200 bg-blue-50 px-3 py-2 text-center text-sm font-medium text-blue-800 hover:bg-blue-100" title="Ouvrir le dossier projet lié à ce devis.">Ouvrir projet</Link>
+            <Link to={`/crm/devis/${quote.id}/edit`} className="rounded-xl bg-slate-950 px-3 py-2 text-center text-sm font-medium text-white hover:bg-slate-800" title="Modifier ce devis dans le Quote Builder.">Modifier devis</Link>
             <button type="button" onClick={() => actions.onStatus(quote, "envoye")} className="rounded-xl border border-slate-200 px-3 py-2 text-sm font-medium hover:bg-slate-50">Envoyer</button>
             <button type="button" onClick={() => actions.onStatus(quote, "relance_1")} className="rounded-xl border border-slate-200 px-3 py-2 text-sm font-medium hover:bg-slate-50">Relancer</button>
             <button type="button" onClick={() => actions.onPdf(quote)} className="rounded-xl border border-slate-200 px-3 py-2 text-sm font-medium hover:bg-slate-50">PDF</button>
             <button type="button" onClick={() => actions.onStatus(quote, "accepte")} className="rounded-xl border border-emerald-200 px-3 py-2 text-sm font-medium text-emerald-700 hover:bg-emerald-50">Accepter</button>
             <button type="button" onClick={() => actions.onStatus(quote, "refuse")} className="rounded-xl border border-red-200 px-3 py-2 text-sm font-medium text-red-700 hover:bg-red-50">Refuser</button>
-            <button type="button" onClick={() => actions.onTransform(quote)} className="rounded-xl bg-slate-950 px-3 py-2 text-sm font-medium text-white hover:bg-slate-800">Transformer chantier</button>
+            <button type="button" onClick={() => actions.onTransform(quote)} className="rounded-xl border border-slate-200 px-3 py-2 text-sm font-medium hover:bg-slate-50">Transformer chantier</button>
             <button type="button" disabled className="rounded-xl border border-slate-200 px-3 py-2 text-sm font-medium text-slate-400" title="Duplication à finaliser dans le Quote Builder">Dupliquer</button>
           </div>
         </div>
