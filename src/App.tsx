@@ -16,6 +16,7 @@ const AssistantDirectionPage = lazy(() => import("./pages/AssistantDirectionPage
 const CocoHistoricalQuotesPage = lazy(() => import("./pages/CocoHistoricalQuotesPage"));
 const RentabilitePage = lazy(() => import("./pages/RentabilitePage"));
 const CrmPage = lazy(() => import("./pages/CrmPage"));
+const CrmQuoteEditRedirectPage = lazy(() => import("./pages/CrmQuoteEditRedirectPage"));
 const ChantiersPage = lazy(() => import("./pages/ChantiersPage"));
 const ChantierNewPage = lazy(() => import("./pages/ChantierNewPage"));
 const ChantierPage = lazy(() => import("./pages/ChantierPage"));
@@ -146,7 +147,14 @@ export default function App() {
         <Route path="/crm/clients" element={<CrmRoute section="clients" />} />
         <Route path="/crm/opportunites" element={<Navigate to="/projets" replace />} />
         <Route path="/crm/devis" element={<CrmRoute section="quotes" />} />
-        <Route path="/crm/devis/:id/edit" element={<Navigate to="/crm/devis" replace />} />
+        <Route
+          path="/crm/devis/:id/edit"
+          element={
+            <RequireCompanyFeature profilePermissionKey="crm">
+              <RouteSuspense label="Ouverture de l'editeur devis..."><CrmQuoteEditRedirectPage /></RouteSuspense>
+            </RequireCompanyFeature>
+          }
+        />
         <Route path="/crm/factures" element={<Navigate to="/factures" replace />} />
         <Route
           path="/crm/apporteurs"
