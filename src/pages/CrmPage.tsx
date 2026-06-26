@@ -40,6 +40,7 @@ import CrmSavSection from "../features/crm/pages/CrmSavSection";
 import CrmSettingsSection from "../features/crm/pages/CrmSettingsSection";
 import CrmStatsSection from "../features/crm/pages/CrmStatsSection";
 import type { CrmModalKey, CrmSection } from "../features/crm/types";
+import { buildProjects } from "../features/projects/utils/projectMappers";
 
 const CrmAppointmentDialog = lazy(() => import("../features/crm/dialogs/CrmAppointmentDialog"));
 const CrmClientDialog = lazy(() => import("../features/crm/dialogs/CrmClientDialog"));
@@ -102,6 +103,15 @@ export default function CrmPage({ section = "dashboard" }: Props) {
   const clientById = useMemo(() => new Map(data.clients.map((row) => [row.id, row])), [data.clients]);
   const opportunityById = useMemo(() => new Map(data.opportunities.map((row) => [row.id, row])), [data.opportunities]);
   const quoteById = useMemo(() => new Map(data.quotes.map((row) => [row.id, row])), [data.quotes]);
+  const projectPathByQuoteId = useMemo(() => {
+    const paths = new Map<string, string>();
+    for (const project of buildProjects(data)) {
+      for (const quote of project.quotes) {
+        paths.set(quote.id, `/projets/${project.id}?tab=quotes`);
+      }
+    }
+    return paths;
+  }, [data]);
   const activeProspects = data.prospects.filter((row) => !["gagne", "perdu", "archive"].includes(row.statut));
   const now = new Date();
   const weekAgo = new Date(now);
@@ -195,7 +205,7 @@ export default function CrmPage({ section = "dashboard" }: Props) {
       ) : section === "opportunities" ? (
         <CrmOpportunitiesSection data={data} prospectById={prospectById} clientById={clientById} dragOpportunityId={dragOpportunityId} setDragOpportunityId={setDragOpportunityId} onMove={(opportunity, stage) => submitSafely(async () => moveCrmOpportunityStage(opportunity.id, stage))} onCreate={() => openOpportunityModal()} />
       ) : section === "quotes" ? (
-        <CrmQuotesSection rows={data.quotes} prospectById={prospectById} clientById={clientById} onCreate={createDraftQuoteAndOpen} onStatus={(row, statut) => submitSafely(async () => updateCrmQuote(row.id, { statut }))} onTransform={transformQuote} onPdf={downloadQuote} />
+        <CrmQuotesSection rows={data.quotes} prospectById={prospectById} clientById={clientById} projectPathByQuoteId={projectPathByQuoteId} onCreate={createDraftQuoteAndOpen} onStatus={(row, statut) => submitSafely(async () => updateCrmQuote(row.id, { statut }))} onTransform={transformQuote} onPdf={downloadQuote} />
       ) : section === "invoices" ? (
         <CrmInvoicesSection rows={data.invoices} clients={clientById} />
       ) : section === "purchases" ? (
