@@ -2,11 +2,11 @@ import type { PurchaseOrderStatus } from "../domain/types";
 
 const STATUS_LABELS: Record<PurchaseOrderStatus, string> = {
   draft: "Brouillon",
-  sent: "Envoye",
-  confirmed: "Confirme",
-  partially_delivered: "Livre partiellement",
-  delivered: "Livre",
-  cancelled: "Annule",
+  sent: "Envoyé",
+  confirmed: "Confirmé",
+  partially_delivered: "Livré partiellement",
+  delivered: "Livré",
+  cancelled: "Annulé",
 };
 
 const STATUS_CLASSES: Record<PurchaseOrderStatus, string> = {
