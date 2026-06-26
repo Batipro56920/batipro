@@ -96,7 +96,8 @@ export function ProspectQuickDrawer({
 
           <div className="grid gap-2 sm:grid-cols-2">
             <button type="button" onClick={() => actions.onTask(prospect)} className="rounded-xl border border-slate-200 px-3 py-2 text-sm font-medium hover:bg-slate-50">Créer tâche</button>
-            <button type="button" onClick={() => actions.onCreateOpportunity(prospect)} className="rounded-xl border border-slate-200 px-3 py-2 text-sm font-medium hover:bg-slate-50">Prise de RDV</button>
+            <button type="button" onClick={() => actions.onCreateOpportunity(prospect)} className="rounded-xl border border-slate-200 px-3 py-2 text-sm font-medium hover:bg-slate-50">Créer affaire</button>
+            <button type="button" onClick={() => actions.onCreateAppointment(prospect)} className="rounded-xl border border-slate-200 px-3 py-2 text-sm font-medium hover:bg-slate-50">Prise de RDV</button>
             <button type="button" onClick={() => actions.onCreateQuote(prospect)} className="rounded-xl border border-slate-200 px-3 py-2 text-sm font-medium hover:bg-slate-50">Créer devis</button>
             <button type="button" onClick={() => actions.onConvert(prospect)} className="rounded-xl border border-emerald-200 px-3 py-2 text-sm font-medium text-emerald-700 hover:bg-emerald-50">Convertir client</button>
             <button type="button" disabled className="rounded-xl border border-slate-200 px-3 py-2 text-sm font-medium text-slate-400" title="Modification dédiée à finaliser">Modifier</button>
