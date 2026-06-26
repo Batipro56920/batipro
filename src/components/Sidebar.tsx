@@ -1,8 +1,9 @@
-﻿import { NavLink } from "react-router-dom";
+import { NavLink } from "react-router-dom";
 import {
   Banknote,
   BrainCircuit,
   Calculator,
+  CalendarDays,
   ChevronLeft,
   ChevronRight,
   ClipboardList,
@@ -132,6 +133,14 @@ export default function Sidebar({ collapsed = false, onToggleCollapse, companyNa
       to: "/chantiers",
       label: t("sidebar.chantiers"),
       icon: Hammer,
+      feature: "preparation_chantier" as const,
+      permissionKey: "preparation_chantier" as const,
+      group: "Production",
+    },
+    {
+      to: "/planning",
+      label: "Planning",
+      icon: CalendarDays,
       feature: "preparation_chantier" as const,
       permissionKey: "preparation_chantier" as const,
       group: "Production",
