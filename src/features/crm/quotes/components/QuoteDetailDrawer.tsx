@@ -67,7 +67,7 @@ export function QuoteDetailDrawer({
           </section>
 
           <div className="grid gap-2 sm:grid-cols-2">
-            <Link to="/projets" className="rounded-xl border border-blue-200 bg-blue-50 px-3 py-2 text-center text-sm font-medium text-blue-800 hover:bg-blue-100" title="Les devis s'éditent depuis le dossier projet avec le Quote Builder.">Ouvrir projet</Link>
+            <Link to={quote.projectPath} className="rounded-xl border border-blue-200 bg-blue-50 px-3 py-2 text-center text-sm font-medium text-blue-800 hover:bg-blue-100" title="Ouvrir le dossier projet lié à ce devis.">Ouvrir projet</Link>
             <button type="button" onClick={() => actions.onStatus(quote, "envoye")} className="rounded-xl border border-slate-200 px-3 py-2 text-sm font-medium hover:bg-slate-50">Envoyer</button>
             <button type="button" onClick={() => actions.onStatus(quote, "relance_1")} className="rounded-xl border border-slate-200 px-3 py-2 text-sm font-medium hover:bg-slate-50">Relancer</button>
             <button type="button" onClick={() => actions.onPdf(quote)} className="rounded-xl border border-slate-200 px-3 py-2 text-sm font-medium hover:bg-slate-50">PDF</button>
