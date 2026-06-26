@@ -1,4 +1,4 @@
-import { X } from "lucide-react";
+import { AlertTriangle, ArrowRight, ClipboardList, FileText, Users, X } from "lucide-react";
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { Button } from "../../../../components/ui/button";
@@ -109,15 +109,86 @@ export function ChantierQuickDrawer({ row, actions, onClose }: { row: ChantierDe
                 <p className="mt-2 text-sm leading-6 text-slate-600">{row.crm_project_description || "Aucune description projet renseignée."}</p>
               </div>
             </>
-          ) : tab === "Alertes" ? (
-            <div className="rounded-2xl border border-slate-200 p-4">
-              {row.isLate ? <p className="text-sm font-medium text-red-700">Le chantier est en retard par rapport à l'échéance prévue.</p> : <p className="text-sm text-slate-500">Aucune alerte critique détectée dans la liste chantier.</p>}
-            </div>
+          ) : tab === "Tâches" ? (
+            <DetailShortcutPanel
+              title="Tâches et devis chantier"
+              description="Accéder au pilotage opérationnel : tâches, avancement, quantités, liens devis et préparation terrain."
+              href={`/chantiers/${row.id}/execution`}
+              icon={ClipboardList}
+              cta="Ouvrir l'exécution"
+              metric={`${row.progress}% d'avancement`}
+            />
+          ) : tab === "Équipe" ? (
+            <DetailShortcutPanel
+              title="Équipe chantier"
+              description="Retrouver les intervenants rattachés, les affectations et la coordination terrain du chantier."
+              href={`/chantiers/${row.id}/equipe`}
+              icon={Users}
+              cta="Ouvrir l'équipe"
+              metric={timeLabel(row.heures_prevues, row.heures_passees)}
+            />
+          ) : tab === "Documents" ? (
+            <DetailShortcutPanel
+              title="Documents chantier"
+              description="Consulter les plans, documents client, pièces liées aux tâches, DOE et éléments utiles au terrain."
+              href={`/chantiers/${row.id}/documents`}
+              icon={FileText}
+              cta="Ouvrir les documents"
+              metric={row.adresse ?? "Adresse non renseignée"}
+            />
           ) : (
-            <div className="rounded-2xl border border-dashed border-slate-200 p-6 text-sm text-slate-500">Aperçu rapide à connecter aux données détaillées de la fiche chantier. Utilisez “Ouvrir” pour accéder au module complet.</div>
+            <DetailShortcutPanel
+              title="Qualité, réserves et alertes"
+              description={row.isLate ? "Le chantier est en retard. Ouvrir la qualité permet de traiter les réserves et points de blocage." : "Suivre les réserves, contrôles et points qualité avant réception ou clôture du chantier."}
+              href={`/chantiers/${row.id}/qualite`}
+              icon={AlertTriangle}
+              cta="Ouvrir la qualité"
+              metric={row.isLate ? "Chantier en retard" : "Aucune alerte critique"}
+              tone={row.isLate ? "red" : "slate"}
+            />
           )}
         </div>
       </aside>
+    </div>
+  );
+}
+
+function DetailShortcutPanel({
+  title,
+  description,
+  href,
+  icon: Icon,
+  cta,
+  metric,
+  tone = "blue",
+}: {
+  title: string;
+  description: string;
+  href: string;
+  icon: typeof ClipboardList;
+  cta: string;
+  metric: string;
+  tone?: "blue" | "red" | "slate";
+}) {
+  const toneClasses =
+    tone === "red"
+      ? "border-red-200 bg-red-50 text-red-800"
+      : tone === "slate"
+        ? "border-slate-200 bg-slate-50 text-slate-700"
+        : "border-blue-100 bg-blue-50 text-blue-900";
+
+  return (
+    <div className="rounded-2xl border border-slate-200 p-4">
+      <div className={`inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-sm font-semibold ${toneClasses}`}>
+        <Icon className="h-4 w-4" />
+        {metric}
+      </div>
+      <h3 className="mt-4 text-base font-semibold text-slate-950">{title}</h3>
+      <p className="mt-2 text-sm leading-6 text-slate-600">{description}</p>
+      <Link to={href} className="mt-4 inline-flex h-10 items-center gap-2 rounded-xl bg-slate-950 px-4 text-sm font-semibold text-white hover:bg-slate-800">
+        {cta}
+        <ArrowRight className="h-4 w-4" />
+      </Link>
     </div>
   );
 }
