@@ -1,12 +1,14 @@
-import { CalendarDays, Upload, UserPlus } from "lucide-react";
+import { BriefcaseBusiness, CalendarDays, Upload, UserPlus } from "lucide-react";
 import { Button } from "../../../../components/ui/button";
 
 export function ProspectsHeader({
   onCreate,
   onCreateOpportunity,
+  onCreateAppointment,
 }: {
   onCreate: () => void;
   onCreateOpportunity: () => void;
+  onCreateAppointment: () => void;
 }) {
   return (
     <header className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm shadow-slate-950/[0.03]">
@@ -21,13 +23,17 @@ export function ProspectsHeader({
             <UserPlus className="h-4 w-4" />
             Ajouter prospect
           </Button>
+          <Button type="button" variant="secondary" size="md" onClick={onCreateOpportunity}>
+            <BriefcaseBusiness className="h-4 w-4" />
+            Créer affaire
+          </Button>
+          <Button type="button" variant="secondary" size="md" onClick={onCreateAppointment}>
+            <CalendarDays className="h-4 w-4" />
+            Prise de RDV
+          </Button>
           <Button type="button" variant="secondary" size="md" disabled title="Import CSV/XLSX à finaliser">
             <Upload className="h-4 w-4" />
             Import
-          </Button>
-          <Button type="button" variant="secondary" size="md" onClick={onCreateOpportunity}>
-            <CalendarDays className="h-4 w-4" />
-            Prise de RDV
           </Button>
         </div>
       </div>
