@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect, useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import {
   createCrmAppointment,
   createCrmClient,
@@ -72,6 +72,7 @@ const EMPTY_DATASET: CrmDataset = {
 
 export default function CrmPage({ section = "dashboard" }: Props) {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [data, setData] = useState<CrmDataset>(EMPTY_DATASET);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -98,6 +99,14 @@ export default function CrmPage({ section = "dashboard" }: Props) {
   useEffect(() => {
     void refresh();
   }, []);
+
+  useEffect(() => {
+    if (searchParams.get("action") !== "nouveau-prospect") return;
+    setModal("prospect");
+    const nextSearchParams = new URLSearchParams(searchParams);
+    nextSearchParams.delete("action");
+    setSearchParams(nextSearchParams, { replace: true });
+  }, [searchParams, setSearchParams]);
 
   const prospectById = useMemo(() => new Map(data.prospects.map((row) => [row.id, row])), [data.prospects]);
   const clientById = useMemo(() => new Map(data.clients.map((row) => [row.id, row])), [data.clients]);
