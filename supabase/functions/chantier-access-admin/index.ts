@@ -1,4 +1,4 @@
-﻿import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
+import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
@@ -93,8 +93,11 @@ function resolvePublicAppUrl(req: Request) {
   return null;
 }
 
-function buildIntervenantAccessUrl(req: Request, token: string) {
-  const path = `/intervenant?token=${encodeURIComponent(token)}`;
+function buildIntervenantAccessUrl(req: Request, token: string, chantierId: string) {
+  const params = new URLSearchParams({ token: token });
+  if (chantierId) params.set("chantier_id", chantierId);
+
+  const path = `/intervenant?${params.toString()}`;
   const base = resolvePublicAppUrl(req);
   return base ? `${base}${path}` : path;
 }
@@ -192,7 +195,7 @@ serve(async (req) => {
 
     if (insertErr) return json({ error: insertErr.message }, 400);
 
-    const accessUrl = buildIntervenantAccessUrl(req, token);
+    const accessUrl = buildIntervenantAccessUrl(req, token, chantierId);
     return json({ token, accessUrl }, 200);
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown error";
