@@ -38,6 +38,8 @@ export function ProspectsCards({ rows, actions, onSelect }: { rows: CrmProspectR
           </button>
           <div className="mt-3 flex flex-wrap gap-2">
             <button type="button" onClick={() => actions.onTask(row)} className="rounded-lg border border-slate-200 px-2 py-1 text-xs font-medium hover:bg-slate-50">Tâche</button>
+            <button type="button" onClick={() => actions.onCreateOpportunity(row)} className="rounded-lg border border-slate-200 px-2 py-1 text-xs font-medium hover:bg-slate-50">Affaire</button>
+            <button type="button" onClick={() => actions.onCreateAppointment(row)} className="rounded-lg border border-slate-200 px-2 py-1 text-xs font-medium hover:bg-slate-50">RDV</button>
             <button type="button" onClick={() => actions.onCreateQuote(row)} className="rounded-lg border border-slate-200 px-2 py-1 text-xs font-medium hover:bg-slate-50">Devis</button>
             <button type="button" onClick={() => actions.onConvert(row)} className="rounded-lg border border-emerald-200 px-2 py-1 text-xs font-medium text-emerald-700 hover:bg-emerald-50">Convertir</button>
           </div>
