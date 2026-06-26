@@ -25,11 +25,13 @@ export function useQuoteFilters({
   rows,
   prospectById,
   clientById,
+  projectPathByQuoteId,
   globalQuery,
 }: {
   rows: CrmQuoteRow[];
   prospectById: Map<string, CrmProspectRow>;
   clientById: Map<string, CrmClientRow>;
+  projectPathByQuoteId?: Map<string, string>;
   globalQuery: string;
 }) {
   const [filters, setFilters] = useState<QuoteFilters>(DEFAULT_FILTERS);
@@ -37,7 +39,8 @@ export function useQuoteFilters({
   const rowsWithParty = useMemo<QuoteWithParty[]>(() => rows.map((row) => ({
     ...row,
     partyLabel: entityLabel(clientById.get(row.client_id ?? "") ?? prospectById.get(row.prospect_id ?? "")),
-  })), [clientById, prospectById, rows]);
+    projectPath: projectPathByQuoteId?.get(row.id) ?? "/projets",
+  })), [clientById, projectPathByQuoteId, prospectById, rows]);
 
   const statuses = useMemo(() => Array.from(new Set(rows.map((row) => row.statut))).sort(), [rows]);
   const clients = useMemo(() => Array.from(new Set(rowsWithParty.map((row) => row.partyLabel).filter((value) => value !== "—"))).sort(), [rowsWithParty]);
