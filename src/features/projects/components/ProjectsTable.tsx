@@ -4,6 +4,21 @@ import type { ProjectRecord } from "../types";
 import { ProjectStatusBadge } from "./ProjectStatusBadge";
 import { formatCurrency, formatDate } from "./ProjectShared";
 
+type ProjectQuote = ProjectRecord["quotes"][number];
+
+function getBillableQuote(project: ProjectRecord): ProjectQuote | null {
+  return (
+    project.quotes.find((quote) => quote.statut === "accepte" && Number(quote.montant_ttc ?? 0) > 0) ??
+    project.quotes.find((quote) => quote.statut === "accepte") ??
+    null
+  );
+}
+
+function getBillableAmount(project: ProjectRecord, quote: ProjectQuote | null) {
+  if (!quote) return project.quoteAmount;
+  return Number(quote.montant_ttc || quote.montant_ht || 0);
+}
+
 export function ProjectsTable({ projects, billingMode = false }: { projects: ProjectRecord[]; billingMode?: boolean }) {
   if (!projects.length) {
     return (
@@ -31,46 +46,64 @@ export function ProjectsTable({ projects, billingMode = false }: { projects: Pro
               <th className="px-4 py-3">Adresse</th>
               <th className="px-4 py-3">Commercial</th>
               <th className="px-4 py-3">Statut</th>
-              <th className="px-4 py-3">Prochaine action</th>
-              <th className="px-4 py-3 text-right">Montant devis</th>
+              <th className="px-4 py-3">{billingMode ? "Devis accepté" : "Prochaine action"}</th>
+              <th className="px-4 py-3 text-right">{billingMode ? "Montant à facturer" : "Montant devis"}</th>
               <th className="px-4 py-3">Création</th>
               <th className="px-4 py-3">Échéance</th>
               <th className="px-4 py-3 text-right">Action</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
-            {projects.map((project) => (
-              <tr key={project.id} className="transition hover:bg-slate-50/80">
-                <td className="max-w-[260px] px-4 py-3">
-                  <Link to={`/projets/${project.id}${billingMode ? "?tab=quotes" : ""}`} className="font-semibold text-slate-950 hover:text-blue-700">
-                    {project.name}
-                  </Link>
-                  <div className="mt-1 truncate text-xs text-slate-500">{project.projectType || "Type à qualifier"}</div>
-                </td>
-                <td className="px-4 py-3 text-slate-700">{project.clientName}</td>
-                <td className="max-w-[220px] truncate px-4 py-3 text-slate-500">{project.address || "Adresse à renseigner"}</td>
-                <td className="px-4 py-3 text-slate-500">{project.salesperson || "À assigner"}</td>
-                <td className="px-4 py-3">
-                  <ProjectStatusBadge status={project.status} />
-                </td>
-                <td className="max-w-[220px] px-4 py-3">
-                  <div className="truncate text-slate-700">{project.nextAction || "Aucune action planifiée"}</div>
-                  {project.nextActionDate ? <div className="mt-1 text-xs text-slate-500">{formatDate(project.nextActionDate)}</div> : null}
-                </td>
-                <td className="px-4 py-3 text-right font-semibold text-slate-900">{formatCurrency(project.quoteAmount)}</td>
-                <td className="px-4 py-3 text-slate-500">{formatDate(project.createdAt)}</td>
-                <td className="px-4 py-3 text-slate-500">{formatDate(project.desiredDeadline)}</td>
-                <td className="px-4 py-3 text-right">
-                  <Link
-                    to={`/projets/${project.id}${billingMode ? "?tab=quotes" : ""}`}
-                    className="inline-flex h-8 items-center justify-center gap-2 rounded-lg border border-slate-200 bg-white px-2.5 text-xs font-semibold text-slate-900 transition hover:bg-slate-50"
-                  >
-                    {billingMode ? "Facturer" : "Ouvrir"}
-                    <ArrowRight className="h-3.5 w-3.5" />
-                  </Link>
-                </td>
-              </tr>
-            ))}
+            {projects.map((project) => {
+              const billableQuote = billingMode ? getBillableQuote(project) : null;
+              return (
+                <tr key={project.id} className="transition hover:bg-slate-50/80">
+                  <td className="max-w-[260px] px-4 py-3">
+                    <Link to={`/projets/${project.id}${billingMode ? "?tab=quotes" : ""}`} className="font-semibold text-slate-950 hover:text-blue-700">
+                      {project.name}
+                    </Link>
+                    <div className="mt-1 truncate text-xs text-slate-500">{project.projectType || "Type à qualifier"}</div>
+                  </td>
+                  <td className="px-4 py-3 text-slate-700">{project.clientName}</td>
+                  <td className="max-w-[220px] truncate px-4 py-3 text-slate-500">{project.address || "Adresse à renseigner"}</td>
+                  <td className="px-4 py-3 text-slate-500">{project.salesperson || "À assigner"}</td>
+                  <td className="px-4 py-3">
+                    <ProjectStatusBadge status={project.status} />
+                  </td>
+                  <td className="max-w-[220px] px-4 py-3">
+                    {billingMode ? (
+                      <>
+                        <div className="truncate font-semibold text-slate-700">{billableQuote?.quote_number || "Devis accepté"}</div>
+                        <div className="mt-1 text-xs text-slate-500">
+                          {billableQuote
+                            ? `Accepté le ${formatDate(billableQuote.accepted_at ?? billableQuote.updated_at)}`
+                            : "Devis accepté à vérifier"}
+                        </div>
+                      </>
+                    ) : (
+                      <>
+                        <div className="truncate text-slate-700">{project.nextAction || "Aucune action planifiée"}</div>
+                        {project.nextActionDate ? <div className="mt-1 text-xs text-slate-500">{formatDate(project.nextActionDate)}</div> : null}
+                      </>
+                    )}
+                  </td>
+                  <td className="px-4 py-3 text-right font-semibold text-slate-900">
+                    {formatCurrency(billingMode ? getBillableAmount(project, billableQuote) : project.quoteAmount)}
+                  </td>
+                  <td className="px-4 py-3 text-slate-500">{formatDate(project.createdAt)}</td>
+                  <td className="px-4 py-3 text-slate-500">{formatDate(project.desiredDeadline)}</td>
+                  <td className="px-4 py-3 text-right">
+                    <Link
+                      to={`/projets/${project.id}${billingMode ? "?tab=quotes" : ""}`}
+                      className="inline-flex h-8 items-center justify-center gap-2 rounded-lg border border-slate-200 bg-white px-2.5 text-xs font-semibold text-slate-900 transition hover:bg-slate-50"
+                    >
+                      {billingMode ? "Facturer" : "Ouvrir"}
+                      <ArrowRight className="h-3.5 w-3.5" />
+                    </Link>
+                  </td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>
