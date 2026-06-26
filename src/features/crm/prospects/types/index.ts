@@ -20,5 +20,6 @@ export type ProspectActionHandlers = {
   onStatus: (row: CrmProspectRow, status: CrmProspectRow["statut"]) => void;
   onTask: (row: CrmProspectRow) => void;
   onCreateOpportunity: (row?: CrmProspectRow) => void;
+  onCreateAppointment: (row?: CrmProspectRow) => void;
   onCreateQuote: (row?: CrmProspectRow) => void;
 };
