@@ -173,7 +173,7 @@ export default function EmployeeDailyChecklistWidget() {
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="fixed bottom-24 right-4 z-50 flex max-w-[calc(100vw-2rem)] items-center gap-2 rounded-full border border-blue-200 bg-white px-4 py-3 text-sm font-semibold text-slate-900 shadow-[0_12px_40px_rgba(15,23,42,0.18)]"
+        className="fixed bottom-24 right-4 z-[45] flex max-w-[calc(100vw-2rem)] items-center gap-2 rounded-full border border-blue-200 bg-white px-4 py-3 text-sm font-semibold text-slate-900 shadow-[0_12px_40px_rgba(15,23,42,0.18)]"
         aria-label="Ouvrir la checklist jour"
       >
         {loading ? <Loader2 className="h-4 w-4 animate-spin text-blue-700" /> : <ClipboardCheck className="h-4 w-4 text-blue-700" />}
@@ -184,7 +184,7 @@ export default function EmployeeDailyChecklistWidget() {
   }
 
   return (
-    <section className="fixed inset-x-4 bottom-24 z-50 mx-auto max-w-md rounded-xl border border-slate-200 bg-white p-4 shadow-[0_20px_70px_rgba(15,23,42,0.24)]">
+    <section className="fixed inset-x-4 bottom-24 z-[45] mx-auto max-w-md rounded-xl border border-slate-200 bg-white p-4 shadow-[0_20px_70px_rgba(15,23,42,0.24)]">
       <div className="flex items-start justify-between gap-3">
         <div>
           <div className="flex items-center gap-2 text-[11px] font-semibold uppercase text-blue-700">
