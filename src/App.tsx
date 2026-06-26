@@ -1,4 +1,4 @@
-﻿// src/App.tsx
+// src/App.tsx
 import { lazy, Suspense, type ReactNode } from "react";
 import { Routes, Route, Navigate } from "react-router-dom";
 import LayoutShell from "./components/LayoutShell";
@@ -333,6 +333,10 @@ export default function App() {
         <Route
           path="/chantiers"
           element={<ChantierBackofficeRoute label="Chargement des chantiers..."><ChantiersPage /></ChantierBackofficeRoute>}
+        />
+        <Route
+          path="/planning"
+          element={<ChantierBackofficeRoute label="Chargement du planning..."><ChantiersPage initialView="planning" /></ChantierBackofficeRoute>}
         />
         <Route path="/chantiers/nouveau" element={<ChantierBackofficeRoute label="Chargement du nouveau chantier..."><ChantierNewPage /></ChantierBackofficeRoute>} />
         <Route path="/chantiers/:id" element={<ChantierBackofficeRoute label="Chargement du chantier..."><ChantierPage /></ChantierBackofficeRoute>} />
