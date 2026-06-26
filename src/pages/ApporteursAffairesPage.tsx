@@ -118,6 +118,10 @@ function statusClass(status: ApporteurLeadStatus) {
   return "bg-slate-100 text-slate-700 ring-slate-200";
 }
 
+function isPayableCommissionStatus(status: ApporteurLeadStatus) {
+  return status === "signe" || status === "commission_a_payer";
+}
+
 function portalLink(tokenRow?: ApporteurAccessTokenRow) {
   if (!tokenRow) return "";
   const origin = typeof window === "undefined" ? "" : window.location.origin;
@@ -219,7 +223,7 @@ export default function ApporteursAffairesPage() {
       const apporteur = apporteurs.find((row) => row.id === lead.apporteur_id);
       const commission = calculateCommission(lead, apporteur);
       totalCommission += commission;
-      if (lead.status !== "paye") unpaidCommission += commission;
+      if (isPayableCommissionStatus(lead.status)) unpaidCommission += commission;
       if (lead.crm_opportunity_id || lead.crm_prospect_id) converted += 1;
     }
     return { totalCommission, unpaidCommission, converted };
