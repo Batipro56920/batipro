@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { getChantiers, type ChantierRow } from "../services/chantiers.service";
 import { listIntervenants, type IntervenantRow } from "../services/intervenants.service";
@@ -75,6 +75,8 @@ export default function TerrainFeedbacksPage() {
   const { locale, t } = useI18n();
   const [searchParams, setSearchParams] = useSearchParams();
   const urlChantierId = searchParams.get("chantierId") ?? "";
+  const urlFeedbackId = searchParams.get("feedbackId") ?? "";
+  const highlightedFeedbackRef = useRef<string | null>(null);
   const [rows, setRows] = useState<TerrainFeedbackRow[]>([]);
   const [chantiers, setChantiers] = useState<ChantierRow[]>([]);
   const [intervenants, setIntervenants] = useState<IntervenantRow[]>([]);
@@ -103,6 +105,11 @@ export default function TerrainFeedbacksPage() {
     );
   }, [chantiers, filterChantierId, rows]);
 
+  const highlightedFeedback = useMemo(
+    () => (urlFeedbackId ? rows.find((row) => row.id === urlFeedbackId) ?? null : null),
+    [rows, urlFeedbackId],
+  );
+
   const workflowStats = useMemo(() => {
     const openRows = rows.filter(isOpenFeedback);
     const priorityRows = rows.filter(isPriorityFeedback);
@@ -121,9 +128,21 @@ export default function TerrainFeedbacksPage() {
     setFilterChantierId((current) => (current === urlChantierId ? current : urlChantierId));
   }, [urlChantierId]);
 
+  useEffect(() => {
+    if (loading || !urlFeedbackId || highlightedFeedbackRef.current === urlFeedbackId) return;
+    if (!rows.some((row) => row.id === urlFeedbackId)) return;
+
+    highlightedFeedbackRef.current = urlFeedbackId;
+    window.requestAnimationFrame(() => {
+      document.getElementById(`feedback-${urlFeedbackId}`)?.scrollIntoView({ block: "center", behavior: "smooth" });
+    });
+  }, [loading, rows, urlFeedbackId]);
+
   function applyChantierFilter(value: string) {
     setFilterChantierId(value);
     const nextParams = new URLSearchParams(searchParams);
+    nextParams.delete("feedbackId");
+    highlightedFeedbackRef.current = null;
     if (value) {
       nextParams.set("chantierId", value);
     } else {
@@ -248,6 +267,20 @@ export default function TerrainFeedbacksPage() {
           {t("common.actions.refresh")}
         </button>
       </div>
+
+      {urlFeedbackId ? (
+        <section className="rounded-3xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-900 shadow-sm">
+          {highlightedFeedback ? (
+            <span>
+              Retour ciblé depuis la recherche globale : <strong>{highlightedFeedback.title}</strong>.
+            </span>
+          ) : loading ? (
+            "Ouverture du retour terrain ciblé..."
+          ) : (
+            "Le retour ciblé n'est pas visible avec les filtres actuels."
+          )}
+        </section>
+      ) : null}
 
       {filterChantierId ? (
         <section className="rounded-3xl border border-blue-200 bg-blue-50 px-4 py-3 shadow-sm">
@@ -484,11 +517,24 @@ export default function TerrainFeedbacksPage() {
         <div className="space-y-4">
           {rows.map((row) => {
             const draft = drafts[row.id];
+            const isHighlighted = row.id === urlFeedbackId;
             return (
-              <article key={row.id} className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+              <article
+                key={row.id}
+                id={`feedback-${row.id}`}
+                className={[
+                  "scroll-mt-24 rounded-3xl border bg-white p-5 shadow-sm transition",
+                  isHighlighted ? "border-blue-400 ring-2 ring-blue-100" : "border-slate-200",
+                ].join(" ")}
+              >
                 <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-2">
+                      {isHighlighted ? (
+                        <span className="inline-flex rounded-full border border-blue-200 bg-blue-50 px-2.5 py-1 text-xs font-semibold text-blue-700">
+                          Résultat recherché
+                        </span>
+                      ) : null}
                       <h2 className="text-lg font-semibold text-slate-950">{row.title}</h2>
                       <span className={["inline-flex rounded-full border px-2.5 py-1 text-xs font-semibold", badgeClass(statusTone(row.status))].join(" ")}>
                         {t(`terrainFeedback.statuses.${row.status}`)}
