@@ -58,6 +58,17 @@ function resultRank(result: GlobalSearchResult, query: string) {
   return 3;
 }
 
+function quoteProjectHref(row: SearchRow) {
+  const opportunityId = cleanText(row.opportunity_id);
+  const prospectId = cleanText(row.prospect_id);
+  const clientId = cleanText(row.client_id);
+
+  if (opportunityId) return `/projets/opportunity-${opportunityId}?tab=quotes`;
+  if (prospectId) return `/projets/prospect-${prospectId}?tab=quotes`;
+  if (clientId) return `/projets/client-${clientId}?tab=quotes`;
+  return "/crm/devis";
+}
+
 async function querySource(source: SearchSource, query: string): Promise<GlobalSearchResult[]> {
   const like = `%${query}%`;
   const { data, error } = await supabase
@@ -133,14 +144,14 @@ const SOURCES: SearchSource[] = [
   },
   {
     table: "crm_quotes",
-    select: "id,quote_number,description,lot,statut,montant_ttc",
+    select: "id,quote_number,description,lot,statut,montant_ttc,opportunity_id,prospect_id,client_id",
     filter: "quote_number.ilike.$term,description.ilike.$term,lot.ilike.$term,statut.ilike.$term",
     map: (row) => ({
       id: cleanText(row.id),
       kind: "devis",
       title: cleanText(row.quote_number) || "Devis sans numéro",
       subtitle: [cleanText(row.description) || cleanText(row.lot), cleanText(row.statut)].filter(Boolean).join(" - ") || "Devis CRM",
-      href: `/crm/devis/${cleanText(row.id)}/edit`,
+      href: quoteProjectHref(row),
       badge: "Devis",
     }),
   },
