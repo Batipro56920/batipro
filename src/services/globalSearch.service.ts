@@ -2,6 +2,9 @@ import { supabase } from "../lib/supabaseClient";
 
 export type GlobalSearchKind =
   | "chantier"
+  | "chantier_tache"
+  | "chantier_reserve"
+  | "chantier_document"
   | "projet"
   | "prospect"
   | "client"
@@ -102,6 +105,15 @@ function resultRank(result: GlobalSearchResult, query: string) {
   return 3;
 }
 
+function chantierSectionHref(row: SearchRow, section: "execution" | "qualite" | "documents", paramName: string) {
+  const chantierId = cleanText(row.chantier_id);
+  const id = cleanText(row.id);
+  if (!chantierId) return "/chantiers";
+
+  const params = new URLSearchParams({ [paramName]: id });
+  return `/chantiers/${encodeURIComponent(chantierId)}/${section}?${params.toString()}`;
+}
+
 function quoteProjectHref(row: SearchRow) {
   const opportunityId = cleanText(row.opportunity_id);
   const prospectId = cleanText(row.prospect_id);
@@ -164,6 +176,45 @@ const SOURCES: SearchSource[] = [
       subtitle: [cleanText(row.client), cleanText(row.adresse)].filter(Boolean).join(" - ") || "Chantier",
       href: `/chantiers/${cleanText(row.id)}`,
       badge: "Chantier",
+    }),
+  },
+  {
+    table: "chantier_tasks",
+    select: "id,chantier_id,titre,titre_terrain,lot,corps_etat,status,quality_status,priorite",
+    filter: "titre.ilike.$term,titre_terrain.ilike.$term,lot.ilike.$term,corps_etat.ilike.$term,status.ilike.$term,quality_status.ilike.$term,priorite.ilike.$term",
+    map: (row) => ({
+      id: cleanText(row.id),
+      kind: "chantier_tache",
+      title: cleanText(row.titre_terrain) || cleanText(row.titre) || "Tache chantier sans titre",
+      subtitle: [cleanText(row.lot) || cleanText(row.corps_etat), cleanText(row.status), cleanText(row.quality_status), cleanText(row.priorite)].filter(Boolean).join(" - ") || "Tache chantier",
+      href: chantierSectionHref(row, "execution", "taskId"),
+      badge: "Tache chantier",
+    }),
+  },
+  {
+    table: "chantier_reserves",
+    select: "id,chantier_id,title,description,status,priority",
+    filter: "title.ilike.$term,description.ilike.$term,status.ilike.$term,priority.ilike.$term",
+    map: (row) => ({
+      id: cleanText(row.id),
+      kind: "chantier_reserve",
+      title: cleanText(row.title) || "Reserve sans titre",
+      subtitle: [cleanText(row.status), cleanText(row.priority), cleanText(row.description)].filter(Boolean).join(" - ") || "Reserve chantier",
+      href: chantierSectionHref(row, "qualite", "reserveId"),
+      badge: "Reserve",
+    }),
+  },
+  {
+    table: "chantier_documents",
+    select: "id,chantier_id,title,file_name,category,document_type,visibility_mode",
+    filter: "title.ilike.$term,file_name.ilike.$term,category.ilike.$term,document_type.ilike.$term,visibility_mode.ilike.$term",
+    map: (row) => ({
+      id: cleanText(row.id),
+      kind: "chantier_document",
+      title: cleanText(row.title) || cleanText(row.file_name) || "Document chantier sans titre",
+      subtitle: [cleanText(row.category), cleanText(row.document_type), cleanText(row.visibility_mode)].filter(Boolean).join(" - ") || "Document chantier",
+      href: chantierSectionHref(row, "documents", "documentId"),
+      badge: "Document chantier",
     }),
   },
   {
