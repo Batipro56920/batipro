@@ -631,7 +631,48 @@ export default function ApporteursAffairesPage() {
 
       <section className="bt-card rounded-xl bg-white p-4">
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3"><div><div className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Projets apportés</div><h2 className="mt-1 text-lg font-semibold text-slate-950">Suivi commercial et commissions</h2></div><div className="flex flex-wrap items-center gap-2"><select className={selectClass} value={selectedApporteurId} onChange={(event) => { setSelectedApporteurId(event.target.value); setSelectedStatus(""); }}><option value="">Tous les apporteurs</option>{apporteurs.map((row) => <option key={row.id} value={row.id}>{row.nom}</option>)}</select><select className={selectClass} value={selectedStatus} onChange={(event) => setSelectedStatus(event.target.value as ApporteurLeadStatus | "")}><option value="">Tous les statuts</option>{LEAD_STATUSES.map((status) => <option key={status.value} value={status.value}>{status.label}</option>)}</select></div></div>
-        <div className="overflow-x-auto"><table className="bt-table min-w-full"><thead><tr><Th>Projet / client</Th><Th>Apporteur</Th><Th>Montant</Th><Th>Statut</Th><Th>Commission</Th><Th>CRM</Th><Th>Actions</Th></tr></thead><tbody>{filteredLeads.map((lead) => { const apporteur = apporteurs.find((row) => row.id === lead.apporteur_id); const crmPath = crmProjectPathForLead(lead); const linked = Boolean(crmPath); const commissionAction = commissionStatusAction(lead.status); return <tr key={lead.id}><Td><div className="font-semibold text-slate-950">{lead.client_name}</div><div className="text-xs text-slate-500">{lead.project_type || lead.project_address || lead.telephone || "-"}</div></Td><Td>{apporteur?.nom ?? "-"}</Td><Td>{formatCurrency(lead.estimated_amount)}</Td><Td><span className={`rounded-full px-2.5 py-1 text-xs font-semibold ring-1 ${statusClass(lead.status)}`}>{optionLabel(LEAD_STATUSES, lead.status)}</span></Td><Td>{formatCurrency(calculateCommission(lead, apporteur ?? undefined))}</Td><Td>{linked ? <Link to={crmPath} className="font-medium text-blue-700 hover:underline">Ouvrir projet</Link> : <span className="text-slate-500">À convertir</span>}</Td><Td><div className="flex flex-wrap gap-2"><button type="button" onClick={() => onEditLead(lead)} className="font-medium text-blue-700 hover:underline">Modifier</button>{commissionAction ? <button type="button" disabled={saving} onClick={() => void onUpdateLeadCommissionStatus(lead)} className="font-medium text-amber-700 hover:underline disabled:text-slate-400">{commissionAction.label}</button> : null}<button type="button" disabled={saving || linked} onClick={() => void onCreateCrmProspectFromLead(lead)} className="font-medium text-emerald-700 hover:underline disabled:text-slate-400">Créer projet CRM</button><button type="button" onClick={() => void onRemoveLead(lead.id)} className="font-medium text-red-600 hover:underline">Supprimer</button></div></Td></tr>; })}{!filteredLeads.length ? <tr><td colSpan={7} className="px-4 py-8 text-center text-sm text-slate-500">Aucun projet rattaché.</td></tr> : null}</tbody></table></div>
+        <div className="space-y-3 md:hidden">
+          {filteredLeads.map((lead) => {
+            const apporteur = apporteurs.find((row) => row.id === lead.apporteur_id);
+            const crmPath = crmProjectPathForLead(lead);
+            const linked = Boolean(crmPath);
+            const commissionAction = commissionStatusAction(lead.status);
+            return (
+              <article key={lead.id} className="rounded-lg border border-slate-200 bg-white p-3 text-sm">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="truncate font-semibold text-slate-950">{lead.client_name}</div>
+                    <div className="mt-0.5 text-xs text-slate-500">{apporteur?.nom ?? "Apporteur non renseigné"}</div>
+                  </div>
+                  <span className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-semibold ring-1 ${statusClass(lead.status)}`}>{optionLabel(LEAD_STATUSES, lead.status)}</span>
+                </div>
+                <div className="mt-3 text-slate-600">
+                  <div className="font-medium text-slate-800">{lead.project_type || lead.project_address || lead.telephone || "Projet non précisé"}</div>
+                  {lead.project_address && lead.project_type ? <div className="mt-0.5 text-xs text-slate-500">{lead.project_address}</div> : null}
+                </div>
+                <div className="mt-3 grid grid-cols-2 gap-3 border-t border-slate-200 pt-3">
+                  <Info label="Montant" value={formatCurrency(lead.estimated_amount)} />
+                  <Info label="Commission" value={formatCurrency(calculateCommission(lead, apporteur ?? undefined))} />
+                </div>
+                <div className="mt-3 rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-600">
+                  CRM : {linked ? <Link to={crmPath} className="font-medium text-blue-700 hover:underline">ouvrir le projet</Link> : <span>à convertir</span>}
+                </div>
+                <LeadActions
+                  lead={lead}
+                  saving={saving}
+                  linked={linked}
+                  commissionAction={commissionAction}
+                  onEdit={onEditLead}
+                  onUpdateCommission={onUpdateLeadCommissionStatus}
+                  onCreateCrm={onCreateCrmProspectFromLead}
+                  onRemove={onRemoveLead}
+                />
+              </article>
+            );
+          })}
+          {!filteredLeads.length ? <div className="rounded-lg border border-dashed border-slate-200 p-4 text-center text-sm text-slate-500">Aucun projet rattaché.</div> : null}
+        </div>
+        <div className="hidden overflow-x-auto md:block"><table className="bt-table min-w-full"><thead><tr><Th>Projet / client</Th><Th>Apporteur</Th><Th>Montant</Th><Th>Statut</Th><Th>Commission</Th><Th>CRM</Th><Th>Actions</Th></tr></thead><tbody>{filteredLeads.map((lead) => { const apporteur = apporteurs.find((row) => row.id === lead.apporteur_id); const crmPath = crmProjectPathForLead(lead); const linked = Boolean(crmPath); const commissionAction = commissionStatusAction(lead.status); return <tr key={lead.id}><Td><div className="font-semibold text-slate-950">{lead.client_name}</div><div className="text-xs text-slate-500">{lead.project_type || lead.project_address || lead.telephone || "-"}</div></Td><Td>{apporteur?.nom ?? "-"}</Td><Td>{formatCurrency(lead.estimated_amount)}</Td><Td><span className={`rounded-full px-2.5 py-1 text-xs font-semibold ring-1 ${statusClass(lead.status)}`}>{optionLabel(LEAD_STATUSES, lead.status)}</span></Td><Td>{formatCurrency(calculateCommission(lead, apporteur ?? undefined))}</Td><Td>{linked ? <Link to={crmPath} className="font-medium text-blue-700 hover:underline">Ouvrir projet</Link> : <span className="text-slate-500">À convertir</span>}</Td><Td><LeadActions lead={lead} saving={saving} linked={linked} commissionAction={commissionAction} onEdit={onEditLead} onUpdateCommission={onUpdateLeadCommissionStatus} onCreateCrm={onCreateCrmProspectFromLead} onRemove={onRemoveLead} /></Td></tr>; })}{!filteredLeads.length ? <tr><td colSpan={7} className="px-4 py-8 text-center text-sm text-slate-500">Aucun projet rattaché.</td></tr> : null}</tbody></table></div>
       </section>
 
       {showApporteurLayer ? (
@@ -671,6 +712,35 @@ function FormPanel({ title, children }: { title: string; children: ReactNode }) 
 
 function Info({ label, value }: { label: string; value: string }) {
   return <div className="rounded-lg border border-slate-100 bg-slate-50 p-3"><div className="text-xs text-slate-500">{label}</div><div className="mt-1 truncate text-sm font-semibold text-slate-900">{value}</div></div>;
+}
+
+function LeadActions({
+  lead,
+  saving,
+  linked,
+  commissionAction,
+  onEdit,
+  onUpdateCommission,
+  onCreateCrm,
+  onRemove,
+}: {
+  lead: ApporteurLeadRow;
+  saving: boolean;
+  linked: boolean;
+  commissionAction: ReturnType<typeof commissionStatusAction>;
+  onEdit: (lead: ApporteurLeadRow) => void;
+  onUpdateCommission: (lead: ApporteurLeadRow) => Promise<void>;
+  onCreateCrm: (lead: ApporteurLeadRow) => Promise<void>;
+  onRemove: (id: string) => Promise<void>;
+}) {
+  return (
+    <div className="mt-3 flex flex-wrap gap-2 md:mt-0">
+      <button type="button" onClick={() => onEdit(lead)} className="font-medium text-blue-700 hover:underline">Modifier</button>
+      {commissionAction ? <button type="button" disabled={saving} onClick={() => void onUpdateCommission(lead)} className="font-medium text-amber-700 hover:underline disabled:text-slate-400">{commissionAction.label}</button> : null}
+      <button type="button" disabled={saving || linked} onClick={() => void onCreateCrm(lead)} className="font-medium text-emerald-700 hover:underline disabled:text-slate-400">Créer projet CRM</button>
+      <button type="button" onClick={() => void onRemove(lead.id)} className="font-medium text-red-600 hover:underline">Supprimer</button>
+    </div>
+  );
 }
 
 function Input({ label, value, onChange, type = "text", inputMode }: { label: string; value: string; onChange: (value: string) => void; type?: string; inputMode?: "decimal" }) {
