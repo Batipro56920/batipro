@@ -22,6 +22,14 @@ const LEAD_STATUSES: { value: ApporteurLeadStatus; label: string }[] = [
   { value: "paye", label: "Payé" },
 ];
 
+function todayLocalDate() {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, "0");
+  const day = String(now.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
 const DEFAULT_LEAD_FORM = {
   client_name: "",
   telephone: "",
@@ -29,7 +37,7 @@ const DEFAULT_LEAD_FORM = {
   project_type: "",
   estimated_amount: "",
   comment: "",
-  date: new Date().toISOString().slice(0, 10),
+  date: todayLocalDate(),
 };
 
 function formatCurrency(value: number) {
@@ -180,7 +188,7 @@ export default function ApporteurPortalPage() {
         date: leadForm.date,
       });
       setActNotice("Client transmis. L'équipe prendra le relais.");
-      setLeadForm(DEFAULT_LEAD_FORM);
+      setLeadForm({ ...DEFAULT_LEAD_FORM, date: todayLocalDate() });
       const accessResult = await checkApporteurToken(token);
       const refreshed = await getApporteurPortalData(jwt, accessResult.apporteur_id);
       setPortalData(refreshed);
@@ -230,7 +238,7 @@ export default function ApporteurPortalPage() {
             {actNotice ? <div className="mt-4 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-700">{actNotice}</div> : null}
             <div className="mt-5 flex flex-wrap gap-2">
               <button type="button" disabled={actSaving} onClick={() => void onSubmitLead()} className={primaryButtonClass}>Transmettre le client</button>
-              <button type="button" onClick={() => setLeadForm(DEFAULT_LEAD_FORM)} className={secondaryButtonClass}>Réinitialiser</button>
+              <button type="button" onClick={() => setLeadForm({ ...DEFAULT_LEAD_FORM, date: todayLocalDate() })} className={secondaryButtonClass}>Réinitialiser</button>
             </div>
           </section>
 
