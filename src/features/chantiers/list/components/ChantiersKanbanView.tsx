@@ -1,3 +1,5 @@
+import { AlertTriangle, ArrowRight } from "lucide-react";
+import { Link } from "react-router-dom";
 import type { ChantierDerived, ChantierListActions } from "../types";
 import { budgetLabel, shortDate } from "../utils/chantiersListUtils";
 import { ChantierProgress } from "./ChantierProgress";
@@ -11,11 +13,14 @@ const COLUMNS = [
 ] as const;
 
 export function ChantiersKanbanView({ rows, onPreview, actions }: { rows: ChantierDerived[]; onPreview: (row: ChantierDerived) => void; actions: ChantierListActions }) {
+  const blockedRows = rows.filter((row) => row.isLate && row.status !== "TERMINE");
+  const blockedIds = new Set(blockedRows.map((row) => row.id));
+  const availableRows = rows.filter((row) => !blockedIds.has(row.id));
   const byColumn = {
-    preparation: rows.filter((row) => row.status === "PREPARATION"),
-    en_cours: rows.filter((row) => row.status === "EN_COURS" || row.status === "EN_PAUSE"),
-    blocage: rows.filter((row) => row.isLate),
-    termine: rows.filter((row) => row.status === "TERMINE"),
+    preparation: availableRows.filter((row) => row.status === "PREPARATION"),
+    en_cours: availableRows.filter((row) => row.status === "EN_COURS" || row.status === "EN_PAUSE"),
+    blocage: blockedRows,
+    termine: availableRows.filter((row) => row.status === "TERMINE"),
   };
 
   return (
@@ -34,10 +39,21 @@ export function ChantiersKanbanView({ rows, onPreview, actions }: { rows: Chanti
                 <div className="mt-3">
                   <ChantierProgress value={row.progress} />
                 </div>
-                <div className="mt-3 flex items-center justify-between text-xs text-slate-500">
-                  <span>{budgetLabel(row.budgetHt)}</span>
-                  <span>{shortDate(row.date_fin_prevue ?? row.planning_end_date)}</span>
+                <div className="mt-3 flex items-center justify-between gap-3 text-xs text-slate-500">
+                  <span className="truncate">{budgetLabel(row.budgetHt)}</span>
+                  <span className="shrink-0">{shortDate(row.date_fin_prevue ?? row.planning_end_date)}</span>
                 </div>
+                {column.key === "blocage" ? (
+                  <Link
+                    to={`/chantiers/${row.id}/qualite`}
+                    onClick={(event) => event.stopPropagation()}
+                    className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm font-semibold text-red-700 transition hover:bg-red-100"
+                  >
+                    <AlertTriangle className="h-4 w-4" />
+                    Traiter en qualité
+                    <ArrowRight className="h-4 w-4" />
+                  </Link>
+                ) : null}
                 <div className="mt-3">
                   <ChantierRowActions row={row} actions={actions} />
                 </div>
