@@ -328,11 +328,11 @@ function buildInvoiceContextLinks(invoice: InvoiceRecord): ContextLink[] {
     });
   }
 
-  if (projectId && quoteId) {
+  if (quoteId) {
     links.push({
       label: "Devis source",
-      description: `Modifier ${invoice.document.quoteId ? "le devis lié" : "le devis d'origine"}`,
-      href: `/projets/${projectId}/devis/${encodeURIComponent(quoteId)}/edit`,
+      description: projectId ? "Modifier le devis depuis le projet" : "Retrouver le devis et son projet",
+      href: projectId ? `/projets/${projectId}/devis/${encodeURIComponent(quoteId)}/edit` : `/crm/devis/${encodeURIComponent(quoteId)}/edit`,
     });
   }
 
