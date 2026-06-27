@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { ArrowRight, FileCheck2, RefreshCw, Search } from "lucide-react";
 import { Button } from "../../../components/ui/button";
 import { PageHeader } from "../../../components/layout/PageHeader";
@@ -13,6 +13,8 @@ import { getPaidAmount } from "../application/invoicePayments";
 import { invoiceTypeLabel } from "../application/invoiceFactory";
 
 export default function InvoicesPage() {
+  const [searchParams] = useSearchParams();
+  const invoiceIdFromUrl = searchParams.get("invoice")?.trim() || null;
   const [invoices, setInvoices] = useState<InvoiceRecord[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [dirtyInvoiceIds, setDirtyInvoiceIds] = useState<Set<string>>(() => new Set());
@@ -26,6 +28,13 @@ export default function InvoicesPage() {
   useEffect(() => {
     void refresh();
   }, []);
+
+  useEffect(() => {
+    if (!invoiceIdFromUrl) return;
+    if (invoices.some((invoice) => invoice.id === invoiceIdFromUrl)) {
+      setSelectedId(invoiceIdFromUrl);
+    }
+  }, [invoiceIdFromUrl, invoices]);
 
   const stats = useMemo(() => {
     const totals = invoices.reduce((acc, invoice) => {
@@ -66,7 +75,12 @@ export default function InvoicesPage() {
       const rows = await listInvoices();
       setInvoices(rows);
       setDirtyInvoiceIds(new Set());
-      if (selectFirst) setSelectedId((current) => current ?? rows[0]?.id ?? null);
+      if (selectFirst) {
+        setSelectedId((current) => {
+          if (invoiceIdFromUrl && rows.some((invoice) => invoice.id === invoiceIdFromUrl)) return invoiceIdFromUrl;
+          return current ?? rows[0]?.id ?? null;
+        });
+      }
     } catch (err: any) {
       setError(err?.message ?? "Chargement des factures impossible.");
       setInvoices([]);
