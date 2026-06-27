@@ -1,4 +1,4 @@
-﻿// src/components/LayoutShell.tsx
+// src/components/LayoutShell.tsx
 import { useEffect, useRef, useState } from "react";
 import { Link, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { Bell, CircleHelp, Menu, Plus, Search, UserRound, X } from "lucide-react";
@@ -18,6 +18,7 @@ export default function LayoutShell() {
   const { language, setLanguage, t } = useI18n();
   const defaultCompanyName = t("layout.defaultCompanyName");
   const searchInputRef = useRef<HTMLInputElement | null>(null);
+  const mobileSearchInputRef = useRef<HTMLInputElement | null>(null);
   const [companyName, setCompanyName] = useState(defaultCompanyName);
   const [userEmail, setUserEmail] = useState<string | null>(null);
   const [signingOut, setSigningOut] = useState(false);
@@ -145,6 +146,11 @@ export default function LayoutShell() {
     navigate(result.href);
   }
 
+  function openMobileSearch() {
+    setSearchOpen((value) => !value);
+    window.setTimeout(() => mobileSearchInputRef.current?.focus(), 0);
+  }
+
   function onSearchKeyDown(event: React.KeyboardEvent<HTMLInputElement>) {
     if (event.key === "Escape") {
       setSearchOpen(false);
@@ -166,7 +172,7 @@ export default function LayoutShell() {
 
         <main className="content">
           <header className="header-bar flex h-14 items-center justify-between gap-3 border-b border-[#E2E8F0] bg-white/95 px-4 shadow-sm shadow-slate-950/[0.02] backdrop-blur">
-            <div className="flex items-center gap-3">
+            <div className="flex min-w-0 items-center gap-3">
               <button
                 type="button"
                 className="sidebar-toggle rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm shadow-sm hover:bg-slate-50"
@@ -175,7 +181,7 @@ export default function LayoutShell() {
               >
                 {sidebarOpen ? <X size={18} /> : <Menu size={18} />}
               </button>
-              <span className="max-w-[12rem] truncate text-sm font-semibold tracking-tight text-[#0F172A] sm:max-w-[18rem]">
+              <span className="max-w-[10rem] truncate text-sm font-semibold tracking-tight text-[#0F172A] sm:max-w-[18rem]">
                 {companyName}
               </span>
             </div>
@@ -232,6 +238,15 @@ export default function LayoutShell() {
             </div>
 
             <div className="flex shrink-0 items-center gap-2">
+              <button
+                type="button"
+                onClick={openMobileSearch}
+                className="grid h-9 w-9 place-items-center rounded-xl border border-slate-200 bg-white text-slate-600 shadow-sm transition hover:bg-slate-50 lg:hidden"
+                aria-label="Recherche globale"
+                aria-expanded={searchOpen}
+              >
+                <Search className="h-4 w-4" />
+              </button>
               <details className="relative hidden sm:block">
                 <summary className="flex h-9 cursor-pointer list-none items-center gap-2 rounded-xl bg-[#3B82F6] px-3 text-sm font-medium text-white shadow-sm shadow-blue-600/15 transition hover:bg-blue-600">
                   <Plus className="h-4 w-4" />
@@ -298,6 +313,57 @@ export default function LayoutShell() {
             </div>
           </header>
 
+          {searchOpen ? (
+            <div className="border-b border-slate-200 bg-white px-4 py-3 shadow-sm lg:hidden">
+              <label className="flex items-center rounded-xl border border-[#E2E8F0] bg-[#F8FAFC] px-3 py-2 text-sm text-slate-400 focus-within:border-blue-300 focus-within:bg-white focus-within:ring-2 focus-within:ring-blue-100">
+                <Search className="mr-2 h-4 w-4 shrink-0" />
+                <input
+                  ref={mobileSearchInputRef}
+                  className="min-w-0 flex-1 bg-transparent text-sm text-slate-700 outline-none placeholder:text-slate-400"
+                  placeholder="Rechercher chantier, client, projet..."
+                  aria-label="Recherche globale mobile"
+                  value={searchQuery}
+                  onChange={(event) => setSearchQuery(event.target.value)}
+                  onKeyDown={onSearchKeyDown}
+                  autoComplete="off"
+                />
+                <button type="button" onClick={() => setSearchOpen(false)} className="ml-2 rounded-lg p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700" aria-label="Fermer la recherche">
+                  <X className="h-4 w-4" />
+                </button>
+              </label>
+              {searchQuery.trim().length >= 2 ? (
+                <div className="mt-2 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-lg shadow-slate-950/5">
+                  {searchLoading ? (
+                    <div className="px-4 py-3 text-sm text-slate-500">Recherche en cours...</div>
+                  ) : searchError ? (
+                    <div className="px-4 py-3 text-sm text-red-600">{searchError}</div>
+                  ) : searchResults.length ? (
+                    <div className="max-h-80 overflow-y-auto p-1">
+                      {searchResults.map((result) => (
+                        <button
+                          key={`${result.kind}-${result.id}`}
+                          type="button"
+                          onClick={() => openSearchResult(result)}
+                          className="flex w-full items-start gap-3 rounded-xl px-3 py-2.5 text-left transition hover:bg-slate-50"
+                        >
+                          <span className="mt-0.5 rounded-full bg-blue-50 px-2 py-0.5 text-[11px] font-semibold text-blue-700 ring-1 ring-blue-100">{result.badge}</span>
+                          <span className="min-w-0 flex-1">
+                            <span className="block truncate text-sm font-semibold text-slate-950">{result.title}</span>
+                            <span className="mt-0.5 block truncate text-xs text-slate-500">{result.subtitle}</span>
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="px-4 py-3 text-sm text-slate-500">Aucun résultat trouvé.</div>
+                  )}
+                </div>
+              ) : (
+                <div className="mt-2 text-xs text-slate-500">Saisissez au moins 2 caractères.</div>
+              )}
+            </div>
+          ) : null}
+
           <div className="content-body bg-[#F8FAFC] p-4 md:p-6">
             <Outlet />
             {location.pathname === "/assistant-direction" ? <CocoHistoricalImportPanel /> : null}
@@ -309,4 +375,3 @@ export default function LayoutShell() {
     </div>
   );
 }
-
