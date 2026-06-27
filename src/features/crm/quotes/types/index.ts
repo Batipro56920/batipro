@@ -12,6 +12,7 @@ export type QuoteFilters = {
 export type QuoteWithParty = CrmQuoteRow & {
   partyLabel: string;
   projectPath: string;
+  chantierPath?: string;
 };
 
 export type QuoteActionHandlers = {
