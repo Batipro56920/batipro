@@ -5,7 +5,7 @@ import type { InvoiceRecord, InvoiceType } from "../../invoices/domain/types";
 import { listInvoices, saveInvoice } from "../../invoices/infrastructure/invoiceRepository";
 import { quoteBuilderToBusinessDocument } from "../../quotes/builder/quoteBuilderDocumentAdapter";
 import { createQuoteBuilderFromEngine } from "../../quotes/builder/quoteBuilderModel";
-import { loadCrmQuoteEngineData } from "../../../services/crm.service";
+import { loadCrmQuoteEngineData, transformAcceptedQuoteToChantier } from "../../../services/crm.service";
 import type { ProjectRecord } from "../types";
 import { EmptyProjectBlock, Panel, formatCurrency, formatDate } from "./ProjectShared";
 import { getPrimaryQuote } from "../hooks/useProjectsData";
@@ -196,6 +196,8 @@ export function ProjectQuotesTab({ project }: { project: ProjectRecord }) {
   const navigate = useNavigate();
   const [billingKey, setBillingKey] = useState<string | null>(null);
   const [billingError, setBillingError] = useState<string | null>(null);
+  const [chantierActionKey, setChantierActionKey] = useState<string | null>(null);
+  const [chantierError, setChantierError] = useState<string | null>(null);
   const [existingInvoices, setExistingInvoices] = useState<InvoiceRecord[]>([]);
   const acceptedQuote = project.quotes.find((quote) => quote.statut === "accepte");
 
@@ -219,6 +221,45 @@ export function ProjectQuotesTab({ project }: { project: ProjectRecord }) {
       const matchesType = !invoiceType || invoice.type === invoiceType;
       return matchesQuote && matchesType && invoice.status !== "cancelled";
     });
+  }
+
+  function getQuoteChantierId(quoteId: string) {
+    return (
+      project.quotes.find((quote) => quote.id === quoteId)?.chantier_id ??
+      project.chantiers.find((chantier) => chantier.crm_quote_id === quoteId)?.id ??
+      (project.chantiers.length === 1 ? project.chantiers[0]?.id : null)
+    );
+  }
+
+  async function createChantierFromQuote(quoteId: string) {
+    const quote = project.quotes.find((item) => item.id === quoteId);
+    if (!quote || chantierActionKey) return;
+    if (quote.statut !== "accepte") {
+      setChantierError("La creation chantier est disponible uniquement depuis un devis accepte.");
+      return;
+    }
+
+    const existingChantierId = getQuoteChantierId(quoteId);
+    if (existingChantierId) {
+      navigate(`/chantiers/${existingChantierId}`);
+      return;
+    }
+
+    setChantierActionKey(quoteId);
+    setChantierError(null);
+    try {
+      const created = await transformAcceptedQuoteToChantier({
+        quote,
+        prospect: project.prospect,
+        client: project.client,
+        opportunity: project.opportunity,
+      });
+      navigate(`/chantiers/${created.id}`);
+    } catch (error) {
+      setChantierError(error instanceof Error ? error.message : "Creation du chantier impossible depuis ce devis.");
+    } finally {
+      setChantierActionKey(null);
+    }
   }
 
   async function createInvoiceFromQuote(quoteId: string, invoiceType: InvoiceType) {
@@ -255,8 +296,25 @@ export function ProjectQuotesTab({ project }: { project: ProjectRecord }) {
     <Panel title="Devis" description="Pre-devis, devis final, variantes, signatures et relances." actions={<Link to={`/projets/${project.id}/devis/nouveau`} className="text-sm font-semibold text-blue-700 hover:text-blue-800">Creer devis</Link>}>
       <div className="space-y-4">
         {acceptedQuote ? (
-          <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800">
-            Devis accepte : l'action Creer chantier est disponible depuis le header projet.
+          <div className="flex flex-col gap-3 rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800 lg:flex-row lg:items-center lg:justify-between">
+            <div>
+              <div className="font-semibold">Devis accepte : le dossier peut passer en chantier.</div>
+              <div className="mt-1 text-emerald-700">Utilisez l'action de la ligne de devis pour créer le chantier ou ouvrir le chantier deja lie.</div>
+            </div>
+            {getQuoteChantierId(acceptedQuote.id) ? (
+              <Link to={`/chantiers/${getQuoteChantierId(acceptedQuote.id)}`} className="inline-flex h-9 items-center justify-center rounded-xl border border-emerald-200 bg-white px-3 text-sm font-semibold text-emerald-700 hover:bg-emerald-100">
+                Ouvrir chantier
+              </Link>
+            ) : (
+              <button type="button" onClick={() => void createChantierFromQuote(acceptedQuote.id)} disabled={chantierActionKey !== null} className="inline-flex h-9 items-center justify-center rounded-xl border border-emerald-200 bg-white px-3 text-sm font-semibold text-emerald-700 hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-60">
+                {chantierActionKey === acceptedQuote.id ? "Creation..." : "Créer chantier"}
+              </button>
+            )}
+          </div>
+        ) : null}
+        {chantierError ? (
+          <div className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm font-medium text-red-700">
+            {chantierError}
           </div>
         ) : null}
         {billingError ? (
@@ -281,7 +339,10 @@ export function ProjectQuotesTab({ project }: { project: ProjectRecord }) {
               <tbody className="divide-y divide-slate-100">
                 {project.quotes.map((quote) => {
                   const quoteInvoices = getQuoteInvoices(quote.id);
+                  const quoteChantierId = getQuoteChantierId(quote.id);
                   const canBill = Number(quote.montant_ttc ?? 0) > 0 && quote.statut === "accepte";
+                  const canCreateChantier = quote.statut === "accepte" && !quoteChantierId;
+                  const isCreatingChantier = chantierActionKey === quote.id;
                   return (
                     <tr key={quote.id}>
                       <td className="px-4 py-3 font-semibold text-slate-950">{quote.quote_number}</td>
@@ -293,6 +354,21 @@ export function ProjectQuotesTab({ project }: { project: ProjectRecord }) {
                       <td className="px-4 py-3 text-right">
                         <div className="flex flex-wrap justify-end gap-2">
                           <Link to={`/projets/${project.id}/devis/${quote.id}/edit`} className="inline-flex h-8 items-center font-semibold text-blue-700 hover:text-blue-800">Ouvrir</Link>
+                          {quoteChantierId ? (
+                            <Link to={`/chantiers/${quoteChantierId}`} className="inline-flex h-8 items-center rounded-lg border border-blue-200 bg-blue-50 px-2.5 text-xs font-semibold text-blue-700 hover:bg-blue-100">
+                              Chantier
+                            </Link>
+                          ) : quote.statut === "accepte" ? (
+                            <button
+                              type="button"
+                              onClick={() => void createChantierFromQuote(quote.id)}
+                              disabled={!canCreateChantier || isCreatingChantier || chantierActionKey !== null}
+                              title={canCreateChantier ? "Creer le chantier depuis ce devis accepte" : "Un chantier est deja lie a ce devis"}
+                              className="inline-flex h-8 items-center rounded-lg border border-emerald-200 bg-emerald-50 px-2.5 text-xs font-semibold text-emerald-700 hover:bg-emerald-100 disabled:bg-slate-50 disabled:text-slate-400"
+                            >
+                              {isCreatingChantier ? "Creation..." : "Créer chantier"}
+                            </button>
+                          ) : null}
                           {quoteInvoices.length ? (
                             <Link to="/factures" className="inline-flex h-8 items-center rounded-lg border border-emerald-200 bg-emerald-50 px-2.5 text-xs font-semibold text-emerald-700 hover:bg-emerald-100">
                               {quoteInvoices.length} facture{quoteInvoices.length > 1 ? "s" : ""}
