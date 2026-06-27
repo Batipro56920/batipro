@@ -6,6 +6,7 @@ export type GlobalSearchKind =
   | "prospect"
   | "client"
   | "devis"
+  | "facture"
   | "retour_terrain"
   | "apporteur"
   | "lead_apporteur";
@@ -32,8 +33,50 @@ function cleanText(value: unknown) {
   return String(value ?? "").trim();
 }
 
+function asRecord(value: unknown): SearchRow {
+  return value && typeof value === "object" && !Array.isArray(value) ? value as SearchRow : {};
+}
+
 function clientName(row: SearchRow) {
   return [cleanText(row.prenom), cleanText(row.nom)].filter(Boolean).join(" ") || cleanText(row.societe) || "Client sans nom";
+}
+
+function documentText(row: SearchRow, key: string) {
+  return cleanText(asRecord(row.document)[key]);
+}
+
+function documentNestedText(row: SearchRow, parentKey: string, key: string) {
+  return cleanText(asRecord(asRecord(row.document)[parentKey])[key]);
+}
+
+function documentTotalTtc(row: SearchRow) {
+  const value = Number(asRecord(asRecord(row.document).totals).totalTtc);
+  return Number.isFinite(value) ? value : null;
+}
+
+function formatSearchCurrency(value: number | null) {
+  if (value === null) return "";
+  return new Intl.NumberFormat("fr-FR", { style: "currency", currency: "EUR" }).format(value);
+}
+
+function invoiceTypeLabel(value: unknown) {
+  const type = cleanText(value);
+  if (type === "deposit") return "Acompte";
+  if (type === "intermediate") return "Intermédiaire";
+  if (type === "final") return "Finale";
+  if (type === "credit_note") return "Avoir";
+  return type || "Facture";
+}
+
+function invoiceStatusLabel(value: unknown) {
+  const status = cleanText(value);
+  if (status === "draft") return "Brouillon";
+  if (status === "sent") return "Envoyée";
+  if (status === "partially_paid") return "Partiellement payée";
+  if (status === "paid") return "Payée";
+  if (status === "overdue") return "En retard";
+  if (status === "cancelled") return "Annulée";
+  return status;
 }
 
 function normalizeQuery(query: string) {
@@ -154,6 +197,24 @@ const SOURCES: SearchSource[] = [
       href: quoteProjectHref(row),
       badge: "Devis",
     }),
+  },
+  {
+    table: "invoices",
+    select: "id,type,status,document,source_quote_id,project_id,chantier_id",
+    filter: "document->>number.ilike.$term,document->>title.ilike.$term,document->>siteAddress.ilike.$term,document->recipient->>displayName.ilike.$term,status.ilike.$term,type.ilike.$term",
+    map: (row) => {
+      const id = cleanText(row.id);
+      const recipient = documentNestedText(row, "recipient", "displayName");
+      const siteAddress = documentText(row, "siteAddress");
+      return {
+        id,
+        kind: "facture",
+        title: documentText(row, "number") || "Facture sans numéro",
+        subtitle: [recipient, siteAddress, invoiceTypeLabel(row.type), invoiceStatusLabel(row.status), formatSearchCurrency(documentTotalTtc(row))].filter(Boolean).join(" - ") || "Facture",
+        href: `/factures?invoice=${encodeURIComponent(id)}`,
+        badge: "Facture",
+      };
+    },
   },
   {
     table: "terrain_feedbacks",
