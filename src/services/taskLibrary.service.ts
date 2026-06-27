@@ -418,11 +418,7 @@ export async function duplicate(id: string): Promise<TaskTemplateRow> {
     fee_items: source.fee_items,
   });
 
-  try {
-    await duplicateTaskTemplatePreparation(source.id, duplicated.id);
-  } catch {
-    // Keep legacy duplication behavior even if advanced preparation is unavailable.
-  }
+  await duplicateTaskTemplatePreparation(source.id, duplicated.id);
 
   return duplicated;
 }
