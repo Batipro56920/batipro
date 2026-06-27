@@ -75,6 +75,18 @@ function isPayableCommissionStatus(status: ApporteurLeadStatus) {
   return status === "signe" || status === "commission_a_payer";
 }
 
+function leadStatusLabel(status: ApporteurLeadStatus) {
+  return LEAD_STATUSES.find((item) => item.value === status)?.label ?? status;
+}
+
+function leadStatusClass(status: ApporteurLeadStatus) {
+  if (status === "paye") return "bg-emerald-50 text-emerald-700 ring-emerald-200";
+  if (status === "commission_a_payer" || status === "signe") return "bg-amber-50 text-amber-700 ring-amber-200";
+  if (status === "perdu") return "bg-red-50 text-red-700 ring-red-200";
+  if (status === "devis_envoye" || status === "contacte") return "bg-blue-50 text-blue-700 ring-blue-200";
+  return "bg-slate-100 text-slate-700 ring-slate-200";
+}
+
 export default function ApporteurPortalPage() {
   const params = useParams<{ token: string }>();
   const token = params.token ?? "";
@@ -233,7 +245,16 @@ export default function ApporteurPortalPage() {
 
         <section className="bt-card rounded-xl bg-white p-4">
           <div className="mb-4"><div className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Suivi</div><h2 className="mt-1 text-lg font-semibold text-slate-950">Clients transmis</h2></div>
-          <div className="overflow-x-auto">
+          {portalData.leads.length ? (
+            <div className="divide-y divide-slate-200 border-y border-slate-200 md:hidden">
+              {portalData.leads.map((lead) => (
+                <LeadMobileRow key={lead.id} lead={lead} apporteur={portalData.apporteur} />
+              ))}
+            </div>
+          ) : (
+            <div className="rounded-lg border border-dashed border-slate-200 p-4 text-center text-sm text-slate-500 md:hidden">Aucun client transmis pour le moment.</div>
+          )}
+          <div className="hidden overflow-x-auto md:block">
             <table className="bt-table min-w-full">
               <thead>
                 <tr>
@@ -251,7 +272,7 @@ export default function ApporteurPortalPage() {
                     <td className="align-top"><div className="font-semibold text-slate-950">{lead.client_name}</div><div className="text-xs text-slate-500">{lead.telephone || "-"}</div></td>
                     <td className="align-top"><div>{lead.project_type || "-"}</div><div className="text-xs text-slate-500">{lead.project_address || ""}</div></td>
                     <td className="align-top">{formatCurrency(lead.estimated_amount)}</td>
-                    <td className="align-top">{LEAD_STATUSES.find((item) => item.value === lead.status)?.label}</td>
+                    <td className="align-top">{leadStatusLabel(lead.status)}</td>
                     <td className="align-top">{formatCurrency(commissionAmount(lead, portalData.apporteur))}</td>
                     <td className="align-top">{lead.date}</td>
                   </tr>
@@ -276,6 +297,29 @@ function PublicShell({ children }: { children: ReactNode }) {
 
 function Metric({ label, value }: { label: string; value: string }) {
   return <div className="bt-card rounded-xl bg-white p-4"><div className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">{label}</div><div className="mt-2 text-lg font-bold text-slate-950">{value}</div></div>;
+}
+
+function LeadMobileRow({ lead, apporteur }: { lead: ApporteurLeadRow; apporteur: ApporteurAffaireRow | null }) {
+  return (
+    <article className="py-3 text-sm">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="truncate font-semibold text-slate-950">{lead.client_name}</div>
+          <div className="mt-0.5 text-xs text-slate-500">{lead.telephone || "Téléphone non renseigné"}</div>
+        </div>
+        <span className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-semibold ring-1 ${leadStatusClass(lead.status)}`}>{leadStatusLabel(lead.status)}</span>
+      </div>
+      <div className="mt-3 space-y-1 text-slate-600">
+        <div className="font-medium text-slate-800">{lead.project_type || "Projet non précisé"}</div>
+        {lead.project_address ? <div className="text-xs text-slate-500">{lead.project_address}</div> : null}
+      </div>
+      <div className="mt-3 grid grid-cols-2 gap-3 border-t border-slate-200 pt-3">
+        <div><div className="text-xs text-slate-500">Montant estimé</div><div className="font-semibold text-slate-950">{formatCurrency(lead.estimated_amount)}</div></div>
+        <div><div className="text-xs text-slate-500">Commission</div><div className="font-semibold text-slate-950">{formatCurrency(commissionAmount(lead, apporteur))}</div></div>
+      </div>
+      <div className="mt-2 text-xs text-slate-500">Transmis le {lead.date}</div>
+    </article>
+  );
 }
 
 function Input({ label, value, onChange, inputMode }: { label: string; value: string; onChange: (value: string) => void; inputMode?: "decimal" }) {
