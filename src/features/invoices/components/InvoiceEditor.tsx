@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
-import { Download, Plus, Save, Send, Trash2 } from "lucide-react";
+import { Link } from "react-router-dom";
+import { ArrowRight, Download, Plus, Save, Send, Trash2 } from "lucide-react";
 import { Button } from "../../../components/ui/button";
 import { calculateDocumentTotals, createDocumentLine, createDocumentSection, DocumentPreview, DocumentSendDialog, DocumentTotalsCard, downloadBusinessDocumentPdf, flattenDocumentNodes, validateBusinessDocument, type BusinessDocument, type BusinessDocumentNode, type DocumentItemKind } from "../../document-engine";
 import { addInvoicePayment, createProfitabilitySnapshot, getPaidAmount, getRemainingAmount, removeInvoicePayment } from "../application/invoicePayments";
@@ -22,6 +23,12 @@ type InvoiceEditorProps = {
   onSave: (invoice: InvoiceRecord) => void | Promise<void>;
 };
 
+type ContextLink = {
+  label: string;
+  description: string;
+  href: string;
+};
+
 export function InvoiceEditor({ invoice, hasUnsavedChanges, onUnsavedChange, onChange, onSave }: InvoiceEditorProps) {
   const [previewOpen, setPreviewOpen] = useState(false);
   const [sendOpen, setSendOpen] = useState(false);
@@ -31,6 +38,7 @@ export function InvoiceEditor({ invoice, hasUnsavedChanges, onUnsavedChange, onC
   const totals = document.totals ?? calculateDocumentTotals(document);
   const rows = useMemo(() => flattenDocumentNodes(document.nodes), [document.nodes]);
   const profitability = createProfitabilitySnapshot(invoice);
+  const contextLinks = useMemo(() => buildInvoiceContextLinks(invoice), [invoice]);
 
   function updateDocument(patch: Partial<BusinessDocument>) {
     const nextDocument = { ...document, ...patch };
@@ -114,6 +122,7 @@ export function InvoiceEditor({ invoice, hasUnsavedChanges, onUnsavedChange, onC
             <Button className="col-span-2 w-full sm:w-auto" variant="primary" disabled={saving} onClick={save}><Save className="h-4 w-4" /> {saving ? "Enregistrement..." : "Enregistrer"}</Button>
           </div>
         </div>
+        {contextLinks.length ? <InvoiceContextLinks links={contextLinks} /> : null}
         {saveError ? <div className="mt-4 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700">{saveError}</div> : null}
       </header>
 
@@ -166,6 +175,25 @@ export function InvoiceEditor({ invoice, hasUnsavedChanges, onUnsavedChange, onC
 
       {previewOpen ? <DocumentPreview document={document} /> : null}
       {sendOpen ? <DocumentSendDialog document={document} onClose={() => setSendOpen(false)} onDownload={() => downloadBusinessDocumentPdf(document)} /> : null}
+    </div>
+  );
+}
+
+function InvoiceContextLinks({ links }: { links: ContextLink[] }) {
+  return (
+    <div className="mt-4 rounded-2xl border border-blue-100 bg-blue-50 px-4 py-3">
+      <div className="text-xs font-semibold uppercase tracking-[0.14em] text-blue-700">Contexte lié</div>
+      <div className="mt-3 grid gap-2 md:grid-cols-3">
+        {links.map((link) => (
+          <Link key={link.href} to={link.href} className="group flex items-center justify-between gap-3 rounded-xl border border-blue-100 bg-white px-3 py-2 text-sm shadow-sm transition hover:border-blue-200 hover:bg-blue-50">
+            <span className="min-w-0">
+              <span className="block truncate font-semibold text-slate-950">{link.label}</span>
+              <span className="mt-0.5 block truncate text-xs text-slate-500">{link.description}</span>
+            </span>
+            <ArrowRight className="h-4 w-4 shrink-0 text-blue-600 transition group-hover:translate-x-0.5" />
+          </Link>
+        ))}
+      </div>
     </div>
   );
 }
@@ -284,6 +312,51 @@ function NumberCell({ value, onChange }: { value: number; onChange: (value: numb
 
 function Line({ label, value }: { label: string; value: string }) {
   return <div className="flex justify-between gap-3"><span>{label}</span><span className="font-semibold text-slate-950">{value}</span></div>;
+}
+
+function buildInvoiceContextLinks(invoice: InvoiceRecord): ContextLink[] {
+  const links: ContextLink[] = [];
+  const projectId = routeProjectId(invoice.document.projectId) ?? routeProjectId(invoice.projectId);
+  const quoteId = cleanText(invoice.document.quoteId) ?? cleanText(invoice.sourceQuoteId);
+  const chantierId = cleanText(invoice.document.chantierId) ?? cleanText(invoice.chantierId);
+
+  if (projectId) {
+    links.push({
+      label: "Projet commercial",
+      description: "Ouvrir l'onglet Devis",
+      href: `/projets/${projectId}?tab=quotes`,
+    });
+  }
+
+  if (projectId && quoteId) {
+    links.push({
+      label: "Devis source",
+      description: `Modifier ${invoice.document.quoteId ? "le devis lié" : "le devis d'origine"}`,
+      href: `/projets/${projectId}/devis/${encodeURIComponent(quoteId)}/edit`,
+    });
+  }
+
+  if (chantierId) {
+    links.push({
+      label: "Chantier lié",
+      description: "Ouvrir le dossier chantier",
+      href: `/chantiers/${encodeURIComponent(chantierId)}/financier`,
+    });
+  }
+
+  return links;
+}
+
+function routeProjectId(value?: string | null) {
+  const id = cleanText(value);
+  if (!id) return null;
+  if (id.startsWith("opportunity-") || id.startsWith("prospect-") || id.startsWith("client-")) return id;
+  return null;
+}
+
+function cleanText(value?: string | null) {
+  const text = String(value ?? "").trim();
+  return text || null;
 }
 
 function updateNodeTree(nodes: BusinessDocumentNode[], nodeId: string, patch: Partial<BusinessDocumentNode>): BusinessDocumentNode[] {
