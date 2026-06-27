@@ -27,6 +27,25 @@ type PreparationSummary = {
 
 type ReadinessFilter = "" | "missing_time" | "missing_cost" | "missing_technical" | "missing_preparation";
 
+function getPreparationSummary(
+  preparationByTemplateId: Record<string, PreparationSummary>,
+  templateId: string,
+): PreparationSummary {
+  return preparationByTemplateId[templateId] ?? { materials: 0, equipment: 0 };
+}
+
+function hasTechnicalDetail(row: TaskTemplateRow) {
+  return Boolean(row.description_technique) || row.caracteristiques.length > 0 || Boolean(row.remarques);
+}
+
+function hasPreparation(
+  row: TaskTemplateRow,
+  preparationByTemplateId: Record<string, PreparationSummary>,
+) {
+  const preparation = getPreparationSummary(preparationByTemplateId, row.id);
+  return preparation.materials + preparation.equipment > 0;
+}
+
 export default function BibliothequeTasksPage() {
   const { locale, t } = useI18n();
   const [rows, setRows] = useState<TaskTemplateRow[]>([]);
@@ -59,24 +78,11 @@ export default function BibliothequeTasksPage() {
     ).sort((a, b) => a.localeCompare(b, locale));
   }, [locale, rows]);
 
-  function getPreparationSummary(templateId: string): PreparationSummary {
-    return preparationByTemplateId[templateId] ?? { materials: 0, equipment: 0 };
-  }
-
-  function hasTechnicalDetail(row: TaskTemplateRow) {
-    return Boolean(row.description_technique) || row.caracteristiques.length > 0 || Boolean(row.remarques);
-  }
-
-  function hasPreparation(row: TaskTemplateRow) {
-    const preparation = getPreparationSummary(row.id);
-    return preparation.materials + preparation.equipment > 0;
-  }
-
   const libraryStats = useMemo(() => {
     const withTime = rows.filter((row) => row.temps_prevu_par_unite_h !== null).length;
     const withCost = rows.filter((row) => row.cout_reference_unitaire_ht !== null).length;
     const withTechnicalDetail = rows.filter(hasTechnicalDetail).length;
-    const withPreparation = rows.filter(hasPreparation).length;
+    const withPreparation = rows.filter((row) => hasPreparation(row, preparationByTemplateId)).length;
     const totalReferenceCost = rows.reduce((sum, row) => {
       const unitCost = Number(row.cout_reference_unitaire_ht ?? 0);
       const quantity = Number(row.quantite_defaut ?? 1);
@@ -105,7 +111,7 @@ export default function BibliothequeTasksPage() {
       if (readinessFilter === "missing_time" && row.temps_prevu_par_unite_h !== null) return false;
       if (readinessFilter === "missing_cost" && row.cout_reference_unitaire_ht !== null) return false;
       if (readinessFilter === "missing_technical" && hasTechnicalDetail(row)) return false;
-      if (readinessFilter === "missing_preparation" && hasPreparation(row)) return false;
+      if (readinessFilter === "missing_preparation" && hasPreparation(row, preparationByTemplateId)) return false;
       if (!q) return true;
       const searchable = [
         row.titre,
@@ -142,7 +148,7 @@ export default function BibliothequeTasksPage() {
       );
     }
 
-    const preparation = getPreparationSummary(templateId);
+    const preparation = getPreparationSummary(preparationByTemplateId, templateId);
     const total = preparation.materials + preparation.equipment;
     if (total === 0) {
       return (
