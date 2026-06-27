@@ -1,4 +1,4 @@
-import { ArrowRight, ClipboardList, Eye, FileText, ShieldCheck, Users } from "lucide-react";
+import { AlertTriangle, ArrowRight, ClipboardList, Eye, FileText, ShieldCheck, Users } from "lucide-react";
 import { Link } from "react-router-dom";
 import type { ChantierDerived } from "../types";
 import { shortDate } from "../utils/chantiersListUtils";
@@ -44,6 +44,13 @@ export function ChantiersPlanningView({ rows, onPreview }: { rows: ChantierDeriv
                     </Link>
                   );
                 })}
+                <Link
+                  to={`/retours-terrain?chantierId=${row.id}`}
+                  className="inline-flex h-7 items-center gap-1.5 rounded-lg border border-amber-200 bg-amber-50 px-2 text-xs font-semibold text-amber-800 transition hover:border-amber-300 hover:bg-amber-100"
+                >
+                  <AlertTriangle className="h-3.5 w-3.5" />
+                  Retours terrain
+                </Link>
               </div>
             </div>
             <ChantierProgress value={row.progress} />
