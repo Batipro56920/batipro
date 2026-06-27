@@ -1,5 +1,5 @@
 ﻿// src/components/LayoutShell.tsx
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { Bell, CircleHelp, Menu, Plus, Search, UserRound, X } from "lucide-react";
 import Sidebar from "./Sidebar";
@@ -8,6 +8,7 @@ import CocoDirectionAssistantWidget from "./CocoDirectionAssistantWidget";
 import CocoHistoricalImportPanel from "./CocoHistoricalImportPanel";
 import { supabase } from "../lib/supabaseClient";
 import { getCompanySettings } from "../services/companySettings.service";
+import { searchGlobalBatipro, type GlobalSearchResult } from "../services/globalSearch.service";
 import { useI18n } from "../i18n";
 
 export default function LayoutShell() {
@@ -16,6 +17,7 @@ export default function LayoutShell() {
   const location = useLocation();
   const { language, setLanguage, t } = useI18n();
   const defaultCompanyName = t("layout.defaultCompanyName");
+  const searchInputRef = useRef<HTMLInputElement | null>(null);
   const [companyName, setCompanyName] = useState(defaultCompanyName);
   const [userEmail, setUserEmail] = useState<string | null>(null);
   const [signingOut, setSigningOut] = useState(false);
@@ -24,6 +26,11 @@ export default function LayoutShell() {
     if (typeof window === "undefined") return false;
     return window.localStorage.getItem(storageKey) === "1";
   });
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [searchLoading, setSearchLoading] = useState(false);
+  const [searchError, setSearchError] = useState<string | null>(null);
+  const [searchResults, setSearchResults] = useState<GlobalSearchResult[]>([]);
 
   useEffect(() => {
     let alive = true;
@@ -66,12 +73,61 @@ export default function LayoutShell() {
 
   useEffect(() => {
     setSidebarOpen(false);
+    setSearchOpen(false);
   }, [location.pathname]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
     window.localStorage.setItem(storageKey, sidebarCollapsed ? "1" : "0");
   }, [sidebarCollapsed]);
+
+  useEffect(() => {
+    const query = searchQuery.trim();
+    if (query.length < 2) {
+      setSearchResults([]);
+      setSearchLoading(false);
+      setSearchError(null);
+      return;
+    }
+
+    let alive = true;
+    setSearchLoading(true);
+    setSearchError(null);
+    const timer = window.setTimeout(() => {
+      searchGlobalBatipro(query)
+        .then((results) => {
+          if (!alive) return;
+          setSearchResults(results);
+        })
+        .catch(() => {
+          if (!alive) return;
+          setSearchResults([]);
+          setSearchError("Recherche indisponible pour le moment.");
+        })
+        .finally(() => {
+          if (!alive) return;
+          setSearchLoading(false);
+        });
+    }, 240);
+
+    return () => {
+      alive = false;
+      window.clearTimeout(timer);
+    };
+  }, [searchQuery]);
+
+  useEffect(() => {
+    function onKeyDown(event: KeyboardEvent) {
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "k") {
+        event.preventDefault();
+        searchInputRef.current?.focus();
+        setSearchOpen(true);
+      }
+    }
+
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, []);
 
   async function logout() {
     setSigningOut(true);
@@ -80,6 +136,23 @@ export default function LayoutShell() {
       navigate("/login", { replace: true });
     } finally {
       setSigningOut(false);
+    }
+  }
+
+  function openSearchResult(result: GlobalSearchResult) {
+    setSearchOpen(false);
+    setSearchQuery("");
+    navigate(result.href);
+  }
+
+  function onSearchKeyDown(event: React.KeyboardEvent<HTMLInputElement>) {
+    if (event.key === "Escape") {
+      setSearchOpen(false);
+      return;
+    }
+    if (event.key === "Enter" && searchResults[0]) {
+      event.preventDefault();
+      openSearchResult(searchResults[0]);
     }
   }
 
@@ -107,17 +180,56 @@ export default function LayoutShell() {
               </span>
             </div>
 
-            <label className="hidden min-w-0 max-w-xl flex-1 items-center rounded-xl border border-[#E2E8F0] bg-[#F8FAFC] px-3 py-1.5 text-sm text-slate-400 lg:flex">
-              <Search className="mr-2 h-4 w-4" />
-              <input
-                className="min-w-0 flex-1 bg-transparent text-sm text-slate-700 outline-none placeholder:text-slate-400"
-                placeholder="Rechercher dans Batipro..."
-                aria-label="Recherche globale"
-                readOnly
-                title="Recherche globale à connecter lors de la prochaine étape fonctionnelle."
-              />
-              <span className="ml-auto rounded-md border border-slate-200 bg-white px-1.5 py-0.5 text-[10px] font-medium text-slate-400">Ctrl K</span>
-            </label>
+            <div className="relative hidden min-w-0 max-w-xl flex-1 lg:block">
+              <label className="flex items-center rounded-xl border border-[#E2E8F0] bg-[#F8FAFC] px-3 py-1.5 text-sm text-slate-400 focus-within:border-blue-300 focus-within:bg-white focus-within:ring-2 focus-within:ring-blue-100">
+                <Search className="mr-2 h-4 w-4 shrink-0" />
+                <input
+                  ref={searchInputRef}
+                  className="min-w-0 flex-1 bg-transparent text-sm text-slate-700 outline-none placeholder:text-slate-400"
+                  placeholder="Rechercher chantier, client, projet, devis..."
+                  aria-label="Recherche globale"
+                  value={searchQuery}
+                  onChange={(event) => {
+                    setSearchQuery(event.target.value);
+                    setSearchOpen(true);
+                  }}
+                  onFocus={() => setSearchOpen(true)}
+                  onKeyDown={onSearchKeyDown}
+                  autoComplete="off"
+                />
+                <span className="ml-auto rounded-md border border-slate-200 bg-white px-1.5 py-0.5 text-[10px] font-medium text-slate-400">Ctrl K</span>
+              </label>
+
+              {searchOpen && searchQuery.trim().length >= 2 ? (
+                <div className="absolute left-0 right-0 top-12 z-50 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xl shadow-slate-950/10">
+                  {searchLoading ? (
+                    <div className="px-4 py-3 text-sm text-slate-500">Recherche en cours...</div>
+                  ) : searchError ? (
+                    <div className="px-4 py-3 text-sm text-red-600">{searchError}</div>
+                  ) : searchResults.length ? (
+                    <div className="max-h-[26rem] overflow-y-auto p-1">
+                      {searchResults.map((result) => (
+                        <button
+                          key={`${result.kind}-${result.id}`}
+                          type="button"
+                          onMouseDown={(event) => event.preventDefault()}
+                          onClick={() => openSearchResult(result)}
+                          className="flex w-full items-start gap-3 rounded-xl px-3 py-2.5 text-left transition hover:bg-slate-50"
+                        >
+                          <span className="mt-0.5 rounded-full bg-blue-50 px-2 py-0.5 text-[11px] font-semibold text-blue-700 ring-1 ring-blue-100">{result.badge}</span>
+                          <span className="min-w-0 flex-1">
+                            <span className="block truncate text-sm font-semibold text-slate-950">{result.title}</span>
+                            <span className="mt-0.5 block truncate text-xs text-slate-500">{result.subtitle}</span>
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="px-4 py-3 text-sm text-slate-500">Aucun résultat trouvé.</div>
+                  )}
+                </div>
+              ) : null}
+            </div>
 
             <div className="flex shrink-0 items-center gap-2">
               <details className="relative hidden sm:block">
@@ -197,5 +309,4 @@ export default function LayoutShell() {
     </div>
   );
 }
-
 
