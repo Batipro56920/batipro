@@ -1,4 +1,4 @@
-import type { CrmDataset, CrmProspectRow, CrmQuoteRow } from "../../../services/crm.service";
+import type { CrmClientRow, CrmDataset, CrmProspectRow, CrmQuoteRow } from "../../../services/crm.service";
 import type { ChantierRow } from "../../../services/chantiers.service";
 import type { ProjectMetrics, ProjectRecord, ProjectStatus } from "../types";
 
@@ -115,17 +115,32 @@ export function projectStatusLabel(status: ProjectStatus) {
   return labels[status];
 }
 
+function rememberQuotes(quoteIds: Set<string>, quotes: CrmQuoteRow[]) {
+  quotes.forEach((quote) => quoteIds.add(quote.id));
+}
+
+function latestDate(values: Array<string | null | undefined>) {
+  return values.filter(Boolean).sort().at(-1) ?? null;
+}
+
+function clientProjectName(client: CrmClientRow, quotes: CrmQuoteRow[]) {
+  const mainQuote = quotes[0] ?? null;
+  return mainQuote?.description || mainQuote?.lot || `Projet ${fullName(client)}`;
+}
+
 export function buildProjects(dataset: CrmDataset): ProjectRecord[] {
   const clientsById = new Map(dataset.clients.map((client) => [client.id, client]));
   const prospectsById = new Map(dataset.prospects.map((prospect) => [prospect.id, prospect]));
   const projects: ProjectRecord[] = [];
   const usedProspects = new Set<string>();
+  const usedQuoteIds = new Set<string>();
 
   for (const opportunity of dataset.opportunities) {
     const prospect = opportunity.prospect_id ? prospectsById.get(opportunity.prospect_id) ?? null : null;
     const client = opportunity.client_id ? clientsById.get(opportunity.client_id) ?? null : prospect?.client_id ? clientsById.get(prospect.client_id) ?? null : null;
     if (prospect) usedProspects.add(prospect.id);
     const quotes = dataset.quotes.filter((quote) => quote.opportunity_id === opportunity.id);
+    rememberQuotes(usedQuoteIds, quotes);
     const chantiers = dataset.chantiers.filter(
       (chantier) =>
         chantier.crm_opportunity_id === opportunity.id ||
@@ -183,7 +198,8 @@ export function buildProjects(dataset: CrmDataset): ProjectRecord[] {
   for (const prospect of dataset.prospects) {
     if (usedProspects.has(prospect.id)) continue;
     const client = prospect.client_id ? clientsById.get(prospect.client_id) ?? null : null;
-    const quotes = dataset.quotes.filter((quote) => quote.prospect_id === prospect.id || (client && quote.client_id === client.id));
+    const quotes = dataset.quotes.filter((quote) => quote.prospect_id === prospect.id || (client && quote.client_id === client.id && !usedQuoteIds.has(quote.id)));
+    rememberQuotes(usedQuoteIds, quotes);
     const chantiers = dataset.chantiers.filter(
       (chantier) =>
         chantier.crm_prospect_id === prospect.id ||
@@ -227,6 +243,54 @@ export function buildProjects(dataset: CrmDataset): ProjectRecord[] {
       appointments: dataset.appointments.filter((appointment) => appointment.prospect_id === prospect.id || (client && appointment.client_id === client.id)),
       documents: dataset.documents.filter((document) => document.prospect_id === prospect.id || quotes.some((quote) => quote.id === document.quote_id)),
       communications: dataset.communications.filter((communication) => communication.prospect_id === prospect.id || quotes.some((quote) => quote.id === communication.quote_id)),
+      sav,
+    });
+  }
+
+  for (const client of dataset.clients) {
+    const quotes = dataset.quotes.filter((quote) => quote.client_id === client.id && !usedQuoteIds.has(quote.id));
+    if (!quotes.length) continue;
+    rememberQuotes(usedQuoteIds, quotes);
+    const chantiers = dataset.chantiers.filter(
+      (chantier) => chantier.crm_client_id === client.id || isChantierLinkedToQuotes(chantier, quotes),
+    );
+    const sav = dataset.sav.filter((ticket) => ticket.client_id === client.id || chantiers.some((chantier) => chantier.id === ticket.chantier_id));
+
+    projects.push({
+      id: `client-${client.id}`,
+      sourceType: "client",
+      sourceId: client.id,
+      name: clientProjectName(client, quotes),
+      clientName: fullName(client),
+      contactEmail: client.email,
+      contactPhone: client.telephone ?? client.mobile,
+      address: chantiers[0]?.adresse ?? fullAddress(client),
+      salesperson: null,
+      status: resolveStatus({
+        prospect: null,
+        quotes,
+        chantiers,
+        hasOpenSav: sav.some((ticket) => isOpenSav(ticket.statut)),
+      }),
+      nextAction: null,
+      nextActionDate: null,
+      quoteAmount: quotes.reduce((sum, quote) => sum + Number(quote.montant_ht || 0), 0),
+      createdAt: latestDate(quotes.map((quote) => quote.created_at)) ?? client.created_at,
+      desiredDeadline: null,
+      projectType: null,
+      sourceLabel: null,
+      budgetEstimate: quotes.reduce((sum, quote) => sum + Number(quote.montant_ht || 0), 0) || null,
+      needDescription: quotes[0]?.description ?? quotes[0]?.lot ?? null,
+      notes: client.notes,
+      prospect: null,
+      client,
+      opportunity: null,
+      quotes,
+      chantiers,
+      tasks: dataset.tasks.filter((task) => task.client_id === client.id || quotes.some((quote) => quote.id === task.quote_id)),
+      appointments: dataset.appointments.filter((appointment) => appointment.client_id === client.id),
+      documents: dataset.documents.filter((document) => document.client_id === client.id || quotes.some((quote) => quote.id === document.quote_id) || chantiers.some((chantier) => chantier.id === document.chantier_id)),
+      communications: dataset.communications.filter((communication) => communication.client_id === client.id || quotes.some((quote) => quote.id === communication.quote_id)),
       sav,
     });
   }
