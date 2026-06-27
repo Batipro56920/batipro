@@ -101,6 +101,10 @@ function normalizePositiveOrZeroNumber(value: number, fieldLabel: string) {
   return value;
 }
 
+function normalizeDuplicateKey(value: string | null | undefined) {
+  return String(value ?? "").trim().replace(/\s+/g, " ");
+}
+
 export async function getApporteursAffaires(): Promise<ApporteurAffaireRow[]> {
   const organization_id = await getOrganizationId();
   const response = await supabase
@@ -452,6 +456,20 @@ export async function createApporteurLeadPortal(jwt: string, input: {
     status: "nouveau" as ApporteurLeadStatus,
     commission_paid: false,
   };
+
+  const duplicateClientName = normalizeDuplicateKey(payload.client_name);
+  const duplicatePhone = normalizeDuplicateKey(payload.telephone);
+  let duplicateQuery = portalClient
+    .from("apporteur_leads")
+    .select("id")
+    .eq("apporteur_id", payload.apporteur_id)
+    .ilike("client_name", duplicateClientName);
+
+  duplicateQuery = duplicatePhone ? duplicateQuery.eq("telephone", duplicatePhone) : duplicateQuery.is("telephone", null);
+
+  const { data: existingLead, error: duplicateError } = await duplicateQuery.limit(1).maybeSingle();
+  if (duplicateError) throw new Error(duplicateError.message);
+  if (existingLead) throw new Error("Ce client a déjà été transmis par ce portail apporteur.");
 
   const response = await portalClient
     .from("apporteur_leads")
