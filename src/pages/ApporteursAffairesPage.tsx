@@ -22,7 +22,8 @@ import type {
   ApporteurLeadStatus,
   ApporteurType,
 } from "../services/apporteurs.service";
-import { createCrmProspect, loadCrmDataset, type CrmOpportunityRow, type CrmProspectRow } from "../services/crm.service";
+import { loadCrmDataset, type CrmOpportunityRow, type CrmProspectRow } from "../services/crm.service";
+import { createProspectWithInitialOpportunity, findOpenProjectForProspect } from "../services/crmWorkflow.service";
 
 const APPORTREUR_TYPES: { value: ApporteurType; label: string }[] = [
   { value: "agent_immobilier", label: "Agent immobilier" },
@@ -435,7 +436,7 @@ export default function ApporteursAffairesPage() {
 
   async function onCreateCrmProspectFromLead(lead: ApporteurLeadRow) {
     if (lead.crm_prospect_id) {
-      setNotice("Ce lead est déjà relié à un prospect CRM.");
+      setNotice("Ce lead est déjà relié à un projet CRM.");
       return;
     }
     setSaving(true);
@@ -449,7 +450,7 @@ export default function ApporteursAffairesPage() {
         lead.project_address ? `Adresse projet : ${lead.project_address}` : null,
         apporteurLabel ? `Apporteur : ${apporteurLabel}` : null,
       ].filter(Boolean).join("\n");
-      const prospect = await createCrmProspect({
+      const prospect = await createProspectWithInitialOpportunity({
         type: "particulier",
         nom: lead.client_name,
         telephone: lead.telephone,
@@ -463,14 +464,20 @@ export default function ApporteursAffairesPage() {
         tags: ["apporteur"],
         statut: lead.status === "nouveau" ? "a_qualifier" : "qualifie",
       });
-      await updateApporteurLead(lead.id, {
+      const opportunity = await findOpenProjectForProspect(prospect.id);
+      const savedLead = await updateApporteurLead(lead.id, {
         crm_prospect_id: prospect.id,
+        crm_opportunity_id: opportunity?.id ?? null,
         status: lead.status === "nouveau" ? "contacte" : lead.status,
       });
-      setNotice("Prospect CRM créé depuis le lead apporteur.");
+      setNotice(
+        savedLead.crm_opportunity_id
+          ? "Projet commercial CRM créé et relié au lead apporteur."
+          : "Prospect CRM créé et relié au lead apporteur. Le projet commercial reste à vérifier dans le CRM.",
+      );
       await refreshData();
     } catch (err: any) {
-      setError(err?.message ?? "Impossible de créer le prospect CRM depuis ce lead.");
+      setError(err?.message ?? "Impossible de créer le projet CRM depuis ce lead.");
     } finally {
       setSaving(false);
     }
@@ -597,7 +604,7 @@ export default function ApporteursAffairesPage() {
 
       <section className="bt-card rounded-xl bg-white p-4">
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3"><div><div className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Projets apportés</div><h2 className="mt-1 text-lg font-semibold text-slate-950">Suivi commercial et commissions</h2></div><div className="flex flex-wrap items-center gap-2"><select className={selectClass} value={selectedApporteurId} onChange={(event) => { setSelectedApporteurId(event.target.value); setSelectedStatus(""); }}><option value="">Tous les apporteurs</option>{apporteurs.map((row) => <option key={row.id} value={row.id}>{row.nom}</option>)}</select><select className={selectClass} value={selectedStatus} onChange={(event) => setSelectedStatus(event.target.value as ApporteurLeadStatus | "")}><option value="">Tous les statuts</option>{LEAD_STATUSES.map((status) => <option key={status.value} value={status.value}>{status.label}</option>)}</select></div></div>
-        <div className="overflow-x-auto"><table className="bt-table min-w-full"><thead><tr><Th>Projet / client</Th><Th>Apporteur</Th><Th>Montant</Th><Th>Statut</Th><Th>Commission</Th><Th>CRM</Th><Th>Actions</Th></tr></thead><tbody>{filteredLeads.map((lead) => { const apporteur = apporteurs.find((row) => row.id === lead.apporteur_id); const crmPath = crmProjectPathForLead(lead); const linked = Boolean(crmPath); return <tr key={lead.id}><Td><div className="font-semibold text-slate-950">{lead.client_name}</div><div className="text-xs text-slate-500">{lead.project_type || lead.project_address || lead.telephone || "-"}</div></Td><Td>{apporteur?.nom ?? "-"}</Td><Td>{formatCurrency(lead.estimated_amount)}</Td><Td><span className={`rounded-full px-2.5 py-1 text-xs font-semibold ring-1 ${statusClass(lead.status)}`}>{optionLabel(LEAD_STATUSES, lead.status)}</span></Td><Td>{formatCurrency(calculateCommission(lead, apporteur ?? undefined))}</Td><Td>{linked ? <Link to={crmPath} className="font-medium text-blue-700 hover:underline">Ouvrir projet</Link> : <span className="text-slate-500">À convertir</span>}</Td><Td><div className="flex flex-wrap gap-2"><button type="button" onClick={() => onEditLead(lead)} className="font-medium text-blue-700 hover:underline">Modifier</button><button type="button" disabled={saving || linked} onClick={() => void onCreateCrmProspectFromLead(lead)} className="font-medium text-emerald-700 hover:underline disabled:text-slate-400">Créer prospect</button><button type="button" onClick={() => void onRemoveLead(lead.id)} className="font-medium text-red-600 hover:underline">Supprimer</button></div></Td></tr>; })}{!filteredLeads.length ? <tr><td colSpan={7} className="px-4 py-8 text-center text-sm text-slate-500">Aucun projet rattaché.</td></tr> : null}</tbody></table></div>
+        <div className="overflow-x-auto"><table className="bt-table min-w-full"><thead><tr><Th>Projet / client</Th><Th>Apporteur</Th><Th>Montant</Th><Th>Statut</Th><Th>Commission</Th><Th>CRM</Th><Th>Actions</Th></tr></thead><tbody>{filteredLeads.map((lead) => { const apporteur = apporteurs.find((row) => row.id === lead.apporteur_id); const crmPath = crmProjectPathForLead(lead); const linked = Boolean(crmPath); return <tr key={lead.id}><Td><div className="font-semibold text-slate-950">{lead.client_name}</div><div className="text-xs text-slate-500">{lead.project_type || lead.project_address || lead.telephone || "-"}</div></Td><Td>{apporteur?.nom ?? "-"}</Td><Td>{formatCurrency(lead.estimated_amount)}</Td><Td><span className={`rounded-full px-2.5 py-1 text-xs font-semibold ring-1 ${statusClass(lead.status)}`}>{optionLabel(LEAD_STATUSES, lead.status)}</span></Td><Td>{formatCurrency(calculateCommission(lead, apporteur ?? undefined))}</Td><Td>{linked ? <Link to={crmPath} className="font-medium text-blue-700 hover:underline">Ouvrir projet</Link> : <span className="text-slate-500">À convertir</span>}</Td><Td><div className="flex flex-wrap gap-2"><button type="button" onClick={() => onEditLead(lead)} className="font-medium text-blue-700 hover:underline">Modifier</button><button type="button" disabled={saving || linked} onClick={() => void onCreateCrmProspectFromLead(lead)} className="font-medium text-emerald-700 hover:underline disabled:text-slate-400">Créer projet CRM</button><button type="button" onClick={() => void onRemoveLead(lead.id)} className="font-medium text-red-600 hover:underline">Supprimer</button></div></Td></tr>; })}{!filteredLeads.length ? <tr><td colSpan={7} className="px-4 py-8 text-center text-sm text-slate-500">Aucun projet rattaché.</td></tr> : null}</tbody></table></div>
       </section>
 
       {showApporteurLayer ? (
