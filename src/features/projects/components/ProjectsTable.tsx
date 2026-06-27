@@ -19,6 +19,17 @@ function getBillableAmount(project: ProjectRecord, quote: ProjectQuote | null) {
   return Number(quote.montant_ttc || quote.montant_ht || 0);
 }
 
+function getCommercialSource(project: ProjectRecord) {
+  const source = project.sourceLabel?.trim() || null;
+  const apporteur = project.prospect?.apporteur_affaire?.trim() || null;
+  if (!source && !apporteur) return null;
+  return {
+    label: source ?? "Origine commerciale",
+    detail: apporteur,
+    isApporteur: Boolean(source?.toLowerCase().includes("apporteur") || apporteur),
+  };
+}
+
 export function ProjectsTable({ projects, billingMode = false }: { projects: ProjectRecord[]; billingMode?: boolean }) {
   if (!projects.length) {
     return (
@@ -43,6 +54,7 @@ export function ProjectsTable({ projects, billingMode = false }: { projects: Pro
             <tr>
               <th className="px-4 py-3">Projet</th>
               <th className="px-4 py-3">Client</th>
+              <th className="px-4 py-3">Origine</th>
               <th className="px-4 py-3">Adresse</th>
               <th className="px-4 py-3">Commercial</th>
               <th className="px-4 py-3">Statut</th>
@@ -56,6 +68,7 @@ export function ProjectsTable({ projects, billingMode = false }: { projects: Pro
           <tbody className="divide-y divide-slate-100">
             {projects.map((project) => {
               const billableQuote = billingMode ? getBillableQuote(project) : null;
+              const commercialSource = getCommercialSource(project);
               return (
                 <tr key={project.id} className="transition hover:bg-slate-50/80">
                   <td className="max-w-[260px] px-4 py-3">
@@ -65,6 +78,25 @@ export function ProjectsTable({ projects, billingMode = false }: { projects: Pro
                     <div className="mt-1 truncate text-xs text-slate-500">{project.projectType || "Type à qualifier"}</div>
                   </td>
                   <td className="px-4 py-3 text-slate-700">{project.clientName}</td>
+                  <td className="max-w-[210px] px-4 py-3">
+                    {commercialSource ? (
+                      <div className="space-y-1">
+                        <span
+                          className={[
+                            "inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ring-1",
+                            commercialSource.isApporteur
+                              ? "bg-emerald-50 text-emerald-700 ring-emerald-200"
+                              : "bg-slate-100 text-slate-700 ring-slate-200",
+                          ].join(" ")}
+                        >
+                          {commercialSource.label}
+                        </span>
+                        {commercialSource.detail ? <div className="truncate text-xs text-slate-500">{commercialSource.detail}</div> : null}
+                      </div>
+                    ) : (
+                      <span className="text-slate-400">Non renseignée</span>
+                    )}
+                  </td>
                   <td className="max-w-[220px] truncate px-4 py-3 text-slate-500">{project.address || "Adresse à renseigner"}</td>
                   <td className="px-4 py-3 text-slate-500">{project.salesperson || "À assigner"}</td>
                   <td className="px-4 py-3">
