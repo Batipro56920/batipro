@@ -112,6 +112,15 @@ function quoteProjectHref(row: SearchRow) {
   return "/crm/devis";
 }
 
+function apporteurLeadHref(row: SearchRow) {
+  const opportunityId = cleanText(row.crm_opportunity_id);
+  const prospectId = cleanText(row.crm_prospect_id);
+
+  if (opportunityId) return `/projets/opportunity-${opportunityId}`;
+  if (prospectId) return `/projets/prospect-${prospectId}`;
+  return "/crm/apporteurs";
+}
+
 async function querySource(source: SearchSource, query: string): Promise<GlobalSearchResult[]> {
   const like = `%${query}%`;
   const { data, error } = await supabase
@@ -250,14 +259,14 @@ const SOURCES: SearchSource[] = [
   },
   {
     table: "apporteur_leads",
-    select: "id,client_name,telephone,project_address,project_type,status",
+    select: "id,client_name,telephone,project_address,project_type,status,crm_opportunity_id,crm_prospect_id",
     filter: "client_name.ilike.$term,telephone.ilike.$term,project_address.ilike.$term,project_type.ilike.$term,status.ilike.$term",
     map: (row) => ({
       id: cleanText(row.id),
       kind: "lead_apporteur",
       title: cleanText(row.client_name) || "Client apporteur sans nom",
       subtitle: [cleanText(row.project_type), cleanText(row.project_address), cleanText(row.status)].filter(Boolean).join(" - ") || "Projet apporté",
-      href: "/crm/apporteurs",
+      href: apporteurLeadHref(row),
       badge: "Projet apporté",
     }),
   },
