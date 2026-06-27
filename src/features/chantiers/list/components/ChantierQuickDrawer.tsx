@@ -8,7 +8,7 @@ import { ChantierProgress } from "./ChantierProgress";
 import { ChantierRowActions } from "./ChantierRowActions";
 import { ChantierStatusPill } from "./ChantierStatusPill";
 
-const TABS = ["Vue rapide", "Tâches", "Équipe", "Documents", "Alertes"] as const;
+const TABS = ["Vue rapide", "Tâches", "Équipe", "Documents", "Retours terrain", "Alertes"] as const;
 
 function getProjectHref(row: ChantierDerived) {
   if (row.crm_opportunity_id) return `/projets/opportunity-${row.crm_opportunity_id}`;
@@ -143,6 +143,16 @@ export function ChantierQuickDrawer({ row, actions, onClose }: { row: ChantierDe
               cta="Ouvrir les documents"
               metric={row.adresse ?? "Adresse non renseignée"}
             />
+          ) : tab === "Retours terrain" ? (
+            <DetailShortcutPanel
+              title="Retours terrain du chantier"
+              description="Centraliser les observations, blocages, photos et demandes remontés par les intervenants terrain pour traiter le sujet depuis le bon chantier."
+              href={`/retours-terrain?chantierId=${row.id}`}
+              icon={AlertTriangle}
+              cta="Voir les retours"
+              metric="Filtré sur ce chantier"
+              tone={row.isLate ? "red" : "blue"}
+            />
           ) : (
             <DetailShortcutPanel
               title="Qualité, réserves et alertes"
@@ -173,6 +183,12 @@ function QuickAccessPanel({ row }: { row: ChantierDerived }) {
       description: "Tâches, devis, avancement et temps",
       href: `/chantiers/${row.id}/execution`,
       icon: Hammer,
+    },
+    {
+      label: "Retours terrain",
+      description: "Observations et blocages filtrés",
+      href: `/retours-terrain?chantierId=${row.id}`,
+      icon: AlertTriangle,
     },
     {
       label: "Qualité",
