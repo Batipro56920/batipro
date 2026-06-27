@@ -1,6 +1,14 @@
 import { supabase } from "../lib/supabaseClient";
 
-export type GlobalSearchKind = "chantier" | "projet" | "prospect" | "client" | "devis" | "retour_terrain";
+export type GlobalSearchKind =
+  | "chantier"
+  | "projet"
+  | "prospect"
+  | "client"
+  | "devis"
+  | "retour_terrain"
+  | "apporteur"
+  | "lead_apporteur";
 
 export type GlobalSearchResult = {
   id: string;
@@ -151,6 +159,32 @@ const SOURCES: SearchSource[] = [
         badge: "Retour terrain",
       };
     },
+  },
+  {
+    table: "apporteurs_affaires",
+    select: "id,nom,entreprise,type,telephone,email,active",
+    filter: "nom.ilike.$term,entreprise.ilike.$term,type.ilike.$term,telephone.ilike.$term,email.ilike.$term",
+    map: (row) => ({
+      id: cleanText(row.id),
+      kind: "apporteur",
+      title: cleanText(row.nom) || "Apporteur sans nom",
+      subtitle: [cleanText(row.entreprise), cleanText(row.telephone) || cleanText(row.email), cleanText(row.active) === "false" ? "Inactif" : "Actif"].filter(Boolean).join(" - ") || "Apporteur d'affaires",
+      href: "/crm/apporteurs",
+      badge: "Apporteur",
+    }),
+  },
+  {
+    table: "apporteur_leads",
+    select: "id,client_name,telephone,project_address,project_type,status",
+    filter: "client_name.ilike.$term,telephone.ilike.$term,project_address.ilike.$term,project_type.ilike.$term,status.ilike.$term",
+    map: (row) => ({
+      id: cleanText(row.id),
+      kind: "lead_apporteur",
+      title: cleanText(row.client_name) || "Client apporteur sans nom",
+      subtitle: [cleanText(row.project_type), cleanText(row.project_address), cleanText(row.status)].filter(Boolean).join(" - ") || "Projet apporté",
+      href: "/crm/apporteurs",
+      badge: "Projet apporté",
+    }),
   },
 ];
 
