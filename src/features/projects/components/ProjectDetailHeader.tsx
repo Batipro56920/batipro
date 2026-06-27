@@ -27,7 +27,7 @@ export function ProjectDetailHeader({ project, onProjectUpdated }: { project: Pr
   const acceptedQuote = project.quotes.find((item) => item.statut === "accepte");
   const chantier = project.chantiers[0] ?? null;
   const linkedChantierId = chantier?.id ?? acceptedQuote?.chantier_id ?? null;
-  const editTarget = project.opportunity ? "/crm/opportunites" : "/crm/prospects";
+  const editTarget = project.opportunity ? "/crm/opportunites" : project.sourceType === "client" ? "/crm/clients" : "/crm/prospects";
   const isWonProject = WON_PROJECT_STATUSES.includes(project.status);
   const canMarkWon = Boolean(quote) && !isWonProject && project.status !== "perdu";
   const canMarkLost = !linkedChantierId && !acceptedQuote && !isWonProject && project.status !== "perdu";
