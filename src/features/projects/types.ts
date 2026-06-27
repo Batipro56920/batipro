@@ -26,7 +26,7 @@ export type ProjectStatus =
   | "sav"
   | "perdu";
 
-export type ProjectSourceType = "opportunity" | "prospect";
+export type ProjectSourceType = "opportunity" | "prospect" | "client";
 
 export type ProjectRecord = {
   id: string;
