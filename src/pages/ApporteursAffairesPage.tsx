@@ -148,6 +148,21 @@ function isPayableCommissionStatus(status: ApporteurLeadStatus) {
   return status === "signe" || status === "commission_a_payer";
 }
 
+function isConfirmedCommissionStatus(status: ApporteurLeadStatus) {
+  return isPayableCommissionStatus(status) || status === "paye";
+}
+
+function commissionAmountForStatus(lead: ApporteurLeadRow, apporteur?: ApporteurAffaireRow) {
+  if (!isConfirmedCommissionStatus(lead.status) || lead.status === "perdu") return 0;
+  return calculateCommission(lead, apporteur);
+}
+
+function commissionDisplay(lead: ApporteurLeadRow, apporteur?: ApporteurAffaireRow) {
+  if (lead.status === "perdu") return formatCurrency(0);
+  if (!isConfirmedCommissionStatus(lead.status)) return "À confirmer";
+  return formatCurrency(calculateCommission(lead, apporteur));
+}
+
 function commissionStatusAction(status: ApporteurLeadStatus) {
   if (status === "signe") {
     return { nextStatus: "commission_a_payer" as ApporteurLeadStatus, label: "À payer", notice: "Commission marquée à payer." };
@@ -261,7 +276,7 @@ export default function ApporteursAffairesPage() {
         count: apporteurScopedLeads.filter((lead) => lead.status === status.value).length,
         commission: apporteurScopedLeads
           .filter((lead) => lead.status === status.value)
-          .reduce((sum, lead) => sum + calculateCommission(lead, apporteurs.find((row) => row.id === lead.apporteur_id)), 0),
+          .reduce((sum, lead) => sum + commissionAmountForStatus(lead, apporteurs.find((row) => row.id === lead.apporteur_id)), 0),
       })),
     [apporteurs, apporteurScopedLeads],
   );
@@ -272,7 +287,7 @@ export default function ApporteursAffairesPage() {
     let converted = 0;
     for (const lead of filteredLeads) {
       const apporteur = apporteurs.find((row) => row.id === lead.apporteur_id);
-      const commission = calculateCommission(lead, apporteur);
+      const commission = commissionAmountForStatus(lead, apporteur);
       totalCommission += commission;
       if (isPayableCommissionStatus(lead.status)) unpaidCommission += commission;
       if (lead.crm_opportunity_id || lead.crm_prospect_id) converted += 1;
@@ -572,7 +587,7 @@ export default function ApporteursAffairesPage() {
         <Metric label="Apporteurs actifs" value={String(apporteurs.filter((row) => row.active).length)} />
         <Metric label="Projets rattachés" value={String(filteredLeads.length)} />
         <Metric label="Liens CRM" value={String(stats.converted)} />
-        <Metric label="Commissions estimées" value={formatCurrency(stats.totalCommission)} />
+        <Metric label="Commissions confirmées" value={formatCurrency(stats.totalCommission)} />
         <Metric label="Commissions dues" value={formatCurrency(stats.unpaidCommission)} />
       </section>
 
@@ -695,7 +710,7 @@ export default function ApporteursAffairesPage() {
                 </div>
                 <div className="mt-3 grid grid-cols-2 gap-3 border-t border-slate-200 pt-3">
                   <Info label="Montant" value={formatCurrency(lead.estimated_amount)} />
-                  <Info label="Commission" value={formatCurrency(calculateCommission(lead, apporteur ?? undefined))} />
+                  <Info label="Commission" value={commissionDisplay(lead, apporteur ?? undefined)} />
                 </div>
                 <div className="mt-3 rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-600">
                   CRM : {linked ? <Link to={crmPath} className="font-medium text-blue-700 hover:underline">ouvrir le projet</Link> : <span>à convertir</span>}
@@ -715,7 +730,7 @@ export default function ApporteursAffairesPage() {
           })}
           {!filteredLeads.length ? <div className="rounded-lg border border-dashed border-slate-200 p-4 text-center text-sm text-slate-500">Aucun projet rattaché.</div> : null}
         </div>
-        <div className="hidden overflow-x-auto md:block"><table className="bt-table min-w-full"><thead><tr><Th>Projet / client</Th><Th>Apporteur</Th><Th>Montant</Th><Th>Statut</Th><Th>Commission</Th><Th>CRM</Th><Th>Actions</Th></tr></thead><tbody>{filteredLeads.map((lead) => { const apporteur = apporteurs.find((row) => row.id === lead.apporteur_id); const crmPath = crmProjectPathForLead(lead); const linked = Boolean(crmPath); const commissionAction = commissionStatusAction(lead.status); return <tr key={lead.id}><Td><div className="font-semibold text-slate-950">{lead.client_name}</div><div className="text-xs text-slate-500">{lead.project_type || lead.project_address || lead.telephone || "-"}</div></Td><Td>{apporteur?.nom ?? "-"}</Td><Td>{formatCurrency(lead.estimated_amount)}</Td><Td><span className={`rounded-full px-2.5 py-1 text-xs font-semibold ring-1 ${statusClass(lead.status)}`}>{optionLabel(LEAD_STATUSES, lead.status)}</span></Td><Td>{formatCurrency(calculateCommission(lead, apporteur ?? undefined))}</Td><Td>{linked ? <Link to={crmPath} className="font-medium text-blue-700 hover:underline">Ouvrir projet</Link> : <span className="text-slate-500">À convertir</span>}</Td><Td><LeadActions lead={lead} saving={saving} linked={linked} commissionAction={commissionAction} onEdit={onEditLead} onUpdateCommission={onUpdateLeadCommissionStatus} onCreateCrm={onCreateCrmProspectFromLead} onRemove={onRemoveLead} /></Td></tr>; })}{!filteredLeads.length ? <tr><td colSpan={7} className="px-4 py-8 text-center text-sm text-slate-500">Aucun projet rattaché.</td></tr> : null}</tbody></table></div>
+        <div className="hidden overflow-x-auto md:block"><table className="bt-table min-w-full"><thead><tr><Th>Projet / client</Th><Th>Apporteur</Th><Th>Montant</Th><Th>Statut</Th><Th>Commission</Th><Th>CRM</Th><Th>Actions</Th></tr></thead><tbody>{filteredLeads.map((lead) => { const apporteur = apporteurs.find((row) => row.id === lead.apporteur_id); const crmPath = crmProjectPathForLead(lead); const linked = Boolean(crmPath); const commissionAction = commissionStatusAction(lead.status); return <tr key={lead.id}><Td><div className="font-semibold text-slate-950">{lead.client_name}</div><div className="text-xs text-slate-500">{lead.project_type || lead.project_address || lead.telephone || "-"}</div></Td><Td>{apporteur?.nom ?? "-"}</Td><Td>{formatCurrency(lead.estimated_amount)}</Td><Td><span className={`rounded-full px-2.5 py-1 text-xs font-semibold ring-1 ${statusClass(lead.status)}`}>{optionLabel(LEAD_STATUSES, lead.status)}</span></Td><Td>{commissionDisplay(lead, apporteur ?? undefined)}</Td><Td>{linked ? <Link to={crmPath} className="font-medium text-blue-700 hover:underline">Ouvrir projet</Link> : <span className="text-slate-500">À convertir</span>}</Td><Td><LeadActions lead={lead} saving={saving} linked={linked} commissionAction={commissionAction} onEdit={onEditLead} onUpdateCommission={onUpdateLeadCommissionStatus} onCreateCrm={onCreateCrmProspectFromLead} onRemove={onRemoveLead} /></Td></tr>; })}{!filteredLeads.length ? <tr><td colSpan={7} className="px-4 py-8 text-center text-sm text-slate-500">Aucun projet rattaché.</td></tr> : null}</tbody></table></div>
       </section>
 
       {showApporteurLayer ? (
