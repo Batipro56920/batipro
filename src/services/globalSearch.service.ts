@@ -9,7 +9,8 @@ export type GlobalSearchKind =
   | "facture"
   | "retour_terrain"
   | "apporteur"
-  | "lead_apporteur";
+  | "lead_apporteur"
+  | "produit";
 
 export type GlobalSearchResult = {
   id: string;
@@ -119,6 +120,16 @@ function apporteurLeadHref(row: SearchRow) {
   if (opportunityId) return `/projets/opportunity-${opportunityId}`;
   if (prospectId) return `/projets/prospect-${prospectId}`;
   return "/crm/apporteurs";
+}
+
+function productPriceLabel(row: SearchRow) {
+  const salePrice = Number(row.recommended_sale_price_ht);
+  if (Number.isFinite(salePrice) && salePrice > 0) return `${formatSearchCurrency(salePrice)} vente HT`;
+
+  const purchasePrice = Number(row.standard_purchase_price_ht);
+  if (Number.isFinite(purchasePrice) && purchasePrice > 0) return `${formatSearchCurrency(purchasePrice)} achat HT`;
+
+  return "";
 }
 
 async function querySource(source: SearchSource, query: string): Promise<GlobalSearchResult[]> {
@@ -268,6 +279,25 @@ const SOURCES: SearchSource[] = [
       subtitle: [cleanText(row.project_type), cleanText(row.project_address), cleanText(row.status)].filter(Boolean).join(" - ") || "Projet apporté",
       href: apporteurLeadHref(row),
       badge: "Projet apporté",
+    }),
+  },
+  {
+    table: "product_catalog_items",
+    select: "id,designation,internal_reference,manufacturer_reference,brand,category,unit,main_supplier_name,standard_purchase_price_ht,recommended_sale_price_ht",
+    filter: "designation.ilike.$term,internal_reference.ilike.$term,manufacturer_reference.ilike.$term,brand.ilike.$term,category.ilike.$term,main_supplier_name.ilike.$term",
+    map: (row) => ({
+      id: cleanText(row.id),
+      kind: "produit",
+      title: cleanText(row.designation) || "Produit sans désignation",
+      subtitle: [
+        cleanText(row.internal_reference) || cleanText(row.manufacturer_reference),
+        cleanText(row.brand),
+        cleanText(row.category),
+        cleanText(row.main_supplier_name),
+        productPriceLabel(row),
+      ].filter(Boolean).join(" - ") || "Catalogue produits",
+      href: "/catalogue-produits",
+      badge: "Produit",
     }),
   },
 ];
