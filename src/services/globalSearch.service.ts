@@ -1,6 +1,6 @@
 import { supabase } from "../lib/supabaseClient";
 
-export type GlobalSearchKind = "chantier" | "projet" | "prospect" | "client" | "devis";
+export type GlobalSearchKind = "chantier" | "projet" | "prospect" | "client" | "devis" | "retour_terrain";
 
 export type GlobalSearchResult = {
   id: string;
@@ -135,6 +135,22 @@ const SOURCES: SearchSource[] = [
       href: `/crm/devis/${cleanText(row.id)}/edit`,
       badge: "Devis",
     }),
+  },
+  {
+    table: "terrain_feedbacks",
+    select: "id,chantier_id,title,description,category,urgency,status",
+    filter: "title.ilike.$term,description.ilike.$term,category.ilike.$term,urgency.ilike.$term,status.ilike.$term",
+    map: (row) => {
+      const chantierId = cleanText(row.chantier_id);
+      return {
+        id: cleanText(row.id),
+        kind: "retour_terrain",
+        title: cleanText(row.title) || "Retour terrain sans titre",
+        subtitle: [cleanText(row.category), cleanText(row.urgency), cleanText(row.status)].filter(Boolean).join(" - ") || "Retour terrain",
+        href: chantierId ? `/retours-terrain?chantierId=${chantierId}` : "/retours-terrain",
+        badge: "Retour terrain",
+      };
+    },
   },
 ];
 
