@@ -153,7 +153,7 @@ function isConfirmedCommissionStatus(status: ApporteurLeadStatus) {
 }
 
 function commissionAmountForStatus(lead: ApporteurLeadRow, apporteur?: ApporteurAffaireRow) {
-  if (!isConfirmedCommissionStatus(lead.status) || lead.status === "perdu") return 0;
+  if (!isConfirmedCommissionStatus(lead.status)) return 0;
   return calculateCommission(lead, apporteur);
 }
 
@@ -822,6 +822,6 @@ function Td({ children }: { children: ReactNode }) {
 }
 
 const inputClass = "w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100";
-const selectClass = "rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100";
+const selectClass = "rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 outline-none focus:border-blue-500 focus:ring-2 focus-slate-100";
 const primaryButtonClass = "rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:bg-slate-300 disabled:text-slate-600";
 const secondaryButtonClass = "rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700";
