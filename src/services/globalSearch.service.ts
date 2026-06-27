@@ -221,13 +221,16 @@ const SOURCES: SearchSource[] = [
     select: "id,chantier_id,title,description,category,urgency,status",
     filter: "title.ilike.$term,description.ilike.$term,category.ilike.$term,urgency.ilike.$term,status.ilike.$term",
     map: (row) => {
+      const id = cleanText(row.id);
       const chantierId = cleanText(row.chantier_id);
+      const params = new URLSearchParams({ feedbackId: id });
+      if (chantierId) params.set("chantierId", chantierId);
       return {
-        id: cleanText(row.id),
+        id,
         kind: "retour_terrain",
         title: cleanText(row.title) || "Retour terrain sans titre",
         subtitle: [cleanText(row.category), cleanText(row.urgency), cleanText(row.status)].filter(Boolean).join(" - ") || "Retour terrain",
-        href: chantierId ? `/retours-terrain?chantierId=${chantierId}` : "/retours-terrain",
+        href: `/retours-terrain?${params.toString()}`,
         badge: "Retour terrain",
       };
     },
