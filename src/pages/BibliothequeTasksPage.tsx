@@ -14,8 +14,16 @@ import {
   type TaskTemplateInput,
   type TaskTemplateRow,
 } from "../services/taskLibrary.service";
-import { replaceTaskTemplatePreparation } from "../services/taskTemplatePreparation.service";
+import {
+  listTaskTemplatePreparationByTemplateIds,
+  replaceTaskTemplatePreparation,
+} from "../services/taskTemplatePreparation.service";
 import { useI18n } from "../i18n";
+
+type PreparationSummary = {
+  materials: number;
+  equipment: number;
+};
 
 export default function BibliothequeTasksPage() {
   const { locale, t } = useI18n();
@@ -33,6 +41,8 @@ export default function BibliothequeTasksPage() {
   const [toast, setToast] = useState<ToastState>(null);
   const [advancedPreparationEnabled, setAdvancedPreparationEnabled] = useState(false);
   const [selectedLot, setSelectedLot] = useState("");
+  const [preparationSchemaReady, setPreparationSchemaReady] = useState(true);
+  const [preparationByTemplateId, setPreparationByTemplateId] = useState<Record<string, PreparationSummary>>({});
 
   useEffect(() => {
     if (!toast) return;
@@ -52,6 +62,10 @@ export default function BibliothequeTasksPage() {
     const withTechnicalDetail = rows.filter(
       (row) => Boolean(row.description_technique) || row.caracteristiques.length > 0 || Boolean(row.remarques),
     ).length;
+    const withPreparation = rows.filter((row) => {
+      const preparation = preparationByTemplateId[row.id];
+      return Boolean(preparation && preparation.materials + preparation.equipment > 0);
+    }).length;
     const totalReferenceCost = rows.reduce((sum, row) => {
       const unitCost = Number(row.cout_reference_unitaire_ht ?? 0);
       const quantity = Number(row.quantite_defaut ?? 1);
@@ -64,9 +78,10 @@ export default function BibliothequeTasksPage() {
       withTime,
       withCost,
       withTechnicalDetail,
+      withPreparation,
       totalReferenceCost,
     };
-  }, [lotOptions.length, rows]);
+  }, [lotOptions.length, preparationByTemplateId, rows]);
 
   const filteredRows = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -96,6 +111,37 @@ export default function BibliothequeTasksPage() {
   function formatHours(value: number | null) {
     if (value === null) return "-";
     return `${value.toLocaleString(locale)} h`;
+  }
+
+  function getPreparationSummary(templateId: string): PreparationSummary {
+    return preparationByTemplateId[templateId] ?? { materials: 0, equipment: 0 };
+  }
+
+  function renderPreparationBadge(templateId: string) {
+    if (!advancedPreparationEnabled) return null;
+    if (!preparationSchemaReady) {
+      return (
+        <span className="inline-flex rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[11px] font-medium text-amber-700">
+          Préparation indisponible
+        </span>
+      );
+    }
+
+    const preparation = getPreparationSummary(templateId);
+    const total = preparation.materials + preparation.equipment;
+    if (total === 0) {
+      return (
+        <span className="inline-flex rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[11px] font-medium text-slate-600">
+          Préparation à compléter
+        </span>
+      );
+    }
+
+    return (
+      <span className="inline-flex rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[11px] font-medium text-emerald-700">
+        Prépa : {preparation.materials} mat. / {preparation.equipment} matériel
+      </span>
+    );
   }
 
   async function refresh() {
@@ -142,6 +188,43 @@ export default function BibliothequeTasksPage() {
       alive = false;
     };
   }, []);
+
+  useEffect(() => {
+    let alive = true;
+
+    async function loadPreparationCoverage() {
+      if (!advancedPreparationEnabled || rows.length === 0) {
+        setPreparationSchemaReady(true);
+        setPreparationByTemplateId({});
+        return;
+      }
+
+      try {
+        const result = await listTaskTemplatePreparationByTemplateIds(rows.map((row) => row.id));
+        if (!alive) return;
+        setPreparationSchemaReady(result.schemaReady);
+
+        const next: Record<string, PreparationSummary> = {};
+        for (const row of rows) {
+          next[row.id] = {
+            materials: result.materialsByTemplateId[row.id]?.length ?? 0,
+            equipment: result.equipmentByTemplateId[row.id]?.length ?? 0,
+          };
+        }
+        setPreparationByTemplateId(next);
+      } catch {
+        if (!alive) return;
+        setPreparationSchemaReady(false);
+        setPreparationByTemplateId({});
+      }
+    }
+
+    void loadPreparationCoverage();
+
+    return () => {
+      alive = false;
+    };
+  }, [advancedPreparationEnabled, rows]);
 
   function openCreateDrawer() {
     setActiveTemplate(null);
@@ -258,7 +341,7 @@ export default function BibliothequeTasksPage() {
         </button>
       </div>
 
-      <div className="grid gap-3 md:grid-cols-5">
+      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-6">
         <div className="rounded-2xl border bg-white p-4">
           <div className="text-xs font-medium uppercase text-slate-500">Modèles</div>
           <div className="mt-1 text-2xl font-bold text-slate-900">{libraryStats.total}</div>
@@ -278,6 +361,13 @@ export default function BibliothequeTasksPage() {
           <div className="text-xs font-medium uppercase text-slate-500">Technique</div>
           <div className="mt-1 text-2xl font-bold text-slate-900">{libraryStats.withTechnicalDetail}</div>
           <div className="text-xs text-slate-500">documentés pour chantier/devis</div>
+        </div>
+        <div className="rounded-2xl border bg-white p-4">
+          <div className="text-xs font-medium uppercase text-slate-500">Préparation</div>
+          <div className="mt-1 text-2xl font-bold text-slate-900">
+            {advancedPreparationEnabled && preparationSchemaReady ? libraryStats.withPreparation : "-"}
+          </div>
+          <div className="text-xs text-slate-500">matériaux ou matériel reliés</div>
         </div>
         <div className="rounded-2xl border bg-white p-4">
           <div className="text-xs font-medium uppercase text-slate-500">Panier type</div>
@@ -339,18 +429,17 @@ export default function BibliothequeTasksPage() {
                       {row.description_technique ? (
                         <div className="text-xs text-slate-500 line-clamp-2">{row.description_technique}</div>
                       ) : null}
-                      {row.caracteristiques.length > 0 ? (
-                        <div className="mt-1 flex flex-wrap gap-1">
-                          {row.caracteristiques.slice(0, 3).map((item) => (
-                            <span
-                              key={`${row.id}-${item}`}
-                              className="rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[11px] text-slate-600"
-                            >
-                              {item}
-                            </span>
-                          ))}
-                        </div>
-                      ) : null}
+                      <div className="mt-1 flex flex-wrap gap-1">
+                        {row.caracteristiques.slice(0, 3).map((item) => (
+                          <span
+                            key={`${row.id}-${item}`}
+                            className="rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[11px] text-slate-600"
+                          >
+                            {item}
+                          </span>
+                        ))}
+                        {renderPreparationBadge(row.id)}
+                      </div>
                       {row.remarques ? <div className="text-xs text-slate-500 truncate">{row.remarques}</div> : null}
                     </td>
                     <td className="px-4 py-3">{row.lot ?? "-"}</td>
@@ -410,18 +499,17 @@ export default function BibliothequeTasksPage() {
                   <div className="mt-3 text-sm text-slate-600">{row.description_technique}</div>
                 ) : null}
 
-                {row.caracteristiques.length > 0 ? (
-                  <div className="mt-3 flex flex-wrap gap-1">
-                    {row.caracteristiques.slice(0, 4).map((item) => (
-                      <span
-                        key={`${row.id}-mobile-${item}`}
-                        className="rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[11px] text-slate-600"
-                      >
-                        {item}
-                      </span>
-                    ))}
-                  </div>
-                ) : null}
+                <div className="mt-3 flex flex-wrap gap-1">
+                  {row.caracteristiques.slice(0, 4).map((item) => (
+                    <span
+                      key={`${row.id}-mobile-${item}`}
+                      className="rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[11px] text-slate-600"
+                    >
+                      {item}
+                    </span>
+                  ))}
+                  {renderPreparationBadge(row.id)}
+                </div>
 
                 <div className="mt-4 grid grid-cols-3 gap-2 text-xs">
                   <div className="rounded-xl bg-slate-50 p-2">
