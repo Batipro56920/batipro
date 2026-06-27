@@ -729,7 +729,7 @@ function FormPanel({ title, children }: { title: string; children: ReactNode }) 
   return <section className="bt-card rounded-xl bg-white p-4"><h2 className="text-sm font-semibold text-slate-950">{title}</h2><div className="mt-4">{children}</div></section>;
 }
 
-function Info({ label, value }: { label: string }) {
+function Info({ label, value }: { label: string; value: string }) {
   return <div className="rounded-lg border border-slate-100 bg-slate-50 p-3"><div className="text-xs text-slate-500">{label}</div><div className="mt-1 truncate text-sm font-semibold text-slate-900">{value}</div></div>;
 }
 
