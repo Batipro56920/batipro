@@ -146,6 +146,14 @@ function crmProjectPathForLead(lead: ApporteurLeadRow) {
   return "";
 }
 
+function projectOptionAlreadyAttached(option: ProjectOption, leads: ApporteurLeadRow[], editingLeadId: string | null) {
+  return leads.some((lead) => {
+    if (lead.id === editingLeadId) return false;
+    if (option.opportunityId && lead.crm_opportunity_id === option.opportunityId) return true;
+    return Boolean(option.prospectId && lead.crm_prospect_id === option.prospectId);
+  });
+}
+
 export default function ApporteursAffairesPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -204,6 +212,13 @@ export default function ApporteursAffairesPage() {
       }));
     return [...opportunityOptions, ...prospectOptions].sort((a, b) => a.label.localeCompare(b.label, "fr"));
   }, [crmOpportunities, crmProspects]);
+
+  const availableProjectOptions = useMemo(
+    () => projectOptions.filter((option) => !projectOptionAlreadyAttached(option, leads, editingLeadId)),
+    [editingLeadId, leads, projectOptions],
+  );
+
+  const attachedProjectCount = projectOptions.length - availableProjectOptions.length;
 
   const apporteurScopedLeads = useMemo(
     () => (selectedApporteurId ? leads.filter((row) => row.apporteur_id === selectedApporteurId) : leads),
@@ -386,8 +401,8 @@ export default function ApporteursAffairesPage() {
       const apporteurId = leadForm.apporteur_id || selectedApporteurId;
       if (!apporteurId) throw new Error("Un apporteur doit être sélectionné.");
       if (!leadForm.crm_project_id) throw new Error("Sélectionnez le projet CRM à rattacher.");
-      const project = projectOptions.find((option) => option.value === leadForm.crm_project_id);
-      if (!project) throw new Error("Projet CRM introuvable.");
+      const project = availableProjectOptions.find((option) => option.value === leadForm.crm_project_id);
+      if (!project) throw new Error("Ce projet CRM est déjà rattaché à un apporteur ou n'est plus disponible.");
       const payload = {
         apporteur_id: apporteurId,
         client_name: project.clientName,
@@ -619,7 +634,11 @@ export default function ApporteursAffairesPage() {
           <FormPanel title={editingLeadId ? "Modifier le rattachement" : "Rattacher un projet CRM"}>
             <div className="grid gap-3 md:grid-cols-2">
               <Select label="Apporteur" value={leadForm.apporteur_id || selectedApporteurId} onChange={(value) => setLeadForm((prev) => ({ ...prev, apporteur_id: value }))} options={apporteurs.map((apporteur) => ({ value: apporteur.id, label: apporteur.nom }))} placeholder="Sélectionner" />
-              <Select label="Projet CRM" value={leadForm.crm_project_id} onChange={(value) => setLeadForm((prev) => ({ ...prev, crm_project_id: value }))} options={projectOptions.map((project) => ({ value: project.value, label: project.label }))} placeholder="Sélectionner un projet" />
+              <div>
+                <Select label="Projet CRM" value={leadForm.crm_project_id} onChange={(value) => setLeadForm((prev) => ({ ...prev, crm_project_id: value }))} options={availableProjectOptions.map((project) => ({ value: project.value, label: project.label }))} placeholder="Sélectionner un projet" />
+                {attachedProjectCount > 0 ? <p className="mt-1 text-xs text-slate-500">{attachedProjectCount} projet{attachedProjectCount > 1 ? "s" : ""} déjà rattaché{attachedProjectCount > 1 ? "s" : ""} masqué{attachedProjectCount > 1 ? "s" : ""} pour éviter les doublons de commission.</p> : null}
+                {!availableProjectOptions.length ? <p className="mt-1 text-xs text-amber-700">Aucun projet CRM disponible à rattacher.</p> : null}
+              </div>
               <Input label="Date de rattachement" type="date" value={leadForm.date} onChange={(value) => setLeadForm((prev) => ({ ...prev, date: value }))} />
               <Select label="Statut commission" value={leadForm.status} onChange={(value) => setLeadForm((prev) => ({ ...prev, status: value as ApporteurLeadStatus }))} options={LEAD_STATUSES} />
               <div className="md:col-span-2"><Textarea label="Commentaire interne" value={leadForm.comment} onChange={(value) => setLeadForm((prev) => ({ ...prev, comment: value }))} /></div>
@@ -710,7 +729,7 @@ function FormPanel({ title, children }: { title: string; children: ReactNode }) 
   return <section className="bt-card rounded-xl bg-white p-4"><h2 className="text-sm font-semibold text-slate-950">{title}</h2><div className="mt-4">{children}</div></section>;
 }
 
-function Info({ label, value }: { label: string; value: string }) {
+function Info({ label, value }: { label: string }) {
   return <div className="rounded-lg border border-slate-100 bg-slate-50 p-3"><div className="text-xs text-slate-500">{label}</div><div className="mt-1 truncate text-sm font-semibold text-slate-900">{value}</div></div>;
 }
 
