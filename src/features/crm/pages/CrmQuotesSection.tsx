@@ -14,6 +14,7 @@ export default function CrmQuotesSection({
   prospectById,
   clientById,
   projectPathByQuoteId,
+  chantierPathByQuoteId,
   onCreate,
   onStatus,
   onTransform,
@@ -23,6 +24,7 @@ export default function CrmQuotesSection({
   prospectById: Map<string, CrmProspectRow>;
   clientById: Map<string, CrmClientRow>;
   projectPathByQuoteId?: Map<string, string>;
+  chantierPathByQuoteId?: Map<string, string>;
   onCreate: () => void;
   onStatus: (row: CrmQuoteRow, status: CrmQuoteRow["statut"]) => void;
   onTransform: (row: CrmQuoteRow) => void;
@@ -34,6 +36,7 @@ export default function CrmQuotesSection({
     prospectById,
     clientById,
     projectPathByQuoteId,
+    chantierPathByQuoteId,
     globalQuery: "",
   });
 
