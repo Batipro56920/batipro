@@ -7,6 +7,8 @@ import {
   intervenantDailyChecklistGet,
   intervenantDailyChecklistUpsert,
   intervenantGetChantiers,
+  intervenantInformationRequestList,
+  intervenantMaterielList,
   intervenantTerrainFeedbackList,
   intervenantTimeList,
   type IntervenantChantier,
@@ -191,9 +193,11 @@ export default function EmployeeDailyChecklistWidget() {
       if (!activeChantierId) return base;
 
       try {
-        const [timeEntries, feedbacks] = await Promise.all([
+        const [timeEntries, feedbacks, materiels, informationRequests] = await Promise.all([
           intervenantTimeList(token, activeChantierId),
           intervenantTerrainFeedbackList(token, activeChantierId),
+          intervenantMaterielList(token, activeChantierId),
+          intervenantInformationRequestList(token, activeChantierId),
         ]);
         const hasTimeLogged = timeEntries.some(
           (entry) => entry.work_date === checklistDate && Number(entry.duration_hours ?? 0) > 0,
@@ -201,9 +205,12 @@ export default function EmployeeDailyChecklistWidget() {
         const hasPhotoTaken = feedbacks.some(
           (feedback) => isSameDay(feedback.created_at, checklistDate) && feedback.attachments.length > 0,
         );
-        const hasTaskReported = feedbacks.some(
-          (feedback) => isSameDay(feedback.created_at, checklistDate) && feedback.category !== "photo",
-        );
+        const hasTaskReported =
+          feedbacks.some(
+            (feedback) => isSameDay(feedback.created_at, checklistDate) && feedback.category !== "photo",
+          ) ||
+          materiels.some((row) => isSameDay(row.created_at, checklistDate)) ||
+          informationRequests.some((request) => isSameDay(request.created_at, checklistDate));
 
         const patch: ChecklistPayload = {
           chantier_id: activeChantierId,
