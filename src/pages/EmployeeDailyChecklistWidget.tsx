@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useLocation } from "react-router-dom";
-import { CalendarDays, CheckCircle2, ClipboardCheck, Loader2, MapPin, X } from "lucide-react";
+import { CalendarDays, CheckCircle2, ClipboardCheck, Loader2, MapPin, RefreshCw, X } from "lucide-react";
 
 import { supabase } from "../lib/supabaseClient";
 import {
@@ -46,6 +46,7 @@ type ChecklistPayload = {
   validate?: boolean;
 };
 
+const CHECKLIST_ACTIVITY_REFRESH_MS = 15000;
 const CHECKLIST_ITEMS: ChecklistItem[] = [
   { key: "photos_taken", label: "Photos prises", detail: "Photos utiles ajoutees au chantier ou a la tache." },
   { key: "tasks_reported", label: "Taches remontees", detail: "Avancement, blocage ou remarque signales si necessaire." },
@@ -104,6 +105,7 @@ export default function EmployeeDailyChecklistWidget() {
   const [loading, setLoading] = useState(false);
   const [savingKey, setSavingKey] = useState<ChecklistKey | "validate" | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [refreshTick, setRefreshTick] = useState(0);
 
   useEffect(() => {
     function syncChantierId() {
@@ -118,6 +120,21 @@ export default function EmployeeDailyChecklistWidget() {
       window.removeEventListener("storage", syncChantierId);
     };
   }, []);
+
+  useEffect(() => {
+    if (!open) return;
+
+    function refreshFromRecentActivity() {
+      setRefreshTick((value) => value + 1);
+    }
+
+    const interval = window.setInterval(refreshFromRecentActivity, CHECKLIST_ACTIVITY_REFRESH_MS);
+    window.addEventListener("focus", refreshFromRecentActivity);
+    return () => {
+      window.clearInterval(interval);
+      window.removeEventListener("focus", refreshFromRecentActivity);
+    };
+  }, [open]);
 
   useEffect(() => {
     let alive = true;
@@ -226,7 +243,7 @@ export default function EmployeeDailyChecklistWidget() {
     return () => {
       alive = false;
     };
-  }, [checklistDate, chantierId, open, token]);
+  }, [checklistDate, chantierId, open, refreshTick, token]);
 
   if (!token) return null;
 
@@ -315,14 +332,25 @@ export default function EmployeeDailyChecklistWidget() {
           <h2 className="mt-1 text-base font-semibold text-slate-950">Checklist du jour</h2>
           <p className="mt-1 text-sm text-slate-500">{validated ? "Journee validee." : `${completed}/${total} points controles.`}</p>
         </div>
-        <button
-          type="button"
-          onClick={() => setOpen(false)}
-          className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-slate-200 text-slate-500"
-          aria-label="Fermer la checklist"
-        >
-          <X className="h-4 w-4" />
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setRefreshTick((value) => value + 1)}
+            disabled={loading}
+            className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-slate-200 text-slate-500 disabled:opacity-60"
+            aria-label="Actualiser la checklist"
+          >
+            {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+          </button>
+          <button
+            type="button"
+            onClick={() => setOpen(false)}
+            className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-slate-200 text-slate-500"
+            aria-label="Fermer la checklist"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
       </div>
 
       <div className="mt-3 grid gap-2 sm:grid-cols-2">
