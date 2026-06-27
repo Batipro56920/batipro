@@ -31,6 +31,9 @@ const STATUS_OPTIONS: TerrainFeedbackStatus[] = [
   "classe_sans_suite",
 ];
 
+const OPEN_STATUS_SET = new Set<TerrainFeedbackStatus>(["nouveau", "en_cours"]);
+const PRIORITY_URGENCIES = new Set(["critique", "urgente"]);
+
 type DraftState = {
   status: TerrainFeedbackStatus;
   assigned_to: string;
@@ -58,6 +61,14 @@ function urgencyTone(urgency: string) {
   if (urgency === "urgente") return "amber" as const;
   if (urgency === "faible") return "green" as const;
   return "slate" as const;
+}
+
+function isOpenFeedback(row: TerrainFeedbackRow) {
+  return OPEN_STATUS_SET.has(row.status);
+}
+
+function isPriorityFeedback(row: TerrainFeedbackRow) {
+  return isOpenFeedback(row) && PRIORITY_URGENCIES.has(row.urgency);
 }
 
 export default function TerrainFeedbacksPage() {
@@ -91,6 +102,20 @@ export default function TerrainFeedbacksPage() {
       null
     );
   }, [chantiers, filterChantierId, rows]);
+
+  const workflowStats = useMemo(() => {
+    const openRows = rows.filter(isOpenFeedback);
+    const priorityRows = rows.filter(isPriorityFeedback);
+    return {
+      total: rows.length,
+      open: openRows.length,
+      priority: priorityRows.length,
+      unassigned: openRows.filter((row) => !row.assigned_to).length,
+      withPhotos: rows.filter((row) => row.attachments.length > 0).length,
+      treated: rows.filter((row) => row.status === "traite").length,
+      priorityRows: priorityRows.slice(0, 3),
+    };
+  }, [rows]);
 
   useEffect(() => {
     setFilterChantierId((current) => (current === urlChantierId ? current : urlChantierId));
@@ -181,6 +206,33 @@ export default function TerrainFeedbacksPage() {
     }
   }
 
+  async function startProcessing(row: TerrainFeedbackRow) {
+    const draft = drafts[row.id];
+    const assignedTo = draft?.assigned_to || row.assigned_to || null;
+    const assignedToName =
+      draft?.assigned_to_name ||
+      row.assigned_to_name ||
+      (assignedTo ? responsibleNameById.get(assignedTo) ?? null : null);
+    setSavingId(row.id);
+    setError(null);
+    try {
+      await updateTerrainFeedback(row.id, {
+        status: "en_cours",
+        assigned_to: assignedTo,
+        assigned_to_name: assignedToName,
+        treatment_comment:
+          draft?.treatment_comment ||
+          row.treatment_comment ||
+          "Pris en charge depuis le pilotage des retours terrain.",
+      });
+      await refresh();
+    } catch (err: any) {
+      setError(err?.message ?? t("terrainFeedback.admin.saveError"));
+    } finally {
+      setSavingId(null);
+    }
+  }
+
   return (
     <div className="space-y-5">
       <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
@@ -238,6 +290,110 @@ export default function TerrainFeedbacksPage() {
           </div>
         </section>
       ) : null}
+
+      <section className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+          <div>
+            <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
+              Pilotage terrain
+            </div>
+            <div className="mt-1 text-lg font-semibold text-slate-950">
+              Retours à traiter et priorités ouvertes
+            </div>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={() => setFilterStatus("")}
+              className={["rounded-xl border px-3 py-2 text-sm font-medium", filterStatus === "" ? "border-slate-900 bg-slate-900 text-white" : "border-slate-200 text-slate-700 hover:bg-slate-50"].join(" ")}
+            >
+              Tous
+            </button>
+            <button
+              type="button"
+              onClick={() => setFilterStatus("nouveau")}
+              className={["rounded-xl border px-3 py-2 text-sm font-medium", filterStatus === "nouveau" ? "border-blue-700 bg-blue-700 text-white" : "border-blue-200 text-blue-800 hover:bg-blue-50"].join(" ")}
+            >
+              Nouveaux
+            </button>
+            <button
+              type="button"
+              onClick={() => setFilterStatus("en_cours")}
+              className={["rounded-xl border px-3 py-2 text-sm font-medium", filterStatus === "en_cours" ? "border-amber-600 bg-amber-500 text-white" : "border-amber-200 text-amber-800 hover:bg-amber-50"].join(" ")}
+            >
+              En cours
+            </button>
+            <button
+              type="button"
+              onClick={() => setFilterStatus("traite")}
+              className={["rounded-xl border px-3 py-2 text-sm font-medium", filterStatus === "traite" ? "border-emerald-700 bg-emerald-700 text-white" : "border-emerald-200 text-emerald-800 hover:bg-emerald-50"].join(" ")}
+            >
+              Traités
+            </button>
+          </div>
+        </div>
+
+        <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+          <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+            <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">Chargés</div>
+            <div className="mt-2 text-2xl font-semibold text-slate-950">{workflowStats.total}</div>
+          </div>
+          <div className="rounded-2xl border border-blue-200 bg-blue-50 p-4">
+            <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-blue-700">À traiter</div>
+            <div className="mt-2 text-2xl font-semibold text-blue-950">{workflowStats.open}</div>
+          </div>
+          <div className="rounded-2xl border border-red-200 bg-red-50 p-4">
+            <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-red-700">Urgents</div>
+            <div className="mt-2 text-2xl font-semibold text-red-950">{workflowStats.priority}</div>
+          </div>
+          <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4">
+            <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-amber-700">Sans responsable</div>
+            <div className="mt-2 text-2xl font-semibold text-amber-950">{workflowStats.unassigned}</div>
+          </div>
+          <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
+            <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-emerald-700">Traités</div>
+            <div className="mt-2 text-2xl font-semibold text-emerald-950">{workflowStats.treated}</div>
+          </div>
+        </div>
+
+        {workflowStats.priorityRows.length > 0 ? (
+          <div className="mt-4 rounded-2xl border border-red-200 bg-red-50 p-4">
+            <div className="text-xs font-semibold uppercase tracking-[0.16em] text-red-700">Priorités ouvertes</div>
+            <div className="mt-3 space-y-2">
+              {workflowStats.priorityRows.map((row) => (
+                <div key={row.id} className="flex flex-col gap-3 rounded-xl border border-red-100 bg-white px-3 py-3 md:flex-row md:items-center md:justify-between">
+                  <div className="min-w-0">
+                    <div className="truncate text-sm font-semibold text-slate-950">{row.title}</div>
+                    <div className="mt-1 text-xs text-slate-500">
+                      {row.chantier?.nom ?? "Chantier non renseigné"} • {t(`terrainFeedback.urgencies.${row.urgency}`)} • {t(`terrainFeedback.statuses.${row.status}`)}
+                    </div>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {row.chantier ? (
+                      <Link
+                        to={`/chantiers/${row.chantier.id}/execution`}
+                        className="rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50"
+                      >
+                        Exécution
+                      </Link>
+                    ) : null}
+                    {row.status === "nouveau" ? (
+                      <button
+                        type="button"
+                        onClick={() => void startProcessing(row)}
+                        disabled={savingId === row.id}
+                        className="rounded-lg bg-red-700 px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-red-800 disabled:opacity-60"
+                      >
+                        Passer en cours
+                      </button>
+                    ) : null}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : null}
+      </section>
 
       <section className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm">
         <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
@@ -375,6 +531,16 @@ export default function TerrainFeedbacksPage() {
                         >
                           Qualité / réserves
                         </Link>
+                        {row.status === "nouveau" ? (
+                          <button
+                            type="button"
+                            onClick={() => void startProcessing(row)}
+                            disabled={savingId === row.id}
+                            className="rounded-xl border border-slate-900 bg-slate-900 px-3 py-2 text-xs font-semibold text-white hover:bg-slate-800 disabled:opacity-60"
+                          >
+                            Passer en cours
+                          </button>
+                        ) : null}
                       </div>
                     ) : null}
                   </div>
