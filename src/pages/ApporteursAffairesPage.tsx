@@ -96,14 +96,30 @@ function formatCurrency(value: number) {
 }
 
 function parseFrenchNumber(value: string) {
-  const text = value.trim();
+  const text = value.trim().replace(/\u00a0/g, " ");
   if (!text || /[,.]$/.test(text) || text.startsWith("-")) return null;
-  const normalized = text.includes(",")
-    ? text.replace(/\s/g, "").replace(/\./g, "").replace(",", ".")
-    : text.replace(/\s/g, "");
-  if (!/^\d+(\.\d+)?$/.test(normalized)) return null;
+
+  const compact = text.replace(/\s/g, "").replace(/€/g, "").replace(/%/g, "");
+  const commaCount = (compact.match(/,/g) ?? []).length;
+  if (commaCount > 1) return null;
+
+  let normalized = compact;
+  if (commaCount === 1) {
+    normalized = compact.replace(/\./g, "").replace(",", ".");
+  } else {
+    const dotGroups = compact.split(".");
+    if (dotGroups.length > 2) {
+      const validThousands = dotGroups.every((group, index) => (index === 0 ? /^\d{1,3}$/.test(group) : /^\d{3}$/.test(group)));
+      if (!validThousands) return null;
+      normalized = dotGroups.join("");
+    } else if (/^\d+\.\d{3}$/.test(compact)) {
+      normalized = compact.replace(".", "");
+    }
+  }
+
+  if (!/^\d+(?:\.\d+)?$/.test(normalized)) return null;
   const parsed = Number(normalized);
-  return Number.isFinite(parsed) ? parsed : null;
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
 }
 
 function calculateCommission(lead: ApporteurLeadRow, apporteur?: ApporteurAffaireRow) {
