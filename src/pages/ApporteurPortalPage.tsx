@@ -73,10 +73,25 @@ function parseFrenchNumber(value: string) {
   return parsed;
 }
 
+function safeLeadAmountPreview(value: string) {
+  try {
+    const amount = parseFrenchNumber(value);
+    return amount > 0 ? amount : null;
+  } catch {
+    return null;
+  }
+}
+
 function commissionAmount(lead: ApporteurLeadRow, apporteur: ApporteurAffaireRow | null) {
   if (!apporteur) return 0;
   if (apporteur.calculation_mode === "fixe") return apporteur.commission_percent;
   return Math.round((lead.estimated_amount * apporteur.commission_percent) / 100 * 100) / 100;
+}
+
+function commissionPreviewAmount(amount: number, apporteur: ApporteurAffaireRow | null) {
+  if (!apporteur) return null;
+  if (apporteur.calculation_mode === "fixe") return apporteur.commission_percent;
+  return Math.round((amount * apporteur.commission_percent) / 100 * 100) / 100;
 }
 
 function isPayableCommissionStatus(status: ApporteurLeadStatus) {
@@ -122,6 +137,11 @@ export default function ApporteurPortalPage() {
     [portalData],
   );
   const paidCommission = useMemo(() => portalData.leads.filter((lead) => lead.status === "paye").reduce((sum, lead) => sum + commissionAmount(lead, portalData.apporteur), 0), [portalData]);
+  const leadAmountPreview = useMemo(() => safeLeadAmountPreview(leadForm.estimated_amount), [leadForm.estimated_amount]);
+  const commissionPreview = useMemo(
+    () => (leadAmountPreview === null ? null : commissionPreviewAmount(leadAmountPreview, portalData.apporteur)),
+    [leadAmountPreview, portalData.apporteur],
+  );
 
   useEffect(() => {
     let alive = true;
@@ -233,6 +253,16 @@ export default function ApporteurPortalPage() {
               <Input label="Nature des travaux" value={leadForm.project_type} onChange={(value) => setLeadForm((prev) => ({ ...prev, project_type: value }))} />
               <Input label="Montant estimé des travaux" value={leadForm.estimated_amount} inputMode="decimal" onChange={(value) => setLeadForm((prev) => ({ ...prev, estimated_amount: value }))} />
               <div className="md:col-span-2"><Textarea label="Informations utiles" value={leadForm.comment} onChange={(value) => setLeadForm((prev) => ({ ...prev, comment: value }))} /></div>
+            </div>
+            <div className="mt-4 rounded-lg border border-blue-100 bg-blue-50 p-3 text-sm text-blue-900">
+              {commissionPreview === null ? (
+                <span>Renseignez un montant estimé pour afficher la commission indicative avant transmission.</span>
+              ) : (
+                <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+                  <span>Commission indicative si le projet est signé</span>
+                  <strong className="text-base text-blue-950">{formatCurrency(commissionPreview)}</strong>
+                </div>
+              )}
             </div>
             {actError ? <div className="mt-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">{actError}</div> : null}
             {actNotice ? <div className="mt-4 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-700">{actNotice}</div> : null}
