@@ -75,6 +75,16 @@ function isPayableCommissionStatus(status: ApporteurLeadStatus) {
   return status === "signe" || status === "commission_a_payer";
 }
 
+function isConfirmedCommissionStatus(status: ApporteurLeadStatus) {
+  return isPayableCommissionStatus(status) || status === "paye";
+}
+
+function commissionDisplay(lead: ApporteurLeadRow, apporteur: ApporteurAffaireRow | null) {
+  if (lead.status === "perdu") return formatCurrency(0);
+  if (!isConfirmedCommissionStatus(lead.status)) return "A confirmer";
+  return formatCurrency(commissionAmount(lead, apporteur));
+}
+
 function leadStatusLabel(status: ApporteurLeadStatus) {
   return LEAD_STATUSES.find((item) => item.value === status)?.label ?? status;
 }
@@ -273,7 +283,7 @@ export default function ApporteurPortalPage() {
                     <td className="align-top"><div>{lead.project_type || "-"}</div><div className="text-xs text-slate-500">{lead.project_address || ""}</div></td>
                     <td className="align-top">{formatCurrency(lead.estimated_amount)}</td>
                     <td className="align-top">{leadStatusLabel(lead.status)}</td>
-                    <td className="align-top">{formatCurrency(commissionAmount(lead, portalData.apporteur))}</td>
+                    <td className="align-top">{commissionDisplay(lead, portalData.apporteur)}</td>
                     <td className="align-top">{lead.date}</td>
                   </tr>
                 ))}
@@ -315,7 +325,7 @@ function LeadMobileRow({ lead, apporteur }: { lead: ApporteurLeadRow; apporteur:
       </div>
       <div className="mt-3 grid grid-cols-2 gap-3 border-t border-slate-200 pt-3">
         <div><div className="text-xs text-slate-500">Montant estimé</div><div className="font-semibold text-slate-950">{formatCurrency(lead.estimated_amount)}</div></div>
-        <div><div className="text-xs text-slate-500">Commission</div><div className="font-semibold text-slate-950">{formatCurrency(commissionAmount(lead, apporteur))}</div></div>
+        <div><div className="text-xs text-slate-500">Commission</div><div className="font-semibold text-slate-950">{commissionDisplay(lead, apporteur)}</div></div>
       </div>
       <div className="mt-2 text-xs text-slate-500">Transmis le {lead.date}</div>
     </article>
