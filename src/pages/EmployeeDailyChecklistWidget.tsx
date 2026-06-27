@@ -253,10 +253,15 @@ export default function EmployeeDailyChecklistWidget() {
   const payloadChantierId = chantierId ?? checklist?.chantier_id ?? null;
   const activeChantier = chantiers.find((row) => row.id === payloadChantierId) ?? null;
   const chantierLabel = activeChantier?.nom ?? (payloadChantierId ? "Chantier actif" : "Chantier non selectionne");
+  const canEditChecklist = Boolean(payloadChantierId);
 
   async function saveValue(key: ChecklistKey, value: boolean) {
     if (!token) return;
     const activeChantierId = currentStoredChantierId() ?? payloadChantierId;
+    if (!activeChantierId) {
+      setError("Selectionne un chantier dans le portail avant de modifier la checklist.");
+      return;
+    }
     setChantierId(activeChantierId);
     const previous = checklist;
     const optimistic = {
@@ -285,6 +290,10 @@ export default function EmployeeDailyChecklistWidget() {
   async function validateDay() {
     if (!token) return;
     const activeChantierId = currentStoredChantierId() ?? payloadChantierId;
+    if (!activeChantierId) {
+      setError("Selectionne un chantier dans le portail avant de valider la journee.");
+      return;
+    }
     setChantierId(activeChantierId);
     setSavingKey("validate");
     setError(null);
@@ -383,13 +392,13 @@ export default function EmployeeDailyChecklistWidget() {
           const checked = checkedValue(checklist, item.key);
           const saving = savingKey === item.key;
           return (
-            <label key={item.key} className="flex items-start gap-3 rounded-lg border border-slate-200 bg-slate-50 px-3 py-3">
+            <label key={item.key} className={`flex items-start gap-3 rounded-lg border border-slate-200 bg-slate-50 px-3 py-3 ${canEditChecklist ? "" : "opacity-60"}`}>
               <input
                 type="checkbox"
                 checked={checked}
-                disabled={Boolean(savingKey)}
+                disabled={Boolean(savingKey) || !canEditChecklist}
                 onChange={(event) => void saveValue(item.key, event.target.checked)}
-                className="mt-1 h-4 w-4 rounded border-slate-300 text-blue-700 focus:ring-blue-200"
+                className="mt-1 h-4 w-4 rounded border-slate-300 text-blue-700 focus:ring-blue-200 disabled:cursor-not-allowed"
               />
               <span className="min-w-0 flex-1">
                 <span className="flex items-center gap-2 text-sm font-semibold text-slate-950">
@@ -406,8 +415,8 @@ export default function EmployeeDailyChecklistWidget() {
       <button
         type="button"
         onClick={() => void validateDay()}
-        disabled={savingKey !== null || loading}
-        className="mt-4 flex w-full items-center justify-center gap-2 rounded-lg bg-emerald-700 px-4 py-3 text-sm font-semibold text-white disabled:opacity-60"
+        disabled={savingKey !== null || loading || !canEditChecklist}
+        className="mt-4 flex w-full items-center justify-center gap-2 rounded-lg bg-emerald-700 px-4 py-3 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60"
       >
         {savingKey === "validate" ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
         Valider la journee
