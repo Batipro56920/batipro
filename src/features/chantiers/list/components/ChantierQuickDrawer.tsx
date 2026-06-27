@@ -13,6 +13,7 @@ const TABS = ["Vue rapide", "Tâches", "Équipe", "Documents", "Alertes"] as con
 function getProjectHref(row: ChantierDerived) {
   if (row.crm_opportunity_id) return `/projets/opportunity-${row.crm_opportunity_id}`;
   if (row.crm_prospect_id) return `/projets/prospect-${row.crm_prospect_id}`;
+  if (row.crm_client_id) return `/projets/client-${row.crm_client_id}`;
   return null;
 }
 
