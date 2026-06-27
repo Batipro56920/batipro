@@ -25,6 +25,8 @@ type PreparationSummary = {
   equipment: number;
 };
 
+type ReadinessFilter = "" | "missing_time" | "missing_cost" | "missing_technical" | "missing_preparation";
+
 export default function BibliothequeTasksPage() {
   const { locale, t } = useI18n();
   const [rows, setRows] = useState<TaskTemplateRow[]>([]);
@@ -41,6 +43,7 @@ export default function BibliothequeTasksPage() {
   const [toast, setToast] = useState<ToastState>(null);
   const [advancedPreparationEnabled, setAdvancedPreparationEnabled] = useState(false);
   const [selectedLot, setSelectedLot] = useState("");
+  const [readinessFilter, setReadinessFilter] = useState<ReadinessFilter>("");
   const [preparationSchemaReady, setPreparationSchemaReady] = useState(true);
   const [preparationByTemplateId, setPreparationByTemplateId] = useState<Record<string, PreparationSummary>>({});
 
@@ -56,16 +59,24 @@ export default function BibliothequeTasksPage() {
     ).sort((a, b) => a.localeCompare(b, locale));
   }, [locale, rows]);
 
+  function getPreparationSummary(templateId: string): PreparationSummary {
+    return preparationByTemplateId[templateId] ?? { materials: 0, equipment: 0 };
+  }
+
+  function hasTechnicalDetail(row: TaskTemplateRow) {
+    return Boolean(row.description_technique) || row.caracteristiques.length > 0 || Boolean(row.remarques);
+  }
+
+  function hasPreparation(row: TaskTemplateRow) {
+    const preparation = getPreparationSummary(row.id);
+    return preparation.materials + preparation.equipment > 0;
+  }
+
   const libraryStats = useMemo(() => {
     const withTime = rows.filter((row) => row.temps_prevu_par_unite_h !== null).length;
     const withCost = rows.filter((row) => row.cout_reference_unitaire_ht !== null).length;
-    const withTechnicalDetail = rows.filter(
-      (row) => Boolean(row.description_technique) || row.caracteristiques.length > 0 || Boolean(row.remarques),
-    ).length;
-    const withPreparation = rows.filter((row) => {
-      const preparation = preparationByTemplateId[row.id];
-      return Boolean(preparation && preparation.materials + preparation.equipment > 0);
-    }).length;
+    const withTechnicalDetail = rows.filter(hasTechnicalDetail).length;
+    const withPreparation = rows.filter(hasPreparation).length;
     const totalReferenceCost = rows.reduce((sum, row) => {
       const unitCost = Number(row.cout_reference_unitaire_ht ?? 0);
       const quantity = Number(row.quantite_defaut ?? 1);
@@ -79,14 +90,22 @@ export default function BibliothequeTasksPage() {
       withCost,
       withTechnicalDetail,
       withPreparation,
+      missingTime: rows.length - withTime,
+      missingCost: rows.length - withCost,
+      missingTechnicalDetail: rows.length - withTechnicalDetail,
+      missingPreparation: advancedPreparationEnabled && preparationSchemaReady ? rows.length - withPreparation : 0,
       totalReferenceCost,
     };
-  }, [lotOptions.length, preparationByTemplateId, rows]);
+  }, [advancedPreparationEnabled, lotOptions.length, preparationByTemplateId, preparationSchemaReady, rows]);
 
   const filteredRows = useMemo(() => {
     const q = query.trim().toLowerCase();
     return rows.filter((row) => {
       if (selectedLot && (row.lot ?? "").trim() !== selectedLot) return false;
+      if (readinessFilter === "missing_time" && row.temps_prevu_par_unite_h !== null) return false;
+      if (readinessFilter === "missing_cost" && row.cout_reference_unitaire_ht !== null) return false;
+      if (readinessFilter === "missing_technical" && hasTechnicalDetail(row)) return false;
+      if (readinessFilter === "missing_preparation" && hasPreparation(row)) return false;
       if (!q) return true;
       const searchable = [
         row.titre,
@@ -101,7 +120,7 @@ export default function BibliothequeTasksPage() {
         .toLowerCase();
       return searchable.includes(q);
     });
-  }, [rows, query, selectedLot]);
+  }, [preparationByTemplateId, query, readinessFilter, rows, selectedLot]);
 
   function formatCurrency(value: number | null) {
     if (value === null) return "-";
@@ -111,10 +130,6 @@ export default function BibliothequeTasksPage() {
   function formatHours(value: number | null) {
     if (value === null) return "-";
     return `${value.toLocaleString(locale)} h`;
-  }
-
-  function getPreparationSummary(templateId: string): PreparationSummary {
-    return preparationByTemplateId[templateId] ?? { materials: 0, equipment: 0 };
   }
 
   function renderPreparationBadge(templateId: string) {
@@ -342,33 +357,56 @@ export default function BibliothequeTasksPage() {
       </div>
 
       <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-6">
-        <div className="rounded-2xl border bg-white p-4">
+        <button
+          type="button"
+          onClick={() => setReadinessFilter("")}
+          className="rounded-2xl border bg-white p-4 text-left hover:bg-slate-50"
+        >
           <div className="text-xs font-medium uppercase text-slate-500">Modèles</div>
           <div className="mt-1 text-2xl font-bold text-slate-900">{libraryStats.total}</div>
           <div className="text-xs text-slate-500">{libraryStats.lots} lots structurés</div>
-        </div>
-        <div className="rounded-2xl border bg-white p-4">
+        </button>
+        <button
+          type="button"
+          onClick={() => setReadinessFilter("missing_time")}
+          className="rounded-2xl border bg-white p-4 text-left hover:bg-slate-50"
+        >
           <div className="text-xs font-medium uppercase text-slate-500">Temps</div>
           <div className="mt-1 text-2xl font-bold text-slate-900">{libraryStats.withTime}</div>
-          <div className="text-xs text-slate-500">avec temps unitaire</div>
-        </div>
-        <div className="rounded-2xl border bg-white p-4">
+          <div className="text-xs text-slate-500">{libraryStats.missingTime} à compléter</div>
+        </button>
+        <button
+          type="button"
+          onClick={() => setReadinessFilter("missing_cost")}
+          className="rounded-2xl border bg-white p-4 text-left hover:bg-slate-50"
+        >
           <div className="text-xs font-medium uppercase text-slate-500">Prix</div>
           <div className="mt-1 text-2xl font-bold text-slate-900">{libraryStats.withCost}</div>
-          <div className="text-xs text-slate-500">avec coût de référence</div>
-        </div>
-        <div className="rounded-2xl border bg-white p-4">
+          <div className="text-xs text-slate-500">{libraryStats.missingCost} sans coût de référence</div>
+        </button>
+        <button
+          type="button"
+          onClick={() => setReadinessFilter("missing_technical")}
+          className="rounded-2xl border bg-white p-4 text-left hover:bg-slate-50"
+        >
           <div className="text-xs font-medium uppercase text-slate-500">Technique</div>
           <div className="mt-1 text-2xl font-bold text-slate-900">{libraryStats.withTechnicalDetail}</div>
-          <div className="text-xs text-slate-500">documentés pour chantier/devis</div>
-        </div>
-        <div className="rounded-2xl border bg-white p-4">
+          <div className="text-xs text-slate-500">{libraryStats.missingTechnicalDetail} sans détail chantier</div>
+        </button>
+        <button
+          type="button"
+          disabled={!advancedPreparationEnabled || !preparationSchemaReady}
+          onClick={() => setReadinessFilter("missing_preparation")}
+          className="rounded-2xl border bg-white p-4 text-left hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+        >
           <div className="text-xs font-medium uppercase text-slate-500">Préparation</div>
           <div className="mt-1 text-2xl font-bold text-slate-900">
             {advancedPreparationEnabled && preparationSchemaReady ? libraryStats.withPreparation : "-"}
           </div>
-          <div className="text-xs text-slate-500">matériaux ou matériel reliés</div>
-        </div>
+          <div className="text-xs text-slate-500">
+            {advancedPreparationEnabled && preparationSchemaReady ? `${libraryStats.missingPreparation} sans prépa` : "module indisponible"}
+          </div>
+        </button>
         <div className="rounded-2xl border bg-white p-4">
           <div className="text-xs font-medium uppercase text-slate-500">Panier type</div>
           <div className="mt-1 text-2xl font-bold text-slate-900">{formatCurrency(libraryStats.totalReferenceCost)}</div>
@@ -376,13 +414,26 @@ export default function BibliothequeTasksPage() {
         </div>
       </div>
 
-      <div className="grid gap-3 rounded-2xl border bg-white p-4 md:grid-cols-[minmax(0,1fr)_240px]">
+      <div className="grid gap-3 rounded-2xl border bg-white p-4 md:grid-cols-[minmax(0,1fr)_220px_240px]">
         <input
           className="w-full rounded-xl border px-3 py-2 text-sm"
           placeholder={t("bibliothequeTasks.searchPlaceholder")}
           value={query}
           onChange={(e) => setQuery(e.target.value)}
         />
+        <select
+          className="w-full rounded-xl border bg-white px-3 py-2 text-sm"
+          value={readinessFilter}
+          onChange={(e) => setReadinessFilter(e.target.value as ReadinessFilter)}
+        >
+          <option value="">Tous les états</option>
+          <option value="missing_time">Temps à compléter</option>
+          <option value="missing_cost">Coût à compléter</option>
+          <option value="missing_technical">Technique à compléter</option>
+          <option value="missing_preparation" disabled={!advancedPreparationEnabled || !preparationSchemaReady}>
+            Préparation à compléter
+          </option>
+        </select>
         <select
           className="w-full rounded-xl border bg-white px-3 py-2 text-sm"
           value={selectedLot}
@@ -404,10 +455,12 @@ export default function BibliothequeTasksPage() {
       {loading ? (
         <div className="rounded-2xl border bg-white p-6 text-sm text-slate-500">{t("common.states.loading")}</div>
       ) : filteredRows.length === 0 ? (
-        <div className="rounded-2xl border bg-white p-6 text-sm text-slate-500">{t("bibliothequeTasks.empty")}</div>
+        <div className="rounded-2xl border bg-white p-6 text-sm text-slate-500">
+          Aucun modèle ne correspond aux filtres actifs.
+        </div>
       ) : (
         <>
-          <div className="hidden rounded-2xl border bg-white overflow-hidden md:block">
+          <div className="hidden overflow-hidden rounded-2xl border bg-white md:block">
             <table className="w-full text-sm">
               <thead className="bg-slate-50 text-slate-600">
                 <tr>
@@ -427,7 +480,7 @@ export default function BibliothequeTasksPage() {
                     <td className="px-4 py-3">
                       <div className="font-medium">{row.titre}</div>
                       {row.description_technique ? (
-                        <div className="text-xs text-slate-500 line-clamp-2">{row.description_technique}</div>
+                        <div className="line-clamp-2 text-xs text-slate-500">{row.description_technique}</div>
                       ) : null}
                       <div className="mt-1 flex flex-wrap gap-1">
                         {row.caracteristiques.slice(0, 3).map((item) => (
@@ -438,9 +491,24 @@ export default function BibliothequeTasksPage() {
                             {item}
                           </span>
                         ))}
+                        {row.temps_prevu_par_unite_h === null ? (
+                          <span className="rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[11px] text-amber-700">
+                            Temps manquant
+                          </span>
+                        ) : null}
+                        {row.cout_reference_unitaire_ht === null ? (
+                          <span className="rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[11px] text-amber-700">
+                            Coût manquant
+                          </span>
+                        ) : null}
+                        {!hasTechnicalDetail(row) ? (
+                          <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[11px] text-slate-600">
+                            Technique à compléter
+                          </span>
+                        ) : null}
                         {renderPreparationBadge(row.id)}
                       </div>
-                      {row.remarques ? <div className="text-xs text-slate-500 truncate">{row.remarques}</div> : null}
+                      {row.remarques ? <div className="truncate text-xs text-slate-500">{row.remarques}</div> : null}
                     </td>
                     <td className="px-4 py-3">{row.lot ?? "-"}</td>
                     <td className="px-4 py-3">{row.unite ?? "-"}</td>
@@ -471,7 +539,7 @@ export default function BibliothequeTasksPage() {
                           type="button"
                           disabled={deleteId === row.id}
                           onClick={() => onDeleteRow(row)}
-                          className="rounded-lg border border-red-200 text-red-700 px-2 py-1 text-xs hover:bg-red-50 disabled:opacity-50"
+                          className="rounded-lg border border-red-200 px-2 py-1 text-xs text-red-700 hover:bg-red-50 disabled:opacity-50"
                         >
                           {deleteId === row.id ? t("common.states.deleting") : t("common.actions.delete")}
                         </button>
@@ -508,6 +576,21 @@ export default function BibliothequeTasksPage() {
                       {item}
                     </span>
                   ))}
+                  {row.temps_prevu_par_unite_h === null ? (
+                    <span className="rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[11px] text-amber-700">
+                      Temps manquant
+                    </span>
+                  ) : null}
+                  {row.cout_reference_unitaire_ht === null ? (
+                    <span className="rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[11px] text-amber-700">
+                      Coût manquant
+                    </span>
+                  ) : null}
+                  {!hasTechnicalDetail(row) ? (
+                    <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[11px] text-slate-600">
+                      Technique à compléter
+                    </span>
+                  ) : null}
                   {renderPreparationBadge(row.id)}
                 </div>
 
