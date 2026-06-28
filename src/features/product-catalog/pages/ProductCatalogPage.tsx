@@ -163,11 +163,11 @@ export default function ProductCatalogPage() {
     setQuery(nextQuery);
     const nextParams = new URLSearchParams(searchParams);
     const trimmed = nextQuery.trim();
+    nextParams.delete("productId");
     if (trimmed) {
       nextParams.set("q", trimmed);
     } else {
       nextParams.delete("q");
-      nextParams.delete("productId");
     }
     setSearchParams(nextParams, { replace: true });
   }
