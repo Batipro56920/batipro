@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { Plus, RefreshCw, Search, ShoppingCart } from "lucide-react";
 import { calculateDocumentTotals } from "../../document-engine";
 import type { SupplierRow } from "../../../services/suppliers.service";
@@ -8,6 +9,9 @@ import { PurchaseOrderEditor } from "./PurchaseOrderEditor";
 import { PurchaseOrderStatusBadge } from "./PurchaseOrderStatusBadge";
 
 export function PurchaseOrdersPanel({ suppliers }: { suppliers: SupplierRow[] }) {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const urlPurchaseOrderId = searchParams.get("purchaseOrderId") ?? "";
+  const openedOrderFromUrlRef = useRef("");
   const [orders, setOrders] = useState<PurchaseOrderRecord[]>([]);
   const [selectedOrder, setSelectedOrder] = useState<PurchaseOrderRecord | null>(null);
   const [loading, setLoading] = useState(true);
@@ -37,6 +41,24 @@ export function PurchaseOrdersPanel({ suppliers }: { suppliers: SupplierRow[] })
     void refresh();
   }, []);
 
+  useEffect(() => {
+    if (!urlPurchaseOrderId) {
+      openedOrderFromUrlRef.current = "";
+      return;
+    }
+    if (loading || openedOrderFromUrlRef.current === urlPurchaseOrderId) return;
+
+    const order = orders.find((item) => item.id === urlPurchaseOrderId);
+    if (!order) return;
+
+    setSelectedOrder(order);
+    setQuery("");
+    setStatusFilter("all");
+    setSupplierFilter("all");
+    setError(null);
+    openedOrderFromUrlRef.current = urlPurchaseOrderId;
+  }, [loading, orders, urlPurchaseOrderId]);
+
   async function refresh() {
     setLoading(true);
     setError(null);
@@ -50,11 +72,30 @@ export function PurchaseOrdersPanel({ suppliers }: { suppliers: SupplierRow[] })
     }
   }
 
+  function clearActivePurchaseOrderParam() {
+    if (!urlPurchaseOrderId) return;
+    openedOrderFromUrlRef.current = "";
+    const nextParams = new URLSearchParams(searchParams);
+    nextParams.delete("purchaseOrderId");
+    setSearchParams(nextParams, { replace: true });
+  }
+
+  function openOrder(order: PurchaseOrderRecord) {
+    if (urlPurchaseOrderId && urlPurchaseOrderId !== order.id) clearActivePurchaseOrderParam();
+    setSelectedOrder(order);
+  }
+
+  function closeOrder() {
+    setSelectedOrder(null);
+    clearActivePurchaseOrderParam();
+  }
+
   async function createOrder() {
     const firstSupplier = suppliers[0] ?? null;
     const order = await createAndSavePurchaseOrder({ supplierId: firstSupplier?.id ?? null, supplierName: firstSupplier?.name ?? null });
     setOrders(await listPurchaseOrders());
     setSelectedOrder(order);
+    clearActivePurchaseOrderParam();
   }
 
   async function save(order: PurchaseOrderRecord) {
@@ -118,7 +159,7 @@ export function PurchaseOrdersPanel({ suppliers }: { suppliers: SupplierRow[] })
           suppliers={suppliers}
           onChange={setSelectedOrder}
           onSave={save}
-          onClose={() => setSelectedOrder(null)}
+          onClose={closeOrder}
         />
       ) : null}
 
@@ -149,7 +190,7 @@ export function PurchaseOrdersPanel({ suppliers }: { suppliers: SupplierRow[] })
                   <td className="px-4 py-3"><PurchaseOrderStatusBadge status={order.status} /></td>
                   <td className="px-4 py-3 text-right font-semibold">{formatCurrency(orderTotals.totalTtc)}</td>
                   <td className="px-4 py-3 text-right">
-                    <button type="button" className="font-semibold text-blue-700 hover:text-blue-800" onClick={() => setSelectedOrder(order)}>
+                    <button type="button" className="font-semibold text-blue-700 hover:text-blue-800" onClick={() => openOrder(order)}>
                       Ouvrir
                     </button>
                   </td>
