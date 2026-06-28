@@ -9,7 +9,7 @@ import {
   type SupplierRow,
 } from "../services/suppliers.service";
 import { useI18n } from "../i18n";
-import { PurchaseOrdersPanel } from "../features/purchase-orders";
+import { PurchaseOrdersPanel, StockTrackingPanel } from "../features/purchase-orders";
 
 type SupplierFormState = {
   name: string;
@@ -22,6 +22,8 @@ type SupplierFormState = {
   notes: string;
   is_active: boolean;
 };
+
+type FournisseursTab = "suppliers" | "orders" | "stock";
 
 const EMPTY_SUPPLIER: SupplierFormState = {
   name: "",
@@ -49,8 +51,12 @@ function toSupplierForm(row: SupplierRow): SupplierFormState {
   };
 }
 
+function isFournisseursTab(value: string | null): value is FournisseursTab {
+  return value === "suppliers" || value === "orders" || value === "stock";
+}
+
 type FournisseursPageProps = {
-  initialTab?: "suppliers" | "orders";
+  initialTab?: FournisseursTab;
 };
 
 export default function FournisseursPage({ initialTab = "suppliers" }: FournisseursPageProps) {
@@ -58,7 +64,8 @@ export default function FournisseursPage({ initialTab = "suppliers" }: Fournisse
   const [searchParams, setSearchParams] = useSearchParams();
   const supplierQueryParam = searchParams.get("q") ?? "";
   const activeSupplierId = searchParams.get("supplierId") ?? "";
-  const [activeTab, setActiveTab] = useState<"suppliers" | "orders">(initialTab);
+  const tabQueryParam = searchParams.get("tab");
+  const [activeTab, setActiveTab] = useState<FournisseursTab>(() => isFournisseursTab(tabQueryParam) ? tabQueryParam : initialTab);
   const [loadingSuppliers, setLoadingSuppliers] = useState(true);
   const [savingSupplier, setSavingSupplier] = useState(false);
   const [suppliersError, setSuppliersError] = useState<string | null>(null);
@@ -107,8 +114,12 @@ export default function FournisseursPage({ initialTab = "suppliers" }: Fournisse
     setSearch((current) => current === supplierQueryParam ? current : supplierQueryParam);
     if (supplierQueryParam || activeSupplierId) {
       setActiveTab("suppliers");
+      return;
     }
-  }, [activeSupplierId, supplierQueryParam]);
+    if (isFournisseursTab(tabQueryParam)) {
+      setActiveTab(tabQueryParam);
+    }
+  }, [activeSupplierId, supplierQueryParam, tabQueryParam]);
 
   function updateSearch(nextSearch: string) {
     setSearch(nextSearch);
@@ -120,6 +131,7 @@ export default function FournisseursPage({ initialTab = "suppliers" }: Fournisse
       nextParams.delete("q");
     }
     nextParams.delete("supplierId");
+    nextParams.delete("tab");
     setSearchParams(nextParams, { replace: true });
   }
 
@@ -128,6 +140,20 @@ export default function FournisseursPage({ initialTab = "suppliers" }: Fournisse
     const nextParams = new URLSearchParams(searchParams);
     nextParams.delete("q");
     nextParams.delete("supplierId");
+    setSearchParams(nextParams, { replace: true });
+  }
+
+  function changeTab(tab: FournisseursTab) {
+    setActiveTab(tab);
+    const nextParams = new URLSearchParams(searchParams);
+    nextParams.delete("supplierId");
+    if (tab === "suppliers") {
+      nextParams.delete("tab");
+    } else {
+      nextParams.set("tab", tab);
+      nextParams.delete("q");
+      setSearch("");
+    }
     setSearchParams(nextParams, { replace: true });
   }
 
@@ -190,7 +216,7 @@ export default function FournisseursPage({ initialTab = "suppliers" }: Fournisse
         <div>
           <div className="text-xs font-semibold uppercase tracking-[0.18em] text-blue-600">Achats</div>
           <h1 className="mt-2 text-2xl font-bold text-slate-950">{t("fournisseurs.title")}</h1>
-          <p className="mt-1 text-sm text-slate-500">Fournisseurs, bons de commande et achats liés à la rentabilité projet.</p>
+          <p className="mt-1 text-sm text-slate-500">Fournisseurs, bons de commande, stock chantier et achats liés à la rentabilité projet.</p>
         </div>
         <div className="flex flex-wrap gap-2">
           <button type="button" onClick={() => void loadSuppliersData()} className="inline-flex h-10 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 hover:bg-slate-50">
@@ -213,11 +239,12 @@ export default function FournisseursPage({ initialTab = "suppliers" }: Fournisse
         {[
           ["suppliers", "Fournisseurs"],
           ["orders", "Bons de commande"],
+          ["stock", "Stock"],
         ].map(([id, label]) => (
           <button
             key={id}
             type="button"
-            onClick={() => setActiveTab(id as "suppliers" | "orders")}
+            onClick={() => changeTab(id as FournisseursTab)}
             className={[
               "h-9 rounded-xl px-4 text-sm font-semibold transition",
               activeTab === id ? "bg-slate-950 text-white" : "text-slate-600 hover:bg-slate-100 hover:text-slate-950",
@@ -238,6 +265,7 @@ export default function FournisseursPage({ initialTab = "suppliers" }: Fournisse
       )}
 
       {activeTab === "orders" ? <PurchaseOrdersPanel suppliers={suppliers} /> : null}
+      {activeTab === "stock" ? <StockTrackingPanel suppliers={suppliers} /> : null}
 
       {activeTab === "suppliers" ? (
         <section className="grid gap-3 md:grid-cols-4">
