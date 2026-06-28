@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import TaskTemplateDrawer from "../components/TaskTemplateDrawer";
 import Toast, { type ToastState } from "../components/chantiers/Toast";
 import {
@@ -48,10 +49,14 @@ function hasPreparation(
 
 export default function BibliothequeTasksPage() {
   const { locale, t } = useI18n();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const templateQueryParam = searchParams.get("q") ?? "";
+  const templateIdQueryParam = searchParams.get("templateId") ?? "";
+  const openedTemplateFromUrlRef = useRef("");
   const [rows, setRows] = useState<TaskTemplateRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [query, setQuery] = useState("");
+  const [query, setQuery] = useState(templateQueryParam);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [activeTemplate, setActiveTemplate] = useState<TaskTemplateRow | null>(null);
   const [saving, setSaving] = useState(false);
@@ -71,6 +76,10 @@ export default function BibliothequeTasksPage() {
     const timer = window.setTimeout(() => setToast(null), 2600);
     return () => window.clearTimeout(timer);
   }, [toast]);
+
+  useEffect(() => {
+    setQuery((current) => current === templateQueryParam ? current : templateQueryParam);
+  }, [templateQueryParam]);
 
   const lotOptions = useMemo(() => {
     return Array.from(
@@ -184,6 +193,31 @@ export default function BibliothequeTasksPage() {
   }, []);
 
   useEffect(() => {
+    if (loading || rows.length === 0) return;
+
+    const urlKey = templateIdQueryParam ? `id:${templateIdQueryParam}` : templateQueryParam ? `q:${templateQueryParam}` : "";
+    if (!urlKey) {
+      openedTemplateFromUrlRef.current = "";
+      return;
+    }
+    if (openedTemplateFromUrlRef.current === urlKey) return;
+
+    const normalizedQuery = templateQueryParam.trim().toLocaleLowerCase(locale);
+    const template = templateIdQueryParam
+      ? rows.find((row) => row.id === templateIdQueryParam)
+      : rows.find((row) => row.titre.trim().toLocaleLowerCase(locale) === normalizedQuery);
+
+    if (!template) return;
+
+    setSelectedLot("");
+    setReadinessFilter("");
+    setActiveTemplate(template);
+    setDrawerError(null);
+    setDrawerOpen(true);
+    openedTemplateFromUrlRef.current = urlKey;
+  }, [loading, locale, rows, templateIdQueryParam, templateQueryParam]);
+
+  useEffect(() => {
     let alive = true;
 
     async function loadPermissions() {
@@ -247,6 +281,20 @@ export default function BibliothequeTasksPage() {
     };
   }, [advancedPreparationEnabled, rows]);
 
+  function updateQueryFromInput(nextQuery: string) {
+    setQuery(nextQuery);
+    openedTemplateFromUrlRef.current = "";
+    const nextParams = new URLSearchParams(searchParams);
+    const trimmed = nextQuery.trim();
+    if (trimmed) {
+      nextParams.set("q", trimmed);
+    } else {
+      nextParams.delete("q");
+    }
+    nextParams.delete("templateId");
+    setSearchParams(nextParams, { replace: true });
+  }
+
   function openCreateDrawer() {
     setActiveTemplate(null);
     setDrawerError(null);
@@ -264,6 +312,10 @@ export default function BibliothequeTasksPage() {
     setDrawerOpen(false);
     setActiveTemplate(null);
     setDrawerError(null);
+    if (!templateIdQueryParam) return;
+    const nextParams = new URLSearchParams(searchParams);
+    nextParams.delete("templateId");
+    setSearchParams(nextParams, { replace: true });
   }
 
   async function onSaveDrawer(payload: TaskTemplateInput) {
@@ -425,7 +477,7 @@ export default function BibliothequeTasksPage() {
           className="w-full rounded-xl border px-3 py-2 text-sm"
           placeholder={t("bibliothequeTasks.searchPlaceholder")}
           value={query}
-          onChange={(e) => setQuery(e.target.value)}
+          onChange={(e) => updateQueryFromInput(e.target.value)}
         />
         <select
           className="w-full rounded-xl border bg-white px-3 py-2 text-sm"
