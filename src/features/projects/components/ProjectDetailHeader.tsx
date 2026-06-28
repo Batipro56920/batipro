@@ -25,8 +25,14 @@ export function ProjectDetailHeader({ project, onProjectUpdated }: { project: Pr
   const [outcomeError, setOutcomeError] = useState<string | null>(null);
   const quote = getPrimaryQuote(project);
   const acceptedQuote = project.quotes.find((item) => item.statut === "accepte");
-  const chantier = project.chantiers[0] ?? null;
-  const linkedChantierId = chantier?.id ?? acceptedQuote?.chantier_id ?? null;
+  const linkedAcceptedQuoteChantier = acceptedQuote
+    ? project.chantiers.find((item) => item.crm_quote_id === acceptedQuote.id || item.id === acceptedQuote.chantier_id) ?? null
+    : null;
+  const fallbackChantier = !acceptedQuote
+    ? project.chantiers.find((item) => item.status !== "ARCHIVE" && item.status !== "ANNULE") ?? project.chantiers[0] ?? null
+    : null;
+  const chantier = linkedAcceptedQuoteChantier ?? fallbackChantier;
+  const linkedChantierId = linkedAcceptedQuoteChantier?.id ?? acceptedQuote?.chantier_id ?? fallbackChantier?.id ?? null;
   const editTarget = project.opportunity ? "/crm/opportunites" : project.sourceType === "client" ? "/crm/clients" : "/crm/prospects";
   const isWonProject = WON_PROJECT_STATUSES.includes(project.status);
   const canMarkWon = Boolean(quote) && !isWonProject && project.status !== "perdu";
@@ -138,7 +144,7 @@ export function ProjectDetailHeader({ project, onProjectUpdated }: { project: Pr
             Relancer
           </Link>
           {linkedChantierId ? (
-            <Link to={`/chantiers/${linkedChantierId}`} className="inline-flex h-9 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-3 text-sm font-medium text-slate-900 transition hover:bg-slate-50">
+            <Link to={`/chantiers/${linkedChantierId}`} className="inline-flex h-9 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-3 text-sm font-medium text-slate-900 transition hover:bg-slate-50" title={chantier?.nom ?? "Ouvrir le chantier lie au devis accepte"}>
               <Hammer className="h-4 w-4" />
               Ouvrir chantier
             </Link>
