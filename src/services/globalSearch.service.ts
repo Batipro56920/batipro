@@ -14,6 +14,7 @@ export type GlobalSearchKind =
   | "apporteur"
   | "lead_apporteur"
   | "fournisseur"
+  | "modele_tache"
   | "produit";
 
 export type GlobalSearchResult = {
@@ -154,6 +155,14 @@ function supplierHref(row: SearchRow) {
   if (supplierId) params.set("supplierId", supplierId);
   const queryString = params.toString();
   return queryString ? `/fournisseurs?${queryString}` : "/fournisseurs";
+}
+
+function taskTemplateHref(row: SearchRow) {
+  const query = cleanText(row.titre) || cleanText(row.lot) || cleanText(row.unite) || cleanText(row.remarques);
+  const params = new URLSearchParams();
+  if (query) params.set("q", query);
+  const queryString = params.toString();
+  return queryString ? `/bibliotheque?${queryString}` : "/bibliotheque";
 }
 
 function productCatalogHref(row: SearchRow) {
@@ -380,6 +389,25 @@ const SOURCES: SearchSource[] = [
       subtitle: [cleanText(row.specialty), cleanText(row.city), cleanText(row.phone) || cleanText(row.email), supplierStatusLabel(row.is_active)].filter(Boolean).join(" - ") || "Fournisseur",
       href: supplierHref(row),
       badge: "Fournisseur",
+    }),
+  },
+  {
+    table: "task_templates",
+    select: "id,titre,lot,unite,remarques,temps_prevu_par_unite_h,cout_reference_unitaire_ht",
+    filter: "titre.ilike.$term,lot.ilike.$term,unite.ilike.$term,remarques.ilike.$term",
+    map: (row) => ({
+      id: cleanText(row.id),
+      kind: "modele_tache",
+      title: cleanText(row.titre) || "Modèle de tâche sans titre",
+      subtitle: [
+        cleanText(row.lot),
+        cleanText(row.unite),
+        Number(row.temps_prevu_par_unite_h) > 0 ? `${row.temps_prevu_par_unite_h} h/u` : "",
+        Number(row.cout_reference_unitaire_ht) > 0 ? `${formatSearchCurrency(Number(row.cout_reference_unitaire_ht))} HT` : "",
+        cleanText(row.remarques),
+      ].filter(Boolean).join(" - ") || "Bibliothèque de tâches",
+      href: taskTemplateHref(row),
+      badge: "Modèle tâche",
     }),
   },
   {
