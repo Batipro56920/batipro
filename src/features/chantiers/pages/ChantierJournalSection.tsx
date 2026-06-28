@@ -1,3 +1,4 @@
+import { Link } from "react-router-dom";
 import type { ChantierActivityLogRow } from "../../../services/chantierActivityLog.service";
 
 export default function ChantierJournalSection({
@@ -19,6 +20,11 @@ export default function ChantierJournalSection({
   actionLabel: (actionType: string) => string;
   tone: (entityType: string) => string;
 }) {
+  const chantierId = logs.find((log) => log.chantier_id)?.chantier_id ?? null;
+  const terrainFeedbackHref = chantierId
+    ? `/retours-terrain?chantierId=${encodeURIComponent(chantierId)}`
+    : null;
+
   return (
     <div className="space-y-4">
       <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
@@ -28,14 +34,24 @@ export default function ChantierJournalSection({
             Historique des actions, validations, consignes, réserves et temps saisis.
           </div>
         </div>
-        <button
-          type="button"
-          onClick={() => void onRefresh()}
-          disabled={loading}
-          className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-60"
-        >
-          {loading ? "Chargement..." : "Rafraîchir"}
-        </button>
+        <div className="flex flex-wrap gap-2">
+          {terrainFeedbackHref ? (
+            <Link
+              to={terrainFeedbackHref}
+              className="rounded-xl border border-blue-200 bg-blue-50 px-4 py-2 text-sm font-medium text-blue-800 hover:bg-blue-100"
+            >
+              Voir retours terrain
+            </Link>
+          ) : null}
+          <button
+            type="button"
+            onClick={() => void onRefresh()}
+            disabled={loading}
+            className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-60"
+          >
+            {loading ? "Chargement..." : "Rafraîchir"}
+          </button>
+        </div>
       </div>
 
       {!schemaReady && (
@@ -96,4 +112,3 @@ export default function ChantierJournalSection({
     </div>
   );
 }
-
