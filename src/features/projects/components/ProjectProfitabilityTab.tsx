@@ -79,6 +79,7 @@ export function ProjectProfitabilityTab({ project }: { project: ProjectRecord })
             <div className="space-y-3 border-t border-slate-100 pt-3">
               <InfoLine label="Devis accepté" value={metrics.acceptedQuoteNumber ?? "Aucun devis accepté détecté"} />
               <InfoLine label="Factures liées" value={`${metrics.invoiceCount}`} />
+              <InfoLine label="Commandes liées" value={`${metrics.purchaseOrderCount}`} />
               <InfoLine label="Mode calcul" value={metrics.dataMode === "estimated" ? "Estimation locale" : metrics.dataMode === "mixed" ? "Réel + estimation" : "Données réelles"} />
             </div>
             {metrics.dataMode === "estimated" ? (
@@ -92,6 +93,7 @@ export function ProjectProfitabilityTab({ project }: { project: ProjectRecord })
       </div>
 
       <LinkedInvoicesPanel metrics={metrics} />
+      <LinkedPurchaseOrdersPanel metrics={metrics} />
 
       <Panel title="Coûts projet" description="Base V1 pour la future rentabilité projet et chantier.">
         <div className="overflow-hidden rounded-2xl border border-slate-200">
@@ -201,6 +203,44 @@ function LinkedInvoicesPanel({ metrics }: { metrics: ProjectProfitabilityMetrics
   );
 }
 
+function LinkedPurchaseOrdersPanel({ metrics }: { metrics: ProjectProfitabilityMetrics }) {
+  return (
+    <Panel title="Commandes fournisseurs liées" description="Bons de commande rattachés au projet ou à ses chantiers, avec accès au suivi des encours.">
+      {metrics.linkedPurchaseOrders.length ? (
+        <div className="overflow-hidden rounded-2xl border border-slate-200">
+          <div className="hidden grid-cols-[1.1fr_1fr_0.8fr_0.8fr_0.8fr_120px] gap-3 bg-slate-50 px-4 py-3 text-xs font-semibold uppercase tracking-[0.12em] text-slate-500 lg:grid">
+            <span>Commande</span>
+            <span>Fournisseur</span>
+            <span>Statut</span>
+            <span>Livraison</span>
+            <span className="text-right">Total HT</span>
+            <span className="text-right">Action</span>
+          </div>
+          <div className="divide-y divide-slate-100">
+            {metrics.linkedPurchaseOrders.map((order) => (
+              <article key={order.id} className="grid gap-3 px-4 py-3 text-sm lg:grid-cols-[1.1fr_1fr_0.8fr_0.8fr_0.8fr_120px] lg:items-center">
+                <div>
+                  <div className="font-semibold text-slate-950">{order.number}</div>
+                  <div className="mt-0.5 text-xs text-slate-500">{order.lot || order.supplierReference || "Commande fournisseur"}</div>
+                </div>
+                <div className="text-slate-600">{order.supplierName}</div>
+                <div><PurchaseOrderStatusPill status={order.status} /></div>
+                <div className="text-slate-600">{formatProjectDate(order.expectedDeliveryDate)}</div>
+                <div className="font-semibold text-slate-950 lg:text-right">{formatCurrency(order.totalHt)}</div>
+                <Link to={`/financier/encours-fournisseurs?purchaseOrder=${encodeURIComponent(order.id)}`} className="inline-flex h-9 items-center justify-center rounded-xl border border-slate-200 px-3 text-sm font-semibold text-slate-900 hover:bg-slate-50 lg:justify-self-end">
+                  Suivre
+                </Link>
+              </article>
+            ))}
+          </div>
+        </div>
+      ) : (
+        <EmptyProjectBlock title="Aucune commande fournisseur liée" description="Les bons de commande rattachés au projet ou à ses chantiers apparaîtront ici pour piloter les achats réels." />
+      )}
+    </Panel>
+  );
+}
+
 function InvoiceStatusPill({ status }: { status: ProjectProfitabilityMetrics["linkedInvoices"][number]["status"] }) {
   const tone = status === "paid"
     ? "border-emerald-200 bg-emerald-50 text-emerald-700"
@@ -212,6 +252,19 @@ function InvoiceStatusPill({ status }: { status: ProjectProfitabilityMetrics["li
           ? "border-slate-200 bg-slate-100 text-slate-500"
           : "border-amber-200 bg-amber-50 text-amber-700";
   return <span className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-semibold ${tone}`}>{invoiceStatusLabel(status)}</span>;
+}
+
+function PurchaseOrderStatusPill({ status }: { status: ProjectProfitabilityMetrics["linkedPurchaseOrders"][number]["status"] }) {
+  const tone = status === "delivered"
+    ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+    : status === "cancelled"
+      ? "border-slate-200 bg-slate-100 text-slate-500"
+      : status === "partially_delivered"
+        ? "border-blue-200 bg-blue-50 text-blue-700"
+        : status === "confirmed"
+          ? "border-indigo-200 bg-indigo-50 text-indigo-700"
+          : "border-amber-200 bg-amber-50 text-amber-700";
+  return <span className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-semibold ${tone}`}>{purchaseOrderStatusLabel(status)}</span>;
 }
 
 function invoiceTypeLabel(type: ProjectProfitabilityMetrics["linkedInvoices"][number]["type"]) {
@@ -230,6 +283,21 @@ function invoiceStatusLabel(status: ProjectProfitabilityMetrics["linkedInvoices"
   if (status === "overdue") return "En retard";
   if (status === "cancelled") return "Annulée";
   return status;
+}
+
+function purchaseOrderStatusLabel(status: ProjectProfitabilityMetrics["linkedPurchaseOrders"][number]["status"]) {
+  if (status === "draft") return "Brouillon";
+  if (status === "sent") return "Envoyée";
+  if (status === "confirmed") return "Confirmée";
+  if (status === "partially_delivered") return "Partiellement livrée";
+  if (status === "delivered") return "Livrée";
+  if (status === "cancelled") return "Annulée";
+  return status;
+}
+
+function formatProjectDate(value: string | null) {
+  if (!value) return "Non renseignée";
+  return new Intl.DateTimeFormat("fr-FR").format(new Date(value));
 }
 
 function ProfitabilityAlert({ title, description, tone }: { title: string; description: string; tone: "danger" | "warning" }) {
