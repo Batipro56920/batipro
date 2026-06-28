@@ -1,6 +1,6 @@
 // src/App.tsx
 import { lazy, Suspense, type ReactNode } from "react";
-import { Routes, Route, Navigate } from "react-router-dom";
+import { Routes, Route, Navigate, useParams } from "react-router-dom";
 import LayoutShell from "./components/LayoutShell";
 import LazyRouteErrorBoundary from "./components/LazyRouteErrorBoundary";
 import RequireAuth from "./components/RequireAuth";
@@ -85,6 +85,20 @@ function ChantierBackofficeRoute({ label, children }: { label: string; children:
       <RouteSuspense label={label}>{children}</RouteSuspense>
     </RequireCompanyFeature>
   );
+}
+
+function TerrainFeedbackBackofficeRoute({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <RequireCompanyFeature moduleId="journal_chantier">
+      <RouteSuspense label={label}>{children}</RouteSuspense>
+    </RequireCompanyFeature>
+  );
+}
+
+function ChantierTerrainFeedbackRedirect() {
+  const { id } = useParams();
+  if (!id) return <Navigate to="/retours-terrain" replace />;
+  return <Navigate to={`/retours-terrain?chantierId=${encodeURIComponent(id)}`} replace />;
 }
 
 function StatistiquesRoute() {
@@ -361,6 +375,12 @@ export default function App() {
         <Route path="/chantiers/:id/qualite-sav" element={<Navigate to="../qualite" replace />} />
         <Route path="/chantiers/:id/crm" element={<Navigate to=".." replace />} />
         <Route
+          path="/chantiers/:id/retours-terrain"
+          element={
+            <TerrainFeedbackBackofficeRoute label="Ouverture des retours terrain..."><ChantierTerrainFeedbackRedirect /></TerrainFeedbackBackofficeRoute>
+          }
+        />
+        <Route
           path="/chantiers/:id/visites"
           element={
             <RequireCompanyFeature moduleId="validation_qualite">
@@ -396,9 +416,7 @@ export default function App() {
         <Route
           path="/retours-terrain"
           element={
-            <RequireCompanyFeature moduleId="journal_chantier">
-              <RouteSuspense label="Chargement des retours terrain..."><TerrainFeedbacksPage /></RouteSuspense>
-            </RequireCompanyFeature>
+            <TerrainFeedbackBackofficeRoute label="Chargement des retours terrain..."><TerrainFeedbacksPage /></TerrainFeedbackBackofficeRoute>
           }
         />
         <Route
