@@ -1,6 +1,7 @@
 import { NavLink } from "react-router-dom";
 import {
   Banknote,
+  Boxes,
   BrainCircuit,
   Calculator,
   CalendarDays,
@@ -186,6 +187,14 @@ export default function Sidebar({ collapsed = false, onToggleCollapse, companyNa
       to: "/bons-commande",
       label: "Bons de commande",
       icon: ReceiptText,
+      feature: "approvisionnement" as const,
+      permissionKey: "fournisseurs" as const,
+      group: "Achats",
+    },
+    {
+      to: "/fournisseurs?tab=stock",
+      label: "Stock",
+      icon: Boxes,
       feature: "approvisionnement" as const,
       permissionKey: "fournisseurs" as const,
       group: "Achats",
