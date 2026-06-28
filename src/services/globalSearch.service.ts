@@ -127,6 +127,11 @@ function quoteProjectHref(row: SearchRow) {
   return "/crm/devis";
 }
 
+function clientHref(row: SearchRow) {
+  const clientId = cleanText(row.id);
+  return clientId ? `/crm/clients?client=${encodeURIComponent(clientId)}` : "/crm/clients";
+}
+
 function apporteurLeadHref(row: SearchRow) {
   const opportunityId = cleanText(row.crm_opportunity_id);
   const prospectId = cleanText(row.crm_prospect_id);
@@ -269,7 +274,7 @@ const SOURCES: SearchSource[] = [
       kind: "client",
       title: clientName(row),
       subtitle: [cleanText(row.telephone) || cleanText(row.mobile), cleanText(row.email), cleanText(row.ville)].filter(Boolean).join(" - ") || "Client CRM",
-      href: "/crm/clients",
+      href: clientHref(row),
       badge: "Client",
     }),
   },
