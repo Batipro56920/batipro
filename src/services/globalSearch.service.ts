@@ -10,6 +10,7 @@ export type GlobalSearchKind =
   | "client"
   | "devis"
   | "facture"
+  | "bon_commande"
   | "retour_terrain"
   | "apporteur"
   | "lead_apporteur"
@@ -86,6 +87,17 @@ function invoiceStatusLabel(value: unknown) {
   return status;
 }
 
+function purchaseOrderStatusLabel(value: unknown) {
+  const status = cleanText(value);
+  if (status === "draft") return "Brouillon";
+  if (status === "sent") return "Envoyé";
+  if (status === "confirmed") return "Confirmé";
+  if (status === "partially_delivered") return "Livré partiellement";
+  if (status === "delivered") return "Livré";
+  if (status === "cancelled") return "Annulé";
+  return status;
+}
+
 function intervenantAccessLabel(row: SearchRow) {
   if (cleanText(row.archived_at)) return "Archivé";
   if (cleanText(row.user_id)) return "Compte actif";
@@ -143,6 +155,13 @@ function quoteProjectHref(row: SearchRow) {
 function clientHref(row: SearchRow) {
   const clientId = cleanText(row.id);
   return clientId ? `/crm/clients?client=${encodeURIComponent(clientId)}` : "/crm/clients";
+}
+
+function purchaseOrderHref(row: SearchRow) {
+  const purchaseOrderId = cleanText(row.id);
+  const params = new URLSearchParams({ tab: "orders" });
+  if (purchaseOrderId) params.set("purchaseOrderId", purchaseOrderId);
+  return `/fournisseurs?${params.toString()}`;
 }
 
 function apporteurHref(row: SearchRow) {
@@ -349,6 +368,29 @@ const SOURCES: SearchSource[] = [
         subtitle: [recipient, siteAddress, invoiceTypeLabel(row.type), invoiceStatusLabel(row.status), formatSearchCurrency(documentTotalTtc(row))].filter(Boolean).join(" - ") || "Facture",
         href: `/factures?invoice=${encodeURIComponent(id)}`,
         badge: "Facture",
+      };
+    },
+  },
+  {
+    table: "purchase_orders",
+    select: "id,status,document,supplier_name,supplier_reference,expected_delivery_date,delivery_address,project_id,chantier_id",
+    filter: "document->>number.ilike.$term,document->>title.ilike.$term,document->recipient->>displayName.ilike.$term,supplier_name.ilike.$term,supplier_reference.ilike.$term,delivery_address.ilike.$term,status.ilike.$term",
+    map: (row) => {
+      const recipient = documentNestedText(row, "recipient", "displayName");
+      const deliveryAddress = cleanText(row.delivery_address) || documentText(row, "siteAddress");
+      return {
+        id: cleanText(row.id),
+        kind: "bon_commande",
+        title: documentText(row, "number") || "Bon de commande sans numéro",
+        subtitle: [
+          cleanText(row.supplier_name) || recipient,
+          deliveryAddress,
+          cleanText(row.supplier_reference),
+          purchaseOrderStatusLabel(row.status),
+          formatSearchCurrency(documentTotalTtc(row)),
+        ].filter(Boolean).join(" - ") || "Bon de commande fournisseur",
+        href: purchaseOrderHref(row),
+        badge: "Bon commande",
       };
     },
   },
