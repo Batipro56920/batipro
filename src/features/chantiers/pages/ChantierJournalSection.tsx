@@ -1,4 +1,4 @@
-import { Link } from "react-router-dom";
+import { Link, useParams } from "react-router-dom";
 import type { ChantierActivityLogRow } from "../../../services/chantierActivityLog.service";
 
 export default function ChantierJournalSection({
@@ -20,7 +20,8 @@ export default function ChantierJournalSection({
   actionLabel: (actionType: string) => string;
   tone: (entityType: string) => string;
 }) {
-  const chantierId = logs.find((log) => log.chantier_id)?.chantier_id ?? null;
+  const { id: routeChantierId } = useParams<{ id: string }>();
+  const chantierId = logs.find((log) => log.chantier_id)?.chantier_id ?? routeChantierId ?? null;
   const terrainFeedbackHref = chantierId
     ? `/retours-terrain?chantierId=${encodeURIComponent(chantierId)}`
     : null;
