@@ -115,10 +115,12 @@ function chantierSectionHref(row: SearchRow, section: "execution" | "qualite" | 
 }
 
 function quoteProjectHref(row: SearchRow) {
+  const quoteId = cleanText(row.id);
   const opportunityId = cleanText(row.opportunity_id);
   const prospectId = cleanText(row.prospect_id);
   const clientId = cleanText(row.client_id);
 
+  if (quoteId) return `/crm/devis/${encodeURIComponent(quoteId)}/edit`;
   if (opportunityId) return `/projets/opportunity-${opportunityId}?tab=quotes`;
   if (prospectId) return `/projets/prospect-${prospectId}?tab=quotes`;
   if (clientId) return `/projets/client-${clientId}?tab=quotes`;
