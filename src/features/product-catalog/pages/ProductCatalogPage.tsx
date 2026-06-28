@@ -97,10 +97,11 @@ export default function ProductCatalogPage() {
       const matchesCategory = categoryFilter === "all" || product.category === categoryFilter;
       const matchesSupplier = supplierFilter === "all" || product.mainSupplierId === supplierFilter || product.supplierPrices.some((price) => price.supplierId === supplierFilter);
       const matchesBrand = brandFilter === "all" || product.brand === brandFilter;
+      const purchasePrice = getPurchasePackagePrice(product);
       const matchesPrice = priceFilter === "all"
-        || (priceFilter === "low" && product.standardPurchasePriceHt < 50)
-        || (priceFilter === "mid" && product.standardPurchasePriceHt >= 50 && product.standardPurchasePriceHt < 250)
-        || (priceFilter === "high" && product.standardPurchasePriceHt >= 250);
+        || (priceFilter === "low" && purchasePrice < 50)
+        || (priceFilter === "mid" && purchasePrice >= 50 && purchasePrice < 250)
+        || (priceFilter === "high" && purchasePrice >= 250);
       return matchesText && matchesCategory && matchesSupplier && matchesBrand && matchesPrice;
     });
   }, [brandFilter, categoryFilter, priceFilter, products, query, supplierFilter]);
@@ -193,7 +194,7 @@ export default function ProductCatalogPage() {
           <Select value={categoryFilter} onChange={setCategoryFilter} options={["all", ...categories]} labels={{ all: "Toutes catégories" }} />
           <Select value={supplierFilter} onChange={setSupplierFilter} options={["all", ...suppliers.map((supplier) => supplier.id)]} labels={Object.fromEntries([["all", "Tous fournisseurs"], ...suppliers.map((supplier) => [supplier.id, supplier.name])])} />
           <Select value={brandFilter} onChange={setBrandFilter} options={["all", ...brands]} labels={{ all: "Toutes marques" }} />
-          <Select value={priceFilter} onChange={setPriceFilter} options={["all", "low", "mid", "high"]} labels={{ all: "Tous prix", low: "< 50 EUR", mid: "50-250 EUR", high: "> 250 EUR" }} />
+          <Select value={priceFilter} onChange={setPriceFilter} options={["all", "low", "mid", "high"]} labels={{ all: "Tous prix colis", low: "< 50 EUR", mid: "50-250 EUR", high: "> 250 EUR" }} />
         </div>
         {query.trim() ? (
           <div className="mt-3 flex flex-col gap-2 rounded-2xl border border-blue-100 bg-blue-50 px-3 py-2 text-sm text-blue-800 sm:flex-row sm:items-center sm:justify-between">
@@ -204,7 +205,7 @@ export default function ProductCatalogPage() {
       </section> : null}
 
       {!loading ? <section className="overflow-x-auto rounded-3xl border border-slate-200 bg-white shadow-sm">
-        <table className="min-w-[1120px] divide-y divide-slate-100 text-sm">
+        <table className="min-w-[1040px] divide-y divide-slate-100 text-sm">
           <thead className="bg-slate-50 text-left text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">
             <tr>
               <th className="px-4 py-3">Produit</th>
@@ -212,39 +213,28 @@ export default function ProductCatalogPage() {
               <th className="px-4 py-3">Marque</th>
               <th className="px-4 py-3">Fournisseur</th>
               <th className="px-4 py-3">Unité</th>
-              <th className="px-4 py-3">Usage</th>
-              <th className="px-4 py-3 text-right">Achat HT</th>
-              <th className="px-4 py-3 text-right">Prix m²</th>
+              <th className="px-4 py-3 text-right">Achat colis HT</th>
+              <th className="px-4 py-3 text-right">Prix à l'unité</th>
               <th className="px-4 py-3 text-right">Vente conseillée</th>
               <th className="px-4 py-3 text-right">Docs</th>
               <th className="px-4 py-3 text-right">Actions</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
-            {filtered.map((product) => {
-              const mainPrice = getMainSupplierPrice(product);
-              return (
+            {filtered.map((product) => (
               <tr key={product.id} className={product.id === activeProductId ? "bg-blue-50 ring-1 ring-inset ring-blue-200" : "hover:bg-slate-50"}>
-                <td className="max-w-[340px] px-4 py-3">
-                  <div className="line-clamp-2 font-semibold text-slate-950">{product.designation}</div>
-                  <div className="mt-1 text-xs text-slate-500">{product.internalReference || "-"} · Fab. {product.manufacturerReference || "-"}</div>
-                  {mainPrice?.packaging || mainPrice?.coverageM2 ? (
-                    <div className="mt-1 text-xs text-slate-500">
-                      {mainPrice.packaging ? mainPrice.packaging : "Conditionnement"}
-                      {mainPrice.coverageM2 ? ` · ${formatNumber(mainPrice.coverageM2)} m²` : ""}
-                    </div>
-                  ) : null}
+                <td className="max-w-[440px] whitespace-normal px-4 py-3 align-top">
+                  <div className="font-semibold leading-snug text-slate-950">{product.designation}</div>
                 </td>
-                <td className="px-4 py-3 text-slate-600">{product.category || "-"}</td>
-                <td className="px-4 py-3 text-slate-600">{product.brand || "-"}</td>
-                <td className="px-4 py-3 text-slate-600">{product.mainSupplierName || "-"}</td>
-                <td className="px-4 py-3 text-slate-600">{product.unit}</td>
-                <td className="px-4 py-3 text-slate-600">{product.isSellable ? "Acheté + vendable" : "Acheté uniquement"}</td>
-                <td className="px-4 py-3 text-right font-semibold">{formatCurrency(product.standardPurchasePriceHt)}</td>
-                <td className="px-4 py-3 text-right font-semibold">{formatM2Price(product)}</td>
-                <td className="px-4 py-3 text-right font-semibold">{formatCurrency(product.recommendedSalePriceHt)}</td>
-                <td className="px-4 py-3 text-right">{product.documents.length}</td>
-                <td className="px-4 py-3">
+                <td className="px-4 py-3 align-top text-slate-600">{product.category || "-"}</td>
+                <td className="px-4 py-3 align-top text-slate-600">{product.brand || "-"}</td>
+                <td className="px-4 py-3 align-top text-slate-600">{product.mainSupplierName || "-"}</td>
+                <td className="px-4 py-3 align-top text-slate-600">{product.unit}</td>
+                <td className="px-4 py-3 text-right align-top font-semibold">{formatCurrency(getPurchasePackagePrice(product))}</td>
+                <td className="px-4 py-3 text-right align-top font-semibold">{formatUnitPurchasePrice(product)}</td>
+                <td className="px-4 py-3 text-right align-top font-semibold">{formatCurrency(getRecommendedSalePrice(product))}</td>
+                <td className="px-4 py-3 text-right align-top">{product.documents.length}</td>
+                <td className="px-4 py-3 align-top">
                   <div className="flex justify-end gap-2">
                     <button type="button" className="rounded-lg border px-2 py-1 text-xs hover:bg-slate-50" onClick={() => setEditing(product)}>Modifier</button>
                     <button type="button" className="rounded-lg border border-red-200 px-2 py-1 text-xs text-red-600 hover:bg-red-50" onClick={() => removeProduct(product.id)}>
@@ -253,9 +243,8 @@ export default function ProductCatalogPage() {
                   </div>
                 </td>
               </tr>
-              );
-            })}
-            {!filtered.length ? <tr><td colSpan={11} className="px-4 py-12"><EmptyCatalogState onCreate={() => setEditing({ ...EMPTY_DRAFT })} /></td></tr> : null}
+            ))}
+            {!filtered.length ? <tr><td colSpan={10} className="px-4 py-12"><EmptyCatalogState onCreate={() => setEditing({ ...EMPTY_DRAFT })} /></td></tr> : null}
           </tbody>
         </table>
       </section> : null}
@@ -571,10 +560,42 @@ function getMainSupplierPrice(product: ProductCatalogItem): ProductSupplierPrice
   return mainSupplierPrice ?? product.supplierPrices[0] ?? null;
 }
 
-function formatM2Price(product: ProductCatalogItem) {
+function getPurchasePackagePrice(product: ProductCatalogItem) {
   const supplierPrice = getMainSupplierPrice(product);
-  const pricePerM2 = supplierPrice?.pricePerM2Ht ?? (product.unit === "m2" ? product.standardPurchasePriceHt : null);
-  return pricePerM2 && pricePerM2 > 0 ? `${formatCurrency(pricePerM2)}/m²` : "-";
+  return positiveNumber(supplierPrice?.priceHt) ?? positiveNumber(product.standardPurchasePriceHt) ?? 0;
+}
+
+function getUnitPurchasePrice(product: ProductCatalogItem) {
+  const supplierPrice = getMainSupplierPrice(product);
+  const explicitUnitPrice = positiveNumber(supplierPrice?.pricePerM2Ht);
+  if (explicitUnitPrice !== null) return explicitUnitPrice;
+
+  const packagePrice = positiveNumber(supplierPrice?.priceHt) ?? positiveNumber(product.standardPurchasePriceHt);
+  const coveredQuantity = positiveNumber(supplierPrice?.coverageM2);
+  if (packagePrice !== null && coveredQuantity !== null) return packagePrice / coveredQuantity;
+
+  return packagePrice;
+}
+
+function getRecommendedSalePrice(product: ProductCatalogItem) {
+  const savedSalePrice = positiveNumber(product.recommendedSalePriceHt);
+  if (savedSalePrice !== null) return savedSalePrice;
+
+  const unitPurchasePrice = getUnitPurchasePrice(product);
+  const marginRate = positiveNumber(product.targetMarginRate) ?? 0;
+  return unitPurchasePrice ? unitPurchasePrice * (1 + marginRate / 100) : 0;
+}
+
+function formatUnitPurchasePrice(product: ProductCatalogItem) {
+  const unitPrice = getUnitPurchasePrice(product);
+  if (!unitPrice) return "-";
+  const unit = product.unit || "u";
+  return `${formatCurrency(unitPrice)}/${unit}`;
+}
+
+function positiveNumber(value: unknown) {
+  const number = Number(value);
+  return Number.isFinite(number) && number > 0 ? number : null;
 }
 
 function formatCurrency(value: number) {
