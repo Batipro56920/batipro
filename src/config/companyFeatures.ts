@@ -228,7 +228,7 @@ export const COMPANY_FEATURE_MODULES: CompanyFeatureModule[] = [
     pillar: "production",
     label: "Journal chantier",
     description: "Historique des actions, retours terrain et traçabilité.",
-    simpleMode: false,
+    simpleMode: true,
     roles: ["ADMIN"],
   },
   {
