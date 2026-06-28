@@ -20,6 +20,11 @@ export function PurchaseOrdersPanel({ suppliers }: { suppliers: SupplierRow[] })
   const [statusFilter, setStatusFilter] = useState("all");
   const [supplierFilter, setSupplierFilter] = useState("all");
   const totals = useMemo(() => buildTotals(orders), [orders]);
+  const targetedOrder = useMemo(
+    () => (urlPurchaseOrderId ? orders.find((order) => order.id === urlPurchaseOrderId) ?? null : null),
+    [orders, urlPurchaseOrderId],
+  );
+  const targetedOrderMissing = Boolean(urlPurchaseOrderId && !loading && !targetedOrder);
 
   const filteredOrders = useMemo(() => {
     const text = query.trim().toLowerCase();
@@ -47,17 +52,15 @@ export function PurchaseOrdersPanel({ suppliers }: { suppliers: SupplierRow[] })
       return;
     }
     if (loading || openedOrderFromUrlRef.current === urlPurchaseOrderId) return;
+    if (!targetedOrder) return;
 
-    const order = orders.find((item) => item.id === urlPurchaseOrderId);
-    if (!order) return;
-
-    setSelectedOrder(order);
+    setSelectedOrder(targetedOrder);
     setQuery("");
     setStatusFilter("all");
     setSupplierFilter("all");
     setError(null);
     openedOrderFromUrlRef.current = urlPurchaseOrderId;
-  }, [loading, orders, urlPurchaseOrderId]);
+  }, [loading, targetedOrder, urlPurchaseOrderId]);
 
   async function refresh() {
     setLoading(true);
@@ -129,6 +132,33 @@ export function PurchaseOrdersPanel({ suppliers }: { suppliers: SupplierRow[] })
         </div>
       </div>
 
+      {urlPurchaseOrderId ? (
+        <div className={[
+          "rounded-2xl border p-4 text-sm",
+          targetedOrderMissing ? "border-amber-200 bg-amber-50 text-amber-900" : "border-blue-200 bg-blue-50 text-blue-900",
+        ].join(" ")}>
+          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+            <div>
+              <div className="font-semibold">
+                {targetedOrderMissing ? "Bon de commande introuvable" : "Bon de commande ouvert depuis la recherche globale"}
+              </div>
+              <p className={targetedOrderMissing ? "mt-1 text-amber-800" : "mt-1 text-blue-800"}>
+                {targetedOrderMissing
+                  ? "Le lien pointe vers une commande supprimée ou non accessible avec les droits actuels."
+                  : `${targetedOrder?.document.number ?? "Commande"} est sélectionné et prêt à être contrôlé ou mis à jour.`}
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={clearActivePurchaseOrderParam}
+              className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700"
+            >
+              Retirer le ciblage
+            </button>
+          </div>
+        </div>
+      ) : null}
+
       {!loading ? (
         <div className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm">
           <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_190px_220px]">
@@ -181,7 +211,7 @@ export function PurchaseOrdersPanel({ suppliers }: { suppliers: SupplierRow[] })
             {filteredOrders.length ? filteredOrders.map((order) => {
               const orderTotals = order.document.totals ?? calculateDocumentTotals(order.document);
               return (
-                <tr key={order.id} className="hover:bg-slate-50">
+                <tr key={order.id} className={["hover:bg-slate-50", order.id === urlPurchaseOrderId ? "bg-blue-50/70 ring-1 ring-inset ring-blue-200" : ""].join(" ")}>
                   <td className="px-4 py-3 font-semibold text-slate-950">{order.document.number}</td>
                   <td className="px-4 py-3 text-slate-600">{order.supplierName || order.document.recipient.displayName || "-"}</td>
                   <td className="px-4 py-3 text-slate-500">{order.projectId || "-"}</td>
