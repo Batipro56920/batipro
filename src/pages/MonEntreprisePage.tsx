@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import {
   Building2,
@@ -17,7 +17,6 @@ import { useAuth } from "@/contexts/AuthContext";
 import {
   COMPANY_BUSINESS_PROFILES,
   COMPANY_FEATURE_MODULES,
-  COMPANY_FEATURE_PROFILE_PERMISSIONS,
   COMPANY_FEATURE_SECTIONS,
   COMPANY_FEATURE_SECTIONS_ORDER,
   COMPANY_INTERFACE_MODE_OPTIONS,
@@ -26,16 +25,13 @@ import {
   COMPANY_PROFILE_ROLES,
   DEFAULT_COMPANY_FEATURE_SETTINGS,
   DEFAULT_COMPANY_PROFILE_FEATURE_PERMISSIONS,
-  DEFAULT_COMPANY_PROFILE_PERMISSIONS,
   type CompanyFeatureModuleId,
   type CompanyFeatureSettings,
-  type CompanyProfilePermissionKey,
   type CompanyProfileRole,
   type ProfileFeaturePermissionKey,
   type ProfileFeaturePermissions,
   cloneCompanyFeatureSettings,
   cloneCompanyProfileFeaturePermissions,
-  cloneCompanyProfilePermissions,
   ensureCompanyFeatureSettings,
   ensureCompanyProfileFeaturePermissions,
   ensureCompanyProfilePermissions,
@@ -55,6 +51,7 @@ import {
 } from "@/lib/services/companySettings";
 
 type CompanySection = "identite" | "fonctionnalites" | "profils";
+type SavingProfilePermission = ProfileFeaturePermissionKey | "__schemaVersion" | null;
 
 type CompanyFormState = {
   nom: string;
@@ -180,7 +177,7 @@ export default function MonEntreprisePage() {
   const [error, setError] = useState<string | null>(null);
   const [savingIdentity, setSavingIdentity] = useState(false);
   const [savingFeatures, setSavingFeatures] = useState(false);
-  const [savingProfilePermission, setSavingProfilePermission] = useState<ProfileFeaturePermissionKey | null>(null);
+  const [savingProfilePermission, setSavingProfilePermission] = useState<SavingProfilePermission>(null);
   const [currentProfileRole, setCurrentProfileRole] = useState<CompanyProfileRole>("admin");
 
   useEffect(() => {
@@ -245,7 +242,6 @@ export default function MonEntreprisePage() {
   const featureCoverage = getCompanyFeatureCoverage(featureSettings);
   const advancedPreparationEnabled = featureSettings.modules.preparation_arborescence;
   const profilePermissionSchemaReady = currentProfilePermissions ? currentProfilePermissions.__schemaVersion === 2 : false;
-
   const readonly = !isCompanyOwner;
 
   function updateCompanyField(field: keyof CompanyFormState, value: string) {
@@ -302,7 +298,7 @@ export default function MonEntreprisePage() {
     setProfilePermissions(next);
   }
 
-  async function onSaveCompanySettings(event: React.FormEvent<HTMLFormElement>) {
+  async function onSaveCompanySettings(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (readonly) return;
 
