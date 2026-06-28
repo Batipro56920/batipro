@@ -2,13 +2,20 @@ import { useEffect, useState } from "react";
 import { Link, Navigate, useParams } from "react-router-dom";
 import { LoadingState } from "../components/ui/design-system";
 import { buildProjects } from "../features/projects/utils/projectMappers";
-import { loadCrmDataset } from "../services/crm.service";
+import { loadCrmDataset, type CrmQuoteRow } from "../services/crm.service";
 
 type ResolveState =
   | { status: "loading" }
   | { status: "ready"; targetPath: string }
   | { status: "not-found" }
   | { status: "error"; message: string };
+
+function quoteFallbackProjectId(quote: CrmQuoteRow) {
+  if (quote.opportunity_id) return `opportunity-${quote.opportunity_id}`;
+  if (quote.prospect_id) return `prospect-${quote.prospect_id}`;
+  if (quote.client_id) return `client-${quote.client_id}`;
+  return "";
+}
 
 export default function CrmQuoteEditRedirectPage() {
   const { id } = useParams();
@@ -28,11 +35,19 @@ export default function CrmQuoteEditRedirectPage() {
         const dataset = await loadCrmDataset();
         const project = buildProjects(dataset).find((candidate) => candidate.quotes.some((quote) => quote.id === id));
         if (cancelled) return;
-        if (!project) {
-          setState({ status: "not-found" });
+        if (project) {
+          setState({ status: "ready", targetPath: `/projets/${encodeURIComponent(project.id)}/devis/${encodeURIComponent(id)}/edit` });
           return;
         }
-        setState({ status: "ready", targetPath: `/projets/${project.id}/devis/${id}/edit` });
+
+        const quote = dataset.quotes.find((candidate) => candidate.id === id);
+        const fallbackProjectId = quote ? quoteFallbackProjectId(quote) : "";
+        if (fallbackProjectId) {
+          setState({ status: "ready", targetPath: `/projets/${encodeURIComponent(fallbackProjectId)}/devis/${encodeURIComponent(id)}/edit` });
+          return;
+        }
+
+        setState({ status: "not-found" });
       } catch (err: any) {
         if (!cancelled) setState({ status: "error", message: err?.message ?? "Chargement du devis impossible." });
       }
