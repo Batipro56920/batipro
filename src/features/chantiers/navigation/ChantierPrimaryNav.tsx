@@ -12,6 +12,9 @@ export function ChantierPrimaryNav({ sections }: { sections: ChantierPrimarySect
   const terrainFeedbackEnabled = Boolean(
     chantierId && sections.some((section) => section.key === "historique" && section.enabled),
   );
+  const terrainFeedbackHref = chantierId
+    ? `/retours-terrain?chantierId=${encodeURIComponent(chantierId)}`
+    : "/retours-terrain";
 
   return (
     <nav className="flex flex-wrap gap-2" aria-label="Navigation chantier principale">
@@ -30,7 +33,7 @@ export function ChantierPrimaryNav({ sections }: { sections: ChantierPrimarySect
       ))}
       {terrainFeedbackEnabled ? (
         <NavLink
-          to={`/chantiers/${encodeURIComponent(chantierId ?? "")}/retours-terrain`}
+          to={terrainFeedbackHref}
           className="rounded-xl border border-blue-200 bg-blue-50 px-3 py-2 text-sm font-semibold text-blue-800 transition hover:bg-blue-100"
         >
           Retours terrain
