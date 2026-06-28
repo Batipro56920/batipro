@@ -6,7 +6,6 @@ import { supabase } from "../../../lib/supabaseClient";
 import type { SupplierRow } from "../../../services/suppliers.service";
 import { listPurchaseOrders } from "../infrastructure/purchaseOrderRepository";
 import type { PurchaseOrderRecord, PurchaseOrderStatus } from "../domain/types";
-import { PurchaseOrderStatusBadge } from "./PurchaseOrderStatusBadge";
 
 type MaterialDemandRow = {
   id: string;
@@ -42,7 +41,6 @@ type StockRow = {
   chantierName: string;
   orderId: string | null;
   orderNumber: string | null;
-  status: PurchaseOrderStatus | string;
   stockState: string;
   dueDate: string | null;
   updatedAt: string;
@@ -251,7 +249,6 @@ function buildOrderStockRows(order: PurchaseOrderRecord, chantierById: Map<strin
     chantierName: chantier?.nom ?? order.chantierId ?? "Non affecte",
     orderId: order.id,
     orderNumber: order.document.number,
-    status: order.status,
     stockState: stockStateFromOrderStatus(order.status),
     dueDate: order.expectedDeliveryDate,
     updatedAt: order.updatedAt,
@@ -278,7 +275,6 @@ function buildDemandStockRow(
     chantierName: chantier?.nom ?? demand.chantier_id,
     orderId: demand.order_id,
     orderNumber: order?.document.number ?? null,
-    status: demand.statut || demand.status || "a_traiter",
     stockState: stockStateFromDemandStatus(demand.statut || demand.status),
     dueDate: demand.date_livraison || demand.date_besoin,
     updatedAt: demand.created_at,
