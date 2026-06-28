@@ -1,4 +1,4 @@
-import { AlertTriangle, ArrowRight, ClipboardList, Eye, FileText, ShieldCheck, Users } from "lucide-react";
+import { AlertTriangle, ArrowRight, CalendarDays, ClipboardList, Eye, FileText, ShieldCheck, Users } from "lucide-react";
 import { Link } from "react-router-dom";
 import type { ChantierDerived } from "../types";
 import { shortDate } from "../utils/chantiersListUtils";
@@ -7,7 +7,7 @@ import { ChantierStatusPill } from "./ChantierStatusPill";
 
 const PLANNING_QUICK_LINKS = [
   { label: "Préparer", path: "preparation", icon: ClipboardList },
-  { label: "Exécuter", path: "execution", icon: ArrowRight },
+  { label: "Planning", path: "execution", icon: CalendarDays },
   { label: "Documents", path: "documents", icon: FileText },
   { label: "Équipe", path: "equipe", icon: Users },
   { label: "Qualité", path: "qualite", icon: ShieldCheck },
@@ -93,7 +93,7 @@ function ChantierPlanningRow({ row, onPreview }: { row: ChantierDerived; onPrevi
           to={`/chantiers/${row.id}/execution`}
           className="inline-flex h-9 items-center gap-2 rounded-xl bg-slate-950 px-3 text-sm font-semibold text-white shadow-sm transition hover:bg-slate-800"
         >
-          Piloter
+          Planning chantier
           <ArrowRight className="h-4 w-4" />
         </Link>
       </div>
@@ -119,6 +119,13 @@ function UnplannedChantierCard({ row, onPreview }: { row: ChantierDerived; onPre
         >
           Cadrer la préparation
           <ArrowRight className="h-4 w-4" />
+        </Link>
+        <Link
+          to={`/chantiers/${row.id}/execution`}
+          className="inline-flex h-9 items-center gap-2 rounded-xl border border-amber-200 bg-white px-3 text-sm font-semibold text-amber-900 transition hover:bg-amber-100"
+        >
+          Ouvrir le planning
+          <CalendarDays className="h-4 w-4" />
         </Link>
         <Link
           to={`/chantiers/${row.id}`}
@@ -155,7 +162,7 @@ export function ChantiersPlanningView({ rows, onPreview }: { rows: ChantierDeriv
       <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
         <div>
           <h2 className="text-base font-semibold text-slate-950">Planning chantiers</h2>
-          <p className="text-sm text-slate-500">Vue chronologique des échéances chantier avec accès direct au pilotage d'exécution.</p>
+          <p className="text-sm text-slate-500">Vue chronologique des échéances chantier avec accès direct au planning détaillé et aux espaces terrain.</p>
         </div>
         <div className="grid gap-2 sm:grid-cols-3 lg:min-w-[420px]">
           <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
