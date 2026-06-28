@@ -302,9 +302,31 @@ export default function BibliothequeTasksPage() {
   }
 
   function openEditDrawer(template: TaskTemplateRow) {
+    const nextParams = new URLSearchParams(searchParams);
+    nextParams.set("templateId", template.id);
+    setSearchParams(nextParams, { replace: true });
+    openedTemplateFromUrlRef.current = `id:${template.id}`;
     setActiveTemplate(template);
     setDrawerError(null);
     setDrawerOpen(true);
+  }
+
+  function buildTemplateLink(templateId: string) {
+    const url = new URL(window.location.href);
+    url.pathname = "/bibliotheque";
+    url.search = "";
+    url.searchParams.set("templateId", templateId);
+    return url.toString();
+  }
+
+  async function copyTemplateLink(template: TaskTemplateRow) {
+    const link = buildTemplateLink(template.id);
+    try {
+      await navigator.clipboard.writeText(link);
+      setToast({ type: "ok", msg: `Lien copié : ${template.titre}` });
+    } catch {
+      window.prompt("Copier le lien de la fiche modèle", link);
+    }
   }
 
   function closeDrawer() {
@@ -595,6 +617,13 @@ export default function BibliothequeTasksPage() {
                         </button>
                         <button
                           type="button"
+                          onClick={() => copyTemplateLink(row)}
+                          className="rounded-lg border px-2 py-1 text-xs hover:bg-slate-50"
+                        >
+                          Lien fiche
+                        </button>
+                        <button
+                          type="button"
                           disabled={deleteId === row.id}
                           onClick={() => onDeleteRow(row)}
                           className="rounded-lg border border-red-200 px-2 py-1 text-xs text-red-700 hover:bg-red-50 disabled:opacity-50"
@@ -682,6 +711,13 @@ export default function BibliothequeTasksPage() {
                     className="rounded-lg border px-3 py-2 text-xs hover:bg-slate-50 disabled:opacity-50"
                   >
                     {duplicateId === row.id ? "Duplication..." : t("common.actions.duplicate")}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => copyTemplateLink(row)}
+                    className="rounded-lg border px-3 py-2 text-xs hover:bg-slate-50"
+                  >
+                    Lien fiche
                   </button>
                   <button
                     type="button"
