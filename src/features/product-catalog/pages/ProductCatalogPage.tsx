@@ -440,7 +440,7 @@ function ProductDocumentsEditor({ documents, onChange }: { documents: ProductCat
         {documents.map((document) => (
           <div key={document.id} className="rounded-xl bg-slate-50 p-3">
             <div className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">{documentKindLabel(document.kind)}</div>
-            <input className={`${inputClass} mt-2`} value={document.name} onChange={(event) => onChange(documents.map((row) => row.id === document.id ? { ...row, name: event.value } : row))} />
+            <input className={`${inputClass} mt-2`} value={document.name} onChange={(event) => onChange(documents.map((row) => row.id === document.id ? { ...row, name: event.target.value } : row))} />
           </div>
         ))}
         {!documents.length ? <div className="rounded-xl border border-dashed border-slate-200 p-4 text-sm text-slate-500">Aucun document lié.</div> : null}
