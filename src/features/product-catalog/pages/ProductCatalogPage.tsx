@@ -107,12 +107,6 @@ export default function ProductCatalogPage() {
 
   const categories = unique(products.map((product) => product.category));
   const brands = unique(products.map((product) => product.brand));
-  const stats = useMemo(() => ({
-    products: products.length,
-    suppliers: new Set(products.map((product) => product.mainSupplierId).filter(Boolean)).size,
-    documents: products.reduce((sum, product) => sum + product.documents.length, 0),
-    averagePurchase: products.length ? products.reduce((sum, product) => sum + product.standardPurchasePriceHt, 0) / products.length : 0,
-  }), [products]);
 
   async function saveProduct(product: ProductCatalogItem | ProductCatalogDraft) {
     await saveProductCatalogItem(sanitizeProductCatalogInput(product));
@@ -192,13 +186,6 @@ export default function ProductCatalogPage() {
 
       {error ? <div className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">{error}</div> : null}
       {loading ? <div className="rounded-3xl border border-slate-200 bg-white p-8 text-center text-sm text-slate-500">Chargement du catalogue produits...</div> : null}
-
-      {!loading ? <section className="grid gap-3 md:grid-cols-4">
-        <Metric label="Produits" value={String(stats.products)} />
-        <Metric label="Fournisseurs liés" value={String(stats.suppliers)} />
-        <Metric label="Documents" value={String(stats.documents)} />
-        <Metric label="Prix achat moyen" value={formatCurrency(stats.averagePurchase)} />
-      </section> : null}
 
       {!loading ? <section className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm">
         <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_180px_180px_180px_160px]">
@@ -565,15 +552,6 @@ function nullableNonNegativeNumber(value: unknown) {
 
 const labelClass = "block text-xs font-semibold uppercase tracking-[0.12em] text-slate-400";
 const inputClass = "h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm font-normal normal-case tracking-normal text-slate-950 outline-none focus:border-blue-300";
-
-function Metric({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm">
-      <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">{label}</div>
-      <div className="mt-2 text-xl font-bold text-slate-950">{value}</div>
-    </div>
-  );
-}
 
 function EmptyCatalogState({ onCreate }: { onCreate: () => void }) {
   return (
