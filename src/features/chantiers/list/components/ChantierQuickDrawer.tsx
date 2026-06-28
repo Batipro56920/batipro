@@ -17,9 +17,15 @@ function getProjectHref(row: ChantierDerived) {
   return null;
 }
 
+function getQuoteHref(row: ChantierDerived, projectHref: string | null) {
+  if (!row.crm_quote_id) return null;
+  if (projectHref) return `${projectHref}/devis/${row.crm_quote_id}/edit`;
+  return `/crm/devis/${row.crm_quote_id}/edit`;
+}
+
 function CommercialContext({ row }: { row: ChantierDerived }) {
   const projectHref = getProjectHref(row);
-  const quoteHref = projectHref && row.crm_quote_id ? `${projectHref}/devis/${row.crm_quote_id}/edit` : null;
+  const quoteHref = getQuoteHref(row, projectHref);
   const quoteListHref = projectHref ? `${projectHref}?tab=quotes` : null;
   const financialHref = `/chantiers/${row.id}/financier`;
   const hasCommercialContext = Boolean(projectHref || row.crm_quote_id || row.signed_quote_amount_ht || row.crm_client_phone || row.crm_client_email);
