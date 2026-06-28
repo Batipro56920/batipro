@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import {
   createApporteurAffaire,
   createApporteurAccessToken,
@@ -210,6 +210,8 @@ function projectOptionAlreadyAttached(option: ProjectOption, leads: ApporteurLea
 }
 
 export default function ApporteursAffairesPage() {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const targetedApporteurId = searchParams.get("apporteurId") ?? "";
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -232,6 +234,11 @@ export default function ApporteursAffairesPage() {
   const selectedApporteur = useMemo(
     () => apporteurs.find((row) => row.id === selectedApporteurId) ?? null,
     [apporteurs, selectedApporteurId],
+  );
+
+  const targetedApporteur = useMemo(
+    () => apporteurs.find((row) => row.id === targetedApporteurId) ?? null,
+    [apporteurs, targetedApporteurId],
   );
 
   const projectOptions = useMemo<ProjectOption[]>(() => {
@@ -325,6 +332,31 @@ export default function ApporteursAffairesPage() {
     void refreshData(true);
   }, []);
 
+  useEffect(() => {
+    if (!targetedApporteurId) return;
+    const exists = apporteurs.some((row) => row.id === targetedApporteurId);
+    if (!exists) return;
+    setSelectedApporteurId(targetedApporteurId);
+    setSelectedStatus("");
+    setSelectedCrmFilter("all");
+    setLeadForm((prev) => ({ ...prev, apporteur_id: targetedApporteurId }));
+  }, [apporteurs, targetedApporteurId]);
+
+  function clearApporteurUrlTarget() {
+    if (!searchParams.has("apporteurId")) return;
+    const nextParams = new URLSearchParams(searchParams);
+    nextParams.delete("apporteurId");
+    setSearchParams(nextParams, { replace: true });
+  }
+
+  function selectApporteur(apporteurId: string, keepUrlTarget = false) {
+    setSelectedApporteurId(apporteurId);
+    setSelectedStatus("");
+    setSelectedCrmFilter("all");
+    resetLeadForm(apporteurId);
+    if (!keepUrlTarget && apporteurId !== targetedApporteurId) clearApporteurUrlTarget();
+  }
+
   async function refreshData(initial = false) {
     if (initial) setLoading(true);
     setError(null);
@@ -343,7 +375,10 @@ export default function ApporteursAffairesPage() {
       setCrmProspects(crmData.prospects);
       setCrmOpportunities(crmData.opportunities);
       setAccessTokens(tokens.reduce((acc, token) => ({ ...acc, [token.apporteur_id]: token }), {} as Record<string, ApporteurAccessTokenRow>));
-      setSelectedApporteurId((current) => current || apporteursData[0]?.id || "");
+      setSelectedApporteurId((current) => {
+        if (targetedApporteurId && apporteursData.some((row) => row.id === targetedApporteurId)) return targetedApporteurId;
+        return current || apporteursData[0]?.id || "";
+      });
     } catch (err: any) {
       setError(err?.message ?? "Impossible de charger les apporteurs.");
     } finally {
@@ -352,6 +387,7 @@ export default function ApporteursAffairesPage() {
   }
 
   function openCreateApporteurLayer() {
+    clearApporteurUrlTarget();
     setEditingApporteurId(null);
     setApporteurForm(DEFAULT_APPORTEUR_FORM);
     setShowApporteurLayer(true);
@@ -399,6 +435,7 @@ export default function ApporteursAffairesPage() {
         : await createApporteurAffaire(payload);
       setNotice(editingApporteurId ? "Apporteur mis à jour." : "Apporteur créé.");
       closeApporteurLayer();
+      clearApporteurUrlTarget();
       await refreshData();
       setSelectedApporteurId(result.id);
       resetLeadForm(result.id);
@@ -435,6 +472,7 @@ export default function ApporteursAffairesPage() {
       await deleteApporteurAffaire(id);
       setNotice("Apporteur supprimé.");
       if (selectedApporteurId === id) setSelectedApporteurId("");
+      if (targetedApporteurId === id) clearApporteurUrlTarget();
       await refreshData();
     } catch (err: any) {
       setError(err?.message ?? "Impossible de supprimer l'apporteur.");
@@ -618,6 +656,33 @@ export default function ApporteursAffairesPage() {
         <Metric label="Commissions dues" value={formatCurrency(stats.unpaidCommission)} />
       </section>
 
+      {targetedApporteurId ? (
+        <section className={[
+          "rounded-xl border p-4 text-sm",
+          targetedApporteur ? "border-blue-200 bg-blue-50 text-blue-900" : "border-amber-200 bg-amber-50 text-amber-900",
+        ].join(" ")}>
+          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+            <div>
+              <div className="font-semibold">
+                {targetedApporteur ? "Apporteur ciblé depuis la recherche globale" : "Apporteur ciblé introuvable"}
+              </div>
+              <p className={targetedApporteur ? "mt-1 text-blue-800" : "mt-1 text-amber-800"}>
+                {targetedApporteur
+                  ? `${targetedApporteur.nom} est sélectionné avec ses projets, commissions et documents.`
+                  : "Le lien de recherche pointe vers un apporteur supprimé ou non visible avec les droits actuels."}
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={clearApporteurUrlTarget}
+              className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700"
+            >
+              Retirer le ciblage
+            </button>
+          </div>
+        </section>
+      ) : null}
+
       {crmToConvertCount > 0 ? (
         <section className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
           <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
@@ -674,7 +739,7 @@ export default function ApporteursAffairesPage() {
                 const active = apporteur.id === selectedApporteurId;
                 const leadCount = leads.filter((lead) => lead.apporteur_id === apporteur.id).length;
                 return (
-                  <button key={apporteur.id} type="button" onClick={() => { setSelectedApporteurId(apporteur.id); setSelectedStatus(""); setSelectedCrmFilter("all"); resetLeadForm(apporteur.id); }} className={["w-full rounded-lg border px-3 py-3 text-left transition", active ? "border-blue-500 bg-blue-50" : "border-transparent hover:border-slate-200 hover:bg-slate-50"].join(" ")}>
+                  <button key={apporteur.id} type="button" onClick={() => selectApporteur(apporteur.id)} className={["w-full rounded-lg border px-3 py-3 text-left transition", active ? "border-blue-500 bg-blue-50" : "border-transparent hover:border-slate-200 hover:bg-slate-50"].join(" ")}>
                     <div className="flex items-start justify-between gap-2">
                       <div className="min-w-0"><div className="truncate text-sm font-semibold text-slate-950">{apporteur.nom}</div><div className="mt-0.5 truncate text-xs text-slate-500">{apporteur.entreprise || optionLabel(APPORTREUR_TYPES, apporteur.type)}</div></div>
                       <span className={apporteur.active ? "status-ok" : "status-muted"}>{apporteur.active ? "Actif" : "Inactif"}</span>
@@ -733,7 +798,7 @@ export default function ApporteursAffairesPage() {
       </section>
 
       <section className="bt-card rounded-xl bg-white p-4">
-        <div className="mb-4 flex flex-wrap items-center justify-between gap-3"><div><div className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Projets apportés</div><h2 className="mt-1 text-lg font-semibold text-slate-950">Suivi commercial et commissions</h2></div><div className="flex flex-wrap items-center gap-2"><select className={selectClass} value={selectedApporteurId} onChange={(event) => { setSelectedApporteurId(event.target.value); setSelectedStatus(""); }}><option value="">Tous les apporteurs</option>{apporteurs.map((row) => <option key={row.id} value={row.id}>{row.nom}</option>)}</select><select className={selectClass} value={selectedStatus} onChange={(event) => setSelectedStatus(event.target.value as ApporteurLeadStatus | "")}><option value="">Tous les statuts</option>{LEAD_STATUSES.map((status) => <option key={status.value} value={status.value}>{status.label}</option>)}</select><select className={selectClass} value={selectedCrmFilter} onChange={(event) => setSelectedCrmFilter(event.target.value as CrmFilter)}><option value="all">Tous CRM</option><option value="linked">Liés CRM</option><option value="unlinked">À convertir CRM</option></select></div></div>
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3"><div><div className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Projets apportés</div><h2 className="mt-1 text-lg font-semibold text-slate-950">Suivi commercial et commissions</h2></div><div className="flex flex-wrap items-center gap-2"><select className={selectClass} value={selectedApporteurId} onChange={(event) => selectApporteur(event.target.value)}><option value="">Tous les apporteurs</option>{apporteurs.map((row) => <option key={row.id} value={row.id}>{row.nom}</option>)}</select><select className={selectClass} value={selectedStatus} onChange={(event) => setSelectedStatus(event.target.value as ApporteurLeadStatus | "")}><option value="">Tous les statuts</option>{LEAD_STATUSES.map((status) => <option key={status.value} value={status.value}>{status.label}</option>)}</select><select className={selectClass} value={selectedCrmFilter} onChange={(event) => setSelectedCrmFilter(event.target.value as CrmFilter)}><option value="all">Tous CRM</option><option value="linked">Liés CRM</option><option value="unlinked">À convertir CRM</option></select></div></div>
         <div className="space-y-3 md:hidden">
           {filteredLeads.map((lead) => {
             const apporteur = apporteurs.find((row) => row.id === lead.apporteur_id);
