@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { FileText, PackageSearch, Plus, RefreshCw, Trash2, X } from "lucide-react";
 import type { SupplierRow } from "../../../services/suppliers.service";
@@ -31,6 +31,7 @@ export default function ProductCatalogPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const catalogQueryParam = searchParams.get("q") ?? "";
   const activeProductId = searchParams.get("productId") ?? "";
+  const openedProductFromUrlRef = useRef("");
   const [products, setProducts] = useState<ProductCatalogItem[]>([]);
   const [suppliers, setSuppliers] = useState<SupplierRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -53,6 +54,20 @@ export default function ProductCatalogPage() {
   useEffect(() => {
     setQuery((current) => current === catalogQueryParam ? current : catalogQueryParam);
   }, [catalogQueryParam]);
+
+  useEffect(() => {
+    if (!activeProductId) {
+      openedProductFromUrlRef.current = "";
+      return;
+    }
+    if (loading || openedProductFromUrlRef.current === activeProductId) return;
+
+    const product = products.find((row) => row.id === activeProductId);
+    if (product) {
+      setEditing(product);
+      openedProductFromUrlRef.current = activeProductId;
+    }
+  }, [activeProductId, loading, products]);
 
   async function refreshProducts() {
     setLoading(true);
