@@ -11,7 +11,7 @@ export function ProjectsHeader({ billingMode = false, onRefresh }: { billingMode
       description={
         billingMode
           ? "Choisissez un projet commercial avec devis accepté pour créer une facture d'acompte, de situation ou finale depuis l'onglet Devis."
-          : "Centralisez vos dossiers avant-production : qualification, visites, devis, préparation chantier et continuité SAV."
+          : "Centralisez vos dossiers avant-production : qualification, visites, devis, préparation chantier, facturation et continuité SAV."
       }
       actions={
         billingMode ? (
@@ -43,6 +43,13 @@ export function ProjectsHeader({ billingMode = false, onRefresh }: { billingMode
             >
               <Plus className="h-4 w-4" />
               Nouveau devis
+            </Link>
+            <Link
+              to="/projets?facturation=1"
+              className="inline-flex h-9 items-center justify-center gap-2 rounded-xl border border-blue-200 bg-blue-50 px-3 text-sm font-medium text-blue-800 shadow-sm transition hover:bg-blue-100"
+            >
+              <Receipt className="h-4 w-4" />
+              À facturer
             </Link>
             <Button type="button" variant="secondary" onClick={onRefresh}>
               <RefreshCw className="h-4 w-4" />
