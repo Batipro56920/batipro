@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import type { ProjectRecord } from "../types";
 import type { ProjectProfitabilityMetrics } from "../utils/projectProfitability";
 import { buildProjectProfitability } from "../utils/projectProfitability";
@@ -90,6 +91,8 @@ export function ProjectProfitabilityTab({ project }: { project: ProjectRecord })
         </Panel>
       </div>
 
+      <LinkedInvoicesPanel metrics={metrics} />
+
       <Panel title="Coûts projet" description="Base V1 pour la future rentabilité projet et chantier.">
         <div className="overflow-hidden rounded-2xl border border-slate-200">
           <table className="min-w-full divide-y divide-slate-100 text-sm">
@@ -158,6 +161,75 @@ function MetricCard({ label, value, helper }: { label: string; value: string; he
       <div className="mt-1 text-xs text-slate-500">{helper}</div>
     </div>
   );
+}
+
+function LinkedInvoicesPanel({ metrics }: { metrics: ProjectProfitabilityMetrics }) {
+  return (
+    <Panel title="Factures liées" description="Factures officielles rattachées au projet ou à ses devis, avec accès direct au suivi.">
+      {metrics.linkedInvoices.length ? (
+        <div className="overflow-hidden rounded-2xl border border-slate-200">
+          <div className="hidden grid-cols-[1.1fr_1fr_0.8fr_0.8fr_0.8fr_120px] gap-3 bg-slate-50 px-4 py-3 text-xs font-semibold uppercase tracking-[0.12em] text-slate-500 lg:grid">
+            <span>Facture</span>
+            <span>Client</span>
+            <span>Statut</span>
+            <span className="text-right">Total TTC</span>
+            <span className="text-right">Reste dû</span>
+            <span className="text-right">Action</span>
+          </div>
+          <div className="divide-y divide-slate-100">
+            {metrics.linkedInvoices.map((invoice) => (
+              <article key={invoice.id} className="grid gap-3 px-4 py-3 text-sm lg:grid-cols-[1.1fr_1fr_0.8fr_0.8fr_0.8fr_120px] lg:items-center">
+                <div>
+                  <div className="font-semibold text-slate-950">{invoice.number}</div>
+                  <div className="mt-0.5 text-xs text-slate-500">{invoiceTypeLabel(invoice.type)}</div>
+                </div>
+                <div className="text-slate-600">{invoice.recipientName}</div>
+                <div><InvoiceStatusPill status={invoice.status} /></div>
+                <div className="font-semibold text-slate-950 lg:text-right">{formatCurrency(invoice.totalTtc)}</div>
+                <div className="font-semibold text-slate-950 lg:text-right">{formatCurrency(invoice.remainingTtc)}</div>
+                <Link to={`/factures?invoice=${encodeURIComponent(invoice.id)}`} className="inline-flex h-9 items-center justify-center rounded-xl border border-slate-200 px-3 text-sm font-semibold text-slate-900 hover:bg-slate-50 lg:justify-self-end">
+                  Ouvrir
+                </Link>
+              </article>
+            ))}
+          </div>
+        </div>
+      ) : (
+        <EmptyProjectBlock title="Aucune facture liée" description="Les factures générées depuis les devis de ce projet apparaîtront ici avec leur état de paiement." />
+      )}
+    </Panel>
+  );
+}
+
+function InvoiceStatusPill({ status }: { status: ProjectProfitabilityMetrics["linkedInvoices"][number]["status"] }) {
+  const tone = status === "paid"
+    ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+    : status === "overdue"
+      ? "border-red-200 bg-red-50 text-red-700"
+      : status === "partially_paid"
+        ? "border-blue-200 bg-blue-50 text-blue-700"
+        : status === "cancelled"
+          ? "border-slate-200 bg-slate-100 text-slate-500"
+          : "border-amber-200 bg-amber-50 text-amber-700";
+  return <span className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-semibold ${tone}`}>{invoiceStatusLabel(status)}</span>;
+}
+
+function invoiceTypeLabel(type: ProjectProfitabilityMetrics["linkedInvoices"][number]["type"]) {
+  if (type === "deposit") return "Acompte";
+  if (type === "intermediate") return "Situation";
+  if (type === "final") return "Finale";
+  if (type === "credit_note") return "Avoir";
+  return "Facture";
+}
+
+function invoiceStatusLabel(status: ProjectProfitabilityMetrics["linkedInvoices"][number]["status"]) {
+  if (status === "draft") return "Brouillon";
+  if (status === "sent") return "Envoyée";
+  if (status === "partially_paid") return "Partiellement payée";
+  if (status === "paid") return "Payée";
+  if (status === "overdue") return "En retard";
+  if (status === "cancelled") return "Annulée";
+  return status;
 }
 
 function ProfitabilityAlert({ title, description, tone }: { title: string; description: string; tone: "danger" | "warning" }) {
