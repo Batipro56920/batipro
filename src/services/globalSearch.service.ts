@@ -134,6 +134,21 @@ function apporteurLeadHref(row: SearchRow) {
   return "/crm/apporteurs";
 }
 
+function productCatalogHref(row: SearchRow) {
+  const productId = cleanText(row.id);
+  const query = cleanText(row.designation)
+    || cleanText(row.internal_reference)
+    || cleanText(row.manufacturer_reference)
+    || cleanText(row.brand)
+    || cleanText(row.category)
+    || cleanText(row.main_supplier_name);
+  const params = new URLSearchParams();
+  if (query) params.set("q", query);
+  if (productId) params.set("productId", productId);
+  const queryString = params.toString();
+  return queryString ? `/catalogue-produits?${queryString}` : "/catalogue-produits";
+}
+
 function productPriceLabel(row: SearchRow) {
   const salePrice = Number(row.recommended_sale_price_ht);
   if (Number.isFinite(salePrice) && salePrice > 0) return `${formatSearchCurrency(salePrice)} vente HT`;
@@ -347,7 +362,7 @@ const SOURCES: SearchSource[] = [
         cleanText(row.main_supplier_name),
         productPriceLabel(row),
       ].filter(Boolean).join(" - ") || "Catalogue produits",
-      href: "/catalogue-produits",
+      href: productCatalogHref(row),
       badge: "Produit",
     }),
   },
