@@ -1,11 +1,13 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { ArrowRight, ChartColumnBig, RefreshCw } from "lucide-react";
 import { calculateDocumentTotals } from "../features/document-engine";
 import type { PurchaseOrderRecord } from "../features/purchase-orders";
 import { listPurchaseOrders, PurchaseOrderStatusBadge } from "../features/purchase-orders";
 
 export default function SupplierOutstandingPage() {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const targetedOrderId = searchParams.get("purchaseOrder") ?? "";
   const [orders, setOrders] = useState<PurchaseOrderRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -31,11 +33,17 @@ export default function SupplierOutstandingPage() {
     () => orders
       .filter((order) => !["delivered", "cancelled"].includes(order.status))
       .sort((a, b) => {
+        const targetedDiff = Number(b.id === targetedOrderId) - Number(a.id === targetedOrderId);
+        if (targetedDiff !== 0) return targetedDiff;
         const lateDiff = Number(isLate(b.expectedDeliveryDate)) - Number(isLate(a.expectedDeliveryDate));
         if (lateDiff !== 0) return lateDiff;
         return deliverySortValue(a.expectedDeliveryDate) - deliverySortValue(b.expectedDeliveryDate);
       }),
-    [orders],
+    [orders, targetedOrderId],
+  );
+  const targetedOrder = useMemo(
+    () => orders.find((order) => order.id === targetedOrderId) ?? null,
+    [orders, targetedOrderId],
   );
   const stats = useMemo(() => {
     const totals = openOrders.reduce(
@@ -58,6 +66,12 @@ export default function SupplierOutstandingPage() {
         .sort()[0] ?? null,
     };
   }, [openOrders]);
+
+  function clearTarget() {
+    const nextParams = new URLSearchParams(searchParams);
+    nextParams.delete("purchaseOrder");
+    setSearchParams(nextParams, { replace: true });
+  }
 
   return (
     <div className="space-y-6">
@@ -91,6 +105,25 @@ export default function SupplierOutstandingPage() {
           </button>
         </div>
       </header>
+
+      {targetedOrderId ? (
+        <div className="flex flex-col gap-3 rounded-2xl border border-blue-200 bg-blue-50 p-4 text-sm text-blue-800 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            {targetedOrder ? (
+              <>
+                <span className="font-semibold">Commande ciblée :</span> {targetedOrder.document.number || "Commande sans numéro"} - {targetedOrder.supplierName || targetedOrder.document.recipient.displayName || "Fournisseur à définir"}
+              </>
+            ) : (
+              <>
+                <span className="font-semibold">Commande ciblée introuvable.</span> Elle est peut-être clôturée, supprimée ou indisponible avec vos droits actuels.
+              </>
+            )}
+          </div>
+          <button type="button" onClick={clearTarget} className="inline-flex h-9 items-center justify-center rounded-xl border border-blue-200 bg-white px-3 font-semibold text-blue-800 hover:bg-blue-100">
+            Voir tous les encours
+          </button>
+        </div>
+      ) : null}
 
       {error ? <div className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">{error}</div> : null}
       {loading ? <div className="rounded-3xl border border-slate-200 bg-white p-8 text-center text-sm text-slate-500">Chargement des encours fournisseurs...</div> : null}
@@ -132,8 +165,9 @@ export default function SupplierOutstandingPage() {
                   {openOrders.map((order) => {
                     const totals = order.document.totals ?? calculateDocumentTotals(order.document);
                     const late = isLate(order.expectedDeliveryDate);
+                    const targeted = order.id === targetedOrderId;
                     return (
-                      <tr key={order.id} className={`border-t border-slate-100 ${late ? "bg-red-50/40" : ""}`}>
+                      <tr key={order.id} className={`border-t border-slate-100 ${targeted ? "bg-blue-50 ring-1 ring-inset ring-blue-200" : late ? "bg-red-50/40" : ""}`}>
                         <Td>
                           <div className="font-semibold text-slate-950">{order.document.number}</div>
                           <div className="mt-0.5 text-xs text-slate-500">{order.lot || order.document.title || "Commande fournisseur"}</div>
