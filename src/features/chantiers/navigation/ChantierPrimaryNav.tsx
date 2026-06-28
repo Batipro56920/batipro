@@ -1,4 +1,4 @@
-import { NavLink } from "react-router-dom";
+import { NavLink, useParams } from "react-router-dom";
 
 export type ChantierPrimarySection = {
   key: string;
@@ -8,6 +8,11 @@ export type ChantierPrimarySection = {
 };
 
 export function ChantierPrimaryNav({ sections }: { sections: ChantierPrimarySection[] }) {
+  const { id: chantierId } = useParams<{ id: string }>();
+  const terrainFeedbackEnabled = Boolean(
+    chantierId && sections.some((section) => section.key === "historique" && section.enabled),
+  );
+
   return (
     <nav className="flex flex-wrap gap-2" aria-label="Navigation chantier principale">
       {sections.filter((section) => section.enabled).map((section) => (
@@ -23,7 +28,14 @@ export function ChantierPrimaryNav({ sections }: { sections: ChantierPrimarySect
           {section.label}
         </NavLink>
       ))}
+      {terrainFeedbackEnabled ? (
+        <NavLink
+          to={`/retours-terrain?chantierId=${encodeURIComponent(chantierId ?? "")}`}
+          className="rounded-xl border border-blue-200 bg-blue-50 px-3 py-2 text-sm font-semibold text-blue-800 transition hover:bg-blue-100"
+        >
+          Retours terrain
+        </NavLink>
+      ) : null}
     </nav>
   );
 }
-
