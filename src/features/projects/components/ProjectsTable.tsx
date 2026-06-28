@@ -1,10 +1,11 @@
 import { Link } from "react-router-dom";
-import { ArrowRight } from "lucide-react";
+import { ArrowRight, Hammer } from "lucide-react";
 import type { ProjectRecord } from "../types";
 import { ProjectStatusBadge } from "./ProjectStatusBadge";
 import { formatCurrency, formatDate } from "./ProjectShared";
 
 type ProjectQuote = ProjectRecord["quotes"][number];
+type ProjectChantier = ProjectRecord["chantiers"][number];
 
 function getBillableQuote(project: ProjectRecord): ProjectQuote | null {
   return (
@@ -28,6 +29,41 @@ function getCommercialSource(project: ProjectRecord) {
     detail: apporteur,
     isApporteur: Boolean(source?.toLowerCase().includes("apporteur") || apporteur),
   };
+}
+
+function getPrimaryChantier(project: ProjectRecord): ProjectChantier | null {
+  const acceptedQuote = project.quotes.find((quote) => quote.statut === "accepte");
+  return (
+    (acceptedQuote
+      ? project.chantiers.find((chantier) => chantier.crm_quote_id === acceptedQuote.id || chantier.id === acceptedQuote.chantier_id)
+      : null) ??
+    project.chantiers.find((chantier) => chantier.status !== "ARCHIVE" && chantier.status !== "ANNULE") ??
+    project.chantiers[0] ??
+    null
+  );
+}
+
+function getChantierStatusLabel(status: ProjectChantier["status"]) {
+  const labels: Record<string, string> = {
+    BROUILLON: "Brouillon",
+    PREPARATION: "Préparation",
+    EN_COURS: "En chantier",
+    EN_PAUSE: "En pause",
+    TERMINE: "Terminé",
+    ARCHIVE: "Archivé",
+    ANNULE: "Annulé",
+  };
+  return labels[status] ?? status;
+}
+
+function getChantierStatusClassName(status: ProjectChantier["status"]) {
+  if (status === "EN_COURS") return "bg-green-50 text-green-700 ring-green-200";
+  if (status === "PREPARATION") return "bg-cyan-50 text-cyan-700 ring-cyan-200";
+  if (status === "EN_PAUSE") return "bg-orange-50 text-orange-700 ring-orange-200";
+  if (status === "TERMINE") return "bg-slate-100 text-slate-700 ring-slate-200";
+  if (status === "ARCHIVE") return "bg-slate-100 text-slate-500 ring-slate-200";
+  if (status === "ANNULE") return "bg-red-50 text-red-700 ring-red-200";
+  return "bg-slate-100 text-slate-700 ring-slate-200";
 }
 
 export function ProjectsTable({ projects, billingMode = false }: { projects: ProjectRecord[]; billingMode?: boolean }) {
@@ -69,6 +105,7 @@ export function ProjectsTable({ projects, billingMode = false }: { projects: Pro
             {projects.map((project) => {
               const billableQuote = billingMode ? getBillableQuote(project) : null;
               const commercialSource = getCommercialSource(project);
+              const primaryChantier = getPrimaryChantier(project);
               return (
                 <tr key={project.id} className="transition hover:bg-slate-50/80">
                   <td className="max-w-[260px] px-4 py-3">
@@ -76,6 +113,19 @@ export function ProjectsTable({ projects, billingMode = false }: { projects: Pro
                       {project.name}
                     </Link>
                     <div className="mt-1 truncate text-xs text-slate-500">{project.projectType || "Type à qualifier"}</div>
+                    {primaryChantier ? (
+                      <Link
+                        to={`/chantiers/${primaryChantier.id}`}
+                        className={[
+                          "mt-2 inline-flex max-w-full items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold ring-1 transition hover:bg-white",
+                          getChantierStatusClassName(primaryChantier.status),
+                        ].join(" ")}
+                        title={primaryChantier.nom}
+                      >
+                        <Hammer className="h-3.5 w-3.5 shrink-0" />
+                        <span className="truncate">Chantier · {getChantierStatusLabel(primaryChantier.status)}</span>
+                      </Link>
+                    ) : null}
                   </td>
                   <td className="px-4 py-3 text-slate-700">{project.clientName}</td>
                   <td className="max-w-[210px] px-4 py-3">
@@ -125,13 +175,24 @@ export function ProjectsTable({ projects, billingMode = false }: { projects: Pro
                   <td className="px-4 py-3 text-slate-500">{formatDate(project.createdAt)}</td>
                   <td className="px-4 py-3 text-slate-500">{formatDate(project.desiredDeadline)}</td>
                   <td className="px-4 py-3 text-right">
-                    <Link
-                      to={`/projets/${project.id}${billingMode ? "?tab=quotes" : ""}`}
-                      className="inline-flex h-8 items-center justify-center gap-2 rounded-lg border border-slate-200 bg-white px-2.5 text-xs font-semibold text-slate-900 transition hover:bg-slate-50"
-                    >
-                      {billingMode ? "Facturer" : "Ouvrir"}
-                      <ArrowRight className="h-3.5 w-3.5" />
-                    </Link>
+                    <div className="flex flex-wrap justify-end gap-2">
+                      {primaryChantier ? (
+                        <Link
+                          to={`/chantiers/${primaryChantier.id}`}
+                          className="inline-flex h-8 items-center justify-center gap-1.5 rounded-lg border border-blue-200 bg-blue-50 px-2.5 text-xs font-semibold text-blue-700 transition hover:bg-blue-100"
+                        >
+                          <Hammer className="h-3.5 w-3.5" />
+                          Chantier
+                        </Link>
+                      ) : null}
+                      <Link
+                        to={`/projets/${project.id}${billingMode ? "?tab=quotes" : ""}`}
+                        className="inline-flex h-8 items-center justify-center gap-2 rounded-lg border border-slate-200 bg-white px-2.5 text-xs font-semibold text-slate-900 transition hover:bg-slate-50"
+                      >
+                        {billingMode ? "Facturer" : "Ouvrir"}
+                        <ArrowRight className="h-3.5 w-3.5" />
+                      </Link>
+                    </div>
                   </td>
                 </tr>
               );
