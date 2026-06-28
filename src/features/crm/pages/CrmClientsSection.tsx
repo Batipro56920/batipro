@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { CrmClientRow, CrmDataset } from "../../../services/crm.service";
 import { ClientDetailDrawer } from "../clients/components/ClientDetailDrawer";
 import { ClientsActivity } from "../clients/components/ClientsActivity";
@@ -19,6 +19,8 @@ export default function CrmClientsSection({
   invoices,
   documents,
   query,
+  focusedClientId,
+  onFocusedClientClear,
   onCreate,
 }: {
   rows: CrmClientRow[];
@@ -29,6 +31,8 @@ export default function CrmClientsSection({
   documents: CrmDataset["documents"];
   query: string;
   setQuery: (value: string) => void;
+  focusedClientId?: string;
+  onFocusedClientClear?: () => void;
   onCreate: () => void;
 }) {
   const [view, setView] = useState<ClientView>("list");
@@ -39,6 +43,21 @@ export default function CrmClientsSection({
     metrics,
     globalQuery: query,
   });
+
+  useEffect(() => {
+    if (!focusedClientId) return;
+    const focusedClient = rowsWithMetrics.find((row) => row.id === focusedClientId);
+    if (focusedClient && selectedClient?.id !== focusedClient.id) {
+      setSelectedClient(focusedClient);
+    }
+  }, [focusedClientId, rowsWithMetrics, selectedClient?.id]);
+
+  function closeClientDrawer() {
+    if (focusedClientId && selectedClient?.id === focusedClientId) {
+      onFocusedClientClear?.();
+    }
+    setSelectedClient(null);
+  }
 
   return (
     <div className="space-y-5">
@@ -56,7 +75,7 @@ export default function CrmClientsSection({
         <ClientsTable rows={filteredRows} onSelect={setSelectedClient} />
       )}
 
-      <ClientDetailDrawer client={selectedClient} metrics={metrics} onClose={() => setSelectedClient(null)} />
+      <ClientDetailDrawer client={selectedClient} metrics={metrics} onClose={closeClientDrawer} />
     </div>
   );
 }
