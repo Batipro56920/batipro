@@ -158,9 +158,11 @@ function supplierHref(row: SearchRow) {
 }
 
 function taskTemplateHref(row: SearchRow) {
+  const templateId = cleanText(row.id);
   const query = cleanText(row.titre) || cleanText(row.lot) || cleanText(row.unite) || cleanText(row.remarques);
   const params = new URLSearchParams();
   if (query) params.set("q", query);
+  if (templateId) params.set("templateId", templateId);
   const queryString = params.toString();
   return queryString ? `/bibliotheque?${queryString}` : "/bibliotheque";
 }
