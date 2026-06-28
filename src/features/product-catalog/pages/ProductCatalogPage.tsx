@@ -335,13 +335,13 @@ function ProductForm({ product, suppliers, onCancel, onSave }: { product: Produc
         </label>
       </div>
 
-      <SupplierPricesEditor prices={draft.supplierPrices} suppliers={suppliers} onChange={(supplierPrices) => patch({ supplierPrices })} />
+      <SupplierPricesEditor unit={draft.unit} prices={draft.supplierPrices} suppliers={suppliers} onChange={(supplierPrices) => patch({ supplierPrices })} />
       <ProductDocumentsEditor documents={draft.documents} onChange={(documents) => patch({ documents })} />
     </div>
   );
 }
 
-function SupplierPricesEditor({ prices, suppliers, onChange }: { prices: ProductSupplierPrice[]; suppliers: SupplierRow[]; onChange: (prices: ProductSupplierPrice[]) => void }) {
+function SupplierPricesEditor({ unit, prices, suppliers, onChange }: { unit: DocumentUnit; prices: ProductSupplierPrice[]; suppliers: SupplierRow[]; onChange: (prices: ProductSupplierPrice[]) => void }) {
   function addPrice() {
     onChange([...prices, { id: crypto.randomUUID(), supplierId: null, supplierName: "", priceHt: 0, discountPercent: null, startDate: null, endDate: null, packaging: null, minimumQuantity: null, deliveryLeadTimeDays: null, coverageM2: null, pricePerM2Ht: null }]);
   }
@@ -355,27 +355,27 @@ function SupplierPricesEditor({ prices, suppliers, onChange }: { prices: Product
       <div className="mb-3 flex items-center justify-between gap-3">
         <div>
           <div className="font-semibold text-slate-950">Prix négociés par fournisseur</div>
-          <p className="mt-1 text-sm text-slate-500">Renseignez le prix d'achat fournisseur, la surface couverte par colis et le prix réellement exploitable au m² pour les devis.</p>
+          <p className="mt-1 text-sm text-slate-500">Renseignez le prix d'achat du colis ou de la botte, la quantité couverte et le prix exploitable à l'unité pour les devis.</p>
         </div>
         <button type="button" className="rounded-xl border px-3 py-2 text-sm hover:bg-slate-50" onClick={addPrice}>Ajouter prix</button>
       </div>
       <div className="grid gap-3">
         {prices.map((price) => {
-          const displayedM2Price = price.pricePerM2Ht ?? (price.coverageM2 && price.coverageM2 > 0 ? price.priceHt : 0);
+          const displayedUnitPrice = getSupplierUnitPrice(price);
           return (
           <div key={price.id} className="rounded-xl border border-slate-200 bg-slate-50 p-3">
             <div className="mb-3 grid gap-2 md:grid-cols-3">
               <div className="rounded-xl bg-white px-3 py-2 text-sm">
-                <div className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-400">Prix fournisseur</div>
+                <div className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-400">Prix colis HT</div>
                 <div className="mt-1 font-semibold text-slate-950">{formatCurrency(price.priceHt)}</div>
               </div>
               <div className="rounded-xl bg-white px-3 py-2 text-sm">
-                <div className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-400">Surface colis</div>
-                <div className="mt-1 font-semibold text-slate-950">{price.coverageM2 ? `${formatNumber(price.coverageM2)} m²` : "Non renseignée"}</div>
+                <div className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-400">Quantité par colis</div>
+                <div className="mt-1 font-semibold text-slate-950">{price.coverageM2 ? `${formatNumber(price.coverageM2)} ${unit}` : "Non renseignée"}</div>
               </div>
               <div className="rounded-xl bg-blue-50 px-3 py-2 text-sm text-blue-800">
-                <div className="text-[11px] font-semibold uppercase tracking-[0.12em] text-blue-500">Prix achat m² HT</div>
-                <div className="mt-1 font-semibold">{displayedM2Price > 0 ? `${formatCurrency(displayedM2Price)}/m²` : "À renseigner"}</div>
+                <div className="text-[11px] font-semibold uppercase tracking-[0.12em] text-blue-500">Prix achat unité HT</div>
+                <div className="mt-1 font-semibold">{displayedUnitPrice > 0 ? `${formatCurrency(displayedUnitPrice)}/${unit}` : "À renseigner"}</div>
               </div>
             </div>
             <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
@@ -385,14 +385,14 @@ function SupplierPricesEditor({ prices, suppliers, onChange }: { prices: Product
                   updatePrice(price.id, { supplierId: supplier?.id ?? null, supplierName: supplier?.name ?? "" });
                 }} options={["", ...suppliers.map((supplier) => supplier.id)]} labels={Object.fromEntries([["", "Fournisseur"], ...suppliers.map((supplier) => [supplier.id, supplier.name])])} />
               </FieldShell>
-              <FieldShell label="Prix fournisseur HT">
-                <SmallNumber value={price.priceHt} onChange={(priceHt) => updatePrice(price.id, { priceHt, pricePerM2Ht: price.coverageM2 ? price.pricePerM2Ht ?? priceHt : price.pricePerM2Ht ?? null })} placeholder="Prix HT" />
+              <FieldShell label="Prix colis HT">
+                <SmallNumber value={price.priceHt} onChange={(priceHt) => updatePrice(price.id, { priceHt, pricePerM2Ht: price.coverageM2 ? priceHt / price.coverageM2 : price.pricePerM2Ht ?? null })} placeholder="Prix colis HT" />
               </FieldShell>
-              <FieldShell label="Surface colis m²">
-                <SmallNumber value={price.coverageM2 ?? 0} onChange={(coverageM2) => updatePrice(price.id, { coverageM2, pricePerM2Ht: coverageM2 > 0 ? price.pricePerM2Ht ?? price.priceHt : null })} placeholder="m²/colis" />
+              <FieldShell label={`Quantité par colis (${unit})`}>
+                <SmallNumber value={price.coverageM2 ?? 0} onChange={(coverageM2) => updatePrice(price.id, { coverageM2, pricePerM2Ht: coverageM2 > 0 ? price.priceHt / coverageM2 : null })} placeholder={`Quantité ${unit}`} />
               </FieldShell>
-              <FieldShell label="Prix achat m² HT">
-                <SmallNumber value={price.pricePerM2Ht ?? 0} onChange={(pricePerM2Ht) => updatePrice(price.id, { pricePerM2Ht })} placeholder="Prix m²" />
+              <FieldShell label={`Prix achat unité HT (${unit})`}>
+                <SmallNumber value={getSupplierUnitPrice(price)} onChange={(pricePerM2Ht) => updatePrice(price.id, { pricePerM2Ht })} placeholder={`Prix/${unit}`} />
               </FieldShell>
               <FieldShell label="Remise %">
                 <SmallNumber value={price.discountPercent ?? 0} onChange={(discountPercent) => updatePrice(price.id, { discountPercent })} placeholder="Remise %" />
@@ -407,7 +407,7 @@ function SupplierPricesEditor({ prices, suppliers, onChange }: { prices: Product
                 <SmallNumber value={price.deliveryLeadTimeDays ?? 0} onChange={(deliveryLeadTimeDays) => updatePrice(price.id, { deliveryLeadTimeDays })} placeholder="Délai j" />
               </FieldShell>
               <FieldShell label="Conditionnement" className="md:col-span-2 xl:col-span-4">
-                <input className={inputClass} placeholder="Ex : colis de 10 panneaux soit 6,48 m²" value={price.packaging ?? ""} onChange={(event) => updatePrice(price.id, { packaging: event.target.value || null })} />
+                <input className={inputClass} placeholder="Ex : colis de 10 panneaux soit 6,48 m² ou botte de 30 ml" value={price.packaging ?? ""} onChange={(event) => updatePrice(price.id, { packaging: event.target.value || null })} />
               </FieldShell>
             </div>
           </div>
@@ -440,7 +440,7 @@ function ProductDocumentsEditor({ documents, onChange }: { documents: ProductCat
         {documents.map((document) => (
           <div key={document.id} className="rounded-xl bg-slate-50 p-3">
             <div className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">{documentKindLabel(document.kind)}</div>
-            <input className={`${inputClass} mt-2`} value={document.name} onChange={(event) => onChange(documents.map((row) => row.id === document.id ? { ...row, name: event.target.value } : row))} />
+            <input className={`${inputClass} mt-2`} value={document.name} onChange={(event) => onChange(documents.map((row) => row.id === document.id ? { ...row, name: event.value } : row))} />
           </div>
         ))}
         {!documents.length ? <div className="rounded-xl border border-dashed border-slate-200 p-4 text-sm text-slate-500">Aucun document lié.</div> : null}
@@ -567,14 +567,18 @@ function getPurchasePackagePrice(product: ProductCatalogItem) {
 
 function getUnitPurchasePrice(product: ProductCatalogItem) {
   const supplierPrice = getMainSupplierPrice(product);
-  const explicitUnitPrice = positiveNumber(supplierPrice?.pricePerM2Ht);
-  if (explicitUnitPrice !== null) return explicitUnitPrice;
-
   const packagePrice = positiveNumber(supplierPrice?.priceHt) ?? positiveNumber(product.standardPurchasePriceHt);
   const coveredQuantity = positiveNumber(supplierPrice?.coverageM2);
   if (packagePrice !== null && coveredQuantity !== null) return packagePrice / coveredQuantity;
 
-  return packagePrice;
+  return positiveNumber(supplierPrice?.pricePerM2Ht) ?? packagePrice;
+}
+
+function getSupplierUnitPrice(price: ProductSupplierPrice) {
+  const packagePrice = positiveNumber(price.priceHt);
+  const coveredQuantity = positiveNumber(price.coverageM2);
+  if (packagePrice !== null && coveredQuantity !== null) return packagePrice / coveredQuantity;
+  return positiveNumber(price.pricePerM2Ht) ?? 0;
 }
 
 function getRecommendedSalePrice(product: ProductCatalogItem) {
