@@ -82,6 +82,7 @@ export default function CrmPage({ section = "dashboard" }: Props) {
   const [dragOpportunityId, setDragOpportunityId] = useState<string | null>(null);
   const [opportunityProspect, setOpportunityProspect] = useState<CrmProspectRow | null>(null);
   const [appointmentProspect, setAppointmentProspect] = useState<CrmProspectRow | null>(null);
+  const focusedClientId = section === "clients" ? searchParams.get("client") ?? "" : "";
 
   async function refresh() {
     setLoading(true);
@@ -184,6 +185,12 @@ export default function CrmPage({ section = "dashboard" }: Props) {
     setModal("appointment");
   }
 
+  function clearFocusedClientParam() {
+    const nextSearchParams = new URLSearchParams(searchParams);
+    nextSearchParams.delete("client");
+    setSearchParams(nextSearchParams, { replace: true });
+  }
+
   async function transformQuote(row: CrmQuoteRow) {
     await submitSafely(async () => {
       const prospect = row.prospect_id ? prospectById.get(row.prospect_id) ?? null : null;
@@ -224,7 +231,7 @@ export default function CrmPage({ section = "dashboard" }: Props) {
       ) : section === "prospects" ? (
         <CrmProspectsSection rows={data.prospects} query={query} setQuery={setQuery} onCreate={() => setModal("prospect")} onConvert={(row) => submitSafely(async () => convertProspectToClient(row))} onStatus={(row, statut) => submitSafely(async () => updateCrmProspect(row.id, { statut }))} onTask={(row) => submitSafely(async () => createCrmTask({ prospect_id: row.id, type: "relance", titre: `Relancer ${entityLabel(row)}`, due_at: new Date().toISOString() }))} onCreateOpportunity={openOpportunityModal} onCreateAppointment={openAppointmentModal} onCreateQuote={createDraftQuoteAndOpen} />
       ) : section === "clients" ? (
-        <CrmClientsSection rows={data.clients} chantiers={data.chantiers} sav={data.sav} quotes={data.quotes} invoices={data.invoices} documents={data.documents} query={query} setQuery={setQuery} onCreate={() => setModal("client")} />
+        <CrmClientsSection rows={data.clients} chantiers={data.chantiers} sav={data.sav} quotes={data.quotes} invoices={data.invoices} documents={data.documents} query={query} setQuery={setQuery} focusedClientId={focusedClientId} onFocusedClientClear={clearFocusedClientParam} onCreate={() => setModal("client")} />
       ) : section === "opportunities" ? (
         <CrmOpportunitiesSection data={data} prospectById={prospectById} clientById={clientById} dragOpportunityId={dragOpportunityId} setDragOpportunityId={setDragOpportunityId} onMove={(opportunity, stage) => submitSafely(async () => moveCrmOpportunityStage(opportunity.id, stage))} onCreate={() => openOpportunityModal()} />
       ) : section === "quotes" ? (
