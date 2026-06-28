@@ -110,6 +110,13 @@ function normalizeDuplicateKey(value: string | null | undefined) {
   return String(value ?? "").trim().replace(/\s+/g, " ");
 }
 
+function normalizeDuplicatePhone(value: string | null | undefined) {
+  const compact = normalizeDuplicateKey(value).replace(/[^\d+]/g, "");
+  if (compact.startsWith("+33")) return `0${compact.slice(3)}`;
+  if (compact.startsWith("0033")) return `0${compact.slice(4)}`;
+  return compact;
+}
+
 export async function getApporteursAffaires(): Promise<ApporteurAffaireRow[]> {
   const organization_id = await getOrganizationId();
   const response = await supabase
@@ -464,17 +471,19 @@ export async function createApporteurLeadPortal(jwt: string, input: {
   };
 
   const duplicateClientName = normalizeDuplicateKey(payload.client_name);
-  const duplicatePhone = normalizeDuplicateKey(payload.telephone);
-  let duplicateQuery = portalClient
+  const duplicatePhone = normalizeDuplicatePhone(payload.telephone);
+  const { data: candidateLeads, error: duplicateError } = await portalClient
     .from("apporteur_leads")
-    .select("id")
+    .select("id,telephone")
     .eq("apporteur_id", payload.apporteur_id)
-    .ilike("client_name", duplicateClientName);
+    .ilike("client_name", duplicateClientName)
+    .limit(20);
 
-  duplicateQuery = duplicatePhone ? duplicateQuery.eq("telephone", duplicatePhone) : duplicateQuery.is("telephone", null);
-
-  const { data: existingLead, error: duplicateError } = await duplicateQuery.limit(1).maybeSingle();
   if (duplicateError) throw new Error(duplicateError.message);
+
+  const existingLead = ((candidateLeads ?? []) as Array<{ id: string; telephone: string | null }>).find(
+    (lead) => normalizeDuplicatePhone(lead.telephone) === duplicatePhone,
+  );
   if (existingLead) throw new Error("Ce client a déjà été transmis par ce portail apporteur.");
 
   const response = await portalClient
