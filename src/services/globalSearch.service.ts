@@ -214,10 +214,19 @@ function apporteurHref(row: SearchRow) {
 function apporteurLeadHref(row: SearchRow) {
   const opportunityId = cleanText(row.crm_opportunity_id);
   const prospectId = cleanText(row.crm_prospect_id);
+  const apporteurId = cleanText(row.apporteur_id);
+  const leadId = cleanText(row.id);
+  const query = cleanText(row.client_name) || cleanText(row.project_address) || cleanText(row.project_type);
 
   if (opportunityId) return `/projets/opportunity-${opportunityId}`;
   if (prospectId) return `/projets/prospect-${prospectId}`;
-  return "/crm/apporteurs";
+
+  const params = new URLSearchParams();
+  if (apporteurId) params.set("apporteurId", apporteurId);
+  if (leadId) params.set("leadId", leadId);
+  if (query) params.set("q", query);
+  const queryString = params.toString();
+  return queryString ? `/crm/apporteurs?${queryString}` : "/crm/apporteurs";
 }
 
 function supplierHref(row: SearchRow) {
@@ -478,7 +487,7 @@ const SOURCES: SearchSource[] = [
   },
   {
     table: "apporteur_leads",
-    select: "id,client_name,telephone,project_address,project_type,status,crm_opportunity_id,crm_prospect_id",
+    select: "id,apporteur_id,client_name,telephone,project_address,project_type,status,crm_opportunity_id,crm_prospect_id",
     filter: "client_name.ilike.$term,telephone.ilike.$term,project_address.ilike.$term,project_type.ilike.$term,status.ilike.$term",
     map: (row) => ({
       id: cleanText(row.id),
