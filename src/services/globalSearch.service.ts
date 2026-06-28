@@ -12,6 +12,7 @@ export type GlobalSearchKind =
   | "facture"
   | "bon_commande"
   | "retour_terrain"
+  | "crm_rdv"
   | "apporteur"
   | "lead_apporteur"
   | "intervenant"
@@ -98,6 +99,25 @@ function purchaseOrderStatusLabel(value: unknown) {
   return status;
 }
 
+function appointmentTypeLabel(value: unknown) {
+  const type = cleanText(value);
+  if (type === "visite_chiffrage") return "Visite de chiffrage";
+  if (type === "visite_chiffrage_pre_devis") return "Préparation devis";
+  if (type === "appel") return "Appel";
+  if (type === "rdv_client") return "RDV client";
+  if (type === "relance") return "Relance";
+  return type || "Rendez-vous";
+}
+
+function appointmentStatusLabel(value: unknown) {
+  const status = cleanText(value);
+  if (status === "planifie") return "Planifié";
+  if (status === "realise") return "Réalisé";
+  if (status === "annule") return "Annulé";
+  if (status === "reporte") return "Reporté";
+  return status;
+}
+
 function intervenantAccessLabel(row: SearchRow) {
   if (cleanText(row.archived_at)) return "Archivé";
   if (cleanText(row.user_id)) return "Compte actif";
@@ -150,6 +170,23 @@ function quoteProjectHref(row: SearchRow) {
   if (prospectId) return `/projets/prospect-${prospectId}?tab=quotes`;
   if (clientId) return `/projets/client-${clientId}?tab=quotes`;
   return "/crm/devis";
+}
+
+function appointmentHref(row: SearchRow) {
+  const appointmentId = cleanText(row.id);
+  const opportunityId = cleanText(row.opportunity_id);
+  const prospectId = cleanText(row.prospect_id);
+  const clientId = cleanText(row.client_id);
+  const projectId = opportunityId ? `opportunity-${opportunityId}` : prospectId ? `prospect-${prospectId}` : clientId ? `client-${clientId}` : "";
+  if (!projectId) return "/crm/agenda";
+
+  const type = cleanText(row.type);
+  const encodedProjectId = encodeURIComponent(projectId);
+  const encodedAppointmentId = encodeURIComponent(appointmentId);
+  if (type === "visite_chiffrage" || type === "visite_chiffrage_pre_devis") {
+    return `/projets/${encodedProjectId}/visites/${encodedAppointmentId}`;
+  }
+  return `/projets/${encodedProjectId}/rdv/${encodedAppointmentId}`;
 }
 
 function clientHref(row: SearchRow) {
@@ -412,6 +449,19 @@ const SOURCES: SearchSource[] = [
         badge: "Retour terrain",
       };
     },
+  },
+  {
+    table: "crm_appointments",
+    select: "id,prospect_id,client_id,opportunity_id,type,titre,starts_at,statut,notes,compte_rendu",
+    filter: "titre.ilike.$term,type.ilike.$term,statut.ilike.$term,notes.ilike.$term,compte_rendu.ilike.$term",
+    map: (row) => ({
+      id: cleanText(row.id),
+      kind: "crm_rdv",
+      title: cleanText(row.titre) || appointmentTypeLabel(row.type),
+      subtitle: [appointmentTypeLabel(row.type), appointmentStatusLabel(row.statut), cleanText(row.starts_at).slice(0, 10)].filter(Boolean).join(" - ") || "Agenda CRM",
+      href: appointmentHref(row),
+      badge: appointmentTypeLabel(row.type),
+    }),
   },
   {
     table: "apporteurs_affaires",
