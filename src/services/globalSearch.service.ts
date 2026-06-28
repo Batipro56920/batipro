@@ -138,6 +138,16 @@ function clientHref(row: SearchRow) {
   return clientId ? `/crm/clients?client=${encodeURIComponent(clientId)}` : "/crm/clients";
 }
 
+function apporteurHref(row: SearchRow) {
+  const apporteurId = cleanText(row.id);
+  const query = cleanText(row.nom) || cleanText(row.entreprise) || cleanText(row.telephone) || cleanText(row.email);
+  const params = new URLSearchParams();
+  if (query) params.set("q", query);
+  if (apporteurId) params.set("apporteurId", apporteurId);
+  const queryString = params.toString();
+  return queryString ? `/crm/apporteurs?${queryString}` : "/crm/apporteurs";
+}
+
 function apporteurLeadHref(row: SearchRow) {
   const opportunityId = cleanText(row.crm_opportunity_id);
   const prospectId = cleanText(row.crm_prospect_id);
@@ -363,7 +373,7 @@ const SOURCES: SearchSource[] = [
       kind: "apporteur",
       title: cleanText(row.nom) || "Apporteur sans nom",
       subtitle: [cleanText(row.entreprise), cleanText(row.telephone) || cleanText(row.email), cleanText(row.active) === "false" ? "Inactif" : "Actif"].filter(Boolean).join(" - ") || "Apporteur d'affaires",
-      href: "/crm/apporteurs",
+      href: apporteurHref(row),
       badge: "Apporteur",
     }),
   },
