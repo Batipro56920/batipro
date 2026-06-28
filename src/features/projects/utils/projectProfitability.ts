@@ -17,6 +17,18 @@ export type ProjectProfitabilityInvoiceSummary = {
   remainingTtc: number;
 };
 
+export type ProjectProfitabilityPurchaseOrderSummary = {
+  id: string;
+  number: string;
+  status: PurchaseOrderRecord["status"];
+  supplierName: string;
+  lot: string | null;
+  supplierReference: string | null;
+  expectedDeliveryDate: string | null;
+  totalHt: number;
+  totalTtc: number;
+};
+
 export type ProjectProfitabilityMetrics = {
   soldAmountHt: number;
   soldAmountTtc: number;
@@ -34,6 +46,8 @@ export type ProjectProfitabilityMetrics = {
   acceptedQuoteNumber: string | null;
   invoiceCount: number;
   linkedInvoices: ProjectProfitabilityInvoiceSummary[];
+  purchaseOrderCount: number;
+  linkedPurchaseOrders: ProjectProfitabilityPurchaseOrderSummary[];
   dataMode: "real" | "mixed" | "estimated";
 };
 
@@ -69,6 +83,8 @@ export async function buildProjectProfitability(project: ProjectRecord): Promise
     acceptedQuoteNumber: acceptedQuote?.quote_number ?? null,
     invoiceCount: invoices.length,
     linkedInvoices: invoices.map(buildInvoiceSummary),
+    purchaseOrderCount: purchaseOrders.length,
+    linkedPurchaseOrders: purchaseOrders.map(buildPurchaseOrderSummary),
     dataMode: hasRealFinancialData ? (productionCosts.hasEstimatedCosts ? "mixed" : "real") : "estimated",
   };
 }
@@ -125,6 +141,21 @@ function buildInvoiceSummary(invoice: InvoiceRecord): ProjectProfitabilityInvoic
     totalTtc,
     paidTtc,
     remainingTtc: round(Math.max(0, totalTtc - paidTtc)),
+  };
+}
+
+function buildPurchaseOrderSummary(order: PurchaseOrderRecord): ProjectProfitabilityPurchaseOrderSummary {
+  const totals = order.document.totals ?? calculateDocumentTotals(order.document);
+  return {
+    id: order.id,
+    number: order.document.number || "Commande sans numéro",
+    status: order.status,
+    supplierName: order.supplierName || order.document.recipient.displayName || "Fournisseur à définir",
+    lot: order.lot || order.document.title || null,
+    supplierReference: order.supplierReference,
+    expectedDeliveryDate: order.expectedDeliveryDate,
+    totalHt: round(totals.totalHt),
+    totalTtc: round(totals.totalTtc),
   };
 }
 
