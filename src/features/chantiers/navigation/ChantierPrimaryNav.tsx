@@ -30,7 +30,7 @@ export function ChantierPrimaryNav({ sections }: { sections: ChantierPrimarySect
       ))}
       {terrainFeedbackEnabled ? (
         <NavLink
-          to={`/retours-terrain?chantierId=${encodeURIComponent(chantierId ?? "")}`}
+          to={`/chantiers/${encodeURIComponent(chantierId ?? "")}/retours-terrain`}
           className="rounded-xl border border-blue-200 bg-blue-50 px-3 py-2 text-sm font-semibold text-blue-800 transition hover:bg-blue-100"
         >
           Retours terrain
