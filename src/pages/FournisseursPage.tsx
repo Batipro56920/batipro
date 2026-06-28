@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { Building2, Plus, RefreshCw, Search, Truck } from "lucide-react";
 import {
@@ -64,6 +64,7 @@ export default function FournisseursPage({ initialTab = "suppliers" }: Fournisse
   const [searchParams, setSearchParams] = useSearchParams();
   const supplierQueryParam = searchParams.get("q") ?? "";
   const activeSupplierId = searchParams.get("supplierId") ?? "";
+  const openedSupplierFromUrlRef = useRef("");
   const tabQueryParam = searchParams.get("tab");
   const [activeTab, setActiveTab] = useState<FournisseursTab>(() => isFournisseursTab(tabQueryParam) ? tabQueryParam : initialTab);
   const [loadingSuppliers, setLoadingSuppliers] = useState(true);
@@ -121,6 +122,39 @@ export default function FournisseursPage({ initialTab = "suppliers" }: Fournisse
     }
   }, [activeSupplierId, supplierQueryParam, tabQueryParam]);
 
+  useEffect(() => {
+    if (!activeSupplierId) {
+      openedSupplierFromUrlRef.current = "";
+      return;
+    }
+    if (loadingSuppliers || openedSupplierFromUrlRef.current === activeSupplierId) return;
+
+    const supplier = suppliers.find((row) => row.id === activeSupplierId);
+    if (!supplier) return;
+
+    setActiveTab("suppliers");
+    setEditingSupplierId(supplier.id);
+    setSupplierForm(toSupplierForm(supplier));
+    setSupplierFormOpen(true);
+    setSuppliersNotice(null);
+    setSuppliersError(null);
+    openedSupplierFromUrlRef.current = activeSupplierId;
+  }, [activeSupplierId, loadingSuppliers, suppliers]);
+
+  function clearActiveSupplierParam() {
+    if (!activeSupplierId) return;
+    openedSupplierFromUrlRef.current = "";
+    const nextParams = new URLSearchParams(searchParams);
+    nextParams.delete("supplierId");
+    setSearchParams(nextParams, { replace: true });
+  }
+
+  function closeSupplierForm() {
+    setSupplierFormOpen(false);
+    setEditingSupplierId(null);
+    clearActiveSupplierParam();
+  }
+
   function updateSearch(nextSearch: string) {
     setSearch(nextSearch);
     const nextParams = new URLSearchParams(searchParams);
@@ -158,6 +192,7 @@ export default function FournisseursPage({ initialTab = "suppliers" }: Fournisse
   }
 
   function openCreateSupplier() {
+    clearActiveSupplierParam();
     setEditingSupplierId(null);
     setSupplierForm({ ...EMPTY_SUPPLIER });
     setSupplierFormOpen(true);
@@ -166,6 +201,7 @@ export default function FournisseursPage({ initialTab = "suppliers" }: Fournisse
   }
 
   function openEditSupplier(row: SupplierRow) {
+    clearActiveSupplierParam();
     setEditingSupplierId(row.id);
     setSupplierForm(toSupplierForm(row));
     setSupplierFormOpen(true);
@@ -185,8 +221,7 @@ export default function FournisseursPage({ initialTab = "suppliers" }: Fournisse
         await createSupplier(supplierForm);
         setSuppliersNotice(t("fournisseurs.created"));
       }
-      setSupplierFormOpen(false);
-      setEditingSupplierId(null);
+      closeSupplierForm();
       setSupplierForm({ ...EMPTY_SUPPLIER });
       await loadSuppliersData();
     } catch (err: any) {
@@ -366,10 +401,7 @@ export default function FournisseursPage({ initialTab = "suppliers" }: Fournisse
             <button
               type="button"
               className="rounded-xl border px-3 py-2 text-sm hover:bg-slate-50"
-              onClick={() => {
-                setSupplierFormOpen(false);
-                setEditingSupplierId(null);
-              }}
+              onClick={closeSupplierForm}
             >
               {t("common.actions.cancel")}
             </button>
