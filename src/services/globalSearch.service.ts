@@ -13,6 +13,7 @@ export type GlobalSearchKind =
   | "retour_terrain"
   | "apporteur"
   | "lead_apporteur"
+  | "fournisseur"
   | "produit";
 
 export type GlobalSearchResult = {
@@ -83,6 +84,10 @@ function invoiceStatusLabel(value: unknown) {
   return status;
 }
 
+function supplierStatusLabel(value: unknown) {
+  return value === false || cleanText(value) === "false" ? "Inactif" : "Actif";
+}
+
 function normalizeQuery(query: string) {
   return query
     .trim()
@@ -139,6 +144,16 @@ function apporteurLeadHref(row: SearchRow) {
   if (opportunityId) return `/projets/opportunity-${opportunityId}`;
   if (prospectId) return `/projets/prospect-${prospectId}`;
   return "/crm/apporteurs";
+}
+
+function supplierHref(row: SearchRow) {
+  const supplierId = cleanText(row.id);
+  const query = cleanText(row.name) || cleanText(row.specialty) || cleanText(row.city) || cleanText(row.email) || cleanText(row.phone);
+  const params = new URLSearchParams();
+  if (query) params.set("q", query);
+  if (supplierId) params.set("supplierId", supplierId);
+  const queryString = params.toString();
+  return queryString ? `/fournisseurs?${queryString}` : "/fournisseurs";
 }
 
 function productCatalogHref(row: SearchRow) {
@@ -352,6 +367,19 @@ const SOURCES: SearchSource[] = [
       subtitle: [cleanText(row.project_type), cleanText(row.project_address), cleanText(row.status)].filter(Boolean).join(" - ") || "Projet apporté",
       href: apporteurLeadHref(row),
       badge: "Projet apporté",
+    }),
+  },
+  {
+    table: "suppliers",
+    select: "id,name,specialty,address,city,phone,email,is_active",
+    filter: "name.ilike.$term,specialty.ilike.$term,address.ilike.$term,city.ilike.$term,phone.ilike.$term,email.ilike.$term",
+    map: (row) => ({
+      id: cleanText(row.id),
+      kind: "fournisseur",
+      title: cleanText(row.name) || "Fournisseur sans nom",
+      subtitle: [cleanText(row.specialty), cleanText(row.city), cleanText(row.phone) || cleanText(row.email), supplierStatusLabel(row.is_active)].filter(Boolean).join(" - ") || "Fournisseur",
+      href: supplierHref(row),
+      badge: "Fournisseur",
     }),
   },
   {
