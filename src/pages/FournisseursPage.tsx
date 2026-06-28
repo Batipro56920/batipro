@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { Building2, Plus, RefreshCw, Search, Truck } from "lucide-react";
 import {
   createSupplier,
@@ -54,13 +55,16 @@ type FournisseursPageProps = {
 
 export default function FournisseursPage({ initialTab = "suppliers" }: FournisseursPageProps) {
   const { t } = useI18n();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const supplierQueryParam = searchParams.get("q") ?? "";
+  const activeSupplierId = searchParams.get("supplierId") ?? "";
   const [activeTab, setActiveTab] = useState<"suppliers" | "orders">(initialTab);
   const [loadingSuppliers, setLoadingSuppliers] = useState(true);
   const [savingSupplier, setSavingSupplier] = useState(false);
   const [suppliersError, setSuppliersError] = useState<string | null>(null);
   const [suppliersNotice, setSuppliersNotice] = useState<string | null>(null);
   const [suppliers, setSuppliers] = useState<SupplierRow[]>([]);
-  const [search, setSearch] = useState("");
+  const [search, setSearch] = useState(supplierQueryParam);
   const [editingSupplierId, setEditingSupplierId] = useState<string | null>(null);
   const [supplierFormOpen, setSupplierFormOpen] = useState(false);
   const [supplierForm, setSupplierForm] = useState<SupplierFormState>(EMPTY_SUPPLIER);
@@ -98,6 +102,34 @@ export default function FournisseursPage({ initialTab = "suppliers" }: Fournisse
   useEffect(() => {
     void loadSuppliersData();
   }, []);
+
+  useEffect(() => {
+    setSearch((current) => current === supplierQueryParam ? current : supplierQueryParam);
+    if (supplierQueryParam || activeSupplierId) {
+      setActiveTab("suppliers");
+    }
+  }, [activeSupplierId, supplierQueryParam]);
+
+  function updateSearch(nextSearch: string) {
+    setSearch(nextSearch);
+    const nextParams = new URLSearchParams(searchParams);
+    const trimmed = nextSearch.trim();
+    if (trimmed) {
+      nextParams.set("q", trimmed);
+    } else {
+      nextParams.delete("q");
+    }
+    nextParams.delete("supplierId");
+    setSearchParams(nextParams, { replace: true });
+  }
+
+  function clearSearchFromUrl() {
+    setSearch("");
+    const nextParams = new URLSearchParams(searchParams);
+    nextParams.delete("q");
+    nextParams.delete("supplierId");
+    setSearchParams(nextParams, { replace: true });
+  }
 
   function openCreateSupplier() {
     setEditingSupplierId(null);
@@ -332,9 +364,15 @@ export default function FournisseursPage({ initialTab = "suppliers" }: Fournisse
             className="h-10 w-full rounded-xl border border-slate-200 bg-white pl-10 pr-3 text-sm outline-none focus:border-blue-300"
             placeholder={t("fournisseurs.searchPlaceholder")}
             value={search}
-            onChange={(e) => setSearch(e.target.value)}
+            onChange={(e) => updateSearch(e.target.value)}
           />
         </label>
+        {search.trim() ? (
+          <div className="mt-3 flex flex-col gap-2 rounded-2xl border border-blue-100 bg-blue-50 px-3 py-2 text-sm text-blue-800 sm:flex-row sm:items-center sm:justify-between">
+            <span>Fournisseurs filtrés sur « {search.trim()} »{activeSupplierId ? " depuis la recherche globale" : ""}.</span>
+            <button type="button" className="self-start rounded-lg border border-blue-200 bg-white px-3 py-1 text-xs font-semibold text-blue-700 hover:bg-blue-100 sm:self-auto" onClick={clearSearchFromUrl}>Réinitialiser</button>
+          </div>
+        ) : null}
       </div> : null}
 
       {activeTab === "suppliers" && loadingSuppliers ? (
@@ -362,7 +400,7 @@ export default function FournisseursPage({ initialTab = "suppliers" }: Fournisse
             </thead>
             <tbody>
               {filteredSuppliers.map((row) => (
-                <tr key={row.id} className="border-t">
+                <tr key={row.id} className={row.id === activeSupplierId ? "border-t bg-blue-50 ring-1 ring-inset ring-blue-200" : "border-t"}>
                   <td className="px-4 py-3 font-medium">{row.name}</td>
                   <td className="px-4 py-3">{row.specialty ?? "-"}</td>
                   <td className="px-4 py-3">{row.city ?? "-"}</td>
