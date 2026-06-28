@@ -6,6 +6,17 @@ import type { PurchaseOrderRecord } from "../../purchase-orders/domain/types";
 import { listPurchaseOrders } from "../../purchase-orders/infrastructure/purchaseOrderRepository";
 import type { ProjectRecord } from "../types";
 
+export type ProjectProfitabilityInvoiceSummary = {
+  id: string;
+  number: string;
+  type: InvoiceRecord["type"];
+  status: InvoiceRecord["status"];
+  recipientName: string;
+  totalTtc: number;
+  paidTtc: number;
+  remainingTtc: number;
+};
+
 export type ProjectProfitabilityMetrics = {
   soldAmountHt: number;
   soldAmountTtc: number;
@@ -22,6 +33,7 @@ export type ProjectProfitabilityMetrics = {
   marginProgress: number;
   acceptedQuoteNumber: string | null;
   invoiceCount: number;
+  linkedInvoices: ProjectProfitabilityInvoiceSummary[];
   dataMode: "real" | "mixed" | "estimated";
 };
 
@@ -56,6 +68,7 @@ export async function buildProjectProfitability(project: ProjectRecord): Promise
     marginProgress: Math.max(0, Math.min(100, marginRate)),
     acceptedQuoteNumber: acceptedQuote?.quote_number ?? null,
     invoiceCount: invoices.length,
+    linkedInvoices: invoices.map(buildInvoiceSummary),
     dataMode: hasRealFinancialData ? (productionCosts.hasEstimatedCosts ? "mixed" : "real") : "estimated",
   };
 }
@@ -98,6 +111,21 @@ async function safeListPurchaseOrders(): Promise<PurchaseOrderRecord[]> {
   } catch {
     return [];
   }
+}
+
+function buildInvoiceSummary(invoice: InvoiceRecord): ProjectProfitabilityInvoiceSummary {
+  const totalTtc = round(invoiceTotalTtc(invoice));
+  const paidTtc = round(getPaidAmount(invoice));
+  return {
+    id: invoice.id,
+    number: invoice.document.number || "Facture sans numéro",
+    type: invoice.type,
+    status: invoice.status,
+    recipientName: invoice.document.recipient.displayName || "Client à définir",
+    totalTtc,
+    paidTtc,
+    remainingTtc: round(Math.max(0, totalTtc - paidTtc)),
+  };
 }
 
 function invoiceTotalTtc(invoice: InvoiceRecord) {
