@@ -112,7 +112,7 @@ export default function ProductCatalogPage() {
   async function saveProduct(product: ProductCatalogItem | ProductCatalogDraft) {
     await saveProductCatalogItem(sanitizeProductCatalogInput(product));
     setProducts(await listProductCatalogItems());
-    setEditing(null);
+    closeProductDrawer();
   }
 
   async function removeProduct(id: string) {
@@ -139,6 +139,24 @@ export default function ProductCatalogPage() {
     } finally {
       setQuoteImporting(false);
     }
+  }
+
+  function clearActiveProductParam() {
+    if (!activeProductId) return;
+    openedProductFromUrlRef.current = "";
+    const nextParams = new URLSearchParams(searchParams);
+    nextParams.delete("productId");
+    setSearchParams(nextParams, { replace: true });
+  }
+
+  function openProductDrawer(product: ProductCatalogItem | ProductCatalogDraft) {
+    setEditing(product);
+    clearActiveProductParam();
+  }
+
+  function closeProductDrawer() {
+    setEditing(null);
+    clearActiveProductParam();
   }
 
   function updateQuery(nextQuery: string) {
@@ -170,7 +188,7 @@ export default function ProductCatalogPage() {
             <button type="button" onClick={() => setQuoteReaderOpen((open) => !open)} className="inline-flex h-10 items-center justify-center gap-2 rounded-xl border border-blue-200 bg-blue-50 px-4 text-sm font-semibold text-blue-700 hover:bg-blue-100">
               <FileText className="h-4 w-4" /> Lecteur devis
             </button>
-            <button type="button" onClick={() => setEditing({ ...EMPTY_DRAFT })} className="inline-flex h-10 items-center justify-center rounded-xl bg-blue-600 px-4 text-sm font-semibold text-white hover:bg-blue-700">
+            <button type="button" onClick={() => openProductDrawer({ ...EMPTY_DRAFT })} className="inline-flex h-10 items-center justify-center rounded-xl bg-blue-600 px-4 text-sm font-semibold text-white hover:bg-blue-700">
               <Plus className="mr-2 h-4 w-4" /> Nouveau produit
             </button>
           </div>
@@ -236,7 +254,7 @@ export default function ProductCatalogPage() {
                 <td className="px-4 py-3 text-right align-top">{product.documents.length}</td>
                 <td className="px-4 py-3 align-top">
                   <div className="flex justify-end gap-2">
-                    <button type="button" className="rounded-lg border px-2 py-1 text-xs hover:bg-slate-50" onClick={() => setEditing(product)}>Modifier</button>
+                    <button type="button" className="rounded-lg border px-2 py-1 text-xs hover:bg-slate-50" onClick={() => openProductDrawer(product)}>Modifier</button>
                     <button type="button" className="rounded-lg border border-red-200 px-2 py-1 text-xs text-red-600 hover:bg-red-50" onClick={() => removeProduct(product.id)}>
                       <Trash2 className="h-3.5 w-3.5" />
                     </button>
@@ -244,13 +262,13 @@ export default function ProductCatalogPage() {
                 </td>
               </tr>
             ))}
-            {!filtered.length ? <tr><td colSpan={10} className="px-4 py-12"><EmptyCatalogState onCreate={() => setEditing({ ...EMPTY_DRAFT })} /></td></tr> : null}
+            {!filtered.length ? <tr><td colSpan={10} className="px-4 py-12"><EmptyCatalogState onCreate={() => openProductDrawer({ ...EMPTY_DRAFT })} /></td></tr> : null}
           </tbody>
         </table>
       </section> : null}
 
       {editing ? (
-        <ProductDrawer product={editing} suppliers={suppliers} onCancel={() => setEditing(null)} onSave={saveProduct} />
+        <ProductDrawer product={editing} suppliers={suppliers} onCancel={closeProductDrawer} onSave={saveProduct} />
       ) : null}
     </div>
   );
