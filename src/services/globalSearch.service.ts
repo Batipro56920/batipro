@@ -13,6 +13,7 @@ export type GlobalSearchKind =
   | "retour_terrain"
   | "apporteur"
   | "lead_apporteur"
+  | "intervenant"
   | "fournisseur"
   | "modele_tache"
   | "produit";
@@ -83,6 +84,12 @@ function invoiceStatusLabel(value: unknown) {
   if (status === "overdue") return "En retard";
   if (status === "cancelled") return "Annulée";
   return status;
+}
+
+function intervenantAccessLabel(row: SearchRow) {
+  if (cleanText(row.archived_at)) return "Archivé";
+  if (cleanText(row.user_id)) return "Compte actif";
+  return "Profil sans compte";
 }
 
 function supplierStatusLabel(value: unknown) {
@@ -388,6 +395,19 @@ const SOURCES: SearchSource[] = [
       subtitle: [cleanText(row.project_type), cleanText(row.project_address), cleanText(row.status)].filter(Boolean).join(" - ") || "Projet apporté",
       href: apporteurLeadHref(row),
       badge: "Projet apporté",
+    }),
+  },
+  {
+    table: "intervenants",
+    select: "id,nom,entreprise,metier,email,telephone,user_id,archived_at",
+    filter: "nom.ilike.$term,entreprise.ilike.$term,metier.ilike.$term,email.ilike.$term,telephone.ilike.$term",
+    map: (row) => ({
+      id: cleanText(row.id),
+      kind: "intervenant",
+      title: cleanText(row.nom) || "Intervenant sans nom",
+      subtitle: [cleanText(row.metier), cleanText(row.entreprise), cleanText(row.telephone) || cleanText(row.email), intervenantAccessLabel(row)].filter(Boolean).join(" - ") || "Profil et accès",
+      href: `/intervenants/${encodeURIComponent(cleanText(row.id))}`,
+      badge: "Intervenant",
     }),
   },
   {
