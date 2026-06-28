@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { FileText, PackageSearch, Plus, RefreshCw, Trash2, X } from "lucide-react";
 import type { SupplierRow } from "../../../services/suppliers.service";
 import { listSuppliers } from "../../../services/suppliers.service";
@@ -27,11 +28,14 @@ const EMPTY_DRAFT: ProductCatalogDraft = {
 };
 
 export default function ProductCatalogPage() {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const catalogQueryParam = searchParams.get("q") ?? "";
+  const activeProductId = searchParams.get("productId") ?? "";
   const [products, setProducts] = useState<ProductCatalogItem[]>([]);
   const [suppliers, setSuppliers] = useState<SupplierRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [query, setQuery] = useState("");
+  const [query, setQuery] = useState(catalogQueryParam);
   const [categoryFilter, setCategoryFilter] = useState("all");
   const [supplierFilter, setSupplierFilter] = useState("all");
   const [brandFilter, setBrandFilter] = useState("all");
@@ -45,6 +49,10 @@ export default function ProductCatalogPage() {
     listSuppliers().then(setSuppliers).catch(() => setSuppliers([]));
     void refreshProducts();
   }, []);
+
+  useEffect(() => {
+    setQuery((current) => current === catalogQueryParam ? current : catalogQueryParam);
+  }, [catalogQueryParam]);
 
   async function refreshProducts() {
     setLoading(true);
@@ -60,10 +68,17 @@ export default function ProductCatalogPage() {
   }
 
   const filtered = useMemo(() => {
-    const text = query.trim().toLowerCase();
+    const text = query.trim().toLocaleLowerCase("fr-FR");
     return products.filter((product) => {
-      const matchesText = !text || [product.designation, product.internalReference, product.manufacturerReference, product.brand, product.category]
-        .some((value) => String(value ?? "").toLowerCase().includes(text));
+      const matchesText = !text || [
+        product.designation,
+        product.internalReference,
+        product.manufacturerReference,
+        product.brand,
+        product.category,
+        product.mainSupplierName,
+        ...product.supplierPrices.map((price) => price.supplierName),
+      ].some((value) => String(value ?? "").toLocaleLowerCase("fr-FR").includes(text));
       const matchesCategory = categoryFilter === "all" || product.category === categoryFilter;
       const matchesSupplier = supplierFilter === "all" || product.mainSupplierId === supplierFilter || product.supplierPrices.some((price) => price.supplierId === supplierFilter);
       const matchesBrand = brandFilter === "all" || product.brand === brandFilter;
@@ -116,6 +131,19 @@ export default function ProductCatalogPage() {
     }
   }
 
+  function updateQuery(nextQuery: string) {
+    setQuery(nextQuery);
+    const nextParams = new URLSearchParams(searchParams);
+    const trimmed = nextQuery.trim();
+    if (trimmed) {
+      nextParams.set("q", trimmed);
+    } else {
+      nextParams.delete("q");
+      nextParams.delete("productId");
+    }
+    setSearchParams(nextParams, { replace: true });
+  }
+
   return (
     <div className="space-y-5">
       <header className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
@@ -159,12 +187,18 @@ export default function ProductCatalogPage() {
 
       {!loading ? <section className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm">
         <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_180px_180px_180px_160px]">
-          <input className={inputClass} placeholder="Rechercher désignation, référence, marque..." value={query} onChange={(event) => setQuery(event.target.value)} />
+          <input className={inputClass} placeholder="Rechercher désignation, référence, marque..." value={query} onChange={(event) => updateQuery(event.target.value)} />
           <Select value={categoryFilter} onChange={setCategoryFilter} options={["all", ...categories]} labels={{ all: "Toutes catégories" }} />
           <Select value={supplierFilter} onChange={setSupplierFilter} options={["all", ...suppliers.map((supplier) => supplier.id)]} labels={Object.fromEntries([["all", "Tous fournisseurs"], ...suppliers.map((supplier) => [supplier.id, supplier.name])])} />
           <Select value={brandFilter} onChange={setBrandFilter} options={["all", ...brands]} labels={{ all: "Toutes marques" }} />
           <Select value={priceFilter} onChange={setPriceFilter} options={["all", "low", "mid", "high"]} labels={{ all: "Tous prix", low: "< 50 EUR", mid: "50-250 EUR", high: "> 250 EUR" }} />
         </div>
+        {query.trim() ? (
+          <div className="mt-3 flex flex-col gap-2 rounded-2xl border border-blue-100 bg-blue-50 px-3 py-2 text-sm text-blue-800 sm:flex-row sm:items-center sm:justify-between">
+            <span>Catalogue filtré sur « {query.trim()} »{activeProductId ? " depuis la recherche globale" : ""}.</span>
+            <button type="button" className="self-start rounded-lg border border-blue-200 bg-white px-3 py-1 text-xs font-semibold text-blue-700 hover:bg-blue-100 sm:self-auto" onClick={() => updateQuery("")}>Réinitialiser</button>
+          </div>
+        ) : null}
       </section> : null}
 
       {!loading ? <section className="overflow-x-auto rounded-3xl border border-slate-200 bg-white shadow-sm">
@@ -188,7 +222,7 @@ export default function ProductCatalogPage() {
             {filtered.map((product) => {
               const mainPrice = getMainSupplierPrice(product);
               return (
-              <tr key={product.id} className="hover:bg-slate-50">
+              <tr key={product.id} className={product.id === activeProductId ? "bg-blue-50 ring-1 ring-inset ring-blue-200" : "hover:bg-slate-50"}>
                 <td className="max-w-[340px] px-4 py-3">
                   <div className="line-clamp-2 font-semibold text-slate-950">{product.designation}</div>
                   <div className="mt-1 text-xs text-slate-500">{product.internalReference || "-"} · Fab. {product.manufacturerReference || "-"}</div>
