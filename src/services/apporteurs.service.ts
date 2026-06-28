@@ -101,6 +101,11 @@ function normalizePositiveOrZeroNumber(value: number, fieldLabel: string) {
   return value;
 }
 
+function normalizeOptionalText(value: string | null | undefined) {
+  if (value === undefined) return undefined;
+  return value?.trim() || null;
+}
+
 function normalizeDuplicateKey(value: string | null | undefined) {
   return String(value ?? "").trim().replace(/\s+/g, " ");
 }
@@ -209,10 +214,11 @@ export async function updateApporteurAffaire(
   const payload = {
     ...input,
     nom: input.nom?.trim(),
-    entreprise: input.entreprise?.trim(),
-    telephone: input.telephone?.trim(),
-    email: input.email?.trim(),
-    iban: input.iban?.trim(),
+    entreprise: normalizeOptionalText(input.entreprise),
+    telephone: normalizeOptionalText(input.telephone),
+    email: normalizeOptionalText(input.email),
+    iban: normalizeOptionalText(input.iban),
+    notes: normalizeOptionalText(input.notes),
     commission_percent:
       input.commission_percent === undefined
         ? undefined
@@ -313,10 +319,10 @@ export async function updateApporteurLead(
   const payload = {
     ...input,
     client_name: input.client_name?.trim(),
-    telephone: input.telephone?.trim(),
-    project_address: input.project_address?.trim(),
-    project_type: input.project_type?.trim(),
-    comment: input.comment?.trim() || null,
+    telephone: normalizeOptionalText(input.telephone),
+    project_address: normalizeOptionalText(input.project_address),
+    project_type: normalizeOptionalText(input.project_type),
+    comment: normalizeOptionalText(input.comment),
     estimated_amount:
       input.estimated_amount === undefined
         ? undefined
