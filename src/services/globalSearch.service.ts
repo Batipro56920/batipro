@@ -14,6 +14,7 @@ export type GlobalSearchKind =
   | "bon_commande"
   | "retour_terrain"
   | "crm_rdv"
+  | "sav"
   | "apporteur"
   | "lead_apporteur"
   | "intervenant"
@@ -117,6 +118,15 @@ function appointmentStatusLabel(value: unknown) {
   if (status === "annule") return "Annulé";
   if (status === "reporte") return "Reporté";
   return status;
+}
+
+function savPriorityLabel(value: unknown) {
+  const priority = cleanText(value);
+  if (priority === "basse") return "Priorité basse";
+  if (priority === "normale") return "Priorité normale";
+  if (priority === "haute") return "Priorité haute";
+  if (priority === "critique") return "Priorité critique";
+  return priority;
 }
 
 function intervenantAccessLabel(row: SearchRow) {
@@ -499,6 +509,23 @@ const SOURCES: SearchSource[] = [
       href: appointmentHref(row),
       badge: appointmentTypeLabel(row.type),
     }),
+  },
+  {
+    table: "crm_sav",
+    select: "id,client_id,chantier_id,titre,description,urgence,statut,assigned_to,planned_at",
+    filter: "titre.ilike.$term,description.ilike.$term,urgence.ilike.$term,statut.ilike.$term,assigned_to.ilike.$term",
+    map: (row) => {
+      const id = cleanText(row.id);
+      const plannedDate = cleanText(row.planned_at).slice(0, 10);
+      return {
+        id,
+        kind: "sav",
+        title: cleanText(row.titre) || "Ticket SAV sans titre",
+        subtitle: [savPriorityLabel(row.urgence), cleanText(row.statut), plannedDate, cleanText(row.description)].filter(Boolean).join(" - ") || "Ticket SAV",
+        href: `/crm/sav?savId=${encodeURIComponent(id)}`,
+        badge: "SAV",
+      };
+    },
   },
   {
     table: "apporteurs_affaires",
