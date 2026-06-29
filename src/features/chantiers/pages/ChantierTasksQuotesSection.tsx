@@ -1,10 +1,12 @@
 import type { ReactNode } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useParams, useSearchParams } from "react-router-dom";
 
 import ChantierChapterDrawer from "../components/ChantierChapterDrawer";
 
 export default function ChantierTasksQuotesSection({ children }: { children: ReactNode }) {
   const { id } = useParams<{ id: string }>();
+  const [searchParams] = useSearchParams();
+  const targetedTaskId = searchParams.get("taskId") ?? "";
   const terrainFeedbackHref = id ? `/retours-terrain?chantierId=${encodeURIComponent(id)}` : "/retours-terrain";
 
   return (
@@ -15,7 +17,13 @@ export default function ChantierTasksQuotesSection({ children }: { children: Rea
       actionLabel="Gerer taches et devis"
       previewClassName="batipro-chapter-preview--tasks-quotes"
       drawerMaxWidthClassName="max-w-6xl"
+      autoOpenKey={targetedTaskId ? `task:${targetedTaskId}` : ""}
     >
+      {targetedTaskId ? (
+        <div className="mb-4 rounded-2xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-900">
+          Recherche globale : le panneau taches est ouvert pour retrouver la tache ciblee.
+        </div>
+      ) : null}
       <div className="mb-4 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
         <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
           <div>
