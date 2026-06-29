@@ -7,7 +7,7 @@ import { ChantierStatusPill } from "./ChantierStatusPill";
 
 const PLANNING_QUICK_LINKS = [
   { label: "Préparer", path: "preparation", icon: ClipboardList },
-  { label: "Planning", path: "execution", icon: CalendarDays },
+  { label: "Planning", path: "planning", icon: CalendarDays },
   { label: "Documents", path: "documents", icon: FileText },
   { label: "Équipe", path: "equipe", icon: Users },
   { label: "Qualité", path: "qualite", icon: ShieldCheck },
@@ -90,7 +90,7 @@ function ChantierPlanningRow({ row, onPreview }: { row: ChantierDerived; onPrevi
           Dossier
         </Link>
         <Link
-          to={`/chantiers/${row.id}/execution`}
+          to={`/chantiers/${row.id}/planning`}
           className="inline-flex h-9 items-center gap-2 rounded-xl bg-slate-950 px-3 text-sm font-semibold text-white shadow-sm transition hover:bg-slate-800"
         >
           Planning chantier
@@ -121,7 +121,7 @@ function UnplannedChantierCard({ row, onPreview }: { row: ChantierDerived; onPre
           <ArrowRight className="h-4 w-4" />
         </Link>
         <Link
-          to={`/chantiers/${row.id}/execution`}
+          to={`/chantiers/${row.id}/planning`}
           className="inline-flex h-9 items-center gap-2 rounded-xl border border-amber-200 bg-white px-3 text-sm font-semibold text-amber-900 transition hover:bg-amber-100"
         >
           Ouvrir le planning
