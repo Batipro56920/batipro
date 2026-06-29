@@ -50,6 +50,81 @@ function compactVisitSummary(value?: string | null) {
   return cleaned.length > 220 ? `${cleaned.slice(0, 220).trim()}...` : cleaned;
 }
 
+function chantierStatusLabel(status: string | null | undefined) {
+  if (status === "PREPARATION") return "Préparation";
+  if (status === "EN_COURS") return "En cours";
+  if (status === "EN_PAUSE") return "En pause";
+  if (status === "TERMINE") return "Terminé";
+  if (status === "ARCHIVE") return "Archivé";
+  if (status === "ANNULE") return "Annulé";
+  return "Statut non renseigné";
+}
+
+function ProductionContinuityPanel({ project }: { project: ProjectRecord }) {
+  const quote = getPrimaryQuote(project);
+
+  if (!project.chantiers.length) {
+    return (
+      <Panel title="Passage en production" description="Continuité entre devis accepté et dossier chantier.">
+        <EmptyProjectBlock
+          title={quote?.statut === "accepte" ? "Chantier à créer" : "Aucun chantier rattaché"}
+          description={
+            quote?.statut === "accepte"
+              ? "Le devis accepté est prêt à basculer en chantier depuis l'en-tête ou l'onglet Devis."
+              : "Le dossier reste côté commerce tant qu'aucun devis accepté n'a été transformé en chantier."
+          }
+        />
+      </Panel>
+    );
+  }
+
+  return (
+    <Panel title="Passage en production" description="Chantiers rattachés au projet commercial, avec accès direct aux espaces de pilotage.">
+      <div className="space-y-3">
+        {project.chantiers.map((chantier) => (
+          <article key={chantier.id} className="rounded-2xl border border-blue-100 bg-blue-50 p-4">
+            <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+              <div className="min-w-0">
+                <div className="flex flex-wrap items-center gap-2">
+                  <h3 className="truncate font-semibold text-blue-950">{chantier.nom}</h3>
+                  <span className="rounded-full border border-blue-200 bg-white px-2.5 py-1 text-xs font-semibold text-blue-700">
+                    {chantierStatusLabel(chantier.status)}
+                  </span>
+                </div>
+                <div className="mt-2 grid gap-2 text-sm text-blue-900 sm:grid-cols-3">
+                  <span>Début {formatDate(chantier.date_debut)}</span>
+                  <span>Échéance {formatDate(chantier.date_fin_prevue ?? chantier.planning_end_date)}</span>
+                  <span>Avancement {Number(chantier.avancement ?? 0)}%</span>
+                </div>
+              </div>
+              <div className="flex shrink-0 flex-wrap gap-2">
+                <Link to={`/chantiers/${chantier.id}`} className="inline-flex h-9 items-center rounded-xl bg-blue-700 px-3 text-sm font-semibold text-white hover:bg-blue-800">
+                  Dossier chantier
+                </Link>
+                <Link to={`/chantiers/${chantier.id}/preparation`} className="inline-flex h-9 items-center rounded-xl border border-blue-200 bg-white px-3 text-sm font-semibold text-blue-800 hover:bg-blue-100">
+                  Préparer
+                </Link>
+                <Link to={`/chantiers/${chantier.id}/planning`} className="inline-flex h-9 items-center rounded-xl border border-blue-200 bg-white px-3 text-sm font-semibold text-blue-800 hover:bg-blue-100">
+                  Planning
+                </Link>
+                <Link to={`/chantiers/${chantier.id}/execution`} className="inline-flex h-9 items-center rounded-xl border border-blue-200 bg-white px-3 text-sm font-semibold text-blue-800 hover:bg-blue-100">
+                  Exécuter
+                </Link>
+                <Link to={`/retours-terrain?chantierId=${encodeURIComponent(chantier.id)}`} className="inline-flex h-9 items-center rounded-xl border border-blue-200 bg-white px-3 text-sm font-semibold text-blue-800 hover:bg-blue-100">
+                  Retours terrain
+                </Link>
+                <Link to={`/chantiers/${chantier.id}/financier`} className="inline-flex h-9 items-center rounded-xl border border-blue-200 bg-white px-3 text-sm font-semibold text-blue-800 hover:bg-blue-100">
+                  Financier
+                </Link>
+              </div>
+            </div>
+          </article>
+        ))}
+      </div>
+    </Panel>
+  );
+}
+
 export function ProjectSummaryTab({ project }: { project: ProjectRecord }) {
   const quote = getPrimaryQuote(project);
   const latestActivity = recentActivity(project)[0] ?? null;
@@ -91,6 +166,8 @@ export function ProjectSummaryTab({ project }: { project: ProjectRecord }) {
           <ProjectProfitabilityWidgets project={project} />
         </div>
       </Panel>
+
+      <ProductionContinuityPanel project={project} />
 
       <div className="grid gap-5 xl:grid-cols-[1.25fr_0.75fr]">
         <Panel title="Resume client">
