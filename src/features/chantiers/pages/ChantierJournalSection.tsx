@@ -26,13 +26,30 @@ export default function ChantierJournalSection({
     ? `/retours-terrain?chantierId=${encodeURIComponent(chantierId)}`
     : null;
 
+  function getJournalEntityLabel(entityType: string) {
+    if (entityType === "terrain_feedback") return "Retour terrain";
+    return entityLabel(entityType);
+  }
+
+  function getJournalEntityTone(entityType: string) {
+    if (entityType === "terrain_feedback") return "border-blue-200 bg-blue-50 text-blue-700";
+    return tone(entityType);
+  }
+
+  function getFeedbackHref(log: ChantierActivityLogRow) {
+    if (log.entity_type !== "terrain_feedback") return null;
+    const targetChantierId = log.chantier_id || chantierId;
+    if (!targetChantierId || !log.entity_id) return null;
+    return `/retours-terrain?chantierId=${encodeURIComponent(targetChantierId)}&feedbackId=${encodeURIComponent(log.entity_id)}`;
+  }
+
   return (
     <div className="space-y-4">
       <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <div>
           <div className="font-semibold section-title">Journal chantier</div>
           <div className="text-sm text-slate-500">
-            Historique des actions, validations, consignes, réserves et temps saisis.
+            Historique des actions, validations, consignes, réserves, retours terrain et temps saisis.
           </div>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -78,36 +95,49 @@ export default function ChantierJournalSection({
             Aucun événement journalisé pour ce chantier.
           </div>
         ) : (
-          logs.map((log) => (
-            <article key={log.id} className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-              <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-                <div className="min-w-0">
-                  <div className="flex flex-wrap gap-2">
-                    <span className={["rounded-full border px-3 py-1 text-xs font-semibold", tone(log.entity_type)].join(" ")}>
-                      {entityLabel(log.entity_type)}
-                    </span>
-                    <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-semibold text-slate-700">
-                      {actionLabel(log.action_type)}
-                    </span>
-                  </div>
-                  <div className="mt-3 text-base font-semibold text-slate-900">
-                    {log.reason || "Action chantier"}
-                  </div>
-                  <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-sm text-slate-500">
-                    <span>{log.actor_name || "Utilisateur"}</span>
-                    {log.actor_role ? <span>{log.actor_role}</span> : null}
-                    <span>{new Date(log.created_at).toLocaleString("fr-FR")}</span>
-                  </div>
-                </div>
-              </div>
+          logs.map((log) => {
+            const feedbackHref = getFeedbackHref(log);
 
-              {Object.keys(log.changes || {}).length > 0 ? (
-                <pre className="mt-4 max-h-64 overflow-auto rounded-2xl bg-slate-950 px-4 py-3 text-xs leading-relaxed text-slate-100">
-                  {JSON.stringify(log.changes, null, 2)}
-                </pre>
-              ) : null}
-            </article>
-          ))
+            return (
+              <article key={log.id} className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+                <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap gap-2">
+                      <span className={["rounded-full border px-3 py-1 text-xs font-semibold", getJournalEntityTone(log.entity_type)].join(" ")}>
+                        {getJournalEntityLabel(log.entity_type)}
+                      </span>
+                      <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-semibold text-slate-700">
+                        {actionLabel(log.action_type)}
+                      </span>
+                    </div>
+                    <div className="mt-3 text-base font-semibold text-slate-900">
+                      {log.reason || "Action chantier"}
+                    </div>
+                    <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-sm text-slate-500">
+                      <span>{log.actor_name || "Utilisateur"}</span>
+                      {log.actor_role ? <span>{log.actor_role}</span> : null}
+                      <span>{new Date(log.created_at).toLocaleString("fr-FR")}</span>
+                    </div>
+                  </div>
+
+                  {feedbackHref ? (
+                    <Link
+                      to={feedbackHref}
+                      className="shrink-0 rounded-xl border border-blue-200 bg-blue-50 px-3 py-2 text-sm font-medium text-blue-800 hover:bg-blue-100"
+                    >
+                      Ouvrir retour
+                    </Link>
+                  ) : null}
+                </div>
+
+                {Object.keys(log.changes || {}).length > 0 ? (
+                  <pre className="mt-4 max-h-64 overflow-auto rounded-2xl bg-slate-950 px-4 py-3 text-xs leading-relaxed text-slate-100">
+                    {JSON.stringify(log.changes, null, 2)}
+                  </pre>
+                ) : null}
+              </article>
+            );
+          })
         )}
       </div>
     </div>
