@@ -151,6 +151,19 @@ export default function TerrainFeedbacksPage() {
     setSearchParams(nextParams, { replace: true });
   }
 
+  function clearTargetFilters() {
+    setFilterChantierId("");
+    setFilterIntervenantId("");
+    setFilterStatus("");
+    setFilterCategory("");
+    highlightedFeedbackRef.current = null;
+
+    const nextParams = new URLSearchParams(searchParams);
+    nextParams.delete("chantierId");
+    if (urlFeedbackId) nextParams.set("feedbackId", urlFeedbackId);
+    setSearchParams(nextParams, { replace: true });
+  }
+
   function syncDrafts(nextRows: TerrainFeedbackRow[]) {
     const nextDrafts: Record<string, DraftState> = {};
     nextRows.forEach((row) => {
@@ -277,7 +290,16 @@ export default function TerrainFeedbacksPage() {
           ) : loading ? (
             "Ouverture du retour terrain ciblé..."
           ) : (
-            "Le retour ciblé n'est pas visible avec les filtres actuels."
+            <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+              <span>Le retour ciblé n'est pas visible avec les filtres actuels.</span>
+              <button
+                type="button"
+                onClick={clearTargetFilters}
+                className="rounded-xl border border-blue-200 bg-white px-3 py-2 text-xs font-semibold text-blue-800 hover:bg-blue-50"
+              >
+                Réinitialiser les filtres
+              </button>
+            </div>
           )}
         </section>
       ) : null}
