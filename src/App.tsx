@@ -455,14 +455,7 @@ export default function App() {
             </RequireCompanyFeature>
           }
         />
-        <Route
-          path="/entreprise/charges"
-          element={
-            <RequireCompanyFeature profilePermissionKey="entreprise_parametres">
-              <RouteSuspense label="Chargement de Mon entreprise..."><MonEntreprisePage /></RouteSuspense>
-            </RequireCompanyFeature>
-          }
-        />
+        <Route path="/entreprise/charges" element={<Navigate to="/financier/charges-fixes" replace />} />
         <Route
           path="/fournisseurs"
           element={
