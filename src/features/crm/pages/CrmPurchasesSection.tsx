@@ -1,11 +1,26 @@
+import { Link } from "react-router-dom";
 import type { CrmDataset } from "../../../services/crm.service";
 import { eur, statusPill } from "../components/crmFormat";
 import ListShell from "../components/ListShell";
 
-export default function CrmPurchasesSection({ rows, chantiers, onCreate }: { rows: CrmDataset["purchases"]; chantiers: CrmDataset["chantiers"]; onCreate: () => void }) {
+export default function CrmPurchasesSection({ rows, chantiers }: { rows: CrmDataset["purchases"]; chantiers: CrmDataset["chantiers"]; onCreate: () => void }) {
   const chantierById = new Map(chantiers.map((row) => [row.id, row]));
   return (
-    <ListShell title="Achats / factures fournisseurs" actionLabel="Nouvel achat" query="" setQuery={() => undefined} onCreate={onCreate} hideSearch>
+    <ListShell title="Achats / factures fournisseurs" query="" setQuery={() => undefined} hideSearch>
+      <div className="rounded-2xl border border-blue-100 bg-blue-50 p-4 text-sm text-blue-900">
+        <div className="font-semibold">Les nouveaux achats fournisseurs se pilotent dans Bons de commande.</div>
+        <p className="mt-1 text-blue-800">
+          Cet onglet conserve l'ancien suivi CRM en lecture. Pour créer, suivre ou ouvrir une commande fournisseur exploitable,
+          utilisez le module Achats / Fournisseurs.
+        </p>
+        <Link
+          to="/fournisseurs?tab=orders"
+          className="mt-3 inline-flex h-9 items-center justify-center rounded-xl bg-blue-600 px-4 text-sm font-semibold text-white hover:bg-blue-700"
+        >
+          Ouvrir les bons de commande
+        </Link>
+      </div>
+
       <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
         {rows.map((row) => (
           <div key={row.id} className="rounded-3xl border bg-white p-5">
