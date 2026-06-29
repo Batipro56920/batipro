@@ -90,7 +90,7 @@ export default function CrmSavSection({
           <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
             <div>
               <div className="font-semibold">
-                {targetedTicketMissing ? "Ticket SAV introuvable" : "Ticket SAV ouvert depuis un lien direct"}
+                {targetedTicketMissing ? "Ticket SAV introuvable" : "Ticket SAV ouvert depuis la recherche globale"}
               </div>
               <p className={targetedTicketMissing ? "mt-1 text-amber-800" : "mt-1 text-blue-800"}>
                 {targetedTicketMissing
