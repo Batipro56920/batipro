@@ -212,6 +212,7 @@ function projectOptionAlreadyAttached(option: ProjectOption, leads: ApporteurLea
 export default function ApporteursAffairesPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const targetedApporteurId = searchParams.get("apporteurId") ?? "";
+  const targetedLeadId = searchParams.get("leadId") ?? "";
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -239,6 +240,11 @@ export default function ApporteursAffairesPage() {
   const targetedApporteur = useMemo(
     () => apporteurs.find((row) => row.id === targetedApporteurId) ?? null,
     [apporteurs, targetedApporteurId],
+  );
+
+  const targetedLead = useMemo(
+    () => leads.find((row) => row.id === targetedLeadId) ?? null,
+    [leads, targetedLeadId],
   );
 
   const projectOptions = useMemo<ProjectOption[]>(() => {
@@ -333,6 +339,15 @@ export default function ApporteursAffairesPage() {
   }, []);
 
   useEffect(() => {
+    if (targetedLeadId) {
+      if (!targetedLead) return;
+      if (targetedLead.apporteur_id) setSelectedApporteurId(targetedLead.apporteur_id);
+      setSelectedStatus("");
+      setSelectedCrmFilter("all");
+      setLeadForm((prev) => ({ ...prev, apporteur_id: targetedLead.apporteur_id ?? "" }));
+      return;
+    }
+
     if (!targetedApporteurId) return;
     const exists = apporteurs.some((row) => row.id === targetedApporteurId);
     if (!exists) return;
@@ -340,12 +355,13 @@ export default function ApporteursAffairesPage() {
     setSelectedStatus("");
     setSelectedCrmFilter("all");
     setLeadForm((prev) => ({ ...prev, apporteur_id: targetedApporteurId }));
-  }, [apporteurs, targetedApporteurId]);
+  }, [apporteurs, targetedApporteurId, targetedLead, targetedLeadId]);
 
   function clearApporteurUrlTarget() {
-    if (!searchParams.has("apporteurId")) return;
+    if (!searchParams.has("apporteurId") && !searchParams.has("leadId")) return;
     const nextParams = new URLSearchParams(searchParams);
     nextParams.delete("apporteurId");
+    nextParams.delete("leadId");
     setSearchParams(nextParams, { replace: true });
   }
 
@@ -354,7 +370,7 @@ export default function ApporteursAffairesPage() {
     setSelectedStatus("");
     setSelectedCrmFilter("all");
     resetLeadForm(apporteurId);
-    if (!keepUrlTarget && apporteurId !== targetedApporteurId) clearApporteurUrlTarget();
+    if (!keepUrlTarget && (apporteurId !== targetedApporteurId || Boolean(targetedLeadId))) clearApporteurUrlTarget();
   }
 
   async function refreshData(initial = false) {
@@ -376,6 +392,10 @@ export default function ApporteursAffairesPage() {
       setCrmOpportunities(crmData.opportunities);
       setAccessTokens(tokens.reduce((acc, token) => ({ ...acc, [token.apporteur_id]: token }), {} as Record<string, ApporteurAccessTokenRow>));
       setSelectedApporteurId((current) => {
+        if (targetedLeadId) {
+          const lead = leadsData.find((row) => row.id === targetedLeadId);
+          if (lead?.apporteur_id) return lead.apporteur_id;
+        }
         if (targetedApporteurId && apporteursData.some((row) => row.id === targetedApporteurId)) return targetedApporteurId;
         return current || apporteursData[0]?.id || "";
       });
@@ -656,21 +676,35 @@ export default function ApporteursAffairesPage() {
         <Metric label="Commissions dues" value={formatCurrency(stats.unpaidCommission)} />
       </section>
 
-      {targetedApporteurId ? (
+      {targetedApporteurId || targetedLeadId ? (
         <section className={[
           "rounded-xl border p-4 text-sm",
-          targetedApporteur ? "border-blue-200 bg-blue-50 text-blue-900" : "border-amber-200 bg-amber-50 text-amber-900",
+          targetedLead || targetedApporteur ? "border-blue-200 bg-blue-50 text-blue-900" : "border-amber-200 bg-amber-50 text-amber-900",
         ].join(" ")}>
           <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
             <div>
               <div className="font-semibold">
-                {targetedApporteur ? "Apporteur ciblé depuis la recherche globale" : "Apporteur ciblé introuvable"}
+                {targetedLead
+                  ? "Projet apporté ciblé depuis la recherche globale"
+                  : targetedApporteur
+                    ? "Apporteur ciblé depuis la recherche globale"
+                    : "Ciblage introuvable"}
               </div>
-              <p className={targetedApporteur ? "mt-1 text-blue-800" : "mt-1 text-amber-800"}>
-                {targetedApporteur
-                  ? `${targetedApporteur.nom} est sélectionné avec ses projets, commissions et documents.`
-                  : "Le lien de recherche pointe vers un apporteur supprimé ou non visible avec les droits actuels."}
+              <p className={targetedLead || targetedApporteur ? "mt-1 text-blue-800" : "mt-1 text-amber-800"}>
+                {targetedLead
+                  ? `${targetedLead.client_name} est visible dans les projets de ${selectedApporteur?.nom ?? "l'apporteur sélectionné"}.`
+                  : targetedApporteur
+                    ? `${targetedApporteur.nom} est sélectionné avec ses projets, commissions et documents.`
+                    : "Le lien de recherche pointe vers un élément supprimé ou non visible avec les droits actuels."}
               </p>
+              {targetedLead ? (
+                <div className="mt-2 flex flex-wrap gap-2 text-xs">
+                  <span className="rounded-full bg-white px-2.5 py-1 font-semibold ring-1 ring-blue-200">{optionLabel(LEAD_STATUSES, targetedLead.status)}</span>
+                  {targetedLead.project_type ? <span className="rounded-full bg-white px-2.5 py-1 ring-1 ring-blue-100">{targetedLead.project_type}</span> : null}
+                  {targetedLead.project_address ? <span className="rounded-full bg-white px-2.5 py-1 ring-1 ring-blue-100">{targetedLead.project_address}</span> : null}
+                  <span className="rounded-full bg-white px-2.5 py-1 ring-1 ring-blue-100">{formatCurrency(targetedLead.estimated_amount)}</span>
+                </div>
+              ) : null}
             </div>
             <button
               type="button"
@@ -807,7 +841,7 @@ export default function ApporteursAffairesPage() {
             const commissionAction = commissionStatusAction(lead.status);
             const crmBadge = crmBadgeForLead(lead);
             return (
-              <article key={lead.id} className="rounded-lg border border-slate-200 bg-white p-3 text-sm">
+              <article key={lead.id} className={["rounded-lg border bg-white p-3 text-sm", lead.id === targetedLeadId ? "border-blue-300 ring-2 ring-blue-100" : "border-slate-200"].join(" ")}>
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
                     <div className="truncate font-semibold text-slate-950">{lead.client_name}</div>
@@ -842,7 +876,7 @@ export default function ApporteursAffairesPage() {
           })}
           {!filteredLeads.length ? <div className="rounded-lg border border-dashed border-slate-200 p-4 text-center text-sm text-slate-500">Aucun projet rattaché.</div> : null}
         </div>
-        <div className="hidden overflow-x-auto md:block"><table className="bt-table min-w-full"><thead><tr><Th>Projet / client</Th><Th>Apporteur</Th><Th>Montant</Th><Th>Statut</Th><Th>Commission</Th><Th>CRM</Th><Th>Actions</Th></tr></thead><tbody>{filteredLeads.map((lead) => { const apporteur = apporteurs.find((row) => row.id === lead.apporteur_id); const crmPath = crmProjectPathForLead(lead); const linked = Boolean(crmPath); const commissionAction = commissionStatusAction(lead.status); const crmBadge = crmBadgeForLead(lead); return <tr key={lead.id}><Td><div className="font-semibold text-slate-950">{lead.client_name}</div><div className="text-xs text-slate-500">{lead.project_type || lead.project_address || lead.telephone || "-"}</div></Td><Td>{apporteur?.nom ?? "-"}</Td><Td>{formatCurrency(lead.estimated_amount)}</Td><Td><span className={`rounded-full px-2.5 py-1 text-xs font-semibold ring-1 ${statusClass(lead.status)}`}>{optionLabel(LEAD_STATUSES, lead.status)}</span></Td><Td>{commissionDisplay(lead, apporteur ?? undefined)}</Td><Td><div className="space-y-1">{linked ? <Link to={crmPath} className="font-medium text-blue-700 hover:underline">Ouvrir projet</Link> : <span className="text-slate-500">À convertir</span>}<div><span className={`rounded-full px-2.5 py-1 text-xs font-semibold ring-1 ${crmBadge.className}`}>{crmBadge.label}</span></div></div></Td><Td><LeadActions lead={lead} saving={saving} linked={linked} commissionAction={commissionAction} onEdit={onEditLead} onUpdateCommission={onUpdateLeadCommissionStatus} onCreateCrm={onCreateCrmProspectFromLead} onRemove={onRemoveLead} /></Td></tr>; })}{!filteredLeads.length ? <tr><td colSpan={7} className="px-4 py-8 text-center text-sm text-slate-500">Aucun projet rattaché.</td></tr> : null}</tbody></table></div>
+        <div className="hidden overflow-x-auto md:block"><table className="bt-table min-w-full"><thead><tr><Th>Projet / client</Th><Th>Apporteur</Th><Th>Montant</Th><Th>Statut</Th><Th>Commission</Th><Th>CRM</Th><Th>Actions</Th></tr></thead><tbody>{filteredLeads.map((lead) => { const apporteur = apporteurs.find((row) => row.id === lead.apporteur_id); const crmPath = crmProjectPathForLead(lead); const linked = Boolean(crmPath); const commissionAction = commissionStatusAction(lead.status); const crmBadge = crmBadgeForLead(lead); return <tr key={lead.id} className={lead.id === targetedLeadId ? "bg-blue-50/70" : undefined}><Td><div className="font-semibold text-slate-950">{lead.client_name}</div><div className="text-xs text-slate-500">{lead.project_type || lead.project_address || lead.telephone || "-"}</div></Td><Td>{apporteur?.nom ?? "-"}</Td><Td>{formatCurrency(lead.estimated_amount)}</Td><Td><span className={`rounded-full px-2.5 py-1 text-xs font-semibold ring-1 ${statusClass(lead.status)}`}>{optionLabel(LEAD_STATUSES, lead.status)}</span></Td><Td>{commissionDisplay(lead, apporteur ?? undefined)}</Td><Td><div className="space-y-1">{linked ? <Link to={crmPath} className="font-medium text-blue-700 hover:underline">Ouvrir projet</Link> : <span className="text-slate-500">À convertir</span>}<div><span className={`rounded-full px-2.5 py-1 text-xs font-semibold ring-1 ${crmBadge.className}`}>{crmBadge.label}</span></div></div></Td><Td><LeadActions lead={lead} saving={saving} linked={linked} commissionAction={commissionAction} onEdit={onEditLead} onUpdateCommission={onUpdateLeadCommissionStatus} onCreateCrm={onCreateCrmProspectFromLead} onRemove={onRemoveLead} /></Td></tr>; })}{!filteredLeads.length ? <tr><td colSpan={7} className="px-4 py-8 text-center text-sm text-slate-500">Aucun projet rattaché.</td></tr> : null}</tbody></table></div>
       </section>
 
       {showApporteurLayer ? (
