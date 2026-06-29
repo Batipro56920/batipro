@@ -5,20 +5,32 @@ import { ProjectsKpiGrid } from "../features/projects/components/ProjectsKpiGrid
 import { ProjectsTable } from "../features/projects/components/ProjectsTable";
 import { ProjectsToolbar } from "../features/projects/components/ProjectsToolbar";
 import { useProjectsData } from "../features/projects/hooks/useProjectsData";
+import type { ProjectRecord } from "../features/projects/types";
+
+function hasAcceptedQuoteAwaitingChantier(project: ProjectRecord) {
+  if (project.chantiers.length > 0) return false;
+  return project.quotes.some((quote) => quote.statut === "accepte" && !quote.chantier_id);
+}
 
 export default function ProjectsPage() {
   const [searchParams] = useSearchParams();
   const billingMode = searchParams.get("facturation") === "1";
   const quoteCreationMode = searchParams.get("devis") === "nouveau";
+  const chantierCreationMode = searchParams.get("chantier") === "a-creer";
   const { filteredProjects, metrics, projectTypes, filters, setFilters, loading, error, refresh } = useProjectsData();
   const visibleProjects = useMemo(() => {
-    if (!billingMode) return filteredProjects;
-    return filteredProjects.filter((project) => project.quotes.some((quote) => quote.statut === "accepte" && Number(quote.montant_ttc ?? 0) > 0));
-  }, [billingMode, filteredProjects]);
+    if (billingMode) {
+      return filteredProjects.filter((project) => project.quotes.some((quote) => quote.statut === "accepte" && Number(quote.montant_ttc ?? 0) > 0));
+    }
+    if (chantierCreationMode) {
+      return filteredProjects.filter(hasAcceptedQuoteAwaitingChantier);
+    }
+    return filteredProjects;
+  }, [billingMode, chantierCreationMode, filteredProjects]);
 
   return (
     <div className="space-y-6">
-      <ProjectsHeader billingMode={billingMode} onRefresh={refresh} />
+      <ProjectsHeader billingMode={billingMode} chantierCreationMode={chantierCreationMode} onRefresh={refresh} />
 
       {billingMode ? (
         <div className="rounded-3xl border border-blue-100 bg-blue-50 p-4 text-sm text-blue-900">
@@ -29,6 +41,12 @@ export default function ProjectsPage() {
       {quoteCreationMode ? (
         <div className="rounded-3xl border border-blue-100 bg-blue-50 p-4 text-sm text-blue-900">
           Sélectionnez le dossier projet à chiffrer. L'action ouvre directement le Quote Builder pour créer un nouveau devis sur ce projet.
+        </div>
+      ) : null}
+
+      {chantierCreationMode ? (
+        <div className="rounded-3xl border border-emerald-100 bg-emerald-50 p-4 text-sm text-emerald-900">
+          Sélectionnez une affaire signée non encore rattachée à un chantier. L'action ouvre l'onglet Devis du projet pour lancer la création chantier avec les données du devis accepté.
         </div>
       ) : null}
 
@@ -44,7 +62,12 @@ export default function ProjectsPage() {
           Chargement des projets...
         </div>
       ) : (
-        <ProjectsTable projects={visibleProjects} billingMode={billingMode} quoteCreationMode={quoteCreationMode} />
+        <ProjectsTable
+          projects={visibleProjects}
+          billingMode={billingMode}
+          quoteCreationMode={quoteCreationMode}
+          chantierCreationMode={chantierCreationMode}
+        />
       )}
     </div>
   );
