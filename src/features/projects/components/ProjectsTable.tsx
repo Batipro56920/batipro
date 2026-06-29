@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import { ArrowRight, Hammer } from "lucide-react";
+import { ArrowRight, FileText, Hammer } from "lucide-react";
 import type { ProjectRecord } from "../types";
 import { ProjectStatusBadge } from "./ProjectStatusBadge";
 import { formatCurrency, formatDate } from "./ProjectShared";
@@ -66,12 +66,26 @@ function getChantierStatusClassName(status: ProjectChantier["status"]) {
   return "bg-slate-100 text-slate-700 ring-slate-200";
 }
 
-export function ProjectsTable({ projects, billingMode = false }: { projects: ProjectRecord[]; billingMode?: boolean }) {
+export function ProjectsTable({
+  projects,
+  billingMode = false,
+  quoteCreationMode = false,
+}: {
+  projects: ProjectRecord[];
+  billingMode?: boolean;
+  quoteCreationMode?: boolean;
+}) {
   if (!projects.length) {
     return (
       <div className="rounded-3xl border border-dashed border-slate-200 bg-white p-10 text-center shadow-sm">
         <div className="text-lg font-semibold text-slate-950">Aucun projet trouvé</div>
-        <p className="mt-2 text-sm text-slate-500">{billingMode ? "Aucun projet avec devis accepté ne correspond aux filtres actifs." : "Créez un prospect ou une opportunité pour initialiser un dossier projet."}</p>
+        <p className="mt-2 text-sm text-slate-500">
+          {billingMode
+            ? "Aucun projet avec devis accepté ne correspond aux filtres actifs."
+            : quoteCreationMode
+              ? "Créez un prospect ou une opportunité avant de démarrer un devis."
+              : "Créez un prospect ou une opportunité pour initialiser un dossier projet."}
+        </p>
         <Link
           to={billingMode ? "/projets" : "/crm/prospects"}
           className="mt-5 inline-flex h-9 items-center justify-center rounded-xl bg-blue-600 px-3 text-sm font-medium text-white transition hover:bg-blue-700"
@@ -94,7 +108,7 @@ export function ProjectsTable({ projects, billingMode = false }: { projects: Pro
               <th className="px-4 py-3">Adresse</th>
               <th className="px-4 py-3">Commercial</th>
               <th className="px-4 py-3">Statut</th>
-              <th className="px-4 py-3">{billingMode ? "Devis accepté" : "Prochaine action"}</th>
+              <th className="px-4 py-3">{billingMode ? "Devis accepté" : quoteCreationMode ? "Devis existants" : "Prochaine action"}</th>
               <th className="px-4 py-3 text-right">{billingMode ? "Montant à facturer" : "Montant devis"}</th>
               <th className="px-4 py-3">Création</th>
               <th className="px-4 py-3">Échéance</th>
@@ -106,6 +120,9 @@ export function ProjectsTable({ projects, billingMode = false }: { projects: Pro
               const billableQuote = billingMode ? getBillableQuote(project) : null;
               const commercialSource = getCommercialSource(project);
               const primaryChantier = getPrimaryChantier(project);
+              const projectPath = quoteCreationMode
+                ? `/projets/${project.id}/devis/nouveau`
+                : `/projets/${project.id}${billingMode ? "?tab=quotes" : ""}`;
               return (
                 <tr key={project.id} className="transition hover:bg-slate-50/80">
                   <td className="max-w-[260px] px-4 py-3">
@@ -162,6 +179,11 @@ export function ProjectsTable({ projects, billingMode = false }: { projects: Pro
                             : "Devis accepté à vérifier"}
                         </div>
                       </>
+                    ) : quoteCreationMode ? (
+                      <>
+                        <div className="truncate text-slate-700">{project.quotes.length ? `${project.quotes.length} devis rattaché${project.quotes.length > 1 ? "s" : ""}` : "Aucun devis"}</div>
+                        <div className="mt-1 text-xs text-slate-500">Nouveau chiffrage possible</div>
+                      </>
                     ) : (
                       <>
                         <div className="truncate text-slate-700">{project.nextAction || "Aucune action planifiée"}</div>
@@ -186,11 +208,20 @@ export function ProjectsTable({ projects, billingMode = false }: { projects: Pro
                         </Link>
                       ) : null}
                       <Link
-                        to={`/projets/${project.id}${billingMode ? "?tab=quotes" : ""}`}
+                        to={projectPath}
                         className="inline-flex h-8 items-center justify-center gap-2 rounded-lg border border-slate-200 bg-white px-2.5 text-xs font-semibold text-slate-900 transition hover:bg-slate-50"
                       >
-                        {billingMode ? "Facturer" : "Ouvrir"}
-                        <ArrowRight className="h-3.5 w-3.5" />
+                        {quoteCreationMode ? (
+                          <>
+                            <FileText className="h-3.5 w-3.5" />
+                            Créer devis
+                          </>
+                        ) : (
+                          <>
+                            {billingMode ? "Facturer" : "Ouvrir"}
+                            <ArrowRight className="h-3.5 w-3.5" />
+                          </>
+                        )}
                       </Link>
                     </div>
                   </td>
