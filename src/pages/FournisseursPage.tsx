@@ -77,6 +77,12 @@ export default function FournisseursPage({ initialTab = "suppliers" }: Fournisse
   const [supplierFormOpen, setSupplierFormOpen] = useState(false);
   const [supplierForm, setSupplierForm] = useState<SupplierFormState>(EMPTY_SUPPLIER);
 
+  const targetedSupplier = useMemo(
+    () => (activeSupplierId ? suppliers.find((row) => row.id === activeSupplierId) ?? null : null),
+    [activeSupplierId, suppliers],
+  );
+  const targetedSupplierMissing = Boolean(activeSupplierId && !loadingSuppliers && !targetedSupplier);
+
   const filteredSuppliers = useMemo(() => {
     const q = search.trim().toLowerCase();
     if (!q) return suppliers;
@@ -128,18 +134,16 @@ export default function FournisseursPage({ initialTab = "suppliers" }: Fournisse
       return;
     }
     if (loadingSuppliers || openedSupplierFromUrlRef.current === activeSupplierId) return;
-
-    const supplier = suppliers.find((row) => row.id === activeSupplierId);
-    if (!supplier) return;
+    if (!targetedSupplier) return;
 
     setActiveTab("suppliers");
-    setEditingSupplierId(supplier.id);
-    setSupplierForm(toSupplierForm(supplier));
+    setEditingSupplierId(targetedSupplier.id);
+    setSupplierForm(toSupplierForm(targetedSupplier));
     setSupplierFormOpen(true);
     setSuppliersNotice(null);
     setSuppliersError(null);
     openedSupplierFromUrlRef.current = activeSupplierId;
-  }, [activeSupplierId, loadingSuppliers, suppliers]);
+  }, [activeSupplierId, loadingSuppliers, targetedSupplier]);
 
   function clearActiveSupplierParam() {
     if (!activeSupplierId) return;
@@ -301,6 +305,33 @@ export default function FournisseursPage({ initialTab = "suppliers" }: Fournisse
 
       {activeTab === "orders" ? <PurchaseOrdersPanel suppliers={suppliers} /> : null}
       {activeTab === "stock" ? <StockTrackingPanel suppliers={suppliers} /> : null}
+
+      {activeTab === "suppliers" && activeSupplierId ? (
+        <div className={[
+          "rounded-2xl border p-4 text-sm",
+          targetedSupplierMissing ? "border-amber-200 bg-amber-50 text-amber-900" : "border-blue-200 bg-blue-50 text-blue-900",
+        ].join(" ")}>
+          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+            <div>
+              <div className="font-semibold">
+                {targetedSupplierMissing ? "Fournisseur introuvable" : "Fournisseur ouvert depuis la recherche globale"}
+              </div>
+              <p className={targetedSupplierMissing ? "mt-1 text-amber-800" : "mt-1 text-blue-800"}>
+                {targetedSupplierMissing
+                  ? "Le lien pointe vers un fournisseur supprimé ou non accessible avec les droits actuels."
+                  : `${targetedSupplier?.name ?? "Le fournisseur"} est sélectionné et prêt à être contrôlé ou mis à jour.`}
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={clearActiveSupplierParam}
+              className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700"
+            >
+              Retirer le ciblage
+            </button>
+          </div>
+        </div>
+      ) : null}
 
       {activeTab === "suppliers" ? (
         <section className="grid gap-3 md:grid-cols-4">
