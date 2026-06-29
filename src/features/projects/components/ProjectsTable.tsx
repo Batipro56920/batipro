@@ -15,6 +15,11 @@ function getBillableQuote(project: ProjectRecord): ProjectQuote | null {
   );
 }
 
+function getAcceptedQuoteAwaitingChantier(project: ProjectRecord): ProjectQuote | null {
+  if (project.chantiers.length > 0) return null;
+  return project.quotes.find((quote) => quote.statut === "accepte" && !quote.chantier_id) ?? null;
+}
+
 function getBillableAmount(project: ProjectRecord, quote: ProjectQuote | null) {
   if (!quote) return project.quoteAmount;
   return Number(quote.montant_ttc || quote.montant_ht || 0);
@@ -70,10 +75,12 @@ export function ProjectsTable({
   projects,
   billingMode = false,
   quoteCreationMode = false,
+  chantierCreationMode = false,
 }: {
   projects: ProjectRecord[];
   billingMode?: boolean;
   quoteCreationMode?: boolean;
+  chantierCreationMode?: boolean;
 }) {
   if (!projects.length) {
     return (
@@ -82,15 +89,17 @@ export function ProjectsTable({
         <p className="mt-2 text-sm text-slate-500">
           {billingMode
             ? "Aucun projet avec devis accepté ne correspond aux filtres actifs."
-            : quoteCreationMode
-              ? "Créez un prospect ou une opportunité avant de démarrer un devis."
-              : "Créez un prospect ou une opportunité pour initialiser un dossier projet."}
+            : chantierCreationMode
+              ? "Aucune affaire signée n'attend actuellement une création chantier."
+              : quoteCreationMode
+                ? "Créez un prospect ou une opportunité avant de démarrer un devis."
+                : "Créez un prospect ou une opportunité pour initialiser un dossier projet."}
         </p>
         <Link
-          to={billingMode ? "/projets" : "/crm/prospects"}
+          to={billingMode || chantierCreationMode ? "/projets" : "/crm/prospects"}
           className="mt-5 inline-flex h-9 items-center justify-center rounded-xl bg-blue-600 px-3 text-sm font-medium text-white transition hover:bg-blue-700"
         >
-          {billingMode ? "Voir tous les projets" : "Ajouter un prospect"}
+          {billingMode || chantierCreationMode ? "Voir tous les projets" : "Ajouter un prospect"}
         </Link>
       </div>
     );
@@ -108,7 +117,7 @@ export function ProjectsTable({
               <th className="px-4 py-3">Adresse</th>
               <th className="px-4 py-3">Commercial</th>
               <th className="px-4 py-3">Statut</th>
-              <th className="px-4 py-3">{billingMode ? "Devis accepté" : quoteCreationMode ? "Devis existants" : "Prochaine action"}</th>
+              <th className="px-4 py-3">{billingMode ? "Devis accepté" : chantierCreationMode ? "Passage chantier" : quoteCreationMode ? "Devis existants" : "Prochaine action"}</th>
               <th className="px-4 py-3 text-right">{billingMode ? "Montant à facturer" : "Montant devis"}</th>
               <th className="px-4 py-3">Création</th>
               <th className="px-4 py-3">Échéance</th>
@@ -118,15 +127,16 @@ export function ProjectsTable({
           <tbody className="divide-y divide-slate-100">
             {projects.map((project) => {
               const billableQuote = billingMode ? getBillableQuote(project) : null;
+              const acceptedQuoteAwaitingChantier = chantierCreationMode ? getAcceptedQuoteAwaitingChantier(project) : null;
               const commercialSource = getCommercialSource(project);
               const primaryChantier = getPrimaryChantier(project);
               const projectPath = quoteCreationMode
                 ? `/projets/${project.id}/devis/nouveau`
-                : `/projets/${project.id}${billingMode ? "?tab=quotes" : ""}`;
+                : `/projets/${project.id}${billingMode || chantierCreationMode ? "?tab=quotes" : ""}`;
               return (
                 <tr key={project.id} className="transition hover:bg-slate-50/80">
                   <td className="max-w-[260px] px-4 py-3">
-                    <Link to={`/projets/${project.id}${billingMode ? "?tab=quotes" : ""}`} className="font-semibold text-slate-950 hover:text-blue-700">
+                    <Link to={`/projets/${project.id}${billingMode || chantierCreationMode ? "?tab=quotes" : ""}`} className="font-semibold text-slate-950 hover:text-blue-700">
                       {project.name}
                     </Link>
                     <div className="mt-1 truncate text-xs text-slate-500">{project.projectType || "Type à qualifier"}</div>
@@ -179,6 +189,15 @@ export function ProjectsTable({
                             : "Devis accepté à vérifier"}
                         </div>
                       </>
+                    ) : chantierCreationMode ? (
+                      <>
+                        <div className="truncate font-semibold text-slate-700">{acceptedQuoteAwaitingChantier?.quote_number || "Devis accepté"}</div>
+                        <div className="mt-1 text-xs text-slate-500">
+                          {acceptedQuoteAwaitingChantier
+                            ? `Accepté le ${formatDate(acceptedQuoteAwaitingChantier.accepted_at ?? acceptedQuoteAwaitingChantier.updated_at)}`
+                            : "Création chantier à vérifier"}
+                        </div>
+                      </>
                     ) : quoteCreationMode ? (
                       <>
                         <div className="truncate text-slate-700">{project.quotes.length ? `${project.quotes.length} devis rattaché${project.quotes.length > 1 ? "s" : ""}` : "Aucun devis"}</div>
@@ -209,12 +228,22 @@ export function ProjectsTable({
                       ) : null}
                       <Link
                         to={projectPath}
-                        className="inline-flex h-8 items-center justify-center gap-2 rounded-lg border border-slate-200 bg-white px-2.5 text-xs font-semibold text-slate-900 transition hover:bg-slate-50"
+                        className={[
+                          "inline-flex h-8 items-center justify-center gap-2 rounded-lg border px-2.5 text-xs font-semibold transition",
+                          chantierCreationMode
+                            ? "border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
+                            : "border-slate-200 bg-white text-slate-900 hover:bg-slate-50",
+                        ].join(" ")}
                       >
                         {quoteCreationMode ? (
                           <>
                             <FileText className="h-3.5 w-3.5" />
                             Créer devis
+                          </>
+                        ) : chantierCreationMode ? (
+                          <>
+                            <Hammer className="h-3.5 w-3.5" />
+                            Créer chantier
                           </>
                         ) : (
                           <>
