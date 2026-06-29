@@ -104,7 +104,7 @@ function isConfirmedCommissionStatus(status: ApporteurLeadStatus) {
 
 function commissionDisplay(lead: ApporteurLeadRow, apporteur: ApporteurAffaireRow | null) {
   if (lead.status === "perdu") return formatCurrency(0);
-  if (!isConfirmedCommissionStatus(lead.status)) return "A confirmer";
+  if (!isConfirmedCommissionStatus(lead.status)) return "À confirmer";
   return formatCurrency(commissionAmount(lead, apporteur));
 }
 
@@ -320,7 +320,7 @@ export default function ApporteurPortalPage() {
                     <td className="align-top"><div className="font-semibold text-slate-950">{lead.client_name}</div><div className="text-xs text-slate-500">{lead.telephone || "-"}</div></td>
                     <td className="align-top"><div>{lead.project_type || "-"}</div><div className="text-xs text-slate-500">{lead.project_address || ""}</div></td>
                     <td className="align-top">{formatCurrency(lead.estimated_amount)}</td>
-                    <td className="align-top">{leadStatusLabel(lead.status)}</td>
+                    <td className="align-top"><span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ring-1 ${leadStatusClass(lead.status)}`}>{leadStatusLabel(lead.status)}</span></td>
                     <td className="align-top">{commissionDisplay(lead, portalData.apporteur)}</td>
                     <td className="align-top">{lead.date}</td>
                   </tr>
