@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useParams, useSearchParams } from "react-router-dom";
 import VisitesModule from "../components/chantiers/VisitesModule";
 import { getChantierById, type ChantierRow } from "../services/chantiers.service";
 import { listIntervenantsByChantierId, type IntervenantRow } from "../services/intervenants.service";
@@ -8,6 +8,8 @@ import { useI18n } from "../i18n";
 
 export default function ChantierVisitesPage() {
   const { id } = useParams<{ id: string }>();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const targetedVisitId = searchParams.get("visiteId") ?? "";
   const { t } = useI18n();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -35,6 +37,13 @@ export default function ChantierVisitesPage() {
   useEffect(() => {
     void loadPage();
   }, [id]);
+
+  function clearTargetedVisit() {
+    if (!searchParams.has("visiteId")) return;
+    const nextParams = new URLSearchParams(searchParams);
+    nextParams.delete("visiteId");
+    setSearchParams(nextParams, { replace: true });
+  }
 
   if (!id) {
     return <div className="text-sm text-red-700">{t("chantierVisites.notFound")}</div>;
@@ -68,6 +77,8 @@ export default function ChantierVisitesPage() {
         chantierAddress={chantier?.adresse ?? null}
         clientName={chantier?.client ?? null}
         intervenants={intervenants}
+        targetedVisitId={targetedVisitId}
+        onClearTargetedVisit={clearTargetedVisit}
         onDocumentsRefresh={async () => {
           await listDocumentsByChantier(id);
         }}
