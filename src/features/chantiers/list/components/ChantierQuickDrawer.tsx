@@ -1,4 +1,4 @@
-import { AlertTriangle, ArrowRight, ClipboardList, FileText, Hammer, Users, X } from "lucide-react";
+import { AlertTriangle, ArrowRight, CalendarDays, ClipboardList, FileText, Hammer, Users, X } from "lucide-react";
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { Button } from "../../../../components/ui/button";
@@ -8,7 +8,7 @@ import { ChantierProgress } from "./ChantierProgress";
 import { ChantierRowActions } from "./ChantierRowActions";
 import { ChantierStatusPill } from "./ChantierStatusPill";
 
-const TABS = ["Vue rapide", "Tâches", "Équipe", "Documents", "Retours terrain", "Alertes"] as const;
+const TABS = ["Vue rapide", "Tâches", "Planning", "Équipe", "Documents", "Retours terrain", "Alertes"] as const;
 
 function getProjectHref(row: ChantierDerived) {
   if (row.crm_opportunity_id) return `/projets/opportunity-${row.crm_opportunity_id}`;
@@ -154,6 +154,15 @@ export function ChantierQuickDrawer({ row, actions, onClose }: { row: ChantierDe
               cta="Ouvrir l'exécution"
               metric={`${row.progress}% d'avancement`}
             />
+          ) : tab === "Planning" ? (
+            <DetailShortcutPanel
+              title="Planning chantier"
+              description="Ouvrir le quotidien et le Gantt du chantier pour organiser les jalons et les séquences sans créer de tâches depuis la vue planning."
+              href={`/chantiers/${row.id}/planning`}
+              icon={CalendarDays}
+              cta="Ouvrir le planning"
+              metric={shortDate(row.date_fin_prevue ?? row.planning_end_date ?? row.planning_start_date ?? row.date_debut)}
+            />
           ) : tab === "Équipe" ? (
             <DetailShortcutPanel
               title="Équipe chantier"
@@ -212,6 +221,12 @@ function QuickAccessPanel({ row }: { row: ChantierDerived }) {
       description: "Tâches, devis, avancement et temps",
       href: `/chantiers/${row.id}/execution`,
       icon: Hammer,
+    },
+    {
+      label: "Planning",
+      description: "Quotidien et Gantt chantier",
+      href: `/chantiers/${row.id}/planning`,
+      icon: CalendarDays,
     },
     {
       label: "Retours terrain",
