@@ -57,7 +57,16 @@ export default function CrmClientsSection({
 
     setSelectedClient(focusedClient);
     setView("list");
-    setFilters((current) => ({ ...current, query: "", type: "all", activity: "all" }));
+    setFilters((current) => ({
+      ...current,
+      query: "",
+      type: "all",
+      owner: "all",
+      status: "all",
+      chantier: "all",
+      sav: "all",
+      date: "all",
+    }));
     openedClientFromUrlRef.current = focusedClientId;
   }, [focusedClient, focusedClientId, setFilters]);
 
@@ -99,7 +108,7 @@ export default function CrmClientsSection({
               <p className={focusedClientMissing ? "mt-1 text-amber-800" : "mt-1 text-blue-800"}>
                 {focusedClientMissing
                   ? "Le lien pointe vers un client supprimé ou non accessible avec les droits actuels."
-                  : `${focusedClient?.displayName ?? focusedClient?.societe ?? "Le client"} est sélectionné avec son activité commerciale, chantier et SAV.`}
+                  : `${focusedClient?.label ?? focusedClient?.societe ?? "Le client"} est sélectionné avec son activité commerciale, chantier et SAV.`}
               </p>
             </div>
             <button
