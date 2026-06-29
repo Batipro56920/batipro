@@ -11,6 +11,8 @@ type Props = {
   chantierAddress?: string | null;
   clientName?: string | null;
   intervenants: IntervenantRow[];
+  targetedVisitId?: string | null;
+  onClearTargetedVisit?: () => void;
   onDocumentsRefresh?: () => Promise<void>;
 };
 
@@ -21,6 +23,8 @@ export default function VisitesModule({
   chantierAddress,
   clientName,
   intervenants,
+  targetedVisitId,
+  onClearTargetedVisit,
   onDocumentsRefresh,
 }: Props) {
   const [loading, setLoading] = useState(false);
@@ -35,6 +39,13 @@ export default function VisitesModule({
     documents.forEach((doc) => map.set(doc.id, doc));
     return map;
   }, [documents]);
+
+  const targetedVisit = useMemo(() => {
+    if (!targetedVisitId) return null;
+    return visites.find((visite) => visite.id === targetedVisitId) ?? null;
+  }, [targetedVisitId, visites]);
+
+  const targetedVisitMissing = Boolean(targetedVisitId && !loading && !targetedVisit);
 
   async function refreshAll() {
     if (!chantierId) return;
@@ -94,6 +105,37 @@ export default function VisitesModule({
 
       {error && <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>}
 
+      {targetedVisitId ? (
+        <div
+          className={[
+            "rounded-xl border px-4 py-3 text-sm",
+            targetedVisitMissing ? "border-amber-200 bg-amber-50 text-amber-900" : "border-blue-200 bg-blue-50 text-blue-900",
+          ].join(" ")}
+        >
+          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+            <div>
+              <div className="font-semibold">
+                {targetedVisitMissing ? "Visite chantier ciblee introuvable" : "Visite chantier ciblee depuis la recherche globale"}
+              </div>
+              <p className={targetedVisitMissing ? "mt-1 text-amber-800" : "mt-1 text-blue-800"}>
+                {targetedVisit
+                  ? `${targetedVisit.titre || "Visite"} ${targetedVisit.numero ? `#${targetedVisit.numero}` : ""} est surlignee dans l'historique.`
+                  : "Le lien de recherche pointe vers une visite supprimee ou non visible avec les droits actuels."}
+              </p>
+            </div>
+            {onClearTargetedVisit ? (
+              <button
+                type="button"
+                onClick={onClearTargetedVisit}
+                className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700"
+              >
+                Retirer le ciblage
+              </button>
+            ) : null}
+          </div>
+        </div>
+      ) : null}
+
       <div className="rounded-2xl border bg-white p-4">
         <div className="font-medium mb-2">Historique des visites</div>
         {loading ? (
@@ -102,35 +144,45 @@ export default function VisitesModule({
           <div className="text-sm text-slate-500">Aucune visite enregistree.</div>
         ) : (
           <div className="space-y-3">
-            {visites.map((visite) => (
-              <div key={visite.id} className="rounded-xl border p-3">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <div className="font-medium">
-                    {visite.titre || "Visite"} {visite.numero ? `#${visite.numero}` : ""} -{" "}
-                    {new Date(visite.visit_datetime).toLocaleDateString("fr-FR")}
+            {visites.map((visite) => {
+              const isTargeted = targetedVisitId === visite.id;
+              return (
+                <div
+                  key={visite.id}
+                  className={[
+                    "rounded-xl border p-3",
+                    isTargeted ? "border-blue-300 bg-blue-50 ring-2 ring-blue-100" : "border-slate-200 bg-white",
+                  ].join(" ")}
+                >
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div className="font-medium">
+                      {visite.titre || "Visite"} {visite.numero ? `#${visite.numero}` : ""} -{" "}
+                      {new Date(visite.visit_datetime).toLocaleDateString("fr-FR")}
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {isTargeted ? <span className="rounded-full border border-blue-200 bg-white px-2 py-0.5 text-xs font-medium text-blue-700">Cible recherche</span> : null}
+                      {visite.phase && <span className="text-xs rounded-full border px-2 py-0.5">{visite.phase}</span>}
+                      <button
+                        type="button"
+                        disabled={!visite.pdf_document_id || openingPdfId === visite.id}
+                        className={[
+                          "rounded-lg border px-3 py-1 text-xs",
+                          visite.pdf_document_id && openingPdfId !== visite.id
+                            ? "hover:bg-slate-50"
+                            : "text-slate-400 border-slate-200",
+                        ].join(" ")}
+                        onClick={() => void openPdf(visite)}
+                      >
+                        {openingPdfId === visite.id ? "Ouverture..." : "Exporter PDF"}
+                      </button>
+                    </div>
                   </div>
-                  <div className="flex items-center gap-2">
-                    {visite.phase && <span className="text-xs rounded-full border px-2 py-0.5">{visite.phase}</span>}
-                    <button
-                      type="button"
-                      disabled={!visite.pdf_document_id || openingPdfId === visite.id}
-                      className={[
-                        "rounded-lg border px-3 py-1 text-xs",
-                        visite.pdf_document_id && openingPdfId !== visite.id
-                          ? "hover:bg-slate-50"
-                          : "text-slate-400 border-slate-200",
-                      ].join(" ")}
-                      onClick={() => void openPdf(visite)}
-                    >
-                      {openingPdfId === visite.id ? "Ouverture..." : "Exporter PDF"}
-                    </button>
+                  <div className="text-xs text-slate-500 mt-1">
+                    Redacteur: {visite.redactor_email || "-"} | PDF: {visite.pdf_document_id ? "OK" : "-"}
                   </div>
                 </div>
-                <div className="text-xs text-slate-500 mt-1">
-                  Redacteur: {visite.redactor_email || "-"} | PDF: {visite.pdf_document_id ? "OK" : "-"}
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>
