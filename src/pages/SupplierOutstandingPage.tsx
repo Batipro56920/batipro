@@ -73,6 +73,15 @@ export default function SupplierOutstandingPage() {
     setSearchParams(nextParams, { replace: true });
   }
 
+  function purchaseOrderHref(orderId: string) {
+    const params = new URLSearchParams({ tab: "orders", purchaseOrderId: orderId });
+    return `/fournisseurs?${params.toString()}`;
+  }
+
+  function purchaseOrdersHref() {
+    return targetedOrder ? purchaseOrderHref(targetedOrder.id) : "/fournisseurs?tab=orders";
+  }
+
   return (
     <div className="space-y-6">
       <header className="flex flex-col gap-4 rounded-3xl border border-slate-200 bg-white p-5 shadow-sm lg:flex-row lg:items-start lg:justify-between">
@@ -90,10 +99,10 @@ export default function SupplierOutstandingPage() {
         </div>
         <div className="flex flex-wrap gap-2">
           <Link
-            to="/crm/achats"
+            to={purchaseOrdersHref()}
             className="inline-flex h-10 items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 text-sm font-semibold text-white shadow-sm shadow-blue-600/15 hover:bg-blue-700"
           >
-            Gérer les commandes
+            {targetedOrder ? "Ouvrir la commande" : "Gérer les commandes"}
             <ArrowRight className="h-4 w-4" />
           </Link>
           <button
@@ -119,9 +128,16 @@ export default function SupplierOutstandingPage() {
               </>
             )}
           </div>
-          <button type="button" onClick={clearTarget} className="inline-flex h-9 items-center justify-center rounded-xl border border-blue-200 bg-white px-3 font-semibold text-blue-800 hover:bg-blue-100">
-            Voir tous les encours
-          </button>
+          <div className="flex flex-wrap gap-2">
+            {targetedOrder ? (
+              <Link to={purchaseOrderHref(targetedOrder.id)} className="inline-flex h-9 items-center justify-center rounded-xl border border-blue-200 bg-white px-3 font-semibold text-blue-800 hover:bg-blue-100">
+                Ouvrir le bon
+              </Link>
+            ) : null}
+            <button type="button" onClick={clearTarget} className="inline-flex h-9 items-center justify-center rounded-xl border border-blue-200 bg-white px-3 font-semibold text-blue-800 hover:bg-blue-100">
+              Voir tous les encours
+            </button>
+          </div>
         </div>
       ) : null}
 
@@ -143,13 +159,13 @@ export default function SupplierOutstandingPage() {
                 <h2 className="font-semibold text-slate-950">Commandes fournisseurs ouvertes</h2>
                 <p className="mt-1 text-sm text-slate-500">Vue dirigeant des engagements fournisseurs encore actifs, classés par retard puis date de livraison.</p>
               </div>
-              <Link to="/crm/achats" className="inline-flex h-9 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-700 hover:bg-slate-50">
-                Module Achats
+              <Link to="/fournisseurs?tab=orders" className="inline-flex h-9 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-700 hover:bg-slate-50">
+                Bons de commande
                 <ArrowRight className="h-4 w-4" />
               </Link>
             </div>
             <div className="overflow-x-auto p-4">
-              <table className="min-w-[960px] text-sm">
+              <table className="min-w-[1040px] text-sm">
                 <thead className="bg-slate-50 text-slate-600">
                   <tr>
                     <Th>Commande</Th>
@@ -159,6 +175,7 @@ export default function SupplierOutstandingPage() {
                     <Th>Référence fournisseur</Th>
                     <Th align="right">HT</Th>
                     <Th align="right">TTC</Th>
+                    <Th align="right">Action</Th>
                   </tr>
                 </thead>
                 <tbody>
@@ -180,12 +197,18 @@ export default function SupplierOutstandingPage() {
                         <Td>{order.supplierReference || "-"}</Td>
                         <Td align="right">{formatCurrency(totals.totalHt)}</Td>
                         <Td align="right">{formatCurrency(totals.totalTtc)}</Td>
+                        <Td align="right">
+                          <Link to={purchaseOrderHref(order.id)} className="font-semibold text-blue-700 hover:text-blue-800">
+                            Ouvrir
+                          </Link>
+                        </Td>
                       </tr>
                     );
                   })}
                   {!openOrders.length ? (
                     <tr>
                       <Td>Aucune commande fournisseur ouverte.</Td>
+                      <Td />
                       <Td />
                       <Td />
                       <Td />
