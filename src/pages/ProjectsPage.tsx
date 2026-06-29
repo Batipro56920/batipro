@@ -9,6 +9,7 @@ import { useProjectsData } from "../features/projects/hooks/useProjectsData";
 export default function ProjectsPage() {
   const [searchParams] = useSearchParams();
   const billingMode = searchParams.get("facturation") === "1";
+  const quoteCreationMode = searchParams.get("devis") === "nouveau";
   const { filteredProjects, metrics, projectTypes, filters, setFilters, loading, error, refresh } = useProjectsData();
   const visibleProjects = useMemo(() => {
     if (!billingMode) return filteredProjects;
@@ -25,6 +26,12 @@ export default function ProjectsPage() {
         </div>
       ) : null}
 
+      {quoteCreationMode ? (
+        <div className="rounded-3xl border border-blue-100 bg-blue-50 p-4 text-sm text-blue-900">
+          Sélectionnez le dossier projet à chiffrer. L'action ouvre directement le Quote Builder pour créer un nouveau devis sur ce projet.
+        </div>
+      ) : null}
+
       {error ? (
         <div className="rounded-3xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">{error}</div>
       ) : null}
@@ -37,7 +44,7 @@ export default function ProjectsPage() {
           Chargement des projets...
         </div>
       ) : (
-        <ProjectsTable projects={visibleProjects} billingMode={billingMode} />
+        <ProjectsTable projects={visibleProjects} billingMode={billingMode} quoteCreationMode={quoteCreationMode} />
       )}
     </div>
   );
