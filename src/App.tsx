@@ -20,6 +20,7 @@ const CrmQuoteEditRedirectPage = lazy(() => import("./pages/CrmQuoteEditRedirect
 const ChantiersPage = lazy(() => import("./pages/ChantiersPage"));
 const ChantierNewPage = lazy(() => import("./pages/ChantierNewPage"));
 const ChantierPage = lazy(() => import("./pages/ChantierPage"));
+const ChantierPlanningPage = lazy(() => import("./pages/ChantierPlanningPage"));
 const ChantierVisitesPage = lazy(() => import("./pages/ChantierVisitesPage"));
 const ProjectsPage = lazy(() => import("./pages/ProjectsPage"));
 const ProjectDetailPage = lazy(() => import("./pages/ProjectDetailPage"));
@@ -364,6 +365,7 @@ export default function App() {
         <Route path="/chantiers/:id" element={<ChantierBackofficeRoute label="Chargement du chantier..."><ChantierPage /></ChantierBackofficeRoute>} />
         <Route path="/chantiers/:id/preparation" element={<ChantierBackofficeRoute label="Chargement du chantier..."><ChantierPage /></ChantierBackofficeRoute>} />
         <Route path="/chantiers/:id/execution" element={<ChantierBackofficeRoute label="Chargement du chantier..."><ChantierPage /></ChantierBackofficeRoute>} />
+        <Route path="/chantiers/:id/planning" element={<ChantierBackofficeRoute label="Chargement du planning chantier..."><ChantierPlanningPage /></ChantierBackofficeRoute>} />
         <Route path="/chantiers/:id/financier" element={<ChantierBackofficeRoute label="Chargement du chantier..."><ChantierPage /></ChantierBackofficeRoute>} />
         <Route path="/chantiers/:id/qualite" element={<ChantierBackofficeRoute label="Chargement du chantier..."><ChantierPage /></ChantierBackofficeRoute>} />
         <Route path="/chantiers/:id/documents" element={<ChantierBackofficeRoute label="Chargement du chantier..."><ChantierPage /></ChantierBackofficeRoute>} />
