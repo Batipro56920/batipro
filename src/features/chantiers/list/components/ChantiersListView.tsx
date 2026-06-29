@@ -1,6 +1,6 @@
-import { Bell, Clock3, MapPin, Users } from "lucide-react";
+import { Bell, Clock3, FileText, MapPin, Users } from "lucide-react";
 import type { ChantierDerived, ChantierListActions } from "../types";
-import { budgetLabel, shortDate, timeLabel } from "../utils/chantiersListUtils";
+import { budgetLabel, commercialAmountLabel, commercialSourceLabel, hasCommercialContext, shortDate, timeLabel } from "../utils/chantiersListUtils";
 import { ChantierProgress } from "./ChantierProgress";
 import { ChantierRowActions } from "./ChantierRowActions";
 import { ChantierStatusPill } from "./ChantierStatusPill";
@@ -111,6 +111,17 @@ function ChantierIdentity({ row }: { row: ChantierDerived }) {
         <MapPin className="h-3.5 w-3.5 shrink-0" />
         <span className="truncate">{row.adresse ?? "Adresse non renseignée"}</span>
       </div>
+      {hasCommercialContext(row) ? (
+        <div className="mt-2 flex flex-wrap gap-1.5">
+          <span className="inline-flex items-center gap-1 rounded-full border border-blue-200 bg-blue-50 px-2 py-1 text-xs font-semibold text-blue-700">
+            <FileText className="h-3 w-3" />
+            {commercialSourceLabel(row)}
+          </span>
+          <span className="inline-flex rounded-full border border-emerald-200 bg-emerald-50 px-2 py-1 text-xs font-semibold text-emerald-700">
+            {commercialAmountLabel(row)}
+          </span>
+        </div>
+      ) : null}
     </div>
   );
 }
