@@ -1,10 +1,10 @@
 import { useEffect, useState } from "react";
 import { Link, Navigate } from "react-router-dom";
 import { Building2, HardHat, LogIn } from "lucide-react";
-import { getCurrentUserHomeRoute } from "../services/currentUserProfile.service";
+import { getCurrentUserHomeRoute, type CurrentUserHomeRoute } from "../services/currentUserProfile.service";
 import { readStoredIntervenantToken } from "../utils/intervenantSession";
 
-type EntryTarget = "/dashboard" | "/intervenant" | "/login" | "choice";
+type EntryTarget = CurrentUserHomeRoute | "/intervenant" | "choice";
 
 export default function AppEntryPage() {
   const [target, setTarget] = useState<EntryTarget | null>(null);
