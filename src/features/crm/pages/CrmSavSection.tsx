@@ -47,6 +47,13 @@ export default function CrmSavSection({
     openedSavFromUrlRef.current = focusedSavId;
   }, [focusedSavId, sav, targetedTicket]);
 
+  function selectTicket(ticket: SavWithContext) {
+    if (focusedSavId && ticket.id !== focusedSavId) {
+      clearFocusedSav();
+    }
+    setSelectedTicket(ticket);
+  }
+
   function closeTicketDrawer() {
     if (focusedSavId && selectedTicket?.id === focusedSavId) {
       onFocusedSavClear?.();
@@ -105,11 +112,11 @@ export default function CrmSavSection({
       {sav.filteredRows.length === 0 ? (
         <SavEmptyState onCreate={onCreate} />
       ) : view === "kanban" ? (
-        <SavKanban rows={sav.filteredRows} onSelect={setSelectedTicket} />
+        <SavKanban rows={sav.filteredRows} onSelect={selectTicket} />
       ) : view === "planning" ? (
-        <SavPlanning rows={sav.filteredRows} onSelect={setSelectedTicket} />
+        <SavPlanning rows={sav.filteredRows} onSelect={selectTicket} />
       ) : (
-        <SavList rows={sav.filteredRows} onSelect={setSelectedTicket} />
+        <SavList rows={sav.filteredRows} onSelect={selectTicket} />
       )}
 
       <SavTicketDrawer ticket={selectedTicket} onClose={closeTicketDrawer} />
