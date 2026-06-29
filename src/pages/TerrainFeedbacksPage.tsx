@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { getChantiers, type ChantierRow } from "../services/chantiers.service";
+import { appendChantierActivityLog } from "../services/chantierActivityLog.service";
 import { listIntervenants, type IntervenantRow } from "../services/intervenants.service";
 import {
   listTerrainFeedbackResponsibles,
@@ -69,6 +70,23 @@ function isOpenFeedback(row: TerrainFeedbackRow) {
 
 function isPriorityFeedback(row: TerrainFeedbackRow) {
   return isOpenFeedback(row) && PRIORITY_URGENCIES.has(row.urgency);
+}
+
+function buildFeedbackActivityChanges(
+  row: TerrainFeedbackRow,
+  draft: DraftState,
+  assignedToName: string | null,
+) {
+  return {
+    title: row.title,
+    category: row.category,
+    urgency: row.urgency,
+    status_from: row.status,
+    status_to: draft.status,
+    assigned_to_name_from: row.assigned_to_name,
+    assigned_to_name_to: assignedToName,
+    treatment_comment_updated: (draft.treatment_comment || null) !== row.treatment_comment,
+  };
 }
 
 export default function TerrainFeedbacksPage() {
@@ -217,19 +235,38 @@ export default function TerrainFeedbacksPage() {
     }));
   }
 
+  async function appendFeedbackActivity(row: TerrainFeedbackRow, draft: DraftState, assignedToName: string | null) {
+    if (!row.chantier_id) return;
+
+    try {
+      await appendChantierActivityLog({
+        chantierId: row.chantier_id,
+        actionType: draft.status === "en_cours" && row.status === "nouveau" ? "started" : "updated",
+        entityType: "terrain_feedback",
+        entityId: row.id,
+        reason: `Retour terrain mis à jour : ${row.title}`,
+        changes: buildFeedbackActivityChanges(row, draft, assignedToName),
+        actorName: "Pilotage retours terrain",
+      });
+    } catch (err) {
+      console.warn("[terrain-feedback] activity log skipped", err);
+    }
+  }
+
   async function saveRow(row: TerrainFeedbackRow) {
     const draft = drafts[row.id];
     if (!draft) return;
+    const assignedToName = draft.assigned_to_name || responsibleNameById.get(draft.assigned_to) || null;
     setSavingId(row.id);
     setError(null);
     try {
       await updateTerrainFeedback(row.id, {
         status: draft.status,
         assigned_to: draft.assigned_to || null,
-        assigned_to_name:
-          draft.assigned_to_name || responsibleNameById.get(draft.assigned_to) || null,
+        assigned_to_name: assignedToName,
         treatment_comment: draft.treatment_comment || null,
       });
+      await appendFeedbackActivity(row, draft, assignedToName);
       await refresh();
     } catch (err: any) {
       setError(err?.message ?? t("terrainFeedback.admin.saveError"));
@@ -245,6 +282,15 @@ export default function TerrainFeedbacksPage() {
       draft?.assigned_to_name ||
       row.assigned_to_name ||
       (assignedTo ? responsibleNameById.get(assignedTo) ?? null : null);
+    const nextDraft: DraftState = {
+      status: "en_cours",
+      assigned_to: assignedTo ?? "",
+      assigned_to_name: assignedToName ?? "",
+      treatment_comment:
+        draft?.treatment_comment ||
+        row.treatment_comment ||
+        "Pris en charge depuis le pilotage des retours terrain.",
+    };
     setSavingId(row.id);
     setError(null);
     try {
@@ -252,11 +298,9 @@ export default function TerrainFeedbacksPage() {
         status: "en_cours",
         assigned_to: assignedTo,
         assigned_to_name: assignedToName,
-        treatment_comment:
-          draft?.treatment_comment ||
-          row.treatment_comment ||
-          "Pris en charge depuis le pilotage des retours terrain.",
+        treatment_comment: nextDraft.treatment_comment,
       });
+      await appendFeedbackActivity(row, nextDraft, assignedToName);
       await refresh();
     } catch (err: any) {
       setError(err?.message ?? t("terrainFeedback.admin.saveError"));
