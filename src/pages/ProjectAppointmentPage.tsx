@@ -9,6 +9,28 @@ function isProjectVisitAppointment(appointment: CrmAppointmentRow) {
   return appointment.type === "visite_chiffrage" || appointment.type === "visite_chiffrage_pre_devis";
 }
 
+function appointmentTypeLabel(type: string | null | undefined) {
+  if (type === "appel") return "Appel";
+  if (type === "rdv_client") return "RDV client";
+  if (type === "relance") return "Relance";
+  if (type === "visite_chiffrage") return "Visite de chiffrage";
+  if (type === "visite_chiffrage_pre_devis") return "Préparation devis";
+  return type || "Rendez-vous";
+}
+
+function appointmentStatusLabel(status: string | null | undefined) {
+  if (status === "planifie") return "Planifié";
+  if (status === "realise") return "Réalisé";
+  if (status === "annule") return "Annulé";
+  if (status === "reporte") return "Reporté";
+  return status || "Statut non renseigné";
+}
+
+function formatAppointmentDate(value: string | null | undefined) {
+  if (!value) return "Date non renseignée";
+  return new Date(value).toLocaleString("fr-FR", { dateStyle: "medium", timeStyle: "short" });
+}
+
 function resolveProjectVisitAppointment(project: ProjectRecord, appointmentId?: string) {
   if (appointmentId) {
     return project.appointments.find((item) => item.id === appointmentId) ?? null;
@@ -18,6 +40,67 @@ function resolveProjectVisitAppointment(project: ProjectRecord, appointmentId?: 
     project.appointments
       .filter(isProjectVisitAppointment)
       .sort((a, b) => String(a.created_at ?? a.starts_at).localeCompare(String(b.created_at ?? b.starts_at)))[0] ?? null
+  );
+}
+
+function ProjectRdvSummary({ project, appointment }: { project: ProjectRecord; appointment: CrmAppointmentRow }) {
+  return (
+    <div className="space-y-5">
+      <div className="rounded-3xl border border-blue-200 bg-blue-50 p-5 text-sm text-blue-950 shadow-sm">
+        <div className="text-xs font-semibold uppercase tracking-[0.16em] text-blue-700">Rendez-vous ciblé</div>
+        <h1 className="mt-2 text-2xl font-bold text-blue-950">{appointment.titre || appointmentTypeLabel(appointment.type)}</h1>
+        <p className="mt-2 text-blue-800">
+          Ce résultat vient de la recherche globale. Il est affiché comme rendez-vous commercial, sans ouvrir l'outil de visite de chiffrage.
+        </p>
+      </div>
+
+      <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+          <div className="rounded-2xl border border-slate-100 bg-slate-50 p-4">
+            <div className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">Projet</div>
+            <div className="mt-2 text-sm font-semibold text-slate-900">{project.name}</div>
+          </div>
+          <div className="rounded-2xl border border-slate-100 bg-slate-50 p-4">
+            <div className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">Type</div>
+            <div className="mt-2 text-sm font-semibold text-slate-900">{appointmentTypeLabel(appointment.type)}</div>
+          </div>
+          <div className="rounded-2xl border border-slate-100 bg-slate-50 p-4">
+            <div className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">Statut</div>
+            <div className="mt-2 text-sm font-semibold text-slate-900">{appointmentStatusLabel(appointment.statut)}</div>
+          </div>
+          <div className="rounded-2xl border border-slate-100 bg-slate-50 p-4">
+            <div className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">Date</div>
+            <div className="mt-2 text-sm font-semibold text-slate-900">{formatAppointmentDate(appointment.starts_at)}</div>
+          </div>
+        </div>
+
+        {appointment.notes || appointment.compte_rendu ? (
+          <div className="mt-5 grid gap-4 lg:grid-cols-2">
+            {appointment.notes ? (
+              <div className="rounded-2xl border border-slate-200 p-4">
+                <div className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">Notes</div>
+                <div className="mt-2 whitespace-pre-wrap text-sm text-slate-700">{appointment.notes}</div>
+              </div>
+            ) : null}
+            {appointment.compte_rendu ? (
+              <div className="rounded-2xl border border-slate-200 p-4">
+                <div className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">Compte rendu</div>
+                <div className="mt-2 whitespace-pre-wrap text-sm text-slate-700">{appointment.compte_rendu}</div>
+              </div>
+            ) : null}
+          </div>
+        ) : null}
+
+        <div className="mt-5 flex flex-wrap gap-2">
+          <Link to={`/projets/${project.id}?tab=visits`} className="rounded-xl bg-blue-700 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-800">
+            Voir tous les RDV du projet
+          </Link>
+          <Link to="/crm/agenda" className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50">
+            Agenda CRM
+          </Link>
+        </div>
+      </section>
+    </div>
   );
 }
 
@@ -52,6 +135,10 @@ export default function ProjectAppointmentPage() {
         </Link>
       </div>
     );
+  }
+
+  if (rdvId && appointment && !isProjectVisitAppointment(appointment)) {
+    return <ProjectRdvSummary project={project} appointment={appointment} />;
   }
 
   if (shouldPrepareQuote) {
