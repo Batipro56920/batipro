@@ -27,6 +27,33 @@ export function shortDate(value: string | null | undefined) {
   return new Intl.DateTimeFormat("fr-FR", { day: "2-digit", month: "short", year: "numeric" }).format(new Date(value));
 }
 
+export function hasCommercialContext(row: ChantierRow) {
+  return Boolean(
+    row.crm_quote_id ||
+      row.crm_opportunity_id ||
+      row.crm_prospect_id ||
+      row.crm_client_id ||
+      row.signed_quote_amount_ht ||
+      row.signed_quote_amount_ttc ||
+      row.crm_client_phone ||
+      row.crm_client_email,
+  );
+}
+
+export function commercialSourceLabel(row: ChantierRow) {
+  if (row.crm_quote_id && (row.signed_quote_amount_ht || row.signed_quote_amount_ttc)) return "Devis signé";
+  if (row.crm_quote_id) return "Devis rattaché";
+  if (row.crm_opportunity_id) return "Opportunité CRM";
+  if (row.crm_prospect_id) return "Prospect CRM";
+  if (row.crm_client_id) return "Client CRM";
+  return "Chantier seul";
+}
+
+export function commercialAmountLabel(row: ChantierRow) {
+  const amount = row.signed_quote_amount_ht ?? row.signed_quote_amount_ttc ?? null;
+  return amount ? currency(amount) : "Montant non renseigné";
+}
+
 export function deriveChantier(row: ChantierRow, today = new Date().toISOString().slice(0, 10)): ChantierDerived {
   const progress = Math.min(100, Math.max(0, Number(row.avancement ?? 0)));
   const endDate = row.date_fin_prevue ?? row.planning_end_date ?? null;
@@ -53,7 +80,15 @@ export function filterChantiers(rows: ChantierDerived[], filters: ChantierListFi
     if (filters.period === "this_month" && !isInCurrentMonth(row.date_fin_prevue ?? row.planning_end_date)) return false;
     if (filters.period === "next_30" && !isInNextDays(row.date_fin_prevue ?? row.planning_end_date, 30)) return false;
     if (!query) return true;
-    return [row.nom, row.client, row.adresse, row.crm_project_description].some((value) => String(value ?? "").toLowerCase().includes(query));
+    return [
+      row.nom,
+      row.client,
+      row.adresse,
+      row.crm_project_description,
+      commercialSourceLabel(row),
+      row.crm_client_email,
+      row.crm_client_phone,
+    ].some((value) => String(value ?? "").toLowerCase().includes(query));
   });
 }
 
@@ -88,7 +123,7 @@ export function statusLabel(status: ChantierStatus) {
 }
 
 export function exportChantiersCsv(rows: ChantierRow[], filename = "chantiers.csv") {
-  const header = ["Nom", "Client", "Adresse", "Statut", "Avancement", "Budget HT", "Date fin"];
+  const header = ["Nom", "Client", "Adresse", "Statut", "Avancement", "Budget HT", "Source commerciale", "Montant devis signé", "Date fin"];
   const lines = rows.map((row) => [
     row.nom,
     row.client ?? "",
@@ -96,6 +131,8 @@ export function exportChantiersCsv(rows: ChantierRow[], filename = "chantiers.cs
     row.status ?? "",
     String(row.avancement ?? 0),
     String(row.signed_quote_amount_ht ?? ""),
+    commercialSourceLabel(row),
+    String(row.signed_quote_amount_ttc ?? row.signed_quote_amount_ht ?? ""),
     row.date_fin_prevue ?? row.planning_end_date ?? "",
   ]);
   const csv = [header, ...lines].map((line) => line.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(";")).join("\n");
