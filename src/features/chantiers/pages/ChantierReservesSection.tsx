@@ -1,10 +1,12 @@
 import type { ReactNode } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useParams, useSearchParams } from "react-router-dom";
 
 import ChantierChapterDrawer from "../components/ChantierChapterDrawer";
 
 export default function ChantierReservesSection({ children }: { children: ReactNode }) {
   const { id } = useParams<{ id: string }>();
+  const [searchParams] = useSearchParams();
+  const targetedReserveId = searchParams.get("reserveId") ?? "";
   const terrainFeedbackHref = id ? `/retours-terrain?chantierId=${encodeURIComponent(id)}` : "/retours-terrain";
 
   return (
@@ -14,7 +16,13 @@ export default function ChantierReservesSection({ children }: { children: ReactN
       subtitle="Reserves ouvertes et levees. La creation, le filtre et le detail se font dans le panneau lateral."
       actionLabel="Gerer les reserves"
       previewClassName="batipro-chapter-preview--reserves"
+      autoOpenKey={targetedReserveId ? `reserve:${targetedReserveId}` : ""}
     >
+      {targetedReserveId ? (
+        <div className="mb-4 rounded-2xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-900">
+          Recherche globale : le panneau reserves est ouvert pour traiter la reserve ciblee.
+        </div>
+      ) : null}
       <div className="mb-4 rounded-2xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-900">
         <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
           <div>
