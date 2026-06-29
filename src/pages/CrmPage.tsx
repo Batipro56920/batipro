@@ -213,7 +213,7 @@ export default function CrmPage({ section = "dashboard" }: Props) {
   }
 
   async function createDraftQuoteAndOpen() {
-    navigate("/projets");
+    navigate("/projets?devis=nouveau");
   }
 
   async function downloadQuote(row: CrmQuoteRow) {
