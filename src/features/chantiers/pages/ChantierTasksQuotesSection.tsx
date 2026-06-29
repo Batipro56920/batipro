@@ -8,6 +8,7 @@ export default function ChantierTasksQuotesSection({ children }: { children: Rea
   const [searchParams] = useSearchParams();
   const targetedTaskId = searchParams.get("taskId") ?? "";
   const terrainFeedbackHref = id ? `/retours-terrain?chantierId=${encodeURIComponent(id)}` : "/retours-terrain";
+  const taskLibraryHref = "/bibliotheque";
 
   return (
     <ChantierChapterDrawer
@@ -37,6 +38,22 @@ export default function ChantierTasksQuotesSection({ children }: { children: Rea
             className="inline-flex shrink-0 items-center justify-center rounded-xl bg-amber-700 px-3 py-2 text-sm font-semibold text-white hover:bg-amber-800"
           >
             Voir les retours terrain
+          </Link>
+        </div>
+      </div>
+      <div className="mb-4 rounded-2xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-900">
+        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+          <div>
+            <div className="font-semibold">Bibliotheque chantier</div>
+            <div className="mt-1 text-blue-800/80">
+              Completez les modeles avec temps, couts, details techniques et preparation avant de les utiliser sur les taches.
+            </div>
+          </div>
+          <Link
+            to={taskLibraryHref}
+            className="inline-flex shrink-0 items-center justify-center rounded-xl bg-blue-700 px-3 py-2 text-sm font-semibold text-white hover:bg-blue-800"
+          >
+            Ouvrir la bibliotheque
           </Link>
         </div>
       </div>
