@@ -16,17 +16,23 @@ function quoteBuilderErrorMessage(error: unknown) {
   return "Chargement du devis impossible.";
 }
 
+function quoteRouteKey(projectId: string, quoteId?: string) {
+  return `${projectId}:${quoteId ?? "new"}`;
+}
+
 export default function ProjectQuoteBuilderV1Page() {
   const { projectId, quoteId } = useParams();
   const navigate = useNavigate();
   const { projectsById, loading, error } = useProjectsData();
   const project = projectId ? projectsById.get(projectId) ?? null : null;
+  const routeKey = project ? quoteRouteKey(project.id, quoteId) : null;
   const quote = useQuoteBuilderStore((state) => state.quote);
   const hydrate = useQuoteBuilderStore((state) => state.hydrate);
   const [permissionLoading, setPermissionLoading] = useState(true);
   const [permissionAllowed, setPermissionAllowed] = useState(false);
   const [quoteLoading, setQuoteLoading] = useState(false);
   const [quoteError, setQuoteError] = useState<string | null>(null);
+  const [loadedRouteKey, setLoadedRouteKey] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -52,14 +58,16 @@ export default function ProjectQuoteBuilderV1Page() {
   }, [quoteId]);
 
   useEffect(() => {
-    if (!project || !permissionAllowed) return;
+    if (!project || !permissionAllowed || !routeKey) return;
     let cancelled = false;
+    setLoadedRouteKey(null);
     setQuoteLoading(true);
     setQuoteError(null);
     void loadQuoteBuilder(project, quoteId)
       .then((loaded) => {
         if (cancelled) return;
         hydrate(loaded);
+        setLoadedRouteKey(routeKey);
         setQuoteLoading(false);
       })
       .catch((err) => {
@@ -70,13 +78,15 @@ export default function ProjectQuoteBuilderV1Page() {
     return () => {
       cancelled = true;
     };
-  }, [hydrate, permissionAllowed, project, quoteId]);
+  }, [hydrate, permissionAllowed, project, quoteId, routeKey]);
 
   const quoteMatchesRoute = Boolean(
     project &&
       quote &&
+      routeKey &&
+      loadedRouteKey === routeKey &&
       quote.projectId === project.id &&
-      (quoteId ? quote.id === quoteId : quote.id === null),
+      (quoteId ? quote.id === quoteId : true),
   );
 
   if (permissionLoading) return <QuoteDocumentLoader />;
