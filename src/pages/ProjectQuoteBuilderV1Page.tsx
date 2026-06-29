@@ -10,6 +10,12 @@ import {
   hasProfileFeaturePermission,
 } from "../services/profileFeaturePermissions.service";
 
+function quoteBuilderErrorMessage(error: unknown) {
+  if (error instanceof Error && error.message) return error.message;
+  if (typeof error === "string" && error.trim()) return error;
+  return "Chargement du devis impossible.";
+}
+
 export default function ProjectQuoteBuilderV1Page() {
   const { projectId, quoteId } = useParams();
   const navigate = useNavigate();
@@ -19,6 +25,8 @@ export default function ProjectQuoteBuilderV1Page() {
   const hydrate = useQuoteBuilderStore((state) => state.hydrate);
   const [permissionLoading, setPermissionLoading] = useState(true);
   const [permissionAllowed, setPermissionAllowed] = useState(false);
+  const [quoteLoading, setQuoteLoading] = useState(false);
+  const [quoteError, setQuoteError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -46,13 +54,30 @@ export default function ProjectQuoteBuilderV1Page() {
   useEffect(() => {
     if (!project || !permissionAllowed) return;
     let cancelled = false;
-    void loadQuoteBuilder(project, quoteId).then((loaded) => {
-      if (!cancelled) hydrate(loaded);
-    });
+    setQuoteLoading(true);
+    setQuoteError(null);
+    void loadQuoteBuilder(project, quoteId)
+      .then((loaded) => {
+        if (cancelled) return;
+        hydrate(loaded);
+        setQuoteLoading(false);
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        setQuoteError(quoteBuilderErrorMessage(err));
+        setQuoteLoading(false);
+      });
     return () => {
       cancelled = true;
     };
   }, [hydrate, permissionAllowed, project, quoteId]);
+
+  const quoteMatchesRoute = Boolean(
+    project &&
+      quote &&
+      quote.projectId === project.id &&
+      (quoteId ? quote.id === quoteId : quote.id === null),
+  );
 
   if (permissionLoading) return <QuoteDocumentLoader />;
 
@@ -64,11 +89,17 @@ export default function ProjectQuoteBuilderV1Page() {
     );
   }
 
-  if (loading || (project && !quote)) return <QuoteDocumentLoader />;
+  if (loading) return <QuoteDocumentLoader />;
 
   if (error || !project) {
     return <div className="rounded-3xl border border-red-200 bg-red-50 p-6 text-sm text-red-700">{error ?? "Projet introuvable."}</div>;
   }
+
+  if (quoteError) {
+    return <div className="rounded-3xl border border-red-200 bg-red-50 p-6 text-sm text-red-700">{quoteError}</div>;
+  }
+
+  if (quoteLoading || !quoteMatchesRoute) return <QuoteDocumentLoader />;
 
   return <QuoteBuilderWorkspace onClose={() => navigate(`/projets/${project.id}?tab=quotes`)} />;
 }
