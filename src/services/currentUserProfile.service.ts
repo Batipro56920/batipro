@@ -2,6 +2,7 @@ import { supabase } from "../lib/supabaseClient";
 import type { User } from "@supabase/supabase-js";
 
 export type CurrentUserRole = "ADMIN" | "INTERVENANT" | string;
+export type CurrentUserHomeRoute = "/dashboard" | "/portail/employe" | "/login";
 
 export type CurrentUserProfile = {
   id: string;
@@ -161,7 +162,7 @@ export async function hasLinkedIntervenantAccount(userId: string): Promise<boole
   return Boolean((directLink.count ?? 0) > 0 || (junctionLink.count ?? 0) > 0);
 }
 
-export async function getCurrentUserHomeRoute(): Promise<"/dashboard" | "/intervenant" | "/login"> {
+export async function getCurrentUserHomeRoute(): Promise<CurrentUserHomeRoute> {
   const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
   if (sessionError) throw sessionError;
 
@@ -176,7 +177,7 @@ export async function getCurrentUserHomeRoute(): Promise<"/dashboard" | "/interv
 
   const profile = await getCurrentUserProfile();
   if (isAdminProfile(profile)) return "/dashboard";
-  if (isIntervenantProfile(profile)) return "/intervenant";
-  if (await hasLinkedIntervenantAccount(user.id)) return "/intervenant";
+  if (isIntervenantProfile(profile)) return "/portail/employe";
+  if (await hasLinkedIntervenantAccount(user.id)) return "/portail/employe";
   return "/login";
 }
