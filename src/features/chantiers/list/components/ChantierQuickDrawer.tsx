@@ -17,16 +17,31 @@ function getProjectHref(row: ChantierDerived) {
   return null;
 }
 
+function getCommercialSourceLabel(row: ChantierDerived) {
+  if (row.crm_opportunity_id) return "Opportunité commerciale";
+  if (row.crm_prospect_id) return "Prospect";
+  if (row.crm_client_id) return "Client";
+  if (row.crm_quote_id) return "Devis rattaché";
+  return "Chantier seul";
+}
+
 function getQuoteHref(row: ChantierDerived, projectHref: string | null) {
   if (!row.crm_quote_id) return null;
   if (projectHref) return `${projectHref}/devis/${row.crm_quote_id}/edit`;
   return `/crm/devis/${row.crm_quote_id}/edit`;
 }
 
+function getBillingHref(row: ChantierDerived, projectHref: string | null) {
+  const hasSignedQuote = Boolean(row.crm_quote_id || row.signed_quote_amount_ht || row.signed_quote_amount_ttc);
+  if (!hasSignedQuote) return null;
+  if (projectHref) return `${projectHref}?tab=quotes`;
+  return "/projets?facturation=1";
+}
+
 function CommercialContext({ row }: { row: ChantierDerived }) {
   const projectHref = getProjectHref(row);
   const quoteHref = getQuoteHref(row, projectHref);
-  const quoteListHref = projectHref ? `${projectHref}?tab=quotes` : null;
+  const billingHref = getBillingHref(row, projectHref);
   const financialHref = `/chantiers/${row.id}/financier`;
   const hasCommercialContext = Boolean(projectHref || row.crm_quote_id || row.signed_quote_amount_ht || row.crm_client_phone || row.crm_client_email);
 
@@ -41,12 +56,20 @@ function CommercialContext({ row }: { row: ChantierDerived }) {
           <h3 className="font-semibold text-blue-950">Dossier commercial</h3>
           <div className="mt-2 grid gap-2 text-sm text-blue-900 sm:grid-cols-2">
             <div>
+              <span className="text-blue-700/80">Rattachement</span>
+              <div className="font-semibold">{getCommercialSourceLabel(row)}</div>
+            </div>
+            <div>
               <span className="text-blue-700/80">Devis signé</span>
               <div className="font-semibold">{budgetLabel(row.signed_quote_amount_ht)}</div>
             </div>
             <div>
               <span className="text-blue-700/80">Contact client</span>
               <div className="font-semibold">{row.crm_client_phone || row.crm_client_email || "Non renseigné"}</div>
+            </div>
+            <div>
+              <span className="text-blue-700/80">Suite métier</span>
+              <div className="font-semibold">{billingHref ? "Facturation disponible" : "Financier chantier"}</div>
             </div>
           </div>
         </div>
@@ -61,8 +84,8 @@ function CommercialContext({ row }: { row: ChantierDerived }) {
               Devis
             </Link>
           ) : null}
-          {quoteListHref ? (
-            <Link to={quoteListHref} className="inline-flex h-9 items-center rounded-xl border border-blue-200 bg-white px-3 text-sm font-semibold text-blue-800 hover:bg-blue-100">
+          {billingHref ? (
+            <Link to={billingHref} className="inline-flex h-9 items-center rounded-xl border border-blue-200 bg-white px-3 text-sm font-semibold text-blue-800 hover:bg-blue-100">
               Facturer
             </Link>
           ) : null}
