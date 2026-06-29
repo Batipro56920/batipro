@@ -284,16 +284,34 @@ export default function TerrainFeedbacksPage() {
 
       {filterChantierId ? (
         <section className="rounded-3xl border border-blue-200 bg-blue-50 px-4 py-3 shadow-sm">
-          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-            <div>
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+            <div className="min-w-0 flex-1">
               <div className="text-xs font-semibold uppercase tracking-[0.18em] text-blue-700">
                 Vue chantier filtrée
               </div>
               <div className="mt-1 text-sm text-blue-900">
                 Retours terrain liés à {selectedChantier?.nom ?? "ce chantier"}. Ouvre directement la zone utile pour traiter le sujet.
               </div>
+              <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+                <div className="rounded-2xl border border-blue-200 bg-white/80 px-3 py-2">
+                  <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-blue-700">À traiter</div>
+                  <div className="mt-1 text-lg font-semibold text-blue-950">{workflowStats.open}</div>
+                </div>
+                <div className="rounded-2xl border border-red-200 bg-white/80 px-3 py-2">
+                  <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-red-700">Urgents</div>
+                  <div className="mt-1 text-lg font-semibold text-red-950">{workflowStats.priority}</div>
+                </div>
+                <div className="rounded-2xl border border-amber-200 bg-white/80 px-3 py-2">
+                  <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-amber-700">Sans responsable</div>
+                  <div className="mt-1 text-lg font-semibold text-amber-950">{workflowStats.unassigned}</div>
+                </div>
+                <div className="rounded-2xl border border-slate-200 bg-white/80 px-3 py-2">
+                  <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Avec photos</div>
+                  <div className="mt-1 text-lg font-semibold text-slate-950">{workflowStats.withPhotos}</div>
+                </div>
+              </div>
             </div>
-            <div className="flex flex-wrap gap-2">
+            <div className="flex flex-wrap gap-2 lg:max-w-xs lg:justify-end">
               <Link
                 to={`/chantiers/${filterChantierId}`}
                 className="rounded-xl bg-blue-700 px-3 py-2 text-sm font-semibold text-white hover:bg-blue-800"
