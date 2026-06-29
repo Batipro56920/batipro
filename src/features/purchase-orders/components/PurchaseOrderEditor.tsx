@@ -259,12 +259,33 @@ function Field({ label, value, onChange, type = "text" }: { label: string; value
 }
 
 function NumberCell({ value, onChange }: { value: number; onChange: (value: number) => void }) {
+  const [draft, setDraft] = useState(() => formatNumberInput(value));
+
+  useEffect(() => {
+    setDraft(formatNumberInput(value));
+  }, [value]);
+
+  function updateDraft(nextDraft: string) {
+    setDraft(nextDraft);
+    const parsed = parseStrictFrenchNumber(nextDraft);
+    if (parsed !== null) {
+      onChange(parsed);
+    }
+  }
+
+  function restoreLastValidValue() {
+    if (parseStrictFrenchNumber(draft) === null) {
+      setDraft(formatNumberInput(value));
+    }
+  }
+
   return (
     <input
       className={`${cellClass} text-right`}
       inputMode="decimal"
-      value={value}
-      onChange={(event) => onChange(parseFrenchNumber(event.target.value))}
+      value={draft}
+      onBlur={restoreLastValidValue}
+      onChange={(event) => updateDraft(event.target.value)}
     />
   );
 }
@@ -293,14 +314,32 @@ const labelClass = "block text-xs font-semibold uppercase tracking-[0.12em] text
 const inputClass = "mt-1 h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm font-normal normal-case tracking-normal text-slate-950 outline-none focus:border-blue-300";
 const cellClass = "h-9 w-full rounded-lg border border-transparent bg-transparent px-2 text-sm font-normal outline-none hover:border-slate-200 focus:border-blue-300";
 
-function parseFrenchNumber(value: string) {
-  const text = value.trim();
-  if (!text) return 0;
-  const normalized = text.includes(",")
-    ? text.replace(/\s/g, "").replace(/\./g, "").replace(",", ".")
-    : text.replace(/\s/g, "");
+function formatNumberInput(value: number) {
+  return Number.isFinite(value) ? String(value) : "";
+}
+
+function parseStrictFrenchNumber(value: string) {
+  const text = value.trim().replace(/[\u00a0\u202f]/g, " ");
+  if (!text || /[,.]$/.test(text)) return null;
+
+  const compact = text.replace(/\s/g, "");
+  if (!/^\d+(?:[.,]\d+)*$/.test(compact)) return null;
+
+  let normalized = compact;
+  if (compact.includes(",")) {
+    normalized = compact.replace(/\./g, "").replace(",", ".");
+  } else if (compact.includes(".")) {
+    const groups = compact.split(".");
+    if (groups.length > 2) {
+      if (!groups.slice(1).every((group) => group.length === 3)) return null;
+      normalized = groups.join("");
+    } else if (groups[1]?.length === 3 && groups[0].length <= 3) {
+      normalized = groups.join("");
+    }
+  }
+
   const parsed = Number(normalized);
-  return Number.isFinite(parsed) ? parsed : 0;
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : null;
 }
 
 function formatCurrency(value: number) {
