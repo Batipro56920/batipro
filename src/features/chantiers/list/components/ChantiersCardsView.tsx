@@ -1,6 +1,6 @@
-import { CalendarDays, MapPin } from "lucide-react";
+import { CalendarDays, FileText, MapPin } from "lucide-react";
 import type { ChantierDerived, ChantierListActions } from "../types";
-import { budgetLabel, shortDate, timeLabel } from "../utils/chantiersListUtils";
+import { budgetLabel, commercialAmountLabel, commercialSourceLabel, hasCommercialContext, shortDate, timeLabel } from "../utils/chantiersListUtils";
 import { ChantierProgress } from "./ChantierProgress";
 import { ChantierRowActions } from "./ChantierRowActions";
 import { ChantierStatusPill } from "./ChantierStatusPill";
@@ -17,6 +17,17 @@ export function ChantiersCardsView({ rows, onPreview, actions }: { rows: Chantie
             </div>
             <ChantierStatusPill status={row.status} />
           </div>
+          {hasCommercialContext(row) ? (
+            <div className="mt-3 flex flex-wrap gap-1.5">
+              <span className="inline-flex items-center gap-1 rounded-full border border-blue-200 bg-blue-50 px-2 py-1 text-xs font-semibold text-blue-700">
+                <FileText className="h-3 w-3" />
+                {commercialSourceLabel(row)}
+              </span>
+              <span className="inline-flex rounded-full border border-emerald-200 bg-emerald-50 px-2 py-1 text-xs font-semibold text-emerald-700">
+                {commercialAmountLabel(row)}
+              </span>
+            </div>
+          ) : null}
           <div className="mt-3 flex items-center gap-2 text-sm text-slate-500">
             <MapPin className="h-4 w-4" />
             <span className="truncate">{row.adresse ?? "Adresse non renseignée"}</span>
