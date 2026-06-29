@@ -1,11 +1,15 @@
 import type { ReactNode } from "react";
-import { useSearchParams } from "react-router-dom";
+import { Link, useParams, useSearchParams } from "react-router-dom";
 
 import ChantierChapterDrawer from "../components/ChantierChapterDrawer";
 
 export default function ChantierDocumentsSection({ children }: { children: ReactNode }) {
+  const { id } = useParams<{ id: string }>();
   const [searchParams] = useSearchParams();
   const targetedDocumentId = searchParams.get("documentId") ?? "";
+  const executionHref = id ? `/chantiers/${encodeURIComponent(id)}/execution` : "/chantiers";
+  const qualiteHref = id ? `/chantiers/${encodeURIComponent(id)}/qualite` : "/chantiers";
+  const terrainFeedbackHref = id ? `/retours-terrain?chantierId=${encodeURIComponent(id)}` : "/retours-terrain";
 
   return (
     <ChantierChapterDrawer
@@ -21,6 +25,36 @@ export default function ChantierDocumentsSection({ children }: { children: React
           Recherche globale : le panneau documents est ouvert pour retrouver le document cible.
         </div>
       ) : null}
+      <div className="mb-4 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-800">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+          <div>
+            <div className="font-semibold text-slate-950">Suite métier liée au document</div>
+            <div className="mt-1 text-slate-600">
+              Utilisez les documents comme support direct des tâches, réserves et retours terrain du chantier.
+            </div>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Link
+              to={executionHref}
+              className="inline-flex shrink-0 items-center justify-center rounded-xl border border-blue-200 bg-white px-3 py-2 text-sm font-semibold text-blue-800 hover:bg-blue-50"
+            >
+              Tâches chantier
+            </Link>
+            <Link
+              to={qualiteHref}
+              className="inline-flex shrink-0 items-center justify-center rounded-xl border border-amber-200 bg-white px-3 py-2 text-sm font-semibold text-amber-800 hover:bg-amber-50"
+            >
+              Réserves qualité
+            </Link>
+            <Link
+              to={terrainFeedbackHref}
+              className="inline-flex shrink-0 items-center justify-center rounded-xl bg-slate-900 px-3 py-2 text-sm font-semibold text-white hover:bg-slate-800"
+            >
+              Retours terrain
+            </Link>
+          </div>
+        </div>
+      </div>
       {children}
     </ChantierChapterDrawer>
   );
