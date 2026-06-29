@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { ReactNode } from "react";
 
 type ChantierChapterDrawerProps = {
@@ -8,6 +8,7 @@ type ChantierChapterDrawerProps = {
   eyebrow?: string;
   previewClassName?: string;
   drawerMaxWidthClassName?: string;
+  autoOpenKey?: string;
   children: ReactNode;
 };
 
@@ -18,9 +19,15 @@ export default function ChantierChapterDrawer({
   eyebrow = "Chantier",
   previewClassName = "",
   drawerMaxWidthClassName = "max-w-5xl",
+  autoOpenKey = "",
   children,
 }: ChantierChapterDrawerProps) {
   const [open, setOpen] = useState(false);
+
+  useEffect(() => {
+    if (!autoOpenKey) return;
+    setOpen(true);
+  }, [autoOpenKey]);
 
   return (
     <>
