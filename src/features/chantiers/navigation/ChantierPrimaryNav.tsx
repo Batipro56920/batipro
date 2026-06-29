@@ -9,9 +9,7 @@ export type ChantierPrimarySection = {
 
 export function ChantierPrimaryNav({ sections }: { sections: ChantierPrimarySection[] }) {
   const { id: chantierId } = useParams<{ id: string }>();
-  const terrainFeedbackEnabled = Boolean(
-    chantierId && sections.some((section) => section.key === "historique" && section.enabled),
-  );
+  const terrainFeedbackEnabled = Boolean(chantierId);
   const terrainFeedbackHref = chantierId
     ? `/retours-terrain?chantierId=${encodeURIComponent(chantierId)}`
     : "/retours-terrain";
