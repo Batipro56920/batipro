@@ -20,11 +20,25 @@ const ALLOWED_CONTENT_PREFIXES = [
   "image/",
   "text/",
   "application/msword",
-  "application/vnd.openxmlformats-officedocument",
   "application/vnd.ms-excel",
-  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  "application/vnd.ms-powerpoint",
+  "application/vnd.openxmlformats-officedocument",
 ];
-
+const ALLOWED_EXTENSION_TYPES: Record<string, string> = {
+  pdf: "application/pdf",
+  png: "image/png",
+  jpg: "image/jpeg",
+  jpeg: "image/jpeg",
+  webp: "image/webp",
+  txt: "text/plain",
+  csv: "text/csv",
+  doc: "application/msword",
+  docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  xls: "application/vnd.ms-excel",
+  xlsx: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  ppt: "application/vnd.ms-powerpoint",
+  pptx: "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+};
 
 function deriveLegacyVisibility(mode: DocumentVisibilityMode, accessIds?: string[] | null): string {
   const normalized = String(mode ?? "GLOBAL").toUpperCase();
@@ -46,16 +60,28 @@ function sanitizeFileName(name: string): string {
   return trimmed.length > maxLen ? trimmed.slice(0, maxLen) : trimmed;
 }
 
+function getFileExtension(name: string): string {
+  const cleaned = String(name ?? "").trim().toLowerCase();
+  const lastDot = cleaned.lastIndexOf(".");
+  if (lastDot < 0 || lastDot === cleaned.length - 1) return "";
+  return cleaned.slice(lastDot + 1);
+}
+
 function resolveContentType(file: File): string {
   const raw = String(file.type ?? "").trim().toLowerCase();
   if (raw) return raw;
-  const name = String(file.name ?? "").toLowerCase();
-  if (name.endsWith(".pdf")) return "application/pdf";
-  if (name.endsWith(".png")) return "image/png";
-  if (name.endsWith(".jpg") || name.endsWith(".jpeg")) return "image/jpeg";
-  if (name.endsWith(".webp")) return "image/webp";
-  if (name.endsWith(".txt")) return "text/plain";
-  return "application/octet-stream";
+  const extension = getFileExtension(file.name);
+  return ALLOWED_EXTENSION_TYPES[extension] ?? "application/octet-stream";
+}
+
+function isAllowedUploadType(contentType: string, safeName: string): boolean {
+  const normalized = String(contentType ?? "").trim().toLowerCase();
+  if (ALLOWED_CONTENT_PREFIXES.some((prefix) => normalized.startsWith(prefix))) return true;
+  if (normalized === "application/octet-stream") {
+    const extension = getFileExtension(safeName);
+    return Boolean(ALLOWED_EXTENSION_TYPES[extension]);
+  }
+  return false;
 }
 
 function validateUploadFile(file: File): { safeName: string; contentType: string } {
@@ -65,14 +91,29 @@ function validateUploadFile(file: File): { safeName: string; contentType: string
   if (file.size > MAX_UPLOAD_BYTES) {
     throw new Error("Fichier trop volumineux (max 50 Mo).");
   }
-  const contentType = resolveContentType(file);
-  const allowed = ALLOWED_CONTENT_PREFIXES.some((prefix) => contentType.startsWith(prefix));
-  if (!allowed && contentType !== "application/octet-stream") {
-    throw new Error(`Type de fichier non supporte (${contentType}).`);
-  }
   const safeName = sanitizeFileName(file.name);
   if (!safeName) throw new Error("Nom de fichier non exploitable.");
+  const contentType = resolveContentType(file);
+  if (!isAllowedUploadType(contentType, safeName)) {
+    throw new Error(`Type de fichier non supporte (${contentType}).`);
+  }
   return { safeName, contentType };
+}
+
+function formatStorageUploadError(error: { message?: string } | null, bucket: string): string {
+  const message = String(error?.message ?? "").trim();
+  const normalized = message.toLowerCase();
+  if (!message) return "Impossible d'importer le document.";
+  if (normalized.includes("bucket") && normalized.includes("not found")) {
+    return `Bucket Supabase introuvable (${bucket}).`;
+  }
+  if (normalized.includes("row-level security") || normalized.includes("policy")) {
+    return "Import refuse par les droits Supabase Storage. Verifiez les droits d'upload du bucket chantier-documents.";
+  }
+  if (normalized.includes("mime") || normalized.includes("content type")) {
+    return `Format refuse par Supabase Storage: ${message}`;
+  }
+  return message;
 }
 
 function isMissingTableError(error: { message?: string } | null): boolean {
@@ -250,8 +291,9 @@ export async function uploadDocument(input: {
   });
 
   if (uploadError) {
-    console.error("[chantier-documents] upload error", uploadError.message);
-    throw uploadError;
+    const message = formatStorageUploadError(uploadError, bucket);
+    console.error("[chantier-documents] upload error", message);
+    throw new Error(message);
   }
 
   try {
@@ -460,4 +502,3 @@ export async function linkDocumentToTask(taskId: string, documentId: string) {
 
   if (error && !isMissingTaskDocumentsRelationError(error)) throw error;
 }
-
