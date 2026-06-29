@@ -128,6 +128,13 @@ function UnplannedChantierCard({ row, onPreview }: { row: ChantierDerived; onPre
           <CalendarDays className="h-4 w-4" />
         </Link>
         <Link
+          to={`/retours-terrain?chantierId=${row.id}`}
+          className="inline-flex h-9 items-center gap-2 rounded-xl border border-amber-200 bg-white px-3 text-sm font-semibold text-amber-900 transition hover:bg-amber-100"
+        >
+          Retours terrain
+          <AlertTriangle className="h-4 w-4" />
+        </Link>
+        <Link
           to={`/chantiers/${row.id}`}
           className="inline-flex h-9 items-center rounded-xl border border-amber-200 bg-white px-3 text-sm font-semibold text-amber-900 transition hover:bg-amber-100"
         >
