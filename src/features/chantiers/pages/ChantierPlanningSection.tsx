@@ -1,4 +1,5 @@
 import { lazy, Suspense, useState } from "react";
+import { Link } from "react-router-dom";
 import type { IntervenantRow } from "../../../services/intervenants.service";
 import DailyChantierPlanning from "../../../components/chantiers/DailyChantierPlanning";
 
@@ -16,6 +17,7 @@ export default function ChantierPlanningSection({
   intervenants: IntervenantRow[];
 }) {
   const [mode, setMode] = useState<PlanningMode>("daily");
+  const terrainFeedbackHref = `/retours-terrain?chantierId=${encodeURIComponent(chantierId)}`;
 
   return (
     <div className="space-y-4">
@@ -25,21 +27,43 @@ export default function ChantierPlanningSection({
           <h2 className="mt-1 text-xl font-bold text-slate-950">Quotidien et Gantt</h2>
           <p className="mt-1 text-sm text-slate-500">Le quotidien sert au pilotage terrain. Le Gantt sert à organiser les phases et les blocs sur plusieurs jours.</p>
         </div>
-        <div className="inline-flex rounded-2xl border border-slate-200 bg-slate-50 p-1">
-          <button
-            type="button"
-            onClick={() => setMode("daily")}
-            className={["rounded-xl px-3 py-2 text-sm font-semibold transition", mode === "daily" ? "bg-slate-950 text-white shadow-sm" : "text-slate-600 hover:bg-white"].join(" ")}
-          >
-            Quotidien
-          </button>
-          <button
-            type="button"
-            onClick={() => setMode("gantt")}
-            className={["rounded-xl px-3 py-2 text-sm font-semibold transition", mode === "gantt" ? "bg-slate-950 text-white shadow-sm" : "text-slate-600 hover:bg-white"].join(" ")}
-          >
-            Gantt
-          </button>
+        <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-end">
+          <div className="inline-flex rounded-2xl border border-slate-200 bg-slate-50 p-1">
+            <button
+              type="button"
+              onClick={() => setMode("daily")}
+              className={["rounded-xl px-3 py-2 text-sm font-semibold transition", mode === "daily" ? "bg-slate-950 text-white shadow-sm" : "text-slate-600 hover:bg-white"].join(" ")}
+            >
+              Quotidien
+            </button>
+            <button
+              type="button"
+              onClick={() => setMode("gantt")}
+              className={["rounded-xl px-3 py-2 text-sm font-semibold transition", mode === "gantt" ? "bg-slate-950 text-white shadow-sm" : "text-slate-600 hover:bg-white"].join(" ")}
+            >
+              Gantt
+            </button>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Link
+              to={`/chantiers/${chantierId}/execution`}
+              className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+            >
+              Exécution
+            </Link>
+            <Link
+              to={terrainFeedbackHref}
+              className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm font-semibold text-amber-800 hover:bg-amber-100"
+            >
+              Retours terrain
+            </Link>
+            <Link
+              to={`/chantiers/${chantierId}/qualite`}
+              className="rounded-xl border border-blue-200 bg-blue-50 px-3 py-2 text-sm font-semibold text-blue-800 hover:bg-blue-100"
+            >
+              Qualité / réserves
+            </Link>
+          </div>
         </div>
       </div>
 
@@ -53,4 +77,3 @@ export default function ChantierPlanningSection({
     </div>
   );
 }
-
