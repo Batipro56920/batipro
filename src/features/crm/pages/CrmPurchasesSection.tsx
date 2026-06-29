@@ -6,7 +6,14 @@ import ListShell from "../components/ListShell";
 export default function CrmPurchasesSection({ rows, chantiers }: { rows: CrmDataset["purchases"]; chantiers: CrmDataset["chantiers"]; onCreate: () => void }) {
   const chantierById = new Map(chantiers.map((row) => [row.id, row]));
   return (
-    <ListShell title="Achats / factures fournisseurs" query="" setQuery={() => undefined} hideSearch>
+    <ListShell
+      title="Achats / factures fournisseurs"
+      actionLabel="Bons de commande"
+      query=""
+      setQuery={() => undefined}
+      onCreate={() => { window.location.href = "/fournisseurs?tab=orders"; }}
+      hideSearch
+    >
       <div className="rounded-2xl border border-blue-100 bg-blue-50 p-4 text-sm text-blue-900">
         <div className="font-semibold">Les nouveaux achats fournisseurs se pilotent dans Bons de commande.</div>
         <p className="mt-1 text-blue-800">
