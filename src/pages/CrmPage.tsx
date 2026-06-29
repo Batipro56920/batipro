@@ -83,6 +83,7 @@ export default function CrmPage({ section = "dashboard" }: Props) {
   const [opportunityProspect, setOpportunityProspect] = useState<CrmProspectRow | null>(null);
   const [appointmentProspect, setAppointmentProspect] = useState<CrmProspectRow | null>(null);
   const focusedClientId = section === "clients" ? searchParams.get("client") ?? "" : "";
+  const focusedSavId = section === "sav" ? searchParams.get("savId") ?? "" : "";
 
   async function refresh() {
     setLoading(true);
@@ -191,6 +192,12 @@ export default function CrmPage({ section = "dashboard" }: Props) {
     setSearchParams(nextSearchParams, { replace: true });
   }
 
+  function clearFocusedSavParam() {
+    const nextSearchParams = new URLSearchParams(searchParams);
+    nextSearchParams.delete("savId");
+    setSearchParams(nextSearchParams, { replace: true });
+  }
+
   async function transformQuote(row: CrmQuoteRow) {
     let createdChantierId: string | null = null;
     await submitSafely(async () => {
@@ -254,7 +261,7 @@ export default function CrmPage({ section = "dashboard" }: Props) {
       ) : section === "agenda" ? (
         <CrmAgendaSection tasks={data.tasks} appointments={data.appointments} onTask={() => setModal("task")} onAppointment={() => setModal("appointment")} onDone={(row) => submitSafely(async () => updateCrmTask(row.id, { statut: "terminee" }))} />
       ) : section === "sav" ? (
-        <CrmSavSection rows={data.sav} clients={clientById} chantiers={data.chantiers} onCreate={() => setModal("sav")} />
+        <CrmSavSection rows={data.sav} clients={clientById} chantiers={data.chantiers} focusedSavId={focusedSavId} onFocusedSavClear={clearFocusedSavParam} onCreate={() => setModal("sav")} />
       ) : section === "stats" ? (
         <CrmStatsSection data={data} kpis={kpis} transformationRate={transformationRate} />
       ) : (
