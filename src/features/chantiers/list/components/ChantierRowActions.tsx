@@ -1,4 +1,5 @@
-import { Archive, Ban, CheckCircle2, Download, ExternalLink, MoreHorizontal, RotateCcw, Trash2 } from "lucide-react";
+import { Archive, Ban, CheckCircle2, Download, ExternalLink, MessageSquareWarning, MoreHorizontal, RotateCcw, Trash2 } from "lucide-react";
+import { Link } from "react-router-dom";
 import { ConfirmDialog } from "../../../../components/feedback/ConfirmDialog";
 import { Button } from "../../../../components/ui/button";
 import type { ChantierListActions, ChantierDerived } from "../types";
@@ -17,6 +18,7 @@ export function ChantierRowActions({ row, actions }: { row: ChantierDerived; act
           <MoreHorizontal className="h-4 w-4" />
         </summary>
         <div className="absolute right-0 z-20 mt-2 w-56 rounded-2xl border border-slate-200 bg-white p-2 shadow-xl shadow-slate-950/10">
+          <MenuLink icon={MessageSquareWarning} label="Retours terrain" href={`/retours-terrain?chantierId=${encodeURIComponent(row.id)}`} />
           {row.status !== "TERMINE" ? (
             <ConfirmDialog
               title="Marquer ce chantier terminé ?"
@@ -72,5 +74,17 @@ function MenuButton({ icon: Icon, label, onClick, disabled, danger, title }: { i
       <Icon className="h-4 w-4" />
       {label}
     </button>
+  );
+}
+
+function MenuLink({ icon: Icon, label, href }: { icon: typeof MoreHorizontal; label: string; href: string }) {
+  return (
+    <Link
+      to={href}
+      className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-sm font-medium text-blue-700 transition hover:bg-blue-50"
+    >
+      <Icon className="h-4 w-4" />
+      {label}
+    </Link>
   );
 }
