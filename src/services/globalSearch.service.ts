@@ -5,6 +5,7 @@ export type GlobalSearchKind =
   | "chantier_tache"
   | "chantier_reserve"
   | "chantier_document"
+  | "chantier_visite"
   | "projet"
   | "prospect"
   | "client"
@@ -157,6 +158,17 @@ function chantierSectionHref(row: SearchRow, section: "execution" | "qualite" | 
 
   const params = new URLSearchParams({ [paramName]: id });
   return `/chantiers/${encodeURIComponent(chantierId)}/${section}?${params.toString()}`;
+}
+
+function chantierVisitHref(row: SearchRow) {
+  const chantierId = cleanText(row.chantier_id);
+  if (!chantierId) return "/chantiers";
+
+  const id = cleanText(row.id);
+  const params = new URLSearchParams();
+  if (id) params.set("visiteId", id);
+  const query = params.toString();
+  return `/chantiers/${encodeURIComponent(chantierId)}/visites${query ? `?${query}` : ""}`;
 }
 
 function quoteProjectHref(row: SearchRow) {
@@ -346,6 +358,22 @@ const SOURCES: SearchSource[] = [
       href: chantierSectionHref(row, "documents", "documentId"),
       badge: "Document chantier",
     }),
+  },
+  {
+    table: "chantier_visites",
+    select: "id,chantier_id,visit_datetime,redactor_email,meteo,avancement_text,observations,safety_points,decisions",
+    filter: "redactor_email.ilike.$term,meteo.ilike.$term,avancement_text.ilike.$term,observations.ilike.$term,safety_points.ilike.$term,decisions.ilike.$term",
+    map: (row) => {
+      const visitDate = cleanText(row.visit_datetime).slice(0, 10);
+      return {
+        id: cleanText(row.id),
+        kind: "chantier_visite",
+        title: visitDate ? `Visite chantier du ${visitDate}` : "Visite chantier",
+        subtitle: [cleanText(row.avancement_text), cleanText(row.meteo), cleanText(row.observations) || cleanText(row.decisions), cleanText(row.redactor_email)].filter(Boolean).join(" - ") || "Compte rendu de visite chantier",
+        href: chantierVisitHref(row),
+        badge: "Visite chantier",
+      };
+    },
   },
   {
     table: "crm_opportunities",
