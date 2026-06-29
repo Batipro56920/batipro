@@ -77,8 +77,8 @@ export function filterChantiers(rows: ChantierDerived[], filters: ChantierListFi
     if (filters.status !== "all" && row.status !== filters.status) return false;
     if (filters.client && (row.client ?? "") !== filters.client) return false;
     if (filters.period === "late" && !row.isLate) return false;
-    if (filters.period === "this_month" && !isInCurrentMonth(row.date_fin_prevue ?? row.planning_end_date)) return false;
-    if (filters.period === "next_30" && !isInNextDays(row.date_fin_prevue ?? row.planning_end_date, 30)) return false;
+    if (filters.period === "this_month" && !isInCurrentMonthWindow(row)) return false;
+    if (filters.period === "next_30" && !isInNextDaysWindow(row, 30)) return false;
     if (!query) return true;
     return [
       row.nom,
@@ -145,14 +145,40 @@ export function exportChantiersCsv(rows: ChantierRow[], filename = "chantiers.cs
   URL.revokeObjectURL(url);
 }
 
-function isInCurrentMonth(value: string | null | undefined) {
-  if (!value) return false;
-  return value.slice(0, 7) === new Date().toISOString().slice(0, 7);
+function getChantierPlanningWindow(row: ChantierDerived) {
+  const start = row.planning_start_date ?? row.date_debut ?? row.date_fin_prevue ?? row.planning_end_date ?? null;
+  const end = row.date_fin_prevue ?? row.planning_end_date ?? row.date_debut ?? row.planning_start_date ?? null;
+  return { start, end };
 }
 
-function isInNextDays(value: string | null | undefined, days: number) {
-  if (!value) return false;
-  const date = new Date(value).getTime();
-  const now = Date.now();
-  return date >= now && date <= now + days * 24 * 60 * 60 * 1000;
+function normalizeDateValue(value: string | null | undefined) {
+  if (!value) return null;
+  const time = new Date(value).getTime();
+  return Number.isNaN(time) ? null : time;
+}
+
+function overlapsDateRange(row: ChantierDerived, rangeStart: Date, rangeEnd: Date) {
+  const window = getChantierPlanningWindow(row);
+  const start = normalizeDateValue(window.start);
+  const end = normalizeDateValue(window.end);
+  if (start === null && end === null) return false;
+  const effectiveStart = start ?? end;
+  const effectiveEnd = end ?? start;
+  if (effectiveStart === null || effectiveEnd === null) return false;
+  return effectiveStart <= rangeEnd.getTime() && effectiveEnd >= rangeStart.getTime();
+}
+
+function isInCurrentMonthWindow(row: ChantierDerived) {
+  const now = new Date();
+  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+  const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
+  return overlapsDateRange(row, monthStart, monthEnd);
+}
+
+function isInNextDaysWindow(row: ChantierDerived, days: number) {
+  const now = new Date();
+  const rangeStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const rangeEnd = new Date(rangeStart.getTime() + days * 24 * 60 * 60 * 1000);
+  rangeEnd.setHours(23, 59, 59, 999);
+  return overlapsDateRange(row, rangeStart, rangeEnd);
 }
