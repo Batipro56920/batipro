@@ -5,11 +5,18 @@ import ChantierChapterDrawer from "../components/ChantierChapterDrawer";
 
 export default function ChantierDocumentsSection({ children }: { children: ReactNode }) {
   const { id } = useParams<{ id: string }>();
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const targetedDocumentId = searchParams.get("documentId") ?? "";
   const executionHref = id ? `/chantiers/${encodeURIComponent(id)}/execution` : "/chantiers";
   const qualiteHref = id ? `/chantiers/${encodeURIComponent(id)}/qualite` : "/chantiers";
   const terrainFeedbackHref = id ? `/retours-terrain?chantierId=${encodeURIComponent(id)}` : "/retours-terrain";
+
+  function clearTargetedDocument() {
+    if (!searchParams.has("documentId")) return;
+    const nextParams = new URLSearchParams(searchParams);
+    nextParams.delete("documentId");
+    setSearchParams(nextParams, { replace: true });
+  }
 
   return (
     <ChantierChapterDrawer
@@ -19,10 +26,12 @@ export default function ChantierDocumentsSection({ children }: { children: React
       actionLabel="Gerer les documents"
       previewClassName="batipro-chapter-preview--documents"
       autoOpenKey={targetedDocumentId ? `document:${targetedDocumentId}` : ""}
+      autoOpenLabel="Document cible depuis la recherche globale"
+      onAutoOpenClear={clearTargetedDocument}
     >
       {targetedDocumentId ? (
         <div className="mb-4 rounded-2xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-900">
-          Recherche globale : le panneau documents est ouvert pour retrouver le document cible.
+          Recherche globale : le panneau documents est ouvert pour retrouver le document cible. Retirez le ciblage une fois le document controle pour revenir aux documents du chantier.
         </div>
       ) : null}
       <div className="mb-4 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-800">
