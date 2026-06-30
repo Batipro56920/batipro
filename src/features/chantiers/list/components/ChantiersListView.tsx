@@ -136,16 +136,30 @@ function Metric({ label, value }: { label: string; value: string }) {
 }
 
 function AlertBadges({ row }: { row: ChantierDerived }) {
+  const hasOpenTerrainFeedbacks = row.terrainFeedbackOpenCount > 0;
+  const terrainTone = row.terrainFeedbackPriorityCount > 0 ? "red" : "amber";
+  const terrainLabel = row.terrainFeedbackPriorityCount > 0
+    ? `${row.terrainFeedbackPriorityCount} retour urgent`
+    : `${row.terrainFeedbackOpenCount} retour${row.terrainFeedbackOpenCount > 1 ? "s" : ""}`;
+
   return (
-    <div className="flex items-center gap-2">
+    <div className="flex flex-wrap items-center gap-2">
       {row.isLate ? <Badge icon={Bell} label="En retard" tone="red" /> : <Badge icon={Clock3} label="À jour" tone="slate" />}
+      {hasOpenTerrainFeedbacks ? <Badge icon={Bell} label={terrainLabel} tone={terrainTone} /> : null}
       <Badge icon={Users} label="Équipe" tone="blue" />
     </div>
   );
 }
 
-function Badge({ icon: Icon, label, tone }: { icon: typeof Bell; label: string; tone: "red" | "slate" | "blue" }) {
-  const classes = tone === "red" ? "border-red-200 bg-red-50 text-red-700" : tone === "blue" ? "border-blue-200 bg-blue-50 text-blue-700" : "border-slate-200 bg-slate-50 text-slate-600";
+function Badge({ icon: Icon, label, tone }: { icon: typeof Bell; label: string; tone: "red" | "slate" | "blue" | "amber" }) {
+  const classes =
+    tone === "red"
+      ? "border-red-200 bg-red-50 text-red-700"
+      : tone === "amber"
+        ? "border-amber-200 bg-amber-50 text-amber-700"
+        : tone === "blue"
+          ? "border-blue-200 bg-blue-50 text-blue-700"
+          : "border-slate-200 bg-slate-50 text-slate-600";
   return (
     <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-1 text-xs font-medium ${classes}`}>
       <Icon className="h-3 w-3" />
