@@ -56,6 +56,15 @@ function formatJournalChanges(log: ChantierActivityLogRow): JournalChangeItem[] 
     return items;
   }
 
+  if (log.entity_type === "reserve" && changes.source === "terrain_feedback") {
+    const items: JournalChangeItem[] = [];
+    items.push({ label: "Origine", value: "Retour terrain", tone: "blue" });
+    if (changes.title) items.push({ label: "Réserve", value: stringifyJournalValue(changes.title), tone: "red" });
+    if (changes.priority) items.push({ label: "Priorité", value: formatStatusValue(changes.priority), tone: "amber" });
+    if (changes.urgency) items.push({ label: "Urgence terrain", value: stringifyJournalValue(changes.urgency), tone: "amber" });
+    return items;
+  }
+
   const knownLabels: Record<string, string> = {
     title: "Titre",
     titre: "Titre",
@@ -144,6 +153,13 @@ export default function ChantierJournalSection({
     return `/retours-terrain?chantierId=${encodeURIComponent(targetChantierId)}&feedbackId=${encodeURIComponent(log.entity_id)}`;
   }
 
+  function getReserveHref(log: ChantierActivityLogRow) {
+    if (log.entity_type !== "reserve") return null;
+    const targetChantierId = log.chantier_id || chantierId;
+    if (!targetChantierId || !log.entity_id) return null;
+    return `/chantiers/${encodeURIComponent(targetChantierId)}/qualite?reserveId=${encodeURIComponent(log.entity_id)}`;
+  }
+
   return (
     <div className="space-y-4">
       <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
@@ -198,6 +214,7 @@ export default function ChantierJournalSection({
         ) : (
           logs.map((log) => {
             const feedbackHref = getFeedbackHref(log);
+            const reserveHref = getReserveHref(log);
             const changeItems = formatJournalChanges(log);
 
             return (
@@ -222,14 +239,24 @@ export default function ChantierJournalSection({
                     </div>
                   </div>
 
-                  {feedbackHref ? (
-                    <Link
-                      to={feedbackHref}
-                      className="shrink-0 rounded-xl border border-blue-200 bg-blue-50 px-3 py-2 text-sm font-medium text-blue-800 hover:bg-blue-100"
-                    >
-                      Ouvrir retour
-                    </Link>
-                  ) : null}
+                  <div className="flex shrink-0 flex-wrap gap-2">
+                    {feedbackHref ? (
+                      <Link
+                        to={feedbackHref}
+                        className="rounded-xl border border-blue-200 bg-blue-50 px-3 py-2 text-sm font-medium text-blue-800 hover:bg-blue-100"
+                      >
+                        Ouvrir retour
+                      </Link>
+                    ) : null}
+                    {reserveHref ? (
+                      <Link
+                        to={reserveHref}
+                        className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm font-medium text-red-800 hover:bg-red-100"
+                      >
+                        Ouvrir réserve
+                      </Link>
+                    ) : null}
+                  </div>
                 </div>
 
                 {changeItems.length > 0 ? (
