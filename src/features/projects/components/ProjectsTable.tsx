@@ -83,6 +83,7 @@ export function ProjectsTable({
   chantierCreationMode?: boolean;
 }) {
   if (!projects.length) {
+    const modeActive = billingMode || quoteCreationMode || chantierCreationMode;
     return (
       <div className="rounded-3xl border border-dashed border-slate-200 bg-white p-10 text-center shadow-sm">
         <div className="text-lg font-semibold text-slate-950">Aucun projet trouvé</div>
@@ -92,14 +93,14 @@ export function ProjectsTable({
             : chantierCreationMode
               ? "Aucune affaire signée n'attend actuellement une création chantier."
               : quoteCreationMode
-                ? "Créez un prospect ou une opportunité avant de démarrer un devis."
+                ? "Aucun dossier commercial ouvert ne correspond aux filtres actifs pour démarrer un devis."
                 : "Créez un prospect ou une opportunité pour initialiser un dossier projet."}
         </p>
         <Link
-          to={billingMode || chantierCreationMode ? "/projets" : "/crm/prospects"}
+          to={modeActive ? "/projets" : "/crm/prospects?action=nouveau-prospect"}
           className="mt-5 inline-flex h-9 items-center justify-center rounded-xl bg-blue-600 px-3 text-sm font-medium text-white transition hover:bg-blue-700"
         >
-          {billingMode || chantierCreationMode ? "Voir tous les projets" : "Ajouter un prospect"}
+          {modeActive ? "Voir tous les projets" : "Ajouter un prospect"}
         </Link>
       </div>
     );
