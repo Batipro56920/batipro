@@ -1,8 +1,19 @@
+import { useEffect, useRef } from "react";
 import { useSearchParams } from "react-router-dom";
 
 export default function ChantierInstructionsSection({ children }: { children: React.ReactNode }) {
   const [searchParams, setSearchParams] = useSearchParams();
   const targetedConsigneId = searchParams.get("consigneId") ?? "";
+  const sectionRef = useRef<HTMLElement | null>(null);
+
+  useEffect(() => {
+    if (!targetedConsigneId) return;
+    const frame = window.requestAnimationFrame(() => {
+      sectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+      sectionRef.current?.focus({ preventScroll: true });
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [targetedConsigneId]);
 
   function clearConsigneTarget() {
     if (!targetedConsigneId) return;
@@ -12,14 +23,19 @@ export default function ChantierInstructionsSection({ children }: { children: Re
   }
 
   return (
-    <section className="space-y-4" data-consigne-target={targetedConsigneId || undefined}>
+    <section
+      ref={sectionRef}
+      tabIndex={-1}
+      className="scroll-mt-28 space-y-4 outline-none"
+      data-consigne-target={targetedConsigneId || undefined}
+    >
       {targetedConsigneId ? (
         <div className="rounded-2xl border border-blue-200 bg-blue-50 p-4 text-sm text-blue-900">
           <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
             <div>
               <div className="font-semibold">Consigne ciblée depuis un lien Batipro</div>
               <p className="mt-1 text-blue-800">
-                La section consignes est ouverte sur le chantier. Vérifiez la consigne concernée dans la liste avant action terrain ou mise à jour.
+                La liste des consignes est amenée à l'écran. Vérifiez la consigne concernée avant action terrain ou mise à jour.
               </p>
             </div>
             <button
