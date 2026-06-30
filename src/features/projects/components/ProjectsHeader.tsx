@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import { Hammer, Plus, Receipt, RefreshCw } from "lucide-react";
+import { Hammer, Handshake, Plus, Receipt, RefreshCw } from "lucide-react";
 import { Button } from "../../../components/ui/button";
 import { PageHeader } from "../../../components/layout/PageHeader";
 
@@ -60,6 +60,13 @@ export function ProjectsHeader({
             >
               <Plus className="h-4 w-4" />
               Depuis prospect
+            </Link>
+            <Link
+              to="/crm/apporteurs"
+              className="inline-flex h-9 items-center justify-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-3 text-sm font-medium text-emerald-800 shadow-sm transition hover:bg-emerald-100"
+            >
+              <Handshake className="h-4 w-4" />
+              Apporteurs
             </Link>
             <Link
               to="/crm/devis"
