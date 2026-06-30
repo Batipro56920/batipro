@@ -1,4 +1,4 @@
-import { AlertTriangle, ArrowRight, CalendarDays, ClipboardList, Eye, FileText, ShieldCheck, Users } from "lucide-react";
+import { AlertTriangle, ArrowRight, CalendarDays, ClipboardList, Eye, FileText, Hammer, ShieldCheck, Users } from "lucide-react";
 import { Link } from "react-router-dom";
 import type { ChantierDerived } from "../types";
 import { shortDate } from "../utils/chantiersListUtils";
@@ -7,6 +7,7 @@ import { ChantierStatusPill } from "./ChantierStatusPill";
 
 const PLANNING_QUICK_LINKS = [
   { label: "Préparer", path: "preparation", icon: ClipboardList },
+  { label: "Exécuter", path: "execution", icon: Hammer },
   { label: "Planning", path: "planning", icon: CalendarDays },
   { label: "Documents", path: "documents", icon: FileText },
   { label: "Équipe", path: "equipe", icon: Users },
@@ -64,7 +65,7 @@ function ChantierPlanningRow({ row, onPreview }: { row: ChantierDerived; onPrevi
             );
           })}
           <Link
-            to={`/retours-terrain?chantierId=${row.id}`}
+            to={`/chantiers/${row.id}/retours-terrain`}
             className="inline-flex h-7 items-center gap-1.5 rounded-lg border border-amber-200 bg-amber-50 px-2 text-xs font-semibold text-amber-800 transition hover:border-amber-300 hover:bg-amber-100"
           >
             <AlertTriangle className="h-3.5 w-3.5" />
@@ -128,7 +129,7 @@ function UnplannedChantierCard({ row, onPreview }: { row: ChantierDerived; onPre
           <CalendarDays className="h-4 w-4" />
         </Link>
         <Link
-          to={`/retours-terrain?chantierId=${row.id}`}
+          to={`/chantiers/${row.id}/retours-terrain`}
           className="inline-flex h-9 items-center gap-2 rounded-xl border border-amber-200 bg-white px-3 text-sm font-semibold text-amber-900 transition hover:bg-amber-100"
         >
           Retours terrain
