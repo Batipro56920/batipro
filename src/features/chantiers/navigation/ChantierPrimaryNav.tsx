@@ -1,4 +1,9 @@
+import { useEffect, useState } from "react";
 import { NavLink, useParams } from "react-router-dom";
+import {
+  getCompanySettings,
+  getEnabledCompanyModulesFromSettings,
+} from "../../../services/companySettings.service";
 
 export type ChantierPrimarySection = {
   key: string;
@@ -9,10 +14,33 @@ export type ChantierPrimarySection = {
 
 export function ChantierPrimaryNav({ sections }: { sections: ChantierPrimarySection[] }) {
   const { id: chantierId } = useParams<{ id: string }>();
-  const terrainFeedbackEnabled = Boolean(chantierId);
+  const [terrainFeedbackModuleEnabled, setTerrainFeedbackModuleEnabled] = useState(true);
+  const terrainFeedbackEnabled = Boolean(chantierId) && terrainFeedbackModuleEnabled;
   const terrainFeedbackHref = chantierId
     ? `/retours-terrain?chantierId=${encodeURIComponent(chantierId)}`
     : "/retours-terrain";
+
+  useEffect(() => {
+    let alive = true;
+
+    async function loadFeatureSettings() {
+      try {
+        const settings = await getCompanySettings();
+        if (!alive) return;
+        const enabledModules = getEnabledCompanyModulesFromSettings(settings);
+        setTerrainFeedbackModuleEnabled(enabledModules.includes("journal_chantier"));
+      } catch {
+        if (!alive) return;
+        setTerrainFeedbackModuleEnabled(true);
+      }
+    }
+
+    void loadFeatureSettings();
+
+    return () => {
+      alive = false;
+    };
+  }, []);
 
   return (
     <nav className="flex flex-wrap gap-2" aria-label="Navigation chantier principale">
