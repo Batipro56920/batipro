@@ -14,34 +14,72 @@ const PLANNING_QUICK_LINKS = [
   { label: "Qualité", path: "qualite", icon: ShieldCheck },
 ] as const;
 
-function getPlanningDate(row: ChantierDerived) {
-  return row.date_fin_prevue ?? row.planning_end_date ?? row.planning_start_date ?? row.date_debut ?? null;
+type PlanningMilestone = {
+  date: string | null;
+  label: string;
+  isPlanningDate: boolean;
+};
+
+function todayIso() {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function getPlanningMilestone(row: ChantierDerived, today = todayIso()): PlanningMilestone {
+  if (row.planning_start_date && row.planning_start_date >= today) {
+    return { date: row.planning_start_date, label: "Début planning", isPlanningDate: true };
+  }
+  if (row.planning_end_date) {
+    return { date: row.planning_end_date, label: "Fin planning", isPlanningDate: true };
+  }
+  if (row.planning_start_date) {
+    return { date: row.planning_start_date, label: "Début planning", isPlanningDate: true };
+  }
+  if (row.date_fin_prevue) {
+    return { date: row.date_fin_prevue, label: "Échéance chantier", isPlanningDate: false };
+  }
+  if (row.date_debut) {
+    return { date: row.date_debut, label: "Début indicatif", isPlanningDate: false };
+  }
+  return { date: null, label: "À planifier", isPlanningDate: false };
+}
+
+function getPlanningSortDate(row: ChantierDerived) {
+  return row.planning_start_date ?? getPlanningMilestone(row).date;
 }
 
 function getPlanningTimingLabel(row: ChantierDerived) {
-  const planningDate = getPlanningDate(row);
+  const milestone = getPlanningMilestone(row);
   if (row.isLate) return "En retard";
-  if (!planningDate) return "À planifier";
-  if (planningDate === row.planning_start_date || planningDate === row.date_debut) return "Début planifié";
-  return "Prochain jalon";
+  return milestone.label;
+}
+
+function getPlanningWindowLabel(row: ChantierDerived) {
+  if (row.planning_start_date && row.planning_end_date) {
+    return `Du ${shortDate(row.planning_start_date)} au ${shortDate(row.planning_end_date)}`;
+  }
+  if (row.planning_start_date) return `Début ${shortDate(row.planning_start_date)}`;
+  if (row.planning_end_date) return `Fin ${shortDate(row.planning_end_date)}`;
+  return "Planning détaillé non cadré";
 }
 
 function ChantierPlanningRow({ row, onPreview }: { row: ChantierDerived; onPreview: (row: ChantierDerived) => void }) {
-  const planningDate = getPlanningDate(row);
+  const milestone = getPlanningMilestone(row);
   const timingLabel = getPlanningTimingLabel(row);
 
   return (
     <div className="grid w-full gap-3 rounded-2xl border border-slate-200 p-3 text-left transition hover:bg-slate-50 md:grid-cols-[160px_minmax(0,1fr)_180px_120px_auto] md:items-center">
       <div>
-        <div className="text-sm font-semibold text-slate-950">{shortDate(planningDate)}</div>
+        <div className="text-sm font-semibold text-slate-950">{shortDate(milestone.date)}</div>
         <div
           className={[
             "mt-1 inline-flex rounded-full px-2 py-0.5 text-xs font-semibold",
             row.isLate
               ? "bg-red-100 text-red-700"
-              : planningDate
+              : milestone.isPlanningDate
                 ? "bg-blue-50 text-blue-700"
-                : "bg-amber-100 text-amber-800",
+                : milestone.date
+                  ? "bg-slate-100 text-slate-700"
+                  : "bg-amber-100 text-amber-800",
           ].join(" ")}
         >
           {timingLabel}
@@ -50,6 +88,7 @@ function ChantierPlanningRow({ row, onPreview }: { row: ChantierDerived; onPrevi
       <div className="min-w-0">
         <div className="truncate font-semibold text-slate-950">{row.nom}</div>
         <div className="truncate text-sm text-slate-500">{row.client ?? "Client non renseigné"}</div>
+        <div className="mt-1 text-xs font-medium text-slate-500">{getPlanningWindowLabel(row)}</div>
         <div className="mt-2 flex flex-wrap gap-1.5">
           {PLANNING_QUICK_LINKS.map((link) => {
             const Icon = link.icon;
@@ -156,10 +195,10 @@ function UnplannedChantierCard({ row, onPreview }: { row: ChantierDerived; onPre
 
 export function ChantiersPlanningView({ rows, onPreview }: { rows: ChantierDerived[]; onPreview: (row: ChantierDerived) => void }) {
   const scheduledRows = rows
-    .filter((row) => getPlanningDate(row))
-    .sort((a, b) => String(getPlanningDate(a)).localeCompare(String(getPlanningDate(b))));
+    .filter((row) => getPlanningMilestone(row).date)
+    .sort((a, b) => String(getPlanningSortDate(a)).localeCompare(String(getPlanningSortDate(b))));
   const unplannedRows = rows
-    .filter((row) => !getPlanningDate(row))
+    .filter((row) => !getPlanningMilestone(row).date)
     .sort((a, b) => a.nom.localeCompare(b.nom));
   const lateCount = rows.filter((row) => row.isLate).length;
   const toPlanCount = unplannedRows.length;
