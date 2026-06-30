@@ -5,10 +5,17 @@ import ChantierChapterDrawer from "../components/ChantierChapterDrawer";
 
 export default function ChantierTasksQuotesSection({ children }: { children: ReactNode }) {
   const { id } = useParams<{ id: string }>();
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const targetedTaskId = searchParams.get("taskId") ?? "";
   const terrainFeedbackHref = id ? `/retours-terrain?chantierId=${encodeURIComponent(id)}` : "/retours-terrain";
   const taskLibraryHref = "/bibliotheque";
+
+  function clearTargetedTask() {
+    if (!searchParams.has("taskId")) return;
+    const nextParams = new URLSearchParams(searchParams);
+    nextParams.delete("taskId");
+    setSearchParams(nextParams, { replace: true });
+  }
 
   return (
     <ChantierChapterDrawer
@@ -19,10 +26,12 @@ export default function ChantierTasksQuotesSection({ children }: { children: Rea
       previewClassName="batipro-chapter-preview--tasks-quotes"
       drawerMaxWidthClassName="max-w-6xl"
       autoOpenKey={targetedTaskId ? `task:${targetedTaskId}` : ""}
+      autoOpenLabel="Tache ciblee depuis la recherche globale"
+      onAutoOpenClear={clearTargetedTask}
     >
       {targetedTaskId ? (
         <div className="mb-4 rounded-2xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-900">
-          Recherche globale : le panneau taches est ouvert pour retrouver la tache ciblee.
+          Recherche globale : le panneau taches est ouvert pour retrouver la tache ciblee. Retirez le ciblage une fois le controle termine pour revenir a un parcours chantier standard.
         </div>
       ) : null}
       <div className="mb-4 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
