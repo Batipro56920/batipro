@@ -49,6 +49,8 @@ export async function findOpenProjectForProspect(prospectId: string): Promise<Cr
     .from("crm_opportunities")
     .select(OPPORTUNITY_SELECT)
     .eq("prospect_id", prospectId)
+    .is("archived_at", null)
+    .neq("status", "perdue")
     .order("created_at", { ascending: true })
     .limit(1)
     .maybeSingle();
