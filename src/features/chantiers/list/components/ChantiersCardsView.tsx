@@ -1,4 +1,5 @@
-import { CalendarDays, FileText, MapPin } from "lucide-react";
+import { AlertTriangle, CalendarDays, FileText, Hammer, MapPin } from "lucide-react";
+import { Link } from "react-router-dom";
 import type { ChantierDerived, ChantierListActions } from "../types";
 import { budgetLabel, commercialAmountLabel, commercialSourceLabel, hasCommercialContext, shortDate, timeLabel } from "../utils/chantiersListUtils";
 import { ChantierProgress } from "./ChantierProgress";
@@ -43,6 +44,12 @@ export function ChantiersCardsView({ rows, onPreview, actions }: { rows: Chantie
           {row.isLate ? (
             <div className="mt-4 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm font-medium text-red-700">En retard</div>
           ) : null}
+          <div className="mt-4 grid grid-cols-2 gap-2" onClick={(event) => event.stopPropagation()}>
+            <QuickLink href={`/chantiers/${row.id}/execution`} icon={Hammer} label="Exécution" />
+            <QuickLink href={`/chantiers/${row.id}/planning`} icon={CalendarDays} label="Planning" />
+            <QuickLink href={`/retours-terrain?chantierId=${encodeURIComponent(row.id)}`} icon={AlertTriangle} label="Retours" tone={row.isLate ? "red" : "amber"} />
+            <QuickLink href={`/chantiers/${row.id}/documents`} icon={FileText} label="Documents" />
+          </div>
           <div className="mt-4">
             <ChantierRowActions row={row} actions={actions} />
           </div>
@@ -61,5 +68,24 @@ function Metric({ label, value }: { label: string; value: string }) {
         {value}
       </div>
     </div>
+  );
+}
+
+function QuickLink({ href, icon: Icon, label, tone = "slate" }: { href: string; icon: typeof CalendarDays; label: string; tone?: "slate" | "amber" | "red" }) {
+  const className =
+    tone === "red"
+      ? "border-red-200 bg-red-50 text-red-800 hover:bg-red-100"
+      : tone === "amber"
+        ? "border-amber-200 bg-amber-50 text-amber-800 hover:bg-amber-100"
+        : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50";
+
+  return (
+    <Link
+      to={href}
+      className={`inline-flex h-9 items-center justify-center gap-1.5 rounded-xl border px-2 text-xs font-semibold transition ${className}`}
+    >
+      <Icon className="h-4 w-4" />
+      <span className="truncate">{label}</span>
+    </Link>
   );
 }
