@@ -49,7 +49,7 @@ export function ProjectDetailHeader({ project, onProjectUpdated }: { project: Pr
         client: project.client,
         opportunity: project.opportunity,
       });
-      navigate(`/chantiers/${created.id}`);
+      navigate(`/chantiers/${created.id}/preparation`);
     } catch (error) {
       setChantierError(error instanceof Error ? error.message : "Creation du chantier impossible.");
     } finally {
@@ -144,9 +144,9 @@ export function ProjectDetailHeader({ project, onProjectUpdated }: { project: Pr
             Relancer
           </Link>
           {linkedChantierId ? (
-            <Link to={`/chantiers/${linkedChantierId}`} className="inline-flex h-9 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-3 text-sm font-medium text-slate-900 transition hover:bg-slate-50" title={chantier?.nom ?? "Ouvrir le chantier lie au devis accepte"}>
+            <Link to={`/chantiers/${linkedChantierId}/preparation`} className="inline-flex h-9 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-3 text-sm font-medium text-slate-900 transition hover:bg-slate-50" title={chantier?.nom ?? "Ouvrir la préparation du chantier lié au devis accepté"}>
               <Hammer className="h-4 w-4" />
-              Ouvrir chantier
+              Préparer chantier
             </Link>
           ) : acceptedQuote ? (
             <button type="button" onClick={createChantierFromAcceptedQuote} disabled={transformingChantier} className="inline-flex h-9 items-center justify-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-3 text-sm font-medium text-emerald-700 transition hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-60">
