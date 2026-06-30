@@ -24,12 +24,15 @@ export default function ChantierReservesSection({ children }: { children: ReactN
       actionLabel="Gerer les reserves"
       previewClassName="batipro-chapter-preview--reserves"
       autoOpenKey={targetedReserveId ? `reserve:${targetedReserveId}` : ""}
-      autoOpenLabel="Reserve ciblee depuis la recherche globale"
+      autoOpenLabel="Reserve ciblee a traiter"
       onAutoOpenClear={clearTargetedReserve}
     >
       {targetedReserveId ? (
         <div className="mb-4 rounded-2xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-900">
-          Recherche globale : le panneau reserves est ouvert pour traiter la reserve ciblee. Retirez le ciblage une fois le suivi termine pour revenir a la liste qualite standard.
+          <div className="font-semibold">Reserve ciblee</div>
+          <div className="mt-1 text-blue-800/80">
+            Le panneau reserves est ouvert sur une reserve precise, issue de la recherche, du journal chantier ou d'un retour terrain transforme. Retirez le ciblage une fois le suivi termine pour revenir a la liste qualite standard.
+          </div>
         </div>
       ) : null}
       <div className="mb-4 rounded-2xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-900">
@@ -37,7 +40,7 @@ export default function ChantierReservesSection({ children }: { children: ReactN
           <div>
             <div className="font-semibold">Retours terrain du chantier</div>
             <div className="mt-1 text-blue-800/80">
-              Ouvrez les observations, blocages et anomalies remontes par les intervenants pour ce chantier.
+              Retrouvez les observations, blocages et anomalies remontes par les intervenants avant de les traiter en execution, documents ou reserves.
             </div>
           </div>
           <Link
