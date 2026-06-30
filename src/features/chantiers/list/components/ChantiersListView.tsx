@@ -1,4 +1,5 @@
 import { Bell, Clock3, FileText, MapPin, Users, type LucideIcon } from "lucide-react";
+import { Link } from "react-router-dom";
 import type { ChantierDerived, ChantierListActions } from "../types";
 import { budgetLabel, commercialAmountLabel, commercialSourceLabel, hasCommercialContext, shortDate, timeLabel } from "../utils/chantiersListUtils";
 import { ChantierProgress } from "./ChantierProgress";
@@ -141,19 +142,27 @@ function AlertBadges({ row }: { row: ChantierDerived }) {
   const hasOpenTerrainFeedbacks = terrainFeedbackOpenCount > 0;
   const terrainTone = terrainFeedbackPriorityCount > 0 ? "red" : "amber";
   const terrainLabel = terrainFeedbackPriorityCount > 0
-    ? `${terrainFeedbackPriorityCount} retour urgent`
+    ? `${terrainFeedbackPriorityCount} retour${terrainFeedbackPriorityCount > 1 ? "s" : ""} urgent${terrainFeedbackPriorityCount > 1 ? "s" : ""}`
     : `${terrainFeedbackOpenCount} retour${terrainFeedbackOpenCount > 1 ? "s" : ""}`;
 
   return (
     <div className="flex flex-wrap items-center gap-2">
       {row.isLate ? <Badge icon={Bell} label="En retard" tone="red" /> : <Badge icon={Clock3} label="À jour" tone="slate" />}
-      {hasOpenTerrainFeedbacks ? <Badge icon={Bell} label={terrainLabel} tone={terrainTone} /> : null}
+      {hasOpenTerrainFeedbacks ? (
+        <Badge
+          icon={Bell}
+          label={terrainLabel}
+          tone={terrainTone}
+          href={`/retours-terrain?chantierId=${encodeURIComponent(row.id)}`}
+          title="Ouvrir les retours terrain de ce chantier"
+        />
+      ) : null}
       <Badge icon={Users} label="Équipe" tone="blue" />
     </div>
   );
 }
 
-function Badge({ icon: Icon, label, tone }: { icon: LucideIcon; label: string; tone: "red" | "slate" | "blue" | "amber" }) {
+function Badge({ icon: Icon, label, tone, href, title }: { icon: LucideIcon; label: string; tone: "red" | "slate" | "blue" | "amber"; href?: string; title?: string }) {
   const classes =
     tone === "red"
       ? "border-red-200 bg-red-50 text-red-700"
@@ -162,8 +171,24 @@ function Badge({ icon: Icon, label, tone }: { icon: LucideIcon; label: string; t
         : tone === "blue"
           ? "border-blue-200 bg-blue-50 text-blue-700"
           : "border-slate-200 bg-slate-50 text-slate-600";
+  const className = `inline-flex items-center gap-1 rounded-full border px-2 py-1 text-xs font-medium ${classes}`;
+
+  if (href) {
+    return (
+      <Link
+        to={href}
+        title={title}
+        onClick={(event) => event.stopPropagation()}
+        className={`${className} transition hover:brightness-95 focus:outline-none focus:ring-2 focus:ring-blue-200`}
+      >
+        <Icon className="h-3 w-3" />
+        {label}
+      </Link>
+    );
+  }
+
   return (
-    <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-1 text-xs font-medium ${classes}`}>
+    <span className={className} title={title}>
       <Icon className="h-3 w-3" />
       {label}
     </span>
