@@ -391,6 +391,18 @@ export default function TerrainFeedbacksPage() {
                 Exécution
               </Link>
               <Link
+                to={`/chantiers/${filterChantierId}/planning`}
+                className="rounded-xl border border-blue-200 bg-white px-3 py-2 text-sm font-medium text-blue-800 hover:bg-blue-50"
+              >
+                Planning
+              </Link>
+              <Link
+                to={`/chantiers/${filterChantierId}/documents`}
+                className="rounded-xl border border-blue-200 bg-white px-3 py-2 text-sm font-medium text-blue-800 hover:bg-blue-50"
+              >
+                Documents
+              </Link>
+              <Link
                 to={`/chantiers/${filterChantierId}/qualite`}
                 className="rounded-xl border border-blue-200 bg-white px-3 py-2 text-sm font-medium text-blue-800 hover:bg-blue-50"
               >
@@ -487,12 +499,26 @@ export default function TerrainFeedbacksPage() {
                   </div>
                   <div className="flex flex-wrap gap-2">
                     {row.chantier ? (
-                      <Link
-                        to={`/chantiers/${row.chantier.id}/execution`}
-                        className="rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50"
-                      >
-                        Exécution
-                      </Link>
+                      <>
+                        <Link
+                          to={`/chantiers/${row.chantier.id}/execution`}
+                          className="rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50"
+                        >
+                          Exécution
+                        </Link>
+                        <Link
+                          to={`/chantiers/${row.chantier.id}/planning`}
+                          className="rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50"
+                        >
+                          Planning
+                        </Link>
+                        <Link
+                          to={`/chantiers/${row.chantier.id}/documents`}
+                          className="rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50"
+                        >
+                          Documents
+                        </Link>
+                      </>
                     ) : null}
                     {row.status === "nouveau" ? (
                       <button
@@ -656,6 +682,18 @@ export default function TerrainFeedbacksPage() {
                           Traiter en exécution
                         </Link>
                         <Link
+                          to={`/chantiers/${row.chantier.id}/planning`}
+                          className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+                        >
+                          Planning
+                        </Link>
+                        <Link
+                          to={`/chantiers/${row.chantier.id}/documents`}
+                          className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+                        >
+                          Documents
+                        </Link>
+                        <Link
                           to={`/chantiers/${row.chantier.id}/qualite`}
                           className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-800 hover:bg-amber-100"
                         >
@@ -781,6 +819,18 @@ export default function TerrainFeedbacksPage() {
                             className="rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-100"
                           >
                             Exécution
+                          </Link>
+                          <Link
+                            to={`/chantiers/${row.chantier.id}/planning`}
+                            className="rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-100"
+                          >
+                            Planning
+                          </Link>
+                          <Link
+                            to={`/chantiers/${row.chantier.id}/documents`}
+                            className="rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-100"
+                          >
+                            Documents
                           </Link>
                           <Link
                             to={`/chantiers/${row.chantier.id}/qualite`}
