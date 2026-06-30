@@ -7,9 +7,23 @@ import { ProjectsToolbar } from "../features/projects/components/ProjectsToolbar
 import { useProjectsData } from "../features/projects/hooks/useProjectsData";
 import type { ProjectRecord } from "../features/projects/types";
 
+const QUOTE_CREATION_EXCLUDED_STATUSES = new Set<ProjectRecord["status"]>([
+  "accepte",
+  "preparation_chantier",
+  "en_chantier",
+  "cloture",
+  "sav",
+  "perdu",
+]);
+
 function hasAcceptedQuoteAwaitingChantier(project: ProjectRecord) {
   if (project.chantiers.length > 0) return false;
   return project.quotes.some((quote) => quote.statut === "accepte" && !quote.chantier_id);
+}
+
+function canCreateNewQuote(project: ProjectRecord) {
+  if (project.chantiers.length > 0) return false;
+  return !QUOTE_CREATION_EXCLUDED_STATUSES.has(project.status);
 }
 
 export default function ProjectsPage() {
@@ -22,15 +36,18 @@ export default function ProjectsPage() {
     if (billingMode) {
       return filteredProjects.filter((project) => project.quotes.some((quote) => quote.statut === "accepte" && Number(quote.montant_ttc ?? 0) > 0));
     }
+    if (quoteCreationMode) {
+      return filteredProjects.filter(canCreateNewQuote);
+    }
     if (chantierCreationMode) {
       return filteredProjects.filter(hasAcceptedQuoteAwaitingChantier);
     }
     return filteredProjects;
-  }, [billingMode, chantierCreationMode, filteredProjects]);
+  }, [billingMode, quoteCreationMode, chantierCreationMode, filteredProjects]);
 
   return (
     <div className="space-y-6">
-      <ProjectsHeader billingMode={billingMode} chantierCreationMode={chantierCreationMode} onRefresh={refresh} />
+      <ProjectsHeader billingMode={billingMode} quoteCreationMode={quoteCreationMode} chantierCreationMode={chantierCreationMode} onRefresh={refresh} />
 
       {billingMode ? (
         <div className="rounded-3xl border border-blue-100 bg-blue-50 p-4 text-sm text-blue-900">
