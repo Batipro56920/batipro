@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
 
 type ChantierChapterDrawerProps = {
@@ -23,11 +23,33 @@ export default function ChantierChapterDrawer({
   children,
 }: ChantierChapterDrawerProps) {
   const [open, setOpen] = useState(false);
+  const drawerRef = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
     if (!autoOpenKey) return;
     setOpen(true);
   }, [autoOpenKey]);
+
+  useEffect(() => {
+    if (!open) return;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+
+    window.requestAnimationFrame(() => {
+      drawerRef.current?.focus();
+      drawerRef.current?.scrollTo({ top: 0 });
+    });
+
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") setOpen(false);
+    }
+
+    window.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener("keydown", onKeyDown);
+    };
+  }, [open]);
 
   return (
     <>
@@ -86,7 +108,12 @@ export default function ChantierChapterDrawer({
       {open ? (
         <div className="fixed inset-0 z-50 bg-slate-900/40 p-4" onClick={() => setOpen(false)}>
           <aside
-            className={["ml-auto h-full w-full overflow-y-auto rounded-2xl bg-white p-5 shadow-2xl", drawerMaxWidthClassName].join(" ")}
+            ref={drawerRef}
+            role="dialog"
+            aria-modal="true"
+            aria-label={title}
+            tabIndex={-1}
+            className={["ml-auto h-full w-full overflow-y-auto rounded-2xl bg-white p-5 shadow-2xl outline-none", drawerMaxWidthClassName].join(" ")}
             onClick={(event) => event.stopPropagation()}
           >
             <div className="sticky top-0 z-10 -mx-5 -mt-5 mb-5 flex items-start justify-between gap-3 border-b border-slate-200 bg-white px-5 py-4">
