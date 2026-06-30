@@ -42,6 +42,10 @@ export function PurchaseOrdersPanel({ suppliers }: { suppliers: SupplierRow[] })
       return matchesText && matchesStatus && matchesSupplier;
     });
   }, [orders, query, statusFilter, supplierFilter]);
+  const targetedOrderVisible = useMemo(
+    () => Boolean(urlPurchaseOrderId && filteredOrders.some((order) => order.id === urlPurchaseOrderId)),
+    [filteredOrders, urlPurchaseOrderId],
+  );
 
   useEffect(() => {
     void refresh();
@@ -64,12 +68,12 @@ export function PurchaseOrdersPanel({ suppliers }: { suppliers: SupplierRow[] })
   }, [loading, targetedOrder, urlPurchaseOrderId]);
 
   useEffect(() => {
-    if (!urlPurchaseOrderId || !targetedOrder || loading) return;
+    if (!urlPurchaseOrderId || !targetedOrder || loading || !targetedOrderVisible) return;
     const frame = window.requestAnimationFrame(() => {
       targetedOrderRowRef.current?.scrollIntoView({ block: "center", behavior: "smooth" });
     });
     return () => window.cancelAnimationFrame(frame);
-  }, [loading, targetedOrder, urlPurchaseOrderId]);
+  }, [loading, targetedOrder, targetedOrderVisible, urlPurchaseOrderId]);
 
   async function refresh() {
     setLoading(true);
