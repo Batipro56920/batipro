@@ -1,27 +1,37 @@
 import { Link } from "react-router-dom";
-import { Hammer, Handshake, Plus, Receipt, RefreshCw } from "lucide-react";
+import { FileText, Hammer, Handshake, Plus, Receipt, RefreshCw } from "lucide-react";
 import { Button } from "../../../components/ui/button";
 import { PageHeader } from "../../../components/layout/PageHeader";
 
 export function ProjectsHeader({
   billingMode = false,
+  quoteCreationMode = false,
   chantierCreationMode = false,
   onRefresh,
 }: {
   billingMode?: boolean;
+  quoteCreationMode?: boolean;
   chantierCreationMode?: boolean;
   onRefresh: () => void;
 }) {
-  const title = billingMode ? "Projets à facturer" : chantierCreationMode ? "Projets à passer en chantier" : "Projets";
+  const title = billingMode
+    ? "Projets à facturer"
+    : quoteCreationMode
+      ? "Projets à chiffrer"
+      : chantierCreationMode
+        ? "Projets à passer en chantier"
+        : "Projets";
   const description = billingMode
     ? "Choisissez un projet commercial avec devis accepté pour créer une facture d'acompte, de situation ou finale depuis l'onglet Devis."
-    : chantierCreationMode
-      ? "Isolez les affaires signées qui n'ont pas encore de dossier chantier afin de lancer rapidement la préparation production."
-      : "Centralisez vos dossiers avant-production : qualification, visites, devis, préparation chantier, facturation et continuité SAV.";
+    : quoteCreationMode
+      ? "Isolez les dossiers commerciaux encore ouverts pour démarrer un nouveau devis depuis le bon projet, sans créer de devis hors contexte."
+      : chantierCreationMode
+        ? "Isolez les affaires signées qui n'ont pas encore de dossier chantier afin de lancer rapidement la préparation production."
+        : "Centralisez vos dossiers avant-production : qualification, visites, devis, préparation chantier, facturation et continuité SAV.";
 
   return (
     <PageHeader
-      eyebrow={billingMode ? "Facturation" : chantierCreationMode ? "Production" : "Commerce"}
+      eyebrow={billingMode ? "Facturation" : quoteCreationMode ? "Chiffrage" : chantierCreationMode ? "Production" : "Commerce"}
       title={title}
       description={description}
       actions={
@@ -33,6 +43,20 @@ export function ProjectsHeader({
             >
               <Receipt className="h-4 w-4" />
               Retour factures
+            </Link>
+            <Button type="button" variant="secondary" onClick={onRefresh}>
+              <RefreshCw className="h-4 w-4" />
+              Rafraîchir
+            </Button>
+          </>
+        ) : quoteCreationMode ? (
+          <>
+            <Link
+              to="/crm/devis"
+              className="inline-flex h-9 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-3 text-sm font-medium text-slate-900 shadow-sm transition hover:bg-slate-50"
+            >
+              <FileText className="h-4 w-4" />
+              Retour devis
             </Link>
             <Button type="button" variant="secondary" onClick={onRefresh}>
               <RefreshCw className="h-4 w-4" />
@@ -69,7 +93,7 @@ export function ProjectsHeader({
               Apporteurs
             </Link>
             <Link
-              to="/crm/devis"
+              to="/projets?devis=nouveau"
               className="inline-flex h-9 items-center justify-center gap-2 rounded-xl bg-blue-600 px-3 text-sm font-medium text-white shadow-sm shadow-blue-600/15 transition hover:bg-blue-700"
             >
               <Plus className="h-4 w-4" />
