@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useSearchParams } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { Plus, RefreshCw, Search, ShoppingCart } from "lucide-react";
 import { calculateDocumentTotals } from "../../document-engine";
 import type { SupplierRow } from "../../../services/suppliers.service";
@@ -235,7 +235,16 @@ export function PurchaseOrdersPanel({ suppliers }: { suppliers: SupplierRow[] })
                   <td className="px-4 py-3 font-semibold text-slate-950">{order.document.number}</td>
                   <td className="px-4 py-3 text-slate-600">{order.supplierName || order.document.recipient.displayName || "-"}</td>
                   <td className="px-4 py-3 text-slate-500">{order.projectId || "-"}</td>
-                  <td className="px-4 py-3 text-slate-500">{order.chantierId || "-"}</td>
+                  <td className="px-4 py-3 text-slate-500">
+                    {order.chantierId ? (
+                      <Link
+                        to={`/chantiers/${encodeURIComponent(order.chantierId)}`}
+                        className="font-semibold text-blue-700 hover:text-blue-800"
+                      >
+                        Ouvrir chantier
+                      </Link>
+                    ) : "-"}
+                  </td>
                   <td className="px-4 py-3 text-slate-500">{order.expectedDeliveryDate ? formatDate(order.expectedDeliveryDate) : "-"}</td>
                   <td className="px-4 py-3"><PurchaseOrderStatusBadge status={order.status} /></td>
                   <td className="px-4 py-3 text-right font-semibold">{formatCurrency(orderTotals.totalTtc)}</td>
