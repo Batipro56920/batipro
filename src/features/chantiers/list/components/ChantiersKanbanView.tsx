@@ -1,4 +1,4 @@
-import { AlertTriangle, ArrowRight, MessageSquareWarning } from "lucide-react";
+import { AlertTriangle, ArrowRight } from "lucide-react";
 import { Link } from "react-router-dom";
 import type { ChantierDerived, ChantierListActions } from "../types";
 import { budgetLabel, shortDate } from "../utils/chantiersListUtils";
@@ -49,7 +49,7 @@ export function ChantiersKanbanView({ rows, onPreview, actions }: { rows: Chanti
                       to={`/retours-terrain?chantierId=${encodeURIComponent(row.id)}`}
                       className="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm font-semibold text-amber-800 transition hover:bg-amber-100"
                     >
-                      <MessageSquareWarning className="h-4 w-4" />
+                      <AlertTriangle className="h-4 w-4" />
                       Voir les retours terrain
                       <ArrowRight className="h-4 w-4" />
                     </Link>
