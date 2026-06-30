@@ -5,9 +5,16 @@ import ChantierChapterDrawer from "../components/ChantierChapterDrawer";
 
 export default function ChantierReservesSection({ children }: { children: ReactNode }) {
   const { id } = useParams<{ id: string }>();
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const targetedReserveId = searchParams.get("reserveId") ?? "";
   const terrainFeedbackHref = id ? `/retours-terrain?chantierId=${encodeURIComponent(id)}` : "/retours-terrain";
+
+  function clearTargetedReserve() {
+    if (!searchParams.has("reserveId")) return;
+    const nextParams = new URLSearchParams(searchParams);
+    nextParams.delete("reserveId");
+    setSearchParams(nextParams, { replace: true });
+  }
 
   return (
     <ChantierChapterDrawer
@@ -17,10 +24,12 @@ export default function ChantierReservesSection({ children }: { children: ReactN
       actionLabel="Gerer les reserves"
       previewClassName="batipro-chapter-preview--reserves"
       autoOpenKey={targetedReserveId ? `reserve:${targetedReserveId}` : ""}
+      autoOpenLabel="Reserve ciblee depuis la recherche globale"
+      onAutoOpenClear={clearTargetedReserve}
     >
       {targetedReserveId ? (
         <div className="mb-4 rounded-2xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-900">
-          Recherche globale : le panneau reserves est ouvert pour traiter la reserve ciblee.
+          Recherche globale : le panneau reserves est ouvert pour traiter la reserve ciblee. Retirez le ciblage une fois le suivi termine pour revenir a la liste qualite standard.
         </div>
       ) : null}
       <div className="mb-4 rounded-2xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-900">
