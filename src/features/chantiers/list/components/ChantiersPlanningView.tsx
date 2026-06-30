@@ -1,4 +1,4 @@
-import { AlertTriangle, ArrowRight, CalendarDays, ClipboardList, Eye, FileText, Hammer, ShieldCheck, Users } from "lucide-react";
+import { AlertTriangle, ArrowRight, CalendarDays, ClipboardCheck, ClipboardList, Eye, FileText, Hammer, ShieldCheck, Users } from "lucide-react";
 import { Link } from "react-router-dom";
 import type { ChantierDerived } from "../types";
 import { shortDate } from "../utils/chantiersListUtils";
@@ -12,6 +12,7 @@ const PLANNING_QUICK_LINKS = [
   { label: "Documents", path: "documents", icon: FileText },
   { label: "Équipe", path: "equipe", icon: Users },
   { label: "Qualité", path: "qualite", icon: ShieldCheck },
+  { label: "Visites", path: "visites", icon: ClipboardCheck },
 ] as const;
 
 type PlanningMilestone = {
@@ -209,7 +210,7 @@ export function ChantiersPlanningView({ rows, onPreview }: { rows: ChantierDeriv
       <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
         <div>
           <h2 className="text-base font-semibold text-slate-950">Planning chantiers</h2>
-          <p className="text-sm text-slate-500">Vue chronologique des échéances chantier avec accès direct au planning détaillé et aux espaces terrain.</p>
+          <p className="text-sm text-slate-500">Vue chronologique des échéances chantier avec accès direct au planning détaillé, aux visites et aux espaces terrain.</p>
         </div>
         <div className="grid gap-2 sm:grid-cols-3 lg:min-w-[420px]">
           <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
