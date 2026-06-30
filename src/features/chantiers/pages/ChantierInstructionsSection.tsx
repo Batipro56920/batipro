@@ -4,10 +4,11 @@ import { useSearchParams } from "react-router-dom";
 function findConsigneTarget(consigneId: string) {
   if (!consigneId) return null;
 
-  const escapedId = typeof CSS !== "undefined" && CSS.escape ? CSS.escape(consigneId) : consigneId.replace(/"/g, "\\\"");
-  return document.querySelector<HTMLElement>(
-    `[data-consigne-id="${escapedId}"], [data-consigne-target-id="${escapedId}"], #consigne-${escapedId}`,
-  );
+  const byDataAttribute = Array.from(
+    document.querySelectorAll<HTMLElement>("[data-consigne-id], [data-consigne-target-id]"),
+  ).find((element) => element.dataset.consigneId === consigneId || element.dataset.consigneTargetId === consigneId);
+
+  return byDataAttribute ?? document.getElementById(`consigne-${consigneId}`);
 }
 
 export default function ChantierInstructionsSection({ children }: { children: React.ReactNode }) {
