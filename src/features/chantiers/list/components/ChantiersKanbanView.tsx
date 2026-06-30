@@ -1,4 +1,4 @@
-import { AlertTriangle, ArrowRight } from "lucide-react";
+import { AlertTriangle, ArrowRight, MessageSquareWarning } from "lucide-react";
 import { Link } from "react-router-dom";
 import type { ChantierDerived, ChantierListActions } from "../types";
 import { budgetLabel, shortDate } from "../utils/chantiersListUtils";
@@ -44,15 +44,24 @@ export function ChantiersKanbanView({ rows, onPreview, actions }: { rows: Chanti
                   <span className="shrink-0">{shortDate(row.date_fin_prevue ?? row.planning_end_date)}</span>
                 </div>
                 {column.key === "blocage" ? (
-                  <Link
-                    to={`/chantiers/${row.id}/qualite`}
-                    onClick={(event) => event.stopPropagation()}
-                    className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm font-semibold text-red-700 transition hover:bg-red-100"
-                  >
-                    <AlertTriangle className="h-4 w-4" />
-                    Traiter en qualité
-                    <ArrowRight className="h-4 w-4" />
-                  </Link>
+                  <div className="mt-3 grid gap-2" onClick={(event) => event.stopPropagation()}>
+                    <Link
+                      to={`/retours-terrain?chantierId=${encodeURIComponent(row.id)}`}
+                      className="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm font-semibold text-amber-800 transition hover:bg-amber-100"
+                    >
+                      <MessageSquareWarning className="h-4 w-4" />
+                      Voir les retours terrain
+                      <ArrowRight className="h-4 w-4" />
+                    </Link>
+                    <Link
+                      to={`/chantiers/${row.id}/qualite`}
+                      className="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm font-semibold text-red-700 transition hover:bg-red-100"
+                    >
+                      <AlertTriangle className="h-4 w-4" />
+                      Traiter en qualité
+                      <ArrowRight className="h-4 w-4" />
+                    </Link>
+                  </div>
                 ) : null}
                 <div className="mt-3">
                   <ChantierRowActions row={row} actions={actions} />
