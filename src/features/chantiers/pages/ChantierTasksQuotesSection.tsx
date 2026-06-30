@@ -9,6 +9,7 @@ export default function ChantierTasksQuotesSection({ children }: { children: Rea
   const targetedTaskId = searchParams.get("taskId") ?? "";
   const terrainFeedbackHref = id ? `/retours-terrain?chantierId=${encodeURIComponent(id)}` : "/retours-terrain";
   const taskLibraryHref = "/bibliotheque";
+  const materialNeedsHref = id ? `/chantiers/${encodeURIComponent(id)}/preparation` : "/chantiers";
 
   function clearTargetedTask() {
     if (!searchParams.has("taskId")) return;
@@ -63,6 +64,22 @@ export default function ChantierTasksQuotesSection({ children }: { children: Rea
             className="inline-flex shrink-0 items-center justify-center rounded-xl bg-blue-700 px-3 py-2 text-sm font-semibold text-white hover:bg-blue-800"
           >
             Ouvrir la bibliotheque
+          </Link>
+        </div>
+      </div>
+      <div className="mb-4 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900">
+        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+          <div>
+            <div className="font-semibold">Besoins materiel lies aux taches</div>
+            <div className="mt-1 text-emerald-800/80">
+              Controlez les demandes materiel rattachees aux taches avant d'engager les achats ou les approvisionnements.
+            </div>
+          </div>
+          <Link
+            to={materialNeedsHref}
+            className="inline-flex shrink-0 items-center justify-center rounded-xl bg-emerald-700 px-3 py-2 text-sm font-semibold text-white hover:bg-emerald-800"
+          >
+            Voir les besoins materiel
           </Link>
         </div>
       </div>
