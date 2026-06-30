@@ -15,7 +15,7 @@ export function ChantiersKpiGrid({ metrics }: { metrics: Metrics }) {
     { label: "Chantiers actifs", value: metrics.active, hint: "Préparation, en cours, pause", icon: Factory, tone: "text-blue-700 bg-blue-50 border-blue-200" },
     { label: "En préparation", value: metrics.preparation, hint: "À lancer prochainement", icon: CalendarCheck, tone: "text-sky-700 bg-sky-50 border-sky-200" },
     { label: "En retard", value: metrics.late, hint: "Échéance dépassée", icon: TimerReset, tone: "text-red-700 bg-red-50 border-red-200" },
-    { label: "Alertes", value: metrics.alerts, hint: "Retards ou temps dépassé", icon: AlertTriangle, tone: "text-amber-700 bg-amber-50 border-amber-200" },
+    { label: "Alertes", value: metrics.alerts, hint: "Retards, temps ou retours terrain", icon: AlertTriangle, tone: "text-amber-700 bg-amber-50 border-amber-200" },
     { label: "Terminés ce mois", value: metrics.completedThisMonth, hint: "Historique mensuel", icon: BarChart3, tone: "text-emerald-700 bg-emerald-50 border-emerald-200" },
     { label: "Marge estimée", value: currency(metrics.estimatedMargin), hint: "Selon budgets renseignés", icon: Euro, tone: "text-slate-700 bg-slate-50 border-slate-200" },
   ];
@@ -40,4 +40,3 @@ export function ChantiersKpiGrid({ metrics }: { metrics: Metrics }) {
     </section>
   );
 }
-
