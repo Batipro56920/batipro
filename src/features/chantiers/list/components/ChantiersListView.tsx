@@ -1,4 +1,4 @@
-import { Bell, Clock3, FileText, MapPin, Users } from "lucide-react";
+import { Bell, Clock3, FileText, MapPin, Users, type LucideIcon } from "lucide-react";
 import type { ChantierDerived, ChantierListActions } from "../types";
 import { budgetLabel, commercialAmountLabel, commercialSourceLabel, hasCommercialContext, shortDate, timeLabel } from "../utils/chantiersListUtils";
 import { ChantierProgress } from "./ChantierProgress";
@@ -151,7 +151,7 @@ function AlertBadges({ row }: { row: ChantierDerived }) {
   );
 }
 
-function Badge({ icon: Icon, label, tone }: { icon: typeof Bell; label: string; tone: "red" | "slate" | "blue" | "amber" }) {
+function Badge({ icon: Icon, label, tone }: { icon: LucideIcon; label: string; tone: "red" | "slate" | "blue" | "amber" }) {
   const classes =
     tone === "red"
       ? "border-red-200 bg-red-50 text-red-700"
