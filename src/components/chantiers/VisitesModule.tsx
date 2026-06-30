@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { IntervenantRow } from "../../services/intervenants.service";
 import { listByChantier as listDocumentsByChantier, getSignedUrl, type ChantierDocumentRow } from "../../services/chantierDocuments.service";
 import { listVisites, type ChantierVisiteRow } from "../../services/chantierVisites.service";
@@ -33,6 +33,7 @@ export default function VisitesModule({
   const [visites, setVisites] = useState<ChantierVisiteRow[]>([]);
   const [documents, setDocuments] = useState<ChantierDocumentRow[]>([]);
   const [openingPdfId, setOpeningPdfId] = useState<string | null>(null);
+  const targetedVisitRef = useRef<HTMLDivElement | null>(null);
 
   const documentsById = useMemo(() => {
     const map = new Map<string, ChantierDocumentRow>();
@@ -46,6 +47,14 @@ export default function VisitesModule({
   }, [targetedVisitId, visites]);
 
   const targetedVisitMissing = Boolean(targetedVisitId && !loading && !targetedVisit);
+
+  useEffect(() => {
+    if (!targetedVisit || loading) return;
+    const frame = window.requestAnimationFrame(() => {
+      targetedVisitRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [loading, targetedVisit?.id]);
 
   async function refreshAll() {
     if (!chantierId) return;
@@ -149,8 +158,10 @@ export default function VisitesModule({
               return (
                 <div
                   key={visite.id}
+                  ref={isTargeted ? targetedVisitRef : undefined}
+                  data-visite-target={isTargeted ? "true" : undefined}
                   className={[
-                    "rounded-xl border p-3",
+                    "rounded-xl border p-3 scroll-mt-24",
                     isTargeted ? "border-blue-300 bg-blue-50 ring-2 ring-blue-100" : "border-slate-200 bg-white",
                   ].join(" ")}
                 >
