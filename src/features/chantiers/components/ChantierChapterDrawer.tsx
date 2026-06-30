@@ -9,6 +9,8 @@ type ChantierChapterDrawerProps = {
   previewClassName?: string;
   drawerMaxWidthClassName?: string;
   autoOpenKey?: string;
+  autoOpenLabel?: string;
+  onAutoOpenClear?: () => void;
   children: ReactNode;
 };
 
@@ -20,6 +22,8 @@ export default function ChantierChapterDrawer({
   previewClassName = "",
   drawerMaxWidthClassName = "max-w-5xl",
   autoOpenKey = "",
+  autoOpenLabel = "Element cible depuis la recherche globale",
+  onAutoOpenClear,
   children,
 }: ChantierChapterDrawerProps) {
   const [open, setOpen] = useState(false);
@@ -29,6 +33,15 @@ export default function ChantierChapterDrawer({
     if (!autoOpenKey) return;
     setOpen(true);
   }, [autoOpenKey]);
+
+  function clearAutoOpenTarget() {
+    onAutoOpenClear?.();
+  }
+
+  function closeDrawer() {
+    setOpen(false);
+    if (autoOpenKey) clearAutoOpenTarget();
+  }
 
   useEffect(() => {
     if (!open) return;
@@ -41,7 +54,7 @@ export default function ChantierChapterDrawer({
     });
 
     function onKeyDown(event: KeyboardEvent) {
-      if (event.key === "Escape") setOpen(false);
+      if (event.key === "Escape") closeDrawer();
     }
 
     window.addEventListener("keydown", onKeyDown);
@@ -49,7 +62,7 @@ export default function ChantierChapterDrawer({
       document.body.style.overflow = previousOverflow;
       window.removeEventListener("keydown", onKeyDown);
     };
-  }, [open]);
+  }, [open, autoOpenKey]);
 
   return (
     <>
@@ -106,7 +119,7 @@ export default function ChantierChapterDrawer({
       </section>
 
       {open ? (
-        <div className="fixed inset-0 z-50 bg-slate-900/40 p-4" onClick={() => setOpen(false)}>
+        <div className="fixed inset-0 z-50 bg-slate-900/40 p-4" onClick={closeDrawer}>
           <aside
             ref={drawerRef}
             role="dialog"
@@ -123,14 +136,30 @@ export default function ChantierChapterDrawer({
                 </div>
                 <div className="mt-1 text-xl font-semibold text-slate-950">{title}</div>
                 <div className="mt-1 text-sm text-slate-500">{subtitle}</div>
+                {autoOpenKey ? (
+                  <div className="mt-2 inline-flex items-center rounded-full border border-blue-200 bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-800">
+                    {autoOpenLabel}
+                  </div>
+                ) : null}
               </div>
-              <button
-                type="button"
-                onClick={() => setOpen(false)}
-                className="rounded-xl border border-slate-200 px-3 py-2 text-sm hover:bg-slate-50"
-              >
-                Fermer
-              </button>
+              <div className="flex shrink-0 flex-wrap justify-end gap-2">
+                {autoOpenKey ? (
+                  <button
+                    type="button"
+                    onClick={clearAutoOpenTarget}
+                    className="rounded-xl border border-blue-200 bg-blue-50 px-3 py-2 text-sm font-semibold text-blue-800 hover:bg-blue-100"
+                  >
+                    Retirer le ciblage
+                  </button>
+                ) : null}
+                <button
+                  type="button"
+                  onClick={closeDrawer}
+                  className="rounded-xl border border-slate-200 px-3 py-2 text-sm hover:bg-slate-50"
+                >
+                  Fermer
+                </button>
+              </div>
             </div>
             {children}
           </aside>
