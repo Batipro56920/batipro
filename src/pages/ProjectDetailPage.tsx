@@ -34,6 +34,7 @@ export default function ProjectDetailPage() {
   const [searchParams] = useSearchParams();
   const { projectsById, loading, error, refresh } = useProjectsData();
   const project = id ? projectsById.get(id) : null;
+  const apporteurTrackingLabel = project?.prospect?.apporteur_affaire?.trim() || null;
   const tabFromUrl = readProjectTab(searchParams.get("tab"));
   const [activeTab, setActiveTab] = useState<ProjectTab>(tabFromUrl);
 
@@ -96,6 +97,25 @@ export default function ProjectDetailPage() {
   return (
     <div className="space-y-5">
       <ProjectDetailHeader project={project} onProjectUpdated={refresh} />
+
+      {apporteurTrackingLabel ? (
+        <section className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950">
+          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+            <div>
+              <div className="font-semibold">Projet issu d'un apporteur d'affaires</div>
+              <p className="mt-1 text-amber-800">
+                Source commerciale : {apporteurTrackingLabel}. Le suivi des commissions se pilote dans le module apporteurs.
+              </p>
+            </div>
+            <Link
+              to="/crm/apporteurs"
+              className="inline-flex h-9 items-center justify-center rounded-xl border border-amber-300 bg-white px-3 text-sm font-semibold text-amber-900 hover:bg-amber-100"
+            >
+              Ouvrir le suivi apporteurs
+            </Link>
+          </div>
+        </section>
+      ) : null}
 
       <nav className="overflow-x-auto rounded-3xl border border-slate-200 bg-white p-2 shadow-sm" aria-label="Navigation projet">
         <div className="flex min-w-max gap-1">
