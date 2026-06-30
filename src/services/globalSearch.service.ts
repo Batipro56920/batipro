@@ -190,7 +190,7 @@ function chantierConsigneHref(row: SearchRow) {
   const params = new URLSearchParams();
   if (id) params.set("consigneId", id);
   const query = params.toString();
-  return `/chantiers/${encodeURIComponent(chantierId)}/execution${query ? `?${query}` : ""}`;
+  return `/chantiers/${encodeURIComponent(chantierId)}/preparation${query ? `?${query}` : ""}`;
 }
 
 function quoteProjectHref(row: SearchRow) {
