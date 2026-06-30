@@ -63,9 +63,27 @@ function getPlanningWindowLabel(row: ChantierDerived) {
   return "Planning détaillé non cadré";
 }
 
+function getTerrainFeedbackHref(row: ChantierDerived) {
+  return `/retours-terrain?chantierId=${encodeURIComponent(row.id)}`;
+}
+
+function getTerrainFeedbackLabel(row: ChantierDerived) {
+  const priorityCount = row.terrainFeedbackPriorityCount ?? 0;
+  const openCount = row.terrainFeedbackOpenCount ?? 0;
+  if (priorityCount > 0) return `${priorityCount} urgent${priorityCount > 1 ? "s" : ""}`;
+  if (openCount > 0) return `${openCount} à traiter`;
+  return "Retours terrain";
+}
+
 function ChantierPlanningRow({ row, onPreview }: { row: ChantierDerived; onPreview: (row: ChantierDerived) => void }) {
   const milestone = getPlanningMilestone(row);
   const timingLabel = getPlanningTimingLabel(row);
+  const openTerrainFeedbackCount = row.terrainFeedbackOpenCount ?? 0;
+  const priorityTerrainFeedbackCount = row.terrainFeedbackPriorityCount ?? 0;
+  const hasOpenTerrainFeedbacks = openTerrainFeedbackCount > 0;
+  const terrainFeedbackTone = priorityTerrainFeedbackCount > 0
+    ? "border-red-200 bg-red-50 text-red-800 hover:border-red-300 hover:bg-red-100"
+    : "border-amber-200 bg-amber-50 text-amber-800 hover:border-amber-300 hover:bg-amber-100";
 
   return (
     <div className="grid w-full gap-3 rounded-2xl border border-slate-200 p-3 text-left transition hover:bg-slate-50 md:grid-cols-[160px_minmax(0,1fr)_180px_120px_auto] md:items-center">
@@ -90,6 +108,15 @@ function ChantierPlanningRow({ row, onPreview }: { row: ChantierDerived; onPrevi
         <div className="truncate font-semibold text-slate-950">{row.nom}</div>
         <div className="truncate text-sm text-slate-500">{row.client ?? "Client non renseigné"}</div>
         <div className="mt-1 text-xs font-medium text-slate-500">{getPlanningWindowLabel(row)}</div>
+        {hasOpenTerrainFeedbacks ? (
+          <Link
+            to={getTerrainFeedbackHref(row)}
+            className={`mt-2 inline-flex h-7 items-center gap-1.5 rounded-lg border px-2 text-xs font-semibold transition ${terrainFeedbackTone}`}
+          >
+            <AlertTriangle className="h-3.5 w-3.5" />
+            {getTerrainFeedbackLabel(row)}
+          </Link>
+        ) : null}
         <div className="mt-2 flex flex-wrap gap-1.5">
           {PLANNING_QUICK_LINKS.map((link) => {
             const Icon = link.icon;
@@ -105,7 +132,7 @@ function ChantierPlanningRow({ row, onPreview }: { row: ChantierDerived; onPrevi
             );
           })}
           <Link
-            to={`/chantiers/${row.id}/retours-terrain`}
+            to={getTerrainFeedbackHref(row)}
             className="inline-flex h-7 items-center gap-1.5 rounded-lg border border-amber-200 bg-amber-50 px-2 text-xs font-semibold text-amber-800 transition hover:border-amber-300 hover:bg-amber-100"
           >
             <AlertTriangle className="h-3.5 w-3.5" />
@@ -143,6 +170,11 @@ function ChantierPlanningRow({ row, onPreview }: { row: ChantierDerived; onPrevi
 }
 
 function UnplannedChantierCard({ row, onPreview }: { row: ChantierDerived; onPreview: (row: ChantierDerived) => void }) {
+  const hasOpenTerrainFeedbacks = (row.terrainFeedbackOpenCount ?? 0) > 0;
+  const terrainFeedbackTone = (row.terrainFeedbackPriorityCount ?? 0) > 0
+    ? "border-red-200 bg-red-50 text-red-800 hover:bg-red-100"
+    : "border-amber-200 bg-white text-amber-900 hover:bg-amber-100";
+
   return (
     <article className="rounded-2xl border border-amber-200 bg-amber-50 p-3">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
@@ -169,10 +201,10 @@ function UnplannedChantierCard({ row, onPreview }: { row: ChantierDerived; onPre
           <CalendarDays className="h-4 w-4" />
         </Link>
         <Link
-          to={`/chantiers/${row.id}/retours-terrain`}
-          className="inline-flex h-9 items-center gap-2 rounded-xl border border-amber-200 bg-white px-3 text-sm font-semibold text-amber-900 transition hover:bg-amber-100"
+          to={getTerrainFeedbackHref(row)}
+          className={`inline-flex h-9 items-center gap-2 rounded-xl border px-3 text-sm font-semibold transition ${terrainFeedbackTone}`}
         >
-          Retours terrain
+          Retours terrain{hasOpenTerrainFeedbacks ? ` · ${getTerrainFeedbackLabel(row)}` : ""}
           <AlertTriangle className="h-4 w-4" />
         </Link>
         <Link
@@ -204,6 +236,8 @@ export function ChantiersPlanningView({ rows, onPreview }: { rows: ChantierDeriv
   const lateCount = rows.filter((row) => row.isLate).length;
   const toPlanCount = unplannedRows.length;
   const activeCount = rows.length;
+  const openTerrainFeedbackCount = rows.reduce((total, row) => total + (row.terrainFeedbackOpenCount ?? 0), 0);
+  const priorityTerrainFeedbackCount = rows.reduce((total, row) => total + (row.terrainFeedbackPriorityCount ?? 0), 0);
 
   return (
     <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm shadow-slate-950/[0.03]">
@@ -212,7 +246,7 @@ export function ChantiersPlanningView({ rows, onPreview }: { rows: ChantierDeriv
           <h2 className="text-base font-semibold text-slate-950">Planning chantiers</h2>
           <p className="text-sm text-slate-500">Vue chronologique des échéances chantier avec accès direct au planning détaillé, aux visites et aux espaces terrain.</p>
         </div>
-        <div className="grid gap-2 sm:grid-cols-3 lg:min-w-[420px]">
+        <div className="grid gap-2 sm:grid-cols-4 lg:min-w-[520px]">
           <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
             <div className="text-xs font-semibold uppercase text-slate-500">Chantiers</div>
             <div className="text-lg font-semibold text-slate-950">{activeCount}</div>
@@ -224,6 +258,12 @@ export function ChantiersPlanningView({ rows, onPreview }: { rows: ChantierDeriv
           <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2">
             <div className="text-xs font-semibold uppercase text-amber-700">À planifier</div>
             <div className="text-lg font-semibold text-amber-800">{toPlanCount}</div>
+          </div>
+          <div className={["rounded-xl border px-3 py-2", priorityTerrainFeedbackCount > 0 ? "border-red-200 bg-red-50" : "border-amber-200 bg-amber-50"].join(" ")}>
+            <div className={["text-xs font-semibold uppercase", priorityTerrainFeedbackCount > 0 ? "text-red-600" : "text-amber-700"].join(" ")}>Retours terrain</div>
+            <div className={["text-lg font-semibold", priorityTerrainFeedbackCount > 0 ? "text-red-700" : "text-amber-800"].join(" ")}>
+              {priorityTerrainFeedbackCount > 0 ? `${priorityTerrainFeedbackCount} urgents` : openTerrainFeedbackCount}
+            </div>
           </div>
         </div>
       </div>
