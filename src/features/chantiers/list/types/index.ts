@@ -10,8 +10,8 @@ export type ChantierDerived = ChantierRow & {
   budgetHt: number | null;
   timeRatio: number | null;
   estimatedMargin: number | null;
-  terrainFeedbackOpenCount: number;
-  terrainFeedbackPriorityCount: number;
+  terrainFeedbackOpenCount?: number;
+  terrainFeedbackPriorityCount?: number;
 };
 
 export type ChantierListFilters = {
