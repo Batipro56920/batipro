@@ -10,6 +10,10 @@ type TerrainFeedbackSummary = {
   priority: number;
 };
 
+function openTerrainFeedbackCount(row: ChantierDerived) {
+  return row.terrainFeedbackOpenCount ?? 0;
+}
+
 export function currency(value: number | null | undefined) {
   if (value === null || value === undefined || Number.isNaN(Number(value))) return "—";
   return new Intl.NumberFormat("fr-FR", { style: "currency", currency: "EUR", maximumFractionDigits: 0 }).format(Number(value));
@@ -106,7 +110,7 @@ export function filterChantiers(rows: ChantierDerived[], filters: ChantierListFi
       commercialSourceLabel(row),
       row.crm_client_email,
       row.crm_client_phone,
-      row.terrainFeedbackOpenCount > 0 ? "retours terrain alertes terrain" : "",
+      openTerrainFeedbackCount(row) > 0 ? "retours terrain alertes terrain" : "",
     ].some((value) => String(value ?? "").toLowerCase().includes(query));
   });
 }
@@ -116,7 +120,7 @@ export function computeChantierMetrics(rows: ChantierDerived[]) {
   const active = rows.filter((row) => ACTIVE_STATUSES.includes(row.status)).length;
   const preparation = rows.filter((row) => row.status === "PREPARATION").length;
   const late = rows.filter((row) => row.isLate).length;
-  const alerts = rows.filter((row) => row.isLate || (row.timeRatio !== null && row.timeRatio > 1.1) || row.terrainFeedbackOpenCount > 0).length;
+  const alerts = rows.filter((row) => row.isLate || (row.timeRatio !== null && row.timeRatio > 1.1) || openTerrainFeedbackCount(row) > 0).length;
   const completedThisMonth = rows.filter((row) => row.status === "TERMINE" && (row.completed_at ?? row.lifecycle_updated_at ?? "").startsWith(thisMonth)).length;
   const marginValues = rows.map((row) => row.estimatedMargin).filter((value): value is number => value !== null);
   const estimatedMargin = marginValues.length ? marginValues.reduce((sum, value) => sum + value, 0) : null;
