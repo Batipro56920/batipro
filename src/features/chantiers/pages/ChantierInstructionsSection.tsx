@@ -1,6 +1,15 @@
 import { useEffect, useRef } from "react";
 import { useSearchParams } from "react-router-dom";
 
+function findConsigneTarget(consigneId: string) {
+  if (!consigneId) return null;
+
+  const escapedId = typeof CSS !== "undefined" && CSS.escape ? CSS.escape(consigneId) : consigneId.replace(/"/g, "\\\"");
+  return document.querySelector<HTMLElement>(
+    `[data-consigne-id="${escapedId}"], [data-consigne-target-id="${escapedId}"], #consigne-${escapedId}`,
+  );
+}
+
 export default function ChantierInstructionsSection({ children }: { children: React.ReactNode }) {
   const [searchParams, setSearchParams] = useSearchParams();
   const targetedConsigneId = searchParams.get("consigneId") ?? "";
@@ -9,8 +18,9 @@ export default function ChantierInstructionsSection({ children }: { children: Re
   useEffect(() => {
     if (!targetedConsigneId) return;
     const frame = window.requestAnimationFrame(() => {
-      sectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
-      sectionRef.current?.focus({ preventScroll: true });
+      const target = findConsigneTarget(targetedConsigneId) ?? sectionRef.current;
+      target?.scrollIntoView({ behavior: "smooth", block: "center" });
+      if (target instanceof HTMLElement) target.focus({ preventScroll: true });
     });
     return () => window.cancelAnimationFrame(frame);
   }, [targetedConsigneId]);
@@ -35,7 +45,7 @@ export default function ChantierInstructionsSection({ children }: { children: Re
             <div>
               <div className="font-semibold">Consigne ciblée depuis un lien Batipro</div>
               <p className="mt-1 text-blue-800">
-                La liste des consignes est amenée à l'écran. Vérifiez la consigne concernée avant action terrain ou mise à jour.
+                La consigne concernée est recherchée dans la liste, puis la zone Consignes reste affichée si l'élément n'est plus visible ou accessible.
               </p>
             </div>
             <button
