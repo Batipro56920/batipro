@@ -1,4 +1,4 @@
-import { AlertTriangle, CalendarDays, FileText, Hammer, MapPin } from "lucide-react";
+import { AlertTriangle, CalendarDays, FileText, Hammer, MapPin, type LucideIcon } from "lucide-react";
 import { Link } from "react-router-dom";
 import type { ChantierDerived, ChantierListActions } from "../types";
 import { budgetLabel, commercialAmountLabel, commercialSourceLabel, hasCommercialContext, shortDate, timeLabel } from "../utils/chantiersListUtils";
@@ -71,7 +71,7 @@ function Metric({ label, value }: { label: string; value: string }) {
   );
 }
 
-function QuickLink({ href, icon: Icon, label, tone = "slate" }: { href: string; icon: typeof CalendarDays; label: string; tone?: "slate" | "amber" | "red" }) {
+function QuickLink({ href, icon: Icon, label, tone = "slate" }: { href: string; icon: LucideIcon; label: string; tone?: "slate" | "amber" | "red" }) {
   const className =
     tone === "red"
       ? "border-red-200 bg-red-50 text-red-800 hover:bg-red-100"
