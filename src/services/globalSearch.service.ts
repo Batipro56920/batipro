@@ -6,6 +6,7 @@ export type GlobalSearchKind =
   | "chantier_reserve"
   | "chantier_document"
   | "chantier_visite"
+  | "chantier_consigne"
   | "projet"
   | "prospect"
   | "client"
@@ -179,6 +180,17 @@ function chantierVisitHref(row: SearchRow) {
   if (id) params.set("visiteId", id);
   const query = params.toString();
   return `/chantiers/${encodeURIComponent(chantierId)}/visites${query ? `?${query}` : ""}`;
+}
+
+function chantierConsigneHref(row: SearchRow) {
+  const chantierId = cleanText(row.chantier_id);
+  if (!chantierId) return "/chantiers";
+
+  const id = cleanText(row.id);
+  const params = new URLSearchParams();
+  if (id) params.set("consigneId", id);
+  const query = params.toString();
+  return `/chantiers/${encodeURIComponent(chantierId)}/execution${query ? `?${query}` : ""}`;
 }
 
 function quoteProjectHref(row: SearchRow) {
@@ -382,6 +394,24 @@ const SOURCES: SearchSource[] = [
         subtitle: [cleanText(row.avancement_text), cleanText(row.meteo), cleanText(row.observations) || cleanText(row.decisions), cleanText(row.redactor_email)].filter(Boolean).join(" - ") || "Compte rendu de visite chantier",
         href: chantierVisitHref(row),
         badge: "Visite chantier",
+      };
+    },
+  },
+  {
+    table: "chantier_consignes",
+    select: "id,chantier_id,title,description,priority,date_debut,date_fin,task_id,applies_to_all,zone_id",
+    filter: "title.ilike.$term,description.ilike.$term,priority.ilike.$term",
+    map: (row) => {
+      const startDate = cleanText(row.date_debut);
+      const endDate = cleanText(row.date_fin);
+      const dateLabel = startDate && endDate ? `${startDate} -> ${endDate}` : startDate;
+      return {
+        id: cleanText(row.id),
+        kind: "chantier_consigne",
+        title: cleanText(row.title) || "Consigne chantier sans titre",
+        subtitle: [cleanText(row.priority), dateLabel, cleanText(row.applies_to_all) === "false" ? "Ciblée" : "Tous intervenants", cleanText(row.description)].filter(Boolean).join(" - ") || "Consigne chantier",
+        href: chantierConsigneHref(row),
+        badge: "Consigne",
       };
     },
   },
