@@ -64,9 +64,10 @@ export default function FournisseursPage({ initialTab = "suppliers" }: Fournisse
   const [searchParams, setSearchParams] = useSearchParams();
   const supplierQueryParam = searchParams.get("q") ?? "";
   const activeSupplierId = searchParams.get("supplierId") ?? "";
+  const activePurchaseOrderId = searchParams.get("purchaseOrderId") ?? "";
   const openedSupplierFromUrlRef = useRef("");
   const tabQueryParam = searchParams.get("tab");
-  const [activeTab, setActiveTab] = useState<FournisseursTab>(() => isFournisseursTab(tabQueryParam) ? tabQueryParam : initialTab);
+  const [activeTab, setActiveTab] = useState<FournisseursTab>(() => activePurchaseOrderId ? "orders" : isFournisseursTab(tabQueryParam) ? tabQueryParam : initialTab);
   const [loadingSuppliers, setLoadingSuppliers] = useState(true);
   const [savingSupplier, setSavingSupplier] = useState(false);
   const [suppliersError, setSuppliersError] = useState<string | null>(null);
@@ -123,10 +124,14 @@ export default function FournisseursPage({ initialTab = "suppliers" }: Fournisse
       setActiveTab("suppliers");
       return;
     }
+    if (activePurchaseOrderId) {
+      setActiveTab("orders");
+      return;
+    }
     if (isFournisseursTab(tabQueryParam)) {
       setActiveTab(tabQueryParam);
     }
-  }, [activeSupplierId, supplierQueryParam, tabQueryParam]);
+  }, [activePurchaseOrderId, activeSupplierId, supplierQueryParam, tabQueryParam]);
 
   useEffect(() => {
     if (!activeSupplierId) {
@@ -169,6 +174,7 @@ export default function FournisseursPage({ initialTab = "suppliers" }: Fournisse
       nextParams.delete("q");
     }
     nextParams.delete("supplierId");
+    nextParams.delete("purchaseOrderId");
     nextParams.delete("tab");
     setSearchParams(nextParams, { replace: true });
   }
@@ -185,6 +191,7 @@ export default function FournisseursPage({ initialTab = "suppliers" }: Fournisse
     setActiveTab(tab);
     const nextParams = new URLSearchParams(searchParams);
     nextParams.delete("supplierId");
+    nextParams.delete("purchaseOrderId");
     if (tab === "suppliers") {
       nextParams.delete("tab");
     } else {
