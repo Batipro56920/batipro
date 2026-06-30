@@ -38,10 +38,10 @@ export default function ChantierNotesSection(props: ChantierNotesSectionProps) {
     >
       {targetedNoteId ? (
         <div className="mb-4 rounded-2xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-900">
-          Recherche globale : le panneau notes est ouvert pour retrouver la note ciblee. Retirez le ciblage une fois le controle termine pour revenir au parcours chantier standard.
+          Recherche globale : le panneau notes est ouvert et la note ciblee est surlignee quand elle est accessible. Retirez le ciblage une fois le controle termine pour revenir au parcours chantier standard.
         </div>
       ) : null}
-      <PreparationNotesPanel {...props} />
+      <PreparationNotesPanel {...props} targetedNoteId={targetedNoteId} />
     </ChantierChapterDrawer>
   );
 }
