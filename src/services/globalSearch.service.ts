@@ -7,6 +7,8 @@ export type GlobalSearchKind =
   | "chantier_document"
   | "chantier_visite"
   | "chantier_consigne"
+  | "chantier_note"
+  | "chantier_imprevu"
   | "projet"
   | "prospect"
   | "client"
@@ -130,6 +132,34 @@ function savPriorityLabel(value: unknown) {
   return priority;
 }
 
+function changeOrderTypeLabel(value: unknown) {
+  const type = cleanText(value);
+  if (type === "travaux_supplementaires" || type === "modification_client") return "Travaux supplémentaires";
+  return "Imprévu chantier";
+}
+
+function changeOrderStatusLabel(value: unknown) {
+  const status = cleanText(value);
+  if (status === "a_analyser") return "À analyser";
+  if (status === "en_cours") return "En cours";
+  if (status === "traite") return "Traité";
+  if (status === "a_chiffrer") return "À chiffrer";
+  if (status === "en_attente_validation_client" || status === "en_attente_validation") return "En attente validation client";
+  if (status === "valide_client" || status === "valide") return "Validé client";
+  if (status === "refuse") return "Refusé";
+  if (status === "termine") return "Terminé";
+  if (status === "facture") return "Facturé";
+  return status;
+}
+
+function noteStatusLabel(value: unknown) {
+  const status = cleanText(value);
+  if (status === "actif") return "Actif";
+  if (status === "traite") return "Traité";
+  if (status === "archive") return "Archivé";
+  return status;
+}
+
 function intervenantAccessLabel(row: SearchRow) {
   if (cleanText(row.archived_at)) return "Archivé";
   if (cleanText(row.user_id)) return "Compte actif";
@@ -191,6 +221,28 @@ function chantierConsigneHref(row: SearchRow) {
   if (id) params.set("consigneId", id);
   const query = params.toString();
   return `/chantiers/${encodeURIComponent(chantierId)}/preparation${query ? `?${query}` : ""}`;
+}
+
+function chantierNoteHref(row: SearchRow) {
+  const chantierId = cleanText(row.chantier_id);
+  if (!chantierId) return "/chantiers";
+
+  const id = cleanText(row.id);
+  const params = new URLSearchParams();
+  if (id) params.set("noteId", id);
+  const query = params.toString();
+  return `/chantiers/${encodeURIComponent(chantierId)}/execution${query ? `?${query}` : ""}`;
+}
+
+function chantierChangeOrderHref(row: SearchRow) {
+  const chantierId = cleanText(row.chantier_id);
+  if (!chantierId) return "/chantiers";
+
+  const id = cleanText(row.id);
+  const params = new URLSearchParams();
+  if (id) params.set("changeOrderId", id);
+  const query = params.toString();
+  return `/chantiers/${encodeURIComponent(chantierId)}/execution${query ? `?${query}` : ""}`;
 }
 
 function quoteProjectHref(row: SearchRow) {
@@ -412,6 +464,35 @@ const SOURCES: SearchSource[] = [
         subtitle: [cleanText(row.priority), dateLabel, cleanText(row.applies_to_all) === "false" ? "Ciblée" : "Tous intervenants", cleanText(row.description)].filter(Boolean).join(" - ") || "Consigne chantier",
         href: chantierConsigneHref(row),
         badge: "Consigne",
+      };
+    },
+  },
+  {
+    table: "chantier_preparation_notes",
+    select: "id,chantier_id,title,content,status,author_name,updated_at,task_id,zone_id,change_order_id,document_id",
+    filter: "title.ilike.$term,content.ilike.$term,status.ilike.$term,author_name.ilike.$term",
+    map: (row) => ({
+      id: cleanText(row.id),
+      kind: "chantier_note",
+      title: cleanText(row.title) || "Note chantier sans titre",
+      subtitle: [noteStatusLabel(row.status), cleanText(row.author_name), cleanText(row.updated_at).slice(0, 10), cleanText(row.content)].filter(Boolean).join(" - ") || "Note chantier",
+      href: chantierNoteHref(row),
+      badge: "Note chantier",
+    }),
+  },
+  {
+    table: "chantier_change_orders",
+    select: "id,chantier_id,titre,description,type_ecart,statut,impact_cout_ht,total_ht,updated_at,task_id,zone_id",
+    filter: "titre.ilike.$term,description.ilike.$term,type_ecart.ilike.$term,statut.ilike.$term",
+    map: (row) => {
+      const amount = Number(row.total_ht ?? row.impact_cout_ht);
+      return {
+        id: cleanText(row.id),
+        kind: "chantier_imprevu",
+        title: cleanText(row.titre) || "Imprévu chantier sans titre",
+        subtitle: [changeOrderTypeLabel(row.type_ecart), changeOrderStatusLabel(row.statut), Number.isFinite(amount) && amount > 0 ? `${formatSearchCurrency(amount)} HT` : "", cleanText(row.description)].filter(Boolean).join(" - ") || "Imprévu / travaux supplémentaires",
+        href: chantierChangeOrderHref(row),
+        badge: changeOrderTypeLabel(row.type_ecart),
       };
     },
   },
