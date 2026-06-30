@@ -13,7 +13,7 @@ import { getPaidAmount } from "../application/invoicePayments";
 import { invoiceTypeLabel } from "../application/invoiceFactory";
 
 export default function InvoicesPage() {
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const invoiceIdFromUrl = searchParams.get("invoice")?.trim() || null;
   const [invoices, setInvoices] = useState<InvoiceRecord[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -24,6 +24,11 @@ export default function InvoicesPage() {
   const [statusFilter, setStatusFilter] = useState("all");
   const [typeFilter, setTypeFilter] = useState("all");
   const selected = invoices.find((invoice) => invoice.id === selectedId) ?? null;
+  const targetedInvoice = useMemo(
+    () => (invoiceIdFromUrl ? invoices.find((invoice) => invoice.id === invoiceIdFromUrl) ?? null : null),
+    [invoiceIdFromUrl, invoices],
+  );
+  const targetedInvoiceMissing = Boolean(invoiceIdFromUrl && !loading && !targetedInvoice);
 
   useEffect(() => {
     void refresh();
@@ -31,10 +36,13 @@ export default function InvoicesPage() {
 
   useEffect(() => {
     if (!invoiceIdFromUrl) return;
-    if (invoices.some((invoice) => invoice.id === invoiceIdFromUrl)) {
-      setSelectedId(invoiceIdFromUrl);
+    if (targetedInvoice) {
+      setSelectedId(targetedInvoice.id);
+      setQuery("");
+      setStatusFilter("all");
+      setTypeFilter("all");
     }
-  }, [invoiceIdFromUrl, invoices]);
+  }, [invoiceIdFromUrl, targetedInvoice]);
 
   const stats = useMemo(() => {
     const totals = invoices.reduce((acc, invoice) => {
@@ -90,6 +98,18 @@ export default function InvoicesPage() {
     }
   }
 
+  function clearActiveInvoiceParam() {
+    if (!invoiceIdFromUrl) return;
+    const nextParams = new URLSearchParams(searchParams);
+    nextParams.delete("invoice");
+    setSearchParams(nextParams, { replace: true });
+  }
+
+  function selectInvoice(invoiceId: string) {
+    if (invoiceIdFromUrl && invoiceIdFromUrl !== invoiceId) clearActiveInvoiceParam();
+    setSelectedId(invoiceId);
+  }
+
   function update(invoice: InvoiceRecord) {
     setInvoices((current) => current.map((row) => row.id === invoice.id ? invoice : row));
     markInvoiceDirty(invoice.id, true);
@@ -129,6 +149,33 @@ export default function InvoicesPage() {
         <StatCard label="CA facturé" value={formatCurrency(stats.amount)} hint="Total TTC" />
         <StatCard label="Encaissé" value={formatCurrency(stats.paid)} hint={`${stats.overdue} en retard`} />
       </section> : null}
+
+      {!loading && invoiceIdFromUrl ? (
+        <div className={[
+          "rounded-2xl border p-4 text-sm",
+          targetedInvoiceMissing ? "border-amber-200 bg-amber-50 text-amber-900" : "border-blue-200 bg-blue-50 text-blue-900",
+        ].join(" ")}>
+          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+            <div>
+              <div className="font-semibold">
+                {targetedInvoiceMissing ? "Facture introuvable" : "Facture ouverte depuis la recherche globale"}
+              </div>
+              <p className={targetedInvoiceMissing ? "mt-1 text-amber-800" : "mt-1 text-blue-800"}>
+                {targetedInvoiceMissing
+                  ? "Le lien pointe vers une facture supprimée ou non accessible avec les droits actuels."
+                  : `${targetedInvoice?.document.number ?? "La facture"} est sélectionnée et prête à être contrôlée, relancée ou encaissée.`}
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={clearActiveInvoiceParam}
+              className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700"
+            >
+              Retirer le ciblage
+            </button>
+          </div>
+        </div>
+      ) : null}
 
       {!loading ? (
         <section className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm">
@@ -171,7 +218,7 @@ export default function InvoicesPage() {
               const totals = invoice.document.totals ?? calculateDocumentTotals(invoice.document);
               const hasUnsavedChanges = dirtyInvoiceIds.has(invoice.id);
               return (
-                <button key={invoice.id} type="button" onClick={() => setSelectedId(invoice.id)} className={`w-full rounded-2xl border px-3 py-2.5 text-left transition ${selectedId === invoice.id ? "border-blue-300 bg-blue-50" : "border-slate-200 hover:bg-slate-50"}`}>
+                <button key={invoice.id} type="button" onClick={() => selectInvoice(invoice.id)} className={`w-full rounded-2xl border px-3 py-2.5 text-left transition ${selectedId === invoice.id ? "border-blue-300 bg-blue-50" : "border-slate-200 hover:bg-slate-50"}`}>
                   <div className="flex min-w-0 items-start justify-between gap-3">
                     <div className="min-w-0">
                       <div className="truncate font-semibold text-slate-950">{invoice.document.number}</div>
