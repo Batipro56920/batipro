@@ -1,6 +1,7 @@
 import { useNavigate } from "react-router-dom";
 import { useEffect, useMemo, useState } from "react";
 import type { ChantierStatus } from "../types/chantier";
+import { supabase } from "../lib/supabaseClient";
 import {
   bulkUpdateChantiersStatus,
   countChantiers,
@@ -33,6 +34,9 @@ const DEFAULT_FILTERS: ChantierListFilters = {
   type: "",
 };
 
+const OPEN_TERRAIN_FEEDBACK_STATUSES = ["nouveau", "en_cours"] as const;
+const PRIORITY_TERRAIN_FEEDBACK_URGENCIES = new Set(["critique", "urgente"]);
+
 const HEADER_BY_VIEW: Record<ChantierListView, { eyebrow: string; title: string; description: string }> = {
   list: {
     eyebrow: "Production",
@@ -60,6 +64,35 @@ type ChantiersPageProps = {
   initialView?: ChantierListView;
 };
 
+type TerrainFeedbackSummaryByChantier = Record<string, { open: number; priority: number }>;
+
+async function loadTerrainFeedbackSummaries(chantierIds: string[]): Promise<TerrainFeedbackSummaryByChantier> {
+  if (chantierIds.length === 0) return {};
+
+  const { data, error } = await (supabase as any)
+    .from("terrain_feedbacks")
+    .select("chantier_id,status,urgency")
+    .in("chantier_id", chantierIds)
+    .in("status", [...OPEN_TERRAIN_FEEDBACK_STATUSES]);
+
+  if (error) {
+    console.warn("[chantiers] terrain feedback summaries skipped", error);
+    return {};
+  }
+
+  const summaries: TerrainFeedbackSummaryByChantier = {};
+  for (const row of (data ?? []) as Array<Record<string, unknown>>) {
+    const chantierId = String(row.chantier_id ?? "");
+    if (!chantierId) continue;
+    const current = summaries[chantierId] ?? { open: 0, priority: 0 };
+    current.open += 1;
+    if (PRIORITY_TERRAIN_FEEDBACK_URGENCIES.has(String(row.urgency ?? ""))) current.priority += 1;
+    summaries[chantierId] = current;
+  }
+
+  return summaries;
+}
+
 export default function ChantiersPage({ initialView = "list" }: ChantiersPageProps) {
   const navigate = useNavigate();
 
@@ -69,12 +102,16 @@ export default function ChantiersPage({ initialView = "list" }: ChantiersPagePro
   const [filters, setFilters] = useState<ChantierListFilters>(DEFAULT_FILTERS);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [previewRow, setPreviewRow] = useState<ChantierDerived | null>(null);
+  const [terrainFeedbackSummaries, setTerrainFeedbackSummaries] = useState<TerrainFeedbackSummaryByChantier>({});
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [debugCount, setDebugCount] = useState<number | null>(null);
 
-  const derivedRows = useMemo(() => items.map((item) => deriveChantier(item)), [items]);
+  const derivedRows = useMemo(
+    () => items.map((item) => deriveChantier(item, undefined, terrainFeedbackSummaries[item.id])),
+    [items, terrainFeedbackSummaries],
+  );
   const visibleRows = useMemo(() => filterChantiers(derivedRows, filters), [derivedRows, filters]);
   const metrics = useMemo(() => computeChantierMetrics(derivedRows), [derivedRows]);
   const clients = useMemo(() => uniqueClients(derivedRows), [derivedRows]);
@@ -86,12 +123,14 @@ export default function ChantiersPage({ initialView = "list" }: ChantiersPagePro
     setErrorMsg(null);
     try {
       const data = await listChantiers({ scope: nextScope });
+      const nextTerrainFeedbackSummaries = await loadTerrainFeedbackSummaries(data.map((item) => item.id));
       setItems(data);
+      setTerrainFeedbackSummaries(nextTerrainFeedbackSummaries);
       setSelectedIds((current) => current.filter((id) => data.some((item) => item.id === id)));
       setPreviewRow((current) => {
         if (!current) return null;
         const next = data.find((item) => item.id === current.id);
-        return next ? deriveChantier(next) : null;
+        return next ? deriveChantier(next, undefined, nextTerrainFeedbackSummaries[next.id]) : null;
       });
       if (import.meta.env.DEV) {
         const count = await countChantiers({ scope: nextScope });
