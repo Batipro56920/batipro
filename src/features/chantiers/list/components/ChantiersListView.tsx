@@ -136,11 +136,13 @@ function Metric({ label, value }: { label: string; value: string }) {
 }
 
 function AlertBadges({ row }: { row: ChantierDerived }) {
-  const hasOpenTerrainFeedbacks = row.terrainFeedbackOpenCount > 0;
-  const terrainTone = row.terrainFeedbackPriorityCount > 0 ? "red" : "amber";
-  const terrainLabel = row.terrainFeedbackPriorityCount > 0
-    ? `${row.terrainFeedbackPriorityCount} retour urgent`
-    : `${row.terrainFeedbackOpenCount} retour${row.terrainFeedbackOpenCount > 1 ? "s" : ""}`;
+  const terrainFeedbackOpenCount = row.terrainFeedbackOpenCount ?? 0;
+  const terrainFeedbackPriorityCount = row.terrainFeedbackPriorityCount ?? 0;
+  const hasOpenTerrainFeedbacks = terrainFeedbackOpenCount > 0;
+  const terrainTone = terrainFeedbackPriorityCount > 0 ? "red" : "amber";
+  const terrainLabel = terrainFeedbackPriorityCount > 0
+    ? `${terrainFeedbackPriorityCount} retour urgent`
+    : `${terrainFeedbackOpenCount} retour${terrainFeedbackOpenCount > 1 ? "s" : ""}`;
 
   return (
     <div className="flex flex-wrap items-center gap-2">
