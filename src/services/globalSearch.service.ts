@@ -521,7 +521,7 @@ const SOURCES: SearchSource[] = [
         id,
         kind: "retour_terrain",
         title: cleanText(row.title) || "Retour terrain sans titre",
-        subtitle: [cleanText(row.category), cleanText(row.urgency), cleanText(row.status)].filter(Boolean).join(" - ") || "Retour terrain",
+        subtitle: [cleanText(row.category), cleanText(row.urgency), cleanText(row.status), cleanText(row.description)].filter(Boolean).join(" - ") || "Retour terrain",
         href: `/retours-terrain?${params.toString()}`,
         badge: "Retour terrain",
       };
