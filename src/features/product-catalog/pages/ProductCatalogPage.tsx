@@ -45,6 +45,11 @@ export default function ProductCatalogPage() {
   const [quoteReaderOpen, setQuoteReaderOpen] = useState(false);
   const [quoteImporting, setQuoteImporting] = useState(false);
   const [quoteImportResult, setQuoteImportResult] = useState<ProductQuoteImportResult | null>(null);
+  const activeProduct = useMemo(
+    () => (activeProductId ? products.find((row) => row.id === activeProductId) ?? null : null),
+    [activeProductId, products],
+  );
+  const activeProductMissing = Boolean(activeProductId && !loading && !activeProduct);
 
   useEffect(() => {
     listSuppliers().then(setSuppliers).catch(() => setSuppliers([]));
@@ -61,13 +66,15 @@ export default function ProductCatalogPage() {
       return;
     }
     if (loading || openedProductFromUrlRef.current === activeProductId) return;
+    if (!activeProduct) return;
 
-    const product = products.find((row) => row.id === activeProductId);
-    if (product) {
-      setEditing(product);
-      openedProductFromUrlRef.current = activeProductId;
-    }
-  }, [activeProductId, loading, products]);
+    setCategoryFilter("all");
+    setSupplierFilter("all");
+    setBrandFilter("all");
+    setPriceFilter("all");
+    setEditing(activeProduct);
+    openedProductFromUrlRef.current = activeProductId;
+  }, [activeProduct, activeProductId, loading]);
 
   async function refreshProducts() {
     setLoading(true);
@@ -221,6 +228,33 @@ export default function ProductCatalogPage() {
           </div>
         ) : null}
       </section> : null}
+
+      {!loading && activeProductId ? (
+        <div className={[
+          "rounded-2xl border p-4 text-sm",
+          activeProductMissing ? "border-amber-200 bg-amber-50 text-amber-900" : "border-blue-200 bg-blue-50 text-blue-900",
+        ].join(" ")}>
+          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+            <div>
+              <div className="font-semibold">
+                {activeProductMissing ? "Produit introuvable" : "Produit ouvert depuis la recherche globale"}
+              </div>
+              <p className={activeProductMissing ? "mt-1 text-amber-800" : "mt-1 text-blue-800"}>
+                {activeProductMissing
+                  ? "Le lien pointe vers une fiche supprimée ou non accessible avec les droits actuels."
+                  : `${activeProduct?.designation ?? "Le produit"} est sélectionné et prêt à être contrôlé ou mis à jour.`}
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={clearActiveProductParam}
+              className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700"
+            >
+              Retirer le ciblage
+            </button>
+          </div>
+        </div>
+      ) : null}
 
       {!loading ? <section className="overflow-x-auto rounded-3xl border border-slate-200 bg-white shadow-sm">
         <table className="min-w-[1040px] divide-y divide-slate-100 text-sm">
