@@ -12,6 +12,7 @@ export function PurchaseOrdersPanel({ suppliers }: { suppliers: SupplierRow[] })
   const [searchParams, setSearchParams] = useSearchParams();
   const urlPurchaseOrderId = searchParams.get("purchaseOrderId") ?? "";
   const openedOrderFromUrlRef = useRef("");
+  const targetedOrderRowRef = useRef<HTMLTableRowElement | null>(null);
   const [orders, setOrders] = useState<PurchaseOrderRecord[]>([]);
   const [selectedOrder, setSelectedOrder] = useState<PurchaseOrderRecord | null>(null);
   const [loading, setLoading] = useState(true);
@@ -60,6 +61,14 @@ export function PurchaseOrdersPanel({ suppliers }: { suppliers: SupplierRow[] })
     setSupplierFilter("all");
     setError(null);
     openedOrderFromUrlRef.current = urlPurchaseOrderId;
+  }, [loading, targetedOrder, urlPurchaseOrderId]);
+
+  useEffect(() => {
+    if (!urlPurchaseOrderId || !targetedOrder || loading) return;
+    const frame = window.requestAnimationFrame(() => {
+      targetedOrderRowRef.current?.scrollIntoView({ block: "center", behavior: "smooth" });
+    });
+    return () => window.cancelAnimationFrame(frame);
   }, [loading, targetedOrder, urlPurchaseOrderId]);
 
   async function refresh() {
@@ -210,8 +219,13 @@ export function PurchaseOrdersPanel({ suppliers }: { suppliers: SupplierRow[] })
           <tbody className="divide-y divide-slate-100">
             {filteredOrders.length ? filteredOrders.map((order) => {
               const orderTotals = order.document.totals ?? calculateDocumentTotals(order.document);
+              const isTargetedOrder = order.id === urlPurchaseOrderId;
               return (
-                <tr key={order.id} className={["hover:bg-slate-50", order.id === urlPurchaseOrderId ? "bg-blue-50/70 ring-1 ring-inset ring-blue-200" : ""].join(" ")}>
+                <tr
+                  key={order.id}
+                  ref={isTargetedOrder ? targetedOrderRowRef : undefined}
+                  className={["hover:bg-slate-50", isTargetedOrder ? "bg-blue-50/70 ring-1 ring-inset ring-blue-200" : ""].join(" ")}
+                >
                   <td className="px-4 py-3 font-semibold text-slate-950">{order.document.number}</td>
                   <td className="px-4 py-3 text-slate-600">{order.supplierName || order.document.recipient.displayName || "-"}</td>
                   <td className="px-4 py-3 text-slate-500">{order.projectId || "-"}</td>
