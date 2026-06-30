@@ -1,3 +1,4 @@
+import { Link } from "react-router-dom";
 import { X } from "lucide-react";
 import type { SavWithContext } from "../types";
 import { dateOnly } from "../../components/crmFormat";
@@ -5,6 +6,11 @@ import { SavPriorityChip, SavStatusChip } from "./SavStatusChip";
 
 export function SavTicketDrawer({ ticket, onClose }: { ticket: SavWithContext | null; onClose: () => void }) {
   if (!ticket) return null;
+
+  const clientHref = ticket.client_id ? `/crm/clients?client=${encodeURIComponent(ticket.client_id)}` : null;
+  const chantierHref = ticket.chantier_id ? `/chantiers/${encodeURIComponent(ticket.chantier_id)}` : null;
+  const chantierQualityHref = ticket.chantier_id ? `/chantiers/${encodeURIComponent(ticket.chantier_id)}/qualite` : null;
+
   return (
     <div className="fixed inset-0 z-40 flex justify-end bg-slate-950/20" role="dialog" aria-modal="true">
       <aside className="h-full w-full max-w-2xl overflow-y-auto border-l border-slate-200 bg-white shadow-2xl shadow-slate-950/20">
@@ -30,6 +36,32 @@ export function SavTicketDrawer({ ticket, onClose }: { ticket: SavWithContext | 
             <div className="mt-2">Intervenant : {ticket.assigned_to ?? "—"}</div>
             <div className="mt-2">Ouvert le : {dateOnly(ticket.created_at)}</div>
             <div className="mt-2">Intervention : {dateOnly(ticket.planned_at)}</div>
+            <div className="mt-4 flex flex-wrap gap-2">
+              {clientHref ? (
+                <Link
+                  to={clientHref}
+                  className="rounded-xl border border-blue-200 bg-blue-50 px-3 py-2 text-xs font-semibold text-blue-800 hover:bg-blue-100"
+                >
+                  Fiche client
+                </Link>
+              ) : null}
+              {chantierHref ? (
+                <Link
+                  to={chantierHref}
+                  className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+                >
+                  Fiche chantier
+                </Link>
+              ) : null}
+              {chantierQualityHref ? (
+                <Link
+                  to={chantierQualityHref}
+                  className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-800 hover:bg-amber-100"
+                >
+                  Qualité / réserves
+                </Link>
+              ) : null}
+            </div>
             <p className="mt-3 leading-6">{ticket.description ?? "Aucune description renseignée."}</p>
           </section>
           <section className="rounded-2xl border border-slate-200 p-4">
