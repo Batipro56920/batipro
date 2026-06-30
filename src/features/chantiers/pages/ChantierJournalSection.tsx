@@ -125,6 +125,13 @@ export default function ChantierJournalSection({
     return entityLabel(entityType);
   }
 
+  function getJournalActionLabel(log: ChantierActivityLogRow) {
+    if (log.entity_type === "terrain_feedback" && log.action_type === "started") {
+      return "Prise en charge";
+    }
+    return actionLabel(log.action_type);
+  }
+
   function getJournalEntityTone(entityType: string) {
     if (entityType === "terrain_feedback") return "border-blue-200 bg-blue-50 text-blue-700";
     return tone(entityType);
@@ -202,7 +209,7 @@ export default function ChantierJournalSection({
                         {getJournalEntityLabel(log.entity_type)}
                       </span>
                       <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-semibold text-slate-700">
-                        {actionLabel(log.action_type)}
+                        {getJournalActionLabel(log)}
                       </span>
                     </div>
                     <div className="mt-3 text-base font-semibold text-slate-900">
