@@ -14,6 +14,21 @@ function openTerrainFeedbackCount(row: ChantierDerived) {
   return row.terrainFeedbackOpenCount ?? 0;
 }
 
+function priorityTerrainFeedbackCount(row: ChantierDerived) {
+  return row.terrainFeedbackPriorityCount ?? 0;
+}
+
+function terrainFeedbackSearchTerms(row: ChantierDerived) {
+  const terms: string[] = [];
+  if (openTerrainFeedbackCount(row) > 0) {
+    terms.push("retours terrain alertes terrain observations terrain a traiter");
+  }
+  if (priorityTerrainFeedbackCount(row) > 0) {
+    terms.push("urgent critique priorite blocage anomalie qualite reserve a traiter");
+  }
+  return terms.join(" ");
+}
+
 export function currency(value: number | null | undefined) {
   if (value === null || value === undefined || Number.isNaN(Number(value))) return "—";
   return new Intl.NumberFormat("fr-FR", { style: "currency", currency: "EUR", maximumFractionDigits: 0 }).format(Number(value));
@@ -110,7 +125,7 @@ export function filterChantiers(rows: ChantierDerived[], filters: ChantierListFi
       commercialSourceLabel(row),
       row.crm_client_email,
       row.crm_client_phone,
-      openTerrainFeedbackCount(row) > 0 ? "retours terrain alertes terrain" : "",
+      terrainFeedbackSearchTerms(row),
     ].some((value) => String(value ?? "").toLowerCase().includes(query));
   });
 }
