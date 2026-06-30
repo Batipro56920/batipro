@@ -83,6 +83,11 @@ export type ApporteurPortalTokenResult = {
   organization_id: string;
 };
 
+type LeadCrmLinkInput = {
+  crm_prospect_id?: string | null;
+  crm_opportunity_id?: string | null;
+};
+
 async function getCurrentUserId(): Promise<string> {
   const { data, error } = await supabase.auth.getUser();
   if (error) throw new Error(error.message);
@@ -115,6 +120,38 @@ function normalizeDuplicatePhone(value: string | null | undefined) {
   if (compact.startsWith("+33")) return `0${compact.slice(3)}`;
   if (compact.startsWith("0033")) return `0${compact.slice(4)}`;
   return compact;
+}
+
+async function assertCrmProjectNotAlreadyAttached(
+  organization_id: string,
+  input: LeadCrmLinkInput,
+  currentLeadId?: string,
+): Promise<void> {
+  const crmProspectId = input.crm_prospect_id ?? null;
+  const crmOpportunityId = input.crm_opportunity_id ?? null;
+  if (!crmProspectId && !crmOpportunityId) return;
+
+  const filters = [
+    crmOpportunityId ? `crm_opportunity_id.eq.${crmOpportunityId}` : null,
+    crmProspectId ? `crm_prospect_id.eq.${crmProspectId}` : null,
+  ].filter(Boolean) as string[];
+
+  const response = await supabase
+    .from("apporteur_leads")
+    .select("id,crm_prospect_id,crm_opportunity_id")
+    .eq("organization_id", organization_id)
+    .or(filters.join(","))
+    .limit(5);
+
+  if (response.error) {
+    if (hasMissingApporteurLeadColumn(response.error, { crm_prospect_id: crmProspectId, crm_opportunity_id: crmOpportunityId })) return;
+    throw new Error(response.error.message);
+  }
+
+  const duplicate = ((response.data ?? []) as Array<{ id: string }>).find((lead) => lead.id !== currentLeadId);
+  if (duplicate) {
+    throw new Error("Ce projet CRM est déjà rattaché à un apporteur.");
+  }
 }
 
 export async function getApporteursAffaires(): Promise<ApporteurAffaireRow[]> {
@@ -284,6 +321,8 @@ export async function createApporteurLead(input: {
     crm_opportunity_id: input.crm_opportunity_id ?? null,
   };
 
+  await assertCrmProjectNotAlreadyAttached(organization_id, payload);
+
   const response = await supabase
     .from("apporteur_leads")
     .insert(payload as any)
@@ -336,6 +375,8 @@ export async function updateApporteurLead(
         : normalizePositiveOrZeroNumber(input.estimated_amount, "Montant estimé"),
     commission_paid: input.status === undefined ? input.commission_paid : input.status === "paye",
   };
+
+  await assertCrmProjectNotAlreadyAttached(organization_id, payload, id);
 
   const response = await supabase
     .from("apporteur_leads")
