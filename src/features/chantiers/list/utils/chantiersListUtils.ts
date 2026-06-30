@@ -5,6 +5,11 @@ import type { ChantierDerived, ChantierListFilters } from "../types";
 const ACTIVE_STATUSES: ChantierStatus[] = ["PREPARATION", "EN_COURS", "EN_PAUSE"];
 const DONE_STATUSES: ChantierStatus[] = ["TERMINE", "ARCHIVE", "ANNULE"];
 
+type TerrainFeedbackSummary = {
+  open: number;
+  priority: number;
+};
+
 export function currency(value: number | null | undefined) {
   if (value === null || value === undefined || Number.isNaN(Number(value))) return "—";
   return new Intl.NumberFormat("fr-FR", { style: "currency", currency: "EUR", maximumFractionDigits: 0 }).format(Number(value));
@@ -54,7 +59,11 @@ export function commercialAmountLabel(row: ChantierRow) {
   return amount ? currency(amount) : "Montant non renseigné";
 }
 
-export function deriveChantier(row: ChantierRow, today = new Date().toISOString().slice(0, 10)): ChantierDerived {
+export function deriveChantier(
+  row: ChantierRow,
+  today = new Date().toISOString().slice(0, 10),
+  terrainFeedbackSummary: TerrainFeedbackSummary = { open: 0, priority: 0 },
+): ChantierDerived {
   const progress = Math.min(100, Math.max(0, Number(row.avancement ?? 0)));
   const endDate = row.date_fin_prevue ?? row.planning_end_date ?? null;
   const status = row.status ?? "PREPARATION";
@@ -68,7 +77,16 @@ export function deriveChantier(row: ChantierRow, today = new Date().toISOString(
   const plannedHours = Number(row.heures_prevues ?? 0);
   const timeRatio = plannedHours > 0 ? Number(row.heures_passees ?? 0) / plannedHours : null;
 
-  return { ...row, progress, isLate, budgetHt, estimatedMargin, timeRatio };
+  return {
+    ...row,
+    progress,
+    isLate,
+    budgetHt,
+    estimatedMargin,
+    timeRatio,
+    terrainFeedbackOpenCount: terrainFeedbackSummary.open,
+    terrainFeedbackPriorityCount: terrainFeedbackSummary.priority,
+  };
 }
 
 export function filterChantiers(rows: ChantierDerived[], filters: ChantierListFilters) {
@@ -88,6 +106,7 @@ export function filterChantiers(rows: ChantierDerived[], filters: ChantierListFi
       commercialSourceLabel(row),
       row.crm_client_email,
       row.crm_client_phone,
+      row.terrainFeedbackOpenCount > 0 ? "retours terrain alertes terrain" : "",
     ].some((value) => String(value ?? "").toLowerCase().includes(query));
   });
 }
@@ -97,7 +116,7 @@ export function computeChantierMetrics(rows: ChantierDerived[]) {
   const active = rows.filter((row) => ACTIVE_STATUSES.includes(row.status)).length;
   const preparation = rows.filter((row) => row.status === "PREPARATION").length;
   const late = rows.filter((row) => row.isLate).length;
-  const alerts = rows.filter((row) => row.isLate || (row.timeRatio !== null && row.timeRatio > 1.1)).length;
+  const alerts = rows.filter((row) => row.isLate || (row.timeRatio !== null && row.timeRatio > 1.1) || row.terrainFeedbackOpenCount > 0).length;
   const completedThisMonth = rows.filter((row) => row.status === "TERMINE" && (row.completed_at ?? row.lifecycle_updated_at ?? "").startsWith(thisMonth)).length;
   const marginValues = rows.map((row) => row.estimatedMargin).filter((value): value is number => value !== null);
   const estimatedMargin = marginValues.length ? marginValues.reduce((sum, value) => sum + value, 0) : null;
