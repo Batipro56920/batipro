@@ -53,7 +53,7 @@ export function QuotesTable({
                     {row.chantierPath ? (
                       <Link to={row.chantierPath} className="rounded-lg border border-emerald-200 bg-emerald-50 px-2 py-1 text-xs font-medium text-emerald-800 hover:bg-emerald-100" title="Ouvrir le chantier déjà lié à ce devis.">Chantier</Link>
                     ) : null}
-                    <Link to={`/crm/devis/${row.id}/edit`} className="rounded-lg border border-slate-900 bg-slate-950 px-2 py-1 text-xs font-medium text-white hover:bg-slate-800" title="Modifier ce devis dans le Quote Builder.">Modifier</Link>
+                    <Link to={row.quoteEditPath} className="rounded-lg border border-slate-900 bg-slate-950 px-2 py-1 text-xs font-medium text-white hover:bg-slate-800" title="Modifier ce devis dans le Quote Builder.">Modifier</Link>
                     <button type="button" onClick={() => actions.onStatus(row, "envoye")} className="rounded-lg border border-slate-200 px-2 py-1 text-xs font-medium hover:bg-slate-50">Envoyer</button>
                     <button type="button" onClick={() => actions.onStatus(row, "relance_1")} className="rounded-lg border border-slate-200 px-2 py-1 text-xs font-medium hover:bg-slate-50">Relancer</button>
                     <details className="relative">
