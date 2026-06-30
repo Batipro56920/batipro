@@ -252,6 +252,7 @@ export default function ApporteurPortalPage() {
               <Input label="Adresse du projet" value={leadForm.project_address} onChange={(value) => setLeadForm((prev) => ({ ...prev, project_address: value }))} />
               <Input label="Nature des travaux" value={leadForm.project_type} onChange={(value) => setLeadForm((prev) => ({ ...prev, project_type: value }))} />
               <Input label="Montant estimé des travaux" value={leadForm.estimated_amount} inputMode="decimal" onChange={(value) => setLeadForm((prev) => ({ ...prev, estimated_amount: value }))} />
+              <Input label="Date de transmission" type="date" value={leadForm.date} onChange={(value) => setLeadForm((prev) => ({ ...prev, date: value }))} />
               <div className="md:col-span-2"><Textarea label="Informations utiles" value={leadForm.comment} onChange={(value) => setLeadForm((prev) => ({ ...prev, comment: value }))} /></div>
             </div>
             <div className="mt-4 rounded-lg border border-blue-100 bg-blue-50 p-3 text-sm text-blue-900">
@@ -370,8 +371,8 @@ function LeadMobileRow({ lead, apporteur }: { lead: ApporteurLeadRow; apporteur:
   );
 }
 
-function Input({ label, value, onChange, inputMode }: { label: string; value: string; onChange: (value: string) => void; inputMode?: "decimal" }) {
-  return <label className="block text-sm"><span className="text-xs font-medium text-slate-600">{label}</span><input inputMode={inputMode} className={`${inputClass} mt-1`} value={value} onChange={(event) => onChange(event.target.value)} /></label>;
+function Input({ label, value, onChange, inputMode, type = "text" }: { label: string; value: string; onChange: (value: string) => void; inputMode?: "decimal"; type?: string }) {
+  return <label className="block text-sm"><span className="text-xs font-medium text-slate-600">{label}</span><input type={type} inputMode={inputMode} className={`${inputClass} mt-1`} value={value} onChange={(event) => onChange(event.target.value)} /></label>;
 }
 
 function Textarea({ label, value, onChange }: { label: string; value: string; onChange: (value: string) => void }) {
