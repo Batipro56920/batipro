@@ -1,4 +1,4 @@
-﻿import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useState, type FormEvent } from "react";
 
 import { appendChantierActivityLog } from "../../services/chantierActivityLog.service";
 import {
@@ -31,6 +31,7 @@ type PreparationNotesPanelProps = {
   tasks: ChantierTaskRow[];
   zones: ChantierZoneRow[];
   documents: ChantierDocumentRow[];
+  targetedNoteId?: string;
 };
 
 function formatDate(value: string | null) {
@@ -66,6 +67,7 @@ export default function PreparationNotesPanel({
   tasks,
   zones,
   documents,
+  targetedNoteId = "",
 }: PreparationNotesPanelProps) {
   const [notes, setNotes] = useState<ChantierPreparationNoteRow[]>([]);
   const [notesSchemaReady, setNotesSchemaReady] = useState(true);
@@ -93,6 +95,10 @@ export default function PreparationNotesPanel({
   const documentById = useMemo(() => new Map(documents.map((document) => [document.id, document])), [documents]);
   const changeOrderById = useMemo(() => new Map(changeOrders.map((row) => [row.id, row])), [changeOrders]);
   const editingNote = useMemo(() => notes.find((note) => note.id === editingId) ?? null, [editingId, notes]);
+  const targetedNoteExists = useMemo(
+    () => Boolean(targetedNoteId && notes.some((note) => note.id === targetedNoteId)),
+    [notes, targetedNoteId],
+  );
 
   useEffect(() => {
     let alive = true;
@@ -150,6 +156,18 @@ export default function PreparationNotesPanel({
       alive = false;
     };
   }, [chantierId]);
+
+  useEffect(() => {
+    if (loading || !targetedNoteId || !targetedNoteExists) return;
+
+    const frame = window.requestAnimationFrame(() => {
+      document
+        .querySelector(`[data-note-id="${targetedNoteId}"]`)
+        ?.scrollIntoView({ behavior: "smooth", block: "center" });
+    });
+
+    return () => window.cancelAnimationFrame(frame);
+  }, [loading, targetedNoteExists, targetedNoteId]);
 
   function resetForm() {
     setEditingId(null);
@@ -278,6 +296,12 @@ export default function PreparationNotesPanel({
           </span>
         ) : null}
       </div>
+
+      {targetedNoteId && !loading && !targetedNoteExists ? (
+        <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+          La note ciblee par le lien n'est plus visible dans ce chantier. Elle a peut-etre ete supprimee, archivee ou rendue inaccessible.
+        </div>
+      ) : null}
 
       {!notesSchemaReady ? (
         <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-700">
@@ -445,12 +469,25 @@ export default function PreparationNotesPanel({
             const linkedChangeOrder = note.change_order_id ? changeOrderById.get(note.change_order_id) : undefined;
             const linkedTask = note.task_id ? taskById.get(note.task_id) : undefined;
             const linkedDocument = note.document_id ? documentById.get(note.document_id) : undefined;
+            const isTargetedNote = note.id === targetedNoteId;
             return (
-              <article key={note.id} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+              <article
+                key={note.id}
+                data-note-id={note.id}
+                className={[
+                  "rounded-2xl border bg-white p-4 shadow-sm transition-colors",
+                  isTargetedNote ? "border-blue-300 bg-blue-50/60 ring-2 ring-blue-100" : "border-slate-200",
+                ].join(" ")}
+              >
                 <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
                   <div className="min-w-0">
                     <div className="flex flex-wrap items-center gap-2">
                       <h4 className="text-sm font-semibold text-slate-950">{note.title}</h4>
+                      {isTargetedNote ? (
+                        <span className="rounded-full border border-blue-200 bg-white px-2 py-0.5 text-[11px] font-semibold text-blue-700">
+                          Cible recherche
+                        </span>
+                      ) : null}
                       <span className={["rounded-full border px-2 py-0.5 text-[11px] font-semibold", noteStatusBadgeClass(note.status)].join(" ")}>
                         {NOTE_STATUS_OPTIONS.find((entry) => entry.value === note.status)?.label ?? note.status}
                       </span>
@@ -506,4 +543,3 @@ export default function PreparationNotesPanel({
     </div>
   );
 }
-
