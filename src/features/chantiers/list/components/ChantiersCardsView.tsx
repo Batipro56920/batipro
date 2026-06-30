@@ -10,11 +10,13 @@ export function ChantiersCardsView({ rows, onPreview, actions }: { rows: Chantie
   return (
     <section className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
       {rows.map((row) => {
-        const hasOpenTerrainFeedbacks = row.terrainFeedbackOpenCount > 0;
-        const hasPriorityTerrainFeedbacks = row.terrainFeedbackPriorityCount > 0;
+        const terrainFeedbackOpenCount = row.terrainFeedbackOpenCount ?? 0;
+        const terrainFeedbackPriorityCount = row.terrainFeedbackPriorityCount ?? 0;
+        const hasOpenTerrainFeedbacks = terrainFeedbackOpenCount > 0;
+        const hasPriorityTerrainFeedbacks = terrainFeedbackPriorityCount > 0;
         const terrainFeedbackLabel = hasPriorityTerrainFeedbacks
-          ? `${row.terrainFeedbackPriorityCount} retour terrain urgent`
-          : `${row.terrainFeedbackOpenCount} retour${row.terrainFeedbackOpenCount > 1 ? "s" : ""} terrain à traiter`;
+          ? `${terrainFeedbackPriorityCount} retour terrain urgent`
+          : `${terrainFeedbackOpenCount} retour${terrainFeedbackOpenCount > 1 ? "s" : ""} terrain à traiter`;
 
         return (
           <article key={row.id} role="button" tabIndex={0} onClick={() => onPreview(row)} onKeyDown={(event) => event.key === "Enter" && onPreview(row)} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm shadow-slate-950/[0.03] transition hover:-translate-y-0.5 hover:shadow-md">
