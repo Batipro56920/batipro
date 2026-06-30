@@ -227,7 +227,9 @@ export function PurchaseOrdersPanel({ suppliers }: { suppliers: SupplierRow[] })
               return (
                 <tr
                   key={order.id}
-                  ref={isTargetedOrder ? targetedOrderRowRef : undefined}
+                  ref={(node) => {
+                    if (isTargetedOrder) targetedOrderRowRef.current = node;
+                  }}
                   className={["hover:bg-slate-50", isTargetedOrder ? "bg-blue-50/70 ring-1 ring-inset ring-blue-200" : ""].join(" ")}
                 >
                   <td className="px-4 py-3 font-semibold text-slate-950">{order.document.number}</td>
