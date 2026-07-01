@@ -32,10 +32,9 @@ function isBlockedChantier(row: ChantierDerived) {
 
 function BlockageSummary({ row }: { row: ChantierDerived }) {
   const feedback = getTerrainFeedbackMeta(row);
-  const items = [
-    row.isLate ? "Chantier en retard" : null,
-    feedback.hasPriority ? feedback.label : null,
-  ].filter(Boolean);
+  const items: string[] = [];
+  if (row.isLate) items.push("Chantier en retard");
+  if (feedback.hasPriority) items.push(feedback.label);
 
   if (items.length === 0) return null;
 
