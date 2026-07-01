@@ -26,6 +26,7 @@ export function createBusinessDocumentPdf(document: BusinessDocument) {
   y = drawDocumentTable(pdf, document, rows, y);
   y = drawTotals(pdf, document, totals, y + 8);
   y = drawTerms(pdf, document, y + 8);
+  y = drawConditionSheet(pdf, document, y + 2);
 
   if (template.showSignature) {
     y = ensureSpace(pdf, y, 36, () => drawContinuationHeader(pdf, document));
@@ -244,6 +245,32 @@ function drawTerms(pdf: jsPDF, document: BusinessDocument, startY: number) {
   });
 
   return y;
+}
+
+function drawConditionSheet(pdf: jsPDF, document: BusinessDocument, startY: number) {
+  const sheet = document.conditionSheet;
+  if (!sheet?.enabled || !sheet.conditions.length) return startY;
+
+  let y = startY;
+  const conditionLines = sheet.conditions.flatMap((condition) => split(pdf, `- ${safe(condition.label)}`, 170, 3));
+  const signatureLines = split(pdf, safe(sheet.signatureText), 170, 3);
+  const height = 15 + conditionLines.length * 4.2 + signatureLines.length * 4.2;
+  y = ensureSpace(pdf, y, height, () => drawContinuationHeader(pdf, document));
+
+  pdf.setFillColor(255, 251, 235);
+  pdf.setDrawColor(253, 230, 138);
+  pdf.roundedRect(PAGE.marginX, y, PAGE.contentWidth, height, 2, 2, "FD");
+  pdf.setFont("helvetica", "bold");
+  pdf.setFontSize(8.5);
+  pdf.setTextColor(...COLORS.slate);
+  pdf.text(safe(sheet.title), PAGE.marginX + 5, y + 7);
+  pdf.setFont("helvetica", "normal");
+  pdf.setFontSize(7.7);
+  pdf.setTextColor(...COLORS.slate);
+  conditionLines.forEach((line, index) => pdf.text(line, PAGE.marginX + 5, y + 14 + index * 4.2));
+  pdf.setFont("helvetica", "bold");
+  signatureLines.forEach((line, index) => pdf.text(line, PAGE.marginX + 5, y + 18 + conditionLines.length * 4.2 + index * 4.2));
+  return y + height + 5;
 }
 
 function drawSignature(pdf: jsPDF, label: string, y: number) {
