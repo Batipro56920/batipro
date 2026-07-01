@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { Download, Plus, Save, Send, Signature, Trash2 } from "lucide-react";
 import { Button } from "../../../components/ui/button";
 import type { ChantierRow } from "../../../services/chantiers.service";
@@ -16,6 +17,8 @@ import type { ReceptionReportDecision, ReceptionReportRecord, ReceptionReportRes
 import { getOrCreateReceptionReport, saveReceptionReport } from "../infrastructure/receptionReportRepository";
 
 export function ReceptionReportPanel({ chantier, reserves, onReservesRefresh }: { chantier: ChantierRow; reserves: ChantierReserveRow[]; onReservesRefresh?: () => Promise<void> | void }) {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const targetedReceptionReportId = searchParams.get("receptionReportId") ?? "";
   const [report, setReport] = useState<ReceptionReportRecord | null>(null);
   const [previewOpen, setPreviewOpen] = useState(false);
   const [sendOpen, setSendOpen] = useState(false);
@@ -47,6 +50,20 @@ export function ReceptionReportPanel({ chantier, reserves, onReservesRefresh }: 
     () => reserves.filter((reserve) => !report?.reserves.some((row) => row.chantierReserveId === reserve.id)),
     [report, reserves],
   );
+  const targetedReportMatches = Boolean(targetedReceptionReportId && report?.id === targetedReceptionReportId);
+  const targetedReportMissing = Boolean(targetedReceptionReportId && !loading && report && report.id !== targetedReceptionReportId);
+
+  useEffect(() => {
+    if (!targetedReportMatches) return;
+    setPreviewOpen(true);
+  }, [targetedReportMatches]);
+
+  function clearReceptionReportTarget() {
+    if (!searchParams.has("receptionReportId")) return;
+    const nextParams = new URLSearchParams(searchParams);
+    nextParams.delete("receptionReportId");
+    setSearchParams(nextParams, { replace: true });
+  }
 
   function patch(patch: Partial<ReceptionReportRecord>) {
     if (!report) return;
@@ -130,6 +147,32 @@ export function ReceptionReportPanel({ chantier, reserves, onReservesRefresh }: 
 
       {error ? <div className="mt-4 rounded-2xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</div> : null}
       {loading ? <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-500">Chargement du PV de réception...</div> : null}
+      {targetedReceptionReportId ? (
+        <div className={[
+          "mt-4 rounded-2xl border p-4 text-sm",
+          targetedReportMissing ? "border-amber-200 bg-amber-50 text-amber-900" : "border-blue-200 bg-blue-50 text-blue-900",
+        ].join(" ")}>
+          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+            <div>
+              <div className="font-semibold">
+                {targetedReportMissing ? "PV de réception introuvable" : "PV de réception ouvert depuis un lien ciblé"}
+              </div>
+              <p className={targetedReportMissing ? "mt-1 text-amber-800" : "mt-1 text-blue-800"}>
+                {targetedReportMissing
+                  ? "Le lien pointe vers un PV supprimé, non accessible ou rattaché à un autre chantier."
+                  : "L'aperçu du PV est ouvert pour contrôler rapidement le document avant envoi, signature ou mise à jour."}
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={clearReceptionReportTarget}
+              className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700"
+            >
+              Retirer le ciblage
+            </button>
+          </div>
+        </div>
+      ) : null}
 
       {!report || loading ? null : (
 
