@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { FormEvent } from "react";
 import { useLocation } from "react-router-dom";
 
@@ -6,7 +6,6 @@ import { supabase } from "../lib/supabaseClient";
 import {
   intervenantGetChantiers,
   intervenantGetTasks,
-  intervenantTerrainFeedbackCreate,
   intervenantTimeCreate,
 } from "../services/intervenantPortal.service";
 import {
@@ -17,15 +16,26 @@ import {
   readStoredIntervenantToken,
 } from "../utils/intervenantSession";
 
-type CleanlinessLevel = "propre" | "attention" | "a_nettoyer";
 type SimpleChantier = { id: string; nom: string };
-type SimpleTask = { id: string; titre: string; status?: string | null; quality_status?: string | null };
+type SimpleTask = {
+  id: string;
+  titre: string;
+  status?: string | null;
+  quality_status?: string | null;
+  unite?: string | null;
+  quantite?: number | null;
+};
 
 const inputClass = "w-full rounded-lg border border-slate-200 bg-white px-3 py-3 text-sm text-slate-900 outline-none placeholder:text-slate-400 focus:border-blue-300 focus:ring-4 focus:ring-blue-100";
+const CLEANING_WORDS = ["nettoyage", "nettoyer", "proprete", "propre", "repli", "fin de journee", "fin journée"];
 
 function todayIso() {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+function normalize(value: unknown) {
+  return String(value ?? "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
 }
 
 function parsePositiveNumber(value: string) {
@@ -57,10 +67,9 @@ function isTaskOpen(task: SimpleTask) {
   return !["FAIT", "TERMINE", "DONE", "COMPLETED"].includes(status) && !["termine_intervenant", "valide_admin"].includes(String(task.quality_status ?? ""));
 }
 
-function cleanlinessLabel(value: CleanlinessLevel) {
-  if (value === "propre") return "Chantier propre";
-  if (value === "attention") return "A surveiller";
-  return "A nettoyer";
+function isCleaningTask(task: SimpleTask) {
+  const text = normalize(`${task.titre} ${task.unite ?? ""}`);
+  return CLEANING_WORDS.some((word) => text.includes(normalize(word)));
 }
 
 export default function EmployeeFieldDataWidget() {
@@ -70,15 +79,19 @@ export default function EmployeeFieldDataWidget() {
   const [tasks, setTasks] = useState<SimpleTask[]>([]);
   const [chantierId, setChantierId] = useState(readStoredIntervenantChantierId());
   const [taskId, setTaskId] = useState("");
+  const [cleaningTaskId, setCleaningTaskId] = useState("");
   const [hours, setHours] = useState("");
   const [progress, setProgress] = useState("");
   const [timeNote, setTimeNote] = useState("");
-  const [cleanliness, setCleanliness] = useState<CleanlinessLevel>("propre");
-  const [cleanlinessNote, setCleanlinessNote] = useState("");
+  const [cleaningNote, setCleaningNote] = useState("");
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  const openTasks = useMemo(() => tasks.filter(isTaskOpen), [tasks]);
+  const taskOptions = openTasks.length ? openTasks : tasks;
+  const cleaningTasks = useMemo(() => taskOptions.filter(isCleaningTask), [taskOptions]);
 
   useEffect(() => {
     let alive = true;
@@ -139,11 +152,20 @@ export default function EmployeeFieldDataWidget() {
       try {
         const rows = await intervenantGetTasks(token, chantierId);
         if (!alive) return;
-        const nextRows = rows.map((row) => ({ id: row.id, titre: row.titre, status: row.status, quality_status: row.quality_status }));
+        const nextRows = rows.map((row) => ({
+          id: row.id,
+          titre: row.titre,
+          status: row.status,
+          quality_status: row.quality_status,
+          unite: row.unite,
+          quantite: row.quantite,
+        }));
         const preferredRows = nextRows.filter(isTaskOpen);
         const selectableRows = preferredRows.length ? preferredRows : nextRows;
-        setTasks(selectableRows);
+        const cleaningRows = selectableRows.filter(isCleaningTask);
+        setTasks(nextRows);
         setTaskId((current) => (current && selectableRows.some((task) => task.id === current) ? current : selectableRows[0]?.id || ""));
+        setCleaningTaskId((current) => (current && cleaningRows.some((task) => task.id === current) ? current : cleaningRows[0]?.id || ""));
       } catch (loadError) {
         if (alive) setError(errorMessage(loadError, "Chargement taches impossible."));
       } finally {
@@ -160,10 +182,11 @@ export default function EmployeeFieldDataWidget() {
   function changeChantier(nextChantierId: string) {
     setChantierId(nextChantierId);
     setTaskId("");
+    setCleaningTaskId("");
     if (nextChantierId) persistIntervenantChantierId(nextChantierId);
   }
 
-  async function submitTime(event: FormEvent<HTMLFormElement>) {
+  async function submitTaskTime(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError(null);
     setMessage(null);
@@ -196,7 +219,7 @@ export default function EmployeeFieldDataWidget() {
       setHours("");
       setProgress("");
       setTimeNote("");
-      setMessage("Temps et avancement enregistres.");
+      setMessage("Temps de tache et avancement enregistres.");
     } catch (saveError) {
       setError(errorMessage(saveError, "Enregistrement temps impossible."));
     } finally {
@@ -204,30 +227,30 @@ export default function EmployeeFieldDataWidget() {
     }
   }
 
-  async function submitCleanliness(event: FormEvent<HTMLFormElement>) {
+  async function submitCleaningFlatRate(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError(null);
     setMessage(null);
-    if (!token || !chantierId) {
-      setError("Selectionne un chantier.");
+    if (!token || !chantierId || !cleaningTaskId) {
+      setError("Aucune tache de nettoyage n'est disponible sur ce chantier.");
       return;
     }
 
-    const label = cleanlinessLabel(cleanliness);
+    const selectedTask = cleaningTasks.find((task) => task.id === cleaningTaskId);
     setSaving(true);
     try {
-      await intervenantTerrainFeedbackCreate(token, {
+      await (intervenantTimeCreate as unknown as (portalToken: string, payload: Record<string, unknown>) => Promise<void>)(token, {
         chantier_id: chantierId,
-        category: "organisation",
-        urgency: cleanliness === "a_nettoyer" ? "urgente" : "normale",
-        title: `Proprete chantier - ${label}`,
-        description: cleanlinessNote.trim() || label,
+        task_id: cleaningTaskId,
+        work_date: todayIso(),
+        quantite_realisee: 1,
+        progress_percent: 100,
+        note: cleaningNote.trim() || `Forfait nettoyage journalier${selectedTask?.titre ? ` - ${selectedTask.titre}` : ""}`,
       });
-      setCleanliness("propre");
-      setCleanlinessNote("");
-      setMessage("Proprete chantier remontee a l'admin.");
+      setCleaningNote("");
+      setMessage("Forfait nettoyage journalier enregistre.");
     } catch (saveError) {
-      setError(errorMessage(saveError, "Enregistrement proprete impossible."));
+      setError(errorMessage(saveError, "Enregistrement forfait nettoyage impossible."));
     } finally {
       setSaving(false);
     }
@@ -240,8 +263,8 @@ export default function EmployeeFieldDataWidget() {
       <div className="rounded-lg border border-slate-200 bg-white p-3 shadow-[0_1px_2px_rgba(15,23,42,0.04),0_10px_30px_rgba(15,23,42,0.04)] sm:p-4">
         <div className="flex items-start justify-between gap-3">
           <div>
-            <div className="text-[11px] font-semibold uppercase text-blue-700">Donnees terrain</div>
-            <h2 className="mt-1 text-base font-semibold text-slate-950">Temps, avancement et proprete</h2>
+            <div className="text-[11px] font-semibold uppercase text-blue-700">Temps terrain</div>
+            <h2 className="mt-1 text-base font-semibold text-slate-950">Temps des taches et forfait nettoyage</h2>
           </div>
           {loading ? <span className="text-xs font-semibold text-blue-700">Chargement...</span> : null}
         </div>
@@ -250,13 +273,16 @@ export default function EmployeeFieldDataWidget() {
         {message ? <div className="mt-3 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-700">{message}</div> : null}
 
         <div className="mt-3 grid gap-3 lg:grid-cols-2">
-          <form className="space-y-3 rounded-lg border border-slate-200 bg-slate-50 p-3" onSubmit={submitTime}>
-            <div className="text-sm font-semibold text-slate-950">Saisie temps et avancement</div>
+          <form className="space-y-3 rounded-lg border border-slate-200 bg-slate-50 p-3" onSubmit={submitTaskTime}>
+            <div>
+              <div className="text-sm font-semibold text-slate-950">Temps des taches</div>
+              <p className="mt-1 text-xs text-slate-500">Selectionne la tache, saisis le temps passe et l'avancement constate.</p>
+            </div>
             <select className={inputClass} value={chantierId} onChange={(event) => changeChantier(event.target.value)}>
               {chantiers.map((chantier) => <option key={chantier.id} value={chantier.id}>{chantier.nom}</option>)}
             </select>
             <select className={inputClass} value={taskId} onChange={(event) => setTaskId(event.target.value)}>
-              {tasks.map((task) => <option key={task.id} value={task.id}>{task.titre}</option>)}
+              {taskOptions.map((task) => <option key={task.id} value={task.id}>{task.titre}</option>)}
             </select>
             <div className="grid grid-cols-2 gap-2">
               <input className={inputClass} inputMode="decimal" value={hours} onChange={(event) => setHours(event.target.value)} placeholder="Temps ex : 1,5" />
@@ -264,20 +290,27 @@ export default function EmployeeFieldDataWidget() {
             </div>
             <textarea className={inputClass} value={timeNote} onChange={(event) => setTimeNote(event.target.value)} rows={2} placeholder="Note optionnelle" />
             <button className="w-full rounded-lg bg-blue-700 px-4 py-3 text-sm font-semibold text-white disabled:opacity-60" type="submit" disabled={saving || !taskId}>
-              Enregistrer
+              Enregistrer le temps
             </button>
           </form>
 
-          <form className="space-y-3 rounded-lg border border-slate-200 bg-slate-50 p-3" onSubmit={submitCleanliness}>
-            <div className="text-sm font-semibold text-slate-950">Proprete chantier</div>
-            <select className={inputClass} value={cleanliness} onChange={(event) => setCleanliness(event.target.value as CleanlinessLevel)}>
-              <option value="propre">Chantier propre</option>
-              <option value="attention">A surveiller</option>
-              <option value="a_nettoyer">A nettoyer</option>
-            </select>
-            <textarea className={inputClass} value={cleanlinessNote} onChange={(event) => setCleanlinessNote(event.target.value)} rows={4} placeholder="Zone concernee, remarque ou action attendue" />
-            <button className="w-full rounded-lg bg-emerald-700 px-4 py-3 text-sm font-semibold text-white disabled:opacity-60" type="submit" disabled={saving || !chantierId}>
-              Remonter a l'admin
+          <form className="space-y-3 rounded-lg border border-slate-200 bg-slate-50 p-3" onSubmit={submitCleaningFlatRate}>
+            <div>
+              <div className="text-sm font-semibold text-slate-950">Forfait nettoyage journalier</div>
+              <p className="mt-1 text-xs text-slate-500">Enregistre 1 forfait sur la tache de nettoyage prevue par l'admin.</p>
+            </div>
+            {cleaningTasks.length ? (
+              <select className={inputClass} value={cleaningTaskId} onChange={(event) => setCleaningTaskId(event.target.value)}>
+                {cleaningTasks.map((task) => <option key={task.id} value={task.id}>{task.titre}</option>)}
+              </select>
+            ) : (
+              <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-3 text-sm text-amber-800">
+                Aucune tache de nettoyage n'est visible sur ce chantier. L'admin doit ajouter une tache de type nettoyage / forfait journalier.
+              </div>
+            )}
+            <textarea className={inputClass} value={cleaningNote} onChange={(event) => setCleaningNote(event.target.value)} rows={4} placeholder="Note optionnelle : zone nettoyee, remarque, point a reprendre" />
+            <button className="w-full rounded-lg bg-emerald-700 px-4 py-3 text-sm font-semibold text-white disabled:opacity-60" type="submit" disabled={saving || !cleaningTaskId}>
+              Enregistrer le forfait
             </button>
           </form>
         </div>
