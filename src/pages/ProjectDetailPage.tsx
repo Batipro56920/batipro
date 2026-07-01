@@ -11,6 +11,7 @@ import {
 } from "../features/projects/components/ProjectDetailSections";
 import { ProjectProfitabilityTab } from "../features/projects/components/ProjectProfitabilityTab";
 import { useProjectsData } from "../features/projects/hooks/useProjectsData";
+import { getApporteurLeads } from "../services/apporteurs.service";
 
 type ProjectTab = "summary" | "visits" | "quotes" | "profitability" | "documents" | "activity" | "sav";
 
@@ -37,10 +38,42 @@ export default function ProjectDetailPage() {
   const apporteurTrackingLabel = project?.prospect?.apporteur_affaire?.trim() || null;
   const tabFromUrl = readProjectTab(searchParams.get("tab"));
   const [activeTab, setActiveTab] = useState<ProjectTab>(tabFromUrl);
+  const [apporteurTrackingPath, setApporteurTrackingPath] = useState("/crm/apporteurs");
 
   useEffect(() => {
     setActiveTab(tabFromUrl);
   }, [tabFromUrl]);
+
+  useEffect(() => {
+    setApporteurTrackingPath("/crm/apporteurs");
+    if (!project || !apporteurTrackingLabel) return;
+
+    const opportunityId = project.opportunity?.id ?? (project.sourceType === "opportunity" ? project.sourceId : null);
+    const prospectId = project.prospect?.id ?? (project.sourceType === "prospect" ? project.sourceId : null);
+    if (!opportunityId && !prospectId) return;
+
+    let alive = true;
+    async function resolveApporteurTrackingPath() {
+      try {
+        const leads = await getApporteurLeads();
+        if (!alive) return;
+        const linkedLead = leads.find((lead) => {
+          if (opportunityId && lead.crm_opportunity_id === opportunityId) return true;
+          return Boolean(prospectId && lead.crm_prospect_id === prospectId);
+        });
+        if (linkedLead) {
+          setApporteurTrackingPath(`/crm/apporteurs?leadId=${linkedLead.id}`);
+        }
+      } catch {
+        if (alive) setApporteurTrackingPath("/crm/apporteurs");
+      }
+    }
+
+    void resolveApporteurTrackingPath();
+    return () => {
+      alive = false;
+    };
+  }, [apporteurTrackingLabel, project]);
 
   function selectTab(tabId: ProjectTab) {
     setActiveTab(tabId);
@@ -108,7 +141,7 @@ export default function ProjectDetailPage() {
               </p>
             </div>
             <Link
-              to="/crm/apporteurs"
+              to={apporteurTrackingPath}
               className="inline-flex h-9 items-center justify-center rounded-xl border border-amber-300 bg-white px-3 text-sm font-semibold text-amber-900 hover:bg-amber-100"
             >
               Ouvrir le suivi apporteurs
