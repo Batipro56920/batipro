@@ -9,6 +9,7 @@ export function SavTicketDrawer({ ticket, onClose }: { ticket: SavWithContext | 
 
   const clientHref = ticket.client_id ? `/crm/clients?client=${encodeURIComponent(ticket.client_id)}` : null;
   const chantierHref = ticket.chantier_id ? `/chantiers/${encodeURIComponent(ticket.chantier_id)}` : null;
+  const chantierPlanningHref = ticket.chantier_id ? `/chantiers/${encodeURIComponent(ticket.chantier_id)}/planning` : null;
   const chantierQualityHref = ticket.chantier_id ? `/chantiers/${encodeURIComponent(ticket.chantier_id)}/qualite` : null;
 
   return (
@@ -51,6 +52,14 @@ export function SavTicketDrawer({ ticket, onClose }: { ticket: SavWithContext | 
                   className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50"
                 >
                   Fiche chantier
+                </Link>
+              ) : null}
+              {chantierPlanningHref ? (
+                <Link
+                  to={chantierPlanningHref}
+                  className="rounded-xl border border-blue-200 bg-white px-3 py-2 text-xs font-semibold text-blue-800 hover:bg-blue-50"
+                >
+                  Agenda / planning
                 </Link>
               ) : null}
               {chantierQualityHref ? (
