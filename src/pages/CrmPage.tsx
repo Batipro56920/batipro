@@ -247,7 +247,7 @@ export default function CrmPage({ section = "dashboard" }: Props) {
       ) : section === "opportunities" ? (
         <CrmOpportunitiesSection data={data} prospectById={prospectById} clientById={clientById} dragOpportunityId={dragOpportunityId} setDragOpportunityId={setDragOpportunityId} onMove={(opportunity, stage) => submitSafely(async () => moveCrmOpportunityStage(opportunity.id, stage))} onCreate={() => openOpportunityModal()} />
       ) : section === "quotes" ? (
-        <CrmQuotesSection rows={data.quotes} prospectById={prospectById} clientById={clientById} projectPathByQuoteId={projectPathByQuoteId} chantierPathByQuoteId={chantierPathByQuoteId} onCreate={createDraftQuoteAndOpen} onStatus={(row, statut) => submitSafely(async () => updateCrmQuote(row.id, { statut }))} onTransform={transformQuote} onPdf={downloadQuote} />
+        <CrmQuotesSection rows={data.quotes} prospectById={prospectById} clientById={clientById} opportunityById={opportunityById} projectPathByQuoteId={projectPathByQuoteId} chantierPathByQuoteId={chantierPathByQuoteId} onCreate={createDraftQuoteAndOpen} onStatus={(row, statut) => submitSafely(async () => updateCrmQuote(row.id, { statut }))} onTransform={transformQuote} onPdf={downloadQuote} />
       ) : section === "invoices" ? (
         <CrmInvoicesSection rows={data.invoices} clients={clientById} />
       ) : section === "purchases" ? (
