@@ -47,10 +47,16 @@ export async function listReceptionReportsByChantier(chantierId: string) {
   return (data ?? []).map(fromRow);
 }
 
-export async function getOrCreateReceptionReport(chantier: ChantierRow) {
-  const existing = (await listReceptionReportsByChantier(chantier.id))[0];
-  if (existing) return existing;
+export async function getReceptionReportForChantier(chantier: ChantierRow, targetedReportId?: string) {
+  const reports = await listReceptionReportsByChantier(chantier.id);
+  const targetedReport = targetedReportId ? reports.find((report) => report.id === targetedReportId) : null;
+  if (targetedReport) return targetedReport;
+  if (reports[0]) return reports[0];
   return saveReceptionReport(createReceptionReport(chantier));
+}
+
+export async function getOrCreateReceptionReport(chantier: ChantierRow) {
+  return getReceptionReportForChantier(chantier);
 }
 
 export async function saveReceptionReport(report: ReceptionReportRecord) {
