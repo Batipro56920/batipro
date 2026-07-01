@@ -62,18 +62,57 @@ function chantierStatusLabel(status: string | null | undefined) {
 
 function ProductionContinuityPanel({ project }: { project: ProjectRecord }) {
   const quote = getPrimaryQuote(project);
+  const acceptedQuote = project.quotes.find((item) => item.statut === "accepte") ?? null;
+  const productionQuote = acceptedQuote ?? quote;
+  const hasAcceptedQuoteWithoutChantier = Boolean(acceptedQuote && !acceptedQuote.chantier_id);
 
   if (!project.chantiers.length) {
     return (
       <Panel title="Passage en production" description="Continuité entre devis accepté et dossier chantier.">
-        <EmptyProjectBlock
-          title={quote?.statut === "accepte" ? "Chantier à créer" : "Aucun chantier rattaché"}
-          description={
-            quote?.statut === "accepte"
-              ? "Le devis accepté est prêt à basculer en chantier depuis l'en-tête ou l'onglet Devis."
-              : "Le dossier reste côté commerce tant qu'aucun devis accepté n'a été transformé en chantier."
-          }
-        />
+        {productionQuote ? (
+          <div className={["rounded-2xl border p-4", acceptedQuote ? "border-emerald-200 bg-emerald-50" : "border-slate-200 bg-slate-50"].join(" ")}>
+            <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+              <div className="min-w-0">
+                <div className={["text-xs font-semibold uppercase", acceptedQuote ? "text-emerald-700" : "text-slate-500"].join(" ")}>
+                  {acceptedQuote ? "Devis accepté" : "Chantier non rattaché"}
+                </div>
+                <h3 className="mt-1 truncate font-semibold text-slate-950">{productionQuote.quote_number}</h3>
+                <div className="mt-2 grid gap-2 text-sm text-slate-700 sm:grid-cols-3">
+                  <span>Statut {productionQuote.statut}</span>
+                  <span>Montant {formatCurrency(productionQuote.montant_ht)}</span>
+                  <span>Validité {formatDate(productionQuote.valid_until)}</span>
+                </div>
+                <p className="mt-3 text-sm text-slate-600">
+                  {hasAcceptedQuoteWithoutChantier
+                    ? "Le devis est prêt à basculer en chantier. La création reste pilotée depuis l'onglet Devis pour conserver le lien devis, facturation et préparation."
+                    : "Le dossier reste côté commerce tant qu'un devis accepté n'a pas été transformé en chantier."}
+                </p>
+              </div>
+              <div className="flex shrink-0 flex-wrap gap-2">
+                <Link
+                  to={`/projets/${project.id}?tab=quotes`}
+                  className={["inline-flex h-9 items-center rounded-xl px-3 text-sm font-semibold", acceptedQuote ? "bg-emerald-700 text-white hover:bg-emerald-800" : "bg-blue-700 text-white hover:bg-blue-800"].join(" ")}
+                >
+                  {hasAcceptedQuoteWithoutChantier ? "Créer le chantier" : "Ouvrir les devis"}
+                </Link>
+                <Link
+                  to={`/projets/${project.id}/devis/${productionQuote.id}/edit`}
+                  className="inline-flex h-9 items-center rounded-xl border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-800 hover:bg-slate-50"
+                >
+                  Ouvrir le devis
+                </Link>
+              </div>
+            </div>
+          </div>
+        ) : (
+          <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-5 text-sm text-slate-500">
+            <div className="font-semibold text-slate-800">Aucun chantier rattaché</div>
+            <p className="mt-1">Le dossier reste côté commerce tant qu'aucun devis accepté n'a été transformé en chantier.</p>
+            <Link to={`/projets/${project.id}/devis/nouveau`} className="mt-4 inline-flex h-9 items-center rounded-xl bg-blue-700 px-3 text-sm font-semibold text-white hover:bg-blue-800">
+              Créer un devis
+            </Link>
+          </div>
+        )}
       </Panel>
     );
   }
