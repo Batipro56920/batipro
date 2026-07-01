@@ -308,6 +308,10 @@ export function ProjectQuotesTab({ project }: { project: ProjectRecord }) {
     );
   }
 
+  function chantierPreparationPath(chantierId: string) {
+    return `/chantiers/${encodeURIComponent(chantierId)}/preparation`;
+  }
+
   async function createChantierFromQuote(quoteId: string) {
     const quote = project.quotes.find((item) => item.id === quoteId);
     if (!quote || chantierActionKey) return;
@@ -318,7 +322,7 @@ export function ProjectQuotesTab({ project }: { project: ProjectRecord }) {
 
     const existingChantierId = getQuoteChantierId(quoteId);
     if (existingChantierId) {
-      navigate(`/chantiers/${existingChantierId}`);
+      navigate(chantierPreparationPath(existingChantierId));
       return;
     }
 
@@ -331,7 +335,7 @@ export function ProjectQuotesTab({ project }: { project: ProjectRecord }) {
         client: project.client,
         opportunity: project.opportunity,
       });
-      navigate(`/chantiers/${created.id}`);
+      navigate(chantierPreparationPath(created.id));
     } catch (error) {
       setChantierError(error instanceof Error ? error.message : "Creation du chantier impossible depuis ce devis.");
     } finally {
@@ -379,8 +383,8 @@ export function ProjectQuotesTab({ project }: { project: ProjectRecord }) {
               <div className="mt-1 text-emerald-700">Utilisez l'action de la ligne de devis pour créer le chantier ou ouvrir le chantier deja lie.</div>
             </div>
             {getQuoteChantierId(acceptedQuote.id) ? (
-              <Link to={`/chantiers/${getQuoteChantierId(acceptedQuote.id)}`} className="inline-flex h-9 items-center justify-center rounded-xl border border-emerald-200 bg-white px-3 text-sm font-semibold text-emerald-700 hover:bg-emerald-100">
-                Ouvrir chantier
+              <Link to={chantierPreparationPath(getQuoteChantierId(acceptedQuote.id)!)} className="inline-flex h-9 items-center justify-center rounded-xl border border-emerald-200 bg-white px-3 text-sm font-semibold text-emerald-700 hover:bg-emerald-100">
+                Préparer chantier
               </Link>
             ) : (
               <button type="button" onClick={() => void createChantierFromQuote(acceptedQuote.id)} disabled={chantierActionKey !== null} className="inline-flex h-9 items-center justify-center rounded-xl border border-emerald-200 bg-white px-3 text-sm font-semibold text-emerald-700 hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-60">
@@ -432,8 +436,8 @@ export function ProjectQuotesTab({ project }: { project: ProjectRecord }) {
                         <div className="flex flex-wrap justify-end gap-2">
                           <Link to={`/projets/${project.id}/devis/${quote.id}/edit`} className="inline-flex h-8 items-center font-semibold text-blue-700 hover:text-blue-800">Ouvrir</Link>
                           {quoteChantierId ? (
-                            <Link to={`/chantiers/${quoteChantierId}`} className="inline-flex h-8 items-center rounded-lg border border-blue-200 bg-blue-50 px-2.5 text-xs font-semibold text-blue-700 hover:bg-blue-100">
-                              Chantier
+                            <Link to={chantierPreparationPath(quoteChantierId)} className="inline-flex h-8 items-center rounded-lg border border-blue-200 bg-blue-50 px-2.5 text-xs font-semibold text-blue-700 hover:bg-blue-100">
+                              Préparer
                             </Link>
                           ) : quote.statut === "accepte" ? (
                             <button
