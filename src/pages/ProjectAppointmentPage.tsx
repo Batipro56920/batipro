@@ -104,6 +104,28 @@ function ProjectRdvSummary({ project, appointment }: { project: ProjectRecord; a
   );
 }
 
+function ProjectAppointmentNotFound({ project, mode }: { project: ProjectRecord; mode: "rdv" | "visit" }) {
+  const label = mode === "rdv" ? "rendez-vous" : "visite de chiffrage";
+
+  return (
+    <div className="rounded-3xl border border-amber-200 bg-amber-50 p-6 text-sm text-amber-950 shadow-sm">
+      <div className="text-xs font-semibold uppercase tracking-[0.16em] text-amber-700">Élément introuvable</div>
+      <h1 className="mt-2 text-xl font-bold text-amber-950">Ce {label} n'est plus accessible</h1>
+      <p className="mt-2 text-amber-800">
+        Le lien pointe vers un élément supprimé, déplacé ou non visible avec les droits actuels. Le projet reste accessible pour contrôler ses RDV, visites et devis.
+      </p>
+      <div className="mt-5 flex flex-wrap gap-2">
+        <Link to={`/projets/${project.id}?tab=visits`} className="rounded-xl bg-amber-900 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-800">
+          Voir les RDV / visites du projet
+        </Link>
+        <Link to="/crm/agenda" className="rounded-xl border border-amber-300 bg-white px-4 py-2 text-sm font-semibold text-amber-900 hover:bg-amber-100">
+          Agenda CRM
+        </Link>
+      </div>
+    </div>
+  );
+}
+
 export default function ProjectAppointmentPage() {
   const { id, rdvId, visitId } = useParams();
   const [searchParams] = useSearchParams();
@@ -135,6 +157,10 @@ export default function ProjectAppointmentPage() {
         </Link>
       </div>
     );
+  }
+
+  if (appointmentId && !appointment) {
+    return <ProjectAppointmentNotFound project={project} mode={rdvId ? "rdv" : "visit"} />;
   }
 
   if (rdvId && appointment && !isProjectVisitAppointment(appointment)) {
