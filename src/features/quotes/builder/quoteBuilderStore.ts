@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import type { QuoteBuilderItemKind, QuoteBuilderNode, QuoteBuilderQuote } from "./types";
 import { appendNode, cloneWithPatch, createItem, createSection, createSubsection, moveNode, removeNodeFromQuote } from "./quoteBuilderModel";
+import { normalizeDailyCleaningFlatRate, syncDailyCleaningFlatRate } from "./quoteBuilderDailyCleaning";
 import { saveQuoteBuilder, saveQuoteBuilderDraft } from "./quoteBuilderRepository";
 
 type SaveState = "idle" | "dirty" | "saving" | "saved" | "error";
@@ -28,9 +29,16 @@ export const useQuoteBuilderStore = create<QuoteBuilderStore>((set, get) => ({
   activeParentId: null,
   saveState: "idle",
   error: null,
-  hydrate: (quote) => set({ quote, activeParentId: quote.nodes[0]?.id ?? null, saveState: "saved", error: null }),
+  hydrate: (quote) => {
+    const normalized = normalizeDailyCleaningFlatRate(quote);
+    set({ quote: normalized, activeParentId: normalized.nodes[0]?.id ?? null, saveState: "saved", error: null });
+  },
   setActiveParent: (activeParentId) => set({ activeParentId }),
-  updateQuote: (patch) => set((state) => state.quote ? { quote: { ...state.quote, ...patch }, saveState: "dirty" } : state),
+  updateQuote: (patch) => set((state) => {
+    if (!state.quote) return state;
+    const quote = syncDailyCleaningFlatRate({ ...state.quote, ...patch });
+    return { quote, saveState: "dirty" };
+  }),
   updateNode: (id, patch) => set((state) => state.quote ? { quote: cloneWithPatch(state.quote, id, patch), saveState: "dirty" } : state),
   addSection: () => set((state) => {
     if (!state.quote) return state;
