@@ -1,9 +1,11 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { QuoteBuilderWorkspace } from "../features/quotes/builder/QuoteBuilderWorkspace";
+import { getDailyCleaningFlatRateDays } from "../features/quotes/builder/quoteBuilderDailyCleaning";
 import { loadQuoteBuilder } from "../features/quotes/builder/quoteBuilderRepository";
 import { useQuoteBuilderStore } from "../features/quotes/builder/quoteBuilderStore";
 import { QuoteDocumentLoader } from "../features/quotes/builder/QuoteBuilderWorkspace";
+import type { QuoteBuilderQuote } from "../features/quotes/builder/types";
 import { useProjectsData } from "../features/projects/hooks/useProjectsData";
 import {
   getCurrentProfileFeaturePermissions,
@@ -28,6 +30,7 @@ export default function ProjectQuoteBuilderV1Page() {
   const routeKey = project ? quoteRouteKey(project.id, quoteId) : null;
   const quote = useQuoteBuilderStore((state) => state.quote);
   const hydrate = useQuoteBuilderStore((state) => state.hydrate);
+  const updateQuote = useQuoteBuilderStore((state) => state.updateQuote);
   const [permissionLoading, setPermissionLoading] = useState(true);
   const [permissionAllowed, setPermissionAllowed] = useState(false);
   const [quoteLoading, setQuoteLoading] = useState(false);
@@ -109,7 +112,30 @@ export default function ProjectQuoteBuilderV1Page() {
     return <div className="rounded-3xl border border-red-200 bg-red-50 p-6 text-sm text-red-700">{quoteError}</div>;
   }
 
-  if (quoteLoading || !quoteMatchesRoute) return <QuoteDocumentLoader />;
+  if (quoteLoading || !quoteMatchesRoute || !quote) return <QuoteDocumentLoader />;
 
-  return <QuoteBuilderWorkspace onClose={() => navigate(`/projets/${project.id}?tab=quotes`)} />;
+  return (
+    <>
+      <QuoteBuilderWorkspace onClose={() => navigate(`/projets/${project.id}?tab=quotes`)} />
+      <DailyCleaningFlatRateControl quote={quote} onToggle={(enabled) => updateQuote({ settings: { ...quote.settings, dailyCleaningFlatRateEnabled: enabled } })} />
+    </>
+  );
+}
+
+function DailyCleaningFlatRateControl({ quote, onToggle }: { quote: QuoteBuilderQuote; onToggle: (enabled: boolean) => void }) {
+  const days = getDailyCleaningFlatRateDays(quote);
+  const checked = Boolean(quote.settings.dailyCleaningFlatRateEnabled);
+  return (
+    <aside className="fixed right-4 top-16 z-40 w-[300px] rounded-xl border border-slate-200 bg-white p-3 text-sm shadow-xl">
+      <label className="flex items-start gap-3 text-slate-700">
+        <input type="checkbox" className="mt-1" checked={checked} onChange={(event) => onToggle(event.target.checked)} />
+        <span>
+          <span className="block font-semibold text-slate-950">Forfait nettoyage journalier</span>
+          <span className="mt-0.5 block text-xs leading-5 text-slate-500">
+            {days > 0 ? `${days} forfait(s) calculé(s) depuis la durée estimée.` : "Renseigner la durée estimée pour calculer la quantité."}
+          </span>
+        </span>
+      </label>
+    </aside>
+  );
 }
