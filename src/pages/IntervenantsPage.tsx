@@ -7,6 +7,7 @@ import {
   createIntervenant,
   deleteIntervenant,
   generateIntervenantInvitation,
+  generateIntervenantPortalAccess,
   listIntervenantChantierLinks,
   listIntervenants,
   restoreIntervenant,
@@ -131,6 +132,7 @@ export default function IntervenantsPage() {
   const [form, setForm] = useState<IntervenantFormState>(EMPTY_FORM);
   const [inviteUrlById, setInviteUrlById] = useState<Record<string, string>>({});
   const [invitingId, setInvitingId] = useState<string | null>(null);
+  const [openingPortalId, setOpeningPortalId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [profileFilter, setProfileFilter] = useState<ProfileFilter>("all");
 
@@ -340,6 +342,27 @@ export default function IntervenantsPage() {
     }
   }
 
+  async function onOpenPortal(row: IntervenantRow & { chantier_ids: string[] }) {
+    const chantierId = row.chantier_ids[0] ?? "";
+    if (!chantierId) {
+      setError("Ajoute d'abord un accès chantier à ce profil pour ouvrir son portail terrain.");
+      return;
+    }
+
+    setOpeningPortalId(row.id);
+    setError(null);
+    try {
+      const data = await generateIntervenantPortalAccess({ intervenantId: row.id, chantierId, expiresInDays: 1 });
+      const portalUrl = data.accessUrl.trim();
+      if (!portalUrl) throw new Error("Lien portail introuvable.");
+      window.open(portalUrl, "_blank", "noopener,noreferrer");
+    } catch (err: any) {
+      setError(err?.message ?? "Erreur ouverture portail intervenant.");
+    } finally {
+      setOpeningPortalId(null);
+    }
+  }
+
   function legacyAccountStatusLabel(row: IntervenantRow) {
     if (row.archived_at) return "Archivé";
     if (row.user_id) return "Compte actif";
@@ -433,6 +456,7 @@ export default function IntervenantsPage() {
             <tbody>
               {filteredRows.map((row) => {
                 const summary = profileSummaryById.get(row.id) ?? getProfileAccessSummary(row);
+                const firstChantierName = row.chantier_ids[0] ? chantierNameById.get(row.chantier_ids[0]) ?? "chantier rattaché" : "chantier rattaché";
                 return (
                 <tr key={row.id} className="border-t align-top">
                   <td className="px-4 py-3">
@@ -496,6 +520,20 @@ export default function IntervenantsPage() {
                       >
                         Voir fiche
                       </Link>
+                      <button
+                        type="button"
+                        onClick={() => onOpenPortal(row)}
+                        disabled={row.chantier_ids.length === 0 || openingPortalId === row.id}
+                        title={row.chantier_ids.length === 0 ? "Aucun chantier rattaché" : `Ouvrir le portail terrain sur ${firstChantierName}`}
+                        className={[
+                          "rounded-xl border px-3 py-2 text-sm",
+                          row.chantier_ids.length === 0 || openingPortalId === row.id
+                            ? "bg-slate-100 text-slate-400 border-slate-200"
+                            : "hover:bg-slate-50",
+                        ].join(" ")}
+                      >
+                        {openingPortalId === row.id ? "Ouverture..." : "Voir portail"}
+                      </button>
                       <button
                         type="button"
                         onClick={() => openEditModal(row)}
