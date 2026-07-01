@@ -44,6 +44,11 @@ export type IntervenantInvitationPreview = {
   };
 };
 
+export type IntervenantPortalAccessLink = {
+  token: string;
+  accessUrl: string;
+};
+
 const INTERVENANT_SELECT =
   "id, chantier_id, nom, entreprise, metier, email, telephone, notes, user_id, invitation_last_sent_at, archived_at, created_at";
 const INTERVENANT_SELECT_V2 =
@@ -519,6 +524,28 @@ async function invokePublicFunction<T>(name: string, body: Record<string, unknow
 export async function generateIntervenantInvitation(intervenantId: string) {
   if (!intervenantId) throw new Error("intervenantId manquant.");
   return invokeEdgeFunction<Record<string, unknown>>("generate-intervenant-link", { intervenantId });
+}
+
+export async function generateIntervenantPortalAccess(input: {
+  intervenantId: string;
+  chantierId: string;
+  expiresInDays?: number;
+}): Promise<IntervenantPortalAccessLink> {
+  const intervenantId = String(input?.intervenantId ?? "").trim();
+  const chantierId = String(input?.chantierId ?? "").trim();
+  if (!intervenantId) throw new Error("intervenantId manquant.");
+  if (!chantierId) throw new Error("chantierId manquant.");
+
+  const data = await invokeEdgeFunction<Record<string, unknown>>("chantier-access-admin", {
+    intervenantId,
+    chantierId,
+    expiresInDays: input.expiresInDays ?? 1,
+  });
+
+  return {
+    token: String(data.token ?? "").trim(),
+    accessUrl: String(data.accessUrl ?? "").trim(),
+  };
 }
 
 export async function previewIntervenantInvitation(token: string): Promise<IntervenantInvitationPreview> {
