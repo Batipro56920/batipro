@@ -232,7 +232,11 @@ function DecaissementsView({ purchaseOrders, summary }: { purchaseOrders: Purcha
               const totals = order.document.totals ?? calculateDocumentTotals(order.document);
               return (
                 <tr key={order.id} className="border-t border-slate-100">
-                  <Td>{order.document.number}</Td>
+                  <Td>
+                    <Link to={purchaseOrderHref(order.id)} className="font-semibold text-blue-700 hover:text-blue-800">
+                      {order.document.number || "Commande sans numéro"}
+                    </Link>
+                  </Td>
                   <Td>{order.supplierName || order.document.recipient.displayName || "Fournisseur à définir"}</Td>
                   <Td>{order.status}</Td>
                   <Td>{formatDate(order.expectedDeliveryDate)}</Td>
@@ -443,6 +447,11 @@ function getSection(pathname: string): FinancialSection {
   if (pathname.endsWith("/tresorerie")) return "tresorerie";
   if (pathname.endsWith("/export-comptable")) return "export";
   return "encaissements";
+}
+
+function purchaseOrderHref(orderId: string) {
+  const params = new URLSearchParams({ tab: "orders", purchaseOrderId: orderId });
+  return `/fournisseurs?${params.toString()}`;
 }
 
 function formatCurrency(value: number) {
