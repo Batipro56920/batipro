@@ -35,6 +35,8 @@ type ReadinessFilter =
   | "quote_hidden"
   | "chantier_hidden";
 
+type UsageField = "quote_visible" | "chantier_visible";
+
 function getPreparationSummary(
   preparationByTemplateId: Record<string, PreparationSummary>,
   templateId: string,
@@ -54,6 +56,24 @@ function hasPreparation(
   return preparation.materials + preparation.equipment > 0;
 }
 
+function buildTemplateUsagePayload(row: TaskTemplateRow, field: UsageField): TaskTemplateInput {
+  return {
+    titre: row.titre,
+    lot: row.lot,
+    unite: row.unite,
+    quantite_defaut: row.quantite_defaut,
+    temps_prevu_par_unite_h: row.temps_prevu_par_unite_h,
+    remarques: row.remarques,
+    description_technique: row.description_technique,
+    caracteristiques: row.caracteristiques,
+    cout_reference_unitaire_ht: row.cout_reference_unitaire_ht,
+    quote_visible: field === "quote_visible" ? !row.quote_visible : row.quote_visible,
+    chantier_visible: field === "chantier_visible" ? !row.chantier_visible : row.chantier_visible,
+    labor_items: row.labor_items,
+    fee_items: row.fee_items,
+  };
+}
+
 export default function BibliothequeTasksPage() {
   const { locale, t } = useI18n();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -71,6 +91,7 @@ export default function BibliothequeTasksPage() {
   const [drawerError, setDrawerError] = useState<string | null>(null);
   const [duplicateId, setDuplicateId] = useState<string | null>(null);
   const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [visibilityUpdateId, setVisibilityUpdateId] = useState<string | null>(null);
   const [toast, setToast] = useState<ToastState>(null);
   const [advancedPreparationEnabled, setAdvancedPreparationEnabled] = useState(false);
   const [selectedLot, setSelectedLot] = useState("");
@@ -213,6 +234,32 @@ export default function BibliothequeTasksPage() {
       <span className="inline-flex rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[11px] font-medium text-emerald-700">
         Prépa : {preparation.materials} mat. / {preparation.equipment} matériel
       </span>
+    );
+  }
+
+  function renderUsageActions(row: TaskTemplateRow, className = "rounded-lg border px-2 py-1 text-xs hover:bg-slate-50") {
+    const quoteBusy = visibilityUpdateId === `${row.id}:quote_visible`;
+    const chantierBusy = visibilityUpdateId === `${row.id}:chantier_visible`;
+
+    return (
+      <>
+        <button
+          type="button"
+          disabled={quoteBusy}
+          onClick={() => onToggleUsage(row, "quote_visible")}
+          className={`${className} border-sky-200 text-sky-700 disabled:opacity-50`}
+        >
+          {quoteBusy ? "Mise à jour..." : row.quote_visible ? "Masquer devis" : "Afficher devis"}
+        </button>
+        <button
+          type="button"
+          disabled={chantierBusy}
+          onClick={() => onToggleUsage(row, "chantier_visible")}
+          className={`${className} border-emerald-200 text-emerald-700 disabled:opacity-50`}
+        >
+          {chantierBusy ? "Mise à jour..." : row.chantier_visible ? "Masquer chantier" : "Afficher chantier"}
+        </button>
+      </>
     );
   }
 
@@ -415,6 +462,30 @@ export default function BibliothequeTasksPage() {
       setToast({ type: "error", msg: err?.message ?? t("bibliothequeTasks.saveError") });
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function onToggleUsage(row: TaskTemplateRow, field: UsageField) {
+    const updateId = `${row.id}:${field}`;
+    setVisibilityUpdateId(updateId);
+    try {
+      const updated = await update(row.id, buildTemplateUsagePayload(row, field));
+      setRows((prev) => prev.map((item) => (item.id === row.id ? updated : item)));
+      setToast({
+        type: "ok",
+        msg:
+          field === "quote_visible"
+            ? updated.quote_visible
+              ? "Modèle visible au devis."
+              : "Modèle masqué au devis."
+            : updated.chantier_visible
+              ? "Modèle visible au chantier."
+              : "Modèle masqué au chantier.",
+      });
+    } catch (err: any) {
+      setToast({ type: "error", msg: err?.message ?? "Impossible de mettre à jour l'usage du modèle." });
+    } finally {
+      setVisibilityUpdateId(null);
     }
   }
 
@@ -651,6 +722,7 @@ export default function BibliothequeTasksPage() {
                         >
                           {t("common.actions.edit")}
                         </button>
+                        {renderUsageActions(row)}
                         <button
                           type="button"
                           disabled={duplicateId === row.id}
@@ -749,6 +821,7 @@ export default function BibliothequeTasksPage() {
                   >
                     {t("common.actions.edit")}
                   </button>
+                  {renderUsageActions(row, "rounded-lg border px-3 py-2 text-xs hover:bg-slate-50")}
                   <button
                     type="button"
                     disabled={duplicateId === row.id}
