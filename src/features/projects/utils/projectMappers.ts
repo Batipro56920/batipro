@@ -55,6 +55,10 @@ function isChantierLinkedToQuotes(chantier: ChantierRow, quotes: CrmQuoteRow[]) 
   return quotes.some((quote) => chantier.crm_quote_id === quote.id || chantier.id === quote.chantier_id);
 }
 
+function isChantierLinkedToProspectProject(chantier: ChantierRow, prospect: CrmProspectRow, quotes: CrmQuoteRow[]) {
+  return chantier.crm_prospect_id === prospect.id || isChantierLinkedToQuotes(chantier, quotes);
+}
+
 function opportunityStatus(stageKey: string, status: string, lostReason: string | null): ProjectStatus {
   const normalized = `${stageKey} ${status}`.toLowerCase();
   if (lostReason || normalized.includes("perdu") || normalized.includes("lost")) return "perdu";
@@ -200,13 +204,8 @@ export function buildProjects(dataset: CrmDataset): ProjectRecord[] {
     const client = prospect.client_id ? clientsById.get(prospect.client_id) ?? null : null;
     const quotes = dataset.quotes.filter((quote) => quote.prospect_id === prospect.id || (client && quote.client_id === client.id && !usedQuoteIds.has(quote.id)));
     rememberQuotes(usedQuoteIds, quotes);
-    const chantiers = dataset.chantiers.filter(
-      (chantier) =>
-        chantier.crm_prospect_id === prospect.id ||
-        (client && chantier.crm_client_id === client.id) ||
-        isChantierLinkedToQuotes(chantier, quotes),
-    );
-    const sav = dataset.sav.filter((ticket) => client && ticket.client_id === client.id);
+    const chantiers = dataset.chantiers.filter((chantier) => isChantierLinkedToProspectProject(chantier, prospect, quotes));
+    const sav = dataset.sav.filter((ticket) => chantiers.some((chantier) => chantier.id === ticket.chantier_id));
 
     projects.push({
       id: `prospect-${prospect.id}`,
@@ -241,7 +240,7 @@ export function buildProjects(dataset: CrmDataset): ProjectRecord[] {
       chantiers,
       tasks: dataset.tasks.filter((task) => task.prospect_id === prospect.id || (client && task.client_id === client.id)),
       appointments: dataset.appointments.filter((appointment) => appointment.prospect_id === prospect.id || (client && appointment.client_id === client.id)),
-      documents: dataset.documents.filter((document) => document.prospect_id === prospect.id || quotes.some((quote) => quote.id === document.quote_id)),
+      documents: dataset.documents.filter((document) => document.prospect_id === prospect.id || quotes.some((quote) => quote.id === document.quote_id) || chantiers.some((chantier) => chantier.id === document.chantier_id)),
       communications: dataset.communications.filter((communication) => communication.prospect_id === prospect.id || quotes.some((quote) => quote.id === communication.quote_id)),
       sav,
     });
