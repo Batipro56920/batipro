@@ -14,7 +14,7 @@ import {
 } from "../../document-engine";
 import { receptionDecisionLabel } from "../application/receptionReportFactory";
 import type { ReceptionReportDecision, ReceptionReportRecord, ReceptionReportReserve, ReceptionReserveStatus } from "../domain/types";
-import { getOrCreateReceptionReport, saveReceptionReport } from "../infrastructure/receptionReportRepository";
+import { getReceptionReportForChantier, saveReceptionReport } from "../infrastructure/receptionReportRepository";
 
 export function ReceptionReportPanel({ chantier, reserves, onReservesRefresh }: { chantier: ChantierRow; reserves: ChantierReserveRow[]; onReservesRefresh?: () => Promise<void> | void }) {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -29,7 +29,7 @@ export function ReceptionReportPanel({ chantier, reserves, onReservesRefresh }: 
     let alive = true;
     setLoading(true);
     setError(null);
-    getOrCreateReceptionReport(chantier)
+    getReceptionReportForChantier(chantier, targetedReceptionReportId || undefined)
       .then((nextReport) => {
         if (!alive) return;
         setReport(nextReport);
@@ -44,7 +44,7 @@ export function ReceptionReportPanel({ chantier, reserves, onReservesRefresh }: 
     return () => {
       alive = false;
     };
-  }, [chantier]);
+  }, [chantier, targetedReceptionReportId]);
 
   const chantierReservesToImport = useMemo(
     () => reserves.filter((reserve) => !report?.reserves.some((row) => row.chantierReserveId === reserve.id)),
