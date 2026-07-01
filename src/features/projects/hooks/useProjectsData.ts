@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { loadCrmDataset, type CrmDataset } from "../../../services/crm.service";
+import { loadCrmDataset, type CrmDataset, type CrmQuoteStatus } from "../../../services/crm.service";
 import type { ProjectFilters, ProjectRecord } from "../types";
 import { buildProjectMetrics, buildProjects } from "../utils/projectMappers";
 
@@ -8,6 +8,16 @@ const DEFAULT_FILTERS: ProjectFilters = {
   status: "all",
   type: "all",
 };
+
+const ACTIVE_PRIMARY_QUOTE_STATUSES = new Set<CrmQuoteStatus>([
+  "en_preparation",
+  "envoye",
+  "relance_1",
+  "relance_2",
+  "vu",
+  "negociation",
+  "brouillon",
+]);
 
 export function useProjectsData() {
   const [dataset, setDataset] = useState<CrmDataset | null>(null);
@@ -71,6 +81,30 @@ export function useProjectsData() {
   };
 }
 
+function quoteActivityDate(quote: ProjectRecord["quotes"][number]) {
+  return String(quote.accepted_at ?? quote.updated_at ?? quote.created_at ?? "");
+}
+
+function latestQuote(quotes: ProjectRecord["quotes"]) {
+  return [...quotes].sort((a, b) => quoteActivityDate(b).localeCompare(quoteActivityDate(a)))[0] ?? null;
+}
+
 export function getPrimaryQuote(project: ProjectRecord) {
-  return project.quotes.find((quote) => quote.statut === "accepte") ?? project.quotes[0] ?? null;
+  const chantierIds = new Set(project.chantiers.map((chantier) => chantier.id));
+  const quoteLinkedToProduction = latestQuote(
+    project.quotes.filter(
+      (quote) =>
+        quote.statut === "accepte" &&
+        Boolean(quote.chantier_id && chantierIds.has(quote.chantier_id)),
+    ),
+  );
+  if (quoteLinkedToProduction) return quoteLinkedToProduction;
+
+  const acceptedQuote = latestQuote(project.quotes.filter((quote) => quote.statut === "accepte"));
+  if (acceptedQuote) return acceptedQuote;
+
+  const activeQuote = latestQuote(project.quotes.filter((quote) => ACTIVE_PRIMARY_QUOTE_STATUSES.has(quote.statut)));
+  if (activeQuote) return activeQuote;
+
+  return latestQuote(project.quotes);
 }
