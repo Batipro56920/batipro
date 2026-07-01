@@ -14,8 +14,9 @@ export function ChantiersCardsView({ rows, onPreview, actions }: { rows: Chantie
         const terrainFeedbackPriorityCount = row.terrainFeedbackPriorityCount ?? 0;
         const hasOpenTerrainFeedbacks = terrainFeedbackOpenCount > 0;
         const hasPriorityTerrainFeedbacks = terrainFeedbackPriorityCount > 0;
+        const terrainFeedbackHref = `/retours-terrain?chantierId=${encodeURIComponent(row.id)}`;
         const terrainFeedbackLabel = hasPriorityTerrainFeedbacks
-          ? `${terrainFeedbackPriorityCount} retour terrain urgent`
+          ? `${terrainFeedbackPriorityCount} retour${terrainFeedbackPriorityCount > 1 ? "s" : ""} terrain urgent${terrainFeedbackPriorityCount > 1 ? "s" : ""}`
           : `${terrainFeedbackOpenCount} retour${terrainFeedbackOpenCount > 1 ? "s" : ""} terrain à traiter`;
 
         return (
@@ -56,14 +57,27 @@ export function ChantiersCardsView({ rows, onPreview, actions }: { rows: Chantie
                   <div className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm font-medium text-red-700">En retard</div>
                 ) : null}
                 {hasOpenTerrainFeedbacks ? (
-                  <div className={["rounded-xl border px-3 py-2 text-sm font-medium", hasPriorityTerrainFeedbacks ? "border-red-200 bg-red-50 text-red-700" : "border-amber-200 bg-amber-50 text-amber-700"].join(" ")}>{terrainFeedbackLabel}</div>
+                  <Link
+                    to={terrainFeedbackHref}
+                    onClick={(event) => event.stopPropagation()}
+                    className={[
+                      "flex items-center justify-between gap-2 rounded-xl border px-3 py-2 text-sm font-medium transition focus:outline-none focus:ring-2 focus:ring-blue-200",
+                      hasPriorityTerrainFeedbacks
+                        ? "border-red-200 bg-red-50 text-red-700 hover:bg-red-100"
+                        : "border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100",
+                    ].join(" ")}
+                    title="Ouvrir les retours terrain de ce chantier"
+                  >
+                    <span>{terrainFeedbackLabel}</span>
+                    <AlertTriangle className="h-4 w-4 shrink-0" />
+                  </Link>
                 ) : null}
               </div>
             ) : null}
             <div className="mt-4 grid grid-cols-2 gap-2" onClick={(event) => event.stopPropagation()}>
               <QuickLink href={`/chantiers/${row.id}/execution`} icon={Hammer} label="Exécution" />
               <QuickLink href={`/chantiers/${row.id}/planning`} icon={CalendarDays} label="Planning" />
-              <QuickLink href={`/retours-terrain?chantierId=${encodeURIComponent(row.id)}`} icon={AlertTriangle} label="Retours" tone={hasPriorityTerrainFeedbacks ? "red" : hasOpenTerrainFeedbacks ? "amber" : "slate"} />
+              <QuickLink href={terrainFeedbackHref} icon={AlertTriangle} label="Retours" tone={hasPriorityTerrainFeedbacks ? "red" : hasOpenTerrainFeedbacks ? "amber" : "slate"} />
               <QuickLink href={`/chantiers/${row.id}/documents`} icon={FileText} label="Documents" />
             </div>
             <div className="mt-4">
