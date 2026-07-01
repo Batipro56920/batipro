@@ -46,7 +46,7 @@ export function QuotesTable({
                 <td className="px-4 py-3 text-slate-600">{dateOnly(row.valid_until)}</td>
                 <td className="px-4 py-3"><QuoteStatusChip status={row.statut} /></td>
                 <td className="px-4 py-3 text-slate-600">{signatureLabel(row.signature_status)}</td>
-                <td className="px-4 py-3 text-slate-600">—</td>
+                <td className="px-4 py-3 text-slate-600">{row.salespersonLabel}</td>
                 <td className="px-4 py-3" onClick={(event) => event.stopPropagation()}>
                   <div className="flex flex-wrap gap-1">
                     <Link to={row.projectPath} className="rounded-lg border border-blue-200 bg-blue-50 px-2 py-1 text-xs font-medium text-blue-800 hover:bg-blue-100" title="Ouvrir le dossier projet lié à ce devis.">Ouvrir projet</Link>
