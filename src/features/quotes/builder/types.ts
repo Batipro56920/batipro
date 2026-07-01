@@ -62,6 +62,7 @@ export type QuoteBuilderSettings = {
   showReferences: boolean;
   showTypes: boolean;
   hideCompositeDetails: boolean;
+  dailyCleaningFlatRateEnabled?: boolean;
 };
 
 export type QuoteBuilderQuote = {
