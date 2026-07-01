@@ -24,10 +24,10 @@ export default function ChantierUnforeseenSection(props: ChantierUnforeseenSecti
 
   return (
     <ChantierChapterDrawer
-      eyebrow="Pilotage chantier"
+      eyebrow="Pilotage financier chantier"
       title="Imprévus et travaux supplémentaires"
-      subtitle="Suivi des écarts chantier, arbitrages et travaux à refacturer. Les saisies détaillées se font dans le panneau latéral."
-      actionLabel="Ouvrir les imprévus / TS"
+      subtitle="Suivi des écarts chantier, impacts financiers, arbitrages et travaux à refacturer. Les saisies détaillées se font dans le panneau latéral."
+      actionLabel="Ouvrir les imprévus / TS chantier"
       previewClassName="batipro-chapter-preview--unforeseen"
       drawerMaxWidthClassName="max-w-6xl"
       autoOpenKey={targetedChangeOrderId ? `change-order:${targetedChangeOrderId}` : ""}
@@ -36,7 +36,7 @@ export default function ChantierUnforeseenSection(props: ChantierUnforeseenSecti
     >
       {targetedChangeOrderId ? (
         <div className="mb-4 rounded-2xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-900">
-          Recherche globale : le panneau Imprévus / TS est ouvert pour retrouver l'écart chantier ou le travail supplémentaire ciblé. Retirez le ciblage une fois le contrôle terminé pour revenir au parcours chantier standard.
+          Recherche globale : le panneau financier Imprévus / TS est ouvert pour retrouver l'écart chantier ou le travail supplémentaire ciblé. Retirez le ciblage une fois le contrôle terminé pour revenir au parcours chantier standard.
         </div>
       ) : null}
       <PilotageTab {...props} />
