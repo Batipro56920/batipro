@@ -349,14 +349,27 @@ export default function IntervenantsPage() {
       return;
     }
 
+    const portalWindow = window.open("about:blank", "_blank");
+    if (portalWindow) {
+      portalWindow.opener = null;
+      portalWindow.document.title = "Ouverture du portail";
+      portalWindow.document.body.textContent = "Ouverture du portail terrain...";
+    }
+
     setOpeningPortalId(row.id);
     setError(null);
     try {
       const data = await generateIntervenantPortalAccess({ intervenantId: row.id, chantierId, expiresInDays: 1 });
       const portalUrl = data.accessUrl.trim();
       if (!portalUrl) throw new Error("Lien portail introuvable.");
-      window.open(portalUrl, "_blank", "noopener,noreferrer");
+
+      if (portalWindow && !portalWindow.closed) {
+        portalWindow.location.href = portalUrl;
+      } else {
+        window.location.assign(portalUrl);
+      }
     } catch (err: any) {
+      if (portalWindow && !portalWindow.closed) portalWindow.close();
       setError(err?.message ?? "Erreur ouverture portail intervenant.");
     } finally {
       setOpeningPortalId(null);
@@ -532,7 +545,7 @@ export default function IntervenantsPage() {
                             : "hover:bg-slate-50",
                         ].join(" ")}
                       >
-                        {openingPortalId === row.id ? "Ouverture..." : "Voir portail"}
+                        {openingPortalId === row.id ? "Ouverture..." : "Ouvrir portail"}
                       </button>
                       <button
                         type="button"
