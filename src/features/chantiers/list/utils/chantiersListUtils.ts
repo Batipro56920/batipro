@@ -18,6 +18,10 @@ function priorityTerrainFeedbackCount(row: ChantierDerived) {
   return row.terrainFeedbackPriorityCount ?? 0;
 }
 
+function hasChantierAlert(row: ChantierDerived) {
+  return row.isLate || (row.timeRatio !== null && row.timeRatio > 1.1) || openTerrainFeedbackCount(row) > 0;
+}
+
 function terrainFeedbackSearchTerms(row: ChantierDerived) {
   const terms: string[] = [];
   if (openTerrainFeedbackCount(row) > 0) {
@@ -114,6 +118,7 @@ export function filterChantiers(rows: ChantierDerived[], filters: ChantierListFi
     if (filters.status !== "all" && row.status !== filters.status) return false;
     if (filters.client && (row.client ?? "") !== filters.client) return false;
     if (filters.period === "late" && !row.isLate) return false;
+    if (filters.period === "alerts" && !hasChantierAlert(row)) return false;
     if (filters.period === "this_month" && !isInCurrentMonthWindow(row)) return false;
     if (filters.period === "next_30" && !isInNextDaysWindow(row, 30)) return false;
     if (!query) return true;
@@ -135,7 +140,7 @@ export function computeChantierMetrics(rows: ChantierDerived[]) {
   const active = rows.filter((row) => ACTIVE_STATUSES.includes(row.status)).length;
   const preparation = rows.filter((row) => row.status === "PREPARATION").length;
   const late = rows.filter((row) => row.isLate).length;
-  const alerts = rows.filter((row) => row.isLate || (row.timeRatio !== null && row.timeRatio > 1.1) || openTerrainFeedbackCount(row) > 0).length;
+  const alerts = rows.filter(hasChantierAlert).length;
   const completedThisMonth = rows.filter((row) => row.status === "TERMINE" && (row.completed_at ?? row.lifecycle_updated_at ?? "").startsWith(thisMonth)).length;
   const marginValues = rows.map((row) => row.estimatedMargin).filter((value): value is number => value !== null);
   const estimatedMargin = marginValues.length ? marginValues.reduce((sum, value) => sum + value, 0) : null;
