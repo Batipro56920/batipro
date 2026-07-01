@@ -4,12 +4,17 @@ import { LoadingState } from "../components/ui/design-system";
 import { buildProjects } from "../features/projects/utils/projectMappers";
 import { loadCrmDataset, type CrmQuoteRow } from "../services/crm.service";
 
+type QuoteDiagnostic = Pick<
+  CrmQuoteRow,
+  "quote_number" | "statut" | "montant_ttc" | "updated_at" | "opportunity_id" | "prospect_id" | "client_id"
+>;
+
 type QuoteOpenIssue =
   | { kind: "missing-id" }
   | { kind: "missing-quote" }
   | {
       kind: "missing-project-link";
-      quote: Pick<CrmQuoteRow, "opportunity_id" | "prospect_id" | "client_id">;
+      quote: QuoteDiagnostic;
     };
 
 type ResolveState =
@@ -33,11 +38,43 @@ function issueMessage(issue: QuoteOpenIssue) {
   return "Ce devis existe, mais il n'a aucun rattachement prospect, client ou opportunité permettant d'ouvrir un dossier projet commercial.";
 }
 
+function formatCurrency(value: number) {
+  return new Intl.NumberFormat("fr-FR", { style: "currency", currency: "EUR" }).format(value);
+}
+
+function formatDate(value: string | null | undefined) {
+  if (!value) return "-";
+  return new Date(value).toLocaleDateString("fr-FR");
+}
+
 function LinkStatus({ label, value }: { label: string; value: string | null | undefined }) {
   return (
     <div className="rounded-xl border border-amber-200 bg-white px-3 py-2">
       <div className="text-[11px] font-semibold uppercase text-amber-700">{label}</div>
       <div className="mt-1 break-all font-mono text-[11px] text-amber-950">{value || "manquant"}</div>
+    </div>
+  );
+}
+
+function QuoteSnapshot({ quote }: { quote: QuoteDiagnostic }) {
+  return (
+    <div className="mt-3 grid gap-2 rounded-2xl border border-amber-200 bg-white/70 p-3 sm:grid-cols-4">
+      <div>
+        <div className="text-[11px] font-semibold uppercase text-amber-700">Numéro</div>
+        <div className="mt-1 font-semibold text-amber-950">{quote.quote_number || "-"}</div>
+      </div>
+      <div>
+        <div className="text-[11px] font-semibold uppercase text-amber-700">Statut</div>
+        <div className="mt-1 capitalize text-amber-950">{quote.statut.replace(/_/g, " ")}</div>
+      </div>
+      <div>
+        <div className="text-[11px] font-semibold uppercase text-amber-700">Montant TTC</div>
+        <div className="mt-1 text-amber-950">{formatCurrency(quote.montant_ttc)}</div>
+      </div>
+      <div>
+        <div className="text-[11px] font-semibold uppercase text-amber-700">Dernière mise à jour</div>
+        <div className="mt-1 text-amber-950">{formatDate(quote.updated_at)}</div>
+      </div>
     </div>
   );
 }
@@ -78,6 +115,10 @@ export default function CrmQuoteEditRedirectPage() {
             ? {
                 kind: "missing-project-link",
                 quote: {
+                  quote_number: quote.quote_number,
+                  statut: quote.statut,
+                  montant_ttc: quote.montant_ttc,
+                  updated_at: quote.updated_at,
                   opportunity_id: quote.opportunity_id,
                   prospect_id: quote.prospect_id,
                   client_id: quote.client_id,
@@ -115,11 +156,14 @@ export default function CrmQuoteEditRedirectPage() {
         </div>
       ) : null}
       {state.status === "not-found" && state.issue.kind === "missing-project-link" ? (
-        <div className="mt-3 grid gap-2 sm:grid-cols-3">
-          <LinkStatus label="Opportunité" value={state.issue.quote.opportunity_id} />
-          <LinkStatus label="Prospect" value={state.issue.quote.prospect_id} />
-          <LinkStatus label="Client" value={state.issue.quote.client_id} />
-        </div>
+        <>
+          <QuoteSnapshot quote={state.issue.quote} />
+          <div className="mt-3 grid gap-2 sm:grid-cols-3">
+            <LinkStatus label="Opportunité" value={state.issue.quote.opportunity_id} />
+            <LinkStatus label="Prospect" value={state.issue.quote.prospect_id} />
+            <LinkStatus label="Client" value={state.issue.quote.client_id} />
+          </div>
+        </>
       ) : null}
       <div className="mt-4 flex flex-wrap gap-2">
         <Link
