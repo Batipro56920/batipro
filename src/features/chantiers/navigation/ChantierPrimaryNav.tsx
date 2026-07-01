@@ -17,7 +17,7 @@ export function ChantierPrimaryNav({ sections }: { sections: ChantierPrimarySect
   const [terrainFeedbackModuleEnabled, setTerrainFeedbackModuleEnabled] = useState(true);
   const terrainFeedbackEnabled = Boolean(chantierId) && terrainFeedbackModuleEnabled;
   const terrainFeedbackHref = chantierId
-    ? `/chantiers/${encodeURIComponent(chantierId)}/retours-terrain`
+    ? `/retours-terrain?chantierId=${encodeURIComponent(chantierId)}`
     : "/retours-terrain";
 
   useEffect(() => {
