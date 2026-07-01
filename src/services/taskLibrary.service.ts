@@ -18,6 +18,8 @@ export type TaskTemplateRow = {
   description_technique: string | null;
   caracteristiques: string[];
   cout_reference_unitaire_ht: number | null;
+  quote_visible: boolean;
+  chantier_visible: boolean;
   labor_items: TaskTemplateLaborItemInput[];
   fee_items: TaskTemplateFeeItemInput[];
   created_at: string;
@@ -34,6 +36,8 @@ export type TaskTemplateInput = {
   description_technique?: string | null;
   caracteristiques?: string[];
   cout_reference_unitaire_ht?: number | null;
+  quote_visible?: boolean;
+  chantier_visible?: boolean;
   labor_items?: TaskTemplateLaborItemInput[];
   fee_items?: TaskTemplateFeeItemInput[];
   preparation_materials?: TaskTemplateMaterialRatioInput[];
@@ -116,6 +120,8 @@ const SELECT_V2 = [
   "description_technique",
   "caracteristiques",
   "cout_reference_unitaire_ht",
+  "quote_visible",
+  "chantier_visible",
   "labor_items",
   "fee_items",
   "created_at",
@@ -155,6 +161,8 @@ function isMissingV2ColumnsError(error: { code?: string; message?: string } | nu
     (msg.includes("description_technique") ||
       msg.includes("caracteristiques") ||
       msg.includes("cout_reference_unitaire_ht") ||
+      msg.includes("quote_visible") ||
+      msg.includes("chantier_visible") ||
       msg.includes("labor_items") ||
       msg.includes("fee_items") ||
       msg.includes("schema cache") ||
@@ -217,6 +225,8 @@ function normalizeRow(row: any): TaskTemplateRow {
     description_technique: row?.description_technique ?? null,
     caracteristiques: normalizeCaracteristiques(row?.caracteristiques),
     cout_reference_unitaire_ht: normalizeNumber(row?.cout_reference_unitaire_ht),
+    quote_visible: row?.quote_visible !== false,
+    chantier_visible: row?.chantier_visible !== false,
     labor_items: normalizeLaborItems(row?.labor_items),
     fee_items: normalizeFeeItems(row?.fee_items),
     created_at: String(row?.created_at ?? ""),
@@ -260,6 +270,8 @@ function normalizeInput(input: TaskTemplateInput) {
     description_technique: String(input.description_technique ?? "").trim() || null,
     caracteristiques: normalizeCaracteristiques(input.caracteristiques),
     cout_reference_unitaire_ht: coutReference,
+    quote_visible: input.quote_visible !== false,
+    chantier_visible: input.chantier_visible !== false,
     labor_items: normalizeLaborItems(input.labor_items),
     fee_items: normalizeFeeItems(input.fee_items),
   };
@@ -270,6 +282,8 @@ function stripV2Columns<T extends Record<string, unknown>>(payload: T): T {
   delete (next as Record<string, unknown>).description_technique;
   delete (next as Record<string, unknown>).caracteristiques;
   delete (next as Record<string, unknown>).cout_reference_unitaire_ht;
+  delete (next as Record<string, unknown>).quote_visible;
+  delete (next as Record<string, unknown>).chantier_visible;
   delete (next as Record<string, unknown>).labor_items;
   delete (next as Record<string, unknown>).fee_items;
   return next;
@@ -414,6 +428,8 @@ export async function duplicate(id: string): Promise<TaskTemplateRow> {
     description_technique: source.description_technique,
     caracteristiques: source.caracteristiques,
     cout_reference_unitaire_ht: source.cout_reference_unitaire_ht,
+    quote_visible: source.quote_visible,
+    chantier_visible: source.chantier_visible,
     labor_items: source.labor_items,
     fee_items: source.fee_items,
   });
