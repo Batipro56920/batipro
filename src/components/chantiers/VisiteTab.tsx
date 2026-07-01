@@ -8,6 +8,8 @@ type Props = {
   chantierAddress?: string | null;
   clientName?: string | null;
   intervenants: IntervenantRow[];
+  targetedVisitId?: string | null;
+  onClearTargetedVisit?: () => void;
   onDocumentsRefresh: () => Promise<void>;
 };
 
@@ -18,6 +20,8 @@ export default function VisiteTab({
   chantierAddress,
   clientName,
   intervenants,
+  targetedVisitId,
+  onClearTargetedVisit,
   onDocumentsRefresh,
 }: Props) {
   return (
@@ -28,6 +32,8 @@ export default function VisiteTab({
       chantierAddress={chantierAddress}
       clientName={clientName}
       intervenants={intervenants}
+      targetedVisitId={targetedVisitId}
+      onClearTargetedVisit={onClearTargetedVisit}
       onDocumentsRefresh={onDocumentsRefresh}
     />
   );
