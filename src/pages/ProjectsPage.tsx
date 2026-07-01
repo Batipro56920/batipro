@@ -57,7 +57,7 @@ export default function ProjectsPage() {
 
       {quoteCreationMode ? (
         <div className="rounded-3xl border border-blue-100 bg-blue-50 p-4 text-sm text-blue-900">
-          Sélectionnez le dossier projet à chiffrer. L'action ouvre directement le Quote Builder pour créer un nouveau devis sur ce projet.
+          Sélectionnez le dossier projet à chiffrer. Si un devis brouillon ou en préparation existe déjà, l'action reprend ce devis ; sinon elle ouvre un nouveau devis sur le projet.
         </div>
       ) : null}
 
