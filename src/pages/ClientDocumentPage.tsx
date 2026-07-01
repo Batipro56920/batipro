@@ -54,12 +54,10 @@ export default function ClientDocumentPage() {
       setDocument(result.document);
       setEvents(result.events);
       setFeedback({ type: "success", message: actionLabel(action) });
-      // If accepted, generate an accepted PDF (signed) for the client
       if (action === "accept") {
         try {
           downloadBusinessDocumentPdf(result.document as BusinessDocument);
         } catch (err) {
-          // ignore PDF generation errors but log
           console.error("ClientDocumentPage: failed to generate accepted PDF", err);
         }
       }
@@ -107,6 +105,16 @@ export default function ClientDocumentPage() {
         <DocumentPreview document={document} />
 
         <aside className="space-y-4">
+          {document.conditionSheet?.enabled && document.conditionSheet.conditions.length ? (
+            <section className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950">
+              <h2 className="text-sm font-semibold">{document.conditionSheet.title}</h2>
+              <ul className="mt-3 space-y-2 text-xs leading-5">
+                {document.conditionSheet.conditions.map((condition) => <li key={condition.id}>- {condition.label}</li>)}
+              </ul>
+              <div className="mt-3 rounded-lg bg-white/70 p-3 text-xs leading-5 text-amber-900">{document.conditionSheet.signatureText}</div>
+            </section>
+          ) : null}
+
           <section className="rounded-lg border border-slate-200 bg-white p-4">
             <h2 className="text-sm font-semibold text-slate-950">Decision client</h2>
             <label className="mt-4 block text-sm font-semibold text-slate-700">
