@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { loadCrmDataset, type CrmDataset, type CrmQuoteStatus } from "../../../services/crm.service";
+import { loadCrmDataset, type CrmDataset } from "../../../services/crm.service";
 import type { ProjectFilters, ProjectRecord } from "../types";
 import { buildProjectMetrics, buildProjects } from "../utils/projectMappers";
 
@@ -9,7 +9,7 @@ const DEFAULT_FILTERS: ProjectFilters = {
   type: "all",
 };
 
-const ACTIVE_PRIMARY_QUOTE_STATUSES = new Set<CrmQuoteStatus>([
+const ACTIVE_PRIMARY_QUOTE_STATUSES = new Set<string>([
   "en_preparation",
   "envoye",
   "relance_1",
