@@ -48,6 +48,23 @@ function getPlanningSortDate(row: ChantierDerived) {
   return row.planning_start_date ?? getPlanningMilestone(row).date;
 }
 
+function getTerrainFeedbackSortWeight(row: ChantierDerived) {
+  if ((row.terrainFeedbackPriorityCount ?? 0) > 0) return 0;
+  if ((row.terrainFeedbackOpenCount ?? 0) > 0) return 1;
+  if (row.isLate) return 2;
+  return 3;
+}
+
+function comparePlanningRows(a: ChantierDerived, b: ChantierDerived) {
+  const alertWeight = getTerrainFeedbackSortWeight(a) - getTerrainFeedbackSortWeight(b);
+  if (alertWeight !== 0) return alertWeight;
+
+  const dateCompare = String(getPlanningSortDate(a) ?? "").localeCompare(String(getPlanningSortDate(b) ?? ""));
+  if (dateCompare !== 0) return dateCompare;
+
+  return a.nom.localeCompare(b.nom);
+}
+
 function getPlanningTimingLabel(row: ChantierDerived) {
   const milestone = getPlanningMilestone(row);
   if (row.isLate) return "En retard";
@@ -229,10 +246,10 @@ function UnplannedChantierCard({ row, onPreview }: { row: ChantierDerived; onPre
 export function ChantiersPlanningView({ rows, onPreview }: { rows: ChantierDerived[]; onPreview: (row: ChantierDerived) => void }) {
   const scheduledRows = rows
     .filter((row) => getPlanningMilestone(row).date)
-    .sort((a, b) => String(getPlanningSortDate(a)).localeCompare(String(getPlanningSortDate(b))));
+    .sort(comparePlanningRows);
   const unplannedRows = rows
     .filter((row) => !getPlanningMilestone(row).date)
-    .sort((a, b) => a.nom.localeCompare(b.nom));
+    .sort(comparePlanningRows);
   const lateCount = rows.filter((row) => row.isLate).length;
   const toPlanCount = unplannedRows.length;
   const activeCount = rows.length;
@@ -244,7 +261,7 @@ export function ChantiersPlanningView({ rows, onPreview }: { rows: ChantierDeriv
       <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
         <div>
           <h2 className="text-base font-semibold text-slate-950">Planning chantiers</h2>
-          <p className="text-sm text-slate-500">Vue chronologique des échéances chantier avec accès direct au planning détaillé, aux visites et aux espaces terrain.</p>
+          <p className="text-sm text-slate-500">Vue chronologique priorisée par les retours terrain urgents, les alertes ouvertes et les échéances chantier.</p>
         </div>
         <div className="grid gap-2 sm:grid-cols-4 lg:min-w-[520px]">
           <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
@@ -273,7 +290,7 @@ export function ChantiersPlanningView({ rows, onPreview }: { rows: ChantierDeriv
           <div className="mb-3 flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
             <div>
               <h3 className="text-sm font-semibold text-amber-950">Chantiers à cadrer</h3>
-              <p className="text-sm text-amber-800">Ces dossiers n'ont pas encore de jalon chantier exploitable dans le planning.</p>
+              <p className="text-sm text-amber-800">Ces dossiers n'ont pas encore de jalon chantier exploitable ; ceux avec retours terrain ouverts remontent en premier.</p>
             </div>
             <span className="text-xs font-semibold uppercase text-amber-700">{toPlanCount} à reprendre</span>
           </div>
