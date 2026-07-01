@@ -167,7 +167,15 @@ export default function ChantierJournalSection({
     if (log.entity_type !== "reserve") return null;
     const targetChantierId = log.chantier_id || chantierId;
     if (!targetChantierId || !log.entity_id) return null;
-    return `/chantiers/${encodeURIComponent(targetChantierId)}/qualite?reserveId=${encodeURIComponent(log.entity_id)}`;
+
+    const changes = (log.changes ?? {}) as Record<string, unknown>;
+    const sourceFeedbackId =
+      changes.source === "terrain_feedback"
+        ? String(changes.terrain_feedback_id ?? "").trim()
+        : "";
+    const feedbackParam = sourceFeedbackId ? `&feedbackId=${encodeURIComponent(sourceFeedbackId)}` : "";
+
+    return `/chantiers/${encodeURIComponent(targetChantierId)}/qualite?reserveId=${encodeURIComponent(log.entity_id)}${feedbackParam}`;
   }
 
   return (
