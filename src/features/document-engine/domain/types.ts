@@ -72,6 +72,18 @@ export type DocumentTerms = {
   paymentMethods: PaymentMethod[];
 };
 
+export type DocumentCondition = {
+  id: string;
+  label: string;
+};
+
+export type DocumentConditionSheet = {
+  enabled: boolean;
+  title: string;
+  signatureText: string;
+  conditions: DocumentCondition[];
+};
+
 export type DocumentBaseNode = {
   id: string;
   type: DocumentLineKind;
@@ -177,6 +189,7 @@ export type BusinessDocument = {
   currency: "EUR";
   settings: DocumentSettings;
   terms: DocumentTerms;
+  conditionSheet?: DocumentConditionSheet | null;
   nodes: BusinessDocumentNode[];
   attachments: DocumentAttachment[];
   totals?: DocumentTotals;
