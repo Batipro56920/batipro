@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import type { FormEvent } from "react";
 import { useLocation } from "react-router-dom";
-import { Brush, CheckCircle2, Clock3, Loader2, RefreshCw, Send } from "lucide-react";
+import { CheckCircle2, Clock3, Loader2, RefreshCw, Send } from "lucide-react";
 
 import { supabase } from "../lib/supabaseClient";
 import {
@@ -296,7 +296,7 @@ export default function EmployeeFieldDataWidget() {
 
           <form className="space-y-3 rounded-lg border border-slate-200 bg-slate-50 p-3" onSubmit={submitCleanliness}>
             <div className="flex items-center gap-2 text-sm font-semibold text-slate-950">
-              <Brush className="h-4 w-4 text-blue-700" />
+              <CheckCircle2 className="h-4 w-4 text-blue-700" />
               Proprete chantier
             </div>
             <div className="rounded-lg bg-white px-3 py-2 text-sm text-slate-600">{selectedChantier?.nom ?? "Chantier non selectionne"}</div>
