@@ -32,10 +32,22 @@ function getQuoteHref(row: ChantierDerived, projectHref: string | null) {
 }
 
 function getBillingHref(row: ChantierDerived, projectHref: string | null) {
-  const hasSignedQuote = Boolean(row.crm_quote_id || row.signed_quote_amount_ht || row.signed_quote_amount_ttc);
-  if (!hasSignedQuote) return null;
-  if (projectHref) return `${projectHref}?tab=quotes`;
-  return "/projets?facturation=1";
+  if (projectHref && (row.crm_quote_id || row.signed_quote_amount_ht || row.signed_quote_amount_ttc)) {
+    return `${projectHref}?tab=quotes`;
+  }
+  if (row.crm_quote_id) return "/projets?facturation=1";
+  return null;
+}
+
+function getClientContactLabel(row: ChantierDerived) {
+  return [row.crm_client_phone, row.crm_client_email].filter(Boolean).join(" · ") || "Non renseigné";
+}
+
+function getCommercialNextStepLabel(params: { quoteHref: string | null; billingHref: string | null }) {
+  if (params.billingHref && params.quoteHref) return "Devis et facturation projet";
+  if (params.billingHref) return "Facturation projet";
+  if (params.quoteHref) return "Devis à consulter";
+  return "Financier chantier";
 }
 
 function CommercialContext({ row }: { row: ChantierDerived }) {
@@ -43,7 +55,7 @@ function CommercialContext({ row }: { row: ChantierDerived }) {
   const quoteHref = getQuoteHref(row, projectHref);
   const billingHref = getBillingHref(row, projectHref);
   const financialHref = `/chantiers/${row.id}/financier`;
-  const hasCommercialContext = Boolean(projectHref || row.crm_quote_id || row.signed_quote_amount_ht || row.crm_client_phone || row.crm_client_email);
+  const hasCommercialContext = Boolean(projectHref || quoteHref || row.signed_quote_amount_ht || row.crm_client_phone || row.crm_client_email);
 
   if (!hasCommercialContext) {
     return null;
@@ -65,18 +77,18 @@ function CommercialContext({ row }: { row: ChantierDerived }) {
             </div>
             <div>
               <span className="text-blue-700/80">Contact client</span>
-              <div className="font-semibold">{row.crm_client_phone || row.crm_client_email || "Non renseigné"}</div>
+              <div className="font-semibold">{getClientContactLabel(row)}</div>
             </div>
             <div>
               <span className="text-blue-700/80">Suite métier</span>
-              <div className="font-semibold">{billingHref ? "Facturation disponible" : "Financier chantier"}</div>
+              <div className="font-semibold">{getCommercialNextStepLabel({ quoteHref, billingHref })}</div>
             </div>
           </div>
         </div>
         <div className="flex shrink-0 flex-wrap gap-2">
           {projectHref ? (
             <Link to={projectHref} className="inline-flex h-9 items-center rounded-xl border border-blue-200 bg-white px-3 text-sm font-semibold text-blue-800 hover:bg-blue-100">
-              Projet
+              Projet commercial
             </Link>
           ) : null}
           {quoteHref ? (
