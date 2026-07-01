@@ -3,7 +3,7 @@ import { Button } from "../../../components/ui/button";
 import { calculateDocumentTotals } from "../application/documentCalculations";
 import { flattenDocumentNodes } from "../application/documentNumbering";
 import { getDocumentTemplate } from "../domain/documentTemplates";
-import type { BusinessDocument, DocumentItemNode, FlatDocumentNode } from "../domain/types";
+import type { BusinessDocument, DocumentConditionSheet, DocumentItemNode, FlatDocumentNode } from "../domain/types";
 
 export function DocumentPreview({ document, onDownload, onSend }: { document: BusinessDocument; onDownload?: () => void; onSend?: () => void }) {
   const rows = flattenDocumentNodes(document.nodes);
@@ -83,6 +83,8 @@ export function DocumentPreview({ document, onDownload, onSend }: { document: Bu
             </div>
           </section>
 
+          <ConditionSheetPreview sheet={document.conditionSheet} />
+
           {template.showSignature ? (
             <section className="mt-10">
               <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-slate-950"><FileSignature className="h-4 w-4" /> {template.signatureLabel}</div>
@@ -95,6 +97,19 @@ export function DocumentPreview({ document, onDownload, onSend }: { document: Bu
         </div>
       </article>
     </div>
+  );
+}
+
+function ConditionSheetPreview({ sheet }: { sheet?: DocumentConditionSheet | null }) {
+  if (!sheet?.enabled || !sheet.conditions.length) return null;
+  return (
+    <section className="mt-8 rounded-2xl border border-amber-200 bg-amber-50 p-5 text-sm text-amber-950">
+      <div className="font-semibold">{sheet.title}</div>
+      <ul className="mt-3 space-y-2">
+        {sheet.conditions.map((condition) => <li key={condition.id}>- {condition.label}</li>)}
+      </ul>
+      <p className="mt-4 text-xs leading-5 text-amber-800">{sheet.signatureText}</p>
+    </section>
   );
 }
 
@@ -164,4 +179,3 @@ function formatUnit(value: string) {
   if (value === "m3") return "m³";
   return value;
 }
-
