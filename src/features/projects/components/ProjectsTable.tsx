@@ -20,6 +20,14 @@ function getAcceptedQuoteAwaitingChantier(project: ProjectRecord): ProjectQuote 
   return project.quotes.find((quote) => quote.statut === "accepte" && !quote.chantier_id) ?? null;
 }
 
+function getQuoteInProgress(project: ProjectRecord): ProjectQuote | null {
+  return (
+    [...project.quotes]
+      .filter((quote) => quote.statut === "brouillon" || quote.statut === "en_preparation")
+      .sort((a, b) => String(b.updated_at ?? b.created_at ?? "").localeCompare(String(a.updated_at ?? a.created_at ?? "")))[0] ?? null
+  );
+}
+
 function getBillableAmount(project: ProjectRecord, quote: ProjectQuote | null) {
   if (!quote) return project.quoteAmount;
   return Number(quote.montant_ttc || quote.montant_ht || 0);
@@ -129,10 +137,13 @@ export function ProjectsTable({
             {projects.map((project) => {
               const billableQuote = billingMode ? getBillableQuote(project) : null;
               const acceptedQuoteAwaitingChantier = chantierCreationMode ? getAcceptedQuoteAwaitingChantier(project) : null;
+              const quoteInProgress = quoteCreationMode ? getQuoteInProgress(project) : null;
               const commercialSource = getCommercialSource(project);
               const primaryChantier = getPrimaryChantier(project);
               const projectPath = quoteCreationMode
-                ? `/projets/${project.id}/devis/nouveau`
+                ? quoteInProgress
+                  ? `/projets/${project.id}/devis/${quoteInProgress.id}/edit`
+                  : `/projets/${project.id}/devis/nouveau`
                 : `/projets/${project.id}${billingMode || chantierCreationMode ? "?tab=quotes" : ""}`;
               return (
                 <tr key={project.id} className="transition hover:bg-slate-50/80">
@@ -201,8 +212,14 @@ export function ProjectsTable({
                       </>
                     ) : quoteCreationMode ? (
                       <>
-                        <div className="truncate text-slate-700">{project.quotes.length ? `${project.quotes.length} devis rattaché${project.quotes.length > 1 ? "s" : ""}` : "Aucun devis"}</div>
-                        <div className="mt-1 text-xs text-slate-500">Nouveau chiffrage possible</div>
+                        <div className="truncate font-semibold text-slate-700">
+                          {quoteInProgress?.quote_number || (project.quotes.length ? `${project.quotes.length} devis rattaché${project.quotes.length > 1 ? "s" : ""}` : "Aucun devis")}
+                        </div>
+                        <div className="mt-1 text-xs text-slate-500">
+                          {quoteInProgress
+                            ? `Devis en cours depuis le ${formatDate(quoteInProgress.updated_at ?? quoteInProgress.created_at)}`
+                            : "Nouveau chiffrage possible"}
+                        </div>
                       </>
                     ) : (
                       <>
@@ -233,13 +250,15 @@ export function ProjectsTable({
                           "inline-flex h-8 items-center justify-center gap-2 rounded-lg border px-2.5 text-xs font-semibold transition",
                           chantierCreationMode
                             ? "border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
-                            : "border-slate-200 bg-white text-slate-900 hover:bg-slate-50",
+                            : quoteCreationMode && quoteInProgress
+                              ? "border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100"
+                              : "border-slate-200 bg-white text-slate-900 hover:bg-slate-50",
                         ].join(" ")}
                       >
                         {quoteCreationMode ? (
                           <>
                             <FileText className="h-3.5 w-3.5" />
-                            Créer devis
+                            {quoteInProgress ? "Reprendre devis" : "Créer devis"}
                           </>
                         ) : chantierCreationMode ? (
                           <>
