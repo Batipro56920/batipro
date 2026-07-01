@@ -1,4 +1,4 @@
-import { Archive, Ban, CalendarDays, CheckCircle2, ClipboardList, Download, ExternalLink, FileText, Hammer, MessageSquareWarning, MoreHorizontal, ReceiptText, RotateCcw, Trash2, Users, type LucideIcon } from "lucide-react";
+import { Archive, Ban, CalendarDays, CheckCircle2, ClipboardList, Download, ExternalLink, FileText, Hammer, MessageSquareWarning, MoreHorizontal, RotateCcw, Trash2, Users, type LucideIcon } from "lucide-react";
 import { Link } from "react-router-dom";
 import { ConfirmDialog } from "../../../../components/feedback/ConfirmDialog";
 import { Button } from "../../../../components/ui/button";
@@ -57,7 +57,7 @@ function getCommercialActions(row: ChantierDerived): CommercialAction[] {
 
   if (projectHref) actions.push({ href: projectHref, label: "Projet commercial", icon: ExternalLink });
   if (quoteHref) actions.push({ href: quoteHref, label: "Devis rattaché", icon: FileText });
-  if (billingHref) actions.push({ href: billingHref, label: "Facturation projet", icon: ReceiptText });
+  if (billingHref) actions.push({ href: billingHref, label: "Facturation projet", icon: FileText });
 
   return actions;
 }
