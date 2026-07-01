@@ -17,7 +17,7 @@ export default function ChantierPlanningSection({
   intervenants: IntervenantRow[];
 }) {
   const [mode, setMode] = useState<PlanningMode>("daily");
-  const terrainFeedbackHref = `/retours-terrain?chantierId=${encodeURIComponent(chantierId)}`;
+  const terrainFeedbackHref = `/chantiers/${encodeURIComponent(chantierId)}/retours-terrain`;
   const intervenantsCount = intervenants.length;
   const teamLabel = intervenantsCount > 0
     ? `${intervenantsCount} intervenant${intervenantsCount > 1 ? "s" : ""} affecté${intervenantsCount > 1 ? "s" : ""}`
