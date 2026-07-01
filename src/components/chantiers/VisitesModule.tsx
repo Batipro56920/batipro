@@ -132,15 +132,27 @@ export default function VisitesModule({
                   : "Le lien de recherche pointe vers une visite supprimee ou non visible avec les droits actuels."}
               </p>
             </div>
-            {onClearTargetedVisit ? (
-              <button
-                type="button"
-                onClick={onClearTargetedVisit}
-                className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700"
-              >
-                Retirer le ciblage
-              </button>
-            ) : null}
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-end">
+              {targetedVisit?.pdf_document_id ? (
+                <button
+                  type="button"
+                  onClick={() => void openPdf(targetedVisit)}
+                  disabled={openingPdfId === targetedVisit.id}
+                  className="rounded-lg border border-blue-200 bg-white px-4 py-2 text-sm font-semibold text-blue-700 hover:bg-blue-50 disabled:cursor-not-allowed disabled:border-slate-200 disabled:text-slate-400"
+                >
+                  {openingPdfId === targetedVisit.id ? "Ouverture..." : "Ouvrir le PDF"}
+                </button>
+              ) : null}
+              {onClearTargetedVisit ? (
+                <button
+                  type="button"
+                  onClick={onClearTargetedVisit}
+                  className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700"
+                >
+                  Retirer le ciblage
+                </button>
+              ) : null}
+            </div>
           </div>
         </div>
       ) : null}
