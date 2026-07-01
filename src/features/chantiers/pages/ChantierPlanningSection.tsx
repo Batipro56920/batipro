@@ -27,9 +27,9 @@ export default function ChantierPlanningSection({
     <div className="space-y-4">
       <div className="flex flex-col gap-3 rounded-3xl border border-slate-200 bg-white p-4 shadow-sm shadow-slate-950/[0.03] lg:flex-row lg:items-center lg:justify-between">
         <div>
-          <div className="text-[11px] font-semibold uppercase tracking-[0.22em] text-blue-700">Planning chantier</div>
-          <h2 className="mt-1 text-xl font-bold text-slate-950">Quotidien et Gantt</h2>
-          <p className="mt-1 text-sm text-slate-500">Le quotidien sert au pilotage terrain. Le Gantt sert à organiser les phases et les blocs sur plusieurs jours.</p>
+          <div className="text-[11px] font-semibold uppercase tracking-[0.22em] text-blue-700">Agenda et planning chantier</div>
+          <h2 className="mt-1 text-xl font-bold text-slate-950">Agenda interventions et Gantt chantier</h2>
+          <p className="mt-1 text-sm text-slate-500">L'agenda interventions sert au pilotage terrain quotidien. Le Gantt chantier sert à organiser les phases, dépendances et blocs sur plusieurs jours.</p>
           <div className="mt-3 flex flex-wrap gap-2 text-xs">
             <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 font-medium text-slate-700">
               {teamLabel}
@@ -46,14 +46,14 @@ export default function ChantierPlanningSection({
               onClick={() => setMode("daily")}
               className={["rounded-xl px-3 py-2 text-sm font-semibold transition", mode === "daily" ? "bg-slate-950 text-white shadow-sm" : "text-slate-600 hover:bg-white"].join(" ")}
             >
-              Quotidien
+              Agenda interventions
             </button>
             <button
               type="button"
               onClick={() => setMode("gantt")}
               className={["rounded-xl px-3 py-2 text-sm font-semibold transition", mode === "gantt" ? "bg-slate-950 text-white shadow-sm" : "text-slate-600 hover:bg-white"].join(" ")}
             >
-              Gantt
+              Gantt chantier
             </button>
           </div>
           <div className="flex flex-wrap gap-2">
@@ -94,7 +94,7 @@ export default function ChantierPlanningSection({
       {mode === "daily" ? (
         <DailyChantierPlanning chantierId={chantierId} chantierName={chantierName} intervenants={intervenants} />
       ) : (
-        <Suspense fallback={<div className="rounded-2xl border bg-white p-4 text-sm text-slate-500">Chargement du planning...</div>}>
+        <Suspense fallback={<div className="rounded-2xl border bg-white p-4 text-sm text-slate-500">Chargement du Gantt chantier...</div>}>
           <PlanningBoard chantierId={chantierId} chantierName={chantierName} intervenants={intervenants} />
         </Suspense>
       )}
