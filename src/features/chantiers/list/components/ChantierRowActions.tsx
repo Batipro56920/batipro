@@ -4,9 +4,27 @@ import { ConfirmDialog } from "../../../../components/feedback/ConfirmDialog";
 import { Button } from "../../../../components/ui/button";
 import type { ChantierListActions, ChantierDerived } from "../types";
 
+function getTerrainFeedbackAction(row: ChantierDerived) {
+  const openCount = row.terrainFeedbackOpenCount ?? 0;
+  const priorityCount = row.terrainFeedbackPriorityCount ?? 0;
+  const hasPriority = priorityCount > 0;
+  const hasOpen = openCount > 0;
+
+  return {
+    href: `/retours-terrain?chantierId=${encodeURIComponent(row.id)}`,
+    label: hasPriority
+      ? `Retours terrain (${priorityCount} urgent${priorityCount > 1 ? "s" : ""})`
+      : hasOpen
+        ? `Retours terrain (${openCount} à traiter)`
+        : "Retours terrain",
+    tone: hasPriority ? "red" : hasOpen ? "amber" : "blue",
+  } as const;
+}
+
 export function ChantierRowActions({ row, actions }: { row: ChantierDerived; actions: ChantierListActions }) {
   const terminal = row.status === "TERMINE" || row.status === "ARCHIVE" || row.status === "ANNULE";
   const chantierBaseHref = `/chantiers/${encodeURIComponent(row.id)}`;
+  const terrainFeedbackAction = getTerrainFeedbackAction(row);
 
   return (
     <div className="flex items-center justify-end gap-2" onClick={(event) => event.stopPropagation()}>
@@ -28,7 +46,7 @@ export function ChantierRowActions({ row, actions }: { row: ChantierDerived; act
           <MenuLink icon={CheckCircle2} label="Qualité / réserves" href={`${chantierBaseHref}/qualite`} />
           <MenuLink icon={FileText} label="Documents" href={`${chantierBaseHref}/documents`} />
           <MenuLink icon={Users} label="Équipe" href={`${chantierBaseHref}/equipe`} />
-          <MenuLink icon={MessageSquareWarning} label="Retours terrain" href={`${chantierBaseHref}/retours-terrain`} />
+          <MenuLink icon={MessageSquareWarning} label={terrainFeedbackAction.label} href={terrainFeedbackAction.href} tone={terrainFeedbackAction.tone} />
 
           <div className="my-2 border-t border-slate-100" />
           <div className="px-3 pb-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-400">
@@ -92,11 +110,18 @@ function MenuButton({ icon: Icon, label, onClick, disabled, danger, title }: { i
   );
 }
 
-function MenuLink({ icon: Icon, label, href }: { icon: LucideIcon; label: string; href: string }) {
+function MenuLink({ icon: Icon, label, href, tone = "blue" }: { icon: LucideIcon; label: string; href: string; tone?: "blue" | "amber" | "red" }) {
+  const className =
+    tone === "red"
+      ? "text-red-700 hover:bg-red-50"
+      : tone === "amber"
+        ? "text-amber-800 hover:bg-amber-50"
+        : "text-blue-700 hover:bg-blue-50";
+
   return (
     <Link
       to={href}
-      className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-sm font-medium text-blue-700 transition hover:bg-blue-50"
+      className={["flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-sm font-medium transition", className].join(" ")}
     >
       <Icon className="h-4 w-4" />
       {label}
