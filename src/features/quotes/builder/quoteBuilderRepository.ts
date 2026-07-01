@@ -17,6 +17,7 @@ import {
 import { calculateQuoteBuilderTotals, flattenQuoteBuilder } from "./quoteBuilderCalculations";
 import { validateQuoteBuilderForDocumentEngine } from "./quoteBuilderDocumentAdapter";
 import { createQuoteBuilderFromEngine, createQuoteBuilderFromProject } from "./quoteBuilderModel";
+import { applyVisitQuoteOptions } from "./quoteBuilderVisitOptions";
 import type { QuoteBuilderFlatRow, QuoteBuilderQuote } from "./types";
 
 type QuoteSaveAccess = {
@@ -32,14 +33,14 @@ export async function loadQuoteBuilder(project: ProjectRecord, quoteId?: string 
       prospect_id: project.prospect?.id ?? null,
       client_id: project.client?.id ?? null,
     });
-    return createQuoteBuilderFromProject(project, source);
+    return applyVisitQuoteOptions(createQuoteBuilderFromProject(project, source));
   }
   const engine = await loadCrmQuoteEngineData(quoteId);
   return createQuoteBuilderFromEngine(engine, project);
 }
 
 export function createQuoteBuilderFromCocoDraft(project: ProjectRecord, draft: CocoControlledDraft): QuoteBuilderQuote {
-  return createQuoteBuilderFromProject(project, cocoDraftToVisitQuoteSource(project, draft));
+  return applyVisitQuoteOptions(createQuoteBuilderFromProject(project, cocoDraftToVisitQuoteSource(project, draft)));
 }
 
 export async function saveQuoteBuilder(quote: QuoteBuilderQuote): Promise<QuoteBuilderQuote> {
@@ -105,6 +106,7 @@ async function createNewQuote(
       work_start_date: quote.workStartDate,
       estimated_duration_value: quote.estimatedDurationValue,
       estimated_duration_unit: quote.estimatedDurationUnit,
+      daily_cleaning_flat_rate_enabled: quote.settings.dailyCleaningFlatRateEnabled,
       builder_v1: true,
       project_id: quote.projectId,
     } as any,
@@ -142,6 +144,7 @@ async function updateExistingQuote(
       work_start_date: quote.workStartDate,
       estimated_duration_value: quote.estimatedDurationValue,
       estimated_duration_unit: quote.estimatedDurationUnit,
+      daily_cleaning_flat_rate_enabled: quote.settings.dailyCleaningFlatRateEnabled,
       builder_v1: true,
       project_id: quote.projectId,
     } as any,
