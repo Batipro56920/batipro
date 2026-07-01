@@ -76,6 +76,7 @@ export function ChantiersToolbar({ scope, onScope, filters, onFilters, clients, 
           <option value="this_month">Ce mois</option>
           <option value="next_30">30 prochains jours</option>
           <option value="late">En retard</option>
+          <option value="alerts">Alertes à traiter</option>
         </select>
       </div>
 
