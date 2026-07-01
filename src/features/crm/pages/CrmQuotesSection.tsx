@@ -1,5 +1,5 @@
 import { useState } from "react";
-import type { CrmClientRow, CrmProspectRow, CrmQuoteRow } from "../../../services/crm.service";
+import type { CrmClientRow, CrmOpportunityRow, CrmProspectRow, CrmQuoteRow } from "../../../services/crm.service";
 import { QuoteDetailDrawer } from "../quotes/components/QuoteDetailDrawer";
 import { QuotesEmptyState } from "../quotes/components/QuotesEmptyState";
 import { QuotesHeader } from "../quotes/components/QuotesHeader";
@@ -13,6 +13,7 @@ export default function CrmQuotesSection({
   rows,
   prospectById,
   clientById,
+  opportunityById,
   projectPathByQuoteId,
   chantierPathByQuoteId,
   onCreate,
@@ -23,6 +24,7 @@ export default function CrmQuotesSection({
   rows: CrmQuoteRow[];
   prospectById: Map<string, CrmProspectRow>;
   clientById: Map<string, CrmClientRow>;
+  opportunityById?: Map<string, CrmOpportunityRow>;
   projectPathByQuoteId?: Map<string, string>;
   chantierPathByQuoteId?: Map<string, string>;
   onCreate: () => void;
@@ -31,10 +33,11 @@ export default function CrmQuotesSection({
   onPdf: (row: CrmQuoteRow) => void;
 }) {
   const [selectedQuote, setSelectedQuote] = useState<QuoteWithParty | null>(null);
-  const { filters, setFilters, filteredRows, statuses, clients } = useQuoteFilters({
+  const { filters, setFilters, filteredRows, statuses, clients, salespeople } = useQuoteFilters({
     rows,
     prospectById,
     clientById,
+    opportunityById,
     projectPathByQuoteId,
     chantierPathByQuoteId,
     globalQuery: "",
@@ -51,6 +54,7 @@ export default function CrmQuotesSection({
         setFilters={setFilters}
         statuses={statuses}
         clients={clients}
+        salespeople={salespeople}
       />
       {filteredRows.length === 0 ? (
         <QuotesEmptyState onCreate={onCreate} />
