@@ -8,10 +8,12 @@ export default function ChantierReservesSection({ children }: { children: ReactN
   const [searchParams, setSearchParams] = useSearchParams();
   const targetedReserveId = searchParams.get("reserveId") ?? "";
   const sourceFeedbackId = searchParams.get("feedbackId") ?? "";
-  const terrainFeedbackHref = id ? `/retours-terrain?chantierId=${encodeURIComponent(id)}` : "/retours-terrain";
+  const encodedChantierId = id ? encodeURIComponent(id) : "";
+  const terrainFeedbackHref = id ? `/retours-terrain?chantierId=${encodedChantierId}` : "/retours-terrain";
+  const chantierJournalHref = id ? `/chantiers/${encodedChantierId}/historique` : "";
   const sourceFeedbackHref =
     id && sourceFeedbackId
-      ? `/retours-terrain?chantierId=${encodeURIComponent(id)}&feedbackId=${encodeURIComponent(sourceFeedbackId)}`
+      ? `/retours-terrain?chantierId=${encodedChantierId}&feedbackId=${encodeURIComponent(sourceFeedbackId)}`
       : terrainFeedbackHref;
 
   function clearTargetedReserve() {
@@ -49,6 +51,14 @@ export default function ChantierReservesSection({ children }: { children: ReactN
               >
                 {sourceFeedbackId ? "Ouvrir le retour source" : "Voir retours chantier"}
               </Link>
+              {chantierJournalHref ? (
+                <Link
+                  to={chantierJournalHref}
+                  className="inline-flex items-center justify-center rounded-xl border border-blue-200 bg-white px-3 py-2 text-sm font-semibold text-blue-800 hover:bg-blue-50"
+                >
+                  Voir journal chantier
+                </Link>
+              ) : null}
               <button
                 type="button"
                 onClick={clearTargetedReserve}
@@ -68,12 +78,22 @@ export default function ChantierReservesSection({ children }: { children: ReactN
               Retrouvez les observations, blocages et anomalies remontés par les intervenants, créez une réserve si nécessaire puis suivez-la ici dans la qualité chantier.
             </div>
           </div>
-          <Link
-            to={terrainFeedbackHref}
-            className="inline-flex shrink-0 items-center justify-center rounded-xl bg-blue-700 px-3 py-2 text-sm font-semibold text-white hover:bg-blue-800"
-          >
-            Voir les retours terrain
-          </Link>
+          <div className="flex shrink-0 flex-wrap gap-2">
+            {chantierJournalHref ? (
+              <Link
+                to={chantierJournalHref}
+                className="inline-flex items-center justify-center rounded-xl border border-blue-200 bg-white px-3 py-2 text-sm font-semibold text-blue-800 hover:bg-blue-50"
+              >
+                Journal chantier
+              </Link>
+            ) : null}
+            <Link
+              to={terrainFeedbackHref}
+              className="inline-flex items-center justify-center rounded-xl bg-blue-700 px-3 py-2 text-sm font-semibold text-white hover:bg-blue-800"
+            >
+              Voir les retours terrain
+            </Link>
+          </div>
         </div>
       </div>
       {children}
