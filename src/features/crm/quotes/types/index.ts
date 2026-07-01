@@ -9,11 +9,18 @@ export type QuoteFilters = {
   amount: string;
 };
 
+export type QuoteFilterOption = {
+  key: string;
+  label: string;
+};
+
 export type QuoteWithParty = CrmQuoteRow & {
   partyLabel: string;
   projectPath: string;
   quoteEditPath: string;
   chantierPath?: string;
+  salespersonKey: string;
+  salespersonLabel: string;
 };
 
 export type QuoteActionHandlers = {
