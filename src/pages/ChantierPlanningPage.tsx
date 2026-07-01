@@ -103,6 +103,12 @@ export default function ChantierPlanningPage() {
               Tâches / exécution
             </Link>
             <Link
+              to={`/chantiers/${id}/qualite`}
+              className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm font-medium text-red-800 hover:bg-red-100"
+            >
+              Qualité / réserves
+            </Link>
+            <Link
               to={`/retours-terrain?chantierId=${encodeURIComponent(id)}`}
               className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm font-medium text-amber-800 hover:bg-amber-100"
             >
