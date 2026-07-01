@@ -242,7 +242,7 @@ function chantierChangeOrderHref(row: SearchRow) {
   const params = new URLSearchParams();
   if (id) params.set("changeOrderId", id);
   const query = params.toString();
-  return `/chantiers/${encodeURIComponent(chantierId)}/execution${query ? `?${query}` : ""}`;
+  return `/chantiers/${encodeURIComponent(chantierId)}/financier${query ? `?${query}` : ""}`;
 }
 
 function quoteProjectHref(row: SearchRow) {
