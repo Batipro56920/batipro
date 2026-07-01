@@ -2,6 +2,7 @@ import { Link, useParams, useSearchParams } from "react-router-dom";
 import { ProjectVisitWorkspaceStable } from "../features/projects/appointments/ProjectVisitWorkspaceStable";
 import { useProjectsData } from "../features/projects/hooks/useProjectsData";
 import type { ProjectRecord } from "../features/projects/types";
+import { VisitQuotePrepDailyCleaningControl } from "../features/quotes/builder/VisitQuotePrepDailyCleaningControl";
 import type { CrmAppointmentRow } from "../services/crm.service";
 import ProjectVisitQuotePrepPage from "./ProjectVisitQuotePrepPage";
 
@@ -168,7 +169,12 @@ export default function ProjectAppointmentPage() {
   }
 
   if (shouldPrepareQuote) {
-    return <ProjectVisitQuotePrepPage />;
+    return (
+      <>
+        <ProjectVisitQuotePrepPage />
+        <VisitQuotePrepDailyCleaningControl projectId={project.id} />
+      </>
+    );
   }
 
   return <ProjectVisitWorkspaceStable project={project} existingAppointment={appointment} />;
