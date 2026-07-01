@@ -51,6 +51,7 @@ export function QuoteDetailDrawer({
             <h4 className="text-sm font-semibold text-slate-950">Client</h4>
             <div className="mt-3 text-sm text-slate-600">{quote.partyLabel}</div>
             <div className="mt-1 text-sm text-slate-600">Projet : {quote.description ?? quote.lot ?? "—"}</div>
+            <div className="mt-1 text-sm text-slate-600">Commercial : {quote.salespersonLabel}</div>
           </section>
 
           <section className="rounded-2xl border border-slate-200 p-4">
@@ -71,7 +72,7 @@ export function QuoteDetailDrawer({
             {quote.chantierPath ? (
               <Link to={quote.chantierPath} className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-center text-sm font-medium text-emerald-800 hover:bg-emerald-100" title="Ouvrir le chantier déjà lié à ce devis.">Ouvrir chantier</Link>
             ) : null}
-            <Link to={`/crm/devis/${quote.id}/edit`} className="rounded-xl bg-slate-950 px-3 py-2 text-center text-sm font-medium text-white hover:bg-slate-800" title="Modifier ce devis dans le Quote Builder.">Modifier devis</Link>
+            <Link to={quote.quoteEditPath} className="rounded-xl bg-slate-950 px-3 py-2 text-center text-sm font-medium text-white hover:bg-slate-800" title="Modifier ce devis dans le Quote Builder.">Modifier devis</Link>
             <button type="button" onClick={() => actions.onStatus(quote, "envoye")} className="rounded-xl border border-slate-200 px-3 py-2 text-sm font-medium hover:bg-slate-50">Envoyer</button>
             <button type="button" onClick={() => actions.onStatus(quote, "relance_1")} className="rounded-xl border border-slate-200 px-3 py-2 text-sm font-medium hover:bg-slate-50">Relancer</button>
             <button type="button" onClick={() => actions.onPdf(quote)} className="rounded-xl border border-slate-200 px-3 py-2 text-sm font-medium hover:bg-slate-50">PDF</button>
