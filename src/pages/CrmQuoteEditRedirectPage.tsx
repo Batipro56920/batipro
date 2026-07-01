@@ -68,14 +68,22 @@ export default function CrmQuoteEditRedirectPage() {
       <p className="mt-2">
         {state.status === "error"
           ? state.message
-          : "Ce devis n'est pas rattaché à un dossier projet accessible. Ouvrez la liste des devis pour vérifier son rattachement prospect, client ou opportunité."}
+          : "Ce devis n'est pas rattaché à un dossier projet accessible. Vérifiez son rattachement prospect, client ou opportunité avant de le reprendre."}
       </p>
-      <Link
-        to="/crm/devis"
-        className="mt-4 inline-flex h-9 items-center justify-center rounded-xl bg-amber-900 px-3 text-sm font-semibold text-white hover:bg-amber-800"
-      >
-        Retour aux devis
-      </Link>
+      <div className="mt-4 flex flex-wrap gap-2">
+        <Link
+          to="/crm/devis"
+          className="inline-flex h-9 items-center justify-center rounded-xl bg-amber-900 px-3 text-sm font-semibold text-white hover:bg-amber-800"
+        >
+          Retour aux devis
+        </Link>
+        <Link
+          to="/projets"
+          className="inline-flex h-9 items-center justify-center rounded-xl border border-amber-300 bg-white px-3 text-sm font-semibold text-amber-900 hover:bg-amber-100"
+        >
+          Voir les projets commerciaux
+        </Link>
+      </div>
     </div>
   );
 }
