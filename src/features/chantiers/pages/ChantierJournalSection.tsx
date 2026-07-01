@@ -147,10 +147,20 @@ export default function ChantierJournalSection({
   }
 
   function getFeedbackHref(log: ChantierActivityLogRow) {
-    if (log.entity_type !== "terrain_feedback") return null;
     const targetChantierId = log.chantier_id || chantierId;
-    if (!targetChantierId || !log.entity_id) return null;
-    return `/retours-terrain?chantierId=${encodeURIComponent(targetChantierId)}&feedbackId=${encodeURIComponent(log.entity_id)}`;
+    if (!targetChantierId) return null;
+
+    if (log.entity_type === "terrain_feedback" && log.entity_id) {
+      return `/retours-terrain?chantierId=${encodeURIComponent(targetChantierId)}&feedbackId=${encodeURIComponent(log.entity_id)}`;
+    }
+
+    const changes = (log.changes ?? {}) as Record<string, unknown>;
+    const sourceFeedbackId = String(changes.terrain_feedback_id ?? "").trim();
+    if (log.entity_type === "reserve" && changes.source === "terrain_feedback" && sourceFeedbackId) {
+      return `/retours-terrain?chantierId=${encodeURIComponent(targetChantierId)}&feedbackId=${encodeURIComponent(sourceFeedbackId)}`;
+    }
+
+    return null;
   }
 
   function getReserveHref(log: ChantierActivityLogRow) {
