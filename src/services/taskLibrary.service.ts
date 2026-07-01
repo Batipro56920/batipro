@@ -270,8 +270,8 @@ function normalizeInput(input: TaskTemplateInput) {
     description_technique: String(input.description_technique ?? "").trim() || null,
     caracteristiques: normalizeCaracteristiques(input.caracteristiques),
     cout_reference_unitaire_ht: coutReference,
-    quote_visible: input.quote_visible !== false,
-    chantier_visible: input.chantier_visible !== false,
+    quote_visible: input.quote_visible,
+    chantier_visible: input.chantier_visible,
     labor_items: normalizeLaborItems(input.labor_items),
     fee_items: normalizeFeeItems(input.fee_items),
   };
