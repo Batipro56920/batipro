@@ -109,7 +109,7 @@ export default function ChantierPlanningPage() {
               Qualité / réserves
             </Link>
             <Link
-              to={`/retours-terrain?chantierId=${encodeURIComponent(id)}`}
+              to={`/chantiers/${encodeURIComponent(id)}/retours-terrain`}
               className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm font-medium text-amber-800 hover:bg-amber-100"
             >
               Retours terrain
