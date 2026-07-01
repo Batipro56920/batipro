@@ -1,17 +1,19 @@
 import { Search } from "lucide-react";
 import type { Dispatch, SetStateAction } from "react";
-import type { QuoteFilters } from "../types";
+import type { QuoteFilterOption, QuoteFilters } from "../types";
 
 export function QuotesToolbar({
   filters,
   setFilters,
   statuses,
   clients,
+  salespeople,
 }: {
   filters: QuoteFilters;
   setFilters: Dispatch<SetStateAction<QuoteFilters>>;
   statuses: string[];
   clients: string[];
+  salespeople: QuoteFilterOption[];
 }) {
   return (
     <section className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm shadow-slate-950/[0.03]">
@@ -29,8 +31,9 @@ export function QuotesToolbar({
           <option value="all">Tous statuts</option>
           {statuses.map((status) => <option key={status} value={status}>{status}</option>)}
         </select>
-        <select value={filters.salesperson} onChange={(event) => setFilters((current) => ({ ...current, salesperson: event.target.value }))} className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-700" disabled title="Commercial à connecter">
+        <select value={filters.salesperson} onChange={(event) => setFilters((current) => ({ ...current, salesperson: event.target.value }))} className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-700">
           <option value="all">Tous commerciaux</option>
+          {salespeople.map((salesperson) => <option key={salesperson.key} value={salesperson.key}>{salesperson.label}</option>)}
         </select>
         <select value={filters.client} onChange={(event) => setFilters((current) => ({ ...current, client: event.target.value }))} className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-700">
           <option value="all">Tous clients</option>
