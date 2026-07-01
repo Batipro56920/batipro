@@ -34,7 +34,7 @@ export default function ChantierPlanningPage() {
         setIntervenants(intervenantRows);
       } catch (err: any) {
         if (!alive) return;
-        setError(err?.message ?? "Impossible de charger le planning chantier.");
+        setError(err?.message ?? "Impossible de charger l'agenda et le planning chantier.");
         setChantier(null);
         setIntervenants([]);
       } finally {
@@ -59,7 +59,7 @@ export default function ChantierPlanningPage() {
   if (loading) {
     return (
       <div className="rounded-2xl border bg-white p-6 text-sm text-slate-500">
-        Chargement du planning chantier...
+        Chargement de l'agenda et du planning chantier...
       </div>
     );
   }
@@ -78,7 +78,7 @@ export default function ChantierPlanningPage() {
         <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
           <div className="min-w-0">
             <div className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-400">
-              Planning chantier
+              Agenda interventions / planning chantier
             </div>
             <h1 className="mt-1 text-2xl font-semibold text-slate-950">
               {chantier?.nom ?? "Chantier"}
