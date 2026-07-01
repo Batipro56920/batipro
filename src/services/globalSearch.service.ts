@@ -9,6 +9,7 @@ export type GlobalSearchKind =
   | "chantier_consigne"
   | "chantier_note"
   | "chantier_imprevu"
+  | "pv_reception"
   | "projet"
   | "prospect"
   | "client"
@@ -152,6 +153,23 @@ function changeOrderStatusLabel(value: unknown) {
   return status;
 }
 
+function receptionReportStatusLabel(value: unknown) {
+  const status = cleanText(value);
+  if (status === "draft") return "Brouillon";
+  if (status === "sent") return "Envoyé";
+  if (status === "signed") return "Signé";
+  if (status === "refused") return "Refusé";
+  return status;
+}
+
+function receptionReportDecisionLabel(value: unknown) {
+  const decision = cleanText(value);
+  if (decision === "without_reserves") return "Réception sans réserve";
+  if (decision === "with_reserves") return "Réception avec réserves";
+  if (decision === "refused") return "Réception refusée";
+  return decision;
+}
+
 function noteStatusLabel(value: unknown) {
   const status = cleanText(value);
   if (status === "actif") return "Actif";
@@ -243,6 +261,17 @@ function chantierChangeOrderHref(row: SearchRow) {
   if (id) params.set("changeOrderId", id);
   const query = params.toString();
   return `/chantiers/${encodeURIComponent(chantierId)}/financier${query ? `?${query}` : ""}`;
+}
+
+function chantierReceptionReportHref(row: SearchRow) {
+  const chantierId = cleanText(row.chantier_id);
+  if (!chantierId) return "/chantiers";
+
+  const id = cleanText(row.id);
+  const params = new URLSearchParams();
+  if (id) params.set("receptionReportId", id);
+  const query = params.toString();
+  return `/chantiers/${encodeURIComponent(chantierId)}/qualite${query ? `?${query}` : ""}`;
 }
 
 function quoteProjectHref(row: SearchRow) {
@@ -493,6 +522,32 @@ const SOURCES: SearchSource[] = [
         subtitle: [changeOrderTypeLabel(row.type_ecart), changeOrderStatusLabel(row.statut), Number.isFinite(amount) && amount > 0 ? `${formatSearchCurrency(amount)} HT` : "", cleanText(row.description)].filter(Boolean).join(" - ") || "Imprévu / travaux supplémentaires",
         href: chantierChangeOrderHref(row),
         badge: changeOrderTypeLabel(row.type_ecart),
+      };
+    },
+  },
+  {
+    table: "reception_reports",
+    select: "id,chantier_id,status,decision,reception_date,project_reference,observations,client_signer_name,company_signer_name,document",
+    filter: "project_reference.ilike.$term,observations.ilike.$term,client_signer_name.ilike.$term,company_signer_name.ilike.$term,document->>number.ilike.$term,document->>title.ilike.$term",
+    map: (row) => {
+      const id = cleanText(row.id);
+      const receptionDate = cleanText(row.reception_date);
+      const reference = cleanText(row.project_reference);
+      const documentNumber = documentText(row, "number");
+      const title = documentNumber || (reference ? `PV réception ${reference}` : receptionDate ? `PV réception du ${receptionDate}` : "PV réception chantier");
+      return {
+        id,
+        kind: "pv_reception",
+        title,
+        subtitle: [
+          receptionReportDecisionLabel(row.decision),
+          receptionReportStatusLabel(row.status),
+          receptionDate,
+          cleanText(row.client_signer_name) || cleanText(row.company_signer_name),
+          cleanText(row.observations),
+        ].filter(Boolean).join(" - ") || "PV de réception chantier",
+        href: chantierReceptionReportHref(row),
+        badge: "PV réception",
       };
     },
   },
