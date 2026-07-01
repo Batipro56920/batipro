@@ -1,4 +1,4 @@
-import { Archive, Ban, CalendarDays, CheckCircle2, ClipboardList, Download, ExternalLink, FileText, Hammer, MessageSquareWarning, MoreHorizontal, RotateCcw, ShieldCheck, Trash2, Users } from "lucide-react";
+import { Archive, Ban, CalendarDays, CheckCircle2, ClipboardList, Download, ExternalLink, FileText, Hammer, MessageSquareWarning, MoreHorizontal, RotateCcw, ShieldCheck, Trash2, Users, type LucideIcon } from "lucide-react";
 import { Link } from "react-router-dom";
 import { ConfirmDialog } from "../../../../components/feedback/ConfirmDialog";
 import { Button } from "../../../../components/ui/button";
@@ -77,7 +77,7 @@ export function ChantierRowActions({ row, actions }: { row: ChantierDerived; act
   );
 }
 
-function MenuButton({ icon: Icon, label, onClick, disabled, danger, title }: { icon: typeof MoreHorizontal; label: string; onClick?: () => void; disabled?: boolean; danger?: boolean; title?: string }) {
+function MenuButton({ icon: Icon, label, onClick, disabled, danger, title }: { icon: LucideIcon; label: string; onClick?: () => void; disabled?: boolean; danger?: boolean; title?: string }) {
   return (
     <button
       type="button"
@@ -92,7 +92,7 @@ function MenuButton({ icon: Icon, label, onClick, disabled, danger, title }: { i
   );
 }
 
-function MenuLink({ icon: Icon, label, href }: { icon: typeof MoreHorizontal; label: string; href: string }) {
+function MenuLink({ icon: Icon, label, href }: { icon: LucideIcon; label: string; href: string }) {
   return (
     <Link
       to={href}
