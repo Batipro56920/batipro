@@ -200,23 +200,34 @@ export default function AuthPage() {
   const [msg, setMsg] = useState<string | null>(null);
 
   useEffect(() => {
-    if (readStoredIntervenantToken()) {
-      navigate("/intervenant", { replace: true });
-      return;
-    }
+    let alive = true;
+    const recoveryUrl = isRecoveryUrl();
+    const storedIntervenantToken = readStoredIntervenantToken();
 
     const authError = String((location.state as any)?.authError ?? "").trim();
     if (authError) {
       setMsg(authError);
     }
 
-    // Si déjà connecté ? on renvoie vers l'app
-    supabase.auth.getSession().then(async ({ data }) => {
-      if (data.session && !isRecoveryUrl()) {
-        const nextRoute = await getCurrentUserHomeRoute();
-        navigate(nextRoute, { replace: true });
-      }
-    });
+    supabase.auth
+      .getSession()
+      .then(async ({ data }) => {
+        if (!alive) return;
+        if (data.session && !recoveryUrl) {
+          const nextRoute = await getCurrentUserHomeRoute();
+          if (alive) navigate(nextRoute, { replace: true });
+          return;
+        }
+        if (storedIntervenantToken && !recoveryUrl) {
+          navigate("/intervenant", { replace: true });
+        }
+      })
+      .catch(() => {
+        if (!alive) return;
+        if (storedIntervenantToken && !recoveryUrl) {
+          navigate("/intervenant", { replace: true });
+        }
+      });
 
     const { data: authSub } = supabase.auth.onAuthStateChange((event) => {
       if (event === "PASSWORD_RECOVERY") {
@@ -226,6 +237,7 @@ export default function AuthPage() {
     });
 
     return () => {
+      alive = false;
       authSub.subscription.unsubscribe();
     };
   }, [location.state, navigate]);
