@@ -31,7 +31,18 @@ export default function ChantierDocumentsSection({ children }: { children: React
     >
       {targetedDocumentId ? (
         <div className="mb-4 rounded-2xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-900">
-          Recherche globale : le panneau documents est ouvert pour retrouver le document cible. Retirez le ciblage une fois le document controle pour revenir aux documents du chantier.
+          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+            <span>
+              Recherche globale : le panneau documents est ouvert pour retrouver le document cible. Retirez le ciblage une fois le document controle pour revenir aux documents du chantier.
+            </span>
+            <button
+              type="button"
+              onClick={clearTargetedDocument}
+              className="inline-flex shrink-0 items-center justify-center rounded-xl border border-blue-200 bg-white px-3 py-2 text-sm font-semibold text-blue-800 hover:bg-blue-100"
+            >
+              Retirer le ciblage
+            </button>
+          </div>
         </div>
       ) : null}
       <div className="mb-4 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-800">
