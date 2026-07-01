@@ -1,4 +1,4 @@
-import { Archive, Ban, CheckCircle2, Download, ExternalLink, MessageSquareWarning, MoreHorizontal, RotateCcw, Trash2 } from "lucide-react";
+import { Archive, Ban, CalendarDays, CheckCircle2, ClipboardList, Download, ExternalLink, FileText, Hammer, MessageSquareWarning, MoreHorizontal, RotateCcw, ShieldCheck, Trash2, Users } from "lucide-react";
 import { Link } from "react-router-dom";
 import { ConfirmDialog } from "../../../../components/feedback/ConfirmDialog";
 import { Button } from "../../../../components/ui/button";
@@ -6,6 +6,7 @@ import type { ChantierListActions, ChantierDerived } from "../types";
 
 export function ChantierRowActions({ row, actions }: { row: ChantierDerived; actions: ChantierListActions }) {
   const terminal = row.status === "TERMINE" || row.status === "ARCHIVE" || row.status === "ANNULE";
+  const chantierBaseHref = `/chantiers/${encodeURIComponent(row.id)}`;
 
   return (
     <div className="flex items-center justify-end gap-2" onClick={(event) => event.stopPropagation()}>
@@ -17,8 +18,22 @@ export function ChantierRowActions({ row, actions }: { row: ChantierDerived; act
         <summary className="flex h-8 w-8 cursor-pointer list-none items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 transition hover:bg-slate-50">
           <MoreHorizontal className="h-4 w-4" />
         </summary>
-        <div className="absolute right-0 z-20 mt-2 w-56 rounded-2xl border border-slate-200 bg-white p-2 shadow-xl shadow-slate-950/10">
-          <MenuLink icon={MessageSquareWarning} label="Retours terrain" href={`/retours-terrain?chantierId=${encodeURIComponent(row.id)}`} />
+        <div className="absolute right-0 z-20 mt-2 w-64 rounded-2xl border border-slate-200 bg-white p-2 shadow-xl shadow-slate-950/10">
+          <div className="px-3 pb-1 pt-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-400">
+            Espaces chantier
+          </div>
+          <MenuLink icon={ClipboardList} label="Préparation" href={`${chantierBaseHref}/preparation`} />
+          <MenuLink icon={Hammer} label="Tâches / exécution" href={`${chantierBaseHref}/execution`} />
+          <MenuLink icon={CalendarDays} label="Planning" href={`${chantierBaseHref}/planning`} />
+          <MenuLink icon={ShieldCheck} label="Qualité / réserves" href={`${chantierBaseHref}/qualite`} />
+          <MenuLink icon={FileText} label="Documents" href={`${chantierBaseHref}/documents`} />
+          <MenuLink icon={Users} label="Équipe" href={`${chantierBaseHref}/equipe`} />
+          <MenuLink icon={MessageSquareWarning} label="Retours terrain" href={`${chantierBaseHref}/retours-terrain`} />
+
+          <div className="my-2 border-t border-slate-100" />
+          <div className="px-3 pb-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-400">
+            Gestion
+          </div>
           {row.status !== "TERMINE" ? (
             <ConfirmDialog
               title="Marquer ce chantier terminé ?"
