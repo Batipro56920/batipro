@@ -70,6 +70,15 @@ export default function CrmQuoteEditRedirectPage() {
           ? state.message
           : "Ce devis n'est pas rattaché à un dossier projet accessible. Vérifiez son rattachement prospect, client ou opportunité avant de le reprendre."}
       </p>
+      {id ? (
+        <div className="mt-3 rounded-2xl border border-amber-200 bg-white/70 px-4 py-3 text-xs text-amber-950">
+          <div className="font-semibold">Identifiant du devis à vérifier</div>
+          <div className="mt-1 break-all font-mono text-[11px]">{id}</div>
+          <div className="mt-1 text-amber-800">
+            Utile pour retrouver le devis dans la liste CRM ou corriger son rattachement projet commercial.
+          </div>
+        </div>
+      ) : null}
       <div className="mt-4 flex flex-wrap gap-2">
         <Link
           to="/crm/devis"
