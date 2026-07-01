@@ -83,10 +83,9 @@ export type ApporteurPortalTokenResult = {
   organization_id: string;
 };
 
-type LeadCrmLinkInput = {
-  crm_prospect_id?: string | null;
-  crm_opportunity_id?: string | null;
-};
+type LeadCrmLinkInput = Partial<Pick<ApporteurLeadRow, "crm_prospect_id" | "crm_opportunity_id">>;
+
+type SupabaseColumnError = { code?: string | null; message?: string | null };
 
 async function getCurrentUserId(): Promise<string> {
   const { data, error } = await supabase.auth.getUser();
@@ -127,24 +126,28 @@ async function assertCrmProjectNotAlreadyAttached(
   input: LeadCrmLinkInput,
   currentLeadId?: string,
 ): Promise<void> {
-  const crmProspectId = input.crm_prospect_id ?? null;
-  const crmOpportunityId = input.crm_opportunity_id ?? null;
+  const crmProspectId = normalizeOptionalText(input.crm_prospect_id) ?? null;
+  const crmOpportunityId = normalizeOptionalText(input.crm_opportunity_id) ?? null;
   if (!crmProspectId && !crmOpportunityId) return;
 
   const filters = [
     crmOpportunityId ? `crm_opportunity_id.eq.${crmOpportunityId}` : null,
     crmProspectId ? `crm_prospect_id.eq.${crmProspectId}` : null,
   ].filter(Boolean) as string[];
+  const crmLinkPayload: LeadCrmLinkInput = {
+    crm_prospect_id: crmProspectId,
+    crm_opportunity_id: crmOpportunityId,
+  };
 
   const response = await supabase
     .from("apporteur_leads")
-    .select("id,crm_prospect_id,crm_opportunity_id")
+    .select("id")
     .eq("organization_id", organization_id)
     .or(filters.join(","))
     .limit(5);
 
   if (response.error) {
-    if (hasMissingApporteurLeadColumn(response.error, { crm_prospect_id: crmProspectId, crm_opportunity_id: crmOpportunityId })) return;
+    if (hasMissingApporteurLeadColumn(response.error, crmLinkPayload)) return;
     throw new Error(response.error.message);
   }
 
@@ -403,18 +406,20 @@ export async function updateApporteurLead(
   return response.data as ApporteurLeadRow;
 }
 
-function hasMissingApporteurLeadColumn(error: { code?: string; message?: string } | null, payload: Record<string, unknown>) {
-  return ["crm_prospect_id", "crm_opportunity_id"].some((column) => column in payload && isMissingColumn(error, column));
+function hasMissingApporteurLeadColumn(error: SupabaseColumnError | null | undefined, payload: LeadCrmLinkInput) {
+  return (["crm_prospect_id", "crm_opportunity_id"] as const).some(
+    (column) => payload[column] !== undefined && isMissingColumn(error, column),
+  );
 }
 
-function stripCrmLinkColumns(payload: Record<string, unknown>) {
+function stripCrmLinkColumns<T extends LeadCrmLinkInput>(payload: T) {
   const fallbackPayload = { ...payload };
   delete fallbackPayload.crm_prospect_id;
   delete fallbackPayload.crm_opportunity_id;
   return fallbackPayload;
 }
 
-function isMissingColumn(error: { code?: string; message?: string } | null, column: string) {
+function isMissingColumn(error: SupabaseColumnError | null | undefined, column: string) {
   const code = String(error?.code ?? "");
   const msg = String(error?.message ?? "").toLowerCase();
   return code === "42703" || (msg.includes(column.toLowerCase()) && (msg.includes("schema cache") || msg.includes("could not find") || msg.includes("column")));
