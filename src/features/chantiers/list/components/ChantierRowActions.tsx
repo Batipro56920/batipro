@@ -1,8 +1,14 @@
-import { Archive, Ban, CalendarDays, CheckCircle2, ClipboardList, Download, ExternalLink, FileText, Hammer, MessageSquareWarning, MoreHorizontal, RotateCcw, Trash2, Users, type LucideIcon } from "lucide-react";
+import { Archive, Ban, CalendarDays, CheckCircle2, ClipboardList, Download, ExternalLink, FileText, Hammer, MessageSquareWarning, MoreHorizontal, ReceiptText, RotateCcw, Trash2, Users, type LucideIcon } from "lucide-react";
 import { Link } from "react-router-dom";
 import { ConfirmDialog } from "../../../../components/feedback/ConfirmDialog";
 import { Button } from "../../../../components/ui/button";
 import type { ChantierListActions, ChantierDerived } from "../types";
+
+type CommercialAction = {
+  href: string;
+  label: string;
+  icon: LucideIcon;
+};
 
 function getTerrainFeedbackAction(row: ChantierDerived) {
   const openCount = row.terrainFeedbackOpenCount ?? 0;
@@ -21,10 +27,46 @@ function getTerrainFeedbackAction(row: ChantierDerived) {
   } as const;
 }
 
+function getProjectHref(row: ChantierDerived) {
+  if (row.crm_opportunity_id) return `/projets/${encodeURIComponent(`opportunity-${row.crm_opportunity_id}`)}`;
+  if (row.crm_prospect_id) return `/projets/${encodeURIComponent(`prospect-${row.crm_prospect_id}`)}`;
+  if (row.crm_client_id) return `/projets/${encodeURIComponent(`client-${row.crm_client_id}`)}`;
+  return null;
+}
+
+function getQuoteHref(row: ChantierDerived, projectHref: string | null) {
+  if (!row.crm_quote_id) return null;
+  const quoteId = encodeURIComponent(row.crm_quote_id);
+  if (projectHref) return `${projectHref}/devis/${quoteId}/edit`;
+  return `/crm/devis/${quoteId}/edit`;
+}
+
+function getBillingHref(row: ChantierDerived, projectHref: string | null) {
+  if (projectHref && (row.crm_quote_id || row.signed_quote_amount_ht || row.signed_quote_amount_ttc)) {
+    return `${projectHref}?tab=quotes`;
+  }
+  if (row.crm_quote_id || row.signed_quote_amount_ht || row.signed_quote_amount_ttc) return "/projets?facturation=1";
+  return null;
+}
+
+function getCommercialActions(row: ChantierDerived): CommercialAction[] {
+  const projectHref = getProjectHref(row);
+  const quoteHref = getQuoteHref(row, projectHref);
+  const billingHref = getBillingHref(row, projectHref);
+  const actions: CommercialAction[] = [];
+
+  if (projectHref) actions.push({ href: projectHref, label: "Projet commercial", icon: ExternalLink });
+  if (quoteHref) actions.push({ href: quoteHref, label: "Devis rattaché", icon: FileText });
+  if (billingHref) actions.push({ href: billingHref, label: "Facturation projet", icon: ReceiptText });
+
+  return actions;
+}
+
 export function ChantierRowActions({ row, actions }: { row: ChantierDerived; actions: ChantierListActions }) {
   const terminal = row.status === "TERMINE" || row.status === "ARCHIVE" || row.status === "ANNULE";
   const chantierBaseHref = `/chantiers/${encodeURIComponent(row.id)}`;
   const terrainFeedbackAction = getTerrainFeedbackAction(row);
+  const commercialActions = getCommercialActions(row);
 
   return (
     <div className="flex items-center justify-end gap-2" onClick={(event) => event.stopPropagation()}>
@@ -47,6 +89,18 @@ export function ChantierRowActions({ row, actions }: { row: ChantierDerived; act
           <MenuLink icon={FileText} label="Documents" href={`${chantierBaseHref}/documents`} />
           <MenuLink icon={Users} label="Équipe" href={`${chantierBaseHref}/equipe`} />
           <MenuLink icon={MessageSquareWarning} label={terrainFeedbackAction.label} href={terrainFeedbackAction.href} tone={terrainFeedbackAction.tone} />
+
+          {commercialActions.length > 0 ? (
+            <>
+              <div className="my-2 border-t border-slate-100" />
+              <div className="px-3 pb-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-400">
+                Commercial
+              </div>
+              {commercialActions.map((action) => (
+                <MenuLink key={action.href} icon={action.icon} label={action.label} href={action.href} tone="blue" />
+              ))}
+            </>
+          ) : null}
 
           <div className="my-2 border-t border-slate-100" />
           <div className="px-3 pb-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-400">
