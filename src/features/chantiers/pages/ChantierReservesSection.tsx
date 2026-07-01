@@ -7,41 +7,47 @@ export default function ChantierReservesSection({ children }: { children: ReactN
   const { id } = useParams<{ id: string }>();
   const [searchParams, setSearchParams] = useSearchParams();
   const targetedReserveId = searchParams.get("reserveId") ?? "";
+  const sourceFeedbackId = searchParams.get("feedbackId") ?? "";
   const terrainFeedbackHref = id ? `/retours-terrain?chantierId=${encodeURIComponent(id)}` : "/retours-terrain";
+  const sourceFeedbackHref =
+    id && sourceFeedbackId
+      ? `/retours-terrain?chantierId=${encodeURIComponent(id)}&feedbackId=${encodeURIComponent(sourceFeedbackId)}`
+      : terrainFeedbackHref;
 
   function clearTargetedReserve() {
-    if (!searchParams.has("reserveId")) return;
+    if (!searchParams.has("reserveId") && !searchParams.has("feedbackId")) return;
     const nextParams = new URLSearchParams(searchParams);
     nextParams.delete("reserveId");
+    nextParams.delete("feedbackId");
     setSearchParams(nextParams, { replace: true });
   }
 
   return (
     <ChantierChapterDrawer
-      eyebrow="Qualite chantier"
-      title="Reserves"
-      subtitle="Reserves ouvertes et levees. La creation, le filtre et le detail se font dans le panneau lateral."
-      actionLabel="Gerer les reserves"
+      eyebrow="Qualité chantier"
+      title="Réserves"
+      subtitle="Réserves ouvertes et levées. La création, le filtre et le détail se font dans le panneau latéral."
+      actionLabel="Gérer les réserves"
       previewClassName="batipro-chapter-preview--reserves"
       autoOpenKey={targetedReserveId ? `reserve:${targetedReserveId}` : ""}
-      autoOpenLabel="Reserve ciblee a traiter"
+      autoOpenLabel="Réserve ciblée à traiter"
       onAutoOpenClear={clearTargetedReserve}
     >
       {targetedReserveId ? (
         <div className="mb-4 rounded-2xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-900">
           <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
             <div>
-              <div className="font-semibold">Reserve ciblee</div>
+              <div className="font-semibold">Réserve ciblée</div>
               <div className="mt-1 text-blue-800/80">
-                Le panneau reserves est ouvert sur une reserve precise, issue de la recherche, du journal chantier ou d'un retour terrain transforme.
+                Le panneau réserves est ouvert sur une réserve précise{sourceFeedbackId ? ", reliée à un retour terrain source." : "."}
               </div>
             </div>
             <div className="flex shrink-0 flex-wrap gap-2">
               <Link
-                to={terrainFeedbackHref}
+                to={sourceFeedbackHref}
                 className="inline-flex items-center justify-center rounded-xl bg-blue-700 px-3 py-2 text-sm font-semibold text-white hover:bg-blue-800"
               >
-                Voir retours chantier
+                {sourceFeedbackId ? "Ouvrir le retour source" : "Voir retours chantier"}
               </Link>
               <button
                 type="button"
@@ -59,7 +65,7 @@ export default function ChantierReservesSection({ children }: { children: ReactN
           <div>
             <div className="font-semibold">Retours terrain du chantier</div>
             <div className="mt-1 text-blue-800/80">
-              Retrouvez les observations, blocages et anomalies remontes par les intervenants, creez une reserve si necessaire puis suivez-la ici dans la qualite chantier.
+              Retrouvez les observations, blocages et anomalies remontés par les intervenants, créez une réserve si nécessaire puis suivez-la ici dans la qualité chantier.
             </div>
           </div>
           <Link
