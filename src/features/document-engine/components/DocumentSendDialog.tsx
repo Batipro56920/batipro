@@ -2,8 +2,9 @@ import { useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
 import { Download, Link2, Send, X } from "lucide-react";
 import { Button } from "../../../components/ui/button";
+import { buildDocumentConditionSheet, DEFAULT_DOCUMENT_CONDITIONS } from "../domain/documentConditionSheet";
 import { getDocumentTemplate } from "../domain/documentTemplates";
-import type { BusinessDocument } from "../domain/types";
+import type { BusinessDocument, DocumentConditionSheet } from "../domain/types";
 import { sendBusinessDocument, type SendBusinessDocumentResult } from "../infrastructure/clientWorkflowRepository";
 import { loadCrmDataset } from "../../../services/crm.service";
 
@@ -20,6 +21,7 @@ export function DocumentSendDialog({
 }) {
   const template = getDocumentTemplate(document);
   const clientLink = useMemo(() => buildClientLink(document), [document]);
+  const defaultConditionIds = DEFAULT_DOCUMENT_CONDITIONS.map((condition) => condition.id);
   const [payload, setPayload] = useState<DocumentSendPayload>({
     recipient: document.recipient.email ?? "",
     cc: "",
@@ -31,6 +33,8 @@ export function DocumentSendDialog({
     requireValidation: document.kind !== "purchase_order",
     allowModificationRequest: true,
     autoReminders: true,
+    includeConditionSheet: false,
+    selectedConditionIds: defaultConditionIds,
   });
   const [sent, setSent] = useState(false);
   const [sending, setSending] = useState(false);
@@ -38,8 +42,6 @@ export function DocumentSendDialog({
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<SendBusinessDocumentResult | null>(null);
 
-  // If the document doesn't include a recipient email but references a CRM client/prospect id,
-  // try to auto-populate the recipient email from the CRM dataset so sending works.
   useEffect(() => {
     if (payload.recipient?.trim()) return;
     const recipientId = (document.recipient as any)?.id;
@@ -57,7 +59,14 @@ export function DocumentSendDialog({
     })();
   }, [document.recipient, payload.recipient]);
 
-  
+  function toggleCondition(conditionId: string, checked: boolean) {
+    setPayload((prev) => ({
+      ...prev,
+      selectedConditionIds: checked
+        ? Array.from(new Set([...prev.selectedConditionIds, conditionId]))
+        : prev.selectedConditionIds.filter((id) => id !== conditionId),
+    }));
+  }
 
   async function submit() {
     setSending(true);
@@ -74,19 +83,26 @@ export function DocumentSendDialog({
       setSending(false);
       return;
     }
+    if (payload.includeConditionSheet && !payload.selectedConditionIds.length) {
+      setError("Sélectionnez au moins une condition chantier ou décochez la fiche de conditions.");
+      setSending(false);
+      return;
+    }
     try {
+      const documentToSend = attachConditionSheet(document, payload);
       console.info("[DocumentSendDialog] submit clicked", {
         documentKind: document.kind,
         documentId: document.id,
         documentNumber: document.number,
         recipient: payload.recipient,
+        conditionSheet: Boolean(documentToSend.conditionSheet?.conditions.length),
       });
-      const nextResult = await sendBusinessDocument(document, payload);
+      const nextResult = await sendBusinessDocument(documentToSend, payload);
       setResult(nextResult);
       setPayload((prev) => ({ ...prev, clientLink: nextResult.clientLink }));
       setFeedback(successMessage(nextResult));
       if (onSend) {
-        await onSend({ ...payload, clientLink: nextResult.clientLink });
+        await onSend({ ...payload, clientLink: nextResult.clientLink, conditionSheet: documentToSend.conditionSheet ?? null });
       }
       setSent(true);
     } catch (err) {
@@ -117,7 +133,7 @@ export function DocumentSendDialog({
           </div>
         </header>
 
-        <div className="grid min-h-0 flex-1 gap-6 overflow-y-auto p-6 lg:grid-cols-[1fr_290px]">
+        <div className="grid min-h-0 flex-1 gap-6 overflow-y-auto p-6 lg:grid-cols-[1fr_310px]">
           <div className="space-y-4">
             <div className="grid gap-3 md:grid-cols-2">
               <Field label="Destinataire">
@@ -138,7 +154,12 @@ export function DocumentSendDialog({
               <div className="mt-2 break-all rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs text-slate-600">{payload.clientLink}</div>
               <p className="mt-2 text-xs text-slate-500">Le lien final est retourné par la fonction Edge après création du workflow client.</p>
             </div>
-            
+            {payload.includeConditionSheet ? (
+              <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950">
+                <div className="font-semibold">Fiche de conditions ajoutée à la signature</div>
+                <p className="mt-1 text-xs leading-5">{payload.selectedConditionIds.length} condition(s) seront présentées au client avec le devis.</p>
+              </div>
+            ) : null}
             {sent ? <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-3 text-sm font-medium text-emerald-700">{feedback ?? "Workflow client active."}</div> : null}
             {result ? (
               <div className="rounded-2xl border border-blue-200 bg-blue-50 p-4 text-sm text-blue-900">
@@ -153,12 +174,26 @@ export function DocumentSendDialog({
             {error ? <div className="rounded-2xl border border-red-200 bg-red-50 p-3 text-sm font-medium text-red-700">{error}</div> : null}
           </div>
 
-          <aside className="space-y-3 rounded-2xl bg-slate-50 p-4 overflow-y-auto max-h-[40vh]">
+          <aside className="space-y-3 rounded-2xl bg-slate-50 p-4 overflow-y-auto max-h-[54vh]">
             <SendOption checked={payload.attachPdf} onChange={(attachPdf) => setPayload((prev) => ({ ...prev, attachPdf }))} label="PDF en pièce jointe" />
             <SendOption checked={payload.requireSignature} onChange={(requireSignature) => setPayload((prev) => ({ ...prev, requireSignature }))} label="Signature électronique" />
             <SendOption checked={payload.requireValidation} onChange={(requireValidation) => setPayload((prev) => ({ ...prev, requireValidation }))} label="Demande de validation" />
             <SendOption checked={payload.allowModificationRequest} onChange={(allowModificationRequest) => setPayload((prev) => ({ ...prev, allowModificationRequest }))} label="Demande de modification" />
             <SendOption checked={payload.autoReminders} onChange={(autoReminders) => setPayload((prev) => ({ ...prev, autoReminders }))} label="Relances automatiques" />
+            <SendOption checked={payload.includeConditionSheet} onChange={(includeConditionSheet) => setPayload((prev) => ({ ...prev, includeConditionSheet, requireSignature: includeConditionSheet ? true : prev.requireSignature }))} label="Ajouter une fiche de conditions" />
+            {payload.includeConditionSheet ? (
+              <div className="rounded-xl border border-slate-200 bg-white p-3">
+                <div className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">Conditions chantier</div>
+                <div className="mt-3 space-y-2">
+                  {DEFAULT_DOCUMENT_CONDITIONS.map((condition) => (
+                    <label key={condition.id} className="flex items-start gap-2 rounded-lg bg-slate-50 px-3 py-2 text-xs leading-5 text-slate-700">
+                      <input type="checkbox" className="mt-1" checked={payload.selectedConditionIds.includes(condition.id)} onChange={(event) => toggleCondition(condition.id, event.target.checked)} />
+                      <span>{condition.label}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+            ) : null}
             <div className="rounded-xl border border-blue-100 bg-blue-50 p-3 text-xs leading-5 text-blue-800">
               Le client pourra consulter, accepter, refuser ou demander une modification via le portail client prévu.
             </div>
@@ -177,6 +212,11 @@ export function DocumentSendDialog({
       </div>
     </div>
   );
+}
+
+function attachConditionSheet(document: BusinessDocument, payload: DocumentSendPayload): BusinessDocument {
+  const conditionSheet = payload.includeConditionSheet ? buildDocumentConditionSheet(payload.selectedConditionIds) : null;
+  return { ...document, conditionSheet };
 }
 
 function successMessage(result: SendBusinessDocumentResult) {
@@ -202,6 +242,9 @@ export type DocumentSendPayload = {
   requireValidation: boolean;
   allowModificationRequest: boolean;
   autoReminders: boolean;
+  includeConditionSheet: boolean;
+  selectedConditionIds: string[];
+  conditionSheet?: DocumentConditionSheet | null;
 };
 
 const inputClass = "mt-2 h-10 w-full rounded-xl border border-slate-200 px-3 text-sm outline-none focus:border-blue-300";
