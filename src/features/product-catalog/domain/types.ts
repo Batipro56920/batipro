@@ -1,6 +1,14 @@
 import type { DocumentUnit } from "../../document-engine";
 
-export type ProductDocumentKind = "technical_sheet" | "manual" | "sds" | "certification" | "photo" | "other";
+export type ProductDocumentKind =
+  | "technical_sheet"
+  | "manual"
+  | "application_scope"
+  | "work_method"
+  | "sds"
+  | "certification"
+  | "photo"
+  | "other";
 
 export type ProductSupplierPrice = {
   id: string;
@@ -17,11 +25,18 @@ export type ProductSupplierPrice = {
   pricePerM2Ht?: number | null;
 };
 
+export type ProductDocumentUsage = {
+  task: boolean;
+  doe: boolean;
+};
+
 export type ProductDocument = {
   id: string;
   kind: ProductDocumentKind;
   name: string;
   url: string | null;
+  usage?: ProductDocumentUsage;
+  notes?: string | null;
 };
 
 export type ProductCatalogItem = {
