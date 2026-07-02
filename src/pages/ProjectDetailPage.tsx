@@ -11,9 +11,14 @@ import {
 } from "../features/projects/components/ProjectDetailSections";
 import { ProjectProfitabilityTab } from "../features/projects/components/ProjectProfitabilityTab";
 import { useProjectsData } from "../features/projects/hooks/useProjectsData";
-import { getApporteurLeads } from "../services/apporteurs.service";
+import { getApporteurLeads, getApporteursAffaires } from "../services/apporteurs.service";
 
 type ProjectTab = "summary" | "visits" | "quotes" | "profitability" | "documents" | "activity" | "sav";
+
+type ApporteurTracking = {
+  label: string;
+  path: string;
+};
 
 const TABS: Array<{ id: ProjectTab; label: string }> = [
   { id: "summary", label: "Résumé" },
@@ -35,45 +40,68 @@ export default function ProjectDetailPage() {
   const [searchParams] = useSearchParams();
   const { projectsById, loading, error, refresh } = useProjectsData();
   const project = id ? projectsById.get(id) : null;
-  const apporteurTrackingLabel = project?.prospect?.apporteur_affaire?.trim() || null;
+  const prospectApporteurLabel = project?.prospect?.apporteur_affaire?.trim() || null;
   const tabFromUrl = readProjectTab(searchParams.get("tab"));
   const [activeTab, setActiveTab] = useState<ProjectTab>(tabFromUrl);
-  const [apporteurTrackingPath, setApporteurTrackingPath] = useState("/crm/apporteurs");
+  const [apporteurTracking, setApporteurTracking] = useState<ApporteurTracking | null>(null);
 
   useEffect(() => {
     setActiveTab(tabFromUrl);
   }, [tabFromUrl]);
 
   useEffect(() => {
-    setApporteurTrackingPath("/crm/apporteurs");
-    if (!project || !apporteurTrackingLabel) return;
+    setApporteurTracking(
+      prospectApporteurLabel
+        ? { label: prospectApporteurLabel, path: "/crm/apporteurs" }
+        : null,
+    );
+    if (!project) return;
 
     const opportunityId = project.opportunity?.id ?? (project.sourceType === "opportunity" ? project.sourceId : null);
     const prospectId = project.prospect?.id ?? (project.sourceType === "prospect" ? project.sourceId : null);
     if (!opportunityId && !prospectId) return;
 
     let alive = true;
-    async function resolveApporteurTrackingPath() {
+    async function resolveApporteurTracking() {
       try {
-        const leads = await getApporteurLeads();
+        const [leads, apporteurs] = await Promise.all([getApporteurLeads(), getApporteursAffaires()]);
         if (!alive) return;
         const linkedLead = leads.find((lead) => {
           if (opportunityId && lead.crm_opportunity_id === opportunityId) return true;
           return Boolean(prospectId && lead.crm_prospect_id === prospectId);
         });
-        if (linkedLead) {
-          setApporteurTrackingPath(`/crm/apporteurs?leadId=${linkedLead.id}`);
+        if (!linkedLead) {
+          setApporteurTracking(
+            prospectApporteurLabel
+              ? { label: prospectApporteurLabel, path: "/crm/apporteurs" }
+              : null,
+          );
+          return;
         }
+
+        const linkedApporteur = apporteurs.find((apporteur) => apporteur.id === linkedLead.apporteur_id);
+        const apporteurLabel = [linkedApporteur?.nom, linkedApporteur?.entreprise].filter(Boolean).join(" - ");
+        const params = new URLSearchParams({ leadId: linkedLead.id });
+        if (linkedLead.apporteur_id) params.set("apporteurId", linkedLead.apporteur_id);
+        setApporteurTracking({
+          label: apporteurLabel || prospectApporteurLabel || "Apporteur lié",
+          path: `/crm/apporteurs?${params.toString()}`,
+        });
       } catch {
-        if (alive) setApporteurTrackingPath("/crm/apporteurs");
+        if (!alive) return;
+        setApporteurTracking(
+          prospectApporteurLabel
+            ? { label: prospectApporteurLabel, path: "/crm/apporteurs" }
+            : null,
+        );
       }
     }
 
-    void resolveApporteurTrackingPath();
+    void resolveApporteurTracking();
     return () => {
       alive = false;
     };
-  }, [apporteurTrackingLabel, project]);
+  }, [prospectApporteurLabel, project]);
 
   function selectTab(tabId: ProjectTab) {
     setActiveTab(tabId);
@@ -131,17 +159,17 @@ export default function ProjectDetailPage() {
     <div className="space-y-5">
       <ProjectDetailHeader project={project} onProjectUpdated={refresh} />
 
-      {apporteurTrackingLabel ? (
+      {apporteurTracking ? (
         <section className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950">
           <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
             <div>
               <div className="font-semibold">Projet issu d'un apporteur d'affaires</div>
               <p className="mt-1 text-amber-800">
-                Source commerciale : {apporteurTrackingLabel}. Le suivi des commissions se pilote dans le module apporteurs.
+                Source commerciale : {apporteurTracking.label}. Le suivi des commissions se pilote dans le module apporteurs.
               </p>
             </div>
             <Link
-              to={apporteurTrackingPath}
+              to={apporteurTracking.path}
               className="inline-flex h-9 items-center justify-center rounded-xl border border-amber-300 bg-white px-3 text-sm font-semibold text-amber-900 hover:bg-amber-100"
             >
               Ouvrir le suivi apporteurs
