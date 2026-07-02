@@ -189,7 +189,11 @@ function EncaissementsView({ invoices, summary }: { invoices: InvoiceRecord[]; s
               const totals = invoice.document.totals ?? calculateDocumentTotals(invoice.document);
               return (
                 <tr key={invoice.id} className="border-t border-slate-100">
-                  <Td>{invoice.document.number}</Td>
+                  <Td>
+                    <Link to={invoiceHref(invoice.id)} className="font-semibold text-blue-700 hover:text-blue-800">
+                      {invoice.document.number || "Facture sans numéro"}
+                    </Link>
+                  </Td>
                   <Td>{invoice.document.recipient.displayName || "Client à définir"}</Td>
                   <Td>{invoice.status}</Td>
                   <Td align="right">{formatCurrency(totals.totalTtc)}</Td>
@@ -447,6 +451,11 @@ function getSection(pathname: string): FinancialSection {
   if (pathname.endsWith("/tresorerie")) return "tresorerie";
   if (pathname.endsWith("/export-comptable")) return "export";
   return "encaissements";
+}
+
+function invoiceHref(invoiceId: string) {
+  const params = new URLSearchParams({ invoice: invoiceId });
+  return `/factures?${params.toString()}`;
 }
 
 function purchaseOrderHref(orderId: string) {
