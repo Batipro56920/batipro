@@ -1,8 +1,25 @@
 import { supabase } from "../../../lib/supabaseClient";
-import type { ProductCatalogDraft, ProductCatalogItem, ProductSupplierPrice } from "../domain/types";
+import type {
+  ProductCatalogDraft,
+  ProductCatalogItem,
+  ProductDocument,
+  ProductDocumentKind,
+  ProductSupplierPrice,
+} from "../domain/types";
 
 const TABLE = "product_catalog_items";
 const LEGACY_STORAGE_KEY = "batipro.product-catalog.v1";
+
+const DEFAULT_DOCUMENT_USAGE_BY_KIND: Record<ProductDocumentKind, ProductDocument["usage"]> = {
+  technical_sheet: { task: true, doe: true },
+  manual: { task: true, doe: false },
+  application_scope: { task: true, doe: false },
+  work_method: { task: true, doe: false },
+  sds: { task: true, doe: true },
+  certification: { task: false, doe: true },
+  photo: { task: false, doe: false },
+  other: { task: false, doe: false },
+};
 
 type ProductCatalogRow = {
   id: string;
@@ -47,12 +64,14 @@ export async function saveProductCatalogItem(input: ProductCatalogItem | Product
   const product: ProductCatalogItem = hasId
     ? {
         ...input,
+        documents: normalizeProductDocuments(input.documents),
         priceHistory: buildNextPriceHistory(input, now, priceHistorySource),
         updatedAt: now,
       }
     : {
         ...input,
         id: crypto.randomUUID(),
+        documents: normalizeProductDocuments(input.documents),
         priceHistory: [buildPriceHistoryEntry(input.standardPurchasePriceHt, input.recommendedSalePriceHt, now, "creation")],
         createdAt: now,
         updatedAt: now,
@@ -85,7 +104,52 @@ export function getBestSupplierPrice(product: ProductCatalogItem, supplierId?: s
     const endsOk = !price.endDate || price.endDate >= today;
     return supplierMatches && startsOk && endsOk;
   });
-  return candidates.sort((a, b) => a.priceHt - b.priceHt)[0] ?? null;
+  return candidates.sort((a, b) => getSupplierUnitPurchasePrice(a) - getSupplierUnitPurchasePrice(b))[0] ?? null;
+}
+
+export function getSupplierUnitPurchasePrice(price: ProductSupplierPrice | null | undefined): number {
+  if (!price) return 0;
+  const explicitUnitPrice = normalizePrice(price.pricePerM2Ht);
+  if (explicitUnitPrice !== null && explicitUnitPrice > 0) return explicitUnitPrice;
+
+  const packagePrice = normalizePrice(price.priceHt);
+  const coveredQuantity = normalizePrice(price.coverageM2);
+  if (packagePrice !== null && packagePrice > 0 && coveredQuantity !== null && coveredQuantity > 0) {
+    return Math.round((packagePrice / coveredQuantity) * 100) / 100;
+  }
+
+  return packagePrice !== null && packagePrice > 0 ? packagePrice : 0;
+}
+
+export function getProductUnitPurchasePrice(product: ProductCatalogItem, supplierId?: string | null): number {
+  const supplierPrice = getBestSupplierPrice(product, supplierId);
+  const supplierUnitPrice = getSupplierUnitPurchasePrice(supplierPrice);
+  if (supplierUnitPrice > 0) return supplierUnitPrice;
+
+  const standardPrice = normalizePrice(product.standardPurchasePriceHt);
+  return standardPrice !== null && standardPrice > 0 ? standardPrice : 0;
+}
+
+export function getProductTaskDocuments(product: ProductCatalogItem): ProductDocument[] {
+  return normalizeProductDocuments(product.documents).filter((document) => document.usage?.task === true);
+}
+
+export function getProductDoeDocuments(product: ProductCatalogItem): ProductDocument[] {
+  return normalizeProductDocuments(product.documents).filter((document) => document.usage?.doe === true);
+}
+
+export function describeProductDocuments(product: ProductCatalogItem): string | null {
+  const taskDocuments = getProductTaskDocuments(product);
+  if (!taskDocuments.length) return null;
+
+  return taskDocuments
+    .map((document) => {
+      const label = productDocumentKindLabel(document.kind);
+      const url = document.url ? ` - ${document.url}` : "";
+      const notes = document.notes ? ` (${document.notes})` : "";
+      return `${label}: ${document.name}${url}${notes}`;
+    })
+    .join("\n");
 }
 
 function fromRow(row: ProductCatalogRow): ProductCatalogItem {
@@ -105,7 +169,7 @@ function fromRow(row: ProductCatalogRow): ProductCatalogItem {
     targetMarginRate: Number(row.target_margin_rate ?? 0),
     isSellable: row.is_sellable !== false,
     supplierPrices: normalizeSupplierPrices(row.supplier_prices ?? []),
-    documents: row.documents ?? [],
+    documents: normalizeProductDocuments(row.documents ?? []),
     priceHistory: row.price_history ?? [],
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -129,7 +193,7 @@ function toRow(product: ProductCatalogItem) {
     target_margin_rate: product.targetMarginRate,
     is_sellable: product.isSellable,
     supplier_prices: normalizeSupplierPrices(product.supplierPrices) as any,
-    documents: product.documents as any,
+    documents: normalizeProductDocuments(product.documents) as any,
     price_history: product.priceHistory as any,
     created_at: product.createdAt,
     updated_at: new Date().toISOString(),
@@ -170,12 +234,74 @@ function normalizeSupplierPrices(prices: ProductSupplierPrice[]): ProductSupplie
   return prices
     .map((price) => {
       const priceHt = normalizePrice(price.priceHt);
-      return priceHt === null ? null : { ...price, priceHt };
+      const pricePerM2Ht = normalizePrice(price.pricePerM2Ht);
+      const coverageM2 = normalizePrice(price.coverageM2);
+      return priceHt === null
+        ? null
+        : {
+            ...price,
+            priceHt,
+            coverageM2,
+            pricePerM2Ht: pricePerM2Ht ?? (coverageM2 && coverageM2 > 0 ? Math.round((priceHt / coverageM2) * 100) / 100 : null),
+          };
     })
     .filter((price): price is ProductSupplierPrice => {
       if (!price || price.priceHt <= 0) return false;
       return Boolean(String(price.supplierId ?? "").trim() || String(price.supplierName ?? "").trim());
     });
+}
+
+function normalizeProductDocuments(documents: ProductDocument[] | unknown): ProductDocument[] {
+  if (!Array.isArray(documents)) return [];
+
+  return documents
+    .map((document) => normalizeProductDocument(document))
+    .filter((document): document is ProductDocument => Boolean(document));
+}
+
+function normalizeProductDocument(document: unknown): ProductDocument | null {
+  const row = (document ?? {}) as Partial<ProductDocument> & Record<string, unknown>;
+  const kind = normalizeProductDocumentKind(row.kind);
+  const name = String(row.name ?? "").trim();
+  const url = String(row.url ?? "").trim() || null;
+  const notes = String(row.notes ?? "").trim() || null;
+
+  if (!name && !url) return null;
+
+  return {
+    id: String(row.id ?? crypto.randomUUID()),
+    kind,
+    name: name || productDocumentKindLabel(kind),
+    url,
+    usage: {
+      task: row.usage?.task ?? DEFAULT_DOCUMENT_USAGE_BY_KIND[kind].task,
+      doe: row.usage?.doe ?? DEFAULT_DOCUMENT_USAGE_BY_KIND[kind].doe,
+    },
+    notes,
+  };
+}
+
+function normalizeProductDocumentKind(value: unknown): ProductDocumentKind {
+  const kind = String(value ?? "").trim();
+  if (kind === "technical_sheet") return "technical_sheet";
+  if (kind === "manual") return "manual";
+  if (kind === "application_scope") return "application_scope";
+  if (kind === "work_method") return "work_method";
+  if (kind === "sds") return "sds";
+  if (kind === "certification") return "certification";
+  if (kind === "photo") return "photo";
+  return "other";
+}
+
+function productDocumentKindLabel(kind: ProductDocumentKind) {
+  if (kind === "technical_sheet") return "Fiche technique";
+  if (kind === "manual") return "Notice";
+  if (kind === "application_scope") return "Domaine d'application";
+  if (kind === "work_method") return "Mode operatoire";
+  if (kind === "sds") return "FDS";
+  if (kind === "certification") return "Certification";
+  if (kind === "photo") return "Photo";
+  return "Autre";
 }
 
 function buildNextPriceHistory(product: ProductCatalogItem, changedAt: string, source: string) {
