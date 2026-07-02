@@ -10,6 +10,7 @@ export function SavTicketDrawer({ ticket, onClose }: { ticket: SavWithContext | 
   const clientHref = ticket.client_id ? `/crm/clients?client=${encodeURIComponent(ticket.client_id)}` : null;
   const chantierHref = ticket.chantier_id ? `/chantiers/${encodeURIComponent(ticket.chantier_id)}` : null;
   const chantierPlanningHref = ticket.chantier_id ? `/chantiers/${encodeURIComponent(ticket.chantier_id)}/planning` : null;
+  const chantierDocumentsHref = ticket.chantier_id ? `/chantiers/${encodeURIComponent(ticket.chantier_id)}/documents` : null;
   const chantierQualityHref = ticket.chantier_id ? `/chantiers/${encodeURIComponent(ticket.chantier_id)}/qualite` : null;
 
   return (
@@ -78,7 +79,29 @@ export function SavTicketDrawer({ ticket, onClose }: { ticket: SavWithContext | 
             <div className="mt-3 rounded-xl border border-dashed border-slate-200 bg-slate-50 p-3 text-sm text-slate-500">{Array.isArray(ticket.photos) ? ticket.photos.length : 0} photo(s) liées.</div>
           </section>
           <div className="grid gap-2 sm:grid-cols-2">
-            {["Assigner", "Planifier", "Message client", "Clôturer"].map((action) => <button key={action} type="button" disabled className="rounded-xl border border-slate-200 px-3 py-2 text-sm font-medium text-slate-400" title={`${action} à finaliser`}>{action}</button>)}
+            <button type="button" disabled className="rounded-xl border border-slate-200 px-3 py-2 text-sm font-medium text-slate-400" title="Assigner à finaliser">Assigner</button>
+            {chantierPlanningHref ? (
+              <Link
+                to={chantierPlanningHref}
+                className="rounded-xl border border-blue-200 bg-blue-50 px-3 py-2 text-center text-sm font-semibold text-blue-800 hover:bg-blue-100"
+              >
+                Planifier
+              </Link>
+            ) : (
+              <button type="button" disabled className="rounded-xl border border-slate-200 px-3 py-2 text-sm font-medium text-slate-400" title="Chantier requis pour planifier">Planifier</button>
+            )}
+            <button type="button" disabled className="rounded-xl border border-slate-200 px-3 py-2 text-sm font-medium text-slate-400" title="Message client à finaliser">Message client</button>
+            {chantierDocumentsHref ? (
+              <Link
+                to={chantierDocumentsHref}
+                className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-center text-sm font-semibold text-slate-700 hover:bg-slate-50"
+              >
+                Documents
+              </Link>
+            ) : (
+              <button type="button" disabled className="rounded-xl border border-slate-200 px-3 py-2 text-sm font-medium text-slate-400" title="Chantier requis pour les documents">Documents</button>
+            )}
+            <button type="button" disabled className="rounded-xl border border-slate-200 px-3 py-2 text-sm font-medium text-slate-400 sm:col-span-2" title="Clôture à finaliser">Clôturer</button>
           </div>
         </div>
       </aside>
