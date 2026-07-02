@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { Link } from "react-router-dom";
 import { AlertTriangle, RefreshCw, TrendingUp } from "lucide-react";
 import { calculateDocumentTotals } from "../features/document-engine";
 import { getPaidAmount, getRemainingAmount } from "../features/invoices/application/invoicePayments";
@@ -28,6 +29,10 @@ function formatCurrency(value: number) {
 
 function formatRate(value: number) {
   return `${Math.round(value || 0)}%`;
+}
+
+function invoiceHref(invoiceId: string) {
+  return `/factures?invoice=${encodeURIComponent(invoiceId)}`;
 }
 
 function buildSummary(invoices: InvoiceRecord[], purchaseOrders: PurchaseOrderRecord[]): ProfitabilitySummary {
@@ -165,7 +170,7 @@ export default function RentabilitePage() {
             <DataPanel title="Dernières factures" empty={!recentInvoices.length ? "Aucune facture." : null}>
               {recentInvoices.map((invoice) => {
                 const totals = invoice.document.totals ?? calculateDocumentTotals(invoice.document);
-                return <Row key={invoice.id} title={invoice.document.number} detail={invoice.document.recipient.displayName || "Client à définir"} value={formatCurrency(totals.totalTtc)} />;
+                return <Row key={invoice.id} title={invoice.document.number || "Facture sans numéro"} detail={invoice.document.recipient.displayName || "Client à définir"} value={formatCurrency(totals.totalTtc)} href={invoiceHref(invoice.id)} />;
               })}
             </DataPanel>
             <DataPanel title="Derniers achats" empty={!recentPurchases.length ? "Aucun achat." : null}>
@@ -232,6 +237,20 @@ function DataPanel({ title, empty, children }: { title: string; empty: string | 
   return <section className="bt-card rounded-xl bg-white p-4"><div className="mb-3 text-sm font-semibold text-slate-950">{title}</div>{empty ? <div className="text-sm text-slate-500">{empty}</div> : <div className="space-y-2">{children}</div>}</section>;
 }
 
-function Row({ title, detail, value }: { title: string; detail: string; value: string }) {
-  return <div className="flex items-center justify-between gap-3 rounded-lg border border-slate-200 px-3 py-2 text-sm"><div className="min-w-0"><div className="truncate font-medium text-slate-950">{title}</div><div className="truncate text-xs text-slate-500">{detail}</div></div><div className="shrink-0 font-semibold text-slate-950">{value}</div></div>;
+function Row({ title, detail, value, href }: { title?: string | null; detail: string; value: string; href?: string }) {
+  return (
+    <div className="flex items-center justify-between gap-3 rounded-lg border border-slate-200 px-3 py-2 text-sm">
+      <div className="min-w-0">
+        {href ? (
+          <Link to={href} className="block truncate font-medium text-blue-700 hover:text-blue-800">
+            {title || "Sans numéro"}
+          </Link>
+        ) : (
+          <div className="truncate font-medium text-slate-950">{title || "Sans numéro"}</div>
+        )}
+        <div className="truncate text-xs text-slate-500">{detail}</div>
+      </div>
+      <div className="shrink-0 font-semibold text-slate-950">{value}</div>
+    </div>
+  );
 }
