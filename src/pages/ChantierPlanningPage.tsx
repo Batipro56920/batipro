@@ -91,6 +91,12 @@ export default function ChantierPlanningPage() {
           </div>
           <div className="flex flex-wrap gap-2">
             <Link
+              to="/planning"
+              className="rounded-xl border border-slate-200 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+            >
+              Planning global
+            </Link>
+            <Link
               to={`/chantiers/${id}`}
               className="rounded-xl border border-slate-200 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
             >
@@ -101,6 +107,12 @@ export default function ChantierPlanningPage() {
               className="rounded-xl border border-blue-200 bg-blue-50 px-3 py-2 text-sm font-medium text-blue-800 hover:bg-blue-100"
             >
               Tâches / exécution
+            </Link>
+            <Link
+              to={`/chantiers/${id}/documents`}
+              className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+            >
+              Documents
             </Link>
             <Link
               to={`/chantiers/${id}/qualite`}
