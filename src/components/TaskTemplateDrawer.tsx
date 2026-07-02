@@ -216,6 +216,8 @@ export default function TaskTemplateDrawer({
   const [descriptionTechnique, setDescriptionTechnique] = useState("");
   const [caracteristiques, setCaracteristiques] = useState("");
   const [remarques, setRemarques] = useState("");
+  const [quoteVisible, setQuoteVisible] = useState(true);
+  const [chantierVisible, setChantierVisible] = useState(true);
   const [materialDrafts, setMaterialDrafts] = useState<MaterialRatioDraft[]>([]);
   const [equipmentDrafts, setEquipmentDrafts] = useState<EquipmentDraft[]>([]);
   const [laborDrafts, setLaborDrafts] = useState<LaborDraft[]>([]);
@@ -271,6 +273,8 @@ export default function TaskTemplateDrawer({
       setDescriptionTechnique(template.description_technique ?? "");
       setCaracteristiques((template.caracteristiques ?? []).join("\n"));
       setRemarques(template.remarques ?? "");
+      setQuoteVisible(template.quote_visible !== false);
+      setChantierVisible(template.chantier_visible !== false);
       setLaborDrafts((template.labor_items ?? []).map((row) => createLaborDraft(row)));
       setFeeDrafts((template.fee_items ?? []).map((row) => createFeeDraft(row)));
     } else {
@@ -283,6 +287,8 @@ export default function TaskTemplateDrawer({
       setDescriptionTechnique(initialValues?.description_technique ?? "");
       setCaracteristiques((initialValues?.caracteristiques ?? []).join("\n"));
       setRemarques(initialValues?.remarques ?? "");
+      setQuoteVisible(initialValues?.quote_visible !== false);
+      setChantierVisible(initialValues?.chantier_visible !== false);
       setMaterialDrafts(
         (initialValues?.preparation_materials ?? []).map((row) =>
           createMaterialDraft({
@@ -326,6 +332,8 @@ export default function TaskTemplateDrawer({
     initialValues?.description_technique,
     initialValues?.caracteristiques,
     initialValues?.remarques,
+    initialValues?.quote_visible,
+    initialValues?.chantier_visible,
     initialValues?.preparation_materials,
     initialValues?.preparation_equipment,
   ]);
@@ -617,6 +625,8 @@ export default function TaskTemplateDrawer({
         .map((value) => value.trim())
         .filter((value) => value.length > 0),
       remarques: remarques.trim() || null,
+      quote_visible: quoteVisible,
+      chantier_visible: chantierVisible,
       preparation_materials: advancedPreparationEnabled
         ? serializedPreparation.preparationMaterials
         : undefined,
@@ -683,6 +693,43 @@ export default function TaskTemplateDrawer({
                 placeholder="Ex: m2"
               />
             </label>
+          </div>
+
+          <div className="space-y-3 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+            <div>
+              <div className="text-sm font-semibold text-slate-900">Usage métier</div>
+              <div className="text-xs text-slate-500">
+                Choisis où ce modèle doit être proposé : chiffrage devis, préparation/exécution chantier, ou les deux.
+              </div>
+            </div>
+            <div className="grid gap-3 md:grid-cols-2">
+              <label className="flex items-start gap-3 rounded-xl border border-sky-200 bg-white px-3 py-3 text-sm text-slate-700">
+                <input
+                  type="checkbox"
+                  className="mt-1"
+                  checked={quoteVisible}
+                  onChange={(e) => setQuoteVisible(e.target.checked)}
+                  disabled={busy}
+                />
+                <span>
+                  <span className="block font-medium text-slate-900">Visible dans les devis</span>
+                  <span className="block text-xs text-slate-500">Disponible pour le chiffrage et la bibliothèque commerciale.</span>
+                </span>
+              </label>
+              <label className="flex items-start gap-3 rounded-xl border border-emerald-200 bg-white px-3 py-3 text-sm text-slate-700">
+                <input
+                  type="checkbox"
+                  className="mt-1"
+                  checked={chantierVisible}
+                  onChange={(e) => setChantierVisible(e.target.checked)}
+                  disabled={busy}
+                />
+                <span>
+                  <span className="block font-medium text-slate-900">Visible côté chantier</span>
+                  <span className="block text-xs text-slate-500">Disponible pour préparer et piloter les tâches de production.</span>
+                </span>
+              </label>
+            </div>
           </div>
 
           <div className="grid gap-3 md:grid-cols-3">
