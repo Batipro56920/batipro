@@ -73,41 +73,48 @@ const HEADER_BY_FOCUS: Record<ChantierListFocus, { eyebrow: string; title: strin
   tasks: {
     eyebrow: "Exécution",
     title: "Tâches chantier",
-    description: "Choisissez un chantier actif puis ouvrez son espace exécution pour piloter tâches, avancement et quantités.",
+    description: "Choisissez un chantier actif puis ouvrez directement son espace exécution pour piloter tâches, avancement et quantités.",
   },
   reserves: {
     eyebrow: "Qualité",
     title: "Réserves chantier",
-    description: "Priorisez les chantiers avec alertes, retours terrain ou retard avant d'ouvrir les réserves et contrôles qualité.",
+    description: "Priorisez les chantiers avec alertes, retours terrain ou retard puis ouvrez directement la qualité et les réserves.",
   },
   time: {
     eyebrow: "Temps",
     title: "Suivi des temps chantier",
-    description: "Repérez les chantiers à surveiller puis ouvrez le dossier pour contrôler temps passés, équipes et avancement.",
+    description: "Repérez les chantiers à surveiller puis ouvrez directement l'exécution pour rapprocher temps passés, avancement et équipe.",
   },
 };
 
 const FOCUS_GUIDANCE: Record<ChantierListFocus, { title: string; description: string; cta: string }> = {
   tasks: {
     title: "Parcours tâches",
-    description: "Ouvrez un chantier depuis la liste ou le tiroir rapide, puis allez dans Exécuter pour travailler sur les tâches, les affectations et les documents liés.",
-    cta: "Cliquer sur un chantier ouvre son dossier complet.",
+    description: "Ouvrez un chantier depuis la liste ou le tiroir rapide : l'action principale mène à Exécuter pour travailler sur les tâches, les affectations et les documents liés.",
+    cta: "Ouvrir mène à Exécuter.",
   },
   reserves: {
     title: "Parcours réserves",
     description: "La vue est placée sur le kanban et le filtre Alertes à traiter afin de rapprocher retours terrain, retard, qualité et réserves chantier.",
-    cta: "Le tiroir rapide permet d'aller vers Qualité ou Retours terrain.",
+    cta: "Ouvrir mène à Qualité.",
   },
   time: {
     title: "Parcours temps",
     description: "La vue met en avant les chantiers à risque pour relier temps passés, avancement et équipe sans créer une logique de temps séparée.",
-    cta: "Depuis le dossier chantier, ouvrez Exécuter ou Équipe selon le contrôle à faire.",
+    cta: "Ouvrir mène à Exécuter.",
   },
 };
 
 function getInitialFilters(initialFocus: ChantierListFocus | undefined): ChantierListFilters {
   if (initialFocus === "reserves" || initialFocus === "time") return { ...DEFAULT_FILTERS, period: "alerts" };
   return DEFAULT_FILTERS;
+}
+
+function getFocusedChantierPath(row: ChantierRow, initialFocus: ChantierListFocus | undefined) {
+  const basePath = `/chantiers/${encodeURIComponent(row.id)}`;
+  if (initialFocus === "tasks" || initialFocus === "time") return `${basePath}/execution`;
+  if (initialFocus === "reserves") return `${basePath}/qualite`;
+  return basePath;
 }
 
 async function loadTerrainFeedbackSummaries(chantierIds: string[]): Promise<TerrainFeedbackSummaryByChantier> {
@@ -309,7 +316,7 @@ export default function ChantiersPage({ initialView = "list", initialFocus }: Ch
   }
 
   const actions = {
-    onOpen: (row: ChantierRow) => navigate(`/chantiers/${row.id}`),
+    onOpen: (row: ChantierRow) => navigate(getFocusedChantierPath(row, initialFocus)),
     onFinish: (row: ChantierRow) => void updateStatus(row, "TERMINE"),
     onArchive: (row: ChantierRow) => void updateStatus(row, "ARCHIVE"),
     onCancel: (row: ChantierRow) => void updateStatus(row, "ANNULE"),
