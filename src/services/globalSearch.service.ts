@@ -212,9 +212,9 @@ function resultRank(result: GlobalSearchResult, query: string) {
 
 function chantierSectionHref(row: SearchRow, section: "execution" | "qualite" | "documents", paramName: string) {
   const chantierId = cleanText(row.chantier_id);
-  const id = cleanText(row.id);
   if (!chantierId) return "/chantiers";
 
+  const id = cleanText(row.id);
   const params = new URLSearchParams({ [paramName]: id });
   return `/chantiers/${encodeURIComponent(chantierId)}/${section}?${params.toString()}`;
 }
@@ -246,10 +246,11 @@ function chantierNoteHref(row: SearchRow) {
   if (!chantierId) return "/chantiers";
 
   const id = cleanText(row.id);
-  const params = new URLSearchParams();
-  if (id) params.set("noteId", id);
-  const query = params.toString();
-  return `/chantiers/${encodeURIComponent(chantierId)}/execution${query ? `?${query}` : ""}`;
+  if (id) {
+    const params = new URLSearchParams({ noteId: id });
+    return `/chantiers/${encodeURIComponent(chantierId)}/execution?${params.toString()}`;
+  }
+  return `/chantiers/${encodeURIComponent(chantierId)}/execution`;
 }
 
 function chantierChangeOrderHref(row: SearchRow) {
@@ -257,10 +258,11 @@ function chantierChangeOrderHref(row: SearchRow) {
   if (!chantierId) return "/chantiers";
 
   const id = cleanText(row.id);
-  const params = new URLSearchParams();
-  if (id) params.set("changeOrderId", id);
-  const query = params.toString();
-  return `/chantiers/${encodeURIComponent(chantierId)}/financier${query ? `?${query}` : ""}`;
+  if (id) {
+    const params = new URLSearchParams({ changeOrderId: id });
+    return `/chantiers/${encodeURIComponent(chantierId)}/financier?${params.toString()}`;
+  }
+  return `/chantiers/${encodeURIComponent(chantierId)}/financier`;
 }
 
 function chantierReceptionReportHref(row: SearchRow) {
@@ -268,10 +270,11 @@ function chantierReceptionReportHref(row: SearchRow) {
   if (!chantierId) return "/chantiers";
 
   const id = cleanText(row.id);
-  const params = new URLSearchParams();
-  if (id) params.set("receptionReportId", id);
-  const query = params.toString();
-  return `/chantiers/${encodeURIComponent(chantierId)}/qualite${query ? `?${query}` : ""}`;
+  if (id) {
+    const params = new URLSearchParams({ receptionReportId: id });
+    return `/chantiers/${encodeURIComponent(chantierId)}/qualite?${params.toString()}`;
+  }
+  return `/chantiers/${encodeURIComponent(chantierId)}/qualite`;
 }
 
 function quoteProjectHref(row: SearchRow) {
@@ -311,9 +314,10 @@ function clientHref(row: SearchRow) {
 
 function purchaseOrderHref(row: SearchRow) {
   const purchaseOrderId = cleanText(row.id);
-  const params = new URLSearchParams({ tab: "orders" });
+  const params = new URLSearchParams();
   if (purchaseOrderId) params.set("purchaseOrderId", purchaseOrderId);
-  return `/fournisseurs?${params.toString()}`;
+  const queryString = params.toString();
+  return queryString ? `/bons-commande?${queryString}` : "/bons-commande";
 }
 
 function apporteurHref(row: SearchRow) {
