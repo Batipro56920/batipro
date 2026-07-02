@@ -162,6 +162,14 @@ function FinancialTabs({ active }: { active: FinancialSection }) {
 }
 
 function EncaissementsView({ invoices, summary }: { invoices: InvoiceRecord[]; summary: FinancialSummary }) {
+  const openInvoices = useMemo(() => invoices.filter(isOpenInvoice), [invoices]);
+  const collectableInvoices = useMemo(() => invoices.filter(isCollectableInvoice), [invoices]);
+  const overdueInvoices = useMemo(() => collectableInvoices.filter(isInvoiceOverdue), [collectableInvoices]);
+  const priorityInvoices = useMemo(
+    () => [...collectableInvoices].sort(compareInvoicePriority).slice(0, 5),
+    [collectableInvoices],
+  );
+
   return (
     <div className="space-y-5">
       <MetricGrid
@@ -169,9 +177,10 @@ function EncaissementsView({ invoices, summary }: { invoices: InvoiceRecord[]; s
           ["Facturé TTC", formatCurrency(summary.invoicedTtc), "Factures émises"],
           ["Encaissé TTC", formatCurrency(summary.paidTtc), "Règlements enregistrés"],
           ["Reste à encaisser", formatCurrency(summary.remainingToCollectTtc), "À relancer ou solder"],
-          ["Factures ouvertes", String(invoices.filter((row) => !["paid", "cancelled"].includes(row.status)).length), "Non soldées"],
+          ["Échéances dépassées", String(overdueInvoices.length), `${openInvoices.length} facture(s) ouverte(s)`],
         ]}
       />
+      <InvoicePriorityPanel invoices={priorityInvoices} collectableCount={collectableInvoices.length} />
       <DataPanel title="Factures et règlements" description="Lecture rapide des encaissements par facture.">
         <table className="min-w-full text-sm">
           <thead className="bg-slate-50 text-slate-600">
@@ -195,7 +204,7 @@ function EncaissementsView({ invoices, summary }: { invoices: InvoiceRecord[]; s
                     </Link>
                   </Td>
                   <Td>{invoice.document.recipient.displayName || "Client à définir"}</Td>
-                  <Td>{invoice.status}</Td>
+                  <Td>{invoiceStatusLabel(invoice.status)}</Td>
                   <Td align="right">{formatCurrency(totals.totalTtc)}</Td>
                   <Td align="right">{formatCurrency(getPaidAmount(invoice))}</Td>
                   <Td align="right">{formatCurrency(getRemainingAmount(invoice))}</Td>
@@ -206,6 +215,50 @@ function EncaissementsView({ invoices, summary }: { invoices: InvoiceRecord[]; s
         </table>
       </DataPanel>
     </div>
+  );
+}
+
+function InvoicePriorityPanel({ invoices, collectableCount }: { invoices: InvoiceRecord[]; collectableCount: number }) {
+  return (
+    <DataPanel title="Factures à relancer" description="Priorité aux factures émises non soldées, avec échéance dépassée ou proche.">
+      {invoices.length ? (
+        <div className="grid gap-3 lg:grid-cols-2">
+          {invoices.map((invoice) => {
+            const totals = invoice.document.totals ?? calculateDocumentTotals(invoice.document);
+            const dueStatus = getInvoiceDueStatus(invoice);
+            return (
+              <Link
+                key={invoice.id}
+                to={invoiceHref(invoice.id)}
+                className="block rounded-2xl border border-slate-200 bg-slate-50 p-4 transition hover:border-blue-200 hover:bg-blue-50/50 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2"
+              >
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                  <div className="min-w-0">
+                    <div className="truncate text-sm font-semibold text-blue-700">{invoice.document.number || "Facture sans numéro"}</div>
+                    <div className="mt-1 truncate text-sm text-slate-600">
+                      {invoice.document.recipient.displayName || "Client à définir"}
+                    </div>
+                  </div>
+                  <div className={`w-fit rounded-full px-3 py-1 text-xs font-semibold ${dueStatus.className}`}>{dueStatus.label}</div>
+                </div>
+                <div className="mt-4 grid gap-2 text-sm sm:grid-cols-3">
+                  <PlainKpi label="Échéance" value={formatDate(invoice.document.dueDate ?? null)} />
+                  <PlainKpi label="Reste" value={formatCurrency(getRemainingAmount(invoice))} />
+                  <PlainKpi label="TTC" value={formatCurrency(totals.totalTtc)} />
+                </div>
+              </Link>
+            );
+          })}
+        </div>
+      ) : (
+        <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800">
+          Aucune facture émise à relancer. Les factures sont soldées, annulées, en brouillon ou inexistantes.
+        </div>
+      )}
+      {collectableCount > invoices.length ? (
+        <p className="mt-3 text-xs text-slate-500">{collectableCount - invoices.length} autre(s) facture(s) émise(s) non soldée(s) restent visibles dans le tableau complet.</p>
+      ) : null}
+    </DataPanel>
   );
 }
 
@@ -515,6 +568,51 @@ function purchaseOrderHref(orderId: string) {
   return `/fournisseurs?${params.toString()}`;
 }
 
+function isOpenInvoice(invoice: InvoiceRecord) {
+  return !["paid", "cancelled"].includes(invoice.status) && getRemainingAmount(invoice) > 0;
+}
+
+function isCollectableInvoice(invoice: InvoiceRecord) {
+  return isOpenInvoice(invoice) && invoice.status !== "draft";
+}
+
+function compareInvoicePriority(left: InvoiceRecord, right: InvoiceRecord) {
+  const leftTime = getInvoiceDueTime(left.document.dueDate ?? null);
+  const rightTime = getInvoiceDueTime(right.document.dueDate ?? null);
+  if (leftTime === null && rightTime === null) return 0;
+  if (leftTime === null) return 1;
+  if (rightTime === null) return -1;
+  return leftTime - rightTime;
+}
+
+function isInvoiceOverdue(invoice: InvoiceRecord) {
+  if (!isCollectableInvoice(invoice)) return false;
+  const dueTime = getInvoiceDueTime(invoice.document.dueDate ?? null);
+  return dueTime !== null && dueTime < getTodayTime();
+}
+
+function getInvoiceDueStatus(invoice: InvoiceRecord) {
+  const dueTime = getInvoiceDueTime(invoice.document.dueDate ?? null);
+  if (dueTime === null) {
+    return { label: "Sans échéance", className: "bg-slate-100 text-slate-700" };
+  }
+  const todayTime = getTodayTime();
+  if (dueTime < todayTime) {
+    return { label: "En retard", className: "bg-red-50 text-red-700" };
+  }
+  if (dueTime === todayTime) {
+    return { label: "Aujourd'hui", className: "bg-amber-50 text-amber-700" };
+  }
+  return { label: "À venir", className: "bg-blue-50 text-blue-700" };
+}
+
+function getInvoiceDueTime(value: string | null) {
+  if (!value) return null;
+  const [year, month, day] = value.slice(0, 10).split("-").map(Number);
+  if (!year || !month || !day) return null;
+  return new Date(year, month - 1, day).getTime();
+}
+
 function isOpenPurchaseOrder(order: PurchaseOrderRecord) {
   return !["delivered", "cancelled"].includes(order.status);
 }
@@ -559,6 +657,18 @@ function getDeliveryTime(value: string | null) {
 function getTodayTime() {
   const today = new Date();
   return new Date(today.getFullYear(), today.getMonth(), today.getDate()).getTime();
+}
+
+function invoiceStatusLabel(status: InvoiceRecord["status"]) {
+  const labels: Record<InvoiceRecord["status"], string> = {
+    draft: "Brouillon",
+    sent: "Envoyée",
+    partially_paid: "Payée partiellement",
+    paid: "Payée",
+    overdue: "En retard",
+    cancelled: "Annulée",
+  };
+  return labels[status] ?? status;
 }
 
 function purchaseOrderStatusLabel(status: PurchaseOrderStatus) {
