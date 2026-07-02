@@ -48,7 +48,15 @@ export function useProjectsData() {
     return projects.filter((project) => {
       const matchesQuery =
         !query ||
-        [project.name, project.clientName, project.address, project.projectType, project.sourceLabel]
+        [
+          project.name,
+          project.clientName,
+          project.address,
+          project.projectType,
+          project.sourceLabel,
+          project.prospect?.source_acquisition,
+          project.prospect?.apporteur_affaire,
+        ]
           .filter(Boolean)
           .some((value) => String(value).toLowerCase().includes(query));
       const matchesStatus = filters.status === "all" || project.status === filters.status;
