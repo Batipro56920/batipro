@@ -51,6 +51,25 @@ export default function CrmQuotesSection({
     setFilters((current) => (current.query === urlQuery ? current : { ...current, query: urlQuery }));
   }, [setFilters, urlQuery]);
 
+  const hasActiveFilters =
+    filters.query.trim().length > 0 ||
+    filters.status !== "all" ||
+    filters.salesperson !== "all" ||
+    filters.client !== "all" ||
+    filters.period !== "all" ||
+    filters.amount !== "all";
+
+  function resetFilters() {
+    setFilters({
+      query: "",
+      status: "all",
+      salesperson: "all",
+      client: "all",
+      period: "all",
+      amount: "all",
+    });
+  }
+
   const actions = { onCreate, onStatus, onTransform, onPdf };
 
   return (
@@ -65,7 +84,12 @@ export default function CrmQuotesSection({
         salespeople={salespeople}
       />
       {filteredRows.length === 0 ? (
-        <QuotesEmptyState onCreate={onCreate} />
+        <QuotesEmptyState
+          onCreate={onCreate}
+          hasActiveFilters={hasActiveFilters}
+          searchTerm={filters.query.trim()}
+          onResetFilters={resetFilters}
+        />
       ) : (
         <QuotesTable rows={filteredRows} actions={actions} onSelect={setSelectedQuote} />
       )}
