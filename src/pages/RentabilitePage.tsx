@@ -35,6 +35,11 @@ function invoiceHref(invoiceId: string) {
   return `/factures?invoice=${encodeURIComponent(invoiceId)}`;
 }
 
+function purchaseOrderHref(orderId: string) {
+  const params = new URLSearchParams({ tab: "orders", purchaseOrderId: orderId });
+  return `/fournisseurs?${params.toString()}`;
+}
+
 function buildSummary(invoices: InvoiceRecord[], purchaseOrders: PurchaseOrderRecord[]): ProfitabilitySummary {
   const invoiceTotals = invoices.map((invoice) => invoice.document.totals ?? calculateDocumentTotals(invoice.document));
   const purchaseTotals = purchaseOrders.map((order) => order.document.totals ?? calculateDocumentTotals(order.document));
@@ -176,7 +181,7 @@ export default function RentabilitePage() {
             <DataPanel title="Derniers achats" empty={!recentPurchases.length ? "Aucun achat." : null}>
               {recentPurchases.map((order) => {
                 const totals = order.document.totals ?? calculateDocumentTotals(order.document);
-                return <Row key={order.id} title={order.document.number} detail={order.supplierName || order.document.recipient.displayName || "Fournisseur à définir"} value={formatCurrency(totals.totalTtc)} />;
+                return <Row key={order.id} title={order.document.number} detail={order.supplierName || order.document.recipient.displayName || "Fournisseur à définir"} value={formatCurrency(totals.totalTtc)} href={purchaseOrderHref(order.id)} />;
               })}
             </DataPanel>
           </section>
