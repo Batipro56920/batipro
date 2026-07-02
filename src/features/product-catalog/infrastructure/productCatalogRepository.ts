@@ -4,13 +4,14 @@ import type {
   ProductCatalogItem,
   ProductDocument,
   ProductDocumentKind,
+  ProductDocumentUsage,
   ProductSupplierPrice,
 } from "../domain/types";
 
 const TABLE = "product_catalog_items";
 const LEGACY_STORAGE_KEY = "batipro.product-catalog.v1";
 
-const DEFAULT_DOCUMENT_USAGE_BY_KIND: Record<ProductDocumentKind, ProductDocument["usage"]> = {
+const DEFAULT_DOCUMENT_USAGE_BY_KIND: Record<ProductDocumentKind, ProductDocumentUsage> = {
   technical_sheet: { task: true, doe: true },
   manual: { task: true, doe: false },
   application_scope: { task: true, doe: false },
