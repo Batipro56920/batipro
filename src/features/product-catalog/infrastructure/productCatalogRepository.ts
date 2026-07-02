@@ -85,7 +85,13 @@ export function getBestSupplierPrice(product: ProductCatalogItem, supplierId?: s
     const endsOk = !price.endDate || price.endDate >= today;
     return supplierMatches && startsOk && endsOk;
   });
-  return candidates.sort((a, b) => a.priceHt - b.priceHt)[0] ?? null;
+  const bestPrice = candidates.sort((a, b) => getSupplierUnitPrice(a) - getSupplierUnitPrice(b))[0] ?? null;
+  if (!bestPrice) return null;
+
+  return {
+    ...bestPrice,
+    priceHt: getSupplierUnitPrice(bestPrice),
+  };
 }
 
 function fromRow(row: ProductCatalogRow): ProductCatalogItem {
@@ -176,6 +182,19 @@ function normalizeSupplierPrices(prices: ProductSupplierPrice[]): ProductSupplie
       if (!price || price.priceHt <= 0) return false;
       return Boolean(String(price.supplierId ?? "").trim() || String(price.supplierName ?? "").trim());
     });
+}
+
+function getSupplierUnitPrice(price: ProductSupplierPrice): number {
+  const explicitUnitPrice = normalizePrice(price.pricePerM2Ht);
+  if (explicitUnitPrice !== null && explicitUnitPrice > 0) return explicitUnitPrice;
+
+  const packagePrice = normalizePrice(price.priceHt) ?? 0;
+  const coveredQuantity = normalizePrice(price.coverageM2);
+  if (packagePrice > 0 && coveredQuantity !== null && coveredQuantity > 0) {
+    return Math.round((packagePrice / coveredQuantity) * 100) / 100;
+  }
+
+  return packagePrice;
 }
 
 function buildNextPriceHistory(product: ProductCatalogItem, changedAt: string, source: string) {
