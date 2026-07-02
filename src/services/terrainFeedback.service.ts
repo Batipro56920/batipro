@@ -40,6 +40,7 @@ export type TerrainFeedbackHistoryRow = {
 export type TerrainFeedbackRow = {
   id: string;
   chantier_id: string;
+  zone_id: string | null;
   author_intervenant_id: string;
   category: TerrainFeedbackCategory;
   urgency: TerrainFeedbackUrgency;
@@ -74,6 +75,7 @@ export type TerrainFeedbackResponsible = {
 type TerrainFeedbackBaseRow = {
   id: string;
   chantier_id: string;
+  zone_id: string | null;
   author_intervenant_id: string;
   category: TerrainFeedbackCategory;
   urgency: TerrainFeedbackUrgency;
@@ -134,6 +136,7 @@ function mapBaseRow(row: Record<string, unknown>): TerrainFeedbackBaseRow {
   return {
     id: String(row.id ?? ""),
     chantier_id: String(row.chantier_id ?? ""),
+    zone_id: normalizeText(row.zone_id),
     author_intervenant_id: String(row.author_intervenant_id ?? ""),
     category: String(row.category ?? "observation_chantier") as TerrainFeedbackCategory,
     urgency: String(row.urgency ?? "normale") as TerrainFeedbackUrgency,
@@ -153,7 +156,7 @@ export async function listTerrainFeedbacks(filters: TerrainFeedbackFilters = {})
   let query = (supabase as any)
     .from("terrain_feedbacks")
     .select(
-      "id, chantier_id, author_intervenant_id, category, urgency, title, description, status, assigned_to, assigned_to_name, treatment_comment, treated_at, created_at, updated_at",
+      "id, chantier_id, zone_id, author_intervenant_id, category, urgency, title, description, status, assigned_to, assigned_to_name, treatment_comment, treated_at, created_at, updated_at",
     )
     .order("created_at", { ascending: false });
 
