@@ -113,15 +113,14 @@ export default function ProductCatalogPage() {
         ...product.supplierPrices.map((price) => price.supplierName),
       ].some((value) => String(value ?? "").toLocaleLowerCase("fr-FR").includes(text));
       const matchesCategory = categoryFilter === "all" || product.category === categoryFilter;
-      const matchesSupplier = categoryFilter === "all" || product.category === categoryFilter;
-      const matchesSupplierFilter = supplierFilter === "all" || product.mainSupplierId === supplierFilter || product.supplierPrices.some((price) => price.supplierId === supplierFilter);
+      const matchesSupplier = supplierFilter === "all" || product.mainSupplierId === supplierFilter || product.supplierPrices.some((price) => price.supplierId === supplierFilter);
       const matchesBrand = brandFilter === "all" || product.brand === brandFilter;
       const purchasePrice = getPurchasePackagePrice(product);
       const matchesPrice = priceFilter === "all"
         || (priceFilter === "low" && purchasePrice < 50)
         || (priceFilter === "mid" && purchasePrice >= 50 && purchasePrice < 250)
         || (priceFilter === "high" && purchasePrice >= 250);
-      return matchesText && matchesCategory && matchesSupplier && matchesSupplierFilter && matchesBrand && matchesPrice;
+      return matchesText && matchesCategory && matchesSupplier && matchesBrand && matchesPrice;
     });
   }, [brandFilter, categoryFilter, priceFilter, products, query, supplierFilter]);
 
