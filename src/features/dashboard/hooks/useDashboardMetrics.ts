@@ -255,7 +255,7 @@ export function useDashboardMetrics({ chantiers, materiel, alerts, activeView, l
       label: "Retards",
       value: alertStats.taskBlockers,
       description: "Tâches à reprendre ou en retard",
-      href: "/chantiers",
+      href: "/taches",
       tone: alertStats.taskBlockers > 0 ? "danger" : "success",
     },
     {
@@ -263,7 +263,7 @@ export function useDashboardMetrics({ chantiers, materiel, alerts, activeView, l
       label: "Achats attente",
       value: alertStats.purchaseBlockers + pendingMateriel.length,
       description: "Approvisionnements à suivre",
-      href: "/chantiers",
+      href: "/bons-commande",
       tone: alertStats.purchaseBlockers + pendingMateriel.length > 0 ? "warning" : "success",
     },
     {
@@ -279,7 +279,7 @@ export function useDashboardMetrics({ chantiers, materiel, alerts, activeView, l
       label: "Réserves",
       value: alertStats.urgentReserves,
       description: "Réserves urgentes ouvertes",
-      href: "/chantiers",
+      href: "/reserves",
       tone: alertStats.urgentReserves > 0 ? "danger" : "success",
     },
   ], [alertStats, pendingMateriel.length]);
