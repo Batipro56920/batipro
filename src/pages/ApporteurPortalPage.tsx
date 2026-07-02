@@ -277,8 +277,8 @@ export default function ApporteurPortalPage() {
             {actError ? <div className="mt-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">{actError}</div> : null}
             {actNotice ? <div className="mt-4 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-700">{actNotice}</div> : null}
             <div className="mt-5 flex flex-wrap gap-2">
-              <button type="button" disabled={actSaving} onClick={() => void onSubmitLead()} className={primaryButtonClass}>Transmettre le client</button>
-              <button type="button" onClick={() => setLeadForm({ ...DEFAULT_LEAD_FORM, date: todayLocalDate() })} className={secondaryButtonClass}>Réinitialiser</button>
+              <button type="button" disabled={actSaving} onClick={() => void onSubmitLead()} className={primaryButtonClass}>{actSaving ? "Transmission..." : "Transmettre le client"}</button>
+              <button type="button" disabled={actSaving} onClick={() => setLeadForm({ ...DEFAULT_LEAD_FORM, date: todayLocalDate() })} className={secondaryButtonClass}>Réinitialiser</button>
             </div>
           </section>
 
@@ -390,4 +390,4 @@ function Textarea({ label, value, onChange }: { label: string; value: string; on
 
 const inputClass = "w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100";
 const primaryButtonClass = "rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:bg-slate-300 disabled:text-slate-600";
-const secondaryButtonClass = "rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700";
+const secondaryButtonClass = "rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700 disabled:opacity-60";
