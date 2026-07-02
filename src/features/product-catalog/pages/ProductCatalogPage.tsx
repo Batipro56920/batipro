@@ -5,7 +5,7 @@ import type { SupplierRow } from "../../../services/suppliers.service";
 import { listSuppliers } from "../../../services/suppliers.service";
 import type { DocumentUnit } from "../../document-engine";
 import ProductQuoteReaderPanel from "../components/ProductQuoteReaderPanel";
-import type { ProductCatalogDraft, ProductCatalogItem, ProductDocumentKind, ProductSupplierPrice } from "../domain/types";
+import type { ProductCatalogDraft, ProductCatalogItem, ProductDocumentKind, ProductDocumentUsage, ProductSupplierPrice } from "../domain/types";
 import { deleteProductCatalogItem, listProductCatalogItems, saveProductCatalogItem } from "../infrastructure/productCatalogRepository";
 import { importProductsFromQuoteText, type ProductQuoteImportResult } from "../services/productQuoteImport.service";
 
@@ -26,6 +26,17 @@ const EMPTY_DRAFT: ProductCatalogDraft = {
   supplierPrices: [],
   documents: [],
 };
+
+const PRODUCT_DOCUMENT_KINDS: ProductDocumentKind[] = [
+  "technical_sheet",
+  "manual",
+  "application_scope",
+  "work_method",
+  "sds",
+  "certification",
+  "photo",
+  "other",
+];
 
 export default function ProductCatalogPage() {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -102,14 +113,15 @@ export default function ProductCatalogPage() {
         ...product.supplierPrices.map((price) => price.supplierName),
       ].some((value) => String(value ?? "").toLocaleLowerCase("fr-FR").includes(text));
       const matchesCategory = categoryFilter === "all" || product.category === categoryFilter;
-      const matchesSupplier = supplierFilter === "all" || product.mainSupplierId === supplierFilter || product.supplierPrices.some((price) => price.supplierId === supplierFilter);
+      const matchesSupplier = categoryFilter === "all" || product.category === categoryFilter;
+      const matchesSupplierFilter = supplierFilter === "all" || product.mainSupplierId === supplierFilter || product.supplierPrices.some((price) => price.supplierId === supplierFilter);
       const matchesBrand = brandFilter === "all" || product.brand === brandFilter;
       const purchasePrice = getPurchasePackagePrice(product);
       const matchesPrice = priceFilter === "all"
         || (priceFilter === "low" && purchasePrice < 50)
         || (priceFilter === "mid" && purchasePrice >= 50 && purchasePrice < 250)
         || (priceFilter === "high" && purchasePrice >= 250);
-      return matchesText && matchesCategory && matchesSupplier && matchesBrand && matchesPrice;
+      return matchesText && matchesCategory && matchesSupplier && matchesSupplierFilter && matchesBrand && matchesPrice;
     });
   }, [brandFilter, categoryFilter, priceFilter, products, query, supplierFilter]);
 
@@ -473,28 +485,110 @@ function SupplierPricesEditor({ unit, prices, suppliers, onChange }: { unit: Doc
 
 function ProductDocumentsEditor({ documents, onChange }: { documents: ProductCatalogItem["documents"]; onChange: (documents: ProductCatalogItem["documents"]) => void }) {
   function addDocument(kind: ProductDocumentKind) {
-    onChange([...documents, { id: crypto.randomUUID(), kind, name: documentKindLabel(kind), url: null }]);
+    onChange([
+      ...documents,
+      {
+        id: crypto.randomUUID(),
+        kind,
+        name: documentKindLabel(kind),
+        url: "",
+        usage: defaultDocumentUsage(kind),
+        notes: null,
+      },
+    ]);
+  }
+
+  function updateDocument(id: string, patch: Partial<ProductCatalogItem["documents"][number]>) {
+    onChange(documents.map((row) => row.id === id ? { ...row, ...patch } : row));
+  }
+
+  function removeDocument(id: string) {
+    onChange(documents.filter((row) => row.id !== id));
   }
 
   return (
     <div className="mt-5 rounded-2xl border border-slate-200 p-4">
-      <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
-        <div className="font-semibold text-slate-950">Documents liés</div>
+      <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <div className="font-semibold text-slate-950">Documents liés</div>
+          <p className="mt-1 text-sm text-slate-500">Ces documents servent ensuite aux tâches terrain et au DOE selon l'usage coché.</p>
+        </div>
         <div className="flex flex-wrap gap-2">
-          {(["technical_sheet", "manual", "sds", "certification", "photo", "other"] as const).map((kind) => (
+          {PRODUCT_DOCUMENT_KINDS.map((kind) => (
             <button key={kind} type="button" className="rounded-xl border px-3 py-2 text-xs font-semibold hover:bg-slate-50" onClick={() => addDocument(kind)}>
               <FileText className="mr-1 inline h-3.5 w-3.5" /> {documentKindLabel(kind)}
             </button>
           ))}
         </div>
       </div>
-      <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
-        {documents.map((document) => (
-          <div key={document.id} className="rounded-xl bg-slate-50 p-3">
-            <div className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">{documentKindLabel(document.kind)}</div>
-            <input className={`${inputClass} mt-2`} value={document.name} onChange={(event) => onChange(documents.map((row) => row.id === document.id ? { ...row, name: event.target.value } : row))} />
-          </div>
-        ))}
+      <div className="grid gap-3">
+        {documents.map((document) => {
+          const usage = document.usage ?? defaultDocumentUsage(document.kind);
+          return (
+            <div key={document.id} className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+              <div className="grid gap-3 md:grid-cols-[180px_minmax(0,1fr)]">
+                <FieldShell label="Type">
+                  <Select
+                    value={document.kind}
+                    onChange={(kind) => updateDocument(document.id, {
+                      kind: kind as ProductDocumentKind,
+                      usage: document.usage ?? defaultDocumentUsage(kind as ProductDocumentKind),
+                    })}
+                    options={PRODUCT_DOCUMENT_KINDS}
+                    labels={Object.fromEntries(PRODUCT_DOCUMENT_KINDS.map((kind) => [kind, documentKindLabel(kind)]))}
+                  />
+                </FieldShell>
+                <FieldShell label="Nom du document">
+                  <input
+                    className={inputClass}
+                    placeholder="Ex : FT Mapelastic, notice de pose, domaine d'application..."
+                    value={document.name}
+                    onChange={(event) => updateDocument(document.id, { name: event.target.value })}
+                  />
+                </FieldShell>
+                <FieldShell label="Lien ou chemin fichier" className="md:col-span-2">
+                  <input
+                    className={inputClass}
+                    placeholder="URL fournisseur, chemin Supabase ou référence documentaire"
+                    value={document.url ?? ""}
+                    onChange={(event) => updateDocument(document.id, { url: event.target.value })}
+                  />
+                </FieldShell>
+                <FieldShell label="Notes d'exploitation" className="md:col-span-2">
+                  <textarea
+                    className={`${inputClass} min-h-[78px] py-2`}
+                    placeholder="Consommation, précautions, support compatible, limites d'emploi..."
+                    value={document.notes ?? ""}
+                    onChange={(event) => updateDocument(document.id, { notes: event.target.value })}
+                  />
+                </FieldShell>
+              </div>
+              <div className="mt-3 flex flex-col gap-2 border-t border-slate-200 pt-3 text-sm text-slate-700 sm:flex-row sm:items-center sm:justify-between">
+                <div className="flex flex-wrap gap-3">
+                  <label className="inline-flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      checked={usage.task}
+                      onChange={(event) => updateDocument(document.id, { usage: { ...usage, task: event.target.checked } })}
+                    />
+                    <span>Visible dans la tâche terrain</span>
+                  </label>
+                  <label className="inline-flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      checked={usage.doe}
+                      onChange={(event) => updateDocument(document.id, { usage: { ...usage, doe: event.target.checked } })}
+                    />
+                    <span>À reprendre dans le DOE</span>
+                  </label>
+                </div>
+                <button type="button" className="self-start rounded-lg border border-red-200 px-3 py-1 text-xs font-semibold text-red-600 hover:bg-red-50 sm:self-auto" onClick={() => removeDocument(document.id)}>
+                  Supprimer
+                </button>
+              </div>
+            </div>
+          );
+        })}
         {!documents.length ? <div className="rounded-xl border border-dashed border-slate-200 p-4 text-sm text-slate-500">Aucun document lié.</div> : null}
       </div>
     </div>
@@ -555,10 +649,19 @@ function unique(values: Array<string | null>) {
 function documentKindLabel(kind: ProductDocumentKind) {
   if (kind === "technical_sheet") return "Fiche technique";
   if (kind === "manual") return "Notice";
+  if (kind === "application_scope") return "Domaine d'application";
+  if (kind === "work_method") return "Mode opératoire";
   if (kind === "sds") return "FDS";
   if (kind === "certification") return "Certification";
   if (kind === "photo") return "Photo";
   return "Autre";
+}
+
+function defaultDocumentUsage(kind: ProductDocumentKind): ProductDocumentUsage {
+  if (kind === "technical_sheet" || kind === "sds") return { task: true, doe: true };
+  if (kind === "manual" || kind === "application_scope" || kind === "work_method") return { task: true, doe: false };
+  if (kind === "certification") return { task: false, doe: true };
+  return { task: false, doe: false };
 }
 
 function sanitizeProductCatalogInput<T extends ProductCatalogItem | ProductCatalogDraft>(product: T): T {
@@ -577,6 +680,19 @@ function sanitizeProductCatalogInput<T extends ProductCatalogItem | ProductCatal
       coverageM2: nullableNonNegativeNumber(price.coverageM2),
       pricePerM2Ht: nullableNonNegativeNumber(price.pricePerM2Ht),
     })),
+    documents: product.documents
+      .map((document) => {
+        const kind = PRODUCT_DOCUMENT_KINDS.includes(document.kind) ? document.kind : "other";
+        return {
+          ...document,
+          kind,
+          name: document.name?.trim() || documentKindLabel(kind),
+          url: document.url?.trim() || null,
+          notes: document.notes?.trim() || null,
+          usage: document.usage ?? defaultDocumentUsage(kind),
+        };
+      })
+      .filter((document) => Boolean(document.name || document.url || document.notes)),
   };
 }
 
