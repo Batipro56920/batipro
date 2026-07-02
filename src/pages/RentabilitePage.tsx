@@ -164,8 +164,8 @@ export default function RentabilitePage() {
             <aside className="bt-card rounded-xl bg-white p-5">
               <div className="flex items-center gap-2 text-sm font-semibold text-slate-950"><AlertTriangle className="h-4 w-4 text-amber-500" /> À surveiller</div>
               <div className="mt-4 space-y-3 text-sm">
-                <WatchItem label="Factures ouvertes" value={String(summary.openInvoices)} detail={formatCurrency(summary.remainingTtc)} />
-                <WatchItem label="Achats ouverts" value={String(summary.openPurchases)} detail={formatCurrency(summary.purchasesTtc)} />
+                <WatchItem label="Factures ouvertes" value={String(summary.openInvoices)} detail={formatCurrency(summary.remainingTtc)} href="/financier/encaissements" />
+                <WatchItem label="Achats ouverts" value={String(summary.openPurchases)} detail={formatCurrency(summary.purchasesTtc)} href="/financier/decaissements" />
                 <WatchItem label="Marge HT" value={formatRate(summary.estimatedMarginRate)} detail={formatCurrency(summary.estimatedMarginHt)} />
               </div>
             </aside>
@@ -241,8 +241,15 @@ function SimpleFinancialChart({ summary }: { summary: ProfitabilitySummary }) {
   );
 }
 
-function WatchItem({ label, value, detail }: { label: string; value: string; detail: string }) {
-  return <div className="flex items-center justify-between gap-3 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2"><div><div className="font-medium text-slate-900">{label}</div><div className="text-xs text-slate-500">{detail}</div></div><div className="text-sm font-bold text-slate-950">{value}</div></div>;
+function WatchItem({ label, value, detail, href }: { label: string; value: string; detail: string; href?: string }) {
+  const className = "flex items-center justify-between gap-3 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 transition hover:border-blue-200 hover:bg-blue-50/50";
+  const content = <><div><div className="font-medium text-slate-900">{label}</div><div className="text-xs text-slate-500">{detail}</div></div><div className="text-sm font-bold text-slate-950">{value}</div></>;
+
+  if (href) {
+    return <Link to={href} className={`${className} focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2`}>{content}</Link>;
+  }
+
+  return <div className={className}>{content}</div>;
 }
 
 function DataPanel({ title, empty, children }: { title: string; empty: string | null; children: ReactNode }) {
