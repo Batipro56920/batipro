@@ -1,4 +1,4 @@
-import { AlertTriangle, BarChart3, CalendarCheck, Euro, Factory, TimerReset } from "lucide-react";
+import { AlertTriangle, BarChart3, CalendarCheck, Euro, Factory, TimerReset, type LucideIcon } from "lucide-react";
 import { currency } from "../utils/chantiersListUtils";
 
 type Metrics = {
@@ -13,21 +13,22 @@ type Metrics = {
 export type ChantiersKpiKey = "active" | "preparation" | "late" | "alerts";
 
 type KpiCard = {
-  key: ChantiersKpiKey | "completedThisMonth" | "estimatedMargin";
+  key: string;
   label: string;
   value: number | string;
   hint: string;
-  icon: typeof Factory;
+  icon: LucideIcon;
   tone: string;
+  selectKey?: ChantiersKpiKey;
   actionLabel?: string;
 };
 
 export function ChantiersKpiGrid({ metrics, onSelect }: { metrics: Metrics; onSelect?: (key: ChantiersKpiKey) => void }) {
   const cards: KpiCard[] = [
-    { key: "active", label: "Chantiers actifs", value: metrics.active, hint: "Préparation, en cours, pause", icon: Factory, tone: "text-blue-700 bg-blue-50 border-blue-200", actionLabel: "Afficher les chantiers actifs" },
-    { key: "preparation", label: "En préparation", value: metrics.preparation, hint: "À lancer prochainement", icon: CalendarCheck, tone: "text-sky-700 bg-sky-50 border-sky-200", actionLabel: "Filtrer les chantiers en préparation" },
-    { key: "late", label: "En retard", value: metrics.late, hint: "Échéance dépassée", icon: TimerReset, tone: "text-red-700 bg-red-50 border-red-200", actionLabel: "Voir les chantiers en retard" },
-    { key: "alerts", label: "Alertes", value: metrics.alerts, hint: "Retards, temps ou retours terrain", icon: AlertTriangle, tone: "text-amber-700 bg-amber-50 border-amber-200", actionLabel: "Voir les alertes à traiter" },
+    { key: "active", selectKey: "active", label: "Chantiers actifs", value: metrics.active, hint: "Préparation, en cours, pause", icon: Factory, tone: "text-blue-700 bg-blue-50 border-blue-200", actionLabel: "Afficher les chantiers actifs" },
+    { key: "preparation", selectKey: "preparation", label: "En préparation", value: metrics.preparation, hint: "À lancer prochainement", icon: CalendarCheck, tone: "text-sky-700 bg-sky-50 border-sky-200", actionLabel: "Filtrer les chantiers en préparation" },
+    { key: "late", selectKey: "late", label: "En retard", value: metrics.late, hint: "Échéance dépassée", icon: TimerReset, tone: "text-red-700 bg-red-50 border-red-200", actionLabel: "Voir les chantiers en retard" },
+    { key: "alerts", selectKey: "alerts", label: "Alertes", value: metrics.alerts, hint: "Retards, temps ou retours terrain", icon: AlertTriangle, tone: "text-amber-700 bg-amber-50 border-amber-200", actionLabel: "Voir les alertes à traiter" },
     { key: "completedThisMonth", label: "Terminés ce mois", value: metrics.completedThisMonth, hint: "Historique mensuel", icon: BarChart3, tone: "text-emerald-700 bg-emerald-50 border-emerald-200" },
     { key: "estimatedMargin", label: "Marge estimée", value: currency(metrics.estimatedMargin), hint: "Selon budgets renseignés", icon: Euro, tone: "text-slate-700 bg-slate-50 border-slate-200" },
   ];
@@ -36,7 +37,7 @@ export function ChantiersKpiGrid({ metrics, onSelect }: { metrics: Metrics; onSe
     <section className="grid gap-3 md:grid-cols-2 xl:grid-cols-6">
       {cards.map((card) => {
         const Icon = card.icon;
-        const isActionable = Boolean(card.actionLabel && onSelect);
+        const isActionable = Boolean(card.selectKey && onSelect);
         const content = (
           <>
             <div className="flex items-start justify-between gap-3">
@@ -54,9 +55,9 @@ export function ChantiersKpiGrid({ metrics, onSelect }: { metrics: Metrics; onSe
           isActionable ? "cursor-pointer focus:outline-none focus:ring-2 focus:ring-blue-200" : "",
         ].join(" ");
 
-        if (isActionable) {
+        if (card.selectKey && onSelect) {
           return (
-            <button key={card.key} type="button" className={className} onClick={() => onSelect(card.key as ChantiersKpiKey)} aria-label={card.actionLabel}>
+            <button key={card.key} type="button" className={className} onClick={() => onSelect(card.selectKey!)} aria-label={card.actionLabel}>
               {content}
             </button>
           );
