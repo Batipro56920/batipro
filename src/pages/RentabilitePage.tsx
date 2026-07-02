@@ -132,7 +132,7 @@ export default function RentabilitePage() {
           <section className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
             <Metric label="Facturé" value={formatCurrency(summary.invoicedTtc)} detail="Chiffre d'affaires TTC" />
             <Metric label="Encaissé" value={formatCurrency(summary.paidTtc)} detail="Cash réellement reçu" />
-            <Metric label="Reste à encaisser" value={formatCurrency(summary.remainingTtc)} detail={`${summary.openInvoices} facture(s) ouverte(s)`} tone={summary.remainingTtc > 0 ? "warning" : "neutral"} />
+            <Metric label="Reste à encaisser" value={formatCurrency(summary.remainingTtc)} detail={`${summary.openInvoices} facture(s) ouverte(s) · Voir les encaissements`} tone={summary.remainingTtc > 0 ? "warning" : "neutral"} href="/financier/encaissements" />
             <Metric label="Marge estimée" value={formatCurrency(summary.estimatedMarginHt)} detail={`${formatRate(summary.estimatedMarginRate)} sur HT`} tone={summary.estimatedMarginHt < 0 ? "danger" : "success"} />
           </section>
 
@@ -186,9 +186,16 @@ export default function RentabilitePage() {
   );
 }
 
-function Metric({ label, value, detail, tone = "neutral" }: { label: string; value: string; detail: string; tone?: "neutral" | "success" | "warning" | "danger" }) {
+function Metric({ label, value, detail, tone = "neutral", href }: { label: string; value: string; detail: string; tone?: "neutral" | "success" | "warning" | "danger"; href?: string }) {
   const toneClass = tone === "success" ? "text-emerald-700" : tone === "warning" ? "text-amber-700" : tone === "danger" ? "text-red-700" : "text-slate-950";
-  return <div className="bt-card rounded-xl bg-white p-4"><div className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">{label}</div><div className={`mt-2 text-2xl font-bold ${toneClass}`}>{value}</div><div className="mt-1 text-xs text-slate-500">{detail}</div></div>;
+  const className = "bt-card rounded-xl bg-white p-4 transition hover:border-blue-200 hover:shadow-sm";
+  const content = <><div className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">{label}</div><div className={`mt-2 text-2xl font-bold ${toneClass}`}>{value}</div><div className="mt-1 text-xs text-slate-500">{detail}</div></>;
+
+  if (href) {
+    return <Link to={href} className={`${className} block focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2`}>{content}</Link>;
+  }
+
+  return <div className={className}>{content}</div>;
 }
 
 function FlowBlock({ label, value, detail, strong = false }: { label: string; value: string; detail: string; strong?: boolean }) {
