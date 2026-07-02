@@ -53,7 +53,7 @@ function getCommercialNextStepLabel(params: { quoteHref: string | null; billingH
 function getTerrainFeedbackInfo(row: ChantierDerived) {
   const open = row.terrainFeedbackOpenCount ?? 0;
   const priority = row.terrainFeedbackPriorityCount ?? 0;
-  const href = `/retours-terrain?chantierId=${row.id}`;
+  const href = `/retours-terrain?chantierId=${encodeURIComponent(row.id)}`;
 
   if (priority > 0) {
     return {
@@ -308,8 +308,8 @@ function QuickAccessPanel({ row }: { row: ChantierDerived }) {
     },
     {
       label: "Qualité",
-      description: terrainFeedbackInfo.hasOpen ? "Réserves et retours terrain liés" : "Réserves, contrôles et réception",
-      href: terrainFeedbackInfo.hasOpen ? terrainFeedbackInfo.href : `/chantiers/${row.id}/qualite`,
+      description: terrainFeedbackInfo.hasOpen ? "Réserves, contrôles et retours à rapprocher" : "Réserves, contrôles et réception",
+      href: `/chantiers/${row.id}/qualite`,
       icon: AlertTriangle,
     },
     {
