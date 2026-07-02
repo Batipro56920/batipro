@@ -69,6 +69,32 @@ export default function ChantierReservesSection({ children }: { children: ReactN
             </div>
           </div>
         </div>
+      ) : sourceFeedbackId ? (
+        <div className="mb-4 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">
+          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+            <div>
+              <div className="font-semibold">Retour terrain source</div>
+              <div className="mt-1 text-amber-900/80">
+                Cette vue qualité conserve le lien avec le signalement terrain d'origine pour contrôler ou créer la réserve adaptée.
+              </div>
+            </div>
+            <div className="flex shrink-0 flex-wrap gap-2">
+              <Link
+                to={sourceFeedbackHref}
+                className="inline-flex items-center justify-center rounded-xl bg-amber-700 px-3 py-2 text-sm font-semibold text-white hover:bg-amber-800"
+              >
+                Ouvrir le retour source
+              </Link>
+              <button
+                type="button"
+                onClick={clearTargetedReserve}
+                className="inline-flex items-center justify-center rounded-xl border border-amber-200 bg-white px-3 py-2 text-sm font-semibold text-amber-800 hover:bg-amber-100"
+              >
+                Retirer ciblage
+              </button>
+            </div>
+          </div>
+        </div>
       ) : null}
       <div className="mb-4 rounded-2xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-900">
         <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
@@ -79,6 +105,14 @@ export default function ChantierReservesSection({ children }: { children: ReactN
             </div>
           </div>
           <div className="flex shrink-0 flex-wrap gap-2">
+            {sourceFeedbackId && !targetedReserveId ? (
+              <Link
+                to={sourceFeedbackHref}
+                className="inline-flex items-center justify-center rounded-xl border border-blue-200 bg-white px-3 py-2 text-sm font-semibold text-blue-800 hover:bg-blue-50"
+              >
+                Retour source
+              </Link>
+            ) : null}
             {chantierJournalHref ? (
               <Link
                 to={chantierJournalHref}
