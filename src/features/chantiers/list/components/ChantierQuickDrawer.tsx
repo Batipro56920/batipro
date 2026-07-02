@@ -50,6 +50,49 @@ function getCommercialNextStepLabel(params: { quoteHref: string | null; billingH
   return "Financier chantier";
 }
 
+function getTerrainFeedbackInfo(row: ChantierDerived) {
+  const open = row.terrainFeedbackOpenCount ?? 0;
+  const priority = row.terrainFeedbackPriorityCount ?? 0;
+  const href = `/retours-terrain?chantierId=${row.id}`;
+
+  if (priority > 0) {
+    return {
+      href,
+      open,
+      priority,
+      hasOpen: true,
+      tone: "red" as const,
+      metric: `${priority} retour${priority > 1 ? "s" : ""} urgent${priority > 1 ? "s" : ""}`,
+      description: `${open} retour${open > 1 ? "s" : ""} terrain ouvert${open > 1 ? "s" : ""}, dont ${priority} urgent${priority > 1 ? "s" : ""}. Ouvrir le pilotage permet de traiter le point, l'assigner ou créer une réserve chantier.`,
+      cta: "Traiter les retours urgents",
+    };
+  }
+
+  if (open > 0) {
+    return {
+      href,
+      open,
+      priority,
+      hasOpen: true,
+      tone: "blue" as const,
+      metric: `${open} retour${open > 1 ? "s" : ""} à traiter`,
+      description: `${open} retour${open > 1 ? "s" : ""} terrain ouvert${open > 1 ? "s" : ""}. Le pilotage filtré permet de garder le lien entre le terrain, l'exécution, les documents et les réserves.`,
+      cta: "Voir les retours chantier",
+    };
+  }
+
+  return {
+    href,
+    open,
+    priority,
+    hasOpen: false,
+    tone: "slate" as const,
+    metric: "Aucun retour ouvert",
+    description: "Aucun retour terrain ouvert pour ce chantier. L'espace reste disponible pour contrôler les observations historisées ou les nouvelles remontées terrain.",
+    cta: "Ouvrir les retours terrain",
+  };
+}
+
 function CommercialContext({ row }: { row: ChantierDerived }) {
   const projectHref = getProjectHref(row);
   const quoteHref = getQuoteHref(row, projectHref);
@@ -113,6 +156,22 @@ function CommercialContext({ row }: { row: ChantierDerived }) {
 export function ChantierQuickDrawer({ row, actions, onClose }: { row: ChantierDerived | null; actions: ChantierListActions; onClose: () => void }) {
   const [tab, setTab] = useState<(typeof TABS)[number]>("Vue rapide");
   if (!row) return null;
+
+  const terrainFeedbackInfo = getTerrainFeedbackInfo(row);
+  const alertHref = terrainFeedbackInfo.hasOpen ? terrainFeedbackInfo.href : `/chantiers/${row.id}/qualite`;
+  const alertTitle = terrainFeedbackInfo.hasOpen ? "Retours terrain à traiter" : "Qualité, réserves et alertes";
+  const alertDescription = terrainFeedbackInfo.hasOpen
+    ? terrainFeedbackInfo.description
+    : row.isLate
+      ? "Le chantier est en retard. Ouvrir la qualité permet de traiter les réserves et points de blocage."
+      : "Suivre les réserves, contrôles et points qualité avant réception ou clôture du chantier.";
+  const alertMetric = terrainFeedbackInfo.hasOpen
+    ? terrainFeedbackInfo.metric
+    : row.isLate
+      ? "Chantier en retard"
+      : "Aucune alerte critique";
+  const alertTone = terrainFeedbackInfo.hasOpen ? terrainFeedbackInfo.tone : row.isLate ? "red" : "slate";
+  const alertCta = terrainFeedbackInfo.hasOpen ? terrainFeedbackInfo.cta : "Ouvrir la qualité";
 
   return (
     <div className="fixed inset-0 z-40 flex justify-end bg-slate-950/20" onClick={onClose}>
@@ -196,22 +255,22 @@ export function ChantierQuickDrawer({ row, actions, onClose }: { row: ChantierDe
           ) : tab === "Retours terrain" ? (
             <DetailShortcutPanel
               title="Retours terrain du chantier"
-              description="Centraliser les observations, blocages, photos et demandes remontés par les intervenants terrain pour traiter le sujet depuis le bon chantier."
-              href={`/retours-terrain?chantierId=${row.id}`}
+              description={terrainFeedbackInfo.description}
+              href={terrainFeedbackInfo.href}
               icon={AlertTriangle}
-              cta="Voir les retours"
-              metric="Filtré sur ce chantier"
-              tone={row.isLate ? "red" : "blue"}
+              cta={terrainFeedbackInfo.cta}
+              metric={terrainFeedbackInfo.metric}
+              tone={terrainFeedbackInfo.tone}
             />
           ) : (
             <DetailShortcutPanel
-              title="Qualité, réserves et alertes"
-              description={row.isLate ? "Le chantier est en retard. Ouvrir la qualité permet de traiter les réserves et points de blocage." : "Suivre les réserves, contrôles et points qualité avant réception ou clôture du chantier."}
-              href={`/chantiers/${row.id}/qualite`}
+              title={alertTitle}
+              description={alertDescription}
+              href={alertHref}
               icon={AlertTriangle}
-              cta="Ouvrir la qualité"
-              metric={row.isLate ? "Chantier en retard" : "Aucune alerte critique"}
-              tone={row.isLate ? "red" : "slate"}
+              cta={alertCta}
+              metric={alertMetric}
+              tone={alertTone}
             />
           )}
         </div>
@@ -221,6 +280,7 @@ export function ChantierQuickDrawer({ row, actions, onClose }: { row: ChantierDe
 }
 
 function QuickAccessPanel({ row }: { row: ChantierDerived }) {
+  const terrainFeedbackInfo = getTerrainFeedbackInfo(row);
   const links = [
     {
       label: "Préparer",
@@ -242,14 +302,14 @@ function QuickAccessPanel({ row }: { row: ChantierDerived }) {
     },
     {
       label: "Retours terrain",
-      description: "Observations et blocages filtrés",
-      href: `/retours-terrain?chantierId=${row.id}`,
+      description: terrainFeedbackInfo.metric,
+      href: terrainFeedbackInfo.href,
       icon: AlertTriangle,
     },
     {
       label: "Qualité",
-      description: "Réserves, contrôles et réception",
-      href: `/chantiers/${row.id}/qualite`,
+      description: terrainFeedbackInfo.hasOpen ? "Réserves et retours terrain liés" : "Réserves, contrôles et réception",
+      href: terrainFeedbackInfo.hasOpen ? terrainFeedbackInfo.href : `/chantiers/${row.id}/qualite`,
       icon: AlertTriangle,
     },
     {
@@ -279,7 +339,7 @@ function QuickAccessPanel({ row }: { row: ChantierDerived }) {
           const Icon = link.icon;
           return (
             <Link
-              key={link.href}
+              key={`${link.label}:${link.href}`}
               to={link.href}
               className="group flex items-start gap-3 rounded-2xl border border-slate-200 bg-white p-3 transition hover:border-blue-200 hover:bg-blue-50"
             >
