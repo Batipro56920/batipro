@@ -140,6 +140,12 @@ export default function CrmQuoteEditRedirectPage() {
   if (state.status === "ready") return <Navigate to={state.targetPath} replace />;
   if (state.status === "loading") return <LoadingState label="Ouverture de l'éditeur devis..." />;
 
+  const quoteSearchTerm =
+    state.status === "not-found" && state.issue.kind === "missing-project-link"
+      ? state.issue.quote.quote_number || id || ""
+      : id ?? "";
+  const crmQuotesPath = quoteSearchTerm ? `/crm/devis?q=${encodeURIComponent(quoteSearchTerm)}` : "/crm/devis";
+
   return (
     <div className="rounded-3xl border border-amber-200 bg-amber-50 p-6 text-sm text-amber-900">
       <div className="font-semibold">Devis impossible à ouvrir depuis le CRM.</div>
@@ -167,7 +173,7 @@ export default function CrmQuoteEditRedirectPage() {
       ) : null}
       <div className="mt-4 flex flex-wrap gap-2">
         <Link
-          to="/crm/devis"
+          to={crmQuotesPath}
           className="inline-flex h-9 items-center justify-center rounded-xl bg-amber-900 px-3 text-sm font-semibold text-white hover:bg-amber-800"
         >
           Retour aux devis
