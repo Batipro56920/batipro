@@ -157,6 +157,20 @@ async function assertCrmProjectNotAlreadyAttached(
   }
 }
 
+async function assertActiveApporteurPortal(portalClient: ReturnType<typeof createPortalClient>, apporteurId: string, organizationId: string): Promise<void> {
+  const { data, error } = await portalClient
+    .from("apporteurs_affaires")
+    .select("id, active")
+    .eq("id", apporteurId)
+    .eq("organization_id", organizationId)
+    .maybeSingle();
+
+  if (error) throw new Error(error.message);
+  if (!(data as Pick<ApporteurAffaireRow, "active"> | null)?.active) {
+    throw new Error("Ce portail apporteur est désactivé.");
+  }
+}
+
 export async function getApporteursAffaires(): Promise<ApporteurAffaireRow[]> {
   const organization_id = await getOrganizationId();
   const response = await supabase
@@ -481,6 +495,7 @@ export async function getApporteurPortalData(jwt: string, apporteurId: string) {
   if (apporteurError) throw new Error(apporteurError.message);
   if (leadsError) throw new Error(leadsError.message);
   if (documentsError) throw new Error(documentsError.message);
+  if (!(apporteur as ApporteurAffaireRow | null)?.active) throw new Error("Ce portail apporteur est désactivé.");
 
   return {
     apporteur: (apporteur as ApporteurAffaireRow) ?? null,
@@ -502,6 +517,8 @@ export async function createApporteurLeadPortal(jwt: string, input: {
   status?: ApporteurLeadStatus;
 }): Promise<ApporteurLeadRow> {
   const portalClient = createPortalClient(jwt);
+  await assertActiveApporteurPortal(portalClient, input.apporteur_id, input.organization_id);
+
   const payload = {
     organization_id: input.organization_id,
     apporteur_id: input.apporteur_id,
