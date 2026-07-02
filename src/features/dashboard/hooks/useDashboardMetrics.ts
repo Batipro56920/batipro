@@ -72,6 +72,10 @@ function chantierTone(status: string | null | undefined): DashboardTone {
   return "success";
 }
 
+function chantierMaterialHref(chantierId: string): string {
+  return `/chantiers/${chantierId}/financier`;
+}
+
 export function useDashboardMetrics({ chantiers, materiel, alerts, activeView, loading, locale, t }: DashboardMetricsInput) {
   const chantierById = useMemo(() => {
     const map = new Map<string, ChantierRow>();
@@ -135,7 +139,7 @@ export function useDashboardMetrics({ chantiers, materiel, alerts, activeView, l
     if (activeView === "materiel") {
       return pendingMateriel.slice(0, 8).map((row) => ({
         key: row.id,
-        href: `/chantiers/${row.chantier_id}`,
+        href: chantierMaterialHref(row.chantier_id),
         title: row.titre || row.designation || t("dashboard.materialRequest"),
         subtitle: chantierById.get(row.chantier_id)?.nom || t("sidebar.chantiers"),
         meta: `${materialStatusLabel(normalizeMaterialStatus(row), t)} · ${Number(row.quantite ?? 0).toLocaleString(locale)} ${row.unite ?? ""}`.trim(),
@@ -297,7 +301,7 @@ export function useDashboardMetrics({ chantiers, materiel, alerts, activeView, l
 
     const materialItems = pendingMateriel.slice(0, Math.max(0, 5 - alertItems.length)).map((row) => ({
       key: row.id,
-      href: `/chantiers/${row.chantier_id}`,
+      href: chantierMaterialHref(row.chantier_id),
       title: row.titre || row.designation || t("dashboard.materialRequest"),
       subtitle: chantierById.get(row.chantier_id)?.nom || t("sidebar.chantiers"),
       meta: materialStatusLabel(normalizeMaterialStatus(row), t),
