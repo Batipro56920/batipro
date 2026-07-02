@@ -121,12 +121,22 @@ export function SavTicketDrawer({ ticket, onClose }: { ticket: SavWithContext | 
             {chantierFeedbackHref ? (
               <Link
                 to={chantierFeedbackHref}
-                className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-center text-sm font-semibold text-emerald-800 hover:bg-emerald-100 sm:col-span-2"
+                className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-center text-sm font-semibold text-emerald-800 hover:bg-emerald-100"
               >
-                Voir les retours terrain
+                Retours terrain
               </Link>
             ) : (
-              <button type="button" disabled className="rounded-xl border border-slate-200 px-3 py-2 text-sm font-medium text-slate-400 sm:col-span-2" title="Chantier requis pour les retours terrain">Retours terrain</button>
+              <button type="button" disabled className="rounded-xl border border-slate-200 px-3 py-2 text-sm font-medium text-slate-400" title="Chantier requis pour les retours terrain">Retours terrain</button>
+            )}
+            {chantierQualityHref ? (
+              <Link
+                to={chantierQualityHref}
+                className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-center text-sm font-semibold text-amber-800 hover:bg-amber-100"
+              >
+                Qualité / réserves
+              </Link>
+            ) : (
+              <button type="button" disabled className="rounded-xl border border-slate-200 px-3 py-2 text-sm font-medium text-slate-400" title="Chantier requis pour la qualité / réserves">Qualité / réserves</button>
             )}
             <button type="button" disabled className="rounded-xl border border-slate-200 px-3 py-2 text-sm font-medium text-slate-400 sm:col-span-2" title="Clôture à finaliser">Clôturer</button>
           </div>
