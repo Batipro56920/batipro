@@ -252,7 +252,7 @@ function normalizeDocumentKind(kind: unknown): ProductDocumentKind {
 function normalizeDocumentUsage(usage: unknown, kind: ProductDocumentKind) {
   const defaultUsage = defaultDocumentUsage(kind);
   if (!usage || typeof usage !== "object") return defaultUsage;
-  const source = usage as Partial<ProductDocument["usage"]>;
+  const source = usage as Record<string, unknown>;
   return {
     task: typeof source.task === "boolean" ? source.task : defaultUsage.task,
     doe: typeof source.doe === "boolean" ? source.doe : defaultUsage.doe,
