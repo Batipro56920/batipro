@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import type { CrmClientRow, CrmOpportunityRow, CrmProspectRow, CrmQuoteRow } from "../../../services/crm.service";
 import { QuoteDetailDrawer } from "../quotes/components/QuoteDetailDrawer";
 import { QuotesEmptyState } from "../quotes/components/QuotesEmptyState";
@@ -32,6 +33,7 @@ export default function CrmQuotesSection({
   onTransform: (row: CrmQuoteRow) => void;
   onPdf: (row: CrmQuoteRow) => void;
 }) {
+  const [searchParams] = useSearchParams();
   const [selectedQuote, setSelectedQuote] = useState<QuoteWithParty | null>(null);
   const { filters, setFilters, filteredRows, statuses, clients, salespeople } = useQuoteFilters({
     rows,
@@ -40,7 +42,7 @@ export default function CrmQuotesSection({
     opportunityById,
     projectPathByQuoteId,
     chantierPathByQuoteId,
-    globalQuery: "",
+    globalQuery: searchParams.get("q") ?? "",
   });
 
   const actions = { onCreate, onStatus, onTransform, onPdf };
