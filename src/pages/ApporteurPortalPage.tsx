@@ -143,7 +143,12 @@ export default function ApporteurPortalPage() {
     [leadAmountPreview, portalData.apporteur],
   );
   const sortedLeads = useMemo(
-    () => [...portalData.leads].sort((a, b) => String(b.date ?? "").localeCompare(String(a.date ?? ""))),
+    () =>
+      [...portalData.leads].sort((a, b) => {
+        const dateOrder = String(b.date ?? "").localeCompare(String(a.date ?? ""));
+        if (dateOrder !== 0) return dateOrder;
+        return String(b.created_at ?? "").localeCompare(String(a.created_at ?? ""));
+      }),
     [portalData.leads],
   );
 
