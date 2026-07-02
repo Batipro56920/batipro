@@ -1,8 +1,19 @@
 import { supabase } from "../../../lib/supabaseClient";
-import type { ProductCatalogDraft, ProductCatalogItem, ProductSupplierPrice } from "../domain/types";
+import type { ProductCatalogDraft, ProductCatalogItem, ProductDocument, ProductDocumentKind, ProductSupplierPrice } from "../domain/types";
 
 const TABLE = "product_catalog_items";
 const LEGACY_STORAGE_KEY = "batipro.product-catalog.v1";
+
+const PRODUCT_DOCUMENT_KINDS: ProductDocumentKind[] = [
+  "technical_sheet",
+  "manual",
+  "application_scope",
+  "work_method",
+  "sds",
+  "certification",
+  "photo",
+  "other",
+];
 
 type ProductCatalogRow = {
   id: string;
@@ -44,16 +55,21 @@ export async function listProductCatalogItems(): Promise<ProductCatalogItem[]> {
 export async function saveProductCatalogItem(input: ProductCatalogItem | ProductCatalogDraft, priceHistorySource = "mise a jour") {
   const now = new Date().toISOString();
   const hasId = "id" in input;
+  const normalizedInput = {
+    ...input,
+    supplierPrices: normalizeSupplierPrices(input.supplierPrices),
+    documents: normalizeProductDocuments(input.documents),
+  };
   const product: ProductCatalogItem = hasId
     ? {
-        ...input,
-        priceHistory: buildNextPriceHistory(input, now, priceHistorySource),
+        ...normalizedInput,
+        priceHistory: buildNextPriceHistory(normalizedInput, now, priceHistorySource),
         updatedAt: now,
       }
     : {
-        ...input,
+        ...normalizedInput,
         id: crypto.randomUUID(),
-        priceHistory: [buildPriceHistoryEntry(input.standardPurchasePriceHt, input.recommendedSalePriceHt, now, "creation")],
+        priceHistory: [buildPriceHistoryEntry(normalizedInput.standardPurchasePriceHt, normalizedInput.recommendedSalePriceHt, now, "creation")],
         createdAt: now,
         updatedAt: now,
       };
@@ -111,7 +127,7 @@ function fromRow(row: ProductCatalogRow): ProductCatalogItem {
     targetMarginRate: Number(row.target_margin_rate ?? 0),
     isSellable: row.is_sellable !== false,
     supplierPrices: normalizeSupplierPrices(row.supplier_prices ?? []),
-    documents: row.documents ?? [],
+    documents: normalizeProductDocuments(row.documents),
     priceHistory: row.price_history ?? [],
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -135,7 +151,7 @@ function toRow(product: ProductCatalogItem) {
     target_margin_rate: product.targetMarginRate,
     is_sellable: product.isSellable,
     supplier_prices: normalizeSupplierPrices(product.supplierPrices) as any,
-    documents: product.documents as any,
+    documents: normalizeProductDocuments(product.documents) as any,
     price_history: product.priceHistory as any,
     created_at: product.createdAt,
     updated_at: new Date().toISOString(),
@@ -182,6 +198,86 @@ function normalizeSupplierPrices(prices: ProductSupplierPrice[]): ProductSupplie
       if (!price || price.priceHt <= 0) return false;
       return Boolean(String(price.supplierId ?? "").trim() || String(price.supplierName ?? "").trim());
     });
+}
+
+function normalizeProductDocuments(documents: unknown): ProductDocument[] {
+  if (!Array.isArray(documents)) return [];
+
+  return documents
+    .map((document, index): ProductDocument | null => {
+      if (typeof document === "string") {
+        const name = document.trim();
+        if (!name) return null;
+        return {
+          id: buildLegacyDocumentId(index, name),
+          kind: "other",
+          name,
+          url: null,
+          usage: defaultDocumentUsage("other"),
+          notes: null,
+        };
+      }
+
+      if (!document || typeof document !== "object") return null;
+      const source = document as Partial<ProductDocument> & Record<string, unknown>;
+      const kind = normalizeDocumentKind(source.kind);
+      const name = String(source.name ?? "").trim() || documentKindLabel(kind);
+      const url = typeof source.url === "string" && source.url.trim() ? source.url.trim() : null;
+      const notes = typeof source.notes === "string" && source.notes.trim() ? source.notes.trim() : null;
+
+      return {
+        id: typeof source.id === "string" && source.id.trim() ? source.id : buildLegacyDocumentId(index, `${kind}-${name}`),
+        kind,
+        name,
+        url,
+        usage: normalizeDocumentUsage(source.usage, kind),
+        notes,
+      };
+    })
+    .filter((document): document is ProductDocument => Boolean(document && (document.name || document.url || document.notes)));
+}
+
+function normalizeDocumentKind(kind: unknown): ProductDocumentKind {
+  return PRODUCT_DOCUMENT_KINDS.includes(kind as ProductDocumentKind) ? kind as ProductDocumentKind : "other";
+}
+
+function normalizeDocumentUsage(usage: unknown, kind: ProductDocumentKind) {
+  const defaultUsage = defaultDocumentUsage(kind);
+  if (!usage || typeof usage !== "object") return defaultUsage;
+  const source = usage as Partial<ProductDocument["usage"]>;
+  return {
+    task: typeof source.task === "boolean" ? source.task : defaultUsage.task,
+    doe: typeof source.doe === "boolean" ? source.doe : defaultUsage.doe,
+  };
+}
+
+function defaultDocumentUsage(kind: ProductDocumentKind) {
+  if (kind === "technical_sheet" || kind === "sds") return { task: true, doe: true };
+  if (kind === "manual" || kind === "application_scope" || kind === "work_method") return { task: true, doe: false };
+  if (kind === "certification") return { task: false, doe: true };
+  return { task: false, doe: false };
+}
+
+function documentKindLabel(kind: ProductDocumentKind) {
+  if (kind === "technical_sheet") return "Fiche technique";
+  if (kind === "manual") return "Notice";
+  if (kind === "application_scope") return "Domaine d'application";
+  if (kind === "work_method") return "Mode operatoire";
+  if (kind === "sds") return "FDS";
+  if (kind === "certification") return "Certification";
+  if (kind === "photo") return "Photo";
+  return "Autre";
+}
+
+function buildLegacyDocumentId(index: number, label: string) {
+  const slug = label
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 48);
+  return `legacy-doc-${index}-${slug || "document"}`;
 }
 
 function getSupplierUnitPrice(price: ProductSupplierPrice): number {
@@ -287,7 +383,10 @@ function readLegacyProducts(): ProductCatalogItem[] {
   const raw = window.localStorage.getItem(LEGACY_STORAGE_KEY);
   if (!raw) return [];
   try {
-    return JSON.parse(raw) as ProductCatalogItem[];
+    const products = JSON.parse(raw) as ProductCatalogItem[];
+    return Array.isArray(products)
+      ? products.map((product) => ({ ...product, documents: normalizeProductDocuments(product.documents) }))
+      : [];
   } catch {
     return [];
   }
