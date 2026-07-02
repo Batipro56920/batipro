@@ -15,6 +15,16 @@ export default function ChantierReservesSection({ children }: { children: ReactN
     id && sourceFeedbackId
       ? `/retours-terrain?chantierId=${encodedChantierId}&feedbackId=${encodeURIComponent(sourceFeedbackId)}`
       : terrainFeedbackHref;
+  const reserveAutoOpenKey = targetedReserveId
+    ? `reserve:${targetedReserveId}`
+    : sourceFeedbackId
+      ? `feedback-source:${sourceFeedbackId}`
+      : "";
+  const reserveAutoOpenLabel = targetedReserveId
+    ? "Réserve ciblée à traiter"
+    : sourceFeedbackId
+      ? "Réserve à créer depuis retour terrain"
+      : "";
 
   function clearTargetedReserve() {
     if (!searchParams.has("reserveId") && !searchParams.has("feedbackId")) return;
@@ -31,8 +41,8 @@ export default function ChantierReservesSection({ children }: { children: ReactN
       subtitle="Réserves ouvertes et levées. La création, le filtre et le détail se font dans le panneau latéral."
       actionLabel="Gérer les réserves"
       previewClassName="batipro-chapter-preview--reserves"
-      autoOpenKey={targetedReserveId ? `reserve:${targetedReserveId}` : ""}
-      autoOpenLabel="Réserve ciblée à traiter"
+      autoOpenKey={reserveAutoOpenKey}
+      autoOpenLabel={reserveAutoOpenLabel}
       onAutoOpenClear={clearTargetedReserve}
     >
       {targetedReserveId ? (
