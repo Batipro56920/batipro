@@ -12,7 +12,7 @@ export function SavTicketDrawer({ ticket, onClose }: { ticket: SavWithContext | 
   const chantierPlanningHref = ticket.chantier_id ? `/chantiers/${encodeURIComponent(ticket.chantier_id)}/planning` : null;
   const chantierDocumentsHref = ticket.chantier_id ? `/chantiers/${encodeURIComponent(ticket.chantier_id)}/documents` : null;
   const chantierQualityHref = ticket.chantier_id ? `/chantiers/${encodeURIComponent(ticket.chantier_id)}/qualite` : null;
-  const chantierFeedbackHref = ticket.chantier_id ? `/chantiers/${encodeURIComponent(ticket.chantier_id)}/retours-terrain` : null;
+  const chantierFeedbackHref = ticket.chantier_id ? `/retours-terrain?chantierId=${encodeURIComponent(ticket.chantier_id)}` : null;
 
   return (
     <div className="fixed inset-0 z-40 flex justify-end bg-slate-950/20" role="dialog" aria-modal="true">
@@ -102,10 +102,10 @@ export function SavTicketDrawer({ ticket, onClose }: { ticket: SavWithContext | 
                 to={chantierPlanningHref}
                 className="rounded-xl border border-blue-200 bg-blue-50 px-3 py-2 text-center text-sm font-semibold text-blue-800 hover:bg-blue-100"
               >
-                Planifier
+                Agenda / planning
               </Link>
             ) : (
-              <button type="button" disabled className="rounded-xl border border-slate-200 px-3 py-2 text-sm font-medium text-slate-400" title="Chantier requis pour planifier">Planifier</button>
+              <button type="button" disabled className="rounded-xl border border-slate-200 px-3 py-2 text-sm font-medium text-slate-400" title="Chantier requis pour l'agenda / planning">Agenda / planning</button>
             )}
             <button type="button" disabled className="rounded-xl border border-slate-200 px-3 py-2 text-sm font-medium text-slate-400" title="Message client à finaliser">Message client</button>
             {chantierDocumentsHref ? (
