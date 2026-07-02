@@ -60,11 +60,55 @@ const HEADER_BY_VIEW: Record<ChantierListView, { eyebrow: string; title: string;
   },
 };
 
+type ChantierListFocus = "tasks" | "reserves" | "time";
+
 type ChantiersPageProps = {
   initialView?: ChantierListView;
+  initialFocus?: ChantierListFocus;
 };
 
 type TerrainFeedbackSummaryByChantier = Record<string, { open: number; priority: number }>;
+
+const HEADER_BY_FOCUS: Record<ChantierListFocus, { eyebrow: string; title: string; description: string }> = {
+  tasks: {
+    eyebrow: "Exécution",
+    title: "Tâches chantier",
+    description: "Choisissez un chantier actif puis ouvrez son espace exécution pour piloter tâches, avancement et quantités.",
+  },
+  reserves: {
+    eyebrow: "Qualité",
+    title: "Réserves chantier",
+    description: "Priorisez les chantiers avec alertes, retours terrain ou retard avant d'ouvrir les réserves et contrôles qualité.",
+  },
+  time: {
+    eyebrow: "Temps",
+    title: "Suivi des temps chantier",
+    description: "Repérez les chantiers à surveiller puis ouvrez le dossier pour contrôler temps passés, équipes et avancement.",
+  },
+};
+
+const FOCUS_GUIDANCE: Record<ChantierListFocus, { title: string; description: string; cta: string }> = {
+  tasks: {
+    title: "Parcours tâches",
+    description: "Ouvrez un chantier depuis la liste ou le tiroir rapide, puis allez dans Exécuter pour travailler sur les tâches, les affectations et les documents liés.",
+    cta: "Cliquer sur un chantier ouvre son dossier complet.",
+  },
+  reserves: {
+    title: "Parcours réserves",
+    description: "La vue est placée sur le kanban et le filtre Alertes à traiter afin de rapprocher retours terrain, retard, qualité et réserves chantier.",
+    cta: "Le tiroir rapide permet d'aller vers Qualité ou Retours terrain.",
+  },
+  time: {
+    title: "Parcours temps",
+    description: "La vue met en avant les chantiers à risque pour relier temps passés, avancement et équipe sans créer une logique de temps séparée.",
+    cta: "Depuis le dossier chantier, ouvrez Exécuter ou Équipe selon le contrôle à faire.",
+  },
+};
+
+function getInitialFilters(initialFocus: ChantierListFocus | undefined): ChantierListFilters {
+  if (initialFocus === "reserves" || initialFocus === "time") return { ...DEFAULT_FILTERS, period: "alerts" };
+  return DEFAULT_FILTERS;
+}
 
 async function loadTerrainFeedbackSummaries(chantierIds: string[]): Promise<TerrainFeedbackSummaryByChantier> {
   if (chantierIds.length === 0) return {};
@@ -93,13 +137,30 @@ async function loadTerrainFeedbackSummaries(chantierIds: string[]): Promise<Terr
   return summaries;
 }
 
-export default function ChantiersPage({ initialView = "list" }: ChantiersPageProps) {
+function ChantiersFocusPanel({ focus }: { focus: ChantierListFocus }) {
+  const copy = FOCUS_GUIDANCE[focus];
+  return (
+    <section className="rounded-2xl border border-blue-100 bg-blue-50 p-4 text-sm text-blue-900 shadow-sm shadow-blue-950/[0.03]">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <h2 className="font-semibold text-blue-950">{copy.title}</h2>
+          <p className="mt-1 leading-6">{copy.description}</p>
+        </div>
+        <div className="shrink-0 rounded-xl border border-blue-200 bg-white px-3 py-2 text-xs font-semibold text-blue-800">
+          {copy.cta}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+export default function ChantiersPage({ initialView = "list", initialFocus }: ChantiersPageProps) {
   const navigate = useNavigate();
 
   const [items, setItems] = useState<ChantierRow[]>([]);
   const [scope, setScope] = useState<ChantierListFilter>("actifs");
   const [view, setView] = useState<ChantierListView>(initialView);
-  const [filters, setFilters] = useState<ChantierListFilters>(DEFAULT_FILTERS);
+  const [filters, setFilters] = useState<ChantierListFilters>(() => getInitialFilters(initialFocus));
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [previewRow, setPreviewRow] = useState<ChantierDerived | null>(null);
   const [terrainFeedbackSummaries, setTerrainFeedbackSummaries] = useState<TerrainFeedbackSummaryByChantier>({});
@@ -116,7 +177,7 @@ export default function ChantiersPage({ initialView = "list" }: ChantiersPagePro
   const metrics = useMemo(() => computeChantierMetrics(derivedRows), [derivedRows]);
   const clients = useMemo(() => uniqueClients(derivedRows), [derivedRows]);
   const selectedRows = useMemo(() => derivedRows.filter((item) => selectedIds.includes(item.id)), [derivedRows, selectedIds]);
-  const headerCopy = HEADER_BY_VIEW[view];
+  const headerCopy = initialFocus ? HEADER_BY_FOCUS[initialFocus] : HEADER_BY_VIEW[view];
 
   async function refresh(nextScope = scope) {
     setLoading(true);
@@ -149,7 +210,11 @@ export default function ChantiersPage({ initialView = "list" }: ChantiersPagePro
 
   useEffect(() => {
     setView(initialView);
-  }, [initialView]);
+    setFilters(getInitialFilters(initialFocus));
+    setScope("actifs");
+    setSelectedIds([]);
+    setPreviewRow(null);
+  }, [initialFocus, initialView]);
 
   function applyKpiFilter(key: ChantiersKpiKey) {
     setSelectedIds([]);
@@ -262,6 +327,7 @@ export default function ChantiersPage({ initialView = "list" }: ChantiersPagePro
         onNew={() => navigate("/chantiers/nouveau")}
         onExport={() => exportChantiersCsv(visibleRows, "chantiers.csv")}
       />
+      {initialFocus ? <ChantiersFocusPanel focus={initialFocus} /> : null}
       <ChantiersKpiGrid metrics={metrics} onSelect={applyKpiFilter} />
       <ChantiersToolbar
         scope={scope}
