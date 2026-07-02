@@ -94,6 +94,10 @@ function normalizePurchaseStatus(value: unknown): string {
   return String(value ?? "").trim().toLowerCase() || "a_commander";
 }
 
+function chantierSectionHref(chantierId: string, section: "preparation" | "execution" | "financier" | "qualite") {
+  return `/chantiers/${chantierId}/${section}`;
+}
+
 async function safeQuery<T>(query: PromiseLike<{ data: T | null; error: any }>, fallback: T): Promise<T> {
   const result = await query;
   if (!result.error) return result.data ?? fallback;
@@ -158,7 +162,7 @@ export async function listDashboardAlerts(chantiers: ChantierRow[]): Promise<Das
       tone: priority === "URGENTE" ? "danger" : "warning",
       title: `Reserve ${priority === "URGENTE" ? "urgente" : "ouverte"}`,
       detail: asText(row.title, "Reserve chantier"),
-      href: `/chantiers/${row.chantier_id}`,
+      href: chantierSectionHref(row.chantier_id, "qualite"),
       sort_at: row.created_at ?? "1970-01-01T00:00:00.000Z",
     });
   }
@@ -184,7 +188,7 @@ export async function listDashboardAlerts(chantiers: ChantierRow[]): Promise<Das
         detail: row.reprise_reason
           ? `${asText(row.titre, "Tache chantier")} - ${asText(row.reprise_reason, "Motif non renseigne")}`
           : asText(row.titre, "Tache chantier"),
-        href: `/chantiers/${row.chantier_id}`,
+        href: chantierSectionHref(row.chantier_id, "execution"),
         sort_at: row.updated_at ?? row.created_at ?? "1970-01-01T00:00:00.000Z",
       });
       continue;
@@ -199,7 +203,7 @@ export async function listDashboardAlerts(chantiers: ChantierRow[]): Promise<Das
         tone: "warning",
         title: "Tache en retard",
         detail: `${asText(row.titre, "Tache chantier")} - echeance ${dueDate}`,
-        href: `/chantiers/${row.chantier_id}`,
+        href: chantierSectionHref(row.chantier_id, "execution"),
         sort_at: row.updated_at ?? row.created_at ?? "1970-01-01T00:00:00.000Z",
       });
     }
@@ -221,7 +225,7 @@ export async function listDashboardAlerts(chantiers: ChantierRow[]): Promise<Das
       detail: expectedAt
         ? `${asText(row.titre, "Demande fournisseur")} - livraison prevue ${expectedAt}`
         : asText(row.titre, "Demande fournisseur"),
-      href: `/chantiers/${row.chantier_id}`,
+      href: chantierSectionHref(row.chantier_id, "financier"),
       sort_at: row.created_at ?? "1970-01-01T00:00:00.000Z",
     });
   }
@@ -236,7 +240,7 @@ export async function listDashboardAlerts(chantiers: ChantierRow[]): Promise<Das
       tone: "warning",
       title: "Preparation incomplete",
       detail: asText(row.commentaire, "Checklist preparation chantier a finaliser"),
-      href: `/chantiers/${row.chantier_id}`,
+      href: chantierSectionHref(row.chantier_id, "preparation"),
       sort_at: row.updated_at ?? row.created_at ?? "1970-01-01T00:00:00.000Z",
     });
   }
