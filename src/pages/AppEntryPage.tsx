@@ -73,7 +73,7 @@ export default function AppEntryPage() {
                 </p>
               </div>
             </div>
-            <div className="mt-5 text-sm font-semibold text-blue-700">Se connecter</div>
+            <div className="mt-5 text-sm font-semibold text-blue-700">Se connecter au back-office</div>
           </Link>
 
           <Link
@@ -87,12 +87,12 @@ export default function AppEntryPage() {
                 </div>
                 <h2 className="mt-4 text-lg font-semibold text-slate-950">Portail terrain</h2>
                 <p className="mt-2 text-sm leading-6 text-slate-600">
-                  Intervenants et employes : taches du jour, temps, photos, remarques et signalements chantier.
+                  Intervenants et employés : tâches du jour, temps, photos, remarques et signalements chantier.
                 </p>
               </div>
             </div>
             <div className="mt-5 text-sm font-semibold text-blue-700">
-              {hasIntervenantAccess ? "Reprendre mon acces" : "Ouvrir avec un lien d'acces"}
+              {hasIntervenantAccess ? "Reprendre mon accès terrain" : "Saisir mon lien d'accès"}
             </div>
           </Link>
         </div>
