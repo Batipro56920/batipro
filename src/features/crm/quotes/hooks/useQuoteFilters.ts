@@ -102,7 +102,16 @@ export function useQuoteFilters({
     const query = [globalQuery, filters.query].join(" ").trim().toLowerCase();
     return rowsWithParty
       .filter((row) => {
-        const searchable = [row.quote_number, row.partyLabel, row.description, row.statut, row.signature_status, row.lot, row.salespersonLabel].join(" ").toLowerCase();
+        const searchable = [
+          row.id,
+          row.quote_number,
+          row.partyLabel,
+          row.description,
+          row.statut,
+          row.signature_status,
+          row.lot,
+          row.salespersonLabel,
+        ].join(" ").toLowerCase();
         if (query && !searchable.includes(query)) return false;
         if (filters.status !== "all" && row.statut !== filters.status) return false;
         if (filters.salesperson !== "all" && row.salespersonKey !== filters.salesperson) return false;
