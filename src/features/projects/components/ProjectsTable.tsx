@@ -36,11 +36,13 @@ function getBillableAmount(project: ProjectRecord, quote: ProjectQuote | null) {
 function getCommercialSource(project: ProjectRecord) {
   const source = project.sourceLabel?.trim() || null;
   const apporteur = project.prospect?.apporteur_affaire?.trim() || null;
+  const isApporteur = Boolean(source?.toLowerCase().includes("apporteur") || apporteur);
   if (!source && !apporteur) return null;
   return {
-    label: source ?? "Origine commerciale",
+    label: source ?? (isApporteur ? "Apporteur d'affaires" : "Origine commerciale"),
     detail: apporteur,
-    isApporteur: Boolean(source?.toLowerCase().includes("apporteur") || apporteur),
+    isApporteur,
+    trackingPath: isApporteur ? "/crm/apporteurs" : null,
   };
 }
 
@@ -170,17 +172,37 @@ export function ProjectsTable({
                   <td className="max-w-[210px] px-4 py-3">
                     {commercialSource ? (
                       <div className="space-y-1">
-                        <span
-                          className={[
-                            "inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ring-1",
-                            commercialSource.isApporteur
-                              ? "bg-emerald-50 text-emerald-700 ring-emerald-200"
-                              : "bg-slate-100 text-slate-700 ring-slate-200",
-                          ].join(" ")}
-                        >
-                          {commercialSource.label}
-                        </span>
+                        {commercialSource.trackingPath ? (
+                          <Link
+                            to={commercialSource.trackingPath}
+                            className={[
+                              "inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ring-1 transition hover:bg-white",
+                              commercialSource.isApporteur
+                                ? "bg-emerald-50 text-emerald-700 ring-emerald-200"
+                                : "bg-slate-100 text-slate-700 ring-slate-200",
+                            ].join(" ")}
+                            title="Ouvrir le suivi des apporteurs"
+                          >
+                            {commercialSource.label}
+                          </Link>
+                        ) : (
+                          <span
+                            className={[
+                              "inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ring-1",
+                              commercialSource.isApporteur
+                                ? "bg-emerald-50 text-emerald-700 ring-emerald-200"
+                                : "bg-slate-100 text-slate-700 ring-slate-200",
+                            ].join(" ")}
+                          >
+                            {commercialSource.label}
+                          </span>
+                        )}
                         {commercialSource.detail ? <div className="truncate text-xs text-slate-500">{commercialSource.detail}</div> : null}
+                        {commercialSource.trackingPath ? (
+                          <Link to={commercialSource.trackingPath} className="block text-xs font-medium text-emerald-700 hover:underline">
+                            Suivi commissions
+                          </Link>
+                        ) : null}
                       </div>
                     ) : (
                       <span className="text-slate-400">Non renseignée</span>
