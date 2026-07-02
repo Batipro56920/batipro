@@ -8,7 +8,7 @@ export default function ChantierTasksQuotesSection({ children }: { children: Rea
   const [searchParams, setSearchParams] = useSearchParams();
   const targetedTaskId = searchParams.get("taskId") ?? "";
   const terrainFeedbackHref = id ? `/retours-terrain?chantierId=${encodeURIComponent(id)}` : "/retours-terrain";
-  const taskLibraryHref = "/bibliotheque";
+  const taskLibraryHref = "/bibliotheque?q=masque%20chantier";
   const materialNeedsHref = id ? `/chantiers/${encodeURIComponent(id)}/preparation` : "/chantiers";
 
   function clearTargetedTask() {
@@ -67,14 +67,14 @@ export default function ChantierTasksQuotesSection({ children }: { children: Rea
           <div>
             <div className="font-semibold">Bibliotheque chantier</div>
             <div className="mt-1 text-blue-800/80">
-              Completez les modeles avec temps, couts, details techniques et preparation avant de les utiliser sur les taches.
+              Retrouvez les modeles masques en production pour les activer ou les completer avant de les utiliser sur les taches.
             </div>
           </div>
           <Link
             to={taskLibraryHref}
             className="inline-flex shrink-0 items-center justify-center rounded-xl bg-blue-700 px-3 py-2 text-sm font-semibold text-white hover:bg-blue-800"
           >
-            Ouvrir la bibliotheque
+            Voir les modeles a activer
           </Link>
         </div>
       </div>
