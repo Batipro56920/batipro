@@ -189,7 +189,8 @@ export async function getApporteurLeads(): Promise<ApporteurLeadRow[]> {
     .from("apporteur_leads")
     .select("*")
     .eq("organization_id", organization_id)
-    .order("date", { ascending: false });
+    .order("date", { ascending: false })
+    .order("created_at", { ascending: false });
 
   if (response.error) throw new Error(response.error.message);
   return (response.data as ApporteurLeadRow[]) ?? [];
@@ -488,7 +489,12 @@ export async function getApporteurPortalData(jwt: string, apporteurId: string) {
   const [{ data: apporteur, error: apporteurError }, { data: leads, error: leadsError }, { data: documents, error: documentsError }] =
     await Promise.all([
       portalClient.from("apporteurs_affaires").select("*").eq("id", apporteurId).single(),
-      portalClient.from("apporteur_leads").select("*").eq("apporteur_id", apporteurId).order("date", { ascending: false }),
+      portalClient
+        .from("apporteur_leads")
+        .select("*")
+        .eq("apporteur_id", apporteurId)
+        .order("date", { ascending: false })
+        .order("created_at", { ascending: false }),
       portalClient.from("apporteur_documents").select("*").eq("apporteur_id", apporteurId).order("created_at", { ascending: false }),
     ]);
 
