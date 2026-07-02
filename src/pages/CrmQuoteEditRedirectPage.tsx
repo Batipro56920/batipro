@@ -23,9 +23,13 @@ type ResolveState =
   | { status: "not-found"; issue: QuoteOpenIssue }
   | { status: "error"; message: string };
 
-function quoteBuilderProjectId(quote: CrmQuoteRow) {
-  const projectId = quote.display_options?.project_id;
+function projectIdFromDisplayOptions(displayOptions: Record<string, unknown> | null | undefined) {
+  const projectId = displayOptions?.project_id;
   return typeof projectId === "string" && projectId.trim() ? projectId.trim() : "";
+}
+
+function quoteBuilderProjectId(quote: CrmQuoteRow) {
+  return projectIdFromDisplayOptions(quote.display_options);
 }
 
 function quoteFallbackProjectId(quote: CrmQuoteRow) {
@@ -179,7 +183,7 @@ export default function CrmQuoteEditRedirectPage() {
         <>
           <QuoteSnapshot quote={state.issue.quote} />
           <div className="mt-3 grid gap-2 sm:grid-cols-4">
-            <LinkStatus label="Projet devis" value={quoteBuilderProjectId(state.issue.quote as CrmQuoteRow)} />
+            <LinkStatus label="Projet devis" value={projectIdFromDisplayOptions(state.issue.quote.display_options)} />
             <LinkStatus label="Opportunité" value={state.issue.quote.opportunity_id} />
             <LinkStatus label="Prospect" value={state.issue.quote.prospect_id} />
             <LinkStatus label="Client" value={state.issue.quote.client_id} />
