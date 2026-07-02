@@ -4,6 +4,7 @@ import { FileText, PackageSearch, Plus, RefreshCw, Trash2, X } from "lucide-reac
 import type { SupplierRow } from "../../../services/suppliers.service";
 import { listSuppliers } from "../../../services/suppliers.service";
 import type { DocumentUnit } from "../../document-engine";
+import ProductFileImportPanel from "../components/ProductFileImportPanel";
 import ProductQuoteReaderPanel from "../components/ProductQuoteReaderPanel";
 import type { ProductCatalogDraft, ProductCatalogItem, ProductDocumentKind, ProductDocumentUsage, ProductSupplierPrice } from "../domain/types";
 import { deleteProductCatalogItem, listProductCatalogItems, saveProductCatalogItem } from "../infrastructure/productCatalogRepository";
@@ -380,7 +381,13 @@ function ProductForm({ product, suppliers, onCancel, onSave }: { product: Produc
         </div>
       </div>
 
-      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+      <ProductFileImportPanel
+        currentProduct={draft}
+        suppliers={suppliers}
+        onApply={patch}
+      />
+
+      <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
         <Field label="Désignation" value={draft.designation} onChange={(designation) => patch({ designation })} className="xl:col-span-2" />
         <Field label="Référence interne" value={draft.internalReference ?? ""} onChange={(internalReference) => patch({ internalReference })} />
         <Field label="Référence fabricant" value={draft.manufacturerReference ?? ""} onChange={(manufacturerReference) => patch({ manufacturerReference })} />
