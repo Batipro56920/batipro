@@ -31,7 +31,7 @@ type ProductCatalogRow = {
   target_margin_rate: number;
   is_sellable?: boolean | null;
   supplier_prices: ProductCatalogItem["supplierPrices"];
-  documents: ProductCatalogItem["documents"];
+  documents: unknown;
   price_history: ProductCatalogItem["priceHistory"];
   created_at: string;
   updated_at: string;
@@ -54,25 +54,33 @@ export async function listProductCatalogItems(): Promise<ProductCatalogItem[]> {
 
 export async function saveProductCatalogItem(input: ProductCatalogItem | ProductCatalogDraft, priceHistorySource = "mise a jour") {
   const now = new Date().toISOString();
-  const hasId = "id" in input;
-  const normalizedInput = {
-    ...input,
-    supplierPrices: normalizeSupplierPrices(input.supplierPrices),
-    documents: normalizeProductDocuments(input.documents),
-  };
-  const product: ProductCatalogItem = hasId
-    ? {
-        ...normalizedInput,
-        priceHistory: buildNextPriceHistory(normalizedInput, now, priceHistorySource),
-        updatedAt: now,
-      }
-    : {
-        ...normalizedInput,
-        id: crypto.randomUUID(),
-        priceHistory: [buildPriceHistoryEntry(normalizedInput.standardPurchasePriceHt, normalizedInput.recommendedSalePriceHt, now, "creation")],
-        createdAt: now,
-        updatedAt: now,
-      };
+  let product: ProductCatalogItem;
+
+  if ("id" in input) {
+    const normalizedProduct: ProductCatalogItem = {
+      ...input,
+      supplierPrices: normalizeSupplierPrices(input.supplierPrices),
+      documents: normalizeProductDocuments(input.documents),
+    };
+    product = {
+      ...normalizedProduct,
+      priceHistory: buildNextPriceHistory(normalizedProduct, now, priceHistorySource),
+      updatedAt: now,
+    };
+  } else {
+    const normalizedDraft: ProductCatalogDraft = {
+      ...input,
+      supplierPrices: normalizeSupplierPrices(input.supplierPrices),
+      documents: normalizeProductDocuments(input.documents),
+    };
+    product = {
+      ...normalizedDraft,
+      id: crypto.randomUUID(),
+      priceHistory: [buildPriceHistoryEntry(normalizedDraft.standardPurchasePriceHt, normalizedDraft.recommendedSalePriceHt, now, "creation")],
+      createdAt: now,
+      updatedAt: now,
+    };
+  }
 
   const { data, error } = await supabase
     .from(TABLE as any)
