@@ -6,7 +6,7 @@ import { loadCrmDataset, type CrmQuoteRow } from "../services/crm.service";
 
 type QuoteDiagnostic = Pick<
   CrmQuoteRow,
-  "quote_number" | "statut" | "montant_ttc" | "updated_at" | "opportunity_id" | "prospect_id" | "client_id"
+  "quote_number" | "statut" | "montant_ttc" | "updated_at" | "opportunity_id" | "prospect_id" | "client_id" | "display_options"
 >;
 
 type QuoteOpenIssue =
@@ -23,6 +23,11 @@ type ResolveState =
   | { status: "not-found"; issue: QuoteOpenIssue }
   | { status: "error"; message: string };
 
+function quoteBuilderProjectId(quote: CrmQuoteRow) {
+  const projectId = quote.display_options?.project_id;
+  return typeof projectId === "string" && projectId.trim() ? projectId.trim() : "";
+}
+
 function quoteFallbackProjectId(quote: CrmQuoteRow) {
   if (quote.opportunity_id) return `opportunity-${quote.opportunity_id}`;
   if (quote.prospect_id) return `prospect-${quote.prospect_id}`;
@@ -35,7 +40,7 @@ function issueMessage(issue: QuoteOpenIssue) {
   if (issue.kind === "missing-quote") {
     return "Ce devis n'existe pas dans les devis CRM chargés ou n'est pas accessible avec vos droits actuels.";
   }
-  return "Ce devis existe, mais il n'a aucun rattachement prospect, client ou opportunité permettant d'ouvrir un dossier projet commercial.";
+  return "Ce devis existe, mais il n'a aucun rattachement projet commercial exploitable pour ouvrir l'éditeur.";
 }
 
 function formatCurrency(value: number) {
@@ -95,7 +100,8 @@ export default function CrmQuoteEditRedirectPage() {
       setState({ status: "loading" });
       try {
         const dataset = await loadCrmDataset();
-        const project = buildProjects(dataset).find((candidate) => candidate.quotes.some((quote) => quote.id === id));
+        const projects = buildProjects(dataset);
+        const project = projects.find((candidate) => candidate.quotes.some((quote) => quote.id === id));
         if (cancelled) return;
         if (project) {
           setState({ status: "ready", targetPath: `/projets/${encodeURIComponent(project.id)}/devis/${encodeURIComponent(id)}/edit` });
@@ -103,6 +109,13 @@ export default function CrmQuoteEditRedirectPage() {
         }
 
         const quote = dataset.quotes.find((candidate) => candidate.id === id);
+        const builderProjectId = quote ? quoteBuilderProjectId(quote) : "";
+        const builderProject = builderProjectId ? projects.find((candidate) => candidate.id === builderProjectId) : null;
+        if (builderProject) {
+          setState({ status: "ready", targetPath: `/projets/${encodeURIComponent(builderProject.id)}/devis/${encodeURIComponent(id)}/edit` });
+          return;
+        }
+
         const fallbackProjectId = quote ? quoteFallbackProjectId(quote) : "";
         if (fallbackProjectId) {
           setState({ status: "ready", targetPath: `/projets/${encodeURIComponent(fallbackProjectId)}/devis/${encodeURIComponent(id)}/edit` });
@@ -122,6 +135,7 @@ export default function CrmQuoteEditRedirectPage() {
                   opportunity_id: quote.opportunity_id,
                   prospect_id: quote.prospect_id,
                   client_id: quote.client_id,
+                  display_options: quote.display_options,
                 },
               }
             : { kind: "missing-quote" },
@@ -164,7 +178,8 @@ export default function CrmQuoteEditRedirectPage() {
       {state.status === "not-found" && state.issue.kind === "missing-project-link" ? (
         <>
           <QuoteSnapshot quote={state.issue.quote} />
-          <div className="mt-3 grid gap-2 sm:grid-cols-3">
+          <div className="mt-3 grid gap-2 sm:grid-cols-4">
+            <LinkStatus label="Projet devis" value={quoteBuilderProjectId(state.issue.quote as CrmQuoteRow)} />
             <LinkStatus label="Opportunité" value={state.issue.quote.opportunity_id} />
             <LinkStatus label="Prospect" value={state.issue.quote.prospect_id} />
             <LinkStatus label="Client" value={state.issue.quote.client_id} />
