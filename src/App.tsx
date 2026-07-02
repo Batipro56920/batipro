@@ -363,15 +363,15 @@ export default function App() {
         />
         <Route
           path="/taches"
-          element={<ChantierBackofficeRoute label="Ouverture des tâches chantier..."><Navigate to="/chantiers" replace /></ChantierBackofficeRoute>}
+          element={<ChantierBackofficeRoute label="Ouverture des tâches chantier..."><ChantiersPage initialView="list" initialFocus="tasks" /></ChantierBackofficeRoute>}
         />
         <Route
           path="/reserves"
-          element={<ChantierBackofficeRoute label="Ouverture des réserves chantier..."><Navigate to="/chantiers" replace /></ChantierBackofficeRoute>}
+          element={<ChantierBackofficeRoute label="Ouverture des réserves chantier..."><ChantiersPage initialView="kanban" initialFocus="reserves" /></ChantierBackofficeRoute>}
         />
         <Route
           path="/temps"
-          element={<ChantierBackofficeRoute label="Ouverture du suivi des temps..."><Navigate to="/chantiers" replace /></ChantierBackofficeRoute>}
+          element={<ChantierBackofficeRoute label="Ouverture du suivi des temps..."><ChantiersPage initialView="kanban" initialFocus="time" /></ChantierBackofficeRoute>}
         />
         <Route path="/chantiers/nouveau" element={<ChantierBackofficeRoute label="Chargement du nouveau chantier..."><ChantierNewPage /></ChantierBackofficeRoute>} />
         <Route path="/chantiers/:id" element={<ChantierBackofficeRoute label="Chargement du chantier..."><ChantierPage /></ChantierBackofficeRoute>} />
