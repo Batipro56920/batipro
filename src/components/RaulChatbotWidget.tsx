@@ -102,9 +102,9 @@ export default function RaulChatbotWidget() {
   if (checkingAccess || !allowed) return null;
 
   return (
-    <div className="fixed bottom-4 right-4 z-50 max-w-[calc(100vw-2rem)] sm:bottom-5 sm:right-5">
+    <div className="fixed bottom-24 right-3 z-40 max-w-[calc(100vw-1.5rem)] sm:right-5 lg:bottom-24">
       {open ? (
-        <section className="mb-3 flex h-[min(560px,calc(100dvh-7rem))] w-[min(380px,calc(100vw-2rem))] flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl shadow-slate-950/20">
+        <section className="mb-3 flex h-[min(560px,calc(100dvh-9rem))] w-[min(380px,calc(100vw-1.5rem))] flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl shadow-slate-950/20">
           <header className="flex items-center justify-between gap-3 border-b border-slate-200 bg-slate-950 px-4 py-3 text-white">
             <div className="flex min-w-0 items-center gap-3">
               <RaulAvatar />
@@ -171,11 +171,11 @@ export default function RaulChatbotWidget() {
       <button
         type="button"
         onClick={() => setOpen((value) => !value)}
-        className="ml-auto flex h-12 items-center gap-2 rounded-2xl bg-slate-950 px-3 pr-4 text-sm font-semibold text-white shadow-xl shadow-slate-950/20 hover:bg-slate-800"
+        title="Raul"
+        className="ml-auto grid h-12 w-12 place-items-center rounded-2xl bg-slate-950 text-white shadow-xl shadow-slate-950/20 hover:bg-slate-800"
         aria-label={open ? "Fermer Raul" : "Ouvrir Raul"}
       >
         <RaulAvatar compact />
-        Raul
       </button>
     </div>
   );
