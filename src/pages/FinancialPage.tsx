@@ -5,7 +5,7 @@ import { calculateDocumentTotals, type BusinessDocument } from "../features/docu
 import { getPaidAmount, getRemainingAmount } from "../features/invoices/application/invoicePayments";
 import type { InvoiceRecord } from "../features/invoices/domain/types";
 import { listInvoices } from "../features/invoices/infrastructure/invoiceRepository";
-import type { PurchaseOrderRecord } from "../features/purchase-orders";
+import type { PurchaseOrderRecord, PurchaseOrderStatus } from "../features/purchase-orders";
 import { listPurchaseOrders } from "../features/purchase-orders";
 
 type FinancialSection = "encaissements" | "decaissements" | "tva" | "tresorerie" | "export";
@@ -210,16 +210,24 @@ function EncaissementsView({ invoices, summary }: { invoices: InvoiceRecord[]; s
 }
 
 function DecaissementsView({ purchaseOrders, summary }: { purchaseOrders: PurchaseOrderRecord[]; summary: FinancialSummary }) {
+  const openOrders = useMemo(() => purchaseOrders.filter(isOpenPurchaseOrder), [purchaseOrders]);
+  const overdueOrders = useMemo(() => openOrders.filter(isPurchaseOrderOverdue), [openOrders]);
+  const priorityOrders = useMemo(
+    () => [...openOrders].sort(comparePurchaseOrderPriority).slice(0, 5),
+    [openOrders],
+  );
+
   return (
     <div className="space-y-5">
       <MetricGrid
         metrics={[
           ["Commandes TTC", formatCurrency(summary.purchasesTtc), "Engagement fournisseurs"],
           ["Commandes HT", formatCurrency(summary.purchasesHt), "Base achats"],
-          ["Commandes ouvertes", String(purchaseOrders.filter((row) => !["delivered", "cancelled"].includes(row.status)).length), "À suivre"],
-          ["Fournisseurs", String(new Set(purchaseOrders.map((row) => row.supplierName).filter(Boolean)).size), "Avec commande"],
+          ["Commandes ouvertes", String(openOrders.length), "À livrer ou confirmer"],
+          ["Livraisons en retard", String(overdueOrders.length), "Date prévue dépassée"],
         ]}
       />
+      <PurchaseOrderPriorityPanel orders={priorityOrders} openCount={openOrders.length} />
       <DataPanel title="Décaissements fournisseurs" description="Bons de commande à suivre avant réception et paiement.">
         <table className="min-w-full text-sm">
           <thead className="bg-slate-50 text-slate-600">
@@ -242,7 +250,7 @@ function DecaissementsView({ purchaseOrders, summary }: { purchaseOrders: Purcha
                     </Link>
                   </Td>
                   <Td>{order.supplierName || order.document.recipient.displayName || "Fournisseur à définir"}</Td>
-                  <Td>{order.status}</Td>
+                  <Td>{purchaseOrderStatusLabel(order.status)}</Td>
                   <Td>{formatDate(order.expectedDeliveryDate)}</Td>
                   <Td align="right">{formatCurrency(totals.totalTtc)}</Td>
                 </tr>
@@ -252,6 +260,50 @@ function DecaissementsView({ purchaseOrders, summary }: { purchaseOrders: Purcha
         </table>
       </DataPanel>
     </div>
+  );
+}
+
+function PurchaseOrderPriorityPanel({ orders, openCount }: { orders: PurchaseOrderRecord[]; openCount: number }) {
+  return (
+    <DataPanel title="Commandes à traiter" description="Priorité aux bons ouverts dont la livraison est en retard, proche ou non planifiée.">
+      {orders.length ? (
+        <div className="grid gap-3 lg:grid-cols-2">
+          {orders.map((order) => {
+            const totals = order.document.totals ?? calculateDocumentTotals(order.document);
+            const deliveryStatus = getDeliveryStatus(order);
+            return (
+              <Link
+                key={order.id}
+                to={purchaseOrderHref(order.id)}
+                className="block rounded-2xl border border-slate-200 bg-slate-50 p-4 transition hover:border-blue-200 hover:bg-blue-50/50 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2"
+              >
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                  <div className="min-w-0">
+                    <div className="truncate text-sm font-semibold text-blue-700">{order.document.number || "Commande sans numéro"}</div>
+                    <div className="mt-1 truncate text-sm text-slate-600">
+                      {order.supplierName || order.document.recipient.displayName || "Fournisseur à définir"}
+                    </div>
+                  </div>
+                  <div className={`w-fit rounded-full px-3 py-1 text-xs font-semibold ${deliveryStatus.className}`}>{deliveryStatus.label}</div>
+                </div>
+                <div className="mt-4 grid gap-2 text-sm sm:grid-cols-3">
+                  <PlainKpi label="Statut" value={purchaseOrderStatusLabel(order.status)} />
+                  <PlainKpi label="Livraison" value={formatDate(order.expectedDeliveryDate)} />
+                  <PlainKpi label="TTC" value={formatCurrency(totals.totalTtc)} />
+                </div>
+              </Link>
+            );
+          })}
+        </div>
+      ) : (
+        <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800">
+          Aucune commande ouverte à traiter. Les bons sont livrés, annulés ou inexistants.
+        </div>
+      )}
+      {openCount > orders.length ? (
+        <p className="mt-3 text-xs text-slate-500">{openCount - orders.length} autre(s) commande(s) ouverte(s) restent visibles dans le tableau complet.</p>
+      ) : null}
+    </DataPanel>
   );
 }
 
@@ -461,6 +513,64 @@ function invoiceHref(invoiceId: string) {
 function purchaseOrderHref(orderId: string) {
   const params = new URLSearchParams({ tab: "orders", purchaseOrderId: orderId });
   return `/fournisseurs?${params.toString()}`;
+}
+
+function isOpenPurchaseOrder(order: PurchaseOrderRecord) {
+  return !["delivered", "cancelled"].includes(order.status);
+}
+
+function comparePurchaseOrderPriority(left: PurchaseOrderRecord, right: PurchaseOrderRecord) {
+  const leftTime = getDeliveryTime(left.expectedDeliveryDate);
+  const rightTime = getDeliveryTime(right.expectedDeliveryDate);
+  if (leftTime === null && rightTime === null) return 0;
+  if (leftTime === null) return 1;
+  if (rightTime === null) return -1;
+  return leftTime - rightTime;
+}
+
+function isPurchaseOrderOverdue(order: PurchaseOrderRecord) {
+  if (!isOpenPurchaseOrder(order)) return false;
+  const deliveryTime = getDeliveryTime(order.expectedDeliveryDate);
+  return deliveryTime !== null && deliveryTime < getTodayTime();
+}
+
+function getDeliveryStatus(order: PurchaseOrderRecord) {
+  const deliveryTime = getDeliveryTime(order.expectedDeliveryDate);
+  if (deliveryTime === null) {
+    return { label: "À planifier", className: "bg-slate-100 text-slate-700" };
+  }
+  const todayTime = getTodayTime();
+  if (deliveryTime < todayTime) {
+    return { label: "En retard", className: "bg-red-50 text-red-700" };
+  }
+  if (deliveryTime === todayTime) {
+    return { label: "Aujourd'hui", className: "bg-amber-50 text-amber-700" };
+  }
+  return { label: "À venir", className: "bg-blue-50 text-blue-700" };
+}
+
+function getDeliveryTime(value: string | null) {
+  if (!value) return null;
+  const [year, month, day] = value.slice(0, 10).split("-").map(Number);
+  if (!year || !month || !day) return null;
+  return new Date(year, month - 1, day).getTime();
+}
+
+function getTodayTime() {
+  const today = new Date();
+  return new Date(today.getFullYear(), today.getMonth(), today.getDate()).getTime();
+}
+
+function purchaseOrderStatusLabel(status: PurchaseOrderStatus) {
+  const labels: Record<PurchaseOrderStatus, string> = {
+    draft: "Brouillon",
+    sent: "Envoyé",
+    confirmed: "Confirmé",
+    partially_delivered: "Livré partiellement",
+    delivered: "Livré",
+    cancelled: "Annulé",
+  };
+  return labels[status] ?? status;
 }
 
 function formatCurrency(value: number) {
