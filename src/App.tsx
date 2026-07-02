@@ -97,9 +97,13 @@ function TerrainFeedbackBackofficeRoute({ label, children }: { label: string; ch
 }
 
 function ChantierTerrainFeedbackRedirect() {
-  const { id } = useParams();
+  const { id, feedbackId } = useParams();
   if (!id) return <Navigate to="/retours-terrain" replace />;
-  return <Navigate to={`/retours-terrain?chantierId=${encodeURIComponent(id)}`} replace />;
+
+  const params = new URLSearchParams({ chantierId: id });
+  if (feedbackId) params.set("feedbackId", feedbackId);
+
+  return <Navigate to={`/retours-terrain?${params.toString()}`} replace />;
 }
 
 function StatistiquesRoute() {
@@ -392,6 +396,12 @@ export default function App() {
           path="/chantiers/:id/retours-terrain"
           element={
             <TerrainFeedbackBackofficeRoute label="Ouverture des retours terrain..."><ChantierTerrainFeedbackRedirect /></TerrainFeedbackBackofficeRoute>
+          }
+        />
+        <Route
+          path="/chantiers/:id/retours-terrain/:feedbackId"
+          element={
+            <TerrainFeedbackBackofficeRoute label="Ouverture du retour terrain..."><ChantierTerrainFeedbackRedirect /></TerrainFeedbackBackofficeRoute>
           }
         />
         <Route
