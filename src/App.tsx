@@ -361,6 +361,18 @@ export default function App() {
           path="/planning"
           element={<ChantierBackofficeRoute label="Chargement du planning..."><ChantiersPage initialView="planning" /></ChantierBackofficeRoute>}
         />
+        <Route
+          path="/taches"
+          element={<ChantierBackofficeRoute label="Ouverture des tâches chantier..."><Navigate to="/chantiers" replace /></ChantierBackofficeRoute>}
+        />
+        <Route
+          path="/reserves"
+          element={<ChantierBackofficeRoute label="Ouverture des réserves chantier..."><Navigate to="/chantiers" replace /></ChantierBackofficeRoute>}
+        />
+        <Route
+          path="/temps"
+          element={<ChantierBackofficeRoute label="Ouverture du suivi des temps..."><Navigate to="/chantiers" replace /></ChantierBackofficeRoute>}
+        />
         <Route path="/chantiers/nouveau" element={<ChantierBackofficeRoute label="Chargement du nouveau chantier..."><ChantierNewPage /></ChantierBackofficeRoute>} />
         <Route path="/chantiers/:id" element={<ChantierBackofficeRoute label="Chargement du chantier..."><ChantierPage /></ChantierBackofficeRoute>} />
         <Route path="/chantiers/:id/preparation" element={<ChantierBackofficeRoute label="Chargement du chantier..."><ChantierPage /></ChantierBackofficeRoute>} />
@@ -418,8 +430,7 @@ export default function App() {
         <Route
           path="/retours-terrain"
           element={
-            <TerrainFeedbackBackofficeRoute label="Chargement des retours terrain..."><TerrainFeedbacksPage /></TerrainFeedbackBackofficeRoute>
-          }
+            <TerrainFeedbackBackofficeRoute label="Chargement des retours terrain..."><TerrainFeedbacksPage /></TerrainFeedbackBackofficeRoute>}
         />
         <Route
           path="/bibliotheque"
