@@ -142,6 +142,10 @@ export default function ApporteurPortalPage() {
     () => (leadAmountPreview === null ? null : commissionPreviewAmount(leadAmountPreview, portalData.apporteur)),
     [leadAmountPreview, portalData.apporteur],
   );
+  const sortedLeads = useMemo(
+    () => [...portalData.leads].sort((a, b) => String(b.date ?? "").localeCompare(String(a.date ?? ""))),
+    [portalData.leads],
+  );
 
   useEffect(() => {
     let alive = true;
@@ -296,7 +300,7 @@ export default function ApporteurPortalPage() {
           <div className="mb-4"><div className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Suivi</div><h2 className="mt-1 text-lg font-semibold text-slate-950">Clients transmis</h2></div>
           {portalData.leads.length ? (
             <div className="divide-y divide-slate-200 border-y border-slate-200 md:hidden">
-              {portalData.leads.map((lead) => (
+              {sortedLeads.map((lead) => (
                 <LeadMobileRow key={lead.id} lead={lead} apporteur={portalData.apporteur} />
               ))}
             </div>
@@ -316,7 +320,7 @@ export default function ApporteurPortalPage() {
                 </tr>
               </thead>
               <tbody>
-                {portalData.leads.map((lead) => (
+                {sortedLeads.map((lead) => (
                   <tr key={lead.id}>
                     <td className="align-top"><div className="font-semibold text-slate-950">{lead.client_name}</div><div className="text-xs text-slate-500">{lead.telephone || "-"}</div></td>
                     <td className="align-top"><div>{lead.project_type || "-"}</div><div className="text-xs text-slate-500">{lead.project_address || ""}</div></td>
