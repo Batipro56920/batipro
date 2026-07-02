@@ -110,6 +110,26 @@ function normalizeOptionalText(value: string | null | undefined) {
   return value?.trim() || null;
 }
 
+function appendCrmReferenceToComment(comment: string | null | undefined, input: LeadCrmLinkInput) {
+  const crmProspectId = normalizeOptionalText(input.crm_prospect_id) ?? null;
+  const crmOpportunityId = normalizeOptionalText(input.crm_opportunity_id) ?? null;
+  if (!crmProspectId && !crmOpportunityId) return comment;
+
+  const currentComment = normalizeOptionalText(comment) ?? "";
+  const crmReference = [
+    crmProspectId ? `prospect ${crmProspectId}` : null,
+    crmOpportunityId ? `projet ${crmOpportunityId}` : null,
+  ].filter(Boolean).join(" / ");
+  const referenceLine = `Référence CRM : ${crmReference}`;
+  const withoutPreviousReference = currentComment
+    .split("\n")
+    .filter((line) => !line.trim().startsWith("Référence CRM :"))
+    .join("\n")
+    .trim();
+
+  return [withoutPreviousReference, referenceLine].filter(Boolean).join("\n");
+}
+
 function normalizeDuplicateKey(value: string | null | undefined) {
   return String(value ?? "").trim().replace(/\s+/g, " ");
 }
@@ -427,8 +447,11 @@ function hasMissingApporteurLeadColumn(error: SupabaseColumnError | null | undef
   );
 }
 
-function stripCrmLinkColumns<T extends LeadCrmLinkInput>(payload: T) {
-  const fallbackPayload = { ...payload };
+function stripCrmLinkColumns<T extends LeadCrmLinkInput & { comment?: string | null }>(payload: T) {
+  const fallbackPayload = {
+    ...payload,
+    comment: appendCrmReferenceToComment(payload.comment, payload),
+  };
   delete fallbackPayload.crm_prospect_id;
   delete fallbackPayload.crm_opportunity_id;
   return fallbackPayload;
