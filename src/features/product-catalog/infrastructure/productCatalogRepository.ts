@@ -266,6 +266,7 @@ function normalizeProductDocument(document: unknown): ProductDocument | null {
   const name = String(row.name ?? "").trim();
   const url = String(row.url ?? "").trim() || null;
   const notes = String(row.notes ?? "").trim() || null;
+  const usage = normalizeProductDocumentUsage(row.usage, kind);
 
   if (!name && !url) return null;
 
@@ -274,10 +275,7 @@ function normalizeProductDocument(document: unknown): ProductDocument | null {
     kind,
     name: name || productDocumentKindLabel(kind),
     url,
-    usage: {
-      task: row.usage?.task ?? DEFAULT_DOCUMENT_USAGE_BY_KIND[kind].task,
-      doe: row.usage?.doe ?? DEFAULT_DOCUMENT_USAGE_BY_KIND[kind].doe,
-    },
+    usage,
     notes,
   };
 }
@@ -292,6 +290,17 @@ function normalizeProductDocumentKind(value: unknown): ProductDocumentKind {
   if (kind === "certification") return "certification";
   if (kind === "photo") return "photo";
   return "other";
+}
+
+function normalizeProductDocumentUsage(value: unknown, kind: ProductDocumentKind): ProductDocumentUsage {
+  const fallback = DEFAULT_DOCUMENT_USAGE_BY_KIND[kind];
+  if (!value || typeof value !== "object") return fallback;
+
+  const usage = value as Partial<ProductDocumentUsage>;
+  return {
+    task: typeof usage.task === "boolean" ? usage.task : fallback.task,
+    doe: typeof usage.doe === "boolean" ? usage.doe : fallback.doe,
+  };
 }
 
 function productDocumentKindLabel(kind: ProductDocumentKind) {
