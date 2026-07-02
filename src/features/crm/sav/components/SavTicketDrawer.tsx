@@ -11,6 +11,7 @@ export function SavTicketDrawer({ ticket, onClose }: { ticket: SavWithContext | 
   const chantierHref = ticket.chantier_id ? `/chantiers/${encodeURIComponent(ticket.chantier_id)}` : null;
   const chantierPlanningHref = ticket.chantier_id ? `/chantiers/${encodeURIComponent(ticket.chantier_id)}/planning` : null;
   const chantierDocumentsHref = ticket.chantier_id ? `/chantiers/${encodeURIComponent(ticket.chantier_id)}/documents` : null;
+  const chantierTeamHref = ticket.chantier_id ? `/chantiers/${encodeURIComponent(ticket.chantier_id)}/equipe` : null;
   const chantierQualityHref = ticket.chantier_id ? `/chantiers/${encodeURIComponent(ticket.chantier_id)}/qualite` : null;
   const chantierFeedbackHref = ticket.chantier_id ? `/retours-terrain?chantierId=${encodeURIComponent(ticket.chantier_id)}` : null;
 
@@ -72,6 +73,14 @@ export function SavTicketDrawer({ ticket, onClose }: { ticket: SavWithContext | 
                   Documents chantier
                 </Link>
               ) : null}
+              {chantierTeamHref ? (
+                <Link
+                  to={chantierTeamHref}
+                  className="rounded-xl border border-violet-200 bg-violet-50 px-3 py-2 text-xs font-semibold text-violet-800 hover:bg-violet-100"
+                >
+                  Équipe chantier
+                </Link>
+              ) : null}
               {chantierFeedbackHref ? (
                 <Link
                   to={chantierFeedbackHref}
@@ -96,7 +105,16 @@ export function SavTicketDrawer({ ticket, onClose }: { ticket: SavWithContext | 
             <div className="mt-3 rounded-xl border border-dashed border-slate-200 bg-slate-50 p-3 text-sm text-slate-500">{Array.isArray(ticket.photos) ? ticket.photos.length : 0} photo(s) liées.</div>
           </section>
           <div className="grid gap-2 sm:grid-cols-2">
-            <button type="button" disabled className="rounded-xl border border-slate-200 px-3 py-2 text-sm font-medium text-slate-400" title="Assigner à finaliser">Assigner</button>
+            {chantierTeamHref ? (
+              <Link
+                to={chantierTeamHref}
+                className="rounded-xl border border-violet-200 bg-violet-50 px-3 py-2 text-center text-sm font-semibold text-violet-800 hover:bg-violet-100"
+              >
+                Équipe chantier
+              </Link>
+            ) : (
+              <button type="button" disabled className="rounded-xl border border-slate-200 px-3 py-2 text-sm font-medium text-slate-400" title="Chantier requis pour l'équipe chantier">Équipe chantier</button>
+            )}
             {chantierPlanningHref ? (
               <Link
                 to={chantierPlanningHref}
