@@ -175,6 +175,14 @@ export default function BibliothequeTasksPage() {
     });
   }, [preparationByTemplateId, query, readinessFilter, rows, selectedLot]);
 
+  const hasActiveFilters = Boolean(query.trim() || selectedLot || readinessFilter);
+
+  function resetFilters() {
+    updateQueryFromInput("");
+    setSelectedLot("");
+    setReadinessFilter("");
+  }
+
   function formatCurrency(value: number | null) {
     if (value === null) return "-";
     return new Intl.NumberFormat(locale, { style: "currency", currency: "EUR" }).format(value);
@@ -535,7 +543,7 @@ export default function BibliothequeTasksPage() {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-start justify-between gap-3">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <h1 className="text-2xl font-bold">{t("bibliothequeTasks.title")}</h1>
           <p className="text-slate-500">{t("bibliothequeTasks.subtitle")}</p>
@@ -543,7 +551,7 @@ export default function BibliothequeTasksPage() {
         <button
           type="button"
           onClick={openCreateDrawer}
-          className="rounded-xl bg-slate-900 px-4 py-2 text-sm text-white hover:bg-slate-800"
+          className="rounded-xl bg-slate-900 px-4 py-2 text-sm text-white hover:bg-slate-800 sm:shrink-0"
         >
           + {t("bibliothequeTasks.new")}
         </button>
@@ -650,7 +658,16 @@ export default function BibliothequeTasksPage() {
         <div className="rounded-2xl border bg-white p-6 text-sm text-slate-500">{t("common.states.loading")}</div>
       ) : filteredRows.length === 0 ? (
         <div className="rounded-2xl border bg-white p-6 text-sm text-slate-500">
-          Aucun modèle ne correspond aux filtres actifs.
+          <div>Aucun modèle ne correspond aux filtres actifs.</div>
+          {hasActiveFilters ? (
+            <button
+              type="button"
+              onClick={resetFilters}
+              className="mt-3 rounded-xl border px-3 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50"
+            >
+              Réinitialiser les filtres
+            </button>
+          ) : null}
         </div>
       ) : (
         <>
