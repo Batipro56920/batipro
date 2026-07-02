@@ -12,6 +12,7 @@ export function SavTicketDrawer({ ticket, onClose }: { ticket: SavWithContext | 
   const chantierPlanningHref = ticket.chantier_id ? `/chantiers/${encodeURIComponent(ticket.chantier_id)}/planning` : null;
   const chantierDocumentsHref = ticket.chantier_id ? `/chantiers/${encodeURIComponent(ticket.chantier_id)}/documents` : null;
   const chantierQualityHref = ticket.chantier_id ? `/chantiers/${encodeURIComponent(ticket.chantier_id)}/qualite` : null;
+  const chantierFeedbackHref = ticket.chantier_id ? `/chantiers/${encodeURIComponent(ticket.chantier_id)}/retours-terrain` : null;
 
   return (
     <div className="fixed inset-0 z-40 flex justify-end bg-slate-950/20" role="dialog" aria-modal="true">
@@ -71,6 +72,14 @@ export function SavTicketDrawer({ ticket, onClose }: { ticket: SavWithContext | 
                   Documents chantier
                 </Link>
               ) : null}
+              {chantierFeedbackHref ? (
+                <Link
+                  to={chantierFeedbackHref}
+                  className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-800 hover:bg-emerald-100"
+                >
+                  Retours terrain
+                </Link>
+              ) : null}
               {chantierQualityHref ? (
                 <Link
                   to={chantierQualityHref}
@@ -108,6 +117,16 @@ export function SavTicketDrawer({ ticket, onClose }: { ticket: SavWithContext | 
               </Link>
             ) : (
               <button type="button" disabled className="rounded-xl border border-slate-200 px-3 py-2 text-sm font-medium text-slate-400" title="Chantier requis pour les documents">Documents</button>
+            )}
+            {chantierFeedbackHref ? (
+              <Link
+                to={chantierFeedbackHref}
+                className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-center text-sm font-semibold text-emerald-800 hover:bg-emerald-100 sm:col-span-2"
+              >
+                Voir les retours terrain
+              </Link>
+            ) : (
+              <button type="button" disabled className="rounded-xl border border-slate-200 px-3 py-2 text-sm font-medium text-slate-400 sm:col-span-2" title="Chantier requis pour les retours terrain">Retours terrain</button>
             )}
             <button type="button" disabled className="rounded-xl border border-slate-200 px-3 py-2 text-sm font-medium text-slate-400 sm:col-span-2" title="Clôture à finaliser">Clôturer</button>
           </div>
