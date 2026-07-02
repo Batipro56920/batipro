@@ -11,7 +11,7 @@ import {
   type ChantierRow,
 } from "../services/chantiers.service";
 import { ChantiersHeader } from "../features/chantiers/list/components/ChantiersHeader";
-import { ChantiersKpiGrid } from "../features/chantiers/list/components/ChantiersKpiGrid";
+import { ChantiersKpiGrid, type ChantiersKpiKey } from "../features/chantiers/list/components/ChantiersKpiGrid";
 import { ChantiersToolbar } from "../features/chantiers/list/components/ChantiersToolbar";
 import { ChantiersBulkBar } from "../features/chantiers/list/components/ChantiersBulkBar";
 import { ChantiersListView } from "../features/chantiers/list/components/ChantiersListView";
@@ -151,6 +151,35 @@ export default function ChantiersPage({ initialView = "list" }: ChantiersPagePro
     setView(initialView);
   }, [initialView]);
 
+  function applyKpiFilter(key: ChantiersKpiKey) {
+    setSelectedIds([]);
+
+    if (key === "active") {
+      setScope("actifs");
+      setFilters(DEFAULT_FILTERS);
+      setView("list");
+      return;
+    }
+
+    if (key === "preparation") {
+      setScope("actifs");
+      setFilters({ ...DEFAULT_FILTERS, status: "PREPARATION" });
+      setView("list");
+      return;
+    }
+
+    if (key === "late") {
+      setScope("actifs");
+      setFilters({ ...DEFAULT_FILTERS, period: "late" });
+      setView("planning");
+      return;
+    }
+
+    setScope("actifs");
+    setFilters({ ...DEFAULT_FILTERS, period: "alerts" });
+    setView("kanban");
+  }
+
   function toggleSelection(id: string) {
     setSelectedIds((current) => (current.includes(id) ? current.filter((value) => value !== id) : [...current, id]));
   }
@@ -233,7 +262,7 @@ export default function ChantiersPage({ initialView = "list" }: ChantiersPagePro
         onNew={() => navigate("/chantiers/nouveau")}
         onExport={() => exportChantiersCsv(visibleRows, "chantiers.csv")}
       />
-      <ChantiersKpiGrid metrics={metrics} />
+      <ChantiersKpiGrid metrics={metrics} onSelect={applyKpiFilter} />
       <ChantiersToolbar
         scope={scope}
         onScope={setScope}
