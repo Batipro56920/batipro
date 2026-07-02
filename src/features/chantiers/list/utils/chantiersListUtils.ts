@@ -141,11 +141,13 @@ export function computeChantierMetrics(rows: ChantierDerived[]) {
   const preparation = rows.filter((row) => row.status === "PREPARATION").length;
   const late = rows.filter((row) => row.isLate).length;
   const alerts = rows.filter(hasChantierAlert).length;
+  const terrainFeedbackOpen = rows.reduce((total, row) => total + openTerrainFeedbackCount(row), 0);
+  const terrainFeedbackPriority = rows.reduce((total, row) => total + priorityTerrainFeedbackCount(row), 0);
   const completedThisMonth = rows.filter((row) => row.status === "TERMINE" && (row.completed_at ?? row.lifecycle_updated_at ?? "").startsWith(thisMonth)).length;
   const marginValues = rows.map((row) => row.estimatedMargin).filter((value): value is number => value !== null);
   const estimatedMargin = marginValues.length ? marginValues.reduce((sum, value) => sum + value, 0) : null;
 
-  return { active, preparation, late, alerts, completedThisMonth, estimatedMargin };
+  return { active, preparation, late, alerts, completedThisMonth, estimatedMargin, terrainFeedbackOpen, terrainFeedbackPriority };
 }
 
 export function uniqueClients(rows: ChantierDerived[]) {
