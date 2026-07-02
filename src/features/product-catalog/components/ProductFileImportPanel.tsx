@@ -20,6 +20,16 @@ type ExtractProductsResponse = {
   products?: ExtractedQuoteProduct[];
 };
 
+type ProductTechnicalInsights = {
+  consumptionRatioQuantity: number | null;
+  consumptionRatioUnit: string | null;
+  ratioBaseUnit: string | null;
+  lossPercent: number | null;
+  workMethod: string | null;
+  applicationScope: string | null;
+  technicalNotes: string[];
+};
+
 type ProductDraftPatch = Partial<ProductCatalogDraft | ProductCatalogItem>;
 
 export default function ProductFileImportPanel({
@@ -69,9 +79,14 @@ export default function ProductFileImportPanel({
         throw new Error("Aucune information produit exploitable n'a été détectée dans ces fichiers.");
       }
 
-      const patch = buildProductPatch(currentProduct, bestProduct, selectedFiles, suppliers);
+      const insights = extractProductTechnicalInsights(cleanedText, bestProduct);
+      const patch = buildProductPatch(currentProduct, bestProduct, selectedFiles, suppliers, insights);
       onApply(patch);
-      setResult(`${bestProduct.designation} détecté et appliqué à la fiche.`);
+      const ratioLabel = insights.consumptionRatioQuantity && insights.consumptionRatioUnit && insights.ratioBaseUnit
+        ? ` Ratio ${formatNumber(insights.consumptionRatioQuantity)} ${insights.consumptionRatioUnit}/${insights.ratioBaseUnit}.`
+        : "";
+      const methodLabel = insights.workMethod ? " Mode opératoire créé." : "";
+      setResult(`${bestProduct.designation} détecté et appliqué à la fiche.${ratioLabel}${methodLabel}`);
     } catch (err: any) {
       setError(err?.message ?? "Analyse automatique du fichier impossible.");
       setResult(null);
@@ -92,7 +107,7 @@ export default function ProductFileImportPanel({
         <div>
           <div className="text-sm font-semibold text-slate-950">Import automatique depuis fichier produit</div>
           <p className="mt-1 text-sm text-slate-600">
-            Importez une fiche technique, notice, tarif fournisseur ou document produit. Batipro lit le contenu et préremplit la fiche ouverte.
+            Importez une fiche technique, notice, tarif fournisseur ou document produit. Batipro lit le contenu, extrait les ratios utiles et préremplit la fiche ouverte.
           </p>
         </div>
         <label className="inline-flex h-10 cursor-pointer items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 text-sm font-semibold text-white hover:bg-blue-700 has-[:disabled]:cursor-not-allowed has-[:disabled]:bg-blue-300">
@@ -148,6 +163,7 @@ function buildProductPatch(
   extracted: ExtractedQuoteProduct,
   files: File[],
   suppliers: SupplierRow[],
+  insights: ProductTechnicalInsights,
 ): ProductDraftPatch {
   const supplierName = normalizeText(extracted.supplier_name);
   const supplier = supplierName ? suppliers.find((row) => normalizeKey(row.name) === normalizeKey(supplierName)) ?? null : null;
@@ -156,19 +172,12 @@ function buildProductPatch(
   const unitPrice = computeCoverageUnitPrice(supplierNegotiatedPrice, coverageM2) ?? supplierNegotiatedPrice;
   const marginRate = positiveNumber(currentProduct.targetMarginRate) ?? 30;
   const salePrice = positiveNumber(extracted.sale_price_ht) ?? computeSalePrice(unitPrice, marginRate);
-  const unit = coverageM2 && coverageM2 > 0 ? "m2" : normalizeUnit(extracted.unit);
+  const unit = insights.consumptionRatioUnit ? normalizeUnit(insights.consumptionRatioUnit) : coverageM2 && coverageM2 > 0 ? "m2" : normalizeUnit(extracted.unit);
   const supplierPrice = buildSupplierPrice(extracted, supplier, supplierNegotiatedPrice);
   const nextSupplierPrices = supplierPrice
     ? mergeSupplierPrice(currentProduct.supplierPrices, supplierPrice)
     : currentProduct.supplierPrices;
-  const importedDocuments = files.map((file) => ({
-    id: crypto.randomUUID(),
-    kind: "technical_sheet" as const,
-    name: file.name,
-    url: null,
-    usage: { task: true, doe: true },
-    notes: "Fichier importé pour analyse automatique de la fiche produit. Stockage documentaire à raccorder au lot Supabase Storage.",
-  }));
+  const importedDocuments = buildImportedDocuments(files, extracted, insights);
 
   return {
     designation: normalizeText(extracted.designation) ?? currentProduct.designation,
@@ -184,6 +193,54 @@ function buildProductPatch(
     supplierPrices: nextSupplierPrices,
     documents: [...currentProduct.documents, ...importedDocuments],
   };
+}
+
+function buildImportedDocuments(files: File[], extracted: ExtractedQuoteProduct, insights: ProductTechnicalInsights): ProductCatalogItem["documents"] {
+  const technicalNotes = [
+    ...insights.technicalNotes,
+    insights.consumptionRatioQuantity && insights.consumptionRatioUnit && insights.ratioBaseUnit
+      ? `Ratio matériau Batipro: ${formatNumber(insights.consumptionRatioQuantity)} ${insights.consumptionRatioUnit}/${insights.ratioBaseUnit}`
+      : null,
+    insights.lossPercent !== null ? `Perte préconisée: ${formatNumber(insights.lossPercent)} %` : null,
+    normalizeText(extracted.packaging) ? `Conditionnement: ${normalizeText(extracted.packaging)}` : null,
+    positiveNumber(extracted.coverage_m2) ? `Couverture conditionnement: ${formatNumber(positiveNumber(extracted.coverage_m2) ?? 0)} m2` : null,
+  ].filter((note): note is string => Boolean(note));
+
+  const documents: ProductCatalogItem["documents"] = files.map((file) => ({
+    id: crypto.randomUUID(),
+    kind: "technical_sheet" as const,
+    name: file.name,
+    url: null,
+    usage: { task: true, doe: true },
+    notes: [
+      "Fichier importé pour analyse automatique de la fiche produit. Stockage documentaire à raccorder au lot Supabase Storage.",
+      ...technicalNotes,
+    ].join("\n"),
+  }));
+
+  if (insights.applicationScope) {
+    documents.push({
+      id: crypto.randomUUID(),
+      kind: "application_scope",
+      name: "Domaine d'application extrait",
+      url: null,
+      usage: { task: true, doe: false },
+      notes: insights.applicationScope,
+    });
+  }
+
+  if (insights.workMethod) {
+    documents.push({
+      id: crypto.randomUUID(),
+      kind: "work_method",
+      name: "Mode opératoire extrait",
+      url: null,
+      usage: { task: true, doe: false },
+      notes: insights.workMethod,
+    });
+  }
+
+  return documents;
 }
 
 function buildSupplierPrice(
@@ -225,6 +282,102 @@ function mergeSupplierPrice(prices: ProductSupplierPrice[], candidate: ProductSu
       && (price.coverageM2 ?? null) === (candidate.coverageM2 ?? null);
   });
   return exists ? prices : [...prices, candidate];
+}
+
+function extractProductTechnicalInsights(text: string, extracted: ExtractedQuoteProduct): ProductTechnicalInsights {
+  const explicit = extracted as ExtractedQuoteProduct & Record<string, unknown>;
+  const explicitRatioQuantity = positiveNumber(explicit.consumption_ratio_quantity ?? explicit.material_ratio_quantity ?? explicit.ratio_quantity);
+  const explicitRatioUnit = normalizeText(explicit.consumption_ratio_unit ?? explicit.material_ratio_unit ?? explicit.ratio_unit);
+  const explicitBaseUnit = normalizeText(explicit.consumption_base_unit ?? explicit.ratio_base_unit);
+  const localRatio = extractConsumptionRatio(text);
+  const ratioQuantity = explicitRatioQuantity ?? localRatio?.quantity ?? null;
+  const ratioUnit = explicitRatioUnit ?? localRatio?.unit ?? normalizeUnit(extracted.unit);
+  const baseUnit = explicitBaseUnit ?? localRatio?.baseUnit ?? "m2";
+  const lossPercent = positiveNumber(explicit.loss_percent) ?? extractLossPercent(text);
+  const workMethod = normalizeText(explicit.work_method) ?? extractSection(text, [
+    "mode operatoire",
+    "mode opératoire",
+    "mise en oeuvre",
+    "mise en œuvre",
+    "application",
+    "preparation",
+    "préparation",
+    "utilisation",
+  ]);
+  const applicationScope = normalizeText(explicit.application_scope) ?? extractSection(text, [
+    "domaine d'application",
+    "domaines d'application",
+    "emploi",
+    "destination",
+    "supports admis",
+    "supports",
+  ]);
+  const technicalNotes = [
+    normalizeText(explicit.technical_notes),
+    ratioQuantity && ratioUnit && baseUnit ? `Consommation extraite: ${formatNumber(ratioQuantity)} ${ratioUnit}/${baseUnit}` : null,
+    lossPercent !== null ? `Perte extraite: ${formatNumber(lossPercent)} %` : null,
+  ].filter((note): note is string => Boolean(note));
+
+  return {
+    consumptionRatioQuantity: ratioQuantity,
+    consumptionRatioUnit: ratioUnit,
+    ratioBaseUnit: baseUnit,
+    lossPercent,
+    workMethod,
+    applicationScope,
+    technicalNotes,
+  };
+}
+
+function extractConsumptionRatio(text: string): { quantity: number; unit: string; baseUnit: string } | null {
+  const normalized = text.replace(/\s+/g, " ");
+  const directPatterns = [
+    /(?:consommation|consomation|conso\.?|dosage|ratio)[^\d]{0,80}(\d+(?:[,.]\d+)?)\s*(l|litres?|kg|g|ml|m²|m2|m3|m³|ml|u|unite|unité)\s*(?:\/|par|pour)\s*(m²|m2|m3|m³|ml|m|u|unite|unité)/i,
+    /(\d+(?:[,.]\d+)?)\s*(l|litres?|kg|g|ml|m²|m2|m3|m³|ml|u|unite|unité)\s*(?:\/|par)\s*(m²|m2|m3|m³|ml|m|u|unite|unité)[^.]{0,80}(?:consommation|rendement|application)/i,
+  ];
+
+  for (const pattern of directPatterns) {
+    const match = normalized.match(pattern);
+    const quantity = parseLooseNumber(match?.[1]);
+    if (quantity !== null && quantity > 0 && match?.[2] && match?.[3]) {
+      return { quantity: roundPrice(quantity), unit: normalizeRatioUnit(match[2]), baseUnit: normalizeRatioUnit(match[3]) };
+    }
+  }
+
+  const yieldPattern = /(?:rendement|couvre|couverture)[^\d]{0,80}(\d+(?:[,.]\d+)?)\s*(m²|m2)\s*(?:\/|par|pour)\s*(l|litre|litres|kg|pot|seau|sac|unite|unité|u)/i;
+  const yieldMatch = normalized.match(yieldPattern);
+  const yieldedSurface = parseLooseNumber(yieldMatch?.[1]);
+  if (yieldedSurface !== null && yieldedSurface > 0 && yieldMatch?.[3]) {
+    return { quantity: roundPrice(1 / yieldedSurface), unit: normalizeRatioUnit(yieldMatch[3]), baseUnit: "m2" };
+  }
+
+  return null;
+}
+
+function extractLossPercent(text: string): number | null {
+  const match = text.match(/(?:perte|chute|gaspillage|majoration)[^\d]{0,60}(\d+(?:[,.]\d+)?)\s*%/i);
+  const value = parseLooseNumber(match?.[1]);
+  return value !== null && value >= 0 && value <= 100 ? roundPrice(value) : null;
+}
+
+function extractSection(text: string, headings: string[]): string | null {
+  const lines = text
+    .split(/\r?\n|(?<=\.)\s+(?=[A-ZÉÈÀÂÎÔÛÇ])/)
+    .map((line) => normalizeText(line))
+    .filter((line): line is string => Boolean(line));
+  const normalizedHeadings = headings.map(normalizeKey);
+  const startIndex = lines.findIndex((line) => normalizedHeadings.some((heading) => normalizeKey(line).includes(heading)));
+  if (startIndex < 0) return null;
+
+  const selected: string[] = [];
+  for (const line of lines.slice(startIndex, startIndex + 8)) {
+    const clean = line.replace(/\s+/g, " ").trim();
+    if (!clean) continue;
+    selected.push(clean);
+    if (selected.join(" ").length > 700) break;
+  }
+
+  return selected.join("\n").slice(0, 1200) || null;
 }
 
 function isSupportedProductFile(file: File): boolean {
@@ -298,18 +451,37 @@ function normalizeKey(value: unknown): string {
 function normalizeUnit(unit: unknown): DocumentUnit {
   const value = normalizeKey(unit);
   if (["m2", "m 2", "m²"].includes(value)) return "m2";
-  if (["m3", "m 3"].includes(value)) return "m3";
+  if (["m3", "m 3", "m³"].includes(value)) return "m3";
   if (["ml", "m", "metre lineaire"].includes(value)) return "ml";
   if (["kg", "kilo"].includes(value)) return "kg";
-  if (["l", "litre"].includes(value)) return "l";
+  if (["l", "litre", "litres"].includes(value)) return "l";
   if (["h", "heure"].includes(value)) return "h";
   if (["forfait", "ens", "ensemble"].includes(value)) return "forfait";
   return "u";
 }
 
+function normalizeRatioUnit(unit: unknown): string {
+  const value = normalizeKey(unit);
+  if (["m2", "m 2", "m²"].includes(value)) return "m2";
+  if (["m3", "m 3", "m³"].includes(value)) return "m3";
+  if (["l", "litre", "litres", "pot", "seau"].includes(value)) return "l";
+  if (["kg", "kilo", "sac"].includes(value)) return "kg";
+  if (["g", "gramme", "grammes"].includes(value)) return "g";
+  if (["ml", "m", "metre", "metre lineaire"].includes(value)) return "ml";
+  if (["u", "unite", "unité"].includes(value)) return "u";
+  return value || "u";
+}
+
 function positiveNumber(value: unknown): number | null {
   const number = Number(value);
   return Number.isFinite(number) && number >= 0 ? number : null;
+}
+
+function parseLooseNumber(value: unknown): number | null {
+  const text = String(value ?? "").trim();
+  if (!text) return null;
+  const number = Number(text.replace(/\s+/g, "").replace(",", "."));
+  return Number.isFinite(number) ? number : null;
 }
 
 function computeCoverageUnitPrice(price: number | null, coverageM2: number | null): number | null {
@@ -324,4 +496,8 @@ function computeSalePrice(purchasePrice: number | null, marginRate: number): num
 
 function roundPrice(value: number): number {
   return Math.round(value * 100) / 100;
+}
+
+function formatNumber(value: number) {
+  return new Intl.NumberFormat("fr-FR", { maximumFractionDigits: 3 }).format(value);
 }
