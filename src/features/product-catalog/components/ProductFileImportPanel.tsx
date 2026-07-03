@@ -30,6 +30,13 @@ type ProductTechnicalInsights = {
   technicalNotes: string[];
 };
 
+type ProductPriceInsights = {
+  unitPurchasePrice: number | null;
+  packagePurchasePrice: number | null;
+  salePrice: number | null;
+  notes: string[];
+};
+
 type ProductDraftPatch = Partial<ProductCatalogDraft | ProductCatalogItem>;
 
 export default function ProductFileImportPanel({
@@ -80,13 +87,17 @@ export default function ProductFileImportPanel({
       }
 
       const insights = extractProductTechnicalInsights(cleanedText, bestProduct);
-      const patch = buildProductPatch(currentProduct, bestProduct, selectedFiles, suppliers, insights);
+      const priceInsights = extractProductPriceInsights(cleanedText, bestProduct, currentProduct);
+      const patch = buildProductPatch(currentProduct, bestProduct, selectedFiles, suppliers, insights, priceInsights);
       onApply(patch);
       const ratioLabel = insights.consumptionRatioQuantity && insights.consumptionRatioUnit && insights.ratioBaseUnit
         ? ` Ratio ${formatNumber(insights.consumptionRatioQuantity)} ${insights.consumptionRatioUnit}/${insights.ratioBaseUnit}.`
         : "";
+      const priceLabel = priceInsights.unitPurchasePrice || priceInsights.packagePurchasePrice || priceInsights.salePrice
+        ? " Prix renseignés."
+        : "";
       const methodLabel = insights.workMethod ? " Mode opératoire créé." : "";
-      setResult(`${bestProduct.designation} détecté et appliqué à la fiche.${ratioLabel}${methodLabel}`);
+      setResult(`${bestProduct.designation} détecté et appliqué à la fiche.${ratioLabel}${priceLabel}${methodLabel}`);
     } catch (err: any) {
       setError(err?.message ?? "Analyse automatique du fichier impossible.");
       setResult(null);
@@ -164,20 +175,31 @@ function buildProductPatch(
   files: File[],
   suppliers: SupplierRow[],
   insights: ProductTechnicalInsights,
+  priceInsights: ProductPriceInsights,
 ): ProductDraftPatch {
   const supplierName = normalizeText(extracted.supplier_name);
   const supplier = supplierName ? suppliers.find((row) => normalizeKey(row.name) === normalizeKey(supplierName)) ?? null : null;
-  const supplierNegotiatedPrice = positiveNumber(extracted.purchase_price_ht) ?? positiveNumber(extracted.package_price_ht);
-  const coverageM2 = positiveNumber(extracted.coverage_m2);
-  const unitPrice = computeCoverageUnitPrice(supplierNegotiatedPrice, coverageM2) ?? supplierNegotiatedPrice;
+  const coverageM2 = positivePrice(extracted.coverage_m2);
+  const supplierNegotiatedPrice = positivePrice(extracted.purchase_price_ht)
+    ?? priceInsights.packagePurchasePrice
+    ?? positivePrice(extracted.package_price_ht)
+    ?? priceInsights.unitPurchasePrice;
+  const existingPurchasePrice = positivePrice(currentProduct.standardPurchasePriceHt) ?? getBestExistingSupplierUnitPrice(currentProduct);
+  const unitPrice = computeCoverageUnitPrice(supplierNegotiatedPrice, coverageM2)
+    ?? priceInsights.unitPurchasePrice
+    ?? supplierNegotiatedPrice
+    ?? existingPurchasePrice;
   const marginRate = positiveNumber(currentProduct.targetMarginRate) ?? 30;
-  const salePrice = positiveNumber(extracted.sale_price_ht) ?? computeSalePrice(unitPrice, marginRate);
+  const salePrice = positivePrice(extracted.sale_price_ht)
+    ?? priceInsights.salePrice
+    ?? positivePrice(currentProduct.recommendedSalePriceHt)
+    ?? computeSalePrice(unitPrice, marginRate);
   const unit = insights.consumptionRatioUnit ? normalizeUnit(insights.consumptionRatioUnit) : coverageM2 && coverageM2 > 0 ? "m2" : normalizeUnit(extracted.unit);
-  const supplierPrice = buildSupplierPrice(extracted, supplier, supplierNegotiatedPrice);
+  const supplierPrice = buildSupplierPrice(extracted, supplier, supplierNegotiatedPrice, priceInsights);
   const nextSupplierPrices = supplierPrice
     ? mergeSupplierPrice(currentProduct.supplierPrices, supplierPrice)
     : currentProduct.supplierPrices;
-  const importedDocuments = buildImportedDocuments(files, extracted, insights);
+  const importedDocuments = buildImportedDocuments(files, extracted, insights, priceInsights);
 
   return {
     designation: normalizeText(extracted.designation) ?? currentProduct.designation,
@@ -188,16 +210,22 @@ function buildProductPatch(
     vatRate: positiveNumber(extracted.vat_rate) ?? currentProduct.vatRate,
     mainSupplierId: supplier?.id ?? currentProduct.mainSupplierId,
     mainSupplierName: supplier?.name ?? supplierName ?? currentProduct.mainSupplierName,
-    standardPurchasePriceHt: unitPrice ?? currentProduct.standardPurchasePriceHt,
-    recommendedSalePriceHt: salePrice ?? currentProduct.recommendedSalePriceHt,
+    standardPurchasePriceHt: unitPrice ?? 0,
+    recommendedSalePriceHt: salePrice ?? unitPrice ?? 0,
     supplierPrices: nextSupplierPrices,
     documents: [...currentProduct.documents, ...importedDocuments],
   };
 }
 
-function buildImportedDocuments(files: File[], extracted: ExtractedQuoteProduct, insights: ProductTechnicalInsights): ProductCatalogItem["documents"] {
+function buildImportedDocuments(
+  files: File[],
+  extracted: ExtractedQuoteProduct,
+  insights: ProductTechnicalInsights,
+  priceInsights: ProductPriceInsights,
+): ProductCatalogItem["documents"] {
   const technicalNotes = [
     ...insights.technicalNotes,
+    ...priceInsights.notes,
     insights.consumptionRatioQuantity && insights.consumptionRatioUnit && insights.ratioBaseUnit
       ? `Ratio matériau Batipro: ${formatNumber(insights.consumptionRatioQuantity)} ${insights.consumptionRatioUnit}/${insights.ratioBaseUnit}`
       : null,
@@ -247,13 +275,14 @@ function buildSupplierPrice(
   extracted: ExtractedQuoteProduct,
   supplier: SupplierRow | null,
   supplierNegotiatedPrice: number | null,
+  priceInsights: ProductPriceInsights,
 ): ProductSupplierPrice | null {
   const supplierName = normalizeText(extracted.supplier_name);
   if (supplierNegotiatedPrice === null || supplierNegotiatedPrice <= 0) return null;
   if (!supplier && !supplierName) return null;
 
   const coverageM2 = positiveNumber(extracted.coverage_m2);
-  const pricePerM2 = computeCoverageUnitPrice(supplierNegotiatedPrice, coverageM2);
+  const pricePerM2 = computeCoverageUnitPrice(supplierNegotiatedPrice, coverageM2) ?? priceInsights.unitPurchasePrice;
 
   return {
     id: crypto.randomUUID(),
@@ -327,6 +356,66 @@ function extractProductTechnicalInsights(text: string, extracted: ExtractedQuote
     applicationScope,
     technicalNotes,
   };
+}
+
+function extractProductPriceInsights(
+  text: string,
+  extracted: ExtractedQuoteProduct,
+  currentProduct: ProductCatalogDraft | ProductCatalogItem,
+): ProductPriceInsights {
+  const normalized = text.replace(/\s+/g, " ");
+  const extractedPurchasePrice = positivePrice(extracted.purchase_price_ht);
+  const extractedPackagePrice = positivePrice(extracted.package_price_ht);
+  const extractedSalePrice = positivePrice(extracted.sale_price_ht);
+  const purchaseFromText = extractPriceByPatterns(normalized, [
+    /(?:prix\s*(?:d['’ ]achat|achat)|achat\s*ht|pa\s*ht|prix\s*fournisseur|tarif\s*fournisseur|prix\s*standard)[^0-9€]{0,80}([0-9]+(?:[\s.,][0-9]{2})?)\s*(?:€|eur)?\s*(?:ht)?\s*(?:\/|par)?\s*(m²|m2|l|litre|kg|u|unité|unite)?/i,
+    /([0-9]+(?:[\s.,][0-9]{2})?)\s*(?:€|eur)\s*(?:ht)?\s*(?:\/|par)?\s*(m²|m2|l|litre|kg|u|unité|unite)?[^.]{0,80}(?:prix\s*(?:d['’ ]achat|achat)|achat\s*ht|pa\s*ht|prix\s*fournisseur|tarif\s*fournisseur)/i,
+  ]);
+  const saleFromText = extractPriceByPatterns(normalized, [
+    /(?:prix\s*(?:de\s*)?vente|vente\s*ht|pv\s*ht|prix\s*public|vente\s*conseill[ée]e)[^0-9€]{0,80}([0-9]+(?:[\s.,][0-9]{2})?)\s*(?:€|eur)?\s*(?:ht)?\s*(?:\/|par)?\s*(m²|m2|l|litre|kg|u|unité|unite)?/i,
+    /([0-9]+(?:[\s.,][0-9]{2})?)\s*(?:€|eur)\s*(?:ht)?\s*(?:\/|par)?\s*(m²|m2|l|litre|kg|u|unité|unite)?[^.]{0,80}(?:prix\s*(?:de\s*)?vente|vente\s*ht|pv\s*ht|prix\s*public|vente\s*conseill[ée]e)/i,
+  ]);
+  const existingSupplierUnitPrice = getBestExistingSupplierUnitPrice(currentProduct);
+  const unitPurchasePrice = extractedPurchasePrice
+    ?? purchaseFromText?.price
+    ?? existingSupplierUnitPrice
+    ?? positivePrice(currentProduct.standardPurchasePriceHt);
+  const packagePurchasePrice = extractedPackagePrice ?? null;
+  const salePrice = extractedSalePrice ?? saleFromText?.price ?? positivePrice(currentProduct.recommendedSalePriceHt);
+  const notes = [
+    unitPurchasePrice !== null ? `Prix achat standard extrait: ${formatNumber(unitPurchasePrice)} EUR HT` : null,
+    packagePurchasePrice !== null ? `Prix conditionnement extrait: ${formatNumber(packagePurchasePrice)} EUR HT` : null,
+    salePrice !== null ? `Prix vente recommandé extrait: ${formatNumber(salePrice)} EUR HT` : null,
+  ].filter((note): note is string => Boolean(note));
+
+  return { unitPurchasePrice, packagePurchasePrice, salePrice, notes };
+}
+
+function extractPriceByPatterns(text: string, patterns: RegExp[]): { price: number; unit: string | null } | null {
+  for (const pattern of patterns) {
+    const match = text.match(pattern);
+    const price = parseLooseNumber(match?.[1]);
+    if (price !== null && price > 0) {
+      return { price: roundPrice(price), unit: normalizeText(match?.[2]) };
+    }
+  }
+  return null;
+}
+
+function getBestExistingSupplierUnitPrice(product: ProductCatalogDraft | ProductCatalogItem): number | null {
+  const prices = product.supplierPrices
+    .map((price) => {
+      const explicitUnitPrice = positivePrice(price.pricePerM2Ht);
+      if (explicitUnitPrice !== null) return explicitUnitPrice;
+
+      const packagePrice = positivePrice(price.priceHt);
+      const coverage = positivePrice(price.coverageM2);
+      if (packagePrice !== null && coverage !== null) return computeCoverageUnitPrice(packagePrice, coverage);
+      return packagePrice;
+    })
+    .filter((price): price is number => price !== null && price > 0)
+    .sort((a, b) => a - b);
+  return prices[0] ?? null;
 }
 
 function extractConsumptionRatio(text: string): { quantity: number; unit: string; baseUnit: string } | null {
@@ -475,6 +564,11 @@ function normalizeRatioUnit(unit: unknown): string {
 function positiveNumber(value: unknown): number | null {
   const number = Number(value);
   return Number.isFinite(number) && number >= 0 ? number : null;
+}
+
+function positivePrice(value: unknown): number | null {
+  const number = Number(value);
+  return Number.isFinite(number) && number > 0 ? number : null;
 }
 
 function parseLooseNumber(value: unknown): number | null {
