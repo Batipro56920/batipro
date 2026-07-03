@@ -1,4 +1,4 @@
-import { Archive, Ban, CalendarDays, CheckCircle2, ClipboardList, Download, ExternalLink, FileText, Hammer, MessageSquareWarning, MoreHorizontal, RotateCcw, Trash2, Users, type LucideIcon } from "lucide-react";
+import { Archive, Ban, CalendarDays, CheckCircle2, ClipboardCheck, ClipboardList, Download, ExternalLink, FileText, Hammer, MessageSquareWarning, MoreHorizontal, RotateCcw, Trash2, Users, type LucideIcon } from "lucide-react";
 import { Link } from "react-router-dom";
 import { ConfirmDialog } from "../../../../components/feedback/ConfirmDialog";
 import { Button } from "../../../../components/ui/button";
@@ -86,6 +86,7 @@ export function ChantierRowActions({ row, actions }: { row: ChantierDerived; act
           <MenuLink icon={Hammer} label="Tâches / exécution" href={`${chantierBaseHref}/execution`} />
           <MenuLink icon={CalendarDays} label="Planning" href={`${chantierBaseHref}/planning`} />
           <MenuLink icon={CheckCircle2} label="Qualité / réserves" href={`${chantierBaseHref}/qualite`} />
+          <MenuLink icon={ClipboardCheck} label="Visites chantier" href={`${chantierBaseHref}/visites`} />
           <MenuLink icon={FileText} label="Documents" href={`${chantierBaseHref}/documents`} />
           <MenuLink icon={Users} label="Équipe" href={`${chantierBaseHref}/equipe`} />
           <MenuLink icon={MessageSquareWarning} label={terrainFeedbackAction.label} href={terrainFeedbackAction.href} tone={terrainFeedbackAction.tone} />
