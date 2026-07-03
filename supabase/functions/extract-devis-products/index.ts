@@ -60,6 +60,16 @@ function normalizeText(value: unknown): string | null {
   return text ? text : null;
 }
 
+function normalizeKey(value: unknown): string {
+  return String(value ?? "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/gi, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .toLowerCase();
+}
+
 function cleanLongText(value: unknown, maxLength: number): string | null {
   const text = normalizeText(value);
   return text ? text.slice(0, maxLength) : null;
@@ -160,7 +170,7 @@ function isNoiseDesignation(value: string): boolean {
   ].some((bad) => text.includes(bad));
 }
 
-function validateLine(raw: any): ProductLine | null {
+function validateLine(raw: any, documentSupplierName: string | null): ProductLine | null {
   const designation = cleanDesignation(raw?.designation ?? raw?.label ?? raw?.title);
   if (!designation || designation.length < 3) return null;
   if (isNoiseDesignation(designation)) return null;
@@ -170,10 +180,12 @@ function validateLine(raw: any): ProductLine | null {
   const coverageM2 = toNumber(raw?.coverage_m2 ?? raw?.surface_m2 ?? raw?.surface_colis_m2);
   const consumptionRatioQuantity = toNumber(raw?.consumption_ratio_quantity ?? raw?.material_ratio_quantity ?? raw?.ratio_quantity);
   const lossPercent = toNumber(raw?.loss_percent ?? raw?.perte_percent ?? raw?.perte_pourcentage);
+  const aiSupplierName = normalizeText(raw?.supplier_name ?? raw?.fournisseur);
+  const supplierName = preferDocumentSupplier(aiSupplierName, documentSupplierName);
 
   return {
     designation,
-    supplier_name: normalizeText(raw?.supplier_name ?? raw?.fournisseur),
+    supplier_name: supplierName,
     supplier_reference: normalizeText(raw?.supplier_reference ?? raw?.reference_fournisseur ?? raw?.reference),
     brand: normalizeText(raw?.brand ?? raw?.marque),
     category: normalizeText(raw?.category ?? raw?.categorie ?? raw?.famille),
@@ -199,6 +211,54 @@ function validateLine(raw: any): ProductLine | null {
   };
 }
 
+function preferDocumentSupplier(aiSupplierName: string | null, documentSupplierName: string | null): string | null {
+  if (!documentSupplierName) return aiSupplierName;
+  if (!aiSupplierName) return documentSupplierName;
+
+  const aiKey = normalizeKey(aiSupplierName);
+  const docKey = normalizeKey(documentSupplierName);
+  if (!aiKey || aiKey === docKey) return documentSupplierName;
+
+  if (looksLikeCustomerName(aiSupplierName)) return documentSupplierName;
+  return aiSupplierName;
+}
+
+function looksLikeCustomerName(value: string): boolean {
+  const key = normalizeKey(value);
+  return key.includes("renovation") || key.includes("renov") || key.includes("client");
+}
+
+function inferDocumentSupplierName(text: string): string | null {
+  const lines = text
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .slice(0, 40);
+
+  const directSeller = lines.find((line) => /(?:comptoir|cp?toir|seigneurie|gauthier|ppg)/i.test(line));
+  if (directSeller) return normalizeSupplierLine(directSeller);
+
+  const devisIndex = lines.findIndex((line) => /\bdevis\b/i.test(line));
+  const headerLines = devisIndex >= 0 ? lines.slice(0, devisIndex) : lines;
+  const candidate = headerLines.find((line) => {
+    const key = normalizeKey(line);
+    if (!key || key.includes("siret") || key.includes("tva") || key.includes("tel") || key.includes("fax")) return false;
+    if (/^[0-9\s,.-]+$/.test(line)) return false;
+    if (looksLikeCustomerName(line)) return false;
+    return /[A-Z]{3,}/.test(line);
+  });
+
+  return candidate ? normalizeSupplierLine(candidate) : null;
+}
+
+function normalizeSupplierLine(line: string): string {
+  return line
+    .replace(/^CSG\s+/i, "")
+    .replace(/^CPTOIR\b/i, "COMPTOIR")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
   if (req.method !== "POST") return json({ ok: false, error: "Method not allowed" }, 405);
@@ -215,6 +275,7 @@ serve(async (req) => {
     return json({ ok: false, error: "cleaned_text vide ou trop court." }, 400);
   }
 
+  const documentSupplierName = inferDocumentSupplierName(cleanedText);
   const openAiKey = Deno.env.get("OPENAI_API_KEY") ?? "";
   if (!openAiKey) {
     return json({ ok: false, error: "OPENAI_API_KEY manquante." }, 500);
@@ -226,13 +287,16 @@ serve(async (req) => {
     "Ta mission n'est pas de copier-coller le document: tu dois comprendre le document et transformer son contenu en données métier fiables pour Batipro.",
     "Tu peux recevoir une fiche technique, une notice, un domaine d'application, un mode opératoire, un devis fournisseur, une grille tarifaire ou plusieurs documents mélangés.",
     "Retourne uniquement les produits matériaux réellement exploitables. Ignore main d'oeuvre, prestations seules, titres, totaux, TVA globale, conditions, adresses, client, mentions légales, règlements, acomptes et lignes sans produit identifiable.",
+    "Règle fournisseur critique: supplier_name est l'émetteur/vendeur du devis ou de la facture, jamais le client/destinataire. Dans un devis fournisseur français, le vendeur est souvent le bloc société en haut à gauche et le client est le bloc à droite ou répété dans l'adresse de livraison.",
+    "Si tu vois CB RENOVATION dans le bloc client/destinataire, ne l'utilise pas comme fournisseur. Pour un devis Comptoir Seigneurie Gauthier / PPG, supplier_name doit être Comptoir Seigneurie Gauthier ou PPG, pas CB RENOVATION.",
+    "Règle devis fournisseur: dans un tableau avec colonnes PRIX TARIF, %REM, P.U. NET, MONTANT H.T., purchase_price_ht doit être le P.U. NET. PRIX TARIF est seulement le tarif avant remise, MONTANT H.T. est le total de ligne, sale_price_ht reste null.",
     "Règle critique: ne confonds jamais un chiffre technique avec un prix. Une consommation, un rendement, une couverture, une densité, une épaisseur, une température ou un temps de séchage ne doit jamais devenir purchase_price_ht ni sale_price_ht.",
-    "Règle critique: si un prix n'est pas explicitement indiqué avec €, EUR, HT, prix, tarif, achat, vente, PA ou PV, laisse les prix à null.",
+    "Règle critique: si un prix n'est pas explicitement indiqué avec €, EUR, HT, prix, tarif, achat, vente, PA, PV, P.U. NET ou MONTANT H.T., laisse les prix à null.",
     "Règle critique: si un chiffre est une consommation type 5,7 m2/L ou 1,8 kg/m2, renseigne consumption_ratio_* ou coverage_m2 selon le sens, mais pas un prix.",
     "designation doit être le nom lisible du produit uniquement. Retire le conditionnement de la désignation quand il existe.",
     "packaging contient le conditionnement complet lisible: Pot de 15 L, Sac de 25 kg, Rouleau de 25 m, Colis de panneaux, etc.",
     "purchase_price_ht est le prix d'achat HT unitaire utile pour chiffrer le matériau dans Batipro. Si le document donne un prix au m2, au kg ou au litre, mets ce prix dans purchase_price_ht et l'unité correspondante dans unit.",
-    "package_price_ht contient le prix HT du conditionnement complet seulement si le document donne un prix de pot, sac, colis ou rouleau distinct du prix unitaire métier.",
+    "package_price_ht contient le prix HT du conditionnement complet ou total de ligne uniquement si le document le donne distinctement du prix unitaire métier.",
     "sale_price_ht est un prix de vente uniquement si le document le dit explicitement. Sinon laisse null: Batipro calculera achat + marge.",
     "coverage_m2 contient la surface couverte par un conditionnement quand elle est indiquée ou clairement déductible. Ne force pas coverage_m2 si le rendement est seulement indicatif et le conditionnement absent.",
     "consumption_ratio_quantity, consumption_ratio_unit et consumption_base_unit décrivent la consommation utile pour une tâche. Exemple: 1.8 kg/m2 => quantity 1.8, unit kg, base m2. Exemple rendement 5.7 m2/L => quantity 0.175, unit l, base m2.",
@@ -291,6 +355,6 @@ serve(async (req) => {
     return json({ ok: false, error: "Format JSON invalide (products[] attendu)." }, 422);
   }
 
-  const products = rawProducts.map((product: any) => validateLine(product)).filter(Boolean) as ProductLine[];
+  const products = rawProducts.map((product: any) => validateLine(product, documentSupplierName)).filter(Boolean) as ProductLine[];
   return json({ ok: true, products });
 });
