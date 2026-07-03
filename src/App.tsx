@@ -18,9 +18,11 @@ const RentabilitePage = lazy(() => import("./pages/RentabilitePage"));
 const CrmPage = lazy(() => import("./pages/CrmPage"));
 const CrmQuoteEditRedirectPage = lazy(() => import("./pages/CrmQuoteEditRedirectPage"));
 const ChantiersPage = lazy(() => import("./pages/ChantiersPage"));
+const ChantiersTimePage = lazy(() => import("./pages/ChantiersTimePage"));
 const ChantierNewPage = lazy(() => import("./pages/ChantierNewPage"));
 const ChantierPage = lazy(() => import("./pages/ChantierPage"));
 const ChantierPlanningPage = lazy(() => import("./pages/ChantierPlanningPage"));
+const ChantierTimePage = lazy(() => import("./pages/ChantierTimePage"));
 const ChantierVisitesPage = lazy(() => import("./pages/ChantierVisitesPage"));
 const ProjectsPage = lazy(() => import("./pages/ProjectsPage"));
 const ProjectDetailPage = lazy(() => import("./pages/ProjectDetailPage"));
@@ -383,13 +385,14 @@ export default function App() {
         />
         <Route
           path="/temps"
-          element={<ChantierBackofficeRoute label="Ouverture du suivi des temps..."><ChantiersPage initialView="kanban" initialFocus="time" /></ChantierBackofficeRoute>}
+          element={<ChantierBackofficeRoute label="Ouverture du suivi des temps..."><ChantiersTimePage /></ChantierBackofficeRoute>}
         />
         <Route path="/chantiers/nouveau" element={<ChantierBackofficeRoute label="Chargement du nouveau chantier..."><ChantierNewPage /></ChantierBackofficeRoute>} />
         <Route path="/chantiers/:id" element={<ChantierBackofficeRoute label="Chargement du chantier..."><ChantierPage /></ChantierBackofficeRoute>} />
         <Route path="/chantiers/:id/preparation" element={<ChantierBackofficeRoute label="Chargement du chantier..."><ChantierPage /></ChantierBackofficeRoute>} />
         <Route path="/chantiers/:id/execution" element={<ChantierBackofficeRoute label="Chargement du chantier..."><ChantierPage /></ChantierBackofficeRoute>} />
         <Route path="/chantiers/:id/planning" element={<ChantierBackofficeRoute label="Chargement du planning chantier..."><ChantierPlanningPage /></ChantierBackofficeRoute>} />
+        <Route path="/chantiers/:id/temps" element={<ChantierBackofficeRoute label="Chargement des temps chantier..."><ChantierTimePage /></ChantierBackofficeRoute>} />
         <Route path="/chantiers/:id/financier" element={<ChantierBackofficeRoute label="Chargement du chantier..."><ChantierPage /></ChantierBackofficeRoute>} />
         <Route path="/chantiers/:id/qualite" element={<ChantierBackofficeRoute label="Chargement du chantier..."><ChantierPage /></ChantierBackofficeRoute>} />
         <Route path="/chantiers/:id/documents" element={<ChantierBackofficeRoute label="Chargement du chantier..."><ChantierPage /></ChantierBackofficeRoute>} />
