@@ -37,6 +37,7 @@ async function loadBusinessMetricCounts(): Promise<BusinessMetricCounts> {
         .from("crm_quotes" as any)
         .select("id", { count: "exact", head: true })
         .is("archived_at", null)
+        .not("sent_at", "is", null)
         .not("signature_status", "in", "(signe,refuse)") as any,
     ),
     countRows(
