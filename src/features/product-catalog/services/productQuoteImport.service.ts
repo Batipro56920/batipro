@@ -20,6 +20,14 @@ export type ExtractedQuoteProduct = {
   vat_rate: number | null;
   packaging: string | null;
   minimum_quantity: number | null;
+  consumption_ratio_quantity?: number | null;
+  consumption_ratio_unit?: string | null;
+  consumption_base_unit?: string | null;
+  loss_percent?: number | null;
+  work_method?: string | null;
+  application_scope?: string | null;
+  technical_notes?: string | null;
+  business_interpretation?: string | null;
   confidence: number;
   source_line: string;
 };
