@@ -181,6 +181,10 @@ export default function ApporteurPortalPage() {
     () => (leadAmountPreview === null ? null : commissionPreviewAmount(leadAmountPreview, portalData.apporteur)),
     [leadAmountPreview, portalData.apporteur],
   );
+  const duplicateLeadPreview = useMemo(
+    () => findPotentialDuplicateLead(leadForm, portalData.leads),
+    [leadForm, portalData.leads],
+  );
   const sortedLeads = useMemo(
     () =>
       [...portalData.leads].sort((a, b) => {
@@ -309,6 +313,14 @@ export default function ApporteurPortalPage() {
               <Input label="Date de transmission" type="date" value={leadForm.date} onChange={(value) => setLeadForm((prev) => ({ ...prev, date: value }))} />
               <div className="md:col-span-2"><Textarea label="Informations utiles" value={leadForm.comment} onChange={(value) => setLeadForm((prev) => ({ ...prev, comment: value }))} /></div>
             </div>
+            {duplicateLeadPreview ? (
+              <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+                <div className="font-semibold">Client déjà transmis</div>
+                <div className="mt-1">
+                  {duplicateLeadPreview.client_name} a déjà été transmis le {duplicateLeadPreview.date}. Consultez le suivi avant de créer un doublon.
+                </div>
+              </div>
+            ) : null}
             <div className="mt-4 rounded-lg border border-blue-100 bg-blue-50 p-3 text-sm text-blue-900">
               {commissionPreview === null ? (
                 <span>Renseignez un montant estimé pour afficher la commission indicative avant transmission.</span>
@@ -322,7 +334,7 @@ export default function ApporteurPortalPage() {
             {actError ? <div className="mt-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">{actError}</div> : null}
             {actNotice ? <div className="mt-4 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-700">{actNotice}</div> : null}
             <div className="mt-5 flex flex-wrap gap-2">
-              <button type="button" disabled={actSaving} onClick={() => void onSubmitLead()} className={primaryButtonClass}>{actSaving ? "Transmission..." : "Transmettre le client"}</button>
+              <button type="button" disabled={actSaving || Boolean(duplicateLeadPreview)} onClick={() => void onSubmitLead()} className={primaryButtonClass}>{actSaving ? "Transmission..." : "Transmettre le client"}</button>
               <button type="button" disabled={actSaving} onClick={() => setLeadForm({ ...DEFAULT_LEAD_FORM, date: todayLocalDate() })} className={secondaryButtonClass}>Réinitialiser</button>
             </div>
           </section>
