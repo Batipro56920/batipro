@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { createInvoice } from "../../invoices/application/invoiceFactory";
 import type { InvoiceRecord, InvoiceType } from "../../invoices/domain/types";
 import { listInvoices, saveInvoice } from "../../invoices/infrastructure/invoiceRepository";
@@ -65,6 +65,9 @@ function ProductionContinuityPanel({ project }: { project: ProjectRecord }) {
   const acceptedQuote = project.quotes.find((item) => item.statut === "accepte") ?? null;
   const productionQuote = acceptedQuote ?? quote;
   const hasAcceptedQuoteWithoutChantier = Boolean(acceptedQuote && !acceptedQuote.chantier_id);
+  const productionQuotePath = hasAcceptedQuoteWithoutChantier
+    ? `/projets/${project.id}?tab=quotes&chantierQuoteId=${productionQuote?.id}`
+    : `/projets/${project.id}?tab=quotes`;
 
   if (!project.chantiers.length) {
     return (
@@ -90,7 +93,7 @@ function ProductionContinuityPanel({ project }: { project: ProjectRecord }) {
               </div>
               <div className="flex shrink-0 flex-wrap gap-2">
                 <Link
-                  to={`/projets/${project.id}?tab=quotes`}
+                  to={productionQuotePath}
                   className={["inline-flex h-9 items-center rounded-xl px-3 text-sm font-semibold", acceptedQuote ? "bg-emerald-700 text-white hover:bg-emerald-800" : "bg-blue-700 text-white hover:bg-blue-800"].join(" ")}
                 >
                   {hasAcceptedQuoteWithoutChantier ? "Créer le chantier" : "Ouvrir les devis"}
@@ -310,6 +313,8 @@ export function ProjectVisitsTab({ project }: { project: ProjectRecord }) {
 
 export function ProjectQuotesTab({ project }: { project: ProjectRecord }) {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const chantierQuoteId = searchParams.get("chantierQuoteId");
   const [billingKey, setBillingKey] = useState<string | null>(null);
   const [billingError, setBillingError] = useState<string | null>(null);
   const [chantierActionKey, setChantierActionKey] = useState<string | null>(null);
@@ -381,6 +386,28 @@ export function ProjectQuotesTab({ project }: { project: ProjectRecord }) {
       setChantierActionKey(null);
     }
   }
+
+  useEffect(() => {
+    if (!chantierQuoteId || chantierActionKey) return;
+
+    const nextSearchParams = new URLSearchParams(searchParams);
+    nextSearchParams.delete("chantierQuoteId");
+    setSearchParams(nextSearchParams, { replace: true });
+
+    const quote = project.quotes.find((item) => item.id === chantierQuoteId);
+    if (!quote) {
+      setChantierError("Devis à passer en chantier introuvable.");
+      return;
+    }
+
+    const existingChantierId = getQuoteChantierId(quote.id);
+    if (existingChantierId) {
+      navigate(chantierPreparationPath(existingChantierId));
+      return;
+    }
+
+    void createChantierFromQuote(quote.id);
+  }, [chantierActionKey, chantierQuoteId, navigate, project.quotes, searchParams, setSearchParams]);
 
   async function createInvoiceFromQuote(quoteId: string, invoiceType: InvoiceType) {
     const quote = project.quotes.find((item) => item.id === quoteId);
