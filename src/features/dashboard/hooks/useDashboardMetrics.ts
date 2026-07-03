@@ -153,7 +153,7 @@ export function useDashboardMetrics({ chantiers, materiel, alerts, activeView, l
         .slice(0, 8)
         .map((chantier) => ({
           key: chantier.id,
-          href: `/chantiers/${chantier.id}`,
+          href: `/chantiers/${chantier.id}/execution`,
           title: chantier.nom,
           subtitle: chantier.client || t("dashboard.missingClient"),
           meta: t("dashboard.progressLabel", { value: formatPercent(Number(chantier.avancement ?? 0)) }),
