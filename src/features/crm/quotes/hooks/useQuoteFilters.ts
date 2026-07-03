@@ -27,11 +27,7 @@ function quoteEditPath(row: CrmQuoteRow, projectPath: string) {
     return `${projectBasePath}/devis/${encodeURIComponent(row.id)}/edit`;
   }
 
-  const fallbackParams = new URLSearchParams({
-    devis: "nouveau",
-    q: row.quote_number || row.description || row.lot || row.id,
-  });
-  return `/projets?${fallbackParams.toString()}`;
+  return `/crm/devis/${encodeURIComponent(row.id)}/edit`;
 }
 
 function shortId(value: string) {
