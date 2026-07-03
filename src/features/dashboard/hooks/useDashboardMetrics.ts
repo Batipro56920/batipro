@@ -240,7 +240,8 @@ export function useDashboardMetrics({ chantiers, materiel, alerts, activeView, l
       key: "marge",
       label: "Marge estimée",
       value: "—",
-      hint: "À connecter au financier chantier",
+      hint: "Voir la rentabilité",
+      href: "/rentabilite",
       tone: "normal",
     },
   ], [alertStats, chantiers.length, loading, locale, pendingMateriel.length, totalHeuresPassees, totalHeuresPrevues]);
