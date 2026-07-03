@@ -1,5 +1,5 @@
 import type { ProductCatalogItem } from "../domain/types";
-import { getBestSupplierPrice, listProductCatalogItems } from "../infrastructure/productCatalogRepository";
+import { listProductCatalogItems } from "../infrastructure/productCatalogRepository";
 
 type ProductRatioHint = {
   quantity: number | null;
@@ -33,8 +33,8 @@ async function onPotentialProductSelection(event: Event) {
   const product = products.find((item) => item.id === productId);
   if (!product) return;
 
-  window.setTimeout(() => applyProductAutofill(row, product), 40);
-  window.setTimeout(() => applyProductAutofill(row, product), 140);
+  window.setTimeout(() => applyProductTechnicalAutofill(row, product), 40);
+  window.setTimeout(() => applyProductTechnicalAutofill(row, product), 140);
 }
 
 function looksLikeTaskTemplateProductSelect(select: HTMLSelectElement) {
@@ -51,24 +51,18 @@ function loadProducts() {
   return productsPromise;
 }
 
-function applyProductAutofill(row: HTMLElement, product: ProductCatalogItem) {
+function applyProductTechnicalAutofill(row: HTMLElement, product: ProductCatalogItem) {
   const inputs = Array.from(row.querySelectorAll("input"));
-  if (inputs.length < 8) return;
+  if (inputs.length < 6) return;
 
   const hint = getProductRatioHint(product);
-  const bestPrice = getBestSupplierPrice(product);
-  const purchasePrice = positiveNumber(bestPrice?.priceHt) ?? positiveNumber(product.standardPurchasePriceHt);
-  const salePrice = getProductSalePrice(product, purchasePrice);
 
   setInputValue(inputs[0], product.designation);
   setInputValue(inputs[1], hint.sourceUnit ?? product.unit);
   if (hint.quantity !== null) setInputValue(inputs[2], formatNumber(hint.quantity));
-  setInputValue(inputs[3], hint.ratioUnit ?? "m2");
+  setInputValue(inputs[3], hint.ratioUnit ?? product.unit);
   if (hint.lossPercent !== null) setInputValue(inputs[4], formatNumber(hint.lossPercent));
   if (hint.notes) setInputValue(inputs[5], hint.notes);
-  if (purchasePrice !== null) setInputValue(inputs[6], formatNumber(purchasePrice));
-  if (salePrice !== null) setInputValue(inputs[7], formatNumber(salePrice));
-  if (inputs[8]) setInputValue(inputs[8], bestPrice?.supplierId ?? product.mainSupplierId ?? "");
 }
 
 function setInputValue(input: HTMLInputElement, value: string) {
@@ -111,24 +105,10 @@ function getProductRatioHint(product: ProductCatalogItem): ProductRatioHint {
   };
 }
 
-function getProductSalePrice(product: ProductCatalogItem, purchasePrice: number | null) {
-  const recommendedSalePrice = positiveNumber(product.recommendedSalePriceHt);
-  if (recommendedSalePrice !== null) return recommendedSalePrice;
-
-  const marginRate = positiveNumber(product.targetMarginRate);
-  if (purchasePrice === null || marginRate === null) return null;
-  return Math.round(purchasePrice * (1 + marginRate / 100) * 100) / 100;
-}
-
 function parseLooseNumber(value: unknown): number | null {
   if (value === null || value === undefined || value === "") return null;
   const parsed = Number(String(value).replace(",", "."));
   return Number.isFinite(parsed) ? parsed : null;
-}
-
-function positiveNumber(value: unknown): number | null {
-  const parsed = parseLooseNumber(value);
-  return parsed !== null && parsed > 0 ? parsed : null;
 }
 
 function normalizeUnit(value: unknown): string | null {
