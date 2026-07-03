@@ -7,9 +7,11 @@ export default function ChantierTasksQuotesSection({ children }: { children: Rea
   const { id } = useParams<{ id: string }>();
   const [searchParams, setSearchParams] = useSearchParams();
   const targetedTaskId = searchParams.get("taskId") ?? "";
-  const terrainFeedbackHref = id ? `/retours-terrain?chantierId=${encodeURIComponent(id)}` : "/retours-terrain";
+  const encodedChantierId = id ? encodeURIComponent(id) : "";
+  const terrainFeedbackHref = id ? `/retours-terrain?chantierId=${encodedChantierId}` : "/retours-terrain";
+  const reservesHref = id ? `/chantiers/${encodedChantierId}/qualite` : "/reserves";
   const taskLibraryHref = "/bibliotheque?q=masque%20chantier";
-  const materialNeedsHref = id ? `/chantiers/${encodeURIComponent(id)}/preparation` : "/chantiers";
+  const materialNeedsHref = id ? `/chantiers/${encodedChantierId}/preparation` : "/chantiers";
 
   function clearTargetedTask() {
     if (!searchParams.has("taskId")) return;
@@ -51,15 +53,23 @@ export default function ChantierTasksQuotesSection({ children }: { children: Rea
           <div>
             <div className="font-semibold">Retours terrain lies a l'execution</div>
             <div className="mt-1 text-amber-800/80">
-              Ouvrez les blocages, anomalies et observations terrain du chantier avant d'ajuster les taches ou les devis.
+              Ouvrez les blocages, anomalies et observations terrain du chantier avant d'ajuster les taches ou les devis, puis basculez vers les reserves si le point doit etre suivi en qualite.
             </div>
           </div>
-          <Link
-            to={terrainFeedbackHref}
-            className="inline-flex shrink-0 items-center justify-center rounded-xl bg-amber-700 px-3 py-2 text-sm font-semibold text-white hover:bg-amber-800"
-          >
-            Voir les retours terrain
-          </Link>
+          <div className="flex shrink-0 flex-wrap gap-2">
+            <Link
+              to={reservesHref}
+              className="inline-flex items-center justify-center rounded-xl border border-amber-200 bg-white px-3 py-2 text-sm font-semibold text-amber-800 hover:bg-amber-100"
+            >
+              Qualite / reserves
+            </Link>
+            <Link
+              to={terrainFeedbackHref}
+              className="inline-flex items-center justify-center rounded-xl bg-amber-700 px-3 py-2 text-sm font-semibold text-white hover:bg-amber-800"
+            >
+              Voir les retours terrain
+            </Link>
+          </div>
         </div>
       </div>
       <div className="mb-4 rounded-2xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-900">
