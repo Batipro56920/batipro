@@ -78,8 +78,8 @@ function getProductRatioHint(product: ProductCatalogItem): ProductRatioHint {
     .map((document) => [document.name, document.notes].filter(Boolean).join("\n"))
     .join("\n\n");
 
-  const ratioMatch = documentText.match(/Ratio matériau Batipro\s*:\s*([0-9]+(?:[,.][0-9]+)?)\s*([^\s/]+)\s*\/\s*([^\s\n]+)/i);
-  const lossMatch = documentText.match(/(?:Perte préconisée|Perte extraite)\s*:\s*([0-9]+(?:[,.][0-9]+)?)\s*%/i);
+  const ratioMatch = documentText.match(/Ratio mat[eé]riau Batipro\s*:\s*([0-9]+(?:[,.][0-9]+)?)\s*([^\s/]+)\s*\/\s*([^\s\n]+)/i);
+  const lossMatch = documentText.match(/(?:Perte pr[eé]conis[eé]e|Perte extraite)\s*:\s*([0-9]+(?:[,.][0-9]+)?)\s*%/i);
 
   const ratioQuantity = parseLooseNumber(ratioMatch?.[1]);
   const sourceUnit = normalizeUnit(ratioMatch?.[2]) ?? product.unit;
