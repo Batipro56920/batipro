@@ -18,7 +18,8 @@ import type { DashboardView, MaterielSnapshot } from "../features/dashboard/type
 const DASHBOARD_VIEWS = new Set<Exclude<DashboardView, null>>(["chantiers", "avancement", "heures", "materiel", "alertes"]);
 
 function dashboardViewFromQuery(value: string | null): DashboardView {
-  return DASHBOARD_VIEWS.has(value as Exclude<DashboardView, null>) ? value as Exclude<DashboardView, null> : "chantiers";
+  if (!value) return null;
+  return DASHBOARD_VIEWS.has(value as Exclude<DashboardView, null>) ? value as Exclude<DashboardView, null> : null;
 }
 
 function isMissingRelationError(message: string | undefined): boolean {
