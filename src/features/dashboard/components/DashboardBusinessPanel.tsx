@@ -18,6 +18,15 @@ const toneClass = {
   danger: "bg-red-50 text-red-700",
 };
 
+const clientDocumentsMetric: DashboardBusinessMetric = {
+  key: "clientDocuments",
+  label: "Docs client en attente",
+  value: "—",
+  hint: "Validation / signature client",
+  href: "/factures",
+  tone: "warning",
+};
+
 const purchaseOrdersMetric: DashboardBusinessMetric = {
   key: "purchaseOrders",
   label: "Commandes à traiter",
@@ -40,7 +49,7 @@ async function countRows(query: PromiseLike<{ count: number | null; error: { mes
 }
 
 async function loadBusinessMetricCounts(): Promise<BusinessMetricCounts> {
-  const [quotes, opportunities, invoices, sav, purchaseOrders] = await Promise.all([
+  const [quotes, opportunities, invoices, sav, clientDocuments, purchaseOrders] = await Promise.all([
     countRows(
       supabase
         .from("crm_quotes" as any)
@@ -70,6 +79,13 @@ async function loadBusinessMetricCounts(): Promise<BusinessMetricCounts> {
     ),
     countRows(
       supabase
+        .from("document_client_workflows" as any)
+        .select("id", { count: "exact", head: true })
+        .is("revoked_at", null)
+        .in("status", ["sent", "viewed", "modification_requested"]) as any,
+    ),
+    countRows(
+      supabase
         .from("purchase_orders" as any)
         .select("id", { count: "exact", head: true })
         .in("status", ["draft", "sent", "confirmed", "partially_delivered"]) as any,
@@ -81,6 +97,7 @@ async function loadBusinessMetricCounts(): Promise<BusinessMetricCounts> {
     opportunities: opportunities ?? undefined,
     invoices: invoices ?? undefined,
     sav: sav ?? undefined,
+    clientDocuments: clientDocuments ?? undefined,
     purchaseOrders: purchaseOrders ?? undefined,
   };
 }
@@ -88,7 +105,7 @@ async function loadBusinessMetricCounts(): Promise<BusinessMetricCounts> {
 export function DashboardBusinessPanel({ metrics }: DashboardBusinessPanelProps) {
   const [counts, setCounts] = useState<BusinessMetricCounts>({});
   const [loadingCounts, setLoadingCounts] = useState(false);
-  const panelMetrics = useMemo(() => [...metrics, purchaseOrdersMetric], [metrics]);
+  const panelMetrics = useMemo(() => [...metrics, clientDocumentsMetric, purchaseOrdersMetric], [metrics]);
 
   useEffect(() => {
     let alive = true;
