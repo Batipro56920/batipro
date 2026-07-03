@@ -38,6 +38,10 @@ function prospectOpportunityLabel(prospect: CrmProspectRow) {
   return [prospect.type_projet, party].filter(Boolean).join(" - ");
 }
 
+function prospectOpportunityNotes(prospect: CrmProspectRow) {
+  return [prospect.description_besoin, prospect.notes].filter(Boolean).join("\n") || null;
+}
+
 async function findStage(stageKey: string): Promise<CrmPipelineStageRow | null> {
   const { data, error } = await crmDb.from("crm_pipeline_stages").select("id,key,label,ordre,probability_default,is_won,is_lost,is_active").eq("key", stageKey).maybeSingle();
   if (error) return null;
@@ -75,18 +79,22 @@ export async function createOpportunityForProspect(prospect: CrmProspectRow, pat
     montant_estime: prospect.budget_estime ?? 0,
     probabilite: targetStage?.probability_default ?? 25,
     prochaine_action: "Planifier une visite terrain",
-    notes: prospect.description_besoin ?? prospect.notes,
+    notes: prospectOpportunityNotes(prospect),
+    tags: normalizeTags(prospect.tags),
     status: "ouverte",
     ...patch,
   });
 }
 
-export async function createProspectWithInitialOpportunity(input: Partial<CrmProspectRow>) {
+export async function createProspectWithInitialOpportunity(
+  input: Partial<CrmProspectRow>,
+  opportunityPatch: Partial<CrmOpportunityRow> = {},
+) {
   const prospect = await createCrmProspect({
     ...input,
     statut: input.statut ?? "a_qualifier",
   });
-  await createOpportunityForProspect(prospect);
+  await createOpportunityForProspect(prospect, opportunityPatch);
   return prospect;
 }
 
