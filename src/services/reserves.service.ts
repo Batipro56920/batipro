@@ -1,4 +1,4 @@
-﻿import { supabase } from "../lib/supabaseClient";
+import { supabase } from "../lib/supabaseClient";
 import type { Database } from "../types/supabase";
 
 export type ReserveStatus = "OUVERTE" | "LEVEE" | "EN_COURS" | string;
@@ -58,6 +58,10 @@ function asTextOrNull(value: unknown): string | null {
   return text || null;
 }
 
+function isTerrainFeedbackReserveDescription(description: unknown): boolean {
+  return String(description ?? "").includes("Origine : retour terrain ");
+}
+
 async function enrichReserveRows(rows: ChantierReserveRow[]): Promise<ChantierReserveRow[]> {
   if (rows.length === 0) return rows;
 
@@ -111,6 +115,34 @@ async function enrichReserveRows(rows: ChantierReserveRow[]): Promise<ChantierRe
     zone_nom: asTextOrNull((row as any).zone_nom) ?? ((row as any).zone_id ? zoneNameById.get(String((row as any).zone_id)) ?? null : null),
     intervenant_nom: asTextOrNull((row as any).intervenant_nom) ?? (row.intervenant_id ? intervenantNameById.get(String(row.intervenant_id)) ?? null : null),
   }));
+}
+
+async function findExistingTerrainFeedbackReserve(input: {
+  chantier_id: string;
+  title: string;
+  description?: string | null;
+}): Promise<ChantierReserveRow | null> {
+  const description = input.description ?? null;
+  if (!isTerrainFeedbackReserveDescription(description)) return null;
+
+  const { data, error } = await (supabase as any)
+    .from("chantier_reserves")
+    .select()
+    .eq("chantier_id", input.chantier_id)
+    .eq("title", input.title.trim())
+    .eq("description", description)
+    .neq("status", "LEVEE")
+    .limit(1)
+    .maybeSingle();
+
+  if (error) {
+    if (isMissingTableError(error)) return null;
+    throw error;
+  }
+  if (!data) return null;
+
+  const [row] = await enrichReserveRows([data as ChantierReserveRow]);
+  return row;
 }
 
 export async function getTaskAssignee(taskId: string): Promise<string | null> {
@@ -173,6 +205,13 @@ export async function createReserve(input: {
     priority: input.priority ?? "NORMALE",
     intervenant_id: input.intervenant_id ?? null,
   };
+
+  const existingTerrainFeedbackReserve = await findExistingTerrainFeedbackReserve({
+    chantier_id: input.chantier_id,
+    title: input.title,
+    description: input.description ?? null,
+  });
+  if (existingTerrainFeedbackReserve) return existingTerrainFeedbackReserve;
 
   const first = await (supabase as any)
     .from("chantier_reserves")
@@ -269,5 +308,3 @@ export async function setReserveStatus(id: string, status: ReserveStatus): Promi
   patch.levee_at = status === "LEVEE" ? new Date().toISOString() : null;
   return updateReserve(id, patch);
 }
-
-
