@@ -38,6 +38,15 @@ const purchaseOrdersMetric: DashboardBusinessMetric = {
   tone: "warning",
 };
 
+const apporteurCommissionsMetric: DashboardBusinessMetric = {
+  key: "apporteurCommissions",
+  label: "Commissions à payer",
+  value: "—",
+  hint: "Apporteurs d'affaires",
+  href: "/crm/apporteurs",
+  tone: "warning",
+};
+
 function metricTone(metric: DashboardBusinessMetric, count: number | null): DashboardTone {
   if (count === null) return metric.tone;
   if (count === 0) return "success";
@@ -51,7 +60,7 @@ async function countRows(query: PromiseLike<{ count: number | null; error: { mes
 }
 
 async function loadBusinessMetricCounts(): Promise<BusinessMetricCounts> {
-  const [quotes, opportunities, invoices, sav, clientDocuments, purchaseOrders] = await Promise.all([
+  const [quotes, opportunities, invoices, sav, clientDocuments, purchaseOrders, apporteurCommissions] = await Promise.all([
     countRows(
       supabase
         .from("crm_quotes" as any)
@@ -92,6 +101,12 @@ async function loadBusinessMetricCounts(): Promise<BusinessMetricCounts> {
         .select("id", { count: "exact", head: true })
         .in("status", ["draft", "sent", "confirmed", "partially_delivered"]) as any,
     ),
+    countRows(
+      supabase
+        .from("apporteur_leads" as any)
+        .select("id", { count: "exact", head: true })
+        .eq("status", "commission_a_payer") as any,
+    ),
   ]);
 
   return {
@@ -101,13 +116,14 @@ async function loadBusinessMetricCounts(): Promise<BusinessMetricCounts> {
     sav: sav ?? undefined,
     clientDocuments: clientDocuments ?? undefined,
     purchaseOrders: purchaseOrders ?? undefined,
+    apporteurCommissions: apporteurCommissions ?? undefined,
   };
 }
 
 export function DashboardBusinessPanel({ metrics }: DashboardBusinessPanelProps) {
   const [counts, setCounts] = useState<BusinessMetricCounts>({});
   const [loadingCounts, setLoadingCounts] = useState(false);
-  const panelMetrics = useMemo(() => [...metrics, clientDocumentsMetric, purchaseOrdersMetric], [metrics]);
+  const panelMetrics = useMemo(() => [...metrics, clientDocumentsMetric, purchaseOrdersMetric, apporteurCommissionsMetric], [metrics]);
 
   useEffect(() => {
     let alive = true;
