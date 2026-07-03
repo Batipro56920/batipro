@@ -1,4 +1,4 @@
-import { AlertTriangle, ArrowRight, CalendarDays, ClipboardList, FileText, Hammer, Users, X } from "lucide-react";
+import { AlertTriangle, ArrowRight, CalendarDays, ClipboardList, Clock3, FileText, Hammer, Users, X } from "lucide-react";
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { Button } from "../../../../components/ui/button";
@@ -8,7 +8,7 @@ import { ChantierProgress } from "./ChantierProgress";
 import { ChantierRowActions } from "./ChantierRowActions";
 import { ChantierStatusPill } from "./ChantierStatusPill";
 
-const TABS = ["Vue rapide", "Tâches", "Planning", "Équipe", "Documents", "Retours terrain", "Alertes"] as const;
+const TABS = ["Vue rapide", "Tâches", "Temps", "Planning", "Équipe", "Documents", "Retours terrain", "Alertes"] as const;
 
 function getProjectHref(row: ChantierDerived) {
   if (row.crm_opportunity_id) return `/projets/opportunity-${row.crm_opportunity_id}`;
@@ -225,6 +225,15 @@ export function ChantierQuickDrawer({ row, actions, onClose }: { row: ChantierDe
               cta="Ouvrir l'exécution"
               metric={`${row.progress}% d'avancement`}
             />
+          ) : tab === "Temps" ? (
+            <DetailShortcutPanel
+              title="Temps chantier"
+              description="Contrôler les heures saisies par tâche et par intervenant, puis rapprocher les écarts avec l'exécution, l'équipe et le planning."
+              href={`/chantiers/${row.id}/temps`}
+              icon={Clock3}
+              cta="Ouvrir les temps"
+              metric={timeLabel(row.heures_prevues, row.heures_passees)}
+            />
           ) : tab === "Planning" ? (
             <DetailShortcutPanel
               title="Planning chantier"
@@ -290,9 +299,15 @@ function QuickAccessPanel({ row }: { row: ChantierDerived }) {
     },
     {
       label: "Exécuter",
-      description: "Tâches, devis, avancement et temps",
+      description: "Tâches, devis et avancement",
       href: `/chantiers/${row.id}/execution`,
       icon: Hammer,
+    },
+    {
+      label: "Temps",
+      description: timeLabel(row.heures_prevues, row.heures_passees),
+      href: `/chantiers/${row.id}/temps`,
+      icon: Clock3,
     },
     {
       label: "Planning",
