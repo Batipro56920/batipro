@@ -27,14 +27,14 @@ function getTerrainFeedbackMeta(row: ChantierDerived) {
 }
 
 function isBlockedChantier(row: ChantierDerived) {
-  return row.status !== "TERMINE" && (row.isLate || (row.terrainFeedbackPriorityCount ?? 0) > 0);
+  return row.status !== "TERMINE" && (row.isLate || (row.terrainFeedbackOpenCount ?? 0) > 0);
 }
 
 function BlockageSummary({ row }: { row: ChantierDerived }) {
   const feedback = getTerrainFeedbackMeta(row);
   const items: string[] = [];
   if (row.isLate) items.push("Chantier en retard");
-  if (feedback.hasPriority) items.push(feedback.label);
+  if (feedback.hasOpen) items.push(feedback.label);
 
   if (items.length === 0) return null;
 
