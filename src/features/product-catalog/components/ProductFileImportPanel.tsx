@@ -39,6 +39,14 @@ type ProductPriceInsights = {
 
 type ProductDraftPatch = Partial<ProductCatalogDraft | ProductCatalogItem>;
 
+type ProductImportAnalysis = {
+  product: ExtractedQuoteProduct;
+  insights: ProductTechnicalInsights;
+  priceInsights: ProductPriceInsights;
+  patch: ProductDraftPatch;
+  interpretation: string | null;
+};
+
 export default function ProductFileImportPanel({
   currentProduct,
   suppliers,
@@ -52,12 +60,14 @@ export default function ProductFileImportPanel({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<string | null>(null);
+  const [pendingAnalysis, setPendingAnalysis] = useState<ProductImportAnalysis | null>(null);
   const hasFiles = fileNames.length > 0;
   const label = useMemo(() => fileNames.slice(0, 3).join(", ") + (fileNames.length > 3 ? ` +${fileNames.length - 3}` : ""), [fileNames]);
 
   async function onFileChange(files: FileList | null) {
     setError(null);
     setResult(null);
+    setPendingAnalysis(null);
     if (!files?.length) return;
 
     const selectedFiles = Array.from(files);
@@ -89,18 +99,18 @@ export default function ProductFileImportPanel({
       const insights = extractProductTechnicalInsights(cleanedText, bestProduct);
       const priceInsights = extractProductPriceInsights(cleanedText, bestProduct, currentProduct);
       const patch = buildProductPatch(currentProduct, bestProduct, selectedFiles, suppliers, insights, priceInsights);
-      onApply(patch);
-      const ratioLabel = insights.consumptionRatioQuantity && insights.consumptionRatioUnit && insights.ratioBaseUnit
-        ? ` Ratio ${formatNumber(insights.consumptionRatioQuantity)} ${insights.consumptionRatioUnit}/${insights.ratioBaseUnit}.`
-        : "";
-      const priceLabel = priceInsights.unitPurchasePrice || priceInsights.packagePurchasePrice || priceInsights.salePrice
-        ? " Prix renseignés."
-        : "";
-      const methodLabel = insights.workMethod ? " Mode opératoire créé." : "";
-      setResult(`${bestProduct.designation} détecté et appliqué à la fiche.${ratioLabel}${priceLabel}${methodLabel}`);
+      setPendingAnalysis({
+        product: bestProduct,
+        insights,
+        priceInsights,
+        patch,
+        interpretation: getBusinessInterpretation(bestProduct),
+      });
+      setResult("Analyse Coco prête à vérifier avant application.");
     } catch (err: any) {
       setError(err?.message ?? "Analyse automatique du fichier impossible.");
       setResult(null);
+      setPendingAnalysis(null);
     } finally {
       setBusy(false);
     }
@@ -110,15 +120,30 @@ export default function ProductFileImportPanel({
     setFileNames([]);
     setError(null);
     setResult(null);
+    setPendingAnalysis(null);
+  }
+
+  function applyPendingAnalysis() {
+    if (!pendingAnalysis) return;
+    onApply(pendingAnalysis.patch);
+    const ratioLabel = pendingAnalysis.insights.consumptionRatioQuantity && pendingAnalysis.insights.consumptionRatioUnit && pendingAnalysis.insights.ratioBaseUnit
+      ? ` Ratio ${formatNumber(pendingAnalysis.insights.consumptionRatioQuantity)} ${pendingAnalysis.insights.consumptionRatioUnit}/${pendingAnalysis.insights.ratioBaseUnit}.`
+      : "";
+    const priceLabel = pendingAnalysis.priceInsights.unitPurchasePrice || pendingAnalysis.priceInsights.packagePurchasePrice || pendingAnalysis.priceInsights.salePrice
+      ? " Prix renseignés."
+      : "";
+    const methodLabel = pendingAnalysis.insights.workMethod ? " Mode opératoire créé." : "";
+    setResult(`${pendingAnalysis.product.designation} appliqué à la fiche.${ratioLabel}${priceLabel}${methodLabel}`);
+    setPendingAnalysis(null);
   }
 
   return (
     <div className="mb-5 rounded-2xl border border-blue-100 bg-blue-50/70 p-4">
       <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
         <div>
-          <div className="text-sm font-semibold text-slate-950">Import automatique depuis fichier produit</div>
+          <div className="text-sm font-semibold text-slate-950">Import intelligent par Coco</div>
           <p className="mt-1 text-sm text-slate-600">
-            Importez une fiche technique, notice, tarif fournisseur ou document produit. Batipro lit le contenu, extrait les ratios utiles et préremplit la fiche ouverte.
+            Importez une fiche technique, notice, tarif fournisseur ou document produit. Coco lit, interprète les données métier, puis vous montre ce qu'il a compris avant de remplir la fiche.
           </p>
         </div>
         <label className="inline-flex h-10 cursor-pointer items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 text-sm font-semibold text-white hover:bg-blue-700 has-[:disabled]:cursor-not-allowed has-[:disabled]:bg-blue-300">
@@ -144,6 +169,52 @@ export default function ProductFileImportPanel({
         </div>
       ) : null}
 
+      {pendingAnalysis ? (
+        <div className="mt-3 space-y-3 rounded-2xl border border-slate-200 bg-white p-4">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <div className="text-sm font-semibold text-slate-950">Coco a compris</div>
+              <div className="mt-1 text-sm text-slate-600">{pendingAnalysis.product.designation}</div>
+            </div>
+            <span className={confidenceClassName(pendingAnalysis.product.confidence)}>
+              Confiance {Math.round((pendingAnalysis.product.confidence ?? 0) * 100)} %
+            </span>
+          </div>
+
+          <div className="grid gap-2 text-sm md:grid-cols-2 xl:grid-cols-4">
+            {buildReadOnlyMetric("Prix achat HT", pendingAnalysis.priceInsights.unitPurchasePrice !== null ? `${formatNumber(pendingAnalysis.priceInsights.unitPurchasePrice)} EUR` : "Non trouvé")}
+            {buildReadOnlyMetric("Prix vente HT", pendingAnalysis.priceInsights.salePrice !== null ? `${formatNumber(pendingAnalysis.priceInsights.salePrice)} EUR` : "Calculé après achat")}
+            {buildReadOnlyMetric(
+              "Ratio tâche",
+              pendingAnalysis.insights.consumptionRatioQuantity && pendingAnalysis.insights.consumptionRatioUnit && pendingAnalysis.insights.ratioBaseUnit
+                ? `${formatNumber(pendingAnalysis.insights.consumptionRatioQuantity)} ${pendingAnalysis.insights.consumptionRatioUnit}/${pendingAnalysis.insights.ratioBaseUnit}`
+                : "Non trouvé",
+            )}
+            {buildReadOnlyMetric("Perte", pendingAnalysis.insights.lossPercent !== null ? `${formatNumber(pendingAnalysis.insights.lossPercent)} %` : "Non trouvée")}
+          </div>
+
+          {pendingAnalysis.interpretation ? (
+            <div className="rounded-xl border border-blue-100 bg-blue-50 px-3 py-2 text-sm text-blue-900">
+              <span className="font-medium">Interprétation métier : </span>{pendingAnalysis.interpretation}
+            </div>
+          ) : null}
+
+          <div className="grid gap-3 md:grid-cols-2">
+            <AnalysisTextBlock title="Domaine d'application" text={pendingAnalysis.insights.applicationScope} />
+            <AnalysisTextBlock title="Mode opératoire" text={pendingAnalysis.insights.workMethod} />
+          </div>
+
+          <div className="flex flex-wrap justify-end gap-2">
+            <button type="button" className="rounded-xl border px-3 py-2 text-sm hover:bg-slate-50" onClick={() => setPendingAnalysis(null)}>
+              Ne pas appliquer
+            </button>
+            <button type="button" className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800" onClick={applyPendingAnalysis}>
+              Appliquer à la fiche
+            </button>
+          </div>
+        </div>
+      ) : null}
+
       {result ? (
         <div className="mt-3 flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-700">
           <CheckCircle2 className="h-4 w-4" /> {result}
@@ -151,6 +222,24 @@ export default function ProductFileImportPanel({
       ) : null}
 
       {error ? <div className="mt-3 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{error}</div> : null}
+    </div>
+  );
+}
+
+function AnalysisTextBlock({ title, text }: { title: string; text: string | null }) {
+  return (
+    <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm">
+      <div className="font-medium text-slate-900">{title}</div>
+      <div className="mt-1 whitespace-pre-line text-slate-600">{text || "Non trouvé dans le document."}</div>
+    </div>
+  );
+}
+
+function buildReadOnlyMetric(label: string, value: string) {
+  return (
+    <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
+      <div className="text-xs text-slate-500">{label}</div>
+      <div className="font-semibold text-slate-950">{value}</div>
     </div>
   );
 }
@@ -219,7 +308,9 @@ function buildImportedDocuments(
   insights: ProductTechnicalInsights,
   priceInsights: ProductPriceInsights,
 ): ProductCatalogItem["documents"] {
+  const businessInterpretation = getBusinessInterpretation(extracted);
   const technicalNotes = [
+    businessInterpretation ? `Interprétation Coco: ${businessInterpretation}` : null,
     ...insights.technicalNotes,
     ...priceInsights.notes,
     insights.consumptionRatioQuantity && insights.consumptionRatioUnit && insights.ratioBaseUnit
@@ -360,10 +451,11 @@ function extractProductPriceInsights(
   extracted: ExtractedQuoteProduct,
   currentProduct: ProductCatalogDraft | ProductCatalogItem,
 ): ProductPriceInsights {
+  const explicitPurchasePrice = positivePrice(extracted.purchase_price_ht);
+  const explicitSalePrice = positivePrice(extracted.sale_price_ht);
   const normalized = text.replace(/\s+/g, " ");
   const priceContext = hasExplicitPriceContext(normalized);
   const extractedPackagePrice = priceContext ? positivePrice(extracted.package_price_ht) : null;
-  const extractedSalePrice = priceContext ? positivePrice(extracted.sale_price_ht) : null;
   const purchaseFromText = extractPriceByPatterns(normalized, [
     /(?:prix\s*(?:d['’ ]achat|achat)|achat\s*ht|pa\s*ht|prix\s*fournisseur|tarif\s*fournisseur|prix\s*standard)[^0-9€]{0,80}([0-9]+(?:[\s.,][0-9]{2})?)\s*(?:€|eur)?\s*(?:ht)?\s*(?:\/|par)?\s*(m²|m2|l|litre|kg|u|unité|unite)?/i,
     /([0-9]+(?:[\s.,][0-9]{2})?)\s*(?:€|eur)\s*(?:ht)?\s*(?:\/|par)?\s*(m²|m2|l|litre|kg|u|unité|unite)?[^.]{0,80}(?:prix\s*(?:d['’ ]achat|achat)|achat\s*ht|pa\s*ht|prix\s*fournisseur|tarif\s*fournisseur)/i,
@@ -373,13 +465,14 @@ function extractProductPriceInsights(
     /([0-9]+(?:[\s.,][0-9]{2})?)\s*(?:€|eur)\s*(?:ht)?\s*(?:\/|par)?\s*(m²|m2|l|litre|kg|u|unité|unite)?[^.]{0,80}(?:prix\s*(?:de\s*)?vente|vente\s*ht|pv\s*ht|prix\s*public|vente\s*conseill[ée]e)/i,
   ]);
   const existingSupplierUnitPrice = getBestExistingSupplierUnitPrice(currentProduct);
-  const unitPurchasePrice = existingSupplierUnitPrice
+  const unitPurchasePrice = explicitPurchasePrice
     ?? purchaseFromText?.price
+    ?? existingSupplierUnitPrice
     ?? positivePrice(currentProduct.standardPurchasePriceHt)
-    ?? (priceContext ? positivePrice(extracted.purchase_price_ht) : null);
+    ?? null;
   const packagePurchasePrice = extractedPackagePrice ?? null;
-  const salePrice = computeSalePrice(unitPurchasePrice, positiveNumber(currentProduct.targetMarginRate) ?? 30)
-    ?? extractedSalePrice
+  const salePrice = explicitSalePrice
+    ?? computeSalePrice(unitPurchasePrice, positiveNumber(currentProduct.targetMarginRate) ?? 30)
     ?? saleFromText?.price
     ?? positivePrice(currentProduct.recommendedSalePriceHt);
   const notes = [
@@ -473,6 +566,18 @@ function extractSection(text: string, headings: string[]): string | null {
   return selected.join("\n").slice(0, 1200) || null;
 }
 
+function getBusinessInterpretation(product: ExtractedQuoteProduct): string | null {
+  const explicit = product as ExtractedQuoteProduct & Record<string, unknown>;
+  return normalizeText(explicit.business_interpretation ?? explicit.interpretation_metier);
+}
+
+function confidenceClassName(confidence: number | null | undefined) {
+  const value = confidence ?? 0;
+  if (value >= 0.8) return "rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700";
+  if (value >= 0.55) return "rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-700";
+  return "rounded-full border border-red-200 bg-red-50 px-3 py-1 text-xs font-semibold text-red-700";
+}
+
 function isSupportedProductFile(file: File): boolean {
   const name = file.name.toLowerCase();
   return [".pdf", ".xlsx", ".xls", ".csv", ".txt"].some((extension) => name.endsWith(extension))
@@ -547,6 +652,7 @@ function normalizeUnit(unit: unknown): DocumentUnit {
   if (["m3", "m 3", "m³"].includes(value)) return "m3";
   if (["ml", "m", "metre lineaire"].includes(value)) return "ml";
   if (["kg", "kilo"].includes(value)) return "kg";
+  if (["g", "gramme", "grammes"].includes(value)) return "kg";
   if (["l", "litre", "litres"].includes(value)) return "l";
   if (["h", "heure"].includes(value)) return "h";
   if (["forfait", "ens", "ensemble"].includes(value)) return "forfait";
