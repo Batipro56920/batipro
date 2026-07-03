@@ -109,6 +109,12 @@ export default function ChantierPlanningPage() {
               Dossier chantier
             </Link>
             <Link
+              to={`/chantiers/${id}/preparation`}
+              className="rounded-xl border border-cyan-200 bg-cyan-50 px-3 py-2 text-sm font-medium text-cyan-800 hover:bg-cyan-100"
+            >
+              Préparation
+            </Link>
+            <Link
               to={`/chantiers/${id}/equipe`}
               className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-medium text-emerald-800 hover:bg-emerald-100"
             >
