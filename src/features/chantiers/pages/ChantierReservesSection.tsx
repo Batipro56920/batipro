@@ -85,7 +85,7 @@ export default function ChantierReservesSection({ children }: { children: ReactN
             <div>
               <div className="font-semibold">Retour terrain source</div>
               <div className="mt-1 text-amber-900/80">
-                Cette vue qualité conserve le lien avec le signalement terrain d'origine pour contrôler ou créer la réserve adaptée.
+                Cette vue qualité garde le signalement terrain d'origine en contexte : contrôlez la situation, créez ou complétez la réserve adaptée, puis retrouvez la trace dans le journal chantier.
               </div>
             </div>
             <div className="flex shrink-0 flex-wrap gap-2">
@@ -95,6 +95,14 @@ export default function ChantierReservesSection({ children }: { children: ReactN
               >
                 Ouvrir le retour source
               </Link>
+              {chantierJournalHref ? (
+                <Link
+                  to={chantierJournalHref}
+                  className="inline-flex items-center justify-center rounded-xl border border-amber-200 bg-white px-3 py-2 text-sm font-semibold text-amber-800 hover:bg-amber-100"
+                >
+                  Journal chantier
+                </Link>
+              ) : null}
               <button
                 type="button"
                 onClick={clearTargetedReserve}
