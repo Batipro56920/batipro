@@ -43,7 +43,7 @@ const apporteurCommissionsMetric: DashboardBusinessMetric = {
   label: "Commissions à payer",
   value: "—",
   hint: "Apporteurs d'affaires",
-  href: "/crm/apporteurs",
+  href: "/crm/apporteurs?status=commission_a_payer",
   tone: "warning",
 };
 
