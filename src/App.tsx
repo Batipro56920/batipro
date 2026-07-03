@@ -374,6 +374,14 @@ export default function App() {
           element={<ChantierBackofficeRoute label="Ouverture des réserves chantier..."><ChantiersPage initialView="kanban" initialFocus="reserves" /></ChantierBackofficeRoute>}
         />
         <Route
+          path="/visites-chantier"
+          element={
+            <RequireCompanyFeature moduleId="validation_qualite">
+              <ChantierBackofficeRoute label="Ouverture des visites chantier..."><ChantiersPage initialView="kanban" initialFocus="reserves" /></ChantierBackofficeRoute>
+            </RequireCompanyFeature>
+          }
+        />
+        <Route
           path="/temps"
           element={<ChantierBackofficeRoute label="Ouverture du suivi des temps..."><ChantiersPage initialView="kanban" initialFocus="time" /></ChantierBackofficeRoute>}
         />
