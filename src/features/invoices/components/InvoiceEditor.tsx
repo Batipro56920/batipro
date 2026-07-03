@@ -336,6 +336,12 @@ function buildInvoiceContextLinks(invoice: InvoiceRecord): ContextLink[] {
     });
   }
 
+  links.push({
+    label: "Encaissements",
+    description: "Suivre les règlements et le reste dû",
+    href: "/financier/encaissements",
+  });
+
   if (chantierId) {
     links.push({
       label: "Chantier lié",
