@@ -180,13 +180,10 @@ function buildProductPatch(
   const supplierName = normalizeText(extracted.supplier_name);
   const supplier = supplierName ? suppliers.find((row) => normalizeKey(row.name) === normalizeKey(supplierName)) ?? null : null;
   const coverageM2 = positivePrice(extracted.coverage_m2);
-  const existingPurchasePrice = positivePrice(currentProduct.standardPurchasePriceHt) ?? getBestExistingSupplierUnitPrice(currentProduct);
   const supplierNegotiatedPrice = priceInsights.packagePurchasePrice
     ?? positivePrice(extracted.package_price_ht)
-    ?? existingPurchasePrice
     ?? priceInsights.unitPurchasePrice;
-  const unitPrice = existingPurchasePrice
-    ?? priceInsights.unitPurchasePrice
+  const unitPrice = priceInsights.unitPurchasePrice
     ?? computeCoverageUnitPrice(supplierNegotiatedPrice, coverageM2)
     ?? supplierNegotiatedPrice;
   const marginRate = positiveNumber(currentProduct.targetMarginRate) ?? 30;
