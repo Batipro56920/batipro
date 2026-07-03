@@ -152,7 +152,7 @@ export default function RentabilitePage() {
               </div>
               <div className="mt-5 grid gap-3 md:grid-cols-3">
                 <FlowBlock label="Entrées prévues" value={formatCurrency(summary.invoicedTtc)} detail="Factures émises" />
-                <FlowBlock label="Sorties engagées" value={formatCurrency(summary.purchasesTtc)} detail="Commandes fournisseurs" />
+                <FlowBlock label="Sorties engagées" value={formatCurrency(summary.purchasesTtc)} detail="Commandes fournisseurs · Voir les décaissements" href="/financier/decaissements" />
                 <FlowBlock label="Net prévisionnel" value={formatCurrency(summary.forecastNetTtc)} detail="Facturé - achats" strong />
               </div>
               <SimpleFinancialChart summary={summary} />
@@ -203,8 +203,15 @@ function Metric({ label, value, detail, tone = "neutral", href }: { label: strin
   return <div className={className}>{content}</div>;
 }
 
-function FlowBlock({ label, value, detail, strong = false }: { label: string; value: string; detail: string; strong?: boolean }) {
-  return <div className={strong ? "rounded-lg border border-blue-200 bg-blue-50 p-4" : "rounded-lg border border-slate-200 bg-slate-50 p-4"}><div className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">{label}</div><div className="mt-2 text-lg font-bold text-slate-950">{value}</div><div className="mt-1 text-xs text-slate-500">{detail}</div></div>;
+function FlowBlock({ label, value, detail, strong = false, href }: { label: string; value: string; detail: string; strong?: boolean; href?: string }) {
+  const className = strong ? "rounded-lg border border-blue-200 bg-blue-50 p-4" : "rounded-lg border border-slate-200 bg-slate-50 p-4";
+  const content = <><div className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">{label}</div><div className="mt-2 text-lg font-bold text-slate-950">{value}</div><div className="mt-1 text-xs text-slate-500">{detail}</div></>;
+
+  if (href) {
+    return <Link to={href} className={`${className} block transition hover:border-blue-200 hover:bg-blue-50/50 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2`}>{content}</Link>;
+  }
+
+  return <div className={className}>{content}</div>;
 }
 
 function SimpleFinancialChart({ summary }: { summary: ProfitabilitySummary }) {
