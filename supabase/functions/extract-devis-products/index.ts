@@ -25,6 +25,14 @@ type ProductLine = {
   vat_rate: number | null;
   packaging: string | null;
   minimum_quantity: number | null;
+  consumption_ratio_quantity: number | null;
+  consumption_ratio_unit: string | null;
+  consumption_base_unit: string | null;
+  loss_percent: number | null;
+  work_method: string | null;
+  application_scope: string | null;
+  technical_notes: string | null;
+  business_interpretation: string | null;
   confidence: number;
   source_line: string;
 };
@@ -50,6 +58,11 @@ function parseJsonPayload(content: string): unknown {
 function normalizeText(value: unknown): string | null {
   const text = String(value ?? "").replace(/\s+/g, " ").trim();
   return text ? text : null;
+}
+
+function cleanLongText(value: unknown, maxLength: number): string | null {
+  const text = normalizeText(value);
+  return text ? text.slice(0, maxLength) : null;
 }
 
 function cleanDesignation(value: unknown): string | null {
@@ -121,10 +134,11 @@ function normalizeUnit(raw: unknown): string {
   if (["ml", "m", "mètre linéaire", "metre lineaire"].includes(value)) return "ml";
   if (["u", "unité", "unite", "pièce", "piece", "pcs", "pc"].includes(value)) return "u";
   if (["h", "heure", "heures"].includes(value)) return "h";
-  if (["kg", "kilo", "kilogramme"].includes(value)) return "kg";
+  if (["kg", "kilo", "kilogramme", "kilogrammes"].includes(value)) return "kg";
+  if (["g", "gramme", "grammes"].includes(value)) return "g";
   if (["l", "litre", "litres"].includes(value)) return "l";
   if (["forfait", "ens", "ensemble", "lot"].includes(value)) return "forfait";
-  return "u";
+  return value;
 }
 
 function isNoiseDesignation(value: string): boolean {
@@ -154,6 +168,8 @@ function validateLine(raw: any): ProductLine | null {
   const purchasePrice = toNumber(raw?.purchase_price_ht ?? raw?.prix_achat_ht ?? raw?.unit_purchase_price_ht);
   const salePrice = toNumber(raw?.sale_price_ht ?? raw?.prix_vente_ht ?? raw?.unit_sale_price_ht ?? raw?.unit_price_ht);
   const coverageM2 = toNumber(raw?.coverage_m2 ?? raw?.surface_m2 ?? raw?.surface_colis_m2);
+  const consumptionRatioQuantity = toNumber(raw?.consumption_ratio_quantity ?? raw?.material_ratio_quantity ?? raw?.ratio_quantity);
+  const lossPercent = toNumber(raw?.loss_percent ?? raw?.perte_percent ?? raw?.perte_pourcentage);
 
   return {
     designation,
@@ -170,6 +186,14 @@ function validateLine(raw: any): ProductLine | null {
     vat_rate: toNumber(raw?.vat_rate ?? raw?.tva_rate ?? raw?.tva),
     packaging: normalizeText(raw?.packaging ?? raw?.conditionnement),
     minimum_quantity: toNumber(raw?.minimum_quantity ?? raw?.quantite_minimum ?? raw?.qte_min),
+    consumption_ratio_quantity: consumptionRatioQuantity,
+    consumption_ratio_unit: normalizeText(raw?.consumption_ratio_unit ?? raw?.material_ratio_unit ?? raw?.ratio_unit),
+    consumption_base_unit: normalizeText(raw?.consumption_base_unit ?? raw?.ratio_base_unit),
+    loss_percent: lossPercent !== null && lossPercent >= 0 && lossPercent <= 100 ? lossPercent : null,
+    work_method: cleanLongText(raw?.work_method ?? raw?.mode_operatoire ?? raw?.mise_en_oeuvre, 1600),
+    application_scope: cleanLongText(raw?.application_scope ?? raw?.domaine_application ?? raw?.destination, 1200),
+    technical_notes: cleanLongText(raw?.technical_notes ?? raw?.notes_techniques, 1200),
+    business_interpretation: cleanLongText(raw?.business_interpretation ?? raw?.interpretation_metier, 700),
     confidence: confidence(raw?.confidence),
     source_line: normalizeText(raw?.source_line ?? raw?.sourceLine ?? designation) ?? designation,
   };
@@ -198,24 +222,29 @@ serve(async (req) => {
 
   const model = Deno.env.get("OPENAI_MODEL") || "gpt-4.1-mini";
   const prompt = [
-    "Tu lis le texte extrait d'un devis fournisseur BTP ou d'une grille de prix matériaux.",
-    "Tu dois retourner uniquement les lignes produits exploitables pour créer des fiches catalogue fournisseur.",
-    "Le document représente les prix négociés fournisseur de l'entreprise, pas un devis client à recopier tel quel.",
-    "Ignore strictement: main d'oeuvre, prestations seules, titres de sections, totaux, sous-totaux, TVA globale, conditions, adresses, client, mentions légales, règlements, acomptes, frais généraux et lignes sans produit identifiable.",
-    "designation doit être le nom lisible du produit uniquement. Retire le conditionnement de la désignation quand il existe, par exemple 'colis de 8 panneaux soit 6,48m2'.",
-    "packaging contient le conditionnement complet lisible, par exemple 'Colis de 8 panneaux', 'Pot de 15 L', 'Rouleau de 25 m', 'Sac de 25 kg'.",
-    "purchase_price_ht est le prix d'achat négocié HT tel qu'il est donné par le fournisseur pour ce conditionnement ou cette unité fournisseur. Ne le transforme jamais en prix au m².",
-    "coverage_m2 contient la surface couverte par ce conditionnement quand elle est indiquée ou clairement déductible: isolant par colis, peinture par pot si rendement et contenance sont explicites, membrane par rouleau, plaque/panneau par lot, etc.",
-    "Si le document donne un rendement générique et une contenance claire, tu peux en déduire coverage_m2. Sinon laisse coverage_m2 à null.",
-    "Batipro calculera ensuite le prix au m² = purchase_price_ht / coverage_m2. Ne fais pas ce calcul toi-même dans purchase_price_ht.",
-    "package_price_ht contient le total HT de ligne si le document distingue prix unitaire fournisseur et total de ligne. Si purchase_price_ht est déjà le prix du conditionnement acheté, package_price_ht peut rester null.",
-    "quantity correspond à la quantité de la ligne du devis fournisseur.",
-    "unit doit être l'unité lue ou la plus proche côté fournisseur parmi: u, h, ml, m2, m3, forfait, kg, l. Ne force pas m2 uniquement parce que coverage_m2 existe.",
-    "Pour chaque produit, extrais seulement les informations nécessaires: supplier_name, designation, quantity, unit, coverage_m2, purchase_price_ht, package_price_ht, vat_rate, supplier_reference, brand, category, packaging, minimum_quantity, confidence, source_line.",
-    "Si le document est clairement un devis client avec prix de vente et pas un devis fournisseur, mets le prix unitaire dans sale_price_ht et laisse purchase_price_ht à null si le prix d'achat est incertain.",
-    "confidence entre 0 et 1.",
+    "Tu es Coco, l'assistant métier intégré à Batipro pour le bâtiment.",
+    "Ta mission n'est pas de copier-coller le document: tu dois comprendre le document et transformer son contenu en données métier fiables pour Batipro.",
+    "Tu peux recevoir une fiche technique, une notice, un domaine d'application, un mode opératoire, un devis fournisseur, une grille tarifaire ou plusieurs documents mélangés.",
+    "Retourne uniquement les produits matériaux réellement exploitables. Ignore main d'oeuvre, prestations seules, titres, totaux, TVA globale, conditions, adresses, client, mentions légales, règlements, acomptes et lignes sans produit identifiable.",
+    "Règle critique: ne confonds jamais un chiffre technique avec un prix. Une consommation, un rendement, une couverture, une densité, une épaisseur, une température ou un temps de séchage ne doit jamais devenir purchase_price_ht ni sale_price_ht.",
+    "Règle critique: si un prix n'est pas explicitement indiqué avec €, EUR, HT, prix, tarif, achat, vente, PA ou PV, laisse les prix à null.",
+    "Règle critique: si un chiffre est une consommation type 5,7 m2/L ou 1,8 kg/m2, renseigne consumption_ratio_* ou coverage_m2 selon le sens, mais pas un prix.",
+    "designation doit être le nom lisible du produit uniquement. Retire le conditionnement de la désignation quand il existe.",
+    "packaging contient le conditionnement complet lisible: Pot de 15 L, Sac de 25 kg, Rouleau de 25 m, Colis de panneaux, etc.",
+    "purchase_price_ht est le prix d'achat HT unitaire utile pour chiffrer le matériau dans Batipro. Si le document donne un prix au m2, au kg ou au litre, mets ce prix dans purchase_price_ht et l'unité correspondante dans unit.",
+    "package_price_ht contient le prix HT du conditionnement complet seulement si le document donne un prix de pot, sac, colis ou rouleau distinct du prix unitaire métier.",
+    "sale_price_ht est un prix de vente uniquement si le document le dit explicitement. Sinon laisse null: Batipro calculera achat + marge.",
+    "coverage_m2 contient la surface couverte par un conditionnement quand elle est indiquée ou clairement déductible. Ne force pas coverage_m2 si le rendement est seulement indicatif et le conditionnement absent.",
+    "consumption_ratio_quantity, consumption_ratio_unit et consumption_base_unit décrivent la consommation utile pour une tâche. Exemple: 1.8 kg/m2 => quantity 1.8, unit kg, base m2. Exemple rendement 5.7 m2/L => quantity 0.175, unit l, base m2.",
+    "loss_percent contient uniquement une perte ou majoration chantier explicitement mentionnée.",
+    "application_scope doit résumer le domaine d'application: supports, pièces, intérieur/extérieur, conditions d'emploi, limites importantes.",
+    "work_method doit transformer la notice en mode opératoire actionnable pour l'intervenant: préparation support, mélange/préparation produit, application, temps d'attente/séchage, couches, contrôles et sécurité utile. Ne recopie pas tout le document: synthétise en étapes terrain.",
+    "technical_notes contient les points techniques importants qui ne rentrent pas ailleurs.",
+    "business_interpretation explique en une phrase pourquoi tu as classé les prix, ratios et unités ainsi. Mentionne les incertitudes si besoin.",
+    "Si le document est clairement un devis client avec prix de vente et pas un devis fournisseur, mets le prix dans sale_price_ht et laisse purchase_price_ht à null si le prix d'achat est incertain.",
+    "confidence entre 0 et 1. Baisse la confiance si le prix, l'unité ou le ratio sont ambigus.",
     "Réponds en JSON strict uniquement avec ce format: {\"products\": ProductLine[]}.",
-    "ProductLine = {supplier_name, designation, supplier_reference, brand, category, unit, quantity, coverage_m2, purchase_price_ht, sale_price_ht, package_price_ht, vat_rate, packaging, minimum_quantity, confidence, source_line}.",
+    "ProductLine = {supplier_name, designation, supplier_reference, brand, category, unit, quantity, coverage_m2, purchase_price_ht, sale_price_ht, package_price_ht, vat_rate, packaging, minimum_quantity, consumption_ratio_quantity, consumption_ratio_unit, consumption_base_unit, loss_percent, work_method, application_scope, technical_notes, business_interpretation, confidence, source_line}.",
   ].join("\n");
 
   const payload = {
