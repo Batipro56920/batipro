@@ -18,11 +18,13 @@ const toneClass = {
   danger: "bg-red-50 text-red-700",
 };
 
+const CLIENT_DOCUMENT_ACTIONABLE_STATUSES = ["sent", "viewed", "modification_requested", "expired"];
+
 const clientDocumentsMetric: DashboardBusinessMetric = {
   key: "clientDocuments",
   label: "Docs client en attente",
   value: "—",
-  hint: "Validation / signature client",
+  hint: "Validation / signature / relance client",
   href: "/factures",
   tone: "warning",
 };
@@ -82,7 +84,7 @@ async function loadBusinessMetricCounts(): Promise<BusinessMetricCounts> {
         .from("document_client_workflows" as any)
         .select("id", { count: "exact", head: true })
         .is("revoked_at", null)
-        .in("status", ["sent", "viewed", "modification_requested"]) as any,
+        .in("status", CLIENT_DOCUMENT_ACTIONABLE_STATUSES) as any,
     ),
     countRows(
       supabase
