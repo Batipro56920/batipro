@@ -361,8 +361,8 @@ export function useDashboardMetrics({ chantiers, materiel, alerts, activeView, l
       key: "invoices",
       label: "Factures en attente",
       value: "—",
-      hint: "Suivi facturation",
-      href: "/crm/factures",
+      hint: "Suivi encaissements",
+      href: "/financier/encaissements",
       tone: "warning",
     },
     {
