@@ -10,7 +10,8 @@ export default function ChantierTasksQuotesSection({ children }: { children: Rea
   const encodedChantierId = id ? encodeURIComponent(id) : "";
   const terrainFeedbackHref = id ? `/retours-terrain?chantierId=${encodedChantierId}` : "/retours-terrain";
   const reservesHref = id ? `/chantiers/${encodedChantierId}/qualite` : "/reserves";
-  const taskLibraryHref = "/bibliotheque?q=masque%20chantier";
+  const taskLibraryReadyHref = "/bibliotheque?q=chantier%20production";
+  const taskLibraryHiddenHref = "/bibliotheque?q=masque%20chantier";
   const materialNeedsHref = id ? `/chantiers/${encodedChantierId}/preparation` : "/chantiers";
 
   function clearTargetedTask() {
@@ -77,15 +78,23 @@ export default function ChantierTasksQuotesSection({ children }: { children: Rea
           <div>
             <div className="font-semibold">Bibliotheque chantier</div>
             <div className="mt-1 text-blue-800/80">
-              Retrouvez les modeles masques en production pour les activer ou les completer avant de les utiliser sur les taches.
+              Controlez les modeles deja visibles en production ou activez ceux qui restent masques avant de les utiliser sur les taches.
             </div>
           </div>
-          <Link
-            to={taskLibraryHref}
-            className="inline-flex shrink-0 items-center justify-center rounded-xl bg-blue-700 px-3 py-2 text-sm font-semibold text-white hover:bg-blue-800"
-          >
-            Voir les modeles a activer
-          </Link>
+          <div className="flex shrink-0 flex-wrap gap-2">
+            <Link
+              to={taskLibraryReadyHref}
+              className="inline-flex items-center justify-center rounded-xl border border-blue-200 bg-white px-3 py-2 text-sm font-semibold text-blue-800 hover:bg-blue-100"
+            >
+              Modeles chantier actifs
+            </Link>
+            <Link
+              to={taskLibraryHiddenHref}
+              className="inline-flex items-center justify-center rounded-xl bg-blue-700 px-3 py-2 text-sm font-semibold text-white hover:bg-blue-800"
+            >
+              Modeles a activer
+            </Link>
+          </div>
         </div>
       </div>
       <div className="mb-4 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900">
