@@ -60,7 +60,7 @@ const HEADER_BY_VIEW: Record<ChantierListView, { eyebrow: string; title: string;
   },
 };
 
-type ChantierListFocus = "tasks" | "reserves" | "time";
+type ChantierListFocus = "tasks" | "reserves" | "time" | "visits";
 
 type ChantiersPageProps = {
   initialView?: ChantierListView;
@@ -85,6 +85,11 @@ const HEADER_BY_FOCUS: Record<ChantierListFocus, { eyebrow: string; title: strin
     title: "Suivi des temps chantier",
     description: "Repérez les chantiers à surveiller puis ouvrez directement l'exécution pour rapprocher temps passés, avancement et équipe.",
   },
+  visits: {
+    eyebrow: "Qualité",
+    title: "Visites chantier",
+    description: "Choisissez un chantier actif puis ouvrez directement son registre de visites, contrôles et comptes rendus.",
+  },
 };
 
 const FOCUS_GUIDANCE: Record<ChantierListFocus, { title: string; description: string; cta: string }> = {
@@ -103,6 +108,11 @@ const FOCUS_GUIDANCE: Record<ChantierListFocus, { title: string; description: st
     description: "La vue met en avant les chantiers à risque pour relier temps passés, avancement et équipe sans créer une logique de temps séparée.",
     cta: "Ouvrir mène à Exécuter.",
   },
+  visits: {
+    title: "Parcours visites",
+    description: "La vue reste centrée sur les chantiers actifs et l'ouverture mène au registre des visites du chantier, sans créer de suivi qualité séparé.",
+    cta: "Ouvrir mène aux Visites.",
+  },
 };
 
 function getInitialFilters(initialFocus: ChantierListFocus | undefined): ChantierListFilters {
@@ -114,6 +124,7 @@ function getFocusedChantierPath(row: ChantierRow, initialFocus: ChantierListFocu
   const basePath = `/chantiers/${encodeURIComponent(row.id)}`;
   if (initialFocus === "tasks" || initialFocus === "time") return `${basePath}/execution`;
   if (initialFocus === "reserves") return `${basePath}/qualite`;
+  if (initialFocus === "visits") return `${basePath}/visites`;
   return basePath;
 }
 
