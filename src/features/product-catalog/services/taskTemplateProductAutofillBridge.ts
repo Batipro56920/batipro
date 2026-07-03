@@ -113,13 +113,13 @@ function getProductDocumentText(product: ProductCatalogItem) {
 
 function findRatioMatch(documentText: string): RatioMatch | null {
   const directLabelMatch = documentText.match(
-    /(?:Ratio mat[eé]riau Batipro|Consommation(?:\s+(?:moyenne|th[eé]orique|indicative))?)\s*:?\s*([0-9]+(?:[,.][0-9]+)?)\s*([^\s/]+)\s*\/\s*([^\s\n]+)/i,
+    /(?:Ratio mat[eé]riau Batipro|Consommation(?:\s+(?:moyenne|th[eé]orique|indicative|recommand[eé]e|pr[eé]conis[eé]e))?|Dosage(?:\s+(?:moyen|recommand[eé]|pr[eé]conis[eé]))?)\s*:?\s*([0-9]+(?:[,.][0-9]+)?)\s*([^\s/]+)\s*\/\s*([^\s\n]+)/i,
   );
   const directRatio = buildDirectRatioMatch(directLabelMatch);
   if (directRatio) return directRatio;
 
   const rendementMatch = documentText.match(
-    /Rendement(?:\s+(?:moyen|th[eé]orique|indicatif))?\s*:?\s*([0-9]+(?:[,.][0-9]+)?)\s*([^\s/]+)\s*\/\s*([^\s\n]+)/i,
+    /(?:Rendement(?:\s+(?:moyen|th[eé]orique|indicatif|pratique))?|Couverture|Pouvoir couvrant)\s*:?\s*([0-9]+(?:[,.][0-9]+)?)\s*([^\s/]+)\s*\/\s*([^\s\n]+)/i,
   );
   return buildRendementRatioMatch(rendementMatch);
 }
