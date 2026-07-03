@@ -275,7 +275,7 @@ export function useDashboardMetrics({ chantiers, materiel, alerts, activeView, l
       label: "Validations",
       value: alertStats.incompletePreparation,
       description: "Préparations incomplètes",
-      href: "/chantiers",
+      href: "/dashboard?view=alertes",
       tone: alertStats.incompletePreparation > 0 ? "warning" : "success",
     },
     {
