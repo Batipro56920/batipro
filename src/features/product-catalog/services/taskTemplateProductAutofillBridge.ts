@@ -9,6 +9,12 @@ type ProductRatioHint = {
   notes: string;
 };
 
+type RatioMatch = {
+  quantity: number;
+  sourceUnit: string;
+  ratioUnit: string;
+};
+
 let installed = false;
 let productsPromise: Promise<ProductCatalogItem[]> | null = null;
 
@@ -74,16 +80,10 @@ function setInputValue(input: HTMLInputElement, value: string) {
 }
 
 function getProductRatioHint(product: ProductCatalogItem): ProductRatioHint {
-  const documentText = product.documents
-    .map((document) => [document.name, document.notes].filter(Boolean).join("\n"))
-    .join("\n\n");
-
-  const ratioMatch = documentText.match(/Ratio mat[eé]riau Batipro\s*:\s*([0-9]+(?:[,.][0-9]+)?)\s*([^\s/]+)\s*\/\s*([^\s\n]+)/i);
+  const documentText = getProductDocumentText(product);
+  const ratioMatch = findRatioMatch(documentText);
   const lossMatch = documentText.match(/(?:Perte pr[eé]conis[eé]e|Perte extraite)\s*:\s*([0-9]+(?:[,.][0-9]+)?)\s*%/i);
 
-  const ratioQuantity = parseLooseNumber(ratioMatch?.[1]);
-  const sourceUnit = normalizeUnit(ratioMatch?.[2]) ?? product.unit;
-  const ratioUnit = normalizeUnit(ratioMatch?.[3]) ?? null;
   const lossPercent = parseLooseNumber(lossMatch?.[1]);
 
   const taskNotes = product.documents
@@ -97,11 +97,52 @@ function getProductRatioHint(product: ProductCatalogItem): ProductRatioHint {
     .join("\n\n");
 
   return {
-    quantity: ratioQuantity,
-    sourceUnit,
-    ratioUnit,
+    quantity: ratioMatch?.quantity ?? null,
+    sourceUnit: ratioMatch?.sourceUnit ?? product.unit,
+    ratioUnit: ratioMatch?.ratioUnit ?? null,
     lossPercent,
     notes: taskNotes,
+  };
+}
+
+function getProductDocumentText(product: ProductCatalogItem) {
+  return product.documents
+    .map((document) => [document.name, document.notes].filter(Boolean).join("\n"))
+    .join("\n\n");
+}
+
+function findRatioMatch(documentText: string): RatioMatch | null {
+  const directLabelMatch = documentText.match(
+    /(?:Ratio mat[eé]riau Batipro|Consommation(?:\s+(?:moyenne|th[eé]orique|indicative))?)\s*:?\s*([0-9]+(?:[,.][0-9]+)?)\s*([^\s/]+)\s*\/\s*([^\s\n]+)/i,
+  );
+  const directRatio = buildDirectRatioMatch(directLabelMatch);
+  if (directRatio) return directRatio;
+
+  const rendementMatch = documentText.match(
+    /Rendement(?:\s+(?:moyen|th[eé]orique|indicatif))?\s*:?\s*([0-9]+(?:[,.][0-9]+)?)\s*([^\s/]+)\s*\/\s*([^\s\n]+)/i,
+  );
+  return buildRendementRatioMatch(rendementMatch);
+}
+
+function buildDirectRatioMatch(match: RegExpMatchArray | null): RatioMatch | null {
+  if (!match) return null;
+  const quantity = parseLooseNumber(match[1]);
+  const sourceUnit = normalizeUnit(match[2]);
+  const ratioUnit = normalizeUnit(match[3]);
+  if (quantity === null || !sourceUnit || !ratioUnit) return null;
+  return { quantity, sourceUnit, ratioUnit };
+}
+
+function buildRendementRatioMatch(match: RegExpMatchArray | null): RatioMatch | null {
+  if (!match) return null;
+  const quantity = parseLooseNumber(match[1]);
+  const producedUnit = normalizeUnit(match[2]);
+  const consumedUnit = normalizeUnit(match[3]);
+  if (quantity === null || quantity <= 0 || !producedUnit || !consumedUnit) return null;
+  return {
+    quantity: 1 / quantity,
+    sourceUnit: consumedUnit,
+    ratioUnit: producedUnit,
   };
 }
 
