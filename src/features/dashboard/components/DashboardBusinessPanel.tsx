@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { ArrowRight, BriefcaseBusiness } from "lucide-react";
 import { supabase } from "../../../lib/supabaseClient";
@@ -18,6 +18,15 @@ const toneClass = {
   danger: "bg-red-50 text-red-700",
 };
 
+const purchaseOrdersMetric: DashboardBusinessMetric = {
+  key: "purchaseOrders",
+  label: "Commandes à traiter",
+  value: "—",
+  hint: "Suivi décaissements",
+  href: "/financier/decaissements",
+  tone: "warning",
+};
+
 function metricTone(metric: DashboardBusinessMetric, count: number | null): DashboardTone {
   if (count === null) return metric.tone;
   if (count === 0) return "success";
@@ -31,7 +40,7 @@ async function countRows(query: PromiseLike<{ count: number | null; error: { mes
 }
 
 async function loadBusinessMetricCounts(): Promise<BusinessMetricCounts> {
-  const [quotes, opportunities, invoices, sav] = await Promise.all([
+  const [quotes, opportunities, invoices, sav, purchaseOrders] = await Promise.all([
     countRows(
       supabase
         .from("crm_quotes" as any)
@@ -59,6 +68,12 @@ async function loadBusinessMetricCounts(): Promise<BusinessMetricCounts> {
         .select("id", { count: "exact", head: true })
         .is("closed_at", null) as any,
     ),
+    countRows(
+      supabase
+        .from("purchase_orders" as any)
+        .select("id", { count: "exact", head: true })
+        .in("status", ["draft", "sent", "confirmed", "partially_delivered"]) as any,
+    ),
   ]);
 
   return {
@@ -66,12 +81,14 @@ async function loadBusinessMetricCounts(): Promise<BusinessMetricCounts> {
     opportunities: opportunities ?? undefined,
     invoices: invoices ?? undefined,
     sav: sav ?? undefined,
+    purchaseOrders: purchaseOrders ?? undefined,
   };
 }
 
 export function DashboardBusinessPanel({ metrics }: DashboardBusinessPanelProps) {
   const [counts, setCounts] = useState<BusinessMetricCounts>({});
   const [loadingCounts, setLoadingCounts] = useState(false);
+  const panelMetrics = useMemo(() => [...metrics, purchaseOrdersMetric], [metrics]);
 
   useEffect(() => {
     let alive = true;
@@ -102,7 +119,7 @@ export function DashboardBusinessPanel({ metrics }: DashboardBusinessPanelProps)
         <BriefcaseBusiness className="h-5 w-5 text-slate-300" />
       </div>
       <div className="grid gap-2 sm:grid-cols-2">
-        {metrics.map((metric) => {
+        {panelMetrics.map((metric) => {
           const count = counts[metric.key] ?? null;
           const value = loadingCounts && count === null ? "..." : count === null ? metric.value : String(count);
           const tone = metricTone(metric, count);
