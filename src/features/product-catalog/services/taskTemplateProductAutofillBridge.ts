@@ -41,6 +41,7 @@ async function onPotentialProductSelection(event: Event) {
 
   window.setTimeout(() => applyProductTechnicalAutofill(row, product), 40);
   window.setTimeout(() => applyProductTechnicalAutofill(row, product), 140);
+  window.setTimeout(() => applyProductTechnicalAutofill(row, product), 280);
 }
 
 function looksLikeTaskTemplateProductSelect(select: HTMLSelectElement) {
@@ -62,6 +63,8 @@ function applyProductTechnicalAutofill(row: HTMLElement, product: ProductCatalog
   if (inputs.length < 6) return;
 
   const hint = getProductRatioHint(product);
+  const purchasePrice = getProductPurchaseUnitPrice(product);
+  const salePrice = getProductSaleUnitPrice(product, purchasePrice);
 
   setInputValue(inputs[0], product.designation);
   setInputValue(inputs[1], hint.sourceUnit ?? product.unit);
@@ -69,6 +72,8 @@ function applyProductTechnicalAutofill(row: HTMLElement, product: ProductCatalog
   setInputValue(inputs[3], hint.ratioUnit ?? product.unit);
   if (hint.lossPercent !== null) setInputValue(inputs[4], formatNumber(hint.lossPercent));
   if (hint.notes) setInputValue(inputs[5], hint.notes);
+  if (inputs[6] && purchasePrice !== null) setInputValue(inputs[6], formatNumber(purchasePrice));
+  if (inputs[7] && salePrice !== null) setInputValue(inputs[7], formatNumber(salePrice));
 }
 
 function setInputValue(input: HTMLInputElement, value: string) {
@@ -105,6 +110,27 @@ function getProductRatioHint(product: ProductCatalogItem): ProductRatioHint {
   };
 }
 
+function getProductPurchaseUnitPrice(product: ProductCatalogItem) {
+  const standardPurchase = normalizePrice(product.standardPurchasePriceHt);
+  if (standardPurchase !== null && standardPurchase > 0) return standardPurchase;
+
+  const supplierPrices = Array.isArray(product.supplierPrices) ? product.supplierPrices : [];
+  const supplierUnitPrices = supplierPrices
+    .map((price) => normalizePrice(price.priceHt))
+    .filter((price): price is number => price !== null && price > 0)
+    .sort((a, b) => a - b);
+  return supplierUnitPrices[0] ?? null;
+}
+
+function getProductSaleUnitPrice(product: ProductCatalogItem, purchasePrice: number | null) {
+  const recommendedSale = normalizePrice(product.recommendedSalePriceHt);
+  if (recommendedSale !== null && recommendedSale > 0) return recommendedSale;
+  if (purchasePrice === null) return null;
+
+  const margin = normalizePrice(product.targetMarginRate) ?? 30;
+  return Math.round(purchasePrice * (1 + margin / 100) * 100) / 100;
+}
+
 function getProductDocumentText(product: ProductCatalogItem) {
   return product.documents
     .map((document) => [document.name, document.notes].filter(Boolean).join("\n"))
@@ -113,7 +139,7 @@ function getProductDocumentText(product: ProductCatalogItem) {
 
 function findRatioMatch(documentText: string): RatioMatch | null {
   const directLabelMatch = documentText.match(
-    /(?:Ratio mat[eé]riau Batipro|Consommation(?:\s+(?:moyenne|th[eé]orique|indicative|recommand[eé]e|pr[eé]conis[eé]e))?|Dosage(?:\s+(?:moyen|recommand[eé]|pr[eé]conis[eé]))?)\s*:?\s*([0-9]+(?:[,.][0-9]+)?)\s*([^\s/]+)\s*\/\s*([^\s\n]+)/i,
+    /(?:Ratio mat[eé]riau Batipro|Consommation(?:\s+(?:moyenne|th[eé]orique|indicative|recommand[eé]e|pr[eé]conis[eé]e|extraite))?|Dosage(?:\s+(?:moyen|recommand[eé]|pr[eé]conis[eé]))?)\s*:?\s*([0-9]+(?:[,.][0-9]+)?)\s*([^\s/]+)\s*\/\s*([^\s\n]+)/i,
   );
   const directRatio = buildDirectRatioMatch(directLabelMatch);
   if (directRatio) return directRatio;
@@ -150,6 +176,11 @@ function parseLooseNumber(value: unknown): number | null {
   if (value === null || value === undefined || value === "") return null;
   const parsed = Number(String(value).replace(",", "."));
   return Number.isFinite(parsed) ? parsed : null;
+}
+
+function normalizePrice(value: unknown): number | null {
+  const parsed = parseLooseNumber(value);
+  return parsed !== null ? Math.round(parsed * 100) / 100 : null;
 }
 
 function normalizeUnit(value: unknown): string | null {
