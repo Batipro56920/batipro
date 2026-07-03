@@ -36,7 +36,7 @@ function onPricingInput(event: Event) {
 function syncProductDrawerPricing() {
   for (const drawer of findProductDrawers()) {
     const inputs = getPricingInputs(drawer);
-    updateSalePrice(drawer, inputs, true);
+    updateSalePrice(drawer, inputs);
     updatePricingSummary(drawer, inputs);
     simplifySupplierPriceSection(drawer);
   }
@@ -44,7 +44,7 @@ function syncProductDrawerPricing() {
 
 function findProductDrawers() {
   return Array.from(document.querySelectorAll("[role='dialog'] aside"))
-    .filter((element): element is HTMLElement => element instanceof HTMLElement && element.textContent?.includes("Fiche produit"));
+    .filter((element): element is HTMLElement => element instanceof HTMLElement && Boolean(element.textContent?.includes("Fiche produit")));
 }
 
 function findProductDrawer(element: HTMLElement) {
@@ -67,13 +67,10 @@ function getInputByLabel(root: HTMLElement, labelText: string) {
   return input instanceof HTMLInputElement ? input : null;
 }
 
-function updateSalePrice(drawer: HTMLElement, inputs: PricingInputs, onlyIfEmptyOrZero = false) {
+function updateSalePrice(drawer: HTMLElement, inputs: PricingInputs) {
   const purchase = parseFrenchNumber(inputs.purchaseInput?.value);
   const margin = parseFrenchNumber(inputs.marginInput?.value) ?? 30;
   if (purchase === null || !inputs.saleInput) return;
-
-  const currentSale = parseFrenchNumber(inputs.saleInput.value);
-  if (onlyIfEmptyOrZero && currentSale !== null && currentSale > 0) return;
 
   const sale = roundPrice(purchase * (1 + margin / 100));
   setInputValue(inputs.saleInput, formatInputNumber(sale));
