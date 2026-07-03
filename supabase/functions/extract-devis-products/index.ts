@@ -10,6 +10,12 @@ type RequestBody = {
   cleaned_text?: string;
 };
 
+type RatioHint = {
+  quantity: number;
+  unit: string;
+  baseUnit: string;
+};
+
 type ProductLine = {
   designation: string;
   supplier_name: string | null;
@@ -73,6 +79,44 @@ function normalizeKey(value: unknown): string {
 function cleanLongText(value: unknown, maxLength: number): string | null {
   const text = normalizeText(value);
   return text ? text.slice(0, maxLength) : null;
+}
+
+function cleanBusinessText(value: unknown, maxLength: number): string | null {
+  const text = normalizeText(value);
+  if (!text) return null;
+
+  const sentences = text
+    .replace(/■/g, "\n")
+    .split(/\n|(?<=\.)\s+(?=[A-ZÉÈÀÂÎÔÛÇ])/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .filter((line) => !isTechnicalSheetNoise(line));
+
+  const cleaned = sentences.join("\n").replace(/\n{3,}/g, "\n\n").trim();
+  return cleaned ? cleaned.slice(0, maxLength) : null;
+}
+
+function isTechnicalSheetNoise(value: string): boolean {
+  const key = normalizeKey(value);
+  if (!key) return true;
+  return [
+    "il appartient a notre clientele de verifier",
+    "derniere edition",
+    "immeuble union square",
+    "rueil malmaison",
+    "www seigneurie com",
+    "tel",
+    "fax",
+    "declaration environnementale",
+    "declaration environnementale consultable",
+    "certification de construction qualite et environnement",
+    "production toutes nos usines francaises sont certifiees",
+    "fiche de donnees de securite consulter",
+    "valeur limite ue",
+    "directive 2004 42 ce",
+    "emissions dans l air interieur",
+    "donnees environnementales et sanitaires",
+  ].some((noise) => key.includes(noise));
 }
 
 function cleanDesignation(value: unknown): string | null {
@@ -170,7 +214,7 @@ function isNoiseDesignation(value: string): boolean {
   ].some((bad) => text.includes(bad));
 }
 
-function validateLine(raw: any, documentSupplierName: string | null): ProductLine | null {
+function validateLine(raw: any, documentSupplierName: string | null, documentText: string): ProductLine | null {
   const designation = cleanDesignation(raw?.designation ?? raw?.label ?? raw?.title);
   if (!designation || designation.length < 3) return null;
   if (isNoiseDesignation(designation)) return null;
@@ -178,7 +222,8 @@ function validateLine(raw: any, documentSupplierName: string | null): ProductLin
   const purchasePrice = toNumber(raw?.purchase_price_ht ?? raw?.prix_achat_ht ?? raw?.unit_purchase_price_ht);
   const salePrice = toNumber(raw?.sale_price_ht ?? raw?.prix_vente_ht ?? raw?.unit_sale_price_ht ?? raw?.unit_price_ht);
   const coverageM2 = toNumber(raw?.coverage_m2 ?? raw?.surface_m2 ?? raw?.surface_colis_m2);
-  const consumptionRatioQuantity = toNumber(raw?.consumption_ratio_quantity ?? raw?.material_ratio_quantity ?? raw?.ratio_quantity);
+  const localRatio = inferConsumptionRatio(documentText);
+  const consumptionRatioQuantity = toNumber(raw?.consumption_ratio_quantity ?? raw?.material_ratio_quantity ?? raw?.ratio_quantity) ?? localRatio?.quantity ?? null;
   const lossPercent = toNumber(raw?.loss_percent ?? raw?.perte_percent ?? raw?.perte_pourcentage);
   const aiSupplierName = normalizeText(raw?.supplier_name ?? raw?.fournisseur);
   const supplierName = preferDocumentSupplier(aiSupplierName, documentSupplierName);
@@ -199,16 +244,42 @@ function validateLine(raw: any, documentSupplierName: string | null): ProductLin
     packaging: normalizeText(raw?.packaging ?? raw?.conditionnement),
     minimum_quantity: toNumber(raw?.minimum_quantity ?? raw?.quantite_minimum ?? raw?.qte_min),
     consumption_ratio_quantity: consumptionRatioQuantity,
-    consumption_ratio_unit: normalizeText(raw?.consumption_ratio_unit ?? raw?.material_ratio_unit ?? raw?.ratio_unit),
-    consumption_base_unit: normalizeText(raw?.consumption_base_unit ?? raw?.ratio_base_unit),
+    consumption_ratio_unit: normalizeText(raw?.consumption_ratio_unit ?? raw?.material_ratio_unit ?? raw?.ratio_unit) ?? localRatio?.unit ?? null,
+    consumption_base_unit: normalizeText(raw?.consumption_base_unit ?? raw?.ratio_base_unit) ?? localRatio?.baseUnit ?? null,
     loss_percent: lossPercent !== null && lossPercent >= 0 && lossPercent <= 100 ? lossPercent : null,
-    work_method: cleanLongText(raw?.work_method ?? raw?.mode_operatoire ?? raw?.mise_en_oeuvre, 1600),
-    application_scope: cleanLongText(raw?.application_scope ?? raw?.domaine_application ?? raw?.destination, 1200),
-    technical_notes: cleanLongText(raw?.technical_notes ?? raw?.notes_techniques, 1200),
+    work_method: cleanBusinessText(raw?.work_method ?? raw?.mode_operatoire ?? raw?.mise_en_oeuvre, 1600),
+    application_scope: cleanBusinessText(raw?.application_scope ?? raw?.domaine_application ?? raw?.destination, 1200),
+    technical_notes: cleanBusinessText(raw?.technical_notes ?? raw?.notes_techniques, 1200),
     business_interpretation: cleanLongText(raw?.business_interpretation ?? raw?.interpretation_metier, 700),
     confidence: confidence(raw?.confidence),
     source_line: normalizeText(raw?.source_line ?? raw?.sourceLine ?? designation) ?? designation,
   };
+}
+
+function inferConsumptionRatio(text: string): RatioHint | null {
+  const normalized = text.replace(/\s+/g, " ");
+  const directPatterns = [
+    /(?:appliquer\s+)?(?:une\s+)?(?:couche\s+de\s+)?[A-Z0-9\s-]{0,80}?\s+(?:de\s+)?([0-9]+(?:[,.][0-9]+)?)\s*(g|kg|l|litres?|ml)\s*\/\s*(m²|m2)/i,
+    /(?:consommation|rendement|application|dosage)[^0-9]{0,120}([0-9]+(?:[,.][0-9]+)?)\s*(g|kg|l|litres?|ml)\s*\/\s*(m²|m2)/i,
+    /([0-9]+(?:[,.][0-9]+)?)\s*(g|kg|l|litres?|ml)\s*\/\s*(m²|m2)[^\.]{0,120}(?:classe|couche|application|appliquer|consommation)/i,
+  ];
+
+  for (const pattern of directPatterns) {
+    const match = normalized.match(pattern);
+    const quantity = toNumber(match?.[1]);
+    const unit = normalizeUnit(match?.[2]);
+    const baseUnit = normalizeUnit(match?.[3]);
+    if (quantity !== null && quantity > 0 && unit && baseUnit) {
+      const converted = unit === "g" ? Math.round((quantity / 1000) * 10000) / 10000 : quantity;
+      return { quantity: converted, unit: unit === "g" ? "kg" : unit, baseUnit };
+    }
+  }
+
+  const literPerM2 = normalized.match(/([0-9]+(?:[,.][0-9]+)?)\s*l\s*\/\s*(m²|m2)/i);
+  const quantity = toNumber(literPerM2?.[1]);
+  if (quantity !== null && quantity > 0) return { quantity, unit: "l", baseUnit: "m2" };
+
+  return null;
 }
 
 function preferDocumentSupplier(aiSupplierName: string | null, documentSupplierName: string | null): string | null {
@@ -290,6 +361,9 @@ serve(async (req) => {
     "Règle fournisseur critique: supplier_name est l'émetteur/vendeur du devis ou de la facture, jamais le client/destinataire. Dans un devis fournisseur français, le vendeur est souvent le bloc société en haut à gauche et le client est le bloc à droite ou répété dans l'adresse de livraison.",
     "Si tu vois CB RENOVATION dans le bloc client/destinataire, ne l'utilise pas comme fournisseur. Pour un devis Comptoir Seigneurie Gauthier / PPG, supplier_name doit être Comptoir Seigneurie Gauthier ou PPG, pas CB RENOVATION.",
     "Règle devis fournisseur: dans un tableau avec colonnes PRIX TARIF, %REM, P.U. NET, MONTANT H.T., purchase_price_ht doit être le P.U. NET. PRIX TARIF est seulement le tarif avant remise, MONTANT H.T. est le total de ligne, sale_price_ht reste null.",
+    "Règle fiche technique: work_method doit contenir seulement les étapes utiles à l'intervenant terrain. Exclure pieds de page, coordonnées société, URL, téléphone, fax, mentions légales, FDES, COV, certifications, déclarations environnementales et phrases comme 'dernière édition'.",
+    "Règle fiche technique: application_scope doit synthétiser uniquement destination, supports, intérieur/extérieur, protection/classement et limites d'emploi. Exclure les données administratives, environnementales et légales.",
+    "Règle fiche technique: si tu vois une application en g/m² ou L/m², extrais aussi consumption_ratio_quantity/unit/base. Exemple 350 g/m² => 0.35 kg/m2, 0,340 L/m² => 0.34 l/m2.",
     "Règle critique: ne confonds jamais un chiffre technique avec un prix. Une consommation, un rendement, une couverture, une densité, une épaisseur, une température ou un temps de séchage ne doit jamais devenir purchase_price_ht ni sale_price_ht.",
     "Règle critique: si un prix n'est pas explicitement indiqué avec €, EUR, HT, prix, tarif, achat, vente, PA, PV, P.U. NET ou MONTANT H.T., laisse les prix à null.",
     "Règle critique: si un chiffre est une consommation type 5,7 m2/L ou 1,8 kg/m2, renseigne consumption_ratio_* ou coverage_m2 selon le sens, mais pas un prix.",
@@ -355,6 +429,6 @@ serve(async (req) => {
     return json({ ok: false, error: "Format JSON invalide (products[] attendu)." }, 422);
   }
 
-  const products = rawProducts.map((product: any) => validateLine(product, documentSupplierName)).filter(Boolean) as ProductLine[];
+  const products = rawProducts.map((product: any) => validateLine(product, documentSupplierName, cleanedText)).filter(Boolean) as ProductLine[];
   return json({ ok: true, products });
 });
