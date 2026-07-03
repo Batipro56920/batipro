@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { supabase } from "../lib/supabaseClient";
 import { listChantiers, type ChantierRow } from "../services/chantiers.service";
 import { listDashboardAlerts, type DashboardAlertRow } from "../services/dashboardAlerts.service";
@@ -14,6 +15,12 @@ import { DashboardSkeleton } from "../features/dashboard/components/DashboardSke
 import { useDashboardMetrics } from "../features/dashboard/hooks/useDashboardMetrics";
 import type { DashboardView, MaterielSnapshot } from "../features/dashboard/types";
 
+const DASHBOARD_VIEWS = new Set<Exclude<DashboardView, null>>(["chantiers", "avancement", "heures", "materiel", "alertes"]);
+
+function dashboardViewFromQuery(value: string | null): DashboardView {
+  return DASHBOARD_VIEWS.has(value as Exclude<DashboardView, null>) ? value as Exclude<DashboardView, null> : "chantiers";
+}
+
 function isMissingRelationError(message: string | undefined): boolean {
   const msg = String(message ?? "").toLowerCase();
   return msg.includes("does not exist") || msg.includes("relation") || msg.includes("schema cache");
@@ -21,11 +28,16 @@ function isMissingRelationError(message: string | undefined): boolean {
 
 export default function DashboardPage() {
   const { locale, t } = useI18n();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [chantiers, setChantiers] = useState<ChantierRow[]>([]);
   const [materiel, setMateriel] = useState<MaterielSnapshot[]>([]);
   const [alerts, setAlerts] = useState<DashboardAlertRow[]>([]);
-  const [activeView, setActiveView] = useState<DashboardView>("chantiers");
+  const [activeView, setActiveView] = useState<DashboardView>(() => dashboardViewFromQuery(searchParams.get("view")));
   const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    setActiveView(dashboardViewFromQuery(searchParams.get("view")));
+  }, [searchParams]);
 
   useEffect(() => {
     let alive = true;
@@ -70,6 +82,16 @@ export default function DashboardPage() {
     };
   }, []);
 
+  function selectDashboardView(view: DashboardView) {
+    setActiveView(view);
+    setSearchParams((previous) => {
+      const next = new URLSearchParams(previous);
+      if (view) next.set("view", view);
+      else next.delete("view");
+      return next;
+    }, { replace: true });
+  }
+
   const metrics = useDashboardMetrics({
     chantiers,
     materiel,
@@ -92,7 +114,7 @@ export default function DashboardPage() {
         <DashboardEmptyState />
       ) : (
         <>
-          <DashboardKpiGrid kpis={metrics.kpis} activeView={activeView} onSelect={setActiveView} />
+          <DashboardKpiGrid kpis={metrics.kpis} activeView={activeView} onSelect={selectDashboardView} />
 
           <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_360px]">
             <DashboardPriorityFeed
@@ -100,7 +122,7 @@ export default function DashboardPage() {
               week={metrics.priorityWeek}
               focusRows={metrics.focusRows}
               hasActiveFocus={activeView !== null}
-              onClearFocus={() => setActiveView(null)}
+              onClearFocus={() => selectDashboardView(null)}
             />
             <DashboardAlertCenter alerts={metrics.alertCards} />
           </div>
