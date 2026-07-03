@@ -82,6 +82,45 @@ function safeLeadAmountPreview(value: string) {
   }
 }
 
+function normalizeDuplicateText(value: string | null | undefined) {
+  return String(value ?? "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+}
+
+function normalizeDuplicatePhone(value: string | null | undefined) {
+  const compact = String(value ?? "").replace(/[^\d+]/g, "");
+  if (compact.startsWith("+33")) return `0${compact.slice(3)}`;
+  if (compact.startsWith("0033")) return `0${compact.slice(4)}`;
+  return compact;
+}
+
+function findPotentialDuplicateLead(
+  form: typeof DEFAULT_LEAD_FORM,
+  leads: ApporteurLeadRow[],
+): ApporteurLeadRow | null {
+  const phone = normalizeDuplicatePhone(form.telephone);
+  if (phone.length >= 8) {
+    const samePhone = leads.find((lead) => normalizeDuplicatePhone(lead.telephone) === phone);
+    if (samePhone) return samePhone;
+  }
+
+  const clientName = normalizeDuplicateText(form.client_name);
+  const address = normalizeDuplicateText(form.project_address);
+  if (clientName && address) {
+    return leads.find(
+      (lead) =>
+        normalizeDuplicateText(lead.client_name) === clientName &&
+        normalizeDuplicateText(lead.project_address) === address,
+    ) ?? null;
+  }
+
+  return null;
+}
+
 function commissionAmount(lead: ApporteurLeadRow, apporteur: ApporteurAffaireRow | null) {
   if (!apporteur) return 0;
   if (apporteur.calculation_mode === "fixe") return apporteur.commission_percent;
@@ -204,6 +243,12 @@ export default function ApporteurPortalPage() {
       if (!portalData.apporteur) throw new Error("Apporteur non trouvé.");
       if (!leadForm.client_name.trim()) throw new Error("Le nom du client est requis.");
       if (!leadForm.telephone.trim()) throw new Error("Le téléphone du client est requis.");
+      const duplicateLead = findPotentialDuplicateLead(leadForm, portalData.leads);
+      if (duplicateLead) {
+        throw new Error(
+          `Ce client semble déjà transmis le ${duplicateLead.date}. Vérifiez le suivi avant de créer un doublon.`,
+        );
+      }
       if (!jwt) throw new Error("Accès non autorisé.");
       await createApporteurLeadPortal(jwt, {
         apporteur_id: portalData.apporteur.id,
