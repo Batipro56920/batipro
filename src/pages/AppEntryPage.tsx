@@ -4,7 +4,7 @@ import { Building2, HardHat, LogIn } from "lucide-react";
 import { getCurrentUserHomeRoute, type CurrentUserHomeRoute } from "../services/currentUserProfile.service";
 import { readStoredIntervenantToken } from "../utils/intervenantSession";
 
-type EntryTarget = CurrentUserHomeRoute | "choice";
+type EntryTarget = CurrentUserHomeRoute | "/intervenant" | "choice";
 
 export default function AppEntryPage() {
   const [target, setTarget] = useState<EntryTarget | null>(null);
@@ -22,11 +22,11 @@ export default function AppEntryPage() {
           setTarget(route);
           return;
         }
-        setTarget("choice");
+        setTarget(storedIntervenantToken ? "/intervenant" : "choice");
       })
       .catch(() => {
         if (!alive) return;
-        setTarget("choice");
+        setTarget(storedIntervenantToken ? "/intervenant" : "choice");
       });
 
     return () => {
