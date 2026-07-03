@@ -37,6 +37,16 @@ type ReadinessFilter =
 
 type UsageField = "quote_visible" | "chantier_visible";
 
+type PriorityAction = {
+  key: ReadinessFilter;
+  title: string;
+  count: number;
+  description: string;
+  actionLabel: string;
+  template: TaskTemplateRow | null;
+  disabled?: boolean;
+};
+
 function getPreparationSummary(
   preparationByTemplateId: Record<string, PreparationSummary>,
   templateId: string,
@@ -146,6 +156,56 @@ export default function BibliothequeTasksPage() {
       totalReferenceCost,
     };
   }, [advancedPreparationEnabled, lotOptions.length, preparationByTemplateId, preparationSchemaReady, rows]);
+
+  const priorityActions = useMemo<PriorityAction[]>(() => {
+    const firstMissingCost = rows.find((row) => row.cout_reference_unitaire_ht === null) ?? null;
+    const firstMissingTime = rows.find((row) => row.temps_prevu_par_unite_h === null) ?? null;
+    const firstMissingTechnical = rows.find((row) => !hasTechnicalDetail(row)) ?? null;
+    const firstMissingPreparation = rows.find((row) => !hasPreparation(row, preparationByTemplateId)) ?? null;
+
+    const actions: PriorityAction[] = [
+      {
+        key: "missing_cost",
+        title: "Fiabiliser le chiffrage",
+        count: libraryStats.missingCost,
+        description: "Modèles sans coût de référence, donc moins exploitables dans les devis.",
+        actionLabel: "Traiter le premier coût",
+        template: firstMissingCost,
+      },
+      {
+        key: "missing_time",
+        title: "Préparer la charge chantier",
+        count: libraryStats.missingTime,
+        description: "Modèles sans temps prévu par unité, donc difficiles à piloter en exécution.",
+        actionLabel: "Traiter le premier temps",
+        template: firstMissingTime,
+      },
+      {
+        key: "missing_technical",
+        title: "Compléter l'exécution terrain",
+        count: libraryStats.missingTechnicalDetail,
+        description: "Modèles sans détail technique, caractéristique ou remarque chantier.",
+        actionLabel: "Traiter le premier détail",
+        template: firstMissingTechnical,
+      },
+    ];
+
+    if (advancedPreparationEnabled) {
+      actions.push({
+        key: "missing_preparation",
+        title: "Préparer les besoins chantier",
+        count: preparationSchemaReady ? libraryStats.missingPreparation : 0,
+        description: preparationSchemaReady
+          ? "Modèles sans matière ou matériel préparatoire relié à la bibliothèque produits."
+          : "La préparation avancée est active, mais le schéma Supabase n'est pas disponible.",
+        actionLabel: "Traiter la première préparation",
+        template: preparationSchemaReady ? firstMissingPreparation : null,
+        disabled: !preparationSchemaReady,
+      });
+    }
+
+    return actions.filter((action) => action.count > 0 || action.disabled);
+  }, [advancedPreparationEnabled, libraryStats, preparationByTemplateId, preparationSchemaReady, rows]);
 
   const filteredRows = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -408,6 +468,15 @@ export default function BibliothequeTasksPage() {
     setDrawerOpen(true);
   }
 
+  function applyPriorityAction(action: PriorityAction) {
+    if (action.disabled) return;
+    setReadinessFilter(action.key);
+    setSelectedLot("");
+    if (action.template) {
+      openEditDrawer(action.template);
+    }
+  }
+
   function buildTemplateLink(templateId: string) {
     const url = new URL(window.location.href);
     url.pathname = "/bibliotheque";
@@ -613,6 +682,58 @@ export default function BibliothequeTasksPage() {
           <div className="text-xs text-slate-500">{libraryStats.missingTechnicalDetail} sans détail chantier</div>
         </button>
       </div>
+
+      {!loading && rows.length > 0 ? (
+        <div className="rounded-2xl border bg-white p-4">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+            <div>
+              <div className="text-xs font-medium uppercase text-slate-500">Priorités bibliothèque</div>
+              <h2 className="text-lg font-semibold text-slate-900">Mise en production des modèles</h2>
+              <p className="text-sm text-slate-500">
+                Les modèles incomplets sont regroupés par impact métier : devis, charge chantier, exécution terrain et préparation.
+              </p>
+            </div>
+            {priorityActions.length === 0 ? (
+              <span className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-medium text-emerald-700">
+                Bibliothèque prête devis / chantier
+              </span>
+            ) : null}
+          </div>
+
+          {priorityActions.length > 0 ? (
+            <div className="mt-4 grid gap-3 lg:grid-cols-2">
+              {priorityActions.map((action) => (
+                <div
+                  key={action.key}
+                  className={`rounded-xl border p-3 ${action.disabled ? "bg-slate-50 text-slate-500" : "bg-slate-50/60"}`}
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <div className="font-medium text-slate-900">{action.title}</div>
+                      <p className="mt-1 text-sm text-slate-500">{action.description}</p>
+                    </div>
+                    <div className="rounded-full bg-white px-2 py-1 text-xs font-semibold text-slate-700 shadow-sm">
+                      {action.disabled ? "Indispo." : action.count}
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    disabled={action.disabled || !action.template}
+                    onClick={() => applyPriorityAction(action)}
+                    className="mt-3 rounded-lg border bg-white px-3 py-2 text-xs font-medium text-slate-700 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {action.actionLabel}
+                  </button>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800">
+              Aucun trou bloquant détecté sur les modèles chargés : les coûts, temps et détails techniques sont renseignés.
+            </div>
+          )}
+        </div>
+      ) : null}
 
       <div className="grid gap-3 rounded-2xl border bg-white p-4 md:grid-cols-[minmax(0,1fr)_220px_240px]">
         <input
