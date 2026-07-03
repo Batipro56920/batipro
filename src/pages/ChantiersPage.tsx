@@ -83,7 +83,7 @@ const HEADER_BY_FOCUS: Record<ChantierListFocus, { eyebrow: string; title: strin
   time: {
     eyebrow: "Temps",
     title: "Suivi des temps chantier",
-    description: "Repérez les chantiers à surveiller puis ouvrez directement l'exécution pour rapprocher temps passés, avancement et équipe.",
+    description: "Repérez les chantiers à surveiller puis ouvrez directement leur suivi des temps pour rapprocher heures passées, tâches et équipe.",
   },
   visits: {
     eyebrow: "Qualité",
@@ -105,8 +105,8 @@ const FOCUS_GUIDANCE: Record<ChantierListFocus, { title: string; description: st
   },
   time: {
     title: "Parcours temps",
-    description: "La vue met en avant les chantiers à risque pour relier temps passés, avancement et équipe sans créer une logique de temps séparée.",
-    cta: "Ouvrir mène à Exécuter.",
+    description: "La vue met en avant les chantiers à risque puis ouvre le suivi des temps du chantier pour relier heures saisies, tâches, intervenants et planning.",
+    cta: "Ouvrir mène aux Temps.",
   },
   visits: {
     title: "Parcours visites",
@@ -122,7 +122,8 @@ function getInitialFilters(initialFocus: ChantierListFocus | undefined): Chantie
 
 function getFocusedChantierPath(row: ChantierRow, initialFocus: ChantierListFocus | undefined) {
   const basePath = `/chantiers/${encodeURIComponent(row.id)}`;
-  if (initialFocus === "tasks" || initialFocus === "time") return `${basePath}/execution`;
+  if (initialFocus === "tasks") return `${basePath}/execution`;
+  if (initialFocus === "time") return `${basePath}/temps`;
   if (initialFocus === "reserves") return `${basePath}/qualite`;
   if (initialFocus === "visits") return `${basePath}/visites`;
   return basePath;
