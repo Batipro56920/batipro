@@ -180,22 +180,21 @@ function buildProductPatch(
   const supplierName = normalizeText(extracted.supplier_name);
   const supplier = supplierName ? suppliers.find((row) => normalizeKey(row.name) === normalizeKey(supplierName)) ?? null : null;
   const coverageM2 = positivePrice(extracted.coverage_m2);
-  const supplierNegotiatedPrice = positivePrice(extracted.purchase_price_ht)
-    ?? priceInsights.packagePurchasePrice
-    ?? positivePrice(extracted.package_price_ht)
-    ?? priceInsights.unitPurchasePrice;
   const existingPurchasePrice = positivePrice(currentProduct.standardPurchasePriceHt) ?? getBestExistingSupplierUnitPrice(currentProduct);
-  const unitPrice = computeCoverageUnitPrice(supplierNegotiatedPrice, coverageM2)
+  const supplierNegotiatedPrice = priceInsights.packagePurchasePrice
+    ?? positivePrice(extracted.package_price_ht)
+    ?? existingPurchasePrice
+    ?? priceInsights.unitPurchasePrice;
+  const unitPrice = existingPurchasePrice
     ?? priceInsights.unitPurchasePrice
-    ?? supplierNegotiatedPrice
-    ?? existingPurchasePrice;
+    ?? computeCoverageUnitPrice(supplierNegotiatedPrice, coverageM2)
+    ?? supplierNegotiatedPrice;
   const marginRate = positiveNumber(currentProduct.targetMarginRate) ?? 30;
-  const salePrice = positivePrice(extracted.sale_price_ht)
+  const salePrice = computeSalePrice(unitPrice, marginRate)
     ?? priceInsights.salePrice
-    ?? positivePrice(currentProduct.recommendedSalePriceHt)
-    ?? computeSalePrice(unitPrice, marginRate);
+    ?? positivePrice(currentProduct.recommendedSalePriceHt);
   const unit = insights.consumptionRatioUnit ? normalizeUnit(insights.consumptionRatioUnit) : coverageM2 && coverageM2 > 0 ? "m2" : normalizeUnit(extracted.unit);
-  const supplierPrice = buildSupplierPrice(extracted, supplier, supplierNegotiatedPrice, priceInsights);
+  const supplierPrice = buildSupplierPrice(extracted, supplier, supplierNegotiatedPrice, unitPrice, priceInsights);
   const nextSupplierPrices = supplierPrice
     ? mergeSupplierPrice(currentProduct.supplierPrices, supplierPrice)
     : currentProduct.supplierPrices;
@@ -211,7 +210,7 @@ function buildProductPatch(
     mainSupplierId: supplier?.id ?? currentProduct.mainSupplierId,
     mainSupplierName: supplier?.name ?? supplierName ?? currentProduct.mainSupplierName,
     standardPurchasePriceHt: unitPrice ?? 0,
-    recommendedSalePriceHt: salePrice ?? unitPrice ?? 0,
+    recommendedSalePriceHt: salePrice ?? 0,
     supplierPrices: nextSupplierPrices,
     documents: [...currentProduct.documents, ...importedDocuments],
   };
@@ -275,6 +274,7 @@ function buildSupplierPrice(
   extracted: ExtractedQuoteProduct,
   supplier: SupplierRow | null,
   supplierNegotiatedPrice: number | null,
+  unitPrice: number | null,
   priceInsights: ProductPriceInsights,
 ): ProductSupplierPrice | null {
   const supplierName = normalizeText(extracted.supplier_name);
@@ -282,7 +282,7 @@ function buildSupplierPrice(
   if (!supplier && !supplierName) return null;
 
   const coverageM2 = positiveNumber(extracted.coverage_m2);
-  const pricePerM2 = computeCoverageUnitPrice(supplierNegotiatedPrice, coverageM2) ?? priceInsights.unitPurchasePrice;
+  const pricePerM2 = unitPrice ?? computeCoverageUnitPrice(supplierNegotiatedPrice, coverageM2) ?? priceInsights.unitPurchasePrice;
 
   return {
     id: crypto.randomUUID(),
@@ -364,9 +364,9 @@ function extractProductPriceInsights(
   currentProduct: ProductCatalogDraft | ProductCatalogItem,
 ): ProductPriceInsights {
   const normalized = text.replace(/\s+/g, " ");
-  const extractedPurchasePrice = positivePrice(extracted.purchase_price_ht);
-  const extractedPackagePrice = positivePrice(extracted.package_price_ht);
-  const extractedSalePrice = positivePrice(extracted.sale_price_ht);
+  const priceContext = hasExplicitPriceContext(normalized);
+  const extractedPackagePrice = priceContext ? positivePrice(extracted.package_price_ht) : null;
+  const extractedSalePrice = priceContext ? positivePrice(extracted.sale_price_ht) : null;
   const purchaseFromText = extractPriceByPatterns(normalized, [
     /(?:prix\s*(?:d['’ ]achat|achat)|achat\s*ht|pa\s*ht|prix\s*fournisseur|tarif\s*fournisseur|prix\s*standard)[^0-9€]{0,80}([0-9]+(?:[\s.,][0-9]{2})?)\s*(?:€|eur)?\s*(?:ht)?\s*(?:\/|par)?\s*(m²|m2|l|litre|kg|u|unité|unite)?/i,
     /([0-9]+(?:[\s.,][0-9]{2})?)\s*(?:€|eur)\s*(?:ht)?\s*(?:\/|par)?\s*(m²|m2|l|litre|kg|u|unité|unite)?[^.]{0,80}(?:prix\s*(?:d['’ ]achat|achat)|achat\s*ht|pa\s*ht|prix\s*fournisseur|tarif\s*fournisseur)/i,
@@ -376,19 +376,26 @@ function extractProductPriceInsights(
     /([0-9]+(?:[\s.,][0-9]{2})?)\s*(?:€|eur)\s*(?:ht)?\s*(?:\/|par)?\s*(m²|m2|l|litre|kg|u|unité|unite)?[^.]{0,80}(?:prix\s*(?:de\s*)?vente|vente\s*ht|pv\s*ht|prix\s*public|vente\s*conseill[ée]e)/i,
   ]);
   const existingSupplierUnitPrice = getBestExistingSupplierUnitPrice(currentProduct);
-  const unitPurchasePrice = extractedPurchasePrice
+  const unitPurchasePrice = existingSupplierUnitPrice
     ?? purchaseFromText?.price
-    ?? existingSupplierUnitPrice
-    ?? positivePrice(currentProduct.standardPurchasePriceHt);
+    ?? positivePrice(currentProduct.standardPurchasePriceHt)
+    ?? (priceContext ? positivePrice(extracted.purchase_price_ht) : null);
   const packagePurchasePrice = extractedPackagePrice ?? null;
-  const salePrice = extractedSalePrice ?? saleFromText?.price ?? positivePrice(currentProduct.recommendedSalePriceHt);
+  const salePrice = computeSalePrice(unitPurchasePrice, positiveNumber(currentProduct.targetMarginRate) ?? 30)
+    ?? extractedSalePrice
+    ?? saleFromText?.price
+    ?? positivePrice(currentProduct.recommendedSalePriceHt);
   const notes = [
-    unitPurchasePrice !== null ? `Prix achat standard extrait: ${formatNumber(unitPurchasePrice)} EUR HT` : null,
-    packagePurchasePrice !== null ? `Prix conditionnement extrait: ${formatNumber(packagePurchasePrice)} EUR HT` : null,
-    salePrice !== null ? `Prix vente recommandé extrait: ${formatNumber(salePrice)} EUR HT` : null,
+    unitPurchasePrice !== null ? `Prix achat standard retenu: ${formatNumber(unitPurchasePrice)} EUR HT` : null,
+    packagePurchasePrice !== null ? `Prix conditionnement retenu: ${formatNumber(packagePurchasePrice)} EUR HT` : null,
+    salePrice !== null ? `Prix vente conseillé calculé: ${formatNumber(salePrice)} EUR HT` : null,
   ].filter((note): note is string => Boolean(note));
 
   return { unitPurchasePrice, packagePurchasePrice, salePrice, notes };
+}
+
+function hasExplicitPriceContext(text: string): boolean {
+  return /(?:€|eur|prix|tarif|achat\s*ht|vente\s*ht|pa\s*ht|pv\s*ht)/i.test(text);
 }
 
 function extractPriceByPatterns(text: string, patterns: RegExp[]): { price: number; unit: string | null } | null {
