@@ -1,10 +1,14 @@
+import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { ArrowRight, BriefcaseBusiness } from "lucide-react";
-import type { DashboardBusinessMetric } from "../types";
+import { supabase } from "../../../lib/supabaseClient";
+import type { DashboardBusinessMetric, DashboardTone } from "../types";
 
 type DashboardBusinessPanelProps = {
   metrics: DashboardBusinessMetric[];
 };
+
+type BusinessMetricCounts = Partial<Record<DashboardBusinessMetric["key"], number>>;
 
 const toneClass = {
   normal: "bg-slate-50 text-slate-700",
@@ -14,7 +18,79 @@ const toneClass = {
   danger: "bg-red-50 text-red-700",
 };
 
+function metricTone(metric: DashboardBusinessMetric, count: number | null): DashboardTone {
+  if (count === null) return metric.tone;
+  if (count === 0) return "success";
+  return metric.tone === "normal" ? "warning" : metric.tone;
+}
+
+async function countRows(query: PromiseLike<{ count: number | null; error: { message?: string } | null }>) {
+  const { count, error } = await query;
+  if (error) return null;
+  return count ?? 0;
+}
+
+async function loadBusinessMetricCounts(): Promise<BusinessMetricCounts> {
+  const [quotes, opportunities, invoices, sav] = await Promise.all([
+    countRows(
+      supabase
+        .from("crm_quotes" as any)
+        .select("id", { count: "exact", head: true })
+        .is("archived_at", null)
+        .not("signature_status", "in", "(signe,refuse)") as any,
+    ),
+    countRows(
+      supabase
+        .from("crm_opportunities" as any)
+        .select("id", { count: "exact", head: true })
+        .is("archived_at", null)
+        .not("status", "in", "(won,lost,archive,archived)") as any,
+    ),
+    countRows(
+      supabase
+        .from("invoices" as any)
+        .select("id", { count: "exact", head: true })
+        .in("status", ["sent", "overdue", "viewed"]) as any,
+    ),
+    countRows(
+      supabase
+        .from("crm_sav" as any)
+        .select("id", { count: "exact", head: true })
+        .is("closed_at", null) as any,
+    ),
+  ]);
+
+  return {
+    quotes: quotes ?? undefined,
+    opportunities: opportunities ?? undefined,
+    invoices: invoices ?? undefined,
+    sav: sav ?? undefined,
+  };
+}
+
 export function DashboardBusinessPanel({ metrics }: DashboardBusinessPanelProps) {
+  const [counts, setCounts] = useState<BusinessMetricCounts>({});
+  const [loadingCounts, setLoadingCounts] = useState(false);
+
+  useEffect(() => {
+    let alive = true;
+    setLoadingCounts(true);
+    loadBusinessMetricCounts()
+      .then((nextCounts) => {
+        if (alive) setCounts(nextCounts);
+      })
+      .catch(() => {
+        if (alive) setCounts({});
+      })
+      .finally(() => {
+        if (alive) setLoadingCounts(false);
+      });
+
+    return () => {
+      alive = false;
+    };
+  }, []);
+
   return (
     <section className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm shadow-slate-950/[0.03]">
       <div className="mb-4 flex items-start justify-between gap-3">
@@ -25,21 +101,27 @@ export function DashboardBusinessPanel({ metrics }: DashboardBusinessPanelProps)
         <BriefcaseBusiness className="h-5 w-5 text-slate-300" />
       </div>
       <div className="grid gap-2 sm:grid-cols-2">
-        {metrics.map((metric) => (
-          <Link key={metric.key} to={metric.href} className="group rounded-2xl border border-slate-200 p-3 transition hover:border-blue-200 hover:bg-blue-50/40">
-            <div className="flex items-start justify-between gap-3">
-              <div className="min-w-0">
-                <div className="truncate text-sm font-semibold text-slate-950">{metric.label}</div>
-                <div className="mt-1 truncate text-xs text-slate-500">{metric.hint}</div>
+        {metrics.map((metric) => {
+          const count = counts[metric.key] ?? null;
+          const value = loadingCounts && count === null ? "..." : count === null ? metric.value : String(count);
+          const tone = metricTone(metric, count);
+
+          return (
+            <Link key={metric.key} to={metric.href} className="group rounded-2xl border border-slate-200 p-3 transition hover:border-blue-200 hover:bg-blue-50/40">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <div className="truncate text-sm font-semibold text-slate-950">{metric.label}</div>
+                  <div className="mt-1 truncate text-xs text-slate-500">{metric.hint}</div>
+                </div>
+                <span className={`rounded-full px-2.5 py-1 text-sm font-bold ${toneClass[tone]}`}>{value}</span>
               </div>
-              <span className={`rounded-full px-2.5 py-1 text-sm font-bold ${toneClass[metric.tone]}`}>{metric.value}</span>
-            </div>
-            <div className="mt-3 flex items-center gap-1 text-xs font-medium text-blue-700">
-              Ouvrir
-              <ArrowRight className="h-3.5 w-3.5 transition group-hover:translate-x-0.5" />
-            </div>
-          </Link>
-        ))}
+              <div className="mt-3 flex items-center gap-1 text-xs font-medium text-blue-700">
+                Ouvrir
+                <ArrowRight className="h-3.5 w-3.5 transition group-hover:translate-x-0.5" />
+              </div>
+            </Link>
+          );
+        })}
       </div>
     </section>
   );
