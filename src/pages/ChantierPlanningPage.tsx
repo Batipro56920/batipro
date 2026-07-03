@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 
 import ChantierPlanningSection from "../features/chantiers/pages/ChantierPlanningSection";
@@ -11,6 +11,11 @@ export default function ChantierPlanningPage() {
   const [intervenants, setIntervenants] = useState<IntervenantRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  const activeIntervenantsCount = useMemo(
+    () => intervenants.filter((intervenant) => !intervenant.archived_at).length,
+    [intervenants],
+  );
 
   useEffect(() => {
     let alive = true;
@@ -87,6 +92,7 @@ export default function ChantierPlanningPage() {
               <span>{chantier?.client || "Client non renseigné"}</span>
               <span>Début : {chantier?.date_debut ?? chantier?.planning_start_date ?? "-"}</span>
               <span>Fin : {chantier?.date_fin_prevue ?? chantier?.planning_end_date ?? "-"}</span>
+              <span>{activeIntervenantsCount} intervenant{activeIntervenantsCount > 1 ? "s" : ""} affecté{activeIntervenantsCount > 1 ? "s" : ""}</span>
             </div>
           </div>
           <div className="flex flex-wrap gap-2">
@@ -101,6 +107,12 @@ export default function ChantierPlanningPage() {
               className="rounded-xl border border-slate-200 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
             >
               Dossier chantier
+            </Link>
+            <Link
+              to={`/chantiers/${id}/equipe`}
+              className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-medium text-emerald-800 hover:bg-emerald-100"
+            >
+              Équipe affectée
             </Link>
             <Link
               to={`/chantiers/${id}/execution`}
