@@ -1,3 +1,4 @@
+import { useMemo, useState } from "react";
 import { AlertTriangle, ArrowRight, CalendarDays, ClipboardCheck, ClipboardList, Eye, FileText, Hammer, ShieldCheck, Users } from "lucide-react";
 import { Link } from "react-router-dom";
 import type { ChantierDerived } from "../types";
@@ -19,6 +20,16 @@ type PlanningMilestone = {
   date: string | null;
   label: string;
   isPlanningDate: boolean;
+};
+
+type PlanningFilter = "all" | "late" | "unplanned" | "terrain" | "priority";
+
+const PLANNING_FILTER_LABELS: Record<PlanningFilter, string> = {
+  all: "Tous les chantiers",
+  late: "Chantiers en retard",
+  unplanned: "Chantiers à planifier",
+  terrain: "Retours terrain ouverts",
+  priority: "Retours terrain urgents",
 };
 
 function todayIso() {
@@ -65,6 +76,14 @@ function comparePlanningRows(a: ChantierDerived, b: ChantierDerived) {
   return a.nom.localeCompare(b.nom);
 }
 
+function matchesPlanningFilter(row: ChantierDerived, filter: PlanningFilter) {
+  if (filter === "late") return row.isLate;
+  if (filter === "unplanned") return !getPlanningMilestone(row).date;
+  if (filter === "terrain") return (row.terrainFeedbackOpenCount ?? 0) > 0;
+  if (filter === "priority") return (row.terrainFeedbackPriorityCount ?? 0) > 0;
+  return true;
+}
+
 function getPlanningTimingLabel(row: ChantierDerived) {
   const milestone = getPlanningMilestone(row);
   if (row.isLate) return "En retard";
@@ -90,6 +109,40 @@ function getTerrainFeedbackLabel(row: ChantierDerived) {
   if (priorityCount > 0) return `${priorityCount} urgent${priorityCount > 1 ? "s" : ""}`;
   if (openCount > 0) return `${openCount} à traiter`;
   return "Retours terrain";
+}
+
+function PlanningFilterCard({
+  label,
+  value,
+  tone,
+  active,
+  onClick,
+}: {
+  label: string;
+  value: string | number;
+  tone: "slate" | "red" | "amber";
+  active: boolean;
+  onClick: () => void;
+}) {
+  const toneClass =
+    tone === "red"
+      ? "border-red-200 bg-red-50 text-red-700"
+      : tone === "amber"
+        ? "border-amber-200 bg-amber-50 text-amber-800"
+        : "border-slate-200 bg-slate-50 text-slate-950";
+  const activeClass = active ? "ring-2 ring-blue-300 ring-offset-2" : "hover:bg-white";
+
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`rounded-xl border px-3 py-2 text-left transition ${toneClass} ${activeClass}`}
+      aria-pressed={active}
+    >
+      <div className="text-xs font-semibold uppercase opacity-80">{label}</div>
+      <div className="text-lg font-semibold">{value}</div>
+    </button>
+  );
 }
 
 function ChantierPlanningRow({ row, onPreview }: { row: ChantierDerived; onPreview: (row: ChantierDerived) => void }) {
@@ -244,14 +297,19 @@ function UnplannedChantierCard({ row, onPreview }: { row: ChantierDerived; onPre
 }
 
 export function ChantiersPlanningView({ rows, onPreview }: { rows: ChantierDerived[]; onPreview: (row: ChantierDerived) => void }) {
-  const scheduledRows = rows
+  const [activeFilter, setActiveFilter] = useState<PlanningFilter>("all");
+  const filteredRows = useMemo(
+    () => rows.filter((row) => matchesPlanningFilter(row, activeFilter)),
+    [activeFilter, rows],
+  );
+  const scheduledRows = filteredRows
     .filter((row) => getPlanningMilestone(row).date)
     .sort(comparePlanningRows);
-  const unplannedRows = rows
+  const unplannedRows = filteredRows
     .filter((row) => !getPlanningMilestone(row).date)
     .sort(comparePlanningRows);
   const lateCount = rows.filter((row) => row.isLate).length;
-  const toPlanCount = unplannedRows.length;
+  const toPlanCount = rows.filter((row) => !getPlanningMilestone(row).date).length;
   const activeCount = rows.length;
   const openTerrainFeedbackCount = rows.reduce((total, row) => total + (row.terrainFeedbackOpenCount ?? 0), 0);
   const priorityTerrainFeedbackCount = rows.reduce((total, row) => total + (row.terrainFeedbackPriorityCount ?? 0), 0);
@@ -264,26 +322,51 @@ export function ChantiersPlanningView({ rows, onPreview }: { rows: ChantierDeriv
           <p className="text-sm text-slate-500">Vue chronologique priorisée par les retours terrain urgents, les alertes ouvertes et les échéances chantier.</p>
         </div>
         <div className="grid gap-2 sm:grid-cols-4 lg:min-w-[520px]">
-          <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
-            <div className="text-xs font-semibold uppercase text-slate-500">Chantiers</div>
-            <div className="text-lg font-semibold text-slate-950">{activeCount}</div>
-          </div>
-          <div className="rounded-xl border border-red-200 bg-red-50 px-3 py-2">
-            <div className="text-xs font-semibold uppercase text-red-600">En retard</div>
-            <div className="text-lg font-semibold text-red-700">{lateCount}</div>
-          </div>
-          <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2">
-            <div className="text-xs font-semibold uppercase text-amber-700">À planifier</div>
-            <div className="text-lg font-semibold text-amber-800">{toPlanCount}</div>
-          </div>
-          <div className={["rounded-xl border px-3 py-2", priorityTerrainFeedbackCount > 0 ? "border-red-200 bg-red-50" : "border-amber-200 bg-amber-50"].join(" ")}>
-            <div className={["text-xs font-semibold uppercase", priorityTerrainFeedbackCount > 0 ? "text-red-600" : "text-amber-700"].join(" ")}>Retours terrain</div>
-            <div className={["text-lg font-semibold", priorityTerrainFeedbackCount > 0 ? "text-red-700" : "text-amber-800"].join(" ")}>
-              {priorityTerrainFeedbackCount > 0 ? `${priorityTerrainFeedbackCount} urgents` : openTerrainFeedbackCount}
-            </div>
-          </div>
+          <PlanningFilterCard
+            label="Chantiers"
+            value={activeCount}
+            tone="slate"
+            active={activeFilter === "all"}
+            onClick={() => setActiveFilter("all")}
+          />
+          <PlanningFilterCard
+            label="En retard"
+            value={lateCount}
+            tone="red"
+            active={activeFilter === "late"}
+            onClick={() => setActiveFilter("late")}
+          />
+          <PlanningFilterCard
+            label="À planifier"
+            value={toPlanCount}
+            tone="amber"
+            active={activeFilter === "unplanned"}
+            onClick={() => setActiveFilter("unplanned")}
+          />
+          <PlanningFilterCard
+            label="Retours terrain"
+            value={priorityTerrainFeedbackCount > 0 ? `${priorityTerrainFeedbackCount} urgents` : openTerrainFeedbackCount}
+            tone={priorityTerrainFeedbackCount > 0 ? "red" : "amber"}
+            active={activeFilter === "terrain" || activeFilter === "priority"}
+            onClick={() => setActiveFilter(priorityTerrainFeedbackCount > 0 ? "priority" : "terrain")}
+          />
         </div>
       </div>
+
+      {activeFilter !== "all" ? (
+        <div className="mb-4 flex flex-col gap-2 rounded-2xl border border-blue-100 bg-blue-50 px-3 py-2 text-sm text-blue-900 sm:flex-row sm:items-center sm:justify-between">
+          <span>
+            Filtre actif : <strong>{PLANNING_FILTER_LABELS[activeFilter]}</strong> · {filteredRows.length} chantier{filteredRows.length > 1 ? "s" : ""} affiché{filteredRows.length > 1 ? "s" : ""}.
+          </span>
+          <button
+            type="button"
+            onClick={() => setActiveFilter("all")}
+            className="rounded-xl border border-blue-200 bg-white px-3 py-1.5 text-xs font-semibold text-blue-800 hover:bg-blue-100"
+          >
+            Réinitialiser
+          </button>
+        </div>
+      ) : null}
 
       {unplannedRows.length > 0 ? (
         <div className="mb-5 rounded-2xl border border-amber-200 bg-amber-50/60 p-3">
@@ -292,7 +375,7 @@ export function ChantiersPlanningView({ rows, onPreview }: { rows: ChantierDeriv
               <h3 className="text-sm font-semibold text-amber-950">Chantiers à cadrer</h3>
               <p className="text-sm text-amber-800">Ces dossiers n'ont pas encore de jalon chantier exploitable ; ceux avec retours terrain ouverts remontent en premier.</p>
             </div>
-            <span className="text-xs font-semibold uppercase text-amber-700">{toPlanCount} à reprendre</span>
+            <span className="text-xs font-semibold uppercase text-amber-700">{unplannedRows.length} à reprendre</span>
           </div>
           <div className="grid gap-3 lg:grid-cols-2">
             {unplannedRows.map((row) => (
@@ -305,11 +388,11 @@ export function ChantiersPlanningView({ rows, onPreview }: { rows: ChantierDeriv
       <div className="space-y-3">
         {scheduledRows.length > 0 ? (
           scheduledRows.map((row) => <ChantierPlanningRow key={row.id} row={row} onPreview={onPreview} />)
-        ) : (
+        ) : unplannedRows.length === 0 ? (
           <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-600">
-            Aucun chantier avec échéance datée dans les filtres actuels.
+            Aucun chantier ne correspond au filtre planning actif.
           </div>
-        )}
+        ) : null}
       </div>
     </section>
   );
