@@ -251,7 +251,7 @@ export function useDashboardMetrics({ chantiers, materiel, alerts, activeView, l
       label: "Urgences",
       value: alertStats.urgentReserves + alertStats.dangerAlerts,
       description: "Réserves et blocages critiques",
-      href: "/chantiers",
+      href: "/dashboard?view=alertes",
       tone: alertStats.urgentReserves + alertStats.dangerAlerts > 0 ? "danger" : "success",
     },
     {
