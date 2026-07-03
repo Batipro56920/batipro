@@ -22,6 +22,7 @@ export type DashboardKpi = {
   value: string;
   hint: string;
   tone: DashboardTone;
+  href?: string;
 };
 
 export type DashboardPriorityItem = {
