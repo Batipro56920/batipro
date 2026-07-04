@@ -33,6 +33,14 @@ function getBillableAmount(project: ProjectRecord, quote: ProjectQuote | null) {
   return Number(quote.montant_ttc || quote.montant_ht || 0);
 }
 
+function getApporteurTrackingPath(project: ProjectRecord) {
+  const params = new URLSearchParams();
+  if (project.opportunity?.id) params.set("crmOpportunityId", project.opportunity.id);
+  if (project.prospect?.id) params.set("crmProspectId", project.prospect.id);
+  const query = params.toString();
+  return query ? `/crm/apporteurs?${query}` : "/crm/apporteurs";
+}
+
 function getCommercialSource(project: ProjectRecord) {
   const source = project.sourceLabel?.trim() || null;
   const apporteur = project.prospect?.apporteur_affaire?.trim() || null;
@@ -42,7 +50,7 @@ function getCommercialSource(project: ProjectRecord) {
     label: source ?? (isApporteur ? "Apporteur d'affaires" : "Origine commerciale"),
     detail: apporteur,
     isApporteur,
-    trackingPath: isApporteur ? "/crm/apporteurs" : null,
+    trackingPath: isApporteur ? getApporteurTrackingPath(project) : null,
   };
 }
 
