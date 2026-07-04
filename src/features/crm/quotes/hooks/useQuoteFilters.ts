@@ -12,9 +12,9 @@ const DEFAULT_FILTERS: QuoteFilters = {
   amount: "all",
 };
 
-const QUOTE_FOLLOW_UP_STATUSES = new Set(["envoye", "vu", "relance_1", "relance_2", "negociation"]);
-const QUOTE_CLOSED_STATUSES = new Set(["accepte", "refuse", "expire", "annule"]);
-const QUOTE_CLOSED_SIGNATURE_STATUSES = new Set(["signe", "signé", "refuse"]);
+const QUOTE_FOLLOW_UP_STATUSES: Set<string> = new Set(["envoye", "vu", "relance_1", "relance_2", "negociation"]);
+const QUOTE_CLOSED_STATUSES: Set<string> = new Set(["accepte", "refuse", "expire", "annule"]);
+const QUOTE_CLOSED_SIGNATURE_STATUSES: Set<string> = new Set(["signe", "signé", "refuse"]);
 
 function isRecent(value: string | null | undefined, days: number) {
   if (!value) return false;
@@ -28,9 +28,8 @@ function isRecent(value: string | null | undefined, days: number) {
 function matchesStatusFilter(row: QuoteWithParty, status: string) {
   if (status === "all") return true;
   if (status === "a_relancer") {
-    const hasBeenSent = Boolean(row.sent_at) || QUOTE_FOLLOW_UP_STATUSES.has(row.statut);
     const isClosed = QUOTE_CLOSED_STATUSES.has(row.statut) || QUOTE_CLOSED_SIGNATURE_STATUSES.has(row.signature_status);
-    return hasBeenSent && !isClosed;
+    return QUOTE_FOLLOW_UP_STATUSES.has(row.statut) && !isClosed;
   }
   return row.statut === status;
 }
