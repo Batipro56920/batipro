@@ -1,5 +1,5 @@
 import { supabase } from "../../../lib/supabaseClient";
-import type { ProductCatalogDraft, ProductCatalogItem, ProductDocument, ProductDocumentKind, ProductSupplierPrice } from "../domain/types";
+import type { ProductCatalogDraft, ProductCatalogItem, ProductDocument, ProductDocumentAnalysis, ProductDocumentKind, ProductMaterialUsage, ProductSupplierPrice } from "../domain/types";
 
 const TABLE = "product_catalog_items";
 const LEGACY_STORAGE_KEY = "batipro.product-catalog.v1";
@@ -228,6 +228,7 @@ function normalizeProductDocuments(documents: unknown): ProductDocument[] {
           url: null,
           usage: defaultDocumentUsage("other"),
           notes: null,
+          analysis: null,
         };
       }
 
@@ -237,6 +238,7 @@ function normalizeProductDocuments(documents: unknown): ProductDocument[] {
       const name = String(source.name ?? "").trim() || documentKindLabel(kind);
       const url = typeof source.url === "string" && source.url.trim() ? source.url.trim() : null;
       const notes = typeof source.notes === "string" && source.notes.trim() ? source.notes.trim() : null;
+      const analysis = normalizeDocumentAnalysis(source.analysis);
 
       return {
         id: typeof source.id === "string" && source.id.trim() ? source.id : buildLegacyDocumentId(index, `${kind}-${name}`),
@@ -245,9 +247,45 @@ function normalizeProductDocuments(documents: unknown): ProductDocument[] {
         url,
         usage: normalizeDocumentUsage(source.usage, kind),
         notes,
+        analysis,
       };
     })
-    .filter((document): document is ProductDocument => Boolean(document && (document.name || document.url || document.notes)));
+    .filter((document): document is ProductDocument => Boolean(document && (document.name || document.url || document.notes || document.analysis)));
+}
+
+function normalizeDocumentAnalysis(value: unknown): ProductDocumentAnalysis | null {
+  if (!value || typeof value !== "object") return null;
+  const source = value as Record<string, unknown>;
+  const materialUsage = normalizeMaterialUsage(source.materialUsage);
+  const confidence = normalizeNullableNumber(source.confidence);
+  const analysis: ProductDocumentAnalysis = {
+    materialUsage,
+    source: typeof source.source === "string" && source.source.trim() ? source.source.trim() : null,
+    confidence,
+  };
+  return materialUsage || analysis.source || confidence !== null ? analysis : null;
+}
+
+function normalizeMaterialUsage(value: unknown): ProductMaterialUsage | null {
+  if (!value || typeof value !== "object") return null;
+  const source = value as Record<string, unknown>;
+  const ratioQuantity = normalizePrice(source.ratioQuantity);
+  const ratioUnit = typeof source.ratioUnit === "string" && source.ratioUnit.trim() ? source.ratioUnit.trim() : null;
+  const sourceUnit = typeof source.sourceUnit === "string" && source.sourceUnit.trim() ? source.sourceUnit.trim() : null;
+  if (ratioQuantity === null || ratioQuantity <= 0 || !ratioUnit || !sourceUnit) return null;
+  return {
+    ratioQuantity,
+    ratioUnit,
+    sourceUnit,
+    lossPercent: normalizeNullableNumber(source.lossPercent),
+    confidence: normalizeNullableNumber(source.confidence),
+    reasoning: typeof source.reasoning === "string" && source.reasoning.trim() ? source.reasoning.trim() : null,
+  };
+}
+
+function normalizeNullableNumber(value: unknown): number | null {
+  const number = normalizePrice(value);
+  return number !== null && number >= 0 ? number : null;
 }
 
 function normalizeDocumentKind(kind: unknown): ProductDocumentKind {
