@@ -35,6 +35,10 @@ function invoiceHref(invoiceId: string) {
   return `/factures?invoice=${encodeURIComponent(invoiceId)}`;
 }
 
+function collectableInvoicesHref() {
+  return "/factures?status=a_encaisser";
+}
+
 function purchaseOrderHref(orderId: string) {
   const params = new URLSearchParams({ tab: "orders", purchaseOrderId: orderId });
   return `/fournisseurs?${params.toString()}`;
@@ -137,7 +141,7 @@ export default function RentabilitePage() {
           <section className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
             <Metric label="Facturé" value={formatCurrency(summary.invoicedTtc)} detail="Chiffre d'affaires TTC" />
             <Metric label="Encaissé" value={formatCurrency(summary.paidTtc)} detail="Cash réellement reçu" />
-            <Metric label="Reste à encaisser" value={formatCurrency(summary.remainingTtc)} detail={`${summary.openInvoices} facture(s) ouverte(s) · Voir les encaissements`} tone={summary.remainingTtc > 0 ? "warning" : "neutral"} href="/financier/encaissements" />
+            <Metric label="Reste à encaisser" value={formatCurrency(summary.remainingTtc)} detail={`${summary.openInvoices} facture(s) ouverte(s) · Voir les factures à encaisser`} tone={summary.remainingTtc > 0 ? "warning" : "neutral"} href={collectableInvoicesHref()} />
             <Metric label="Marge estimée" value={formatCurrency(summary.estimatedMarginHt)} detail={`${formatRate(summary.estimatedMarginRate)} sur HT`} tone={summary.estimatedMarginHt < 0 ? "danger" : "success"} />
           </section>
 
@@ -164,7 +168,7 @@ export default function RentabilitePage() {
             <aside className="bt-card rounded-xl bg-white p-5">
               <div className="flex items-center gap-2 text-sm font-semibold text-slate-950"><AlertTriangle className="h-4 w-4 text-amber-500" /> À surveiller</div>
               <div className="mt-4 space-y-3 text-sm">
-                <WatchItem label="Factures ouvertes" value={String(summary.openInvoices)} detail={formatCurrency(summary.remainingTtc)} href="/financier/encaissements" />
+                <WatchItem label="Factures ouvertes" value={String(summary.openInvoices)} detail={formatCurrency(summary.remainingTtc)} href={collectableInvoicesHref()} />
                 <WatchItem label="Achats ouverts" value={String(summary.openPurchases)} detail={formatCurrency(summary.purchasesTtc)} href="/financier/decaissements" />
                 <WatchItem label="Marge HT" value={formatRate(summary.estimatedMarginRate)} detail={formatCurrency(summary.estimatedMarginHt)} />
               </div>
