@@ -12,6 +12,10 @@ const DEFAULT_FILTERS: QuoteFilters = {
   amount: "all",
 };
 
+const QUOTE_FOLLOW_UP_STATUSES = new Set(["envoye", "vu", "relance_1", "relance_2", "negociation"]);
+const QUOTE_CLOSED_STATUSES = new Set(["accepte", "refuse", "expire", "annule"]);
+const QUOTE_CLOSED_SIGNATURE_STATUSES = new Set(["signe", "signé", "refuse"]);
+
 function isRecent(value: string | null | undefined, days: number) {
   if (!value) return false;
   const date = new Date(value);
@@ -19,6 +23,16 @@ function isRecent(value: string | null | undefined, days: number) {
   const limit = new Date();
   limit.setDate(limit.getDate() - days);
   return date >= limit;
+}
+
+function matchesStatusFilter(row: QuoteWithParty, status: string) {
+  if (status === "all") return true;
+  if (status === "a_relancer") {
+    const hasBeenSent = Boolean(row.sent_at) || QUOTE_FOLLOW_UP_STATUSES.has(row.statut);
+    const isClosed = QUOTE_CLOSED_STATUSES.has(row.statut) || QUOTE_CLOSED_SIGNATURE_STATUSES.has(row.signature_status);
+    return hasBeenSent && !isClosed;
+  }
+  return row.statut === status;
 }
 
 function quoteEditPath(row: CrmQuoteRow, projectPath: string) {
@@ -114,7 +128,7 @@ export function useQuoteFilters({
           row.salespersonLabel,
         ].join(" ").toLowerCase();
         if (query && !searchable.includes(query)) return false;
-        if (filters.status !== "all" && row.statut !== filters.status) return false;
+        if (!matchesStatusFilter(row, filters.status)) return false;
         if (filters.salesperson !== "all" && row.salespersonKey !== filters.salesperson) return false;
         if (filters.client !== "all" && row.partyLabel !== filters.client) return false;
         if (filters.period === "week" && !isRecent(row.created_at, 7)) return false;
