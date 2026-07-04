@@ -24,6 +24,11 @@ const DASHBOARD_METRIC_HREFS: Partial<Record<DashboardBusinessMetric["key"], str
   invoices: "/factures?status=a_encaisser",
 };
 
+const DASHBOARD_METRIC_HINTS: Partial<Record<DashboardBusinessMetric["key"], string>> = {
+  quotes: "Envoyés, non signés ni refusés",
+  invoices: "Factures émises non soldées",
+};
+
 const clientDocumentsMetric: DashboardBusinessMetric = {
   key: "clientDocuments",
   label: "Docs client en attente",
@@ -163,13 +168,14 @@ export function DashboardBusinessPanel({ metrics }: DashboardBusinessPanelProps)
           const value = loadingCounts && count === null ? "..." : count === null ? metric.value : String(count);
           const tone = metricTone(metric, count);
           const href = DASHBOARD_METRIC_HREFS[metric.key] ?? metric.href;
+          const hint = DASHBOARD_METRIC_HINTS[metric.key] ?? metric.hint;
 
           return (
             <Link key={metric.key} to={href} className="group rounded-2xl border border-slate-200 p-3 transition hover:border-blue-200 hover:bg-blue-50/40">
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
                   <div className="truncate text-sm font-semibold text-slate-950">{metric.label}</div>
-                  <div className="mt-1 truncate text-xs text-slate-500">{metric.hint}</div>
+                  <div className="mt-1 truncate text-xs text-slate-500">{hint}</div>
                 </div>
                 <span className={`rounded-full px-2.5 py-1 text-sm font-bold ${toneClass[tone]}`}>{value}</span>
               </div>
