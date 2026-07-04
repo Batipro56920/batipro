@@ -1,4 +1,8 @@
-import { matchTaskTemplateLotProfile } from "./taskTemplateLotProfiles";
+import {
+  getTaskTemplateLotProfiles,
+  matchTaskTemplateLotProfile,
+  TASK_TEMPLATE_LOT_PROFILES_CHANGED,
+} from "./taskTemplateLotProfiles";
 
 let installed = false;
 let observer: MutationObserver | null = null;
@@ -7,9 +11,24 @@ let pending = false;
 export function installTaskTemplateCocoAssistantBridge() {
   if (installed || typeof window === "undefined" || typeof document === "undefined") return;
   installed = true;
+  document.addEventListener("input", onDrawerInput, true);
+  document.addEventListener("change", onDrawerInput, true);
+  window.addEventListener(TASK_TEMPLATE_LOT_PROFILES_CHANGED, scheduleOrganization);
   observer = new MutationObserver(scheduleOrganization);
   observer.observe(document.body, { childList: true, subtree: true });
   scheduleOrganization();
+}
+
+function onDrawerInput(event: Event) {
+  const target = event.target;
+  if (!(target instanceof HTMLInputElement || target instanceof HTMLSelectElement)) return;
+  const drawer = target.closest(".fixed.inset-0") as HTMLElement | null;
+  if (!drawer || !isTaskTemplateDrawer(drawer)) return;
+
+  if (target.dataset.batiproLotSelect === "true" || isLaborCostInput(drawer, target)) {
+    applyLotDefaults(drawer, target.dataset.batiproLotSelect === "true");
+    updateSummary(drawer);
+  }
 }
 
 function scheduleOrganization() {
@@ -22,24 +41,102 @@ function scheduleOrganization() {
 }
 
 function organizeDrawer(drawer: HTMLElement) {
-  if (drawer.dataset.batiproCocoTemplateOrganized === "true") return;
+  ensureLotSelect(drawer);
+  applyLotDefaults(drawer, false);
 
-  const descriptionLabel = getLabeledTextarea(drawer, "description technique")?.closest("label") as HTMLElement | null;
-  const characteristicsLabel =
-    getLabeledTextarea(drawer, "caracteristiques")?.closest("label") as HTMLElement | null
-    ?? getLabeledTextarea(drawer, "caractéristiques")?.closest("label") as HTMLElement | null;
-  const remarksLabel = getLabeledTextarea(drawer, "remarques")?.closest("label") as HTMLElement | null;
-  if (!descriptionLabel || !characteristicsLabel || !remarksLabel) return;
+  if (drawer.dataset.batiproCocoTemplateOrganized !== "true") {
+    const descriptionLabel = getLabeledTextarea(drawer, "description technique")?.closest("label") as HTMLElement | null;
+    const characteristicsLabel =
+      getLabeledTextarea(drawer, "caracteristiques")?.closest("label") as HTMLElement | null
+      ?? getLabeledTextarea(drawer, "caractéristiques")?.closest("label") as HTMLElement | null;
+    const remarksLabel = getLabeledTextarea(drawer, "remarques")?.closest("label") as HTMLElement | null;
+    if (!descriptionLabel || !characteristicsLabel || !remarksLabel) return;
 
-  const advancedSection = findAdvancedPreparationSection(drawer);
-  const insertionAnchor = advancedSection ?? findCostReferenceRow(drawer);
-  if (!insertionAnchor?.parentElement) return;
+    const advancedSection = findAdvancedPreparationSection(drawer);
+    const insertionAnchor = advancedSection ?? findCostReferenceRow(drawer);
+    if (!insertionAnchor?.parentElement) return;
 
-  const outputSection = buildOutputSection(drawer);
-  outputSection.append(descriptionLabel, characteristicsLabel, remarksLabel);
-  insertionAnchor.insertAdjacentElement("afterend", outputSection);
-  drawer.dataset.batiproCocoTemplateOrganized = "true";
+    const outputSection = buildOutputSection(drawer);
+    outputSection.append(descriptionLabel, characteristicsLabel, remarksLabel);
+    insertionAnchor.insertAdjacentElement("afterend", outputSection);
+    drawer.dataset.batiproCocoTemplateOrganized = "true";
+  }
+
   updateSummary(drawer);
+}
+
+function ensureLotSelect(drawer: HTMLElement) {
+  const profiles = getTaskTemplateLotProfiles();
+  const existingSelect = drawer.querySelector("select[data-batipro-lot-select='true']") as HTMLSelectElement | null;
+  if (existingSelect) {
+    syncLotOptions(existingSelect, profiles);
+    return;
+  }
+
+  const lotInput = getLabeledInput(drawer, "lot");
+  if (!lotInput) return;
+  const select = document.createElement("select");
+  select.dataset.batiproLotSelect = "true";
+  select.className = lotInput.className;
+  select.disabled = lotInput.disabled;
+  syncLotOptions(select, profiles, lotInput.value.trim());
+  select.addEventListener("change", () => {
+    setInputValue(lotInput, select.value);
+    applyLotDefaults(drawer, true);
+    updateSummary(drawer);
+  });
+
+  lotInput.type = "hidden";
+  lotInput.insertAdjacentElement("afterend", select);
+}
+
+function syncLotOptions(select: HTMLSelectElement, profiles = getTaskTemplateLotProfiles(), currentValue = select.value) {
+  const selected = currentValue || select.value;
+  select.innerHTML = "";
+  const empty = document.createElement("option");
+  empty.value = "";
+  empty.textContent = "Choisir un lot métier";
+  select.append(empty);
+  for (const profile of profiles) {
+    const option = document.createElement("option");
+    option.value = profile.label;
+    option.textContent = `${profile.label} - MO +${profile.laborMarginRate} %`;
+    select.append(option);
+  }
+  if (selected && !profiles.some((profile) => profile.label === selected)) {
+    const custom = document.createElement("option");
+    custom.value = selected;
+    custom.textContent = `${selected} (non paramétré)`;
+    select.append(custom);
+  }
+  select.value = selected;
+}
+
+function applyLotDefaults(drawer: HTMLElement, force = false) {
+  const context = readContext(drawer);
+  const profile = matchTaskTemplateLotProfile(context.lot);
+
+  const unitInput = getLabeledInput(drawer, "unite") ?? getLabeledInput(drawer, "unité");
+  if (unitInput && profile.defaultUnit && (force || !unitInput.value.trim())) {
+    setInputValue(unitInput, profile.defaultUnit);
+  }
+
+  setCheckboxByText(drawer, "Visible dans les devis", profile.defaultUsage.quoteVisible, force);
+  setCheckboxByText(drawer, "Visible côté chantier", profile.defaultUsage.chantierVisible, force);
+  applyLaborMargin(drawer, profile.laborMarginRate, force);
+}
+
+function applyLaborMargin(drawer: HTMLElement, marginRate: number, force = false) {
+  for (const row of findLaborRows(drawer)) {
+    const inputs = Array.from(row.querySelectorAll("input"));
+    const costInput = inputs[2];
+    const saleInput = inputs[3];
+    if (!(costInput instanceof HTMLInputElement) || !(saleInput instanceof HTMLInputElement)) continue;
+    const cost = parseFrenchNumber(costInput.value);
+    if (cost === null) continue;
+    if (!force && saleInput.value.trim()) continue;
+    setInputValue(saleInput, formatNumber(cost * (1 + marginRate / 100)));
+  }
 }
 
 function buildOutputSection(drawer: HTMLElement) {
@@ -91,6 +188,7 @@ function buildOutputSection(drawer: HTMLElement) {
 }
 
 function generateWithCoco(drawer: HTMLElement) {
+  applyLotDefaults(drawer, false);
   const context = readContext(drawer);
   const profile = matchTaskTemplateLotProfile(context.lot);
   const generated = buildGeneratedOutputs(context, profile);
@@ -116,13 +214,18 @@ function generateWithCoco(drawer: HTMLElement) {
 function readContext(drawer: HTMLElement) {
   return {
     title: getLabeledInput(drawer, "titre")?.value.trim() || "Template de tâche",
-    lot: getLabeledInput(drawer, "lot")?.value.trim() || "Lot à préciser",
+    lot: getLotValue(drawer) || "Lot à préciser",
     unit: getLabeledInput(drawer, "unite")?.value.trim() || getLabeledInput(drawer, "unité")?.value.trim() || "unité",
     materials: readMaterialRows(drawer),
     equipment: readEquipmentRows(drawer),
     labor: readLaborRows(drawer),
     fees: readFeeRows(drawer),
   };
+}
+
+function getLotValue(drawer: HTMLElement) {
+  const select = drawer.querySelector("select[data-batipro-lot-select='true']") as HTMLSelectElement | null;
+  return select?.value.trim() || getLabeledInput(drawer, "lot")?.value.trim() || "";
 }
 
 function buildGeneratedOutputs(context: ReturnType<typeof readContext>, profile: ReturnType<typeof matchTaskTemplateLotProfile>) {
@@ -223,7 +326,7 @@ function updateSummary(drawer: HTMLElement, message?: string) {
   if (!summary) return;
   const context = readContext(drawer);
   const profile = matchTaskTemplateLotProfile(context.lot);
-  summary.textContent = message ?? `Coco utilisera : ${context.materials.length} matériau(x), ${context.equipment.length} matériel(s), ${context.labor.length} ligne(s) main d'oeuvre, ${context.fees.length} frais. Lot détecté : ${profile.label}.`;
+  summary.textContent = message ?? `Coco utilisera : ${context.materials.length} matériau(x), ${context.equipment.length} matériel(s), ${context.labor.length} ligne(s) main d'oeuvre, ${context.fees.length} frais. Lot détecté : ${profile.label}. Main d'oeuvre : PV horaire = coût horaire + ${profile.laborMarginRate} %.`;
 }
 
 function setGeneratedOutput(drawer: HTMLElement, selector: string, lines: string[]) {
@@ -259,7 +362,7 @@ function readEquipmentRows(drawer: HTMLElement) {
 }
 
 function readLaborRows(drawer: HTMLElement) {
-  return findRows(drawer, "Saisie manuelle").map((row) => {
+  return findLaborRows(drawer).map((row) => {
     const inputs = Array.from(row.querySelectorAll("input"));
     return {
       duration: inputs[0]?.value.trim() ?? "",
@@ -282,6 +385,14 @@ function readFeeRows(drawer: HTMLElement) {
   }).filter((row) => row.name || row.cost || row.sale || row.note);
 }
 
+function findLaborRows(drawer: HTMLElement) {
+  return findRows(drawer, "Saisie manuelle");
+}
+
+function isLaborCostInput(drawer: HTMLElement, target: Element) {
+  return findLaborRows(drawer).some((row) => Array.from(row.querySelectorAll("input"))[2] === target);
+}
+
 function findRows(drawer: HTMLElement, marker: string) {
   return Array.from(drawer.querySelectorAll(".rounded-2xl.border.border-slate-200.bg-slate-50, .grid.rounded-2xl.border.border-slate-200.bg-slate-50"))
     .filter((element): element is HTMLElement => element instanceof HTMLElement)
@@ -291,7 +402,11 @@ function findRows(drawer: HTMLElement, marker: string) {
 function findTaskTemplateDrawers() {
   return Array.from(document.querySelectorAll(".fixed.inset-0"))
     .filter((element): element is HTMLElement => element instanceof HTMLElement)
-    .filter((element) => Boolean(element.textContent?.includes("Nouveau template") || element.textContent?.includes("Préparation avancée")));
+    .filter(isTaskTemplateDrawer);
+}
+
+function isTaskTemplateDrawer(element: HTMLElement) {
+  return Boolean(element.textContent?.includes("Nouveau template") || element.textContent?.includes("Préparation avancée"));
 }
 
 function findAdvancedPreparationSection(drawer: HTMLElement) {
@@ -321,8 +436,26 @@ function findLabel(root: HTMLElement, labelText: string) {
   return Array.from(root.querySelectorAll("label")).find((label) => normalizeText(label.textContent).includes(expected)) as HTMLLabelElement | undefined;
 }
 
+function setCheckboxByText(drawer: HTMLElement, labelText: string, checked: boolean, force: boolean) {
+  const label = Array.from(drawer.querySelectorAll("label"))
+    .find((candidate) => normalizeText(candidate.textContent).includes(normalizeText(labelText)));
+  const input = label?.querySelector("input[type='checkbox']");
+  if (!(input instanceof HTMLInputElement)) return;
+  if (!force && input.checked === checked) return;
+  input.checked = checked;
+  input.dispatchEvent(new Event("input", { bubbles: true }));
+  input.dispatchEvent(new Event("change", { bubbles: true }));
+}
+
 function canReplace(value: string, label: string) {
   return !value.trim() || window.confirm(`Le champ ${label} contient déjà du texte. Remplacer par la proposition Coco ?`);
+}
+
+function setInputValue(input: HTMLInputElement, value: string) {
+  const valueSetter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
+  valueSetter?.call(input, value);
+  input.dispatchEvent(new Event("input", { bubbles: true }));
+  input.dispatchEvent(new Event("change", { bubbles: true }));
 }
 
 function setTextareaValue(textarea: HTMLTextAreaElement, value: string) {
@@ -330,6 +463,15 @@ function setTextareaValue(textarea: HTMLTextAreaElement, value: string) {
   valueSetter?.call(textarea, value);
   textarea.dispatchEvent(new Event("input", { bubbles: true }));
   textarea.dispatchEvent(new Event("change", { bubbles: true }));
+}
+
+function parseFrenchNumber(value: unknown) {
+  const number = Number(String(value ?? "").trim().replace(/\s/g, "").replace(",", "."));
+  return Number.isFinite(number) ? number : null;
+}
+
+function formatNumber(value: number) {
+  return String(Math.round(value * 100) / 100).replace(".", ",");
 }
 
 function normalizeText(value: unknown) {
