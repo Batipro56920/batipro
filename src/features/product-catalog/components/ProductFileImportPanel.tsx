@@ -279,7 +279,9 @@ function buildProductPatch(
   const salePrice = computeSalePrice(unitPrice, marginRate)
     ?? priceInsights.salePrice
     ?? positivePrice(currentProduct.recommendedSalePriceHt);
-  const unit = insights.consumptionRatioUnit ? normalizeUnit(insights.consumptionRatioUnit) : coverageM2 && coverageM2 > 0 ? "m2" : normalizeUnit(extracted.unit);
+  const extractedUnit = normalizeUnit(extracted.unit);
+  const currentUnit = normalizeUnit(currentProduct.unit);
+  const unit = extractedUnit !== "u" ? extractedUnit : coverageM2 && coverageM2 > 0 ? "m2" : currentUnit;
   const supplierPrice = buildSupplierPrice(extracted, supplier, supplierNegotiatedPrice, unitPrice, priceInsights);
   const nextSupplierPrices = supplierPrice
     ? mergeSupplierPrice(currentProduct.supplierPrices, supplierPrice)
@@ -295,8 +297,8 @@ function buildProductPatch(
     vatRate: positiveNumber(extracted.vat_rate) ?? currentProduct.vatRate,
     mainSupplierId: supplier?.id ?? currentProduct.mainSupplierId,
     mainSupplierName: supplier?.name ?? supplierName ?? currentProduct.mainSupplierName,
-    standardPurchasePriceHt: unitPrice ?? 0,
-    recommendedSalePriceHt: salePrice ?? 0,
+    standardPurchasePriceHt: unitPrice ?? currentProduct.standardPurchasePriceHt,
+    recommendedSalePriceHt: salePrice ?? currentProduct.recommendedSalePriceHt,
     supplierPrices: nextSupplierPrices,
     documents: [...currentProduct.documents, ...importedDocuments],
   };
@@ -403,15 +405,16 @@ function mergeSupplierPrice(prices: ProductSupplierPrice[], candidate: ProductSu
 
 function extractProductTechnicalInsights(text: string, extracted: ExtractedQuoteProduct): ProductTechnicalInsights {
   const explicit = extracted as ExtractedQuoteProduct & Record<string, unknown>;
+  const preferredUnit = normalizeUnit(extracted.unit);
+  const localRatio = extractConsumptionRatio(text, preferredUnit);
   const explicitRatioQuantity = positiveNumber(explicit.consumption_ratio_quantity ?? explicit.material_ratio_quantity ?? explicit.ratio_quantity);
   const explicitRatioUnit = normalizeText(explicit.consumption_ratio_unit ?? explicit.material_ratio_unit ?? explicit.ratio_unit);
   const explicitBaseUnit = normalizeText(explicit.consumption_base_unit ?? explicit.ratio_base_unit);
-  const localRatio = extractConsumptionRatio(text);
   const ratioQuantity = explicitRatioQuantity ?? localRatio?.quantity ?? null;
-  const ratioUnit = explicitRatioUnit ?? localRatio?.unit ?? normalizeUnit(extracted.unit);
-  const baseUnit = explicitBaseUnit ?? localRatio?.baseUnit ?? "m2";
+  const ratioUnit = explicitRatioUnit ? normalizeRatioUnit(explicitRatioUnit) : localRatio?.unit ?? null;
+  const baseUnit = explicitBaseUnit ? normalizeRatioUnit(explicitBaseUnit) : localRatio?.baseUnit ?? null;
   const lossPercent = positiveNumber(explicit.loss_percent) ?? extractLossPercent(text);
-  const workMethod = normalizeText(explicit.work_method) ?? extractSection(text, [
+  const workMethod = cleanBusinessText(explicit.work_method, 1600) ?? cleanBusinessText(extractSection(text, [
     "mode operatoire",
     "mode opératoire",
     "mise en oeuvre",
@@ -420,17 +423,17 @@ function extractProductTechnicalInsights(text: string, extracted: ExtractedQuote
     "preparation",
     "préparation",
     "utilisation",
-  ]);
-  const applicationScope = normalizeText(explicit.application_scope) ?? extractSection(text, [
+  ]), 1600);
+  const applicationScope = cleanBusinessText(explicit.application_scope, 1200) ?? cleanBusinessText(extractSection(text, [
     "domaine d'application",
     "domaines d'application",
     "emploi",
     "destination",
     "supports admis",
     "supports",
-  ]);
+  ]), 1200);
   const technicalNotes = [
-    normalizeText(explicit.technical_notes),
+    cleanBusinessText(explicit.technical_notes, 900),
     ratioQuantity && ratioUnit && baseUnit ? `Consommation extraite: ${formatNumber(ratioQuantity)} ${ratioUnit}/${baseUnit}` : null,
     lossPercent !== null ? `Perte extraite: ${formatNumber(lossPercent)} %` : null,
   ].filter((note): note is string => Boolean(note));
@@ -515,29 +518,68 @@ function getBestExistingSupplierUnitPrice(product: ProductCatalogDraft | Product
   return prices[0] ?? null;
 }
 
-function extractConsumptionRatio(text: string): { quantity: number; unit: string; baseUnit: string } | null {
+function extractConsumptionRatio(text: string, preferredUnit?: DocumentUnit): { quantity: number; unit: string; baseUnit: string } | null {
   const normalized = text.replace(/\s+/g, " ");
+  const candidates: Array<{ quantity: number; unit: string; baseUnit: string; priority: number }> = [];
   const directPatterns = [
-    /(?:consommation|consomation|conso\.?|dosage|ratio)[^\d]{0,80}(\d+(?:[,.]\d+)?)\s*(l|litres?|kg|g|ml|m²|m2|m3|m³|ml|u|unite|unité)\s*(?:\/|par|pour)\s*(m²|m2|m3|m³|ml|m|u|unite|unité)/i,
-    /(\d+(?:[,.]\d+)?)\s*(l|litres?|kg|g|ml|m²|m2|m3|m³|ml|u|unite|unité)\s*(?:\/|par)\s*(m²|m2|m3|m³|ml|m|u|unite|unité)[^.]{0,80}(?:consommation|rendement|application)/i,
+    /(?:consommation|consomation|conso\.?|dosage|ratio)[^\d]{0,120}(\d+(?:[,.]\d+)?)\s*(l|litres?|kg|g|ml|m²|m2|m3|m³|u|unite|unité)\s*(?:\/|par|pour)\s*(m²|m2|m3|m³|ml|m|u|unite|unité)/gi,
+    /(\d+(?:[,.]\d+)?)\s*(l|litres?|kg|g|ml)\s*(?:\/|par)\s*(m²|m2)[^.]{0,140}(?:consommation|rendement|application|appliquer|couche|classe)/gi,
+    /(?:appliquer|application|couche|classe)[^.]{0,160}?(\d+(?:[,.]\d+)?)\s*(l|litres?|kg|g|ml)\s*\/\s*(m²|m2)/gi,
   ];
 
   for (const pattern of directPatterns) {
-    const match = normalized.match(pattern);
-    const quantity = parseLooseNumber(match?.[1]);
-    if (quantity !== null && quantity > 0 && match?.[2] && match?.[3]) {
-      return { quantity: roundPrice(quantity), unit: normalizeRatioUnit(match[2]), baseUnit: normalizeRatioUnit(match[3]) };
+    let match: RegExpExecArray | null;
+    while ((match = pattern.exec(normalized)) !== null) {
+      const candidate = buildRatioCandidate(match[1], match[2], match[3], 2);
+      if (candidate) candidates.push(candidate);
     }
+  }
+
+  const anyRatioPattern = /(\d+(?:[,.]\d+)?)\s*(l|litres?|kg|g|ml)\s*\/\s*(m²|m2)/gi;
+  let anyMatch: RegExpExecArray | null;
+  while ((anyMatch = anyRatioPattern.exec(normalized)) !== null) {
+    const context = normalized.slice(Math.max(0, anyMatch.index - 140), anyMatch.index + 180);
+    if (!/(consommation|rendement|application|appliquer|couche|classe|m2|m²|pantifilm)/i.test(context)) continue;
+    const candidate = buildRatioCandidate(anyMatch[1], anyMatch[2], anyMatch[3], 1);
+    if (candidate) candidates.push(candidate);
   }
 
   const yieldPattern = /(?:rendement|couvre|couverture)[^\d]{0,80}(\d+(?:[,.]\d+)?)\s*(m²|m2)\s*(?:\/|par|pour)\s*(l|litre|litres|kg|pot|seau|sac|unite|unité|u)/i;
   const yieldMatch = normalized.match(yieldPattern);
   const yieldedSurface = parseLooseNumber(yieldMatch?.[1]);
   if (yieldedSurface !== null && yieldedSurface > 0 && yieldMatch?.[3]) {
-    return { quantity: roundPrice(1 / yieldedSurface), unit: normalizeRatioUnit(yieldMatch[3]), baseUnit: "m2" };
+    candidates.push({ quantity: roundPrice(1 / yieldedSurface), unit: normalizeRatioUnit(yieldMatch[3]), baseUnit: "m2", priority: 1 });
   }
 
-  return null;
+  const preferredRatioUnit = normalizeRatioUnit(preferredUnit);
+  const unique = candidates.filter((candidate, index) => candidates.findIndex((other) => sameRatioCandidate(candidate, other)) === index);
+  unique.sort((a, b) => {
+    const aPreferred = preferredRatioUnit && a.unit === preferredRatioUnit ? 1 : 0;
+    const bPreferred = preferredRatioUnit && b.unit === preferredRatioUnit ? 1 : 0;
+    return bPreferred - aPreferred || b.priority - a.priority;
+  });
+
+  return unique[0] ? { quantity: unique[0].quantity, unit: unique[0].unit, baseUnit: unique[0].baseUnit } : null;
+}
+
+function buildRatioCandidate(rawQuantity: unknown, rawUnit: unknown, rawBaseUnit: unknown, priority: number) {
+  const quantity = parseLooseNumber(rawQuantity);
+  if (quantity === null || quantity <= 0) return null;
+  const unit = normalizeRatioUnit(rawUnit);
+  const baseUnit = normalizeRatioUnit(rawBaseUnit);
+  if (!unit || !baseUnit) return null;
+
+  if (unit === "g") {
+    return { quantity: roundPrice(quantity / 1000), unit: "kg", baseUnit, priority };
+  }
+  return { quantity: roundPrice(quantity), unit, baseUnit, priority };
+}
+
+function sameRatioCandidate(
+  a: { quantity: number; unit: string; baseUnit: string },
+  b: { quantity: number; unit: string; baseUnit: string },
+) {
+  return a.quantity === b.quantity && a.unit === b.unit && a.baseUnit === b.baseUnit;
 }
 
 function extractLossPercent(text: string): number | null {
@@ -556,14 +598,55 @@ function extractSection(text: string, headings: string[]): string | null {
   if (startIndex < 0) return null;
 
   const selected: string[] = [];
-  for (const line of lines.slice(startIndex, startIndex + 8)) {
+  for (const line of lines.slice(startIndex, startIndex + 12)) {
     const clean = line.replace(/\s+/g, " ").trim();
-    if (!clean) continue;
+    if (!clean || isTechnicalSheetNoise(clean)) continue;
     selected.push(clean);
     if (selected.join(" ").length > 700) break;
   }
 
   return selected.join("\n").slice(0, 1200) || null;
+}
+
+function cleanBusinessText(value: unknown, maxLength: number): string | null {
+  const text = normalizeText(value);
+  if (!text) return null;
+
+  const lines = text
+    .replace(/■/g, "\n")
+    .split(/\r?\n|(?<=\.)\s+(?=[A-ZÉÈÀÂÎÔÛÇ])/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .filter((line) => !isTechnicalSheetNoise(line));
+
+  const cleaned = lines.join("\n").replace(/\n{3,}/g, "\n\n").trim();
+  return cleaned ? cleaned.slice(0, maxLength) : null;
+}
+
+function isTechnicalSheetNoise(value: string): boolean {
+  const key = normalizeKey(value);
+  if (!key) return true;
+  return [
+    "il appartient a notre clientele de verifier",
+    "derniere edition",
+    "immeuble union square",
+    "rueil malmaison",
+    "www seigneurie com",
+    "tel",
+    "fax",
+    "telephone",
+    "declaration environnementale",
+    "donnees environnementales",
+    "certification de construction qualite",
+    "production toutes nos usines",
+    "fiche de donnees de securite",
+    "valeur limite ue",
+    "directive 2004 42 ce",
+    "emissions dans l air interieur",
+    "inies",
+    "iso 14001",
+    "ppg ac france",
+  ].some((noise) => key.includes(noise));
 }
 
 function getBusinessInterpretation(product: ExtractedQuoteProduct): string | null {
@@ -641,6 +724,7 @@ function normalizeKey(value: unknown): string {
   return String(value ?? "")
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/gi, " ")
     .replace(/\s+/g, " ")
     .trim()
     .toLowerCase();
