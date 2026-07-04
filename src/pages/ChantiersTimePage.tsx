@@ -5,6 +5,26 @@ import { AlertTriangle, ArrowRight, CalendarDays, Clock3, ClipboardList, Refresh
 import { listChantiers, type ChantierRow } from "../services/chantiers.service";
 import { listChantierTimeEntriesByChantierId, type ChantierTimeEntryRow } from "../services/chantierTimeEntries.service";
 
+type TimeTone = "over" | "missing" | "ok";
+type TimePriorityFilter = "all" | TimeTone;
+
+type TimeRow = {
+  chantier: ChantierRow;
+  entries: ChantierTimeEntryRow[];
+  planned: number;
+  logged: number;
+  delta: number;
+  tone: TimeTone;
+  searchable: string;
+};
+
+const FILTER_LABELS: Record<TimePriorityFilter, string> = {
+  all: "Tous les chantiers actifs",
+  over: "Chantiers en dépassement",
+  missing: "Chantiers sans saisie temps",
+  ok: "Chantiers sous contrôle",
+};
+
 function formatHours(value: number | null | undefined) {
   const n = Number(value ?? 0);
   return `${Math.round(n * 100) / 100} h`;
@@ -28,16 +48,51 @@ function getTimeTone(params: { planned: number; logged: number; entriesCount: nu
   return "ok" as const;
 }
 
+function TimeFilterCard({
+  label,
+  value,
+  tone,
+  active,
+  onClick,
+}: {
+  label: string;
+  value: string | number;
+  tone: "slate" | "red" | "amber" | "green";
+  active: boolean;
+  onClick: () => void;
+}) {
+  const toneClass =
+    tone === "red"
+      ? "border-red-200 bg-red-50 text-red-700"
+      : tone === "amber"
+        ? "border-amber-200 bg-amber-50 text-amber-700"
+        : tone === "green"
+          ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+          : "border-slate-200 bg-white text-slate-950";
+  const activeClass = active ? "ring-2 ring-blue-300 ring-offset-2" : "hover:bg-slate-50";
+
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`rounded-2xl border p-4 text-left shadow-sm transition ${toneClass} ${activeClass}`}
+      aria-pressed={active}
+    >
+      <div className="text-xs font-semibold uppercase opacity-75">{label}</div>
+      <div className="mt-2 text-2xl font-semibold">{value}</div>
+    </button>
+  );
+}
+
 export default function ChantiersTimePage() {
   const [chantiers, setChantiers] = useState<ChantierRow[]>([]);
   const [entriesByChantier, setEntriesByChantier] = useState<Record<string, ChantierTimeEntryRow[]>>({});
   const [query, setQuery] = useState("");
+  const [activeFilter, setActiveFilter] = useState<TimePriorityFilter>("all");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const rows = useMemo(() => {
-    const search = normalizeSearch(query);
-
+  const allRows = useMemo<TimeRow[]>(() => {
     return chantiers
       .map((chantier) => {
         const entries = entriesByChantier[chantier.id] ?? [];
@@ -56,7 +111,6 @@ export default function ChantiersTimePage() {
           searchable: normalizeSearch(`${chantier.nom} ${chantier.client ?? ""} ${chantier.adresse ?? ""}`),
         };
       })
-      .filter((row) => !search || row.searchable.includes(search))
       .sort((a, b) => {
         const weight = { over: 0, missing: 1, ok: 2 } as const;
         const byTone = weight[a.tone] - weight[b.tone];
@@ -64,18 +118,25 @@ export default function ChantiersTimePage() {
         if (a.tone === "over" || b.tone === "over") return b.delta - a.delta;
         return a.chantier.nom.localeCompare(b.chantier.nom, "fr");
       });
-  }, [chantiers, entriesByChantier, query]);
+  }, [chantiers, entriesByChantier]);
+
+  const rows = useMemo(() => {
+    const search = normalizeSearch(query);
+    return allRows.filter((row) => {
+      const matchesFilter = activeFilter === "all" || row.tone === activeFilter;
+      const matchesSearch = !search || row.searchable.includes(search);
+      return matchesFilter && matchesSearch;
+    });
+  }, [activeFilter, allRows, query]);
 
   const totals = useMemo(() => {
     const planned = chantiers.reduce((sum, chantier) => sum + Number(chantier.heures_prevues ?? 0), 0);
     const logged = Object.values(entriesByChantier).reduce((sum, entries) => sum + getTotal(entries), 0);
-    const missingTime = chantiers.filter((chantier) => (entriesByChantier[chantier.id] ?? []).length === 0).length;
-    const overBudget = chantiers.filter((chantier) => {
-      const plannedHours = Number(chantier.heures_prevues ?? 0);
-      return plannedHours > 0 && getTotal(entriesByChantier[chantier.id] ?? []) > plannedHours;
-    }).length;
-    return { planned, logged, missingTime, overBudget };
-  }, [chantiers, entriesByChantier]);
+    const missingTime = allRows.filter((row) => row.tone === "missing").length;
+    const overBudget = allRows.filter((row) => row.tone === "over").length;
+    const underControl = allRows.filter((row) => row.tone === "ok").length;
+    return { planned, logged, missingTime, overBudget, underControl };
+  }, [allRows, chantiers, entriesByChantier]);
 
   async function refresh() {
     setLoading(true);
@@ -123,7 +184,14 @@ export default function ChantiersTimePage() {
         </div>
       </section>
 
-      <section className="grid gap-3 md:grid-cols-4">
+      <section className="grid gap-3 md:grid-cols-5">
+        <TimeFilterCard
+          label="Chantiers actifs"
+          value={chantiers.length}
+          tone="slate"
+          active={activeFilter === "all"}
+          onClick={() => setActiveFilter("all")}
+        />
         <article className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
           <div className="text-xs font-semibold uppercase text-slate-400">Prévu actif</div>
           <div className="mt-2 text-2xl font-semibold text-slate-950">{formatHours(totals.planned)}</div>
@@ -132,15 +200,53 @@ export default function ChantiersTimePage() {
           <div className="text-xs font-semibold uppercase text-slate-400">Saisi actif</div>
           <div className="mt-2 text-2xl font-semibold text-slate-950">{formatHours(totals.logged)}</div>
         </article>
-        <article className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <div className="text-xs font-semibold uppercase text-slate-400">Dépassements</div>
-          <div className={`mt-2 text-2xl font-semibold ${totals.overBudget > 0 ? "text-red-700" : "text-slate-950"}`}>{totals.overBudget}</div>
-        </article>
-        <article className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <div className="text-xs font-semibold uppercase text-slate-400">Sans saisie</div>
-          <div className="mt-2 text-2xl font-semibold text-slate-950">{totals.missingTime}</div>
-        </article>
+        <TimeFilterCard
+          label="Dépassements"
+          value={totals.overBudget}
+          tone={totals.overBudget > 0 ? "red" : "slate"}
+          active={activeFilter === "over"}
+          onClick={() => setActiveFilter("over")}
+        />
+        <TimeFilterCard
+          label="Sans saisie"
+          value={totals.missingTime}
+          tone={totals.missingTime > 0 ? "amber" : "green"}
+          active={activeFilter === "missing"}
+          onClick={() => setActiveFilter("missing")}
+        />
       </section>
+
+      <section className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800 shadow-sm shadow-emerald-950/[0.02]">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h2 className="font-semibold text-emerald-950">Chantiers sous contrôle</h2>
+            <p className="mt-1">{totals.underControl} chantier{totals.underControl > 1 ? "s" : ""} avec temps saisi sans dépassement du prévu.</p>
+          </div>
+          <button
+            type="button"
+            onClick={() => setActiveFilter("ok")}
+            className="inline-flex h-9 items-center justify-center rounded-xl border border-emerald-200 bg-white px-3 text-xs font-semibold text-emerald-800 hover:bg-emerald-100"
+            aria-pressed={activeFilter === "ok"}
+          >
+            Afficher sous contrôle
+          </button>
+        </div>
+      </section>
+
+      {activeFilter !== "all" ? (
+        <div className="flex flex-col gap-2 rounded-2xl border border-blue-100 bg-blue-50 px-3 py-2 text-sm text-blue-900 sm:flex-row sm:items-center sm:justify-between">
+          <span>
+            Filtre actif : <strong>{FILTER_LABELS[activeFilter]}</strong> · {rows.length} chantier{rows.length > 1 ? "s" : ""} affiché{rows.length > 1 ? "s" : ""}.
+          </span>
+          <button
+            type="button"
+            onClick={() => setActiveFilter("all")}
+            className="rounded-xl border border-blue-200 bg-white px-3 py-1.5 text-xs font-semibold text-blue-800 hover:bg-blue-100"
+          >
+            Réinitialiser
+          </button>
+        </div>
+      ) : null}
 
       {error ? <div className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm font-medium text-red-700">{error}</div> : null}
 
@@ -160,7 +266,7 @@ export default function ChantiersTimePage() {
                 onChange={(event) => setQuery(event.target.value)}
               />
             </label>
-            <span className="text-xs font-semibold uppercase text-slate-400">{rows.length} / {chantiers.length} chantier{chantiers.length > 1 ? "s" : ""}</span>
+            <span className="text-xs font-semibold uppercase text-slate-400">{rows.length} / {allRows.length} chantier{allRows.length > 1 ? "s" : ""}</span>
           </div>
         </div>
 
@@ -170,7 +276,7 @@ export default function ChantiersTimePage() {
           ) : chantiers.length === 0 ? (
             <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-6 text-center text-sm text-slate-500 lg:col-span-2">Aucun chantier actif à suivre.</div>
           ) : rows.length === 0 ? (
-            <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-6 text-center text-sm text-slate-500 lg:col-span-2">Aucun chantier ne correspond à cette recherche.</div>
+            <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-6 text-center text-sm text-slate-500 lg:col-span-2">Aucun chantier ne correspond à ce filtre ou cette recherche.</div>
           ) : rows.map(({ chantier, entries, planned, logged, delta, tone }) => {
             const isOver = tone === "over";
             const isMissing = tone === "missing";
