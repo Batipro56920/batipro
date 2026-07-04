@@ -335,7 +335,7 @@ export function useDashboardMetrics({ chantiers, materiel, alerts, activeView, l
       statusTone: chantierTone(chantier.status),
       finishLabel: chantier.date_fin_prevue ? `Fin prévue ${chantier.date_fin_prevue}` : "Fin non planifiée",
       progress: Math.max(0, Math.min(100, Number(chantier.avancement ?? 0))),
-      nextAction: Number(chantier.heures_prevues ?? 0)
+      nextAction: Number(chantier.heures_prevues ?? 0) > 0
         ? `${formatHours(Number(chantier.heures_passees ?? 0), locale)} consommées`
         : "Préparer les prochaines actions",
     }));
