@@ -169,7 +169,7 @@ export default function ChantierPlanningPage() {
             </Link>
             <Link
               to={`/chantiers/${id}/temps`}
-              className="rounded-xl border border-violet-200 bg-violet-50 px-3 py-2 text-sm font-medium text-violet-800 hover:bg-violet-100"
+              className="rounded-xl border border-slate-300 bg-slate-50 px-3 py-2 text-sm font-medium text-slate-800 hover:bg-slate-100"
             >
               Suivi des temps
             </Link>
