@@ -47,6 +47,19 @@ type PriorityAction = {
   disabled?: boolean;
 };
 
+const READINESS_FILTERS: ReadinessFilter[] = [
+  "missing_time",
+  "missing_cost",
+  "missing_technical",
+  "missing_preparation",
+  "quote_hidden",
+  "chantier_hidden",
+];
+
+function isReadinessFilter(value: string): value is ReadinessFilter {
+  return value === "" || READINESS_FILTERS.includes(value as ReadinessFilter);
+}
+
 function getPreparationSummary(
   preparationByTemplateId: Record<string, PreparationSummary>,
   templateId: string,
@@ -89,6 +102,9 @@ export default function BibliothequeTasksPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const templateQueryParam = searchParams.get("q") ?? "";
   const templateIdQueryParam = searchParams.get("templateId") ?? "";
+  const lotQueryParam = (searchParams.get("lot") ?? "").trim();
+  const readinessQueryParam = searchParams.get("readiness") ?? "";
+  const initialReadinessFilter = isReadinessFilter(readinessQueryParam) ? readinessQueryParam : "";
   const openedTemplateFromUrlRef = useRef("");
   const [rows, setRows] = useState<TaskTemplateRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -104,8 +120,8 @@ export default function BibliothequeTasksPage() {
   const [visibilityUpdateId, setVisibilityUpdateId] = useState<string | null>(null);
   const [toast, setToast] = useState<ToastState>(null);
   const [advancedPreparationEnabled, setAdvancedPreparationEnabled] = useState(false);
-  const [selectedLot, setSelectedLot] = useState("");
-  const [readinessFilter, setReadinessFilter] = useState<ReadinessFilter>("");
+  const [selectedLot, setSelectedLot] = useState(lotQueryParam);
+  const [readinessFilter, setReadinessFilter] = useState<ReadinessFilter>(initialReadinessFilter);
   const [preparationSchemaReady, setPreparationSchemaReady] = useState(true);
   const [preparationByTemplateId, setPreparationByTemplateId] = useState<Record<string, PreparationSummary>>({});
 
@@ -119,11 +135,35 @@ export default function BibliothequeTasksPage() {
     setQuery((current) => current === templateQueryParam ? current : templateQueryParam);
   }, [templateQueryParam]);
 
+  useEffect(() => {
+    const nextReadiness = isReadinessFilter(readinessQueryParam) ? readinessQueryParam : "";
+    setReadinessFilter((current) => current === nextReadiness ? current : nextReadiness);
+
+    if (readinessQueryParam && !isReadinessFilter(readinessQueryParam)) {
+      const nextParams = new URLSearchParams(searchParams);
+      nextParams.delete("readiness");
+      setSearchParams(nextParams, { replace: true });
+    }
+  }, [readinessQueryParam, searchParams, setSearchParams]);
+
   const lotOptions = useMemo(() => {
     return Array.from(
       new Set(rows.map((row) => (row.lot ?? "").trim()).filter((lot) => lot.length > 0)),
     ).sort((a, b) => a.localeCompare(b, locale));
   }, [locale, rows]);
+
+  useEffect(() => {
+    if (loading) return;
+
+    const nextLot = lotQueryParam && lotOptions.includes(lotQueryParam) ? lotQueryParam : "";
+    setSelectedLot((current) => current === nextLot ? current : nextLot);
+
+    if (lotQueryParam && !lotOptions.includes(lotQueryParam)) {
+      const nextParams = new URLSearchParams(searchParams);
+      nextParams.delete("lot");
+      setSearchParams(nextParams, { replace: true });
+    }
+  }, [loading, lotOptions, lotQueryParam, searchParams, setSearchParams]);
 
   const libraryStats = useMemo(() => {
     const withTime = rows.filter((row) => row.temps_prevu_par_unite_h !== null).length;
@@ -238,9 +278,16 @@ export default function BibliothequeTasksPage() {
   const hasActiveFilters = Boolean(query.trim() || selectedLot || readinessFilter);
 
   function resetFilters() {
-    updateQueryFromInput("");
+    setQuery("");
     setSelectedLot("");
     setReadinessFilter("");
+    openedTemplateFromUrlRef.current = "";
+    const nextParams = new URLSearchParams(searchParams);
+    nextParams.delete("q");
+    nextParams.delete("lot");
+    nextParams.delete("readiness");
+    nextParams.delete("templateId");
+    setSearchParams(nextParams, { replace: true });
   }
 
   function formatCurrency(value: number | null) {
@@ -366,8 +413,6 @@ export default function BibliothequeTasksPage() {
 
     if (!template) return;
 
-    setSelectedLot("");
-    setReadinessFilter("");
     setActiveTemplate(template);
     setDrawerError(null);
     setDrawerOpen(true);
@@ -452,6 +497,30 @@ export default function BibliothequeTasksPage() {
     setSearchParams(nextParams, { replace: true });
   }
 
+  function updateReadinessFilter(nextFilter: ReadinessFilter) {
+    setReadinessFilter(nextFilter);
+    const nextParams = new URLSearchParams(searchParams);
+    if (nextFilter) {
+      nextParams.set("readiness", nextFilter);
+    } else {
+      nextParams.delete("readiness");
+    }
+    nextParams.delete("templateId");
+    setSearchParams(nextParams, { replace: true });
+  }
+
+  function updateSelectedLot(nextLot: string) {
+    setSelectedLot(nextLot);
+    const nextParams = new URLSearchParams(searchParams);
+    if (nextLot) {
+      nextParams.set("lot", nextLot);
+    } else {
+      nextParams.delete("lot");
+    }
+    nextParams.delete("templateId");
+    setSearchParams(nextParams, { replace: true });
+  }
+
   function openCreateDrawer() {
     setActiveTemplate(null);
     setDrawerError(null);
@@ -472,9 +541,19 @@ export default function BibliothequeTasksPage() {
     if (action.disabled) return;
     setReadinessFilter(action.key);
     setSelectedLot("");
+    const nextParams = new URLSearchParams(searchParams);
+    nextParams.set("readiness", action.key);
+    nextParams.delete("lot");
     if (action.template) {
-      openEditDrawer(action.template);
+      nextParams.set("templateId", action.template.id);
+      openedTemplateFromUrlRef.current = `id:${action.template.id}`;
+      setActiveTemplate(action.template);
+      setDrawerError(null);
+      setDrawerOpen(true);
+    } else {
+      nextParams.delete("templateId");
     }
+    setSearchParams(nextParams, { replace: true });
   }
 
   function buildTemplateLink(templateId: string) {
@@ -629,7 +708,7 @@ export default function BibliothequeTasksPage() {
       <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-6">
         <button
           type="button"
-          onClick={() => setReadinessFilter("")}
+          onClick={() => updateReadinessFilter("")}
           className="rounded-2xl border bg-white p-4 text-left hover:bg-slate-50"
         >
           <div className="text-xs font-medium uppercase text-slate-500">Modèles</div>
@@ -638,7 +717,7 @@ export default function BibliothequeTasksPage() {
         </button>
         <button
           type="button"
-          onClick={() => setReadinessFilter("quote_hidden")}
+          onClick={() => updateReadinessFilter("quote_hidden")}
           className="rounded-2xl border bg-white p-4 text-left hover:bg-slate-50"
         >
           <div className="text-xs font-medium uppercase text-slate-500">Devis</div>
@@ -647,7 +726,7 @@ export default function BibliothequeTasksPage() {
         </button>
         <button
           type="button"
-          onClick={() => setReadinessFilter("chantier_hidden")}
+          onClick={() => updateReadinessFilter("chantier_hidden")}
           className="rounded-2xl border bg-white p-4 text-left hover:bg-slate-50"
         >
           <div className="text-xs font-medium uppercase text-slate-500">Chantier</div>
@@ -656,7 +735,7 @@ export default function BibliothequeTasksPage() {
         </button>
         <button
           type="button"
-          onClick={() => setReadinessFilter("missing_time")}
+          onClick={() => updateReadinessFilter("missing_time")}
           className="rounded-2xl border bg-white p-4 text-left hover:bg-slate-50"
         >
           <div className="text-xs font-medium uppercase text-slate-500">Temps</div>
@@ -665,7 +744,7 @@ export default function BibliothequeTasksPage() {
         </button>
         <button
           type="button"
-          onClick={() => setReadinessFilter("missing_cost")}
+          onClick={() => updateReadinessFilter("missing_cost")}
           className="rounded-2xl border bg-white p-4 text-left hover:bg-slate-50"
         >
           <div className="text-xs font-medium uppercase text-slate-500">Prix</div>
@@ -674,7 +753,7 @@ export default function BibliothequeTasksPage() {
         </button>
         <button
           type="button"
-          onClick={() => setReadinessFilter("missing_technical")}
+          onClick={() => updateReadinessFilter("missing_technical")}
           className="rounded-2xl border bg-white p-4 text-left hover:bg-slate-50"
         >
           <div className="text-xs font-medium uppercase text-slate-500">Technique</div>
@@ -745,7 +824,7 @@ export default function BibliothequeTasksPage() {
         <select
           className="w-full rounded-xl border bg-white px-3 py-2 text-sm"
           value={readinessFilter}
-          onChange={(e) => setReadinessFilter(e.target.value as ReadinessFilter)}
+          onChange={(e) => updateReadinessFilter(e.target.value as ReadinessFilter)}
         >
           <option value="">Tous les états</option>
           <option value="quote_hidden">Masqués au devis</option>
@@ -760,7 +839,7 @@ export default function BibliothequeTasksPage() {
         <select
           className="w-full rounded-xl border bg-white px-3 py-2 text-sm"
           value={selectedLot}
-          onChange={(e) => setSelectedLot(e.target.value)}
+          onChange={(e) => updateSelectedLot(e.target.value)}
         >
           <option value="">Tous les lots</option>
           {lotOptions.map((lot) => (
