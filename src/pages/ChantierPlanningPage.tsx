@@ -27,6 +27,16 @@ export default function ChantierPlanningPage() {
     [intervenants],
   );
 
+  const terrainFeedbackLabel = useMemo(() => {
+    if (terrainFeedbackSummary.priority > 0) {
+      return `${terrainFeedbackSummary.priority} retour${terrainFeedbackSummary.priority > 1 ? "s" : ""} urgent${terrainFeedbackSummary.priority > 1 ? "s" : ""}`;
+    }
+    if (terrainFeedbackSummary.open > 0) {
+      return `${terrainFeedbackSummary.open} retour${terrainFeedbackSummary.open > 1 ? "s" : ""} ouvert${terrainFeedbackSummary.open > 1 ? "s" : ""}`;
+    }
+    return "Aucun retour ouvert";
+  }, [terrainFeedbackSummary.open, terrainFeedbackSummary.priority]);
+
   useEffect(() => {
     let alive = true;
 
@@ -110,14 +120,21 @@ export default function ChantierPlanningPage() {
               <span>Début : {chantier?.date_debut ?? chantier?.planning_start_date ?? "-"}</span>
               <span>Fin : {chantier?.date_fin_prevue ?? chantier?.planning_end_date ?? "-"}</span>
               <span>{activeIntervenantsCount} intervenant{activeIntervenantsCount > 1 ? "s" : ""} affecté{activeIntervenantsCount > 1 ? "s" : ""}</span>
-              {terrainFeedbackSummary.open > 0 ? (
-                <span className={terrainFeedbackSummary.priority > 0 ? "font-semibold text-red-700" : "font-semibold text-blue-700"}>
-                  {terrainFeedbackSummary.priority > 0
-                    ? `${terrainFeedbackSummary.priority} retour terrain urgent`
-                    : `${terrainFeedbackSummary.open} retour terrain ouvert`}
-                </span>
-              ) : null}
+              <span className={terrainFeedbackSummary.priority > 0 ? "font-semibold text-red-700" : terrainFeedbackSummary.open > 0 ? "font-semibold text-blue-700" : "text-slate-500"}>
+                {terrainFeedbackLabel}
+              </span>
             </div>
+            {terrainFeedbackSummary.open > 0 ? (
+              <div className={[
+                "mt-3 rounded-2xl border px-3 py-2 text-sm",
+                terrainFeedbackSummary.priority > 0
+                  ? "border-red-200 bg-red-50 text-red-800"
+                  : "border-amber-200 bg-amber-50 text-amber-800",
+              ].join(" ")}
+              >
+                À arbitrer avant de figer le planning : les retours terrain ouverts peuvent impacter les affectations, délais ou reprises.
+              </div>
+            ) : null}
           </div>
           <div className="flex flex-wrap gap-2">
             <Link
@@ -151,6 +168,12 @@ export default function ChantierPlanningPage() {
               Tâches / exécution
             </Link>
             <Link
+              to={`/chantiers/${id}/temps`}
+              className="rounded-xl border border-violet-200 bg-violet-50 px-3 py-2 text-sm font-medium text-violet-800 hover:bg-violet-100"
+            >
+              Suivi des temps
+            </Link>
+            <Link
               to={`/chantiers/${id}/documents`}
               className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
             >
@@ -168,12 +191,12 @@ export default function ChantierPlanningPage() {
                 "rounded-xl border px-3 py-2 text-sm font-medium hover:bg-amber-100",
                 terrainFeedbackSummary.priority > 0
                   ? "border-red-200 bg-red-50 text-red-800"
-                  : "border-amber-200 bg-amber-50 text-amber-800",
+                  : terrainFeedbackSummary.open > 0
+                    ? "border-amber-200 bg-amber-50 text-amber-800"
+                    : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50",
               ].join(" ")}
             >
-              {terrainFeedbackSummary.open > 0
-                ? `Retours terrain (${terrainFeedbackSummary.priority > 0 ? `${terrainFeedbackSummary.priority} urgent` : terrainFeedbackSummary.open})`
-                : "Retours terrain"}
+              {terrainFeedbackSummary.open > 0 ? `Retours terrain (${terrainFeedbackLabel})` : "Retours terrain"}
             </Link>
           </div>
         </div>
