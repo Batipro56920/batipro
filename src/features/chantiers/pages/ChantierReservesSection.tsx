@@ -8,14 +8,15 @@ export default function ChantierReservesSection({ children }: { children: ReactN
   const [searchParams, setSearchParams] = useSearchParams();
   const targetedReserveId = searchParams.get("reserveId") ?? "";
   const sourceFeedbackId = searchParams.get("feedbackId") ?? "";
+  const hasTargetedReserve = Boolean(targetedReserveId);
   const hasSourceFeedback = Boolean(sourceFeedbackId);
   const encodedChantierId = id ? encodeURIComponent(id) : "";
-  const terrainFeedbackHref = id ? `/retours-terrain?chantierId=${encodedChantierId}` : "/retours-terrain";
+  const terrainFeedbackParams = new URLSearchParams();
+  if (id) terrainFeedbackParams.set("chantierId", id);
+  if (hasSourceFeedback) terrainFeedbackParams.set("feedbackId", sourceFeedbackId);
+  const terrainFeedbackHref = id ? `/retours-terrain?${terrainFeedbackParams.toString()}` : "/retours-terrain";
   const chantierJournalHref = id ? `/chantiers/${encodedChantierId}/historique` : "";
-  const sourceFeedbackHref =
-    id && hasSourceFeedback
-      ? `/retours-terrain?chantierId=${encodedChantierId}&feedbackId=${encodeURIComponent(sourceFeedbackId)}`
-      : terrainFeedbackHref;
+  const sourceFeedbackHref = hasSourceFeedback ? terrainFeedbackHref : `/retours-terrain?chantierId=${encodedChantierId}`;
   const reserveAutoOpenKey = targetedReserveId
     ? `reserve:${targetedReserveId}`
     : hasSourceFeedback
@@ -28,6 +29,14 @@ export default function ChantierReservesSection({ children }: { children: ReactN
     : hasSourceFeedback
       ? "Retour terrain source à qualifier"
       : "";
+  const chapterActionLabel = hasTargetedReserve
+    ? "Traiter la réserve ciblée"
+    : hasSourceFeedback
+      ? "Qualifier le retour terrain"
+      : "Gérer les réserves";
+  const chapterSubtitle = hasSourceFeedback
+    ? "Réserves ouvertes et levées. Le retour terrain source reste relié pour traiter la qualité chantier sans perdre l'origine du signalement."
+    : "Réserves ouvertes et levées. La création, le filtre et le détail se font dans le panneau latéral.";
 
   function clearTargetedReserve() {
     if (!searchParams.has("reserveId") && !searchParams.has("feedbackId")) return;
@@ -41,8 +50,8 @@ export default function ChantierReservesSection({ children }: { children: ReactN
     <ChantierChapterDrawer
       eyebrow="Qualité chantier"
       title="Réserves"
-      subtitle="Réserves ouvertes et levées. La création, le filtre et le détail se font dans le panneau latéral."
-      actionLabel="Gérer les réserves"
+      subtitle={chapterSubtitle}
+      actionLabel={chapterActionLabel}
       previewClassName="batipro-chapter-preview--reserves"
       autoOpenKey={reserveAutoOpenKey}
       autoOpenLabel={reserveAutoOpenLabel}
@@ -122,7 +131,9 @@ export default function ChantierReservesSection({ children }: { children: ReactN
           <div>
             <div className="font-semibold">Retours terrain du chantier</div>
             <div className="mt-1 text-blue-800/80">
-              Retrouvez les observations, blocages et anomalies remontés par les intervenants, créez une réserve si nécessaire puis suivez-la ici dans la qualité chantier.
+              {hasSourceFeedback
+                ? "Le lien vers les retours terrain conserve le signalement source pour revenir au bon contexte après traitement de la réserve."
+                : "Retrouvez les observations, blocages et anomalies remontés par les intervenants, créez une réserve si nécessaire puis suivez-la ici dans la qualité chantier."}
             </div>
           </div>
           <div className="flex shrink-0 flex-wrap gap-2">
@@ -146,7 +157,7 @@ export default function ChantierReservesSection({ children }: { children: ReactN
               to={terrainFeedbackHref}
               className="inline-flex items-center justify-center rounded-xl bg-blue-700 px-3 py-2 text-sm font-semibold text-white hover:bg-blue-800"
             >
-              Voir les retours terrain
+              {hasSourceFeedback ? "Voir le retour terrain" : "Voir les retours terrain"}
             </Link>
           </div>
         </div>
