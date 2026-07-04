@@ -98,7 +98,7 @@ function generateTemplateFields(drawer: HTMLElement) {
   const profile = getLotProfile(context.lot);
   const description = buildTechnicalDescription(context, profile);
   const characteristics = buildCharacteristics(context, profile);
-  const remarks = buildFieldReturns(context, profile);
+  const remarks = buildFieldReturns(profile);
 
   const descriptionInput = getLabeledTextarea(drawer, "description technique");
   const characteristicsInput = getLabeledTextarea(drawer, "caracteristiques") ?? getLabeledTextarea(drawer, "caractéristiques");
@@ -163,7 +163,7 @@ function buildCharacteristics(context: ReturnType<typeof readTemplateContext>, p
   return uniqueLines(lines);
 }
 
-function buildFieldReturns(context: ReturnType<typeof readTemplateContext>, profile: ReturnType<typeof getLotProfile>) {
+function buildFieldReturns(profile: ReturnType<typeof getLotProfile>) {
   const lines = [
     "Retour terrain attendu : confirmer quantité réellement consommée, temps passé et éventuels écarts avec le ratio prévu.",
     "Contrôle qualité : vérifier support, finition, conformité aux fiches produit et réserves éventuelles avant clôture.",
