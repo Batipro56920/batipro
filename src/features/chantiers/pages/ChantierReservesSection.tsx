@@ -40,6 +40,13 @@ export default function ChantierReservesSection({ children }: { children: ReactN
     ? "Réserves ouvertes et levées. Le retour terrain source reste relié pour traiter la qualité chantier sans perdre l'origine du signalement."
     : "Réserves ouvertes et levées. La création, le filtre et le détail se font dans le panneau latéral.";
 
+  function clearReserveTargetOnly() {
+    if (!searchParams.has("reserveId")) return;
+    const nextParams = new URLSearchParams(searchParams);
+    nextParams.delete("reserveId");
+    setSearchParams(nextParams, { replace: true });
+  }
+
   function clearTargetedReserve() {
     if (!searchParams.has("reserveId") && !searchParams.has("feedbackId")) return;
     const nextParams = new URLSearchParams(searchParams);
@@ -75,6 +82,15 @@ export default function ChantierReservesSection({ children }: { children: ReactN
               >
                 {hasSourceFeedback ? "Ouvrir le retour source" : "Voir retours chantier"}
               </Link>
+              {hasSourceFeedback ? (
+                <button
+                  type="button"
+                  onClick={clearReserveTargetOnly}
+                  className="inline-flex items-center justify-center rounded-xl border border-blue-200 bg-white px-3 py-2 text-sm font-semibold text-blue-800 hover:bg-blue-50"
+                >
+                  Garder le retour source
+                </button>
+              ) : null}
               {chantierJournalHref ? (
                 <Link
                   to={chantierJournalHref}
