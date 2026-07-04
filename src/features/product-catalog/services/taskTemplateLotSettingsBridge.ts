@@ -17,20 +17,28 @@ export function installTaskTemplateLotSettingsBridge() {
 }
 
 function installLotSettingsButton() {
-  const page = findTaskLibraryPage();
-  if (!page || page.dataset.batiproLotSettingsInstalled === "true") return;
+  const activeTemplatesTab = findActiveTemplatesTab();
+  if (!activeTemplatesTab) {
+    removeLotSettingsBands();
+    return;
+  }
 
-  const searchInput = Array.from(page.querySelectorAll("input"))
-    .find((input) => input.placeholder?.toLowerCase().includes("rechercher"));
-  const anchor = searchInput?.closest(".rounded-2xl") ?? searchInput?.parentElement;
-  if (!anchor?.parentElement) return;
+  const anchor = findTemplateSearchAnchor(activeTemplatesTab);
+  if (!anchor?.parentElement) {
+    removeLotSettingsBands();
+    return;
+  }
 
-  page.dataset.batiproLotSettingsInstalled = "true";
+  const existingBand = document.querySelector("[data-batipro-lot-settings-band]");
+  if (existingBand && anchor.parentElement.contains(existingBand)) return;
+
+  removeLotSettingsBands();
   anchor.parentElement.insertBefore(buildSettingsBand(), anchor);
 }
 
 function buildSettingsBand() {
   const band = document.createElement("div");
+  band.dataset.batiproLotSettingsBand = "true";
   band.className = "mb-4 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-blue-200 bg-blue-50/60 px-4 py-3";
 
   const text = document.createElement("div");
@@ -184,10 +192,58 @@ function readProfiles(rows: HTMLElement): TaskTemplateLotProfile[] {
   });
 }
 
-function findTaskLibraryPage() {
-  return Array.from(document.querySelectorAll("main, section, div"))
+function findActiveTemplatesTab() {
+  return Array.from(document.querySelectorAll("button, [role='tab']"))
     .filter((element): element is HTMLElement => element instanceof HTMLElement)
-    .find((element) => element.textContent?.includes("Bibliothèque") && element.textContent?.includes("Templates de tâches")) ?? null;
+    .find((element) => isVisible(element) && normalizeText(element.textContent) === "templates de taches" && isActiveTab(element)) ?? null;
+}
+
+function findTemplateSearchAnchor(activeTemplatesTab: HTMLElement) {
+  const inputs = Array.from(document.querySelectorAll("input"))
+    .filter((input): input is HTMLInputElement => input instanceof HTMLInputElement)
+    .filter((input) => isVisible(input) && normalizeText(input.placeholder).includes("rechercher"));
+
+  const afterTab = inputs.filter((input) => activeTemplatesTab.compareDocumentPosition(input) & Node.DOCUMENT_POSITION_FOLLOWING);
+  const templateInput = afterTab.find((input) => {
+    const zone = closestSearchZone(input);
+    const text = normalizeText(`${input.placeholder} ${zone?.textContent ?? ""}`);
+    return text.includes("template") || text.includes("tache");
+  }) ?? afterTab[0] ?? inputs[0];
+
+  return templateInput?.closest(".rounded-2xl") ?? templateInput?.parentElement ?? null;
+}
+
+function closestSearchZone(input: HTMLInputElement) {
+  let element: HTMLElement | null = input;
+  for (let depth = 0; depth < 4 && element?.parentElement; depth += 1) {
+    element = element.parentElement;
+  }
+  return element;
+}
+
+function isActiveTab(element: HTMLElement) {
+  const className = String(element.getAttribute("class") ?? "");
+  return element.getAttribute("aria-selected") === "true"
+    || element.getAttribute("data-state") === "active"
+    || className.includes("bg-slate-900")
+    || className.includes("text-white");
+}
+
+function removeLotSettingsBands() {
+  document.querySelectorAll("[data-batipro-lot-settings-band]").forEach((band) => band.remove());
+}
+
+function isVisible(element: HTMLElement) {
+  return Boolean(element.offsetWidth || element.offsetHeight || element.getClientRects().length);
+}
+
+function normalizeText(value: unknown) {
+  return String(value ?? "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .toLowerCase();
 }
 
 function closeExistingDrawer() {
