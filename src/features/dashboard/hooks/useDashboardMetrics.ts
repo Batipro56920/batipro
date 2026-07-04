@@ -205,10 +205,10 @@ export function useDashboardMetrics({ chantiers, materiel, alerts, activeView, l
     },
     {
       key: "alertes",
-      label: "Tâches urgentes",
-      value: loading ? "..." : String(alertStats.taskBlockers),
-      hint: alertStats.taskBlockers > 0 ? "Action requise" : "Flux sous contrôle",
-      tone: alertStats.taskBlockers > 0 ? "danger" : "success",
+      label: "Alertes chantier",
+      value: loading ? "..." : String(alerts.length),
+      hint: alerts.length > 0 ? "Réserves, tâches, achats, préparation" : "Aucune alerte active",
+      tone: alerts.length > 0 ? (alertStats.dangerAlerts > 0 ? "danger" : "warning") : "success",
     },
     {
       key: "avancement",
@@ -244,7 +244,7 @@ export function useDashboardMetrics({ chantiers, materiel, alerts, activeView, l
       href: "/rentabilite",
       tone: "normal",
     },
-  ], [alertStats, avgAvancement, chantiers.length, loading, locale, pendingMateriel.length, totalHeuresPassees, totalHeuresPrevues]);
+  ], [alertStats, alerts.length, avgAvancement, chantiers.length, loading, locale, pendingMateriel.length, totalHeuresPassees, totalHeuresPrevues]);
 
   const alertCards = useMemo<DashboardAlertCard[]>(() => [
     {
