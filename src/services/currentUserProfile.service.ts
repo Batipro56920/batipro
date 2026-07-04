@@ -78,6 +78,16 @@ function isMissingFeaturePermissionsColumnError(error: unknown): boolean {
   return code === "42703" || (msg.includes("feature_permissions") && (msg.includes("schema cache") || msg.includes("does not exist") || msg.includes("could not find")));
 }
 
+function isMissingOptionalIntervenantLinkError(error: unknown): boolean {
+  const code = String((error as any)?.code ?? "");
+  const msg = String((error as any)?.message ?? "").toLowerCase();
+  if (code === "42P01" || code === "42703") return true;
+  return (
+    (msg.includes("intervenants") || msg.includes("intervenant_users")) &&
+    (msg.includes("schema cache") || msg.includes("does not exist") || msg.includes("could not find") || msg.includes("relation"))
+  );
+}
+
 export async function getCurrentUserProfile(): Promise<CurrentUserProfile | null> {
   const { data: sessionData } = await supabase.auth.getSession();
   let user = sessionData.session?.user ?? null;
@@ -156,8 +166,12 @@ export async function hasLinkedIntervenantAccount(userId: string): Promise<boole
       .eq("user_id", userId),
   ]);
 
-  if (directLink.error) throw new Error(directLink.error.message);
-  if (junctionLink.error) throw new Error(junctionLink.error.message);
+  if (directLink.error && !isMissingOptionalIntervenantLinkError(directLink.error)) {
+    throw new Error(directLink.error.message);
+  }
+  if (junctionLink.error && !isMissingOptionalIntervenantLinkError(junctionLink.error)) {
+    throw new Error(junctionLink.error.message);
+  }
 
   return Boolean((directLink.count ?? 0) > 0 || (junctionLink.count ?? 0) > 0);
 }
