@@ -568,19 +568,27 @@ export async function createApporteurLeadPortal(jwt: string, input: {
 
   const duplicateClientName = normalizeDuplicateKey(payload.client_name);
   const duplicatePhone = normalizeDuplicatePhone(payload.telephone);
-  const { data: candidateLeads, error: duplicateError } = await portalClient
+  const duplicateQuery = portalClient
     .from("apporteur_leads")
-    .select("id,telephone")
-    .eq("apporteur_id", payload.apporteur_id)
+    .select("id,telephone,apporteur_id")
+    .eq("organization_id", payload.organization_id)
     .ilike("client_name", duplicateClientName)
     .limit(20);
+  const { data: candidateLeads, error: duplicateError } = await duplicateQuery;
 
   if (duplicateError) throw new Error(duplicateError.message);
 
-  const existingLead = ((candidateLeads ?? []) as Array<{ id: string; telephone: string | null }>).find(
+  const existingLead = ((candidateLeads ?? []) as Array<{ id: string; telephone: string | null; apporteur_id: string | null }>).find(
     (lead) => normalizeDuplicatePhone(lead.telephone) === duplicatePhone,
   );
-  if (existingLead) throw new Error("Ce client a déjà été transmis par ce portail apporteur.");
+  if (existingLead) {
+    const sameApporteur = existingLead.apporteur_id === payload.apporteur_id;
+    throw new Error(
+      sameApporteur
+        ? "Ce client a déjà été transmis par votre portail apporteur."
+        : "Ce client a déjà été transmis à l'entreprise. Contactez l'équipe Batipro avant de le renvoyer.",
+    );
+  }
 
   const response = await portalClient
     .from("apporteur_leads")
