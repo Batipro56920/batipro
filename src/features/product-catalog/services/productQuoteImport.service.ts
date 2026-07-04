@@ -190,8 +190,13 @@ function mergeExtractedProduct(
   let changed = false;
 
   const next: ProductCatalogItem = { ...product, supplierPrices: [...product.supplierPrices] };
+  const shouldReplaceCustomerSupplier = Boolean(supplier && next.mainSupplierName && looksLikeCustomerName(next.mainSupplierName));
 
-  if (!next.mainSupplierId && supplier?.id) {
+  if (shouldReplaceCustomerSupplier) {
+    next.mainSupplierId = supplier?.id ?? null;
+    next.mainSupplierName = supplier?.name ?? normalizeText(extracted.supplier_name);
+    changed = true;
+  } else if (!next.mainSupplierId && supplier?.id) {
     next.mainSupplierId = supplier.id;
     next.mainSupplierName = supplier.name;
     changed = true;
