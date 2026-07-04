@@ -268,7 +268,7 @@ export function useDashboardMetrics({ chantiers, materiel, alerts, activeView, l
       label: "Achats attente",
       value: alertStats.purchaseBlockers + pendingMateriel.length,
       description: "Approvisionnements à suivre",
-      href: "/bons-commande",
+      href: "/financier/decaissements",
       tone: alertStats.purchaseBlockers + pendingMateriel.length > 0 ? "warning" : "success",
     },
     {
@@ -335,7 +335,7 @@ export function useDashboardMetrics({ chantiers, materiel, alerts, activeView, l
       statusTone: chantierTone(chantier.status),
       finishLabel: chantier.date_fin_prevue ? `Fin prévue ${chantier.date_fin_prevue}` : "Fin non planifiée",
       progress: Math.max(0, Math.min(100, Number(chantier.avancement ?? 0))),
-      nextAction: Number(chantier.heures_prevues ?? 0) > 0
+      nextAction: Number(chantier.heures_prevues ?? 0)
         ? `${formatHours(Number(chantier.heures_passees ?? 0), locale)} consommées`
         : "Préparer les prochaines actions",
     }));
