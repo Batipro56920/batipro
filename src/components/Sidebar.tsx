@@ -263,11 +263,11 @@ export default function Sidebar({ collapsed = false, onToggleCollapse, companyNa
     },
     {
       to: "/bibliotheque",
-      label: t("sidebar.library"),
+      label: "Bibliothèque tâches",
       icon: LibraryBig,
       feature: "documents" as const,
       permissionKey: "bibliotheque" as const,
-      group: "Ressources",
+      group: "Production",
     },
     {
       to: "/ressources/profils-types",
