@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import { ArrowLeft, Clock3, Trash2 } from "lucide-react";
+import { AlertTriangle, ArrowLeft, Clock3, Trash2 } from "lucide-react";
 
 import { getChantierById, type ChantierRow } from "../services/chantiers.service";
 import { getTasksByChantierIdDetailed, type ChantierTaskRow } from "../services/chantierTasks.service";
@@ -25,8 +25,45 @@ function formatHours(value: number | null | undefined) {
   return `${Math.round(n * 100) / 100} h`;
 }
 
-function getTaskTitle(task: ChantierTaskRow | undefined) {
+function formatQuantity(value: number | null | undefined, unit: string | null | undefined) {
+  const n = Number(value ?? 0);
+  if (n <= 0) return "-";
+  const label = Math.round(n * 100) / 100;
+  return unit ? `${label} ${unit}` : String(label);
+}
+
+function getTaskTitle(task: ChantierTaskRow | undefined | null) {
   return task?.titre_terrain?.trim() || task?.titre?.trim() || "Tache chantier";
+}
+
+type TaskTimeSummary = {
+  id: string;
+  task: ChantierTaskRow | null;
+  planned: number;
+  logged: number;
+  delta: number;
+  quantity: number;
+  entriesCount: number;
+  latestDate: string | null;
+  tone: "over" | "missing" | "ok";
+};
+
+function buildTaskTimeTone(params: { planned: number; logged: number; entriesCount: number }) {
+  if (params.planned > 0 && params.logged > params.planned) return "over" as const;
+  if (params.entriesCount === 0) return "missing" as const;
+  return "ok" as const;
+}
+
+function statusLabel(summary: TaskTimeSummary) {
+  if (summary.tone === "over") return `Dépassement ${formatHours(summary.delta)}`;
+  if (summary.tone === "missing") return "Aucune saisie";
+  return "Sous contrôle";
+}
+
+function statusClass(summary: TaskTimeSummary) {
+  if (summary.tone === "over") return "border-red-200 bg-red-50 text-red-700";
+  if (summary.tone === "missing") return "border-amber-200 bg-amber-50 text-amber-700";
+  return "border-emerald-200 bg-emerald-50 text-emerald-700";
 }
 
 export default function ChantierTimePage() {
@@ -55,6 +92,68 @@ export default function ChantierTimePage() {
   );
   const plannedHours = Number(chantier?.heures_prevues ?? 0) || tasks.reduce((sum, task) => sum + Number(task.temps_prevu_h ?? 0), 0);
   const selectedTask = taskId ? taskById.get(taskId) : null;
+
+  const taskTimeSummaries = useMemo<TaskTimeSummary[]>(() => {
+    const aggregateByTask = new Map<string, { logged: number; quantity: number; entriesCount: number; latestDate: string | null }>();
+
+    for (const entry of entries) {
+      const key = entry.task_id || "__sans_tache__";
+      const current = aggregateByTask.get(key) ?? { logged: 0, quantity: 0, entriesCount: 0, latestDate: null };
+      current.logged += Number(entry.duration_hours ?? 0);
+      current.quantity += Number(entry.quantite_realisee ?? 0);
+      current.entriesCount += 1;
+      if (!current.latestDate || entry.work_date > current.latestDate) current.latestDate = entry.work_date;
+      aggregateByTask.set(key, current);
+    }
+
+    const summaries = tasks.map((task) => {
+      const aggregate = aggregateByTask.get(task.id) ?? { logged: 0, quantity: 0, entriesCount: 0, latestDate: null };
+      const planned = Number(task.temps_prevu_h ?? 0);
+      const logged = aggregate.logged;
+      return {
+        id: task.id,
+        task,
+        planned,
+        logged,
+        delta: logged - planned,
+        quantity: aggregate.quantity,
+        entriesCount: aggregate.entriesCount,
+        latestDate: aggregate.latestDate,
+        tone: buildTaskTimeTone({ planned, logged, entriesCount: aggregate.entriesCount }),
+      };
+    });
+
+    const orphanAggregate = aggregateByTask.get("__sans_tache__");
+    if (orphanAggregate) {
+      summaries.push({
+        id: "__sans_tache__",
+        task: null,
+        planned: 0,
+        logged: orphanAggregate.logged,
+        delta: orphanAggregate.logged,
+        quantity: orphanAggregate.quantity,
+        entriesCount: orphanAggregate.entriesCount,
+        latestDate: orphanAggregate.latestDate,
+        tone: "ok",
+      });
+    }
+
+    const weight = { over: 0, missing: 1, ok: 2 } as const;
+    return summaries.sort((a, b) => {
+      const byTone = weight[a.tone] - weight[b.tone];
+      if (byTone !== 0) return byTone;
+      if (a.tone === "over" || b.tone === "over") return b.delta - a.delta;
+      return getTaskTitle(a.task).localeCompare(getTaskTitle(b.task), "fr");
+    });
+  }, [entries, tasks]);
+
+  const timeControlStats = useMemo(() => {
+    return {
+      over: taskTimeSummaries.filter((summary) => summary.tone === "over").length,
+      missing: taskTimeSummaries.filter((summary) => summary.tone === "missing").length,
+      withTime: taskTimeSummaries.filter((summary) => summary.entriesCount > 0).length,
+    };
+  }, [taskTimeSummaries]);
 
   async function refresh() {
     if (!id) return;
@@ -235,7 +334,7 @@ export default function ChantierTimePage() {
         </div>
       </section>
 
-      <section className="grid gap-3 md:grid-cols-3">
+      <section className="grid gap-3 md:grid-cols-4">
         <article className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
           <div className="text-xs font-semibold uppercase text-slate-400">Prévu</div>
           <div className="mt-2 text-2xl font-semibold text-slate-950">{formatHours(plannedHours)}</div>
@@ -248,6 +347,67 @@ export default function ChantierTimePage() {
           <div className="text-xs font-semibold uppercase text-slate-400">Écart</div>
           <div className={`mt-2 text-2xl font-semibold ${totalLogged > plannedHours && plannedHours > 0 ? "text-red-700" : "text-slate-950"}`}>{formatHours(totalLogged - plannedHours)}</div>
         </article>
+        <article className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+          <div className="text-xs font-semibold uppercase text-slate-400">Tâches à contrôler</div>
+          <div className={`mt-2 text-2xl font-semibold ${timeControlStats.over > 0 ? "text-red-700" : timeControlStats.missing > 0 ? "text-amber-700" : "text-slate-950"}`}>
+            {timeControlStats.over + timeControlStats.missing}
+          </div>
+        </article>
+      </section>
+
+      <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+        <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <h2 className="text-lg font-semibold text-slate-950">Temps par tâche</h2>
+            <p className="text-sm text-slate-500">Synthèse temps, quantité réalisée et dernier pointage pour rapprocher saisie terrain et avancement.</p>
+          </div>
+          <span className="text-xs font-semibold uppercase text-slate-400">
+            {timeControlStats.withTime} / {taskTimeSummaries.length} avec saisie
+          </span>
+        </div>
+
+        <div className="mt-4 grid gap-3 lg:grid-cols-2">
+          {taskTimeSummaries.length === 0 ? (
+            <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-6 text-center text-sm text-slate-500 lg:col-span-2">
+              Aucune tâche chantier à rapprocher des temps.
+            </div>
+          ) : taskTimeSummaries.map((summary) => (
+            <article key={summary.id} className={`rounded-2xl border bg-white p-4 shadow-sm ${summary.tone === "over" ? "border-red-200" : "border-slate-200"}`}>
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                <div className="min-w-0">
+                  <div className="truncate font-semibold text-slate-950">{summary.task ? getTaskTitle(summary.task) : "Saisies sans tâche rattachée"}</div>
+                  <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-sm text-slate-500">
+                    <span>{summary.task?.lot || summary.task?.corps_etat || "Lot non renseigné"}</span>
+                    <span>{summary.latestDate ? `Dernière saisie : ${summary.latestDate}` : "Aucune saisie"}</span>
+                  </div>
+                </div>
+                <span className={`inline-flex shrink-0 items-center gap-1 rounded-full border px-2 py-1 text-xs font-semibold ${statusClass(summary)}`}>
+                  {summary.tone === "over" ? <AlertTriangle className="h-3 w-3" /> : null}
+                  {statusLabel(summary)}
+                </span>
+              </div>
+
+              <div className="mt-4 grid grid-cols-2 gap-2 text-sm sm:grid-cols-4">
+                <div className="rounded-xl bg-slate-50 p-3">
+                  <div className="text-[11px] font-semibold uppercase text-slate-400">Prévu</div>
+                  <div className="mt-1 font-semibold text-slate-950">{formatHours(summary.planned)}</div>
+                </div>
+                <div className="rounded-xl bg-slate-50 p-3">
+                  <div className="text-[11px] font-semibold uppercase text-slate-400">Saisi</div>
+                  <div className="mt-1 font-semibold text-slate-950">{formatHours(summary.logged)}</div>
+                </div>
+                <div className="rounded-xl bg-slate-50 p-3">
+                  <div className="text-[11px] font-semibold uppercase text-slate-400">Quantité</div>
+                  <div className="mt-1 font-semibold text-slate-950">{formatQuantity(summary.quantity, summary.task?.unite)}</div>
+                </div>
+                <div className="rounded-xl bg-slate-50 p-3">
+                  <div className="text-[11px] font-semibold uppercase text-slate-400">Pointages</div>
+                  <div className="mt-1 font-semibold text-slate-950">{summary.entriesCount}</div>
+                </div>
+              </div>
+            </article>
+          ))}
+        </div>
       </section>
 
       <section className="grid gap-5 xl:grid-cols-[minmax(0,0.95fr)_minmax(0,1.25fr)]">
