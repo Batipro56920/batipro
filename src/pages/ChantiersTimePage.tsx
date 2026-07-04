@@ -2,11 +2,13 @@ import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { AlertTriangle, ArrowRight, CalendarDays, Clock3, ClipboardList, RefreshCw, Search, Users } from "lucide-react";
 
+import { supabase } from "../lib/supabaseClient";
 import { listChantiers, type ChantierRow } from "../services/chantiers.service";
 import { listChantierTimeEntriesByChantierId, type ChantierTimeEntryRow } from "../services/chantierTimeEntries.service";
 
 type TimeTone = "over" | "missing" | "ok";
 type TimePriorityFilter = "all" | TimeTone;
+type TerrainFeedbackSummary = { open: number; priority: number };
 
 type TimeRow = {
   chantier: ChantierRow;
@@ -15,6 +17,7 @@ type TimeRow = {
   logged: number;
   delta: number;
   tone: TimeTone;
+  terrainFeedback: TerrainFeedbackSummary;
   searchable: string;
 };
 
@@ -24,6 +27,9 @@ const FILTER_LABELS: Record<TimePriorityFilter, string> = {
   missing: "Chantiers sans saisie temps",
   ok: "Chantiers sous contrôle",
 };
+
+const OPEN_TERRAIN_FEEDBACK_STATUSES = ["nouveau", "en_cours"] as const;
+const PRIORITY_TERRAIN_FEEDBACK_URGENCIES = new Set(["critique", "urgente"]);
 
 function formatHours(value: number | null | undefined) {
   const n = Number(value ?? 0);
@@ -46,6 +52,40 @@ function getTimeTone(params: { planned: number; logged: number; entriesCount: nu
   if (params.planned > 0 && params.logged > params.planned) return "over" as const;
   if (params.entriesCount === 0) return "missing" as const;
   return "ok" as const;
+}
+
+function getTerrainFeedbackLabel(summary: TerrainFeedbackSummary) {
+  if (summary.priority > 0) return `${summary.priority} retour${summary.priority > 1 ? "s" : ""} urgent${summary.priority > 1 ? "s" : ""}`;
+  if (summary.open > 0) return `${summary.open} retour${summary.open > 1 ? "s" : ""} terrain`;
+  return "Aucun retour ouvert";
+}
+
+async function loadTerrainFeedbackSummaries(chantierIds: string[]): Promise<Record<string, TerrainFeedbackSummary>> {
+  if (chantierIds.length === 0) return {};
+
+  const { data, error } = await (supabase as any)
+    .from("terrain_feedbacks")
+    .select("chantier_id,status,urgency")
+    .in("chantier_id", chantierIds)
+    .in("status", [...OPEN_TERRAIN_FEEDBACK_STATUSES]);
+
+  if (error) {
+    console.warn("[chantiers-time] terrain feedback summaries skipped", error);
+    return {};
+  }
+
+  const summaries: Record<string, TerrainFeedbackSummary> = {};
+  for (const row of (data ?? []) as Array<Record<string, unknown>>) {
+    const chantierId = String(row.chantier_id ?? "");
+    if (!chantierId) continue;
+
+    const current = summaries[chantierId] ?? { open: 0, priority: 0 };
+    current.open += 1;
+    if (PRIORITY_TERRAIN_FEEDBACK_URGENCIES.has(String(row.urgency ?? ""))) current.priority += 1;
+    summaries[chantierId] = current;
+  }
+
+  return summaries;
 }
 
 function TimeFilterCard({
@@ -87,6 +127,7 @@ function TimeFilterCard({
 export default function ChantiersTimePage() {
   const [chantiers, setChantiers] = useState<ChantierRow[]>([]);
   const [entriesByChantier, setEntriesByChantier] = useState<Record<string, ChantierTimeEntryRow[]>>({});
+  const [terrainFeedbackByChantier, setTerrainFeedbackByChantier] = useState<Record<string, TerrainFeedbackSummary>>({});
   const [query, setQuery] = useState("");
   const [activeFilter, setActiveFilter] = useState<TimePriorityFilter>("all");
   const [loading, setLoading] = useState(true);
@@ -100,6 +141,7 @@ export default function ChantiersTimePage() {
         const logged = getTotal(entries);
         const delta = logged - planned;
         const tone = getTimeTone({ planned, logged, entriesCount: entries.length });
+        const terrainFeedback = terrainFeedbackByChantier[chantier.id] ?? { open: 0, priority: 0 };
 
         return {
           chantier,
@@ -108,17 +150,22 @@ export default function ChantiersTimePage() {
           logged,
           delta,
           tone,
-          searchable: normalizeSearch(`${chantier.nom} ${chantier.client ?? ""} ${chantier.adresse ?? ""}`),
+          terrainFeedback,
+          searchable: normalizeSearch(`${chantier.nom} ${chantier.client ?? ""} ${chantier.adresse ?? ""} ${terrainFeedback.open > 0 ? "retours terrain" : ""}`),
         };
       })
       .sort((a, b) => {
         const weight = { over: 0, missing: 1, ok: 2 } as const;
         const byTone = weight[a.tone] - weight[b.tone];
         if (byTone !== 0) return byTone;
+        const byPriorityFeedback = b.terrainFeedback.priority - a.terrainFeedback.priority;
+        if (byPriorityFeedback !== 0) return byPriorityFeedback;
+        const byOpenFeedback = b.terrainFeedback.open - a.terrainFeedback.open;
+        if (byOpenFeedback !== 0) return byOpenFeedback;
         if (a.tone === "over" || b.tone === "over") return b.delta - a.delta;
         return a.chantier.nom.localeCompare(b.chantier.nom, "fr");
       });
-  }, [chantiers, entriesByChantier]);
+  }, [chantiers, entriesByChantier, terrainFeedbackByChantier]);
 
   const rows = useMemo(() => {
     const search = normalizeSearch(query);
@@ -135,7 +182,9 @@ export default function ChantiersTimePage() {
     const missingTime = allRows.filter((row) => row.tone === "missing").length;
     const overBudget = allRows.filter((row) => row.tone === "over").length;
     const underControl = allRows.filter((row) => row.tone === "ok").length;
-    return { planned, logged, missingTime, overBudget, underControl };
+    const openTerrainFeedbacks = allRows.reduce((sum, row) => sum + row.terrainFeedback.open, 0);
+    const priorityTerrainFeedbacks = allRows.reduce((sum, row) => sum + row.terrainFeedback.priority, 0);
+    return { planned, logged, missingTime, overBudget, underControl, openTerrainFeedbacks, priorityTerrainFeedbacks };
   }, [allRows, chantiers, entriesByChantier]);
 
   async function refresh() {
@@ -143,21 +192,26 @@ export default function ChantiersTimePage() {
     setError(null);
     try {
       const rows = await listChantiers({ scope: "actifs" });
-      const pairs = await Promise.all(
-        rows.map(async (chantier) => {
-          try {
-            return [chantier.id, await listChantierTimeEntriesByChantierId(chantier.id)] as const;
-          } catch {
-            return [chantier.id, [] as ChantierTimeEntryRow[]] as const;
-          }
-        }),
-      );
+      const [pairs, terrainFeedbackSummaries] = await Promise.all([
+        Promise.all(
+          rows.map(async (chantier) => {
+            try {
+              return [chantier.id, await listChantierTimeEntriesByChantierId(chantier.id)] as const;
+            } catch {
+              return [chantier.id, [] as ChantierTimeEntryRow[]] as const;
+            }
+          }),
+        ),
+        loadTerrainFeedbackSummaries(rows.map((chantier) => chantier.id)),
+      ]);
       setChantiers(rows);
       setEntriesByChantier(Object.fromEntries(pairs));
+      setTerrainFeedbackByChantier(terrainFeedbackSummaries);
     } catch (err: any) {
       setError(err?.message ?? "Impossible de charger le suivi des temps.");
       setChantiers([]);
       setEntriesByChantier({});
+      setTerrainFeedbackByChantier({});
     } finally {
       setLoading(false);
     }
@@ -175,7 +229,7 @@ export default function ChantiersTimePage() {
             <div className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-400">Pilotage</div>
             <h1 className="mt-1 text-2xl font-semibold text-slate-950">Suivi des temps chantier</h1>
             <p className="mt-2 max-w-3xl text-sm text-slate-500">
-              Priorisez les chantiers actifs en dépassement, sans saisie ou à contrôler, puis ouvrez directement le suivi temps, les tâches, le planning ou l'équipe.
+              Priorisez les chantiers actifs en dépassement, sans saisie ou avec retours terrain ouverts, puis ouvrez directement le suivi temps, les tâches, le planning ou l'équipe.
             </p>
           </div>
           <button type="button" onClick={() => void refresh()} disabled={loading} className="inline-flex h-10 items-center gap-2 rounded-xl border border-slate-200 px-3 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50">
@@ -184,7 +238,7 @@ export default function ChantiersTimePage() {
         </div>
       </section>
 
-      <section className="grid gap-3 md:grid-cols-5">
+      <section className="grid gap-3 md:grid-cols-6">
         <TimeFilterCard
           label="Chantiers actifs"
           value={chantiers.length}
@@ -214,6 +268,11 @@ export default function ChantiersTimePage() {
           active={activeFilter === "missing"}
           onClick={() => setActiveFilter("missing")}
         />
+        <article className={`rounded-2xl border p-4 shadow-sm ${totals.priorityTerrainFeedbacks > 0 ? "border-red-200 bg-red-50 text-red-700" : totals.openTerrainFeedbacks > 0 ? "border-amber-200 bg-amber-50 text-amber-700" : "border-slate-200 bg-white text-slate-950"}`}>
+          <div className="text-xs font-semibold uppercase opacity-75">Retours ouverts</div>
+          <div className="mt-2 text-2xl font-semibold">{totals.openTerrainFeedbacks}</div>
+          {totals.priorityTerrainFeedbacks > 0 ? <div className="mt-1 text-xs font-semibold">{totals.priorityTerrainFeedbacks} urgent{totals.priorityTerrainFeedbacks > 1 ? "s" : ""}</div> : null}
+        </article>
       </section>
 
       <section className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800 shadow-sm shadow-emerald-950/[0.02]">
@@ -254,14 +313,14 @@ export default function ChantiersTimePage() {
         <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
           <div>
             <h2 className="text-lg font-semibold text-slate-950">Chantiers actifs</h2>
-            <p className="text-sm text-slate-500">Les écarts et chantiers sans saisie remontent en premier pour accélérer le contrôle conducteur.</p>
+            <p className="text-sm text-slate-500">Les écarts, chantiers sans saisie et retours terrain ouverts remontent en premier pour accélérer le contrôle conducteur.</p>
           </div>
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
             <label className="flex h-10 min-w-0 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-500 focus-within:border-blue-300 focus-within:ring-2 focus-within:ring-blue-100 sm:w-72">
               <Search className="h-4 w-4 shrink-0" />
               <input
                 className="min-w-0 flex-1 bg-transparent text-sm text-slate-700 outline-none placeholder:text-slate-400"
-                placeholder="Rechercher chantier, client..."
+                placeholder="Rechercher chantier, client, retours..."
                 value={query}
                 onChange={(event) => setQuery(event.target.value)}
               />
@@ -277,18 +336,25 @@ export default function ChantiersTimePage() {
             <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-6 text-center text-sm text-slate-500 lg:col-span-2">Aucun chantier actif à suivre.</div>
           ) : rows.length === 0 ? (
             <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-6 text-center text-sm text-slate-500 lg:col-span-2">Aucun chantier ne correspond à ce filtre ou cette recherche.</div>
-          ) : rows.map(({ chantier, entries, planned, logged, delta, tone }) => {
+          ) : rows.map(({ chantier, entries, planned, logged, delta, tone, terrainFeedback }) => {
             const isOver = tone === "over";
             const isMissing = tone === "missing";
+            const hasOpenTerrainFeedbacks = terrainFeedback.open > 0;
+            const hasPriorityTerrainFeedbacks = terrainFeedback.priority > 0;
             const statusLabel = isOver ? `Dépassement ${formatHours(delta)}` : isMissing ? "Aucune saisie temps" : "Temps sous contrôle";
             const statusClass = isOver
               ? "border-red-200 bg-red-50 text-red-700"
               : isMissing
                 ? "border-amber-200 bg-amber-50 text-amber-700"
                 : "border-emerald-200 bg-emerald-50 text-emerald-700";
+            const terrainClass = hasPriorityTerrainFeedbacks
+              ? "border-red-200 bg-red-50 text-red-700"
+              : hasOpenTerrainFeedbacks
+                ? "border-amber-200 bg-amber-50 text-amber-700"
+                : "border-slate-200 bg-slate-50 text-slate-600";
 
             return (
-              <article key={chantier.id} className={`rounded-2xl border bg-white p-4 shadow-sm transition hover:border-blue-200 ${isOver ? "border-red-200" : "border-slate-200"}`}>
+              <article key={chantier.id} className={`rounded-2xl border bg-white p-4 shadow-sm transition hover:border-blue-200 ${isOver || hasPriorityTerrainFeedbacks ? "border-red-200" : "border-slate-200"}`}>
                 <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
                   <div className="min-w-0">
                     <div className="flex flex-wrap items-center gap-2">
@@ -297,6 +363,16 @@ export default function ChantiersTimePage() {
                         {isOver ? <AlertTriangle className="h-3 w-3" /> : null}
                         {statusLabel}
                       </span>
+                      {hasOpenTerrainFeedbacks ? (
+                        <Link
+                          to={`/retours-terrain?chantierId=${encodeURIComponent(chantier.id)}`}
+                          className={`inline-flex items-center gap-1 rounded-full border px-2 py-1 text-xs font-semibold transition hover:brightness-95 ${terrainClass}`}
+                          title="Ouvrir les retours terrain de ce chantier"
+                        >
+                          <AlertTriangle className="h-3 w-3" />
+                          {getTerrainFeedbackLabel(terrainFeedback)}
+                        </Link>
+                      ) : null}
                     </div>
                     <div className="mt-1 truncate text-sm text-slate-500">{chantier.client ?? "Client non renseigné"}</div>
                     <div className="mt-3 flex flex-wrap gap-2 text-xs font-semibold">
@@ -316,6 +392,11 @@ export default function ChantiersTimePage() {
                   <Link to={`/chantiers/${encodeURIComponent(chantier.id)}/planning`} className="inline-flex h-9 items-center gap-2 rounded-xl border border-slate-200 px-3 text-sm font-medium text-slate-700 hover:bg-slate-50">
                     <CalendarDays className="h-4 w-4" /> Planning
                   </Link>
+                  {hasOpenTerrainFeedbacks ? (
+                    <Link to={`/retours-terrain?chantierId=${encodeURIComponent(chantier.id)}`} className={`inline-flex h-9 items-center gap-2 rounded-xl border px-3 text-sm font-medium hover:brightness-95 ${terrainClass}`}>
+                      <AlertTriangle className="h-4 w-4" /> Retours terrain
+                    </Link>
+                  ) : null}
                   <Link to={`/chantiers/${encodeURIComponent(chantier.id)}/equipe`} className="inline-flex h-9 items-center gap-2 rounded-xl border border-slate-200 px-3 text-sm font-medium text-slate-700 hover:bg-slate-50">
                     <Users className="h-4 w-4" /> Équipe
                   </Link>
