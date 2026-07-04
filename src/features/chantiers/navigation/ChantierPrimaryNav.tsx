@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { NavLink, useParams } from "react-router-dom";
 import {
   getCompanySettings,
@@ -27,8 +27,25 @@ export function ChantierPrimaryNav({ sections }: { sections: ChantierPrimarySect
   const [terrainFeedbackSummary, setTerrainFeedbackSummary] = useState<TerrainFeedbackSummary | null>(null);
   const terrainFeedbackEnabled = Boolean(chantierId) && terrainFeedbackModuleEnabled;
   const terrainFeedbackHref = chantierId
-    ? `/chantiers/${encodeURIComponent(chantierId)}/retours-terrain`
+    ? `/retours-terrain?chantierId=${encodeURIComponent(chantierId)}`
     : "/retours-terrain";
+  const terrainFeedbackBadge = useMemo(() => {
+    if (!terrainFeedbackSummary?.open) return null;
+    if (terrainFeedbackSummary.priority > 0) {
+      return {
+        label: `${terrainFeedbackSummary.priority} urgent${terrainFeedbackSummary.priority > 1 ? "s" : ""}`,
+        title: `${terrainFeedbackSummary.priority} retour${terrainFeedbackSummary.priority > 1 ? "s" : ""} terrain urgent${terrainFeedbackSummary.priority > 1 ? "s" : ""}`,
+        priority: true,
+      };
+    }
+
+    return {
+      label: `${terrainFeedbackSummary.open} ouvert${terrainFeedbackSummary.open > 1 ? "s" : ""}`,
+      title: `${terrainFeedbackSummary.open} retour${terrainFeedbackSummary.open > 1 ? "s" : ""} terrain ouvert${terrainFeedbackSummary.open > 1 ? "s" : ""}`,
+      priority: false,
+    };
+  }, [terrainFeedbackSummary]);
+  const terrainFeedbackTitle = terrainFeedbackBadge?.title ?? "Voir les retours terrain filtrés sur ce chantier";
 
   useEffect(() => {
     let alive = true;
@@ -102,24 +119,26 @@ export function ChantierPrimaryNav({ sections }: { sections: ChantierPrimarySect
       {terrainFeedbackEnabled ? (
         <NavLink
           to={terrainFeedbackHref}
-          className="inline-flex items-center gap-2 rounded-xl border border-blue-200 bg-blue-50 px-3 py-2 text-sm font-semibold text-blue-800 transition hover:bg-blue-100"
+          title={terrainFeedbackTitle}
+          aria-label={terrainFeedbackTitle}
+          className={[
+            "inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-sm font-semibold transition",
+            terrainFeedbackBadge?.priority
+              ? "border-red-200 bg-red-50 text-red-800 hover:bg-red-100"
+              : "border-blue-200 bg-blue-50 text-blue-800 hover:bg-blue-100",
+          ].join(" ")}
         >
           <span>Retours terrain</span>
-          {terrainFeedbackSummary?.open ? (
+          {terrainFeedbackBadge ? (
             <span
               className={[
                 "rounded-full px-2 py-0.5 text-[11px] font-bold leading-none",
-                terrainFeedbackSummary.priority > 0
+                terrainFeedbackBadge.priority
                   ? "bg-red-600 text-white"
                   : "border border-blue-200 bg-white text-blue-800",
               ].join(" ")}
-              title={
-                terrainFeedbackSummary.priority > 0
-                  ? `${terrainFeedbackSummary.priority} retour(s) urgent(s)`
-                  : `${terrainFeedbackSummary.open} retour(s) ouvert(s)`
-              }
             >
-              {terrainFeedbackSummary.priority > 0 ? `${terrainFeedbackSummary.priority} urgent` : terrainFeedbackSummary.open}
+              {terrainFeedbackBadge.label}
             </span>
           ) : null}
         </NavLink>
