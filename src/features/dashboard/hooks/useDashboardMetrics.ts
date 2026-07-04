@@ -212,10 +212,10 @@ export function useDashboardMetrics({ chantiers, materiel, alerts, activeView, l
     },
     {
       key: "avancement",
-      label: "Retards",
-      value: loading ? "..." : String(alertStats.dangerAlerts),
-      hint: alertStats.dangerAlerts > 0 ? "À traiter aujourd’hui" : "Aucun retard critique",
-      tone: alertStats.dangerAlerts > 0 ? "danger" : "success",
+      label: "Avancement moyen",
+      value: loading ? "..." : formatPercent(avgAvancement),
+      hint: chantiers.length === 0 ? "Aucun chantier actif" : "Chantiers à faible progression",
+      tone: chantiers.length === 0 ? "warning" : avgAvancement < 35 ? "danger" : avgAvancement < 65 ? "warning" : "success",
     },
     {
       key: "materiel",
@@ -244,7 +244,7 @@ export function useDashboardMetrics({ chantiers, materiel, alerts, activeView, l
       href: "/rentabilite",
       tone: "normal",
     },
-  ], [alertStats, chantiers.length, loading, locale, pendingMateriel.length, totalHeuresPassees, totalHeuresPrevues]);
+  ], [alertStats, avgAvancement, chantiers.length, loading, locale, pendingMateriel.length, totalHeuresPassees, totalHeuresPrevues]);
 
   const alertCards = useMemo<DashboardAlertCard[]>(() => [
     {
@@ -335,7 +335,7 @@ export function useDashboardMetrics({ chantiers, materiel, alerts, activeView, l
       statusTone: chantierTone(chantier.status),
       finishLabel: chantier.date_fin_prevue ? `Fin prévue ${chantier.date_fin_prevue}` : "Fin non planifiée",
       progress: Math.max(0, Math.min(100, Number(chantier.avancement ?? 0))),
-      nextAction: Number(chantier.heures_prevues ?? 0) > 0
+      nextAction: Number(chantier.heures_prevues ?? 0)
         ? `${formatHours(Number(chantier.heures_passees ?? 0), locale)} consommées`
         : "Préparer les prochaines actions",
     }));
