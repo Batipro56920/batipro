@@ -65,9 +65,10 @@ function applyProductTechnicalAutofill(row: HTMLElement, product: ProductCatalog
   const hint = getProductRatioHint(product);
   const purchasePrice = getProductPurchaseUnitPrice(product);
   const salePrice = getProductSaleUnitPrice(product, purchasePrice);
+  const templateUnit = getTemplateUnit(row);
 
   setInputValue(inputs[0], product.designation);
-  setInputValue(inputs[1], hint.sourceUnit ?? product.unit);
+  setInputValue(inputs[1], hint.sourceUnit ?? templateUnit ?? "");
   if (hint.quantity !== null) setInputValue(inputs[2], formatNumber(hint.quantity));
   setInputValue(inputs[3], hint.ratioUnit ?? product.unit);
   if (hint.lossPercent !== null) setInputValue(inputs[4], formatNumber(hint.lossPercent));
@@ -103,7 +104,7 @@ function getProductRatioHint(product: ProductCatalogItem): ProductRatioHint {
 
   return {
     quantity: ratioMatch?.quantity ?? null,
-    sourceUnit: ratioMatch?.sourceUnit ?? product.unit,
+    sourceUnit: ratioMatch?.sourceUnit ?? null,
     ratioUnit: ratioMatch?.ratioUnit ?? null,
     lossPercent,
     notes: taskNotes,
@@ -116,7 +117,7 @@ function getProductPurchaseUnitPrice(product: ProductCatalogItem) {
 
   const supplierPrices = Array.isArray(product.supplierPrices) ? product.supplierPrices : [];
   const supplierUnitPrices = supplierPrices
-    .map((price) => normalizePrice(price.priceHt))
+    .map((price) => normalizePrice(price.pricePerM2Ht) ?? normalizePrice(price.priceHt))
     .filter((price): price is number => price !== null && price > 0)
     .sort((a, b) => a - b);
   return supplierUnitPrices[0] ?? null;
@@ -153,8 +154,8 @@ function findRatioMatch(documentText: string): RatioMatch | null {
 function buildDirectRatioMatch(match: RegExpMatchArray | null): RatioMatch | null {
   if (!match) return null;
   const quantity = parseLooseNumber(match[1]);
-  const sourceUnit = normalizeUnit(match[2]);
-  const ratioUnit = normalizeUnit(match[3]);
+  const ratioUnit = normalizeUnit(match[2]);
+  const sourceUnit = normalizeUnit(match[3]);
   if (quantity === null || !sourceUnit || !ratioUnit) return null;
   return { quantity, sourceUnit, ratioUnit };
 }
@@ -162,19 +163,36 @@ function buildDirectRatioMatch(match: RegExpMatchArray | null): RatioMatch | nul
 function buildRendementRatioMatch(match: RegExpMatchArray | null): RatioMatch | null {
   if (!match) return null;
   const quantity = parseLooseNumber(match[1]);
-  const producedUnit = normalizeUnit(match[2]);
-  const consumedUnit = normalizeUnit(match[3]);
-  if (quantity === null || quantity <= 0 || !producedUnit || !consumedUnit) return null;
+  const sourceUnit = normalizeUnit(match[2]);
+  const ratioUnit = normalizeUnit(match[3]);
+  if (quantity === null || quantity <= 0 || !sourceUnit || !ratioUnit) return null;
   return {
     quantity: 1 / quantity,
-    sourceUnit: consumedUnit,
-    ratioUnit: producedUnit,
+    sourceUnit,
+    ratioUnit,
   };
+}
+
+function getTemplateUnit(row: HTMLElement): string | null {
+  const drawer = row.closest(".fixed.inset-0") as HTMLElement | null;
+  if (!drawer) return null;
+
+  const labels = Array.from(drawer.querySelectorAll("label"));
+  for (const label of labels) {
+    if (row.contains(label)) continue;
+    const labelText = normalizeKey(label.textContent);
+    if (!labelText.includes("unite")) continue;
+    const input = label.querySelector("input");
+    const value = normalizeUnit(input?.value);
+    if (value) return value;
+  }
+
+  return null;
 }
 
 function parseLooseNumber(value: unknown): number | null {
   if (value === null || value === undefined || value === "") return null;
-  const parsed = Number(String(value).replace(",", "."));
+  const parsed = Number(String(value).replace(/[\s\u00a0\u202f]/g, "").replace(",", "."));
   return Number.isFinite(parsed) ? parsed : null;
 }
 
@@ -184,13 +202,28 @@ function normalizePrice(value: unknown): number | null {
 }
 
 function normalizeUnit(value: unknown): string | null {
-  const unit = String(value ?? "").trim().toLowerCase();
+  const unit = normalizeKey(value);
   if (!unit) return null;
-  if (["m²", "m2", "m 2"].includes(unit)) return "m2";
-  if (["l", "litre", "litres", "liter", "liters"].includes(unit)) return "l";
-  if (["kg", "kilo", "kilos"].includes(unit)) return "kg";
-  if (["ml", "millilitre", "millilitres"].includes(unit)) return "ml";
+  if (["m2", "m 2"].includes(unit)) return "m2";
+  if (["m3", "m 3"].includes(unit)) return "m3";
+  if (["l", "litre", "litres", "liter", "liters", "pot", "seau"].includes(unit)) return "l";
+  if (["kg", "kilo", "kilos", "sac"].includes(unit)) return "kg";
+  if (["g", "gramme", "grammes"].includes(unit)) return "g";
+  if (["ml", "millilitre", "millilitres", "metre lineaire", "m"].includes(unit)) return "ml";
+  if (["u", "unite", "unites"].includes(unit)) return "u";
   return unit;
+}
+
+function normalizeKey(value: unknown): string {
+  return String(value ?? "")
+    .replace(/²/g, "2")
+    .replace(/³/g, "3")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/gi, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .toLowerCase();
 }
 
 function formatNumber(value: number) {
