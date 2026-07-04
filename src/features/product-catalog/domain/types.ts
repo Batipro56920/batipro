@@ -30,6 +30,21 @@ export type ProductDocumentUsage = {
   doe: boolean;
 };
 
+export type ProductMaterialUsage = {
+  ratioQuantity: number;
+  ratioUnit: string;
+  sourceUnit: string;
+  lossPercent: number | null;
+  confidence: number | null;
+  reasoning: string | null;
+};
+
+export type ProductDocumentAnalysis = {
+  materialUsage?: ProductMaterialUsage | null;
+  source?: string | null;
+  confidence?: number | null;
+};
+
 export type ProductDocument = {
   id: string;
   kind: ProductDocumentKind;
@@ -37,6 +52,7 @@ export type ProductDocument = {
   url: string | null;
   usage?: ProductDocumentUsage;
   notes?: string | null;
+  analysis?: ProductDocumentAnalysis | null;
 };
 
 export type ProductCatalogItem = {
