@@ -21,11 +21,12 @@ const toneClass = {
 const CLIENT_DOCUMENT_ACTIONABLE_STATUSES = ["sent", "viewed", "modification_requested", "expired"];
 const COLLECTABLE_INVOICE_STATUSES = ["sent", "partially_paid", "overdue"];
 const DASHBOARD_METRIC_HREFS: Partial<Record<DashboardBusinessMetric["key"], string>> = {
+  quotes: "/crm/devis?status=a_relancer",
   invoices: "/factures?status=a_encaisser",
 };
 
 const DASHBOARD_METRIC_HINTS: Partial<Record<DashboardBusinessMetric["key"], string>> = {
-  quotes: "Envoyés, non signés ni refusés",
+  quotes: "Envoyés, vus ou relancés non clos",
   invoices: "Factures émises non soldées",
   apporteurCommissions: "Statut Commission à payer",
 };
