@@ -722,6 +722,8 @@ function normalizeText(value: unknown): string | null {
 
 function normalizeKey(value: unknown): string {
   return String(value ?? "")
+    .replace(/²/g, "2")
+    .replace(/³/g, "3")
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
     .replace(/[^a-z0-9]+/gi, " ")
