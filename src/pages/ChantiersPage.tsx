@@ -259,6 +259,13 @@ export default function ChantiersPage({ initialView = "list", initialFocus }: Ch
       return;
     }
 
+    if (key === "terrainFeedback") {
+      setScope("actifs");
+      setFilters({ ...DEFAULT_FILTERS, period: "alerts", query: "retours terrain" });
+      setView("kanban");
+      return;
+    }
+
     setScope("actifs");
     setFilters({ ...DEFAULT_FILTERS, period: "alerts" });
     setView("kanban");
