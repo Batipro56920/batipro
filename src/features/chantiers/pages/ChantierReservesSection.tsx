@@ -8,22 +8,25 @@ export default function ChantierReservesSection({ children }: { children: ReactN
   const [searchParams, setSearchParams] = useSearchParams();
   const targetedReserveId = searchParams.get("reserveId") ?? "";
   const sourceFeedbackId = searchParams.get("feedbackId") ?? "";
+  const hasSourceFeedback = Boolean(sourceFeedbackId);
   const encodedChantierId = id ? encodeURIComponent(id) : "";
   const terrainFeedbackHref = id ? `/retours-terrain?chantierId=${encodedChantierId}` : "/retours-terrain";
   const chantierJournalHref = id ? `/chantiers/${encodedChantierId}/historique` : "";
   const sourceFeedbackHref =
-    id && sourceFeedbackId
+    id && hasSourceFeedback
       ? `/retours-terrain?chantierId=${encodedChantierId}&feedbackId=${encodeURIComponent(sourceFeedbackId)}`
       : terrainFeedbackHref;
   const reserveAutoOpenKey = targetedReserveId
     ? `reserve:${targetedReserveId}`
-    : sourceFeedbackId
+    : hasSourceFeedback
       ? `feedback-source:${sourceFeedbackId}`
       : "";
   const reserveAutoOpenLabel = targetedReserveId
-    ? "Réserve ciblée à traiter"
-    : sourceFeedbackId
-      ? "Réserve à créer depuis retour terrain"
+    ? hasSourceFeedback
+      ? "Réserve créée depuis retour terrain"
+      : "Réserve ciblée à traiter"
+    : hasSourceFeedback
+      ? "Retour terrain source à qualifier"
       : "";
 
   function clearTargetedReserve() {
@@ -51,7 +54,7 @@ export default function ChantierReservesSection({ children }: { children: ReactN
             <div>
               <div className="font-semibold">Réserve ciblée</div>
               <div className="mt-1 text-blue-800/80">
-                Le panneau réserves est ouvert sur une réserve précise{sourceFeedbackId ? ", reliée à un retour terrain source." : "."}
+                Le panneau réserves est ouvert sur une réserve précise{hasSourceFeedback ? ", reliée à un retour terrain source." : "."} Traitez la levée ici, puis revenez au signalement source si son statut doit être clôturé.
               </div>
             </div>
             <div className="flex shrink-0 flex-wrap gap-2">
@@ -59,7 +62,7 @@ export default function ChantierReservesSection({ children }: { children: ReactN
                 to={sourceFeedbackHref}
                 className="inline-flex items-center justify-center rounded-xl bg-blue-700 px-3 py-2 text-sm font-semibold text-white hover:bg-blue-800"
               >
-                {sourceFeedbackId ? "Ouvrir le retour source" : "Voir retours chantier"}
+                {hasSourceFeedback ? "Ouvrir le retour source" : "Voir retours chantier"}
               </Link>
               {chantierJournalHref ? (
                 <Link
@@ -79,7 +82,7 @@ export default function ChantierReservesSection({ children }: { children: ReactN
             </div>
           </div>
         </div>
-      ) : sourceFeedbackId ? (
+      ) : hasSourceFeedback ? (
         <div className="mb-4 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">
           <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
             <div>
@@ -123,7 +126,7 @@ export default function ChantierReservesSection({ children }: { children: ReactN
             </div>
           </div>
           <div className="flex shrink-0 flex-wrap gap-2">
-            {sourceFeedbackId && !targetedReserveId ? (
+            {hasSourceFeedback && !targetedReserveId ? (
               <Link
                 to={sourceFeedbackHref}
                 className="inline-flex items-center justify-center rounded-xl border border-blue-200 bg-white px-3 py-2 text-sm font-semibold text-blue-800 hover:bg-blue-50"
