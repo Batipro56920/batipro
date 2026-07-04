@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { ArrowRight, Clock3, RefreshCw } from "lucide-react";
+import { AlertTriangle, ArrowRight, CalendarDays, Clock3, ClipboardList, RefreshCw, Search, Users } from "lucide-react";
 
 import { listChantiers, type ChantierRow } from "../services/chantiers.service";
 import { listChantierTimeEntriesByChantierId, type ChantierTimeEntryRow } from "../services/chantierTimeEntries.service";
@@ -14,17 +14,67 @@ function getTotal(entries: ChantierTimeEntryRow[]) {
   return entries.reduce((sum, entry) => sum + Number(entry.duration_hours ?? 0), 0);
 }
 
+function normalizeSearch(value: string | null | undefined) {
+  return String(value ?? "")
+    .trim()
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "");
+}
+
+function getTimeTone(params: { planned: number; logged: number; entriesCount: number }) {
+  if (params.planned > 0 && params.logged > params.planned) return "over" as const;
+  if (params.entriesCount === 0) return "missing" as const;
+  return "ok" as const;
+}
+
 export default function ChantiersTimePage() {
   const [chantiers, setChantiers] = useState<ChantierRow[]>([]);
   const [entriesByChantier, setEntriesByChantier] = useState<Record<string, ChantierTimeEntryRow[]>>({});
+  const [query, setQuery] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  const rows = useMemo(() => {
+    const search = normalizeSearch(query);
+
+    return chantiers
+      .map((chantier) => {
+        const entries = entriesByChantier[chantier.id] ?? [];
+        const planned = Number(chantier.heures_prevues ?? 0);
+        const logged = getTotal(entries);
+        const delta = logged - planned;
+        const tone = getTimeTone({ planned, logged, entriesCount: entries.length });
+
+        return {
+          chantier,
+          entries,
+          planned,
+          logged,
+          delta,
+          tone,
+          searchable: normalizeSearch(`${chantier.nom} ${chantier.client ?? ""} ${chantier.adresse ?? ""}`),
+        };
+      })
+      .filter((row) => !search || row.searchable.includes(search))
+      .sort((a, b) => {
+        const weight = { over: 0, missing: 1, ok: 2 } as const;
+        const byTone = weight[a.tone] - weight[b.tone];
+        if (byTone !== 0) return byTone;
+        if (a.tone === "over" || b.tone === "over") return b.delta - a.delta;
+        return a.chantier.nom.localeCompare(b.chantier.nom, "fr");
+      });
+  }, [chantiers, entriesByChantier, query]);
 
   const totals = useMemo(() => {
     const planned = chantiers.reduce((sum, chantier) => sum + Number(chantier.heures_prevues ?? 0), 0);
     const logged = Object.values(entriesByChantier).reduce((sum, entries) => sum + getTotal(entries), 0);
-    const missingRecentTime = chantiers.filter((chantier) => (entriesByChantier[chantier.id] ?? []).length === 0).length;
-    return { planned, logged, missingRecentTime };
+    const missingTime = chantiers.filter((chantier) => (entriesByChantier[chantier.id] ?? []).length === 0).length;
+    const overBudget = chantiers.filter((chantier) => {
+      const plannedHours = Number(chantier.heures_prevues ?? 0);
+      return plannedHours > 0 && getTotal(entriesByChantier[chantier.id] ?? []) > plannedHours;
+    }).length;
+    return { planned, logged, missingTime, overBudget };
   }, [chantiers, entriesByChantier]);
 
   async function refresh() {
@@ -64,7 +114,7 @@ export default function ChantiersTimePage() {
             <div className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-400">Pilotage</div>
             <h1 className="mt-1 text-2xl font-semibold text-slate-950">Suivi des temps chantier</h1>
             <p className="mt-2 max-w-3xl text-sm text-slate-500">
-              Vue globale des heures prévues et saisies, reliée aux dossiers chantier, tâches et intervenants.
+              Priorisez les chantiers actifs en dépassement, sans saisie ou à contrôler, puis ouvrez directement le suivi temps, les tâches, le planning ou l'équipe.
             </p>
           </div>
           <button type="button" onClick={() => void refresh()} disabled={loading} className="inline-flex h-10 items-center gap-2 rounded-xl border border-slate-200 px-3 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50">
@@ -73,7 +123,7 @@ export default function ChantiersTimePage() {
         </div>
       </section>
 
-      <section className="grid gap-3 md:grid-cols-3">
+      <section className="grid gap-3 md:grid-cols-4">
         <article className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
           <div className="text-xs font-semibold uppercase text-slate-400">Prévu actif</div>
           <div className="mt-2 text-2xl font-semibold text-slate-950">{formatHours(totals.planned)}</div>
@@ -83,20 +133,35 @@ export default function ChantiersTimePage() {
           <div className="mt-2 text-2xl font-semibold text-slate-950">{formatHours(totals.logged)}</div>
         </article>
         <article className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+          <div className="text-xs font-semibold uppercase text-slate-400">Dépassements</div>
+          <div className={`mt-2 text-2xl font-semibold ${totals.overBudget > 0 ? "text-red-700" : "text-slate-950"}`}>{totals.overBudget}</div>
+        </article>
+        <article className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
           <div className="text-xs font-semibold uppercase text-slate-400">Sans saisie</div>
-          <div className="mt-2 text-2xl font-semibold text-slate-950">{totals.missingRecentTime}</div>
+          <div className="mt-2 text-2xl font-semibold text-slate-950">{totals.missingTime}</div>
         </article>
       </section>
 
       {error ? <div className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm font-medium text-red-700">{error}</div> : null}
 
       <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-        <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
+        <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
           <div>
             <h2 className="text-lg font-semibold text-slate-950">Chantiers actifs</h2>
-            <p className="text-sm text-slate-500">Ouvrez un chantier pour saisir ou contrôler les temps liés aux tâches.</p>
+            <p className="text-sm text-slate-500">Les écarts et chantiers sans saisie remontent en premier pour accélérer le contrôle conducteur.</p>
           </div>
-          <span className="text-xs font-semibold uppercase text-slate-400">{chantiers.length} chantier{chantiers.length > 1 ? "s" : ""}</span>
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+            <label className="flex h-10 min-w-0 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-500 focus-within:border-blue-300 focus-within:ring-2 focus-within:ring-blue-100 sm:w-72">
+              <Search className="h-4 w-4 shrink-0" />
+              <input
+                className="min-w-0 flex-1 bg-transparent text-sm text-slate-700 outline-none placeholder:text-slate-400"
+                placeholder="Rechercher chantier, client..."
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+              />
+            </label>
+            <span className="text-xs font-semibold uppercase text-slate-400">{rows.length} / {chantiers.length} chantier{chantiers.length > 1 ? "s" : ""}</span>
+          </div>
         </div>
 
         <div className="mt-4 grid gap-3 lg:grid-cols-2">
@@ -104,16 +169,29 @@ export default function ChantiersTimePage() {
             <div className="rounded-2xl border border-slate-200 bg-slate-50 p-6 text-sm text-slate-500 lg:col-span-2">Chargement des temps...</div>
           ) : chantiers.length === 0 ? (
             <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-6 text-center text-sm text-slate-500 lg:col-span-2">Aucun chantier actif à suivre.</div>
-          ) : chantiers.map((chantier) => {
-            const entries = entriesByChantier[chantier.id] ?? [];
-            const logged = getTotal(entries);
-            const planned = Number(chantier.heures_prevues ?? 0);
-            const isOver = planned > 0 && logged > planned;
+          ) : rows.length === 0 ? (
+            <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-6 text-center text-sm text-slate-500 lg:col-span-2">Aucun chantier ne correspond à cette recherche.</div>
+          ) : rows.map(({ chantier, entries, planned, logged, delta, tone }) => {
+            const isOver = tone === "over";
+            const isMissing = tone === "missing";
+            const statusLabel = isOver ? `Dépassement ${formatHours(delta)}` : isMissing ? "Aucune saisie temps" : "Temps sous contrôle";
+            const statusClass = isOver
+              ? "border-red-200 bg-red-50 text-red-700"
+              : isMissing
+                ? "border-amber-200 bg-amber-50 text-amber-700"
+                : "border-emerald-200 bg-emerald-50 text-emerald-700";
+
             return (
-              <article key={chantier.id} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm transition hover:border-blue-200">
+              <article key={chantier.id} className={`rounded-2xl border bg-white p-4 shadow-sm transition hover:border-blue-200 ${isOver ? "border-red-200" : "border-slate-200"}`}>
                 <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
                   <div className="min-w-0">
-                    <div className="truncate font-semibold text-slate-950">{chantier.nom}</div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <div className="truncate font-semibold text-slate-950">{chantier.nom}</div>
+                      <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-1 text-xs font-semibold ${statusClass}`}>
+                        {isOver ? <AlertTriangle className="h-3 w-3" /> : null}
+                        {statusLabel}
+                      </span>
+                    </div>
                     <div className="mt-1 truncate text-sm text-slate-500">{chantier.client ?? "Client non renseigné"}</div>
                     <div className="mt-3 flex flex-wrap gap-2 text-xs font-semibold">
                       <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-slate-700">Prévu {formatHours(planned)}</span>
@@ -121,8 +199,19 @@ export default function ChantiersTimePage() {
                       <span className="rounded-full border border-blue-200 bg-blue-50 px-3 py-1 text-blue-700">{entries.length} saisie{entries.length > 1 ? "s" : ""}</span>
                     </div>
                   </div>
-                  <Link to={`/chantiers/${encodeURIComponent(chantier.id)}/temps`} className="inline-flex h-10 shrink-0 items-center gap-2 rounded-xl bg-slate-950 px-3 text-sm font-semibold text-white hover:bg-slate-800">
+                  <Link to={`/chantiers/${encodeURIComponent(chantier.id)}/temps`} className="inline-flex h-10 shrink-0 items-center justify-center gap-2 rounded-xl bg-slate-950 px-3 text-sm font-semibold text-white hover:bg-slate-800">
                     <Clock3 className="h-4 w-4" /> Suivre <ArrowRight className="h-4 w-4" />
+                  </Link>
+                </div>
+                <div className="mt-4 flex flex-wrap gap-2 border-t border-slate-100 pt-3">
+                  <Link to={`/chantiers/${encodeURIComponent(chantier.id)}/execution`} className="inline-flex h-9 items-center gap-2 rounded-xl border border-slate-200 px-3 text-sm font-medium text-slate-700 hover:bg-slate-50">
+                    <ClipboardList className="h-4 w-4" /> Tâches
+                  </Link>
+                  <Link to={`/chantiers/${encodeURIComponent(chantier.id)}/planning`} className="inline-flex h-9 items-center gap-2 rounded-xl border border-slate-200 px-3 text-sm font-medium text-slate-700 hover:bg-slate-50">
+                    <CalendarDays className="h-4 w-4" /> Planning
+                  </Link>
+                  <Link to={`/chantiers/${encodeURIComponent(chantier.id)}/equipe`} className="inline-flex h-9 items-center gap-2 rounded-xl border border-slate-200 px-3 text-sm font-medium text-slate-700 hover:bg-slate-50">
+                    <Users className="h-4 w-4" /> Équipe
                   </Link>
                 </div>
               </article>
