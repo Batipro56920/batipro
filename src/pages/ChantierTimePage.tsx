@@ -5,6 +5,7 @@ import { ArrowLeft, Clock3, Trash2 } from "lucide-react";
 import { getChantierById, type ChantierRow } from "../services/chantiers.service";
 import { getTasksByChantierIdDetailed, type ChantierTaskRow } from "../services/chantierTasks.service";
 import { listIntervenantsByChantierId, type IntervenantRow } from "../services/intervenants.service";
+import { appendChantierActivityLog } from "../services/chantierActivityLog.service";
 import {
   createChantierTimeEntry,
   deleteChantierTimeEntry,
@@ -95,6 +96,34 @@ export default function ChantierTimePage() {
     }
   }, [intervenantId, intervenants, selectedTask?.intervenant_id]);
 
+  async function recordTimeActivity(input: {
+    actionType: "time_logged" | "deleted";
+    entry: ChantierTimeEntryRow;
+    reason: string;
+  }) {
+    if (!id) return;
+    try {
+      await appendChantierActivityLog({
+        chantierId: id,
+        actionType: input.actionType,
+        entityType: "time_entry",
+        entityId: input.entry.id,
+        reason: input.reason,
+        changes: {
+          task_id: input.entry.task_id,
+          task_title: input.entry.task_id ? getTaskTitle(taskById.get(input.entry.task_id)) : null,
+          intervenant_id: input.entry.intervenant_id,
+          intervenant_name: intervenantById.get(input.entry.intervenant_id)?.nom ?? null,
+          work_date: input.entry.work_date,
+          duration_hours: input.entry.duration_hours,
+          quantite_realisee: input.entry.quantite_realisee,
+        },
+      });
+    } catch (err) {
+      console.warn("[activity-log] time entry append failed", err);
+    }
+  }
+
   async function saveTimeEntry() {
     if (!id) return;
     const duration = toNumberOrNull(hours);
@@ -124,7 +153,7 @@ export default function ChantierTimePage() {
     setSaving(true);
     setFormError(null);
     try {
-      await createChantierTimeEntry({
+      const created = await createChantierTimeEntry({
         chantier_id: id,
         task_id: taskId,
         intervenant_id: intervenantId,
@@ -132,6 +161,11 @@ export default function ChantierTimePage() {
         duration_hours: duration,
         quantite_realisee: doneQuantity,
         note: note.trim() || null,
+      });
+      await recordTimeActivity({
+        actionType: "time_logged",
+        entry: created,
+        reason: "Saisie temps ajoutée depuis le suivi des temps",
       });
       setHours("");
       setQuantity("");
@@ -145,11 +179,19 @@ export default function ChantierTimePage() {
   }
 
   async function removeTimeEntry(entryId: string) {
+    const entry = entries.find((item) => item.id === entryId);
     setDeletingId(entryId);
     setFormError(null);
     try {
       await deleteChantierTimeEntry(entryId);
-      setEntries((current) => current.filter((entry) => entry.id !== entryId));
+      if (entry) {
+        await recordTimeActivity({
+          actionType: "deleted",
+          entry,
+          reason: "Saisie temps supprimée depuis le suivi des temps",
+        });
+      }
+      setEntries((current) => current.filter((item) => item.id !== entryId));
     } catch (err: any) {
       setFormError(err?.message ?? "Erreur suppression temps.");
     } finally {
