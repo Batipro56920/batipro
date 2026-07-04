@@ -18,26 +18,36 @@ export function installTaskTemplateLotSettingsBridge() {
 
 function installLotSettingsButton() {
   const newTemplateButton = findNewTemplateButton();
-  if (!newTemplateButton?.parentElement) {
-    removeLotSettingsButtons();
+  const actionGroup = newTemplateButton?.parentElement;
+  if (!newTemplateButton || !actionGroup?.parentElement) {
+    removeLotSettingsActions();
     return;
   }
 
-  const existingButton = document.querySelector("[data-batipro-lot-settings-button]");
-  if (existingButton && newTemplateButton.parentElement.contains(existingButton)) return;
+  const existingAction = document.querySelector("[data-batipro-lot-settings-action]");
+  if (existingAction && actionGroup.parentElement.contains(existingAction)) return;
 
-  removeLotSettingsButtons();
-  newTemplateButton.insertAdjacentElement("afterend", buildSettingsButton());
+  removeLotSettingsActions();
+  actionGroup.insertAdjacentElement("afterend", buildSettingsAction());
 }
 
-function buildSettingsButton() {
+function buildSettingsAction() {
+  const wrapper = document.createElement("div");
+  wrapper.dataset.batiproLotSettingsAction = "true";
+  wrapper.className = "mt-3 flex justify-end";
+
   const button = document.createElement("button");
   button.type = "button";
-  button.dataset.batiproLotSettingsButton = "true";
   button.className = "rounded-xl border border-blue-200 bg-white px-4 py-2 text-sm font-semibold text-blue-800 shadow-sm hover:bg-blue-50";
   button.textContent = "Paramétrer les lots";
-  button.addEventListener("click", openLotSettingsDrawer);
-  return button;
+  button.addEventListener("click", (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    openLotSettingsDrawer();
+  });
+
+  wrapper.append(button);
+  return wrapper;
 }
 
 function openLotSettingsDrawer() {
@@ -178,8 +188,8 @@ function findNewTemplateButton() {
     .find((button) => isVisible(button) && normalizeText(button.textContent).includes("nouveau template")) ?? null;
 }
 
-function removeLotSettingsButtons() {
-  document.querySelectorAll("[data-batipro-lot-settings-button]").forEach((button) => button.remove());
+function removeLotSettingsActions() {
+  document.querySelectorAll("[data-batipro-lot-settings-action]").forEach((action) => action.remove());
 }
 
 function isVisible(element: HTMLElement) {
