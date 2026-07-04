@@ -260,7 +260,7 @@ export function useDashboardMetrics({ chantiers, materiel, alerts, activeView, l
       label: "Retards",
       value: alertStats.taskBlockers,
       description: "Tâches à reprendre ou en retard",
-      href: "/taches",
+      href: "/dashboard?view=alertes",
       tone: alertStats.taskBlockers > 0 ? "danger" : "success",
     },
     {
