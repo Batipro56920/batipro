@@ -106,7 +106,7 @@ export default function ChantierTimePage() {
       aggregateByTask.set(key, current);
     }
 
-    const summaries = tasks.map((task) => {
+    const summaries: TaskTimeSummary[] = tasks.map((task) => {
       const aggregate = aggregateByTask.get(task.id) ?? { logged: 0, quantity: 0, entriesCount: 0, latestDate: null };
       const planned = Number(task.temps_prevu_h ?? 0);
       const logged = aggregate.logged;
