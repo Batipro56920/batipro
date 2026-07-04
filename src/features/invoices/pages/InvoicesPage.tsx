@@ -27,6 +27,12 @@ const INVOICE_STATUS_FILTERS: Array<{ value: InvoiceStatusFilter; label: string 
   { value: "cancelled", label: "Annulée" },
 ];
 
+function matchesStatusFilter(invoice: InvoiceRecord, filter: InvoiceStatusFilter) {
+  if (filter === "all") return true;
+  if (filter === "a_encaisser") return COLLECTABLE_INVOICE_STATUSES.includes(invoice.status);
+  return invoice.status === filter;
+}
+
 export default function InvoicesPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const invoiceIdFromUrl = searchParams.get("invoice")?.trim() || null;
@@ -100,9 +106,7 @@ export default function InvoicesPage() {
         invoice.document.siteAddress,
         invoice.document.title,
       ].some((value) => String(value ?? "").toLowerCase().includes(text));
-      const matchesStatus =
-        statusFilter === "all" ||
-        (statusFilter === "a_encaisser" ? COLLECTABLE_INVOICE_STATUSES.includes(invoice.status) : invoice.status === statusFilter);
+      const matchesStatus = matchesStatusFilter(invoice, statusFilter);
       const matchesType = typeFilter === "all" || invoice.type === typeFilter;
       return matchesText && matchesStatus && matchesType;
     });
@@ -123,7 +127,10 @@ export default function InvoicesPage() {
       if (selectFirst) {
         setSelectedId((current) => {
           if (invoiceIdFromUrl && rows.some((invoice) => invoice.id === invoiceIdFromUrl)) return invoiceIdFromUrl;
-          return current ?? rows[0]?.id ?? null;
+          const urlStatusFilter = statusFilterFromUrl ?? "all";
+          const firstMatchingStatus = rows.find((invoice) => matchesStatusFilter(invoice, urlStatusFilter));
+          if (current && rows.some((invoice) => invoice.id === current && matchesStatusFilter(invoice, urlStatusFilter))) return current;
+          return firstMatchingStatus?.id ?? rows[0]?.id ?? null;
         });
       }
     } catch (err: any) {
