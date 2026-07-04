@@ -6,7 +6,7 @@ import { CheckCircle2, FileText, Loader2, UploadCloud, X } from "lucide-react";
 import { supabase } from "../../../lib/supabaseClient";
 import type { SupplierRow } from "../../../services/suppliers.service";
 import type { DocumentUnit } from "../../document-engine";
-import type { ProductCatalogDraft, ProductCatalogItem, ProductSupplierPrice } from "../domain/types";
+import type { ProductCatalogDraft, ProductCatalogItem, ProductMaterialUsage, ProductSupplierPrice } from "../domain/types";
 import type { ExtractedQuoteProduct } from "../services/productQuoteImport.service";
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
@@ -311,6 +311,7 @@ function buildImportedDocuments(
   priceInsights: ProductPriceInsights,
 ): ProductCatalogItem["documents"] {
   const businessInterpretation = getBusinessInterpretation(extracted);
+  const materialUsage = buildMaterialUsageAnalysis(insights, businessInterpretation, extracted.confidence);
   const technicalNotes = [
     businessInterpretation ? `Interprétation Coco: ${businessInterpretation}` : null,
     ...insights.technicalNotes,
@@ -333,6 +334,13 @@ function buildImportedDocuments(
       "Fichier importé pour analyse automatique de la fiche produit. Stockage documentaire à raccorder au lot Supabase Storage.",
       ...technicalNotes,
     ].join("\n"),
+    analysis: materialUsage
+      ? {
+          materialUsage,
+          source: "coco_product_import",
+          confidence: materialUsage.confidence,
+        }
+      : null,
   }));
 
   if (insights.applicationScope) {
@@ -358,6 +366,22 @@ function buildImportedDocuments(
   }
 
   return documents;
+}
+
+function buildMaterialUsageAnalysis(
+  insights: ProductTechnicalInsights,
+  businessInterpretation: string | null,
+  confidence: number | null | undefined,
+): ProductMaterialUsage | null {
+  if (insights.consumptionRatioQuantity === null || !insights.consumptionRatioUnit || !insights.ratioBaseUnit) return null;
+  return {
+    ratioQuantity: insights.consumptionRatioQuantity,
+    ratioUnit: insights.consumptionRatioUnit,
+    sourceUnit: insights.ratioBaseUnit,
+    lossPercent: insights.lossPercent,
+    confidence: positiveNumber(confidence),
+    reasoning: businessInterpretation ?? insights.technicalNotes[0] ?? null,
+  };
 }
 
 function buildSupplierPrice(
