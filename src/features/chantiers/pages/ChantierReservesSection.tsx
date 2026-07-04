@@ -11,12 +11,14 @@ export default function ChantierReservesSection({ children }: { children: ReactN
   const hasTargetedReserve = Boolean(targetedReserveId);
   const hasSourceFeedback = Boolean(sourceFeedbackId);
   const encodedChantierId = id ? encodeURIComponent(id) : "";
-  const terrainFeedbackParams = new URLSearchParams();
-  if (id) terrainFeedbackParams.set("chantierId", id);
-  if (hasSourceFeedback) terrainFeedbackParams.set("feedbackId", sourceFeedbackId);
-  const terrainFeedbackHref = id ? `/retours-terrain?${terrainFeedbackParams.toString()}` : "/retours-terrain";
+  const encodedSourceFeedbackId = sourceFeedbackId ? encodeURIComponent(sourceFeedbackId) : "";
+  const terrainFeedbackHref = id
+    ? hasSourceFeedback
+      ? `/chantiers/${encodedChantierId}/retours-terrain/${encodedSourceFeedbackId}`
+      : `/chantiers/${encodedChantierId}/retours-terrain`
+    : "/retours-terrain";
   const chantierJournalHref = id ? `/chantiers/${encodedChantierId}/historique` : "";
-  const sourceFeedbackHref = hasSourceFeedback ? terrainFeedbackHref : `/retours-terrain?chantierId=${encodedChantierId}`;
+  const sourceFeedbackHref = terrainFeedbackHref;
   const reserveAutoOpenKey = targetedReserveId
     ? `reserve:${targetedReserveId}`
     : hasSourceFeedback
