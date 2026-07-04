@@ -2,11 +2,6 @@ import { Search } from "lucide-react";
 import type { Dispatch, SetStateAction } from "react";
 import type { QuoteFilterOption, QuoteFilters } from "../types";
 
-function statusFilterLabel(status: string) {
-  if (status === "a_relancer") return "À relancer";
-  return status;
-}
-
 export function QuotesToolbar({
   filters,
   setFilters,
@@ -34,7 +29,7 @@ export function QuotesToolbar({
         </div>
         <select value={filters.status} onChange={(event) => setFilters((current) => ({ ...current, status: event.target.value }))} className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-700">
           <option value="all">Tous statuts</option>
-          {statuses.map((status) => <option key={status} value={status}>{statusFilterLabel(status)}</option>)}
+          {statuses.map((status) => <option key={status} value={status}>{status}</option>)}
         </select>
         <select value={filters.salesperson} onChange={(event) => setFilters((current) => ({ ...current, salesperson: event.target.value }))} className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-700">
           <option value="all">Tous commerciaux</option>
