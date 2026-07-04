@@ -50,6 +50,8 @@ const LEAD_STATUSES: { value: ApporteurLeadStatus; label: string }[] = [
   { value: "paye", label: "Payé" },
 ];
 
+const LEAD_STATUS_VALUES = new Set<ApporteurLeadStatus>(LEAD_STATUSES.map((status) => status.value));
+
 type CrmFilter = "all" | "linked" | "unlinked";
 
 const DEFAULT_APPORTEUR_FORM = {
@@ -92,6 +94,10 @@ type ProjectOption = {
   projectType: string | null;
   estimatedAmount: number;
 };
+
+function isLeadStatusFilter(value: string | null): value is ApporteurLeadStatus {
+  return Boolean(value && LEAD_STATUS_VALUES.has(value as ApporteurLeadStatus));
+}
 
 function formatCurrency(value: number) {
   return new Intl.NumberFormat("fr-FR", { style: "currency", currency: "EUR" }).format(value || 0);
@@ -213,6 +219,7 @@ export default function ApporteursAffairesPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const targetedApporteurId = searchParams.get("apporteurId") ?? "";
   const targetedLeadId = searchParams.get("leadId") ?? "";
+  const requestedStatus = searchParams.get("status");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -224,7 +231,7 @@ export default function ApporteursAffairesPage() {
   const [crmOpportunities, setCrmOpportunities] = useState<CrmOpportunityRow[]>([]);
   const [accessTokens, setAccessTokens] = useState<Record<string, ApporteurAccessTokenRow>>({});
   const [selectedApporteurId, setSelectedApporteurId] = useState("");
-  const [selectedStatus, setSelectedStatus] = useState<ApporteurLeadStatus | "">("");
+  const [selectedStatus, setSelectedStatus] = useState<ApporteurLeadStatus | "">(() => (isLeadStatusFilter(requestedStatus) ? requestedStatus : ""));
   const [selectedCrmFilter, setSelectedCrmFilter] = useState<CrmFilter>("all");
   const [apporteurForm, setApporteurForm] = useState(DEFAULT_APPORTEUR_FORM);
   const [showApporteurLayer, setShowApporteurLayer] = useState(false);
@@ -339,6 +346,21 @@ export default function ApporteursAffairesPage() {
   }, []);
 
   useEffect(() => {
+    const status = searchParams.get("status");
+    if (isLeadStatusFilter(status)) {
+      setSelectedStatus(status);
+      return;
+    }
+    if (status !== null) {
+      const nextParams = new URLSearchParams(searchParams);
+      nextParams.delete("status");
+      setSearchParams(nextParams, { replace: true });
+      return;
+    }
+    setSelectedStatus("");
+  }, [searchParams, setSearchParams]);
+
+  useEffect(() => {
     if (targetedLeadId) {
       if (!targetedLead) return;
       if (targetedLead.apporteur_id) setSelectedApporteurId(targetedLead.apporteur_id);
@@ -365,9 +387,17 @@ export default function ApporteursAffairesPage() {
     setSearchParams(nextParams, { replace: true });
   }
 
+  function selectStatus(status: ApporteurLeadStatus | "") {
+    setSelectedStatus(status);
+    const nextParams = new URLSearchParams(searchParams);
+    if (status) nextParams.set("status", status);
+    else nextParams.delete("status");
+    setSearchParams(nextParams, { replace: true });
+  }
+
   function selectApporteur(apporteurId: string, keepUrlTarget = false) {
     setSelectedApporteurId(apporteurId);
-    setSelectedStatus("");
+    selectStatus("");
     setSelectedCrmFilter("all");
     resetLeadForm(apporteurId);
     if (!keepUrlTarget && (apporteurId !== targetedApporteurId || Boolean(targetedLeadId))) clearApporteurUrlTarget();
@@ -726,7 +756,7 @@ export default function ApporteursAffairesPage() {
             </div>
             <button
               type="button"
-              onClick={() => { setSelectedCrmFilter("unlinked"); setSelectedStatus(""); }}
+              onClick={() => { setSelectedCrmFilter("unlinked"); selectStatus(""); }}
               className="rounded-lg border border-amber-300 bg-white px-4 py-2 text-sm font-semibold text-amber-800 hover:bg-amber-100"
             >
               Voir à convertir
@@ -741,14 +771,14 @@ export default function ApporteursAffairesPage() {
             <div className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Pipeline commissions</div>
             <h2 className="mt-1 text-lg font-semibold text-slate-950">Répartition des projets apportés</h2>
           </div>
-          {selectedStatus ? <button type="button" onClick={() => setSelectedStatus("")} className={secondaryButtonClass}>Tous les statuts</button> : null}
+          {selectedStatus ? <button type="button" onClick={() => selectStatus("")} className={secondaryButtonClass}>Tous les statuts</button> : null}
         </div>
         <div className="mt-4 grid gap-2 md:grid-cols-4 xl:grid-cols-7">
           {statusBreakdown.map((status) => (
             <button
               key={status.value}
               type="button"
-              onClick={() => setSelectedStatus((current) => (current === status.value ? "" : status.value))}
+              onClick={() => selectStatus(selectedStatus === status.value ? "" : status.value)}
               className={[
                 "rounded-lg border px-3 py-3 text-left text-sm transition",
                 selectedStatus === status.value ? statusClass(status.value) : "border-slate-200 bg-slate-50 text-slate-700 hover:border-blue-200 hover:bg-blue-50",
@@ -832,7 +862,7 @@ export default function ApporteursAffairesPage() {
       </section>
 
       <section className="bt-card rounded-xl bg-white p-4">
-        <div className="mb-4 flex flex-wrap items-center justify-between gap-3"><div><div className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Projets apportés</div><h2 className="mt-1 text-lg font-semibold text-slate-950">Suivi commercial et commissions</h2></div><div className="flex flex-wrap items-center gap-2"><select className={selectClass} value={selectedApporteurId} onChange={(event) => selectApporteur(event.target.value)}><option value="">Tous les apporteurs</option>{apporteurs.map((row) => <option key={row.id} value={row.id}>{row.nom}</option>)}</select><select className={selectClass} value={selectedStatus} onChange={(event) => setSelectedStatus(event.target.value as ApporteurLeadStatus | "")}><option value="">Tous les statuts</option>{LEAD_STATUSES.map((status) => <option key={status.value} value={status.value}>{status.label}</option>)}</select><select className={selectClass} value={selectedCrmFilter} onChange={(event) => setSelectedCrmFilter(event.target.value as CrmFilter)}><option value="all">Tous CRM</option><option value="linked">Liés CRM</option><option value="unlinked">À convertir CRM</option></select></div></div>
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3"><div><div className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Projets apportés</div><h2 className="mt-1 text-lg font-semibold text-slate-950">Suivi commercial et commissions</h2></div><div className="flex flex-wrap items-center gap-2"><select className={selectClass} value={selectedApporteurId} onChange={(event) => selectApporteur(event.target.value)}><option value="">Tous les apporteurs</option>{apporteurs.map((row) => <option key={row.id} value={row.id}>{row.nom}</option>)}</select><select className={selectClass} value={selectedStatus} onChange={(event) => selectStatus(event.target.value as ApporteurLeadStatus | "")}><option value="">Tous les statuts</option>{LEAD_STATUSES.map((status) => <option key={status.value} value={status.value}>{status.label}</option>)}</select><select className={selectClass} value={selectedCrmFilter} onChange={(event) => setSelectedCrmFilter(event.target.value as CrmFilter)}><option value="all">Tous CRM</option><option value="linked">Liés CRM</option><option value="unlinked">À convertir CRM</option></select></div></div>
         <div className="space-y-3 md:hidden">
           {filteredLeads.map((lead) => {
             const apporteur = apporteurs.find((row) => row.id === lead.apporteur_id);
