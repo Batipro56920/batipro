@@ -160,8 +160,8 @@ export async function listDashboardAlerts(chantiers: ChantierRow[]): Promise<Das
       chantier_nom: chantierNameById.get(row.chantier_id) ?? "Chantier",
       category: "reserve",
       tone: priority === "URGENTE" ? "danger" : "warning",
-      title: `Reserve ${priority === "URGENTE" ? "urgente" : "ouverte"}`,
-      detail: asText(row.title, "Reserve chantier"),
+      title: `Réserve ${priority === "URGENTE" ? "urgente" : "ouverte"}`,
+      detail: asText(row.title, "Réserve chantier"),
       href: chantierSectionHref(row.chantier_id, "qualite"),
       sort_at: row.created_at ?? "1970-01-01T00:00:00.000Z",
     });
@@ -184,10 +184,10 @@ export async function listDashboardAlerts(chantiers: ChantierRow[]): Promise<Das
         chantier_nom: chantierNameById.get(row.chantier_id) ?? "Chantier",
         category: "task",
         tone: "danger",
-        title: "Tache a reprendre",
+        title: "Tâche à reprendre",
         detail: row.reprise_reason
-          ? `${asText(row.titre, "Tache chantier")} - ${asText(row.reprise_reason, "Motif non renseigne")}`
-          : asText(row.titre, "Tache chantier"),
+          ? `${asText(row.titre, "Tâche chantier")} - ${asText(row.reprise_reason, "Motif non renseigné")}`
+          : asText(row.titre, "Tâche chantier"),
         href: chantierSectionHref(row.chantier_id, "execution"),
         sort_at: row.updated_at ?? row.created_at ?? "1970-01-01T00:00:00.000Z",
       });
@@ -201,8 +201,8 @@ export async function listDashboardAlerts(chantiers: ChantierRow[]): Promise<Das
         chantier_nom: chantierNameById.get(row.chantier_id) ?? "Chantier",
         category: "task",
         tone: "warning",
-        title: "Tache en retard",
-        detail: `${asText(row.titre, "Tache chantier")} - echeance ${dueDate}`,
+        title: "Tâche en retard",
+        detail: `${asText(row.titre, "Tâche chantier")} - échéance ${dueDate}`,
         href: chantierSectionHref(row.chantier_id, "execution"),
         sort_at: row.updated_at ?? row.created_at ?? "1970-01-01T00:00:00.000Z",
       });
@@ -221,9 +221,9 @@ export async function listDashboardAlerts(chantiers: ChantierRow[]): Promise<Das
       chantier_nom: chantierNameById.get(row.chantier_id) ?? "Chantier",
       category: "purchase",
       tone: isLate || status === "a_commander" ? "warning" : "danger",
-      title: isLate ? "Approvisionnement en retard" : status === "a_commander" ? "Approvisionnement a commander" : "Approvisionnement non livre",
+      title: isLate ? "Approvisionnement en retard" : status === "a_commander" ? "Approvisionnement à commander" : "Approvisionnement non livré",
       detail: expectedAt
-        ? `${asText(row.titre, "Demande fournisseur")} - livraison prevue ${expectedAt}`
+        ? `${asText(row.titre, "Demande fournisseur")} - livraison prévue ${expectedAt}`
         : asText(row.titre, "Demande fournisseur"),
       href: chantierSectionHref(row.chantier_id, "financier"),
       sort_at: row.created_at ?? "1970-01-01T00:00:00.000Z",
@@ -238,8 +238,8 @@ export async function listDashboardAlerts(chantiers: ChantierRow[]): Promise<Das
       chantier_nom: chantierNameById.get(row.chantier_id) ?? "Chantier",
       category: "preparation",
       tone: "warning",
-      title: "Preparation incomplete",
-      detail: asText(row.commentaire, "Checklist preparation chantier a finaliser"),
+      title: "Préparation incomplète",
+      detail: asText(row.commentaire, "Checklist préparation chantier à finaliser"),
       href: chantierSectionHref(row.chantier_id, "preparation"),
       sort_at: row.updated_at ?? row.created_at ?? "1970-01-01T00:00:00.000Z",
     });
