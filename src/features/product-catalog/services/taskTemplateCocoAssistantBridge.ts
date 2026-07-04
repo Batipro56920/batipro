@@ -52,8 +52,8 @@ function buildOutputSection(drawer: HTMLElement) {
   const text = document.createElement("div");
   text.innerHTML = `
     <div class="text-xs font-semibold uppercase tracking-[0.18em] text-blue-700">Coco template</div>
-    <div class="mt-1 text-sm font-semibold text-slate-950">Génération après saisie métier</div>
-    <div class="mt-1 text-xs text-slate-600">Ordre attendu : désignation, unité, usage métier, matériaux, main d'oeuvre, matériel/frais, puis synthèse Coco.</div>
+    <div class="mt-1 text-sm font-semibold text-slate-950">Sorties générées par Coco</div>
+    <div class="mt-1 text-xs text-slate-600">Coco doit produire la liste matériaux, la liste matériel, le mode opératoire complet, puis remplir les champs enregistrés.</div>
   `;
 
   const button = document.createElement("button");
@@ -68,16 +68,39 @@ function buildOutputSection(drawer: HTMLElement) {
   summary.dataset.batiproCocoTemplateSummary = "true";
   summary.className = "rounded-xl border border-blue-100 bg-white px-3 py-2 text-xs text-slate-600";
 
-  section.append(header, summary);
+  const generated = document.createElement("div");
+  generated.dataset.batiproCocoGeneratedOutputs = "true";
+  generated.className = "grid gap-3 xl:grid-cols-3";
+  generated.innerHTML = `
+    <div class="rounded-2xl border border-slate-200 bg-white p-3">
+      <div class="text-sm font-semibold text-slate-900">Liste matériaux Coco</div>
+      <div data-coco-materials class="mt-2 whitespace-pre-line text-sm text-slate-700">Clique sur "Générer avec Coco" après avoir ajouté les matériaux.</div>
+    </div>
+    <div class="rounded-2xl border border-slate-200 bg-white p-3">
+      <div class="text-sm font-semibold text-slate-900">Liste matériel Coco</div>
+      <div data-coco-equipment class="mt-2 whitespace-pre-line text-sm text-slate-700">Clique sur "Générer avec Coco" après avoir ajouté le matériel et les frais.</div>
+    </div>
+    <div class="rounded-2xl border border-slate-200 bg-white p-3">
+      <div class="text-sm font-semibold text-slate-900">Mode opératoire complet</div>
+      <div data-coco-procedure class="mt-2 whitespace-pre-line text-sm text-slate-700">Clique sur "Générer avec Coco" pour créer les étapes terrain.</div>
+    </div>
+  `;
+
+  section.append(header, summary, generated);
   return section;
 }
 
 function generateWithCoco(drawer: HTMLElement) {
   const context = readContext(drawer);
   const profile = matchTaskTemplateLotProfile(context.lot);
-  const description = buildDescription(context, profile);
-  const characteristics = buildCharacteristics(context, profile);
+  const generated = buildGeneratedOutputs(context, profile);
+  const description = buildDescription(context, profile, generated.procedureLines);
+  const characteristics = buildCharacteristics(context, profile, generated.materialLines, generated.equipmentLines);
   const fieldReturns = buildFieldReturns(profile.fieldGuidance);
+
+  setGeneratedOutput(drawer, "[data-coco-materials]", generated.materialLines);
+  setGeneratedOutput(drawer, "[data-coco-equipment]", generated.equipmentLines);
+  setGeneratedOutput(drawer, "[data-coco-procedure]", generated.procedureLines);
 
   const descriptionInput = getLabeledTextarea(drawer, "description technique");
   const characteristicsInput = getLabeledTextarea(drawer, "caracteristiques") ?? getLabeledTextarea(drawer, "caractéristiques");
@@ -87,7 +110,7 @@ function generateWithCoco(drawer: HTMLElement) {
   if (characteristicsInput && canReplace(characteristicsInput.value, "caractéristiques")) setTextareaValue(characteristicsInput, characteristics.join("\n"));
   if (remarksInput && canReplace(remarksInput.value, "retours terrain")) setTextareaValue(remarksInput, fieldReturns.join("\n"));
 
-  updateSummary(drawer, "Coco a généré les champs de sortie à partir des données saisies au-dessus.");
+  updateSummary(drawer, "Coco a généré les listes matériaux/matériel, le mode opératoire complet et les champs enregistrés.");
 }
 
 function readContext(drawer: HTMLElement) {
@@ -102,7 +125,42 @@ function readContext(drawer: HTMLElement) {
   };
 }
 
-function buildDescription(context: ReturnType<typeof readContext>, profile: ReturnType<typeof matchTaskTemplateLotProfile>) {
+function buildGeneratedOutputs(context: ReturnType<typeof readContext>, profile: ReturnType<typeof matchTaskTemplateLotProfile>) {
+  const materialLines = context.materials.length
+    ? context.materials.map((material, index) => {
+      const quantity = material.quantity && material.ratioUnit
+        ? `${material.quantity} ${material.ratioUnit} pour 1 ${material.sourceUnit || context.unit}`
+        : `quantité à préciser pour 1 ${context.unit}`;
+      const loss = material.loss ? `, perte ${material.loss} %` : "";
+      return `${index + 1}. ${material.name || "Matériau à préciser"} : ${quantity}${loss}${material.note ? ` - ${material.note}` : ""}`;
+    })
+    : [`1. Aucun matériau renseigné : ajouter les produits liés avant génération.`];
+
+  const equipmentLines = [
+    ...context.equipment.map((item, index) => `${index + 1}. ${item.name || "Matériel à préciser"}${item.quantity ? ` : ${item.quantity} ${item.unit}` : ""}${item.note ? ` - ${item.note}` : ""}`),
+    ...context.fees.map((fee, index) => `${context.equipment.length + index + 1}. ${fee.name || "Frais à préciser"}${fee.cost ? ` - PR ${fee.cost} € HT` : ""}${fee.sale ? ` - PV ${fee.sale} € HT` : ""}${fee.note ? ` - ${fee.note}` : ""}`),
+  ];
+  if (equipmentLines.length === 0) equipmentLines.push("1. Aucun matériel/frais renseigné : compléter le bloc matériel/frais si nécessaire.");
+
+  const procedureLines = [
+    `1. Vérifier le support, les dimensions et les conditions chantier pour ${context.title}.`,
+    `2. Préparer la zone : protections, accès, outillage, sécurité et matériel nécessaire (${profile.label || context.lot}).`,
+    ...context.materials.map((material, index) => `${index + 3}. Préparer ${material.name || "le matériau"} selon le ratio prévu (${material.quantity || "?"} ${material.ratioUnit || "unité"} / ${material.sourceUnit || context.unit}) et contrôler la compatibilité avec le support.`),
+  ];
+  const nextStep = procedureLines.length + 1;
+  procedureLines.push(`${nextStep}. Exécuter la pose/application dans l'ordre logique des matériaux, en contrôlant alignement, recouvrement, temps d'attente et finition.`);
+  procedureLines.push(`${nextStep + 1}. Contrôler la conformité : quantité posée, finition, réserves, nettoyage et photos si nécessaire.`);
+  procedureLines.push(`${nextStep + 2}. Renseigner le retour terrain : consommation réelle, temps passé, écarts de ratio, matériel manquant, erreurs à éviter.`);
+  if (profile.fieldGuidance) procedureLines.push(`${nextStep + 3}. Consigne lot : ${profile.fieldGuidance}`);
+
+  return { materialLines, equipmentLines, procedureLines };
+}
+
+function buildDescription(
+  context: ReturnType<typeof readContext>,
+  profile: ReturnType<typeof matchTaskTemplateLotProfile>,
+  procedureLines: string[],
+) {
   const materialLine = context.materials.length
     ? `Matériaux pour 1 ${context.unit} : ${joinFrench(context.materials.map((row) => row.name).filter(Boolean))}.`
     : `Matériaux pour 1 ${context.unit} : à compléter.`;
@@ -122,32 +180,30 @@ function buildDescription(context: ReturnType<typeof readContext>, profile: Retu
     equipmentLine,
     laborLine,
     feesLine,
-    "Mode opératoire : contrôler le support, préparer et protéger la zone, exécuter les matériaux dans l'ordre logique, contrôler la finition, nettoyer, puis renseigner les écarts terrain.",
+    "Mode opératoire complet :",
+    ...procedureLines,
     profile.fieldGuidance,
   ].filter(Boolean).join("\n");
 }
 
-function buildCharacteristics(context: ReturnType<typeof readContext>, profile: ReturnType<typeof matchTaskTemplateLotProfile>) {
+function buildCharacteristics(
+  context: ReturnType<typeof readContext>,
+  profile: ReturnType<typeof matchTaskTemplateLotProfile>,
+  materialLines: string[],
+  equipmentLines: string[],
+) {
   const lines = [
     `Lot : ${profile.label || context.lot}`,
     `Unité de production : ${context.unit}`,
     `Marge main d'oeuvre cible : ${profile.laborMarginRate} %`,
+    "Liste matériaux Coco :",
+    ...materialLines,
+    "Liste matériel Coco :",
+    ...equipmentLines,
   ];
 
-  for (const material of context.materials) {
-    const ratio = material.quantity && material.ratioUnit && material.sourceUnit
-      ? ` - quantité pour 1 ${material.sourceUnit} : ${material.quantity} ${material.ratioUnit}`
-      : " - quantité pour 1 unité : à préciser";
-    lines.push(`Matériau : ${material.name || "à préciser"}${ratio}`);
-  }
-  for (const equipment of context.equipment) {
-    if (equipment.name) lines.push(`Matériel : ${equipment.name}${equipment.quantity ? ` - ${equipment.quantity} ${equipment.unit}` : ""}`);
-  }
   for (const labor of context.labor) {
     lines.push(`Main d'oeuvre : ${labor.duration || "?"} ${labor.unit || "h"}${labor.cost ? ` - PR ${labor.cost} €/h` : ""}${labor.sale ? ` - PV ${labor.sale} €/h` : ""}`);
-  }
-  for (const fee of context.fees) {
-    if (fee.name) lines.push(`Matériel/frais : ${fee.name}${fee.cost ? ` - PR ${fee.cost} € HT` : ""}${fee.sale ? ` - PV ${fee.sale} € HT` : ""}`);
   }
 
   return uniqueLines(lines);
@@ -170,6 +226,12 @@ function updateSummary(drawer: HTMLElement, message?: string) {
   summary.textContent = message ?? `Coco utilisera : ${context.materials.length} matériau(x), ${context.equipment.length} matériel(s), ${context.labor.length} ligne(s) main d'oeuvre, ${context.fees.length} frais. Lot détecté : ${profile.label}.`;
 }
 
+function setGeneratedOutput(drawer: HTMLElement, selector: string, lines: string[]) {
+  const target = drawer.querySelector(selector) as HTMLElement | null;
+  if (!target) return;
+  target.textContent = lines.join("\n");
+}
+
 function readMaterialRows(drawer: HTMLElement) {
   return findRows(drawer, "Matériau #").map((row) => {
     const inputs = Array.from(row.querySelectorAll("input"));
@@ -178,8 +240,10 @@ function readMaterialRows(drawer: HTMLElement) {
       sourceUnit: inputs[1]?.value.trim() ?? "",
       quantity: inputs[2]?.value.trim() ?? "",
       ratioUnit: inputs[3]?.value.trim() ?? "",
+      loss: inputs[4]?.value.trim() ?? "",
+      note: inputs[5]?.value.trim() ?? "",
     };
-  }).filter((row) => row.name || row.quantity);
+  }).filter((row) => row.name || row.quantity || row.note);
 }
 
 function readEquipmentRows(drawer: HTMLElement) {
@@ -189,8 +253,9 @@ function readEquipmentRows(drawer: HTMLElement) {
       name: inputs[0]?.value.trim() ?? "",
       quantity: inputs[1]?.value.trim() ?? "",
       unit: inputs[2]?.value.trim() ?? "",
+      note: inputs[4]?.value.trim() ?? "",
     };
-  }).filter((row) => row.name || row.quantity);
+  }).filter((row) => row.name || row.quantity || row.note);
 }
 
 function readLaborRows(drawer: HTMLElement) {
@@ -212,8 +277,9 @@ function readFeeRows(drawer: HTMLElement) {
       name: inputs[0]?.value.trim() ?? "",
       cost: inputs[1]?.value.trim() ?? "",
       sale: inputs[2]?.value.trim() ?? "",
+      note: inputs[3]?.value.trim() ?? "",
     };
-  }).filter((row) => row.name || row.cost || row.sale);
+  }).filter((row) => row.name || row.cost || row.sale || row.note);
 }
 
 function findRows(drawer: HTMLElement, marker: string) {
