@@ -1,5 +1,4 @@
 import {
-  DEFAULT_TASK_TEMPLATE_LOT_PROFILES,
   getTaskTemplateLotProfiles,
   resetTaskTemplateLotProfiles,
   saveTaskTemplateLotProfiles,
