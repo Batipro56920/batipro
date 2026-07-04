@@ -141,9 +141,9 @@ async function resolveSupplier(
 
 function toProductDraft(extracted: ExtractedQuoteProduct, supplier: SupplierRow | null): ProductCatalogDraft {
   const supplierNegotiatedPrice = supplierPriceFromQuote(extracted);
-  const coverageM2 = positiveNumber(extracted.coverage_m2);
+  const coverageM2 = positivePrice(extracted.coverage_m2);
   const catalogPurchasePrice = computeCoverageUnitPrice(supplierNegotiatedPrice, coverageM2) ?? supplierNegotiatedPrice;
-  const salePrice = positiveNumber(extracted.sale_price_ht) ?? computeSalePrice(catalogPurchasePrice, DEFAULT_MARGIN_RATE);
+  const salePrice = positivePrice(extracted.sale_price_ht) ?? computeSalePrice(catalogPurchasePrice, DEFAULT_MARGIN_RATE);
   const supplierPrice = buildSupplierPrice(extracted, supplier, supplierNegotiatedPrice);
   const unit = coverageM2 && coverageM2 > 0 ? "m2" : normalizeUnit(extracted.unit);
 
@@ -172,9 +172,9 @@ function mergeExtractedProduct(
   supplier: SupplierRow | null,
 ): ProductCatalogItem | null {
   const supplierNegotiatedPrice = supplierPriceFromQuote(extracted);
-  const coverageM2 = positiveNumber(extracted.coverage_m2);
+  const coverageM2 = positivePrice(extracted.coverage_m2);
   const catalogPurchasePrice = computeCoverageUnitPrice(supplierNegotiatedPrice, coverageM2) ?? supplierNegotiatedPrice;
-  const salePrice = positiveNumber(extracted.sale_price_ht) ?? computeSalePrice(catalogPurchasePrice, product.targetMarginRate || DEFAULT_MARGIN_RATE);
+  const salePrice = positivePrice(extracted.sale_price_ht) ?? computeSalePrice(catalogPurchasePrice, product.targetMarginRate || DEFAULT_MARGIN_RATE);
   const supplierPrice = buildSupplierPrice(extracted, supplier, supplierNegotiatedPrice);
   let changed = false;
 
@@ -226,7 +226,7 @@ function mergeExtractedProduct(
     changed = true;
   }
 
-  if (next.recommendedSalePriceHt === 0 && salePrice !== null) {
+  if (salePrice !== null && (next.recommendedSalePriceHt === 0 || isMainSupplierImport) && !sameAmount(next.recommendedSalePriceHt, salePrice)) {
     next.recommendedSalePriceHt = salePrice;
     changed = true;
   }
@@ -247,7 +247,7 @@ function buildSupplierPrice(
   if (supplierNegotiatedPrice === null || supplierNegotiatedPrice <= 0) return null;
   if (!supplier && !normalizeText(extracted.supplier_name)) return null;
 
-  const coverageM2 = positiveNumber(extracted.coverage_m2);
+  const coverageM2 = positivePrice(extracted.coverage_m2);
   const pricePerM2 = computeCoverageUnitPrice(supplierNegotiatedPrice, coverageM2);
 
   return {
@@ -373,8 +373,13 @@ function positiveNumber(value: unknown): number | null {
   return Number.isFinite(n) && n >= 0 ? n : null;
 }
 
+function positivePrice(value: unknown): number | null {
+  const n = Number(value);
+  return Number.isFinite(n) && n > 0 ? n : null;
+}
+
 function supplierPriceFromQuote(extracted: ExtractedQuoteProduct): number | null {
-  return positiveNumber(extracted.purchase_price_ht) ?? positiveNumber(extracted.package_price_ht);
+  return positivePrice(extracted.purchase_price_ht) ?? positivePrice(extracted.package_price_ht);
 }
 
 function computeCoverageUnitPrice(price: number | null, coverageM2: number | null): number | null {
