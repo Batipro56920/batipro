@@ -1,4 +1,4 @@
-﻿// src/pages/AuthPage.tsx
+// src/pages/AuthPage.tsx
 import { useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { supabase } from "../lib/supabaseClient";
@@ -198,11 +198,13 @@ export default function AuthPage() {
   );
   const [loading, setLoading] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
+  const [hasIntervenantAccess, setHasIntervenantAccess] = useState(false);
 
   useEffect(() => {
     let alive = true;
     const recoveryUrl = isRecoveryUrl();
-    const storedIntervenantToken = readStoredIntervenantToken();
+    const storedIntervenantToken = Boolean(readStoredIntervenantToken());
+    setHasIntervenantAccess(storedIntervenantToken);
 
     const authError = String((location.state as any)?.authError ?? "").trim();
     if (authError) {
@@ -216,18 +218,9 @@ export default function AuthPage() {
         if (data.session && !recoveryUrl) {
           const nextRoute = await getCurrentUserHomeRoute();
           if (alive) navigate(nextRoute, { replace: true });
-          return;
-        }
-        if (storedIntervenantToken && !recoveryUrl) {
-          navigate("/intervenant", { replace: true });
         }
       })
-      .catch(() => {
-        if (!alive) return;
-        if (storedIntervenantToken && !recoveryUrl) {
-          navigate("/intervenant", { replace: true });
-        }
-      });
+      .catch(() => undefined);
 
     const { data: authSub } = supabase.auth.onAuthStateChange((event) => {
       if (event === "PASSWORD_RECOVERY") {
@@ -446,10 +439,17 @@ export default function AuthPage() {
             </button>
           )}
         </div>
+
+        {mode === "login" && hasIntervenantAccess && (
+          <button
+            type="button"
+            onClick={() => navigate("/intervenant")}
+            className="w-full rounded-xl border border-blue-200 bg-blue-50 px-4 py-2 text-sm font-medium text-blue-800 transition hover:border-blue-300 hover:bg-blue-100"
+          >
+            Reprendre mon accès terrain
+          </button>
+        )}
       </div>
     </div>
   );
 }
-
-
-
