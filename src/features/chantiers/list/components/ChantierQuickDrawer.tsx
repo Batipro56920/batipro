@@ -1,4 +1,4 @@
-import { AlertTriangle, ArrowRight, CalendarDays, ClipboardList, Clock3, FileText, Hammer, Users, X } from "lucide-react";
+import { AlertTriangle, ArrowRight, CalendarDays, CircleDollarSign, ClipboardList, Clock3, FileText, Hammer, Users, X } from "lucide-react";
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { Button } from "../../../../components/ui/button";
@@ -8,7 +8,7 @@ import { ChantierProgress } from "./ChantierProgress";
 import { ChantierRowActions } from "./ChantierRowActions";
 import { ChantierStatusPill } from "./ChantierStatusPill";
 
-const TABS = ["Vue rapide", "Tâches", "Temps", "Planning", "Équipe", "Documents", "Retours terrain", "Alertes"] as const;
+const TABS = ["Vue rapide", "Tâches", "Temps", "Planning", "Financier", "Équipe", "Documents", "Retours terrain", "Alertes"] as const;
 
 function getProjectHref(row: ChantierDerived) {
   if (row.crm_opportunity_id) return `/projets/opportunity-${row.crm_opportunity_id}`;
@@ -243,6 +243,15 @@ export function ChantierQuickDrawer({ row, actions, onClose }: { row: ChantierDe
               cta="Ouvrir le planning"
               metric={shortDate(row.date_fin_prevue ?? row.planning_end_date ?? row.planning_start_date ?? row.date_debut)}
             />
+          ) : tab === "Financier" ? (
+            <DetailShortcutPanel
+              title="Budget et facturation chantier"
+              description="Ouvrir le suivi financier du chantier pour rapprocher devis signé, budget prévu, marge estimée et facturation sans repasser par la liste projets."
+              href={`/chantiers/${row.id}/financier`}
+              icon={CircleDollarSign}
+              cta="Ouvrir le financier"
+              metric={budgetLabel(row.budgetHt)}
+            />
           ) : tab === "Équipe" ? (
             <DetailShortcutPanel
               title="Équipe chantier"
@@ -314,6 +323,12 @@ function QuickAccessPanel({ row }: { row: ChantierDerived }) {
       description: "Quotidien et Gantt chantier",
       href: `/chantiers/${row.id}/planning`,
       icon: CalendarDays,
+    },
+    {
+      label: "Financier",
+      description: budgetLabel(row.budgetHt),
+      href: `/chantiers/${row.id}/financier`,
+      icon: CircleDollarSign,
     },
     {
       label: "Retours terrain",
