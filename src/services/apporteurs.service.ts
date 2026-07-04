@@ -547,12 +547,16 @@ export async function createApporteurLeadPortal(jwt: string, input: {
 }): Promise<ApporteurLeadRow> {
   const portalClient = createPortalClient(jwt);
   await assertActiveApporteurPortal(portalClient, input.apporteur_id, input.organization_id);
+  const clientName = input.client_name.trim();
+  const telephone = input.telephone?.trim() ?? "";
+  if (!clientName) throw new Error("Le nom du client est requis.");
+  if (!telephone) throw new Error("Le téléphone du client est requis.");
 
   const payload = {
     organization_id: input.organization_id,
     apporteur_id: input.apporteur_id,
-    client_name: input.client_name.trim(),
-    telephone: input.telephone?.trim() || null,
+    client_name: clientName,
+    telephone,
     project_address: input.project_address?.trim() || null,
     project_type: input.project_type?.trim() || null,
     estimated_amount: normalizePositiveOrZeroNumber(input.estimated_amount, "Montant estimé"),
