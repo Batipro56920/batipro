@@ -1,4 +1,4 @@
-import type { ProductCatalogItem } from "../domain/types";
+import type { ProductCatalogItem, ProductMaterialUsage } from "../domain/types";
 import { listProductCatalogItems } from "../infrastructure/productCatalogRepository";
 
 type ProductRatioHint = {
@@ -87,10 +87,12 @@ function setInputValue(input: HTMLInputElement, value: string) {
 
 function getProductRatioHint(product: ProductCatalogItem): ProductRatioHint {
   const documentText = getProductDocumentText(product);
-  const ratioMatch = findRatioMatch(documentText);
+  const materialUsage = findProductMaterialUsage(product);
+  const structuredRatio = materialUsage ? buildStructuredRatioMatch(materialUsage) : null;
+  const ratioMatch = structuredRatio ?? findRatioMatch(documentText);
   const lossMatch = documentText.match(/(?:Perte pr[eé]conis[eé]e|Perte extraite)\s*:\s*([0-9]+(?:[,.][0-9]+)?)\s*%/i);
 
-  const lossPercent = parseLooseNumber(lossMatch?.[1]);
+  const lossPercent = materialUsage?.lossPercent ?? parseLooseNumber(lossMatch?.[1]);
 
   const taskNotes = product.documents
     .filter((document) => document.usage?.task || document.kind === "technical_sheet" || document.kind === "application_scope" || document.kind === "work_method")
@@ -108,6 +110,25 @@ function getProductRatioHint(product: ProductCatalogItem): ProductRatioHint {
     ratioUnit: ratioMatch?.ratioUnit ?? null,
     lossPercent,
     notes: taskNotes,
+  };
+}
+
+function findProductMaterialUsage(product: ProductCatalogItem): ProductMaterialUsage | null {
+  const usages = product.documents
+    .map((document) => document.analysis?.materialUsage ?? null)
+    .filter((usage): usage is ProductMaterialUsage => Boolean(usage && usage.ratioQuantity > 0 && usage.ratioUnit && usage.sourceUnit))
+    .sort((a, b) => (b.confidence ?? 0) - (a.confidence ?? 0));
+  return usages[0] ?? null;
+}
+
+function buildStructuredRatioMatch(materialUsage: ProductMaterialUsage): RatioMatch | null {
+  const sourceUnit = normalizeUnit(materialUsage.sourceUnit);
+  const ratioUnit = normalizeUnit(materialUsage.ratioUnit);
+  if (!sourceUnit || !ratioUnit || materialUsage.ratioQuantity <= 0) return null;
+  return {
+    quantity: materialUsage.ratioQuantity,
+    sourceUnit,
+    ratioUnit,
   };
 }
 
