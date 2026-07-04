@@ -427,6 +427,7 @@ export default function ApporteursAffairesPage() {
           if (lead?.apporteur_id) return lead.apporteur_id;
         }
         if (targetedApporteurId && apporteursData.some((row) => row.id === targetedApporteurId)) return targetedApporteurId;
+        if (isLeadStatusFilter(requestedStatus)) return current;
         return current || apporteursData[0]?.id || "";
       });
     } catch (err: any) {
