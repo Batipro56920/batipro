@@ -60,7 +60,8 @@ export async function importProductsFromQuoteText(
     throw new Error("Importez un devis PDF avant de lancer le lecteur.");
   }
 
-  const extractedProducts = await extractProducts(cleanedText);
+  const documentSupplierName = inferDocumentSupplierName(cleanedText);
+  const extractedProducts = (await extractProducts(cleanedText)).map((product) => normalizeExtractedProduct(product, documentSupplierName));
   const supplierByName = new Map(suppliers.map((supplier) => [normalizeKey(supplier.name), supplier]));
   const productByKey = buildProductIdentityIndex(existingProducts);
   const importedProducts: ProductCatalogItem[] = [];
@@ -116,6 +117,16 @@ async function extractProducts(cleanedText: string): Promise<ExtractedQuoteProdu
   if (error) throw new Error(error.message);
   if (!data?.ok) throw new Error(data?.error ?? "Lecture du devis impossible.");
   return (data.products ?? []).filter((product) => Boolean(normalizeText(product.designation)));
+}
+
+function normalizeExtractedProduct(product: ExtractedQuoteProduct, documentSupplierName: string | null): ExtractedQuoteProduct {
+  return {
+    ...product,
+    supplier_name: preferDocumentSupplier(normalizeText(product.supplier_name), documentSupplierName),
+    sale_price_ht: positivePrice(product.sale_price_ht),
+    purchase_price_ht: positivePrice(product.purchase_price_ht),
+    package_price_ht: positivePrice(product.package_price_ht),
+  };
 }
 
 async function resolveSupplier(
@@ -336,6 +347,53 @@ function productMainSupplierMatches(product: ProductCatalogItem, supplier: Suppl
   if (supplier?.id && product.mainSupplierId) return product.mainSupplierId === supplier.id;
   const candidateName = normalizeKey(supplier?.name ?? supplierName);
   return Boolean(candidateName && normalizeKey(product.mainSupplierName) === candidateName);
+}
+
+function preferDocumentSupplier(aiSupplierName: string | null, documentSupplierName: string | null): string | null {
+  if (!documentSupplierName) return aiSupplierName;
+  if (!aiSupplierName) return documentSupplierName;
+
+  const aiKey = normalizeKey(aiSupplierName);
+  const docKey = normalizeKey(documentSupplierName);
+  if (!aiKey || aiKey === docKey) return documentSupplierName;
+  if (looksLikeCustomerName(aiSupplierName)) return documentSupplierName;
+  return aiSupplierName;
+}
+
+function looksLikeCustomerName(value: string): boolean {
+  const key = normalizeKey(value);
+  return key.includes("renovation") || key.includes("renov") || key.includes("client");
+}
+
+function inferDocumentSupplierName(text: string): string | null {
+  const lines = text
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .slice(0, 50);
+
+  const directSeller = lines.find((line) => /(?:comptoir|cp?toir|seigneurie|gauthier|ppg)/i.test(line));
+  if (directSeller) return normalizeSupplierLine(directSeller);
+
+  const devisIndex = lines.findIndex((line) => /\bdevis\b/i.test(line));
+  const headerLines = devisIndex >= 0 ? lines.slice(0, devisIndex) : lines;
+  const candidate = headerLines.find((line) => {
+    const key = normalizeKey(line);
+    if (!key || key.includes("siret") || key.includes("tva") || key.includes("tel") || key.includes("fax")) return false;
+    if (/^[0-9\s,.-]+$/.test(line)) return false;
+    if (looksLikeCustomerName(line)) return false;
+    return /[A-Z]{3,}/.test(line);
+  });
+
+  return candidate ? normalizeSupplierLine(candidate) : null;
+}
+
+function normalizeSupplierLine(line: string): string {
+  return line
+    .replace(/^CSG\s+/i, "")
+    .replace(/^CPTOIR\b/i, "COMPTOIR")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 function sameAmount(a: unknown, b: unknown) {
