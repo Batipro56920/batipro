@@ -27,6 +27,7 @@ const DASHBOARD_METRIC_HREFS: Partial<Record<DashboardBusinessMetric["key"], str
 const DASHBOARD_METRIC_HINTS: Partial<Record<DashboardBusinessMetric["key"], string>> = {
   quotes: "Envoyés, non signés ni refusés",
   invoices: "Factures émises non soldées",
+  apporteurCommissions: "Statut Commission à payer",
 };
 
 const clientDocumentsMetric: DashboardBusinessMetric = {
