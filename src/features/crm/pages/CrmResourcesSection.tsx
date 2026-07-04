@@ -28,6 +28,15 @@ export default function CrmResourcesSection({ templates }: { templates: CrmDatas
     navigate("/bibliotheque");
   }
 
+  function openLibraryLot(lot?: string | null) {
+    const normalizedLot = (lot ?? "").trim();
+    if (!normalizedLot) {
+      openLibrary();
+      return;
+    }
+    navigate(`/bibliotheque?q=${encodeURIComponent(normalizedLot)}`);
+  }
+
   return (
     <ListShell
       title="Ressources / bibliothèque devis"
@@ -69,7 +78,14 @@ export default function CrmResourcesSection({ templates }: { templates: CrmDatas
 
             return (
               <div key={row.id} className="rounded-2xl border bg-white p-5">
-                <div className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">{row.lot ?? "Sans famille"}</div>
+                <button
+                  type="button"
+                  onClick={() => openLibraryLot(row.lot)}
+                  className="text-left text-xs font-semibold uppercase tracking-[0.16em] text-slate-400 hover:text-slate-700"
+                  title="Voir ce lot dans la bibliothèque"
+                >
+                  {row.lot ?? "Sans famille"}
+                </button>
                 <div className="mt-1 font-semibold text-slate-900">{row.titre}</div>
                 <div className="mt-3 grid grid-cols-3 gap-2 text-xs">
                   <div className="rounded-xl bg-slate-50 p-2">Unité<br /><b>{row.unite ?? "u"}</b></div>
@@ -85,6 +101,15 @@ export default function CrmResourcesSection({ templates }: { templates: CrmDatas
                   >
                     Ouvrir la fiche
                   </button>
+                  {row.lot ? (
+                    <button
+                      type="button"
+                      onClick={() => openLibraryLot(row.lot)}
+                      className="rounded-lg border px-3 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50"
+                    >
+                      Voir le lot
+                    </button>
+                  ) : null}
                   {!row.quote_visible ? (
                     <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-1 text-[11px] font-medium text-slate-600">
                       Masqué au devis
