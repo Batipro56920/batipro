@@ -6,22 +6,42 @@ import { PageHeader } from "../../../components/layout/PageHeader";
 import { StatCard } from "../../../components/data/StatCard";
 import { calculateDocumentTotals } from "../../document-engine";
 import { listInvoices, saveInvoice } from "../infrastructure/invoiceRepository";
-import type { InvoiceRecord } from "../domain/types";
+import type { InvoiceRecord, InvoiceStatus } from "../domain/types";
 import { InvoiceEditor } from "../components/InvoiceEditor";
 import { InvoiceStatusBadge } from "../components/InvoiceStatusBadge";
 import { getPaidAmount } from "../application/invoicePayments";
 import { invoiceTypeLabel } from "../application/invoiceFactory";
 
+type InvoiceStatusFilter = "all" | "a_encaisser" | InvoiceStatus;
+
+const COLLECTABLE_INVOICE_STATUSES: InvoiceStatus[] = ["sent", "partially_paid", "overdue"];
+
+const INVOICE_STATUS_FILTERS: Array<{ value: InvoiceStatusFilter; label: string }> = [
+  { value: "all", label: "Tous statuts" },
+  { value: "a_encaisser", label: "À encaisser" },
+  { value: "draft", label: "Brouillon" },
+  { value: "sent", label: "Envoyée" },
+  { value: "partially_paid", label: "Partiellement payée" },
+  { value: "paid", label: "Payée" },
+  { value: "overdue", label: "En retard" },
+  { value: "cancelled", label: "Annulée" },
+];
+
 export default function InvoicesPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const invoiceIdFromUrl = searchParams.get("invoice")?.trim() || null;
+  const statusFromUrl = searchParams.get("status")?.trim() || "";
+  const statusFilterFromUrl = INVOICE_STATUS_FILTERS.some((option) => option.value === statusFromUrl)
+    ? (statusFromUrl as InvoiceStatusFilter)
+    : null;
+  const invalidStatusFromUrl = Boolean(statusFromUrl && !statusFilterFromUrl);
   const [invoices, setInvoices] = useState<InvoiceRecord[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [dirtyInvoiceIds, setDirtyInvoiceIds] = useState<Set<string>>(() => new Set());
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState("");
-  const [statusFilter, setStatusFilter] = useState("all");
+  const [statusFilter, setStatusFilter] = useState<InvoiceStatusFilter>("all");
   const [typeFilter, setTypeFilter] = useState("all");
   const selected = invoices.find((invoice) => invoice.id === selectedId) ?? null;
   const targetedInvoice = useMemo(
@@ -35,14 +55,29 @@ export default function InvoicesPage() {
   }, []);
 
   useEffect(() => {
+    if (invalidStatusFromUrl) {
+      const nextParams = new URLSearchParams(searchParams);
+      nextParams.delete("status");
+      setSearchParams(nextParams, { replace: true });
+      return;
+    }
+    setStatusFilter(statusFilterFromUrl ?? "all");
+  }, [invalidStatusFromUrl, searchParams, setSearchParams, statusFilterFromUrl]);
+
+  useEffect(() => {
     if (!invoiceIdFromUrl) return;
     if (targetedInvoice) {
       setSelectedId(targetedInvoice.id);
       setQuery("");
       setStatusFilter("all");
       setTypeFilter("all");
+      if (searchParams.has("status")) {
+        const nextParams = new URLSearchParams(searchParams);
+        nextParams.delete("status");
+        setSearchParams(nextParams, { replace: true });
+      }
     }
-  }, [invoiceIdFromUrl, targetedInvoice]);
+  }, [invoiceIdFromUrl, searchParams, setSearchParams, targetedInvoice]);
 
   const stats = useMemo(() => {
     const totals = invoices.reduce((acc, invoice) => {
@@ -65,7 +100,9 @@ export default function InvoicesPage() {
         invoice.document.siteAddress,
         invoice.document.title,
       ].some((value) => String(value ?? "").toLowerCase().includes(text));
-      const matchesStatus = statusFilter === "all" || invoice.status === statusFilter;
+      const matchesStatus =
+        statusFilter === "all" ||
+        (statusFilter === "a_encaisser" ? COLLECTABLE_INVOICE_STATUSES.includes(invoice.status) : invoice.status === statusFilter);
       const matchesType = typeFilter === "all" || invoice.type === typeFilter;
       return matchesText && matchesStatus && matchesType;
     });
@@ -108,6 +145,14 @@ export default function InvoicesPage() {
   function selectInvoice(invoiceId: string) {
     if (invoiceIdFromUrl && invoiceIdFromUrl !== invoiceId) clearActiveInvoiceParam();
     setSelectedId(invoiceId);
+  }
+
+  function selectStatusFilter(nextStatus: InvoiceStatusFilter) {
+    setStatusFilter(nextStatus);
+    const nextParams = new URLSearchParams(searchParams);
+    if (nextStatus === "all") nextParams.delete("status");
+    else nextParams.set("status", nextStatus);
+    setSearchParams(nextParams, { replace: true });
   }
 
   function update(invoice: InvoiceRecord) {
@@ -187,14 +232,8 @@ export default function InvoicesPage() {
               <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
               <input className="h-10 w-full rounded-xl border border-slate-200 bg-white pl-10 pr-3 text-sm outline-none focus:border-blue-300" placeholder="Rechercher numéro, client, chantier..." value={query} onChange={(event) => setQuery(event.target.value)} />
             </label>
-            <select className={selectClass} value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}>
-              <option value="all">Tous statuts</option>
-              <option value="draft">Brouillon</option>
-              <option value="sent">Envoyée</option>
-              <option value="partially_paid">Partiellement payée</option>
-              <option value="paid">Payée</option>
-              <option value="overdue">En retard</option>
-              <option value="cancelled">Annulée</option>
+            <select className={selectClass} value={statusFilter} onChange={(event) => selectStatusFilter(event.target.value as InvoiceStatusFilter)}>
+              {INVOICE_STATUS_FILTERS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
             </select>
             <select className={selectClass} value={typeFilter} onChange={(event) => setTypeFilter(event.target.value)}>
               <option value="all">Tous types</option>
