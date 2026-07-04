@@ -4,11 +4,21 @@ import { Link, useParams } from "react-router-dom";
 import ChantierPlanningSection from "../features/chantiers/pages/ChantierPlanningSection";
 import { getChantierById, type ChantierRow } from "../services/chantiers.service";
 import { listIntervenantsByChantierId, type IntervenantRow } from "../services/intervenants.service";
+import { listTerrainFeedbacks } from "../services/terrainFeedback.service";
+
+type TerrainFeedbackPlanningSummary = {
+  open: number;
+  priority: number;
+};
+
+const OPEN_TERRAIN_FEEDBACK_STATUSES = new Set(["nouveau", "en_cours"]);
+const PRIORITY_TERRAIN_FEEDBACK_URGENCIES = new Set(["critique", "urgente"]);
 
 export default function ChantierPlanningPage() {
   const { id } = useParams<{ id: string }>();
   const [chantier, setChantier] = useState<ChantierRow | null>(null);
   const [intervenants, setIntervenants] = useState<IntervenantRow[]>([]);
+  const [terrainFeedbackSummary, setTerrainFeedbackSummary] = useState<TerrainFeedbackPlanningSummary>({ open: 0, priority: 0 });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -30,18 +40,25 @@ export default function ChantierPlanningPage() {
       setLoading(true);
       setError(null);
       try {
-        const [chantierRow, intervenantRows] = await Promise.all([
+        const [chantierRow, intervenantRows, terrainFeedbackRows] = await Promise.all([
           getChantierById(id),
           listIntervenantsByChantierId(id),
+          listTerrainFeedbacks({ chantierId: id }).catch(() => []),
         ]);
         if (!alive) return;
+        const openTerrainFeedbackRows = terrainFeedbackRows.filter((row) => OPEN_TERRAIN_FEEDBACK_STATUSES.has(row.status));
         setChantier(chantierRow);
         setIntervenants(intervenantRows);
+        setTerrainFeedbackSummary({
+          open: openTerrainFeedbackRows.length,
+          priority: openTerrainFeedbackRows.filter((row) => PRIORITY_TERRAIN_FEEDBACK_URGENCIES.has(row.urgency)).length,
+        });
       } catch (err: any) {
         if (!alive) return;
         setError(err?.message ?? "Impossible de charger l'agenda et le planning chantier.");
         setChantier(null);
         setIntervenants([]);
+        setTerrainFeedbackSummary({ open: 0, priority: 0 });
       } finally {
         if (alive) setLoading(false);
       }
@@ -93,6 +110,13 @@ export default function ChantierPlanningPage() {
               <span>Début : {chantier?.date_debut ?? chantier?.planning_start_date ?? "-"}</span>
               <span>Fin : {chantier?.date_fin_prevue ?? chantier?.planning_end_date ?? "-"}</span>
               <span>{activeIntervenantsCount} intervenant{activeIntervenantsCount > 1 ? "s" : ""} affecté{activeIntervenantsCount > 1 ? "s" : ""}</span>
+              {terrainFeedbackSummary.open > 0 ? (
+                <span className={terrainFeedbackSummary.priority > 0 ? "font-semibold text-red-700" : "font-semibold text-blue-700"}>
+                  {terrainFeedbackSummary.priority > 0
+                    ? `${terrainFeedbackSummary.priority} retour terrain urgent`
+                    : `${terrainFeedbackSummary.open} retour terrain ouvert`}
+                </span>
+              ) : null}
             </div>
           </div>
           <div className="flex flex-wrap gap-2">
@@ -140,9 +164,16 @@ export default function ChantierPlanningPage() {
             </Link>
             <Link
               to={`/chantiers/${encodeURIComponent(id)}/retours-terrain`}
-              className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm font-medium text-amber-800 hover:bg-amber-100"
+              className={[
+                "rounded-xl border px-3 py-2 text-sm font-medium hover:bg-amber-100",
+                terrainFeedbackSummary.priority > 0
+                  ? "border-red-200 bg-red-50 text-red-800"
+                  : "border-amber-200 bg-amber-50 text-amber-800",
+              ].join(" ")}
             >
-              Retours terrain
+              {terrainFeedbackSummary.open > 0
+                ? `Retours terrain (${terrainFeedbackSummary.priority > 0 ? `${terrainFeedbackSummary.priority} urgent` : terrainFeedbackSummary.open})`
+                : "Retours terrain"}
             </Link>
           </div>
         </div>
