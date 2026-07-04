@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { ArrowLeft, CalendarPlus, CheckCircle2, FileText, Hammer, Pencil, RefreshCw, XCircle } from "lucide-react";
+import { ArrowLeft, CalendarPlus, CheckCircle2, FileText, FolderOpen, Hammer, Pencil, RefreshCw, XCircle } from "lucide-react";
 import {
   ensureCrmDefaults,
   moveCrmOpportunityStage,
@@ -144,10 +144,16 @@ export function ProjectDetailHeader({ project, onProjectUpdated }: { project: Pr
             Relancer
           </Link>
           {linkedChantierId ? (
-            <Link to={`/chantiers/${linkedChantierId}/preparation`} className="inline-flex h-9 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-3 text-sm font-medium text-slate-900 transition hover:bg-slate-50" title={chantier?.nom ?? "Ouvrir la préparation du chantier lié au devis accepté"}>
-              <Hammer className="h-4 w-4" />
-              Préparer chantier
-            </Link>
+            <>
+              <Link to={`/chantiers/${linkedChantierId}/preparation`} className="inline-flex h-9 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-3 text-sm font-medium text-slate-900 transition hover:bg-slate-50" title={chantier?.nom ?? "Ouvrir la préparation du chantier lié au devis accepté"}>
+                <Hammer className="h-4 w-4" />
+                Préparer chantier
+              </Link>
+              <Link to={`/chantiers/${linkedChantierId}/documents`} className="inline-flex h-9 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-3 text-sm font-medium text-slate-900 transition hover:bg-slate-50" title={chantier?.nom ? `Ouvrir les documents de ${chantier.nom}` : "Ouvrir les documents du chantier lié"}>
+                <FolderOpen className="h-4 w-4" />
+                Documents chantier
+              </Link>
+            </>
           ) : acceptedQuote ? (
             <button type="button" onClick={createChantierFromAcceptedQuote} disabled={transformingChantier} className="inline-flex h-9 items-center justify-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-3 text-sm font-medium text-emerald-700 transition hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-60">
               <Hammer className="h-4 w-4" />
