@@ -19,6 +19,9 @@ const toneClass = {
 };
 
 const CLIENT_DOCUMENT_ACTIONABLE_STATUSES = ["sent", "viewed", "modification_requested", "expired"];
+const DASHBOARD_METRIC_HREFS: Partial<Record<DashboardBusinessMetric["key"], string>> = {
+  invoices: "/factures?status=a_encaisser",
+};
 
 const clientDocumentsMetric: DashboardBusinessMetric = {
   key: "clientDocuments",
@@ -158,9 +161,10 @@ export function DashboardBusinessPanel({ metrics }: DashboardBusinessPanelProps)
           const count = counts[metric.key] ?? null;
           const value = loadingCounts && count === null ? "..." : count === null ? metric.value : String(count);
           const tone = metricTone(metric, count);
+          const href = DASHBOARD_METRIC_HREFS[metric.key] ?? metric.href;
 
           return (
-            <Link key={metric.key} to={metric.href} className="group rounded-2xl border border-slate-200 p-3 transition hover:border-blue-200 hover:bg-blue-50/40">
+            <Link key={metric.key} to={href} className="group rounded-2xl border border-slate-200 p-3 transition hover:border-blue-200 hover:bg-blue-50/40">
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
                   <div className="truncate text-sm font-semibold text-slate-950">{metric.label}</div>
