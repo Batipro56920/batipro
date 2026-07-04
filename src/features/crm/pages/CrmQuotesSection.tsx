@@ -67,6 +67,21 @@ export default function CrmQuotesSection({
     setFilters((current) => (current.status === urlStatus ? current : { ...current, status: urlStatus }));
   }, [searchParams, setFilters, setSearchParams, urlStatus, validUrlStatus]);
 
+  useEffect(() => {
+    const currentStatus = searchParams.get("status") ?? "";
+    if (filters.status === "all") {
+      if (!currentStatus) return;
+      const nextSearchParams = new URLSearchParams(searchParams);
+      nextSearchParams.delete("status");
+      setSearchParams(nextSearchParams, { replace: true });
+      return;
+    }
+    if (currentStatus === filters.status) return;
+    const nextSearchParams = new URLSearchParams(searchParams);
+    nextSearchParams.set("status", filters.status);
+    setSearchParams(nextSearchParams, { replace: true });
+  }, [filters.status, searchParams, setSearchParams]);
+
   const hasActiveFilters =
     filters.query.trim().length > 0 ||
     filters.status !== "all" ||
