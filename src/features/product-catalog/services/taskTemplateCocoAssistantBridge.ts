@@ -1,21 +1,19 @@
+import { matchTaskTemplateLotProfile, TASK_TEMPLATE_LOT_PROFILES_CHANGED } from "./taskTemplateLotProfiles";
+
 let installed = false;
 let observer: MutationObserver | null = null;
-
-const LOT_MARGIN_PROFILES = [
-  { patterns: ["electricite", "elec", "courant fort", "courant faible"], label: "Électricité", laborMarginRate: 55 },
-  { patterns: ["platrerie", "placo", "cloison", "doublage", "isolation"], label: "Plâtrerie", laborMarginRate: 30 },
-  { patterns: ["peinture", "revetement mural", "papier peint"], label: "Peinture", laborMarginRate: 30 },
-  { patterns: ["plomberie", "sanitaire", "chauffage", "cvc"], label: "Plomberie", laborMarginRate: 45 },
-  { patterns: ["menuiserie", "agencement"], label: "Menuiserie", laborMarginRate: 35 },
-  { patterns: ["sol", "carrelage", "parquet", "faience", "faïence"], label: "Sols / carrelage", laborMarginRate: 35 },
-  { patterns: ["facade", "façade", "ite", "ravalement"], label: "Façade", laborMarginRate: 35 },
-];
 
 export function installTaskTemplateCocoAssistantBridge() {
   if (installed || typeof window === "undefined" || typeof document === "undefined") return;
   installed = true;
   document.addEventListener("input", onTemplateInput, true);
   document.addEventListener("change", onTemplateInput, true);
+  window.addEventListener(TASK_TEMPLATE_LOT_PROFILES_CHANGED, () => {
+    for (const drawer of findTaskTemplateDrawers()) {
+      applyLotDefaults(drawer, true);
+      updateAssistantSummary(drawer);
+    }
+  });
   observer = new MutationObserver(() => installAssistantCards());
   observer.observe(document.body, { childList: true, subtree: true });
   window.setTimeout(installAssistantCards, 0);
@@ -27,7 +25,13 @@ function onTemplateInput(event: Event) {
   const drawer = findTaskTemplateDrawer(target);
   if (!drawer) return;
 
-  if (isLotInput(drawer, target) || isLaborCostInput(drawer, target)) {
+  if (isLotInput(drawer, target)) {
+    applyLotDefaults(drawer);
+    updateAssistantSummary(drawer);
+    return;
+  }
+
+  if (isLaborCostInput(drawer, target)) {
     applyLaborMargin(drawer);
     updateAssistantSummary(drawer);
   }
@@ -36,13 +40,13 @@ function onTemplateInput(event: Event) {
 function installAssistantCards() {
   for (const drawer of findTaskTemplateDrawers()) {
     if (drawer.dataset.batiproTaskCocoAssistant === "true") continue;
-    const titleInput = getLabeledInput(drawer, "titre");
-    const anchor = titleInput?.closest("label") as HTMLElement | null;
+    const advancedSection = findAdvancedPreparationSection(drawer);
+    const anchor = advancedSection ?? getLabeledTextarea(drawer, "remarques")?.closest("label") as HTMLElement | null;
     if (!anchor?.parentElement) continue;
 
     drawer.dataset.batiproTaskCocoAssistant = "true";
-    anchor.insertAdjacentElement("afterend", buildAssistantCard(drawer));
-    applyLaborMargin(drawer);
+    anchor.insertAdjacentElement("beforebegin", buildAssistantCard(drawer));
+    applyLotDefaults(drawer);
     updateAssistantSummary(drawer);
   }
 }
@@ -61,7 +65,7 @@ function buildAssistantCard(drawer: HTMLElement) {
   title.textContent = "Assistant Coco template";
   const subtitle = document.createElement("div");
   subtitle.className = "mt-1 text-xs text-slate-600";
-  subtitle.textContent = "Pré-remplit le template à partir du lot, de la désignation, des matériaux, de la main d'oeuvre et des frais saisis.";
+  subtitle.textContent = "À lancer après avoir renseigné désignation, unité, usage, matériaux, main d'oeuvre et frais.";
   text.append(title, subtitle);
 
   const actions = document.createElement("div");
@@ -70,16 +74,16 @@ function buildAssistantCard(drawer: HTMLElement) {
   const marginButton = document.createElement("button");
   marginButton.type = "button";
   marginButton.className = "rounded-xl border border-blue-200 bg-white px-3 py-2 text-xs font-medium text-blue-800 hover:bg-blue-50";
-  marginButton.textContent = "Appliquer marge lot";
+  marginButton.textContent = "Appliquer lot";
   marginButton.addEventListener("click", () => {
-    applyLaborMargin(drawer, true);
+    applyLotDefaults(drawer, true);
     updateAssistantSummary(drawer);
   });
 
   const generateButton = document.createElement("button");
   generateButton.type = "button";
   generateButton.className = "rounded-xl bg-slate-900 px-3 py-2 text-xs font-semibold text-white hover:bg-slate-800";
-  generateButton.textContent = "Générer avec Coco";
+  generateButton.textContent = "Générer après saisie";
   generateButton.addEventListener("click", () => generateTemplateFields(drawer));
 
   actions.append(marginButton, generateButton);
@@ -108,8 +112,8 @@ function generateTemplateFields(drawer: HTMLElement) {
   if (characteristicsInput && shouldFill(characteristicsInput.value)) setTextareaValue(characteristicsInput, characteristics.join("\n"));
   if (remarksInput && shouldFill(remarksInput.value)) setTextareaValue(remarksInput, remarks.join("\n"));
 
-  applyLaborMargin(drawer, true);
-  updateAssistantSummary(drawer, "Coco a généré les champs métier à partir du template en cours.");
+  applyLotDefaults(drawer, true);
+  updateAssistantSummary(drawer, "Coco a généré les champs métier à partir des données saisies dans le template.");
 }
 
 function readTemplateContext(drawer: HTMLElement) {
@@ -125,7 +129,7 @@ function readTemplateContext(drawer: HTMLElement) {
 
 function buildTechnicalDescription(context: ReturnType<typeof readTemplateContext>, profile: ReturnType<typeof getLotProfile>) {
   const title = context.title || "Tâche à exécuter";
-  const unit = context.unit || "unité";
+  const unit = context.unit || profile.defaultUnit || "unité";
   const materials = context.materials.map((material) => material.name).filter(Boolean).slice(0, 4);
   const materialText = materials.length ? ` avec ${joinFrench(materials)}` : "";
   const laborText = context.labor.length ? ` Main d'oeuvre prévue : ${context.labor.map((row) => `${row.duration || "?"} ${row.unit || "h"}`).join(", ")}.` : "";
@@ -134,14 +138,15 @@ function buildTechnicalDescription(context: ReturnType<typeof readTemplateContex
     `${title} - lot ${profile.label}.`,
     `Exécution prévue au ${unit}${materialText}.`,
     laborText,
-    "Préparer la zone, vérifier les supports, appliquer les produits conformément aux fiches produit et contrôler le résultat avant validation.",
+    "Coco doit suivre l'ordre logique : préparation, protections, application/pose, contrôle, nettoyage et retour terrain.",
+    profile.fieldGuidance,
   ].filter(Boolean).join("\n");
 }
 
 function buildCharacteristics(context: ReturnType<typeof readTemplateContext>, profile: ReturnType<typeof getLotProfile>) {
   const lines = [
     `Lot : ${profile.label}`,
-    `Unité de production : ${context.unit || "à préciser"}`,
+    `Unité de production : ${context.unit || profile.defaultUnit || "à préciser"}`,
     `Marge main d'oeuvre cible : ${profile.laborMarginRate} %`,
   ];
 
@@ -164,23 +169,23 @@ function buildCharacteristics(context: ReturnType<typeof readTemplateContext>, p
 }
 
 function buildFieldReturns(profile: ReturnType<typeof getLotProfile>) {
-  const lines = [
+  return uniqueLines([
     "Retour terrain attendu : confirmer quantité réellement consommée, temps passé et éventuels écarts avec le ratio prévu.",
     "Contrôle qualité : vérifier support, finition, conformité aux fiches produit et réserves éventuelles avant clôture.",
     "Point d'attention : signaler toute incompatibilité support/produit, manque matériel, temps d'attente ou condition chantier bloquante.",
-  ];
+    profile.fieldGuidance,
+  ].filter(Boolean));
+}
 
-  if (profile.label === "Électricité") {
-    lines.push("Électricité : vérifier repérage, continuité, protections, essais et conformité avant rebouchage ou fermeture.");
+function applyLotDefaults(drawer: HTMLElement, force = false) {
+  const profile = getLotProfile(getLabeledInput(drawer, "lot")?.value ?? "");
+  const unitInput = getLabeledInput(drawer, "unite") ?? getLabeledInput(drawer, "unité");
+  if (unitInput && profile.defaultUnit && (force || !unitInput.value.trim())) {
+    setInputValue(unitInput, profile.defaultUnit);
   }
-  if (profile.label === "Plâtrerie") {
-    lines.push("Plâtrerie : vérifier planéité, aplomb, fixation, traitement des joints et réservations avant finition.");
-  }
-  if (profile.label === "Peinture") {
-    lines.push("Peinture : vérifier préparation support, teinte, nombre de couches, séchage et aspect final à la lumière.");
-  }
-
-  return lines;
+  setCheckboxByText(drawer, "Visible dans les devis", profile.defaultUsage.quoteVisible, force);
+  setCheckboxByText(drawer, "Visible côté chantier", profile.defaultUsage.chantierVisible, force);
+  applyLaborMargin(drawer, force);
 }
 
 function applyLaborMargin(drawer: HTMLElement, force = false) {
@@ -244,6 +249,11 @@ function findTaskTemplateDrawer(element: HTMLElement) {
   return element.closest(".fixed.inset-0") as HTMLElement | null;
 }
 
+function findAdvancedPreparationSection(drawer: HTMLElement) {
+  return Array.from(drawer.querySelectorAll(".rounded-2xl.border.border-blue-200"))
+    .find((element): element is HTMLElement => element instanceof HTMLElement && Boolean(element.textContent?.includes("Préparation avancée"))) ?? null;
+}
+
 function getLabeledInput(root: HTMLElement, labelText: string) {
   const label = findLabel(root, labelText);
   const input = label?.querySelector("input");
@@ -288,24 +298,32 @@ function findPreparationRows(drawer: HTMLElement, marker: string) {
 }
 
 function getLotProfile(lot: string) {
-  const key = normalizeText(lot);
-  return LOT_MARGIN_PROFILES.find((profile) => profile.patterns.some((pattern) => key.includes(normalizeText(pattern)))) ?? {
-    label: lot.trim() || "Lot standard",
-    laborMarginRate: 30,
-  };
+  return matchTaskTemplateLotProfile(lot);
 }
 
 function updateAssistantSummary(drawer: HTMLElement, message?: string) {
   const summary = drawer.querySelector("[data-batipro-task-coco-assistant-summary]") as HTMLElement | null;
   if (!summary) return;
   const profile = getLotProfile(getLabeledInput(drawer, "lot")?.value ?? "");
-  summary.textContent = message ?? `Profil détecté : ${profile.label} - marge main d'oeuvre ${profile.laborMarginRate} %. Coco utilise les matériaux, ratios, main d'oeuvre et frais du template.`;
+  summary.textContent = message ?? `Profil détecté : ${profile.label} - marge main d'oeuvre ${profile.laborMarginRate} %, unité ${profile.defaultUnit}. Coco utilise les matériaux, ratios, main d'oeuvre et frais saisis.`;
 }
 
 function shouldFill(value: string) {
   const trimmed = value.trim();
   if (!trimmed) return true;
   return window.confirm("Ce champ contient déjà du texte. Coco peut le remplacer par une proposition recalculée. Continuer ?");
+}
+
+function setCheckboxByText(drawer: HTMLElement, labelText: string, checked: boolean, force: boolean) {
+  const label = Array.from(drawer.querySelectorAll("label"))
+    .find((candidate) => normalizeText(candidate.textContent).includes(normalizeText(labelText)));
+  const input = label?.querySelector("input[type='checkbox']");
+  if (!(input instanceof HTMLInputElement)) return;
+  if (!force && input.checked === checked) return;
+  if (input.checked === checked) return;
+  input.checked = checked;
+  input.dispatchEvent(new Event("input", { bubbles: true }));
+  input.dispatchEvent(new Event("change", { bubbles: true }));
 }
 
 function setInputValue(input: HTMLInputElement, value: string) {
