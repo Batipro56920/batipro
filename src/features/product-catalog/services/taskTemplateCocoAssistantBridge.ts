@@ -8,6 +8,31 @@ let installed = false;
 let observer: MutationObserver | null = null;
 let pending = false;
 
+type MaterialRow = {
+  name: string;
+  sourceUnit: string;
+  quantity: string;
+  ratioUnit: string;
+  loss: string;
+  note: string;
+  purchasePrice: string;
+  salePrice: string;
+};
+
+type EquipmentRow = {
+  name: string;
+  quantity: string;
+  unit: string;
+  note: string;
+};
+
+type GeneratedOutputs = {
+  materialLines: string[];
+  equipmentLines: string[];
+  procedureLines: string[];
+  controlLines: string[];
+};
+
 export function installTaskTemplateCocoAssistantBridge() {
   if (installed || typeof window === "undefined" || typeof document === "undefined") return;
   installed = true;
@@ -149,8 +174,8 @@ function buildOutputSection(drawer: HTMLElement) {
   const text = document.createElement("div");
   text.innerHTML = `
     <div class="text-xs font-semibold uppercase tracking-[0.18em] text-blue-700">Coco template</div>
-    <div class="mt-1 text-sm font-semibold text-slate-950">Sorties générées par Coco</div>
-    <div class="mt-1 text-xs text-slate-600">Coco doit produire la liste matériaux, la liste matériel, le mode opératoire complet, puis remplir les champs enregistrés.</div>
+    <div class="mt-1 text-sm font-semibold text-slate-950">Génération intelligente de la tâche</div>
+    <div class="mt-1 text-xs text-slate-600">Coco analyse les produits liés, leurs notes techniques, le lot, la main d'oeuvre et les frais pour produire les besoins chantier.</div>
   `;
 
   const button = document.createElement("button");
@@ -167,7 +192,7 @@ function buildOutputSection(drawer: HTMLElement) {
 
   const generated = document.createElement("div");
   generated.dataset.batiproCocoGeneratedOutputs = "true";
-  generated.className = "grid gap-3 xl:grid-cols-3";
+  generated.className = "grid gap-3 xl:grid-cols-4";
   generated.innerHTML = `
     <div class="rounded-2xl border border-slate-200 bg-white p-3">
       <div class="text-sm font-semibold text-slate-900">Liste matériaux Coco</div>
@@ -175,11 +200,15 @@ function buildOutputSection(drawer: HTMLElement) {
     </div>
     <div class="rounded-2xl border border-slate-200 bg-white p-3">
       <div class="text-sm font-semibold text-slate-900">Liste matériel Coco</div>
-      <div data-coco-equipment class="mt-2 whitespace-pre-line text-sm text-slate-700">Clique sur "Générer avec Coco" après avoir ajouté le matériel et les frais.</div>
+      <div data-coco-equipment class="mt-2 whitespace-pre-line text-sm text-slate-700">Coco proposera aussi le matériel à partir des fiches techniques.</div>
     </div>
     <div class="rounded-2xl border border-slate-200 bg-white p-3">
       <div class="text-sm font-semibold text-slate-900">Mode opératoire complet</div>
       <div data-coco-procedure class="mt-2 whitespace-pre-line text-sm text-slate-700">Clique sur "Générer avec Coco" pour créer les étapes terrain.</div>
+    </div>
+    <div class="rounded-2xl border border-slate-200 bg-white p-3">
+      <div class="text-sm font-semibold text-slate-900">Contrôles / erreurs à éviter</div>
+      <div data-coco-controls class="mt-2 whitespace-pre-line text-sm text-slate-700">Coco ajoutera les contrôles et alertes utiles.</div>
     </div>
   `;
 
@@ -192,13 +221,14 @@ function generateWithCoco(drawer: HTMLElement) {
   const context = readContext(drawer);
   const profile = matchTaskTemplateLotProfile(context.lot);
   const generated = buildGeneratedOutputs(context, profile);
-  const description = buildDescription(context, profile, generated.procedureLines);
-  const characteristics = buildCharacteristics(context, profile, generated.materialLines, generated.equipmentLines);
-  const fieldReturns = buildFieldReturns(profile.fieldGuidance);
+  const description = buildDescription(context, profile, generated);
+  const characteristics = buildCharacteristics(context, profile, generated);
+  const fieldReturns = buildFieldReturns(profile.fieldGuidance, generated.controlLines);
 
   setGeneratedOutput(drawer, "[data-coco-materials]", generated.materialLines);
   setGeneratedOutput(drawer, "[data-coco-equipment]", generated.equipmentLines);
   setGeneratedOutput(drawer, "[data-coco-procedure]", generated.procedureLines);
+  setGeneratedOutput(drawer, "[data-coco-controls]", generated.controlLines);
 
   const descriptionInput = getLabeledTextarea(drawer, "description technique");
   const characteristicsInput = getLabeledTextarea(drawer, "caracteristiques") ?? getLabeledTextarea(drawer, "caractéristiques");
@@ -208,7 +238,7 @@ function generateWithCoco(drawer: HTMLElement) {
   if (characteristicsInput && canReplace(characteristicsInput.value, "caractéristiques")) setTextareaValue(characteristicsInput, characteristics.join("\n"));
   if (remarksInput && canReplace(remarksInput.value, "retours terrain")) setTextareaValue(remarksInput, fieldReturns.join("\n"));
 
-  updateSummary(drawer, "Coco a généré les listes matériaux/matériel, le mode opératoire complet et les champs enregistrés.");
+  updateSummary(drawer, "Coco a analysé les matériaux, proposé le matériel, créé le mode opératoire et rempli les champs enregistrés.");
 }
 
 function readContext(drawer: HTMLElement) {
@@ -228,81 +258,165 @@ function getLotValue(drawer: HTMLElement) {
   return select?.value.trim() || getLabeledInput(drawer, "lot")?.value.trim() || "";
 }
 
-function buildGeneratedOutputs(context: ReturnType<typeof readContext>, profile: ReturnType<typeof matchTaskTemplateLotProfile>) {
-  const materialLines = context.materials.length
-    ? context.materials.map((material, index) => {
-      const quantity = material.quantity && material.ratioUnit
-        ? `${material.quantity} ${material.ratioUnit} pour 1 ${material.sourceUnit || context.unit}`
-        : `quantité à préciser pour 1 ${context.unit}`;
-      const loss = material.loss ? `, perte ${material.loss} %` : "";
-      return `${index + 1}. ${material.name || "Matériau à préciser"} : ${quantity}${loss}${material.note ? ` - ${material.note}` : ""}`;
+function buildGeneratedOutputs(context: ReturnType<typeof readContext>, profile: ReturnType<typeof matchTaskTemplateLotProfile>): GeneratedOutputs {
+  const enrichedMaterials = context.materials.map((material) => enrichMaterial(material, context.unit));
+
+  const materialLines = enrichedMaterials.length
+    ? enrichedMaterials.map((material, index) => {
+      const price = material.purchasePrice || material.salePrice
+        ? ` - PR ${material.purchasePrice || "?"} HT${material.salePrice ? ` / PV ${material.salePrice} HT` : ""}`
+        : "";
+      const loss = material.loss ? ` - perte ${material.loss} %` : "";
+      return `${index + 1}. ${material.name || "Matériau à préciser"} : ${material.quantity} ${material.ratioUnit} pour 1 ${material.sourceUnit}${loss}${price}`;
     })
     : [`1. Aucun matériau renseigné : ajouter les produits liés avant génération.`];
 
-  const equipmentLines = [
-    ...context.equipment.map((item, index) => `${index + 1}. ${item.name || "Matériel à préciser"}${item.quantity ? ` : ${item.quantity} ${item.unit}` : ""}${item.note ? ` - ${item.note}` : ""}`),
-    ...context.fees.map((fee, index) => `${context.equipment.length + index + 1}. ${fee.name || "Frais à préciser"}${fee.cost ? ` - PR ${fee.cost} € HT` : ""}${fee.sale ? ` - PV ${fee.sale} € HT` : ""}${fee.note ? ` - ${fee.note}` : ""}`),
-  ];
-  if (equipmentLines.length === 0) equipmentLines.push("1. Aucun matériel/frais renseigné : compléter le bloc matériel/frais si nécessaire.");
+  const inferredEquipment = inferEquipment(context, enrichedMaterials, profile.label || context.lot);
+  const equipmentLines = inferredEquipment.map((item, index) => `${index + 1}. ${item}`);
 
-  const procedureLines = [
-    `1. Vérifier le support, les dimensions et les conditions chantier pour ${context.title}.`,
-    `2. Préparer la zone : protections, accès, outillage, sécurité et matériel nécessaire (${profile.label || context.lot}).`,
-    ...context.materials.map((material, index) => `${index + 3}. Préparer ${material.name || "le matériau"} selon le ratio prévu (${material.quantity || "?"} ${material.ratioUnit || "unité"} / ${material.sourceUnit || context.unit}) et contrôler la compatibilité avec le support.`),
-  ];
-  const nextStep = procedureLines.length + 1;
-  procedureLines.push(`${nextStep}. Exécuter la pose/application dans l'ordre logique des matériaux, en contrôlant alignement, recouvrement, temps d'attente et finition.`);
-  procedureLines.push(`${nextStep + 1}. Contrôler la conformité : quantité posée, finition, réserves, nettoyage et photos si nécessaire.`);
-  procedureLines.push(`${nextStep + 2}. Renseigner le retour terrain : consommation réelle, temps passé, écarts de ratio, matériel manquant, erreurs à éviter.`);
-  if (profile.fieldGuidance) procedureLines.push(`${nextStep + 3}. Consigne lot : ${profile.fieldGuidance}`);
+  const procedureLines = buildProcedureLines(context, profile, enrichedMaterials, inferredEquipment);
+  const controlLines = buildControlLines(context, enrichedMaterials, profile.fieldGuidance);
 
-  return { materialLines, equipmentLines, procedureLines };
+  return { materialLines, equipmentLines, procedureLines, controlLines };
+}
+
+function enrichMaterial(material: MaterialRow, taskUnit: string) {
+  const note = cleanTechnicalNote(material.note);
+  const extractedRatio = extractRatioFromText(note, taskUnit);
+  const extractedLoss = extractLossFromText(note);
+  return {
+    ...material,
+    sourceUnit: normalizeUnit(material.sourceUnit || extractedRatio.sourceUnit || taskUnit),
+    quantity: material.quantity || extractedRatio.quantity || "à préciser",
+    ratioUnit: normalizeUnit(material.ratioUnit || extractedRatio.ratioUnit || material.sourceUnit || "unité"),
+    loss: material.loss || extractedLoss || "",
+    note,
+  };
+}
+
+function inferEquipment(context: ReturnType<typeof readContext>, materials: ReturnType<typeof enrichMaterial>[], lot: string) {
+  const lines: string[] = [];
+
+  for (const item of context.equipment) {
+    if (item.name) lines.push(`${item.name}${item.quantity ? ` : ${item.quantity} ${item.unit || "u"}` : ""}${item.note ? ` - ${item.note}` : ""}`);
+  }
+  for (const fee of context.fees) {
+    if (fee.name) lines.push(`${fee.name}${fee.cost ? ` - PR ${fee.cost} € HT` : ""}${fee.sale ? ` - PV ${fee.sale} € HT` : ""}${fee.note ? ` - ${fee.note}` : ""}`);
+  }
+
+  const text = normalizeText(`${context.title} ${lot} ${materials.map((material) => `${material.name} ${material.note}`).join(" ")}`);
+  const addIf = (condition: boolean, label: string) => {
+    if (condition) lines.push(label);
+  };
+
+  addIf(/peinture|facade|facade|pantifilm|revêtement|revetement|impritex|pantiprim/.test(text), "Protections chantier : bâches, adhésif de masquage, protection menuiseries/sols");
+  addIf(/peinture|pantifilm|revêtement|revetement/.test(text), "Application : brosse et rouleau polyamide texturé 18 mm");
+  addIf(/pistolet|buse|200 bars|519/.test(text), "Application mécanisée si prévue : pistolet 200 bars avec buse 519");
+  addIf(/lavage|haute pression|facade|façade/.test(text), "Préparation support : nettoyeur haute pression adapté au support");
+  addIf(/brossage|epoussetage|egrenage|égrenage/.test(text), "Préparation support : brosse, grattoir, abrasif/égrenoir et moyen de dépoussiérage");
+  addIf(/eau|nettoyage/.test(text), "Nettoyage : seau d'eau, chiffons, rinçage/nettoyage du matériel");
+  addIf(/facade|façade|exterieur|extérieur/.test(text), "Accès/façade : échelle, escabeau ou échafaudage selon hauteur et sécurité");
+  addIf(/peinture|solvant|poussiere|poussière/.test(text), "EPI : gants, lunettes, protection respiratoire si ponçage/pulvérisation");
+
+  if (lines.length === 0) lines.push("Matériel à compléter : Coco n'a pas assez d'informations produit pour proposer une liste fiable.");
+  return uniqueLines(lines);
+}
+
+function buildProcedureLines(
+  context: ReturnType<typeof readContext>,
+  profile: ReturnType<typeof matchTaskTemplateLotProfile>,
+  materials: ReturnType<typeof enrichMaterial>[],
+  equipment: string[],
+) {
+  const text = normalizeText(`${context.title} ${context.lot} ${materials.map((material) => `${material.name} ${material.note}`).join(" ")}`);
+  const lines = [
+    `1. Vérifier le support, les surfaces à traiter, l'accès et les conditions météo avant ${context.title}.`,
+    `2. Protéger la zone : ${equipment.filter((item) => /protection|bache|masquage/i.test(item)).join(", ") || "bâcher, masquer et sécuriser les zones sensibles"}.`,
+  ];
+
+  if (/egrenage|égrenage|brossage|epoussetage|lavage|haute pression|preparation|préparation/.test(text)) {
+    lines.push("3. Préparer le support : égrenage/grattage des parties non adhérentes, brossage, dépoussiérage, lavage haute pression si nécessaire, puis séchage complet.");
+  } else {
+    lines.push("3. Préparer le support suivant l'état réel : nettoyage, dépoussiérage et suppression des parties non adhérentes.");
+  }
+
+  const hasPrimer = /pantiprim|impritex|impriderme|primaire/.test(text);
+  lines.push(hasPrimer
+    ? "4. Appliquer l'impression/primer adapté au support avant finition, puis respecter le séchage indiqué."
+    : "4. Vérifier si une impression est nécessaire selon le support et la fiche produit.");
+
+  const finishMaterial = materials.find((material) => normalizeText(material.name).includes("pantifilm")) ?? materials[0];
+  if (finishMaterial) {
+    lines.push(`5. Appliquer ${finishMaterial.name} au ratio prévu : ${finishMaterial.quantity} ${finishMaterial.ratioUnit} pour 1 ${finishMaterial.sourceUnit}. Garnir régulièrement le support et éviter les manques.`);
+  } else {
+    lines.push(`5. Appliquer les matériaux selon les ratios renseignés pour 1 ${context.unit}.`);
+  }
+
+  if (/recouvrable|24 h|sechage|séchage|hors pluie/.test(text)) {
+    lines.push("6. Respecter les temps de séchage/recouvrement avant couche suivante ou réception.");
+  }
+
+  lines.push("7. Contrôler la finition : aspect, recouvrement, zones oubliées, coulures/surcharges, propreté des protections et réserves éventuelles.");
+  lines.push("8. Renseigner le retour terrain : surface réalisée, consommation réelle, temps passé, matériel manquant et écarts avec le template.");
+  if (profile.fieldGuidance) lines.push(`9. Consigne lot : ${profile.fieldGuidance}`);
+  return uniqueLines(lines);
+}
+
+function buildControlLines(context: ReturnType<typeof readContext>, materials: ReturnType<typeof enrichMaterial>[], profileGuidance: string) {
+  const text = normalizeText(`${context.title} ${materials.map((material) => `${material.name} ${material.note}`).join(" ")}`);
+  const lines = [
+    "Contrôle support : support sain, propre, sec, cohérent et compatible avec le système prévu.",
+    "Contrôle quantité : comparer consommation réelle et ratio prévu, expliquer tout écart important.",
+    "Contrôle qualité : vérifier aspect final, régularité, recouvrement, nettoyage et photos avant clôture.",
+  ];
+
+  if (/gel|averse|brise|humidite|humidité|5 c|80/.test(text) || /facade|façade|exterieur|extérieur/.test(text)) {
+    lines.push("Erreurs à éviter : appliquer par gel, pluie menaçante, forte humidité, support trop froid ou support non sec.");
+  }
+  if (/interieur|intérieur/.test(text)) lines.push("Erreur à éviter : ne pas employer ce produit en intérieur si la fiche le proscrit.");
+  if (/teinte|soleil|absorption solaire/.test(text)) lines.push("Point d'attention : vérifier les teintes foncées exposées au soleil et les prescriptions fabricant.");
+  if (/25 cm|sol/.test(text)) lines.push("Point d'attention façade : respecter l'arrêt du revêtement à 25 cm minimum du sol si indiqué par la fiche.");
+  if (profileGuidance) lines.push(`Retour terrain lot : ${profileGuidance}`);
+
+  return uniqueLines(lines);
 }
 
 function buildDescription(
   context: ReturnType<typeof readContext>,
   profile: ReturnType<typeof matchTaskTemplateLotProfile>,
-  procedureLines: string[],
+  generated: GeneratedOutputs,
 ) {
-  const materialLine = context.materials.length
-    ? `Matériaux pour 1 ${context.unit} : ${joinFrench(context.materials.map((row) => row.name).filter(Boolean))}.`
-    : `Matériaux pour 1 ${context.unit} : à compléter.`;
-  const equipmentLine = context.equipment.length
-    ? `Matériel à prévoir : ${joinFrench(context.equipment.map((row) => row.name).filter(Boolean))}.`
-    : "Matériel à prévoir : à compléter si nécessaire.";
   const laborLine = context.labor.length
     ? `Main d'oeuvre estimée : ${context.labor.map((row) => `${row.duration || "?"} ${row.unit || "h"}`).join(", ")}.`
     : "Main d'oeuvre : à compléter.";
-  const feesLine = context.fees.length
-    ? `Frais intégrés : ${joinFrench(context.fees.map((row) => row.name).filter(Boolean))}.`
-    : "Frais : aucun frais spécifique renseigné.";
 
   return [
     `${context.title} - ${profile.label || context.lot}. Unité de production : ${context.unit}.`,
-    materialLine,
-    equipmentLine,
+    "Matériaux prévus pour 1 unité :",
+    ...generated.materialLines,
+    "Matériel/outillage à prévoir :",
+    ...generated.equipmentLines,
     laborLine,
-    feesLine,
     "Mode opératoire complet :",
-    ...procedureLines,
-    profile.fieldGuidance,
+    ...generated.procedureLines,
   ].filter(Boolean).join("\n");
 }
 
 function buildCharacteristics(
   context: ReturnType<typeof readContext>,
   profile: ReturnType<typeof matchTaskTemplateLotProfile>,
-  materialLines: string[],
-  equipmentLines: string[],
+  generated: GeneratedOutputs,
 ) {
   const lines = [
     `Lot : ${profile.label || context.lot}`,
     `Unité de production : ${context.unit}`,
     `Marge main d'oeuvre cible : ${profile.laborMarginRate} %`,
-    "Liste matériaux Coco :",
-    ...materialLines,
-    "Liste matériel Coco :",
-    ...equipmentLines,
+    "Matériaux pour 1 unité :",
+    ...generated.materialLines,
+    "Matériel proposé par Coco :",
+    ...generated.equipmentLines,
+    "Contrôles / erreurs à éviter :",
+    ...generated.controlLines,
   ];
 
   for (const labor of context.labor) {
@@ -312,11 +426,11 @@ function buildCharacteristics(
   return uniqueLines(lines);
 }
 
-function buildFieldReturns(profileGuidance: string) {
+function buildFieldReturns(profileGuidance: string, controlLines: string[]) {
   return uniqueLines([
-    "Retour terrain à alimenter : quantité réellement consommée, temps passé et écart avec le ratio prévu.",
-    "Points à contrôler : support, préparation, compatibilité produit, finition, nettoyage, réserves éventuelles.",
-    "Erreurs à éviter : démarrer sans support validé, oublier protections, sous-estimer attente/séchage, oublier matériel ou consommables.",
+    "Retour terrain à alimenter après chantier : surface réalisée, quantité réellement consommée, temps passé et écart avec le ratio prévu.",
+    "Noter le matériel manquant, les consommables oubliés, les problèmes support et les attentes/séchages qui ont ralenti l'équipe.",
+    ...controlLines,
     profileGuidance,
   ].filter(Boolean));
 }
@@ -326,7 +440,7 @@ function updateSummary(drawer: HTMLElement, message?: string) {
   if (!summary) return;
   const context = readContext(drawer);
   const profile = matchTaskTemplateLotProfile(context.lot);
-  summary.textContent = message ?? `Coco utilisera : ${context.materials.length} matériau(x), ${context.equipment.length} matériel(s), ${context.labor.length} ligne(s) main d'oeuvre, ${context.fees.length} frais. Lot détecté : ${profile.label}. Main d'oeuvre : PV horaire = coût horaire + ${profile.laborMarginRate} %.`;
+  summary.textContent = message ?? `Coco utilisera : ${context.materials.length} matériau(x), ${context.equipment.length} matériel(s) saisi(s), ${context.labor.length} ligne(s) main d'oeuvre, ${context.fees.length} frais. Lot détecté : ${profile.label}. Il proposera aussi le matériel manquant depuis les fiches produits.`;
 }
 
 function setGeneratedOutput(drawer: HTMLElement, selector: string, lines: string[]) {
@@ -335,21 +449,23 @@ function setGeneratedOutput(drawer: HTMLElement, selector: string, lines: string
   target.textContent = lines.join("\n");
 }
 
-function readMaterialRows(drawer: HTMLElement) {
+function readMaterialRows(drawer: HTMLElement): MaterialRow[] {
   return findRows(drawer, "Matériau #").map((row) => {
     const inputs = Array.from(row.querySelectorAll("input"));
     return {
-      name: inputs[0]?.value.trim() ?? "",
+      name: readSelectOrInputValue(row, 0) || inputs[0]?.value.trim() || "",
       sourceUnit: inputs[1]?.value.trim() ?? "",
       quantity: inputs[2]?.value.trim() ?? "",
       ratioUnit: inputs[3]?.value.trim() ?? "",
       loss: inputs[4]?.value.trim() ?? "",
       note: inputs[5]?.value.trim() ?? "",
+      purchasePrice: inputs[6]?.value.trim() ?? "",
+      salePrice: inputs[7]?.value.trim() ?? "",
     };
   }).filter((row) => row.name || row.quantity || row.note);
 }
 
-function readEquipmentRows(drawer: HTMLElement) {
+function readEquipmentRows(drawer: HTMLElement): EquipmentRow[] {
   return findRows(drawer, "Matériel #").map((row) => {
     const inputs = Array.from(row.querySelectorAll("input"));
     return {
@@ -447,6 +563,70 @@ function setCheckboxByText(drawer: HTMLElement, labelText: string, checked: bool
   input.dispatchEvent(new Event("change", { bubbles: true }));
 }
 
+function readSelectOrInputValue(row: HTMLElement, index: number) {
+  const controls = Array.from(row.querySelectorAll("select, input"));
+  const control = controls[index];
+  if (control instanceof HTMLSelectElement) return control.selectedOptions[0]?.textContent?.trim() || control.value.trim();
+  if (control instanceof HTMLInputElement) return control.value.trim();
+  return "";
+}
+
+function cleanTechnicalNote(value: string) {
+  return value
+    .replace(/Fichier importé pour analyse automatique[^.]*\./gi, "")
+    .replace(/Stockage documentaire[^.]*\./gi, "")
+    .replace(/Dernière mise[\s\S]*?www\.seigneurie\.com/gi, "")
+    .replace(/PPG AC[\s\S]*?www\.seigneurie\.com/gi, "")
+    .replace(/Prix achat standard retenu[^\n]*/gi, "")
+    .replace(/Prix vente conseillé[^\n]*/gi, "")
+    .replace(/Conditionnement\s*:\s*[^\n]*/gi, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function extractRatioFromText(text: string, taskUnit: string) {
+  const direct = text.match(/([0-9]+(?:[,.][0-9]+)?)\s*(l|litre|litres|kg|g|ml)\s*\/\s*m[²2]/i)
+    ?? text.match(/([0-9]+(?:[,.][0-9]+)?)\s*(l|litre|litres|kg|g|ml)\s*par\s*m[²2]/i);
+  if (direct) {
+    let quantity = parseFrenchNumber(direct[1]) ?? 0;
+    let unit = direct[2].toLowerCase();
+    if (unit === "g") {
+      quantity = quantity / 1000;
+      unit = "kg";
+    }
+    if (unit === "ml") {
+      quantity = quantity / 1000;
+      unit = "l";
+    }
+    if (unit === "litre" || unit === "litres") unit = "l";
+    return { quantity: formatNumber(quantity), ratioUnit: unit, sourceUnit: "m2" };
+  }
+
+  const inverse = text.match(/([0-9]+(?:[,.][0-9]+)?)\s*m[²2]\s*\/\s*(l|litre|litres|kg)/i);
+  if (inverse) {
+    const yieldValue = parseFrenchNumber(inverse[1]);
+    if (yieldValue && yieldValue > 0) {
+      let unit = inverse[2].toLowerCase();
+      if (unit === "litre" || unit === "litres") unit = "l";
+      return { quantity: formatNumber(1 / yieldValue), ratioUnit: unit, sourceUnit: "m2" };
+    }
+  }
+
+  return { quantity: "", ratioUnit: "", sourceUnit: taskUnit };
+}
+
+function extractLossFromText(text: string) {
+  const match = text.match(/perte\s*(?:préconisée|prevue|estimée|estimee)?\s*:?\s*([0-9]+(?:[,.][0-9]+)?)\s*%/i);
+  return match?.[1]?.replace(",", ".") ?? "";
+}
+
+function normalizeUnit(value: string) {
+  const clean = value.trim().toLowerCase().replace("²", "2");
+  if (["m2", "m 2", "m²"].includes(clean)) return "m2";
+  if (["litre", "litres", "l"].includes(clean)) return "l";
+  return value.trim() || "unité";
+}
+
 function canReplace(value: string, label: string) {
   return !value.trim() || window.confirm(`Le champ ${label} contient déjà du texte. Remplacer par la proposition Coco ?`);
 }
@@ -486,12 +666,9 @@ function normalizeText(value: unknown) {
     .toLowerCase();
 }
 
-function joinFrench(values: string[]) {
-  const clean = values.filter(Boolean);
-  if (clean.length <= 1) return clean[0] ?? "";
-  return `${clean.slice(0, -1).join(", ")} et ${clean[clean.length - 1]}`;
-}
-
 function uniqueLines(lines: string[]) {
-  return lines.filter((line, index) => lines.findIndex((candidate) => normalizeText(candidate) === normalizeText(line)) === index);
+  return lines
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .filter((line, index, all) => all.findIndex((candidate) => normalizeText(candidate) === normalizeText(line)) === index);
 }
