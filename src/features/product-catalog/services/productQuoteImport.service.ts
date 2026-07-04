@@ -355,7 +355,7 @@ function productMainSupplierMatches(product: ProductCatalogItem, supplier: Suppl
 }
 
 function preferDocumentSupplier(aiSupplierName: string | null, documentSupplierName: string | null): string | null {
-  if (!documentSupplierName) return aiSupplierName;
+  if (!documentSupplierName) return aiSupplierName && !looksLikeCustomerName(aiSupplierName) ? aiSupplierName : null;
   if (!aiSupplierName) return documentSupplierName;
 
   const aiKey = normalizeKey(aiSupplierName);
@@ -367,18 +367,24 @@ function preferDocumentSupplier(aiSupplierName: string | null, documentSupplierN
 
 function looksLikeCustomerName(value: string): boolean {
   const key = normalizeKey(value);
-  return key.includes("renovation") || key.includes("renov") || key.includes("client");
+  return key.includes("cb renovation") || key.includes("renovation") || key.includes("renov") || key.includes("client");
 }
 
 function inferDocumentSupplierName(text: string): string | null {
+  const compactText = text.replace(/\s+/g, " ").trim();
+  const knownSupplier = extractKnownSupplierName(compactText);
+  if (knownSupplier) return knownSupplier;
+
   const lines = text
     .split(/\r?\n/)
     .map((line) => line.trim())
     .filter(Boolean)
     .slice(0, 50);
 
-  const directSeller = lines.find((line) => /(?:comptoir|cp?toir|seigneurie|gauthier|ppg)/i.test(line));
-  if (directSeller) return normalizeSupplierLine(directSeller);
+  for (const line of lines) {
+    const seller = extractKnownSupplierName(line);
+    if (seller) return seller;
+  }
 
   const devisIndex = lines.findIndex((line) => /\bdevis\b/i.test(line));
   const headerLines = devisIndex >= 0 ? lines.slice(0, devisIndex) : lines;
@@ -393,10 +399,22 @@ function inferDocumentSupplierName(text: string): string | null {
   return candidate ? normalizeSupplierLine(candidate) : null;
 }
 
+function extractKnownSupplierName(text: string): string | null {
+  const key = normalizeKey(text);
+  if (/(?:^| )c(?:om)?p?toir seigneurie gauthier(?: |$)/.test(key) || key.includes("seigneurie gauthier")) {
+    return "COMPTOIR SEIGNEURIE GAUTHIER";
+  }
+  if (key.includes("ppg") && key.includes("seigneurie")) return "PPG Seigneurie";
+
+  const match = text.match(/\b((?:COMPTOIR|CPTOIR|CPT\s*OIR)\s+SEIGNEURIE\s+GAUTHIER)\b/i);
+  return match ? normalizeSupplierLine(match[1]) : null;
+}
+
 function normalizeSupplierLine(line: string): string {
   return line
-    .replace(/^CSG\s+/i, "")
-    .replace(/^CPTOIR\b/i, "COMPTOIR")
+    .replace(/\bCPTOIR\b/i, "COMPTOIR")
+    .replace(/\bCPT\s*OIR\b/i, "COMPTOIR")
+    .replace(/\s+(?:ZI|ZAC|AV\b|[0-9]{5}\b|CB\s+RENOVATION\b|SIRET\b|TVA\b|PAGE\b|DEVIS\b|TEL\b|FAX\b).*$/i, "")
     .replace(/\s+/g, " ")
     .trim();
 }
@@ -414,6 +432,7 @@ function normalizeKey(value: unknown): string {
   return String(value ?? "")
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/gi, " ")
     .replace(/\s+/g, " ")
     .trim()
     .toLowerCase();
