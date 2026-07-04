@@ -8,11 +8,15 @@ export default function CrmResourcesSection({ templates }: { templates: CrmDatas
   const navigate = useNavigate();
   const libraryStats = useMemo(() => {
     const lots = new Set(templates.map((row) => (row.lot ?? "").trim()).filter(Boolean));
-    const readyForQuote = templates.filter((row) => row.temps_prevu_par_unite_h !== null && row.cout_reference_unitaire_ht !== null).length;
+    const readyForQuote = templates.filter(
+      (row) => row.quote_visible && row.temps_prevu_par_unite_h !== null && row.cout_reference_unitaire_ht !== null,
+    ).length;
+    const hiddenFromQuote = templates.filter((row) => !row.quote_visible).length;
     return {
       total: templates.length,
       lots: lots.size,
       readyForQuote,
+      hiddenFromQuote,
     };
   }, [templates]);
 
@@ -47,7 +51,9 @@ export default function CrmResourcesSection({ templates }: { templates: CrmDatas
         <div className="rounded-2xl border bg-white p-4">
           <div className="text-xs font-medium uppercase text-slate-500">Prêts devis</div>
           <div className="mt-1 text-2xl font-bold text-slate-900">{libraryStats.readyForQuote}</div>
-          <div className="text-xs text-slate-500">avec temps et coût de référence</div>
+          <div className="text-xs text-slate-500">
+            visibles au devis, avec temps et coût · {libraryStats.hiddenFromQuote} masqués
+          </div>
         </div>
       </div>
 
@@ -57,32 +63,42 @@ export default function CrmResourcesSection({ templates }: { templates: CrmDatas
         </div>
       ) : (
         <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-          {templates.map((row) => (
-            <div key={row.id} className="rounded-2xl border bg-white p-5">
-              <div className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">{row.lot ?? "Sans famille"}</div>
-              <div className="mt-1 font-semibold text-slate-900">{row.titre}</div>
-              <div className="mt-3 grid grid-cols-3 gap-2 text-xs">
-                <div className="rounded-xl bg-slate-50 p-2">Unité<br /><b>{row.unite ?? "u"}</b></div>
-                <div className="rounded-xl bg-slate-50 p-2">Temps<br /><b>{row.temps_prevu_par_unite_h ?? 0}h</b></div>
-                <div className="rounded-xl bg-slate-50 p-2">Coût ref.<br /><b>{eur(row.cout_reference_unitaire_ht ?? 0)}</b></div>
+          {templates.map((row) => {
+            const missingQuoteReadiness =
+              !row.quote_visible || row.temps_prevu_par_unite_h === null || row.cout_reference_unitaire_ht === null;
+
+            return (
+              <div key={row.id} className="rounded-2xl border bg-white p-5">
+                <div className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">{row.lot ?? "Sans famille"}</div>
+                <div className="mt-1 font-semibold text-slate-900">{row.titre}</div>
+                <div className="mt-3 grid grid-cols-3 gap-2 text-xs">
+                  <div className="rounded-xl bg-slate-50 p-2">Unité<br /><b>{row.unite ?? "u"}</b></div>
+                  <div className="rounded-xl bg-slate-50 p-2">Temps<br /><b>{row.temps_prevu_par_unite_h ?? 0}h</b></div>
+                  <div className="rounded-xl bg-slate-50 p-2">Coût ref.<br /><b>{eur(row.cout_reference_unitaire_ht ?? 0)}</b></div>
+                </div>
+                {row.description_technique ? <p className="mt-3 line-clamp-3 text-sm text-slate-600">{row.description_technique}</p> : null}
+                <div className="mt-4 flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={() => openLibrary(row.id)}
+                    className="rounded-lg border px-3 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50"
+                  >
+                    Ouvrir la fiche
+                  </button>
+                  {!row.quote_visible ? (
+                    <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-1 text-[11px] font-medium text-slate-600">
+                      Masqué au devis
+                    </span>
+                  ) : null}
+                  {missingQuoteReadiness ? (
+                    <span className="rounded-full border border-amber-200 bg-amber-50 px-2 py-1 text-[11px] font-medium text-amber-700">
+                      À compléter avant devis
+                    </span>
+                  ) : null}
+                </div>
               </div>
-              {row.description_technique ? <p className="mt-3 line-clamp-3 text-sm text-slate-600">{row.description_technique}</p> : null}
-              <div className="mt-4 flex flex-wrap gap-2">
-                <button
-                  type="button"
-                  onClick={() => openLibrary(row.id)}
-                  className="rounded-lg border px-3 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50"
-                >
-                  Ouvrir la fiche
-                </button>
-                {row.temps_prevu_par_unite_h === null || row.cout_reference_unitaire_ht === null ? (
-                  <span className="rounded-full border border-amber-200 bg-amber-50 px-2 py-1 text-[11px] font-medium text-amber-700">
-                    À compléter avant devis
-                  </span>
-                ) : null}
-              </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </ListShell>
