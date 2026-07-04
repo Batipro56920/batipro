@@ -119,6 +119,11 @@ export function getBestSupplierPrice(product: ProductCatalogItem, supplierId?: s
 }
 
 function fromRow(row: ProductCatalogRow): ProductCatalogItem {
+  const purchasePrice = Number(row.standard_purchase_price_ht ?? 0);
+  const savedSalePrice = Number(row.recommended_sale_price_ht ?? 0);
+  const marginRate = Number(row.target_margin_rate ?? 0);
+  const salePrice = savedSalePrice > 0 ? savedSalePrice : computeSalePrice(purchasePrice, marginRate) ?? 0;
+
   return {
     id: row.id,
     designation: row.designation,
@@ -130,9 +135,9 @@ function fromRow(row: ProductCatalogRow): ProductCatalogItem {
     vatRate: Number(row.vat_rate ?? 20),
     mainSupplierId: row.main_supplier_id,
     mainSupplierName: row.main_supplier_name,
-    standardPurchasePriceHt: Number(row.standard_purchase_price_ht ?? 0),
-    recommendedSalePriceHt: Number(row.recommended_sale_price_ht ?? 0),
-    targetMarginRate: Number(row.target_margin_rate ?? 0),
+    standardPurchasePriceHt: purchasePrice,
+    recommendedSalePriceHt: salePrice,
+    targetMarginRate: marginRate,
     isSellable: row.is_sellable !== false,
     supplierPrices: normalizeSupplierPrices(row.supplier_prices ?? []),
     documents: normalizeProductDocuments(row.documents),
@@ -355,6 +360,12 @@ function normalizePrice(value: unknown) {
 
   const n = Number(normalized);
   return Number.isFinite(n) ? Math.round(n * 100) / 100 : null;
+}
+
+function computeSalePrice(purchasePrice: number, marginRate: number) {
+  if (!Number.isFinite(purchasePrice) || purchasePrice <= 0) return null;
+  if (!Number.isFinite(marginRate) || marginRate <= 0) return null;
+  return Math.round(purchasePrice * (1 + marginRate / 100) * 100) / 100;
 }
 
 function samePrice(a: unknown, b: unknown) {
