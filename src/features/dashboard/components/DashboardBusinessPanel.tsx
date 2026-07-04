@@ -20,6 +20,7 @@ const toneClass = {
 
 const CLIENT_DOCUMENT_ACTIONABLE_STATUSES = ["sent", "viewed", "modification_requested", "expired"];
 const COLLECTABLE_INVOICE_STATUSES = ["sent", "partially_paid", "overdue"];
+const CLOSED_QUOTE_STATUSES = ["accepte", "refuse", "expire", "annule"];
 const DASHBOARD_METRIC_HREFS: Partial<Record<DashboardBusinessMetric["key"], string>> = {
   quotes: "/crm/devis?status=a_relancer",
   invoices: "/factures?status=a_encaisser",
@@ -78,7 +79,8 @@ async function loadBusinessMetricCounts(): Promise<BusinessMetricCounts> {
         .select("id", { count: "exact", head: true })
         .is("archived_at", null)
         .not("sent_at", "is", null)
-        .not("signature_status", "in", "(signe,refuse)") as any,
+        .not("signature_status", "in", "(signe,refuse)")
+        .not("statut", "in", `(${CLOSED_QUOTE_STATUSES.join(",")})`) as any,
     ),
     countRows(
       supabase
