@@ -34,13 +34,47 @@ function normalizeTags(value: unknown): string[] {
     .filter(Boolean);
 }
 
+function uniqueTags(tags: string[]) {
+  return Array.from(new Set(tags.map((tag) => tag.trim()).filter(Boolean)));
+}
+
+function isApporteurProspect(prospect: CrmProspectRow) {
+  return prospect.source_acquisition === "Apporteur d'affaires" || Boolean(text(prospect.apporteur_affaire));
+}
+
 function prospectOpportunityLabel(prospect: CrmProspectRow) {
   const party = [prospect.prenom, prospect.nom].filter(Boolean).join(" ") || prospect.societe || prospect.email || "Prospect";
   return [prospect.type_projet, party].filter(Boolean).join(" - ");
 }
 
 function prospectOpportunityNotes(prospect: CrmProspectRow) {
-  return [prospect.description_besoin, prospect.notes].filter(Boolean).join("\n") || null;
+  const sourceLine = isApporteurProspect(prospect) ? "Origine : Apporteur d'affaires" : null;
+  const apporteurLine = text(prospect.apporteur_affaire) ? `Apporteur : ${text(prospect.apporteur_affaire)}` : null;
+  return [sourceLine, apporteurLine, prospect.description_besoin, prospect.notes].filter(Boolean).join("\n") || null;
+}
+
+function prospectOpportunityTags(prospect: CrmProspectRow) {
+  const tags = normalizeTags(prospect.tags);
+  if (isApporteurProspect(prospect)) tags.push("apporteur");
+  return uniqueTags(tags);
+}
+
+function prospectNextAction(prospect: CrmProspectRow) {
+  if (isApporteurProspect(prospect)) return "Qualifier le besoin et confirmer la commission apporteur";
+  return "Planifier une visite terrain";
+}
+
+function prospectFollowUpTaskTitle(prospect: CrmProspectRow) {
+  const label = prospectOpportunityLabel(prospect);
+  if (isApporteurProspect(prospect)) return `Qualifier le lead apporteur - ${label}`;
+  return `Qualifier ${label}`;
+}
+
+function prospectFollowUpTaskDescription(prospect: CrmProspectRow) {
+  if (isApporteurProspect(prospect)) {
+    return "Confirmer le besoin client, vérifier le rattachement apporteur et préparer la suite devis / chantier.";
+  }
+  return "Suivi commercial à lancer après création du dossier projet.";
 }
 
 function nextFollowUpDate() {
@@ -86,9 +120,9 @@ export async function createOpportunityForProspect(prospect: CrmProspectRow, pat
     nom_affaire: prospectOpportunityLabel(prospect),
     montant_estime: prospect.budget_estime ?? 0,
     probabilite: targetStage?.probability_default ?? 25,
-    prochaine_action: "Planifier une visite terrain",
+    prochaine_action: prospectNextAction(prospect),
     notes: prospectOpportunityNotes(prospect),
-    tags: normalizeTags(prospect.tags),
+    tags: prospectOpportunityTags(prospect),
     status: "ouverte",
     ...patch,
   });
@@ -108,8 +142,8 @@ export async function createProspectWithInitialOpportunity(
     client_id: prospect.client_id,
     opportunity_id: opportunity.id,
     type: "relance",
-    titre: `Qualifier ${prospectOpportunityLabel(prospect)}`,
-    description: "Suivi commercial à lancer après création du dossier projet.",
+    titre: prospectFollowUpTaskTitle(prospect),
+    description: prospectFollowUpTaskDescription(prospect),
     due_at: nextFollowUpDate(),
     priorite: "haute",
     statut: "a_faire",
