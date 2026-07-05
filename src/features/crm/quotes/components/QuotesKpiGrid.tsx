@@ -1,7 +1,17 @@
 import { ArrowRight, BadgeEuro, CheckCircle2, FileClock, FileText, PenLine, Send } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 import { Link } from "react-router-dom";
 import type { CrmQuoteRow } from "../../../../services/crm.service";
 import { eur } from "../../components/crmFormat";
+
+type QuoteKpiItem = {
+  label: string;
+  value: string;
+  hint: string;
+  icon: LucideIcon;
+  tone: string;
+  href?: string;
+};
 
 export function QuotesKpiGrid({ rows }: { rows: CrmQuoteRow[] }) {
   const drafts = rows.filter((row) => ["brouillon", "en_preparation"].includes(row.statut)).length;
@@ -11,7 +21,7 @@ export function QuotesKpiGrid({ rows }: { rows: CrmQuoteRow[] }) {
   const accepted = rows.filter((row) => row.statut === "accepte").length;
   const revenue = rows.reduce((sum, row) => sum + Number(row.montant_ht ?? 0), 0);
 
-  const items = [
+  const items: QuoteKpiItem[] = [
     { label: "Brouillons", value: String(drafts), hint: "À finaliser", icon: FileText, tone: "text-slate-700 bg-slate-50 border-slate-200" },
     { label: "Envoyés", value: String(sent), hint: "En attente retour client", icon: Send, tone: "text-blue-700 bg-blue-50 border-blue-200" },
     { label: "Relances", value: String(reminders), hint: "Suivi commercial", icon: FileClock, tone: "text-amber-700 bg-amber-50 border-amber-200" },
