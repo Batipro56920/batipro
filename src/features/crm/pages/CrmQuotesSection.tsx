@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import type { CrmClientRow, CrmOpportunityRow, CrmProspectRow, CrmQuoteRow } from "../../../services/crm.service";
 import { QuoteDetailDrawer } from "../quotes/components/QuoteDetailDrawer";
@@ -9,6 +9,12 @@ import { QuotesTable } from "../quotes/components/QuotesTable";
 import { QuotesToolbar } from "../quotes/components/QuotesToolbar";
 import { useQuoteFilters } from "../quotes/hooks/useQuoteFilters";
 import type { QuoteWithParty } from "../quotes/types";
+
+const SIGNATURE_STATUS_LABELS: Record<string, string> = {
+  attente_signature: "Attente signature",
+  signe: "Signé",
+  refuse: "Refusé",
+};
 
 export default function CrmQuotesSection({
   rows,
@@ -35,6 +41,13 @@ export default function CrmQuotesSection({
 }) {
   const [searchParams, setSearchParams] = useSearchParams();
   const urlQuery = searchParams.get("q") ?? "";
+  const urlSignatureStatus = searchParams.get("signatureStatus") ?? "";
+  const availableSignatureStatuses = useMemo(
+    () => new Set(["attente_signature", ...rows.map((row) => row.signature_status).filter(Boolean)]),
+    [rows],
+  );
+  const signatureStatusFromUrl = availableSignatureStatuses.has(urlSignatureStatus) ? urlSignatureStatus : "";
+  const invalidSignatureStatusFromUrl = Boolean(urlSignatureStatus && !signatureStatusFromUrl);
   const [selectedQuote, setSelectedQuote] = useState<QuoteWithParty | null>(null);
   const { filters, setFilters, filteredRows, statuses, clients, salespeople } = useQuoteFilters({
     rows,
@@ -51,9 +64,24 @@ export default function CrmQuotesSection({
     setFilters((current) => (current.query === urlQuery ? current : { ...current, query: urlQuery }));
   }, [setFilters, urlQuery]);
 
+  useEffect(() => {
+    if (invalidSignatureStatusFromUrl) {
+      const nextSearchParams = new URLSearchParams(searchParams);
+      nextSearchParams.delete("signatureStatus");
+      setSearchParams(nextSearchParams, { replace: true });
+      return;
+    }
+
+    setFilters((current) => {
+      const nextSignatureStatus = signatureStatusFromUrl || "all";
+      return current.signatureStatus === nextSignatureStatus ? current : { ...current, signatureStatus: nextSignatureStatus };
+    });
+  }, [invalidSignatureStatusFromUrl, searchParams, setFilters, setSearchParams, signatureStatusFromUrl]);
+
   const hasActiveFilters =
     filters.query.trim().length > 0 ||
     filters.status !== "all" ||
+    filters.signatureStatus !== "all" ||
     filters.salesperson !== "all" ||
     filters.client !== "all" ||
     filters.period !== "all" ||
@@ -63,6 +91,7 @@ export default function CrmQuotesSection({
     setFilters({
       query: "",
       status: "all",
+      signatureStatus: "all",
       salesperson: "all",
       client: "all",
       period: "all",
@@ -70,10 +99,19 @@ export default function CrmQuotesSection({
     });
     const nextSearchParams = new URLSearchParams(searchParams);
     nextSearchParams.delete("q");
+    nextSearchParams.delete("signatureStatus");
+    setSearchParams(nextSearchParams, { replace: true });
+  }
+
+  function clearSignatureStatusFilter() {
+    setFilters((current) => ({ ...current, signatureStatus: "all" }));
+    const nextSearchParams = new URLSearchParams(searchParams);
+    nextSearchParams.delete("signatureStatus");
     setSearchParams(nextSearchParams, { replace: true });
   }
 
   const actions = { onCreate, onStatus, onTransform, onPdf };
+  const signatureStatusLabel = SIGNATURE_STATUS_LABELS[filters.signatureStatus] ?? filters.signatureStatus;
 
   return (
     <div className="space-y-5">
@@ -86,6 +124,23 @@ export default function CrmQuotesSection({
         clients={clients}
         salespeople={salespeople}
       />
+      {filters.signatureStatus !== "all" ? (
+        <div className="rounded-2xl border border-blue-100 bg-blue-50 p-4 text-sm text-blue-900">
+          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+            <div>
+              <div className="font-semibold">Devis filtrés sur la signature client</div>
+              <p className="mt-1 text-blue-800">Statut signature : {signatureStatusLabel}. Ce contexte vient du dashboard et reste partageable dans l'URL.</p>
+            </div>
+            <button
+              type="button"
+              onClick={clearSignatureStatusFilter}
+              className="rounded-xl border border-blue-200 bg-white px-4 py-2 text-sm font-semibold text-blue-700 hover:bg-blue-100"
+            >
+              Afficher tous les devis
+            </button>
+          </div>
+        </div>
+      ) : null}
       {filteredRows.length === 0 ? (
         <QuotesEmptyState
           onCreate={onCreate}
