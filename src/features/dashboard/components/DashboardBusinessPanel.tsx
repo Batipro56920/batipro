@@ -44,8 +44,8 @@ const purchaseOrdersMetric: DashboardBusinessMetric = {
   key: "purchaseOrders",
   label: "Commandes à traiter",
   value: "—",
-  hint: "Suivi décaissements",
-  href: "/financier/decaissements",
+  hint: "Bons de commande ouverts",
+  href: "/bons-commande",
   tone: "warning",
 };
 
