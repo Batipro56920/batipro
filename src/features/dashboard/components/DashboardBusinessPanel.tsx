@@ -36,7 +36,7 @@ const clientDocumentsMetric: DashboardBusinessMetric = {
   label: "Docs client en attente",
   value: "—",
   hint: "Validation / signature / relance client",
-  href: "/factures",
+  href: "/factures?clientWorkflow=actionable",
   tone: "warning",
 };
 
