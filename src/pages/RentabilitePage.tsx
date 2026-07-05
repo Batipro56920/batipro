@@ -5,7 +5,7 @@ import { calculateDocumentTotals } from "../features/document-engine";
 import { getPaidAmount, getRemainingAmount } from "../features/invoices/application/invoicePayments";
 import type { InvoiceRecord } from "../features/invoices/domain/types";
 import { listInvoices } from "../features/invoices/infrastructure/invoiceRepository";
-import type { PurchaseOrderRecord } from "../features/purchase-orders";
+import type { PurchaseOrderRecord, PurchaseOrderStatus } from "../features/purchase-orders";
 import { listPurchaseOrders } from "../features/purchase-orders";
 
 type ProfitabilitySummary = {
@@ -23,6 +23,8 @@ type ProfitabilitySummary = {
   openPurchases: number;
 };
 
+const OPEN_PURCHASE_ORDER_STATUSES: PurchaseOrderStatus[] = ["draft", "sent", "confirmed", "partially_delivered"];
+
 function formatCurrency(value: number) {
   return new Intl.NumberFormat("fr-FR", { style: "currency", currency: "EUR", maximumFractionDigits: 0 }).format(value || 0);
 }
@@ -39,9 +41,20 @@ function collectableInvoicesHref() {
   return "/factures?status=a_encaisser";
 }
 
-function purchaseOrderHref(orderId: string) {
-  const params = new URLSearchParams({ tab: "orders", purchaseOrderId: orderId });
-  return `/fournisseurs?${params.toString()}`;
+function purchaseOrdersHref() {
+  return "/bons-commande?status=open";
+}
+
+function isOpenPurchaseOrderStatus(status: PurchaseOrderStatus) {
+  return OPEN_PURCHASE_ORDER_STATUSES.includes(status);
+}
+
+function purchaseOrderHref(order: PurchaseOrderRecord) {
+  const params = new URLSearchParams({ purchaseOrderId: order.id });
+  if (isOpenPurchaseOrderStatus(order.status)) {
+    params.set("status", "open");
+  }
+  return `/bons-commande?${params.toString()}`;
 }
 
 function buildSummary(invoices: InvoiceRecord[], purchaseOrders: PurchaseOrderRecord[]): ProfitabilitySummary {
@@ -66,7 +79,7 @@ function buildSummary(invoices: InvoiceRecord[], purchaseOrders: PurchaseOrderRe
     cashPositionTtc: paidTtc - purchasesTtc,
     forecastNetTtc: invoicedTtc - purchasesTtc,
     openInvoices: invoices.filter((row) => !["paid", "cancelled"].includes(row.status)).length,
-    openPurchases: purchaseOrders.filter((row) => !["delivered", "cancelled"].includes(row.status)).length,
+    openPurchases: purchaseOrders.filter((row) => isOpenPurchaseOrderStatus(row.status)).length,
   };
 }
 
@@ -156,7 +169,7 @@ export default function RentabilitePage() {
               </div>
               <div className="mt-5 grid gap-3 md:grid-cols-3">
                 <FlowBlock label="Entrées prévues" value={formatCurrency(summary.invoicedTtc)} detail="Factures émises" />
-                <FlowBlock label="Sorties engagées" value={formatCurrency(summary.purchasesTtc)} detail="Commandes fournisseurs · Voir les décaissements" href="/financier/decaissements" />
+                <FlowBlock label="Sorties engagées" value={formatCurrency(summary.purchasesTtc)} detail="Bons de commande ouverts" href={purchaseOrdersHref()} />
                 <FlowBlock label="Net prévisionnel" value={formatCurrency(summary.forecastNetTtc)} detail="Facturé - achats" strong />
               </div>
               <SimpleFinancialChart summary={summary} />
@@ -169,7 +182,7 @@ export default function RentabilitePage() {
               <div className="flex items-center gap-2 text-sm font-semibold text-slate-950"><AlertTriangle className="h-4 w-4 text-amber-500" /> À surveiller</div>
               <div className="mt-4 space-y-3 text-sm">
                 <WatchItem label="Factures ouvertes" value={String(summary.openInvoices)} detail={formatCurrency(summary.remainingTtc)} href={collectableInvoicesHref()} />
-                <WatchItem label="Achats ouverts" value={String(summary.openPurchases)} detail={formatCurrency(summary.purchasesTtc)} href="/financier/decaissements" />
+                <WatchItem label="Achats ouverts" value={String(summary.openPurchases)} detail={formatCurrency(summary.purchasesTtc)} href={purchaseOrdersHref()} />
                 <WatchItem label="Marge HT" value={formatRate(summary.estimatedMarginRate)} detail={formatCurrency(summary.estimatedMarginHt)} />
               </div>
             </aside>
@@ -185,7 +198,7 @@ export default function RentabilitePage() {
             <DataPanel title="Derniers achats" empty={!recentPurchases.length ? "Aucun achat." : null}>
               {recentPurchases.map((order) => {
                 const totals = order.document.totals ?? calculateDocumentTotals(order.document);
-                return <Row key={order.id} title={order.document.number} detail={order.supplierName || order.document.recipient.displayName || "Fournisseur à définir"} value={formatCurrency(totals.totalTtc)} href={purchaseOrderHref(order.id)} />;
+                return <Row key={order.id} title={order.document.number} detail={order.supplierName || order.document.recipient.displayName || "Fournisseur à définir"} value={formatCurrency(totals.totalTtc)} href={purchaseOrderHref(order)} />;
               })}
             </DataPanel>
           </section>
