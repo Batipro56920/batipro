@@ -90,6 +90,14 @@ function ChantierBackofficeRoute({ label, children }: { label: string; children:
   );
 }
 
+function ChantierTimeBackofficeRoute({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <RequireCompanyFeature moduleId="temps" profilePermissionKey="temps">
+      <RouteSuspense label={label}>{children}</RouteSuspense>
+    </RequireCompanyFeature>
+  );
+}
+
 function TerrainFeedbackBackofficeRoute({ label, children }: { label: string; children: ReactNode }) {
   return (
     <RequireCompanyFeature moduleId="journal_chantier">
@@ -385,14 +393,14 @@ export default function App() {
         />
         <Route
           path="/temps"
-          element={<ChantierBackofficeRoute label="Ouverture du suivi des temps..."><ChantiersTimePage /></ChantierBackofficeRoute>}
+          element={<ChantierTimeBackofficeRoute label="Ouverture du suivi des temps..."><ChantiersTimePage /></ChantierTimeBackofficeRoute>}
         />
         <Route path="/chantiers/nouveau" element={<ChantierBackofficeRoute label="Chargement du nouveau chantier..."><ChantierNewPage /></ChantierBackofficeRoute>} />
         <Route path="/chantiers/:id" element={<ChantierBackofficeRoute label="Chargement du chantier..."><ChantierPage /></ChantierBackofficeRoute>} />
         <Route path="/chantiers/:id/preparation" element={<ChantierBackofficeRoute label="Chargement du chantier..."><ChantierPage /></ChantierBackofficeRoute>} />
         <Route path="/chantiers/:id/execution" element={<ChantierBackofficeRoute label="Chargement du chantier..."><ChantierPage /></ChantierBackofficeRoute>} />
         <Route path="/chantiers/:id/planning" element={<ChantierBackofficeRoute label="Chargement du planning chantier..."><ChantierPlanningPage /></ChantierBackofficeRoute>} />
-        <Route path="/chantiers/:id/temps" element={<ChantierBackofficeRoute label="Chargement des temps chantier..."><ChantierTimePage /></ChantierBackofficeRoute>} />
+        <Route path="/chantiers/:id/temps" element={<ChantierTimeBackofficeRoute label="Chargement des temps chantier..."><ChantierTimePage /></ChantierTimeBackofficeRoute>} />
         <Route path="/chantiers/:id/financier" element={<ChantierBackofficeRoute label="Chargement du chantier..."><ChantierPage /></ChantierBackofficeRoute>} />
         <Route path="/chantiers/:id/qualite" element={<ChantierBackofficeRoute label="Chargement du chantier..."><ChantierPage /></ChantierBackofficeRoute>} />
         <Route path="/chantiers/:id/documents" element={<ChantierBackofficeRoute label="Chargement du chantier..."><ChantierPage /></ChantierBackofficeRoute>} />
