@@ -18,8 +18,16 @@ function priorityTerrainFeedbackCount(row: ChantierDerived) {
   return row.terrainFeedbackPriorityCount ?? 0;
 }
 
+function hasOpenTerrainFeedback(row: ChantierDerived) {
+  return openTerrainFeedbackCount(row) > 0;
+}
+
+function hasPriorityTerrainFeedback(row: ChantierDerived) {
+  return priorityTerrainFeedbackCount(row) > 0;
+}
+
 function hasChantierAlert(row: ChantierDerived) {
-  return row.isLate || (row.timeRatio !== null && row.timeRatio > 1.1) || openTerrainFeedbackCount(row) > 0;
+  return row.isLate || (row.timeRatio !== null && row.timeRatio > 1.1) || hasOpenTerrainFeedback(row);
 }
 
 function terrainFeedbackSearchTerms(row: ChantierDerived) {
@@ -119,6 +127,8 @@ export function filterChantiers(rows: ChantierDerived[], filters: ChantierListFi
     if (filters.client && (row.client ?? "") !== filters.client) return false;
     if (filters.period === "late" && !row.isLate) return false;
     if (filters.period === "alerts" && !hasChantierAlert(row)) return false;
+    if (filters.period === "terrain_feedback" && !hasOpenTerrainFeedback(row)) return false;
+    if (filters.period === "terrain_feedback_priority" && !hasPriorityTerrainFeedback(row)) return false;
     if (filters.period === "this_month" && !isInCurrentMonthWindow(row)) return false;
     if (filters.period === "next_30" && !isInNextDaysWindow(row, 30)) return false;
     if (!query) return true;
