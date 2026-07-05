@@ -229,7 +229,7 @@ function InvoicePriorityPanel({ invoices, collectableCount }: { invoices: Invoic
             return (
               <Link
                 key={invoice.id}
-                to={invoiceHref(invoice.id)}
+                to={invoiceHref(invoice.id, "a_encaisser")}
                 className="block rounded-2xl border border-slate-200 bg-slate-50 p-4 transition hover:border-blue-200 hover:bg-blue-50/50 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2"
               >
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
@@ -558,8 +558,9 @@ function getSection(pathname: string): FinancialSection {
   return "encaissements";
 }
 
-function invoiceHref(invoiceId: string) {
+function invoiceHref(invoiceId: string, status?: "a_encaisser") {
   const params = new URLSearchParams({ invoice: invoiceId });
+  if (status) params.set("status", status);
   return `/factures?${params.toString()}`;
 }
 
