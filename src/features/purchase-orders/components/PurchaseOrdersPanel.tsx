@@ -96,13 +96,14 @@ export function PurchaseOrdersPanel({ suppliers }: { suppliers: SupplierRow[] })
     if (loading || openedOrderFromUrlRef.current === urlPurchaseOrderId) return;
     if (!targetedOrder) return;
 
+    const requestedStatusFilter = isPurchaseOrderStatusFilter(statusQueryParam) ? statusQueryParam : "all";
     setSelectedOrder(targetedOrder);
     setQuery("");
-    setStatusFilter("all");
+    setStatusFilter(matchesStatusFilter(targetedOrder, requestedStatusFilter) ? requestedStatusFilter : "all");
     setSupplierFilter("all");
     setError(null);
     openedOrderFromUrlRef.current = urlPurchaseOrderId;
-  }, [loading, targetedOrder, urlPurchaseOrderId]);
+  }, [loading, statusQueryParam, targetedOrder, urlPurchaseOrderId]);
 
   useEffect(() => {
     if (!urlPurchaseOrderId || !targetedOrder || loading || !targetedOrderVisible) return;
