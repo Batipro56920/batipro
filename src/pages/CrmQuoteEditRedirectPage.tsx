@@ -32,19 +32,12 @@ function quoteBuilderProjectId(quote: CrmQuoteRow) {
   return projectIdFromDisplayOptions(quote.display_options);
 }
 
-function quoteFallbackProjectId(quote: CrmQuoteRow) {
-  if (quote.opportunity_id) return `opportunity-${quote.opportunity_id}`;
-  if (quote.prospect_id) return `prospect-${quote.prospect_id}`;
-  if (quote.client_id) return `client-${quote.client_id}`;
-  return "";
-}
-
 function issueMessage(issue: QuoteOpenIssue) {
   if (issue.kind === "missing-id") return "Aucun identifiant de devis n'a été fourni dans l'URL.";
   if (issue.kind === "missing-quote") {
     return "Ce devis n'existe pas dans les devis CRM chargés ou n'est pas accessible avec vos droits actuels.";
   }
-  return "Ce devis existe, mais il n'a aucun rattachement projet commercial exploitable pour ouvrir l'éditeur.";
+  return "Ce devis existe, mais il n'a aucun rattachement projet commercial confirmé pour ouvrir l'éditeur.";
 }
 
 function formatCurrency(value: number) {
@@ -117,12 +110,6 @@ export default function CrmQuoteEditRedirectPage() {
         const builderProject = builderProjectId ? projects.find((candidate) => candidate.id === builderProjectId) : null;
         if (builderProject) {
           setState({ status: "ready", targetPath: `/projets/${encodeURIComponent(builderProject.id)}/devis/${encodeURIComponent(id)}/edit` });
-          return;
-        }
-
-        const fallbackProjectId = quote ? quoteFallbackProjectId(quote) : "";
-        if (fallbackProjectId) {
-          setState({ status: "ready", targetPath: `/projets/${encodeURIComponent(fallbackProjectId)}/devis/${encodeURIComponent(id)}/edit` });
           return;
         }
 
