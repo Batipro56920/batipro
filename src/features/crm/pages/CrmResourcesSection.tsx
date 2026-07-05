@@ -34,7 +34,7 @@ export default function CrmResourcesSection({ templates }: { templates: CrmDatas
       openLibrary();
       return;
     }
-    navigate(`/bibliotheque?q=${encodeURIComponent(normalizedLot)}`);
+    navigate(`/bibliotheque?lot=${encodeURIComponent(normalizedLot)}`);
   }
 
   return (
