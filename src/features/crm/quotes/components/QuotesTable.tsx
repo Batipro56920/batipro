@@ -11,6 +11,73 @@ function signatureLabel(value: string) {
   return value || "—";
 }
 
+function QuoteMobileCard({
+  row,
+  actions,
+  onSelect,
+}: {
+  row: QuoteWithParty;
+  actions: QuoteActionHandlers;
+  onSelect: (row: QuoteWithParty) => void;
+}) {
+  return (
+    <article className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm shadow-slate-950/[0.03]">
+      <button type="button" onClick={() => onSelect(row)} className="block w-full text-left">
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <div className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">{row.quote_number}</div>
+            <div className="mt-1 truncate text-base font-semibold text-slate-950">{row.partyLabel}</div>
+          </div>
+          <QuoteStatusChip status={row.statut} />
+        </div>
+        <div className="mt-3 line-clamp-2 text-sm font-medium text-slate-700">{row.description ?? row.lot ?? "Projet à compléter"}</div>
+        <div className="mt-4 grid grid-cols-2 gap-3 text-sm">
+          <div>
+            <div className="text-xs text-slate-500">Montant</div>
+            <div className="mt-1 font-semibold text-slate-950">{eur(row.montant_ht)} HT</div>
+            <div className="text-xs text-slate-500">{eur(row.montant_ttc)} TTC</div>
+          </div>
+          <div>
+            <div className="text-xs text-slate-500">Validité</div>
+            <div className="mt-1 font-semibold text-slate-950">{dateOnly(row.valid_until)}</div>
+            <div className="text-xs text-slate-500">Signature : {signatureLabel(row.signature_status)}</div>
+          </div>
+        </div>
+      </button>
+
+      <div className="mt-4 flex flex-wrap gap-2" onClick={(event) => event.stopPropagation()}>
+        <Link to={row.quoteEditPath} className="inline-flex h-9 items-center justify-center rounded-xl bg-slate-950 px-3 text-sm font-semibold text-white hover:bg-slate-800" title="Modifier ce devis dans le Quote Builder.">
+          Modifier
+        </Link>
+        <Link to={row.projectPath} className="inline-flex h-9 items-center justify-center rounded-xl border border-blue-200 bg-blue-50 px-3 text-sm font-semibold text-blue-800 hover:bg-blue-100" title="Ouvrir le dossier projet lié à ce devis.">
+          Projet
+        </Link>
+        {row.chantierPath ? (
+          <Link to={row.chantierPath} className="inline-flex h-9 items-center justify-center rounded-xl border border-emerald-200 bg-emerald-50 px-3 text-sm font-semibold text-emerald-800 hover:bg-emerald-100" title="Ouvrir le chantier déjà lié à ce devis.">
+            Chantier
+          </Link>
+        ) : (
+          <button type="button" onClick={() => actions.onTransform(row)} className="inline-flex h-9 items-center justify-center rounded-xl border border-slate-200 px-3 text-sm font-semibold text-slate-700 hover:bg-slate-50">
+            Transformer
+          </button>
+        )}
+        <details className="relative">
+          <summary className="flex h-9 cursor-pointer list-none items-center rounded-xl border border-slate-200 px-3 text-sm font-semibold text-slate-700 hover:bg-slate-50">
+            <MoreHorizontal className="h-4 w-4" />
+          </summary>
+          <div className="absolute right-0 z-20 mt-1 w-52 rounded-2xl border border-slate-200 bg-white p-2 shadow-xl shadow-slate-950/10">
+            <button type="button" onClick={() => actions.onStatus(row, "envoye")} className="block w-full rounded-xl px-3 py-2 text-left text-sm hover:bg-slate-50">Envoyer</button>
+            <button type="button" onClick={() => actions.onStatus(row, "relance_1")} className="block w-full rounded-xl px-3 py-2 text-left text-sm hover:bg-slate-50">Relancer</button>
+            <button type="button" onClick={() => actions.onPdf(row)} className="block w-full rounded-xl px-3 py-2 text-left text-sm hover:bg-slate-50">PDF</button>
+            <button type="button" onClick={() => actions.onStatus(row, "accepte")} className="block w-full rounded-xl px-3 py-2 text-left text-sm text-emerald-700 hover:bg-emerald-50">Accepter</button>
+            <button type="button" onClick={() => actions.onStatus(row, "refuse")} className="block w-full rounded-xl px-3 py-2 text-left text-sm text-red-700 hover:bg-red-50">Refuser</button>
+          </div>
+        </details>
+      </div>
+    </article>
+  );
+}
+
 export function QuotesTable({
   rows,
   actions,
@@ -22,7 +89,13 @@ export function QuotesTable({
 }) {
   return (
     <section className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm shadow-slate-950/[0.03]">
-      <div className="overflow-x-auto">
+      <div className="space-y-3 bg-slate-50/60 p-3 md:hidden">
+        {rows.map((row) => (
+          <QuoteMobileCard key={row.id} row={row} actions={actions} onSelect={onSelect} />
+        ))}
+      </div>
+
+      <div className="hidden overflow-x-auto md:block">
         <table className="w-full min-w-[1120px] text-sm">
           <thead className="border-b border-slate-200 bg-slate-50 text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">
             <tr>
@@ -82,7 +155,7 @@ export function QuotesTable({
       </div>
       <div className="flex items-center justify-between border-t border-slate-200 px-4 py-3 text-xs text-slate-500">
         <span>{rows.length} devis</span>
-        <span>Pagination avancée à connecter si volume élevé.</span>
+        <span className="hidden sm:inline">Pagination avancée à connecter si volume élevé.</span>
       </div>
     </section>
   );
