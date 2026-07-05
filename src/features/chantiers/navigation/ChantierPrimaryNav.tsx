@@ -82,7 +82,7 @@ export function ChantierPrimaryNav({ sections }: { sections: ChantierPrimarySect
   const reserveShortcutEnabled =
     Boolean(chantierId) &&
     enabledSectionKeys.has("qualite") &&
-    isModuleEnabled("validation_qualite", enabledModules);
+    isModuleEnabled("reserves", enabledModules);
   const reserveHref = chantierId ? `/chantiers/${encodeURIComponent(chantierId)}/qualite` : "/reserves";
   const terrainFeedbackEnabled = Boolean(chantierId) && isModuleEnabled("journal_chantier", enabledModules);
   const terrainFeedbackHref = chantierId
