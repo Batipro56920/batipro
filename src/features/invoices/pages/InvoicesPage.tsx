@@ -17,7 +17,15 @@ type InvoiceStatusFilter = "all" | "a_encaisser" | InvoiceStatus;
 type ClientWorkflowFilter = "all" | "actionable";
 
 const COLLECTABLE_INVOICE_STATUSES: InvoiceStatus[] = ["sent", "partially_paid", "overdue"];
-const ACTIONABLE_CLIENT_WORKFLOW_STATUSES = ["sent", "viewed", "modification_requested", "expired"];
+const ACTIONABLE_CLIENT_WORKFLOW_STATUSES = ["sent", "viewed", "modification_requested", "expired"] as const;
+type ClientWorkflowStatus = (typeof ACTIONABLE_CLIENT_WORKFLOW_STATUSES)[number];
+
+const CLIENT_WORKFLOW_STATUS_META: Record<ClientWorkflowStatus, { label: string; className: string }> = {
+  sent: { label: "Doc envoyé", className: "bg-blue-100 text-blue-800" },
+  viewed: { label: "Doc consulté", className: "bg-cyan-100 text-cyan-800" },
+  modification_requested: { label: "Modif. demandée", className: "bg-amber-100 text-amber-800" },
+  expired: { label: "Lien expiré", className: "bg-red-100 text-red-800" },
+};
 
 const INVOICE_STATUS_FILTERS: Array<{ value: InvoiceStatusFilter; label: string }> = [
   { value: "all", label: "Tous statuts" },
@@ -41,9 +49,9 @@ function matchesStatusFilter(invoice: InvoiceRecord, filter: InvoiceStatusFilter
   return invoice.status === filter;
 }
 
-function matchesClientWorkflowFilter(invoice: InvoiceRecord, filter: ClientWorkflowFilter, workflowInvoiceIds: Set<string>) {
+function matchesClientWorkflowFilter(invoice: InvoiceRecord, filter: ClientWorkflowFilter, workflowByInvoiceId: Map<string, ClientWorkflowStatus>) {
   if (filter === "all") return true;
-  return workflowInvoiceIds.has(invoice.id);
+  return workflowByInvoiceId.has(invoice.id);
 }
 
 export default function InvoicesPage() {
@@ -60,7 +68,7 @@ export default function InvoicesPage() {
   const invalidStatusFromUrl = Boolean(statusFromUrl && !statusFilterFromUrl);
   const invalidClientWorkflowFromUrl = Boolean(clientWorkflowFromUrl && !clientWorkflowFilterFromUrl);
   const [invoices, setInvoices] = useState<InvoiceRecord[]>([]);
-  const [clientWorkflowInvoiceIds, setClientWorkflowInvoiceIds] = useState<Set<string>>(() => new Set());
+  const [clientWorkflowByInvoiceId, setClientWorkflowByInvoiceId] = useState<Map<string, ClientWorkflowStatus>>(() => new Map());
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [dirtyInvoiceIds, setDirtyInvoiceIds] = useState<Set<string>>(() => new Set());
   const [loading, setLoading] = useState(true);
@@ -110,7 +118,7 @@ export default function InvoicesPage() {
           ? statusFilterFromUrl
           : "all";
       const targetedClientWorkflowFilter =
-        clientWorkflowFilterFromUrl && matchesClientWorkflowFilter(targetedInvoice, clientWorkflowFilterFromUrl, clientWorkflowInvoiceIds)
+        clientWorkflowFilterFromUrl && matchesClientWorkflowFilter(targetedInvoice, clientWorkflowFilterFromUrl, clientWorkflowByInvoiceId)
           ? clientWorkflowFilterFromUrl
           : "all";
       setSelectedId(targetedInvoice.id);
@@ -125,7 +133,7 @@ export default function InvoicesPage() {
         setSearchParams(nextParams, { replace: true });
       }
     }
-  }, [clientWorkflowFilterFromUrl, clientWorkflowInvoiceIds, invoiceIdFromUrl, searchParams, setSearchParams, statusFilterFromUrl, targetedInvoice]);
+  }, [clientWorkflowByInvoiceId, clientWorkflowFilterFromUrl, invoiceIdFromUrl, searchParams, setSearchParams, statusFilterFromUrl, targetedInvoice]);
 
   const stats = useMemo(() => {
     const totals = invoices.reduce((acc, invoice) => {
@@ -149,11 +157,11 @@ export default function InvoicesPage() {
         invoice.document.title,
       ].some((value) => String(value ?? "").toLowerCase().includes(text));
       const matchesStatus = matchesStatusFilter(invoice, statusFilter);
-      const matchesClientWorkflow = matchesClientWorkflowFilter(invoice, clientWorkflowFilter, clientWorkflowInvoiceIds);
+      const matchesClientWorkflow = matchesClientWorkflowFilter(invoice, clientWorkflowFilter, clientWorkflowByInvoiceId);
       const matchesType = typeFilter === "all" || invoice.type === typeFilter;
       return matchesText && matchesStatus && matchesClientWorkflow && matchesType;
     });
-  }, [clientWorkflowFilter, clientWorkflowInvoiceIds, invoices, query, statusFilter, typeFilter]);
+  }, [clientWorkflowByInvoiceId, clientWorkflowFilter, invoices, query, statusFilter, typeFilter]);
 
   async function refresh(selectFirst = true) {
     if (dirtyInvoiceIds.size > 0) {
@@ -165,15 +173,15 @@ export default function InvoicesPage() {
     setClientWorkflowLoadFailed(false);
     setError(null);
     try {
-      const [rows, workflowInvoiceIds] = await Promise.all([
+      const [rows, workflowByInvoiceId] = await Promise.all([
         listInvoices(),
-        listActionableClientWorkflowInvoiceIds().catch(() => {
+        listActionableClientWorkflowByInvoiceId().catch(() => {
           setClientWorkflowLoadFailed(true);
-          return new Set<string>();
+          return new Map<string, ClientWorkflowStatus>();
         }),
       ]);
       setInvoices(rows);
-      setClientWorkflowInvoiceIds(workflowInvoiceIds);
+      setClientWorkflowByInvoiceId(workflowByInvoiceId);
       setDirtyInvoiceIds(new Set());
       if (selectFirst) {
         setSelectedId((current) => {
@@ -181,7 +189,7 @@ export default function InvoicesPage() {
           const urlStatusFilter = statusFilterFromUrl ?? "all";
           const urlClientWorkflowFilter = clientWorkflowFilterFromUrl ?? "all";
           const matchesUrlFilters = (invoice: InvoiceRecord) =>
-            matchesStatusFilter(invoice, urlStatusFilter) && matchesClientWorkflowFilter(invoice, urlClientWorkflowFilter, workflowInvoiceIds);
+            matchesStatusFilter(invoice, urlStatusFilter) && matchesClientWorkflowFilter(invoice, urlClientWorkflowFilter, workflowByInvoiceId);
           const firstMatchingFilters = rows.find(matchesUrlFilters);
           const hasActiveUrlFilter = urlStatusFilter !== "all" || urlClientWorkflowFilter !== "all";
           if (current && rows.some((invoice) => invoice.id === current && matchesUrlFilters(invoice))) return current;
@@ -191,7 +199,7 @@ export default function InvoicesPage() {
     } catch (err: any) {
       setError(err?.message ?? "Chargement des factures impossible.");
       setInvoices([]);
-      setClientWorkflowInvoiceIds(new Set());
+      setClientWorkflowByInvoiceId(new Map());
       setDirtyInvoiceIds(new Set());
     } finally {
       setLoading(false);
@@ -355,6 +363,7 @@ export default function InvoicesPage() {
             {filteredInvoices.map((invoice) => {
               const totals = invoice.document.totals ?? calculateDocumentTotals(invoice.document);
               const hasUnsavedChanges = dirtyInvoiceIds.has(invoice.id);
+              const clientWorkflowStatus = clientWorkflowByInvoiceId.get(invoice.id);
               return (
                 <button key={invoice.id} type="button" onClick={() => selectInvoice(invoice.id)} className={`w-full rounded-2xl border px-3 py-2.5 text-left transition ${selectedId === invoice.id ? "border-blue-300 bg-blue-50" : "border-slate-200 hover:bg-slate-50"}`}>
                   <div className="flex min-w-0 items-start justify-between gap-3">
@@ -369,6 +378,7 @@ export default function InvoicesPage() {
                   </div>
                   <div className="mt-2 flex flex-wrap items-center gap-2">
                     <InvoiceStatusBadge status={invoice.status} />
+                    {clientWorkflowStatus ? <ClientWorkflowStatusBadge status={clientWorkflowStatus} /> : null}
                     {hasUnsavedChanges ? <span className="rounded-full bg-amber-100 px-2.5 py-1 text-xs font-semibold text-amber-800">Non enregistré</span> : null}
                   </div>
                 </button>
@@ -388,17 +398,32 @@ export default function InvoicesPage() {
   );
 }
 
-async function listActionableClientWorkflowInvoiceIds() {
+async function listActionableClientWorkflowByInvoiceId() {
   const { data, error } = await supabase
     .from("document_client_workflows" as any)
-    .select("source_id")
+    .select("source_id,status")
     .eq("source_kind", "invoice")
     .is("revoked_at", null)
     .in("status", ACTIONABLE_CLIENT_WORKFLOW_STATUSES)
-    .overrideTypes<Array<{ source_id: string | null }>>();
+    .order("created_at", { ascending: false })
+    .overrideTypes<Array<{ source_id: string | null; status: string | null }>>();
 
   if (error) throw new Error(error.message);
-  return new Set((data ?? []).map((row) => row.source_id).filter(Boolean) as string[]);
+
+  return (data ?? []).reduce((acc, row) => {
+    const status = normalizeClientWorkflowStatus(row.status);
+    if (row.source_id && status && !acc.has(row.source_id)) acc.set(row.source_id, status);
+    return acc;
+  }, new Map<string, ClientWorkflowStatus>());
+}
+
+function normalizeClientWorkflowStatus(status: string | null): ClientWorkflowStatus | null {
+  return ACTIONABLE_CLIENT_WORKFLOW_STATUSES.includes(status as ClientWorkflowStatus) ? (status as ClientWorkflowStatus) : null;
+}
+
+function ClientWorkflowStatusBadge({ status }: { status: ClientWorkflowStatus }) {
+  const meta = CLIENT_WORKFLOW_STATUS_META[status];
+  return <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${meta.className}`}>{meta.label}</span>;
 }
 
 function EmptyState({ title, description }: { title: string; description: string }) {
