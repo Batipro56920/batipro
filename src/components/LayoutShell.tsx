@@ -11,6 +11,41 @@ import { getCompanySettings } from "../services/companySettings.service";
 import { searchGlobalBatipro, type GlobalSearchResult } from "../services/globalSearch.service";
 import { useI18n } from "../i18n";
 
+const SEARCH_PLACEHOLDER = "Rechercher chantier, client, projet, devis, retour terrain...";
+
+const SEARCH_QUICK_LINKS = [
+  {
+    label: "Chantiers",
+    description: "Ouvrir le portefeuille chantier",
+    href: "/chantiers",
+    badge: "Production",
+  },
+  {
+    label: "Retours terrain",
+    description: "Traiter observations, blocages et anomalies",
+    href: "/retours-terrain",
+    badge: "Terrain",
+  },
+  {
+    label: "Tâches chantier",
+    description: "Suivre les travaux à exécuter",
+    href: "/taches",
+    badge: "Exécution",
+  },
+  {
+    label: "Réserves",
+    description: "Piloter les réserves qualité ouvertes",
+    href: "/reserves",
+    badge: "Qualité",
+  },
+  {
+    label: "Planning",
+    description: "Voir la charge et les interventions",
+    href: "/planning",
+    badge: "Planning",
+  },
+] as const;
+
 export default function LayoutShell() {
   const storageKey = "batipro.sidebarCollapsed";
   const navigate = useNavigate();
@@ -146,6 +181,12 @@ export default function LayoutShell() {
     navigate(result.href);
   }
 
+  function openQuickLink(href: string) {
+    setSearchOpen(false);
+    setSearchQuery("");
+    navigate(href);
+  }
+
   function openMobileSearch() {
     setSearchOpen((value) => !value);
     window.setTimeout(() => mobileSearchInputRef.current?.focus(), 0);
@@ -160,6 +201,35 @@ export default function LayoutShell() {
       event.preventDefault();
       openSearchResult(searchResults[0]);
     }
+  }
+
+  function renderQuickSearchLinks(compact = false) {
+    return (
+      <div className={compact ? "mt-2 rounded-xl border border-slate-200 bg-white p-2" : "p-2"}>
+        <div className="px-2 pb-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">
+          Accès rapides chantier
+        </div>
+        <div className={compact ? "space-y-1" : "grid gap-1 sm:grid-cols-2"}>
+          {SEARCH_QUICK_LINKS.map((item) => (
+            <button
+              key={item.href}
+              type="button"
+              onMouseDown={(event) => event.preventDefault()}
+              onClick={() => openQuickLink(item.href)}
+              className="flex w-full items-start gap-3 rounded-xl px-3 py-2.5 text-left transition hover:bg-slate-50"
+            >
+              <span className="mt-0.5 rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-600 ring-1 ring-slate-200">
+                {item.badge}
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-sm font-semibold text-slate-950">{item.label}</span>
+                <span className="mt-0.5 block truncate text-xs text-slate-500">{item.description}</span>
+              </span>
+            </button>
+          ))}
+        </div>
+      </div>
+    );
   }
 
   return (
@@ -192,7 +262,7 @@ export default function LayoutShell() {
                 <input
                   ref={searchInputRef}
                   className="min-w-0 flex-1 bg-transparent text-sm text-slate-700 outline-none placeholder:text-slate-400"
-                  placeholder="Rechercher chantier, client, projet, devis..."
+                  placeholder={SEARCH_PLACEHOLDER}
                   aria-label="Recherche globale"
                   value={searchQuery}
                   onChange={(event) => {
@@ -206,32 +276,36 @@ export default function LayoutShell() {
                 <span className="ml-auto rounded-md border border-slate-200 bg-white px-1.5 py-0.5 text-[10px] font-medium text-slate-400">Ctrl K</span>
               </label>
 
-              {searchOpen && searchQuery.trim().length >= 2 ? (
+              {searchOpen ? (
                 <div className="absolute left-0 right-0 top-12 z-50 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xl shadow-slate-950/10">
-                  {searchLoading ? (
-                    <div className="px-4 py-3 text-sm text-slate-500">Recherche en cours...</div>
-                  ) : searchError ? (
-                    <div className="px-4 py-3 text-sm text-red-600">{searchError}</div>
-                  ) : searchResults.length ? (
-                    <div className="max-h-[26rem] overflow-y-auto p-1">
-                      {searchResults.map((result) => (
-                        <button
-                          key={`${result.kind}-${result.id}`}
-                          type="button"
-                          onMouseDown={(event) => event.preventDefault()}
-                          onClick={() => openSearchResult(result)}
-                          className="flex w-full items-start gap-3 rounded-xl px-3 py-2.5 text-left transition hover:bg-slate-50"
-                        >
-                          <span className="mt-0.5 rounded-full bg-blue-50 px-2 py-0.5 text-[11px] font-semibold text-blue-700 ring-1 ring-blue-100">{result.badge}</span>
-                          <span className="min-w-0 flex-1">
-                            <span className="block truncate text-sm font-semibold text-slate-950">{result.title}</span>
-                            <span className="mt-0.5 block truncate text-xs text-slate-500">{result.subtitle}</span>
-                          </span>
-                        </button>
-                      ))}
-                    </div>
+                  {searchQuery.trim().length >= 2 ? (
+                    searchLoading ? (
+                      <div className="px-4 py-3 text-sm text-slate-500">Recherche en cours...</div>
+                    ) : searchError ? (
+                      <div className="px-4 py-3 text-sm text-red-600">{searchError}</div>
+                    ) : searchResults.length ? (
+                      <div className="max-h-[26rem] overflow-y-auto p-1">
+                        {searchResults.map((result) => (
+                          <button
+                            key={`${result.kind}-${result.id}`}
+                            type="button"
+                            onMouseDown={(event) => event.preventDefault()}
+                            onClick={() => openSearchResult(result)}
+                            className="flex w-full items-start gap-3 rounded-xl px-3 py-2.5 text-left transition hover:bg-slate-50"
+                          >
+                            <span className="mt-0.5 rounded-full bg-blue-50 px-2 py-0.5 text-[11px] font-semibold text-blue-700 ring-1 ring-blue-100">{result.badge}</span>
+                            <span className="min-w-0 flex-1">
+                              <span className="block truncate text-sm font-semibold text-slate-950">{result.title}</span>
+                              <span className="mt-0.5 block truncate text-xs text-slate-500">{result.subtitle}</span>
+                            </span>
+                          </button>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="px-4 py-3 text-sm text-slate-500">Aucun résultat trouvé.</div>
+                    )
                   ) : (
-                    <div className="px-4 py-3 text-sm text-slate-500">Aucun résultat trouvé.</div>
+                    renderQuickSearchLinks()
                   )}
                 </div>
               ) : null}
@@ -320,7 +394,7 @@ export default function LayoutShell() {
                 <input
                   ref={mobileSearchInputRef}
                   className="min-w-0 flex-1 bg-transparent text-sm text-slate-700 outline-none placeholder:text-slate-400"
-                  placeholder="Rechercher chantier, client, projet..."
+                  placeholder={SEARCH_PLACEHOLDER}
                   aria-label="Recherche globale mobile"
                   value={searchQuery}
                   onChange={(event) => setSearchQuery(event.target.value)}
@@ -359,7 +433,7 @@ export default function LayoutShell() {
                   )}
                 </div>
               ) : (
-                <div className="mt-2 text-xs text-slate-500">Saisissez au moins 2 caractères.</div>
+                renderQuickSearchLinks(true)
               )}
             </div>
           ) : null}
