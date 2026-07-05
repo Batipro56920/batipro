@@ -298,7 +298,7 @@ function DecaissementsView({ purchaseOrders, summary }: { purchaseOrders: Purcha
               return (
                 <tr key={order.id} className="border-t border-slate-100">
                   <Td>
-                    <Link to={purchaseOrderHref(order.id)} className="font-semibold text-blue-700 hover:text-blue-800">
+                    <Link to={purchaseOrderHref(order.id, isOpenPurchaseOrder(order) ? "open" : undefined)} className="font-semibold text-blue-700 hover:text-blue-800">
                       {order.document.number || "Commande sans numéro"}
                     </Link>
                   </Td>
@@ -327,7 +327,7 @@ function PurchaseOrderPriorityPanel({ orders, openCount }: { orders: PurchaseOrd
             return (
               <Link
                 key={order.id}
-                to={purchaseOrderHref(order.id)}
+                to={purchaseOrderHref(order.id, "open")}
                 className="block rounded-2xl border border-slate-200 bg-slate-50 p-4 transition hover:border-blue-200 hover:bg-blue-50/50 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2"
               >
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
@@ -564,9 +564,10 @@ function invoiceHref(invoiceId: string, status?: "a_encaisser") {
   return `/factures?${params.toString()}`;
 }
 
-function purchaseOrderHref(orderId: string) {
-  const params = new URLSearchParams({ tab: "orders", purchaseOrderId: orderId });
-  return `/fournisseurs?${params.toString()}`;
+function purchaseOrderHref(orderId: string, status?: "open") {
+  const params = new URLSearchParams({ purchaseOrderId: orderId });
+  if (status) params.set("status", status);
+  return `/bons-commande?${params.toString()}`;
 }
 
 function isOpenInvoice(invoice: InvoiceRecord) {
