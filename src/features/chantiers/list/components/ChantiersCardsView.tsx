@@ -15,6 +15,8 @@ export function ChantiersCardsView({ rows, onPreview, actions }: { rows: Chantie
         const hasOpenTerrainFeedbacks = terrainFeedbackOpenCount > 0;
         const hasPriorityTerrainFeedbacks = terrainFeedbackPriorityCount > 0;
         const terrainFeedbackHref = `/retours-terrain?chantierId=${encodeURIComponent(row.id)}`;
+        const qualityHref = `/chantiers/${row.id}/qualite`;
+        const qualityLinkTone = hasPriorityTerrainFeedbacks ? "red" : hasOpenTerrainFeedbacks ? "amber" : "slate";
         const terrainFeedbackLabel = hasPriorityTerrainFeedbacks
           ? `${terrainFeedbackPriorityCount} retour${terrainFeedbackPriorityCount > 1 ? "s" : ""} terrain urgent${terrainFeedbackPriorityCount > 1 ? "s" : ""}`
           : `${terrainFeedbackOpenCount} retour${terrainFeedbackOpenCount > 1 ? "s" : ""} terrain à traiter`;
@@ -57,20 +59,31 @@ export function ChantiersCardsView({ rows, onPreview, actions }: { rows: Chantie
                   <div className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm font-medium text-red-700">En retard</div>
                 ) : null}
                 {hasOpenTerrainFeedbacks ? (
-                  <Link
-                    to={terrainFeedbackHref}
-                    onClick={(event) => event.stopPropagation()}
-                    className={[
-                      "flex items-center justify-between gap-2 rounded-xl border px-3 py-2 text-sm font-medium transition focus:outline-none focus:ring-2 focus:ring-blue-200",
-                      hasPriorityTerrainFeedbacks
-                        ? "border-red-200 bg-red-50 text-red-700 hover:bg-red-100"
-                        : "border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100",
-                    ].join(" ")}
-                    title="Ouvrir les retours terrain de ce chantier"
-                  >
-                    <span>{terrainFeedbackLabel}</span>
-                    <AlertTriangle className="h-4 w-4 shrink-0" />
-                  </Link>
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    <Link
+                      to={terrainFeedbackHref}
+                      onClick={(event) => event.stopPropagation()}
+                      className={[
+                        "flex items-center justify-between gap-2 rounded-xl border px-3 py-2 text-sm font-medium transition focus:outline-none focus:ring-2 focus:ring-blue-200",
+                        hasPriorityTerrainFeedbacks
+                          ? "border-red-200 bg-red-50 text-red-700 hover:bg-red-100"
+                          : "border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100",
+                      ].join(" ")}
+                      title="Ouvrir les retours terrain de ce chantier"
+                    >
+                      <span>{terrainFeedbackLabel}</span>
+                      <AlertTriangle className="h-4 w-4 shrink-0" />
+                    </Link>
+                    <Link
+                      to={qualityHref}
+                      onClick={(event) => event.stopPropagation()}
+                      className="flex items-center justify-between gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-200"
+                      title="Ouvrir la qualité et les réserves de ce chantier"
+                    >
+                      <span>Suivre en réserves</span>
+                      <AlertTriangle className="h-4 w-4 shrink-0" />
+                    </Link>
+                  </div>
                 ) : null}
               </div>
             ) : null}
@@ -78,7 +91,8 @@ export function ChantiersCardsView({ rows, onPreview, actions }: { rows: Chantie
               <QuickLink href={`/chantiers/${row.id}/execution`} icon={Hammer} label="Exécution" />
               <QuickLink href={`/chantiers/${row.id}/temps`} icon={Clock3} label="Temps" />
               <QuickLink href={`/chantiers/${row.id}/planning`} icon={CalendarDays} label="Planning" />
-              <QuickLink href={terrainFeedbackHref} icon={AlertTriangle} label="Retours" tone={hasPriorityTerrainFeedbacks ? "red" : hasOpenTerrainFeedbacks ? "amber" : "slate"} />
+              <QuickLink href={terrainFeedbackHref} icon={AlertTriangle} label="Retours" tone={qualityLinkTone} />
+              <QuickLink href={qualityHref} icon={AlertTriangle} label="Qualité" tone={qualityLinkTone} />
               <QuickLink href={`/chantiers/${row.id}/documents`} icon={FileText} label="Documents" />
             </div>
             <div className="mt-4">
