@@ -4,6 +4,7 @@ import { ArrowRight, FileCheck2, RefreshCw, Search } from "lucide-react";
 import { Button } from "../../../components/ui/button";
 import { PageHeader } from "../../../components/layout/PageHeader";
 import { StatCard } from "../../../components/data/StatCard";
+import { supabase } from "../../../lib/supabaseClient";
 import { calculateDocumentTotals } from "../../document-engine";
 import { listInvoices, saveInvoice } from "../infrastructure/invoiceRepository";
 import type { InvoiceRecord, InvoiceStatus } from "../domain/types";
@@ -13,8 +14,10 @@ import { getPaidAmount } from "../application/invoicePayments";
 import { invoiceTypeLabel } from "../application/invoiceFactory";
 
 type InvoiceStatusFilter = "all" | "a_encaisser" | InvoiceStatus;
+type ClientWorkflowFilter = "all" | "actionable";
 
 const COLLECTABLE_INVOICE_STATUSES: InvoiceStatus[] = ["sent", "partially_paid", "overdue"];
+const ACTIONABLE_CLIENT_WORKFLOW_STATUSES = ["sent", "viewed", "modification_requested", "expired"];
 
 const INVOICE_STATUS_FILTERS: Array<{ value: InvoiceStatusFilter; label: string }> = [
   { value: "all", label: "Tous statuts" },
@@ -27,27 +30,45 @@ const INVOICE_STATUS_FILTERS: Array<{ value: InvoiceStatusFilter; label: string 
   { value: "cancelled", label: "Annulée" },
 ];
 
+const CLIENT_WORKFLOW_FILTERS: Array<{ value: ClientWorkflowFilter; label: string }> = [
+  { value: "all", label: "Tous documents client" },
+  { value: "actionable", label: "Docs client à traiter" },
+];
+
 function matchesStatusFilter(invoice: InvoiceRecord, filter: InvoiceStatusFilter) {
   if (filter === "all") return true;
   if (filter === "a_encaisser") return COLLECTABLE_INVOICE_STATUSES.includes(invoice.status);
   return invoice.status === filter;
 }
 
+function matchesClientWorkflowFilter(invoice: InvoiceRecord, filter: ClientWorkflowFilter, workflowInvoiceIds: Set<string>) {
+  if (filter === "all") return true;
+  return workflowInvoiceIds.has(invoice.id);
+}
+
 export default function InvoicesPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const invoiceIdFromUrl = searchParams.get("invoice")?.trim() || null;
   const statusFromUrl = searchParams.get("status")?.trim() || "";
+  const clientWorkflowFromUrl = searchParams.get("clientWorkflow")?.trim() || "";
   const statusFilterFromUrl = INVOICE_STATUS_FILTERS.some((option) => option.value === statusFromUrl)
     ? (statusFromUrl as InvoiceStatusFilter)
     : null;
+  const clientWorkflowFilterFromUrl = CLIENT_WORKFLOW_FILTERS.some((option) => option.value === clientWorkflowFromUrl)
+    ? (clientWorkflowFromUrl as ClientWorkflowFilter)
+    : null;
   const invalidStatusFromUrl = Boolean(statusFromUrl && !statusFilterFromUrl);
+  const invalidClientWorkflowFromUrl = Boolean(clientWorkflowFromUrl && !clientWorkflowFilterFromUrl);
   const [invoices, setInvoices] = useState<InvoiceRecord[]>([]);
+  const [clientWorkflowInvoiceIds, setClientWorkflowInvoiceIds] = useState<Set<string>>(() => new Set());
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [dirtyInvoiceIds, setDirtyInvoiceIds] = useState<Set<string>>(() => new Set());
   const [loading, setLoading] = useState(true);
+  const [clientWorkflowLoadFailed, setClientWorkflowLoadFailed] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<InvoiceStatusFilter>("all");
+  const [clientWorkflowFilter, setClientWorkflowFilter] = useState<ClientWorkflowFilter>("all");
   const [typeFilter, setTypeFilter] = useState("all");
   const selected = invoices.find((invoice) => invoice.id === selectedId) ?? null;
   const targetedInvoice = useMemo(
@@ -55,6 +76,7 @@ export default function InvoicesPage() {
     [invoiceIdFromUrl, invoices],
   );
   const targetedInvoiceMissing = Boolean(invoiceIdFromUrl && !loading && !targetedInvoice);
+  const activeClientWorkflowFilterLabel = CLIENT_WORKFLOW_FILTERS.find((option) => option.value === clientWorkflowFilter)?.label ?? "Documents client";
 
   useEffect(() => {
     void refresh();
@@ -71,23 +93,39 @@ export default function InvoicesPage() {
   }, [invalidStatusFromUrl, searchParams, setSearchParams, statusFilterFromUrl]);
 
   useEffect(() => {
+    if (invalidClientWorkflowFromUrl) {
+      const nextParams = new URLSearchParams(searchParams);
+      nextParams.delete("clientWorkflow");
+      setSearchParams(nextParams, { replace: true });
+      return;
+    }
+    setClientWorkflowFilter(clientWorkflowFilterFromUrl ?? "all");
+  }, [clientWorkflowFilterFromUrl, invalidClientWorkflowFromUrl, searchParams, setSearchParams]);
+
+  useEffect(() => {
     if (!invoiceIdFromUrl) return;
     if (targetedInvoice) {
       const targetedStatusFilter =
         statusFilterFromUrl && matchesStatusFilter(targetedInvoice, statusFilterFromUrl)
           ? statusFilterFromUrl
           : "all";
+      const targetedClientWorkflowFilter =
+        clientWorkflowFilterFromUrl && matchesClientWorkflowFilter(targetedInvoice, clientWorkflowFilterFromUrl, clientWorkflowInvoiceIds)
+          ? clientWorkflowFilterFromUrl
+          : "all";
       setSelectedId(targetedInvoice.id);
       setQuery("");
       setStatusFilter(targetedStatusFilter);
+      setClientWorkflowFilter(targetedClientWorkflowFilter);
       setTypeFilter("all");
-      if (statusFilterFromUrl && targetedStatusFilter === "all") {
+      if ((statusFilterFromUrl && targetedStatusFilter === "all") || (clientWorkflowFilterFromUrl && targetedClientWorkflowFilter === "all")) {
         const nextParams = new URLSearchParams(searchParams);
-        nextParams.delete("status");
+        if (statusFilterFromUrl && targetedStatusFilter === "all") nextParams.delete("status");
+        if (clientWorkflowFilterFromUrl && targetedClientWorkflowFilter === "all") nextParams.delete("clientWorkflow");
         setSearchParams(nextParams, { replace: true });
       }
     }
-  }, [invoiceIdFromUrl, searchParams, setSearchParams, statusFilterFromUrl, targetedInvoice]);
+  }, [clientWorkflowFilterFromUrl, clientWorkflowInvoiceIds, invoiceIdFromUrl, searchParams, setSearchParams, statusFilterFromUrl, targetedInvoice]);
 
   const stats = useMemo(() => {
     const totals = invoices.reduce((acc, invoice) => {
@@ -111,10 +149,11 @@ export default function InvoicesPage() {
         invoice.document.title,
       ].some((value) => String(value ?? "").toLowerCase().includes(text));
       const matchesStatus = matchesStatusFilter(invoice, statusFilter);
+      const matchesClientWorkflow = matchesClientWorkflowFilter(invoice, clientWorkflowFilter, clientWorkflowInvoiceIds);
       const matchesType = typeFilter === "all" || invoice.type === typeFilter;
-      return matchesText && matchesStatus && matchesType;
+      return matchesText && matchesStatus && matchesClientWorkflow && matchesType;
     });
-  }, [invoices, query, statusFilter, typeFilter]);
+  }, [clientWorkflowFilter, clientWorkflowInvoiceIds, invoices, query, statusFilter, typeFilter]);
 
   async function refresh(selectFirst = true) {
     if (dirtyInvoiceIds.size > 0) {
@@ -123,23 +162,35 @@ export default function InvoicesPage() {
     }
 
     setLoading(true);
+    setClientWorkflowLoadFailed(false);
     setError(null);
     try {
-      const rows = await listInvoices();
+      const [rows, workflowInvoiceIds] = await Promise.all([
+        listInvoices(),
+        listActionableClientWorkflowInvoiceIds().catch(() => {
+          setClientWorkflowLoadFailed(true);
+          return new Set<string>();
+        }),
+      ]);
       setInvoices(rows);
+      setClientWorkflowInvoiceIds(workflowInvoiceIds);
       setDirtyInvoiceIds(new Set());
       if (selectFirst) {
         setSelectedId((current) => {
           if (invoiceIdFromUrl && rows.some((invoice) => invoice.id === invoiceIdFromUrl)) return invoiceIdFromUrl;
           const urlStatusFilter = statusFilterFromUrl ?? "all";
-          const firstMatchingStatus = rows.find((invoice) => matchesStatusFilter(invoice, urlStatusFilter));
-          if (current && rows.some((invoice) => invoice.id === current && matchesStatusFilter(invoice, urlStatusFilter))) return current;
-          return firstMatchingStatus?.id ?? rows[0]?.id ?? null;
+          const urlClientWorkflowFilter = clientWorkflowFilterFromUrl ?? "all";
+          const matchesUrlFilters = (invoice: InvoiceRecord) =>
+            matchesStatusFilter(invoice, urlStatusFilter) && matchesClientWorkflowFilter(invoice, urlClientWorkflowFilter, workflowInvoiceIds);
+          const firstMatchingFilters = rows.find(matchesUrlFilters);
+          if (current && rows.some((invoice) => invoice.id === current && matchesUrlFilters(invoice))) return current;
+          return firstMatchingFilters?.id ?? rows[0]?.id ?? null;
         });
       }
     } catch (err: any) {
       setError(err?.message ?? "Chargement des factures impossible.");
       setInvoices([]);
+      setClientWorkflowInvoiceIds(new Set());
       setDirtyInvoiceIds(new Set());
     } finally {
       setLoading(false);
@@ -163,6 +214,14 @@ export default function InvoicesPage() {
     const nextParams = new URLSearchParams(searchParams);
     if (nextStatus === "all") nextParams.delete("status");
     else nextParams.set("status", nextStatus);
+    setSearchParams(nextParams, { replace: true });
+  }
+
+  function selectClientWorkflowFilter(nextFilter: ClientWorkflowFilter) {
+    setClientWorkflowFilter(nextFilter);
+    const nextParams = new URLSearchParams(searchParams);
+    if (nextFilter === "all") nextParams.delete("clientWorkflow");
+    else nextParams.set("clientWorkflow", nextFilter);
     setSearchParams(nextParams, { replace: true });
   }
 
@@ -233,12 +292,37 @@ export default function InvoicesPage() {
         </div>
       ) : null}
 
+      {!loading && clientWorkflowFilter !== "all" ? (
+        <div className={[
+          "rounded-2xl border p-4 text-sm",
+          clientWorkflowLoadFailed ? "border-amber-200 bg-amber-50 text-amber-900" : "border-blue-200 bg-blue-50 text-blue-900",
+        ].join(" ")}>
+          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+            <div>
+              <div className="font-semibold">{activeClientWorkflowFilterLabel}</div>
+              <p className={clientWorkflowLoadFailed ? "mt-1 text-amber-800" : "mt-1 text-blue-800"}>
+                {clientWorkflowLoadFailed
+                  ? "Le suivi des documents client n'a pas pu être chargé. Rafraîchissez la page pour relancer la lecture."
+                  : "Liste limitée aux factures dont le document client attend une validation, une signature, une relance ou une réponse."}
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => selectClientWorkflowFilter("all")}
+              className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700"
+            >
+              Afficher toutes les factures
+            </button>
+          </div>
+        </div>
+      ) : null}
+
       {!loading ? (
         <section className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm">
           <div className="mb-4 rounded-2xl border border-blue-100 bg-blue-50 p-4 text-sm text-blue-900">
             La création d'une facture part du devis afin de conserver le client, le projet, les lignes, les montants et le lien commercial. Depuis un projet commercial, ouvrez l'onglet Devis puis choisissez Acompte, Situation ou Finale. Cette page sert au suivi, aux paiements et aux relances des factures déjà générées.
           </div>
-          <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_190px_190px]">
+          <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_190px_190px_220px]">
             <label className="relative block">
               <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
               <input className="h-10 w-full rounded-xl border border-slate-200 bg-white pl-10 pr-3 text-sm outline-none focus:border-blue-300" placeholder="Rechercher numéro, client, chantier..." value={query} onChange={(event) => setQuery(event.target.value)} />
@@ -252,6 +336,9 @@ export default function InvoicesPage() {
               <option value="intermediate">Intermédiaire</option>
               <option value="final">Finale</option>
               <option value="credit_note">Avoir</option>
+            </select>
+            <select className={selectClass} value={clientWorkflowFilter} onChange={(event) => selectClientWorkflowFilter(event.target.value as ClientWorkflowFilter)}>
+              {CLIENT_WORKFLOW_FILTERS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
             </select>
           </div>
         </section>
@@ -286,7 +373,7 @@ export default function InvoicesPage() {
                 </button>
               );
             })}
-            {!filteredInvoices.length ? <EmptyState title="Aucune facture" description="Aucune facture ne correspond aux filtres actifs." /> : null}
+            {!filteredInvoices.length ? <EmptyState title="Aucune facture" description={emptyStateDescription(clientWorkflowFilter, clientWorkflowLoadFailed)} /> : null}
           </div>
         </aside>
 
@@ -300,6 +387,19 @@ export default function InvoicesPage() {
   );
 }
 
+async function listActionableClientWorkflowInvoiceIds() {
+  const { data, error } = await supabase
+    .from("document_client_workflows" as any)
+    .select("source_id")
+    .eq("source_kind", "invoice")
+    .is("revoked_at", null)
+    .in("status", ACTIONABLE_CLIENT_WORKFLOW_STATUSES)
+    .overrideTypes<Array<{ source_id: string | null }>>();
+
+  if (error) throw new Error(error.message);
+  return new Set((data ?? []).map((row) => row.source_id).filter(Boolean) as string[]);
+}
+
 function EmptyState({ title, description }: { title: string; description: string }) {
   return (
     <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-5 text-center">
@@ -307,6 +407,16 @@ function EmptyState({ title, description }: { title: string; description: string
       <div className="mt-1 text-xs text-slate-500">{description}</div>
     </div>
   );
+}
+
+function emptyStateDescription(clientWorkflowFilter: ClientWorkflowFilter, clientWorkflowLoadFailed: boolean) {
+  if (clientWorkflowFilter === "actionable" && clientWorkflowLoadFailed) {
+    return "Le suivi des documents client n'a pas pu être chargé. Rafraîchissez la page pour réessayer.";
+  }
+  if (clientWorkflowFilter === "actionable") {
+    return "Aucune facture n'a de document client en attente de validation, signature, relance ou réponse.";
+  }
+  return "Aucune facture ne correspond aux filtres actifs.";
 }
 
 function formatCurrency(value: number) {
