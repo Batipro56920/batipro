@@ -47,6 +47,12 @@ type PriorityAction = {
   disabled?: boolean;
 };
 
+type EmptyStateCopy = {
+  label: string;
+  title: string;
+  description: string;
+};
+
 const READINESS_FILTERS: ReadinessFilter[] = [
   "missing_time",
   "missing_cost",
@@ -55,6 +61,39 @@ const READINESS_FILTERS: ReadinessFilter[] = [
   "quote_hidden",
   "chantier_hidden",
 ];
+
+const READINESS_EMPTY_COPY: Record<Exclude<ReadinessFilter, "">, EmptyStateCopy> = {
+  missing_time: {
+    label: "Temps à compléter",
+    title: "Aucun modèle sans temps prévu",
+    description: "Les modèles visibles avec ces filtres ont déjà une charge chantier renseignée.",
+  },
+  missing_cost: {
+    label: "Coût à compléter",
+    title: "Aucun modèle sans coût de référence",
+    description: "Les modèles visibles avec ces filtres sont déjà exploitables pour le chiffrage.",
+  },
+  missing_technical: {
+    label: "Technique à compléter",
+    title: "Aucun modèle sans détail technique",
+    description: "Les modèles visibles avec ces filtres ont déjà une base d'exécution terrain.",
+  },
+  missing_preparation: {
+    label: "Préparation à compléter",
+    title: "Aucun modèle sans préparation",
+    description: "Les modèles visibles avec ces filtres ont déjà des besoins préparatoires associés.",
+  },
+  quote_hidden: {
+    label: "Masqués au devis",
+    title: "Aucun modèle masqué au devis",
+    description: "Tous les modèles visibles avec ces filtres restent disponibles pour le chiffrage.",
+  },
+  chantier_hidden: {
+    label: "Masqués au chantier",
+    title: "Aucun modèle masqué en production",
+    description: "Tous les modèles visibles avec ces filtres restent disponibles pour les chantiers.",
+  },
+};
 
 function isReadinessFilter(value: string): value is ReadinessFilter {
   return value === "" || READINESS_FILTERS.includes(value as ReadinessFilter);
@@ -276,6 +315,31 @@ export default function BibliothequeTasksPage() {
   }, [preparationByTemplateId, query, readinessFilter, rows, selectedLot]);
 
   const hasActiveFilters = Boolean(query.trim() || selectedLot || readinessFilter);
+
+  const emptyState = useMemo(() => {
+    if (rows.length === 0) {
+      return {
+        title: "Aucun modèle de tâche enregistré",
+        description:
+          "Créez les premiers modèles pour fiabiliser les devis, préparer les chantiers et accélérer la production terrain.",
+        activeFilters: [] as string[],
+      };
+    }
+
+    const activeFilters: string[] = [];
+    const trimmedQuery = query.trim();
+    if (trimmedQuery) activeFilters.push(`Recherche : ${trimmedQuery}`);
+    if (selectedLot) activeFilters.push(`Lot : ${selectedLot}`);
+    if (readinessFilter) activeFilters.push(READINESS_EMPTY_COPY[readinessFilter].label);
+
+    const readinessCopy = readinessFilter ? READINESS_EMPTY_COPY[readinessFilter] : null;
+    const title = readinessCopy?.title ?? "Aucun modèle ne correspond aux filtres";
+    const description = selectedLot
+      ? `${readinessCopy?.description ?? "Aucun modèle ne correspond à la combinaison active."} Le lot ${selectedLot} peut être déjà complet ou ne pas contenir ce type de modèle.`
+      : readinessCopy?.description ?? "Ajustez la recherche ou retirez les filtres pour retrouver les modèles de la bibliothèque.";
+
+    return { title, description, activeFilters };
+  }, [query, readinessFilter, rows.length, selectedLot]);
 
   function resetFilters() {
     setQuery("");
@@ -668,7 +732,7 @@ export default function BibliothequeTasksPage() {
       setRows((prev) => [duplicated, ...prev]);
       setToast({ type: "ok", msg: t("bibliothequeTasks.duplicated") });
     } catch (err: any) {
-      setToast({ type: "error", msg: err?.message ?? t("bibliothequeTasks.duplicateError") });
+      setToast({ type: "error", msg: t("bibliothequeTasks.duplicateError") });
     } finally {
       setDuplicateId(null);
     }
@@ -857,17 +921,44 @@ export default function BibliothequeTasksPage() {
       {loading ? (
         <div className="rounded-2xl border bg-white p-6 text-sm text-slate-500">{t("common.states.loading")}</div>
       ) : filteredRows.length === 0 ? (
-        <div className="rounded-2xl border bg-white p-6 text-sm text-slate-500">
-          <div>Aucun modèle ne correspond aux filtres actifs.</div>
-          {hasActiveFilters ? (
-            <button
-              type="button"
-              onClick={resetFilters}
-              className="mt-3 rounded-xl border px-3 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50"
-            >
-              Réinitialiser les filtres
-            </button>
+        <div className="rounded-2xl border border-dashed bg-white p-6 text-sm text-slate-600">
+          <div className="text-xs font-medium uppercase text-slate-500">Vue bibliothèque</div>
+          <h2 className="mt-1 text-base font-semibold text-slate-900">{emptyState.title}</h2>
+          <p className="mt-1 max-w-2xl text-sm text-slate-500">{emptyState.description}</p>
+
+          {emptyState.activeFilters.length > 0 ? (
+            <div className="mt-3 flex flex-wrap gap-2">
+              {emptyState.activeFilters.map((filter) => (
+                <span
+                  key={filter}
+                  className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs font-medium text-slate-600"
+                >
+                  {filter}
+                </span>
+              ))}
+            </div>
           ) : null}
+
+          <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:items-center">
+            {hasActiveFilters ? (
+              <button
+                type="button"
+                onClick={resetFilters}
+                className="rounded-xl border px-3 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50"
+              >
+                Réinitialiser les filtres
+              </button>
+            ) : null}
+            {rows.length === 0 ? (
+              <button
+                type="button"
+                onClick={openCreateDrawer}
+                className="rounded-xl bg-slate-900 px-3 py-2 text-xs font-medium text-white hover:bg-slate-800"
+              >
+                Créer un modèle
+              </button>
+            ) : null}
+          </div>
         </div>
       ) : (
         <>
