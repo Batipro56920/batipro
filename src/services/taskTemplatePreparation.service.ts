@@ -92,11 +92,19 @@ export type TaskTemplatePreparationCollection = {
 
 export type TaskPreparationEstimateMaterial = {
   id: string;
+  product_id: string | null;
+  supplier_id: string | null;
   material_name: string;
   source_unit: string;
   ratio_quantity: number;
   ratio_unit: string;
   loss_percent: number | null;
+  purchase_price_ht: number | null;
+  sale_price_ht: number | null;
+  estimated_purchase_cost_ht: number | null;
+  estimated_sale_price_ht: number | null;
+  price_source: string | null;
+  manual_override: boolean;
   notes: string | null;
   base_quantity: number;
   estimated_quantity: number;
@@ -300,6 +308,11 @@ function roundEstimate(value: number) {
   return Math.round(value * 100) / 100;
 }
 
+function estimatePriceTotal(quantity: number, unitPrice: number | null) {
+  if (unitPrice === null) return null;
+  return roundEstimate(quantity * unitPrice);
+}
+
 export async function listTaskTemplatePreparationByTemplateIds(
   templateIds: string[],
 ): Promise<TaskTemplatePreparationCollection> {
@@ -470,11 +483,19 @@ export function estimateTaskTemplatePreparation(
 
     compatibleMaterials.push({
       id: material.id,
+      product_id: material.product_id,
+      supplier_id: material.supplier_id,
       material_name: material.material_name,
       source_unit: material.source_unit,
       ratio_quantity: material.ratio_quantity,
       ratio_unit: material.ratio_unit,
       loss_percent: material.loss_percent,
+      purchase_price_ht: material.purchase_price_ht,
+      sale_price_ht: material.sale_price_ht,
+      estimated_purchase_cost_ht: estimatePriceTotal(estimated_quantity, material.purchase_price_ht),
+      estimated_sale_price_ht: estimatePriceTotal(estimated_quantity, material.sale_price_ht),
+      price_source: material.price_source,
+      manual_override: material.manual_override,
       notes: material.notes,
       base_quantity,
       estimated_quantity,
