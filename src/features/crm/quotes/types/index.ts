@@ -3,6 +3,7 @@ import type { CrmQuoteRow } from "../../../../services/crm.service";
 export type QuoteFilters = {
   query: string;
   status: string;
+  signatureStatus: string;
   salesperson: string;
   client: string;
   period: string;
