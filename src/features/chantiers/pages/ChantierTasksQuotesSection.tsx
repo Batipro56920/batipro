@@ -11,7 +11,8 @@ export default function ChantierTasksQuotesSection({ children }: { children: Rea
   const terrainFeedbackHref = id ? `/retours-terrain?chantierId=${encodedChantierId}` : "/retours-terrain";
   const reservesHref = id ? `/chantiers/${encodedChantierId}/qualite` : "/reserves";
   const taskLibraryReadyHref = "/bibliotheque?q=chantier%20production";
-  const taskLibraryHiddenHref = "/bibliotheque?q=masque%20chantier";
+  const taskLibraryHiddenHref = "/bibliotheque?readiness=chantier_hidden";
+  const taskLibraryPreparationHref = "/bibliotheque?readiness=missing_preparation";
   const materialNeedsHref = id ? `/chantiers/${encodedChantierId}/preparation` : "/chantiers";
 
   function clearTargetedTask() {
@@ -78,7 +79,7 @@ export default function ChantierTasksQuotesSection({ children }: { children: Rea
           <div>
             <div className="font-semibold">Bibliotheque chantier</div>
             <div className="mt-1 text-blue-800/80">
-              Controlez les modeles deja visibles en production ou activez ceux qui restent masques avant de les utiliser sur les taches.
+              Controlez les modeles deja visibles en production, activez ceux qui restent masques et completez les preparations avant de les utiliser sur les taches.
             </div>
           </div>
           <div className="flex shrink-0 flex-wrap gap-2">
@@ -87,6 +88,12 @@ export default function ChantierTasksQuotesSection({ children }: { children: Rea
               className="inline-flex items-center justify-center rounded-xl border border-blue-200 bg-white px-3 py-2 text-sm font-semibold text-blue-800 hover:bg-blue-100"
             >
               Modeles chantier actifs
+            </Link>
+            <Link
+              to={taskLibraryPreparationHref}
+              className="inline-flex items-center justify-center rounded-xl border border-blue-200 bg-white px-3 py-2 text-sm font-semibold text-blue-800 hover:bg-blue-100"
+            >
+              Preparations a completer
             </Link>
             <Link
               to={taskLibraryHiddenHref}
