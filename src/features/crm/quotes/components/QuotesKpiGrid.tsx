@@ -26,7 +26,7 @@ export function QuotesKpiGrid({ rows }: { rows: CrmQuoteRow[] }) {
     { label: "Envoyés", value: String(sent), hint: "En attente retour client", icon: Send, tone: "text-blue-700 bg-blue-50 border-blue-200" },
     { label: "Relances", value: String(reminders), hint: "Suivi commercial", icon: FileClock, tone: "text-amber-700 bg-amber-50 border-amber-200" },
     { label: "Attente signature", value: String(pendingSignature), hint: "Validation client", icon: PenLine, tone: "text-indigo-700 bg-indigo-50 border-indigo-200", href: "/crm/devis?signatureStatus=attente_signature" },
-    { label: "Acceptés", value: String(accepted), hint: "Transformables chantier", icon: CheckCircle2, tone: "text-emerald-700 bg-emerald-50 border-emerald-200" },
+    { label: "Acceptés", value: String(accepted), hint: "Transformables chantier", icon: CheckCircle2, tone: "text-emerald-700 bg-emerald-50 border-emerald-200", href: "/crm/devis?status=accepte" },
     { label: "CA devis", value: eur(revenue), hint: "Total HT portefeuille", icon: BadgeEuro, tone: "text-slate-700 bg-slate-50 border-slate-200" },
   ];
 
