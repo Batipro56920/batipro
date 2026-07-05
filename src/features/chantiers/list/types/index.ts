@@ -20,7 +20,7 @@ export type ChantierListFilters = {
   client: string;
   conducteur: string;
   commercial: string;
-  period: "all" | "this_month" | "next_30" | "late" | "alerts";
+  period: "all" | "this_month" | "next_30" | "late" | "alerts" | "terrain_feedback" | "terrain_feedback_priority";
   type: string;
 };
 
