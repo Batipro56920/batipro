@@ -4,13 +4,39 @@ import { Plus, RefreshCw, Search, ShoppingCart } from "lucide-react";
 import { calculateDocumentTotals } from "../../document-engine";
 import type { SupplierRow } from "../../../services/suppliers.service";
 import { createAndSavePurchaseOrder, listPurchaseOrders, savePurchaseOrder } from "../infrastructure/purchaseOrderRepository";
-import type { PurchaseOrderRecord } from "../domain/types";
+import type { PurchaseOrderRecord, PurchaseOrderStatus } from "../domain/types";
 import { PurchaseOrderEditor } from "./PurchaseOrderEditor";
 import { PurchaseOrderStatusBadge } from "./PurchaseOrderStatusBadge";
+
+type PurchaseOrderStatusFilter = "all" | "open" | PurchaseOrderStatus;
+
+const PURCHASE_ORDER_STATUS_FILTERS: PurchaseOrderStatusFilter[] = [
+  "all",
+  "open",
+  "draft",
+  "sent",
+  "confirmed",
+  "partially_delivered",
+  "delivered",
+  "cancelled",
+];
+const OPEN_PURCHASE_ORDER_STATUSES: PurchaseOrderStatus[] = ["draft", "sent", "confirmed", "partially_delivered"];
+
+function isPurchaseOrderStatusFilter(value: string): value is PurchaseOrderStatusFilter {
+  return PURCHASE_ORDER_STATUS_FILTERS.includes(value as PurchaseOrderStatusFilter);
+}
+
+function matchesStatusFilter(order: PurchaseOrderRecord, filter: PurchaseOrderStatusFilter) {
+  if (filter === "all") return true;
+  if (filter === "open") return OPEN_PURCHASE_ORDER_STATUSES.includes(order.status);
+  return order.status === filter;
+}
 
 export function PurchaseOrdersPanel({ suppliers }: { suppliers: SupplierRow[] }) {
   const [searchParams, setSearchParams] = useSearchParams();
   const urlPurchaseOrderId = searchParams.get("purchaseOrderId") ?? "";
+  const statusQueryParam = searchParams.get("status") ?? "";
+  const initialStatusFilter = isPurchaseOrderStatusFilter(statusQueryParam) ? statusQueryParam : "all";
   const openedOrderFromUrlRef = useRef("");
   const targetedOrderRowRef = useRef<HTMLTableRowElement | null>(null);
   const [orders, setOrders] = useState<PurchaseOrderRecord[]>([]);
@@ -18,7 +44,7 @@ export function PurchaseOrdersPanel({ suppliers }: { suppliers: SupplierRow[] })
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState("");
-  const [statusFilter, setStatusFilter] = useState("all");
+  const [statusFilter, setStatusFilter] = useState<PurchaseOrderStatusFilter>(initialStatusFilter);
   const [supplierFilter, setSupplierFilter] = useState("all");
   const totals = useMemo(() => buildTotals(orders), [orders]);
   const targetedOrder = useMemo(
@@ -37,7 +63,7 @@ export function PurchaseOrdersPanel({ suppliers }: { suppliers: SupplierRow[] })
         order.deliveryAddress,
         order.supplierReference,
       ].some((value) => String(value ?? "").toLowerCase().includes(text));
-      const matchesStatus = statusFilter === "all" || order.status === statusFilter;
+      const matchesStatus = matchesStatusFilter(order, statusFilter);
       const matchesSupplier = supplierFilter === "all" || order.supplierId === supplierFilter;
       return matchesText && matchesStatus && matchesSupplier;
     });
@@ -50,6 +76,17 @@ export function PurchaseOrdersPanel({ suppliers }: { suppliers: SupplierRow[] })
   useEffect(() => {
     void refresh();
   }, []);
+
+  useEffect(() => {
+    const nextStatus = isPurchaseOrderStatusFilter(statusQueryParam) ? statusQueryParam : "all";
+    setStatusFilter((current) => current === nextStatus ? current : nextStatus);
+
+    if (statusQueryParam && !isPurchaseOrderStatusFilter(statusQueryParam)) {
+      const nextParams = new URLSearchParams(searchParams);
+      nextParams.delete("status");
+      setSearchParams(nextParams, { replace: true });
+    }
+  }, [searchParams, setSearchParams, statusQueryParam]);
 
   useEffect(() => {
     if (!urlPurchaseOrderId) {
@@ -94,6 +131,22 @@ export function PurchaseOrdersPanel({ suppliers }: { suppliers: SupplierRow[] })
     const nextParams = new URLSearchParams(searchParams);
     nextParams.delete("purchaseOrderId");
     setSearchParams(nextParams, { replace: true });
+  }
+
+  function updateStatusFilter(nextStatus: PurchaseOrderStatusFilter) {
+    setStatusFilter(nextStatus);
+    const nextParams = new URLSearchParams(searchParams);
+    nextParams.delete("purchaseOrderId");
+    if (nextStatus === "all") {
+      nextParams.delete("status");
+    } else {
+      nextParams.set("status", nextStatus);
+    }
+    setSearchParams(nextParams, { replace: true });
+  }
+
+  function clearOpenStatusFilter() {
+    updateStatusFilter("all");
   }
 
   function openOrder(order: PurchaseOrderRecord) {
@@ -172,6 +225,26 @@ export function PurchaseOrdersPanel({ suppliers }: { suppliers: SupplierRow[] })
         </div>
       ) : null}
 
+      {!urlPurchaseOrderId && statusFilter === "open" ? (
+        <div className="rounded-2xl border border-blue-200 bg-blue-50 p-4 text-sm text-blue-900">
+          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+            <div>
+              <div className="font-semibold">Commandes ouvertes à traiter</div>
+              <p className="mt-1 text-blue-800">
+                Liste limitée aux brouillons, bons envoyés, confirmés ou livrés partiellement.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={clearOpenStatusFilter}
+              className="rounded-xl border border-blue-200 bg-white px-4 py-2 text-sm font-semibold text-blue-700 hover:bg-blue-100"
+            >
+              Afficher toutes les commandes
+            </button>
+          </div>
+        </div>
+      ) : null}
+
       {!loading ? (
         <div className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm">
           <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_190px_220px]">
@@ -179,8 +252,9 @@ export function PurchaseOrdersPanel({ suppliers }: { suppliers: SupplierRow[] })
               <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
               <input className={inputClassWithIcon} placeholder="Rechercher commande, fournisseur, référence..." value={query} onChange={(event) => setQuery(event.target.value)} />
             </label>
-            <select className={selectClass} value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}>
+            <select className={selectClass} value={statusFilter} onChange={(event) => updateStatusFilter(event.target.value as PurchaseOrderStatusFilter)}>
               <option value="all">Tous statuts</option>
+              <option value="open">Ouverts à traiter</option>
               <option value="draft">Brouillon</option>
               <option value="sent">Envoyé</option>
               <option value="confirmed">Confirmé</option>
