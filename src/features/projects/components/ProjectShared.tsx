@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 
 export function formatCurrency(value: number | null | undefined) {
-  if (!value) return "Non renseigné";
+  if (value === null || value === undefined) return "Non renseigné";
   return new Intl.NumberFormat("fr-FR", { style: "currency", currency: "EUR", maximumFractionDigits: 0 }).format(value);
 }
 
