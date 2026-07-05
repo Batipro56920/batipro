@@ -247,7 +247,24 @@ export default function FixedChargesPage() {
                   ))}
                   {!charges.length ? (
                     <tr>
-                      <td colSpan={9} className="px-4 py-6 text-center text-sm text-slate-500">Aucune charge définie.</td>
+                      <td colSpan={9} className="px-4 py-10">
+                        <div className="mx-auto flex max-w-lg flex-col items-center rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-5 py-6 text-center">
+                          <div className="grid h-10 w-10 place-items-center rounded-2xl bg-white text-slate-700 shadow-sm">
+                            <Calculator className="h-5 w-5" />
+                          </div>
+                          <div className="mt-3 font-semibold text-slate-950">Aucune charge d'exploitation définie</div>
+                          <p className="mt-1 text-sm text-slate-500">
+                            Ajoutez les loyers, assurances, salaires, logiciels ou frais récurrents pour alimenter le seuil de rentabilité.
+                          </p>
+                          <button
+                            type="button"
+                            onClick={openNewChargeDrawer}
+                            className="mt-4 inline-flex h-10 items-center justify-center gap-2 rounded-xl bg-slate-900 px-4 text-sm font-semibold text-white hover:bg-slate-800"
+                          >
+                            <Plus className="h-4 w-4" /> Ajouter la première charge
+                          </button>
+                        </div>
+                      </td>
                     </tr>
                   ) : null}
                 </tbody>
