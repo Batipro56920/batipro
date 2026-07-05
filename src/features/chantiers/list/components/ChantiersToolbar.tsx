@@ -13,6 +13,15 @@ const SCOPES: Array<{ key: ChantierListFilter; label: string }> = [
 ];
 
 const STATUSES: Array<"all" | ChantierStatus> = ["all", "BROUILLON", "PREPARATION", "EN_COURS", "EN_PAUSE", "TERMINE", "ARCHIVE", "ANNULE"];
+const PERIODS: Array<{ key: ChantierListFilters["period"]; label: string }> = [
+  { key: "all", label: "Toute période" },
+  { key: "this_month", label: "Ce mois" },
+  { key: "next_30", label: "30 prochains jours" },
+  { key: "late", label: "En retard" },
+  { key: "alerts", label: "Alertes à traiter" },
+  { key: "terrain_feedback", label: "Retours terrain ouverts" },
+  { key: "terrain_feedback_priority", label: "Retours terrain urgents" },
+];
 const VIEWS: Array<{ key: ChantierListView; label: string }> = [
   { key: "list", label: "Liste" },
   { key: "cards", label: "Cartes" },
@@ -72,11 +81,9 @@ export function ChantiersToolbar({ scope, onScope, filters, onFilters, clients, 
           <option value="">Responsable</option>
         </select>
         <select className="h-9 rounded-xl border border-slate-200 bg-white px-3 text-sm" value={filters.period} onChange={(event) => onFilters({ ...filters, period: event.target.value as ChantierListFilters["period"] })}>
-          <option value="all">Toute période</option>
-          <option value="this_month">Ce mois</option>
-          <option value="next_30">30 prochains jours</option>
-          <option value="late">En retard</option>
-          <option value="alerts">Alertes à traiter</option>
+          {PERIODS.map((period) => (
+            <option key={period.key} value={period.key}>{period.label}</option>
+          ))}
         </select>
       </div>
 
