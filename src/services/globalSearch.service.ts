@@ -282,11 +282,11 @@ function quoteProjectHref(row: SearchRow) {
   const opportunityId = cleanText(row.opportunity_id);
   const prospectId = cleanText(row.prospect_id);
   const clientId = cleanText(row.client_id);
+  const projectId = opportunityId ? `opportunity-${opportunityId}` : prospectId ? `prospect-${prospectId}` : clientId ? `client-${clientId}` : "";
 
+  if (quoteId && projectId) return `/projets/${encodeURIComponent(projectId)}/devis/${encodeURIComponent(quoteId)}/edit`;
   if (quoteId) return `/crm/devis/${encodeURIComponent(quoteId)}/edit`;
-  if (opportunityId) return `/projets/opportunity-${opportunityId}?tab=quotes`;
-  if (prospectId) return `/projets/prospect-${prospectId}?tab=quotes`;
-  if (clientId) return `/projets/client-${clientId}?tab=quotes`;
+  if (projectId) return `/projets/${encodeURIComponent(projectId)}?tab=quotes`;
   return "/crm/devis";
 }
 
