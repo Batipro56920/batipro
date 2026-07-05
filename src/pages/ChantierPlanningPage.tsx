@@ -104,6 +104,8 @@ export default function ChantierPlanningPage() {
     );
   }
 
+  const terrainFeedbackHref = `/retours-terrain?chantierId=${encodeURIComponent(id)}`;
+
   return (
     <div className="space-y-5">
       <section className="rounded-3xl border border-slate-200 bg-white px-5 py-4 shadow-sm">
@@ -126,13 +128,26 @@ export default function ChantierPlanningPage() {
             </div>
             {terrainFeedbackSummary.open > 0 ? (
               <div className={[
-                "mt-3 rounded-2xl border px-3 py-2 text-sm",
+                "mt-3 flex flex-col gap-3 rounded-2xl border px-3 py-2 text-sm sm:flex-row sm:items-center sm:justify-between",
                 terrainFeedbackSummary.priority > 0
                   ? "border-red-200 bg-red-50 text-red-800"
                   : "border-amber-200 bg-amber-50 text-amber-800",
               ].join(" ")}
               >
-                À arbitrer avant de figer le planning : les retours terrain ouverts peuvent impacter les affectations, délais ou reprises.
+                <span>
+                  À arbitrer avant de figer le planning : les retours terrain ouverts peuvent impacter les affectations, délais ou reprises.
+                </span>
+                <Link
+                  to={terrainFeedbackHref}
+                  className={[
+                    "shrink-0 rounded-xl border bg-white px-3 py-2 text-xs font-semibold hover:bg-white/80",
+                    terrainFeedbackSummary.priority > 0
+                      ? "border-red-200 text-red-800"
+                      : "border-amber-200 text-amber-800",
+                  ].join(" ")}
+                >
+                  Ouvrir les retours à arbitrer
+                </Link>
               </div>
             ) : null}
           </div>
@@ -186,7 +201,7 @@ export default function ChantierPlanningPage() {
               Qualité / réserves
             </Link>
             <Link
-              to={`/chantiers/${encodeURIComponent(id)}/retours-terrain`}
+              to={terrainFeedbackHref}
               className={[
                 "rounded-xl border px-3 py-2 text-sm font-medium hover:bg-amber-100",
                 terrainFeedbackSummary.priority > 0
