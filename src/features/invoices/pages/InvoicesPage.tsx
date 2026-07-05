@@ -388,7 +388,7 @@ export default function InvoicesPage() {
           </div>
         </aside>
 
-        {selected ? <InvoiceEditor invoice={selected} hasUnsavedChanges={dirtyInvoiceIds.has(selected.id)} onUnsavedChange={markInvoiceDirty} onChange={update} onSave={save} /> : (
+        {selected ? <InvoiceEditor invoice={selected} hasUnsavedChanges={dirtyInvoiceIds.has(selected.id)} clientWorkflowStatus={clientWorkflowByInvoiceId.get(selected.id) ?? null} onUnsavedChange={markInvoiceDirty} onChange={update} onSave={save} /> : (
           <div className="rounded-3xl border border-dashed border-slate-200 bg-white p-10 text-center text-sm text-slate-500">
             Sélectionnez une facture existante ou choisissez un projet commercial pour facturer un devis.
           </div>
