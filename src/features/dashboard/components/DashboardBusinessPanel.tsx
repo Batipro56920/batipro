@@ -21,7 +21,7 @@ const toneClass = {
 const CLIENT_DOCUMENT_ACTIONABLE_STATUSES = ["sent", "viewed", "modification_requested", "expired"];
 const COLLECTABLE_INVOICE_STATUSES = ["sent", "partially_paid", "overdue"];
 const DASHBOARD_METRIC_HREFS: Partial<Record<DashboardBusinessMetric["key"], string>> = {
-  quotes: "/crm/devis?q=attente_signature",
+  quotes: "/crm/devis?signatureStatus=attente_signature",
   invoices: "/factures?status=a_encaisser",
 };
 
