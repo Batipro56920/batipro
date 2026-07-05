@@ -73,17 +73,21 @@ export default function InvoicesPage() {
   useEffect(() => {
     if (!invoiceIdFromUrl) return;
     if (targetedInvoice) {
+      const targetedStatusFilter =
+        statusFilterFromUrl && matchesStatusFilter(targetedInvoice, statusFilterFromUrl)
+          ? statusFilterFromUrl
+          : "all";
       setSelectedId(targetedInvoice.id);
       setQuery("");
-      setStatusFilter("all");
+      setStatusFilter(targetedStatusFilter);
       setTypeFilter("all");
-      if (searchParams.has("status")) {
+      if (statusFilterFromUrl && targetedStatusFilter === "all") {
         const nextParams = new URLSearchParams(searchParams);
         nextParams.delete("status");
         setSearchParams(nextParams, { replace: true });
       }
     }
-  }, [invoiceIdFromUrl, searchParams, setSearchParams, targetedInvoice]);
+  }, [invoiceIdFromUrl, searchParams, setSearchParams, statusFilterFromUrl, targetedInvoice]);
 
   const stats = useMemo(() => {
     const totals = invoices.reduce((acc, invoice) => {
