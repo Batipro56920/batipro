@@ -34,11 +34,7 @@ function getBillableAmount(project: ProjectRecord, quote: ProjectQuote | null) {
 }
 
 function getApporteurTrackingPath(project: ProjectRecord) {
-  const params = new URLSearchParams();
-  if (project.opportunity?.id) params.set("crmOpportunityId", project.opportunity.id);
-  if (project.prospect?.id) params.set("crmProspectId", project.prospect.id);
-  const query = params.toString();
-  return query ? `/crm/apporteurs?${query}` : "/crm/apporteurs";
+  return `/projets/${project.id}`;
 }
 
 function getCommercialSource(project: ProjectRecord) {
@@ -189,7 +185,7 @@ export function ProjectsTable({
                                 ? "bg-emerald-50 text-emerald-700 ring-emerald-200"
                                 : "bg-slate-100 text-slate-700 ring-slate-200",
                             ].join(" ")}
-                            title="Ouvrir le suivi des apporteurs"
+                            title="Ouvrir le projet et son suivi apporteur"
                           >
                             {commercialSource.label}
                           </Link>
@@ -208,7 +204,7 @@ export function ProjectsTable({
                         {commercialSource.detail ? <div className="truncate text-xs text-slate-500">{commercialSource.detail}</div> : null}
                         {commercialSource.trackingPath ? (
                           <Link to={commercialSource.trackingPath} className="block text-xs font-medium text-emerald-700 hover:underline">
-                            Suivi commissions
+                            Projet et commissions
                           </Link>
                         ) : null}
                       </div>
