@@ -1,4 +1,5 @@
-import { BadgeEuro, CheckCircle2, FileClock, FileText, PenLine, Send } from "lucide-react";
+import { ArrowRight, BadgeEuro, CheckCircle2, FileClock, FileText, PenLine, Send } from "lucide-react";
+import { Link } from "react-router-dom";
 import type { CrmQuoteRow } from "../../../../services/crm.service";
 import { eur } from "../../components/crmFormat";
 
@@ -14,7 +15,7 @@ export function QuotesKpiGrid({ rows }: { rows: CrmQuoteRow[] }) {
     { label: "Brouillons", value: String(drafts), hint: "À finaliser", icon: FileText, tone: "text-slate-700 bg-slate-50 border-slate-200" },
     { label: "Envoyés", value: String(sent), hint: "En attente retour client", icon: Send, tone: "text-blue-700 bg-blue-50 border-blue-200" },
     { label: "Relances", value: String(reminders), hint: "Suivi commercial", icon: FileClock, tone: "text-amber-700 bg-amber-50 border-amber-200" },
-    { label: "Attente signature", value: String(pendingSignature), hint: "Validation client", icon: PenLine, tone: "text-indigo-700 bg-indigo-50 border-indigo-200" },
+    { label: "Attente signature", value: String(pendingSignature), hint: "Validation client", icon: PenLine, tone: "text-indigo-700 bg-indigo-50 border-indigo-200", href: "/crm/devis?signatureStatus=attente_signature" },
     { label: "Acceptés", value: String(accepted), hint: "Transformables chantier", icon: CheckCircle2, tone: "text-emerald-700 bg-emerald-50 border-emerald-200" },
     { label: "CA devis", value: eur(revenue), hint: "Total HT portefeuille", icon: BadgeEuro, tone: "text-slate-700 bg-slate-50 border-slate-200" },
   ];
@@ -23,14 +24,34 @@ export function QuotesKpiGrid({ rows }: { rows: CrmQuoteRow[] }) {
     <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
       {items.map((item) => {
         const Icon = item.icon;
-        return (
-          <div key={item.label} className="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm shadow-slate-950/[0.03]">
+        const content = (
+          <>
             <span className={`inline-flex rounded-lg border p-1.5 ${item.tone}`}>
               <Icon className="h-4 w-4" />
             </span>
             <div className="mt-3 text-xl font-bold tracking-tight text-slate-950">{item.value}</div>
             <div className="mt-1 text-sm font-semibold text-slate-800">{item.label}</div>
             <div className="mt-0.5 text-xs text-slate-500">{item.hint}</div>
+            {item.href ? (
+              <div className="mt-3 inline-flex items-center gap-1 text-xs font-semibold text-indigo-700">
+                Ouvrir
+                <ArrowRight className="h-3.5 w-3.5 transition group-hover:translate-x-0.5" />
+              </div>
+            ) : null}
+          </>
+        );
+
+        if (item.href) {
+          return (
+            <Link key={item.label} to={item.href} className="group rounded-2xl border border-slate-200 bg-white p-3 shadow-sm shadow-slate-950/[0.03] transition hover:border-indigo-200 hover:bg-indigo-50/40 focus:outline-none focus:ring-2 focus:ring-indigo-100">
+              {content}
+            </Link>
+          );
+        }
+
+        return (
+          <div key={item.label} className="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm shadow-slate-950/[0.03]">
+            {content}
           </div>
         );
       })}
