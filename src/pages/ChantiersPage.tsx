@@ -123,7 +123,7 @@ function getInitialFilters(initialFocus: ChantierListFocus | undefined): Chantie
 function getFocusedChantierPath(row: ChantierRow, initialFocus: ChantierListFocus | undefined) {
   const basePath = `/chantiers/${encodeURIComponent(row.id)}`;
   if (initialFocus === "tasks") return `${basePath}/execution`;
-  if (initialFocus === "time") return `${basePath}/execution`;
+  if (initialFocus === "time") return `${basePath}/temps`;
   if (initialFocus === "reserves") return `${basePath}/qualite`;
   if (initialFocus === "visits") return `${basePath}/visites`;
   return basePath;
