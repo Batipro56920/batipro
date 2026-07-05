@@ -8,6 +8,7 @@ import {
   ChevronLeft,
   ChevronRight,
   ClipboardList,
+  Clock3,
   FileSpreadsheet,
   LayoutDashboard,
   Hammer,
@@ -144,6 +145,14 @@ export default function Sidebar({ collapsed = false, onToggleCollapse, companyNa
       icon: CalendarDays,
       feature: "preparation_chantier" as const,
       permissionKey: "preparation_chantier" as const,
+      group: "Production",
+    },
+    {
+      to: "/temps",
+      label: "Temps",
+      icon: Clock3,
+      feature: "temps" as const,
+      permissionKey: "temps" as const,
       group: "Production",
     },
     {
