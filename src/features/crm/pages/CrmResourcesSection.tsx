@@ -12,11 +12,15 @@ export default function CrmResourcesSection({ templates }: { templates: CrmDatas
       (row) => row.quote_visible && row.temps_prevu_par_unite_h !== null && row.cout_reference_unitaire_ht !== null,
     ).length;
     const hiddenFromQuote = templates.filter((row) => !row.quote_visible).length;
+    const missingQuoteTime = templates.filter((row) => row.quote_visible && row.temps_prevu_par_unite_h === null).length;
+    const missingQuoteCost = templates.filter((row) => row.quote_visible && row.cout_reference_unitaire_ht === null).length;
     return {
       total: templates.length,
       lots: lots.size,
       readyForQuote,
       hiddenFromQuote,
+      missingQuoteTime,
+      missingQuoteCost,
     };
   }, [templates]);
 
@@ -37,6 +41,10 @@ export default function CrmResourcesSection({ templates }: { templates: CrmDatas
     navigate(`/bibliotheque?lot=${encodeURIComponent(normalizedLot)}`);
   }
 
+  function openLibraryReadiness(readiness: string) {
+    navigate(`/bibliotheque?readiness=${encodeURIComponent(readiness)}`);
+  }
+
   return (
     <ListShell
       title="Ressources / bibliothèque devis"
@@ -47,21 +55,58 @@ export default function CrmResourcesSection({ templates }: { templates: CrmDatas
       hideSearch
     >
       <div className="grid gap-3 md:grid-cols-3">
-        <div className="rounded-2xl border bg-white p-4">
+        <button
+          type="button"
+          onClick={() => openLibrary()}
+          className="rounded-2xl border bg-white p-4 text-left hover:bg-slate-50"
+        >
           <div className="text-xs font-medium uppercase text-slate-500">Modèles</div>
           <div className="mt-1 text-2xl font-bold text-slate-900">{libraryStats.total}</div>
           <div className="text-xs text-slate-500">base de tâches pour devis et chantiers</div>
-        </div>
-        <div className="rounded-2xl border bg-white p-4">
+        </button>
+        <button
+          type="button"
+          onClick={() => openLibrary()}
+          className="rounded-2xl border bg-white p-4 text-left hover:bg-slate-50"
+        >
           <div className="text-xs font-medium uppercase text-slate-500">Lots</div>
           <div className="mt-1 text-2xl font-bold text-slate-900">{libraryStats.lots}</div>
           <div className="text-xs text-slate-500">familles métier structurées</div>
-        </div>
+        </button>
         <div className="rounded-2xl border bg-white p-4">
           <div className="text-xs font-medium uppercase text-slate-500">Prêts devis</div>
           <div className="mt-1 text-2xl font-bold text-slate-900">{libraryStats.readyForQuote}</div>
           <div className="text-xs text-slate-500">
             visibles au devis, avec temps et coût · {libraryStats.hiddenFromQuote} masqués
+          </div>
+          <div className="mt-3 flex flex-wrap gap-2">
+            {libraryStats.missingQuoteCost > 0 ? (
+              <button
+                type="button"
+                onClick={() => openLibraryReadiness("missing_cost")}
+                className="rounded-lg border border-amber-200 px-2 py-1 text-[11px] font-medium text-amber-700 hover:bg-amber-50"
+              >
+                {libraryStats.missingQuoteCost} coûts à compléter
+              </button>
+            ) : null}
+            {libraryStats.missingQuoteTime > 0 ? (
+              <button
+                type="button"
+                onClick={() => openLibraryReadiness("missing_time")}
+                className="rounded-lg border border-amber-200 px-2 py-1 text-[11px] font-medium text-amber-700 hover:bg-amber-50"
+              >
+                {libraryStats.missingQuoteTime} temps à compléter
+              </button>
+            ) : null}
+            {libraryStats.hiddenFromQuote > 0 ? (
+              <button
+                type="button"
+                onClick={() => openLibraryReadiness("quote_hidden")}
+                className="rounded-lg border border-slate-200 px-2 py-1 text-[11px] font-medium text-slate-600 hover:bg-slate-50"
+              >
+                {libraryStats.hiddenFromQuote} masqués devis
+              </button>
+            ) : null}
           </div>
         </div>
       </div>
