@@ -7,7 +7,7 @@ import { listChantiers, type ChantierRow } from "../services/chantiers.service";
 import { listChantierTimeEntriesByChantierId, type ChantierTimeEntryRow } from "../services/chantierTimeEntries.service";
 
 type TimeTone = "over" | "missing" | "ok";
-type TimePriorityFilter = "all" | TimeTone;
+type TimePriorityFilter = "all" | TimeTone | "terrain";
 type TerrainFeedbackSummary = { open: number; priority: number };
 
 type TimeRow = {
@@ -26,6 +26,7 @@ const FILTER_LABELS: Record<TimePriorityFilter, string> = {
   over: "Chantiers en dépassement",
   missing: "Chantiers sans saisie temps",
   ok: "Chantiers sous contrôle",
+  terrain: "Chantiers avec retours terrain ouverts",
 };
 
 const OPEN_TERRAIN_FEEDBACK_STATUSES = ["nouveau", "en_cours"] as const;
@@ -91,12 +92,14 @@ async function loadTerrainFeedbackSummaries(chantierIds: string[]): Promise<Reco
 function TimeFilterCard({
   label,
   value,
+  helper,
   tone,
   active,
   onClick,
 }: {
   label: string;
   value: string | number;
+  helper?: string | null;
   tone: "slate" | "red" | "amber" | "green";
   active: boolean;
   onClick: () => void;
@@ -120,6 +123,7 @@ function TimeFilterCard({
     >
       <div className="text-xs font-semibold uppercase opacity-75">{label}</div>
       <div className="mt-2 text-2xl font-semibold">{value}</div>
+      {helper ? <div className="mt-1 text-xs font-semibold opacity-90">{helper}</div> : null}
     </button>
   );
 }
@@ -170,7 +174,7 @@ export default function ChantiersTimePage() {
   const rows = useMemo(() => {
     const search = normalizeSearch(query);
     return allRows.filter((row) => {
-      const matchesFilter = activeFilter === "all" || row.tone === activeFilter;
+      const matchesFilter = activeFilter === "terrain" ? row.terrainFeedback.open > 0 : activeFilter === "all" || row.tone === activeFilter;
       const matchesSearch = !search || row.searchable.includes(search);
       return matchesFilter && matchesSearch;
     });
@@ -182,9 +186,10 @@ export default function ChantiersTimePage() {
     const missingTime = allRows.filter((row) => row.tone === "missing").length;
     const overBudget = allRows.filter((row) => row.tone === "over").length;
     const underControl = allRows.filter((row) => row.tone === "ok").length;
+    const chantiersWithTerrainFeedbacks = allRows.filter((row) => row.terrainFeedback.open > 0).length;
     const openTerrainFeedbacks = allRows.reduce((sum, row) => sum + row.terrainFeedback.open, 0);
     const priorityTerrainFeedbacks = allRows.reduce((sum, row) => sum + row.terrainFeedback.priority, 0);
-    return { planned, logged, missingTime, overBudget, underControl, openTerrainFeedbacks, priorityTerrainFeedbacks };
+    return { planned, logged, missingTime, overBudget, underControl, chantiersWithTerrainFeedbacks, openTerrainFeedbacks, priorityTerrainFeedbacks };
   }, [allRows, chantiers, entriesByChantier]);
 
   async function refresh() {
@@ -268,11 +273,14 @@ export default function ChantiersTimePage() {
           active={activeFilter === "missing"}
           onClick={() => setActiveFilter("missing")}
         />
-        <article className={`rounded-2xl border p-4 shadow-sm ${totals.priorityTerrainFeedbacks > 0 ? "border-red-200 bg-red-50 text-red-700" : totals.openTerrainFeedbacks > 0 ? "border-amber-200 bg-amber-50 text-amber-700" : "border-slate-200 bg-white text-slate-950"}`}>
-          <div className="text-xs font-semibold uppercase opacity-75">Retours ouverts</div>
-          <div className="mt-2 text-2xl font-semibold">{totals.openTerrainFeedbacks}</div>
-          {totals.priorityTerrainFeedbacks > 0 ? <div className="mt-1 text-xs font-semibold">{totals.priorityTerrainFeedbacks} urgent{totals.priorityTerrainFeedbacks > 1 ? "s" : ""}</div> : null}
-        </article>
+        <TimeFilterCard
+          label="Retours ouverts"
+          value={totals.openTerrainFeedbacks}
+          helper={totals.priorityTerrainFeedbacks > 0 ? `${totals.priorityTerrainFeedbacks} urgent${totals.priorityTerrainFeedbacks > 1 ? "s" : ""} sur ${totals.chantiersWithTerrainFeedbacks} chantier${totals.chantiersWithTerrainFeedbacks > 1 ? "s" : ""}` : `${totals.chantiersWithTerrainFeedbacks} chantier${totals.chantiersWithTerrainFeedbacks > 1 ? "s" : ""} concerné${totals.chantiersWithTerrainFeedbacks > 1 ? "s" : ""}`}
+          tone={totals.priorityTerrainFeedbacks > 0 ? "red" : totals.openTerrainFeedbacks > 0 ? "amber" : "slate"}
+          active={activeFilter === "terrain"}
+          onClick={() => setActiveFilter("terrain")}
+        />
       </section>
 
       <section className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800 shadow-sm shadow-emerald-950/[0.02]">
