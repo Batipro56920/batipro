@@ -15,16 +15,34 @@ const SEARCH_PLACEHOLDER = "Rechercher chantier, client, projet, devis, retour t
 
 const SEARCH_QUICK_LINKS = [
   {
+    label: "Projets commerciaux",
+    description: "Reprendre prospects, visites, devis et passage chantier",
+    href: "/projets",
+    badge: "Projet",
+  },
+  {
+    label: "Devis",
+    description: "Ouvrir les devis CRM et reprendre un chiffrage",
+    href: "/crm/devis",
+    badge: "CRM",
+  },
+  {
+    label: "Clients",
+    description: "Retrouver un client, ses coordonnées et son historique",
+    href: "/crm/clients",
+    badge: "Admin",
+  },
+  {
     label: "Chantiers",
     description: "Ouvrir le portefeuille chantier",
     href: "/chantiers",
     badge: "Production",
   },
   {
-    label: "Retours terrain",
-    description: "Traiter observations, blocages et anomalies",
-    href: "/retours-terrain",
-    badge: "Terrain",
+    label: "Planning",
+    description: "Voir la charge et les interventions",
+    href: "/planning",
+    badge: "Planning",
   },
   {
     label: "Tâches chantier",
@@ -33,16 +51,22 @@ const SEARCH_QUICK_LINKS = [
     badge: "Exécution",
   },
   {
+    label: "Temps chantier",
+    description: "Contrôler heures passées, tâches et équipe",
+    href: "/temps",
+    badge: "Temps",
+  },
+  {
+    label: "Retours terrain",
+    description: "Traiter observations, blocages et anomalies",
+    href: "/retours-terrain",
+    badge: "Terrain",
+  },
+  {
     label: "Réserves",
     description: "Piloter les réserves qualité ouvertes",
     href: "/reserves",
     badge: "Qualité",
-  },
-  {
-    label: "Planning",
-    description: "Voir la charge et les interventions",
-    href: "/planning",
-    badge: "Planning",
   },
 ] as const;
 
@@ -207,7 +231,7 @@ export default function LayoutShell() {
     return (
       <div className={compact ? "mt-2 rounded-xl border border-slate-200 bg-white p-2" : "p-2"}>
         <div className="px-2 pb-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">
-          Accès rapides chantier
+          Accès rapides Batipro
         </div>
         <div className={compact ? "space-y-1" : "grid gap-1 sm:grid-cols-2"}>
           {SEARCH_QUICK_LINKS.map((item) => (
