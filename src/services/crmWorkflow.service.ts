@@ -1,6 +1,7 @@
 import { supabase } from "../lib/supabaseClient";
 import {
   createCrmProspect,
+  createCrmTask,
   upsertCrmOpportunity,
   type CrmAppointmentRow,
   type CrmOpportunityRow,
@@ -40,6 +41,13 @@ function prospectOpportunityLabel(prospect: CrmProspectRow) {
 
 function prospectOpportunityNotes(prospect: CrmProspectRow) {
   return [prospect.description_besoin, prospect.notes].filter(Boolean).join("\n") || null;
+}
+
+function nextFollowUpDate() {
+  const dueAt = new Date();
+  dueAt.setDate(dueAt.getDate() + 1);
+  dueAt.setHours(9, 0, 0, 0);
+  return dueAt.toISOString();
 }
 
 async function findStage(stageKey: string): Promise<CrmPipelineStageRow | null> {
@@ -94,7 +102,18 @@ export async function createProspectWithInitialOpportunity(
     ...input,
     statut: input.statut ?? "a_qualifier",
   });
-  await createOpportunityForProspect(prospect, opportunityPatch);
+  const opportunity = await createOpportunityForProspect(prospect, opportunityPatch);
+  await createCrmTask({
+    prospect_id: prospect.id,
+    client_id: prospect.client_id,
+    opportunity_id: opportunity.id,
+    type: "relance",
+    titre: `Qualifier ${prospectOpportunityLabel(prospect)}`,
+    description: "Suivi commercial à lancer après création du dossier projet.",
+    due_at: nextFollowUpDate(),
+    priorite: "haute",
+    statut: "a_faire",
+  });
   return prospect;
 }
 
