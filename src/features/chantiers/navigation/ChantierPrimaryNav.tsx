@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { NavLink, useParams } from "react-router-dom";
+import type { CompanyFeatureModuleId } from "../../../config/companyFeatures";
 import {
   getCompanySettings,
   getEnabledCompanyModulesFromSettings,
@@ -18,17 +19,71 @@ type TerrainFeedbackSummary = {
   priority: number;
 };
 
+type ChantierPilotageShortcut = {
+  key: string;
+  label: string;
+  href: string;
+  title: string;
+  moduleId: CompanyFeatureModuleId;
+  sectionKeys: string[];
+};
+
 const OPEN_TERRAIN_FEEDBACK_STATUSES = new Set(["nouveau", "en_cours"]);
 const PRIORITY_TERRAIN_FEEDBACK_URGENCIES = new Set(["critique", "urgente"]);
 
+const CHANTIER_PILOTAGE_SHORTCUTS: ChantierPilotageShortcut[] = [
+  {
+    key: "planning-chantier",
+    label: "Planning",
+    href: "planning",
+    title: "Ouvrir le planning détaillé de ce chantier",
+    moduleId: "planning",
+    sectionKeys: ["execution", "equipe"],
+  },
+  {
+    key: "temps-chantier",
+    label: "Temps",
+    href: "temps",
+    title: "Ouvrir le suivi des temps de ce chantier",
+    moduleId: "temps",
+    sectionKeys: ["execution", "equipe"],
+  },
+  {
+    key: "visites-chantier",
+    label: "Visites",
+    href: "visites",
+    title: "Ouvrir les visites et comptes rendus de ce chantier",
+    moduleId: "validation_qualite",
+    sectionKeys: ["qualite", "sav"],
+  },
+];
+
+function isModuleEnabled(moduleId: CompanyFeatureModuleId, enabledModules: Set<CompanyFeatureModuleId> | null) {
+  return !enabledModules || enabledModules.has(moduleId);
+}
+
 export function ChantierPrimaryNav({ sections }: { sections: ChantierPrimarySection[] }) {
   const { id: chantierId } = useParams<{ id: string }>();
-  const [terrainFeedbackModuleEnabled, setTerrainFeedbackModuleEnabled] = useState(true);
+  const [enabledModules, setEnabledModules] = useState<Set<CompanyFeatureModuleId> | null>(null);
   const [terrainFeedbackSummary, setTerrainFeedbackSummary] = useState<TerrainFeedbackSummary | null>(null);
-  const terrainFeedbackEnabled = Boolean(chantierId) && terrainFeedbackModuleEnabled;
+  const enabledSectionKeys = useMemo(
+    () => new Set(sections.filter((section) => section.enabled).map((section) => section.key)),
+    [sections],
+  );
+  const terrainFeedbackEnabled = Boolean(chantierId) && isModuleEnabled("journal_chantier", enabledModules);
   const terrainFeedbackHref = chantierId
     ? `/retours-terrain?chantierId=${encodeURIComponent(chantierId)}`
     : "/retours-terrain";
+  const pilotageShortcuts = useMemo(() => {
+    if (!chantierId) return [];
+    return CHANTIER_PILOTAGE_SHORTCUTS.filter((shortcut) => {
+      const sectionVisible = shortcut.sectionKeys.some((sectionKey) => enabledSectionKeys.has(sectionKey));
+      return sectionVisible && isModuleEnabled(shortcut.moduleId, enabledModules);
+    }).map((shortcut) => ({
+      ...shortcut,
+      href: `/chantiers/${encodeURIComponent(chantierId)}/${shortcut.href}`,
+    }));
+  }, [chantierId, enabledModules, enabledSectionKeys]);
   const terrainFeedbackBadge = useMemo(() => {
     if (!terrainFeedbackSummary?.open) return null;
     if (terrainFeedbackSummary.priority > 0) {
@@ -54,11 +109,10 @@ export function ChantierPrimaryNav({ sections }: { sections: ChantierPrimarySect
       try {
         const settings = await getCompanySettings();
         if (!alive) return;
-        const enabledModules = getEnabledCompanyModulesFromSettings(settings);
-        setTerrainFeedbackModuleEnabled(enabledModules.includes("journal_chantier"));
+        setEnabledModules(new Set(getEnabledCompanyModulesFromSettings(settings)));
       } catch {
         if (!alive) return;
-        setTerrainFeedbackModuleEnabled(true);
+        setEnabledModules(null);
       }
     }
 
@@ -73,7 +127,7 @@ export function ChantierPrimaryNav({ sections }: { sections: ChantierPrimarySect
     let alive = true;
     setTerrainFeedbackSummary(null);
 
-    if (!chantierId || !terrainFeedbackModuleEnabled) {
+    if (!chantierId || !terrainFeedbackEnabled) {
       return () => {
         alive = false;
       };
@@ -99,7 +153,7 @@ export function ChantierPrimaryNav({ sections }: { sections: ChantierPrimarySect
     return () => {
       alive = false;
     };
-  }, [chantierId, terrainFeedbackModuleEnabled]);
+  }, [chantierId, terrainFeedbackEnabled]);
 
   return (
     <nav className="flex flex-wrap gap-2" aria-label="Navigation chantier principale">
@@ -114,6 +168,22 @@ export function ChantierPrimaryNav({ sections }: { sections: ChantierPrimarySect
           ].join(" ")}
         >
           {section.label}
+        </NavLink>
+      ))}
+      {pilotageShortcuts.map((shortcut) => (
+        <NavLink
+          key={shortcut.key}
+          to={shortcut.href}
+          title={shortcut.title}
+          aria-label={shortcut.title}
+          className={({ isActive }) => [
+            "rounded-xl border px-3 py-2 text-sm font-semibold transition",
+            isActive
+              ? "border-blue-700 bg-blue-600 text-white shadow-sm shadow-blue-600/20"
+              : "border-blue-100 bg-blue-50 text-blue-800 hover:bg-blue-100",
+          ].join(" ")}
+        >
+          {shortcut.label}
         </NavLink>
       ))}
       {terrainFeedbackEnabled ? (
