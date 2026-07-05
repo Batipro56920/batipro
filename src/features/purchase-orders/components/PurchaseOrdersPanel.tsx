@@ -10,6 +10,13 @@ import { PurchaseOrderStatusBadge } from "./PurchaseOrderStatusBadge";
 
 type PurchaseOrderStatusFilter = "all" | "open" | PurchaseOrderStatus;
 
+type EmptyStateCopy = {
+  title: string;
+  description: string;
+  showCreate: boolean;
+  showReset: boolean;
+};
+
 const PURCHASE_ORDER_STATUS_FILTERS: PurchaseOrderStatusFilter[] = [
   "all",
   "open",
@@ -71,6 +78,21 @@ export function PurchaseOrdersPanel({ suppliers }: { suppliers: SupplierRow[] })
   const targetedOrderVisible = useMemo(
     () => Boolean(urlPurchaseOrderId && filteredOrders.some((order) => order.id === urlPurchaseOrderId)),
     [filteredOrders, urlPurchaseOrderId],
+  );
+  const activeSupplierName = useMemo(() => {
+    if (supplierFilter === "all") return "";
+    return suppliers.find((supplier) => supplier.id === supplierFilter)?.name ?? "fournisseur sélectionné";
+  }, [supplierFilter, suppliers]);
+  const hasActiveListFilters = Boolean(query.trim()) || statusFilter !== "all" || supplierFilter !== "all";
+  const emptyStateCopy = useMemo(
+    () => buildEmptyStateCopy({
+      hasActiveListFilters,
+      query,
+      statusFilter,
+      supplierName: activeSupplierName,
+      totalOrders: orders.length,
+    }),
+    [activeSupplierName, hasActiveListFilters, orders.length, query, statusFilter],
   );
 
   useEffect(() => {
@@ -147,6 +169,12 @@ export function PurchaseOrdersPanel({ suppliers }: { suppliers: SupplierRow[] })
   }
 
   function clearOpenStatusFilter() {
+    updateStatusFilter("all");
+  }
+
+  function resetListFilters() {
+    setQuery("");
+    setSupplierFilter("all");
     updateStatusFilter("all");
   }
 
@@ -333,11 +361,26 @@ export function PurchaseOrdersPanel({ suppliers }: { suppliers: SupplierRow[] })
             }) : (
               <tr>
                 <td colSpan={8} className="px-4 py-12">
-                  <div className="mx-auto max-w-sm text-center">
+                  <div className="mx-auto max-w-md text-center">
                     <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-blue-50 text-blue-700"><ShoppingCart className="h-5 w-5" /></div>
-                    <div className="mt-3 font-semibold text-slate-950">Aucun bon de commande</div>
-                    <div className="mt-1 text-sm text-slate-500">Créez une commande fournisseur ou ajustez vos filtres.</div>
-                    <button type="button" onClick={() => void createOrder()} className="mt-4 rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700">Nouveau bon de commande</button>
+                    <div className="mt-3 font-semibold text-slate-950">{emptyStateCopy.title}</div>
+                    <div className="mt-1 text-sm leading-6 text-slate-500">{emptyStateCopy.description}</div>
+                    <div className="mt-4 flex flex-col justify-center gap-2 sm:flex-row">
+                      {emptyStateCopy.showReset ? (
+                        <button
+                          type="button"
+                          onClick={resetListFilters}
+                          className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700"
+                        >
+                          Réinitialiser les filtres
+                        </button>
+                      ) : null}
+                      {emptyStateCopy.showCreate ? (
+                        <button type="button" onClick={() => void createOrder()} className="rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700">
+                          Nouveau bon de commande
+                        </button>
+                      ) : null}
+                    </div>
                   </div>
                 </td>
               </tr>
@@ -363,6 +406,74 @@ function buildTotals(orders: PurchaseOrderRecord[]) {
     const totals = order.document.totals ?? calculateDocumentTotals(order.document);
     return { ht: sum.ht + totals.totalHt, ttc: sum.ttc + totals.totalTtc };
   }, { ht: 0, ttc: 0 });
+}
+
+function buildEmptyStateCopy({
+  hasActiveListFilters,
+  query,
+  statusFilter,
+  supplierName,
+  totalOrders,
+}: {
+  hasActiveListFilters: boolean;
+  query: string;
+  statusFilter: PurchaseOrderStatusFilter;
+  supplierName: string;
+  totalOrders: number;
+}): EmptyStateCopy {
+  if (!totalOrders) {
+    return {
+      title: "Aucun bon de commande",
+      description: "Créez le premier bon fournisseur pour suivre les achats engagés, les livraisons et les sorties à venir.",
+      showCreate: true,
+      showReset: false,
+    };
+  }
+
+  if (!hasActiveListFilters) {
+    return {
+      title: "Aucun bon de commande visible",
+      description: "Les commandes existent peut-être dans un autre contexte ou ne sont pas accessibles avec les droits actuels.",
+      showCreate: true,
+      showReset: false,
+    };
+  }
+
+  const details = [
+    statusFilter !== "all" ? `statut ${purchaseOrderStatusFilterLabel(statusFilter).toLowerCase()}` : "",
+    supplierName ? `fournisseur ${supplierName}` : "",
+    query.trim() ? `recherche "${query.trim()}"` : "",
+  ].filter(Boolean);
+
+  return {
+    title: statusFilter === "open" ? "Aucune commande ouverte à traiter" : "Aucune commande ne correspond aux filtres",
+    description: details.length
+      ? `Aucun bon ne correspond à ce contexte : ${details.join(", ")}. Réinitialisez les filtres pour revenir à la liste complète.`
+      : "Aucun bon ne correspond à ce contexte. Réinitialisez les filtres pour revenir à la liste complète.",
+    showCreate: true,
+    showReset: true,
+  };
+}
+
+function purchaseOrderStatusFilterLabel(status: PurchaseOrderStatusFilter) {
+  switch (status) {
+    case "open":
+      return "Ouverts à traiter";
+    case "draft":
+      return "Brouillon";
+    case "sent":
+      return "Envoyé";
+    case "confirmed":
+      return "Confirmé";
+    case "partially_delivered":
+      return "Livré partiellement";
+    case "delivered":
+      return "Livré";
+    case "cancelled":
+      return "Annulé";
+    default:
+      return "Tous statuts";
+  }
 }
 
 function formatCurrency(value: number) {
