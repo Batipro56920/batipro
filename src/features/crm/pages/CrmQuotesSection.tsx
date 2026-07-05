@@ -170,7 +170,7 @@ export default function CrmQuotesSection({
           <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
             <div>
               <div className="font-semibold">Devis filtrés sur le statut commercial</div>
-              <p className="mt-1 text-emerald-800">Statut : {statusLabel}. Ce contexte peut venir d'un KPI Devis et reste partageable dans l'URL.</p>
+              <p className="mt-1 text-emerald-800">Statut : {statusLabel}. Ce contexte isole les devis à traiter dans ce statut.</p>
             </div>
             <button
               type="button"
