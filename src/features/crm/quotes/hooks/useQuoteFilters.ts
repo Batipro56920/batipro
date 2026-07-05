@@ -6,6 +6,7 @@ import type { QuoteFilterOption, QuoteFilters, QuoteWithParty } from "../types";
 const DEFAULT_FILTERS: QuoteFilters = {
   query: "",
   status: "all",
+  signatureStatus: "all",
   salesperson: "all",
   client: "all",
   period: "all",
@@ -115,6 +116,7 @@ export function useQuoteFilters({
         ].join(" ").toLowerCase();
         if (query && !searchable.includes(query)) return false;
         if (filters.status !== "all" && row.statut !== filters.status) return false;
+        if (filters.signatureStatus !== "all" && row.signature_status !== filters.signatureStatus) return false;
         if (filters.salesperson !== "all" && row.salespersonKey !== filters.salesperson) return false;
         if (filters.client !== "all" && row.partyLabel !== filters.client) return false;
         if (filters.period === "week" && !isRecent(row.created_at, 7)) return false;
