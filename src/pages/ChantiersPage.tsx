@@ -120,12 +120,13 @@ function getInitialFilters(initialFocus: ChantierListFocus | undefined): Chantie
   return DEFAULT_FILTERS;
 }
 
-function getFocusedChantierPath(row: ChantierRow, initialFocus: ChantierListFocus | undefined) {
+function getFocusedChantierPath(row: ChantierRow, initialFocus: ChantierListFocus | undefined, currentView: ChantierListView) {
   const basePath = `/chantiers/${encodeURIComponent(row.id)}`;
   if (initialFocus === "tasks") return `${basePath}/execution`;
   if (initialFocus === "time") return `${basePath}/temps`;
   if (initialFocus === "reserves") return `${basePath}/qualite`;
   if (initialFocus === "visits") return `${basePath}/visites`;
+  if (currentView === "planning") return `${basePath}/planning`;
   return basePath;
 }
 
@@ -333,7 +334,7 @@ export default function ChantiersPage({ initialView = "list", initialFocus }: Ch
   }
 
   const actions = {
-    onOpen: (row: ChantierRow) => navigate(getFocusedChantierPath(row, initialFocus)),
+    onOpen: (row: ChantierRow) => navigate(getFocusedChantierPath(row, initialFocus, view)),
     onFinish: (row: ChantierRow) => void updateStatus(row, "TERMINE"),
     onArchive: (row: ChantierRow) => void updateStatus(row, "ARCHIVE"),
     onCancel: (row: ChantierRow) => void updateStatus(row, "ANNULE"),
