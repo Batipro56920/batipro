@@ -5,6 +5,7 @@ import {
   getCompanySettings,
   getEnabledCompanyModulesFromSettings,
 } from "../../../services/companySettings.service";
+import { listReservesByChantierId } from "../../../services/reserves.service";
 import { listTerrainFeedbacks } from "../../../services/terrainFeedback.service";
 
 export type ChantierPrimarySection = {
@@ -19,6 +20,11 @@ type TerrainFeedbackSummary = {
   priority: number;
 };
 
+type ReserveSummary = {
+  open: number;
+  urgent: number;
+};
+
 type ChantierPilotageShortcut = {
   key: string;
   label: string;
@@ -30,6 +36,8 @@ type ChantierPilotageShortcut = {
 
 const OPEN_TERRAIN_FEEDBACK_STATUSES = new Set(["nouveau", "en_cours"]);
 const PRIORITY_TERRAIN_FEEDBACK_URGENCIES = new Set(["critique", "urgente"]);
+const OPEN_RESERVE_STATUSES = new Set(["OUVERTE", "EN_COURS"]);
+const URGENT_RESERVE_PRIORITIES = new Set(["URGENTE"]);
 
 const CHANTIER_PILOTAGE_SHORTCUTS: ChantierPilotageShortcut[] = [
   {
@@ -66,10 +74,16 @@ export function ChantierPrimaryNav({ sections }: { sections: ChantierPrimarySect
   const { id: chantierId } = useParams<{ id: string }>();
   const [enabledModules, setEnabledModules] = useState<Set<CompanyFeatureModuleId> | null>(null);
   const [terrainFeedbackSummary, setTerrainFeedbackSummary] = useState<TerrainFeedbackSummary | null>(null);
+  const [reserveSummary, setReserveSummary] = useState<ReserveSummary | null>(null);
   const enabledSectionKeys = useMemo(
     () => new Set(sections.filter((section) => section.enabled).map((section) => section.key)),
     [sections],
   );
+  const reserveShortcutEnabled =
+    Boolean(chantierId) &&
+    enabledSectionKeys.has("qualite") &&
+    isModuleEnabled("validation_qualite", enabledModules);
+  const reserveHref = chantierId ? `/chantiers/${encodeURIComponent(chantierId)}/qualite` : "/reserves";
   const terrainFeedbackEnabled = Boolean(chantierId) && isModuleEnabled("journal_chantier", enabledModules);
   const terrainFeedbackHref = chantierId
     ? `/retours-terrain?chantierId=${encodeURIComponent(chantierId)}`
@@ -84,6 +98,22 @@ export function ChantierPrimaryNav({ sections }: { sections: ChantierPrimarySect
       href: `/chantiers/${encodeURIComponent(chantierId)}/${shortcut.href}`,
     }));
   }, [chantierId, enabledModules, enabledSectionKeys]);
+  const reserveBadge = useMemo(() => {
+    if (!reserveSummary?.open) return null;
+    if (reserveSummary.urgent > 0) {
+      return {
+        label: `${reserveSummary.urgent} urgente${reserveSummary.urgent > 1 ? "s" : ""}`,
+        title: `${reserveSummary.urgent} réserve${reserveSummary.urgent > 1 ? "s" : ""} urgente${reserveSummary.urgent > 1 ? "s" : ""}`,
+        priority: true,
+      };
+    }
+
+    return {
+      label: `${reserveSummary.open} ouverte${reserveSummary.open > 1 ? "s" : ""}`,
+      title: `${reserveSummary.open} réserve${reserveSummary.open > 1 ? "s" : ""} ouverte${reserveSummary.open > 1 ? "s" : ""}`,
+      priority: false,
+    };
+  }, [reserveSummary]);
   const terrainFeedbackBadge = useMemo(() => {
     if (!terrainFeedbackSummary?.open) return null;
     if (terrainFeedbackSummary.priority > 0) {
@@ -100,6 +130,7 @@ export function ChantierPrimaryNav({ sections }: { sections: ChantierPrimarySect
       priority: false,
     };
   }, [terrainFeedbackSummary]);
+  const reserveTitle = reserveBadge?.title ?? "Ouvrir les réserves qualité de ce chantier";
   const terrainFeedbackTitle = terrainFeedbackBadge?.title ?? "Voir les retours terrain filtrés sur ce chantier";
 
   useEffect(() => {
@@ -122,6 +153,38 @@ export function ChantierPrimaryNav({ sections }: { sections: ChantierPrimarySect
       alive = false;
     };
   }, []);
+
+  useEffect(() => {
+    let alive = true;
+    setReserveSummary(null);
+
+    if (!chantierId || !reserveShortcutEnabled) {
+      return () => {
+        alive = false;
+      };
+    }
+
+    async function loadReserveSummary() {
+      try {
+        const rows = await listReservesByChantierId(chantierId);
+        if (!alive) return;
+        const openRows = rows.filter((row) => OPEN_RESERVE_STATUSES.has(String(row.status ?? "")));
+        setReserveSummary({
+          open: openRows.length,
+          urgent: openRows.filter((row) => URGENT_RESERVE_PRIORITIES.has(String(row.priority ?? ""))).length,
+        });
+      } catch {
+        if (!alive) return;
+        setReserveSummary(null);
+      }
+    }
+
+    void loadReserveSummary();
+
+    return () => {
+      alive = false;
+    };
+  }, [chantierId, reserveShortcutEnabled]);
 
   useEffect(() => {
     let alive = true;
@@ -186,6 +249,35 @@ export function ChantierPrimaryNav({ sections }: { sections: ChantierPrimarySect
           {shortcut.label}
         </NavLink>
       ))}
+      {reserveShortcutEnabled ? (
+        <NavLink
+          to={reserveHref}
+          title={reserveTitle}
+          aria-label={reserveTitle}
+          className={({ isActive }) => [
+            "inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-sm font-semibold transition",
+            isActive
+              ? "border-red-700 bg-red-600 text-white shadow-sm shadow-red-600/20"
+              : reserveBadge?.priority
+                ? "border-red-200 bg-red-50 text-red-800 hover:bg-red-100"
+                : "border-amber-200 bg-amber-50 text-amber-800 hover:bg-amber-100",
+          ].join(" ")}
+        >
+          <span>Réserves</span>
+          {reserveBadge ? (
+            <span
+              className={[
+                "rounded-full px-2 py-0.5 text-[11px] font-bold leading-none",
+                reserveBadge.priority
+                  ? "bg-red-600 text-white"
+                  : "border border-amber-200 bg-white text-amber-800",
+              ].join(" ")}
+            >
+              {reserveBadge.label}
+            </span>
+          ) : null}
+        </NavLink>
+      ) : null}
       {terrainFeedbackEnabled ? (
         <NavLink
           to={terrainFeedbackHref}
