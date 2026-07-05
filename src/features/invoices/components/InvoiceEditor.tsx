@@ -15,9 +15,12 @@ const PAYMENT_METHOD_LABELS: Record<InvoicePayment["method"], string> = {
   direct_debit: "Prélèvement",
 };
 
+type InvoiceClientWorkflowStatus = "sent" | "viewed" | "modification_requested" | "expired";
+
 type InvoiceEditorProps = {
   invoice: InvoiceRecord;
   hasUnsavedChanges: boolean;
+  clientWorkflowStatus?: InvoiceClientWorkflowStatus | null;
   onUnsavedChange: (invoiceId: string, dirty: boolean) => void;
   onChange: (invoice: InvoiceRecord) => void;
   onSave: (invoice: InvoiceRecord) => void | Promise<void>;
@@ -29,7 +32,34 @@ type ContextLink = {
   href: string;
 };
 
-export function InvoiceEditor({ invoice, hasUnsavedChanges, onUnsavedChange, onChange, onSave }: InvoiceEditorProps) {
+const CLIENT_WORKFLOW_PANEL_META: Record<InvoiceClientWorkflowStatus, { label: string; description: string; actionLabel: string; className: string }> = {
+  sent: {
+    label: "Document envoyé",
+    description: "Le document client attend encore une validation ou une signature. Relancez le client depuis le workflow existant.",
+    actionLabel: "Relancer le client",
+    className: "border-blue-200 bg-blue-50 text-blue-900",
+  },
+  viewed: {
+    label: "Document consulté",
+    description: "Le client a ouvert le document sans finaliser sa réponse. Préparez une relance avec le lien client.",
+    actionLabel: "Relancer le client",
+    className: "border-cyan-200 bg-cyan-50 text-cyan-900",
+  },
+  modification_requested: {
+    label: "Modification demandée",
+    description: "Le client a demandé une modification. Contrôlez la facture puis renvoyez une version à jour si nécessaire.",
+    actionLabel: "Renvoyer au client",
+    className: "border-amber-200 bg-amber-50 text-amber-950",
+  },
+  expired: {
+    label: "Lien client expiré",
+    description: "Le lien de consultation n'est plus utilisable. Générez un nouveau workflow client depuis cette facture.",
+    actionLabel: "Renvoyer un lien",
+    className: "border-red-200 bg-red-50 text-red-900",
+  },
+};
+
+export function InvoiceEditor({ invoice, hasUnsavedChanges, clientWorkflowStatus = null, onUnsavedChange, onChange, onSave }: InvoiceEditorProps) {
   const [previewOpen, setPreviewOpen] = useState(false);
   const [sendOpen, setSendOpen] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -160,6 +190,7 @@ export function InvoiceEditor({ invoice, hasUnsavedChanges, onUnsavedChange, onC
         </div>
 
         <aside className="space-y-4">
+          <ClientWorkflowActionPanel status={clientWorkflowStatus} onSend={() => setSendOpen(true)} />
           <DocumentTotalsCard document={document} totals={totals} />
           <PaymentPanel invoice={invoice} hasUnsavedChanges={hasUnsavedChanges} onAdd={addPayment} onRemove={removePayment} />
           <div className="rounded-2xl border border-slate-200 bg-white p-4 text-sm shadow-sm">
@@ -175,6 +206,27 @@ export function InvoiceEditor({ invoice, hasUnsavedChanges, onUnsavedChange, onC
 
       {previewOpen ? <DocumentPreview document={document} /> : null}
       {sendOpen ? <DocumentSendDialog document={document} onClose={() => setSendOpen(false)} onDownload={() => downloadBusinessDocumentPdf(document)} /> : null}
+    </div>
+  );
+}
+
+function ClientWorkflowActionPanel({ status, onSend }: { status?: InvoiceClientWorkflowStatus | null; onSend: () => void }) {
+  if (!status) return null;
+  const meta = CLIENT_WORKFLOW_PANEL_META[status];
+
+  return (
+    <div className={`rounded-2xl border p-4 text-sm shadow-sm ${meta.className}`}>
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <div className="font-semibold">Suivi client</div>
+          <div className="mt-1 text-base font-bold">{meta.label}</div>
+        </div>
+        <Send className="h-4 w-4 shrink-0 opacity-70" />
+      </div>
+      <p className="mt-2 text-xs leading-5 opacity-90">{meta.description}</p>
+      <Button className="mt-4 w-full" variant="secondary" onClick={onSend}>
+        <Send className="h-4 w-4" /> {meta.actionLabel}
+      </Button>
     </div>
   );
 }
