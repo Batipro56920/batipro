@@ -8,7 +8,7 @@ import { QuotesKpiGrid } from "../quotes/components/QuotesKpiGrid";
 import { QuotesTable } from "../quotes/components/QuotesTable";
 import { QuotesToolbar } from "../quotes/components/QuotesToolbar";
 import { useQuoteFilters } from "../quotes/hooks/useQuoteFilters";
-import type { QuoteWithParty } from "../quotes/types";
+import type { QuoteFilters, QuoteWithParty } from "../quotes/types";
 
 const STATUS_LABELS: Record<string, string> = {
   brouillon: "Brouillon",
@@ -119,6 +119,35 @@ export default function CrmQuotesSection({
     filters.period !== "all" ||
     filters.amount !== "all";
 
+  function updateShareableFilters(nextValue: QuoteFilters | ((current: QuoteFilters) => QuoteFilters)) {
+    setFilters((current) => {
+      const nextFilters = typeof nextValue === "function" ? nextValue(current) : nextValue;
+      const nextSearchParams = new URLSearchParams(searchParams);
+      const query = nextFilters.query.trim();
+
+      if (query) {
+        nextSearchParams.set("q", query);
+      } else {
+        nextSearchParams.delete("q");
+      }
+
+      if (nextFilters.status !== "all") {
+        nextSearchParams.set("status", nextFilters.status);
+      } else {
+        nextSearchParams.delete("status");
+      }
+
+      if (nextFilters.signatureStatus !== "all") {
+        nextSearchParams.set("signatureStatus", nextFilters.signatureStatus);
+      } else {
+        nextSearchParams.delete("signatureStatus");
+      }
+
+      setSearchParams(nextSearchParams, { replace: true });
+      return nextFilters;
+    });
+  }
+
   function resetFilters() {
     setFilters({
       query: "",
@@ -160,7 +189,7 @@ export default function CrmQuotesSection({
       <QuotesKpiGrid rows={rows} />
       <QuotesToolbar
         filters={filters}
-        setFilters={setFilters}
+        setFilters={updateShareableFilters}
         statuses={statuses}
         clients={clients}
         salespeople={salespeople}
