@@ -183,8 +183,9 @@ export default function InvoicesPage() {
           const matchesUrlFilters = (invoice: InvoiceRecord) =>
             matchesStatusFilter(invoice, urlStatusFilter) && matchesClientWorkflowFilter(invoice, urlClientWorkflowFilter, workflowInvoiceIds);
           const firstMatchingFilters = rows.find(matchesUrlFilters);
+          const hasActiveUrlFilter = urlStatusFilter !== "all" || urlClientWorkflowFilter !== "all";
           if (current && rows.some((invoice) => invoice.id === current && matchesUrlFilters(invoice))) return current;
-          return firstMatchingFilters?.id ?? rows[0]?.id ?? null;
+          return firstMatchingFilters?.id ?? (hasActiveUrlFilter ? null : rows[0]?.id ?? null);
         });
       }
     } catch (err: any) {
