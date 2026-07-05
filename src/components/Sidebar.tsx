@@ -140,6 +140,22 @@ export default function Sidebar({ collapsed = false, onToggleCollapse, companyNa
       group: "Production",
     },
     {
+      to: "/taches",
+      label: "Tâches chantier",
+      icon: ClipboardList,
+      feature: "preparation_chantier" as const,
+      permissionKey: "preparation_chantier" as const,
+      group: "Production",
+    },
+    {
+      to: "/reserves",
+      label: "Réserves chantier",
+      icon: ClipboardList,
+      feature: "preparation_chantier" as const,
+      permissionKey: "preparation_chantier" as const,
+      group: "Production",
+    },
+    {
       to: "/planning",
       label: "Planning",
       icon: CalendarDays,
