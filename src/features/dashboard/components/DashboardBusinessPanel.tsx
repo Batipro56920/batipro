@@ -45,7 +45,7 @@ const purchaseOrdersMetric: DashboardBusinessMetric = {
   label: "Commandes à traiter",
   value: "—",
   hint: "Bons de commande ouverts",
-  href: "/bons-commande",
+  href: "/bons-commande?status=open",
   tone: "warning",
 };
 
