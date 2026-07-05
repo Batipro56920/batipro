@@ -155,6 +155,8 @@ export default function ProjectDetailPage() {
     );
   }
 
+  const projectQuotesPath = `/projets/${project.id}?tab=quotes`;
+
   return (
     <div className="space-y-5">
       <ProjectDetailHeader project={project} onProjectUpdated={refresh} />
@@ -165,15 +167,23 @@ export default function ProjectDetailPage() {
             <div>
               <div className="font-semibold">Projet issu d'un apporteur d'affaires</div>
               <p className="mt-1 text-amber-800">
-                Source commerciale : {apporteurTracking.label}. Le suivi des commissions se pilote dans le module apporteurs.
+                Source commerciale : {apporteurTracking.label}. Le suivi des commissions se pilote dans le module apporteurs, puis le chiffrage se poursuit dans les devis du projet.
               </p>
             </div>
-            <Link
-              to={apporteurTracking.path}
-              className="inline-flex h-9 items-center justify-center rounded-xl border border-amber-300 bg-white px-3 text-sm font-semibold text-amber-900 hover:bg-amber-100"
-            >
-              Ouvrir le suivi apporteurs
-            </Link>
+            <div className="flex flex-wrap gap-2">
+              <Link
+                to={apporteurTracking.path}
+                className="inline-flex h-9 items-center justify-center rounded-xl border border-amber-300 bg-white px-3 text-sm font-semibold text-amber-900 hover:bg-amber-100"
+              >
+                Ouvrir le suivi apporteurs
+              </Link>
+              <Link
+                to={projectQuotesPath}
+                className="inline-flex h-9 items-center justify-center rounded-xl bg-amber-600 px-3 text-sm font-semibold text-white hover:bg-amber-700"
+              >
+                Préparer le devis
+              </Link>
+            </div>
           </div>
         </section>
       ) : null}
