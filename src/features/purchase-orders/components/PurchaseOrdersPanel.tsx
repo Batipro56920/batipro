@@ -63,6 +63,7 @@ export function PurchaseOrdersPanel({ suppliers }: { suppliers: SupplierRow[] })
   const urlPurchaseOrderId = searchParams.get("purchaseOrderId") ?? "";
   const urlSupplierId = searchParams.get("supplierId") ?? "";
   const urlChantierId = searchParams.get("chantierId") ?? "";
+  const urlProjectId = searchParams.get("projectId") ?? "";
   const statusQueryParam = searchParams.get("status") ?? "";
   const initialStatusFilter = isPurchaseOrderStatusFilter(statusQueryParam) ? statusQueryParam : "all";
   const openedOrderFromUrlRef = useRef("");
@@ -75,6 +76,7 @@ export function PurchaseOrdersPanel({ suppliers }: { suppliers: SupplierRow[] })
   const [statusFilter, setStatusFilter] = useState<PurchaseOrderStatusFilter>(initialStatusFilter);
   const [supplierFilter, setSupplierFilter] = useState(urlSupplierId || "all");
   const [chantierFilter, setChantierFilter] = useState(urlChantierId || "all");
+  const [projectFilter, setProjectFilter] = useState(urlProjectId || "all");
   const [chantierOptions, setChantierOptions] = useState<ChantierListOption[]>([]);
   const [projectOptions, setProjectOptions] = useState<ProjectListOption[]>([]);
   const totals = useMemo(() => buildTotals(orders), [orders]);
@@ -118,9 +120,10 @@ export function PurchaseOrdersPanel({ suppliers }: { suppliers: SupplierRow[] })
       const matchesStatus = matchesStatusFilter(order, statusFilter);
       const matchesSupplier = supplierFilter === "all" || order.supplierId === supplierFilter;
       const matchesChantier = chantierFilter === "all" || order.chantierId === chantierFilter;
-      return matchesText && matchesStatus && matchesSupplier && matchesChantier;
+      const matchesProject = projectFilter === "all" || orderMatchesProjectFilter(order, projectFilter, projectById);
+      return matchesText && matchesStatus && matchesSupplier && matchesChantier && matchesProject;
     });
-  }, [chantierById, chantierFilter, orders, projectById, query, statusFilter, supplierFilter]);
+  }, [chantierById, chantierFilter, orders, projectById, projectFilter, query, statusFilter, supplierFilter]);
   const targetedOrderVisible = useMemo(
     () => Boolean(urlPurchaseOrderId && filteredOrders.some((order) => order.id === urlPurchaseOrderId)),
     [filteredOrders, urlPurchaseOrderId],
@@ -134,17 +137,23 @@ export function PurchaseOrdersPanel({ suppliers }: { suppliers: SupplierRow[] })
     const chantier = chantierById.get(chantierFilter) ?? null;
     return chantier ? formatChantierDisplayName(chantier) : "chantier sélectionné";
   }, [chantierById, chantierFilter]);
-  const hasActiveListFilters = Boolean(query.trim()) || statusFilter !== "all" || supplierFilter !== "all" || chantierFilter !== "all";
+  const activeProjectName = useMemo(() => {
+    if (projectFilter === "all") return "";
+    const project = projectById.get(projectFilter) ?? null;
+    return project ? formatProjectDisplayName(project) : "projet sélectionné";
+  }, [projectById, projectFilter]);
+  const hasActiveListFilters = Boolean(query.trim()) || statusFilter !== "all" || supplierFilter !== "all" || chantierFilter !== "all" || projectFilter !== "all";
   const emptyStateCopy = useMemo(
     () => buildEmptyStateCopy({
       chantierName: activeChantierName,
       hasActiveListFilters,
+      projectName: activeProjectName,
       query,
       statusFilter,
       supplierName: activeSupplierName,
       totalOrders: orders.length,
     }),
-    [activeChantierName, activeSupplierName, hasActiveListFilters, orders.length, query, statusFilter],
+    [activeChantierName, activeProjectName, activeSupplierName, hasActiveListFilters, orders.length, query, statusFilter],
   );
 
   useEffect(() => {
@@ -181,6 +190,11 @@ export function PurchaseOrdersPanel({ suppliers }: { suppliers: SupplierRow[] })
   }, [urlChantierId]);
 
   useEffect(() => {
+    const nextProject = urlProjectId || "all";
+    setProjectFilter((current) => current === nextProject ? current : nextProject);
+  }, [urlProjectId]);
+
+  useEffect(() => {
     if (!urlPurchaseOrderId) {
       openedOrderFromUrlRef.current = "";
       return;
@@ -191,14 +205,16 @@ export function PurchaseOrdersPanel({ suppliers }: { suppliers: SupplierRow[] })
     const requestedStatusFilter = isPurchaseOrderStatusFilter(statusQueryParam) ? statusQueryParam : "all";
     const requestedSupplierFilter = urlSupplierId && targetedOrder.supplierId === urlSupplierId ? urlSupplierId : "all";
     const requestedChantierFilter = urlChantierId && targetedOrder.chantierId === urlChantierId ? urlChantierId : "all";
+    const requestedProjectFilter = urlProjectId && orderMatchesProjectFilter(targetedOrder, urlProjectId, projectById) ? urlProjectId : "all";
     setSelectedOrder(targetedOrder);
     setQuery("");
     setStatusFilter(matchesStatusFilter(targetedOrder, requestedStatusFilter) ? requestedStatusFilter : "all");
     setSupplierFilter(requestedSupplierFilter);
     setChantierFilter(requestedChantierFilter);
+    setProjectFilter(requestedProjectFilter);
     setError(null);
     openedOrderFromUrlRef.current = urlPurchaseOrderId;
-  }, [loading, statusQueryParam, targetedOrder, urlChantierId, urlPurchaseOrderId, urlSupplierId]);
+  }, [loading, projectById, statusQueryParam, targetedOrder, urlChantierId, urlProjectId, urlPurchaseOrderId, urlSupplierId]);
 
   useEffect(() => {
     if (!urlPurchaseOrderId || !targetedOrder || loading || !targetedOrderVisible) return;
@@ -265,6 +281,18 @@ export function PurchaseOrdersPanel({ suppliers }: { suppliers: SupplierRow[] })
     setSearchParams(nextParams, { replace: true });
   }
 
+  function updateProjectFilter(nextProjectId: string) {
+    setProjectFilter(nextProjectId);
+    const nextParams = new URLSearchParams(searchParams);
+    nextParams.delete("purchaseOrderId");
+    if (nextProjectId === "all") {
+      nextParams.delete("projectId");
+    } else {
+      nextParams.set("projectId", nextProjectId);
+    }
+    setSearchParams(nextParams, { replace: true });
+  }
+
   function clearOpenStatusFilter() {
     updateStatusFilter("all");
   }
@@ -274,11 +302,13 @@ export function PurchaseOrdersPanel({ suppliers }: { suppliers: SupplierRow[] })
     setStatusFilter("all");
     setSupplierFilter("all");
     setChantierFilter("all");
+    setProjectFilter("all");
     const nextParams = new URLSearchParams(searchParams);
     nextParams.delete("purchaseOrderId");
     nextParams.delete("status");
     nextParams.delete("supplierId");
     nextParams.delete("chantierId");
+    nextParams.delete("projectId");
     setSearchParams(nextParams, { replace: true });
   }
 
@@ -398,6 +428,26 @@ export function PurchaseOrdersPanel({ suppliers }: { suppliers: SupplierRow[] })
         </div>
       ) : null}
 
+      {!urlPurchaseOrderId && projectFilter !== "all" ? (
+        <div className="rounded-2xl border border-blue-200 bg-blue-50 p-4 text-sm text-blue-900">
+          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+            <div>
+              <div className="font-semibold">Commandes du projet</div>
+              <p className="mt-1 text-blue-800">
+                Liste filtrée sur {activeProjectName} pour suivre les achats liés au dossier commercial.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => updateProjectFilter("all")}
+              className="rounded-xl border border-blue-200 bg-white px-4 py-2 text-sm font-semibold text-blue-700 hover:bg-blue-100"
+            >
+              Afficher tous les projets
+            </button>
+          </div>
+        </div>
+      ) : null}
+
       {!urlPurchaseOrderId && chantierFilter !== "all" ? (
         <div className="rounded-2xl border border-blue-200 bg-blue-50 p-4 text-sm text-blue-900">
           <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
@@ -420,7 +470,7 @@ export function PurchaseOrdersPanel({ suppliers }: { suppliers: SupplierRow[] })
 
       {!loading ? (
         <div className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm">
-          <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_170px_220px_220px]">
+          <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_160px_200px_200px_200px]">
             <label className="relative block">
               <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
               <input className={inputClassWithIcon} placeholder="Rechercher commande, fournisseur, projet, chantier..." value={query} onChange={(event) => setQuery(event.target.value)} />
@@ -438,6 +488,10 @@ export function PurchaseOrdersPanel({ suppliers }: { suppliers: SupplierRow[] })
             <select className={selectClass} value={supplierFilter} onChange={(event) => updateSupplierFilter(event.target.value)}>
               <option value="all">Tous fournisseurs</option>
               {suppliers.map((supplier) => <option key={supplier.id} value={supplier.id}>{supplier.name}</option>)}
+            </select>
+            <select className={selectClass} value={projectFilter} onChange={(event) => updateProjectFilter(event.target.value)}>
+              <option value="all">Tous projets</option>
+              {projectOptions.map((project) => <option key={project.id} value={project.id}>{formatProjectOptionLabel(project)}</option>)}
             </select>
             <select className={selectClass} value={chantierFilter} onChange={(event) => updateChantierFilter(event.target.value)}>
               <option value="all">Tous chantiers</option>
@@ -601,6 +655,7 @@ function buildTotals(orders: PurchaseOrderRecord[]) {
 function buildEmptyStateCopy({
   chantierName,
   hasActiveListFilters,
+  projectName,
   query,
   statusFilter,
   supplierName,
@@ -608,6 +663,7 @@ function buildEmptyStateCopy({
 }: {
   chantierName: string;
   hasActiveListFilters: boolean;
+  projectName: string;
   query: string;
   statusFilter: PurchaseOrderStatusFilter;
   supplierName: string;
@@ -634,6 +690,7 @@ function buildEmptyStateCopy({
   const details = [
     statusFilter !== "all" ? `statut ${purchaseOrderStatusFilterLabel(statusFilter).toLowerCase()}` : "",
     supplierName ? `fournisseur ${supplierName}` : "",
+    projectName ? `projet ${projectName}` : "",
     chantierName ? `chantier ${chantierName}` : "",
     query.trim() ? `recherche "${query.trim()}"` : "",
   ].filter(Boolean);
@@ -692,12 +749,27 @@ async function listProjectOptions(): Promise<ProjectListOption[]> {
   }));
 }
 
+function orderMatchesProjectFilter(
+  order: PurchaseOrderRecord,
+  projectFilter: string,
+  projectById: Map<string, ProjectListOption>,
+) {
+  if (!order.projectId) return false;
+  if (order.projectId === projectFilter) return true;
+  const project = projectById.get(order.projectId);
+  return project?.id === projectFilter || project?.sourceId === projectFilter;
+}
+
 function formatChantierDisplayName(chantier: ChantierListOption) {
   return [chantier.nom, chantier.client].filter(Boolean).join(" - ");
 }
 
 function formatProjectDisplayName(project: ProjectListOption) {
   return project.name || project.clientName || "Ouvrir projet";
+}
+
+function formatProjectOptionLabel(project: ProjectListOption) {
+  return [formatProjectDisplayName(project), project.clientName].filter(Boolean).join(" - ");
 }
 
 function formatShortIdentifier(value: string) {
