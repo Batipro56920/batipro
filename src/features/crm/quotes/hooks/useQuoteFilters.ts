@@ -83,12 +83,14 @@ export function useQuoteFilters({
   const [filters, setFilters] = useState<QuoteFilters>(DEFAULT_FILTERS);
 
   const rowsWithParty = useMemo<QuoteWithParty[]>(() => rows.map((row) => {
-    const projectPath = projectPathByQuoteId?.get(row.id) ?? quoteCrmFallbackPath(row);
+    const linkedProjectPath = projectPathByQuoteId?.get(row.id) ?? "";
+    const projectPath = linkedProjectPath || "/projets";
     const salesperson = quoteSalesperson(row, prospectById, opportunityById);
     return {
       ...row,
       partyLabel: entityLabel(clientById.get(row.client_id ?? "") ?? prospectById.get(row.prospect_id ?? "")),
       projectPath,
+      hasProjectLink: Boolean(linkedProjectPath),
       quoteEditPath: quoteEditPath(row, projectPath),
       chantierPath: chantierPathByQuoteId?.get(row.id),
       salespersonKey: salesperson.key,
