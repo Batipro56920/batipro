@@ -42,6 +42,7 @@ function matchesStatusFilter(order: PurchaseOrderRecord, filter: PurchaseOrderSt
 export function PurchaseOrdersPanel({ suppliers }: { suppliers: SupplierRow[] }) {
   const [searchParams, setSearchParams] = useSearchParams();
   const urlPurchaseOrderId = searchParams.get("purchaseOrderId") ?? "";
+  const urlSupplierId = searchParams.get("supplierId") ?? "";
   const statusQueryParam = searchParams.get("status") ?? "";
   const initialStatusFilter = isPurchaseOrderStatusFilter(statusQueryParam) ? statusQueryParam : "all";
   const openedOrderFromUrlRef = useRef("");
@@ -52,7 +53,7 @@ export function PurchaseOrdersPanel({ suppliers }: { suppliers: SupplierRow[] })
   const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<PurchaseOrderStatusFilter>(initialStatusFilter);
-  const [supplierFilter, setSupplierFilter] = useState("all");
+  const [supplierFilter, setSupplierFilter] = useState(urlSupplierId || "all");
   const totals = useMemo(() => buildTotals(orders), [orders]);
   const targetedOrder = useMemo(
     () => (urlPurchaseOrderId ? orders.find((order) => order.id === urlPurchaseOrderId) ?? null : null),
@@ -111,6 +112,11 @@ export function PurchaseOrdersPanel({ suppliers }: { suppliers: SupplierRow[] })
   }, [searchParams, setSearchParams, statusQueryParam]);
 
   useEffect(() => {
+    const nextSupplier = urlSupplierId || "all";
+    setSupplierFilter((current) => current === nextSupplier ? current : nextSupplier);
+  }, [urlSupplierId]);
+
+  useEffect(() => {
     if (!urlPurchaseOrderId) {
       openedOrderFromUrlRef.current = "";
       return;
@@ -119,13 +125,14 @@ export function PurchaseOrdersPanel({ suppliers }: { suppliers: SupplierRow[] })
     if (!targetedOrder) return;
 
     const requestedStatusFilter = isPurchaseOrderStatusFilter(statusQueryParam) ? statusQueryParam : "all";
+    const requestedSupplierFilter = urlSupplierId && targetedOrder.supplierId === urlSupplierId ? urlSupplierId : "all";
     setSelectedOrder(targetedOrder);
     setQuery("");
     setStatusFilter(matchesStatusFilter(targetedOrder, requestedStatusFilter) ? requestedStatusFilter : "all");
-    setSupplierFilter("all");
+    setSupplierFilter(requestedSupplierFilter);
     setError(null);
     openedOrderFromUrlRef.current = urlPurchaseOrderId;
-  }, [loading, statusQueryParam, targetedOrder, urlPurchaseOrderId]);
+  }, [loading, statusQueryParam, targetedOrder, urlPurchaseOrderId, urlSupplierId]);
 
   useEffect(() => {
     if (!urlPurchaseOrderId || !targetedOrder || loading || !targetedOrderVisible) return;
@@ -168,14 +175,31 @@ export function PurchaseOrdersPanel({ suppliers }: { suppliers: SupplierRow[] })
     setSearchParams(nextParams, { replace: true });
   }
 
+  function updateSupplierFilter(nextSupplierId: string) {
+    setSupplierFilter(nextSupplierId);
+    const nextParams = new URLSearchParams(searchParams);
+    nextParams.delete("purchaseOrderId");
+    if (nextSupplierId === "all") {
+      nextParams.delete("supplierId");
+    } else {
+      nextParams.set("supplierId", nextSupplierId);
+    }
+    setSearchParams(nextParams, { replace: true });
+  }
+
   function clearOpenStatusFilter() {
     updateStatusFilter("all");
   }
 
   function resetListFilters() {
     setQuery("");
+    setStatusFilter("all");
     setSupplierFilter("all");
-    updateStatusFilter("all");
+    const nextParams = new URLSearchParams(searchParams);
+    nextParams.delete("purchaseOrderId");
+    nextParams.delete("status");
+    nextParams.delete("supplierId");
+    setSearchParams(nextParams, { replace: true });
   }
 
   function openOrder(order: PurchaseOrderRecord) {
@@ -274,6 +298,26 @@ export function PurchaseOrdersPanel({ suppliers }: { suppliers: SupplierRow[] })
         </div>
       ) : null}
 
+      {!urlPurchaseOrderId && supplierFilter !== "all" ? (
+        <div className="rounded-2xl border border-blue-200 bg-blue-50 p-4 text-sm text-blue-900">
+          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+            <div>
+              <div className="font-semibold">Commandes du fournisseur</div>
+              <p className="mt-1 text-blue-800">
+                Liste filtrée sur {activeSupplierName} pour contrôler ses bons de commande et livraisons.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => updateSupplierFilter("all")}
+              className="rounded-xl border border-blue-200 bg-white px-4 py-2 text-sm font-semibold text-blue-700 hover:bg-blue-100"
+            >
+              Afficher tous les fournisseurs
+            </button>
+          </div>
+        </div>
+      ) : null}
+
       {!loading ? (
         <div className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm">
           <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_190px_220px]">
@@ -291,7 +335,7 @@ export function PurchaseOrdersPanel({ suppliers }: { suppliers: SupplierRow[] })
               <option value="delivered">Livré</option>
               <option value="cancelled">Annulé</option>
             </select>
-            <select className={selectClass} value={supplierFilter} onChange={(event) => setSupplierFilter(event.target.value)}>
+            <select className={selectClass} value={supplierFilter} onChange={(event) => updateSupplierFilter(event.target.value)}>
               <option value="all">Tous fournisseurs</option>
               {suppliers.map((supplier) => <option key={supplier.id} value={supplier.id}>{supplier.name}</option>)}
             </select>
