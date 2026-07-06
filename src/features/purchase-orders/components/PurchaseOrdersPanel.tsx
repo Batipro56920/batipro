@@ -323,10 +323,30 @@ export function PurchaseOrdersPanel({ suppliers }: { suppliers: SupplierRow[] })
   }
 
   async function createOrder() {
-    const firstSupplier = suppliers[0] ?? null;
-    const order = await createAndSavePurchaseOrder({ supplierId: firstSupplier?.id ?? null, supplierName: firstSupplier?.name ?? null });
+    const contextualSupplier = supplierFilter !== "all"
+      ? suppliers.find((supplier) => supplier.id === supplierFilter) ?? null
+      : suppliers[0] ?? null;
+    const contextualProjectId = projectFilter !== "all" ? projectFilter : null;
+    const contextualChantier = chantierFilter !== "all" ? chantierById.get(chantierFilter) ?? null : null;
+    const contextualChantierId = chantierFilter !== "all" ? chantierFilter : null;
+    const order = await createAndSavePurchaseOrder({
+      supplierId: contextualSupplier?.id ?? null,
+      supplierName: contextualSupplier?.name ?? null,
+      projectId: contextualProjectId,
+      chantierId: contextualChantierId,
+    });
+    const savedOrder = contextualChantier?.adresse
+      ? await savePurchaseOrder({
+        ...order,
+        deliveryAddress: contextualChantier.adresse,
+        document: {
+          ...order.document,
+          siteAddress: contextualChantier.adresse,
+        },
+      })
+      : order;
     setOrders(await listPurchaseOrders());
-    setSelectedOrder(order);
+    setSelectedOrder(savedOrder);
     clearActivePurchaseOrderParam();
   }
 
