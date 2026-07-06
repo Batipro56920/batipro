@@ -18,6 +18,8 @@ export default function ChantierReservesSection({ children }: { children: ReactN
       : `/chantiers/${encodedChantierId}/retours-terrain`
     : "/retours-terrain";
   const chantierJournalHref = id ? `/chantiers/${encodedChantierId}/historique` : "";
+  const chantierExecutionHref = id ? `/chantiers/${encodedChantierId}/execution` : "";
+  const chantierPlanningHref = id ? `/chantiers/${encodedChantierId}/planning` : "";
   const sourceFeedbackHref = terrainFeedbackHref;
   const reserveAutoOpenKey = targetedReserveId
     ? `reserve:${targetedReserveId}`
@@ -91,6 +93,22 @@ export default function ChantierReservesSection({ children }: { children: ReactN
                   Garder le retour source
                 </button>
               ) : null}
+              {chantierExecutionHref ? (
+                <Link
+                  to={chantierExecutionHref}
+                  className="inline-flex items-center justify-center rounded-xl border border-blue-200 bg-white px-3 py-2 text-sm font-semibold text-blue-800 hover:bg-blue-50"
+                >
+                  Exécution
+                </Link>
+              ) : null}
+              {chantierPlanningHref ? (
+                <Link
+                  to={chantierPlanningHref}
+                  className="inline-flex items-center justify-center rounded-xl border border-blue-200 bg-white px-3 py-2 text-sm font-semibold text-blue-800 hover:bg-blue-50"
+                >
+                  Planning
+                </Link>
+              ) : null}
               {chantierJournalHref ? (
                 <Link
                   to={chantierJournalHref}
@@ -125,6 +143,22 @@ export default function ChantierReservesSection({ children }: { children: ReactN
               >
                 Ouvrir le retour source
               </Link>
+              {chantierExecutionHref ? (
+                <Link
+                  to={chantierExecutionHref}
+                  className="inline-flex items-center justify-center rounded-xl border border-amber-200 bg-white px-3 py-2 text-sm font-semibold text-amber-800 hover:bg-amber-100"
+                >
+                  Exécution
+                </Link>
+              ) : null}
+              {chantierPlanningHref ? (
+                <Link
+                  to={chantierPlanningHref}
+                  className="inline-flex items-center justify-center rounded-xl border border-amber-200 bg-white px-3 py-2 text-sm font-semibold text-amber-800 hover:bg-amber-100"
+                >
+                  Planning
+                </Link>
+              ) : null}
               {chantierJournalHref ? (
                 <Link
                   to={chantierJournalHref}
@@ -161,6 +195,22 @@ export default function ChantierReservesSection({ children }: { children: ReactN
                 className="inline-flex items-center justify-center rounded-xl border border-blue-200 bg-white px-3 py-2 text-sm font-semibold text-blue-800 hover:bg-blue-50"
               >
                 Retour source
+              </Link>
+            ) : null}
+            {chantierExecutionHref ? (
+              <Link
+                to={chantierExecutionHref}
+                className="inline-flex items-center justify-center rounded-xl border border-blue-200 bg-white px-3 py-2 text-sm font-semibold text-blue-800 hover:bg-blue-50"
+              >
+                Exécution
+              </Link>
+            ) : null}
+            {chantierPlanningHref ? (
+              <Link
+                to={chantierPlanningHref}
+                className="inline-flex items-center justify-center rounded-xl border border-blue-200 bg-white px-3 py-2 text-sm font-semibold text-blue-800 hover:bg-blue-50"
+              >
+                Planning
               </Link>
             ) : null}
             {chantierJournalHref ? (
