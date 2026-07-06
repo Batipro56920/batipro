@@ -11,7 +11,7 @@ import { getCompanySettings } from "../services/companySettings.service";
 import { searchGlobalBatipro, type GlobalSearchResult } from "../services/globalSearch.service";
 import { useI18n } from "../i18n";
 
-const SEARCH_PLACEHOLDER = "Rechercher chantier, client, projet, devis, retour terrain...";
+const SEARCH_PLACEHOLDER = "Rechercher chantier, client, projet, devis, apporteur, retour terrain...";
 
 const SEARCH_QUICK_LINKS = [
   {
@@ -31,6 +31,12 @@ const SEARCH_QUICK_LINKS = [
     description: "Retrouver un client, ses coordonnées et son historique",
     href: "/crm/clients",
     badge: "Admin",
+  },
+  {
+    label: "Apporteurs d'affaires",
+    description: "Suivre partenaires, projets apportés, conversion CRM et commissions",
+    href: "/crm/apporteurs",
+    badge: "CRM",
   },
   {
     label: "Chantiers",
