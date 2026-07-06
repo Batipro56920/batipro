@@ -149,6 +149,10 @@ export function ProjectDetailHeader({ project, onProjectUpdated }: { project: Pr
                 <Hammer className="h-4 w-4" />
                 Préparer chantier
               </Link>
+              <Link to={`/chantiers/${linkedChantierId}/execution`} className="inline-flex h-9 items-center justify-center gap-2 rounded-xl border border-blue-200 bg-blue-50 px-3 text-sm font-medium text-blue-800 transition hover:bg-blue-100" title={chantier?.nom ? `Ouvrir l'exécution de ${chantier.nom}` : "Ouvrir l'exécution du chantier lié"}>
+                <Hammer className="h-4 w-4" />
+                Exécuter
+              </Link>
               <Link to={`/chantiers/${linkedChantierId}/planning`} className="inline-flex h-9 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-3 text-sm font-medium text-slate-900 transition hover:bg-slate-50" title={chantier?.nom ? `Ouvrir le planning de ${chantier.nom}` : "Ouvrir le planning du chantier lié"}>
                 <CalendarDays className="h-4 w-4" />
                 Planning
@@ -160,6 +164,10 @@ export function ProjectDetailHeader({ project, onProjectUpdated }: { project: Pr
               <Link to={`/chantiers/${linkedChantierId}/documents`} className="inline-flex h-9 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-3 text-sm font-medium text-slate-900 transition hover:bg-slate-50" title={chantier?.nom ? `Ouvrir les documents de ${chantier.nom}` : "Ouvrir les documents du chantier lié"}>
                 <FolderOpen className="h-4 w-4" />
                 Documents chantier
+              </Link>
+              <Link to={`/retours-terrain?chantierId=${encodeURIComponent(linkedChantierId)}`} className="inline-flex h-9 items-center justify-center gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3 text-sm font-medium text-amber-800 transition hover:bg-amber-100" title={chantier?.nom ? `Ouvrir les retours terrain de ${chantier.nom}` : "Ouvrir les retours terrain du chantier lié"}>
+                <FileText className="h-4 w-4" />
+                Retours terrain
               </Link>
             </>
           ) : acceptedQuote ? (
