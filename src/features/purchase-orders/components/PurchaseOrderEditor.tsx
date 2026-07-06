@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Download, Plus, Save, Send } from "lucide-react";
 import { Button } from "../../../components/ui/button";
+import { supabase } from "../../../lib/supabaseClient";
 import {
   calculateDocumentTotals,
   createDocumentLine,
@@ -22,6 +23,13 @@ import { getBestSupplierPrice, listProductCatalogItems } from "../../product-cat
 import type { PurchaseOrderRecord, PurchaseOrderStatus } from "../domain/types";
 import { PurchaseOrderStatusBadge } from "./PurchaseOrderStatusBadge";
 
+type ChantierOption = {
+  id: string;
+  nom: string;
+  client: string | null;
+  adresse: string | null;
+};
+
 export function PurchaseOrderEditor({
   order,
   suppliers,
@@ -39,9 +47,14 @@ export function PurchaseOrderEditor({
   const [sendOpen, setSendOpen] = useState(false);
   const [productQuery, setProductQuery] = useState("");
   const [products, setProducts] = useState<ProductCatalogItem[]>([]);
+  const [chantiers, setChantiers] = useState<ChantierOption[]>([]);
   const document = order.document;
   const totals = document.totals ?? calculateDocumentTotals(document);
   const rows = useMemo(() => flattenDocumentNodes(document.nodes), [document.nodes]);
+  const selectedChantier = useMemo(
+    () => chantiers.find((chantier) => chantier.id === order.chantierId) ?? null,
+    [chantiers, order.chantierId],
+  );
   const filteredProducts = useMemo(() => {
     const query = productQuery.trim().toLowerCase();
     return products
@@ -51,6 +64,10 @@ export function PurchaseOrderEditor({
 
   useEffect(() => {
     listProductCatalogItems().then(setProducts).catch(() => setProducts([]));
+  }, []);
+
+  useEffect(() => {
+    listChantierOptions().then(setChantiers).catch(() => setChantiers([]));
   }, []);
 
   function updateOrder(patch: Partial<PurchaseOrderRecord>) {
@@ -134,6 +151,20 @@ export function PurchaseOrderEditor({
     });
   }
 
+  function selectChantier(chantierId: string) {
+    const chantier = chantiers.find((row) => row.id === chantierId) ?? null;
+    const deliveryAddress = chantier?.adresse || order.deliveryAddress || null;
+    updateOrder({
+      chantierId: chantier?.id ?? null,
+      deliveryAddress,
+      document: {
+        ...document,
+        chantierId: chantier?.id ?? null,
+        siteAddress: deliveryAddress ?? document.siteAddress,
+      },
+    });
+  }
+
   function save() {
     const validation = validateBusinessDocument(document);
     if (!validation.success) throw new Error(validation.error.issues.map((issue) => issue.message).join(", "));
@@ -191,7 +222,18 @@ export function PurchaseOrderEditor({
               </select>
             </label>
             <Field label="Projet ID" value={order.projectId ?? ""} onChange={(projectId) => updateOrder({ projectId: projectId || null, document: { ...document, projectId: projectId || null } })} />
-            <Field label="Chantier ID" value={order.chantierId ?? ""} onChange={(chantierId) => updateOrder({ chantierId: chantierId || null, document: { ...document, chantierId: chantierId || null } })} />
+            <label className={labelClass}>
+              Chantier
+              <select className={inputClass} value={order.chantierId ?? ""} onChange={(event) => selectChantier(event.target.value)}>
+                <option value="">Sans chantier</option>
+                {chantiers.map((chantier) => (
+                  <option key={chantier.id} value={chantier.id}>{formatChantierOptionLabel(chantier)}</option>
+                ))}
+              </select>
+              {order.chantierId && !selectedChantier ? (
+                <div className="mt-1 text-[11px] font-normal normal-case tracking-normal text-amber-600">Chantier lie non retrouve dans la liste accessible.</div>
+              ) : null}
+            </label>
             <Field label="Lot / prestation" value={order.lot ?? ""} onChange={(lot) => updateOrder({ lot: lot || null })} />
             <Field label="Reference fournisseur" value={order.supplierReference ?? ""} onChange={(supplierReference) => updateOrder({ supplierReference: supplierReference || null })} />
             <Field label="Livraison prevue" type="date" value={order.expectedDeliveryDate ?? ""} onChange={(expectedDeliveryDate) => updateOrder({ expectedDeliveryDate: expectedDeliveryDate || null })} />
@@ -236,6 +278,21 @@ export function PurchaseOrderEditor({
       {sendOpen ? <DocumentSendDialog document={document} onClose={() => setSendOpen(false)} onDownload={() => downloadBusinessDocumentPdf(document)} /> : null}
     </div>
   );
+}
+
+async function listChantierOptions(): Promise<ChantierOption[]> {
+  const { data, error } = await supabase
+    .from("chantiers" as any)
+    .select("id, nom, client, adresse")
+    .order("nom", { ascending: true })
+    .overrideTypes<ChantierOption[]>();
+
+  if (error) throw new Error(error.message);
+  return data ?? [];
+}
+
+function formatChantierOptionLabel(chantier: ChantierOption) {
+  return [chantier.nom, chantier.client].filter(Boolean).join(" - ");
 }
 
 function StatusPanel({ status, onChange }: { status: PurchaseOrderStatus; onChange: (status: PurchaseOrderStatus) => void }) {
