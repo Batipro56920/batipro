@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { Plus, RefreshCw, Search, ShoppingCart } from "lucide-react";
+import { supabase } from "../../../lib/supabaseClient";
 import { calculateDocumentTotals } from "../../document-engine";
 import type { SupplierRow } from "../../../services/suppliers.service";
 import { createAndSavePurchaseOrder, listPurchaseOrders, savePurchaseOrder } from "../infrastructure/purchaseOrderRepository";
@@ -15,6 +16,13 @@ type EmptyStateCopy = {
   description: string;
   showCreate: boolean;
   showReset: boolean;
+};
+
+type ChantierListOption = {
+  id: string;
+  nom: string;
+  client: string | null;
+  adresse: string | null;
 };
 
 const PURCHASE_ORDER_STATUS_FILTERS: PurchaseOrderStatusFilter[] = [
@@ -54,7 +62,12 @@ export function PurchaseOrdersPanel({ suppliers }: { suppliers: SupplierRow[] })
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<PurchaseOrderStatusFilter>(initialStatusFilter);
   const [supplierFilter, setSupplierFilter] = useState(urlSupplierId || "all");
+  const [chantierOptions, setChantierOptions] = useState<ChantierListOption[]>([]);
   const totals = useMemo(() => buildTotals(orders), [orders]);
+  const chantierById = useMemo(
+    () => new Map(chantierOptions.map((chantier) => [chantier.id, chantier])),
+    [chantierOptions],
+  );
   const targetedOrder = useMemo(
     () => (urlPurchaseOrderId ? orders.find((order) => order.id === urlPurchaseOrderId) ?? null : null),
     [orders, urlPurchaseOrderId],
@@ -64,18 +77,22 @@ export function PurchaseOrdersPanel({ suppliers }: { suppliers: SupplierRow[] })
   const filteredOrders = useMemo(() => {
     const text = query.trim().toLowerCase();
     return orders.filter((order) => {
+      const chantier = order.chantierId ? chantierById.get(order.chantierId) ?? null : null;
       const matchesText = !text || [
         order.document.number,
         order.supplierName,
         order.document.recipient.displayName,
         order.deliveryAddress,
         order.supplierReference,
+        chantier?.nom,
+        chantier?.client,
+        chantier?.adresse,
       ].some((value) => String(value ?? "").toLowerCase().includes(text));
       const matchesStatus = matchesStatusFilter(order, statusFilter);
       const matchesSupplier = supplierFilter === "all" || order.supplierId === supplierFilter;
       return matchesText && matchesStatus && matchesSupplier;
     });
-  }, [orders, query, statusFilter, supplierFilter]);
+  }, [chantierById, orders, query, statusFilter, supplierFilter]);
   const targetedOrderVisible = useMemo(
     () => Boolean(urlPurchaseOrderId && filteredOrders.some((order) => order.id === urlPurchaseOrderId)),
     [filteredOrders, urlPurchaseOrderId],
@@ -98,6 +115,10 @@ export function PurchaseOrdersPanel({ suppliers }: { suppliers: SupplierRow[] })
 
   useEffect(() => {
     void refresh();
+  }, []);
+
+  useEffect(() => {
+    listChantierOptions().then(setChantierOptions).catch(() => setChantierOptions([]));
   }, []);
 
   useEffect(() => {
@@ -323,7 +344,7 @@ export function PurchaseOrdersPanel({ suppliers }: { suppliers: SupplierRow[] })
           <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_190px_220px]">
             <label className="relative block">
               <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-              <input className={inputClassWithIcon} placeholder="Rechercher commande, fournisseur, référence..." value={query} onChange={(event) => setQuery(event.target.value)} />
+              <input className={inputClassWithIcon} placeholder="Rechercher commande, fournisseur, chantier..." value={query} onChange={(event) => setQuery(event.target.value)} />
             </label>
             <select className={selectClass} value={statusFilter} onChange={(event) => updateStatusFilter(event.target.value as PurchaseOrderStatusFilter)}>
               <option value="all">Tous statuts</option>
@@ -370,6 +391,7 @@ export function PurchaseOrdersPanel({ suppliers }: { suppliers: SupplierRow[] })
           <tbody className="divide-y divide-slate-100">
             {filteredOrders.length ? filteredOrders.map((order) => {
               const orderTotals = order.document.totals ?? calculateDocumentTotals(order.document);
+              const chantier = order.chantierId ? chantierById.get(order.chantierId) ?? null : null;
               const isTargetedOrder = order.id === urlPurchaseOrderId;
               return (
                 <tr
@@ -384,12 +406,19 @@ export function PurchaseOrdersPanel({ suppliers }: { suppliers: SupplierRow[] })
                   <td className="px-4 py-3 text-slate-500">{order.projectId || "-"}</td>
                   <td className="px-4 py-3 text-slate-500">
                     {order.chantierId ? (
-                      <Link
-                        to={`/chantiers/${encodeURIComponent(order.chantierId)}`}
-                        className="font-semibold text-blue-700 hover:text-blue-800"
-                      >
-                        Ouvrir chantier
-                      </Link>
+                      <div className="min-w-44">
+                        <Link
+                          to={`/chantiers/${encodeURIComponent(order.chantierId)}`}
+                          className="font-semibold text-blue-700 hover:text-blue-800"
+                        >
+                          {chantier ? formatChantierDisplayName(chantier) : "Ouvrir chantier"}
+                        </Link>
+                        {chantier?.adresse ? (
+                          <div className="mt-0.5 max-w-64 truncate text-xs text-slate-400">{chantier.adresse}</div>
+                        ) : !chantier ? (
+                          <div className="mt-0.5 text-xs text-amber-600">Chantier non accessible</div>
+                        ) : null}
+                      </div>
                     ) : "-"}
                   </td>
                   <td className="px-4 py-3 text-slate-500">{order.expectedDeliveryDate ? formatDate(order.expectedDeliveryDate) : "-"}</td>
@@ -518,6 +547,21 @@ function purchaseOrderStatusFilterLabel(status: PurchaseOrderStatusFilter) {
     default:
       return "Tous statuts";
   }
+}
+
+async function listChantierOptions(): Promise<ChantierListOption[]> {
+  const { data, error } = await supabase
+    .from("chantiers" as any)
+    .select("id, nom, client, adresse")
+    .order("nom", { ascending: true })
+    .overrideTypes<ChantierListOption[]>();
+
+  if (error) throw new Error(error.message);
+  return data ?? [];
+}
+
+function formatChantierDisplayName(chantier: ChantierListOption) {
+  return [chantier.nom, chantier.client].filter(Boolean).join(" - ");
 }
 
 function formatCurrency(value: number) {
