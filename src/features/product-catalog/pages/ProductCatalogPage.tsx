@@ -42,6 +42,7 @@ const PRODUCT_DOCUMENT_KINDS: ProductDocumentKind[] = [
 export default function ProductCatalogPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const catalogQueryParam = searchParams.get("q") ?? "";
+  const catalogSupplierIdParam = searchParams.get("supplierId") ?? "";
   const activeProductId = searchParams.get("productId") ?? "";
   const openedProductFromUrlRef = useRef("");
   const [products, setProducts] = useState<ProductCatalogItem[]>([]);
@@ -50,7 +51,7 @@ export default function ProductCatalogPage() {
   const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState(catalogQueryParam);
   const [categoryFilter, setCategoryFilter] = useState("all");
-  const [supplierFilter, setSupplierFilter] = useState("all");
+  const [supplierFilter, setSupplierFilter] = useState(catalogSupplierIdParam || "all");
   const [brandFilter, setBrandFilter] = useState("all");
   const [priceFilter, setPriceFilter] = useState("all");
   const [editing, setEditing] = useState<ProductCatalogItem | ProductCatalogDraft | null>(null);
@@ -62,6 +63,11 @@ export default function ProductCatalogPage() {
     [activeProductId, products],
   );
   const activeProductMissing = Boolean(activeProductId && !loading && !activeProduct);
+  const activeSupplier = useMemo(
+    () => (catalogSupplierIdParam ? suppliers.find((row) => row.id === catalogSupplierIdParam) ?? null : null),
+    [catalogSupplierIdParam, suppliers],
+  );
+  const activeCatalogFilters = Boolean(query.trim() || catalogSupplierIdParam);
 
   useEffect(() => {
     listSuppliers().then(setSuppliers).catch(() => setSuppliers([]));
@@ -71,6 +77,22 @@ export default function ProductCatalogPage() {
   useEffect(() => {
     setQuery((current) => current === catalogQueryParam ? current : catalogQueryParam);
   }, [catalogQueryParam]);
+
+  useEffect(() => {
+    setSupplierFilter((current) => {
+      const nextSupplierFilter = catalogSupplierIdParam || "all";
+      return current === nextSupplierFilter ? current : nextSupplierFilter;
+    });
+  }, [catalogSupplierIdParam]);
+
+  useEffect(() => {
+    if (!catalogSupplierIdParam || !suppliers.length) return;
+    if (suppliers.some((supplier) => supplier.id === catalogSupplierIdParam)) return;
+
+    const nextParams = new URLSearchParams(searchParams);
+    nextParams.delete("supplierId");
+    setSearchParams(nextParams, { replace: true });
+  }, [catalogSupplierIdParam, searchParams, setSearchParams, suppliers]);
 
   useEffect(() => {
     if (!activeProductId) {
@@ -191,6 +213,36 @@ export default function ProductCatalogPage() {
     setSearchParams(nextParams, { replace: true });
   }
 
+  function updateSupplierFilter(nextSupplierId: string) {
+    setSupplierFilter(nextSupplierId);
+    const nextParams = new URLSearchParams(searchParams);
+    nextParams.delete("productId");
+    if (nextSupplierId && nextSupplierId !== "all") {
+      nextParams.set("supplierId", nextSupplierId);
+    } else {
+      nextParams.delete("supplierId");
+    }
+    setSearchParams(nextParams, { replace: true });
+  }
+
+  function resetCatalogUrlFilters() {
+    setQuery("");
+    setSupplierFilter("all");
+    const nextParams = new URLSearchParams(searchParams);
+    nextParams.delete("q");
+    nextParams.delete("supplierId");
+    nextParams.delete("productId");
+    setSearchParams(nextParams, { replace: true });
+  }
+
+  function describeActiveCatalogFilters() {
+    const trimmedQuery = query.trim();
+    if (trimmedQuery && activeSupplier) return `Catalogue filtré sur « ${trimmedQuery} » et le fournisseur ${activeSupplier.name}.`;
+    if (activeSupplier) return `Catalogue filtré sur le fournisseur ${activeSupplier.name}.`;
+    if (trimmedQuery) return `Catalogue filtré sur « ${trimmedQuery} »${activeProductId ? " depuis la recherche globale" : ""}.`;
+    return "Catalogue filtré par fournisseur.";
+  }
+
   return (
     <div className="space-y-5">
       <header className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
@@ -229,14 +281,14 @@ export default function ProductCatalogPage() {
         <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_180px_180px_180px_160px]">
           <input className={inputClass} placeholder="Rechercher désignation, référence, marque..." value={query} onChange={(event) => updateQuery(event.target.value)} />
           <Select value={categoryFilter} onChange={setCategoryFilter} options={["all", ...categories]} labels={{ all: "Toutes catégories" }} />
-          <Select value={supplierFilter} onChange={setSupplierFilter} options={["all", ...suppliers.map((supplier) => supplier.id)]} labels={Object.fromEntries([["all", "Tous fournisseurs"], ...suppliers.map((supplier) => [supplier.id, supplier.name])])} />
+          <Select value={supplierFilter} onChange={updateSupplierFilter} options={["all", ...suppliers.map((supplier) => supplier.id)]} labels={Object.fromEntries([["all", "Tous fournisseurs"], ...suppliers.map((supplier) => [supplier.id, supplier.name])])} />
           <Select value={brandFilter} onChange={setBrandFilter} options={["all", ...brands]} labels={{ all: "Toutes marques" }} />
           <Select value={priceFilter} onChange={setPriceFilter} options={["all", "low", "mid", "high"]} labels={{ all: "Tous prix colis", low: "< 50 EUR", mid: "50-250 EUR", high: "> 250 EUR" }} />
         </div>
-        {query.trim() ? (
+        {activeCatalogFilters ? (
           <div className="mt-3 flex flex-col gap-2 rounded-2xl border border-blue-100 bg-blue-50 px-3 py-2 text-sm text-blue-800 sm:flex-row sm:items-center sm:justify-between">
-            <span>Catalogue filtré sur « {query.trim()} »{activeProductId ? " depuis la recherche globale" : ""}.</span>
-            <button type="button" className="self-start rounded-lg border border-blue-200 bg-white px-3 py-1 text-xs font-semibold text-blue-700 hover:bg-blue-100 sm:self-auto" onClick={() => updateQuery("")}>Réinitialiser</button>
+            <span>{describeActiveCatalogFilters()}</span>
+            <button type="button" className="self-start rounded-lg border border-blue-200 bg-white px-3 py-1 text-xs font-semibold text-blue-700 hover:bg-blue-100 sm:self-auto" onClick={resetCatalogUrlFilters}>Réinitialiser</button>
           </div>
         ) : null}
       </section> : null}
