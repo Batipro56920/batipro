@@ -458,7 +458,18 @@ export function PurchaseOrdersPanel({ suppliers }: { suppliers: SupplierRow[] })
                   className={["hover:bg-slate-50", isTargetedOrder ? "bg-blue-50/70 ring-1 ring-inset ring-blue-200" : ""].join(" ")}
                 >
                   <td className="px-4 py-3 font-semibold text-slate-950">{order.document.number}</td>
-                  <td className="px-4 py-3 text-slate-600">{order.supplierName || order.document.recipient.displayName || "-"}</td>
+                  <td className="px-4 py-3 text-slate-600">
+                    {order.supplierId ? (
+                      <Link
+                        to={`/fournisseurs?supplierId=${encodeURIComponent(order.supplierId)}`}
+                        className="font-semibold text-blue-700 hover:text-blue-800"
+                      >
+                        {order.supplierName || order.document.recipient.displayName || "Ouvrir fournisseur"}
+                      </Link>
+                    ) : (
+                      order.supplierName || order.document.recipient.displayName || "-"
+                    )}
+                  </td>
                   <td className="px-4 py-3 text-slate-500">{order.projectId || "-"}</td>
                   <td className="px-4 py-3 text-slate-500">
                     {order.chantierId ? (
