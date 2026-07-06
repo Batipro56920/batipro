@@ -11,6 +11,43 @@ function signatureLabel(value: string) {
   return value || "—";
 }
 
+function ProjectLinkAction({ row, compact = false }: { row: QuoteWithParty; compact?: boolean }) {
+  if (row.hasProjectLink) {
+    return (
+      <Link
+        to={row.projectPath}
+        className={compact ? "rounded-lg border border-blue-200 bg-blue-50 px-2 py-1 text-xs font-medium text-blue-800 hover:bg-blue-100" : "inline-flex h-9 items-center justify-center rounded-xl border border-blue-200 bg-blue-50 px-3 text-sm font-semibold text-blue-800 hover:bg-blue-100"}
+        title="Ouvrir le dossier projet lié à ce devis."
+      >
+        {compact ? "Ouvrir projet" : "Projet"}
+      </Link>
+    );
+  }
+
+  return (
+    <Link
+      to={row.quoteEditPath}
+      className={compact ? "rounded-lg border border-amber-200 bg-amber-50 px-2 py-1 text-xs font-medium text-amber-800 hover:bg-amber-100" : "inline-flex h-9 items-center justify-center rounded-xl border border-amber-200 bg-amber-50 px-3 text-sm font-semibold text-amber-800 hover:bg-amber-100"}
+      title="Vérifier pourquoi ce devis n'a pas de projet commercial rattaché."
+    >
+      {compact ? "Rattachement" : "À rattacher"}
+    </Link>
+  );
+}
+
+function QuoteEditAction({ row, compact = false }: { row: QuoteWithParty; compact?: boolean }) {
+  if (!row.hasProjectLink) return null;
+  return (
+    <Link
+      to={row.quoteEditPath}
+      className={compact ? "rounded-lg border border-slate-900 bg-slate-950 px-2 py-1 text-xs font-medium text-white hover:bg-slate-800" : "inline-flex h-9 items-center justify-center rounded-xl bg-slate-950 px-3 text-sm font-semibold text-white hover:bg-slate-800"}
+      title="Modifier ce devis dans le Quote Builder."
+    >
+      Modifier
+    </Link>
+  );
+}
+
 function QuoteMobileCard({
   row,
   actions,
@@ -46,12 +83,8 @@ function QuoteMobileCard({
       </button>
 
       <div className="mt-4 flex flex-wrap gap-2" onClick={(event) => event.stopPropagation()}>
-        <Link to={row.quoteEditPath} className="inline-flex h-9 items-center justify-center rounded-xl bg-slate-950 px-3 text-sm font-semibold text-white hover:bg-slate-800" title="Modifier ce devis dans le Quote Builder.">
-          Modifier
-        </Link>
-        <Link to={row.projectPath} className="inline-flex h-9 items-center justify-center rounded-xl border border-blue-200 bg-blue-50 px-3 text-sm font-semibold text-blue-800 hover:bg-blue-100" title="Ouvrir le dossier projet lié à ce devis.">
-          Projet
-        </Link>
+        <QuoteEditAction row={row} />
+        <ProjectLinkAction row={row} />
         {row.chantierPath ? (
           <Link to={row.chantierPath} className="inline-flex h-9 items-center justify-center rounded-xl border border-emerald-200 bg-emerald-50 px-3 text-sm font-semibold text-emerald-800 hover:bg-emerald-100" title="Ouvrir le chantier déjà lié à ce devis.">
             Chantier
@@ -122,11 +155,11 @@ export function QuotesTable({
                 <td className="px-4 py-3 text-slate-600">{row.salespersonLabel}</td>
                 <td className="px-4 py-3" onClick={(event) => event.stopPropagation()}>
                   <div className="flex flex-wrap gap-1">
-                    <Link to={row.projectPath} className="rounded-lg border border-blue-200 bg-blue-50 px-2 py-1 text-xs font-medium text-blue-800 hover:bg-blue-100" title="Ouvrir le dossier projet lié à ce devis.">Ouvrir projet</Link>
+                    <ProjectLinkAction row={row} compact />
                     {row.chantierPath ? (
                       <Link to={row.chantierPath} className="rounded-lg border border-emerald-200 bg-emerald-50 px-2 py-1 text-xs font-medium text-emerald-800 hover:bg-emerald-100" title="Ouvrir le chantier déjà lié à ce devis.">Chantier</Link>
                     ) : null}
-                    <Link to={row.quoteEditPath} className="rounded-lg border border-slate-900 bg-slate-950 px-2 py-1 text-xs font-medium text-white hover:bg-slate-800" title="Modifier ce devis dans le Quote Builder.">Modifier</Link>
+                    <QuoteEditAction row={row} compact />
                     <button type="button" onClick={() => actions.onStatus(row, "envoye")} className="rounded-lg border border-slate-200 px-2 py-1 text-xs font-medium hover:bg-slate-50">Envoyer</button>
                     <button type="button" onClick={() => actions.onStatus(row, "relance_1")} className="rounded-lg border border-slate-200 px-2 py-1 text-xs font-medium hover:bg-slate-50">Relancer</button>
                     <details className="relative">
