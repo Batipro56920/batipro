@@ -18,6 +18,7 @@ export type QuoteFilterOption = {
 export type QuoteWithParty = CrmQuoteRow & {
   partyLabel: string;
   projectPath: string;
+  hasProjectLink: boolean;
   quoteEditPath: string;
   chantierPath?: string;
   salespersonKey: string;
