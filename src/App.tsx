@@ -407,6 +407,11 @@ export default function App() {
         <Route path="/chantiers/:id/equipe" element={<ChantierBackofficeRoute label="Chargement du chantier..."><ChantierPage /></ChantierBackofficeRoute>} />
         <Route path="/chantiers/:id/sav" element={<ChantierBackofficeRoute label="Chargement du chantier..."><ChantierPage /></ChantierBackofficeRoute>} />
         <Route path="/chantiers/:id/historique" element={<ChantierBackofficeRoute label="Chargement du chantier..."><ChantierPage /></ChantierBackofficeRoute>} />
+        <Route path="/chantiers/:id/taches" element={<Navigate to="../execution" replace />} />
+        <Route path="/chantiers/:id/reserves" element={<Navigate to="../qualite" replace />} />
+        <Route path="/chantiers/:id/visites-chantier" element={<Navigate to="../visites" replace />} />
+        <Route path="/chantiers/:id/notes" element={<Navigate to="../execution" replace />} />
+        <Route path="/chantiers/:id/imprevus" element={<Navigate to="../financier" replace />} />
         <Route path="/chantiers/:id/production" element={<Navigate to="../execution" replace />} />
         <Route path="/chantiers/:id/qualite-cloture" element={<Navigate to="../qualite" replace />} />
         <Route path="/chantiers/:id/qualite-sav" element={<Navigate to="../qualite" replace />} />
