@@ -2,7 +2,9 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { Plus, RefreshCw, Search, ShoppingCart } from "lucide-react";
 import { supabase } from "../../../lib/supabaseClient";
+import { loadCrmDataset } from "../../../services/crm.service";
 import { calculateDocumentTotals } from "../../document-engine";
+import { buildProjects } from "../../projects/utils/projectMappers";
 import type { SupplierRow } from "../../../services/suppliers.service";
 import { createAndSavePurchaseOrder, listPurchaseOrders, savePurchaseOrder } from "../infrastructure/purchaseOrderRepository";
 import type { PurchaseOrderRecord, PurchaseOrderStatus } from "../domain/types";
@@ -23,6 +25,15 @@ type ChantierListOption = {
   nom: string;
   client: string | null;
   adresse: string | null;
+};
+
+type ProjectListOption = {
+  id: string;
+  sourceId: string;
+  name: string;
+  clientName: string;
+  address: string | null;
+  projectType: string | null;
 };
 
 const PURCHASE_ORDER_STATUS_FILTERS: PurchaseOrderStatusFilter[] = [
@@ -65,11 +76,20 @@ export function PurchaseOrdersPanel({ suppliers }: { suppliers: SupplierRow[] })
   const [supplierFilter, setSupplierFilter] = useState(urlSupplierId || "all");
   const [chantierFilter, setChantierFilter] = useState(urlChantierId || "all");
   const [chantierOptions, setChantierOptions] = useState<ChantierListOption[]>([]);
+  const [projectOptions, setProjectOptions] = useState<ProjectListOption[]>([]);
   const totals = useMemo(() => buildTotals(orders), [orders]);
   const chantierById = useMemo(
     () => new Map(chantierOptions.map((chantier) => [chantier.id, chantier])),
     [chantierOptions],
   );
+  const projectById = useMemo(() => {
+    const map = new Map<string, ProjectListOption>();
+    projectOptions.forEach((project) => {
+      map.set(project.id, project);
+      map.set(project.sourceId, project);
+    });
+    return map;
+  }, [projectOptions]);
   const targetedOrder = useMemo(
     () => (urlPurchaseOrderId ? orders.find((order) => order.id === urlPurchaseOrderId) ?? null : null),
     [orders, urlPurchaseOrderId],
@@ -80,12 +100,17 @@ export function PurchaseOrdersPanel({ suppliers }: { suppliers: SupplierRow[] })
     const text = query.trim().toLowerCase();
     return orders.filter((order) => {
       const chantier = order.chantierId ? chantierById.get(order.chantierId) ?? null : null;
+      const project = order.projectId ? projectById.get(order.projectId) ?? null : null;
       const matchesText = !text || [
         order.document.number,
         order.supplierName,
         order.document.recipient.displayName,
         order.deliveryAddress,
         order.supplierReference,
+        project?.name,
+        project?.clientName,
+        project?.address,
+        project?.projectType,
         chantier?.nom,
         chantier?.client,
         chantier?.adresse,
@@ -95,7 +120,7 @@ export function PurchaseOrdersPanel({ suppliers }: { suppliers: SupplierRow[] })
       const matchesChantier = chantierFilter === "all" || order.chantierId === chantierFilter;
       return matchesText && matchesStatus && matchesSupplier && matchesChantier;
     });
-  }, [chantierById, chantierFilter, orders, query, statusFilter, supplierFilter]);
+  }, [chantierById, chantierFilter, orders, projectById, query, statusFilter, supplierFilter]);
   const targetedOrderVisible = useMemo(
     () => Boolean(urlPurchaseOrderId && filteredOrders.some((order) => order.id === urlPurchaseOrderId)),
     [filteredOrders, urlPurchaseOrderId],
@@ -128,6 +153,10 @@ export function PurchaseOrdersPanel({ suppliers }: { suppliers: SupplierRow[] })
 
   useEffect(() => {
     listChantierOptions().then(setChantierOptions).catch(() => setChantierOptions([]));
+  }, []);
+
+  useEffect(() => {
+    listProjectOptions().then(setProjectOptions).catch(() => setProjectOptions([]));
   }, []);
 
   useEffect(() => {
@@ -394,7 +423,7 @@ export function PurchaseOrdersPanel({ suppliers }: { suppliers: SupplierRow[] })
           <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_170px_220px_220px]">
             <label className="relative block">
               <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-              <input className={inputClassWithIcon} placeholder="Rechercher commande, fournisseur, chantier..." value={query} onChange={(event) => setQuery(event.target.value)} />
+              <input className={inputClassWithIcon} placeholder="Rechercher commande, fournisseur, projet, chantier..." value={query} onChange={(event) => setQuery(event.target.value)} />
             </label>
             <select className={selectClass} value={statusFilter} onChange={(event) => updateStatusFilter(event.target.value as PurchaseOrderStatusFilter)}>
               <option value="all">Tous statuts</option>
@@ -448,6 +477,7 @@ export function PurchaseOrdersPanel({ suppliers }: { suppliers: SupplierRow[] })
             {filteredOrders.length ? filteredOrders.map((order) => {
               const orderTotals = order.document.totals ?? calculateDocumentTotals(order.document);
               const chantier = order.chantierId ? chantierById.get(order.chantierId) ?? null : null;
+              const project = order.projectId ? projectById.get(order.projectId) ?? null : null;
               const isTargetedOrder = order.id === urlPurchaseOrderId;
               return (
                 <tr
@@ -470,7 +500,27 @@ export function PurchaseOrdersPanel({ suppliers }: { suppliers: SupplierRow[] })
                       order.supplierName || order.document.recipient.displayName || "-"
                     )}
                   </td>
-                  <td className="px-4 py-3 text-slate-500">{order.projectId || "-"}</td>
+                  <td className="px-4 py-3 text-slate-500">
+                    {order.projectId ? (
+                      <div className="min-w-44">
+                        {project ? (
+                          <Link
+                            to={`/projets/${encodeURIComponent(project.id)}`}
+                            className="font-semibold text-blue-700 hover:text-blue-800"
+                          >
+                            {formatProjectDisplayName(project)}
+                          </Link>
+                        ) : (
+                          <span className="font-medium text-slate-600">Projet non accessible</span>
+                        )}
+                        {project?.clientName ? (
+                          <div className="mt-0.5 max-w-64 truncate text-xs text-slate-400">{project.clientName}</div>
+                        ) : !project ? (
+                          <div className="mt-0.5 text-xs text-amber-600">ID {formatShortIdentifier(order.projectId)}</div>
+                        ) : null}
+                      </div>
+                    ) : "-"}
+                  </td>
                   <td className="px-4 py-3 text-slate-500">
                     {order.chantierId ? (
                       <div className="min-w-44">
@@ -630,8 +680,28 @@ async function listChantierOptions(): Promise<ChantierListOption[]> {
   return data ?? [];
 }
 
+async function listProjectOptions(): Promise<ProjectListOption[]> {
+  const dataset = await loadCrmDataset();
+  return buildProjects(dataset).map((project) => ({
+    id: project.id,
+    sourceId: project.sourceId,
+    name: project.name,
+    clientName: project.clientName,
+    address: project.address,
+    projectType: project.projectType,
+  }));
+}
+
 function formatChantierDisplayName(chantier: ChantierListOption) {
   return [chantier.nom, chantier.client].filter(Boolean).join(" - ");
+}
+
+function formatProjectDisplayName(project: ProjectListOption) {
+  return project.name || project.clientName || "Ouvrir projet";
+}
+
+function formatShortIdentifier(value: string) {
+  return value.length > 8 ? `${value.slice(0, 8)}...` : value;
 }
 
 function formatCurrency(value: number) {
