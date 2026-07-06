@@ -116,6 +116,14 @@ function ChantierTerrainFeedbackRedirect() {
   return <Navigate to={`/retours-terrain?${params.toString()}`} replace />;
 }
 
+function TerrainFeedbackDeepLinkRedirect() {
+  const { feedbackId } = useParams();
+  if (!feedbackId) return <Navigate to="/retours-terrain" replace />;
+
+  const params = new URLSearchParams({ feedbackId });
+  return <Navigate to={`/retours-terrain?${params.toString()}`} replace />;
+}
+
 function StatistiquesRoute() {
   return (
     <RequireCompanyFeature moduleId="rapports" profilePermissionKey="statistiques">
@@ -465,6 +473,12 @@ export default function App() {
           path="/retours-terrain"
           element={
             <TerrainFeedbackBackofficeRoute label="Chargement des retours terrain..."><TerrainFeedbacksPage /></TerrainFeedbackBackofficeRoute>}
+        />
+        <Route
+          path="/retours-terrain/:feedbackId"
+          element={
+            <TerrainFeedbackBackofficeRoute label="Ouverture du retour terrain..."><TerrainFeedbackDeepLinkRedirect /></TerrainFeedbackBackofficeRoute>
+          }
         />
         <Route
           path="/bibliotheque"
