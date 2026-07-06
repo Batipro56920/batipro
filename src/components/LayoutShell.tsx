@@ -11,7 +11,7 @@ import { getCompanySettings } from "../services/companySettings.service";
 import { searchGlobalBatipro, type GlobalSearchResult } from "../services/globalSearch.service";
 import { useI18n } from "../i18n";
 
-const SEARCH_PLACEHOLDER = "Rechercher chantier, client, projet, devis, apporteur, retour terrain...";
+const SEARCH_PLACEHOLDER = "Rechercher chantier, client, projet, devis, modele, retour terrain...";
 
 const SEARCH_QUICK_LINKS = [
   {
@@ -55,6 +55,24 @@ const SEARCH_QUICK_LINKS = [
     description: "Suivre les travaux à exécuter",
     href: "/taches",
     badge: "Exécution",
+  },
+  {
+    label: "Bibliothèque tâches",
+    description: "Ouvrir les modèles utilisés pour devis, préparation et chantier",
+    href: "/bibliotheque",
+    badge: "Référentiel",
+  },
+  {
+    label: "Modèles à chiffrer",
+    description: "Compléter les coûts de référence avant reprise dans les devis",
+    href: "/bibliotheque?readiness=missing_cost",
+    badge: "Devis",
+  },
+  {
+    label: "Charges chantier à préparer",
+    description: "Compléter les temps prévus avant pilotage planning et production",
+    href: "/bibliotheque?readiness=missing_time",
+    badge: "Chantier",
   },
   {
     label: "Temps chantier",
