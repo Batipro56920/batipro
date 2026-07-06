@@ -526,7 +526,7 @@ export default function FournisseursPage({ initialTab = "suppliers" }: Fournisse
                         Commandes
                       </Link>
                       <Link
-                        to={`/catalogue-produits?q=${encodeURIComponent(row.name)}`}
+                        to={`/catalogue-produits?supplierId=${encodeURIComponent(row.id)}`}
                         className="rounded-lg border border-slate-200 px-2 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-50"
                       >
                         Catalogue
