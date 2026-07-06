@@ -7,7 +7,7 @@ import { listPurchaseOrders, PurchaseOrderStatusBadge } from "../features/purcha
 
 export default function SupplierOutstandingPage() {
   const [searchParams, setSearchParams] = useSearchParams();
-  const targetedOrderId = searchParams.get("purchaseOrder") ?? "";
+  const targetedOrderId = searchParams.get("purchaseOrderId") ?? searchParams.get("purchaseOrder") ?? "";
   const [orders, setOrders] = useState<PurchaseOrderRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -70,16 +70,17 @@ export default function SupplierOutstandingPage() {
   function clearTarget() {
     const nextParams = new URLSearchParams(searchParams);
     nextParams.delete("purchaseOrder");
+    nextParams.delete("purchaseOrderId");
     setSearchParams(nextParams, { replace: true });
   }
 
   function purchaseOrderHref(orderId: string) {
-    const params = new URLSearchParams({ tab: "orders", purchaseOrderId: orderId });
-    return `/fournisseurs?${params.toString()}`;
+    const params = new URLSearchParams({ status: "open", purchaseOrderId: orderId });
+    return `/bons-commande?${params.toString()}`;
   }
 
   function purchaseOrdersHref() {
-    return targetedOrder ? purchaseOrderHref(targetedOrder.id) : "/fournisseurs?tab=orders";
+    return targetedOrder ? purchaseOrderHref(targetedOrder.id) : "/bons-commande?status=open";
   }
 
   return (
@@ -159,7 +160,7 @@ export default function SupplierOutstandingPage() {
                 <h2 className="font-semibold text-slate-950">Commandes fournisseurs ouvertes</h2>
                 <p className="mt-1 text-sm text-slate-500">Vue dirigeant des engagements fournisseurs encore actifs, classés par retard puis date de livraison.</p>
               </div>
-              <Link to="/fournisseurs?tab=orders" className="inline-flex h-9 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-700 hover:bg-slate-50">
+              <Link to="/bons-commande?status=open" className="inline-flex h-9 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-700 hover:bg-slate-50">
                 Bons de commande
                 <ArrowRight className="h-4 w-4" />
               </Link>
