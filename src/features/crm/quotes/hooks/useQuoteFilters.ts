@@ -22,13 +22,17 @@ function isRecent(value: string | null | undefined, days: number) {
   return date >= limit;
 }
 
+function quoteCrmFallbackPath(row: CrmQuoteRow) {
+  return `/crm/devis/${encodeURIComponent(row.id)}/edit`;
+}
+
 function quoteEditPath(row: CrmQuoteRow, projectPath: string) {
   const [projectBasePath] = projectPath.split("?");
-  if (projectBasePath && projectBasePath !== "/projets") {
+  if (projectBasePath?.startsWith("/projets/") && projectBasePath !== "/projets") {
     return `${projectBasePath}/devis/${encodeURIComponent(row.id)}/edit`;
   }
 
-  return `/crm/devis/${encodeURIComponent(row.id)}/edit`;
+  return quoteCrmFallbackPath(row);
 }
 
 function shortId(value: string) {
@@ -79,7 +83,7 @@ export function useQuoteFilters({
   const [filters, setFilters] = useState<QuoteFilters>(DEFAULT_FILTERS);
 
   const rowsWithParty = useMemo<QuoteWithParty[]>(() => rows.map((row) => {
-    const projectPath = projectPathByQuoteId?.get(row.id) ?? "/projets";
+    const projectPath = projectPathByQuoteId?.get(row.id) ?? quoteCrmFallbackPath(row);
     const salesperson = quoteSalesperson(row, prospectById, opportunityById);
     return {
       ...row,
