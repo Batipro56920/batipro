@@ -68,6 +68,7 @@ type ChantiersPageProps = {
 };
 
 type TerrainFeedbackSummaryByChantier = Record<string, { open: number; priority: number }>;
+type ChantiersMetrics = ReturnType<typeof computeChantierMetrics>;
 
 const HEADER_BY_FOCUS: Record<ChantierListFocus, { eyebrow: string; title: string; description: string }> = {
   tasks: {
@@ -174,6 +175,38 @@ function ChantiersFocusPanel({ focus }: { focus: ChantierListFocus }) {
   );
 }
 
+function ChantiersTerrainFeedbackPanel({ metrics, onOpenAll }: { metrics: ChantiersMetrics; onOpenAll: () => void }) {
+  const hasPriority = metrics.terrainFeedbackPriority > 0;
+  const title = hasPriority ? "Chantiers avec retours terrain urgents" : "Chantiers avec retours terrain ouverts";
+  const description = hasPriority
+    ? "La liste est filtrée sur les chantiers portant au moins un retour critique ou urgent. Ouvrez un chantier pour traiter le retour filtré, l'assigner ou le convertir en réserve."
+    : "La liste est filtrée sur les chantiers qui ont encore des retours terrain ouverts. Le badge Retours terrain de chaque ligne ouvre le traitement déjà filtré sur le chantier.";
+  const metricLabel = hasPriority
+    ? `${metrics.terrainFeedbackPriority} urgent${metrics.terrainFeedbackPriority > 1 ? "s" : ""} / ${metrics.terrainFeedbackOpen} ouvert${metrics.terrainFeedbackOpen > 1 ? "s" : ""}`
+    : `${metrics.terrainFeedbackOpen} retour${metrics.terrainFeedbackOpen > 1 ? "s" : ""} ouvert${metrics.terrainFeedbackOpen > 1 ? "s" : ""}`;
+
+  return (
+    <section className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950 shadow-sm shadow-amber-950/[0.03]">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div className="min-w-0">
+          <h2 className="font-semibold text-amber-950">{title}</h2>
+          <p className="mt-1 leading-6 text-amber-900">{description}</p>
+        </div>
+        <div className="flex shrink-0 flex-col gap-2 sm:items-end">
+          <div className="rounded-xl border border-amber-200 bg-white px-3 py-2 text-xs font-semibold text-amber-800">{metricLabel}</div>
+          <button
+            type="button"
+            onClick={onOpenAll}
+            className="rounded-xl border border-amber-300 bg-white px-3 py-2 text-xs font-semibold text-amber-900 transition hover:bg-amber-100 focus:outline-none focus:ring-2 focus:ring-amber-300"
+          >
+            Ouvrir tous les retours
+          </button>
+        </div>
+      </div>
+    </section>
+  );
+}
+
 export default function ChantiersPage({ initialView = "list", initialFocus }: ChantiersPageProps) {
   const navigate = useNavigate();
 
@@ -198,6 +231,7 @@ export default function ChantiersPage({ initialView = "list", initialFocus }: Ch
   const clients = useMemo(() => uniqueClients(derivedRows), [derivedRows]);
   const selectedRows = useMemo(() => derivedRows.filter((item) => selectedIds.includes(item.id)), [derivedRows, selectedIds]);
   const headerCopy = initialFocus ? HEADER_BY_FOCUS[initialFocus] : HEADER_BY_VIEW[view];
+  const showTerrainFeedbackPanel = filters.period === "terrain_feedback" || filters.period === "terrain_feedback_priority";
 
   async function refresh(nextScope = scope) {
     setLoading(true);
@@ -261,7 +295,12 @@ export default function ChantiersPage({ initialView = "list", initialFocus }: Ch
     }
 
     if (key === "terrainFeedback") {
-      navigate("/retours-terrain");
+      setScope("actifs");
+      setFilters({
+        ...DEFAULT_FILTERS,
+        period: metrics.terrainFeedbackPriority > 0 ? "terrain_feedback_priority" : "terrain_feedback",
+      });
+      setView(metrics.terrainFeedbackPriority > 0 ? "kanban" : "list");
       return;
     }
 
@@ -354,6 +393,7 @@ export default function ChantiersPage({ initialView = "list", initialFocus }: Ch
       />
       {initialFocus ? <ChantiersFocusPanel focus={initialFocus} /> : null}
       <ChantiersKpiGrid metrics={metrics} onSelect={applyKpiFilter} />
+      {showTerrainFeedbackPanel ? <ChantiersTerrainFeedbackPanel metrics={metrics} onOpenAll={() => navigate("/retours-terrain")} /> : null}
       <ChantiersToolbar
         scope={scope}
         onScope={setScope}
