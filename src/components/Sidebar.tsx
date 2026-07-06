@@ -132,6 +132,13 @@ export default function Sidebar({ collapsed = false, onToggleCollapse, companyNa
       group: "Commerce",
     },
     {
+      to: "/crm/apporteurs?status=commission_a_payer",
+      label: "Commissions apporteurs",
+      icon: ReceiptText,
+      permissionKey: "crm" as const,
+      group: "Financier",
+    },
+    {
       to: "/chantiers",
       label: t("sidebar.chantiers"),
       icon: Hammer,
