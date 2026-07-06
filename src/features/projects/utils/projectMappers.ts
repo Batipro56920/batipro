@@ -51,6 +51,15 @@ function quoteStatusToProjectStatus(quotes: CrmQuoteRow[]): ProjectStatus | null
   return null;
 }
 
+function quoteDisplayProjectId(quote: CrmQuoteRow) {
+  const value = quote.display_options?.project_id;
+  return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+function isQuoteLinkedToProject(quote: CrmQuoteRow, projectId: string) {
+  return quoteDisplayProjectId(quote) === projectId;
+}
+
 function isChantierLinkedToQuotes(chantier: ChantierRow, quotes: CrmQuoteRow[]) {
   return quotes.some((quote) => chantier.crm_quote_id === quote.id || chantier.id === quote.chantier_id);
 }
@@ -140,10 +149,11 @@ export function buildProjects(dataset: CrmDataset): ProjectRecord[] {
   const usedQuoteIds = new Set<string>();
 
   for (const opportunity of dataset.opportunities) {
+    const projectId = `opportunity-${opportunity.id}`;
     const prospect = opportunity.prospect_id ? prospectsById.get(opportunity.prospect_id) ?? null : null;
     const client = opportunity.client_id ? clientsById.get(opportunity.client_id) ?? null : prospect?.client_id ? clientsById.get(prospect.client_id) ?? null : null;
     if (prospect) usedProspects.add(prospect.id);
-    const quotes = dataset.quotes.filter((quote) => quote.opportunity_id === opportunity.id);
+    const quotes = dataset.quotes.filter((quote) => quote.opportunity_id === opportunity.id || isQuoteLinkedToProject(quote, projectId));
     rememberQuotes(usedQuoteIds, quotes);
     const chantiers = dataset.chantiers.filter(
       (chantier) =>
@@ -158,7 +168,7 @@ export function buildProjects(dataset: CrmDataset): ProjectRecord[] {
     const communications = dataset.communications.filter((communication) => communication.opportunity_id === opportunity.id || quotes.some((quote) => quote.id === communication.quote_id));
 
     projects.push({
-      id: `opportunity-${opportunity.id}`,
+      id: projectId,
       sourceType: "opportunity",
       sourceId: opportunity.id,
       name: opportunity.nom_affaire || prospect?.description_besoin || "Projet sans nom",
@@ -201,14 +211,15 @@ export function buildProjects(dataset: CrmDataset): ProjectRecord[] {
 
   for (const prospect of dataset.prospects) {
     if (usedProspects.has(prospect.id)) continue;
+    const projectId = `prospect-${prospect.id}`;
     const client = prospect.client_id ? clientsById.get(prospect.client_id) ?? null : null;
-    const quotes = dataset.quotes.filter((quote) => quote.prospect_id === prospect.id || (client && quote.client_id === client.id && !usedQuoteIds.has(quote.id)));
+    const quotes = dataset.quotes.filter((quote) => quote.prospect_id === prospect.id || isQuoteLinkedToProject(quote, projectId) || (client && quote.client_id === client.id && !usedQuoteIds.has(quote.id)));
     rememberQuotes(usedQuoteIds, quotes);
     const chantiers = dataset.chantiers.filter((chantier) => isChantierLinkedToProspectProject(chantier, prospect, quotes));
     const sav = dataset.sav.filter((ticket) => chantiers.some((chantier) => chantier.id === ticket.chantier_id));
 
     projects.push({
-      id: `prospect-${prospect.id}`,
+      id: projectId,
       sourceType: "prospect",
       sourceId: prospect.id,
       name: prospect.description_besoin || prospect.type_projet || `Projet ${fullName(prospect)}`,
@@ -247,7 +258,8 @@ export function buildProjects(dataset: CrmDataset): ProjectRecord[] {
   }
 
   for (const client of dataset.clients) {
-    const quotes = dataset.quotes.filter((quote) => quote.client_id === client.id && !usedQuoteIds.has(quote.id));
+    const projectId = `client-${client.id}`;
+    const quotes = dataset.quotes.filter((quote) => !usedQuoteIds.has(quote.id) && (quote.client_id === client.id || isQuoteLinkedToProject(quote, projectId)));
     if (!quotes.length) continue;
     rememberQuotes(usedQuoteIds, quotes);
     const chantiers = dataset.chantiers.filter(
@@ -256,7 +268,7 @@ export function buildProjects(dataset: CrmDataset): ProjectRecord[] {
     const sav = dataset.sav.filter((ticket) => ticket.client_id === client.id || chantiers.some((chantier) => chantier.id === ticket.chantier_id));
 
     projects.push({
-      id: `client-${client.id}`,
+      id: projectId,
       sourceType: "client",
       sourceId: client.id,
       name: clientProjectName(client, quotes),
