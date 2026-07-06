@@ -14,6 +14,8 @@ export default function ChantierPurchasesSection({
   tasks: ChantierTaskRow[];
   zones: ChantierZoneRow[];
 }) {
+  const purchaseOrdersHref = `/bons-commande?chantierId=${encodeURIComponent(chantierId)}`;
+
   return (
     <ChantierChapterDrawer
       eyebrow="Approvisionnement"
@@ -38,10 +40,10 @@ export default function ChantierPurchasesSection({
               Catalogue produits
             </Link>
             <Link
-              to="/fournisseurs?tab=orders"
+              to={purchaseOrdersHref}
               className="inline-flex shrink-0 items-center justify-center rounded-xl bg-blue-700 px-3 py-2 text-sm font-semibold text-white hover:bg-blue-800"
             >
-              Bons de commande
+              Bons de commande chantier
             </Link>
           </div>
         </div>
