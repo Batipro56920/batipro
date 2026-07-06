@@ -163,6 +163,13 @@ export default function Sidebar({ collapsed = false, onToggleCollapse, companyNa
       group: "Production",
     },
     {
+      to: "/visites-chantier",
+      label: "Visites chantier",
+      icon: ClipboardList,
+      feature: "validation_qualite" as const,
+      group: "Production",
+    },
+    {
       to: "/planning",
       label: "Planning",
       icon: CalendarDays,
