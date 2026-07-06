@@ -51,6 +51,7 @@ export function PurchaseOrdersPanel({ suppliers }: { suppliers: SupplierRow[] })
   const [searchParams, setSearchParams] = useSearchParams();
   const urlPurchaseOrderId = searchParams.get("purchaseOrderId") ?? "";
   const urlSupplierId = searchParams.get("supplierId") ?? "";
+  const urlChantierId = searchParams.get("chantierId") ?? "";
   const statusQueryParam = searchParams.get("status") ?? "";
   const initialStatusFilter = isPurchaseOrderStatusFilter(statusQueryParam) ? statusQueryParam : "all";
   const openedOrderFromUrlRef = useRef("");
@@ -62,6 +63,7 @@ export function PurchaseOrdersPanel({ suppliers }: { suppliers: SupplierRow[] })
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<PurchaseOrderStatusFilter>(initialStatusFilter);
   const [supplierFilter, setSupplierFilter] = useState(urlSupplierId || "all");
+  const [chantierFilter, setChantierFilter] = useState(urlChantierId || "all");
   const [chantierOptions, setChantierOptions] = useState<ChantierListOption[]>([]);
   const totals = useMemo(() => buildTotals(orders), [orders]);
   const chantierById = useMemo(
@@ -90,9 +92,10 @@ export function PurchaseOrdersPanel({ suppliers }: { suppliers: SupplierRow[] })
       ].some((value) => String(value ?? "").toLowerCase().includes(text));
       const matchesStatus = matchesStatusFilter(order, statusFilter);
       const matchesSupplier = supplierFilter === "all" || order.supplierId === supplierFilter;
-      return matchesText && matchesStatus && matchesSupplier;
+      const matchesChantier = chantierFilter === "all" || order.chantierId === chantierFilter;
+      return matchesText && matchesStatus && matchesSupplier && matchesChantier;
     });
-  }, [chantierById, orders, query, statusFilter, supplierFilter]);
+  }, [chantierById, chantierFilter, orders, query, statusFilter, supplierFilter]);
   const targetedOrderVisible = useMemo(
     () => Boolean(urlPurchaseOrderId && filteredOrders.some((order) => order.id === urlPurchaseOrderId)),
     [filteredOrders, urlPurchaseOrderId],
@@ -101,16 +104,22 @@ export function PurchaseOrdersPanel({ suppliers }: { suppliers: SupplierRow[] })
     if (supplierFilter === "all") return "";
     return suppliers.find((supplier) => supplier.id === supplierFilter)?.name ?? "fournisseur sélectionné";
   }, [supplierFilter, suppliers]);
-  const hasActiveListFilters = Boolean(query.trim()) || statusFilter !== "all" || supplierFilter !== "all";
+  const activeChantierName = useMemo(() => {
+    if (chantierFilter === "all") return "";
+    const chantier = chantierById.get(chantierFilter) ?? null;
+    return chantier ? formatChantierDisplayName(chantier) : "chantier sélectionné";
+  }, [chantierById, chantierFilter]);
+  const hasActiveListFilters = Boolean(query.trim()) || statusFilter !== "all" || supplierFilter !== "all" || chantierFilter !== "all";
   const emptyStateCopy = useMemo(
     () => buildEmptyStateCopy({
+      chantierName: activeChantierName,
       hasActiveListFilters,
       query,
       statusFilter,
       supplierName: activeSupplierName,
       totalOrders: orders.length,
     }),
-    [activeSupplierName, hasActiveListFilters, orders.length, query, statusFilter],
+    [activeChantierName, activeSupplierName, hasActiveListFilters, orders.length, query, statusFilter],
   );
 
   useEffect(() => {
@@ -138,6 +147,11 @@ export function PurchaseOrdersPanel({ suppliers }: { suppliers: SupplierRow[] })
   }, [urlSupplierId]);
 
   useEffect(() => {
+    const nextChantier = urlChantierId || "all";
+    setChantierFilter((current) => current === nextChantier ? current : nextChantier);
+  }, [urlChantierId]);
+
+  useEffect(() => {
     if (!urlPurchaseOrderId) {
       openedOrderFromUrlRef.current = "";
       return;
@@ -147,13 +161,15 @@ export function PurchaseOrdersPanel({ suppliers }: { suppliers: SupplierRow[] })
 
     const requestedStatusFilter = isPurchaseOrderStatusFilter(statusQueryParam) ? statusQueryParam : "all";
     const requestedSupplierFilter = urlSupplierId && targetedOrder.supplierId === urlSupplierId ? urlSupplierId : "all";
+    const requestedChantierFilter = urlChantierId && targetedOrder.chantierId === urlChantierId ? urlChantierId : "all";
     setSelectedOrder(targetedOrder);
     setQuery("");
     setStatusFilter(matchesStatusFilter(targetedOrder, requestedStatusFilter) ? requestedStatusFilter : "all");
     setSupplierFilter(requestedSupplierFilter);
+    setChantierFilter(requestedChantierFilter);
     setError(null);
     openedOrderFromUrlRef.current = urlPurchaseOrderId;
-  }, [loading, statusQueryParam, targetedOrder, urlPurchaseOrderId, urlSupplierId]);
+  }, [loading, statusQueryParam, targetedOrder, urlChantierId, urlPurchaseOrderId, urlSupplierId]);
 
   useEffect(() => {
     if (!urlPurchaseOrderId || !targetedOrder || loading || !targetedOrderVisible) return;
@@ -208,6 +224,18 @@ export function PurchaseOrdersPanel({ suppliers }: { suppliers: SupplierRow[] })
     setSearchParams(nextParams, { replace: true });
   }
 
+  function updateChantierFilter(nextChantierId: string) {
+    setChantierFilter(nextChantierId);
+    const nextParams = new URLSearchParams(searchParams);
+    nextParams.delete("purchaseOrderId");
+    if (nextChantierId === "all") {
+      nextParams.delete("chantierId");
+    } else {
+      nextParams.set("chantierId", nextChantierId);
+    }
+    setSearchParams(nextParams, { replace: true });
+  }
+
   function clearOpenStatusFilter() {
     updateStatusFilter("all");
   }
@@ -216,10 +244,12 @@ export function PurchaseOrdersPanel({ suppliers }: { suppliers: SupplierRow[] })
     setQuery("");
     setStatusFilter("all");
     setSupplierFilter("all");
+    setChantierFilter("all");
     const nextParams = new URLSearchParams(searchParams);
     nextParams.delete("purchaseOrderId");
     nextParams.delete("status");
     nextParams.delete("supplierId");
+    nextParams.delete("chantierId");
     setSearchParams(nextParams, { replace: true });
   }
 
@@ -339,9 +369,29 @@ export function PurchaseOrdersPanel({ suppliers }: { suppliers: SupplierRow[] })
         </div>
       ) : null}
 
+      {!urlPurchaseOrderId && chantierFilter !== "all" ? (
+        <div className="rounded-2xl border border-blue-200 bg-blue-50 p-4 text-sm text-blue-900">
+          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+            <div>
+              <div className="font-semibold">Commandes du chantier</div>
+              <p className="mt-1 text-blue-800">
+                Liste filtrée sur {activeChantierName} pour suivre les achats et livraisons liés au chantier.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => updateChantierFilter("all")}
+              className="rounded-xl border border-blue-200 bg-white px-4 py-2 text-sm font-semibold text-blue-700 hover:bg-blue-100"
+            >
+              Afficher tous les chantiers
+            </button>
+          </div>
+        </div>
+      ) : null}
+
       {!loading ? (
         <div className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm">
-          <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_190px_220px]">
+          <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_170px_220px_220px]">
             <label className="relative block">
               <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
               <input className={inputClassWithIcon} placeholder="Rechercher commande, fournisseur, chantier..." value={query} onChange={(event) => setQuery(event.target.value)} />
@@ -359,6 +409,12 @@ export function PurchaseOrdersPanel({ suppliers }: { suppliers: SupplierRow[] })
             <select className={selectClass} value={supplierFilter} onChange={(event) => updateSupplierFilter(event.target.value)}>
               <option value="all">Tous fournisseurs</option>
               {suppliers.map((supplier) => <option key={supplier.id} value={supplier.id}>{supplier.name}</option>)}
+            </select>
+            <select className={selectClass} value={chantierFilter} onChange={(event) => updateChantierFilter(event.target.value)}>
+              <option value="all">Tous chantiers</option>
+              {chantierOptions.map((chantier) => (
+                <option key={chantier.id} value={chantier.id}>{formatChantierDisplayName(chantier)}</option>
+              ))}
             </select>
           </div>
         </div>
@@ -482,12 +538,14 @@ function buildTotals(orders: PurchaseOrderRecord[]) {
 }
 
 function buildEmptyStateCopy({
+  chantierName,
   hasActiveListFilters,
   query,
   statusFilter,
   supplierName,
   totalOrders,
 }: {
+  chantierName: string;
   hasActiveListFilters: boolean;
   query: string;
   statusFilter: PurchaseOrderStatusFilter;
@@ -515,6 +573,7 @@ function buildEmptyStateCopy({
   const details = [
     statusFilter !== "all" ? `statut ${purchaseOrderStatusFilterLabel(statusFilter).toLowerCase()}` : "",
     supplierName ? `fournisseur ${supplierName}` : "",
+    chantierName ? `chantier ${chantierName}` : "",
     query.trim() ? `recherche "${query.trim()}"` : "",
   ].filter(Boolean);
 
