@@ -10,6 +10,7 @@ import {
   type CrmQuoteStatus,
 } from "../../../services/crm.service";
 import type { ProjectRecord } from "../types";
+import { ProjectPurchasesSummary } from "./ProjectPurchasesSummary";
 import { ProjectStatusBadge } from "./ProjectStatusBadge";
 import { formatCurrency, formatDate } from "./ProjectShared";
 import { getPrimaryQuote } from "../hooks/useProjectsData";
@@ -125,6 +126,7 @@ export function ProjectDetailHeader({ project, onProjectUpdated }: { project: Pr
           </div>
           {chantierError ? <div className="mt-3 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{chantierError}</div> : null}
           {outcomeError ? <div className="mt-3 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{outcomeError}</div> : null}
+          <ProjectPurchasesSummary project={project} purchaseOrdersPath={projectPurchaseOrdersPath} />
         </div>
 
         <div className="flex flex-wrap gap-2">
