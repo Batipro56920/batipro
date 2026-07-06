@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Download, Plus, Save, Send } from "lucide-react";
 import { Button } from "../../../components/ui/button";
 import { supabase } from "../../../lib/supabaseClient";
+import { loadCrmDataset } from "../../../services/crm.service";
 import {
   calculateDocumentTotals,
   createDocumentLine,
@@ -20,6 +21,7 @@ import {
 import type { SupplierRow } from "../../../services/suppliers.service";
 import type { ProductCatalogItem } from "../../product-catalog";
 import { getBestSupplierPrice, listProductCatalogItems } from "../../product-catalog";
+import { buildProjects } from "../../projects/utils/projectMappers";
 import type { PurchaseOrderRecord, PurchaseOrderStatus } from "../domain/types";
 import { PurchaseOrderStatusBadge } from "./PurchaseOrderStatusBadge";
 
@@ -28,6 +30,15 @@ type ChantierOption = {
   nom: string;
   client: string | null;
   adresse: string | null;
+};
+
+type ProjectOption = {
+  id: string;
+  sourceId: string;
+  name: string;
+  clientName: string;
+  address: string | null;
+  projectType: string | null;
 };
 
 export function PurchaseOrderEditor({
@@ -48,12 +59,17 @@ export function PurchaseOrderEditor({
   const [productQuery, setProductQuery] = useState("");
   const [products, setProducts] = useState<ProductCatalogItem[]>([]);
   const [chantiers, setChantiers] = useState<ChantierOption[]>([]);
+  const [projects, setProjects] = useState<ProjectOption[]>([]);
   const document = order.document;
   const totals = document.totals ?? calculateDocumentTotals(document);
   const rows = useMemo(() => flattenDocumentNodes(document.nodes), [document.nodes]);
   const selectedChantier = useMemo(
     () => chantiers.find((chantier) => chantier.id === order.chantierId) ?? null,
     [chantiers, order.chantierId],
+  );
+  const selectedProject = useMemo(
+    () => projects.find((project) => project.id === order.projectId || project.sourceId === order.projectId) ?? null,
+    [order.projectId, projects],
   );
   const filteredProducts = useMemo(() => {
     const query = productQuery.trim().toLowerCase();
@@ -68,6 +84,10 @@ export function PurchaseOrderEditor({
 
   useEffect(() => {
     listChantierOptions().then(setChantiers).catch(() => setChantiers([]));
+  }, []);
+
+  useEffect(() => {
+    listProjectOptions().then(setProjects).catch(() => setProjects([]));
   }, []);
 
   function updateOrder(patch: Partial<PurchaseOrderRecord>) {
@@ -151,6 +171,17 @@ export function PurchaseOrderEditor({
     });
   }
 
+  function selectProject(projectId: string) {
+    const project = projects.find((row) => row.id === projectId) ?? null;
+    updateOrder({
+      projectId: project?.id ?? null,
+      document: {
+        ...document,
+        projectId: project?.id ?? null,
+      },
+    });
+  }
+
   function selectChantier(chantierId: string) {
     const chantier = chantiers.find((row) => row.id === chantierId) ?? null;
     const deliveryAddress = chantier?.adresse || order.deliveryAddress || null;
@@ -221,7 +252,18 @@ export function PurchaseOrderEditor({
                 {suppliers.map((supplier) => <option key={supplier.id} value={supplier.id}>{supplier.name}</option>)}
               </select>
             </label>
-            <Field label="Projet ID" value={order.projectId ?? ""} onChange={(projectId) => updateOrder({ projectId: projectId || null, document: { ...document, projectId: projectId || null } })} />
+            <label className={labelClass}>
+              Projet CRM
+              <select className={inputClass} value={selectedProject?.id ?? ""} onChange={(event) => selectProject(event.target.value)}>
+                <option value="">Sans projet CRM</option>
+                {projects.map((project) => (
+                  <option key={project.id} value={project.id}>{formatProjectOptionLabel(project)}</option>
+                ))}
+              </select>
+              {order.projectId && !selectedProject ? (
+                <div className="mt-1 text-[11px] font-normal normal-case tracking-normal text-amber-600">Projet lie non retrouve dans la liste accessible.</div>
+              ) : null}
+            </label>
             <label className={labelClass}>
               Chantier
               <select className={inputClass} value={order.chantierId ?? ""} onChange={(event) => selectChantier(event.target.value)}>
@@ -291,8 +333,24 @@ async function listChantierOptions(): Promise<ChantierOption[]> {
   return data ?? [];
 }
 
+async function listProjectOptions(): Promise<ProjectOption[]> {
+  const dataset = await loadCrmDataset();
+  return buildProjects(dataset).map((project) => ({
+    id: project.id,
+    sourceId: project.sourceId,
+    name: project.name,
+    clientName: project.clientName,
+    address: project.address,
+    projectType: project.projectType,
+  }));
+}
+
 function formatChantierOptionLabel(chantier: ChantierOption) {
   return [chantier.nom, chantier.client].filter(Boolean).join(" - ");
+}
+
+function formatProjectOptionLabel(project: ProjectOption) {
+  return [project.name, project.clientName, project.projectType].filter(Boolean).join(" - ");
 }
 
 function StatusPanel({ status, onChange }: { status: PurchaseOrderStatus; onChange: (status: PurchaseOrderStatus) => void }) {
