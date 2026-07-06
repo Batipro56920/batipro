@@ -267,8 +267,8 @@ export function useDashboardMetrics({ chantiers, materiel, alerts, activeView, l
       key: "achats",
       label: "Achats attente",
       value: alertStats.purchaseBlockers + pendingMateriel.length,
-      description: "Approvisionnements à suivre",
-      href: "/financier/decaissements",
+      description: alertStats.purchaseBlockers > 0 ? "Alertes approvisionnement à traiter" : "Demandes matériel à suivre",
+      href: alertStats.purchaseBlockers > 0 ? "/dashboard?view=alertes" : "/dashboard?view=materiel",
       tone: alertStats.purchaseBlockers + pendingMateriel.length > 0 ? "warning" : "success",
     },
     {
