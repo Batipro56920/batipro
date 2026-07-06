@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useSearchParams } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { Building2, Plus, RefreshCw, Search, Truck } from "lucide-react";
 import {
   createSupplier,
@@ -67,6 +67,7 @@ export default function FournisseursPage({ initialTab = "suppliers" }: Fournisse
   const activePurchaseOrderId = searchParams.get("purchaseOrderId") ?? "";
   const openedSupplierFromUrlRef = useRef("");
   const tabQueryParam = searchParams.get("tab");
+  const shouldOpenSupplierFromUrl = Boolean(activeSupplierId && initialTab !== "orders" && tabQueryParam !== "orders");
   const [activeTab, setActiveTab] = useState<FournisseursTab>(() => activePurchaseOrderId ? "orders" : isFournisseursTab(tabQueryParam) ? tabQueryParam : initialTab);
   const [loadingSuppliers, setLoadingSuppliers] = useState(true);
   const [savingSupplier, setSavingSupplier] = useState(false);
@@ -120,7 +121,7 @@ export default function FournisseursPage({ initialTab = "suppliers" }: Fournisse
 
   useEffect(() => {
     setSearch((current) => current === supplierQueryParam ? current : supplierQueryParam);
-    if (supplierQueryParam || activeSupplierId) {
+    if (supplierQueryParam || shouldOpenSupplierFromUrl) {
       setActiveTab("suppliers");
       return;
     }
@@ -131,10 +132,10 @@ export default function FournisseursPage({ initialTab = "suppliers" }: Fournisse
     if (isFournisseursTab(tabQueryParam)) {
       setActiveTab(tabQueryParam);
     }
-  }, [activePurchaseOrderId, activeSupplierId, supplierQueryParam, tabQueryParam]);
+  }, [activePurchaseOrderId, shouldOpenSupplierFromUrl, supplierQueryParam, tabQueryParam]);
 
   useEffect(() => {
-    if (!activeSupplierId) {
+    if (!shouldOpenSupplierFromUrl) {
       openedSupplierFromUrlRef.current = "";
       return;
     }
@@ -148,7 +149,7 @@ export default function FournisseursPage({ initialTab = "suppliers" }: Fournisse
     setSuppliersNotice(null);
     setSuppliersError(null);
     openedSupplierFromUrlRef.current = activeSupplierId;
-  }, [activeSupplierId, loadingSuppliers, targetedSupplier]);
+  }, [activeSupplierId, loadingSuppliers, shouldOpenSupplierFromUrl, targetedSupplier]);
 
   function clearActiveSupplierParam() {
     if (!activeSupplierId) return;
@@ -493,7 +494,7 @@ export default function FournisseursPage({ initialTab = "suppliers" }: Fournisse
                 <th className="px-4 py-3 text-left font-medium">{t("common.labels.phone")}</th>
                 <th className="px-4 py-3 text-left font-medium">{t("common.labels.email")}</th>
                 <th className="px-4 py-3 text-left font-medium">{t("common.labels.status")}</th>
-                <th className="px-4 py-3 text-right font-medium">{t("common.actions.edit")}</th>
+                <th className="px-4 py-3 text-right font-medium">Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -518,6 +519,12 @@ export default function FournisseursPage({ initialTab = "suppliers" }: Fournisse
                   </td>
                   <td className="px-4 py-3">
                     <div className="flex justify-end gap-2">
+                      <Link
+                        to={`/bons-commande?supplierId=${encodeURIComponent(row.id)}`}
+                        className="rounded-lg border border-blue-200 px-2 py-1 text-xs font-semibold text-blue-700 hover:bg-blue-50"
+                      >
+                        Commandes
+                      </Link>
                       <button
                         type="button"
                         className="rounded-lg border px-2 py-1 text-xs hover:bg-slate-50"
