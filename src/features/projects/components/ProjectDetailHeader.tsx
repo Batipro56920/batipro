@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { ArrowLeft, CalendarDays, CalendarPlus, CheckCircle2, Clock3, FileText, FolderOpen, Hammer, Pencil, RefreshCw, XCircle } from "lucide-react";
+import { ArrowLeft, CalendarDays, CalendarPlus, CheckCircle2, Clock3, FileText, FolderOpen, Hammer, Pencil, RefreshCw, ShoppingCart, XCircle } from "lucide-react";
 import {
   ensureCrmDefaults,
   moveCrmOpportunityStage,
@@ -34,6 +34,7 @@ export function ProjectDetailHeader({ project, onProjectUpdated }: { project: Pr
   const chantier = linkedAcceptedQuoteChantier ?? fallbackChantier;
   const linkedChantierId = linkedAcceptedQuoteChantier?.id ?? acceptedQuote?.chantier_id ?? fallbackChantier?.id ?? null;
   const editTarget = project.opportunity ? "/crm/opportunites" : project.sourceType === "client" ? "/crm/clients" : "/crm/prospects";
+  const projectPurchaseOrdersPath = `/bons-commande?projectId=${encodeURIComponent(project.id)}`;
   const isWonProject = WON_PROJECT_STATUSES.includes(project.status);
   const canMarkWon = Boolean(quote) && !isWonProject && project.status !== "perdu";
   const canMarkLost = !linkedChantierId && !acceptedQuote && !isWonProject && project.status !== "perdu";
@@ -138,6 +139,10 @@ export function ProjectDetailHeader({ project, onProjectUpdated }: { project: Pr
           <Link to={quote ? `/projets/${project.id}/devis/${quote.id}/edit` : `/projets/${project.id}/devis/nouveau`} className="inline-flex h-9 items-center justify-center gap-2 rounded-xl bg-blue-600 px-3 text-sm font-medium text-white transition hover:bg-blue-700">
             <FileText className="h-4 w-4" />
             {quote ? "Ouvrir devis" : "Créer devis"}
+          </Link>
+          <Link to={projectPurchaseOrdersPath} className="inline-flex h-9 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-3 text-sm font-medium text-slate-900 transition hover:bg-slate-50" title="Ouvrir les bons de commande rattachés à ce projet">
+            <ShoppingCart className="h-4 w-4" />
+            Achats projet
           </Link>
           <Link to="/crm/agenda" className="inline-flex h-9 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-3 text-sm font-medium text-slate-900 transition hover:bg-slate-50">
             <RefreshCw className="h-4 w-4" />
