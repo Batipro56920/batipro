@@ -250,35 +250,7 @@ export default function AuthPage() {
     setMsg(null);
 
     try {
-      if (!email.trim() || !password) {
-        setMsg(t("auth.emailRequired"));
-        return;
-      }
-
-      if (mode === "signup") {
-        const { error } = await supabase.auth.signUp({
-          email: email.trim(),
-          password,
-        });
-        if (error) throw error;
-        setMsg(t("auth.signupSuccess"));
-        setMode("login");
-        return;
-      }
-
-      if (mode === "forgot") {
-        if (!email.trim()) {
-          setMsg(t("auth.emailRequired"));
-          return;
-        }
-
-        const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
-          redirectTo: buildPasswordResetRedirectUrl(),
-        });
-        if (error) throw error;
-        setMsg(t("auth.resetRequestSuccess"));
-        return;
-      }
+      const trimmedEmail = email.trim();
 
       if (mode === "reset") {
         if (!resetPassword.trim()) {
@@ -298,8 +270,38 @@ export default function AuthPage() {
         return;
       }
 
+      if (!trimmedEmail) {
+        setMsg(t("auth.emailRequired"));
+        return;
+      }
+
+      if (mode === "forgot") {
+        const { error } = await supabase.auth.resetPasswordForEmail(trimmedEmail, {
+          redirectTo: buildPasswordResetRedirectUrl(),
+        });
+        if (error) throw error;
+        setMsg(t("auth.resetRequestSuccess"));
+        return;
+      }
+
+      if (!password) {
+        setMsg(t("auth.emailRequired"));
+        return;
+      }
+
+      if (mode === "signup") {
+        const { error } = await supabase.auth.signUp({
+          email: trimmedEmail,
+          password,
+        });
+        if (error) throw error;
+        setMsg(t("auth.signupSuccess"));
+        setMode("login");
+        return;
+      }
+
       const credentials = {
-        email: email.trim(),
+        email: trimmedEmail,
         password,
       };
 
