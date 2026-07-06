@@ -75,6 +75,18 @@ const SEARCH_QUICK_LINKS = [
     badge: "Chantier",
   },
   {
+    label: "Détails terrain à compléter",
+    description: "Renseigner les consignes techniques avant exécution chantier",
+    href: "/bibliotheque?readiness=missing_technical",
+    badge: "Exécution",
+  },
+  {
+    label: "Préparations à compléter",
+    description: "Relier matières et matériel aux modèles avant préparation chantier",
+    href: "/bibliotheque?readiness=missing_preparation",
+    badge: "Préparer",
+  },
+  {
     label: "Temps chantier",
     description: "Contrôler heures passées, tâches et équipe",
     href: "/temps",
