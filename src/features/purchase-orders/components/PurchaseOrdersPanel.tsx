@@ -36,6 +36,13 @@ type ProjectListOption = {
   projectType: string | null;
 };
 
+type CreateOrderOptions = {
+  chantierId?: string | null;
+  clearNewOrderParam?: boolean;
+  projectId?: string | null;
+  supplierId?: string | null;
+};
+
 const PURCHASE_ORDER_STATUS_FILTERS: PurchaseOrderStatusFilter[] = [
   "all",
   "open",
@@ -64,9 +71,11 @@ export function PurchaseOrdersPanel({ suppliers }: { suppliers: SupplierRow[] })
   const urlSupplierId = searchParams.get("supplierId") ?? "";
   const urlChantierId = searchParams.get("chantierId") ?? "";
   const urlProjectId = searchParams.get("projectId") ?? "";
+  const urlNewOrder = searchParams.get("newOrder") === "1";
   const statusQueryParam = searchParams.get("status") ?? "";
   const initialStatusFilter = isPurchaseOrderStatusFilter(statusQueryParam) ? statusQueryParam : "all";
   const openedOrderFromUrlRef = useRef("");
+  const openedNewOrderFromUrlRef = useRef("");
   const targetedOrderRowRef = useRef<HTMLTableRowElement | null>(null);
   const [orders, setOrders] = useState<PurchaseOrderRecord[]>([]);
   const [selectedOrder, setSelectedOrder] = useState<PurchaseOrderRecord | null>(null);
@@ -79,6 +88,7 @@ export function PurchaseOrdersPanel({ suppliers }: { suppliers: SupplierRow[] })
   const [projectFilter, setProjectFilter] = useState(urlProjectId || "all");
   const [chantierOptions, setChantierOptions] = useState<ChantierListOption[]>([]);
   const [projectOptions, setProjectOptions] = useState<ProjectListOption[]>([]);
+  const [chantierOptionsLoaded, setChantierOptionsLoaded] = useState(false);
   const totals = useMemo(() => buildTotals(orders), [orders]);
   const chantierById = useMemo(
     () => new Map(chantierOptions.map((chantier) => [chantier.id, chantier])),
@@ -155,13 +165,28 @@ export function PurchaseOrdersPanel({ suppliers }: { suppliers: SupplierRow[] })
     }),
     [activeChantierName, activeProjectName, activeSupplierName, hasActiveListFilters, orders.length, query, statusFilter],
   );
+  const newOrderContextKey = [urlSupplierId, urlProjectId, urlChantierId].join("|");
 
   useEffect(() => {
     void refresh();
   }, []);
 
   useEffect(() => {
-    listChantierOptions().then(setChantierOptions).catch(() => setChantierOptions([]));
+    let cancelled = false;
+    setChantierOptionsLoaded(false);
+    listChantierOptions()
+      .then((options) => {
+        if (!cancelled) setChantierOptions(options);
+      })
+      .catch(() => {
+        if (!cancelled) setChantierOptions([]);
+      })
+      .finally(() => {
+        if (!cancelled) setChantierOptionsLoaded(true);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   useEffect(() => {
@@ -224,6 +249,26 @@ export function PurchaseOrdersPanel({ suppliers }: { suppliers: SupplierRow[] })
     return () => window.cancelAnimationFrame(frame);
   }, [loading, targetedOrder, targetedOrderVisible, urlPurchaseOrderId]);
 
+  useEffect(() => {
+    if (!urlNewOrder) {
+      openedNewOrderFromUrlRef.current = "";
+      return;
+    }
+    if (loading || selectedOrder || openedNewOrderFromUrlRef.current === newOrderContextKey) return;
+    if (urlChantierId && !chantierOptionsLoaded) return;
+
+    openedNewOrderFromUrlRef.current = newOrderContextKey;
+    void createOrder({
+      chantierId: urlChantierId || null,
+      clearNewOrderParam: true,
+      projectId: urlProjectId || null,
+      supplierId: urlSupplierId || null,
+    }).catch((err: any) => {
+      setError(err?.message ?? "Création du bon de commande impossible.");
+      clearNewOrderParam();
+    });
+  }, [chantierOptionsLoaded, loading, newOrderContextKey, selectedOrder, urlChantierId, urlNewOrder, urlProjectId, urlSupplierId]);
+
   async function refresh() {
     setLoading(true);
     setError(null);
@@ -245,10 +290,18 @@ export function PurchaseOrdersPanel({ suppliers }: { suppliers: SupplierRow[] })
     setSearchParams(nextParams, { replace: true });
   }
 
+  function clearNewOrderParam() {
+    if (!urlNewOrder) return;
+    const nextParams = new URLSearchParams(searchParams);
+    nextParams.delete("newOrder");
+    setSearchParams(nextParams, { replace: true });
+  }
+
   function updateStatusFilter(nextStatus: PurchaseOrderStatusFilter) {
     setStatusFilter(nextStatus);
     const nextParams = new URLSearchParams(searchParams);
     nextParams.delete("purchaseOrderId");
+    nextParams.delete("newOrder");
     if (nextStatus === "all") {
       nextParams.delete("status");
     } else {
@@ -261,6 +314,7 @@ export function PurchaseOrdersPanel({ suppliers }: { suppliers: SupplierRow[] })
     setSupplierFilter(nextSupplierId);
     const nextParams = new URLSearchParams(searchParams);
     nextParams.delete("purchaseOrderId");
+    nextParams.delete("newOrder");
     if (nextSupplierId === "all") {
       nextParams.delete("supplierId");
     } else {
@@ -273,6 +327,7 @@ export function PurchaseOrdersPanel({ suppliers }: { suppliers: SupplierRow[] })
     setChantierFilter(nextChantierId);
     const nextParams = new URLSearchParams(searchParams);
     nextParams.delete("purchaseOrderId");
+    nextParams.delete("newOrder");
     if (nextChantierId === "all") {
       nextParams.delete("chantierId");
     } else {
@@ -285,6 +340,7 @@ export function PurchaseOrdersPanel({ suppliers }: { suppliers: SupplierRow[] })
     setProjectFilter(nextProjectId);
     const nextParams = new URLSearchParams(searchParams);
     nextParams.delete("purchaseOrderId");
+    nextParams.delete("newOrder");
     if (nextProjectId === "all") {
       nextParams.delete("projectId");
     } else {
@@ -305,6 +361,7 @@ export function PurchaseOrdersPanel({ suppliers }: { suppliers: SupplierRow[] })
     setProjectFilter("all");
     const nextParams = new URLSearchParams(searchParams);
     nextParams.delete("purchaseOrderId");
+    nextParams.delete("newOrder");
     nextParams.delete("status");
     nextParams.delete("supplierId");
     nextParams.delete("chantierId");
@@ -314,26 +371,29 @@ export function PurchaseOrdersPanel({ suppliers }: { suppliers: SupplierRow[] })
 
   function openOrder(order: PurchaseOrderRecord) {
     if (urlPurchaseOrderId && urlPurchaseOrderId !== order.id) clearActivePurchaseOrderParam();
+    clearNewOrderParam();
     setSelectedOrder(order);
   }
 
   function closeOrder() {
     setSelectedOrder(null);
     clearActivePurchaseOrderParam();
+    clearNewOrderParam();
   }
 
-  async function createOrder() {
-    const contextualSupplier = supplierFilter !== "all"
-      ? suppliers.find((supplier) => supplier.id === supplierFilter) ?? null
+  async function createOrder(options: CreateOrderOptions = {}) {
+    const effectiveSupplierId = options.supplierId ?? (supplierFilter !== "all" ? supplierFilter : null);
+    const effectiveProjectId = options.projectId ?? (projectFilter !== "all" ? projectFilter : null);
+    const effectiveChantierId = options.chantierId ?? (chantierFilter !== "all" ? chantierFilter : null);
+    const contextualSupplier = effectiveSupplierId
+      ? suppliers.find((supplier) => supplier.id === effectiveSupplierId) ?? null
       : suppliers[0] ?? null;
-    const contextualProjectId = projectFilter !== "all" ? projectFilter : null;
-    const contextualChantier = chantierFilter !== "all" ? chantierById.get(chantierFilter) ?? null : null;
-    const contextualChantierId = chantierFilter !== "all" ? chantierFilter : null;
+    const contextualChantier = effectiveChantierId ? chantierById.get(effectiveChantierId) ?? null : null;
     const order = await createAndSavePurchaseOrder({
       supplierId: contextualSupplier?.id ?? null,
       supplierName: contextualSupplier?.name ?? null,
-      projectId: contextualProjectId,
-      chantierId: contextualChantierId,
+      projectId: effectiveProjectId,
+      chantierId: effectiveChantierId,
     });
     const savedOrder = contextualChantier?.adresse
       ? await savePurchaseOrder({
@@ -347,7 +407,8 @@ export function PurchaseOrdersPanel({ suppliers }: { suppliers: SupplierRow[] })
       : order;
     setOrders(await listPurchaseOrders());
     setSelectedOrder(savedOrder);
-    clearActivePurchaseOrderParam();
+    if (options.clearNewOrderParam) clearNewOrderParam();
+    else clearActivePurchaseOrderParam();
   }
 
   async function save(order: PurchaseOrderRecord) {
