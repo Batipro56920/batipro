@@ -9,6 +9,7 @@ import { ChantierRowActions } from "./ChantierRowActions";
 import { ChantierStatusPill } from "./ChantierStatusPill";
 
 const TABS = ["Vue rapide", "Tâches", "Temps", "Planning", "Financier", "Équipe", "Documents", "Retours terrain", "Alertes"] as const;
+type ShortcutTone = "blue" | "red" | "amber" | "slate";
 
 function getProjectHref(row: ChantierDerived) {
   if (row.crm_opportunity_id) return `/projets/opportunity-${row.crm_opportunity_id}`;
@@ -74,7 +75,7 @@ function getTerrainFeedbackInfo(row: ChantierDerived) {
       open,
       priority,
       hasOpen: true,
-      tone: "blue" as const,
+      tone: "amber" as const,
       metric: `${open} retour${open > 1 ? "s" : ""} à traiter`,
       description: `${open} retour${open > 1 ? "s" : ""} terrain ouvert${open > 1 ? "s" : ""}. Le pilotage filtré permet de garder le lien entre le terrain, l'exécution, les documents et les réserves.`,
       cta: "Voir les retours chantier",
@@ -91,6 +92,20 @@ function getTerrainFeedbackInfo(row: ChantierDerived) {
     description: "Aucun retour terrain ouvert pour ce chantier. L'espace reste disponible pour contrôler les observations historisées ou les nouvelles remontées terrain.",
     cta: "Ouvrir les retours terrain",
   };
+}
+
+function shortcutLinkClasses(tone: ShortcutTone = "slate") {
+  if (tone === "red") return "border-red-200 bg-red-50 hover:border-red-300 hover:bg-red-100";
+  if (tone === "amber") return "border-amber-200 bg-amber-50 hover:border-amber-300 hover:bg-amber-100";
+  if (tone === "blue") return "border-blue-200 bg-blue-50 hover:border-blue-300 hover:bg-blue-100";
+  return "border-slate-200 bg-white hover:border-blue-200 hover:bg-blue-50";
+}
+
+function shortcutIconClasses(tone: ShortcutTone = "slate") {
+  if (tone === "red") return "bg-white text-red-700 group-hover:bg-red-50";
+  if (tone === "amber") return "bg-white text-amber-700 group-hover:bg-amber-50";
+  if (tone === "blue") return "bg-white text-blue-700 group-hover:bg-blue-50";
+  return "bg-slate-100 text-slate-600 group-hover:bg-white group-hover:text-blue-700";
 }
 
 function CommercialContext({ row }: { row: ChantierDerived }) {
@@ -299,7 +314,14 @@ export function ChantierQuickDrawer({ row, actions, onClose }: { row: ChantierDe
 
 function QuickAccessPanel({ row }: { row: ChantierDerived }) {
   const terrainFeedbackInfo = getTerrainFeedbackInfo(row);
-  const links = [
+  const qualityTone: ShortcutTone = terrainFeedbackInfo.priority > 0 ? "red" : terrainFeedbackInfo.hasOpen ? "amber" : "slate";
+  const links: Array<{
+    label: string;
+    description: string;
+    href: string;
+    icon: typeof ClipboardList;
+    tone?: ShortcutTone;
+  }> = [
     {
       label: "Préparer",
       description: "Lots, préparation et cadrage chantier",
@@ -335,12 +357,14 @@ function QuickAccessPanel({ row }: { row: ChantierDerived }) {
       description: terrainFeedbackInfo.metric,
       href: terrainFeedbackInfo.href,
       icon: AlertTriangle,
+      tone: terrainFeedbackInfo.tone,
     },
     {
       label: "Qualité",
       description: terrainFeedbackInfo.hasOpen ? "Réserves, contrôles et retours à rapprocher" : "Réserves, contrôles et réception",
       href: `/chantiers/${row.id}/qualite`,
       icon: AlertTriangle,
+      tone: qualityTone,
     },
     {
       label: "Documents",
@@ -371,9 +395,9 @@ function QuickAccessPanel({ row }: { row: ChantierDerived }) {
             <Link
               key={`${link.label}:${link.href}`}
               to={link.href}
-              className="group flex items-start gap-3 rounded-2xl border border-slate-200 bg-white p-3 transition hover:border-blue-200 hover:bg-blue-50"
+              className={`group flex items-start gap-3 rounded-2xl border p-3 transition ${shortcutLinkClasses(link.tone)}`}
             >
-              <span className="mt-0.5 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-slate-100 text-slate-600 transition group-hover:bg-white group-hover:text-blue-700">
+              <span className={`mt-0.5 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-xl transition ${shortcutIconClasses(link.tone)}`}>
                 <Icon className="h-4 w-4" />
               </span>
               <span className="min-w-0">
@@ -403,14 +427,16 @@ function DetailShortcutPanel({
   icon: typeof ClipboardList;
   cta: string;
   metric: string;
-  tone?: "blue" | "red" | "slate";
+  tone?: ShortcutTone;
 }) {
   const toneClasses =
     tone === "red"
       ? "border-red-200 bg-red-50 text-red-800"
-      : tone === "slate"
-        ? "border-slate-200 bg-slate-50 text-slate-700"
-        : "border-blue-100 bg-blue-50 text-blue-900";
+      : tone === "amber"
+        ? "border-amber-200 bg-amber-50 text-amber-800"
+        : tone === "slate"
+          ? "border-slate-200 bg-slate-50 text-slate-700"
+          : "border-blue-100 bg-blue-50 text-blue-900";
 
   return (
     <div className="rounded-2xl border border-slate-200 p-4">
