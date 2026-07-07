@@ -173,11 +173,15 @@ export function PurchaseOrderEditor({
 
   function selectProject(projectId: string) {
     const project = projects.find((row) => row.id === projectId) ?? null;
+    const projectAddress = project?.address?.trim() || null;
+    const deliveryAddress = order.deliveryAddress || projectAddress;
     updateOrder({
       projectId: project?.id ?? null,
+      deliveryAddress: deliveryAddress ?? null,
       document: {
         ...document,
         projectId: project?.id ?? null,
+        siteAddress: deliveryAddress ?? document.siteAddress,
       },
     });
   }
