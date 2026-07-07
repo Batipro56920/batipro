@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useSearchParams } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { FileText, PackageSearch, Plus, RefreshCw, Trash2, X } from "lucide-react";
 import type { SupplierRow } from "../../../services/suppliers.service";
 import { listSuppliers } from "../../../services/suppliers.service";
@@ -344,7 +344,16 @@ export default function ProductCatalogPage() {
                 </td>
                 <td className="px-4 py-3 align-top text-slate-600">{product.category || "-"}</td>
                 <td className="px-4 py-3 align-top text-slate-600">{product.brand || "-"}</td>
-                <td className="px-4 py-3 align-top text-slate-600">{product.mainSupplierName || "-"}</td>
+                <td className="px-4 py-3 align-top text-slate-600">
+                  {product.mainSupplierId && product.mainSupplierName ? (
+                    <Link
+                      to={`/fournisseurs?supplierId=${encodeURIComponent(product.mainSupplierId)}`}
+                      className="font-semibold text-blue-700 hover:text-blue-900 hover:underline"
+                    >
+                      {product.mainSupplierName}
+                    </Link>
+                  ) : product.mainSupplierName || "-"}
+                </td>
                 <td className="px-4 py-3 align-top text-slate-600">{product.unit}</td>
                 <td className="px-4 py-3 text-right align-top font-semibold">{formatCurrency(getPurchasePackagePrice(product))}</td>
                 <td className="px-4 py-3 text-right align-top font-semibold">{formatUnitPurchasePrice(product)}</td>
