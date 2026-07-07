@@ -25,7 +25,15 @@ type ProjectPurchaseSummary = {
   totalHt: number;
 };
 
-export function ProjectPurchasesSummary({ project, purchaseOrdersPath }: { project: ProjectRecord; purchaseOrdersPath: string }) {
+export function ProjectPurchasesSummary({
+  newPurchaseOrderPath,
+  project,
+  purchaseOrdersPath,
+}: {
+  newPurchaseOrderPath: string;
+  project: ProjectRecord;
+  purchaseOrdersPath: string;
+}) {
   const projectIds = useMemo(() => Array.from(new Set([project.id, project.sourceId].filter(Boolean))), [project.id, project.sourceId]);
   const [summary, setSummary] = useState<ProjectPurchaseSummary | null>(null);
   const [loading, setLoading] = useState(true);
@@ -118,9 +126,14 @@ export function ProjectPurchasesSummary({ project, purchaseOrdersPath }: { proje
             <ProjectPurchaseMetric label="HT engagé" value={formatCurrency(currentSummary.totalHt)} />
           </div>
         </div>
-        <Link to={purchaseOrdersPath} className="inline-flex h-9 shrink-0 items-center justify-center gap-2 rounded-xl border border-blue-200 bg-white px-3 text-sm font-semibold text-blue-700 transition hover:bg-blue-100">
-          Voir les commandes
-        </Link>
+        <div className="flex shrink-0 flex-col gap-2 sm:flex-row md:flex-col">
+          <Link to={newPurchaseOrderPath} className="inline-flex h-9 items-center justify-center gap-2 rounded-xl bg-blue-600 px-3 text-sm font-semibold text-white transition hover:bg-blue-700">
+            Nouveau bon projet
+          </Link>
+          <Link to={purchaseOrdersPath} className="inline-flex h-9 items-center justify-center gap-2 rounded-xl border border-blue-200 bg-white px-3 text-sm font-semibold text-blue-700 transition hover:bg-blue-100">
+            Voir les commandes
+          </Link>
+        </div>
       </div>
     </section>
   );
