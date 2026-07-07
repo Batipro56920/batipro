@@ -36,6 +36,7 @@ export function ProjectDetailHeader({ project, onProjectUpdated }: { project: Pr
   const linkedChantierId = linkedAcceptedQuoteChantier?.id ?? acceptedQuote?.chantier_id ?? fallbackChantier?.id ?? null;
   const editTarget = project.opportunity ? "/crm/opportunites" : project.sourceType === "client" ? "/crm/clients" : "/crm/prospects";
   const projectPurchaseOrdersPath = `/bons-commande?projectId=${encodeURIComponent(project.id)}`;
+  const newProjectPurchaseOrderPath = `${projectPurchaseOrdersPath}&newOrder=1`;
   const isWonProject = WON_PROJECT_STATUSES.includes(project.status);
   const canMarkWon = Boolean(quote) && !isWonProject && project.status !== "perdu";
   const canMarkLost = !linkedChantierId && !acceptedQuote && !isWonProject && project.status !== "perdu";
@@ -126,7 +127,11 @@ export function ProjectDetailHeader({ project, onProjectUpdated }: { project: Pr
           </div>
           {chantierError ? <div className="mt-3 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{chantierError}</div> : null}
           {outcomeError ? <div className="mt-3 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{outcomeError}</div> : null}
-          <ProjectPurchasesSummary project={project} purchaseOrdersPath={projectPurchaseOrdersPath} />
+          <ProjectPurchasesSummary
+            newPurchaseOrderPath={newProjectPurchaseOrderPath}
+            project={project}
+            purchaseOrdersPath={projectPurchaseOrdersPath}
+          />
         </div>
 
         <div className="flex flex-wrap gap-2">
