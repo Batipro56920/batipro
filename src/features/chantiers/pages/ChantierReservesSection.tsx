@@ -49,6 +49,14 @@ export default function ChantierReservesSection({ children }: { children: ReactN
     setSearchParams(nextParams, { replace: true });
   }
 
+  function clearAutoOpenContext() {
+    if (hasTargetedReserve && hasSourceFeedback) {
+      clearReserveTargetOnly();
+      return;
+    }
+    clearTargetedReserve();
+  }
+
   function clearTargetedReserve() {
     if (!searchParams.has("reserveId") && !searchParams.has("feedbackId")) return;
     const nextParams = new URLSearchParams(searchParams);
@@ -66,7 +74,7 @@ export default function ChantierReservesSection({ children }: { children: ReactN
       previewClassName="batipro-chapter-preview--reserves"
       autoOpenKey={reserveAutoOpenKey}
       autoOpenLabel={reserveAutoOpenLabel}
-      onAutoOpenClear={clearTargetedReserve}
+      onAutoOpenClear={clearAutoOpenContext}
     >
       {targetedReserveId ? (
         <div className="mb-4 rounded-2xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-900">
