@@ -14,6 +14,7 @@ type TimeRow = {
   chantier: ChantierRow;
   entries: ChantierTimeEntryRow[];
   planned: number;
+  plannedFromTasks: number;
   logged: number;
   delta: number;
   tone: TimeTone;
@@ -59,6 +60,29 @@ function getTerrainFeedbackLabel(summary: TerrainFeedbackSummary) {
   if (summary.priority > 0) return `${summary.priority} retour${summary.priority > 1 ? "s" : ""} urgent${summary.priority > 1 ? "s" : ""}`;
   if (summary.open > 0) return `${summary.open} retour${summary.open > 1 ? "s" : ""} terrain`;
   return "Aucun retour ouvert";
+}
+
+async function loadTaskPlannedHoursByChantier(chantierIds: string[]): Promise<Record<string, number>> {
+  if (chantierIds.length === 0) return {};
+
+  const { data, error } = await (supabase as any)
+    .from("chantier_tasks")
+    .select("chantier_id,temps_prevu_h")
+    .in("chantier_id", chantierIds);
+
+  if (error) {
+    console.warn("[chantiers-time] task planned hours skipped", error);
+    return {};
+  }
+
+  const totals: Record<string, number> = {};
+  for (const row of (data ?? []) as Array<Record<string, unknown>>) {
+    const chantierId = String(row.chantier_id ?? "");
+    if (!chantierId) continue;
+    totals[chantierId] = (totals[chantierId] ?? 0) + Number(row.temps_prevu_h ?? 0);
+  }
+
+  return totals;
 }
 
 async function loadTerrainFeedbackSummaries(chantierIds: string[]): Promise<Record<string, TerrainFeedbackSummary>> {
@@ -131,6 +155,7 @@ function TimeFilterCard({
 export default function ChantiersTimePage() {
   const [chantiers, setChantiers] = useState<ChantierRow[]>([]);
   const [entriesByChantier, setEntriesByChantier] = useState<Record<string, ChantierTimeEntryRow[]>>({});
+  const [plannedHoursByChantier, setPlannedHoursByChantier] = useState<Record<string, number>>({});
   const [terrainFeedbackByChantier, setTerrainFeedbackByChantier] = useState<Record<string, TerrainFeedbackSummary>>({});
   const [query, setQuery] = useState("");
   const [activeFilter, setActiveFilter] = useState<TimePriorityFilter>("all");
@@ -141,7 +166,9 @@ export default function ChantiersTimePage() {
     return chantiers
       .map((chantier) => {
         const entries = entriesByChantier[chantier.id] ?? [];
-        const planned = Number(chantier.heures_prevues ?? 0);
+        const plannedFromChantier = Number(chantier.heures_prevues ?? 0);
+        const plannedFromTasks = plannedHoursByChantier[chantier.id] ?? 0;
+        const planned = plannedFromChantier > 0 ? plannedFromChantier : plannedFromTasks;
         const logged = getTotal(entries);
         const delta = logged - planned;
         const tone = getTimeTone({ planned, logged, entriesCount: entries.length });
@@ -151,6 +178,7 @@ export default function ChantiersTimePage() {
           chantier,
           entries,
           planned,
+          plannedFromTasks,
           logged,
           delta,
           tone,
@@ -169,7 +197,7 @@ export default function ChantiersTimePage() {
         if (a.tone === "over" || b.tone === "over") return b.delta - a.delta;
         return a.chantier.nom.localeCompare(b.chantier.nom, "fr");
       });
-  }, [chantiers, entriesByChantier, terrainFeedbackByChantier]);
+  }, [chantiers, entriesByChantier, plannedHoursByChantier, terrainFeedbackByChantier]);
 
   const rows = useMemo(() => {
     const search = normalizeSearch(query);
@@ -181,23 +209,25 @@ export default function ChantiersTimePage() {
   }, [activeFilter, allRows, query]);
 
   const totals = useMemo(() => {
-    const planned = chantiers.reduce((sum, chantier) => sum + Number(chantier.heures_prevues ?? 0), 0);
+    const planned = allRows.reduce((sum, row) => sum + row.planned, 0);
     const logged = Object.values(entriesByChantier).reduce((sum, entries) => sum + getTotal(entries), 0);
     const missingTime = allRows.filter((row) => row.tone === "missing").length;
     const overBudget = allRows.filter((row) => row.tone === "over").length;
     const underControl = allRows.filter((row) => row.tone === "ok").length;
+    const plannedFromTasks = allRows.filter((row) => Number(row.chantier.heures_prevues ?? 0) <= 0 && row.plannedFromTasks > 0).length;
     const chantiersWithTerrainFeedbacks = allRows.filter((row) => row.terrainFeedback.open > 0).length;
     const openTerrainFeedbacks = allRows.reduce((sum, row) => sum + row.terrainFeedback.open, 0);
     const priorityTerrainFeedbacks = allRows.reduce((sum, row) => sum + row.terrainFeedback.priority, 0);
-    return { planned, logged, missingTime, overBudget, underControl, chantiersWithTerrainFeedbacks, openTerrainFeedbacks, priorityTerrainFeedbacks };
-  }, [allRows, chantiers, entriesByChantier]);
+    return { planned, logged, missingTime, overBudget, underControl, plannedFromTasks, chantiersWithTerrainFeedbacks, openTerrainFeedbacks, priorityTerrainFeedbacks };
+  }, [allRows, entriesByChantier]);
 
   async function refresh() {
     setLoading(true);
     setError(null);
     try {
       const rows = await listChantiers({ scope: "actifs" });
-      const [pairs, terrainFeedbackSummaries] = await Promise.all([
+      const chantierIds = rows.map((chantier) => chantier.id);
+      const [pairs, taskPlannedHours, terrainFeedbackSummaries] = await Promise.all([
         Promise.all(
           rows.map(async (chantier) => {
             try {
@@ -207,15 +237,18 @@ export default function ChantiersTimePage() {
             }
           }),
         ),
-        loadTerrainFeedbackSummaries(rows.map((chantier) => chantier.id)),
+        loadTaskPlannedHoursByChantier(chantierIds),
+        loadTerrainFeedbackSummaries(chantierIds),
       ]);
       setChantiers(rows);
       setEntriesByChantier(Object.fromEntries(pairs));
+      setPlannedHoursByChantier(taskPlannedHours);
       setTerrainFeedbackByChantier(terrainFeedbackSummaries);
     } catch (err: any) {
       setError(err?.message ?? "Impossible de charger le suivi des temps.");
       setChantiers([]);
       setEntriesByChantier({});
+      setPlannedHoursByChantier({});
       setTerrainFeedbackByChantier({});
     } finally {
       setLoading(false);
@@ -254,6 +287,7 @@ export default function ChantiersTimePage() {
         <article className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
           <div className="text-xs font-semibold uppercase text-slate-400">Prévu actif</div>
           <div className="mt-2 text-2xl font-semibold text-slate-950">{formatHours(totals.planned)}</div>
+          {totals.plannedFromTasks > 0 ? <div className="mt-1 text-xs font-semibold text-slate-500">Inclut {totals.plannedFromTasks} prévu{totals.plannedFromTasks > 1 ? "s" : ""} calculé{totals.plannedFromTasks > 1 ? "s" : ""} depuis les tâches</div> : null}
         </article>
         <article className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
           <div className="text-xs font-semibold uppercase text-slate-400">Saisi actif</div>
@@ -344,11 +378,13 @@ export default function ChantiersTimePage() {
             <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-6 text-center text-sm text-slate-500 lg:col-span-2">Aucun chantier actif à suivre.</div>
           ) : rows.length === 0 ? (
             <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-6 text-center text-sm text-slate-500 lg:col-span-2">Aucun chantier ne correspond à ce filtre ou cette recherche.</div>
-          ) : rows.map(({ chantier, entries, planned, logged, delta, tone, terrainFeedback }) => {
+          ) : rows.map(({ chantier, entries, planned, plannedFromTasks, logged, delta, tone, terrainFeedback }) => {
             const isOver = tone === "over";
             const isMissing = tone === "missing";
             const hasOpenTerrainFeedbacks = terrainFeedback.open > 0;
             const hasPriorityTerrainFeedbacks = terrainFeedback.priority > 0;
+            const usesTaskPlannedHours = Number(chantier.heures_prevues ?? 0) <= 0 && plannedFromTasks > 0;
+            const plannedLabel = usesTaskPlannedHours ? "Prévu tâches" : "Prévu";
             const statusLabel = isOver ? `Dépassement ${formatHours(delta)}` : isMissing ? "Aucune saisie temps" : "Temps sous contrôle";
             const statusClass = isOver
               ? "border-red-200 bg-red-50 text-red-700"
@@ -384,7 +420,7 @@ export default function ChantiersTimePage() {
                     </div>
                     <div className="mt-1 truncate text-sm text-slate-500">{chantier.client ?? "Client non renseigné"}</div>
                     <div className="mt-3 flex flex-wrap gap-2 text-xs font-semibold">
-                      <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-slate-700">Prévu {formatHours(planned)}</span>
+                      <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-slate-700">{plannedLabel} {formatHours(planned)}</span>
                       <span className={`rounded-full border px-3 py-1 ${isOver ? "border-red-200 bg-red-50 text-red-700" : "border-emerald-200 bg-emerald-50 text-emerald-700"}`}>Saisi {formatHours(logged)}</span>
                       <span className="rounded-full border border-blue-200 bg-blue-50 px-3 py-1 text-blue-700">{entries.length} saisie{entries.length > 1 ? "s" : ""}</span>
                     </div>
