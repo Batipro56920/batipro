@@ -27,6 +27,7 @@ export default function ChantierPurchasesSection({
   zones: ChantierZoneRow[];
 }) {
   const purchaseOrdersHref = `/bons-commande?chantierId=${encodeURIComponent(chantierId)}`;
+  const newPurchaseOrderHref = `${purchaseOrdersHref}&newOrder=1`;
   const [purchaseOrders, setPurchaseOrders] = useState<PurchaseOrderSummaryRow[]>([]);
   const [purchaseOrdersLoading, setPurchaseOrdersLoading] = useState(true);
   const [purchaseOrdersError, setPurchaseOrdersError] = useState(false);
@@ -106,8 +107,14 @@ export default function ChantierPurchasesSection({
               Catalogue produits
             </Link>
             <Link
-              to={purchaseOrdersHref}
+              to={newPurchaseOrderHref}
               className="inline-flex shrink-0 items-center justify-center rounded-xl bg-blue-700 px-3 py-2 text-sm font-semibold text-white hover:bg-blue-800"
+            >
+              Nouveau bon chantier
+            </Link>
+            <Link
+              to={purchaseOrdersHref}
+              className="inline-flex shrink-0 items-center justify-center rounded-xl border border-blue-200 bg-white px-3 py-2 text-sm font-semibold text-blue-800 hover:bg-blue-100"
             >
               Bons de commande chantier
             </Link>
