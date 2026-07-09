@@ -1,4 +1,4 @@
-import { AlertTriangle, ArrowRight } from "lucide-react";
+import { AlertTriangle, ArrowRight, CalendarDays } from "lucide-react";
 import { Link } from "react-router-dom";
 import type { ChantierDerived, ChantierListActions } from "../types";
 import { budgetLabel, shortDate } from "../utils/chantiersListUtils";
@@ -70,6 +70,19 @@ function TerrainFeedbackLink({ row, compact = false }: { row: ChantierDerived; c
   );
 }
 
+function PlanningDelayLink({ row }: { row: ChantierDerived }) {
+  return (
+    <Link
+      to={`/chantiers/${row.id}/planning`}
+      className="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-red-200 bg-white px-3 py-2 text-sm font-semibold text-red-700 transition hover:bg-red-50"
+    >
+      <CalendarDays className="h-4 w-4" />
+      Recaler le planning
+      <ArrowRight className="h-4 w-4" />
+    </Link>
+  );
+}
+
 export function ChantiersKanbanView({ rows, onPreview, actions }: { rows: ChantierDerived[]; onPreview: (row: ChantierDerived) => void; actions: ChantierListActions }) {
   const blockedRows = rows.filter(isBlockedChantier);
   const blockedIds = new Set(blockedRows.map((row) => row.id));
@@ -111,15 +124,20 @@ export function ChantiersKanbanView({ rows, onPreview, actions }: { rows: Chanti
                   ) : null}
                   {column.key === "blocage" ? (
                     <div className="mt-3 grid gap-2" onClick={(event) => event.stopPropagation()}>
-                      <TerrainFeedbackLink row={row} />
-                      <Link
-                        to={`/chantiers/${row.id}/qualite`}
-                        className="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm font-semibold text-red-700 transition hover:bg-red-100"
-                      >
-                        <AlertTriangle className="h-4 w-4" />
-                        Traiter en qualité
-                        <ArrowRight className="h-4 w-4" />
-                      </Link>
+                      {row.isLate ? <PlanningDelayLink row={row} /> : null}
+                      {feedback.hasOpen ? (
+                        <>
+                          <TerrainFeedbackLink row={row} />
+                          <Link
+                            to={`/chantiers/${row.id}/qualite`}
+                            className="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm font-semibold text-red-700 transition hover:bg-red-100"
+                          >
+                            <AlertTriangle className="h-4 w-4" />
+                            Traiter en qualité
+                            <ArrowRight className="h-4 w-4" />
+                          </Link>
+                        </>
+                      ) : null}
                     </div>
                   ) : null}
                   <div className="mt-3">
