@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { AlertTriangle, ArrowRight, CalendarDays, Clock3, ClipboardList, RefreshCw, Search, Users } from "lucide-react";
+import { AlertTriangle, ArrowRight, CalendarDays, CheckCircle2, Clock3, ClipboardList, RefreshCw, Search, Users } from "lucide-react";
 
 import { supabase } from "../lib/supabaseClient";
 import { listChantiers, type ChantierRow } from "../services/chantiers.service";
@@ -267,7 +267,7 @@ export default function ChantiersTimePage() {
             <div className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-400">Pilotage</div>
             <h1 className="mt-1 text-2xl font-semibold text-slate-950">Suivi des temps chantier</h1>
             <p className="mt-2 max-w-3xl text-sm text-slate-500">
-              Priorisez les chantiers actifs en dépassement, sans saisie ou avec retours terrain ouverts, puis ouvrez directement le suivi temps, les tâches, le planning ou l'équipe.
+              Priorisez les chantiers actifs en dépassement, sans saisie ou avec retours terrain ouverts, puis ouvrez directement le suivi temps, les tâches, le planning, la qualité ou l'équipe.
             </p>
           </div>
           <button type="button" onClick={() => void refresh()} disabled={loading} className="inline-flex h-10 items-center gap-2 rounded-xl border border-slate-200 px-3 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50">
@@ -396,6 +396,7 @@ export default function ChantiersTimePage() {
               : hasOpenTerrainFeedbacks
                 ? "border-amber-200 bg-amber-50 text-amber-700"
                 : "border-slate-200 bg-slate-50 text-slate-600";
+            const qualityClass = hasOpenTerrainFeedbacks ? terrainClass : "border-slate-200 text-slate-700 hover:bg-slate-50";
 
             return (
               <article key={chantier.id} className={`rounded-2xl border bg-white p-4 shadow-sm transition hover:border-blue-200 ${isOver || hasPriorityTerrainFeedbacks ? "border-red-200" : "border-slate-200"}`}>
@@ -435,6 +436,9 @@ export default function ChantiersTimePage() {
                   </Link>
                   <Link to={`/chantiers/${encodeURIComponent(chantier.id)}/planning`} className="inline-flex h-9 items-center gap-2 rounded-xl border border-slate-200 px-3 text-sm font-medium text-slate-700 hover:bg-slate-50">
                     <CalendarDays className="h-4 w-4" /> Planning
+                  </Link>
+                  <Link to={`/chantiers/${encodeURIComponent(chantier.id)}/qualite`} className={`inline-flex h-9 items-center gap-2 rounded-xl border px-3 text-sm font-medium ${qualityClass}`}>
+                    <CheckCircle2 className="h-4 w-4" /> Qualité / réserves
                   </Link>
                   {hasOpenTerrainFeedbacks ? (
                     <Link to={`/retours-terrain?chantierId=${encodeURIComponent(chantier.id)}`} className={`inline-flex h-9 items-center gap-2 rounded-xl border px-3 text-sm font-medium hover:brightness-95 ${terrainClass}`}>
