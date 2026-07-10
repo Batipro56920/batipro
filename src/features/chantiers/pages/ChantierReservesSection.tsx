@@ -3,6 +3,12 @@ import { Link, useParams, useSearchParams } from "react-router-dom";
 
 import ChantierChapterDrawer from "../components/ChantierChapterDrawer";
 
+function buildTerrainFeedbackHref(chantierId: string, feedbackId?: string) {
+  const params = new URLSearchParams({ chantierId });
+  if (feedbackId) params.set("feedbackId", feedbackId);
+  return `/retours-terrain?${params.toString()}`;
+}
+
 export default function ChantierReservesSection({ children }: { children: ReactNode }) {
   const { id } = useParams<{ id: string }>();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -11,11 +17,8 @@ export default function ChantierReservesSection({ children }: { children: ReactN
   const hasTargetedReserve = Boolean(targetedReserveId);
   const hasSourceFeedback = Boolean(sourceFeedbackId);
   const encodedChantierId = id ? encodeURIComponent(id) : "";
-  const encodedSourceFeedbackId = sourceFeedbackId ? encodeURIComponent(sourceFeedbackId) : "";
   const terrainFeedbackHref = id
-    ? hasSourceFeedback
-      ? `/chantiers/${encodedChantierId}/retours-terrain/${encodedSourceFeedbackId}`
-      : `/chantiers/${encodedChantierId}/retours-terrain`
+    ? buildTerrainFeedbackHref(id, hasSourceFeedback ? sourceFeedbackId : undefined)
     : "/retours-terrain";
   const chantierJournalHref = id ? `/chantiers/${encodedChantierId}/historique` : "";
   const chantierExecutionHref = id ? `/chantiers/${encodedChantierId}/execution` : "";
@@ -31,15 +34,15 @@ export default function ChantierReservesSection({ children }: { children: ReactN
       ? "Réserve créée depuis retour terrain"
       : "Réserve ciblée à traiter"
     : hasSourceFeedback
-      ? "Retour terrain source à qualifier"
+      ? "Retour terrain source à transformer en réserve"
       : "";
   const chapterActionLabel = hasTargetedReserve
     ? "Traiter la réserve ciblée"
     : hasSourceFeedback
-      ? "Qualifier le retour terrain"
+      ? "Créer ou compléter la réserve"
       : "Gérer les réserves";
   const chapterSubtitle = hasSourceFeedback
-    ? "Réserves ouvertes et levées. Le retour terrain source reste relié pour traiter la qualité chantier sans perdre l'origine du signalement."
+    ? "Réserves ouvertes et levées. Le retour terrain source reste relié pour traiter la qualité chantier, revenir au signalement et conserver la trace dans le journal."
     : "Réserves ouvertes et levées. La création, le filtre et le détail se font dans le panneau latéral.";
 
   function clearReserveTargetOnly() {
