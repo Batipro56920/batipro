@@ -159,6 +159,24 @@ function leadStatusClass(status: ApporteurLeadStatus) {
   return "bg-slate-100 text-slate-700 ring-slate-200";
 }
 
+function leadCrmProcessingLabel(lead: ApporteurLeadRow) {
+  if (lead.crm_opportunity_id) return "Projet CRM ouvert";
+  if (lead.crm_prospect_id) return "Prospect CRM créé";
+  return "À reprendre par Batipro";
+}
+
+function leadCrmProcessingClass(lead: ApporteurLeadRow) {
+  if (lead.crm_opportunity_id) return "bg-emerald-50 text-emerald-700 ring-emerald-200";
+  if (lead.crm_prospect_id) return "bg-blue-50 text-blue-700 ring-blue-200";
+  return "bg-amber-50 text-amber-700 ring-amber-200";
+}
+
+function leadCrmProcessingDescription(lead: ApporteurLeadRow) {
+  if (lead.crm_opportunity_id) return "Batipro a ouvert le dossier projet dans le CRM.";
+  if (lead.crm_prospect_id) return "Batipro a créé le prospect CRM et peut qualifier la demande.";
+  return "Le client est transmis et reste à convertir côté back-office Batipro.";
+}
+
 function leadNextStepLabel(status: ApporteurLeadStatus) {
   if (status === "nouveau") return "Client reçu, qualification commerciale à lancer par Batipro.";
   if (status === "contacte") return "Client contacté, besoin en cours de cadrage.";
@@ -276,7 +294,7 @@ export default function ApporteurPortalPage() {
         comment: leadForm.comment || null,
         date: leadForm.date,
       });
-      setActNotice("Client transmis. L'équipe prendra le relais.");
+      setActNotice("Client transmis. Il apparaît maintenant côté Batipro comme dossier à reprendre dans le CRM.");
       setLeadForm({ ...DEFAULT_LEAD_FORM, date: todayLocalDate() });
       const accessResult = await checkApporteurToken(token);
       const refreshed = await getApporteurPortalData(jwt, accessResult.apporteur_id);
@@ -303,7 +321,7 @@ export default function ApporteurPortalPage() {
           <div>
             <div className="section-title text-xs font-semibold uppercase tracking-[0.16em]">Portail apporteur</div>
             <h1 className="mt-1 text-2xl font-bold text-slate-950">{portalData.apporteur?.nom || "Apporteur"}</h1>
-            <p className="mt-1 text-sm text-slate-500">Transmettez les coordonnées client. Batipro reprend ensuite le suivi commercial.</p>
+            <p className="mt-1 text-sm text-slate-500">Transmettez les coordonnées client et suivez la reprise du dossier par Batipro dans le CRM.</p>
           </div>
           <div className="grid gap-3 sm:grid-cols-3">
             <Metric label="Clients transmis" value={String(portalData.leads.length)} />
@@ -388,6 +406,7 @@ export default function ApporteurPortalPage() {
                   <th>Projet</th>
                   <th>Montant estimé</th>
                   <th>Statut</th>
+                  <th>Traitement CRM</th>
                   <th>Suite Batipro</th>
                   <th>Commission</th>
                   <th>Date</th>
@@ -400,14 +419,17 @@ export default function ApporteurPortalPage() {
                     <td className="align-top"><div>{lead.project_type || "-"}</div><div className="text-xs text-slate-500">{lead.project_address || ""}</div></td>
                     <td className="align-top">{formatCurrency(lead.estimated_amount)}</td>
                     <td className="align-top"><span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ring-1 ${leadStatusClass(lead.status)}`}>{leadStatusLabel(lead.status)}</span></td>
-                    <td className="max-w-xs align-top text-xs text-slate-600">{leadNextStepLabel(lead.status)}</td>
+                    <td className="align-top">
+                      <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ring-1 ${leadCrmProcessingClass(lead)}`}>{leadCrmProcessingLabel(lead)}</span>
+                    </td>
+                    <td className="max-w-xs align-top text-xs text-slate-600"><div>{leadNextStepLabel(lead.status)}</div><div className="mt-1 text-slate-500">{leadCrmProcessingDescription(lead)}</div></td>
                     <td className="align-top">{commissionDisplay(lead, portalData.apporteur)}</td>
                     <td className="align-top">{lead.date}</td>
                   </tr>
                 ))}
                 {portalData.leads.length === 0 ? (
                   <tr>
-                    <td colSpan={7} className="px-4 py-6 text-center text-sm text-slate-500">Aucun client transmis pour le moment.</td>
+                    <td colSpan={8} className="px-4 py-6 text-center text-sm text-slate-500">Aucun client transmis pour le moment.</td>
                   </tr>
                 ) : null}
               </tbody>
@@ -444,6 +466,13 @@ function LeadMobileRow({ lead, apporteur }: { lead: ApporteurLeadRow; apporteur:
       <div className="mt-3 grid grid-cols-2 gap-3 border-t border-slate-200 pt-3">
         <div><div className="text-xs text-slate-500">Montant estimé</div><div className="font-semibold text-slate-950">{formatCurrency(lead.estimated_amount)}</div></div>
         <div><div className="text-xs text-slate-500">Commission</div><div className="font-semibold text-slate-950">{commissionDisplay(lead, apporteur)}</div></div>
+      </div>
+      <div className="mt-3 rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-600 ring-1 ring-slate-200">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <span className="font-semibold text-slate-800">Traitement CRM</span>
+          <span className={`rounded-full px-2.5 py-1 font-semibold ring-1 ${leadCrmProcessingClass(lead)}`}>{leadCrmProcessingLabel(lead)}</span>
+        </div>
+        <div className="mt-2">{leadCrmProcessingDescription(lead)}</div>
       </div>
       <div className="mt-3 rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-600 ring-1 ring-slate-200">
         <div className="font-semibold text-slate-800">Suite Batipro</div>
