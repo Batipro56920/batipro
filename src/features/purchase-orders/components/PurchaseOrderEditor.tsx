@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { Download, Plus, Save, Send } from "lucide-react";
 import { Button } from "../../../components/ui/button";
 import { supabase } from "../../../lib/supabaseClient";
@@ -54,6 +55,9 @@ export function PurchaseOrderEditor({
   onSave: (order: PurchaseOrderRecord) => void | Promise<void>;
   onClose: () => void;
 }) {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const urlProductId = searchParams.get("productId") ?? "";
+  const insertedProductFromUrlRef = useRef("");
   const [previewOpen, setPreviewOpen] = useState(false);
   const [sendOpen, setSendOpen] = useState(false);
   const [productQuery, setProductQuery] = useState("");
@@ -89,6 +93,28 @@ export function PurchaseOrderEditor({
   useEffect(() => {
     listProjectOptions().then(setProjects).catch(() => setProjects([]));
   }, []);
+
+  useEffect(() => {
+    if (!urlProductId) {
+      insertedProductFromUrlRef.current = "";
+      return;
+    }
+    if (!products.length || insertedProductFromUrlRef.current === urlProductId) return;
+
+    const product = products.find((row) => row.id === urlProductId) ?? null;
+    const nextParams = new URLSearchParams(searchParams);
+    nextParams.delete("productId");
+
+    if (!product) {
+      setSearchParams(nextParams, { replace: true });
+      return;
+    }
+
+    insertedProductFromUrlRef.current = urlProductId;
+    addCatalogProduct(product);
+    setProductQuery(product.designation);
+    setSearchParams(nextParams, { replace: true });
+  }, [products, searchParams, setSearchParams, urlProductId]);
 
   function updateOrder(patch: Partial<PurchaseOrderRecord>) {
     onChange({ ...order, ...patch, updatedAt: new Date().toISOString() });
