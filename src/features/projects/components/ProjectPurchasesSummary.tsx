@@ -86,12 +86,20 @@ export function ProjectPurchasesSummary({
 
   if (error) {
     return (
-      <div className="mt-4 flex flex-col gap-3 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800 sm:flex-row sm:items-center sm:justify-between">
-        <span>Suivi achats projet indisponible.</span>
-        <Link to={purchaseOrdersPath} className="inline-flex h-8 items-center justify-center gap-2 rounded-xl border border-amber-200 bg-white px-3 text-xs font-semibold text-amber-800 transition hover:bg-amber-100">
-          <ShoppingCart className="h-4 w-4" />
-          Ouvrir les achats du projet
-        </Link>
+      <div className="mt-4 flex flex-col gap-3 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800 lg:flex-row lg:items-center lg:justify-between">
+        <div>
+          <div className="font-semibold">Suivi achats projet indisponible.</div>
+          <p className="mt-1 text-amber-800/80">La lecture du résumé est bloquée, mais les bons de commande du projet restent accessibles.</p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <Link to={newPurchaseOrderPath} className="inline-flex h-8 items-center justify-center gap-2 rounded-xl bg-amber-700 px-3 text-xs font-semibold text-white transition hover:bg-amber-800">
+            Nouveau bon projet
+          </Link>
+          <Link to={purchaseOrdersPath} className="inline-flex h-8 items-center justify-center gap-2 rounded-xl border border-amber-200 bg-white px-3 text-xs font-semibold text-amber-800 transition hover:bg-amber-100">
+            <ShoppingCart className="h-4 w-4" />
+            Ouvrir les achats du projet
+          </Link>
+        </div>
       </div>
     );
   }
