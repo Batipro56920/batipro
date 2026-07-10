@@ -247,9 +247,12 @@ function mergeExtractedProduct(
     changed = true;
   }
 
-  if (supplierPrice && !hasSupplierPrice(next.supplierPrices, supplierPrice)) {
-    next.supplierPrices.push(supplierPrice);
-    changed = true;
+  if (supplierPrice) {
+    const nextSupplierPrices = upsertSupplierPrice(next.supplierPrices, supplierPrice);
+    if (nextSupplierPrices !== next.supplierPrices) {
+      next.supplierPrices = nextSupplierPrices;
+      changed = true;
+    }
   }
 
   return changed ? next : null;
@@ -332,6 +335,41 @@ function addProductIdentityKey(keys: Set<string>, designation: string, supplierN
   const supplier = normalizeKey(supplierName);
   if (!supplier && !reference) return;
   keys.add([designation, supplier, reference].join("|"));
+}
+
+function upsertSupplierPrice(prices: ProductSupplierPrice[], candidate: ProductSupplierPrice) {
+  const matchingIndex = prices.findIndex((price) => sameSupplierPriceContext(price, candidate));
+  if (matchingIndex < 0) return [...prices, candidate];
+
+  const existing = prices[matchingIndex];
+  if (hasSupplierPrice([existing], candidate)) return prices;
+
+  const nextPrice: ProductSupplierPrice = {
+    ...existing,
+    supplierId: existing.supplierId ?? candidate.supplierId,
+    supplierName: existing.supplierName || candidate.supplierName,
+    priceHt: candidate.priceHt,
+    discountPercent: candidate.discountPercent ?? existing.discountPercent,
+    startDate: candidate.startDate ?? existing.startDate,
+    endDate: candidate.endDate ?? existing.endDate,
+    packaging: candidate.packaging ?? existing.packaging,
+    minimumQuantity: candidate.minimumQuantity ?? existing.minimumQuantity,
+    deliveryLeadTimeDays: candidate.deliveryLeadTimeDays ?? existing.deliveryLeadTimeDays,
+    coverageM2: candidate.coverageM2 ?? existing.coverageM2,
+    pricePerM2Ht: candidate.pricePerM2Ht ?? existing.pricePerM2Ht,
+  };
+
+  return prices.map((price, index) => index === matchingIndex ? nextPrice : price);
+}
+
+function sameSupplierPriceContext(price: ProductSupplierPrice, candidate: ProductSupplierPrice) {
+  const sameSupplier = candidate.supplierId
+    ? price.supplierId === candidate.supplierId
+    : normalizeKey(price.supplierName) === normalizeKey(candidate.supplierName);
+  return sameSupplier
+    && normalizeKey(price.packaging) === normalizeKey(candidate.packaging)
+    && (price.minimumQuantity ?? null) === (candidate.minimumQuantity ?? null)
+    && (price.coverageM2 ?? null) === (candidate.coverageM2 ?? null);
 }
 
 function hasSupplierPrice(prices: ProductSupplierPrice[], candidate: ProductSupplierPrice) {
