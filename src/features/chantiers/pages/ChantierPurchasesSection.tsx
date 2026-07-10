@@ -27,6 +27,7 @@ export default function ChantierPurchasesSection({
   zones: ChantierZoneRow[];
 }) {
   const purchaseOrdersHref = `/bons-commande?chantierId=${encodeURIComponent(chantierId)}`;
+  const openPurchaseOrdersHref = `${purchaseOrdersHref}&status=open`;
   const newPurchaseOrderHref = `${purchaseOrdersHref}&newOrder=1`;
   const [purchaseOrders, setPurchaseOrders] = useState<PurchaseOrderSummaryRow[]>([]);
   const [purchaseOrdersLoading, setPurchaseOrdersLoading] = useState(true);
@@ -84,18 +85,20 @@ export default function ChantierPurchasesSection({
               <PurchaseOrderSummaryBadge
                 label="Bons chantier"
                 value={purchaseOrdersLoading ? "..." : String(purchaseOrderSummary.total)}
+                href={purchaseOrdersHref}
               />
               <PurchaseOrderSummaryBadge
                 label="Ouverts"
                 value={purchaseOrdersLoading ? "..." : String(purchaseOrderSummary.open)}
                 tone={purchaseOrderSummary.open > 0 ? "blue" : "slate"}
+                href={openPurchaseOrdersHref}
               />
               {purchaseOrdersError ? (
                 <span className="inline-flex items-center rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-800">
                   Suivi commandes indisponible
                 </span>
               ) : purchaseOrderSummary.late > 0 ? (
-                <PurchaseOrderSummaryBadge label="Livraisons en retard" value={String(purchaseOrderSummary.late)} tone="amber" />
+                <PurchaseOrderSummaryBadge label="Livraisons en retard" value={String(purchaseOrderSummary.late)} tone="amber" href={openPurchaseOrdersHref} />
               ) : null}
             </div>
           </div>
@@ -146,21 +149,33 @@ function PurchaseOrderSummaryBadge({
   label,
   value,
   tone = "slate",
+  href,
 }: {
   label: string;
   value: string;
   tone?: "slate" | "blue" | "amber";
+  href?: string;
 }) {
   const toneClass = {
-    amber: "border-amber-200 bg-amber-50 text-amber-800",
-    blue: "border-blue-200 bg-white text-blue-800",
-    slate: "border-slate-200 bg-white text-slate-600",
+    amber: "border-amber-200 bg-amber-50 text-amber-800 hover:bg-amber-100",
+    blue: "border-blue-200 bg-white text-blue-800 hover:bg-blue-100",
+    slate: "border-slate-200 bg-white text-slate-600 hover:bg-slate-50",
   }[tone];
-
-  return (
-    <span className={`inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs font-semibold ${toneClass}`}>
+  const className = `inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs font-semibold ${toneClass}`;
+  const content = (
+    <>
       <span className="text-sm font-bold">{value}</span>
       {label}
-    </span>
+    </>
   );
+
+  if (href) {
+    return (
+      <Link to={href} className={className}>
+        {content}
+      </Link>
+    );
+  }
+
+  return <span className={className}>{content}</span>;
 }
