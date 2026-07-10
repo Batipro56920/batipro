@@ -730,6 +730,7 @@ function documentKindLabel(kind: ProductDocumentKind) {
   if (kind === "application_scope") return "Domaine d'application";
   if (kind === "work_method") return "Mode opératoire";
   if (kind === "sds") return "FDS";
+  if (kind === "certification") return "Certification";
   return "Autre";
 }
 
