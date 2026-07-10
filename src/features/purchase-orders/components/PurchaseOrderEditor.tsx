@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useSearchParams } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { Download, Plus, Save, Send } from "lucide-react";
 import { Button } from "../../../components/ui/button";
 import { supabase } from "../../../lib/supabaseClient";
@@ -75,6 +75,9 @@ export function PurchaseOrderEditor({
     () => projects.find((project) => project.id === order.projectId || project.sourceId === order.projectId) ?? null,
     [order.projectId, projects],
   );
+  const catalogHref = order.supplierId
+    ? `/catalogue-produits?supplierId=${encodeURIComponent(order.supplierId)}`
+    : "/catalogue-produits";
   const filteredProducts = useMemo(() => {
     const query = productQuery.trim().toLowerCase();
     return products
@@ -260,7 +263,7 @@ export function PurchaseOrderEditor({
                 <div className="text-sm font-semibold text-slate-950">Catalogue produits</div>
                 <div className="text-xs text-slate-500">Insertion rapide avec prix, TVA, unite et fournisseur.</div>
               </div>
-              <a href="/catalogue-produits" className="text-xs font-semibold text-blue-700 hover:text-blue-800">Ouvrir catalogue</a>
+              <Link to={catalogHref} className="text-xs font-semibold text-blue-700 hover:text-blue-800">Ouvrir catalogue</Link>
             </div>
             <input className={inputClass} placeholder="Rechercher produit, reference, marque..." value={productQuery} onChange={(event) => setProductQuery(event.target.value)} />
             <div className="mt-3 grid gap-2 lg:grid-cols-2">
