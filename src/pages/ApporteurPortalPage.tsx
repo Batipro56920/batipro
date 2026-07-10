@@ -159,6 +159,17 @@ function leadStatusClass(status: ApporteurLeadStatus) {
   return "bg-slate-100 text-slate-700 ring-slate-200";
 }
 
+function leadNextStepLabel(status: ApporteurLeadStatus) {
+  if (status === "nouveau") return "Client reçu, qualification commerciale à lancer par Batipro.";
+  if (status === "contacte") return "Client contacté, besoin en cours de cadrage.";
+  if (status === "devis_envoye") return "Devis transmis au client, attente du retour de signature.";
+  if (status === "signe") return "Projet signé, commission à préparer côté Batipro.";
+  if (status === "commission_a_payer") return "Commission validée, paiement en attente.";
+  if (status === "paye") return "Commission payée et dossier clôturé côté apporteur.";
+  if (status === "perdu") return "Dossier perdu, aucune commission due.";
+  return "Suivi en cours côté Batipro.";
+}
+
 export default function ApporteurPortalPage() {
   const params = useParams<{ token: string }>();
   const token = params.token ?? "";
@@ -377,6 +388,7 @@ export default function ApporteurPortalPage() {
                   <th>Projet</th>
                   <th>Montant estimé</th>
                   <th>Statut</th>
+                  <th>Suite Batipro</th>
                   <th>Commission</th>
                   <th>Date</th>
                 </tr>
@@ -388,13 +400,14 @@ export default function ApporteurPortalPage() {
                     <td className="align-top"><div>{lead.project_type || "-"}</div><div className="text-xs text-slate-500">{lead.project_address || ""}</div></td>
                     <td className="align-top">{formatCurrency(lead.estimated_amount)}</td>
                     <td className="align-top"><span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ring-1 ${leadStatusClass(lead.status)}`}>{leadStatusLabel(lead.status)}</span></td>
+                    <td className="max-w-xs align-top text-xs text-slate-600">{leadNextStepLabel(lead.status)}</td>
                     <td className="align-top">{commissionDisplay(lead, portalData.apporteur)}</td>
                     <td className="align-top">{lead.date}</td>
                   </tr>
                 ))}
                 {portalData.leads.length === 0 ? (
                   <tr>
-                    <td colSpan={6} className="px-4 py-6 text-center text-sm text-slate-500">Aucun client transmis pour le moment.</td>
+                    <td colSpan={7} className="px-4 py-6 text-center text-sm text-slate-500">Aucun client transmis pour le moment.</td>
                   </tr>
                 ) : null}
               </tbody>
@@ -431,6 +444,10 @@ function LeadMobileRow({ lead, apporteur }: { lead: ApporteurLeadRow; apporteur:
       <div className="mt-3 grid grid-cols-2 gap-3 border-t border-slate-200 pt-3">
         <div><div className="text-xs text-slate-500">Montant estimé</div><div className="font-semibold text-slate-950">{formatCurrency(lead.estimated_amount)}</div></div>
         <div><div className="text-xs text-slate-500">Commission</div><div className="font-semibold text-slate-950">{commissionDisplay(lead, apporteur)}</div></div>
+      </div>
+      <div className="mt-3 rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-600 ring-1 ring-slate-200">
+        <div className="font-semibold text-slate-800">Suite Batipro</div>
+        <div className="mt-1">{leadNextStepLabel(lead.status)}</div>
       </div>
       <div className="mt-2 text-xs text-slate-500">Transmis le {lead.date}</div>
     </article>
