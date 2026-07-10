@@ -395,7 +395,7 @@ export default function App() {
           path="/visites-chantier"
           element={
             <RequireCompanyFeature moduleId="validation_qualite">
-              <ChantierBackofficeRoute label="Ouverture des visites chantier..."><ChantiersPage initialView="kanban" initialFocus="visits" /></ChantierBackofficeRoute>
+              <RouteSuspense label="Ouverture des visites chantier..."><ChantiersPage initialView="kanban" initialFocus="visits" /></RouteSuspense>
             </RequireCompanyFeature>
           }
         />
