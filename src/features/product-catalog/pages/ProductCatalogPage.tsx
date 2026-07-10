@@ -363,7 +363,7 @@ export default function ProductCatalogPage() {
                   <div className="flex justify-end gap-2">
                     {product.mainSupplierId ? (
                       <Link
-                        to={`/bons-commande?supplierId=${encodeURIComponent(product.mainSupplierId)}&newOrder=1`}
+                        to={`/bons-commande?supplierId=${encodeURIComponent(product.mainSupplierId)}&productId=${encodeURIComponent(product.id)}&newOrder=1`}
                         className="rounded-lg border border-blue-200 px-2 py-1 text-xs font-semibold text-blue-700 hover:bg-blue-50"
                       >
                         Commander
