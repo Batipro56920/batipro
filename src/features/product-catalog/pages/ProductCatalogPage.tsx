@@ -361,6 +361,14 @@ export default function ProductCatalogPage() {
                 <td className="px-4 py-3 text-right align-top">{product.documents.length}</td>
                 <td className="px-4 py-3 align-top">
                   <div className="flex justify-end gap-2">
+                    {product.mainSupplierId ? (
+                      <Link
+                        to={`/bons-commande?supplierId=${encodeURIComponent(product.mainSupplierId)}&newOrder=1`}
+                        className="rounded-lg border border-blue-200 px-2 py-1 text-xs font-semibold text-blue-700 hover:bg-blue-50"
+                      >
+                        Commander
+                      </Link>
+                    ) : null}
                     <button type="button" className="rounded-lg border px-2 py-1 text-xs hover:bg-slate-50" onClick={() => openProductDrawer(product)}>Modifier</button>
                     <button type="button" className="rounded-lg border border-red-200 px-2 py-1 text-xs text-red-600 hover:bg-red-50" onClick={() => removeProduct(product.id)}>
                       <Trash2 className="h-3.5 w-3.5" />
