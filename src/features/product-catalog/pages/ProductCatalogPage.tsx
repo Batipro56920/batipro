@@ -731,6 +731,7 @@ function documentKindLabel(kind: ProductDocumentKind) {
   if (kind === "work_method") return "Mode opératoire";
   if (kind === "sds") return "FDS";
   if (kind === "certification") return "Certification";
+  if (kind === "photo") return "Photo";
   return "Autre";
 }
 
