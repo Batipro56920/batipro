@@ -337,7 +337,9 @@ export default function ProductCatalogPage() {
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
-            {filtered.map((product) => (
+            {filtered.map((product) => {
+              const orderSupplierId = getOrderSupplierId(product, supplierFilter);
+              return (
               <tr key={product.id} className={product.id === activeProductId ? "bg-blue-50 ring-1 ring-inset ring-blue-200" : "hover:bg-slate-50"}>
                 <td className="max-w-[440px] whitespace-normal px-4 py-3 align-top">
                   <div className="font-semibold leading-snug text-slate-950">{product.designation}</div>
@@ -361,9 +363,9 @@ export default function ProductCatalogPage() {
                 <td className="px-4 py-3 text-right align-top">{product.documents.length}</td>
                 <td className="px-4 py-3 align-top">
                   <div className="flex justify-end gap-2">
-                    {product.mainSupplierId ? (
+                    {orderSupplierId ? (
                       <Link
-                        to={`/bons-commande?supplierId=${encodeURIComponent(product.mainSupplierId)}&productId=${encodeURIComponent(product.id)}&newOrder=1`}
+                        to={`/bons-commande?supplierId=${encodeURIComponent(orderSupplierId)}&productId=${encodeURIComponent(product.id)}&newOrder=1`}
                         className="rounded-lg border border-blue-200 px-2 py-1 text-xs font-semibold text-blue-700 hover:bg-blue-50"
                       >
                         Commander
@@ -376,7 +378,8 @@ export default function ProductCatalogPage() {
                   </div>
                 </td>
               </tr>
-            ))}
+              );
+            })}
             {!filtered.length ? <tr><td colSpan={10} className="px-4 py-12"><EmptyCatalogState onCreate={() => openProductDrawer({ ...EMPTY_DRAFT })} /></td></tr> : null}
           </tbody>
         </table>
@@ -727,8 +730,6 @@ function documentKindLabel(kind: ProductDocumentKind) {
   if (kind === "application_scope") return "Domaine d'application";
   if (kind === "work_method") return "Mode opératoire";
   if (kind === "sds") return "FDS";
-  if (kind === "certification") return "Certification";
-  if (kind === "photo") return "Photo";
   return "Autre";
 }
 
@@ -794,6 +795,11 @@ function EmptyCatalogState({ onCreate }: { onCreate: () => void }) {
       <button type="button" onClick={onCreate} className="mt-4 rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700">Nouveau produit</button>
     </div>
   );
+}
+
+function getOrderSupplierId(product: ProductCatalogItem, supplierFilter: string) {
+  if (supplierFilter !== "all" && product.supplierPrices.some((price) => price.supplierId === supplierFilter)) return supplierFilter;
+  return product.mainSupplierId;
 }
 
 function getMainSupplierPrice(product: ProductCatalogItem): ProductSupplierPrice | null {
