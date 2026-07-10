@@ -8,19 +8,31 @@ export default function CrmResourcesSection({ templates }: { templates: CrmDatas
   const navigate = useNavigate();
   const libraryStats = useMemo(() => {
     const lots = new Set(templates.map((row) => (row.lot ?? "").trim()).filter(Boolean));
+    const hasTechnicalBase = (row: CrmDataset["taskTemplates"][number]) =>
+      Boolean(row.description_technique) || row.caracteristiques.length > 0 || Boolean(row.remarques);
     const readyForQuote = templates.filter(
       (row) => row.quote_visible && row.temps_prevu_par_unite_h !== null && row.cout_reference_unitaire_ht !== null,
     ).length;
+    const readyForChantier = templates.filter(
+      (row) => row.chantier_visible && row.temps_prevu_par_unite_h !== null && hasTechnicalBase(row),
+    ).length;
     const hiddenFromQuote = templates.filter((row) => !row.quote_visible).length;
+    const hiddenFromChantier = templates.filter((row) => !row.chantier_visible).length;
     const missingQuoteTime = templates.filter((row) => row.quote_visible && row.temps_prevu_par_unite_h === null).length;
     const missingQuoteCost = templates.filter((row) => row.quote_visible && row.cout_reference_unitaire_ht === null).length;
+    const missingChantierTime = templates.filter((row) => row.chantier_visible && row.temps_prevu_par_unite_h === null).length;
+    const missingChantierTechnical = templates.filter((row) => row.chantier_visible && !hasTechnicalBase(row)).length;
     return {
       total: templates.length,
       lots: lots.size,
       readyForQuote,
+      readyForChantier,
       hiddenFromQuote,
+      hiddenFromChantier,
       missingQuoteTime,
       missingQuoteCost,
+      missingChantierTime,
+      missingChantierTechnical,
     };
   }, [templates]);
 
@@ -54,7 +66,7 @@ export default function CrmResourcesSection({ templates }: { templates: CrmDatas
       onCreate={() => openLibrary()}
       hideSearch
     >
-      <div className="grid gap-3 md:grid-cols-3">
+      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
         <button
           type="button"
           onClick={() => openLibrary()}
@@ -109,6 +121,42 @@ export default function CrmResourcesSection({ templates }: { templates: CrmDatas
             ) : null}
           </div>
         </div>
+        <div className="rounded-2xl border bg-white p-4">
+          <div className="text-xs font-medium uppercase text-slate-500">Prêts chantier</div>
+          <div className="mt-1 text-2xl font-bold text-slate-900">{libraryStats.readyForChantier}</div>
+          <div className="text-xs text-slate-500">
+            visibles chantier, avec temps et base technique · {libraryStats.hiddenFromChantier} masqués
+          </div>
+          <div className="mt-3 flex flex-wrap gap-2">
+            {libraryStats.missingChantierTime > 0 ? (
+              <button
+                type="button"
+                onClick={() => openLibraryReadiness("missing_time")}
+                className="rounded-lg border border-amber-200 px-2 py-1 text-[11px] font-medium text-amber-700 hover:bg-amber-50"
+              >
+                {libraryStats.missingChantierTime} temps chantier
+              </button>
+            ) : null}
+            {libraryStats.missingChantierTechnical > 0 ? (
+              <button
+                type="button"
+                onClick={() => openLibraryReadiness("missing_technical")}
+                className="rounded-lg border border-amber-200 px-2 py-1 text-[11px] font-medium text-amber-700 hover:bg-amber-50"
+              >
+                {libraryStats.missingChantierTechnical} détails terrain
+              </button>
+            ) : null}
+            {libraryStats.hiddenFromChantier > 0 ? (
+              <button
+                type="button"
+                onClick={() => openLibraryReadiness("chantier_hidden")}
+                className="rounded-lg border border-slate-200 px-2 py-1 text-[11px] font-medium text-slate-600 hover:bg-slate-50"
+              >
+                {libraryStats.hiddenFromChantier} masqués chantier
+              </button>
+            ) : null}
+          </div>
+        </div>
       </div>
 
       {templates.length === 0 ? (
@@ -118,8 +166,12 @@ export default function CrmResourcesSection({ templates }: { templates: CrmDatas
       ) : (
         <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
           {templates.map((row) => {
+            const hasTechnicalBase =
+              Boolean(row.description_technique) || row.caracteristiques.length > 0 || Boolean(row.remarques);
             const missingQuoteReadiness =
               !row.quote_visible || row.temps_prevu_par_unite_h === null || row.cout_reference_unitaire_ht === null;
+            const missingChantierReadiness =
+              !row.chantier_visible || row.temps_prevu_par_unite_h === null || !hasTechnicalBase;
 
             return (
               <div key={row.id} className="rounded-2xl border bg-white p-5">
@@ -160,9 +212,19 @@ export default function CrmResourcesSection({ templates }: { templates: CrmDatas
                       Masqué au devis
                     </span>
                   ) : null}
+                  {!row.chantier_visible ? (
+                    <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-1 text-[11px] font-medium text-slate-600">
+                      Masqué au chantier
+                    </span>
+                  ) : null}
                   {missingQuoteReadiness ? (
                     <span className="rounded-full border border-amber-200 bg-amber-50 px-2 py-1 text-[11px] font-medium text-amber-700">
                       À compléter avant devis
+                    </span>
+                  ) : null}
+                  {missingChantierReadiness ? (
+                    <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-1 text-[11px] font-medium text-emerald-700">
+                      À préparer avant chantier
                     </span>
                   ) : null}
                 </div>
