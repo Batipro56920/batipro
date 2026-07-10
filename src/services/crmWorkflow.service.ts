@@ -59,20 +59,41 @@ function prospectOpportunityTags(prospect: CrmProspectRow) {
   return uniqueTags(tags);
 }
 
+function prospectOpportunityStageKey(prospect: CrmProspectRow) {
+  if (!isApporteurProspect(prospect)) return "qualification";
+  if (prospect.statut === "qualifie") return "visite";
+  if (prospect.statut === "devis_en_cours") return "chiffrage";
+  if (prospect.statut === "negociation") return "negociation";
+  if (prospect.statut === "gagne") return "signature";
+  if (prospect.statut === "perdu") return "perdu";
+  return "qualification";
+}
+
+function opportunityStatusForStage(stage: CrmPipelineStageRow | null, fallback = "ouverte") {
+  if (stage?.is_won) return "gagnee";
+  if (stage?.is_lost) return "perdue";
+  return fallback;
+}
+
 function prospectNextAction(prospect: CrmProspectRow) {
-  if (isApporteurProspect(prospect)) return "Qualifier le besoin et confirmer la commission apporteur";
-  return "Planifier une visite terrain";
+  if (!isApporteurProspect(prospect)) return "Planifier une visite terrain";
+  if (prospect.statut === "qualifie") return "Planifier la visite terrain et confirmer la commission apporteur";
+  if (prospect.statut === "devis_en_cours") return "Préparer le devis et confirmer la base de commission apporteur";
+  if (prospect.statut === "negociation") return "Relancer le client et suivre la commission apporteur";
+  if (prospect.statut === "gagne") return "Préparer le passage en chantier et la commission apporteur";
+  if (prospect.statut === "perdu") return "Clôturer le projet et notifier l'apporteur";
+  return "Qualifier le besoin et confirmer la commission apporteur";
 }
 
 function prospectFollowUpTaskTitle(prospect: CrmProspectRow) {
   const label = prospectOpportunityLabel(prospect);
-  if (isApporteurProspect(prospect)) return `Qualifier le lead apporteur - ${label}`;
+  if (isApporteurProspect(prospect)) return `Suivre le projet apporteur - ${label}`;
   return `Qualifier ${label}`;
 }
 
 function prospectFollowUpTaskDescription(prospect: CrmProspectRow) {
   if (isApporteurProspect(prospect)) {
-    return "Confirmer le besoin client, vérifier le rattachement apporteur et préparer la suite devis / chantier.";
+    return "Reprendre le lead apporteur dans le CRM, sécuriser la prochaine étape commerciale et vérifier la commission avant devis / chantier.";
   }
   return "Suivi commercial à lancer après création du dossier projet.";
 }
@@ -107,10 +128,10 @@ export async function findOpenProjectForProspect(prospectId: string): Promise<Cr
 export async function createOpportunityForProspect(prospect: CrmProspectRow, patch: Partial<CrmOpportunityRow> = {}) {
   const existing = await findOpenProjectForProspect(prospect.id);
   if (existing) {
-    const stageKey = text(patch.stage_key) ?? existing.stage_key ?? "qualification";
+    const stageKey = text(patch.stage_key) ?? existing.stage_key ?? prospectOpportunityStageKey(prospect);
     return updateCrmOpportunityStageByKey(existing.id, stageKey, patch);
   }
-  const stageKey = text(patch.stage_key) ?? "qualification";
+  const stageKey = text(patch.stage_key) ?? prospectOpportunityStageKey(prospect);
   const targetStage = await findStage(stageKey);
   return upsertCrmOpportunity({
     prospect_id: prospect.id,
@@ -123,7 +144,7 @@ export async function createOpportunityForProspect(prospect: CrmProspectRow, pat
     prochaine_action: prospectNextAction(prospect),
     notes: prospectOpportunityNotes(prospect),
     tags: prospectOpportunityTags(prospect),
-    status: "ouverte",
+    status: opportunityStatusForStage(targetStage),
     ...patch,
   });
 }
