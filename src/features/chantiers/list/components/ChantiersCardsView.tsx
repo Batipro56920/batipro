@@ -1,4 +1,4 @@
-import { AlertTriangle, CalendarDays, Clock3, FileText, Hammer, MapPin, type LucideIcon } from "lucide-react";
+import { AlertTriangle, CalendarDays, ClipboardList, Clock3, FileText, Hammer, MapPin, Users, type LucideIcon } from "lucide-react";
 import { Link } from "react-router-dom";
 import type { ChantierDerived, ChantierListActions } from "../types";
 import { budgetLabel, commercialAmountLabel, commercialSourceLabel, hasCommercialContext, shortDate, timeLabel } from "../utils/chantiersListUtils";
@@ -88,12 +88,14 @@ export function ChantiersCardsView({ rows, onPreview, actions }: { rows: Chantie
               </div>
             ) : null}
             <div className="mt-4 grid grid-cols-2 gap-2" onClick={(event) => event.stopPropagation()}>
+              <QuickLink href={`/chantiers/${row.id}/preparation`} icon={ClipboardList} label="Préparer" />
               <QuickLink href={`/chantiers/${row.id}/execution`} icon={Hammer} label="Exécution" />
               <QuickLink href={`/chantiers/${row.id}/temps`} icon={Clock3} label="Temps" />
               <QuickLink href={`/chantiers/${row.id}/planning`} icon={CalendarDays} label="Planning" />
               <QuickLink href={terrainFeedbackHref} icon={AlertTriangle} label="Retours" tone={qualityLinkTone} />
               <QuickLink href={qualityHref} icon={AlertTriangle} label="Qualité" tone={qualityLinkTone} />
               <QuickLink href={`/chantiers/${row.id}/documents`} icon={FileText} label="Documents" />
+              <QuickLink href={`/chantiers/${row.id}/equipe`} icon={Users} label="Équipe" />
             </div>
             <div className="mt-4">
               <ChantierRowActions row={row} actions={actions} />
