@@ -138,7 +138,7 @@ export default function ProductCatalogPage() {
       const matchesCategory = categoryFilter === "all" || product.category === categoryFilter;
       const matchesSupplier = supplierFilter === "all" || product.mainSupplierId === supplierFilter || product.supplierPrices.some((price) => price.supplierId === supplierFilter);
       const matchesBrand = brandFilter === "all" || product.brand === brandFilter;
-      const purchasePrice = getPurchasePackagePrice(product);
+      const purchasePrice = getPurchasePackagePrice(product, supplierFilter);
       const matchesPrice = priceFilter === "all"
         || (priceFilter === "low" && purchasePrice < 50)
         || (priceFilter === "mid" && purchasePrice >= 50 && purchasePrice < 250)
@@ -339,6 +339,8 @@ export default function ProductCatalogPage() {
           <tbody className="divide-y divide-slate-100">
             {filtered.map((product) => {
               const orderSupplierId = getOrderSupplierId(product, supplierFilter);
+              const displayedSupplierPrice = getDisplayedSupplierPrice(product, supplierFilter);
+              const usesFilteredSupplierPrice = supplierFilter !== "all" && displayedSupplierPrice?.supplierId === supplierFilter && product.mainSupplierId !== supplierFilter;
               return (
               <tr key={product.id} className={product.id === activeProductId ? "bg-blue-50 ring-1 ring-inset ring-blue-200" : "hover:bg-slate-50"}>
                 <td className="max-w-[440px] whitespace-normal px-4 py-3 align-top">
@@ -347,19 +349,26 @@ export default function ProductCatalogPage() {
                 <td className="px-4 py-3 align-top text-slate-600">{product.category || "-"}</td>
                 <td className="px-4 py-3 align-top text-slate-600">{product.brand || "-"}</td>
                 <td className="px-4 py-3 align-top text-slate-600">
-                  {product.mainSupplierId && product.mainSupplierName ? (
-                    <Link
-                      to={`/fournisseurs?supplierId=${encodeURIComponent(product.mainSupplierId)}`}
-                      className="font-semibold text-blue-700 hover:text-blue-900 hover:underline"
-                    >
-                      {product.mainSupplierName}
-                    </Link>
-                  ) : product.mainSupplierName || "-"}
+                  <div className="space-y-1">
+                    {product.mainSupplierId && product.mainSupplierName ? (
+                      <Link
+                        to={`/fournisseurs?supplierId=${encodeURIComponent(product.mainSupplierId)}`}
+                        className="font-semibold text-blue-700 hover:text-blue-900 hover:underline"
+                      >
+                        {product.mainSupplierName}
+                      </Link>
+                    ) : product.mainSupplierName || "-"}
+                    {usesFilteredSupplierPrice ? (
+                      <div className="inline-flex rounded-full border border-blue-100 bg-blue-50 px-2 py-0.5 text-[11px] font-semibold text-blue-700">
+                        Prix négocié {displayedSupplierPrice?.supplierName || activeSupplier?.name || "fournisseur"}
+                      </div>
+                    ) : null}
+                  </div>
                 </td>
                 <td className="px-4 py-3 align-top text-slate-600">{product.unit}</td>
-                <td className="px-4 py-3 text-right align-top font-semibold">{formatCurrency(getPurchasePackagePrice(product))}</td>
-                <td className="px-4 py-3 text-right align-top font-semibold">{formatUnitPurchasePrice(product)}</td>
-                <td className="px-4 py-3 text-right align-top font-semibold">{formatCurrency(getRecommendedSalePrice(product))}</td>
+                <td className="px-4 py-3 text-right align-top font-semibold">{formatCurrency(getPurchasePackagePrice(product, supplierFilter))}</td>
+                <td className="px-4 py-3 text-right align-top font-semibold">{formatUnitPurchasePrice(product, supplierFilter)}</td>
+                <td className="px-4 py-3 text-right align-top font-semibold">{formatCurrency(getRecommendedSalePrice(product, supplierFilter))}</td>
                 <td className="px-4 py-3 text-right align-top">{product.documents.length}</td>
                 <td className="px-4 py-3 align-top">
                   <div className="flex justify-end gap-2">
@@ -804,6 +813,14 @@ function getOrderSupplierId(product: ProductCatalogItem, supplierFilter: string)
   return product.mainSupplierId;
 }
 
+function getDisplayedSupplierPrice(product: ProductCatalogItem, supplierFilter: string): ProductSupplierPrice | null {
+  if (supplierFilter !== "all") {
+    const filteredSupplierPrice = product.supplierPrices.find((price) => price.supplierId === supplierFilter);
+    if (filteredSupplierPrice) return filteredSupplierPrice;
+  }
+  return getMainSupplierPrice(product);
+}
+
 function getMainSupplierPrice(product: ProductCatalogItem): ProductSupplierPrice | null {
   const mainSupplierPrice = product.mainSupplierId
     ? product.supplierPrices.find((price) => price.supplierId === product.mainSupplierId)
@@ -811,13 +828,13 @@ function getMainSupplierPrice(product: ProductCatalogItem): ProductSupplierPrice
   return mainSupplierPrice ?? product.supplierPrices[0] ?? null;
 }
 
-function getPurchasePackagePrice(product: ProductCatalogItem) {
-  const supplierPrice = getMainSupplierPrice(product);
+function getPurchasePackagePrice(product: ProductCatalogItem, supplierFilter = "all") {
+  const supplierPrice = getDisplayedSupplierPrice(product, supplierFilter);
   return positiveNumber(supplierPrice?.priceHt) ?? positiveNumber(product.standardPurchasePriceHt) ?? 0;
 }
 
-function getUnitPurchasePrice(product: ProductCatalogItem) {
-  const supplierPrice = getMainSupplierPrice(product);
+function getUnitPurchasePrice(product: ProductCatalogItem, supplierFilter = "all") {
+  const supplierPrice = getDisplayedSupplierPrice(product, supplierFilter);
   const packagePrice = positiveNumber(supplierPrice?.priceHt) ?? positiveNumber(product.standardPurchasePriceHt);
   const coveredQuantity = positiveNumber(supplierPrice?.coverageM2);
   if (packagePrice !== null && coveredQuantity !== null) return packagePrice / coveredQuantity;
@@ -832,17 +849,17 @@ function getSupplierUnitPrice(price: ProductSupplierPrice) {
   return positiveNumber(price.pricePerM2Ht) ?? 0;
 }
 
-function getRecommendedSalePrice(product: ProductCatalogItem) {
+function getRecommendedSalePrice(product: ProductCatalogItem, supplierFilter = "all") {
   const savedSalePrice = positiveNumber(product.recommendedSalePriceHt);
   if (savedSalePrice !== null) return savedSalePrice;
 
-  const unitPurchasePrice = getUnitPurchasePrice(product);
+  const unitPurchasePrice = getUnitPurchasePrice(product, supplierFilter);
   const marginRate = positiveNumber(product.targetMarginRate) ?? 0;
   return unitPurchasePrice ? unitPurchasePrice * (1 + marginRate / 100) : 0;
 }
 
-function formatUnitPurchasePrice(product: ProductCatalogItem) {
-  const unitPrice = getUnitPurchasePrice(product);
+function formatUnitPurchasePrice(product: ProductCatalogItem, supplierFilter = "all") {
+  const unitPrice = getUnitPurchasePrice(product, supplierFilter);
   if (!unitPrice) return "-";
   const unit = product.unit || "u";
   return `${formatCurrency(unitPrice)}/${unit}`;
