@@ -105,6 +105,10 @@ function nextFollowUpDate() {
   return dueAt.toISOString();
 }
 
+function nextFollowUpDateOnly() {
+  return nextFollowUpDate().slice(0, 10);
+}
+
 async function findStage(stageKey: string): Promise<CrmPipelineStageRow | null> {
   const { data, error } = await crmDb.from("crm_pipeline_stages").select("id,key,label,ordre,probability_default,is_won,is_lost,is_active").eq("key", stageKey).maybeSingle();
   if (error) return null;
@@ -129,10 +133,14 @@ export async function createOpportunityForProspect(prospect: CrmProspectRow, pat
   const existing = await findOpenProjectForProspect(prospect.id);
   if (existing) {
     const stageKey = text(patch.stage_key) ?? existing.stage_key ?? prospectOpportunityStageKey(prospect);
-    return updateCrmOpportunityStageByKey(existing.id, stageKey, patch);
+    return updateCrmOpportunityStageByKey(existing.id, stageKey, {
+      ...patch,
+      prochaine_action_date: patch.prochaine_action_date === undefined ? existing.prochaine_action_date ?? nextFollowUpDateOnly() : patch.prochaine_action_date,
+    });
   }
   const stageKey = text(patch.stage_key) ?? prospectOpportunityStageKey(prospect);
   const targetStage = await findStage(stageKey);
+  const { prochaine_action_date, ...restPatch } = patch;
   return upsertCrmOpportunity({
     prospect_id: prospect.id,
     client_id: prospect.client_id,
@@ -142,10 +150,11 @@ export async function createOpportunityForProspect(prospect: CrmProspectRow, pat
     montant_estime: prospect.budget_estime ?? 0,
     probabilite: targetStage?.probability_default ?? 25,
     prochaine_action: prospectNextAction(prospect),
+    prochaine_action_date: prochaine_action_date === undefined ? nextFollowUpDateOnly() : prochaine_action_date,
     notes: prospectOpportunityNotes(prospect),
     tags: prospectOpportunityTags(prospect),
     status: opportunityStatusForStage(targetStage),
-    ...patch,
+    ...restPatch,
   });
 }
 
