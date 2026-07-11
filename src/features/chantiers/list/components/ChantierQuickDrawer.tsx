@@ -36,7 +36,7 @@ function getBillingHref(row: ChantierDerived, projectHref: string | null) {
   if (projectHref && (row.crm_quote_id || row.signed_quote_amount_ht || row.signed_quote_amount_ttc)) {
     return `${projectHref}?tab=quotes`;
   }
-  if (row.crm_quote_id) return "/projets?facturation=1";
+  if (row.crm_quote_id) return `/crm/devis/${row.crm_quote_id}/edit`;
   return null;
 }
 
