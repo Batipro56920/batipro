@@ -188,6 +188,7 @@ export default function AuthPage() {
   const navigate = useNavigate();
   const location = useLocation();
   const { t } = useI18n();
+  const forceBackOffice = new URLSearchParams(location.search).get("space") === "backoffice";
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -237,11 +238,12 @@ export default function AuthPage() {
 
   function buildPasswordResetRedirectUrl(): string {
     const configured = String(import.meta.env.VITE_PUBLIC_APP_URL ?? "").trim().replace(/\/+$/, "");
-    if (configured) return `${configured}/login`;
+    const loginPath = forceBackOffice ? "/login?space=backoffice" : "/login";
+    if (configured) return `${configured}${loginPath}`;
     if (typeof window !== "undefined") {
-      return `${window.location.origin.replace(/\/+$/, "")}/login`;
+      return `${window.location.origin.replace(/\/+$/, "")}${loginPath}`;
     }
-    return "/login";
+    return loginPath;
   }
 
   async function onSubmit(e: React.FormEvent) {
