@@ -23,6 +23,7 @@ export default function ChantierReservesSection({ children }: { children: ReactN
   const chantierJournalHref = id ? `/chantiers/${encodedChantierId}/historique` : "";
   const chantierExecutionHref = id ? `/chantiers/${encodedChantierId}/execution` : "";
   const chantierPlanningHref = id ? `/chantiers/${encodedChantierId}/planning` : "";
+  const chantierDocumentsHref = id ? `/chantiers/${encodedChantierId}/documents` : "";
   const sourceFeedbackHref = terrainFeedbackHref;
   const reserveAutoOpenKey = targetedReserveId
     ? `reserve:${targetedReserveId}`
@@ -120,6 +121,14 @@ export default function ChantierReservesSection({ children }: { children: ReactN
                   Planning
                 </Link>
               ) : null}
+              {chantierDocumentsHref ? (
+                <Link
+                  to={chantierDocumentsHref}
+                  className="inline-flex items-center justify-center rounded-xl border border-blue-200 bg-white px-3 py-2 text-sm font-semibold text-blue-800 hover:bg-blue-50"
+                >
+                  Documents
+                </Link>
+              ) : null}
               {chantierJournalHref ? (
                 <Link
                   to={chantierJournalHref}
@@ -168,6 +177,14 @@ export default function ChantierReservesSection({ children }: { children: ReactN
                   className="inline-flex items-center justify-center rounded-xl border border-amber-200 bg-white px-3 py-2 text-sm font-semibold text-amber-800 hover:bg-amber-100"
                 >
                   Planning
+                </Link>
+              ) : null}
+              {chantierDocumentsHref ? (
+                <Link
+                  to={chantierDocumentsHref}
+                  className="inline-flex items-center justify-center rounded-xl border border-amber-200 bg-white px-3 py-2 text-sm font-semibold text-amber-800 hover:bg-amber-100"
+                >
+                  Documents
                 </Link>
               ) : null}
               {chantierJournalHref ? (
@@ -222,6 +239,14 @@ export default function ChantierReservesSection({ children }: { children: ReactN
                 className="inline-flex items-center justify-center rounded-xl border border-blue-200 bg-white px-3 py-2 text-sm font-semibold text-blue-800 hover:bg-blue-50"
               >
                 Planning
+              </Link>
+            ) : null}
+            {chantierDocumentsHref ? (
+              <Link
+                to={chantierDocumentsHref}
+                className="inline-flex items-center justify-center rounded-xl border border-blue-200 bg-white px-3 py-2 text-sm font-semibold text-blue-800 hover:bg-blue-50"
+              >
+                Documents
               </Link>
             ) : null}
             {chantierJournalHref ? (
