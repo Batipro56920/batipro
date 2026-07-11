@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
-import { Download, Plus, Save, Send } from "lucide-react";
+import { AlertTriangle, Download, Plus, Save, Send } from "lucide-react";
 import { Button } from "../../../components/ui/button";
 import { supabase } from "../../../lib/supabaseClient";
 import { loadCrmDataset } from "../../../services/crm.service";
@@ -61,6 +61,8 @@ export function PurchaseOrderEditor({
   const [previewOpen, setPreviewOpen] = useState(false);
   const [sendOpen, setSendOpen] = useState(false);
   const [productQuery, setProductQuery] = useState("");
+  const [catalogInsertPending, setCatalogInsertPending] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
   const [products, setProducts] = useState<ProductCatalogItem[]>([]);
   const [chantiers, setChantiers] = useState<ChantierOption[]>([]);
   const [projects, setProjects] = useState<ProjectOption[]>([]);
@@ -96,6 +98,10 @@ export function PurchaseOrderEditor({
   useEffect(() => {
     listProjectOptions().then(setProjects).catch(() => setProjects([]));
   }, []);
+
+  useEffect(() => {
+    setCatalogInsertPending(null);
+  }, [order.id]);
 
   useEffect(() => {
     if (!urlProductId) {
@@ -174,6 +180,7 @@ export function PurchaseOrderEditor({
         ? { ...document.recipient, id: recipient.id ?? null, displayName: recipient.name, email: recipient.email ?? null, phone: recipient.phone ?? null, address: recipient.address ?? null }
         : document.recipient,
     };
+    setCatalogInsertPending(product.designation);
     updateOrder({
       supplierId: recipient?.id ?? order.supplierId ?? null,
       supplierName: recipient?.name ?? order.supplierName ?? null,
@@ -229,10 +236,24 @@ export function PurchaseOrderEditor({
     });
   }
 
-  function save() {
+  async function save() {
     const validation = validateBusinessDocument(document);
     if (!validation.success) throw new Error(validation.error.issues.map((issue) => issue.message).join(", "));
-    onSave(order);
+    setSaving(true);
+    try {
+      await onSave(order);
+      setCatalogInsertPending(null);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  function closeEditor() {
+    if (catalogInsertPending) {
+      const confirmed = window.confirm("Un produit catalogue vient d'etre ajoute au bon. Fermer sans enregistrer peut perdre cette ligne. Fermer quand meme ?");
+      if (!confirmed) return;
+    }
+    onClose();
   }
 
   return (
@@ -250,10 +271,35 @@ export function PurchaseOrderEditor({
           <Button variant="secondary" onClick={() => setPreviewOpen((open) => !open)}>Preview</Button>
           <Button variant="secondary" onClick={() => downloadBusinessDocumentPdf(document)}><Download className="h-4 w-4" /> PDF</Button>
           <Button variant="secondary" onClick={() => setSendOpen(true)}><Send className="h-4 w-4" /> Envoyer</Button>
-          <Button variant="primary" onClick={save}><Save className="h-4 w-4" /> Enregistrer</Button>
-          <Button variant="secondary" onClick={onClose}>Fermer</Button>
+          <Button variant="primary" onClick={() => void save()} disabled={saving}><Save className="h-4 w-4" /> {saving ? "Enregistrement..." : "Enregistrer"}</Button>
+          <Button variant="secondary" onClick={closeEditor}>Fermer</Button>
         </div>
       </header>
+
+      {catalogInsertPending ? (
+        <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex gap-3">
+              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-700" />
+              <div>
+                <div className="font-semibold">Produit catalogue ajoute au bon</div>
+                <p className="mt-1 text-amber-800">
+                  {catalogInsertPending} est insere dans les lignes. Enregistrez le bon pour conserver la ligne produit, le fournisseur et les prix repris du catalogue.
+                </p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => void save()}
+              disabled={saving}
+              className="inline-flex h-10 shrink-0 items-center justify-center gap-2 rounded-xl bg-amber-900 px-4 text-sm font-semibold text-white transition hover:bg-amber-800 disabled:opacity-60"
+            >
+              <Save className="h-4 w-4" />
+              {saving ? "Enregistrement..." : "Enregistrer maintenant"}
+            </button>
+          </div>
+        </div>
+      ) : null}
 
       <section className="mt-5 grid gap-5 xl:grid-cols-[minmax(0,1fr)_320px]">
         <div className="space-y-4">
