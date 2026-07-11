@@ -2,12 +2,16 @@ import { useEffect, useState } from "react";
 import { Link, Navigate, useParams } from "react-router-dom";
 import { LoadingState } from "../components/ui/design-system";
 import { buildProjects } from "../features/projects/utils/projectMappers";
-import { loadCrmDataset, type CrmQuoteRow } from "../services/crm.service";
+import type { ProjectRecord } from "../features/projects/types";
+import type { ChantierRow } from "../services/chantiers.service";
+import { loadCrmDataset, type CrmDataset, type CrmQuoteRow } from "../services/crm.service";
 
 type QuoteDiagnostic = Pick<
   CrmQuoteRow,
-  "quote_number" | "statut" | "montant_ttc" | "updated_at" | "opportunity_id" | "prospect_id" | "client_id" | "display_options"
+  "quote_number" | "statut" | "montant_ttc" | "updated_at" | "opportunity_id" | "prospect_id" | "client_id" | "chantier_id" | "display_options"
 >;
+
+type ChantierQuoteLink = Pick<ChantierRow, "id" | "crm_opportunity_id" | "crm_prospect_id" | "crm_client_id" | "crm_quote_id">;
 
 type QuoteOpenIssue =
   | { kind: "missing-id" }
@@ -15,6 +19,7 @@ type QuoteOpenIssue =
   | {
       kind: "missing-project-link";
       quote: QuoteDiagnostic;
+      chantier: ChantierQuoteLink | null;
     };
 
 type ResolveState =
@@ -30,6 +35,30 @@ function projectIdFromDisplayOptions(displayOptions: Record<string, unknown> | n
 
 function quoteBuilderProjectId(quote: CrmQuoteRow) {
   return projectIdFromDisplayOptions(quote.display_options);
+}
+
+function projectIdFromChantierLink(chantier: ChantierQuoteLink | null) {
+  if (!chantier) return "";
+  if (chantier.crm_opportunity_id) return `opportunity-${chantier.crm_opportunity_id}`;
+  if (chantier.crm_prospect_id) return `prospect-${chantier.crm_prospect_id}`;
+  if (chantier.crm_client_id) return `client-${chantier.crm_client_id}`;
+  return "";
+}
+
+function findQuoteLinkedChantier(quote: CrmQuoteRow, chantiers: CrmDataset["chantiers"]): ChantierQuoteLink | null {
+  return (
+    chantiers.find((chantier) => chantier.id === quote.chantier_id) ??
+    chantiers.find((chantier) => chantier.crm_quote_id === quote.id) ??
+    null
+  );
+}
+
+function quoteEditorPath(projectId: string, quoteId: string) {
+  return `/projets/${encodeURIComponent(projectId)}/devis/${encodeURIComponent(quoteId)}/edit`;
+}
+
+function findProjectById(projects: ProjectRecord[], projectId: string) {
+  return projects.find((candidate) => candidate.id === projectId) ?? null;
 }
 
 function issueMessage(issue: QuoteOpenIssue) {
@@ -101,15 +130,23 @@ export default function CrmQuoteEditRedirectPage() {
         const project = projects.find((candidate) => candidate.quotes.some((quote) => quote.id === id));
         if (cancelled) return;
         if (project) {
-          setState({ status: "ready", targetPath: `/projets/${encodeURIComponent(project.id)}/devis/${encodeURIComponent(id)}/edit` });
+          setState({ status: "ready", targetPath: quoteEditorPath(project.id, id) });
           return;
         }
 
         const quote = dataset.quotes.find((candidate) => candidate.id === id);
         const builderProjectId = quote ? quoteBuilderProjectId(quote) : "";
-        const builderProject = builderProjectId ? projects.find((candidate) => candidate.id === builderProjectId) : null;
+        const builderProject = builderProjectId ? findProjectById(projects, builderProjectId) : null;
         if (builderProject) {
-          setState({ status: "ready", targetPath: `/projets/${encodeURIComponent(builderProject.id)}/devis/${encodeURIComponent(id)}/edit` });
+          setState({ status: "ready", targetPath: quoteEditorPath(builderProject.id, id) });
+          return;
+        }
+
+        const linkedChantier = quote ? findQuoteLinkedChantier(quote, dataset.chantiers) : null;
+        const chantierProjectId = projectIdFromChantierLink(linkedChantier);
+        const chantierProject = chantierProjectId ? findProjectById(projects, chantierProjectId) : null;
+        if (chantierProject) {
+          setState({ status: "ready", targetPath: quoteEditorPath(chantierProject.id, id) });
           return;
         }
 
@@ -126,8 +163,10 @@ export default function CrmQuoteEditRedirectPage() {
                   opportunity_id: quote.opportunity_id,
                   prospect_id: quote.prospect_id,
                   client_id: quote.client_id,
+                  chantier_id: quote.chantier_id,
                   display_options: quote.display_options,
                 },
+                chantier: linkedChantier,
               }
             : { kind: "missing-quote" },
         });
@@ -171,9 +210,13 @@ export default function CrmQuoteEditRedirectPage() {
           <QuoteSnapshot quote={state.issue.quote} />
           <div className="mt-3 grid gap-2 sm:grid-cols-4">
             <LinkStatus label="Projet devis" value={projectIdFromDisplayOptions(state.issue.quote.display_options)} />
-            <LinkStatus label="Opportunité" value={state.issue.quote.opportunity_id} />
-            <LinkStatus label="Prospect" value={state.issue.quote.prospect_id} />
-            <LinkStatus label="Client" value={state.issue.quote.client_id} />
+            <LinkStatus label="Chantier devis" value={state.issue.quote.chantier_id ?? state.issue.chantier?.id} />
+            <LinkStatus label="Opportunité" value={state.issue.quote.opportunity_id ?? state.issue.chantier?.crm_opportunity_id} />
+            <LinkStatus label="Client" value={state.issue.quote.client_id ?? state.issue.chantier?.crm_client_id} />
+          </div>
+          <div className="mt-2 grid gap-2 sm:grid-cols-2">
+            <LinkStatus label="Prospect" value={state.issue.quote.prospect_id ?? state.issue.chantier?.crm_prospect_id} />
+            <LinkStatus label="Projet déduit du chantier" value={projectIdFromChantierLink(state.issue.chantier)} />
           </div>
         </>
       ) : null}
