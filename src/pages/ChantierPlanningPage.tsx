@@ -105,6 +105,7 @@ export default function ChantierPlanningPage() {
   }
 
   const terrainFeedbackHref = `/retours-terrain?chantierId=${encodeURIComponent(id)}`;
+  const qualityHref = `/chantiers/${encodeURIComponent(id)}/qualite`;
 
   return (
     <div className="space-y-5">
@@ -135,19 +136,32 @@ export default function ChantierPlanningPage() {
               ].join(" ")}
               >
                 <span>
-                  À arbitrer avant de figer le planning : les retours terrain ouverts peuvent impacter les affectations, délais ou reprises.
+                  À arbitrer avant de figer le planning : les retours terrain ouverts peuvent impacter les affectations, délais, reprises ou réserves qualité.
                 </span>
-                <Link
-                  to={terrainFeedbackHref}
-                  className={[
-                    "shrink-0 rounded-xl border bg-white px-3 py-2 text-xs font-semibold hover:bg-white/80",
-                    terrainFeedbackSummary.priority > 0
-                      ? "border-red-200 text-red-800"
-                      : "border-amber-200 text-amber-800",
-                  ].join(" ")}
-                >
-                  Ouvrir les retours à arbitrer
-                </Link>
+                <div className="flex shrink-0 flex-wrap gap-2">
+                  <Link
+                    to={terrainFeedbackHref}
+                    className={[
+                      "rounded-xl border bg-white px-3 py-2 text-xs font-semibold hover:bg-white/80",
+                      terrainFeedbackSummary.priority > 0
+                        ? "border-red-200 text-red-800"
+                        : "border-amber-200 text-amber-800",
+                    ].join(" ")}
+                  >
+                    Ouvrir les retours à arbitrer
+                  </Link>
+                  <Link
+                    to={qualityHref}
+                    className={[
+                      "rounded-xl border bg-white px-3 py-2 text-xs font-semibold hover:bg-white/80",
+                      terrainFeedbackSummary.priority > 0
+                        ? "border-red-200 text-red-800"
+                        : "border-amber-200 text-amber-800",
+                    ].join(" ")}
+                  >
+                    Voir qualité / réserves
+                  </Link>
+                </div>
               </div>
             ) : null}
           </div>
@@ -195,7 +209,7 @@ export default function ChantierPlanningPage() {
               Documents
             </Link>
             <Link
-              to={`/chantiers/${id}/qualite`}
+              to={qualityHref}
               className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm font-medium text-red-800 hover:bg-red-100"
             >
               Qualité / réserves
