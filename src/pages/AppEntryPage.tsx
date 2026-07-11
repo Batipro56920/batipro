@@ -60,7 +60,7 @@ export default function AppEntryPage() {
         <div className="grid gap-3 md:grid-cols-2">
           <Link
             className="group rounded-lg border border-slate-200 bg-white p-5 shadow-[0_1px_2px_rgba(15,23,42,0.04),0_10px_30px_rgba(15,23,42,0.04)] transition hover:border-blue-300 hover:bg-blue-50"
-            to="/login"
+            to="/login?space=backoffice"
           >
             <div className="flex items-start justify-between gap-4">
               <div className="min-w-0">
