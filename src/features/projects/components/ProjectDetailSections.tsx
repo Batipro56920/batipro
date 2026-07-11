@@ -60,6 +60,10 @@ function chantierStatusLabel(status: string | null | undefined) {
   return "Statut non renseigné";
 }
 
+function invoiceDetailPath(invoiceId: string) {
+  return `/factures?invoice=${encodeURIComponent(invoiceId)}`;
+}
+
 function ProductionContinuityPanel({ project }: { project: ProjectRecord }) {
   const quote = getPrimaryQuote(project);
   const acceptedQuote = project.quotes.find((item) => item.statut === "accepte") ?? null;
@@ -417,7 +421,7 @@ export function ProjectQuotesTab({ project }: { project: ProjectRecord }) {
       return;
     }
     if (getQuoteInvoices(quoteId, invoiceType).length) {
-      setBillingError("Une facture de ce type existe déjà pour ce devis. Ouvrez /factures pour la consulter ou la modifier.");
+      setBillingError("Une facture de ce type existe déjà pour ce devis. Ouvrez la facture existante pour la consulter ou la modifier.");
       return;
     }
 
@@ -431,7 +435,7 @@ export function ProjectQuotesTab({ project }: { project: ProjectRecord }) {
       const invoice = createInvoice(invoiceType, document);
       const savedInvoice = await saveInvoice(invoice);
       setExistingInvoices((current) => [savedInvoice, ...current]);
-      navigate("/factures");
+      navigate(invoiceDetailPath(savedInvoice.id));
     } catch (error) {
       setBillingError(error instanceof Error ? error.message : "Creation de facture impossible depuis ce devis.");
     } finally {
@@ -517,7 +521,7 @@ export function ProjectQuotesTab({ project }: { project: ProjectRecord }) {
                             </button>
                           ) : null}
                           {quoteInvoices.length ? (
-                            <Link to="/factures" className="inline-flex h-8 items-center rounded-lg border border-emerald-200 bg-emerald-50 px-2.5 text-xs font-semibold text-emerald-700 hover:bg-emerald-100">
+                            <Link to={invoiceDetailPath(quoteInvoices[0].id)} className="inline-flex h-8 items-center rounded-lg border border-emerald-200 bg-emerald-50 px-2.5 text-xs font-semibold text-emerald-700 hover:bg-emerald-100">
                               {quoteInvoices.length} facture{quoteInvoices.length > 1 ? "s" : ""}
                             </Link>
                           ) : null}
