@@ -24,6 +24,7 @@ type PlanningMilestone = {
 };
 
 type PlanningFilter = "all" | "late" | "unplanned" | "terrain" | "priority";
+type PlanningActionTone = "slate" | "red" | "amber" | "blue";
 
 const PLANNING_FILTER_LABELS: Record<PlanningFilter, string> = {
   all: "Tous les chantiers",
@@ -35,6 +36,11 @@ const PLANNING_FILTER_LABELS: Record<PlanningFilter, string> = {
 
 function todayIso() {
   return new Date().toISOString().slice(0, 10);
+}
+
+function getChantierHref(row: ChantierDerived, section?: string) {
+  const basePath = `/chantiers/${encodeURIComponent(row.id)}`;
+  return section ? `${basePath}/${section}` : basePath;
 }
 
 function getPlanningMilestone(row: ChantierDerived, today = todayIso()): PlanningMilestone {
@@ -112,6 +118,71 @@ function getTerrainFeedbackLabel(row: ChantierDerived) {
   return "Retours terrain";
 }
 
+function getNextPlanningAction(row: ChantierDerived) {
+  const priorityCount = row.terrainFeedbackPriorityCount ?? 0;
+  const openCount = row.terrainFeedbackOpenCount ?? 0;
+  const milestone = getPlanningMilestone(row);
+
+  if (priorityCount > 0) {
+    return {
+      href: getTerrainFeedbackHref(row),
+      label: "Traiter urgence terrain",
+      description: "Retour urgent avant recalage planning.",
+      tone: "red" as const,
+    };
+  }
+
+  if (openCount > 0) {
+    return {
+      href: getTerrainFeedbackHref(row),
+      label: "Traiter retour terrain",
+      description: "Observation ouverte à arbitrer.",
+      tone: "amber" as const,
+    };
+  }
+
+  if (!milestone.date) {
+    return {
+      href: getChantierHref(row, "preparation"),
+      label: "Cadrer la préparation",
+      description: "Jalon chantier manquant.",
+      tone: "amber" as const,
+    };
+  }
+
+  if (row.isLate) {
+    return {
+      href: getChantierHref(row, "planning"),
+      label: "Recaler le planning",
+      description: "Échéance dépassée à reprendre.",
+      tone: "red" as const,
+    };
+  }
+
+  if (row.progress < 100) {
+    return {
+      href: getChantierHref(row, "execution"),
+      label: "Piloter l'exécution",
+      description: `${row.progress}% d'avancement chantier.`,
+      tone: "blue" as const,
+    };
+  }
+
+  return {
+    href: getChantierHref(row),
+    label: "Contrôler le dossier",
+    description: "Chantier à vérifier avant clôture.",
+    tone: "slate" as const,
+  };
+}
+
+function nextActionClasses(tone: PlanningActionTone) {
+  if (tone === "red") return "border-red-200 bg-red-50 text-red-800 hover:border-red-300 hover:bg-red-100";
+  if (tone === "amber") return "border-amber-200 bg-amber-50 text-amber-900 hover:border-amber-300 hover:bg-amber-100";
+  if (tone === "blue") return "border-blue-200 bg-blue-50 text-blue-800 hover:border-blue-300 hover:bg-blue-100";
+  return "border-slate-200 bg-slate-50 text-slate-800 hover:border-slate-300 hover:bg-white";
+}
+
 function PlanningFilterCard({
   label,
   value,
@@ -149,6 +220,7 @@ function PlanningFilterCard({
 function ChantierPlanningRow({ row, onPreview }: { row: ChantierDerived; onPreview: (row: ChantierDerived) => void }) {
   const milestone = getPlanningMilestone(row);
   const timingLabel = getPlanningTimingLabel(row);
+  const nextAction = getNextPlanningAction(row);
   const openTerrainFeedbackCount = row.terrainFeedbackOpenCount ?? 0;
   const priorityTerrainFeedbackCount = row.terrainFeedbackPriorityCount ?? 0;
   const hasOpenTerrainFeedbacks = openTerrainFeedbackCount > 0;
@@ -179,22 +251,32 @@ function ChantierPlanningRow({ row, onPreview }: { row: ChantierDerived; onPrevi
         <div className="truncate font-semibold text-slate-950">{row.nom}</div>
         <div className="truncate text-sm text-slate-500">{row.client ?? "Client non renseigné"}</div>
         <div className="mt-1 text-xs font-medium text-slate-500">{getPlanningWindowLabel(row)}</div>
-        {hasOpenTerrainFeedbacks ? (
+        <div className="mt-2 flex flex-wrap gap-1.5">
           <Link
-            to={getTerrainFeedbackHref(row)}
-            className={`mt-2 inline-flex h-7 items-center gap-1.5 rounded-lg border px-2 text-xs font-semibold transition ${terrainFeedbackTone}`}
+            to={nextAction.href}
+            className={`inline-flex min-h-7 items-center gap-1.5 rounded-lg border px-2 py-1 text-xs font-semibold transition ${nextActionClasses(nextAction.tone)}`}
+            title={nextAction.description}
           >
-            <AlertTriangle className="h-3.5 w-3.5" />
-            {getTerrainFeedbackLabel(row)}
+            <ArrowRight className="h-3.5 w-3.5" />
+            {nextAction.label}
           </Link>
-        ) : null}
+          {hasOpenTerrainFeedbacks ? (
+            <Link
+              to={getTerrainFeedbackHref(row)}
+              className={`inline-flex h-7 items-center gap-1.5 rounded-lg border px-2 text-xs font-semibold transition ${terrainFeedbackTone}`}
+            >
+              <AlertTriangle className="h-3.5 w-3.5" />
+              {getTerrainFeedbackLabel(row)}
+            </Link>
+          ) : null}
+        </div>
         <div className="mt-2 flex flex-wrap gap-1.5">
           {PLANNING_QUICK_LINKS.map((link) => {
             const Icon = link.icon;
             return (
               <Link
                 key={link.path}
-                to={`/chantiers/${row.id}/${link.path}`}
+                to={getChantierHref(row, link.path)}
                 className="inline-flex h-7 items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2 text-xs font-semibold text-slate-600 transition hover:border-blue-200 hover:bg-blue-50 hover:text-blue-800"
               >
                 <Icon className="h-3.5 w-3.5" />
@@ -223,16 +305,17 @@ function ChantierPlanningRow({ row, onPreview }: { row: ChantierDerived; onPrevi
           Aperçu
         </button>
         <Link
-          to={`/chantiers/${row.id}`}
+          to={getChantierHref(row)}
           className="inline-flex h-9 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-100"
         >
           Dossier
         </Link>
         <Link
-          to={`/chantiers/${row.id}/planning`}
-          className="inline-flex h-9 items-center gap-2 rounded-xl bg-slate-950 px-3 text-sm font-semibold text-white shadow-sm transition hover:bg-slate-800"
+          to={nextAction.href}
+          className={`inline-flex h-9 items-center gap-2 rounded-xl border px-3 text-sm font-semibold shadow-sm transition ${nextActionClasses(nextAction.tone)}`}
+          title={nextAction.description}
         >
-          Planning chantier
+          {nextAction.label}
           <ArrowRight className="h-4 w-4" />
         </Link>
       </div>
@@ -258,14 +341,14 @@ function UnplannedChantierCard({ row, onPreview }: { row: ChantierDerived; onPre
       </div>
       <div className="mt-3 flex flex-wrap gap-2">
         <Link
-          to={`/chantiers/${row.id}/preparation`}
+          to={getChantierHref(row, "preparation")}
           className="inline-flex h-9 items-center gap-2 rounded-xl bg-amber-900 px-3 text-sm font-semibold text-white transition hover:bg-amber-800"
         >
           Cadrer la préparation
           <ArrowRight className="h-4 w-4" />
         </Link>
         <Link
-          to={`/chantiers/${row.id}/planning`}
+          to={getChantierHref(row, "planning")}
           className="inline-flex h-9 items-center gap-2 rounded-xl border border-amber-200 bg-white px-3 text-sm font-semibold text-amber-900 transition hover:bg-amber-100"
         >
           Ouvrir le planning
@@ -279,7 +362,7 @@ function UnplannedChantierCard({ row, onPreview }: { row: ChantierDerived; onPre
           <AlertTriangle className="h-4 w-4" />
         </Link>
         <Link
-          to={`/chantiers/${row.id}`}
+          to={getChantierHref(row)}
           className="inline-flex h-9 items-center rounded-xl border border-amber-200 bg-white px-3 text-sm font-semibold text-amber-900 transition hover:bg-amber-100"
         >
           Dossier
