@@ -45,8 +45,12 @@ function getBillingHref(row: ChantierDerived, projectHref: string | null) {
   if (projectHref && (row.crm_quote_id || row.signed_quote_amount_ht || row.signed_quote_amount_ttc)) {
     return `${projectHref}?tab=quotes`;
   }
-  if (row.crm_quote_id || row.signed_quote_amount_ht || row.signed_quote_amount_ttc) return "/projets?facturation=1";
+  if (row.crm_quote_id || row.signed_quote_amount_ht || row.signed_quote_amount_ttc) return "/factures";
   return null;
+}
+
+function getBillingLabel(projectHref: string | null) {
+  return projectHref ? "Facturation projet" : "Factures chantier";
 }
 
 function getCommercialActions(row: ChantierDerived): CommercialAction[] {
@@ -57,7 +61,7 @@ function getCommercialActions(row: ChantierDerived): CommercialAction[] {
 
   if (projectHref) actions.push({ href: projectHref, label: "Projet commercial", icon: ExternalLink });
   if (quoteHref) actions.push({ href: quoteHref, label: "Devis rattaché", icon: FileText });
-  if (billingHref) actions.push({ href: billingHref, label: "Facturation projet", icon: FileText });
+  if (billingHref) actions.push({ href: billingHref, label: getBillingLabel(projectHref), icon: FileText });
 
   return actions;
 }
