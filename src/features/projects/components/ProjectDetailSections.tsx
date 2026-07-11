@@ -17,6 +17,12 @@ const PROJECT_INVOICE_ACTIONS: Array<{ type: InvoiceType; label: string; title: 
   { type: "final", label: "Finale", title: "Creer une facture finale depuis ce devis" },
 ];
 
+type CreatedChantierLink = {
+  quoteId: string;
+  chantierId: string;
+  chantierName: string;
+};
+
 function InfoGrid({ rows }: { rows: Array<[string, string | number | null | undefined]> }) {
   return (
     <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
@@ -62,6 +68,32 @@ function chantierStatusLabel(status: string | null | undefined) {
 
 function invoiceDetailPath(invoiceId: string) {
   return `/factures?invoice=${encodeURIComponent(invoiceId)}`;
+}
+
+function chantierPath(chantierId: string, suffix = "") {
+  return `/chantiers/${encodeURIComponent(chantierId)}${suffix}`;
+}
+
+function ChantierProductionLinks({ chantierId }: { chantierId: string }) {
+  return (
+    <div className="flex flex-wrap gap-2">
+      <Link to={chantierPath(chantierId)} className="inline-flex h-9 items-center rounded-xl bg-emerald-700 px-3 text-sm font-semibold text-white hover:bg-emerald-800">
+        Dossier chantier
+      </Link>
+      <Link to={chantierPath(chantierId, "/preparation")} className="inline-flex h-9 items-center rounded-xl border border-emerald-200 bg-white px-3 text-sm font-semibold text-emerald-800 hover:bg-emerald-100">
+        Préparer
+      </Link>
+      <Link to={chantierPath(chantierId, "/planning")} className="inline-flex h-9 items-center rounded-xl border border-emerald-200 bg-white px-3 text-sm font-semibold text-emerald-800 hover:bg-emerald-100">
+        Planning
+      </Link>
+      <Link to={chantierPath(chantierId, "/execution")} className="inline-flex h-9 items-center rounded-xl border border-emerald-200 bg-white px-3 text-sm font-semibold text-emerald-800 hover:bg-emerald-100">
+        Exécuter
+      </Link>
+      <Link to={chantierPath(chantierId, "/financier")} className="inline-flex h-9 items-center rounded-xl border border-emerald-200 bg-white px-3 text-sm font-semibold text-emerald-800 hover:bg-emerald-100">
+        Financier
+      </Link>
+    </div>
+  );
 }
 
 function ProductionContinuityPanel({ project }: { project: ProjectRecord }) {
@@ -323,6 +355,7 @@ export function ProjectQuotesTab({ project }: { project: ProjectRecord }) {
   const [billingError, setBillingError] = useState<string | null>(null);
   const [chantierActionKey, setChantierActionKey] = useState<string | null>(null);
   const [chantierError, setChantierError] = useState<string | null>(null);
+  const [createdChantierLink, setCreatedChantierLink] = useState<CreatedChantierLink | null>(null);
   const [existingInvoices, setExistingInvoices] = useState<InvoiceRecord[]>([]);
   const acceptedQuote = project.quotes.find((quote) => quote.statut === "accepte");
 
@@ -350,6 +383,7 @@ export function ProjectQuotesTab({ project }: { project: ProjectRecord }) {
 
   function getQuoteChantierId(quoteId: string) {
     return (
+      (createdChantierLink?.quoteId === quoteId ? createdChantierLink.chantierId : null) ??
       project.quotes.find((quote) => quote.id === quoteId)?.chantier_id ??
       project.chantiers.find((chantier) => chantier.crm_quote_id === quoteId)?.id ??
       (project.chantiers.length === 1 ? project.chantiers[0]?.id : null)
@@ -357,7 +391,7 @@ export function ProjectQuotesTab({ project }: { project: ProjectRecord }) {
   }
 
   function chantierPreparationPath(chantierId: string) {
-    return `/chantiers/${encodeURIComponent(chantierId)}/preparation`;
+    return chantierPath(chantierId, "/preparation");
   }
 
   async function createChantierFromQuote(quoteId: string) {
@@ -370,7 +404,11 @@ export function ProjectQuotesTab({ project }: { project: ProjectRecord }) {
 
     const existingChantierId = getQuoteChantierId(quoteId);
     if (existingChantierId) {
-      navigate(chantierPreparationPath(existingChantierId));
+      setCreatedChantierLink({
+        quoteId,
+        chantierId: existingChantierId,
+        chantierName: project.chantiers.find((chantier) => chantier.id === existingChantierId)?.nom ?? "Chantier lié",
+      });
       return;
     }
 
@@ -383,7 +421,7 @@ export function ProjectQuotesTab({ project }: { project: ProjectRecord }) {
         client: project.client,
         opportunity: project.opportunity,
       });
-      navigate(chantierPreparationPath(created.id));
+      setCreatedChantierLink({ quoteId, chantierId: created.id, chantierName: created.nom });
     } catch (error) {
       setChantierError(error instanceof Error ? error.message : "Creation du chantier impossible depuis ce devis.");
     } finally {
@@ -461,6 +499,17 @@ export function ProjectQuotesTab({ project }: { project: ProjectRecord }) {
                 {chantierActionKey === acceptedQuote.id ? "Creation..." : "Créer chantier"}
               </button>
             )}
+          </div>
+        ) : null}
+        {createdChantierLink ? (
+          <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-900">
+            <div className="font-semibold">Chantier rattaché au devis : {createdChantierLink.chantierName}</div>
+            <p className="mt-1 text-emerald-800">
+              Le lien commerce → production est posé. Vous pouvez maintenant préparer le dossier, construire le planning, lancer l'exécution ou contrôler le financier chantier.
+            </p>
+            <div className="mt-3">
+              <ChantierProductionLinks chantierId={createdChantierLink.chantierId} />
+            </div>
           </div>
         ) : null}
         {chantierError ? (
