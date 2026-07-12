@@ -72,6 +72,9 @@ export default function ChantierVisitesPage() {
           <Link to={`/chantiers/${id}/qualite`} className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm font-medium text-amber-800 hover:bg-amber-100">
             Qualité / réserves
           </Link>
+          <Link to={`/retours-terrain?chantierId=${id}`} className="rounded-xl border border-blue-200 bg-blue-50 px-3 py-2 text-sm font-medium text-blue-800 hover:bg-blue-100">
+            Retours terrain
+          </Link>
           <Link to={`/chantiers/${id}/planning`} className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50">
             Planning
           </Link>
