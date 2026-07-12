@@ -49,6 +49,8 @@ export function useProjectsData() {
       const matchesQuery =
         !query ||
         [
+          project.id,
+          project.sourceId,
           project.name,
           project.clientName,
           project.address,
@@ -56,6 +58,7 @@ export function useProjectsData() {
           project.sourceLabel,
           project.prospect?.source_acquisition,
           project.prospect?.apporteur_affaire,
+          ...project.quotes.flatMap((quote) => [quote.id, quote.quote_number]),
         ]
           .filter(Boolean)
           .some((value) => String(value).toLowerCase().includes(query));
