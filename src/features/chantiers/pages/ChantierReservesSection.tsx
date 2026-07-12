@@ -20,6 +20,7 @@ export default function ChantierReservesSection({ children }: { children: ReactN
   const terrainFeedbackHref = id
     ? buildTerrainFeedbackHref(id, hasSourceFeedback ? sourceFeedbackId : undefined)
     : "/retours-terrain";
+  const chantierFeedbackListHref = id ? buildTerrainFeedbackHref(id) : "/retours-terrain";
   const chantierJournalHref = id ? `/chantiers/${encodedChantierId}/historique` : "";
   const chantierExecutionHref = id ? `/chantiers/${encodedChantierId}/execution` : "";
   const chantierPlanningHref = id ? `/chantiers/${encodedChantierId}/planning` : "";
@@ -45,6 +46,28 @@ export default function ChantierReservesSection({ children }: { children: ReactN
   const chapterSubtitle = hasSourceFeedback
     ? "Réserves ouvertes et levées. Le retour terrain source reste relié pour traiter la qualité chantier, revenir au signalement et conserver la trace dans le journal."
     : "Réserves ouvertes et levées. La création, le filtre et le détail se font dans le panneau latéral.";
+  const linkedWorkflowSteps = hasSourceFeedback
+    ? [
+        {
+          key: "feedback",
+          label: "Retour source",
+          helper: "Signalement terrain conservé en contexte",
+          href: sourceFeedbackHref,
+        },
+        {
+          key: "reserve",
+          label: hasTargetedReserve ? "Réserve ciblée" : "Réserve qualité",
+          helper: hasTargetedReserve ? "Traitement ouvert sur la réserve liée" : "Création ou contrôle depuis la qualité",
+          href: "",
+        },
+        {
+          key: "journal",
+          label: "Journal chantier",
+          helper: "Trace de création et suivi du traitement",
+          href: chantierJournalHref,
+        },
+      ]
+    : [];
 
   function clearReserveTargetOnly() {
     if (!searchParams.has("reserveId")) return;
@@ -97,13 +120,21 @@ export default function ChantierReservesSection({ children }: { children: ReactN
                 {hasSourceFeedback ? "Ouvrir le retour source" : "Voir retours chantier"}
               </Link>
               {hasSourceFeedback ? (
-                <button
-                  type="button"
-                  onClick={clearReserveTargetOnly}
-                  className="inline-flex items-center justify-center rounded-xl border border-blue-200 bg-white px-3 py-2 text-sm font-semibold text-blue-800 hover:bg-blue-50"
-                >
-                  Garder le retour source
-                </button>
+                <>
+                  <Link
+                    to={chantierFeedbackListHref}
+                    className="inline-flex items-center justify-center rounded-xl border border-blue-200 bg-white px-3 py-2 text-sm font-semibold text-blue-800 hover:bg-blue-50"
+                  >
+                    Tous les retours
+                  </Link>
+                  <button
+                    type="button"
+                    onClick={clearReserveTargetOnly}
+                    className="inline-flex items-center justify-center rounded-xl border border-blue-200 bg-white px-3 py-2 text-sm font-semibold text-blue-800 hover:bg-blue-50"
+                  >
+                    Garder le retour source
+                  </button>
+                </>
               ) : null}
               {chantierExecutionHref ? (
                 <Link
@@ -163,6 +194,12 @@ export default function ChantierReservesSection({ children }: { children: ReactN
               >
                 Ouvrir le retour source
               </Link>
+              <Link
+                to={chantierFeedbackListHref}
+                className="inline-flex items-center justify-center rounded-xl border border-amber-200 bg-white px-3 py-2 text-sm font-semibold text-amber-800 hover:bg-amber-100"
+              >
+                Tous les retours
+              </Link>
               {chantierExecutionHref ? (
                 <Link
                   to={chantierExecutionHref}
@@ -206,6 +243,37 @@ export default function ChantierReservesSection({ children }: { children: ReactN
           </div>
         </div>
       ) : null}
+      {linkedWorkflowSteps.length > 0 ? (
+        <div className="mb-4 grid gap-3 md:grid-cols-3">
+          {linkedWorkflowSteps.map((step) => {
+            const content = (
+              <>
+                <div className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Parcours lié</div>
+                <div className="mt-1 text-sm font-semibold text-slate-950">{step.label}</div>
+                <div className="mt-1 text-xs text-slate-500">{step.helper}</div>
+              </>
+            );
+
+            if (step.href) {
+              return (
+                <Link
+                  key={step.key}
+                  to={step.href}
+                  className="rounded-2xl border border-slate-200 bg-white px-4 py-3 hover:bg-slate-50"
+                >
+                  {content}
+                </Link>
+              );
+            }
+
+            return (
+              <div key={step.key} className="rounded-2xl border border-blue-200 bg-blue-50 px-4 py-3">
+                {content}
+              </div>
+            );
+          })}
+        </div>
+      ) : null}
       <div className="mb-4 rounded-2xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-900">
         <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
           <div>
@@ -223,6 +291,14 @@ export default function ChantierReservesSection({ children }: { children: ReactN
                 className="inline-flex items-center justify-center rounded-xl border border-blue-200 bg-white px-3 py-2 text-sm font-semibold text-blue-800 hover:bg-blue-50"
               >
                 Retour source
+              </Link>
+            ) : null}
+            {hasSourceFeedback ? (
+              <Link
+                to={chantierFeedbackListHref}
+                className="inline-flex items-center justify-center rounded-xl border border-blue-200 bg-white px-3 py-2 text-sm font-semibold text-blue-800 hover:bg-blue-50"
+              >
+                Liste chantier
               </Link>
             ) : null}
             {chantierExecutionHref ? (
