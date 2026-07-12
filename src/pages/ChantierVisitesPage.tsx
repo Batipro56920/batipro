@@ -59,15 +59,26 @@ export default function ChantierVisitesPage() {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between gap-3">
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
         <div>
           <div className="text-xs uppercase tracking-[0.2em] text-slate-500">{t("chantierVisites.subtitle")}</div>
           <h1 className="text-xl font-semibold text-slate-900">{t("chantierVisites.title")}</h1>
           <p className="text-sm text-slate-500">{chantier?.nom ?? t("chantierVisites.chantierFallback")}</p>
         </div>
-        <Link to={`/chantiers/${id}`} className="rounded-xl border px-3 py-2 text-sm hover:bg-slate-50">
-          {t("chantierVisites.back")}
-        </Link>
+        <div className="flex flex-wrap gap-2">
+          <Link to={`/chantiers/${id}`} className="rounded-xl border px-3 py-2 text-sm hover:bg-slate-50">
+            {t("chantierVisites.back")}
+          </Link>
+          <Link to={`/chantiers/${id}/qualite`} className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm font-medium text-amber-800 hover:bg-amber-100">
+            Qualité / réserves
+          </Link>
+          <Link to={`/chantiers/${id}/planning`} className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50">
+            Planning
+          </Link>
+          <Link to={`/chantiers/${id}/documents`} className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50">
+            Documents
+          </Link>
+        </div>
       </div>
 
       <VisitesModule
