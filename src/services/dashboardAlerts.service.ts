@@ -98,6 +98,10 @@ function chantierSectionHref(chantierId: string, section: "preparation" | "execu
   return `/chantiers/${chantierId}/${section}`;
 }
 
+function reserveHref(chantierId: string, reserveId: string) {
+  return `${chantierSectionHref(chantierId, "qualite")}?reserveId=${reserveId}`;
+}
+
 async function safeQuery<T>(query: PromiseLike<{ data: T | null; error: any }>, fallback: T): Promise<T> {
   const result = await query;
   if (!result.error) return result.data ?? fallback;
@@ -162,7 +166,7 @@ export async function listDashboardAlerts(chantiers: ChantierRow[]): Promise<Das
       tone: priority === "URGENTE" ? "danger" : "warning",
       title: `Réserve ${priority === "URGENTE" ? "urgente" : "ouverte"}`,
       detail: asText(row.title, "Réserve chantier"),
-      href: chantierSectionHref(row.chantier_id, "qualite"),
+      href: reserveHref(row.chantier_id, row.id),
       sort_at: row.created_at ?? "1970-01-01T00:00:00.000Z",
     });
   }
