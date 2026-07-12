@@ -9,6 +9,14 @@ import { listChantierTimeEntriesByChantierId, type ChantierTimeEntryRow } from "
 type TimeTone = "over" | "missing" | "ok";
 type TimePriorityFilter = "all" | TimeTone | "terrain";
 type TerrainFeedbackSummary = { open: number; priority: number };
+type TimeActionTone = "red" | "amber" | "blue" | "slate";
+type TimeNextAction = {
+  href: string;
+  label: string;
+  description: string;
+  tone: TimeActionTone;
+  kind: "time" | "terrain";
+};
 
 type TimeRow = {
   chantier: ChantierRow;
@@ -60,6 +68,65 @@ function getTerrainFeedbackLabel(summary: TerrainFeedbackSummary) {
   if (summary.priority > 0) return `${summary.priority} retour${summary.priority > 1 ? "s" : ""} urgent${summary.priority > 1 ? "s" : ""}`;
   if (summary.open > 0) return `${summary.open} retour${summary.open > 1 ? "s" : ""} terrain`;
   return "Aucun retour ouvert";
+}
+
+function getTimeNextAction(row: TimeRow): TimeNextAction {
+  const chantierId = encodeURIComponent(row.chantier.id);
+
+  if (row.terrainFeedback.priority > 0) {
+    return {
+      href: `/retours-terrain?chantierId=${chantierId}`,
+      label: "Traiter l'urgence terrain",
+      description: "Retour terrain urgent à arbitrer avant de valider les temps, le planning ou les reprises.",
+      tone: "red",
+      kind: "terrain",
+    };
+  }
+
+  if (row.tone === "over") {
+    return {
+      href: `/chantiers/${chantierId}/temps`,
+      label: "Analyser l'écart temps",
+      description: `${formatHours(row.delta)} au-dessus du prévu : contrôler les pointages par tâche et intervenant.`,
+      tone: "red",
+      kind: "time",
+    };
+  }
+
+  if (row.tone === "missing") {
+    return {
+      href: `/chantiers/${chantierId}/temps`,
+      label: "Saisir le temps",
+      description: "Aucune saisie temps : ouvrir le chantier pour rattacher heures, tâche et intervenant.",
+      tone: "amber",
+      kind: "time",
+    };
+  }
+
+  if (row.terrainFeedback.open > 0) {
+    return {
+      href: `/retours-terrain?chantierId=${chantierId}`,
+      label: "Arbitrer le retour terrain",
+      description: "Retour terrain ouvert : rapprocher l'observation des temps, tâches ou réserves avant clôture.",
+      tone: "amber",
+      kind: "terrain",
+    };
+  }
+
+  return {
+    href: `/chantiers/${chantierId}/temps`,
+    label: "Contrôler le détail",
+    description: "Temps saisi sans dépassement : contrôler le détail si besoin avant prochaine clôture.",
+    tone: "blue",
+    kind: "time",
+  };
+}
+
+function timeActionClasses(tone: TimeActionTone) {
+  if (tone === "red") return "border-red-200 bg-red-600 text-white hover:bg-red-700";
+  if (tone === "amber") return "border-amber-200 bg-amber-600 text-white hover:bg-amber-700";
+  if (tone === "blue") return "border-blue-200 bg-blue-600 text-white hover:bg-blue-700";
+  return "border-slate-200 bg-slate-950 text-white hover:bg-slate-800";
 }
 
 async function loadTaskPlannedHoursByChantier(chantierIds: string[]): Promise<Record<string, number>> {
@@ -378,7 +445,8 @@ export default function ChantiersTimePage() {
             <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-6 text-center text-sm text-slate-500 lg:col-span-2">Aucun chantier actif à suivre.</div>
           ) : rows.length === 0 ? (
             <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-6 text-center text-sm text-slate-500 lg:col-span-2">Aucun chantier ne correspond à ce filtre ou cette recherche.</div>
-          ) : rows.map(({ chantier, entries, planned, plannedFromTasks, logged, delta, tone, terrainFeedback }) => {
+          ) : rows.map((row) => {
+            const { chantier, entries, planned, plannedFromTasks, logged, delta, tone, terrainFeedback } = row;
             const isOver = tone === "over";
             const isMissing = tone === "missing";
             const hasOpenTerrainFeedbacks = terrainFeedback.open > 0;
@@ -397,6 +465,7 @@ export default function ChantiersTimePage() {
                 ? "border-amber-200 bg-amber-50 text-amber-700"
                 : "border-slate-200 bg-slate-50 text-slate-600";
             const qualityClass = hasOpenTerrainFeedbacks ? terrainClass : "border-slate-200 text-slate-700 hover:bg-slate-50";
+            const nextAction = getTimeNextAction(row);
 
             return (
               <article key={chantier.id} className={`rounded-2xl border bg-white p-4 shadow-sm transition hover:border-blue-200 ${isOver || hasPriorityTerrainFeedbacks ? "border-red-200" : "border-slate-200"}`}>
@@ -425,9 +494,18 @@ export default function ChantiersTimePage() {
                       <span className={`rounded-full border px-3 py-1 ${isOver ? "border-red-200 bg-red-50 text-red-700" : "border-emerald-200 bg-emerald-50 text-emerald-700"}`}>Saisi {formatHours(logged)}</span>
                       <span className="rounded-full border border-blue-200 bg-blue-50 px-3 py-1 text-blue-700">{entries.length} saisie{entries.length > 1 ? "s" : ""}</span>
                     </div>
+                    <div className="mt-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs leading-5 text-slate-600">
+                      <span className="font-semibold text-slate-800">Prochaine action : </span>{nextAction.description}
+                    </div>
                   </div>
-                  <Link to={`/chantiers/${encodeURIComponent(chantier.id)}/temps`} className="inline-flex h-10 shrink-0 items-center justify-center gap-2 rounded-xl bg-slate-950 px-3 text-sm font-semibold text-white hover:bg-slate-800">
-                    <Clock3 className="h-4 w-4" /> Suivre <ArrowRight className="h-4 w-4" />
+                  <Link
+                    to={nextAction.href}
+                    title={nextAction.description}
+                    className={`inline-flex h-10 shrink-0 items-center justify-center gap-2 rounded-xl border px-3 text-sm font-semibold shadow-sm transition ${timeActionClasses(nextAction.tone)}`}
+                  >
+                    {nextAction.kind === "terrain" ? <AlertTriangle className="h-4 w-4" /> : <Clock3 className="h-4 w-4" />}
+                    {nextAction.label}
+                    <ArrowRight className="h-4 w-4" />
                   </Link>
                 </div>
                 <div className="mt-4 flex flex-wrap gap-2 border-t border-slate-100 pt-3">
