@@ -65,6 +65,10 @@ function quoteEditorPath(projectId: string, quoteId: string) {
   return `/projets/${encodeURIComponent(projectId)}/devis/${encodeURIComponent(quoteId)}/edit`;
 }
 
+function chantierDetailPath(chantierId: string) {
+  return `/chantiers/${encodeURIComponent(chantierId)}`;
+}
+
 function findProjectById(projects: ProjectRecord[], projectId: string) {
   return projects.find((candidate) => candidate.id === projectId) ?? null;
 }
@@ -204,6 +208,10 @@ export default function CrmQuoteEditRedirectPage() {
       ? state.issue.quote.quote_number || id || ""
       : id ?? "";
   const crmQuotesPath = quoteSearchTerm ? `/crm/devis?q=${encodeURIComponent(quoteSearchTerm)}` : "/crm/devis";
+  const linkedChantierId =
+    state.status === "not-found" && state.issue.kind === "missing-project-link"
+      ? state.issue.chantier?.id ?? state.issue.quote.chantier_id
+      : null;
 
   return (
     <div className="rounded-3xl border border-amber-200 bg-amber-50 p-6 text-sm text-amber-900">
@@ -243,6 +251,14 @@ export default function CrmQuoteEditRedirectPage() {
         >
           Retour aux devis
         </Link>
+        {linkedChantierId ? (
+          <Link
+            to={chantierDetailPath(linkedChantierId)}
+            className="inline-flex h-9 items-center justify-center rounded-xl border border-amber-300 bg-white px-3 text-sm font-semibold text-amber-900 hover:bg-amber-100"
+          >
+            Ouvrir le chantier lié
+          </Link>
+        ) : null}
         <Link
           to="/projets"
           className="inline-flex h-9 items-center justify-center rounded-xl border border-amber-300 bg-white px-3 text-sm font-semibold text-amber-900 hover:bg-amber-100"
