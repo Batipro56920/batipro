@@ -37,6 +37,14 @@ function quoteBuilderProjectId(quote: CrmQuoteRow) {
   return projectIdFromDisplayOptions(quote.display_options);
 }
 
+function projectIdFromQuoteLinks(quote: Pick<CrmQuoteRow, "opportunity_id" | "prospect_id" | "client_id"> | null) {
+  if (!quote) return "";
+  if (quote.opportunity_id) return `opportunity-${quote.opportunity_id}`;
+  if (quote.prospect_id) return `prospect-${quote.prospect_id}`;
+  if (quote.client_id) return `client-${quote.client_id}`;
+  return "";
+}
+
 function projectIdFromChantierLink(chantier: ChantierQuoteLink | null) {
   if (!chantier) return "";
   if (chantier.crm_opportunity_id) return `opportunity-${chantier.crm_opportunity_id}`;
@@ -142,6 +150,13 @@ export default function CrmQuoteEditRedirectPage() {
           return;
         }
 
+        const directProjectId = quote ? projectIdFromQuoteLinks(quote) : "";
+        const directProject = directProjectId ? findProjectById(projects, directProjectId) : null;
+        if (directProject) {
+          setState({ status: "ready", targetPath: quoteEditorPath(directProject.id, id) });
+          return;
+        }
+
         const linkedChantier = quote ? findQuoteLinkedChantier(quote, dataset.chantiers) : null;
         const chantierProjectId = projectIdFromChantierLink(linkedChantier);
         const chantierProject = chantierProjectId ? findProjectById(projects, chantierProjectId) : null;
@@ -214,8 +229,9 @@ export default function CrmQuoteEditRedirectPage() {
             <LinkStatus label="Opportunité" value={state.issue.quote.opportunity_id ?? state.issue.chantier?.crm_opportunity_id} />
             <LinkStatus label="Client" value={state.issue.quote.client_id ?? state.issue.chantier?.crm_client_id} />
           </div>
-          <div className="mt-2 grid gap-2 sm:grid-cols-2">
+          <div className="mt-2 grid gap-2 sm:grid-cols-3">
             <LinkStatus label="Prospect" value={state.issue.quote.prospect_id ?? state.issue.chantier?.crm_prospect_id} />
+            <LinkStatus label="Projet déduit du devis" value={projectIdFromQuoteLinks(state.issue.quote)} />
             <LinkStatus label="Projet déduit du chantier" value={projectIdFromChantierLink(state.issue.chantier)} />
           </div>
         </>
