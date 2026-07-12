@@ -54,6 +54,11 @@ export default function AppEntryPage() {
           <div>
             <div className="text-[11px] font-semibold uppercase text-blue-700">Batipro</div>
             <h1 className="text-2xl font-semibold text-slate-950">Choisir un espace</h1>
+            <p className="mt-1 max-w-2xl text-sm leading-6 text-slate-600">
+              {hasIntervenantAccess
+                ? "Un acces terrain est deja enregistre sur cet appareil. Vous pouvez reprendre le terrain ou ouvrir le back-office sans effacer cet acces."
+                : "Ouvrez le back-office Batipro ou le portail terrain pour saisir un lien d'acces intervenant."}
+            </p>
           </div>
         </div>
 
