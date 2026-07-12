@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useEffect, useMemo } from "react";
 import { useSearchParams } from "react-router-dom";
 import { ProjectsHeader } from "../features/projects/components/ProjectsHeader";
 import { ProjectsKpiGrid } from "../features/projects/components/ProjectsKpiGrid";
@@ -31,7 +31,13 @@ export default function ProjectsPage() {
   const billingMode = searchParams.get("facturation") === "1";
   const quoteCreationMode = searchParams.get("devis") === "nouveau";
   const chantierCreationMode = searchParams.get("chantier") === "a-creer";
+  const urlQuery = searchParams.get("q")?.trim() ?? "";
   const { filteredProjects, metrics, projectTypes, filters, setFilters, loading, error, refresh } = useProjectsData();
+
+  useEffect(() => {
+    setFilters((current) => (current.query === urlQuery ? current : { ...current, query: urlQuery }));
+  }, [setFilters, urlQuery]);
+
   const visibleProjects = useMemo(() => {
     if (billingMode) {
       return filteredProjects.filter((project) => project.quotes.some((quote) => quote.statut === "accepte" && Number(quote.montant_ttc ?? 0) > 0));
@@ -64,6 +70,12 @@ export default function ProjectsPage() {
       {chantierCreationMode ? (
         <div className="rounded-3xl border border-emerald-100 bg-emerald-50 p-4 text-sm text-emerald-900">
           Sélectionnez une affaire signée non encore rattachée à un chantier. L'action ouvre l'onglet Devis du projet pour lancer la création chantier avec les données du devis accepté.
+        </div>
+      ) : null}
+
+      {urlQuery ? (
+        <div className="rounded-3xl border border-amber-100 bg-amber-50 p-4 text-sm text-amber-900">
+          Recherche projet ouverte depuis un lien entrant : <strong>{urlQuery}</strong>. La recherche couvre les noms, clients, adresses, identifiants projet/source et devis liés.
         </div>
       ) : null}
 
