@@ -53,6 +53,10 @@ function projectIdFromChantierLink(chantier: ChantierQuoteLink | null) {
   return "";
 }
 
+function projectSearchPath(projectId: string) {
+  return `/projets?q=${encodeURIComponent(projectId)}`;
+}
+
 function findQuoteLinkedChantier(quote: CrmQuoteRow, chantiers: CrmDataset["chantiers"]): ChantierQuoteLink | null {
   return (
     chantiers.find((chantier) => chantier.id === quote.chantier_id) ??
@@ -212,6 +216,12 @@ export default function CrmQuoteEditRedirectPage() {
     state.status === "not-found" && state.issue.kind === "missing-project-link"
       ? state.issue.chantier?.id ?? state.issue.quote.chantier_id
       : null;
+  const deducedProjectId =
+    state.status === "not-found" && state.issue.kind === "missing-project-link"
+      ? projectIdFromDisplayOptions(state.issue.quote.display_options) ||
+        projectIdFromQuoteLinks(state.issue.quote) ||
+        projectIdFromChantierLink(state.issue.chantier)
+      : "";
 
   return (
     <div className="rounded-3xl border border-amber-200 bg-amber-50 p-6 text-sm text-amber-900">
@@ -251,6 +261,14 @@ export default function CrmQuoteEditRedirectPage() {
         >
           Retour aux devis
         </Link>
+        {deducedProjectId ? (
+          <Link
+            to={projectSearchPath(deducedProjectId)}
+            className="inline-flex h-9 items-center justify-center rounded-xl border border-amber-300 bg-white px-3 text-sm font-semibold text-amber-900 hover:bg-amber-100"
+          >
+            Rechercher le projet déduit
+          </Link>
+        ) : null}
         {linkedChantierId ? (
           <Link
             to={chantierDetailPath(linkedChantierId)}
