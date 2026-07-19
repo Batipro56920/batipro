@@ -33,6 +33,12 @@ function getBillableAmount(project: ProjectRecord, quote: ProjectQuote | null) {
   return Number(quote.montant_ttc || quote.montant_ht || 0);
 }
 
+function getProjectQuotesPath(project: ProjectRecord, quoteToTransform?: ProjectQuote | null) {
+  const params = new URLSearchParams({ tab: "quotes" });
+  if (quoteToTransform?.id) params.set("chantierQuoteId", quoteToTransform.id);
+  return `/projets/${project.id}?${params.toString()}`;
+}
+
 function getApporteurTrackingPath(project: ProjectRecord) {
   return `/projets/${project.id}`;
 }
@@ -146,15 +152,18 @@ export function ProjectsTable({
               const quoteInProgress = quoteCreationMode ? getQuoteInProgress(project) : null;
               const commercialSource = getCommercialSource(project);
               const primaryChantier = getPrimaryChantier(project);
+              const chantierCreationPath = getProjectQuotesPath(project, acceptedQuoteAwaitingChantier);
               const projectPath = quoteCreationMode
                 ? quoteInProgress
                   ? `/projets/${project.id}/devis/${quoteInProgress.id}/edit`
                   : `/projets/${project.id}/devis/nouveau`
-                : `/projets/${project.id}${billingMode || chantierCreationMode ? "?tab=quotes" : ""}`;
+                : chantierCreationMode
+                  ? chantierCreationPath
+                  : `/projets/${project.id}${billingMode ? "?tab=quotes" : ""}`;
               return (
                 <tr key={project.id} className="transition hover:bg-slate-50/80">
                   <td className="max-w-[260px] px-4 py-3">
-                    <Link to={`/projets/${project.id}${billingMode || chantierCreationMode ? "?tab=quotes" : ""}`} className="font-semibold text-slate-950 hover:text-blue-700">
+                    <Link to={chantierCreationMode ? chantierCreationPath : `/projets/${project.id}${billingMode ? "?tab=quotes" : ""}`} className="font-semibold text-slate-950 hover:text-blue-700">
                       {project.name}
                     </Link>
                     <div className="mt-1 truncate text-xs text-slate-500">{project.projectType || "Type à qualifier"}</div>
