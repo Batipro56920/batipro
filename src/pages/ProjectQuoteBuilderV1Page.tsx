@@ -202,7 +202,7 @@ function TravelCostsControl({
   const summary = calculateQuoteTravelCosts({ ...quote, settings: { ...quote.settings, travelCosts: settings } });
   const hasDistance = summary.oneWayDistanceKm > 0;
   return (
-    <aside className="fixed right-4 top-44 z-40 hidden max-h-[calc(100vh-12rem)] w-[340px] overflow-auto rounded-xl border border-slate-200 bg-white p-4 text-sm shadow-xl 2xl:block">
+    <aside className="fixed right-4 top-44 z-40 hidden max-h-[calc(100vh-12rem)] w-[340px] overflow-auto rounded-xl border border-slate-200 bg-white p-4 text-sm shadow-xl xl:block">
       <div className="flex items-start justify-between gap-3">
         <div>
           <div className="text-xs font-semibold uppercase tracking-[0.14em] text-blue-600">Coûts cachés</div>
