@@ -13,10 +13,12 @@ import { useQuoteBuilderStore } from "../features/quotes/builder/quoteBuilderSto
 import { QuoteDocumentLoader } from "../features/quotes/builder/QuoteBuilderWorkspace";
 import type { QuoteBuilderNode, QuoteBuilderQuote, QuoteTravelCostSettings } from "../features/quotes/builder/types";
 import { useProjectsData } from "../features/projects/hooks/useProjectsData";
+import { getCompanyTravelSettings } from "../services/companyTravelSettings.service";
 import {
   getCurrentProfileFeaturePermissions,
   hasProfileFeaturePermission,
 } from "../services/profileFeaturePermissions.service";
+import { calculateQuoteTravelRoute } from "../services/quoteTravelRoute.service";
 
 function quoteBuilderErrorMessage(error: unknown) {
   if (error instanceof Error && error.message) return error.message;
@@ -43,6 +45,9 @@ export default function ProjectQuoteBuilderV1Page() {
   const [quoteLoading, setQuoteLoading] = useState(false);
   const [quoteError, setQuoteError] = useState<string | null>(null);
   const [loadedRouteKey, setLoadedRouteKey] = useState<string | null>(null);
+  const [travelDefaultsAppliedKey, setTravelDefaultsAppliedKey] = useState<string | null>(null);
+  const [travelRouteLoading, setTravelRouteLoading] = useState(false);
+  const [travelRouteError, setTravelRouteError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -73,6 +78,8 @@ export default function ProjectQuoteBuilderV1Page() {
     setLoadedRouteKey(null);
     setQuoteLoading(true);
     setQuoteError(null);
+    setTravelDefaultsAppliedKey(null);
+    setTravelRouteError(null);
     void loadQuoteBuilder(project, quoteId)
       .then((loaded) => {
         if (cancelled) return;
@@ -98,6 +105,39 @@ export default function ProjectQuoteBuilderV1Page() {
       quote.projectId === project.id &&
       (quoteId ? quote.id === quoteId : true),
   );
+
+  useEffect(() => {
+    if (!quote || !quoteMatchesRoute || !routeKey || travelDefaultsAppliedKey === routeKey) return;
+    let cancelled = false;
+    void getCompanyTravelSettings()
+      .then((settings) => {
+        if (cancelled) return;
+        const current = normalizeQuoteTravelCostSettings(quote.settings.travelCosts, quote.siteAddress);
+        const next = normalizeQuoteTravelCostSettings(
+          {
+            ...current,
+            companyAddress: current.companyAddress || settings.companyAddress,
+            costPerKm: settings.costPerKm,
+            vehicleHourlyCost: settings.vehicleHourlyCost,
+            vehicleWearCostPerKm: settings.vehicleWearCostPerKm,
+            averageSpeedKmh: settings.averageSpeedKmh,
+            workersCount: settings.workersCount,
+            vehiclesCount: settings.vehiclesCount,
+          },
+          quote.siteAddress,
+        );
+        setTravelDefaultsAppliedKey(routeKey);
+        if (JSON.stringify(next) !== JSON.stringify(current)) {
+          updateQuote({ settings: { ...quote.settings, travelCosts: next } });
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setTravelDefaultsAppliedKey(routeKey);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [quote, quoteMatchesRoute, routeKey, travelDefaultsAppliedKey, updateQuote]);
 
   if (permissionLoading) return <QuoteDocumentLoader />;
 
@@ -126,6 +166,32 @@ export default function ProjectQuoteBuilderV1Page() {
     const current = normalizeQuoteTravelCostSettings(quote.settings.travelCosts, quote.siteAddress);
     const next = normalizeQuoteTravelCostSettings({ ...current, ...patch }, quote.siteAddress);
     updateQuote({ settings: { ...quote.settings, travelCosts: next } });
+  }
+
+  async function calculateTravelRoute() {
+    if (!quote) return;
+    const settings = normalizeQuoteTravelCostSettings(quote.settings.travelCosts, quote.siteAddress);
+    const originAddress = settings.companyAddress.trim();
+    const destinationAddress = (settings.siteAddress || quote.siteAddress).trim();
+    if (!originAddress || !destinationAddress) {
+      setTravelRouteError("Adresse siège et adresse chantier requises.");
+      return;
+    }
+
+    setTravelRouteLoading(true);
+    setTravelRouteError(null);
+    try {
+      const route = await calculateQuoteTravelRoute({ originAddress, destinationAddress, includeTolls: true });
+      patchTravelCosts({
+        oneWayDistanceKm: route.oneWayDistanceKm,
+        oneWayDurationMinutes: route.oneWayDurationMinutes,
+        tollsPerRoundTripHt: route.tollsPerRoundTripHt,
+      });
+    } catch (err) {
+      setTravelRouteError(err instanceof Error ? err.message : "Calcul trajet impossible.");
+    } finally {
+      setTravelRouteLoading(false);
+    }
   }
 
   function insertTravelCostLine() {
@@ -166,7 +232,14 @@ export default function ProjectQuoteBuilderV1Page() {
     <>
       <QuoteBuilderWorkspace onClose={() => navigate(`/projets/${project.id}?tab=quotes`)} />
       <DailyCleaningFlatRateControl quote={quote} onToggle={(enabled) => updateQuote({ settings: { ...quote.settings, dailyCleaningFlatRateEnabled: enabled } })} />
-      <TravelCostsControl quote={quote} onPatch={patchTravelCosts} onInsertLine={insertTravelCostLine} />
+      <TravelCostsControl
+        quote={quote}
+        routeError={travelRouteError}
+        routeLoading={travelRouteLoading}
+        onPatch={patchTravelCosts}
+        onCalculateRoute={() => void calculateTravelRoute()}
+        onInsertLine={insertTravelCostLine}
+      />
     </>
   );
 }
@@ -191,16 +264,23 @@ function DailyCleaningFlatRateControl({ quote, onToggle }: { quote: QuoteBuilder
 
 function TravelCostsControl({
   quote,
+  routeError,
+  routeLoading,
   onPatch,
+  onCalculateRoute,
   onInsertLine,
 }: {
   quote: QuoteBuilderQuote;
+  routeError: string | null;
+  routeLoading: boolean;
   onPatch: (patch: Partial<QuoteTravelCostSettings>) => void;
+  onCalculateRoute: () => void;
   onInsertLine: () => void;
 }) {
   const settings = normalizeQuoteTravelCostSettings(quote.settings.travelCosts, quote.siteAddress);
   const summary = calculateQuoteTravelCosts({ ...quote, settings: { ...quote.settings, travelCosts: settings } });
   const hasDistance = summary.oneWayDistanceKm > 0;
+  const canCalculateRoute = Boolean(settings.companyAddress.trim() && (settings.siteAddress || quote.siteAddress).trim()) && !routeLoading;
   return (
     <aside className="fixed right-4 top-44 z-40 hidden max-h-[calc(100vh-12rem)] w-[340px] overflow-auto rounded-xl border border-slate-200 bg-white p-4 text-sm shadow-xl xl:block">
       <div className="flex items-start justify-between gap-3">
@@ -214,6 +294,15 @@ function TravelCostsControl({
       <div className="mt-4 grid gap-2">
         <TextField label="Adresse siège" value={settings.companyAddress} onChange={(companyAddress) => onPatch({ companyAddress })} />
         <TextField label="Adresse chantier" value={settings.siteAddress || quote.siteAddress} onChange={(siteAddress) => onPatch({ siteAddress })} />
+        <button
+          type="button"
+          className="inline-flex h-9 items-center justify-center rounded-xl border border-blue-200 bg-blue-50 px-3 text-sm font-semibold text-blue-700 transition hover:bg-blue-100 disabled:border-slate-200 disabled:bg-slate-100 disabled:text-slate-400"
+          disabled={!canCalculateRoute}
+          onClick={onCalculateRoute}
+        >
+          {routeLoading ? "Calcul du trajet..." : "Calculer automatiquement"}
+        </button>
+        {routeError ? <p className="text-xs leading-5 text-red-600">{routeError}</p> : null}
       </div>
 
       <div className="mt-4 grid grid-cols-2 gap-2">
