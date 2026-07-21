@@ -36,7 +36,7 @@ export function normalizeQuoteTravelCostSettings(
   siteAddress = "",
 ): QuoteTravelCostSettings {
   const raw = typeof value === "object" && value ? value as Partial<QuoteTravelCostSettings> : {};
-  const normalized = {
+  const normalized: QuoteTravelCostSettings = {
     ...DEFAULT_QUOTE_TRAVEL_COST_SETTINGS,
     ...raw,
     companyAddress: cleanText(raw.companyAddress),
