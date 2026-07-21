@@ -100,16 +100,7 @@ async function createNewQuote(
     payment_terms_text: quote.paymentTerms,
     legal_mentions: { text: quote.legalMentions } as any,
     waste_management: defaultWasteManagement(),
-    display_options: {
-      site_address: quote.siteAddress,
-      footer_notes: quote.footerNotes,
-      work_start_date: quote.workStartDate,
-      estimated_duration_value: quote.estimatedDurationValue,
-      estimated_duration_unit: quote.estimatedDurationUnit,
-      daily_cleaning_flat_rate_enabled: quote.settings.dailyCleaningFlatRateEnabled,
-      builder_v1: true,
-      project_id: quote.projectId,
-    } as any,
+    display_options: buildDisplayOptions(quote) as any,
     acompte_percent: quote.settings.depositPercent,
   });
   removeLocalQuote(quote.projectId, null);
@@ -138,20 +129,25 @@ async function updateExistingQuote(
     payment_terms_text: quote.paymentTerms,
     legal_mentions: { text: quote.legalMentions } as any,
     waste_management: defaultWasteManagement(),
-    display_options: {
-      site_address: quote.siteAddress,
-      footer_notes: quote.footerNotes,
-      work_start_date: quote.workStartDate,
-      estimated_duration_value: quote.estimatedDurationValue,
-      estimated_duration_unit: quote.estimatedDurationUnit,
-      daily_cleaning_flat_rate_enabled: quote.settings.dailyCleaningFlatRateEnabled,
-      builder_v1: true,
-      project_id: quote.projectId,
-    } as any,
+    display_options: buildDisplayOptions(quote) as any,
     acompte_percent: quote.settings.depositPercent,
   });
   await persistItems(quote, engine);
   return { ...quote, status: "saved" };
+}
+
+function buildDisplayOptions(quote: QuoteBuilderQuote) {
+  return {
+    site_address: quote.siteAddress,
+    footer_notes: quote.footerNotes,
+    work_start_date: quote.workStartDate,
+    estimated_duration_value: quote.estimatedDurationValue,
+    estimated_duration_unit: quote.estimatedDurationUnit,
+    daily_cleaning_flat_rate_enabled: quote.settings.dailyCleaningFlatRateEnabled,
+    travel_costs: quote.settings.travelCosts,
+    builder_v1: true,
+    project_id: quote.projectId,
+  };
 }
 
 function assertQuotePricePermission(
