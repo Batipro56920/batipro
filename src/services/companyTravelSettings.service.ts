@@ -74,10 +74,11 @@ export async function getCompanyTravelSettings(): Promise<CompanyTravelSettings>
     .from(TABLE)
     .select("address, travel_settings")
     .eq("organization_id", userId)
-    .maybeSingle<CompanyTravelSettingsRow>();
+    .maybeSingle();
 
   if (!withTravelSettings.error) {
-    return normalizeCompanyTravelSettings(withTravelSettings.data?.travel_settings, withTravelSettings.data?.address ?? "");
+    const row = withTravelSettings.data as CompanyTravelSettingsRow | null;
+    return normalizeCompanyTravelSettings(row?.travel_settings, row?.address ?? "");
   }
 
   if (!isMissingTravelSettingsColumn(withTravelSettings.error)) {
@@ -88,8 +89,9 @@ export async function getCompanyTravelSettings(): Promise<CompanyTravelSettings>
     .from(TABLE)
     .select("address")
     .eq("organization_id", userId)
-    .maybeSingle<CompanyTravelSettingsRow>();
+    .maybeSingle();
 
   if (withoutTravelSettings.error) throw new Error(withoutTravelSettings.error.message);
-  return normalizeCompanyTravelSettings(null, withoutTravelSettings.data?.address ?? "");
+  const row = withoutTravelSettings.data as CompanyTravelSettingsRow | null;
+  return normalizeCompanyTravelSettings(null, row?.address ?? "");
 }
