@@ -37,7 +37,6 @@ export default function ProjectQuoteBuilderV1Page() {
   const quote = useQuoteBuilderStore((state) => state.quote);
   const hydrate = useQuoteBuilderStore((state) => state.hydrate);
   const updateQuote = useQuoteBuilderStore((state) => state.updateQuote);
-  const updateNode = useQuoteBuilderStore((state) => state.updateNode);
   const addItem = useQuoteBuilderStore((state) => state.addItem);
   const [permissionLoading, setPermissionLoading] = useState(true);
   const [permissionAllowed, setPermissionAllowed] = useState(false);
