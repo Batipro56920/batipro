@@ -51,6 +51,25 @@ export type QuoteBuilderSection = {
 
 export type QuoteBuilderNode = QuoteBuilderSection | QuoteBuilderSubsection | QuoteBuilderItem;
 
+export type QuoteTravelCostBillingMode = "hidden" | "absorb" | "line";
+
+export type QuoteTravelCostSettings = {
+  companyAddress: string;
+  siteAddress: string;
+  oneWayDistanceKm: number;
+  oneWayDurationMinutes: number;
+  tollsPerRoundTripHt: number;
+  worksiteDays: number | null;
+  workersCount: number;
+  vehiclesCount: number;
+  costPerKm: number;
+  vehicleHourlyCost: number;
+  vehicleWearCostPerKm: number;
+  averageSpeedKmh: number;
+  billingMode: QuoteTravelCostBillingMode;
+  lineVatRate: number;
+};
+
 export type QuoteBuilderSettings = {
   defaultVatRate: number;
   depositPercent: number;
@@ -63,6 +82,7 @@ export type QuoteBuilderSettings = {
   showTypes: boolean;
   hideCompositeDetails: boolean;
   dailyCleaningFlatRateEnabled?: boolean;
+  travelCosts?: QuoteTravelCostSettings;
 };
 
 export type QuoteBuilderQuote = {
