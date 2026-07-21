@@ -1,7 +1,8 @@
 import type { ProjectRecord } from "../../projects/types";
 import type { CrmQuoteEngineData, CrmQuoteItemRow } from "../../../services/crm.service";
 import type { CrmVisitQuoteSource } from "../../../services/crmVisitReports.service";
-import type { QuoteBuilderItem, QuoteBuilderItemKind, QuoteBuilderNode, QuoteBuilderQuote, QuoteBuilderSection, QuoteBuilderSubsection, QuoteBuilderUnit } from "./types";
+import { normalizeQuoteTravelCostSettings } from "./quoteBuilderTravelCosts";
+import type { QuoteBuilderItem, QuoteBuilderItemKind, QuoteBuilderNode, QuoteBuilderQuote, QuoteBuilderSection, QuoteBuilderSettings, QuoteBuilderSubsection, QuoteBuilderUnit } from "./types";
 
 export function createQuoteBuilderFromProject(project: ProjectRecord, visitSource?: CrmVisitQuoteSource | null): QuoteBuilderQuote {
   const source = visitSource ?? readVisitQuoteSource(project.id);
@@ -24,42 +25,62 @@ export function createQuoteBuilderFromProject(project: ProjectRecord, visitSourc
     paymentTerms: "Acompte de 30% a la signature, solde selon avancement et reception.",
     legalMentions: "Devis valable selon la date indiquee. Travaux soumis aux conditions generales de l'entreprise.",
     footerNotes: "",
-    settings: {
-      defaultVatRate: 20,
-      depositPercent: 30,
-      showVatColumn: true,
-      showQuantityColumns: true,
-      hideSectionTotals: false,
-      showMargins: false,
-      showDiscounts: false,
-      showReferences: false,
-      showTypes: false,
-      hideCompositeDetails: false,
-    },
+    settings: createDefaultQuoteSettings(project.address ?? ""),
     nodes: source?.lines?.length ? mapVisitToQuoteNodes(source) : [createSection("Nouvelle section")],
   };
 }
 
 export function createQuoteBuilderFromEngine(engine: CrmQuoteEngineData, project: ProjectRecord): QuoteBuilderQuote {
+  const base = createQuoteBuilderFromProject(project);
   return {
-    ...createQuoteBuilderFromProject(project),
+    ...base,
     id: engine.quote.id,
     number: engine.quote.quote_number,
     status: engine.quote.statut === "envoye" ? "sent" : engine.quote.statut === "accepte" ? "accepted" : "saved",
     date: engine.quote.date_emission ?? new Date().toISOString().slice(0, 10),
     validUntil: engine.quote.valid_until,
-    workStartDate: readDisplayOption(engine.quote.display_options, "work_start_date"),
-    estimatedDurationValue: Number(readDisplayOption(engine.quote.display_options, "estimated_duration_value") ?? 0) || null,
-    estimatedDurationUnit: durationUnit(readDisplayOption(engine.quote.display_options, "estimated_duration_unit")),
+    workStartDate: readDisplayOptionText(engine.quote.display_options, "work_start_date"),
+    estimatedDurationValue: Number(readDisplayOptionText(engine.quote.display_options, "estimated_duration_value") ?? 0) || null,
+    estimatedDurationUnit: durationUnit(readDisplayOptionText(engine.quote.display_options, "estimated_duration_unit")),
     description: engine.quote.description ?? project.needDescription ?? project.name,
     paymentTerms: engine.quote.payment_terms_text ?? engine.quote.conditions ?? "Acompte de 30% a la signature, solde selon avancement et reception.",
     legalMentions: typeof engine.quote.legal_mentions === "object" && engine.quote.legal_mentions ? String((engine.quote.legal_mentions as Record<string, unknown>).text ?? "") : "",
+    settings: {
+      ...base.settings,
+      dailyCleaningFlatRateEnabled: readDisplayOptionBoolean(engine.quote.display_options, "daily_cleaning_flat_rate_enabled"),
+      travelCosts: normalizeQuoteTravelCostSettings(readDisplayOptionValue(engine.quote.display_options, "travel_costs"), project.address ?? ""),
+    },
     nodes: mapCrmItemsToQuoteNodes(engine.items),
   };
 }
 
-function readDisplayOption(options: unknown, key: string): string | null {
-  return typeof options === "object" && options ? String((options as Record<string, unknown>)[key] ?? "") || null : null;
+function createDefaultQuoteSettings(siteAddress: string): QuoteBuilderSettings {
+  return {
+    defaultVatRate: 20,
+    depositPercent: 30,
+    showVatColumn: true,
+    showQuantityColumns: true,
+    hideSectionTotals: false,
+    showMargins: false,
+    showDiscounts: false,
+    showReferences: false,
+    showTypes: false,
+    hideCompositeDetails: false,
+    travelCosts: normalizeQuoteTravelCostSettings(null, siteAddress),
+  };
+}
+
+function readDisplayOptionValue(options: unknown, key: string): unknown {
+  return typeof options === "object" && options ? (options as Record<string, unknown>)[key] : null;
+}
+
+function readDisplayOptionText(options: unknown, key: string): string | null {
+  const value = readDisplayOptionValue(options, key);
+  return String(value ?? "") || null;
+}
+
+function readDisplayOptionBoolean(options: unknown, key: string): boolean {
+  return readDisplayOptionValue(options, key) === true;
 }
 
 function durationUnit(value: string | null): "jours" | "semaines" | "mois" {
