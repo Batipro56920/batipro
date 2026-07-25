@@ -105,6 +105,9 @@ export type ElectronicInvoicingMetadata = {
   pdpReference?: string | null;
   lastTransmissionAt?: string | null;
   rejectionReason?: string | null;
+  lastFacturXExportAt?: string | null;
+  lastFacturXExportFilename?: string | null;
+  facturXExportCount?: number | null;
 };
 
 export type DocumentBaseNode = {
