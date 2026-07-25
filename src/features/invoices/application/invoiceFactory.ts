@@ -1,4 +1,4 @@
-import { calculateDocumentTotals, createEmptyBusinessDocument, type BusinessDocument, type BusinessDocumentNode } from "../../document-engine";
+import { calculateDocumentTotals, createEmptyBusinessDocument, type BusinessDocument, type BusinessDocumentNode, type ElectronicInvoicingMetadata } from "../../document-engine";
 import type { InvoiceRecord, InvoiceType } from "../domain/types";
 import { addLocalDays, getLocalInputDate } from "./invoiceDates";
 
@@ -33,6 +33,7 @@ export function createInvoiceDocumentFromQuote(quote: BusinessDocument, type: In
     issueDate: getLocalInputDate(),
     dueDate: dueDate(30),
     quoteId: quote.id,
+    electronicInvoicing: normalizeInvoiceElectronicInvoicing(quote.electronicInvoicing),
     terms: {
       ...quote.terms,
       paymentTerms: type === "deposit"
@@ -58,16 +59,39 @@ export function createInvoiceDocumentFromQuote(quote: BusinessDocument, type: In
 
 function createEmptyInvoiceDocument(type: InvoiceType): BusinessDocument {
   const document = createEmptyBusinessDocument(type === "credit_note" ? "credit_note" : "invoice");
-  return {
+  const nextDocument = {
     ...document,
     number: createInvoiceNumber(type),
     title: invoiceTypeLabel(type),
     dueDate: dueDate(30),
+    electronicInvoicing: normalizeInvoiceElectronicInvoicing(document.electronicInvoicing),
     terms: {
       ...document.terms,
       paymentTerms: type === "deposit" ? "Acompte à régler à réception de facture." : "Paiement à réception de facture.",
     },
-    totals: calculateDocumentTotals(document),
+  };
+  return {
+    ...nextDocument,
+    totals: calculateDocumentTotals(nextDocument),
+  };
+}
+
+function normalizeInvoiceElectronicInvoicing(value?: ElectronicInvoicingMetadata | null): ElectronicInvoicingMetadata {
+  return {
+    customerType: value?.customerType ?? "b2b_fr",
+    operationType: value?.operationType ?? "services",
+    transmissionStatus: value?.transmissionStatus ?? "not_ready",
+    buyerSiren: cleanIdentifier(value?.buyerSiren),
+    buyerSiret: cleanIdentifier(value?.buyerSiret),
+    sellerSiren: cleanIdentifier(value?.sellerSiren),
+    sellerSiret: cleanIdentifier(value?.sellerSiret),
+    buyerVatNumber: cleanText(value?.buyerVatNumber),
+    sellerVatNumber: cleanText(value?.sellerVatNumber),
+    vatExigibility: value?.vatExigibility ?? "payment",
+    pdpProvider: cleanText(value?.pdpProvider),
+    pdpReference: cleanText(value?.pdpReference),
+    lastTransmissionAt: value?.lastTransmissionAt ?? null,
+    rejectionReason: cleanText(value?.rejectionReason),
   };
 }
 
@@ -134,6 +158,15 @@ function createInvoiceNumber(type: InvoiceType) {
 
 function dueDate(days: number) {
   return addLocalDays(days);
+}
+
+function cleanIdentifier(value?: string | null) {
+  return cleanText(value)?.replace(/\s/g, "") ?? null;
+}
+
+function cleanText(value?: string | null) {
+  const text = String(value ?? "").trim();
+  return text || null;
 }
 
 function roundMoney(value: number) {
