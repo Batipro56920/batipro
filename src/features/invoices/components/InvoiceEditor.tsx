@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { ArrowRight, Download, Plus, Save, Send, Trash2 } from "lucide-react";
+import { ArrowRight, Download, FileCode2, Plus, Save, Send, Trash2 } from "lucide-react";
 import { Button } from "../../../components/ui/button";
 import { calculateDocumentTotals, createDocumentLine, createDocumentSection, DocumentPreview, DocumentSendDialog, DocumentTotalsCard, downloadBusinessDocumentPdf, flattenDocumentNodes, validateBusinessDocument, type BusinessDocument, type BusinessDocumentNode, type DocumentItemKind, type ElectronicInvoicingCustomerType, type ElectronicInvoicingMetadata, type ElectronicInvoicingOperationType, type ElectronicInvoicingTransmissionStatus } from "../../document-engine";
 import { addInvoicePayment, createProfitabilitySnapshot, getPaidAmount, getRemainingAmount, removeInvoicePayment } from "../application/invoicePayments";
-import { canUseInvoiceElectronicInvoicingStatus, cleanInvoiceElectronicInvoicingIdentifier, cleanInvoiceElectronicInvoicingText, getInvoiceElectronicInvoicingReadiness, normalizeInvoiceElectronicInvoicing, normalizeInvoiceElectronicInvoicingPatch } from "../application/electronicInvoicing";
+import { canUseInvoiceElectronicInvoicingStatus, cleanInvoiceElectronicInvoicingIdentifier, cleanInvoiceElectronicInvoicingText, ELECTRONIC_INVOICING_TRANSMISSION_STATUS_LABELS, getInvoiceElectronicInvoicingReadiness, INVOICE_ELECTRONIC_INVOICING_STRATEGY, normalizeInvoiceElectronicInvoicing, normalizeInvoiceElectronicInvoicingPatch } from "../application/electronicInvoicing";
+import { downloadFacturXXml } from "../application/facturxExport";
 import type { InvoicePayment, InvoiceRecord } from "../domain/types";
 import { InvoiceStatusBadge } from "./InvoiceStatusBadge";
 
@@ -74,13 +75,7 @@ const OPERATION_TYPE_LABELS: Record<ElectronicInvoicingOperationType, string> = 
   works: "Travaux bâtiment",
 };
 
-const TRANSMISSION_STATUS_LABELS: Record<ElectronicInvoicingTransmissionStatus, string> = {
-  not_ready: "À compléter",
-  ready: "Prête PDP",
-  pending_pdp: "En attente PDP",
-  transmitted: "Transmise",
-  rejected: "Rejetée",
-};
+const TRANSMISSION_STATUS_LABELS = ELECTRONIC_INVOICING_TRANSMISSION_STATUS_LABELS;
 
 export function InvoiceEditor({ invoice, hasUnsavedChanges, clientWorkflowStatus = null, onUnsavedChange, onChange, onSave }: InvoiceEditorProps) {
   const [previewOpen, setPreviewOpen] = useState(false);
@@ -134,6 +129,15 @@ export function InvoiceEditor({ invoice, hasUnsavedChanges, clientWorkflowStatus
     onChange(removeInvoicePayment(invoice, paymentId));
   }
 
+  function exportFacturXXml() {
+    setSaveError(null);
+    try {
+      downloadFacturXXml(document);
+    } catch (err) {
+      setSaveError(getErrorMessage(err, "Export Factur-X impossible."));
+    }
+  }
+
   async function save() {
     if (saving) return;
     setSaveError(null);
@@ -177,6 +181,7 @@ export function InvoiceEditor({ invoice, hasUnsavedChanges, clientWorkflowStatus
           <div className="grid w-full grid-cols-2 gap-2 sm:flex sm:flex-wrap lg:w-auto lg:justify-end">
             <Button className="w-full sm:w-auto" variant="secondary" onClick={() => setPreviewOpen((open) => !open)}>Aperçu</Button>
             <Button className="w-full sm:w-auto" variant="secondary" onClick={() => downloadBusinessDocumentPdf(document)}><Download className="h-4 w-4" /> PDF</Button>
+            <Button className="w-full sm:w-auto" variant="secondary" onClick={exportFacturXXml}><FileCode2 className="h-4 w-4" /> Factur-X XML</Button>
             <Button className="w-full sm:w-auto" variant="secondary" onClick={() => setSendOpen(true)}><Send className="h-4 w-4" /> Envoyer</Button>
             <Button className="col-span-2 w-full sm:w-auto" variant="primary" disabled={saving} onClick={save}><Save className="h-4 w-4" /> {saving ? "Enregistrement..." : "Enregistrer"}</Button>
           </div>
@@ -250,14 +255,14 @@ function ElectronicInvoicingPanel({ metadata, onChange }: { metadata: Electronic
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <div className="text-xs font-semibold uppercase tracking-[0.14em] text-blue-700">Facturation électronique</div>
-          <div className="mt-1 text-sm text-slate-600">Qualification PDP / e-reporting pour la réforme française.</div>
+          <div className="mt-1 text-sm text-slate-600">{INVOICE_ELECTRONIC_INVOICING_STRATEGY.description}</div>
         </div>
         <div className="flex flex-col gap-2 sm:items-end">
           <span className={`rounded-full border px-2.5 py-1 text-xs font-semibold ${readiness.badgeClassName}`}>
             {readiness.label}
           </span>
           <Button variant="secondary" size="sm" disabled={!readiness.canMarkReady || metadata.transmissionStatus === "ready"} onClick={() => onChange({ transmissionStatus: "ready" })}>
-            Marquer prête PDP
+            {INVOICE_ELECTRONIC_INVOICING_STRATEGY.readyActionLabel}
           </Button>
         </div>
       </div>
@@ -271,13 +276,13 @@ function ElectronicInvoicingPanel({ metadata, onChange }: { metadata: Electronic
         <Field label="SIRET client" value={metadata.buyerSiret ?? ""} onChange={(buyerSiret) => onChange({ buyerSiret: cleanInvoiceElectronicInvoicingIdentifier(buyerSiret), buyerSiren: null })} />
         <Field label="TVA intra client" value={metadata.buyerVatNumber ?? ""} onChange={(buyerVatNumber) => onChange({ buyerVatNumber: cleanInvoiceElectronicInvoicingText(buyerVatNumber) })} />
         <SelectField label="Exigibilité TVA" value={metadata.vatExigibility ?? "payment"} onChange={(vatExigibility) => onChange({ vatExigibility: vatExigibility as ElectronicInvoicingMetadata["vatExigibility"] })} options={{ payment: "À l'encaissement", debit: "Sur les débits" }} />
-        <SelectField label="Statut PDP" value={metadata.transmissionStatus} onChange={(transmissionStatus) => onChange({ transmissionStatus: transmissionStatus as ElectronicInvoicingTransmissionStatus })} options={TRANSMISSION_STATUS_LABELS} disabledOptions={blockedTransmissionStatuses} />
+        <SelectField label="Statut e-facturation" value={metadata.transmissionStatus} onChange={(transmissionStatus) => onChange({ transmissionStatus: transmissionStatus as ElectronicInvoicingTransmissionStatus })} options={TRANSMISSION_STATUS_LABELS} disabledOptions={blockedTransmissionStatuses} />
         <Field label="Plateforme PDP" value={metadata.pdpProvider ?? ""} onChange={(pdpProvider) => onChange({ pdpProvider: cleanInvoiceElectronicInvoicingText(pdpProvider) })} />
       </div>
 
       {readiness.missingFields.length ? (
         <div className="mt-3 rounded-xl border border-amber-200 bg-white px-3 py-2 text-xs font-medium text-amber-800">
-          Champs à compléter avant transmission PDP : {readiness.missingFields.join(", ")}.
+          Champs à compléter avant export Factur-X / transmission PDP : {readiness.missingFields.join(", ")}.
         </div>
       ) : null}
     </div>
