@@ -92,6 +92,16 @@ export type ElectronicInvoicingTransmissionStatus = "not_ready" | "ready" | "pen
 
 export type FacturXExternalValidationStatus = "not_checked" | "valid" | "invalid";
 
+export type PdpSimulationStatus = "not_queued" | "queued" | "simulated" | "blocked";
+
+export type PdpSimulationEvent = {
+  id: string;
+  at: string;
+  status: PdpSimulationStatus;
+  label: string;
+  detail?: string | null;
+};
+
 export type ElectronicInvoicingMetadata = {
   customerType: ElectronicInvoicingCustomerType;
   operationType: ElectronicInvoicingOperationType;
@@ -113,6 +123,10 @@ export type ElectronicInvoicingMetadata = {
   facturXExternalValidationStatus?: FacturXExternalValidationStatus | null;
   facturXExternalValidationAt?: string | null;
   facturXExternalValidator?: string | null;
+  pdpSimulationStatus?: PdpSimulationStatus | null;
+  pdpSimulationQueuedAt?: string | null;
+  pdpSimulationLastRunAt?: string | null;
+  pdpSimulationEventLog?: PdpSimulationEvent[] | null;
 };
 
 export type DocumentBaseNode = {
