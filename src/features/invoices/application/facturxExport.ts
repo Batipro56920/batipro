@@ -1,4 +1,4 @@
-import { calculateDocumentTotals, createBusinessDocumentPdf, flattenDocumentNodes, type BusinessDocument, type DocumentItemNode, type DocumentUnit } from "../../document-engine";
+import { calculateDocumentTotals, calculateLineTotalHt, createBusinessDocumentPdf, flattenDocumentNodes, type BusinessDocument, type DocumentItemNode, type DocumentParty, type DocumentUnit, type PaymentMethod } from "../../document-engine";
 import { getInvoiceElectronicInvoicingReadiness, normalizeInvoiceElectronicInvoicing } from "./electronicInvoicing";
 import type { jsPDF } from "jspdf";
 
@@ -86,6 +86,11 @@ export function getFacturXExportReadiness(document: BusinessDocument): FacturXEx
       { label: "Entreprise et client", ok: Boolean(cleanText(document.company.displayName) && cleanText(document.recipient.displayName)) },
       { label: "Lignes facturables", ok: lines.length > 0 && lineIssues.length === 0, detail: lineIssues[0] },
       { label: "Totaux et TVA", ok: Number.isFinite(totals.totalTtc) && totals.totalTtc > 0 && totals.vatBreakdown.length > 0 },
+      {
+        label: "XML enrichi Batipro",
+        ok: canExport,
+        detail: canExport ? "Contacts, livraison, paiement, références et TVA structurés quand disponibles" : "Corriger les blocages avant enrichissement fiable",
+      },
       {
         label: "PDF avec XML embarqué",
         ok: canExport,
@@ -208,22 +213,30 @@ function buildCrossIndustryInvoiceXml(
     <ram:IssueDateTime>
       <udt:DateTimeString format="102">${formatXmlDate(document.issueDate)}</udt:DateTimeString>
     </ram:IssueDateTime>
+${document.title ? `    <ram:Name>${xml(document.title)}</ram:Name>` : ""}
+${document.description ? `    <ram:IncludedNote>\n      <ram:Content>${xml(document.description)}</ram:Content>\n    </ram:IncludedNote>` : ""}
   </rsm:ExchangedDocument>
   <rsm:SupplyChainTradeTransaction>
 ${lineXml}
     <ram:ApplicableHeaderTradeAgreement>
+${buyerReferenceXml(document)}
       <ram:SellerTradeParty>
         <ram:Name>${xml(document.company.displayName)}</ram:Name>
+${tradeContactXml(document.company)}
 ${partyIdentifierXml(metadata.sellerSiret ?? metadata.sellerSiren)}
+${taxRegistrationXml(metadata.sellerVatNumber)}
 ${postalAddressXml(document.company.address)}
       </ram:SellerTradeParty>
       <ram:BuyerTradeParty>
         <ram:Name>${xml(document.recipient.displayName)}</ram:Name>
+${tradeContactXml(document.recipient)}
 ${partyIdentifierXml(metadata.buyerSiret ?? metadata.buyerSiren)}
+${taxRegistrationXml(metadata.buyerVatNumber)}
 ${postalAddressXml(document.recipient.address)}
       </ram:BuyerTradeParty>
     </ram:ApplicableHeaderTradeAgreement>
     <ram:ApplicableHeaderTradeDelivery>
+${deliveryPartyXml(document)}
       <ram:ActualDeliverySupplyChainEvent>
         <ram:OccurrenceDateTime>
           <udt:DateTimeString format="102">${formatXmlDate(document.issueDate)}</udt:DateTimeString>
@@ -232,6 +245,7 @@ ${postalAddressXml(document.recipient.address)}
     </ram:ApplicableHeaderTradeDelivery>
     <ram:ApplicableHeaderTradeSettlement>
       <ram:InvoiceCurrencyCode>${document.currency}</ram:InvoiceCurrencyCode>
+${paymentMeansXml(document.terms.paymentMethods)}
 ${vatXml}
       <ram:SpecifiedTradePaymentTerms>
         <ram:Description>${xml(paymentTerms)}</ram:Description>
@@ -250,13 +264,14 @@ ${document.dueDate ? `        <ram:DueDateDateTime>\n          <udt:DateTimeStri
 }
 
 function buildLineXml(line: DocumentItemNode, position: number) {
-  const lineTotal = roundMoney(line.quantity * line.unitPriceHt);
+  const lineTotal = calculateLineTotalHt(line).toDecimalPlaces(2).toNumber();
   return `    <ram:IncludedSupplyChainTradeLineItem>
       <ram:AssociatedDocumentLineDocument>
         <ram:LineID>${position}</ram:LineID>
       </ram:AssociatedDocumentLineDocument>
       <ram:SpecifiedTradeProduct>
         <ram:Name>${xml(line.title)}</ram:Name>
+${line.description ? `        <ram:Description>${xml(line.description)}</ram:Description>` : ""}
       </ram:SpecifiedTradeProduct>
       <ram:SpecifiedLineTradeAgreement>
         <ram:NetPriceProductTradePrice>
@@ -269,7 +284,7 @@ function buildLineXml(line: DocumentItemNode, position: number) {
       <ram:SpecifiedLineTradeSettlement>
         <ram:ApplicableTradeTax>
           <ram:TypeCode>VAT</ram:TypeCode>
-          <ram:CategoryCode>S</ram:CategoryCode>
+          <ram:CategoryCode>${vatCategoryCode(line.vatRate)}</ram:CategoryCode>
           <ram:RateApplicablePercent>${quantity(line.vatRate)}</ram:RateApplicablePercent>
         </ram:ApplicableTradeTax>
         <ram:SpecifiedTradeSettlementLineMonetarySummation>
@@ -284,7 +299,7 @@ function buildVatBreakdownXml(breakdown: { rate: number; baseHt: number; vatAmou
         <ram:CalculatedAmount>${money(breakdown.vatAmount)}</ram:CalculatedAmount>
         <ram:TypeCode>VAT</ram:TypeCode>
         <ram:BasisAmount>${money(breakdown.baseHt)}</ram:BasisAmount>
-        <ram:CategoryCode>S</ram:CategoryCode>
+        <ram:CategoryCode>${vatCategoryCode(breakdown.rate)}</ram:CategoryCode>
         <ram:RateApplicablePercent>${quantity(breakdown.rate)}</ram:RateApplicablePercent>
       </ram:ApplicableTradeTax>`;
 }
@@ -324,6 +339,71 @@ function getLineIssues(lines: DocumentItemNode[]) {
   return issues;
 }
 
+function buyerReferenceXml(document: BusinessDocument) {
+  const reference = [document.projectId, document.chantierId, document.quoteId].map(cleanText).filter(Boolean).join(" / ");
+  return reference ? `      <ram:BuyerReference>${xml(reference)}</ram:BuyerReference>` : "";
+}
+
+function tradeContactXml(party: DocumentParty) {
+  const contactName = cleanText(party.contactName);
+  const email = cleanText(party.email);
+  const phone = cleanText(party.phone);
+  if (!contactName && !email && !phone) return "";
+  return `        <ram:DefinedTradeContact>
+${contactName ? `          <ram:PersonName>${xml(contactName)}</ram:PersonName>` : ""}
+${phone ? `          <ram:TelephoneUniversalCommunication>\n            <ram:CompleteNumber>${xml(phone)}</ram:CompleteNumber>\n          </ram:TelephoneUniversalCommunication>` : ""}
+${email ? `          <ram:EmailURIUniversalCommunication>\n            <ram:URIID>${xml(email)}</ram:URIID>\n          </ram:EmailURIUniversalCommunication>` : ""}
+        </ram:DefinedTradeContact>`;
+}
+
+function deliveryPartyXml(document: BusinessDocument) {
+  const address = cleanText(document.siteAddress);
+  if (!address) return "";
+  return `      <ram:ShipToTradeParty>
+        <ram:Name>${xml(document.title || document.recipient.displayName || "Chantier")}</ram:Name>
+${postalAddressXml(address)}
+      </ram:ShipToTradeParty>`;
+}
+
+function paymentMeansXml(paymentMethods: PaymentMethod[]) {
+  const paymentMethod = paymentMethods[0];
+  if (!paymentMethod) return "";
+  const meta = PAYMENT_MEANS_BY_METHOD[paymentMethod];
+  return `      <ram:SpecifiedTradeSettlementPaymentMeans>
+        <ram:TypeCode>${meta.typeCode}</ram:TypeCode>
+        <ram:Information>${xml(meta.label)}</ram:Information>
+      </ram:SpecifiedTradeSettlementPaymentMeans>`;
+}
+
+const PAYMENT_MEANS_BY_METHOD: Record<PaymentMethod, { typeCode: string; label: string }> = {
+  transfer: { typeCode: "58", label: "Virement" },
+  card: { typeCode: "48", label: "Carte bancaire" },
+  cash: { typeCode: "10", label: "Espèces" },
+  cheque: { typeCode: "20", label: "Chèque" },
+  direct_debit: { typeCode: "49", label: "Prélèvement" },
+};
+
+function taxRegistrationXml(vatNumber?: string | null) {
+  const value = cleanText(vatNumber);
+  if (!value) return "";
+  return `        <ram:SpecifiedTaxRegistration>\n          <ram:ID schemeID="VA">${xml(value)}</ram:ID>\n        </ram:SpecifiedTaxRegistration>`;
+}
+
+function partyIdentifierXml(identifier?: string | null) {
+  if (!identifier) return "";
+  return `        <ram:SpecifiedLegalOrganization>\n          <ram:ID>${xml(identifier)}</ram:ID>\n        </ram:SpecifiedLegalOrganization>`;
+}
+
+function postalAddressXml(address?: string | null) {
+  const cleanAddress = address?.trim();
+  if (!cleanAddress) return "";
+  return `        <ram:PostalTradeAddress>\n          <ram:LineOne>${xml(cleanAddress)}</ram:LineOne>\n          <ram:CountryID>FR</ram:CountryID>\n        </ram:PostalTradeAddress>`;
+}
+
+function vatCategoryCode(rate: number) {
+  return rate > 0 ? "S" : "Z";
+}
+
 function requiredField(condition: boolean, label: string) {
   return condition ? [label] : [];
 }
@@ -337,17 +417,6 @@ function isValidDocumentDate(value?: string | null) {
   if (!value) return false;
   const [dateOnly] = value.split("T");
   return /^\d{4}-\d{2}-\d{2}$/.test(dateOnly) && !Number.isNaN(new Date(dateOnly).getTime());
-}
-
-function partyIdentifierXml(identifier?: string | null) {
-  if (!identifier) return "";
-  return `        <ram:SpecifiedLegalOrganization>\n          <ram:ID>${xml(identifier)}</ram:ID>\n        </ram:SpecifiedLegalOrganization>`;
-}
-
-function postalAddressXml(address?: string | null) {
-  const cleanAddress = address?.trim();
-  if (!cleanAddress) return "";
-  return `        <ram:PostalTradeAddress>\n          <ram:LineOne>${xml(cleanAddress)}</ram:LineOne>\n          <ram:CountryID>FR</ram:CountryID>\n        </ram:PostalTradeAddress>`;
 }
 
 function formatXmlDate(value: string) {
