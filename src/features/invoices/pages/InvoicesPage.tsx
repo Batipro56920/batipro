@@ -6,7 +6,7 @@ import { PageHeader } from "../../../components/layout/PageHeader";
 import { StatCard } from "../../../components/data/StatCard";
 import { supabase } from "../../../lib/supabaseClient";
 import { calculateDocumentTotals, type ElectronicInvoicingMetadata, type ElectronicInvoicingTransmissionStatus } from "../../document-engine";
-import { getInvoiceElectronicInvoicingReadiness, normalizeInvoiceElectronicInvoicing } from "../application/electronicInvoicing";
+import { getInvoiceElectronicInvoicingReadiness, getInvoicePdpTransmissionReadiness, normalizeInvoiceElectronicInvoicing } from "../application/electronicInvoicing";
 import { getFacturXExportReadiness } from "../application/facturxExport";
 import { listInvoices, saveInvoice } from "../infrastructure/invoiceRepository";
 import type { InvoiceRecord, InvoiceStatus } from "../domain/types";
@@ -169,8 +169,10 @@ export default function InvoicesPage() {
       if (facturXReadiness.canExport) acc.facturXReady += 1;
       else acc.facturXIncomplete += 1;
       if (electronicInvoicing.lastFacturXExportAt) acc.facturXExported += 1;
+      if (electronicInvoicing.facturXExternalValidationStatus === "valid") acc.facturXValidated += 1;
+      if (getInvoicePdpTransmissionReadiness(electronicInvoicing).canTransmit) acc.pdpReady += 1;
       return acc;
-    }, { amount: 0, paid: 0, overdue: 0, drafts: 0, facturXReady: 0, facturXIncomplete: 0, facturXExported: 0 });
+    }, { amount: 0, paid: 0, overdue: 0, drafts: 0, facturXReady: 0, facturXIncomplete: 0, facturXExported: 0, facturXValidated: 0, pdpReady: 0 });
     return totals;
   }, [invoices]);
 
@@ -320,12 +322,13 @@ export default function InvoicesPage() {
       {error ? <div className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">{error}</div> : null}
       {loading ? <div className="rounded-3xl border border-slate-200 bg-white p-8 text-center text-sm text-slate-500">Chargement des factures...</div> : null}
 
-      {!loading ? <section className="grid gap-4 md:grid-cols-3 xl:grid-cols-6">
+      {!loading ? <section className="grid gap-4 md:grid-cols-3 xl:grid-cols-7">
         <StatCard label="Factures" value={invoices.length} hint="Documents de facturation" />
         <StatCard label="Brouillons" value={stats.drafts} hint="À finaliser" />
         <StatCard label="Factur-X prévalidées" value={stats.facturXReady} hint="Validation externe requise" />
         <StatCard label="Exports Factur-X" value={stats.facturXExported} hint="PDF générés" />
-        <StatCard label="Factur-X à corriger" value={stats.facturXIncomplete} hint="Avant export" />
+        <StatCard label="Validées externe" value={stats.facturXValidated} hint="Contrôle renseigné" />
+        <StatCard label="PDP transmissibles" value={stats.pdpReady} hint="Non envoyées" />
         <StatCard label="Encaissé" value={formatCurrency(stats.paid)} hint={`${stats.overdue} en retard`} />
       </section> : null}
 
@@ -447,6 +450,7 @@ export default function InvoicesPage() {
               const clientWorkflowStatus = clientWorkflowByInvoiceId.get(invoice.id);
               const electronicInvoicing = normalizeInvoiceElectronicInvoicing(invoice.document.electronicInvoicing, invoice.document);
               const electronicReadiness = getInvoiceElectronicInvoicingReadiness(electronicInvoicing);
+              const pdpReadiness = getInvoicePdpTransmissionReadiness(electronicInvoicing);
               const facturXReadiness = getFacturXExportReadiness(invoice.document);
               const firstFacturXIssue = getFacturXBlockingIssue(invoice);
               return (
@@ -466,6 +470,8 @@ export default function InvoicesPage() {
                     <ElectronicInvoicingStatusBadge readiness={electronicReadiness} status={electronicInvoicing.transmissionStatus} />
                     <FacturXStatusBadge canExport={facturXReadiness.canExport} />
                     <FacturXExportStatusBadge metadata={electronicInvoicing} />
+                    <FacturXExternalValidationBadge metadata={electronicInvoicing} />
+                    {pdpReadiness.canTransmit ? <span className="rounded-full bg-blue-100 px-2.5 py-1 text-xs font-semibold text-blue-800">PDP possible</span> : null}
                     {clientWorkflowStatus ? <ClientWorkflowStatusBadge status={clientWorkflowStatus} /> : null}
                     {hasUnsavedChanges ? <span className="rounded-full bg-amber-100 px-2.5 py-1 text-xs font-semibold text-amber-800">Non enregistré</span> : null}
                   </div>
@@ -545,6 +551,16 @@ function FacturXExportStatusBadge({ metadata }: { metadata: ElectronicInvoicingM
   return metadata.lastFacturXExportAt
     ? <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-700">Export généré</span>
     : null;
+}
+
+function FacturXExternalValidationBadge({ metadata }: { metadata: ElectronicInvoicingMetadata }) {
+  if (metadata.facturXExternalValidationStatus === "valid") {
+    return <span className="rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-semibold text-emerald-800">Validation externe OK</span>;
+  }
+  if (metadata.facturXExternalValidationStatus === "invalid") {
+    return <span className="rounded-full bg-red-100 px-2.5 py-1 text-xs font-semibold text-red-800">Validation rejetée</span>;
+  }
+  return null;
 }
 
 function EmptyState({ title, description }: { title: string; description: string }) {
