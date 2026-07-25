@@ -7,6 +7,26 @@ export type ElectronicInvoicingReadiness = {
   badgeClassName: string;
 };
 
+export type InvoiceElectronicInvoicingStrategy = {
+  mode: "facturx_export_first";
+  label: string;
+  shortLabel: string;
+  description: string;
+  readyActionLabel: string;
+  readyBadgeLabel: string;
+  nextStepLabel: string;
+};
+
+export const INVOICE_ELECTRONIC_INVOICING_STRATEGY: InvoiceElectronicInvoicingStrategy = {
+  mode: "facturx_export_first",
+  label: "Export Factur-X d'abord",
+  shortLabel: "Factur-X first",
+  description: "Batipro prépare les factures au format exportable Factur-X avant transmission via la PDP choisie. Le connecteur PDP direct reste un lot séparé.",
+  readyActionLabel: "Marquer prête Factur-X",
+  readyBadgeLabel: "Prête Factur-X",
+  nextStepLabel: "Prochain lot : générer le fichier Factur-X conforme.",
+};
+
 const BLOCKED_TRANSMISSION_STATUSES = new Set<ElectronicInvoicingTransmissionStatus>([
   "ready",
   "pending_pdp",
@@ -15,7 +35,7 @@ const BLOCKED_TRANSMISSION_STATUSES = new Set<ElectronicInvoicingTransmissionSta
 
 export const ELECTRONIC_INVOICING_TRANSMISSION_STATUS_LABELS: Record<ElectronicInvoicingTransmissionStatus, string> = {
   not_ready: "À compléter",
-  ready: "Prête PDP",
+  ready: INVOICE_ELECTRONIC_INVOICING_STRATEGY.readyBadgeLabel,
   pending_pdp: "En attente PDP",
   transmitted: "Transmise",
   rejected: "Rejetée",
