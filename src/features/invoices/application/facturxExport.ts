@@ -143,6 +143,7 @@ export function downloadFacturXPdf(document: BusinessDocument) {
   });
   attachFacturXXml(pdf, exportResult.xml);
   pdf.save(filename);
+  return filename;
 }
 
 function attachFacturXXml(pdf: jsPDF, xmlContent: string) {
