@@ -49,7 +49,7 @@ const CLIENT_WORKFLOW_FILTERS: Array<{ value: ClientWorkflowFilter; label: strin
 const ELECTRONIC_INVOICING_FILTERS: Array<{ value: ElectronicInvoicingFilter; label: string }> = [
   { value: "all", label: "Toutes Factur-X" },
   { value: "facturx_incomplete", label: "Factur-X à corriger" },
-  { value: "facturx_ready", label: "Factur-X exportable" },
+  { value: "facturx_ready", label: "Factur-X prévalidée" },
 ];
 
 function matchesStatusFilter(invoice: InvoiceRecord, filter: InvoiceStatusFilter) {
@@ -321,7 +321,7 @@ export default function InvoicesPage() {
       {!loading ? <section className="grid gap-4 md:grid-cols-3 xl:grid-cols-5">
         <StatCard label="Factures" value={invoices.length} hint="Documents de facturation" />
         <StatCard label="Brouillons" value={stats.drafts} hint="À finaliser" />
-        <StatCard label="Factur-X OK" value={stats.facturXReady} hint="PDF exportable" />
+        <StatCard label="Factur-X prévalidées" value={stats.facturXReady} hint="Validation externe requise" />
         <StatCard label="Factur-X à corriger" value={stats.facturXIncomplete} hint="Avant export" />
         <StatCard label="Encaissé" value={formatCurrency(stats.paid)} hint={`${stats.overdue} en retard`} />
       </section> : null}
@@ -532,7 +532,7 @@ function ElectronicInvoicingStatusBadge({ readiness, status }: { readiness: Retu
 
 function FacturXStatusBadge({ canExport }: { canExport: boolean }) {
   return canExport
-    ? <span className="rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-semibold text-emerald-800">Factur-X OK</span>
+    ? <span className="rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-semibold text-emerald-800">Factur-X prévalidée</span>
     : <span className="rounded-full bg-red-100 px-2.5 py-1 text-xs font-semibold text-red-800">Factur-X à corriger</span>;
 }
 
@@ -550,7 +550,7 @@ function emptyStateDescription(clientWorkflowFilter: ClientWorkflowFilter, clien
     return "Aucune facture n'est à corriger pour l'export Factur-X avec les filtres actifs.";
   }
   if (electronicInvoicingFilter === "facturx_ready") {
-    return "Aucune facture n'est exportable Factur-X avec les filtres actifs.";
+    return "Aucune facture n'est prévalidée Factur-X avec les filtres actifs.";
   }
   if (clientWorkflowFilter === "actionable" && clientWorkflowLoadFailed) {
     return "Le suivi des documents client n'a pas pu être chargé. Rafraîchissez la page pour réessayer.";
