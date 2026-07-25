@@ -5,7 +5,7 @@ import { Button } from "../../../components/ui/button";
 import { calculateDocumentTotals, createDocumentLine, createDocumentSection, DocumentPreview, DocumentSendDialog, DocumentTotalsCard, downloadBusinessDocumentPdf, flattenDocumentNodes, validateBusinessDocument, type BusinessDocument, type BusinessDocumentNode, type DocumentItemKind, type ElectronicInvoicingCustomerType, type ElectronicInvoicingMetadata, type ElectronicInvoicingOperationType, type ElectronicInvoicingTransmissionStatus } from "../../document-engine";
 import { addInvoicePayment, createProfitabilitySnapshot, getPaidAmount, getRemainingAmount, removeInvoicePayment } from "../application/invoicePayments";
 import { canUseInvoiceElectronicInvoicingStatus, cleanInvoiceElectronicInvoicingIdentifier, cleanInvoiceElectronicInvoicingText, ELECTRONIC_INVOICING_TRANSMISSION_STATUS_LABELS, getInvoiceElectronicInvoicingReadiness, INVOICE_ELECTRONIC_INVOICING_STRATEGY, normalizeInvoiceElectronicInvoicing, normalizeInvoiceElectronicInvoicingPatch } from "../application/electronicInvoicing";
-import { downloadFacturXXml } from "../application/facturxExport";
+import { downloadFacturXPdf } from "../application/facturxExport";
 import type { InvoicePayment, InvoiceRecord } from "../domain/types";
 import { InvoiceStatusBadge } from "./InvoiceStatusBadge";
 
@@ -129,10 +129,10 @@ export function InvoiceEditor({ invoice, hasUnsavedChanges, clientWorkflowStatus
     onChange(removeInvoicePayment(invoice, paymentId));
   }
 
-  function exportFacturXXml() {
+  function exportFacturXPdf() {
     setSaveError(null);
     try {
-      downloadFacturXXml(document);
+      downloadFacturXPdf(document);
     } catch (err) {
       setSaveError(getErrorMessage(err, "Export Factur-X impossible."));
     }
@@ -181,7 +181,7 @@ export function InvoiceEditor({ invoice, hasUnsavedChanges, clientWorkflowStatus
           <div className="grid w-full grid-cols-2 gap-2 sm:flex sm:flex-wrap lg:w-auto lg:justify-end">
             <Button className="w-full sm:w-auto" variant="secondary" onClick={() => setPreviewOpen((open) => !open)}>Aperçu</Button>
             <Button className="w-full sm:w-auto" variant="secondary" onClick={() => downloadBusinessDocumentPdf(document)}><Download className="h-4 w-4" /> PDF</Button>
-            <Button className="w-full sm:w-auto" variant="secondary" onClick={exportFacturXXml}><FileCode2 className="h-4 w-4" /> Factur-X XML</Button>
+            <Button className="w-full sm:w-auto" variant="secondary" onClick={exportFacturXPdf}><FileCode2 className="h-4 w-4" /> Factur-X PDF</Button>
             <Button className="w-full sm:w-auto" variant="secondary" onClick={() => setSendOpen(true)}><Send className="h-4 w-4" /> Envoyer</Button>
             <Button className="col-span-2 w-full sm:w-auto" variant="primary" disabled={saving} onClick={save}><Save className="h-4 w-4" /> {saving ? "Enregistrement..." : "Enregistrer"}</Button>
           </div>
