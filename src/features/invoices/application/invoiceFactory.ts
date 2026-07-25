@@ -1,4 +1,4 @@
-import { calculateDocumentTotals, createEmptyBusinessDocument, type BusinessDocument, type BusinessDocumentNode, type ElectronicInvoicingMetadata } from "../../document-engine";
+import { calculateDocumentTotals, createEmptyBusinessDocument, type BusinessDocument, type BusinessDocumentNode, type DocumentParty, type ElectronicInvoicingMetadata } from "../../document-engine";
 import type { InvoiceRecord, InvoiceType } from "../domain/types";
 import { addLocalDays, getLocalInputDate } from "./invoiceDates";
 
@@ -33,7 +33,7 @@ export function createInvoiceDocumentFromQuote(quote: BusinessDocument, type: In
     issueDate: getLocalInputDate(),
     dueDate: dueDate(30),
     quoteId: quote.id,
-    electronicInvoicing: normalizeInvoiceElectronicInvoicing(quote.electronicInvoicing),
+    electronicInvoicing: normalizeInvoiceElectronicInvoicing(quote.electronicInvoicing, quote),
     terms: {
       ...quote.terms,
       paymentTerms: type === "deposit"
@@ -64,7 +64,7 @@ function createEmptyInvoiceDocument(type: InvoiceType): BusinessDocument {
     number: createInvoiceNumber(type),
     title: invoiceTypeLabel(type),
     dueDate: dueDate(30),
-    electronicInvoicing: normalizeInvoiceElectronicInvoicing(document.electronicInvoicing),
+    electronicInvoicing: normalizeInvoiceElectronicInvoicing(document.electronicInvoicing, document),
     terms: {
       ...document.terms,
       paymentTerms: type === "deposit" ? "Acompte à régler à réception de facture." : "Paiement à réception de facture.",
@@ -76,15 +76,17 @@ function createEmptyInvoiceDocument(type: InvoiceType): BusinessDocument {
   };
 }
 
-function normalizeInvoiceElectronicInvoicing(value?: ElectronicInvoicingMetadata | null): ElectronicInvoicingMetadata {
+function normalizeInvoiceElectronicInvoicing(value?: ElectronicInvoicingMetadata | null, document?: BusinessDocument): ElectronicInvoicingMetadata {
+  const buyerIdentifiers = inferPartyIdentifiers(document?.recipient);
+  const sellerIdentifiers = inferPartyIdentifiers(document?.company);
   return {
     customerType: value?.customerType ?? "b2b_fr",
-    operationType: value?.operationType ?? "services",
+    operationType: value?.operationType ?? "works",
     transmissionStatus: value?.transmissionStatus ?? "not_ready",
-    buyerSiren: cleanIdentifier(value?.buyerSiren),
-    buyerSiret: cleanIdentifier(value?.buyerSiret),
-    sellerSiren: cleanIdentifier(value?.sellerSiren),
-    sellerSiret: cleanIdentifier(value?.sellerSiret),
+    buyerSiren: cleanIdentifier(value?.buyerSiren) ?? buyerIdentifiers.siren,
+    buyerSiret: cleanIdentifier(value?.buyerSiret) ?? buyerIdentifiers.siret,
+    sellerSiren: cleanIdentifier(value?.sellerSiren) ?? sellerIdentifiers.siren,
+    sellerSiret: cleanIdentifier(value?.sellerSiret) ?? sellerIdentifiers.siret,
     buyerVatNumber: cleanText(value?.buyerVatNumber),
     sellerVatNumber: cleanText(value?.sellerVatNumber),
     vatExigibility: value?.vatExigibility ?? "payment",
@@ -92,6 +94,14 @@ function normalizeInvoiceElectronicInvoicing(value?: ElectronicInvoicingMetadata
     pdpReference: cleanText(value?.pdpReference),
     lastTransmissionAt: value?.lastTransmissionAt ?? null,
     rejectionReason: cleanText(value?.rejectionReason),
+  };
+}
+
+function inferPartyIdentifiers(party?: DocumentParty | null) {
+  const siret = cleanIdentifier(party?.siret);
+  return {
+    siret,
+    siren: siret && siret.length >= 9 ? siret.slice(0, 9) : null,
   };
 }
 
