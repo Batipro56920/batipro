@@ -1,11 +1,23 @@
-import { calculateDocumentTotals, flattenDocumentNodes, type BusinessDocument, type DocumentItemNode, type DocumentUnit } from "../../document-engine";
+import { calculateDocumentTotals, createBusinessDocumentPdf, flattenDocumentNodes, type BusinessDocument, type DocumentItemNode, type DocumentUnit } from "../../document-engine";
 import { getInvoiceElectronicInvoicingReadiness, normalizeInvoiceElectronicInvoicing } from "./electronicInvoicing";
+import type { jsPDF } from "jspdf";
 
-const FACTURX_XML_FILENAME_SUFFIX = "factur-x.xml";
+const FACTURX_XML_FILENAME = "factur-x.xml";
 
 type FacturXExportResult = {
   filename: string;
   xml: string;
+};
+
+type JsPdfAttachmentInternal = jsPDF & {
+  addMetadata?: (metadata: string) => void;
+  internal: jsPDF["internal"] & {
+    events: {
+      subscribe: (topic: string, callback: () => void) => void;
+    };
+    newObject: () => number;
+    out: (line: string) => void;
+  };
 };
 
 export function buildFacturXXmlExport(document: BusinessDocument): FacturXExportResult {
@@ -20,7 +32,7 @@ export function buildFacturXXmlExport(document: BusinessDocument): FacturXExport
   const lines = flattenDocumentNodes(document.nodes)
     .map((row) => row.node)
     .filter((node): node is DocumentItemNode => node.type === "line" || node.type === "composite");
-  const filename = `${sanitizeFilename(document.number)}-${FACTURX_XML_FILENAME_SUFFIX}`;
+  const filename = `${sanitizeFilename(document.number)}-${FACTURX_XML_FILENAME}`;
 
   return {
     filename,
@@ -30,15 +42,65 @@ export function buildFacturXXmlExport(document: BusinessDocument): FacturXExport
 
 export function downloadFacturXXml(document: BusinessDocument) {
   const exportResult = buildFacturXXmlExport(document);
-  const blob = new Blob([exportResult.xml], { type: "application/xml;charset=utf-8" });
-  const url = URL.createObjectURL(blob);
-  const link = window.document.createElement("a");
-  link.href = url;
-  link.download = exportResult.filename;
-  window.document.body.appendChild(link);
-  link.click();
-  link.remove();
-  URL.revokeObjectURL(url);
+  downloadBlob(exportResult.filename, exportResult.xml, "application/xml;charset=utf-8");
+}
+
+export function downloadFacturXPdf(document: BusinessDocument) {
+  const exportResult = buildFacturXXmlExport(document);
+  const pdf = createBusinessDocumentPdf(document);
+  const filename = `${sanitizeFilename(document.number)}-factur-x.pdf`;
+
+  pdf.setProperties({
+    title: `${document.number} - Factur-X`,
+    subject: "Facture Batipro avec donnees XML Factur-X embarquees",
+    creator: "Batipro",
+  });
+  attachFacturXXml(pdf, exportResult.xml);
+  pdf.save(filename);
+}
+
+function attachFacturXXml(pdf: jsPDF, xmlContent: string) {
+  const target = pdf as JsPdfAttachmentInternal;
+  const createdAt = new Date();
+  const pdfDate = formatPdfDate(createdAt);
+  const xmlByteLength = asciiByteLength(xmlContent);
+  let embeddedFileObjectNumber = 0;
+  let fileSpecObjectNumber = 0;
+
+  if (typeof target.addMetadata === "function") {
+    target.addMetadata(buildFacturXXmpMetadata(createdAt));
+  }
+
+  target.internal.events.subscribe("postPutResources", () => {
+    embeddedFileObjectNumber = target.internal.newObject();
+    target.internal.out("<<");
+    target.internal.out("/Type /EmbeddedFile");
+    target.internal.out("/Subtype /text#2Fxml");
+    target.internal.out(`/Params << /Size ${xmlByteLength} /ModDate (${pdfDate}) >>`);
+    target.internal.out(`/Length ${xmlByteLength}`);
+    target.internal.out(">>");
+    target.internal.out("stream");
+    target.internal.out(xmlContent);
+    target.internal.out("endstream");
+    target.internal.out("endobj");
+
+    fileSpecObjectNumber = target.internal.newObject();
+    target.internal.out("<<");
+    target.internal.out("/Type /Filespec");
+    target.internal.out(`/F (${pdfString(FACTURX_XML_FILENAME)})`);
+    target.internal.out(`/UF ${pdfUtf16String(FACTURX_XML_FILENAME)}`);
+    target.internal.out("/AFRelationship /Alternative");
+    target.internal.out("/Desc (Factur-X XML invoice data)");
+    target.internal.out(`/EF << /F ${embeddedFileObjectNumber} 0 R /UF ${embeddedFileObjectNumber} 0 R >>`);
+    target.internal.out(">>");
+    target.internal.out("endobj");
+  });
+
+  target.internal.events.subscribe("putCatalog", () => {
+    if (!fileSpecObjectNumber) return;
+    target.internal.out(`/Names << /EmbeddedFiles << /Names [(${pdfString(FACTURX_XML_FILENAME)}) ${fileSpecObjectNumber} 0 R] >> >>`);
+    target.internal.out(`/AF [${fileSpecObjectNumber} 0 R]`);
+  });
 }
 
 function buildCrossIndustryInvoiceXml(
@@ -146,6 +208,23 @@ function buildVatBreakdownXml(breakdown: { rate: number; baseHt: number; vatAmou
       </ram:ApplicableTradeTax>`;
 }
 
+function buildFacturXXmpMetadata(createdAt: Date) {
+  const date = createdAt.toISOString();
+  return `<x:xmpmeta xmlns:x="adobe:ns:meta/">
+  <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
+    <rdf:Description rdf:about="" xmlns:pdfaid="http://www.aiim.org/pdfa/ns/id/" xmlns:fx="urn:factur-x:pdfa:CrossIndustryDocument:invoice:1p0#">
+      <pdfaid:part>3</pdfaid:part>
+      <pdfaid:conformance>B</pdfaid:conformance>
+      <fx:DocumentType>INVOICE</fx:DocumentType>
+      <fx:DocumentFileName>${FACTURX_XML_FILENAME}</fx:DocumentFileName>
+      <fx:Version>1.0</fx:Version>
+      <fx:ConformanceLevel>BASIC WL</fx:ConformanceLevel>
+      <fx:CreationDate>${date}</fx:CreationDate>
+    </rdf:Description>
+  </rdf:RDF>
+</x:xmpmeta>`;
+}
+
 function partyIdentifierXml(identifier?: string | null) {
   if (!identifier) return "";
   return `        <ram:SpecifiedLegalOrganization>\n          <ram:ID>${xml(identifier)}</ram:ID>\n        </ram:SpecifiedLegalOrganization>`;
@@ -166,6 +245,10 @@ function formatXmlDate(value: string) {
 function formatTodayXmlDate() {
   const now = new Date();
   return `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, "0")}${String(now.getDate()).padStart(2, "0")}`;
+}
+
+function formatPdfDate(value: Date) {
+  return `D:${value.getUTCFullYear()}${String(value.getUTCMonth() + 1).padStart(2, "0")}${String(value.getUTCDate()).padStart(2, "0")}${String(value.getUTCHours()).padStart(2, "0")}${String(value.getUTCMinutes()).padStart(2, "0")}${String(value.getUTCSeconds()).padStart(2, "0")}Z`;
 }
 
 function unitCode(unit: DocumentUnit) {
@@ -198,11 +281,41 @@ function sanitizeFilename(value: string) {
   return value.replace(/[^a-z0-9-_]+/gi, "_").replace(/^_+|_+$/g, "") || "facture";
 }
 
+function downloadBlob(filename: string, content: string, type: string) {
+  const blob = new Blob([content], { type });
+  const url = URL.createObjectURL(blob);
+  const link = window.document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  window.document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}
+
+function asciiByteLength(value: string) {
+  return value.length;
+}
+
+function pdfString(value: string) {
+  return value.replace(/\\/g, "\\\\").replace(/\(/g, "\\(").replace(/\)/g, "\\)");
+}
+
+function pdfUtf16String(value: string) {
+  const bytes = [0xfe, 0xff];
+  for (let index = 0; index < value.length; index += 1) {
+    const code = value.charCodeAt(index);
+    bytes.push((code >> 8) & 0xff, code & 0xff);
+  }
+  return `<${bytes.map((byte) => byte.toString(16).padStart(2, "0").toUpperCase()).join("")}>`;
+}
+
 function xml(value?: string | null) {
   return String(value ?? "")
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;")
-    .replace(/'/g, "&apos;");
+    .replace(/'/g, "&apos;")
+    .replace(/[^\x09\x0a\x0d\x20-\x7e]/g, (character) => `&#${character.charCodeAt(0)};`);
 }
