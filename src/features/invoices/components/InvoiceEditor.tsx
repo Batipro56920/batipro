@@ -176,6 +176,7 @@ export function InvoiceEditor({ invoice, hasUnsavedChanges, clientWorkflowStatus
               <InvoiceStatusBadge status={invoice.status} />
               <span className="rounded-full bg-blue-50 px-2.5 py-1 text-xs font-semibold text-blue-700">{TRANSMISSION_STATUS_LABELS[electronicInvoicing.transmissionStatus]}</span>
               <span className={`rounded-full border px-2.5 py-1 text-xs font-semibold ${facturXReadiness.badgeClassName}`}>{facturXReadiness.label}</span>
+              {facturXReadiness.canExport ? <span className="rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-900">{facturXReadiness.externalValidationLabel}</span> : null}
               {hasUnsavedChanges ? <span className="rounded-full bg-amber-100 px-2.5 py-1 text-xs font-semibold text-amber-800">Non enregistré</span> : null}
             </div>
             <p className="mt-1 break-words text-sm text-slate-500">{document.title}</p>
@@ -300,14 +301,14 @@ function FacturXChecklist({ readiness }: { readiness: FacturXExportReadiness }) 
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <div className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Contrôle export Factur-X</div>
-          <div className="mt-1 text-xs text-slate-500">Prévalidation Batipro avant génération du PDF avec XML embarqué.</div>
+          <div className="mt-1 text-xs text-slate-500">Prévalidation Batipro. La validation officielle reste externe avant dépôt PDP ou usage légal.</div>
         </div>
         <span className={`w-fit rounded-full border px-2.5 py-1 text-xs font-semibold ${readiness.badgeClassName}`}>{readiness.label}</span>
       </div>
       <div className="mt-3 grid gap-2 md:grid-cols-2">
         {readiness.checklist.map((item) => (
           <div key={item.label} className="flex items-start gap-2 text-xs text-slate-700">
-            <span className={`mt-1 h-2.5 w-2.5 shrink-0 rounded-full ${item.ok ? "bg-emerald-500" : "bg-red-500"}`} />
+            <span className={`mt-1 h-2.5 w-2.5 shrink-0 rounded-full ${item.level === "warning" ? "bg-amber-400" : item.ok ? "bg-emerald-500" : "bg-red-500"}`} />
             <span>
               <span className="font-semibold text-slate-900">{item.label}</span>
               {item.detail ? <span className="mt-0.5 block text-slate-500">{item.detail}</span> : null}
@@ -315,6 +316,7 @@ function FacturXChecklist({ readiness }: { readiness: FacturXExportReadiness }) 
           </div>
         ))}
       </div>
+      {readiness.canExport ? <div className="mt-3 rounded-xl border border-amber-200 bg-white px-3 py-2 text-xs font-medium text-amber-800">{readiness.externalValidationLabel} : contrôler le PDF avec un validateur Factur-X / PDF-A3 avant transmission PDP.</div> : null}
       {readiness.missingFields.length ? <div className="mt-3 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs font-medium text-red-700">À corriger : {readiness.missingFields.join(", ")}.</div> : null}
       {readiness.warnings.length ? <div className="mt-3 rounded-xl border border-amber-200 bg-white px-3 py-2 text-xs font-medium text-amber-800">À vérifier : {readiness.warnings.join(", ")}.</div> : null}
     </div>
