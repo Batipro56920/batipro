@@ -7,6 +7,7 @@ import { StatCard } from "../../../components/data/StatCard";
 import { supabase } from "../../../lib/supabaseClient";
 import { calculateDocumentTotals, type ElectronicInvoicingTransmissionStatus } from "../../document-engine";
 import { getInvoiceElectronicInvoicingReadiness, normalizeInvoiceElectronicInvoicing } from "../application/electronicInvoicing";
+import { getFacturXExportReadiness } from "../application/facturxExport";
 import { listInvoices, saveInvoice } from "../infrastructure/invoiceRepository";
 import type { InvoiceRecord, InvoiceStatus } from "../domain/types";
 import { InvoiceEditor } from "../components/InvoiceEditor";
@@ -16,7 +17,7 @@ import { invoiceTypeLabel } from "../application/invoiceFactory";
 
 type InvoiceStatusFilter = "all" | "a_encaisser" | InvoiceStatus;
 type ClientWorkflowFilter = "all" | "actionable";
-type ElectronicInvoicingFilter = "all" | "incomplete" | "ready";
+type ElectronicInvoicingFilter = "all" | "facturx_incomplete" | "facturx_ready";
 
 const COLLECTABLE_INVOICE_STATUSES: InvoiceStatus[] = ["sent", "partially_paid", "overdue"];
 const ACTIONABLE_CLIENT_WORKFLOW_STATUSES = ["sent", "viewed", "modification_requested", "expired"] as const;
@@ -46,9 +47,9 @@ const CLIENT_WORKFLOW_FILTERS: Array<{ value: ClientWorkflowFilter; label: strin
 ];
 
 const ELECTRONIC_INVOICING_FILTERS: Array<{ value: ElectronicInvoicingFilter; label: string }> = [
-  { value: "all", label: "Toutes e-factures" },
-  { value: "incomplete", label: "À compléter e-facturation" },
-  { value: "ready", label: "Prêtes PDP" },
+  { value: "all", label: "Toutes Factur-X" },
+  { value: "facturx_incomplete", label: "Factur-X à corriger" },
+  { value: "facturx_ready", label: "Factur-X exportable" },
 ];
 
 function matchesStatusFilter(invoice: InvoiceRecord, filter: InvoiceStatusFilter) {
@@ -64,10 +65,9 @@ function matchesClientWorkflowFilter(invoice: InvoiceRecord, filter: ClientWorkf
 
 function matchesElectronicInvoicingFilter(invoice: InvoiceRecord, filter: ElectronicInvoicingFilter) {
   if (filter === "all") return true;
-  const metadata = normalizeInvoiceElectronicInvoicing(invoice.document.electronicInvoicing, invoice.document);
-  const readiness = getInvoiceElectronicInvoicingReadiness(metadata);
-  if (filter === "ready") return readiness.canMarkReady;
-  return !readiness.canMarkReady;
+  const readiness = getFacturXExportReadiness(invoice.document);
+  if (filter === "facturx_ready") return readiness.canExport;
+  return !readiness.canExport;
 }
 
 export default function InvoicesPage() {
@@ -156,16 +156,15 @@ export default function InvoicesPage() {
   const stats = useMemo(() => {
     const totals = invoices.reduce((acc, invoice) => {
       const documentTotals = invoice.document.totals ?? calculateDocumentTotals(invoice.document);
-      const metadata = normalizeInvoiceElectronicInvoicing(invoice.document.electronicInvoicing, invoice.document);
-      const readiness = getInvoiceElectronicInvoicingReadiness(metadata);
+      const facturXReadiness = getFacturXExportReadiness(invoice.document);
       acc.amount += documentTotals.totalTtc;
       acc.paid += getPaidAmount(invoice);
       if (invoice.status === "overdue") acc.overdue += 1;
       if (invoice.status === "draft") acc.drafts += 1;
-      if (readiness.canMarkReady) acc.electronicReady += 1;
-      else acc.electronicIncomplete += 1;
+      if (facturXReadiness.canExport) acc.facturXReady += 1;
+      else acc.facturXIncomplete += 1;
       return acc;
-    }, { amount: 0, paid: 0, overdue: 0, drafts: 0, electronicReady: 0, electronicIncomplete: 0 });
+    }, { amount: 0, paid: 0, overdue: 0, drafts: 0, facturXReady: 0, facturXIncomplete: 0 });
     return totals;
   }, [invoices]);
 
@@ -293,8 +292,8 @@ export default function InvoicesPage() {
       {!loading ? <section className="grid gap-4 md:grid-cols-3 xl:grid-cols-5">
         <StatCard label="Factures" value={invoices.length} hint="Documents de facturation" />
         <StatCard label="Brouillons" value={stats.drafts} hint="À finaliser" />
-        <StatCard label="Prêtes PDP" value={stats.electronicReady} hint="Données minimales OK" />
-        <StatCard label="À compléter" value={stats.electronicIncomplete} hint="E-facturation" />
+        <StatCard label="Factur-X OK" value={stats.facturXReady} hint="PDF exportable" />
+        <StatCard label="Factur-X à corriger" value={stats.facturXIncomplete} hint="Avant export" />
         <StatCard label="Encaissé" value={formatCurrency(stats.paid)} hint={`${stats.overdue} en retard`} />
       </section> : null}
 
@@ -393,6 +392,7 @@ export default function InvoicesPage() {
               const clientWorkflowStatus = clientWorkflowByInvoiceId.get(invoice.id);
               const electronicInvoicing = normalizeInvoiceElectronicInvoicing(invoice.document.electronicInvoicing, invoice.document);
               const electronicReadiness = getInvoiceElectronicInvoicingReadiness(electronicInvoicing);
+              const facturXReadiness = getFacturXExportReadiness(invoice.document);
               return (
                 <button key={invoice.id} type="button" onClick={() => selectInvoice(invoice.id)} className={`w-full rounded-2xl border px-3 py-2.5 text-left transition ${selectedId === invoice.id ? "border-blue-300 bg-blue-50" : "border-slate-200 hover:bg-slate-50"}`}>
                   <div className="flex min-w-0 items-start justify-between gap-3">
@@ -408,6 +408,7 @@ export default function InvoicesPage() {
                   <div className="mt-2 flex flex-wrap items-center gap-2">
                     <InvoiceStatusBadge status={invoice.status} />
                     <ElectronicInvoicingStatusBadge readiness={electronicReadiness} status={electronicInvoicing.transmissionStatus} />
+                    <FacturXStatusBadge canExport={facturXReadiness.canExport} />
                     {clientWorkflowStatus ? <ClientWorkflowStatusBadge status={clientWorkflowStatus} /> : null}
                     {hasUnsavedChanges ? <span className="rounded-full bg-amber-100 px-2.5 py-1 text-xs font-semibold text-amber-800">Non enregistré</span> : null}
                   </div>
@@ -475,6 +476,12 @@ function ElectronicInvoicingStatusBadge({ readiness, status }: { readiness: Retu
   return <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700">Données OK</span>;
 }
 
+function FacturXStatusBadge({ canExport }: { canExport: boolean }) {
+  return canExport
+    ? <span className="rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-semibold text-emerald-800">Factur-X OK</span>
+    : <span className="rounded-full bg-red-100 px-2.5 py-1 text-xs font-semibold text-red-800">Factur-X à corriger</span>;
+}
+
 function EmptyState({ title, description }: { title: string; description: string }) {
   return (
     <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-5 text-center">
@@ -485,11 +492,11 @@ function EmptyState({ title, description }: { title: string; description: string
 }
 
 function emptyStateDescription(clientWorkflowFilter: ClientWorkflowFilter, clientWorkflowLoadFailed: boolean, electronicInvoicingFilter: ElectronicInvoicingFilter) {
-  if (electronicInvoicingFilter === "incomplete") {
-    return "Aucune facture ne manque de données minimales de facturation électronique avec les filtres actifs.";
+  if (electronicInvoicingFilter === "facturx_incomplete") {
+    return "Aucune facture n'est à corriger pour l'export Factur-X avec les filtres actifs.";
   }
-  if (electronicInvoicingFilter === "ready") {
-    return "Aucune facture n'est prête PDP avec les filtres actifs.";
+  if (electronicInvoicingFilter === "facturx_ready") {
+    return "Aucune facture n'est exportable Factur-X avec les filtres actifs.";
   }
   if (clientWorkflowFilter === "actionable" && clientWorkflowLoadFailed) {
     return "Le suivi des documents client n'a pas pu être chargé. Rafraîchissez la page pour réessayer.";
