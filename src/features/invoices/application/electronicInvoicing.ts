@@ -61,6 +61,9 @@ export function normalizeInvoiceElectronicInvoicing(value?: ElectronicInvoicingM
     pdpReference: cleanText(value?.pdpReference),
     lastTransmissionAt: value?.lastTransmissionAt ?? null,
     rejectionReason: cleanText(value?.rejectionReason),
+    lastFacturXExportAt: value?.lastFacturXExportAt ?? null,
+    lastFacturXExportFilename: cleanText(value?.lastFacturXExportFilename),
+    facturXExportCount: normalizeExportCount(value?.facturXExportCount),
   };
 }
 
@@ -130,4 +133,8 @@ function cleanIdentifier(value?: string | null) {
 function cleanText(value?: string | null) {
   const text = String(value ?? "").trim();
   return text || null;
+}
+
+function normalizeExportCount(value?: number | null) {
+  return typeof value === "number" && Number.isFinite(value) && value > 0 ? Math.floor(value) : 0;
 }
