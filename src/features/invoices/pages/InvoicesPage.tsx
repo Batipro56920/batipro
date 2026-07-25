@@ -5,7 +5,8 @@ import { Button } from "../../../components/ui/button";
 import { PageHeader } from "../../../components/layout/PageHeader";
 import { StatCard } from "../../../components/data/StatCard";
 import { supabase } from "../../../lib/supabaseClient";
-import { calculateDocumentTotals } from "../../document-engine";
+import { calculateDocumentTotals, type ElectronicInvoicingTransmissionStatus } from "../../document-engine";
+import { getInvoiceElectronicInvoicingReadiness, normalizeInvoiceElectronicInvoicing } from "../application/electronicInvoicing";
 import { listInvoices, saveInvoice } from "../infrastructure/invoiceRepository";
 import type { InvoiceRecord, InvoiceStatus } from "../domain/types";
 import { InvoiceEditor } from "../components/InvoiceEditor";
@@ -15,6 +16,7 @@ import { invoiceTypeLabel } from "../application/invoiceFactory";
 
 type InvoiceStatusFilter = "all" | "a_encaisser" | InvoiceStatus;
 type ClientWorkflowFilter = "all" | "actionable";
+type ElectronicInvoicingFilter = "all" | "incomplete" | "ready";
 
 const COLLECTABLE_INVOICE_STATUSES: InvoiceStatus[] = ["sent", "partially_paid", "overdue"];
 const ACTIONABLE_CLIENT_WORKFLOW_STATUSES = ["sent", "viewed", "modification_requested", "expired"] as const;
@@ -43,6 +45,12 @@ const CLIENT_WORKFLOW_FILTERS: Array<{ value: ClientWorkflowFilter; label: strin
   { value: "actionable", label: "Docs client à traiter" },
 ];
 
+const ELECTRONIC_INVOICING_FILTERS: Array<{ value: ElectronicInvoicingFilter; label: string }> = [
+  { value: "all", label: "Toutes e-factures" },
+  { value: "incomplete", label: "À compléter e-facturation" },
+  { value: "ready", label: "Prêtes PDP" },
+];
+
 function matchesStatusFilter(invoice: InvoiceRecord, filter: InvoiceStatusFilter) {
   if (filter === "all") return true;
   if (filter === "a_encaisser") return COLLECTABLE_INVOICE_STATUSES.includes(invoice.status);
@@ -52,6 +60,14 @@ function matchesStatusFilter(invoice: InvoiceRecord, filter: InvoiceStatusFilter
 function matchesClientWorkflowFilter(invoice: InvoiceRecord, filter: ClientWorkflowFilter, workflowByInvoiceId: Map<string, ClientWorkflowStatus>) {
   if (filter === "all") return true;
   return workflowByInvoiceId.has(invoice.id);
+}
+
+function matchesElectronicInvoicingFilter(invoice: InvoiceRecord, filter: ElectronicInvoicingFilter) {
+  if (filter === "all") return true;
+  const metadata = normalizeInvoiceElectronicInvoicing(invoice.document.electronicInvoicing, invoice.document);
+  const readiness = getInvoiceElectronicInvoicingReadiness(metadata);
+  if (filter === "ready") return readiness.canMarkReady;
+  return !readiness.canMarkReady;
 }
 
 export default function InvoicesPage() {
@@ -77,6 +93,7 @@ export default function InvoicesPage() {
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<InvoiceStatusFilter>("all");
   const [clientWorkflowFilter, setClientWorkflowFilter] = useState<ClientWorkflowFilter>("all");
+  const [electronicInvoicingFilter, setElectronicInvoicingFilter] = useState<ElectronicInvoicingFilter>("all");
   const [typeFilter, setTypeFilter] = useState("all");
   const selected = invoices.find((invoice) => invoice.id === selectedId) ?? null;
   const targetedInvoice = useMemo(
@@ -125,6 +142,7 @@ export default function InvoicesPage() {
       setQuery("");
       setStatusFilter(targetedStatusFilter);
       setClientWorkflowFilter(targetedClientWorkflowFilter);
+      setElectronicInvoicingFilter("all");
       setTypeFilter("all");
       if ((statusFilterFromUrl && targetedStatusFilter === "all") || (clientWorkflowFilterFromUrl && targetedClientWorkflowFilter === "all")) {
         const nextParams = new URLSearchParams(searchParams);
@@ -138,12 +156,16 @@ export default function InvoicesPage() {
   const stats = useMemo(() => {
     const totals = invoices.reduce((acc, invoice) => {
       const documentTotals = invoice.document.totals ?? calculateDocumentTotals(invoice.document);
+      const metadata = normalizeInvoiceElectronicInvoicing(invoice.document.electronicInvoicing, invoice.document);
+      const readiness = getInvoiceElectronicInvoicingReadiness(metadata);
       acc.amount += documentTotals.totalTtc;
       acc.paid += getPaidAmount(invoice);
       if (invoice.status === "overdue") acc.overdue += 1;
       if (invoice.status === "draft") acc.drafts += 1;
+      if (readiness.canMarkReady) acc.electronicReady += 1;
+      else acc.electronicIncomplete += 1;
       return acc;
-    }, { amount: 0, paid: 0, overdue: 0, drafts: 0 });
+    }, { amount: 0, paid: 0, overdue: 0, drafts: 0, electronicReady: 0, electronicIncomplete: 0 });
     return totals;
   }, [invoices]);
 
@@ -158,10 +180,11 @@ export default function InvoicesPage() {
       ].some((value) => String(value ?? "").toLowerCase().includes(text));
       const matchesStatus = matchesStatusFilter(invoice, statusFilter);
       const matchesClientWorkflow = matchesClientWorkflowFilter(invoice, clientWorkflowFilter, clientWorkflowByInvoiceId);
+      const matchesElectronicInvoicing = matchesElectronicInvoicingFilter(invoice, electronicInvoicingFilter);
       const matchesType = typeFilter === "all" || invoice.type === typeFilter;
-      return matchesText && matchesStatus && matchesClientWorkflow && matchesType;
+      return matchesText && matchesStatus && matchesClientWorkflow && matchesElectronicInvoicing && matchesType;
     });
-  }, [clientWorkflowByInvoiceId, clientWorkflowFilter, invoices, query, statusFilter, typeFilter]);
+  }, [clientWorkflowByInvoiceId, clientWorkflowFilter, electronicInvoicingFilter, invoices, query, statusFilter, typeFilter]);
 
   async function refresh(selectFirst = true) {
     if (dirtyInvoiceIds.size > 0) {
@@ -267,10 +290,11 @@ export default function InvoicesPage() {
       {error ? <div className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">{error}</div> : null}
       {loading ? <div className="rounded-3xl border border-slate-200 bg-white p-8 text-center text-sm text-slate-500">Chargement des factures...</div> : null}
 
-      {!loading ? <section className="grid gap-4 md:grid-cols-4">
+      {!loading ? <section className="grid gap-4 md:grid-cols-3 xl:grid-cols-5">
         <StatCard label="Factures" value={invoices.length} hint="Documents de facturation" />
         <StatCard label="Brouillons" value={stats.drafts} hint="À finaliser" />
-        <StatCard label="CA facturé" value={formatCurrency(stats.amount)} hint="Total TTC" />
+        <StatCard label="Prêtes PDP" value={stats.electronicReady} hint="Données minimales OK" />
+        <StatCard label="À compléter" value={stats.electronicIncomplete} hint="E-facturation" />
         <StatCard label="Encaissé" value={formatCurrency(stats.paid)} hint={`${stats.overdue} en retard`} />
       </section> : null}
 
@@ -331,7 +355,7 @@ export default function InvoicesPage() {
           <div className="mb-4 rounded-2xl border border-blue-100 bg-blue-50 p-4 text-sm text-blue-900">
             La création d'une facture part du devis afin de conserver le client, le projet, les lignes, les montants et le lien commercial. Depuis un projet commercial, ouvrez l'onglet Devis puis choisissez Acompte, Situation ou Finale. Cette page sert au suivi, aux paiements et aux relances des factures déjà générées.
           </div>
-          <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_190px_190px_220px]">
+          <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_190px_190px_220px_220px]">
             <label className="relative block">
               <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
               <input className="h-10 w-full rounded-xl border border-slate-200 bg-white pl-10 pr-3 text-sm outline-none focus:border-blue-300" placeholder="Rechercher numéro, client, chantier..." value={query} onChange={(event) => setQuery(event.target.value)} />
@@ -349,6 +373,9 @@ export default function InvoicesPage() {
             <select className={selectClass} value={clientWorkflowFilter} onChange={(event) => selectClientWorkflowFilter(event.target.value as ClientWorkflowFilter)}>
               {CLIENT_WORKFLOW_FILTERS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
             </select>
+            <select className={selectClass} value={electronicInvoicingFilter} onChange={(event) => setElectronicInvoicingFilter(event.target.value as ElectronicInvoicingFilter)}>
+              {ELECTRONIC_INVOICING_FILTERS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+            </select>
           </div>
         </section>
       ) : null}
@@ -364,6 +391,8 @@ export default function InvoicesPage() {
               const totals = invoice.document.totals ?? calculateDocumentTotals(invoice.document);
               const hasUnsavedChanges = dirtyInvoiceIds.has(invoice.id);
               const clientWorkflowStatus = clientWorkflowByInvoiceId.get(invoice.id);
+              const electronicInvoicing = normalizeInvoiceElectronicInvoicing(invoice.document.electronicInvoicing, invoice.document);
+              const electronicReadiness = getInvoiceElectronicInvoicingReadiness(electronicInvoicing);
               return (
                 <button key={invoice.id} type="button" onClick={() => selectInvoice(invoice.id)} className={`w-full rounded-2xl border px-3 py-2.5 text-left transition ${selectedId === invoice.id ? "border-blue-300 bg-blue-50" : "border-slate-200 hover:bg-slate-50"}`}>
                   <div className="flex min-w-0 items-start justify-between gap-3">
@@ -378,13 +407,14 @@ export default function InvoicesPage() {
                   </div>
                   <div className="mt-2 flex flex-wrap items-center gap-2">
                     <InvoiceStatusBadge status={invoice.status} />
+                    <ElectronicInvoicingStatusBadge readiness={electronicReadiness} status={electronicInvoicing.transmissionStatus} />
                     {clientWorkflowStatus ? <ClientWorkflowStatusBadge status={clientWorkflowStatus} /> : null}
                     {hasUnsavedChanges ? <span className="rounded-full bg-amber-100 px-2.5 py-1 text-xs font-semibold text-amber-800">Non enregistré</span> : null}
                   </div>
                 </button>
               );
             })}
-            {!filteredInvoices.length ? <EmptyState title="Aucune facture" description={emptyStateDescription(clientWorkflowFilter, clientWorkflowLoadFailed)} /> : null}
+            {!filteredInvoices.length ? <EmptyState title="Aucune facture" description={emptyStateDescription(clientWorkflowFilter, clientWorkflowLoadFailed, electronicInvoicingFilter)} /> : null}
           </div>
         </aside>
 
@@ -426,6 +456,25 @@ function ClientWorkflowStatusBadge({ status }: { status: ClientWorkflowStatus })
   return <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${meta.className}`}>{meta.label}</span>;
 }
 
+function ElectronicInvoicingStatusBadge({ readiness, status }: { readiness: ReturnType<typeof getInvoiceElectronicInvoicingReadiness>; status: ElectronicInvoicingTransmissionStatus }) {
+  if (!readiness.canMarkReady) {
+    return <span className="rounded-full bg-amber-100 px-2.5 py-1 text-xs font-semibold text-amber-800">À compléter e-fact.</span>;
+  }
+  if (status === "ready") {
+    return <span className="rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-semibold text-emerald-800">Prête PDP</span>;
+  }
+  if (status === "pending_pdp") {
+    return <span className="rounded-full bg-blue-100 px-2.5 py-1 text-xs font-semibold text-blue-800">En attente PDP</span>;
+  }
+  if (status === "transmitted") {
+    return <span className="rounded-full bg-slate-900 px-2.5 py-1 text-xs font-semibold text-white">Transmise PDP</span>;
+  }
+  if (status === "rejected") {
+    return <span className="rounded-full bg-red-100 px-2.5 py-1 text-xs font-semibold text-red-800">Rejetée PDP</span>;
+  }
+  return <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700">Données OK</span>;
+}
+
 function EmptyState({ title, description }: { title: string; description: string }) {
   return (
     <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-5 text-center">
@@ -435,7 +484,13 @@ function EmptyState({ title, description }: { title: string; description: string
   );
 }
 
-function emptyStateDescription(clientWorkflowFilter: ClientWorkflowFilter, clientWorkflowLoadFailed: boolean) {
+function emptyStateDescription(clientWorkflowFilter: ClientWorkflowFilter, clientWorkflowLoadFailed: boolean, electronicInvoicingFilter: ElectronicInvoicingFilter) {
+  if (electronicInvoicingFilter === "incomplete") {
+    return "Aucune facture ne manque de données minimales de facturation électronique avec les filtres actifs.";
+  }
+  if (electronicInvoicingFilter === "ready") {
+    return "Aucune facture n'est prête PDP avec les filtres actifs.";
+  }
   if (clientWorkflowFilter === "actionable" && clientWorkflowLoadFailed) {
     return "Le suivi des documents client n'a pas pu être chargé. Rafraîchissez la page pour réessayer.";
   }
