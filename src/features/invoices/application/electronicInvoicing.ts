@@ -1,9 +1,16 @@
-import type { BusinessDocument, DocumentParty, ElectronicInvoicingMetadata, ElectronicInvoicingTransmissionStatus } from "../../document-engine";
+import type { BusinessDocument, DocumentParty, ElectronicInvoicingMetadata, ElectronicInvoicingTransmissionStatus, FacturXExternalValidationStatus } from "../../document-engine";
 
 export type ElectronicInvoicingReadiness = {
   canMarkReady: boolean;
   missingFields: string[];
   label: "Données minimales OK" | "À compléter e-facturation";
+  badgeClassName: string;
+};
+
+export type PdpTransmissionReadiness = {
+  canTransmit: boolean;
+  missingFields: string[];
+  label: "Transmission PDP possible" | "Transmission PDP bloquée";
   badgeClassName: string;
 };
 
@@ -27,11 +34,8 @@ export const INVOICE_ELECTRONIC_INVOICING_STRATEGY: InvoiceElectronicInvoicingSt
   nextStepLabel: "Prochain lot : générer le fichier Factur-X conforme.",
 };
 
-const BLOCKED_TRANSMISSION_STATUSES = new Set<ElectronicInvoicingTransmissionStatus>([
-  "ready",
-  "pending_pdp",
-  "transmitted",
-]);
+const READY_TRANSMISSION_STATUSES = new Set<ElectronicInvoicingTransmissionStatus>(["ready"]);
+const PDP_TRANSMISSION_STATUSES = new Set<ElectronicInvoicingTransmissionStatus>(["pending_pdp", "transmitted"]);
 
 export const ELECTRONIC_INVOICING_TRANSMISSION_STATUS_LABELS: Record<ElectronicInvoicingTransmissionStatus, string> = {
   not_ready: "À compléter",
@@ -39,6 +43,12 @@ export const ELECTRONIC_INVOICING_TRANSMISSION_STATUS_LABELS: Record<ElectronicI
   pending_pdp: "En attente PDP",
   transmitted: "Transmise",
   rejected: "Rejetée",
+};
+
+export const FACTURX_EXTERNAL_VALIDATION_STATUS_LABELS: Record<FacturXExternalValidationStatus, string> = {
+  not_checked: "Validation externe à faire",
+  valid: "Validation externe OK",
+  invalid: "Validation externe rejetée",
 };
 
 export function normalizeInvoiceElectronicInvoicing(value?: ElectronicInvoicingMetadata | null, document?: BusinessDocument): ElectronicInvoicingMetadata {
@@ -64,6 +74,9 @@ export function normalizeInvoiceElectronicInvoicing(value?: ElectronicInvoicingM
     lastFacturXExportAt: value?.lastFacturXExportAt ?? null,
     lastFacturXExportFilename: cleanText(value?.lastFacturXExportFilename),
     facturXExportCount: normalizeExportCount(value?.facturXExportCount),
+    facturXExternalValidationStatus: normalizeFacturXExternalValidationStatus(value?.facturXExternalValidationStatus),
+    facturXExternalValidationAt: value?.facturXExternalValidationAt ?? null,
+    facturXExternalValidator: cleanText(value?.facturXExternalValidator),
   };
 }
 
@@ -89,9 +102,29 @@ export function getInvoiceElectronicInvoicingReadiness(metadata: ElectronicInvoi
   };
 }
 
+export function getInvoicePdpTransmissionReadiness(metadata: ElectronicInvoicingMetadata): PdpTransmissionReadiness {
+  const minimumMissingFields = getInvoiceElectronicInvoicingMissingFields(metadata);
+  const missingFields = [
+    ...minimumMissingFields,
+    ...requiredField(!metadata.lastFacturXExportAt, "export Factur-X généré"),
+    ...requiredField(metadata.facturXExternalValidationStatus !== "valid", "validation externe Factur-X OK"),
+    ...requiredField(!metadata.pdpProvider, "PDP choisie"),
+  ];
+  const canTransmit = missingFields.length === 0;
+  return {
+    canTransmit,
+    missingFields,
+    label: canTransmit ? "Transmission PDP possible" : "Transmission PDP bloquée",
+    badgeClassName: canTransmit
+      ? "border-emerald-200 bg-emerald-50 text-emerald-900"
+      : "border-red-200 bg-red-50 text-red-800",
+  };
+}
+
 export function canUseInvoiceElectronicInvoicingStatus(metadata: ElectronicInvoicingMetadata, status: ElectronicInvoicingTransmissionStatus) {
-  if (!BLOCKED_TRANSMISSION_STATUSES.has(status)) return true;
-  return getInvoiceElectronicInvoicingReadiness(metadata).canMarkReady;
+  if (READY_TRANSMISSION_STATUSES.has(status)) return getInvoiceElectronicInvoicingReadiness(metadata).canMarkReady;
+  if (PDP_TRANSMISSION_STATUSES.has(status)) return getInvoicePdpTransmissionReadiness(metadata).canTransmit;
+  return true;
 }
 
 export function normalizeInvoiceElectronicInvoicingPatch(
@@ -137,4 +170,12 @@ function cleanText(value?: string | null) {
 
 function normalizeExportCount(value?: number | null) {
   return typeof value === "number" && Number.isFinite(value) && value > 0 ? Math.floor(value) : 0;
+}
+
+function normalizeFacturXExternalValidationStatus(value?: FacturXExternalValidationStatus | null): FacturXExternalValidationStatus {
+  return value === "valid" || value === "invalid" ? value : "not_checked";
+}
+
+function requiredField(condition: boolean, label: string) {
+  return condition ? [label] : [];
 }
