@@ -4,7 +4,7 @@ import { ArrowRight, Download, FileCode2, Plus, Save, Send, Trash2 } from "lucid
 import { Button } from "../../../components/ui/button";
 import { calculateDocumentTotals, createDocumentLine, createDocumentSection, DocumentPreview, DocumentSendDialog, DocumentTotalsCard, downloadBusinessDocumentPdf, flattenDocumentNodes, validateBusinessDocument, type BusinessDocument, type BusinessDocumentNode, type DocumentItemKind, type ElectronicInvoicingCustomerType, type ElectronicInvoicingMetadata, type ElectronicInvoicingOperationType, type ElectronicInvoicingTransmissionStatus, type FacturXExternalValidationStatus } from "../../document-engine";
 import { addInvoicePayment, createProfitabilitySnapshot, getPaidAmount, getRemainingAmount, removeInvoicePayment } from "../application/invoicePayments";
-import { canUseInvoiceElectronicInvoicingStatus, cleanInvoiceElectronicInvoicingIdentifier, cleanInvoiceElectronicInvoicingText, ELECTRONIC_INVOICING_TRANSMISSION_STATUS_LABELS, FACTURX_EXTERNAL_VALIDATION_STATUS_LABELS, getInvoiceElectronicInvoicingReadiness, getInvoicePdpTransmissionReadiness, INVOICE_ELECTRONIC_INVOICING_STRATEGY, normalizeInvoiceElectronicInvoicing, normalizeInvoiceElectronicInvoicingPatch } from "../application/electronicInvoicing";
+import { appendPdpSimulationEvent, buildPdpSimulationEvent, canUseInvoiceElectronicInvoicingStatus, cleanInvoiceElectronicInvoicingIdentifier, cleanInvoiceElectronicInvoicingText, ELECTRONIC_INVOICING_TRANSMISSION_STATUS_LABELS, FACTURX_EXTERNAL_VALIDATION_STATUS_LABELS, getInvoiceElectronicInvoicingReadiness, getInvoicePdpTransmissionReadiness, INVOICE_ELECTRONIC_INVOICING_STRATEGY, normalizeInvoiceElectronicInvoicing, normalizeInvoiceElectronicInvoicingPatch, PDP_SIMULATION_STATUS_LABELS } from "../application/electronicInvoicing";
 import { downloadFacturXPdf, getFacturXExportReadiness, type FacturXExportReadiness } from "../application/facturxExport";
 import type { InvoicePayment, InvoiceRecord } from "../domain/types";
 import { InvoiceStatusBadge } from "./InvoiceStatusBadge";
@@ -202,6 +202,8 @@ export function InvoiceEditor({ invoice, hasUnsavedChanges, clientWorkflowStatus
               {facturXReadiness.canExport ? <span className="rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-900">{facturXReadiness.externalValidationLabel}</span> : null}
               {electronicInvoicing.lastFacturXExportAt ? <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-700">Export généré</span> : null}
               {electronicInvoicing.facturXExternalValidationStatus === "valid" ? <span className="rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-semibold text-emerald-800">Validation externe OK</span> : null}
+              {electronicInvoicing.pdpSimulationStatus === "queued" ? <span className="rounded-full bg-blue-100 px-2.5 py-1 text-xs font-semibold text-blue-800">Simulation PDP en file</span> : null}
+              {electronicInvoicing.pdpSimulationStatus === "simulated" ? <span className="rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-semibold text-emerald-800">Simulation PDP OK</span> : null}
               {hasUnsavedChanges ? <span className="rounded-full bg-amber-100 px-2.5 py-1 text-xs font-semibold text-amber-800">Non enregistré</span> : null}
             </div>
             <p className="mt-1 break-words text-sm text-slate-500">{document.title}</p>
@@ -279,11 +281,36 @@ function ElectronicInvoicingPanel({ document, metadata, onChange }: { document: 
   const pdpReadiness = getInvoicePdpTransmissionReadiness(metadata);
   const facturXReadiness = getFacturXExportReadiness(document);
   const blockedTransmissionStatuses = getBlockedTransmissionStatusOptions(metadata);
+  const canRunSimulation = pdpReadiness.canTransmit && metadata.pdpSimulationStatus === "queued";
 
   function updateExternalValidationStatus(status: FacturXExternalValidationStatus) {
     onChange({
       facturXExternalValidationStatus: status,
       facturXExternalValidationAt: status === "valid" ? metadata.facturXExternalValidationAt ?? new Date().toISOString() : null,
+    });
+  }
+
+  function queuePdpSimulation() {
+    if (!pdpReadiness.canTransmit) return;
+    const queuedAt = new Date().toISOString();
+    const event = buildPdpSimulationEvent("queued", "Facture mise en file PDP simulée", `PDP : ${metadata.pdpProvider ?? "non renseignée"}`);
+    onChange({
+      pdpSimulationStatus: "queued",
+      pdpSimulationQueuedAt: queuedAt,
+      pdpSimulationEventLog: appendPdpSimulationEvent(metadata, event),
+      transmissionStatus: "pending_pdp",
+    });
+  }
+
+  function runPdpSimulation() {
+    if (!canRunSimulation) return;
+    const simulatedAt = new Date().toISOString();
+    const event = buildPdpSimulationEvent("simulated", "Dépôt PDP simulé", "Simulation interne Batipro, sans envoi à une PDP réelle.");
+    onChange({
+      pdpSimulationStatus: "simulated",
+      pdpSimulationLastRunAt: simulatedAt,
+      pdpSimulationEventLog: appendPdpSimulationEvent(metadata, event),
+      transmissionStatus: "pending_pdp",
     });
   }
 
@@ -303,6 +330,12 @@ function ElectronicInvoicingPanel({ document, metadata, onChange }: { document: 
           </span>
           <Button variant="secondary" size="sm" disabled={!readiness.canMarkReady || metadata.transmissionStatus === "ready"} onClick={() => onChange({ transmissionStatus: "ready" })}>
             {INVOICE_ELECTRONIC_INVOICING_STRATEGY.readyActionLabel}
+          </Button>
+          <Button variant="secondary" size="sm" disabled={!pdpReadiness.canTransmit} onClick={queuePdpSimulation}>
+            Mettre en file simulation PDP
+          </Button>
+          <Button variant="secondary" size="sm" disabled={!canRunSimulation} onClick={runPdpSimulation}>
+            Simuler dépôt PDP
           </Button>
         </div>
       </div>
@@ -333,8 +366,41 @@ function ElectronicInvoicingPanel({ document, metadata, onChange }: { document: 
         </div>
       ) : null}
 
+      <PdpSimulationTrace metadata={metadata} />
       <FacturXExportTrace metadata={metadata} />
       <FacturXChecklist readiness={facturXReadiness} />
+    </div>
+  );
+}
+
+function PdpSimulationTrace({ metadata }: { metadata: ElectronicInvoicingMetadata }) {
+  const events = metadata.pdpSimulationEventLog ?? [];
+  const status = metadata.pdpSimulationStatus ?? "not_queued";
+  const statusClassName = status === "simulated"
+    ? "border-emerald-200 bg-emerald-50 text-emerald-900"
+    : status === "queued"
+      ? "border-blue-200 bg-blue-50 text-blue-900"
+      : status === "blocked"
+        ? "border-red-200 bg-red-50 text-red-800"
+        : "border-slate-200 bg-white text-slate-600";
+
+  return (
+    <div className={`mt-3 rounded-xl border px-3 py-2 text-xs ${statusClassName}`}>
+      <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+        <div className="font-semibold">Simulation PDP : {PDP_SIMULATION_STATUS_LABELS[status]}</div>
+        {metadata.pdpSimulationQueuedAt ? <div>Mise en file : {formatDateTime(metadata.pdpSimulationQueuedAt)}</div> : null}
+        {metadata.pdpSimulationLastRunAt ? <div>Simulation : {formatDateTime(metadata.pdpSimulationLastRunAt)}</div> : null}
+      </div>
+      <div className="mt-1 text-slate-500">Simulation interne uniquement : aucun dépôt réel PDP n'est effectué depuis cet écran.</div>
+      {events.length ? (
+        <div className="mt-2 space-y-1">
+          {events.slice(-3).reverse().map((event) => (
+            <div key={event.id} className="rounded-lg bg-white/70 px-2 py-1">
+              <span className="font-medium">{formatDateTime(event.at)}</span> · {event.label}{event.detail ? ` — ${event.detail}` : ""}
+            </div>
+          ))}
+        </div>
+      ) : null}
     </div>
   );
 }
