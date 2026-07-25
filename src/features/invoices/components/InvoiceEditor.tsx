@@ -5,7 +5,7 @@ import { Button } from "../../../components/ui/button";
 import { calculateDocumentTotals, createDocumentLine, createDocumentSection, DocumentPreview, DocumentSendDialog, DocumentTotalsCard, downloadBusinessDocumentPdf, flattenDocumentNodes, validateBusinessDocument, type BusinessDocument, type BusinessDocumentNode, type DocumentItemKind, type ElectronicInvoicingCustomerType, type ElectronicInvoicingMetadata, type ElectronicInvoicingOperationType, type ElectronicInvoicingTransmissionStatus } from "../../document-engine";
 import { addInvoicePayment, createProfitabilitySnapshot, getPaidAmount, getRemainingAmount, removeInvoicePayment } from "../application/invoicePayments";
 import { canUseInvoiceElectronicInvoicingStatus, cleanInvoiceElectronicInvoicingIdentifier, cleanInvoiceElectronicInvoicingText, ELECTRONIC_INVOICING_TRANSMISSION_STATUS_LABELS, getInvoiceElectronicInvoicingReadiness, INVOICE_ELECTRONIC_INVOICING_STRATEGY, normalizeInvoiceElectronicInvoicing, normalizeInvoiceElectronicInvoicingPatch } from "../application/electronicInvoicing";
-import { downloadFacturXPdf } from "../application/facturxExport";
+import { downloadFacturXPdf, getFacturXExportReadiness, type FacturXExportReadiness } from "../application/facturxExport";
 import type { InvoicePayment, InvoiceRecord } from "../domain/types";
 import { InvoiceStatusBadge } from "./InvoiceStatusBadge";
 
@@ -84,6 +84,7 @@ export function InvoiceEditor({ invoice, hasUnsavedChanges, clientWorkflowStatus
   const [saveError, setSaveError] = useState<string | null>(null);
   const document = invoice.document;
   const electronicInvoicing = normalizeInvoiceElectronicInvoicing(document.electronicInvoicing, document);
+  const facturXReadiness = useMemo(() => getFacturXExportReadiness(document), [document]);
   const totals = document.totals ?? calculateDocumentTotals(document);
   const rows = useMemo(() => flattenDocumentNodes(document.nodes), [document.nodes]);
   const profitability = createProfitabilitySnapshot(invoice);
@@ -174,6 +175,7 @@ export function InvoiceEditor({ invoice, hasUnsavedChanges, clientWorkflowStatus
               <input className="w-full min-w-0 rounded-xl border border-transparent text-xl font-bold text-slate-950 outline-none hover:border-slate-200 focus:border-blue-300 sm:w-auto sm:text-2xl" value={document.number} onChange={(event) => updateDocument({ number: event.target.value })} />
               <InvoiceStatusBadge status={invoice.status} />
               <span className="rounded-full bg-blue-50 px-2.5 py-1 text-xs font-semibold text-blue-700">{TRANSMISSION_STATUS_LABELS[electronicInvoicing.transmissionStatus]}</span>
+              <span className={`rounded-full border px-2.5 py-1 text-xs font-semibold ${facturXReadiness.badgeClassName}`}>{facturXReadiness.label}</span>
               {hasUnsavedChanges ? <span className="rounded-full bg-amber-100 px-2.5 py-1 text-xs font-semibold text-amber-800">Non enregistré</span> : null}
             </div>
             <p className="mt-1 break-words text-sm text-slate-500">{document.title}</p>
@@ -181,7 +183,7 @@ export function InvoiceEditor({ invoice, hasUnsavedChanges, clientWorkflowStatus
           <div className="grid w-full grid-cols-2 gap-2 sm:flex sm:flex-wrap lg:w-auto lg:justify-end">
             <Button className="w-full sm:w-auto" variant="secondary" onClick={() => setPreviewOpen((open) => !open)}>Aperçu</Button>
             <Button className="w-full sm:w-auto" variant="secondary" onClick={() => downloadBusinessDocumentPdf(document)}><Download className="h-4 w-4" /> PDF</Button>
-            <Button className="w-full sm:w-auto" variant="secondary" onClick={exportFacturXPdf}><FileCode2 className="h-4 w-4" /> Factur-X PDF</Button>
+            <Button className="w-full sm:w-auto" variant="secondary" disabled={!facturXReadiness.canExport} onClick={exportFacturXPdf}><FileCode2 className="h-4 w-4" /> Factur-X PDF</Button>
             <Button className="w-full sm:w-auto" variant="secondary" onClick={() => setSendOpen(true)}><Send className="h-4 w-4" /> Envoyer</Button>
             <Button className="col-span-2 w-full sm:w-auto" variant="primary" disabled={saving} onClick={save}><Save className="h-4 w-4" /> {saving ? "Enregistrement..." : "Enregistrer"}</Button>
           </div>
@@ -199,7 +201,7 @@ export function InvoiceEditor({ invoice, hasUnsavedChanges, clientWorkflowStatus
             <Field label="Echéance" type="date" value={document.dueDate ?? ""} onChange={(dueDate) => updateDocument({ dueDate })} />
           </div>
 
-          <ElectronicInvoicingPanel metadata={electronicInvoicing} onChange={updateElectronicInvoicing} />
+          <ElectronicInvoicingPanel document={document} metadata={electronicInvoicing} onChange={updateElectronicInvoicing} />
 
           <div className="flex flex-wrap gap-2 border-y border-slate-100 py-3">
             <Button variant="secondary" onClick={addSection}><Plus className="h-4 w-4" /> Section</Button>
@@ -246,8 +248,9 @@ export function InvoiceEditor({ invoice, hasUnsavedChanges, clientWorkflowStatus
   );
 }
 
-function ElectronicInvoicingPanel({ metadata, onChange }: { metadata: ElectronicInvoicingMetadata; onChange: (patch: Partial<ElectronicInvoicingMetadata>) => void }) {
+function ElectronicInvoicingPanel({ document, metadata, onChange }: { document: BusinessDocument; metadata: ElectronicInvoicingMetadata; onChange: (patch: Partial<ElectronicInvoicingMetadata>) => void }) {
   const readiness = getInvoiceElectronicInvoicingReadiness(metadata);
+  const facturXReadiness = getFacturXExportReadiness(document);
   const blockedTransmissionStatuses = getBlockedTransmissionStatusOptions(metadata);
 
   return (
@@ -285,6 +288,35 @@ function ElectronicInvoicingPanel({ metadata, onChange }: { metadata: Electronic
           Champs à compléter avant export Factur-X / transmission PDP : {readiness.missingFields.join(", ")}.
         </div>
       ) : null}
+
+      <FacturXChecklist readiness={facturXReadiness} />
+    </div>
+  );
+}
+
+function FacturXChecklist({ readiness }: { readiness: FacturXExportReadiness }) {
+  return (
+    <div className="mt-4 border-t border-slate-200 pt-4">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <div className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Contrôle export Factur-X</div>
+          <div className="mt-1 text-xs text-slate-500">Prévalidation Batipro avant génération du PDF avec XML embarqué.</div>
+        </div>
+        <span className={`w-fit rounded-full border px-2.5 py-1 text-xs font-semibold ${readiness.badgeClassName}`}>{readiness.label}</span>
+      </div>
+      <div className="mt-3 grid gap-2 md:grid-cols-2">
+        {readiness.checklist.map((item) => (
+          <div key={item.label} className="flex items-start gap-2 text-xs text-slate-700">
+            <span className={`mt-1 h-2.5 w-2.5 shrink-0 rounded-full ${item.ok ? "bg-emerald-500" : "bg-red-500"}`} />
+            <span>
+              <span className="font-semibold text-slate-900">{item.label}</span>
+              {item.detail ? <span className="mt-0.5 block text-slate-500">{item.detail}</span> : null}
+            </span>
+          </div>
+        ))}
+      </div>
+      {readiness.missingFields.length ? <div className="mt-3 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs font-medium text-red-700">À corriger : {readiness.missingFields.join(", ")}.</div> : null}
+      {readiness.warnings.length ? <div className="mt-3 rounded-xl border border-amber-200 bg-white px-3 py-2 text-xs font-medium text-amber-800">À vérifier : {readiness.warnings.join(", ")}.</div> : null}
     </div>
   );
 }
