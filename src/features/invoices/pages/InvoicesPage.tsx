@@ -5,7 +5,7 @@ import { Button } from "../../../components/ui/button";
 import { PageHeader } from "../../../components/layout/PageHeader";
 import { StatCard } from "../../../components/data/StatCard";
 import { supabase } from "../../../lib/supabaseClient";
-import { calculateDocumentTotals, type ElectronicInvoicingTransmissionStatus } from "../../document-engine";
+import { calculateDocumentTotals, type ElectronicInvoicingMetadata, type ElectronicInvoicingTransmissionStatus } from "../../document-engine";
 import { getInvoiceElectronicInvoicingReadiness, normalizeInvoiceElectronicInvoicing } from "../application/electronicInvoicing";
 import { getFacturXExportReadiness } from "../application/facturxExport";
 import { listInvoices, saveInvoice } from "../infrastructure/invoiceRepository";
@@ -161,14 +161,16 @@ export default function InvoicesPage() {
     const totals = invoices.reduce((acc, invoice) => {
       const documentTotals = invoice.document.totals ?? calculateDocumentTotals(invoice.document);
       const facturXReadiness = getFacturXExportReadiness(invoice.document);
+      const electronicInvoicing = normalizeInvoiceElectronicInvoicing(invoice.document.electronicInvoicing, invoice.document);
       acc.amount += documentTotals.totalTtc;
       acc.paid += getPaidAmount(invoice);
       if (invoice.status === "overdue") acc.overdue += 1;
       if (invoice.status === "draft") acc.drafts += 1;
       if (facturXReadiness.canExport) acc.facturXReady += 1;
       else acc.facturXIncomplete += 1;
+      if (electronicInvoicing.lastFacturXExportAt) acc.facturXExported += 1;
       return acc;
-    }, { amount: 0, paid: 0, overdue: 0, drafts: 0, facturXReady: 0, facturXIncomplete: 0 });
+    }, { amount: 0, paid: 0, overdue: 0, drafts: 0, facturXReady: 0, facturXIncomplete: 0, facturXExported: 0 });
     return totals;
   }, [invoices]);
 
@@ -318,10 +320,11 @@ export default function InvoicesPage() {
       {error ? <div className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">{error}</div> : null}
       {loading ? <div className="rounded-3xl border border-slate-200 bg-white p-8 text-center text-sm text-slate-500">Chargement des factures...</div> : null}
 
-      {!loading ? <section className="grid gap-4 md:grid-cols-3 xl:grid-cols-5">
+      {!loading ? <section className="grid gap-4 md:grid-cols-3 xl:grid-cols-6">
         <StatCard label="Factures" value={invoices.length} hint="Documents de facturation" />
         <StatCard label="Brouillons" value={stats.drafts} hint="À finaliser" />
         <StatCard label="Factur-X prévalidées" value={stats.facturXReady} hint="Validation externe requise" />
+        <StatCard label="Exports Factur-X" value={stats.facturXExported} hint="PDF générés" />
         <StatCard label="Factur-X à corriger" value={stats.facturXIncomplete} hint="Avant export" />
         <StatCard label="Encaissé" value={formatCurrency(stats.paid)} hint={`${stats.overdue} en retard`} />
       </section> : null}
@@ -462,10 +465,12 @@ export default function InvoicesPage() {
                     <InvoiceStatusBadge status={invoice.status} />
                     <ElectronicInvoicingStatusBadge readiness={electronicReadiness} status={electronicInvoicing.transmissionStatus} />
                     <FacturXStatusBadge canExport={facturXReadiness.canExport} />
+                    <FacturXExportStatusBadge metadata={electronicInvoicing} />
                     {clientWorkflowStatus ? <ClientWorkflowStatusBadge status={clientWorkflowStatus} /> : null}
                     {hasUnsavedChanges ? <span className="rounded-full bg-amber-100 px-2.5 py-1 text-xs font-semibold text-amber-800">Non enregistré</span> : null}
                   </div>
                   {firstFacturXIssue ? <div className="mt-2 rounded-xl bg-red-50 px-3 py-2 text-xs font-medium text-red-700">Premier blocage : {firstFacturXIssue}</div> : null}
+                  {!firstFacturXIssue && electronicInvoicing.lastFacturXExportAt ? <div className="mt-2 rounded-xl bg-slate-50 px-3 py-2 text-xs font-medium text-slate-600">Dernier export : {formatDateTime(electronicInvoicing.lastFacturXExportAt)}</div> : null}
                 </button>
               );
             })}
@@ -536,6 +541,12 @@ function FacturXStatusBadge({ canExport }: { canExport: boolean }) {
     : <span className="rounded-full bg-red-100 px-2.5 py-1 text-xs font-semibold text-red-800">Factur-X à corriger</span>;
 }
 
+function FacturXExportStatusBadge({ metadata }: { metadata: ElectronicInvoicingMetadata }) {
+  return metadata.lastFacturXExportAt
+    ? <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-700">Export généré</span>
+    : null;
+}
+
 function EmptyState({ title, description }: { title: string; description: string }) {
   return (
     <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-5 text-center">
@@ -563,6 +574,11 @@ function emptyStateDescription(clientWorkflowFilter: ClientWorkflowFilter, clien
 
 function formatCurrency(value: number) {
   return new Intl.NumberFormat("fr-FR", { style: "currency", currency: "EUR" }).format(value);
+}
+
+function formatDateTime(value: string) {
+  if (!value) return "-";
+  return new Date(value).toLocaleString("fr-FR", { dateStyle: "short", timeStyle: "short" });
 }
 
 const selectClass = "h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-700 outline-none focus:border-blue-300";
