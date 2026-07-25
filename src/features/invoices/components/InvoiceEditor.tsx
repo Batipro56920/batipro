@@ -81,6 +81,7 @@ export function InvoiceEditor({ invoice, hasUnsavedChanges, clientWorkflowStatus
   const [previewOpen, setPreviewOpen] = useState(false);
   const [sendOpen, setSendOpen] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [exportingFacturX, setExportingFacturX] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const document = invoice.document;
   const electronicInvoicing = normalizeInvoiceElectronicInvoicing(document.electronicInvoicing, document);
@@ -130,12 +131,34 @@ export function InvoiceEditor({ invoice, hasUnsavedChanges, clientWorkflowStatus
     onChange(removeInvoicePayment(invoice, paymentId));
   }
 
-  function exportFacturXPdf() {
+  async function exportFacturXPdf() {
+    if (exportingFacturX) return;
     setSaveError(null);
+    setExportingFacturX(true);
     try {
-      downloadFacturXPdf(document);
+      const filename = downloadFacturXPdf(document);
+      const exportedAt = new Date().toISOString();
+      const nextElectronicInvoicing = normalizeInvoiceElectronicInvoicingPatch(electronicInvoicing, {
+        lastFacturXExportAt: exportedAt,
+        lastFacturXExportFilename: filename,
+        facturXExportCount: (electronicInvoicing.facturXExportCount ?? 0) + 1,
+      }, document);
+      const nextDocument = {
+        ...document,
+        electronicInvoicing: nextElectronicInvoicing,
+      };
+      const nextInvoice = {
+        ...invoice,
+        document: { ...nextDocument, totals: calculateDocumentTotals(nextDocument) },
+        updatedAt: exportedAt,
+      };
+      onChange(nextInvoice);
+      await onSave(nextInvoice);
+      onUnsavedChange(invoice.id, false);
     } catch (err) {
       setSaveError(getErrorMessage(err, "Export Factur-X impossible."));
+    } finally {
+      setExportingFacturX(false);
     }
   }
 
@@ -177,6 +200,7 @@ export function InvoiceEditor({ invoice, hasUnsavedChanges, clientWorkflowStatus
               <span className="rounded-full bg-blue-50 px-2.5 py-1 text-xs font-semibold text-blue-700">{TRANSMISSION_STATUS_LABELS[electronicInvoicing.transmissionStatus]}</span>
               <span className={`rounded-full border px-2.5 py-1 text-xs font-semibold ${facturXReadiness.badgeClassName}`}>{facturXReadiness.label}</span>
               {facturXReadiness.canExport ? <span className="rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-900">{facturXReadiness.externalValidationLabel}</span> : null}
+              {electronicInvoicing.lastFacturXExportAt ? <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-700">Export généré</span> : null}
               {hasUnsavedChanges ? <span className="rounded-full bg-amber-100 px-2.5 py-1 text-xs font-semibold text-amber-800">Non enregistré</span> : null}
             </div>
             <p className="mt-1 break-words text-sm text-slate-500">{document.title}</p>
@@ -184,7 +208,7 @@ export function InvoiceEditor({ invoice, hasUnsavedChanges, clientWorkflowStatus
           <div className="grid w-full grid-cols-2 gap-2 sm:flex sm:flex-wrap lg:w-auto lg:justify-end">
             <Button className="w-full sm:w-auto" variant="secondary" onClick={() => setPreviewOpen((open) => !open)}>Aperçu</Button>
             <Button className="w-full sm:w-auto" variant="secondary" onClick={() => downloadBusinessDocumentPdf(document)}><Download className="h-4 w-4" /> PDF</Button>
-            <Button className="w-full sm:w-auto" variant="secondary" disabled={!facturXReadiness.canExport} onClick={exportFacturXPdf}><FileCode2 className="h-4 w-4" /> Factur-X PDF</Button>
+            <Button className="w-full sm:w-auto" variant="secondary" disabled={!facturXReadiness.canExport || exportingFacturX} onClick={() => void exportFacturXPdf()}><FileCode2 className="h-4 w-4" /> {exportingFacturX ? "Export..." : "Factur-X PDF"}</Button>
             <Button className="w-full sm:w-auto" variant="secondary" onClick={() => setSendOpen(true)}><Send className="h-4 w-4" /> Envoyer</Button>
             <Button className="col-span-2 w-full sm:w-auto" variant="primary" disabled={saving} onClick={save}><Save className="h-4 w-4" /> {saving ? "Enregistrement..." : "Enregistrer"}</Button>
           </div>
@@ -290,7 +314,26 @@ function ElectronicInvoicingPanel({ document, metadata, onChange }: { document: 
         </div>
       ) : null}
 
+      <FacturXExportTrace metadata={metadata} />
       <FacturXChecklist readiness={facturXReadiness} />
+    </div>
+  );
+}
+
+function FacturXExportTrace({ metadata }: { metadata: ElectronicInvoicingMetadata }) {
+  if (!metadata.lastFacturXExportAt) {
+    return (
+      <div className="mt-3 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs text-slate-600">
+        Aucun export Factur-X généré pour cette facture.
+      </div>
+    );
+  }
+
+  return (
+    <div className="mt-3 rounded-xl border border-emerald-200 bg-white px-3 py-2 text-xs text-emerald-900">
+      <div className="font-semibold">Dernier export Factur-X : {formatDateTime(metadata.lastFacturXExportAt)}</div>
+      <div className="mt-1 text-emerald-800">Fichier : {metadata.lastFacturXExportFilename ?? "nom non enregistré"}</div>
+      <div className="mt-0.5 text-emerald-800">Exports générés : {metadata.facturXExportCount ?? 1}</div>
     </div>
   );
 }
@@ -599,6 +642,11 @@ function formatDate(value: string) {
   const parts = dateOnly.split("-");
   if (parts.length === 3) return `${parts[2]}/${parts[1]}/${parts[0]}`;
   return new Date(value).toLocaleDateString("fr-FR");
+}
+
+function formatDateTime(value: string) {
+  if (!value) return "-";
+  return new Date(value).toLocaleString("fr-FR", { dateStyle: "short", timeStyle: "short" });
 }
 
 function getOverpaidAmount(invoice: InvoiceRecord) {
