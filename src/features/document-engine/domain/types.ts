@@ -90,6 +90,8 @@ export type ElectronicInvoicingOperationType = "services" | "goods" | "mixed" | 
 
 export type ElectronicInvoicingTransmissionStatus = "not_ready" | "ready" | "pending_pdp" | "transmitted" | "rejected";
 
+export type FacturXExternalValidationStatus = "not_checked" | "valid" | "invalid";
+
 export type ElectronicInvoicingMetadata = {
   customerType: ElectronicInvoicingCustomerType;
   operationType: ElectronicInvoicingOperationType;
@@ -108,6 +110,9 @@ export type ElectronicInvoicingMetadata = {
   lastFacturXExportAt?: string | null;
   lastFacturXExportFilename?: string | null;
   facturXExportCount?: number | null;
+  facturXExternalValidationStatus?: FacturXExternalValidationStatus | null;
+  facturXExternalValidationAt?: string | null;
+  facturXExternalValidator?: string | null;
 };
 
 export type DocumentBaseNode = {
