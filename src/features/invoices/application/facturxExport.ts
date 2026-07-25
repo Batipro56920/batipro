@@ -12,12 +12,14 @@ type FacturXExportResult = {
 export type FacturXChecklistItem = {
   label: string;
   ok: boolean;
+  level?: "ok" | "warning" | "error";
   detail?: string;
 };
 
 export type FacturXExportReadiness = {
   canExport: boolean;
-  label: "Factur-X exportable" | "Factur-X à corriger";
+  label: "Factur-X prévalidée" | "Factur-X à corriger";
+  externalValidationLabel: "Validation externe requise" | "Corriger avant validation externe";
   badgeClassName: string;
   missingFields: string[];
   warnings: string[];
@@ -66,7 +68,8 @@ export function getFacturXExportReadiness(document: BusinessDocument): FacturXEx
 
   return {
     canExport,
-    label: canExport ? "Factur-X exportable" : "Factur-X à corriger",
+    label: canExport ? "Factur-X prévalidée" : "Factur-X à corriger",
+    externalValidationLabel: canExport ? "Validation externe requise" : "Corriger avant validation externe",
     badgeClassName: canExport
       ? "border-emerald-200 bg-emerald-50 text-emerald-900"
       : "border-red-200 bg-red-50 text-red-800",
@@ -83,7 +86,19 @@ export function getFacturXExportReadiness(document: BusinessDocument): FacturXEx
       { label: "Entreprise et client", ok: Boolean(cleanText(document.company.displayName) && cleanText(document.recipient.displayName)) },
       { label: "Lignes facturables", ok: lines.length > 0 && lineIssues.length === 0, detail: lineIssues[0] },
       { label: "Totaux et TVA", ok: Number.isFinite(totals.totalTtc) && totals.totalTtc > 0 && totals.vatBreakdown.length > 0 },
-      { label: "PDF avec XML embarqué", ok: true, detail: FACTURX_XML_FILENAME },
+      {
+        label: "PDF avec XML embarqué",
+        ok: canExport,
+        detail: canExport ? FACTURX_XML_FILENAME : "Corriger les blocages avant génération du PDF Factur-X",
+      },
+      {
+        label: "Validation externe officielle",
+        ok: false,
+        level: "warning",
+        detail: canExport
+          ? "À contrôler avec un validateur Factur-X / PDF-A3 avant dépôt PDP ou usage légal."
+          : "Non lançable tant que l'export Batipro n'est pas prévalidé.",
+      },
     ],
   };
 }
