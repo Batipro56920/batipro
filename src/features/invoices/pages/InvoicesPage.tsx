@@ -70,6 +70,10 @@ function matchesElectronicInvoicingFilter(invoice: InvoiceRecord, filter: Electr
   return !readiness.canExport;
 }
 
+function getFacturXBlockingIssue(invoice: InvoiceRecord) {
+  return getFacturXExportReadiness(invoice.document).missingFields[0] ?? null;
+}
+
 export default function InvoicesPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const invoiceIdFromUrl = searchParams.get("invoice")?.trim() || null;
@@ -185,6 +189,11 @@ export default function InvoicesPage() {
     });
   }, [clientWorkflowByInvoiceId, clientWorkflowFilter, electronicInvoicingFilter, invoices, query, statusFilter, typeFilter]);
 
+  const firstFacturXIncompleteInvoice = useMemo(
+    () => filteredInvoices.find((invoice) => !getFacturXExportReadiness(invoice.document).canExport) ?? null,
+    [filteredInvoices],
+  );
+
   async function refresh(selectFirst = true) {
     if (dirtyInvoiceIds.size > 0) {
       const shouldDiscardChanges = typeof window !== "undefined" && window.confirm("Des modifications de facture ne sont pas enregistrées. Les perdre et rafraîchir les données ?");
@@ -254,6 +263,26 @@ export default function InvoicesPage() {
     if (nextFilter === "all") nextParams.delete("clientWorkflow");
     else nextParams.set("clientWorkflow", nextFilter);
     setSearchParams(nextParams, { replace: true });
+  }
+
+  function selectElectronicInvoicingFilter(nextFilter: ElectronicInvoicingFilter) {
+    setElectronicInvoicingFilter(nextFilter);
+    if (nextFilter !== "facturx_incomplete") return;
+    const firstIncompleteInvoice = invoices.find((invoice) => {
+      const text = query.trim().toLowerCase();
+      const matchesText = !text || [
+        invoice.document.number,
+        invoice.document.recipient.displayName,
+        invoice.document.siteAddress,
+        invoice.document.title,
+      ].some((value) => String(value ?? "").toLowerCase().includes(text));
+      return matchesText
+        && matchesStatusFilter(invoice, statusFilter)
+        && matchesClientWorkflowFilter(invoice, clientWorkflowFilter, clientWorkflowByInvoiceId)
+        && matchesElectronicInvoicingFilter(invoice, nextFilter)
+        && (typeFilter === "all" || invoice.type === typeFilter);
+    });
+    if (firstIncompleteInvoice) selectInvoice(firstIncompleteInvoice.id);
   }
 
   function update(invoice: InvoiceRecord) {
@@ -349,6 +378,29 @@ export default function InvoicesPage() {
         </div>
       ) : null}
 
+      {!loading && electronicInvoicingFilter === "facturx_incomplete" ? (
+        <div className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-900">
+          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+            <div>
+              <div className="font-semibold">Factures Factur-X à corriger</div>
+              <p className="mt-1 text-red-800">
+                {firstFacturXIncompleteInvoice
+                  ? `Prochain blocage : ${getFacturXBlockingIssue(firstFacturXIncompleteInvoice) ?? "contrôle Factur-X incomplet"}.`
+                  : "Aucune facture à corriger avec les filtres actifs."}
+              </p>
+            </div>
+            <button
+              type="button"
+              disabled={!firstFacturXIncompleteInvoice}
+              onClick={() => firstFacturXIncompleteInvoice && selectInvoice(firstFacturXIncompleteInvoice.id)}
+              className="rounded-xl border border-red-200 bg-white px-4 py-2 text-sm font-semibold text-red-700 hover:border-red-300 hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              Ouvrir la première à corriger
+            </button>
+          </div>
+        </div>
+      ) : null}
+
       {!loading ? (
         <section className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm">
           <div className="mb-4 rounded-2xl border border-blue-100 bg-blue-50 p-4 text-sm text-blue-900">
@@ -372,7 +424,7 @@ export default function InvoicesPage() {
             <select className={selectClass} value={clientWorkflowFilter} onChange={(event) => selectClientWorkflowFilter(event.target.value as ClientWorkflowFilter)}>
               {CLIENT_WORKFLOW_FILTERS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
             </select>
-            <select className={selectClass} value={electronicInvoicingFilter} onChange={(event) => setElectronicInvoicingFilter(event.target.value as ElectronicInvoicingFilter)}>
+            <select className={selectClass} value={electronicInvoicingFilter} onChange={(event) => selectElectronicInvoicingFilter(event.target.value as ElectronicInvoicingFilter)}>
               {ELECTRONIC_INVOICING_FILTERS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
             </select>
           </div>
@@ -393,6 +445,7 @@ export default function InvoicesPage() {
               const electronicInvoicing = normalizeInvoiceElectronicInvoicing(invoice.document.electronicInvoicing, invoice.document);
               const electronicReadiness = getInvoiceElectronicInvoicingReadiness(electronicInvoicing);
               const facturXReadiness = getFacturXExportReadiness(invoice.document);
+              const firstFacturXIssue = getFacturXBlockingIssue(invoice);
               return (
                 <button key={invoice.id} type="button" onClick={() => selectInvoice(invoice.id)} className={`w-full rounded-2xl border px-3 py-2.5 text-left transition ${selectedId === invoice.id ? "border-blue-300 bg-blue-50" : "border-slate-200 hover:bg-slate-50"}`}>
                   <div className="flex min-w-0 items-start justify-between gap-3">
@@ -412,6 +465,7 @@ export default function InvoicesPage() {
                     {clientWorkflowStatus ? <ClientWorkflowStatusBadge status={clientWorkflowStatus} /> : null}
                     {hasUnsavedChanges ? <span className="rounded-full bg-amber-100 px-2.5 py-1 text-xs font-semibold text-amber-800">Non enregistré</span> : null}
                   </div>
+                  {firstFacturXIssue ? <div className="mt-2 rounded-xl bg-red-50 px-3 py-2 text-xs font-medium text-red-700">Premier blocage : {firstFacturXIssue}</div> : null}
                 </button>
               );
             })}
