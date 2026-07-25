@@ -159,6 +159,8 @@ serve(async (req) => {
     const body = await req.json().catch(() => ({})) as RouteBody;
     return json(await calculateWithGoogleRoutes(body));
   } catch (err) {
-    return json({ error: err instanceof Error ? err.message : "Calcul trajet impossible." }, 400);
+    const message = err instanceof Error ? err.message : "Calcul trajet impossible.";
+    console.error("quote-travel-route failed", { message });
+    return json({ error: message }, 400);
   }
 });
