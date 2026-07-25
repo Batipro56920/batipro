@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { ArrowRight, Download, Plus, Save, Send, Trash2 } from "lucide-react";
 import { Button } from "../../../components/ui/button";
-import { calculateDocumentTotals, createDocumentLine, createDocumentSection, DocumentPreview, DocumentSendDialog, DocumentTotalsCard, downloadBusinessDocumentPdf, flattenDocumentNodes, validateBusinessDocument, type BusinessDocument, type BusinessDocumentNode, type DocumentItemKind, type ElectronicInvoicingCustomerType, type ElectronicInvoicingMetadata, type ElectronicInvoicingOperationType, type ElectronicInvoicingTransmissionStatus } from "../../document-engine";
+import { calculateDocumentTotals, createDocumentLine, createDocumentSection, DocumentPreview, DocumentSendDialog, DocumentTotalsCard, downloadBusinessDocumentPdf, flattenDocumentNodes, validateBusinessDocument, type BusinessDocument, type BusinessDocumentNode, type DocumentItemKind, type DocumentParty, type ElectronicInvoicingCustomerType, type ElectronicInvoicingMetadata, type ElectronicInvoicingOperationType, type ElectronicInvoicingTransmissionStatus } from "../../document-engine";
 import { addInvoicePayment, createProfitabilitySnapshot, getPaidAmount, getRemainingAmount, removeInvoicePayment } from "../application/invoicePayments";
 import type { InvoicePayment, InvoiceRecord } from "../domain/types";
 import { InvoiceStatusBadge } from "./InvoiceStatusBadge";
@@ -87,7 +87,7 @@ export function InvoiceEditor({ invoice, hasUnsavedChanges, clientWorkflowStatus
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const document = invoice.document;
-  const electronicInvoicing = normalizeElectronicInvoicing(document.electronicInvoicing);
+  const electronicInvoicing = normalizeElectronicInvoicing(document.electronicInvoicing, document);
   const totals = document.totals ?? calculateDocumentTotals(document);
   const rows = useMemo(() => flattenDocumentNodes(document.nodes), [document.nodes]);
   const profitability = createProfitabilitySnapshot(invoice);
@@ -101,7 +101,7 @@ export function InvoiceEditor({ invoice, hasUnsavedChanges, clientWorkflowStatus
   }
 
   function updateElectronicInvoicing(patch: Partial<ElectronicInvoicingMetadata>) {
-    updateDocument({ electronicInvoicing: normalizeElectronicInvoicing({ ...electronicInvoicing, ...patch }) });
+    updateDocument({ electronicInvoicing: normalizeElectronicInvoicing({ ...electronicInvoicing, ...patch }, document) });
   }
 
   function updateNode(nodeId: string, patch: Partial<BusinessDocumentNode>) {
@@ -242,25 +242,33 @@ export function InvoiceEditor({ invoice, hasUnsavedChanges, clientWorkflowStatus
 
 function ElectronicInvoicingPanel({ metadata, onChange }: { metadata: ElectronicInvoicingMetadata; onChange: (patch: Partial<ElectronicInvoicingMetadata>) => void }) {
   const missingRequiredFields = getElectronicInvoicingMissingFields(metadata);
-  const readinessClass = missingRequiredFields.length
-    ? "border-amber-200 bg-amber-50 text-amber-900"
-    : "border-emerald-200 bg-emerald-50 text-emerald-900";
+  const canMarkReady = missingRequiredFields.length === 0;
+  const readinessClass = canMarkReady
+    ? "border-emerald-200 bg-emerald-50 text-emerald-900"
+    : "border-amber-200 bg-amber-50 text-amber-900";
 
   return (
     <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <div className="text-xs font-semibold uppercase tracking-[0.14em] text-blue-700">Facturation électronique</div>
           <div className="mt-1 text-sm text-slate-600">Qualification PDP / e-reporting pour la réforme française.</div>
         </div>
-        <span className={`rounded-full border px-2.5 py-1 text-xs font-semibold ${readinessClass}`}>
-          {missingRequiredFields.length ? "À compléter" : "Données minimales OK"}
-        </span>
+        <div className="flex flex-col gap-2 sm:items-end">
+          <span className={`rounded-full border px-2.5 py-1 text-xs font-semibold ${readinessClass}`}>
+            {canMarkReady ? "Données minimales OK" : "À compléter"}
+          </span>
+          <Button variant="secondary" size="sm" disabled={!canMarkReady || metadata.transmissionStatus === "ready"} onClick={() => onChange({ transmissionStatus: "ready" })}>
+            Marquer prête PDP
+          </Button>
+        </div>
       </div>
 
       <div className="mt-4 grid gap-3 md:grid-cols-2">
         <SelectField label="Client" value={metadata.customerType} onChange={(customerType) => onChange({ customerType: customerType as ElectronicInvoicingCustomerType })} options={CUSTOMER_TYPE_LABELS} />
         <SelectField label="Opération" value={metadata.operationType} onChange={(operationType) => onChange({ operationType: operationType as ElectronicInvoicingOperationType })} options={OPERATION_TYPE_LABELS} />
+        <Field label="SIREN entreprise" value={metadata.sellerSiren ?? ""} onChange={(sellerSiren) => onChange({ sellerSiren: cleanIdentifier(sellerSiren) })} />
+        <Field label="SIRET entreprise" value={metadata.sellerSiret ?? ""} onChange={(sellerSiret) => onChange({ sellerSiret: cleanIdentifier(sellerSiret) })} />
         <Field label="SIREN client" value={metadata.buyerSiren ?? ""} onChange={(buyerSiren) => onChange({ buyerSiren: cleanIdentifier(buyerSiren) })} />
         <Field label="SIRET client" value={metadata.buyerSiret ?? ""} onChange={(buyerSiret) => onChange({ buyerSiret: cleanIdentifier(buyerSiret) })} />
         <Field label="TVA intra client" value={metadata.buyerVatNumber ?? ""} onChange={(buyerVatNumber) => onChange({ buyerVatNumber: cleanText(buyerVatNumber) })} />
@@ -493,21 +501,24 @@ function routeProjectId(value?: string | null) {
 
 function getElectronicInvoicingMissingFields(metadata: ElectronicInvoicingMetadata) {
   const missing: string[] = [];
-  if (metadata.customerType === "b2b_fr" && !metadata.buyerSiren && !metadata.buyerSiret) missing.push("SIREN ou SIRET client");
+  if (!metadata.sellerSiren && !metadata.sellerSiret) missing.push("SIREN ou SIRET entreprise");
+  if ((metadata.customerType === "b2b_fr" || metadata.customerType === "public_fr") && !metadata.buyerSiren && !metadata.buyerSiret) missing.push("SIREN ou SIRET client");
   if (!metadata.operationType) missing.push("type d'opération");
   if (!metadata.vatExigibility) missing.push("exigibilité TVA");
   return missing;
 }
 
-function normalizeElectronicInvoicing(value?: ElectronicInvoicingMetadata | null): ElectronicInvoicingMetadata {
+function normalizeElectronicInvoicing(value?: ElectronicInvoicingMetadata | null, document?: BusinessDocument): ElectronicInvoicingMetadata {
+  const buyerIdentifiers = inferPartyIdentifiers(document?.recipient);
+  const sellerIdentifiers = inferPartyIdentifiers(document?.company);
   return {
     customerType: value?.customerType ?? "b2b_fr",
-    operationType: value?.operationType ?? "services",
+    operationType: value?.operationType ?? "works",
     transmissionStatus: value?.transmissionStatus ?? "not_ready",
-    buyerSiren: cleanIdentifier(value?.buyerSiren),
-    buyerSiret: cleanIdentifier(value?.buyerSiret),
-    sellerSiren: cleanIdentifier(value?.sellerSiren),
-    sellerSiret: cleanIdentifier(value?.sellerSiret),
+    buyerSiren: cleanIdentifier(value?.buyerSiren) ?? buyerIdentifiers.siren,
+    buyerSiret: cleanIdentifier(value?.buyerSiret) ?? buyerIdentifiers.siret,
+    sellerSiren: cleanIdentifier(value?.sellerSiren) ?? sellerIdentifiers.siren,
+    sellerSiret: cleanIdentifier(value?.sellerSiret) ?? sellerIdentifiers.siret,
     buyerVatNumber: cleanText(value?.buyerVatNumber),
     sellerVatNumber: cleanText(value?.sellerVatNumber),
     vatExigibility: value?.vatExigibility ?? "payment",
@@ -515,6 +526,14 @@ function normalizeElectronicInvoicing(value?: ElectronicInvoicingMetadata | null
     pdpReference: cleanText(value?.pdpReference),
     lastTransmissionAt: value?.lastTransmissionAt ?? null,
     rejectionReason: cleanText(value?.rejectionReason),
+  };
+}
+
+function inferPartyIdentifiers(party?: DocumentParty | null) {
+  const siret = cleanIdentifier(party?.siret);
+  return {
+    siret,
+    siren: siret && siret.length >= 9 ? siret.slice(0, 9) : null,
   };
 }
 
