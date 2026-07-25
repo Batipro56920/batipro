@@ -1,5 +1,6 @@
-import { calculateDocumentTotals, createEmptyBusinessDocument, type BusinessDocument, type BusinessDocumentNode, type DocumentParty, type ElectronicInvoicingMetadata } from "../../document-engine";
+import { calculateDocumentTotals, createEmptyBusinessDocument, type BusinessDocument, type BusinessDocumentNode } from "../../document-engine";
 import type { InvoiceRecord, InvoiceType } from "../domain/types";
+import { normalizeInvoiceElectronicInvoicing } from "./electronicInvoicing";
 import { addLocalDays, getLocalInputDate } from "./invoiceDates";
 
 export function createInvoice(type: InvoiceType = "deposit", sourceQuote?: BusinessDocument): InvoiceRecord {
@@ -76,35 +77,6 @@ function createEmptyInvoiceDocument(type: InvoiceType): BusinessDocument {
   };
 }
 
-function normalizeInvoiceElectronicInvoicing(value?: ElectronicInvoicingMetadata | null, document?: BusinessDocument): ElectronicInvoicingMetadata {
-  const buyerIdentifiers = inferPartyIdentifiers(document?.recipient);
-  const sellerIdentifiers = inferPartyIdentifiers(document?.company);
-  return {
-    customerType: value?.customerType ?? "b2b_fr",
-    operationType: value?.operationType ?? "works",
-    transmissionStatus: value?.transmissionStatus ?? "not_ready",
-    buyerSiren: cleanIdentifier(value?.buyerSiren) ?? buyerIdentifiers.siren,
-    buyerSiret: cleanIdentifier(value?.buyerSiret) ?? buyerIdentifiers.siret,
-    sellerSiren: cleanIdentifier(value?.sellerSiren) ?? sellerIdentifiers.siren,
-    sellerSiret: cleanIdentifier(value?.sellerSiret) ?? sellerIdentifiers.siret,
-    buyerVatNumber: cleanText(value?.buyerVatNumber),
-    sellerVatNumber: cleanText(value?.sellerVatNumber),
-    vatExigibility: value?.vatExigibility ?? "payment",
-    pdpProvider: cleanText(value?.pdpProvider),
-    pdpReference: cleanText(value?.pdpReference),
-    lastTransmissionAt: value?.lastTransmissionAt ?? null,
-    rejectionReason: cleanText(value?.rejectionReason),
-  };
-}
-
-function inferPartyIdentifiers(party?: DocumentParty | null) {
-  const siret = cleanIdentifier(party?.siret);
-  return {
-    siret,
-    siren: siret && siret.length >= 9 ? siret.slice(0, 9) : null,
-  };
-}
-
 function createDepositInvoiceNodes(quote: BusinessDocument, depositPercent: number): BusinessDocumentNode[] {
   const percent = Math.max(0, Math.min(100, depositPercent || 0));
   const nodes = quote.nodes.map((node, index) => cloneNodeForDepositInvoice(node, null, index, percent));
@@ -168,15 +140,6 @@ function createInvoiceNumber(type: InvoiceType) {
 
 function dueDate(days: number) {
   return addLocalDays(days);
-}
-
-function cleanIdentifier(value?: string | null) {
-  return cleanText(value)?.replace(/\s/g, "") ?? null;
-}
-
-function cleanText(value?: string | null) {
-  const text = String(value ?? "").trim();
-  return text || null;
 }
 
 function roundMoney(value: number) {
