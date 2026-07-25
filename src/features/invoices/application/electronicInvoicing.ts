@@ -1,4 +1,4 @@
-import type { BusinessDocument, DocumentParty, ElectronicInvoicingMetadata, ElectronicInvoicingTransmissionStatus, FacturXExternalValidationStatus } from "../../document-engine";
+import type { BusinessDocument, DocumentParty, ElectronicInvoicingMetadata, ElectronicInvoicingTransmissionStatus, FacturXExternalValidationStatus, PdpSimulationEvent, PdpSimulationStatus } from "../../document-engine";
 
 export type ElectronicInvoicingReadiness = {
   canMarkReady: boolean;
@@ -36,6 +36,7 @@ export const INVOICE_ELECTRONIC_INVOICING_STRATEGY: InvoiceElectronicInvoicingSt
 
 const READY_TRANSMISSION_STATUSES = new Set<ElectronicInvoicingTransmissionStatus>(["ready"]);
 const PDP_TRANSMISSION_STATUSES = new Set<ElectronicInvoicingTransmissionStatus>(["pending_pdp", "transmitted"]);
+const MAX_PDP_SIMULATION_EVENTS = 8;
 
 export const ELECTRONIC_INVOICING_TRANSMISSION_STATUS_LABELS: Record<ElectronicInvoicingTransmissionStatus, string> = {
   not_ready: "À compléter",
@@ -49,6 +50,13 @@ export const FACTURX_EXTERNAL_VALIDATION_STATUS_LABELS: Record<FacturXExternalVa
   not_checked: "Validation externe à faire",
   valid: "Validation externe OK",
   invalid: "Validation externe rejetée",
+};
+
+export const PDP_SIMULATION_STATUS_LABELS: Record<PdpSimulationStatus, string> = {
+  not_queued: "Non simulée",
+  queued: "En file simulation PDP",
+  simulated: "Simulation PDP OK",
+  blocked: "Simulation bloquée",
 };
 
 export function normalizeInvoiceElectronicInvoicing(value?: ElectronicInvoicingMetadata | null, document?: BusinessDocument): ElectronicInvoicingMetadata {
@@ -77,6 +85,10 @@ export function normalizeInvoiceElectronicInvoicing(value?: ElectronicInvoicingM
     facturXExternalValidationStatus: normalizeFacturXExternalValidationStatus(value?.facturXExternalValidationStatus),
     facturXExternalValidationAt: value?.facturXExternalValidationAt ?? null,
     facturXExternalValidator: cleanText(value?.facturXExternalValidator),
+    pdpSimulationStatus: normalizePdpSimulationStatus(value?.pdpSimulationStatus),
+    pdpSimulationQueuedAt: value?.pdpSimulationQueuedAt ?? null,
+    pdpSimulationLastRunAt: value?.pdpSimulationLastRunAt ?? null,
+    pdpSimulationEventLog: normalizePdpSimulationEventLog(value?.pdpSimulationEventLog),
   };
 }
 
@@ -139,6 +151,21 @@ export function normalizeInvoiceElectronicInvoicingPatch(
   return next;
 }
 
+export function buildPdpSimulationEvent(status: PdpSimulationStatus, label: string, detail?: string | null): PdpSimulationEvent {
+  const randomId = typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : null;
+  return {
+    id: randomId ?? `pdp-simulation-${Date.now()}`,
+    at: new Date().toISOString(),
+    status,
+    label,
+    detail: cleanText(detail),
+  };
+}
+
+export function appendPdpSimulationEvent(metadata: ElectronicInvoicingMetadata, event: PdpSimulationEvent): PdpSimulationEvent[] {
+  return [...(metadata.pdpSimulationEventLog ?? []), event].slice(-MAX_PDP_SIMULATION_EVENTS);
+}
+
 export function cleanInvoiceElectronicInvoicingIdentifier(value?: string | null) {
   return cleanIdentifier(value);
 }
@@ -174,6 +201,27 @@ function normalizeExportCount(value?: number | null) {
 
 function normalizeFacturXExternalValidationStatus(value?: FacturXExternalValidationStatus | null): FacturXExternalValidationStatus {
   return value === "valid" || value === "invalid" ? value : "not_checked";
+}
+
+function normalizePdpSimulationStatus(value?: PdpSimulationStatus | null): PdpSimulationStatus {
+  return value === "queued" || value === "simulated" || value === "blocked" ? value : "not_queued";
+}
+
+function normalizePdpSimulationEventLog(value?: PdpSimulationEvent[] | null): PdpSimulationEvent[] {
+  return Array.isArray(value)
+    ? value.map(normalizePdpSimulationEvent).filter((event): event is PdpSimulationEvent => Boolean(event)).slice(-MAX_PDP_SIMULATION_EVENTS)
+    : [];
+}
+
+function normalizePdpSimulationEvent(value: PdpSimulationEvent | null | undefined): PdpSimulationEvent | null {
+  if (!value?.id || !value.at || !value.label) return null;
+  return {
+    id: String(value.id),
+    at: String(value.at),
+    status: normalizePdpSimulationStatus(value.status),
+    label: String(value.label),
+    detail: cleanText(value.detail),
+  };
 }
 
 function requiredField(condition: boolean, label: string) {
