@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { ArrowRight, Download, Plus, Save, Send, Trash2 } from "lucide-react";
 import { Button } from "../../../components/ui/button";
-import { calculateDocumentTotals, createDocumentLine, createDocumentSection, DocumentPreview, DocumentSendDialog, DocumentTotalsCard, downloadBusinessDocumentPdf, flattenDocumentNodes, validateBusinessDocument, type BusinessDocument, type BusinessDocumentNode, type DocumentItemKind } from "../../document-engine";
+import { calculateDocumentTotals, createDocumentLine, createDocumentSection, DocumentPreview, DocumentSendDialog, DocumentTotalsCard, downloadBusinessDocumentPdf, flattenDocumentNodes, validateBusinessDocument, type BusinessDocument, type BusinessDocumentNode, type DocumentItemKind, type ElectronicInvoicingCustomerType, type ElectronicInvoicingMetadata, type ElectronicInvoicingOperationType, type ElectronicInvoicingTransmissionStatus } from "../../document-engine";
 import { addInvoicePayment, createProfitabilitySnapshot, getPaidAmount, getRemainingAmount, removeInvoicePayment } from "../application/invoicePayments";
 import type { InvoicePayment, InvoiceRecord } from "../domain/types";
 import { InvoiceStatusBadge } from "./InvoiceStatusBadge";
@@ -59,12 +59,35 @@ const CLIENT_WORKFLOW_PANEL_META: Record<InvoiceClientWorkflowStatus, { label: s
   },
 };
 
+const CUSTOMER_TYPE_LABELS: Record<ElectronicInvoicingCustomerType, string> = {
+  b2b_fr: "Entreprise France",
+  b2c_fr: "Particulier France",
+  public_fr: "Secteur public",
+  foreign: "Client étranger",
+};
+
+const OPERATION_TYPE_LABELS: Record<ElectronicInvoicingOperationType, string> = {
+  services: "Prestation de services",
+  goods: "Livraison de biens",
+  mixed: "Mixte biens + services",
+  works: "Travaux bâtiment",
+};
+
+const TRANSMISSION_STATUS_LABELS: Record<ElectronicInvoicingTransmissionStatus, string> = {
+  not_ready: "À compléter",
+  ready: "Prête PDP",
+  pending_pdp: "En attente PDP",
+  transmitted: "Transmise",
+  rejected: "Rejetée",
+};
+
 export function InvoiceEditor({ invoice, hasUnsavedChanges, clientWorkflowStatus = null, onUnsavedChange, onChange, onSave }: InvoiceEditorProps) {
   const [previewOpen, setPreviewOpen] = useState(false);
   const [sendOpen, setSendOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const document = invoice.document;
+  const electronicInvoicing = normalizeElectronicInvoicing(document.electronicInvoicing);
   const totals = document.totals ?? calculateDocumentTotals(document);
   const rows = useMemo(() => flattenDocumentNodes(document.nodes), [document.nodes]);
   const profitability = createProfitabilitySnapshot(invoice);
@@ -75,6 +98,10 @@ export function InvoiceEditor({ invoice, hasUnsavedChanges, clientWorkflowStatus
     setSaveError(null);
     onUnsavedChange(invoice.id, true);
     onChange({ ...invoice, document: { ...nextDocument, totals: calculateDocumentTotals(nextDocument) }, updatedAt: new Date().toISOString() });
+  }
+
+  function updateElectronicInvoicing(patch: Partial<ElectronicInvoicingMetadata>) {
+    updateDocument({ electronicInvoicing: normalizeElectronicInvoicing({ ...electronicInvoicing, ...patch }) });
   }
 
   function updateNode(nodeId: string, patch: Partial<BusinessDocumentNode>) {
@@ -141,6 +168,7 @@ export function InvoiceEditor({ invoice, hasUnsavedChanges, clientWorkflowStatus
             <div className="mt-2 flex min-w-0 flex-col items-start gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:gap-3">
               <input className="w-full min-w-0 rounded-xl border border-transparent text-xl font-bold text-slate-950 outline-none hover:border-slate-200 focus:border-blue-300 sm:w-auto sm:text-2xl" value={document.number} onChange={(event) => updateDocument({ number: event.target.value })} />
               <InvoiceStatusBadge status={invoice.status} />
+              <span className="rounded-full bg-blue-50 px-2.5 py-1 text-xs font-semibold text-blue-700">{TRANSMISSION_STATUS_LABELS[electronicInvoicing.transmissionStatus]}</span>
               {hasUnsavedChanges ? <span className="rounded-full bg-amber-100 px-2.5 py-1 text-xs font-semibold text-amber-800">Non enregistré</span> : null}
             </div>
             <p className="mt-1 break-words text-sm text-slate-500">{document.title}</p>
@@ -164,6 +192,8 @@ export function InvoiceEditor({ invoice, hasUnsavedChanges, clientWorkflowStatus
             <Field label="Date facture" type="date" value={document.issueDate} onChange={(issueDate) => updateDocument({ issueDate })} />
             <Field label="Echéance" type="date" value={document.dueDate ?? ""} onChange={(dueDate) => updateDocument({ dueDate })} />
           </div>
+
+          <ElectronicInvoicingPanel metadata={electronicInvoicing} onChange={updateElectronicInvoicing} />
 
           <div className="flex flex-wrap gap-2 border-y border-slate-100 py-3">
             <Button variant="secondary" onClick={addSection}><Plus className="h-4 w-4" /> Section</Button>
@@ -206,6 +236,44 @@ export function InvoiceEditor({ invoice, hasUnsavedChanges, clientWorkflowStatus
 
       {previewOpen ? <DocumentPreview document={document} /> : null}
       {sendOpen ? <DocumentSendDialog document={document} onClose={() => setSendOpen(false)} onDownload={() => downloadBusinessDocumentPdf(document)} /> : null}
+    </div>
+  );
+}
+
+function ElectronicInvoicingPanel({ metadata, onChange }: { metadata: ElectronicInvoicingMetadata; onChange: (patch: Partial<ElectronicInvoicingMetadata>) => void }) {
+  const missingRequiredFields = getElectronicInvoicingMissingFields(metadata);
+  const readinessClass = missingRequiredFields.length
+    ? "border-amber-200 bg-amber-50 text-amber-900"
+    : "border-emerald-200 bg-emerald-50 text-emerald-900";
+
+  return (
+    <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <div className="text-xs font-semibold uppercase tracking-[0.14em] text-blue-700">Facturation électronique</div>
+          <div className="mt-1 text-sm text-slate-600">Qualification PDP / e-reporting pour la réforme française.</div>
+        </div>
+        <span className={`rounded-full border px-2.5 py-1 text-xs font-semibold ${readinessClass}`}>
+          {missingRequiredFields.length ? "À compléter" : "Données minimales OK"}
+        </span>
+      </div>
+
+      <div className="mt-4 grid gap-3 md:grid-cols-2">
+        <SelectField label="Client" value={metadata.customerType} onChange={(customerType) => onChange({ customerType: customerType as ElectronicInvoicingCustomerType })} options={CUSTOMER_TYPE_LABELS} />
+        <SelectField label="Opération" value={metadata.operationType} onChange={(operationType) => onChange({ operationType: operationType as ElectronicInvoicingOperationType })} options={OPERATION_TYPE_LABELS} />
+        <Field label="SIREN client" value={metadata.buyerSiren ?? ""} onChange={(buyerSiren) => onChange({ buyerSiren: cleanIdentifier(buyerSiren) })} />
+        <Field label="SIRET client" value={metadata.buyerSiret ?? ""} onChange={(buyerSiret) => onChange({ buyerSiret: cleanIdentifier(buyerSiret) })} />
+        <Field label="TVA intra client" value={metadata.buyerVatNumber ?? ""} onChange={(buyerVatNumber) => onChange({ buyerVatNumber: cleanText(buyerVatNumber) })} />
+        <SelectField label="Exigibilité TVA" value={metadata.vatExigibility ?? "payment"} onChange={(vatExigibility) => onChange({ vatExigibility: vatExigibility as ElectronicInvoicingMetadata["vatExigibility"] })} options={{ payment: "À l'encaissement", debit: "Sur les débits" }} />
+        <SelectField label="Statut PDP" value={metadata.transmissionStatus} onChange={(transmissionStatus) => onChange({ transmissionStatus: transmissionStatus as ElectronicInvoicingTransmissionStatus })} options={TRANSMISSION_STATUS_LABELS} />
+        <Field label="Plateforme PDP" value={metadata.pdpProvider ?? ""} onChange={(pdpProvider) => onChange({ pdpProvider: cleanText(pdpProvider) })} />
+      </div>
+
+      {missingRequiredFields.length ? (
+        <div className="mt-3 rounded-xl border border-amber-200 bg-white px-3 py-2 text-xs font-medium text-amber-800">
+          Champs à compléter avant transmission PDP : {missingRequiredFields.join(", ")}.
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -329,6 +397,17 @@ function Field({ label, value, onChange, type = "text" }: { label: string; value
   return <label className="block text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">{label}<input className={`${inputClass} mt-1`} type={type} value={value} onChange={(event) => onChange(event.target.value)} /></label>;
 }
 
+function SelectField({ label, value, onChange, options }: { label: string; value: string; onChange: (value: string) => void; options: Record<string, string> }) {
+  return (
+    <label className="block text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">
+      {label}
+      <select className={`${inputClass} mt-1`} value={value} onChange={(event) => onChange(event.target.value)}>
+        {Object.entries(options).map(([optionValue, optionLabel]) => <option key={optionValue} value={optionValue}>{optionLabel}</option>)}
+      </select>
+    </label>
+  );
+}
+
 function NumberCell({ value, onChange }: { value: number; onChange: (value: number) => void }) {
   const [draft, setDraft] = useState(() => formatEditableNumber(value));
   const [focused, setFocused] = useState(false);
@@ -410,6 +489,37 @@ function routeProjectId(value?: string | null) {
   if (!id) return null;
   if (id.startsWith("opportunity-") || id.startsWith("prospect-") || id.startsWith("client-")) return id;
   return null;
+}
+
+function getElectronicInvoicingMissingFields(metadata: ElectronicInvoicingMetadata) {
+  const missing: string[] = [];
+  if (metadata.customerType === "b2b_fr" && !metadata.buyerSiren && !metadata.buyerSiret) missing.push("SIREN ou SIRET client");
+  if (!metadata.operationType) missing.push("type d'opération");
+  if (!metadata.vatExigibility) missing.push("exigibilité TVA");
+  return missing;
+}
+
+function normalizeElectronicInvoicing(value?: ElectronicInvoicingMetadata | null): ElectronicInvoicingMetadata {
+  return {
+    customerType: value?.customerType ?? "b2b_fr",
+    operationType: value?.operationType ?? "services",
+    transmissionStatus: value?.transmissionStatus ?? "not_ready",
+    buyerSiren: cleanIdentifier(value?.buyerSiren),
+    buyerSiret: cleanIdentifier(value?.buyerSiret),
+    sellerSiren: cleanIdentifier(value?.sellerSiren),
+    sellerSiret: cleanIdentifier(value?.sellerSiret),
+    buyerVatNumber: cleanText(value?.buyerVatNumber),
+    sellerVatNumber: cleanText(value?.sellerVatNumber),
+    vatExigibility: value?.vatExigibility ?? "payment",
+    pdpProvider: cleanText(value?.pdpProvider),
+    pdpReference: cleanText(value?.pdpReference),
+    lastTransmissionAt: value?.lastTransmissionAt ?? null,
+    rejectionReason: cleanText(value?.rejectionReason),
+  };
+}
+
+function cleanIdentifier(value?: string | null) {
+  return cleanText(value)?.replace(/\s/g, "") ?? null;
 }
 
 function cleanText(value?: string | null) {
