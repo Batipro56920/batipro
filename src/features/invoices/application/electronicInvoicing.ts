@@ -24,14 +24,16 @@ export const ELECTRONIC_INVOICING_TRANSMISSION_STATUS_LABELS: Record<ElectronicI
 export function normalizeInvoiceElectronicInvoicing(value?: ElectronicInvoicingMetadata | null, document?: BusinessDocument): ElectronicInvoicingMetadata {
   const buyerIdentifiers = inferPartyIdentifiers(document?.recipient);
   const sellerIdentifiers = inferPartyIdentifiers(document?.company);
+  const buyerSiret = cleanIdentifier(value?.buyerSiret) ?? buyerIdentifiers.siret;
+  const sellerSiret = cleanIdentifier(value?.sellerSiret) ?? sellerIdentifiers.siret;
   return {
     customerType: value?.customerType ?? "b2b_fr",
     operationType: value?.operationType ?? "works",
     transmissionStatus: value?.transmissionStatus ?? "not_ready",
-    buyerSiren: cleanIdentifier(value?.buyerSiren) ?? buyerIdentifiers.siren,
-    buyerSiret: cleanIdentifier(value?.buyerSiret) ?? buyerIdentifiers.siret,
-    sellerSiren: cleanIdentifier(value?.sellerSiren) ?? sellerIdentifiers.siren,
-    sellerSiret: cleanIdentifier(value?.sellerSiret) ?? sellerIdentifiers.siret,
+    buyerSiren: cleanIdentifier(value?.buyerSiren) ?? sirenFromSiret(buyerSiret) ?? buyerIdentifiers.siren,
+    buyerSiret,
+    sellerSiren: cleanIdentifier(value?.sellerSiren) ?? sirenFromSiret(sellerSiret) ?? sellerIdentifiers.siren,
+    sellerSiret,
     buyerVatNumber: cleanText(value?.buyerVatNumber),
     sellerVatNumber: cleanText(value?.sellerVatNumber),
     vatExigibility: value?.vatExigibility ?? "payment",
@@ -93,8 +95,12 @@ function inferPartyIdentifiers(party?: DocumentParty | null) {
   const siret = cleanIdentifier(party?.siret);
   return {
     siret,
-    siren: siret && siret.length >= 9 ? siret.slice(0, 9) : null,
+    siren: sirenFromSiret(siret),
   };
+}
+
+function sirenFromSiret(value?: string | null) {
+  return value && value.length >= 9 ? value.slice(0, 9) : null;
 }
 
 function cleanIdentifier(value?: string | null) {
