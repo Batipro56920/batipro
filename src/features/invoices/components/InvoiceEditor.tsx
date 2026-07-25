@@ -2,9 +2,9 @@ import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { ArrowRight, Download, FileCode2, Plus, Save, Send, Trash2 } from "lucide-react";
 import { Button } from "../../../components/ui/button";
-import { calculateDocumentTotals, createDocumentLine, createDocumentSection, DocumentPreview, DocumentSendDialog, DocumentTotalsCard, downloadBusinessDocumentPdf, flattenDocumentNodes, validateBusinessDocument, type BusinessDocument, type BusinessDocumentNode, type DocumentItemKind, type ElectronicInvoicingCustomerType, type ElectronicInvoicingMetadata, type ElectronicInvoicingOperationType, type ElectronicInvoicingTransmissionStatus } from "../../document-engine";
+import { calculateDocumentTotals, createDocumentLine, createDocumentSection, DocumentPreview, DocumentSendDialog, DocumentTotalsCard, downloadBusinessDocumentPdf, flattenDocumentNodes, validateBusinessDocument, type BusinessDocument, type BusinessDocumentNode, type DocumentItemKind, type ElectronicInvoicingCustomerType, type ElectronicInvoicingMetadata, type ElectronicInvoicingOperationType, type ElectronicInvoicingTransmissionStatus, type FacturXExternalValidationStatus } from "../../document-engine";
 import { addInvoicePayment, createProfitabilitySnapshot, getPaidAmount, getRemainingAmount, removeInvoicePayment } from "../application/invoicePayments";
-import { canUseInvoiceElectronicInvoicingStatus, cleanInvoiceElectronicInvoicingIdentifier, cleanInvoiceElectronicInvoicingText, ELECTRONIC_INVOICING_TRANSMISSION_STATUS_LABELS, getInvoiceElectronicInvoicingReadiness, INVOICE_ELECTRONIC_INVOICING_STRATEGY, normalizeInvoiceElectronicInvoicing, normalizeInvoiceElectronicInvoicingPatch } from "../application/electronicInvoicing";
+import { canUseInvoiceElectronicInvoicingStatus, cleanInvoiceElectronicInvoicingIdentifier, cleanInvoiceElectronicInvoicingText, ELECTRONIC_INVOICING_TRANSMISSION_STATUS_LABELS, FACTURX_EXTERNAL_VALIDATION_STATUS_LABELS, getInvoiceElectronicInvoicingReadiness, getInvoicePdpTransmissionReadiness, INVOICE_ELECTRONIC_INVOICING_STRATEGY, normalizeInvoiceElectronicInvoicing, normalizeInvoiceElectronicInvoicingPatch } from "../application/electronicInvoicing";
 import { downloadFacturXPdf, getFacturXExportReadiness, type FacturXExportReadiness } from "../application/facturxExport";
 import type { InvoicePayment, InvoiceRecord } from "../domain/types";
 import { InvoiceStatusBadge } from "./InvoiceStatusBadge";
@@ -201,6 +201,7 @@ export function InvoiceEditor({ invoice, hasUnsavedChanges, clientWorkflowStatus
               <span className={`rounded-full border px-2.5 py-1 text-xs font-semibold ${facturXReadiness.badgeClassName}`}>{facturXReadiness.label}</span>
               {facturXReadiness.canExport ? <span className="rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-900">{facturXReadiness.externalValidationLabel}</span> : null}
               {electronicInvoicing.lastFacturXExportAt ? <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-700">Export généré</span> : null}
+              {electronicInvoicing.facturXExternalValidationStatus === "valid" ? <span className="rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-semibold text-emerald-800">Validation externe OK</span> : null}
               {hasUnsavedChanges ? <span className="rounded-full bg-amber-100 px-2.5 py-1 text-xs font-semibold text-amber-800">Non enregistré</span> : null}
             </div>
             <p className="mt-1 break-words text-sm text-slate-500">{document.title}</p>
@@ -275,8 +276,16 @@ export function InvoiceEditor({ invoice, hasUnsavedChanges, clientWorkflowStatus
 
 function ElectronicInvoicingPanel({ document, metadata, onChange }: { document: BusinessDocument; metadata: ElectronicInvoicingMetadata; onChange: (patch: Partial<ElectronicInvoicingMetadata>) => void }) {
   const readiness = getInvoiceElectronicInvoicingReadiness(metadata);
+  const pdpReadiness = getInvoicePdpTransmissionReadiness(metadata);
   const facturXReadiness = getFacturXExportReadiness(document);
   const blockedTransmissionStatuses = getBlockedTransmissionStatusOptions(metadata);
+
+  function updateExternalValidationStatus(status: FacturXExternalValidationStatus) {
+    onChange({
+      facturXExternalValidationStatus: status,
+      facturXExternalValidationAt: status === "valid" ? metadata.facturXExternalValidationAt ?? new Date().toISOString() : null,
+    });
+  }
 
   return (
     <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
@@ -288,6 +297,9 @@ function ElectronicInvoicingPanel({ document, metadata, onChange }: { document: 
         <div className="flex flex-col gap-2 sm:items-end">
           <span className={`rounded-full border px-2.5 py-1 text-xs font-semibold ${readiness.badgeClassName}`}>
             {readiness.label}
+          </span>
+          <span className={`rounded-full border px-2.5 py-1 text-xs font-semibold ${pdpReadiness.badgeClassName}`}>
+            {pdpReadiness.label}
           </span>
           <Button variant="secondary" size="sm" disabled={!readiness.canMarkReady || metadata.transmissionStatus === "ready"} onClick={() => onChange({ transmissionStatus: "ready" })}>
             {INVOICE_ELECTRONIC_INVOICING_STRATEGY.readyActionLabel}
@@ -304,6 +316,8 @@ function ElectronicInvoicingPanel({ document, metadata, onChange }: { document: 
         <Field label="SIRET client" value={metadata.buyerSiret ?? ""} onChange={(buyerSiret) => onChange({ buyerSiret: cleanInvoiceElectronicInvoicingIdentifier(buyerSiret), buyerSiren: null })} />
         <Field label="TVA intra client" value={metadata.buyerVatNumber ?? ""} onChange={(buyerVatNumber) => onChange({ buyerVatNumber: cleanInvoiceElectronicInvoicingText(buyerVatNumber) })} />
         <SelectField label="Exigibilité TVA" value={metadata.vatExigibility ?? "payment"} onChange={(vatExigibility) => onChange({ vatExigibility: vatExigibility as ElectronicInvoicingMetadata["vatExigibility"] })} options={{ payment: "À l'encaissement", debit: "Sur les débits" }} />
+        <SelectField label="Validation externe Factur-X" value={metadata.facturXExternalValidationStatus ?? "not_checked"} onChange={(status) => updateExternalValidationStatus(status as FacturXExternalValidationStatus)} options={FACTURX_EXTERNAL_VALIDATION_STATUS_LABELS} />
+        <Field label="Validateur externe" value={metadata.facturXExternalValidator ?? ""} onChange={(facturXExternalValidator) => onChange({ facturXExternalValidator: cleanInvoiceElectronicInvoicingText(facturXExternalValidator) })} />
         <SelectField label="Statut e-facturation" value={metadata.transmissionStatus} onChange={(transmissionStatus) => onChange({ transmissionStatus: transmissionStatus as ElectronicInvoicingTransmissionStatus })} options={TRANSMISSION_STATUS_LABELS} disabledOptions={blockedTransmissionStatuses} />
         <Field label="Plateforme PDP" value={metadata.pdpProvider ?? ""} onChange={(pdpProvider) => onChange({ pdpProvider: cleanInvoiceElectronicInvoicingText(pdpProvider) })} />
       </div>
@@ -311,6 +325,11 @@ function ElectronicInvoicingPanel({ document, metadata, onChange }: { document: 
       {readiness.missingFields.length ? (
         <div className="mt-3 rounded-xl border border-amber-200 bg-white px-3 py-2 text-xs font-medium text-amber-800">
           Champs à compléter avant export Factur-X / transmission PDP : {readiness.missingFields.join(", ")}.
+        </div>
+      ) : null}
+      {!pdpReadiness.canTransmit ? (
+        <div className="mt-3 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs font-medium text-red-700">
+          Transmission PDP bloquée : {pdpReadiness.missingFields.join(", ")}.
         </div>
       ) : null}
 
@@ -334,6 +353,7 @@ function FacturXExportTrace({ metadata }: { metadata: ElectronicInvoicingMetadat
       <div className="font-semibold">Dernier export Factur-X : {formatDateTime(metadata.lastFacturXExportAt)}</div>
       <div className="mt-1 text-emerald-800">Fichier : {metadata.lastFacturXExportFilename ?? "nom non enregistré"}</div>
       <div className="mt-0.5 text-emerald-800">Exports générés : {metadata.facturXExportCount ?? 1}</div>
+      {metadata.facturXExternalValidationStatus === "valid" ? <div className="mt-0.5 text-emerald-800">Validation externe : {formatDateTime(metadata.facturXExternalValidationAt ?? metadata.lastFacturXExportAt)}</div> : null}
     </div>
   );
 }
