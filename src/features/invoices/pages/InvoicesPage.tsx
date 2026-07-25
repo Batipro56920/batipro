@@ -17,7 +17,7 @@ import { invoiceTypeLabel } from "../application/invoiceFactory";
 
 type InvoiceStatusFilter = "all" | "a_encaisser" | InvoiceStatus;
 type ClientWorkflowFilter = "all" | "actionable";
-type ElectronicInvoicingFilter = "all" | "facturx_incomplete" | "facturx_ready";
+type ElectronicInvoicingFilter = "all" | "facturx_incomplete" | "facturx_ready" | "pdp_simulation_queued";
 
 const COLLECTABLE_INVOICE_STATUSES: InvoiceStatus[] = ["sent", "partially_paid", "overdue"];
 const ACTIONABLE_CLIENT_WORKFLOW_STATUSES = ["sent", "viewed", "modification_requested", "expired"] as const;
@@ -50,6 +50,7 @@ const ELECTRONIC_INVOICING_FILTERS: Array<{ value: ElectronicInvoicingFilter; la
   { value: "all", label: "Toutes Factur-X" },
   { value: "facturx_incomplete", label: "Factur-X à corriger" },
   { value: "facturx_ready", label: "Factur-X prévalidée" },
+  { value: "pdp_simulation_queued", label: "Simulation PDP en file" },
 ];
 
 function matchesStatusFilter(invoice: InvoiceRecord, filter: InvoiceStatusFilter) {
@@ -67,6 +68,10 @@ function matchesElectronicInvoicingFilter(invoice: InvoiceRecord, filter: Electr
   if (filter === "all") return true;
   const readiness = getFacturXExportReadiness(invoice.document);
   if (filter === "facturx_ready") return readiness.canExport;
+  if (filter === "pdp_simulation_queued") {
+    const electronicInvoicing = normalizeInvoiceElectronicInvoicing(invoice.document.electronicInvoicing, invoice.document);
+    return electronicInvoicing.pdpSimulationStatus === "queued";
+  }
   return !readiness.canExport;
 }
 
@@ -200,6 +205,11 @@ export default function InvoicesPage() {
     [filteredInvoices],
   );
 
+  const firstPdpSimulationQueuedInvoice = useMemo(
+    () => filteredInvoices.find((invoice) => normalizeInvoiceElectronicInvoicing(invoice.document.electronicInvoicing, invoice.document).pdpSimulationStatus === "queued") ?? null,
+    [filteredInvoices],
+  );
+
   async function refresh(selectFirst = true) {
     if (dirtyInvoiceIds.size > 0) {
       const shouldDiscardChanges = typeof window !== "undefined" && window.confirm("Des modifications de facture ne sont pas enregistrées. Les perdre et rafraîchir les données ?");
@@ -273,22 +283,41 @@ export default function InvoicesPage() {
 
   function selectElectronicInvoicingFilter(nextFilter: ElectronicInvoicingFilter) {
     setElectronicInvoicingFilter(nextFilter);
-    if (nextFilter !== "facturx_incomplete") return;
-    const firstIncompleteInvoice = invoices.find((invoice) => {
-      const text = query.trim().toLowerCase();
-      const matchesText = !text || [
-        invoice.document.number,
-        invoice.document.recipient.displayName,
-        invoice.document.siteAddress,
-        invoice.document.title,
-      ].some((value) => String(value ?? "").toLowerCase().includes(text));
-      return matchesText
-        && matchesStatusFilter(invoice, statusFilter)
-        && matchesClientWorkflowFilter(invoice, clientWorkflowFilter, clientWorkflowByInvoiceId)
-        && matchesElectronicInvoicingFilter(invoice, nextFilter)
-        && (typeFilter === "all" || invoice.type === typeFilter);
-    });
-    if (firstIncompleteInvoice) selectInvoice(firstIncompleteInvoice.id);
+    if (nextFilter === "facturx_incomplete") {
+      const firstIncompleteInvoice = invoices.find((invoice) => {
+        const text = query.trim().toLowerCase();
+        const matchesText = !text || [
+          invoice.document.number,
+          invoice.document.recipient.displayName,
+          invoice.document.siteAddress,
+          invoice.document.title,
+        ].some((value) => String(value ?? "").toLowerCase().includes(text));
+        return matchesText
+          && matchesStatusFilter(invoice, statusFilter)
+          && matchesClientWorkflowFilter(invoice, clientWorkflowFilter, clientWorkflowByInvoiceId)
+          && matchesElectronicInvoicingFilter(invoice, nextFilter)
+          && (typeFilter === "all" || invoice.type === typeFilter);
+      });
+      if (firstIncompleteInvoice) selectInvoice(firstIncompleteInvoice.id);
+      return;
+    }
+    if (nextFilter === "pdp_simulation_queued") {
+      const firstQueuedInvoice = invoices.find((invoice) => {
+        const text = query.trim().toLowerCase();
+        const matchesText = !text || [
+          invoice.document.number,
+          invoice.document.recipient.displayName,
+          invoice.document.siteAddress,
+          invoice.document.title,
+        ].some((value) => String(value ?? "").toLowerCase().includes(text));
+        return matchesText
+          && matchesStatusFilter(invoice, statusFilter)
+          && matchesClientWorkflowFilter(invoice, clientWorkflowFilter, clientWorkflowByInvoiceId)
+          && matchesElectronicInvoicingFilter(invoice, nextFilter)
+          && (typeFilter === "all" || invoice.type === typeFilter);
+      });
+      if (firstQueuedInvoice) selectInvoice(firstQueuedInvoice.id);
+    }
   }
 
   function update(invoice: InvoiceRecord) {
@@ -405,6 +434,29 @@ export default function InvoicesPage() {
               className="rounded-xl border border-red-200 bg-white px-4 py-2 text-sm font-semibold text-red-700 hover:border-red-300 hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-50"
             >
               Ouvrir la première à corriger
+            </button>
+          </div>
+        </div>
+      ) : null}
+
+      {!loading && electronicInvoicingFilter === "pdp_simulation_queued" ? (
+        <div className="rounded-2xl border border-blue-200 bg-blue-50 p-4 text-sm text-blue-900">
+          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+            <div>
+              <div className="font-semibold">Factures en file simulation PDP</div>
+              <p className="mt-1 text-blue-800">
+                {firstPdpSimulationQueuedInvoice
+                  ? `${firstPdpSimulationQueuedInvoice.document.number} attend une simulation de dépôt PDP.`
+                  : "Aucune facture en file simulation PDP avec les filtres actifs."}
+              </p>
+            </div>
+            <button
+              type="button"
+              disabled={!firstPdpSimulationQueuedInvoice}
+              onClick={() => firstPdpSimulationQueuedInvoice && selectInvoice(firstPdpSimulationQueuedInvoice.id)}
+              className="rounded-xl border border-blue-200 bg-white px-4 py-2 text-sm font-semibold text-blue-700 hover:border-blue-300 hover:bg-blue-100 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              Ouvrir la première en file
             </button>
           </div>
         </div>
@@ -590,6 +642,9 @@ function EmptyState({ title, description }: { title: string; description: string
 }
 
 function emptyStateDescription(clientWorkflowFilter: ClientWorkflowFilter, clientWorkflowLoadFailed: boolean, electronicInvoicingFilter: ElectronicInvoicingFilter) {
+  if (electronicInvoicingFilter === "pdp_simulation_queued") {
+    return "Aucune facture n'est en file de simulation PDP avec les filtres actifs.";
+  }
   if (electronicInvoicingFilter === "facturx_incomplete") {
     return "Aucune facture n'est à corriger pour l'export Factur-X avec les filtres actifs.";
   }
