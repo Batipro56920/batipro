@@ -9,6 +9,21 @@ type FacturXExportResult = {
   xml: string;
 };
 
+export type FacturXChecklistItem = {
+  label: string;
+  ok: boolean;
+  detail?: string;
+};
+
+export type FacturXExportReadiness = {
+  canExport: boolean;
+  label: "Factur-X exportable" | "Factur-X à corriger";
+  badgeClassName: string;
+  missingFields: string[];
+  warnings: string[];
+  checklist: FacturXChecklistItem[];
+};
+
 type JsPdfAttachmentInternal = jsPDF & {
   addMetadata?: (metadata: string) => void;
   internal: jsPDF["internal"] & {
@@ -20,18 +35,69 @@ type JsPdfAttachmentInternal = jsPDF & {
   };
 };
 
-export function buildFacturXXmlExport(document: BusinessDocument): FacturXExportResult {
+export function getFacturXExportReadiness(document: BusinessDocument): FacturXExportReadiness {
   const metadata = normalizeInvoiceElectronicInvoicing(document.electronicInvoicing, document);
-  const readiness = getInvoiceElectronicInvoicingReadiness(metadata);
+  const electronicReadiness = getInvoiceElectronicInvoicingReadiness(metadata);
+  const totals = document.totals ?? calculateDocumentTotals(document);
+  const lines = getFacturXLines(document);
+  const lineIssues = getLineIssues(lines);
+  const missingFields = [
+    ...electronicReadiness.missingFields,
+    ...requiredField(!["invoice", "credit_note"].includes(document.kind), "document facture ou avoir"),
+    ...requiredField(!cleanText(document.number), "numéro de facture"),
+    ...requiredField(!isValidDocumentDate(document.issueDate), "date de facture"),
+    ...requiredField(!cleanText(document.company.displayName), "nom entreprise"),
+    ...requiredField(!cleanText(document.recipient.displayName), "nom client"),
+    ...requiredField(document.currency !== "EUR", "devise EUR"),
+    ...requiredField(lines.length === 0, "au moins une ligne facturable"),
+    ...lineIssues,
+    ...requiredField(!Number.isFinite(totals.totalHt), "total HT calculable"),
+    ...requiredField(!Number.isFinite(totals.totalVat), "TVA calculable"),
+    ...requiredField(!Number.isFinite(totals.totalTtc) || totals.totalTtc <= 0, "total TTC positif"),
+    ...requiredField(totals.vatBreakdown.length === 0, "ventilation TVA"),
+  ];
+  const warnings = [
+    ...requiredField(!cleanText(document.company.address), "adresse entreprise non renseignée"),
+    ...requiredField(!cleanText(document.recipient.address) && !cleanText(document.siteAddress), "adresse client ou chantier non renseignée"),
+    ...requiredField(!document.dueDate, "échéance non renseignée"),
+    ...requiredField(!metadata.pdpProvider, "PDP non choisie"),
+  ];
+  const canExport = missingFields.length === 0;
 
-  if (!readiness.canMarkReady) {
+  return {
+    canExport,
+    label: canExport ? "Factur-X exportable" : "Factur-X à corriger",
+    badgeClassName: canExport
+      ? "border-emerald-200 bg-emerald-50 text-emerald-900"
+      : "border-red-200 bg-red-50 text-red-800",
+    missingFields,
+    warnings,
+    checklist: [
+      {
+        label: "Données e-facturation minimales",
+        ok: electronicReadiness.canMarkReady,
+        detail: electronicReadiness.canMarkReady ? undefined : electronicReadiness.missingFields.join(", "),
+      },
+      { label: "Document facture / avoir", ok: ["invoice", "credit_note"].includes(document.kind) },
+      { label: "Numéro et date", ok: Boolean(cleanText(document.number)) && isValidDocumentDate(document.issueDate) },
+      { label: "Entreprise et client", ok: Boolean(cleanText(document.company.displayName) && cleanText(document.recipient.displayName)) },
+      { label: "Lignes facturables", ok: lines.length > 0 && lineIssues.length === 0, detail: lineIssues[0] },
+      { label: "Totaux et TVA", ok: Number.isFinite(totals.totalTtc) && totals.totalTtc > 0 && totals.vatBreakdown.length > 0 },
+      { label: "PDF avec XML embarqué", ok: true, detail: FACTURX_XML_FILENAME },
+    ],
+  };
+}
+
+export function buildFacturXXmlExport(document: BusinessDocument): FacturXExportResult {
+  const readiness = getFacturXExportReadiness(document);
+
+  if (!readiness.canExport) {
     throw new Error(`Export Factur-X impossible : ${readiness.missingFields.join(", ")}.`);
   }
 
+  const metadata = normalizeInvoiceElectronicInvoicing(document.electronicInvoicing, document);
   const totals = document.totals ?? calculateDocumentTotals(document);
-  const lines = flattenDocumentNodes(document.nodes)
-    .map((row) => row.node)
-    .filter((node): node is DocumentItemNode => node.type === "line" || node.type === "composite");
+  const lines = getFacturXLines(document);
   const filename = `${sanitizeFilename(document.number)}-${FACTURX_XML_FILENAME}`;
 
   return {
@@ -223,6 +289,39 @@ function buildFacturXXmpMetadata(createdAt: Date) {
     </rdf:Description>
   </rdf:RDF>
 </x:xmpmeta>`;
+}
+
+function getFacturXLines(document: BusinessDocument) {
+  return flattenDocumentNodes(document.nodes)
+    .map((row) => row.node)
+    .filter((node): node is DocumentItemNode => node.type === "line" || node.type === "composite");
+}
+
+function getLineIssues(lines: DocumentItemNode[]) {
+  const issues: string[] = [];
+  lines.forEach((line, index) => {
+    const prefix = `ligne ${index + 1}`;
+    if (!cleanText(line.title)) issues.push(`${prefix} sans désignation`);
+    if (!Number.isFinite(line.quantity) || line.quantity <= 0) issues.push(`${prefix} quantité invalide`);
+    if (!Number.isFinite(line.unitPriceHt) || line.unitPriceHt < 0) issues.push(`${prefix} prix HT invalide`);
+    if (!Number.isFinite(line.vatRate) || line.vatRate < 0) issues.push(`${prefix} TVA invalide`);
+  });
+  return issues;
+}
+
+function requiredField(condition: boolean, label: string) {
+  return condition ? [label] : [];
+}
+
+function cleanText(value?: string | null) {
+  const text = String(value ?? "").trim();
+  return text || null;
+}
+
+function isValidDocumentDate(value?: string | null) {
+  if (!value) return false;
+  const [dateOnly] = value.split("T");
+  return /^\d{4}-\d{2}-\d{2}$/.test(dateOnly) && !Number.isNaN(new Date(dateOnly).getTime());
 }
 
 function partyIdentifierXml(identifier?: string | null) {
