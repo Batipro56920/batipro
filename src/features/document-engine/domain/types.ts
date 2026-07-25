@@ -84,6 +84,29 @@ export type DocumentConditionSheet = {
   conditions: DocumentCondition[];
 };
 
+export type ElectronicInvoicingCustomerType = "b2b_fr" | "b2c_fr" | "public_fr" | "foreign";
+
+export type ElectronicInvoicingOperationType = "services" | "goods" | "mixed" | "works";
+
+export type ElectronicInvoicingTransmissionStatus = "not_ready" | "ready" | "pending_pdp" | "transmitted" | "rejected";
+
+export type ElectronicInvoicingMetadata = {
+  customerType: ElectronicInvoicingCustomerType;
+  operationType: ElectronicInvoicingOperationType;
+  transmissionStatus: ElectronicInvoicingTransmissionStatus;
+  buyerSiren?: string | null;
+  buyerSiret?: string | null;
+  sellerSiren?: string | null;
+  sellerSiret?: string | null;
+  buyerVatNumber?: string | null;
+  sellerVatNumber?: string | null;
+  vatExigibility?: "debit" | "payment" | null;
+  pdpProvider?: string | null;
+  pdpReference?: string | null;
+  lastTransmissionAt?: string | null;
+  rejectionReason?: string | null;
+};
+
 export type DocumentBaseNode = {
   id: string;
   type: DocumentLineKind;
@@ -189,6 +212,7 @@ export type BusinessDocument = {
   currency: "EUR";
   settings: DocumentSettings;
   terms: DocumentTerms;
+  electronicInvoicing?: ElectronicInvoicingMetadata | null;
   conditionSheet?: DocumentConditionSheet | null;
   nodes: BusinessDocumentNode[];
   attachments: DocumentAttachment[];
