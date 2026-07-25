@@ -366,9 +366,51 @@ function ElectronicInvoicingPanel({ document, metadata, onChange }: { document: 
         </div>
       ) : null}
 
+      <PdpPreTransmissionPanel document={document} metadata={metadata} />
       <PdpSimulationTrace metadata={metadata} />
       <FacturXExportTrace metadata={metadata} />
       <FacturXChecklist readiness={facturXReadiness} />
+    </div>
+  );
+}
+
+function PdpPreTransmissionPanel({ document, metadata }: { document: BusinessDocument; metadata: ElectronicInvoicingMetadata }) {
+  const readiness = getInvoicePdpTransmissionReadiness(metadata);
+  const minimumReadiness = getInvoiceElectronicInvoicingReadiness(metadata);
+  const totals = document.totals ?? calculateDocumentTotals(document);
+  const checklist = [
+    { label: "Données minimales", ok: minimumReadiness.canMarkReady },
+    { label: "Export Factur-X généré", ok: Boolean(metadata.lastFacturXExportAt) },
+    { label: "Validation externe Factur-X", ok: metadata.facturXExternalValidationStatus === "valid" },
+    { label: "PDP choisie", ok: Boolean(metadata.pdpProvider) },
+  ];
+
+  return (
+    <div className={`mt-4 rounded-xl border px-3 py-3 text-xs ${readiness.canTransmit ? "border-emerald-200 bg-emerald-50 text-emerald-900" : "border-slate-200 bg-white text-slate-700"}`}>
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <div className="font-semibold text-slate-950">Pré-transmission PDP</div>
+          <div className="mt-1 text-slate-500">Récapitulatif interne avant futur connecteur PDP. Aucun envoi réel n'est déclenché ici.</div>
+        </div>
+        <span className={`w-fit rounded-full border px-2.5 py-1 font-semibold ${readiness.badgeClassName}`}>{readiness.label}</span>
+      </div>
+      <div className="mt-3 grid gap-2 md:grid-cols-2">
+        <Line label="Facture" value={document.number} />
+        <Line label="Client" value={document.recipient.displayName || "Client à définir"} />
+        <Line label="Montant TTC" value={formatCurrency(totals.totalTtc)} />
+        <Line label="PDP" value={metadata.pdpProvider ?? "PDP à renseigner"} />
+        <Line label="SIRET entreprise" value={metadata.sellerSiret ?? metadata.sellerSiren ?? "À renseigner"} />
+        <Line label="SIRET client" value={metadata.buyerSiret ?? metadata.buyerSiren ?? "À renseigner"} />
+      </div>
+      <div className="mt-3 grid gap-2 md:grid-cols-2">
+        {checklist.map((item) => (
+          <div key={item.label} className="flex items-center gap-2">
+            <span className={`h-2.5 w-2.5 rounded-full ${item.ok ? "bg-emerald-500" : "bg-red-500"}`} />
+            <span className="font-medium">{item.label}</span>
+          </div>
+        ))}
+      </div>
+      {!readiness.canTransmit ? <div className="mt-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 font-medium text-red-700">Pré-transmission bloquée : {readiness.missingFields.join(", ")}.</div> : null}
     </div>
   );
 }
