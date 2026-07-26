@@ -11,6 +11,14 @@ function signatureLabel(value: string) {
   return value || "—";
 }
 
+function quoteHasClientApproval(row: QuoteWithParty) {
+  return row.statut === "accepte" || row.signature_status === "signe" || row.signature_status === "signé";
+}
+
+function needsChantierHandoff(row: QuoteWithParty) {
+  return !row.chantierPath && quoteHasClientApproval(row);
+}
+
 function ProjectLinkAction({ row, compact = false }: { row: QuoteWithParty; compact?: boolean }) {
   if (row.hasProjectLink) {
     return (
@@ -48,6 +56,49 @@ function QuoteEditAction({ row, compact = false }: { row: QuoteWithParty; compac
   );
 }
 
+function ChantierHandoffAction({
+  row,
+  actions,
+  compact = false,
+}: {
+  row: QuoteWithParty;
+  actions: QuoteActionHandlers;
+  compact?: boolean;
+}) {
+  if (row.chantierPath) {
+    return (
+      <Link
+        to={row.chantierPath}
+        className={compact ? "rounded-lg border border-emerald-200 bg-emerald-50 px-2 py-1 text-xs font-medium text-emerald-800 hover:bg-emerald-100" : "inline-flex h-9 items-center justify-center rounded-xl border border-emerald-200 bg-emerald-50 px-3 text-sm font-semibold text-emerald-800 hover:bg-emerald-100"}
+        title="Ouvrir le chantier déjà lié à ce devis."
+      >
+        Chantier
+      </Link>
+    );
+  }
+
+  if (needsChantierHandoff(row)) {
+    return (
+      <button
+        type="button"
+        onClick={() => actions.onTransform(row)}
+        className={compact ? "rounded-lg border border-emerald-300 bg-emerald-600 px-2 py-1 text-xs font-medium text-white hover:bg-emerald-700" : "inline-flex h-9 items-center justify-center rounded-xl bg-emerald-600 px-3 text-sm font-semibold text-white hover:bg-emerald-700"}
+        title="Créer le chantier à partir de ce devis accepté."
+      >
+        Créer chantier
+      </button>
+    );
+  }
+
+  if (compact) return null;
+
+  return (
+    <button type="button" onClick={() => actions.onTransform(row)} className="inline-flex h-9 items-center justify-center rounded-xl border border-slate-200 px-3 text-sm font-semibold text-slate-700 hover:bg-slate-50">
+      Transformer
+    </button>
+  );
+}
+
 function QuoteMobileCard({
   row,
   actions,
@@ -80,20 +131,17 @@ function QuoteMobileCard({
             <div className="text-xs text-slate-500">Signature : {signatureLabel(row.signature_status)}</div>
           </div>
         </div>
+        {needsChantierHandoff(row) ? (
+          <div className="mt-4 rounded-xl border border-emerald-100 bg-emerald-50 px-3 py-2 text-sm font-medium text-emerald-800">
+            Devis validé : chantier à créer pour lancer la préparation.
+          </div>
+        ) : null}
       </button>
 
       <div className="mt-4 flex flex-wrap gap-2" onClick={(event) => event.stopPropagation()}>
         <QuoteEditAction row={row} />
         <ProjectLinkAction row={row} />
-        {row.chantierPath ? (
-          <Link to={row.chantierPath} className="inline-flex h-9 items-center justify-center rounded-xl border border-emerald-200 bg-emerald-50 px-3 text-sm font-semibold text-emerald-800 hover:bg-emerald-100" title="Ouvrir le chantier déjà lié à ce devis.">
-            Chantier
-          </Link>
-        ) : (
-          <button type="button" onClick={() => actions.onTransform(row)} className="inline-flex h-9 items-center justify-center rounded-xl border border-slate-200 px-3 text-sm font-semibold text-slate-700 hover:bg-slate-50">
-            Transformer
-          </button>
-        )}
+        <ChantierHandoffAction row={row} actions={actions} />
         <details className="relative">
           <summary className="flex h-9 cursor-pointer list-none items-center rounded-xl border border-slate-200 px-3 text-sm font-semibold text-slate-700 hover:bg-slate-50">
             <MoreHorizontal className="h-4 w-4" />
@@ -144,6 +192,11 @@ export function QuotesTable({
                 <td className="px-4 py-3 text-slate-700">{row.partyLabel}</td>
                 <td className="px-4 py-3">
                   <div className="line-clamp-2 max-w-xs font-medium text-slate-800">{row.description ?? row.lot ?? "Projet à compléter"}</div>
+                  {row.chantierPath ? (
+                    <div className="mt-2 inline-flex rounded-full bg-emerald-50 px-2 py-1 text-xs font-medium text-emerald-700">Chantier créé</div>
+                  ) : needsChantierHandoff(row) ? (
+                    <div className="mt-2 inline-flex rounded-full bg-amber-50 px-2 py-1 text-xs font-medium text-amber-700">Chantier à créer</div>
+                  ) : null}
                 </td>
                 <td className="px-4 py-3">
                   <div className="font-semibold text-slate-950">{eur(row.montant_ht)} HT</div>
@@ -156,9 +209,7 @@ export function QuotesTable({
                 <td className="px-4 py-3" onClick={(event) => event.stopPropagation()}>
                   <div className="flex flex-wrap gap-1">
                     <ProjectLinkAction row={row} compact />
-                    {row.chantierPath ? (
-                      <Link to={row.chantierPath} className="rounded-lg border border-emerald-200 bg-emerald-50 px-2 py-1 text-xs font-medium text-emerald-800 hover:bg-emerald-100" title="Ouvrir le chantier déjà lié à ce devis.">Chantier</Link>
-                    ) : null}
+                    <ChantierHandoffAction row={row} actions={actions} compact />
                     <QuoteEditAction row={row} compact />
                     <button type="button" onClick={() => actions.onStatus(row, "envoye")} className="rounded-lg border border-slate-200 px-2 py-1 text-xs font-medium hover:bg-slate-50">Envoyer</button>
                     <button type="button" onClick={() => actions.onStatus(row, "relance_1")} className="rounded-lg border border-slate-200 px-2 py-1 text-xs font-medium hover:bg-slate-50">Relancer</button>
