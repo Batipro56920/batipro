@@ -4,6 +4,21 @@ import type { QuoteActionHandlers, QuoteWithParty } from "../types";
 import { dateOnly, eur } from "../../components/crmFormat";
 import { QuoteStatusChip } from "./QuoteStatusChip";
 
+function signatureLabel(value: string) {
+  if (value === "attente_signature") return "Attente signature";
+  if (value === "signe" || value === "signé") return "Signé";
+  if (value === "refuse") return "Refusé";
+  return value || "—";
+}
+
+function quoteHasClientApproval(quote: QuoteWithParty) {
+  return quote.statut === "accepte" || quote.signature_status === "signe" || quote.signature_status === "signé";
+}
+
+function needsChantierHandoff(quote: QuoteWithParty) {
+  return !quote.chantierPath && quoteHasClientApproval(quote);
+}
+
 export function QuoteDetailDrawer({
   quote,
   actions,
@@ -56,9 +71,26 @@ export function QuoteDetailDrawer({
 
           <section className="rounded-2xl border border-slate-200 p-4">
             <h4 className="text-sm font-semibold text-slate-950">Signature</h4>
-            <div className="mt-3 text-sm text-slate-600">Statut : {quote.signature_status}</div>
+            <div className="mt-3 text-sm text-slate-600">Statut : {signatureLabel(quote.signature_status)}</div>
             <div className="mt-1 text-sm text-slate-600">Accepté : {dateOnly(quote.accepted_at)}</div>
             <div className="mt-1 text-sm text-slate-600">Refusé : {dateOnly(quote.refused_at)}</div>
+          </section>
+
+          <section className={quote.chantierPath ? "rounded-2xl border border-emerald-200 bg-emerald-50 p-4" : needsChantierHandoff(quote) ? "rounded-2xl border border-amber-200 bg-amber-50 p-4" : "rounded-2xl border border-slate-200 p-4"}>
+            <h4 className="text-sm font-semibold text-slate-950">Suite chantier</h4>
+            {quote.chantierPath ? (
+              <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <p className="text-sm text-emerald-800">Un chantier est déjà rattaché à ce devis. La préparation peut être pilotée depuis le dossier chantier.</p>
+                <Link to={quote.chantierPath} className="rounded-xl border border-emerald-200 bg-white px-3 py-2 text-center text-sm font-medium text-emerald-800 hover:bg-emerald-100" title="Ouvrir le chantier déjà lié à ce devis.">Ouvrir chantier</Link>
+              </div>
+            ) : needsChantierHandoff(quote) ? (
+              <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <p className="text-sm text-amber-800">Devis validé côté client : créer le chantier pour lancer la préparation, les tâches et le pilotage terrain.</p>
+                <button type="button" onClick={() => actions.onTransform(quote)} className="rounded-xl bg-emerald-600 px-3 py-2 text-sm font-semibold text-white hover:bg-emerald-700">Créer le chantier</button>
+              </div>
+            ) : (
+              <p className="mt-3 text-sm text-slate-600">Le chantier sera à créer quand le devis sera accepté ou signé.</p>
+            )}
           </section>
 
           <section className="rounded-2xl border border-slate-200 p-4">
