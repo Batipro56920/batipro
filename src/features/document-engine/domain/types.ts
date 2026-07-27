@@ -92,6 +92,10 @@ export type ElectronicInvoicingTransmissionStatus = "not_ready" | "ready" | "pen
 
 export type FacturXExternalValidationStatus = "not_checked" | "valid" | "invalid";
 
+export type PdpConnectionMode = "manual_deposit" | "api_connector" | "chorus_pro";
+
+export type PdpConnectorStatus = "not_configured" | "sandbox" | "production";
+
 export type PdpSimulationStatus = "not_queued" | "queued" | "simulated" | "blocked";
 
 export type PdpSimulationEvent = {
@@ -115,6 +119,8 @@ export type ElectronicInvoicingMetadata = {
   vatExigibility?: "debit" | "payment" | null;
   pdpProvider?: string | null;
   pdpReference?: string | null;
+  pdpConnectionMode?: PdpConnectionMode | null;
+  pdpConnectorStatus?: PdpConnectorStatus | null;
   lastTransmissionAt?: string | null;
   rejectionReason?: string | null;
   lastFacturXExportAt?: string | null;
