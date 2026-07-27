@@ -1,24 +1,22 @@
 import { useMemo, useSyncExternalStore } from "react";
-import { al } from "./al";
 import { fr } from "./fr";
 
-export type Language = "fr" | "al";
+export type Language = "fr";
 
 type TranslationValue = string | { [key: string]: TranslationValue };
 type TranslationTree = { [key: string]: TranslationValue };
 type Params = Record<string, string | number>;
 
 const STORAGE_KEY = "batipro.language";
-const dictionaries: Record<Language, TranslationTree> = { fr, al: al as TranslationTree };
+const dictionaries: Record<Language, TranslationTree> = { fr };
 const localeByLanguage: Record<Language, string> = {
   fr: "fr-FR",
-  al: "sq-AL",
 };
 
 const listeners = new Set<() => void>();
 
 function isLanguage(value: string | null | undefined): value is Language {
-  return value === "fr" || value === "al";
+  return value === "fr";
 }
 
 function readStoredLanguage(): Language {
