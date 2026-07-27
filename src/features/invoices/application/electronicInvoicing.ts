@@ -28,13 +28,14 @@ export const INVOICE_ELECTRONIC_INVOICING_STRATEGY: InvoiceElectronicInvoicingSt
   mode: "facturx_export_first",
   label: "Export Factur-X d'abord",
   shortLabel: "Factur-X first",
-  description: "Batipro prépare les factures au format exportable Factur-X avant transmission via la PDP choisie. Le connecteur PDP direct reste un lot séparé.",
+  description: "Batipro prépare et contrôle les factures au format Factur-X. La transmission légale passe ensuite par la plateforme agréée choisie par l'entreprise.",
   readyActionLabel: "Marquer prête Factur-X",
   readyBadgeLabel: "Prête Factur-X",
-  nextStepLabel: "Prochain lot : générer le fichier Factur-X conforme.",
+  nextStepLabel: "Prochain lot : choisir la plateforme agréée et déposer ou raccorder la facture.",
 };
 
-export const DEFAULT_PDP_PROVIDER = "Abby";
+export const DEFAULT_PDP_PROVIDER = "";
+export const PDP_PROVIDER_PLACEHOLDER = "Plateforme agréée à choisir";
 
 const READY_TRANSMISSION_STATUSES = new Set<ElectronicInvoicingTransmissionStatus>(["ready"]);
 const PDP_TRANSMISSION_STATUSES = new Set<ElectronicInvoicingTransmissionStatus>(["pending_pdp", "transmitted"]);
@@ -67,7 +68,7 @@ export const PDP_CONNECTOR_STATUS_LABELS: Record<PdpConnectorStatus, string> = {
 };
 
 export const RECOMMENDED_PDP_PROVIDER_OPTIONS = [
-  DEFAULT_PDP_PROVIDER,
+  "Abby",
   "Dougs Facturation gratuite",
   "Tiime",
   "Pennylane",
@@ -159,7 +160,7 @@ export function getInvoicePdpTransmissionReadiness(metadata: ElectronicInvoicing
     ...minimumMissingFields,
     ...requiredField(!metadata.lastFacturXExportAt, "export Factur-X généré"),
     ...requiredField(!hasOfficialFacturXValidation, "validation officielle Factur-X avec validateur renseigné"),
-    ...requiredField(!metadata.pdpProvider, "PDP choisie"),
+    ...requiredField(!metadata.pdpProvider, "plateforme agréée choisie"),
     ...requiredField(!metadata.pdpConnectionMode, "mode de raccordement PDP"),
     ...requiredField(requiresConfiguredApiConnector && metadata.pdpConnectorStatus !== "production", "connecteur PDP production configuré"),
   ];
