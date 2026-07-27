@@ -89,6 +89,8 @@ export function normalizeInvoiceElectronicInvoicing(value?: ElectronicInvoicingM
     pdpSimulationQueuedAt: value?.pdpSimulationQueuedAt ?? null,
     pdpSimulationLastRunAt: value?.pdpSimulationLastRunAt ?? null,
     pdpSimulationEventLog: normalizePdpSimulationEventLog(value?.pdpSimulationEventLog),
+    pdpPreTransmissionValidatedAt: value?.pdpPreTransmissionValidatedAt ?? null,
+    pdpPreTransmissionValidationNote: cleanText(value?.pdpPreTransmissionValidationNote),
   };
 }
 
