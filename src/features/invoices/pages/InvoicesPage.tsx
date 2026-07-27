@@ -17,7 +17,7 @@ import { invoiceTypeLabel } from "../application/invoiceFactory";
 
 type InvoiceStatusFilter = "all" | "a_encaisser" | InvoiceStatus;
 type ClientWorkflowFilter = "all" | "actionable";
-type ElectronicInvoicingFilter = "all" | "facturx_incomplete" | "facturx_ready" | "pdp_simulation_queued";
+type ElectronicInvoicingFilter = "all" | "facturx_incomplete" | "facturx_ready" | "pdp_ready" | "pdp_internal_validated" | "pdp_simulation_queued";
 
 const COLLECTABLE_INVOICE_STATUSES: InvoiceStatus[] = ["sent", "partially_paid", "overdue"];
 const ACTIONABLE_CLIENT_WORKFLOW_STATUSES = ["sent", "viewed", "modification_requested", "expired"] as const;
@@ -50,6 +50,8 @@ const ELECTRONIC_INVOICING_FILTERS: Array<{ value: ElectronicInvoicingFilter; la
   { value: "all", label: "Toutes Factur-X" },
   { value: "facturx_incomplete", label: "Factur-X à corriger" },
   { value: "facturx_ready", label: "Factur-X prévalidée" },
+  { value: "pdp_ready", label: "PDP transmissible" },
+  { value: "pdp_internal_validated", label: "Validation interne PDP" },
   { value: "pdp_simulation_queued", label: "Simulation PDP en file" },
 ];
 
@@ -66,12 +68,12 @@ function matchesClientWorkflowFilter(invoice: InvoiceRecord, filter: ClientWorkf
 
 function matchesElectronicInvoicingFilter(invoice: InvoiceRecord, filter: ElectronicInvoicingFilter) {
   if (filter === "all") return true;
+  const electronicInvoicing = normalizeInvoiceElectronicInvoicing(invoice.document.electronicInvoicing, invoice.document);
+  if (filter === "pdp_ready") return getInvoicePdpTransmissionReadiness(electronicInvoicing).canTransmit;
+  if (filter === "pdp_internal_validated") return Boolean(electronicInvoicing.pdpPreTransmissionValidatedAt);
+  if (filter === "pdp_simulation_queued") return electronicInvoicing.pdpSimulationStatus === "queued";
   const readiness = getFacturXExportReadiness(invoice.document);
   if (filter === "facturx_ready") return readiness.canExport;
-  if (filter === "pdp_simulation_queued") {
-    const electronicInvoicing = normalizeInvoiceElectronicInvoicing(invoice.document.electronicInvoicing, invoice.document);
-    return electronicInvoicing.pdpSimulationStatus === "queued";
-  }
   return !readiness.canExport;
 }
 
@@ -176,10 +178,11 @@ export default function InvoicesPage() {
       if (electronicInvoicing.lastFacturXExportAt) acc.facturXExported += 1;
       if (electronicInvoicing.facturXExternalValidationStatus === "valid") acc.facturXValidated += 1;
       if (getInvoicePdpTransmissionReadiness(electronicInvoicing).canTransmit) acc.pdpReady += 1;
+      if (electronicInvoicing.pdpPreTransmissionValidatedAt) acc.pdpInternalValidated += 1;
       if (electronicInvoicing.pdpSimulationStatus === "queued") acc.pdpSimulationQueued += 1;
       if (electronicInvoicing.pdpSimulationStatus === "simulated") acc.pdpSimulationDone += 1;
       return acc;
-    }, { amount: 0, paid: 0, overdue: 0, drafts: 0, facturXReady: 0, facturXIncomplete: 0, facturXExported: 0, facturXValidated: 0, pdpReady: 0, pdpSimulationQueued: 0, pdpSimulationDone: 0 });
+    }, { amount: 0, paid: 0, overdue: 0, drafts: 0, facturXReady: 0, facturXIncomplete: 0, facturXExported: 0, facturXValidated: 0, pdpReady: 0, pdpInternalValidated: 0, pdpSimulationQueued: 0, pdpSimulationDone: 0 });
     return totals;
   }, [invoices]);
 
@@ -301,8 +304,8 @@ export default function InvoicesPage() {
       if (firstIncompleteInvoice) selectInvoice(firstIncompleteInvoice.id);
       return;
     }
-    if (nextFilter === "pdp_simulation_queued") {
-      const firstQueuedInvoice = invoices.find((invoice) => {
+    if (nextFilter === "pdp_simulation_queued" || nextFilter === "pdp_internal_validated" || nextFilter === "pdp_ready") {
+      const firstMatchingInvoice = invoices.find((invoice) => {
         const text = query.trim().toLowerCase();
         const matchesText = !text || [
           invoice.document.number,
@@ -316,7 +319,7 @@ export default function InvoicesPage() {
           && matchesElectronicInvoicingFilter(invoice, nextFilter)
           && (typeFilter === "all" || invoice.type === typeFilter);
       });
-      if (firstQueuedInvoice) selectInvoice(firstQueuedInvoice.id);
+      if (firstMatchingInvoice) selectInvoice(firstMatchingInvoice.id);
     }
   }
 
@@ -353,13 +356,14 @@ export default function InvoicesPage() {
       {error ? <div className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">{error}</div> : null}
       {loading ? <div className="rounded-3xl border border-slate-200 bg-white p-8 text-center text-sm text-slate-500">Chargement des factures...</div> : null}
 
-      {!loading ? <section className="grid gap-4 md:grid-cols-3 xl:grid-cols-8">
+      {!loading ? <section className="grid gap-4 md:grid-cols-3 xl:grid-cols-9">
         <StatCard label="Factures" value={invoices.length} hint="Documents de facturation" />
         <StatCard label="Brouillons" value={stats.drafts} hint="À finaliser" />
         <StatCard label="Factur-X prévalidées" value={stats.facturXReady} hint="Validation externe requise" />
         <StatCard label="Exports Factur-X" value={stats.facturXExported} hint="PDF générés" />
         <StatCard label="Validées externe" value={stats.facturXValidated} hint="Contrôle renseigné" />
         <StatCard label="PDP transmissibles" value={stats.pdpReady} hint="Non envoyées" />
+        <StatCard label="Validées interne" value={stats.pdpInternalValidated} hint="Dernier contrôle PDP" />
         <StatCard label="Simulations PDP" value={stats.pdpSimulationQueued + stats.pdpSimulationDone} hint={`${stats.pdpSimulationQueued} en file`} />
         <StatCard label="Encaissé" value={formatCurrency(stats.paid)} hint={`${stats.overdue} en retard`} />
       </section> : null}
@@ -526,6 +530,7 @@ export default function InvoicesPage() {
                     <FacturXStatusBadge canExport={facturXReadiness.canExport} />
                     <FacturXExportStatusBadge metadata={electronicInvoicing} />
                     <FacturXExternalValidationBadge metadata={electronicInvoicing} />
+                    <PdpInternalValidationBadge metadata={electronicInvoicing} />
                     <PdpSimulationStatusBadge metadata={electronicInvoicing} />
                     {pdpReadiness.canTransmit ? <span className="rounded-full bg-blue-100 px-2.5 py-1 text-xs font-semibold text-blue-800">PDP possible</span> : null}
                     {clientWorkflowStatus ? <ClientWorkflowStatusBadge status={clientWorkflowStatus} /> : null}
@@ -619,6 +624,12 @@ function FacturXExternalValidationBadge({ metadata }: { metadata: ElectronicInvo
   return null;
 }
 
+function PdpInternalValidationBadge({ metadata }: { metadata: ElectronicInvoicingMetadata }) {
+  return metadata.pdpPreTransmissionValidatedAt
+    ? <span className="rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-semibold text-emerald-800">Validation interne PDP</span>
+    : null;
+}
+
 function PdpSimulationStatusBadge({ metadata }: { metadata: ElectronicInvoicingMetadata }) {
   if (metadata.pdpSimulationStatus === "queued") {
     return <span className="rounded-full bg-blue-100 px-2.5 py-1 text-xs font-semibold text-blue-800">{PDP_SIMULATION_STATUS_LABELS.queued}</span>;
@@ -644,6 +655,12 @@ function EmptyState({ title, description }: { title: string; description: string
 function emptyStateDescription(clientWorkflowFilter: ClientWorkflowFilter, clientWorkflowLoadFailed: boolean, electronicInvoicingFilter: ElectronicInvoicingFilter) {
   if (electronicInvoicingFilter === "pdp_simulation_queued") {
     return "Aucune facture n'est en file de simulation PDP avec les filtres actifs.";
+  }
+  if (electronicInvoicingFilter === "pdp_internal_validated") {
+    return "Aucune facture n'a encore de validation interne PDP avec les filtres actifs.";
+  }
+  if (electronicInvoicingFilter === "pdp_ready") {
+    return "Aucune facture n'est transmissible PDP avec les filtres actifs.";
   }
   if (electronicInvoicingFilter === "facturx_incomplete") {
     return "Aucune facture n'est à corriger pour l'export Factur-X avec les filtres actifs.";
