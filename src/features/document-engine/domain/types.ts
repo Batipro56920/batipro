@@ -127,6 +127,8 @@ export type ElectronicInvoicingMetadata = {
   pdpSimulationQueuedAt?: string | null;
   pdpSimulationLastRunAt?: string | null;
   pdpSimulationEventLog?: PdpSimulationEvent[] | null;
+  pdpPreTransmissionValidatedAt?: string | null;
+  pdpPreTransmissionValidationNote?: string | null;
 };
 
 export type DocumentBaseNode = {
