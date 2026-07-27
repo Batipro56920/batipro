@@ -202,6 +202,7 @@ export function InvoiceEditor({ invoice, hasUnsavedChanges, clientWorkflowStatus
               {facturXReadiness.canExport ? <span className="rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-900">{facturXReadiness.externalValidationLabel}</span> : null}
               {electronicInvoicing.lastFacturXExportAt ? <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-700">Export généré</span> : null}
               {electronicInvoicing.facturXExternalValidationStatus === "valid" ? <span className="rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-semibold text-emerald-800">Validation externe OK</span> : null}
+              {electronicInvoicing.pdpPreTransmissionValidatedAt ? <span className="rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-semibold text-emerald-800">Validation interne PDP</span> : null}
               {electronicInvoicing.pdpSimulationStatus === "queued" ? <span className="rounded-full bg-blue-100 px-2.5 py-1 text-xs font-semibold text-blue-800">Simulation PDP en file</span> : null}
               {electronicInvoicing.pdpSimulationStatus === "simulated" ? <span className="rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-semibold text-emerald-800">Simulation PDP OK</span> : null}
               {hasUnsavedChanges ? <span className="rounded-full bg-amber-100 px-2.5 py-1 text-xs font-semibold text-amber-800">Non enregistré</span> : null}
@@ -366,7 +367,7 @@ function ElectronicInvoicingPanel({ document, metadata, onChange }: { document: 
         </div>
       ) : null}
 
-      <PdpPreTransmissionPanel document={document} metadata={metadata} />
+      <PdpPreTransmissionPanel document={document} metadata={metadata} onChange={onChange} />
       <PdpSimulationTrace metadata={metadata} />
       <FacturXExportTrace metadata={metadata} />
       <FacturXChecklist readiness={facturXReadiness} />
@@ -374,16 +375,33 @@ function ElectronicInvoicingPanel({ document, metadata, onChange }: { document: 
   );
 }
 
-function PdpPreTransmissionPanel({ document, metadata }: { document: BusinessDocument; metadata: ElectronicInvoicingMetadata }) {
+function PdpPreTransmissionPanel({ document, metadata, onChange }: { document: BusinessDocument; metadata: ElectronicInvoicingMetadata; onChange: (patch: Partial<ElectronicInvoicingMetadata>) => void }) {
   const readiness = getInvoicePdpTransmissionReadiness(metadata);
   const minimumReadiness = getInvoiceElectronicInvoicingReadiness(metadata);
   const totals = document.totals ?? calculateDocumentTotals(document);
+  const isValidated = Boolean(metadata.pdpPreTransmissionValidatedAt);
   const checklist = [
     { label: "Données minimales", ok: minimumReadiness.canMarkReady },
     { label: "Export Factur-X généré", ok: Boolean(metadata.lastFacturXExportAt) },
     { label: "Validation externe Factur-X", ok: metadata.facturXExternalValidationStatus === "valid" },
     { label: "PDP choisie", ok: Boolean(metadata.pdpProvider) },
+    { label: "Validation finale interne", ok: isValidated },
   ];
+
+  function validatePreTransmission() {
+    if (!readiness.canTransmit) return;
+    onChange({
+      pdpPreTransmissionValidatedAt: new Date().toISOString(),
+      pdpPreTransmissionValidationNote: "Validation finale interne effectuée avant future transmission PDP.",
+    });
+  }
+
+  function resetPreTransmissionValidation() {
+    onChange({
+      pdpPreTransmissionValidatedAt: null,
+      pdpPreTransmissionValidationNote: null,
+    });
+  }
 
   return (
     <div className={`mt-4 rounded-xl border px-3 py-3 text-xs ${readiness.canTransmit ? "border-emerald-200 bg-emerald-50 text-emerald-900" : "border-slate-200 bg-white text-slate-700"}`}>
@@ -410,7 +428,23 @@ function PdpPreTransmissionPanel({ document, metadata }: { document: BusinessDoc
           </div>
         ))}
       </div>
+      {metadata.pdpPreTransmissionValidatedAt ? (
+        <div className="mt-3 rounded-lg border border-emerald-200 bg-white px-3 py-2 font-medium text-emerald-800">
+          Validation finale interne : {formatDateTime(metadata.pdpPreTransmissionValidatedAt)}
+          {metadata.pdpPreTransmissionValidationNote ? <span className="mt-0.5 block text-emerald-700">{metadata.pdpPreTransmissionValidationNote}</span> : null}
+        </div>
+      ) : null}
       {!readiness.canTransmit ? <div className="mt-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 font-medium text-red-700">Pré-transmission bloquée : {readiness.missingFields.join(", ")}.</div> : null}
+      <div className="mt-3 flex flex-wrap gap-2">
+        <Button variant="secondary" size="sm" disabled={!readiness.canTransmit || isValidated} onClick={validatePreTransmission}>
+          Valider en interne avant PDP
+        </Button>
+        {isValidated ? (
+          <Button variant="ghost" size="sm" onClick={resetPreTransmissionValidation}>
+            Retirer validation interne
+          </Button>
+        ) : null}
+      </div>
     </div>
   );
 }
