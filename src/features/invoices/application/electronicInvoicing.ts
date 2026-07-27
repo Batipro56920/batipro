@@ -34,6 +34,8 @@ export const INVOICE_ELECTRONIC_INVOICING_STRATEGY: InvoiceElectronicInvoicingSt
   nextStepLabel: "Prochain lot : générer le fichier Factur-X conforme.",
 };
 
+export const DEFAULT_PDP_PROVIDER = "Abby";
+
 const READY_TRANSMISSION_STATUSES = new Set<ElectronicInvoicingTransmissionStatus>(["ready"]);
 const PDP_TRANSMISSION_STATUSES = new Set<ElectronicInvoicingTransmissionStatus>(["pending_pdp", "transmitted"]);
 const MAX_PDP_SIMULATION_EVENTS = 8;
@@ -65,6 +67,11 @@ export const PDP_CONNECTOR_STATUS_LABELS: Record<PdpConnectorStatus, string> = {
 };
 
 export const RECOMMENDED_PDP_PROVIDER_OPTIONS = [
+  DEFAULT_PDP_PROVIDER,
+  "Dougs Facturation gratuite",
+  "Tiime",
+  "Pennylane",
+  "Qonto",
   "Cegid",
   "Esker",
   "jefacture.com",
@@ -101,7 +108,7 @@ export function normalizeInvoiceElectronicInvoicing(value?: ElectronicInvoicingM
     buyerVatNumber: cleanText(value?.buyerVatNumber),
     sellerVatNumber: cleanText(value?.sellerVatNumber),
     vatExigibility: value?.vatExigibility ?? "payment",
-    pdpProvider: cleanText(value?.pdpProvider),
+    pdpProvider: cleanText(value?.pdpProvider) ?? DEFAULT_PDP_PROVIDER,
     pdpReference: cleanText(value?.pdpReference),
     pdpConnectionMode: normalizePdpConnectionMode(value?.pdpConnectionMode),
     pdpConnectorStatus: normalizePdpConnectorStatus(value?.pdpConnectorStatus),
