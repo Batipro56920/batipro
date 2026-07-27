@@ -110,7 +110,7 @@ export default function LayoutShell() {
   const storageKey = "batipro.sidebarCollapsed";
   const navigate = useNavigate();
   const location = useLocation();
-  const { language, setLanguage, t } = useI18n();
+  const { t } = useI18n();
   const defaultCompanyName = t("layout.defaultCompanyName");
   const searchInputRef = useRef<HTMLInputElement | null>(null);
   const mobileSearchInputRef = useRef<HTMLInputElement | null>(null);
@@ -410,26 +410,6 @@ export default function LayoutShell() {
               >
                 <CircleHelp className="h-4 w-4" />
               </button>
-              <div
-                className="hidden items-center rounded-xl border border-slate-200 bg-slate-50 p-1 shadow-sm md:inline-flex"
-                role="group"
-                aria-label={t("layout.languageSwitcherLabel")}
-              >
-                {(["fr", "al"] as const).map((value) => (
-                  <button
-                    key={value}
-                    type="button"
-                    onClick={() => setLanguage(value)}
-                    className={[
-                      "rounded-lg px-2.5 py-1.5 text-xs font-medium transition",
-                      language === value ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-900",
-                    ].join(" ")}
-                    aria-pressed={language === value}
-                  >
-                    {t(`common.languages.${value}`)}
-                  </button>
-                ))}
-              </div>
               <button
                 type="button"
                 onClick={logout}
