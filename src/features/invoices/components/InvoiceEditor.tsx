@@ -2,9 +2,9 @@ import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { ArrowRight, Download, FileCode2, Plus, Save, Send, Trash2 } from "lucide-react";
 import { Button } from "../../../components/ui/button";
-import { calculateDocumentTotals, createDocumentLine, createDocumentSection, DocumentPreview, DocumentSendDialog, DocumentTotalsCard, downloadBusinessDocumentPdf, flattenDocumentNodes, validateBusinessDocument, type BusinessDocument, type BusinessDocumentNode, type DocumentItemKind, type ElectronicInvoicingCustomerType, type ElectronicInvoicingMetadata, type ElectronicInvoicingOperationType, type ElectronicInvoicingTransmissionStatus, type FacturXExternalValidationStatus } from "../../document-engine";
+import { calculateDocumentTotals, createDocumentLine, createDocumentSection, DocumentPreview, DocumentSendDialog, DocumentTotalsCard, downloadBusinessDocumentPdf, flattenDocumentNodes, validateBusinessDocument, type BusinessDocument, type BusinessDocumentNode, type DocumentItemKind, type ElectronicInvoicingCustomerType, type ElectronicInvoicingMetadata, type ElectronicInvoicingOperationType, type ElectronicInvoicingTransmissionStatus, type FacturXExternalValidationStatus, type PdpConnectionMode, type PdpConnectorStatus } from "../../document-engine";
 import { addInvoicePayment, createProfitabilitySnapshot, getPaidAmount, getRemainingAmount, removeInvoicePayment } from "../application/invoicePayments";
-import { appendPdpSimulationEvent, buildPdpSimulationEvent, canUseInvoiceElectronicInvoicingStatus, cleanInvoiceElectronicInvoicingIdentifier, cleanInvoiceElectronicInvoicingText, ELECTRONIC_INVOICING_TRANSMISSION_STATUS_LABELS, FACTURX_EXTERNAL_VALIDATION_STATUS_LABELS, getInvoiceElectronicInvoicingReadiness, getInvoicePdpTransmissionReadiness, INVOICE_ELECTRONIC_INVOICING_STRATEGY, normalizeInvoiceElectronicInvoicing, normalizeInvoiceElectronicInvoicingPatch, PDP_SIMULATION_STATUS_LABELS } from "../application/electronicInvoicing";
+import { appendPdpSimulationEvent, buildPdpSimulationEvent, canUseInvoiceElectronicInvoicingStatus, cleanInvoiceElectronicInvoicingIdentifier, cleanInvoiceElectronicInvoicingText, ELECTRONIC_INVOICING_TRANSMISSION_STATUS_LABELS, FACTURX_EXTERNAL_VALIDATION_STATUS_LABELS, getInvoiceElectronicInvoicingReadiness, getInvoicePdpTransmissionReadiness, INVOICE_ELECTRONIC_INVOICING_STRATEGY, normalizeInvoiceElectronicInvoicing, normalizeInvoiceElectronicInvoicingPatch, PDP_CONNECTION_MODE_LABELS, PDP_CONNECTOR_STATUS_LABELS, PDP_PROVIDER_PLACEHOLDER, PDP_SIMULATION_STATUS_LABELS, RECOMMENDED_PDP_PROVIDER_OPTIONS } from "../application/electronicInvoicing";
 import { downloadFacturXPdf, getFacturXExportReadiness, type FacturXExportReadiness } from "../application/facturxExport";
 import type { InvoicePayment, InvoiceRecord } from "../domain/types";
 import { InvoiceStatusBadge } from "./InvoiceStatusBadge";
@@ -76,6 +76,15 @@ const OPERATION_TYPE_LABELS: Record<ElectronicInvoicingOperationType, string> = 
 };
 
 const TRANSMISSION_STATUS_LABELS = ELECTRONIC_INVOICING_TRANSMISSION_STATUS_LABELS;
+const PDP_PROVIDER_SELECT_OPTIONS: Record<string, string> = {
+  "": PDP_PROVIDER_PLACEHOLDER,
+  ...Object.fromEntries(RECOMMENDED_PDP_PROVIDER_OPTIONS.map((provider) => [provider, provider])),
+};
+const PDP_CONNECTION_MODE_OPTIONS: Record<string, string> = {
+  "": "Mode à choisir",
+  ...PDP_CONNECTION_MODE_LABELS,
+};
+const PDP_CONNECTOR_STATUS_OPTIONS: Record<PdpConnectorStatus, string> = PDP_CONNECTOR_STATUS_LABELS;
 
 export function InvoiceEditor({ invoice, hasUnsavedChanges, clientWorkflowStatus = null, onUnsavedChange, onChange, onSave }: InvoiceEditorProps) {
   const [previewOpen, setPreviewOpen] = useState(false);
@@ -283,6 +292,8 @@ function ElectronicInvoicingPanel({ document, metadata, onChange }: { document: 
   const facturXReadiness = getFacturXExportReadiness(document);
   const blockedTransmissionStatuses = getBlockedTransmissionStatusOptions(metadata);
   const canRunSimulation = pdpReadiness.canTransmit && metadata.pdpSimulationStatus === "queued";
+  const pdpProviderOptions = useMemo(() => buildPdpProviderOptions(metadata.pdpProvider), [metadata.pdpProvider]);
+  const showConnectorStatus = metadata.pdpConnectionMode === "api_connector";
 
   function updateExternalValidationStatus(status: FacturXExternalValidationStatus) {
     onChange({
@@ -291,10 +302,18 @@ function ElectronicInvoicingPanel({ document, metadata, onChange }: { document: 
     });
   }
 
+  function updatePdpConnectionMode(value: string) {
+    const pdpConnectionMode = value ? value as PdpConnectionMode : null;
+    onChange({
+      pdpConnectionMode,
+      pdpConnectorStatus: pdpConnectionMode === "api_connector" ? metadata.pdpConnectorStatus ?? "not_configured" : "not_configured",
+    });
+  }
+
   function queuePdpSimulation() {
     if (!pdpReadiness.canTransmit) return;
     const queuedAt = new Date().toISOString();
-    const event = buildPdpSimulationEvent("queued", "Facture mise en file PDP simulée", `PDP : ${metadata.pdpProvider ?? "non renseignée"}`);
+    const event = buildPdpSimulationEvent("queued", "Facture mise en file PDP simulée", `Plateforme : ${metadata.pdpProvider ?? "non renseignée"}`);
     onChange({
       pdpSimulationStatus: "queued",
       pdpSimulationQueuedAt: queuedAt,
@@ -353,7 +372,10 @@ function ElectronicInvoicingPanel({ document, metadata, onChange }: { document: 
         <SelectField label="Validation externe Factur-X" value={metadata.facturXExternalValidationStatus ?? "not_checked"} onChange={(status) => updateExternalValidationStatus(status as FacturXExternalValidationStatus)} options={FACTURX_EXTERNAL_VALIDATION_STATUS_LABELS} />
         <Field label="Validateur externe" value={metadata.facturXExternalValidator ?? ""} onChange={(facturXExternalValidator) => onChange({ facturXExternalValidator: cleanInvoiceElectronicInvoicingText(facturXExternalValidator) })} />
         <SelectField label="Statut e-facturation" value={metadata.transmissionStatus} onChange={(transmissionStatus) => onChange({ transmissionStatus: transmissionStatus as ElectronicInvoicingTransmissionStatus })} options={TRANSMISSION_STATUS_LABELS} disabledOptions={blockedTransmissionStatuses} />
-        <Field label="Plateforme PDP" value={metadata.pdpProvider ?? ""} onChange={(pdpProvider) => onChange({ pdpProvider: cleanInvoiceElectronicInvoicingText(pdpProvider) })} />
+        <SelectField label="Plateforme agréée" value={metadata.pdpProvider ?? ""} onChange={(pdpProvider) => onChange({ pdpProvider: cleanInvoiceElectronicInvoicingText(pdpProvider) })} options={pdpProviderOptions} />
+        <SelectField label="Mode PDP" value={metadata.pdpConnectionMode ?? ""} onChange={updatePdpConnectionMode} options={PDP_CONNECTION_MODE_OPTIONS} />
+        {showConnectorStatus ? <SelectField label="Connecteur PDP" value={metadata.pdpConnectorStatus ?? "not_configured"} onChange={(pdpConnectorStatus) => onChange({ pdpConnectorStatus: pdpConnectorStatus as PdpConnectorStatus })} options={PDP_CONNECTOR_STATUS_OPTIONS} /> : null}
+        <Field label="Référence PDP" value={metadata.pdpReference ?? ""} onChange={(pdpReference) => onChange({ pdpReference: cleanInvoiceElectronicInvoicingText(pdpReference) })} />
       </div>
 
       {readiness.missingFields.length ? (
@@ -384,7 +406,8 @@ function PdpPreTransmissionPanel({ document, metadata, onChange }: { document: B
     { label: "Données minimales", ok: minimumReadiness.canMarkReady },
     { label: "Export Factur-X généré", ok: Boolean(metadata.lastFacturXExportAt) },
     { label: "Validation externe Factur-X", ok: metadata.facturXExternalValidationStatus === "valid" },
-    { label: "PDP choisie", ok: Boolean(metadata.pdpProvider) },
+    { label: "Plateforme agréée choisie", ok: Boolean(metadata.pdpProvider) },
+    { label: "Mode de raccordement PDP", ok: Boolean(metadata.pdpConnectionMode) },
     { label: "Validation finale interne", ok: isValidated },
   ];
 
@@ -416,7 +439,9 @@ function PdpPreTransmissionPanel({ document, metadata, onChange }: { document: B
         <Line label="Facture" value={document.number} />
         <Line label="Client" value={document.recipient.displayName || "Client à définir"} />
         <Line label="Montant TTC" value={formatCurrency(totals.totalTtc)} />
-        <Line label="PDP" value={metadata.pdpProvider ?? "PDP à renseigner"} />
+        <Line label="Plateforme" value={metadata.pdpProvider ?? PDP_PROVIDER_PLACEHOLDER} />
+        <Line label="Mode PDP" value={formatPdpConnectionMode(metadata.pdpConnectionMode)} />
+        {metadata.pdpConnectionMode === "api_connector" ? <Line label="Connecteur" value={formatPdpConnectorStatus(metadata.pdpConnectorStatus)} /> : null}
         <Line label="SIRET entreprise" value={metadata.sellerSiret ?? metadata.sellerSiren ?? "À renseigner"} />
         <Line label="SIRET client" value={metadata.buyerSiret ?? metadata.buyerSiren ?? "À renseigner"} />
       </div>
@@ -693,6 +718,21 @@ function NumberCell({ value, onChange }: { value: number; onChange: (value: numb
 
 function Line({ label, value }: { label: string; value: string }) {
   return <div className="flex justify-between gap-3"><span>{label}</span><span className="font-semibold text-slate-950">{value}</span></div>;
+}
+
+function buildPdpProviderOptions(currentProvider?: string | null) {
+  const options = { ...PDP_PROVIDER_SELECT_OPTIONS };
+  const current = cleanText(currentProvider);
+  if (current && !options[current]) options[current] = current;
+  return options;
+}
+
+function formatPdpConnectionMode(mode?: PdpConnectionMode | null) {
+  return mode ? PDP_CONNECTION_MODE_LABELS[mode] : "À choisir";
+}
+
+function formatPdpConnectorStatus(status?: PdpConnectorStatus | null) {
+  return status ? PDP_CONNECTOR_STATUS_LABELS[status] : "Non configuré";
 }
 
 function buildInvoiceContextLinks(invoice: InvoiceRecord): ContextLink[] {
