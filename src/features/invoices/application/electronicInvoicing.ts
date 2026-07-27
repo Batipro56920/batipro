@@ -47,9 +47,9 @@ export const ELECTRONIC_INVOICING_TRANSMISSION_STATUS_LABELS: Record<ElectronicI
 };
 
 export const FACTURX_EXTERNAL_VALIDATION_STATUS_LABELS: Record<FacturXExternalValidationStatus, string> = {
-  not_checked: "Validation externe à faire",
-  valid: "Validation externe OK",
-  invalid: "Validation externe rejetée",
+  not_checked: "Validation officielle à faire",
+  valid: "Validation officielle OK",
+  invalid: "Validation officielle rejetée",
 };
 
 export const PDP_SIMULATION_STATUS_LABELS: Record<PdpSimulationStatus, string> = {
@@ -118,10 +118,11 @@ export function getInvoiceElectronicInvoicingReadiness(metadata: ElectronicInvoi
 
 export function getInvoicePdpTransmissionReadiness(metadata: ElectronicInvoicingMetadata): PdpTransmissionReadiness {
   const minimumMissingFields = getInvoiceElectronicInvoicingMissingFields(metadata);
+  const hasOfficialFacturXValidation = metadata.facturXExternalValidationStatus === "valid" && Boolean(metadata.facturXExternalValidator);
   const missingFields = [
     ...minimumMissingFields,
     ...requiredField(!metadata.lastFacturXExportAt, "export Factur-X généré"),
-    ...requiredField(metadata.facturXExternalValidationStatus !== "valid", "validation externe Factur-X OK"),
+    ...requiredField(!hasOfficialFacturXValidation, "validation officielle Factur-X avec validateur renseigné"),
     ...requiredField(!metadata.pdpProvider, "PDP choisie"),
   ];
   const canTransmit = missingFields.length === 0;
