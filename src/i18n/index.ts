@@ -19,10 +19,13 @@ function isLanguage(value: string | null | undefined): value is Language {
   return value === "fr";
 }
 
+function normalizeLanguage(value: string | null | undefined): Language {
+  return isLanguage(value) ? value : "fr";
+}
+
 function readStoredLanguage(): Language {
   if (typeof window === "undefined") return "fr";
-  const stored = window.localStorage.getItem(STORAGE_KEY);
-  return isLanguage(stored) ? stored : "fr";
+  return normalizeLanguage(window.localStorage.getItem(STORAGE_KEY));
 }
 
 let currentLanguage: Language = readStoredLanguage();
@@ -62,22 +65,24 @@ export function getLanguage(): Language {
   return currentLanguage;
 }
 
-export function getLocale(language: Language = currentLanguage) {
-  return localeByLanguage[language];
+export function getLocale(language: Language | string = currentLanguage) {
+  return localeByLanguage[normalizeLanguage(language)];
 }
 
-export function setLanguage(language: Language) {
-  if (language === currentLanguage) return;
-  currentLanguage = language;
+export function setLanguage(language: Language | string) {
+  const nextLanguage = normalizeLanguage(language);
+  if (nextLanguage === currentLanguage) return;
+  currentLanguage = nextLanguage;
   if (typeof window !== "undefined") {
-    window.localStorage.setItem(STORAGE_KEY, language);
+    window.localStorage.setItem(STORAGE_KEY, nextLanguage);
   }
-  syncDocumentLanguage(language);
+  syncDocumentLanguage(nextLanguage);
   notify();
 }
 
-export function translate(key: string, params?: Params, language: Language = currentLanguage) {
-  const localized = resolvePath(dictionaries[language], key);
+export function translate(key: string, params?: Params, language: Language | string = currentLanguage) {
+  const selectedLanguage = normalizeLanguage(language);
+  const localized = resolvePath(dictionaries[selectedLanguage], key);
   const fallback = resolvePath(dictionaries.fr, key);
   const value = localized ?? fallback ?? key;
   return interpolate(value, params);
@@ -86,7 +91,7 @@ export function translate(key: string, params?: Params, language: Language = cur
 export function formatDate(
   value: string | number | Date | null | undefined,
   options?: Intl.DateTimeFormatOptions,
-  language: Language = currentLanguage,
+  language: Language | string = currentLanguage,
 ) {
   if (!value) return "";
   const date = value instanceof Date ? value : new Date(value);
@@ -96,7 +101,7 @@ export function formatDate(
 
 export function formatDateTime(
   value: string | number | Date | null | undefined,
-  language: Language = currentLanguage,
+  language: Language | string = currentLanguage,
   options?: Intl.DateTimeFormatOptions,
 ) {
   return formatDate(
@@ -115,7 +120,7 @@ export function formatDateTime(
 export function formatNumber(
   value: number,
   options?: Intl.NumberFormatOptions,
-  language: Language = currentLanguage,
+  language: Language | string = currentLanguage,
 ) {
   return new Intl.NumberFormat(getLocale(language), options).format(value);
 }
