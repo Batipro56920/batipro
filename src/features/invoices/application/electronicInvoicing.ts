@@ -1,4 +1,4 @@
-import type { BusinessDocument, DocumentParty, ElectronicInvoicingMetadata, ElectronicInvoicingTransmissionStatus, FacturXExternalValidationStatus, PdpSimulationEvent, PdpSimulationStatus } from "../../document-engine";
+import type { BusinessDocument, DocumentParty, ElectronicInvoicingMetadata, ElectronicInvoicingTransmissionStatus, FacturXExternalValidationStatus, PdpConnectionMode, PdpConnectorStatus, PdpSimulationEvent, PdpSimulationStatus } from "../../document-engine";
 
 export type ElectronicInvoicingReadiness = {
   canMarkReady: boolean;
@@ -52,6 +52,32 @@ export const FACTURX_EXTERNAL_VALIDATION_STATUS_LABELS: Record<FacturXExternalVa
   invalid: "Validation officielle rejetée",
 };
 
+export const PDP_CONNECTION_MODE_LABELS: Record<PdpConnectionMode, string> = {
+  manual_deposit: "Dépôt manuel PDP",
+  api_connector: "Connecteur API PDP",
+  chorus_pro: "Chorus Pro secteur public",
+};
+
+export const PDP_CONNECTOR_STATUS_LABELS: Record<PdpConnectorStatus, string> = {
+  not_configured: "Connecteur non configuré",
+  sandbox: "Connecteur bac à sable",
+  production: "Connecteur production",
+};
+
+export const RECOMMENDED_PDP_PROVIDER_OPTIONS = [
+  "Cegid",
+  "Esker",
+  "jefacture.com",
+  "Axonaut",
+  "Dext",
+  "Indy",
+  "Cegedim",
+  "Basware",
+  "Generix Group",
+  "EDICOM",
+  "Autre plateforme agréée",
+] as const;
+
 export const PDP_SIMULATION_STATUS_LABELS: Record<PdpSimulationStatus, string> = {
   not_queued: "Non simulée",
   queued: "En file simulation PDP",
@@ -77,6 +103,8 @@ export function normalizeInvoiceElectronicInvoicing(value?: ElectronicInvoicingM
     vatExigibility: value?.vatExigibility ?? "payment",
     pdpProvider: cleanText(value?.pdpProvider),
     pdpReference: cleanText(value?.pdpReference),
+    pdpConnectionMode: normalizePdpConnectionMode(value?.pdpConnectionMode),
+    pdpConnectorStatus: normalizePdpConnectorStatus(value?.pdpConnectorStatus),
     lastTransmissionAt: value?.lastTransmissionAt ?? null,
     rejectionReason: cleanText(value?.rejectionReason),
     lastFacturXExportAt: value?.lastFacturXExportAt ?? null,
@@ -119,11 +147,14 @@ export function getInvoiceElectronicInvoicingReadiness(metadata: ElectronicInvoi
 export function getInvoicePdpTransmissionReadiness(metadata: ElectronicInvoicingMetadata): PdpTransmissionReadiness {
   const minimumMissingFields = getInvoiceElectronicInvoicingMissingFields(metadata);
   const hasOfficialFacturXValidation = metadata.facturXExternalValidationStatus === "valid" && Boolean(metadata.facturXExternalValidator);
+  const requiresConfiguredApiConnector = metadata.pdpConnectionMode === "api_connector";
   const missingFields = [
     ...minimumMissingFields,
     ...requiredField(!metadata.lastFacturXExportAt, "export Factur-X généré"),
     ...requiredField(!hasOfficialFacturXValidation, "validation officielle Factur-X avec validateur renseigné"),
     ...requiredField(!metadata.pdpProvider, "PDP choisie"),
+    ...requiredField(!metadata.pdpConnectionMode, "mode de raccordement PDP"),
+    ...requiredField(requiresConfiguredApiConnector && metadata.pdpConnectorStatus !== "production", "connecteur PDP production configuré"),
   ];
   const canTransmit = missingFields.length === 0;
   return {
@@ -204,6 +235,14 @@ function normalizeExportCount(value?: number | null) {
 
 function normalizeFacturXExternalValidationStatus(value?: FacturXExternalValidationStatus | null): FacturXExternalValidationStatus {
   return value === "valid" || value === "invalid" ? value : "not_checked";
+}
+
+function normalizePdpConnectionMode(value?: PdpConnectionMode | null): PdpConnectionMode {
+  return value === "api_connector" || value === "chorus_pro" ? value : "manual_deposit";
+}
+
+function normalizePdpConnectorStatus(value?: PdpConnectorStatus | null): PdpConnectorStatus {
+  return value === "sandbox" || value === "production" ? value : "not_configured";
 }
 
 function normalizePdpSimulationStatus(value?: PdpSimulationStatus | null): PdpSimulationStatus {
