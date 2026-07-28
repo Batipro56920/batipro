@@ -4,7 +4,6 @@ import { supabase } from "../lib/supabaseClient";
 import { listChantiers, type ChantierRow } from "../services/chantiers.service";
 import { listDashboardAlerts, type DashboardAlertRow } from "../services/dashboardAlerts.service";
 import { useI18n } from "../i18n";
-import { DashboardAlertCenter } from "../features/dashboard/components/DashboardAlertCenter";
 import { DashboardBusinessPanel } from "../features/dashboard/components/DashboardBusinessPanel";
 import { DashboardEmptyState } from "../features/dashboard/components/DashboardEmptyState";
 import { DashboardHeader } from "../features/dashboard/components/DashboardHeader";
@@ -106,7 +105,7 @@ export default function DashboardPage() {
   const hasData = chantiers.length > 0 || alerts.length > 0 || materiel.length > 0;
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-4">
       <DashboardHeader />
 
       {loading ? (
@@ -117,16 +116,14 @@ export default function DashboardPage() {
         <>
           <DashboardKpiGrid kpis={metrics.kpis} activeView={activeView} onSelect={selectDashboardView} />
 
-          <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_360px]">
-            <DashboardPriorityFeed
-              today={metrics.priorityToday}
-              week={metrics.priorityWeek}
-              focusRows={metrics.focusRows}
-              hasActiveFocus={activeView !== null}
-              onClearFocus={() => selectDashboardView(null)}
-            />
-            <DashboardAlertCenter alerts={metrics.alertCards} />
-          </div>
+          <DashboardPriorityFeed
+            today={metrics.priorityToday}
+            week={metrics.priorityWeek}
+            focusRows={metrics.focusRows}
+            alerts={metrics.alertCards}
+            hasActiveFocus={activeView !== null}
+            onClearFocus={() => selectDashboardView(null)}
+          />
 
           <DashboardProjectsGrid projects={metrics.projects} />
           <DashboardBusinessPanel metrics={metrics.businessMetrics} />
