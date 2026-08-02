@@ -393,7 +393,14 @@ export default function ChantiersPage({ initialView = "list", initialFocus }: Ch
       />
       {initialFocus ? <ChantiersFocusPanel focus={initialFocus} /> : null}
       <ChantiersKpiGrid metrics={metrics} onSelect={applyKpiFilter} />
-      {showTerrainFeedbackPanel ? <ChantiersTerrainFeedbackPanel metrics={metrics} onOpenAll={() => navigate("/retours-terrain")} /> : null}
+      {showTerrainFeedbackPanel ? (
+        <ChantiersTerrainFeedbackPanel
+          metrics={metrics}
+          onOpenAll={() =>
+            navigate(`/retours-terrain?scope=${filters.period === "terrain_feedback_priority" ? "priority" : "open"}`)
+          }
+        />
+      ) : null}
       <ChantiersToolbar
         scope={scope}
         onScope={setScope}
