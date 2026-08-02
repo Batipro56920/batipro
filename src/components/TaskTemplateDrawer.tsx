@@ -9,6 +9,7 @@ import {
 } from "../services/taskTemplatePreparation.service";
 import type { ProductCatalogItem } from "../features/product-catalog";
 import { getBestSupplierPrice, listProductCatalogItems } from "../features/product-catalog";
+import { generateTaskTemplateWithCoco } from "../features/coco/cocoOrchestrator";
 import { useI18n } from "../i18n";
 
 type Props = {
@@ -227,6 +228,9 @@ export default function TaskTemplateDrawer({
   const [preparationSchemaReady, setPreparationSchemaReady] = useState(true);
   const [preparationError, setPreparationError] = useState<string | null>(null);
   const [localError, setLocalError] = useState<string | null>(null);
+  const [cocoLoading, setCocoLoading] = useState(false);
+  const [cocoMessage, setCocoMessage] = useState<string | null>(null);
+  const [cocoError, setCocoError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!open) return;
@@ -375,7 +379,7 @@ export default function TaskTemplateDrawer({
     };
   }, [open, template?.id, advancedPreparationEnabled]);
 
-  const busy = saving || deleting;
+  const busy = saving || deleting || cocoLoading;
   const title = useMemo(() => (template ? `${t("common.actions.edit")} template` : t("bibliothequeTasks.new")), [t, template]);
   const compositionTotals = useMemo(() => {
     const materialCost = materialDrafts.reduce((sum, row) => {
@@ -573,6 +577,90 @@ export default function TaskTemplateDrawer({
     }
 
     return { preparationMaterials, preparationEquipment, laborItems, feeItems };
+  }
+
+  async function handleGenerateWithCoco() {
+    setCocoError(null);
+    setCocoMessage(null);
+    if (!titre.trim()) {
+      setCocoError("Renseigne d'abord le titre du modèle.");
+      return;
+    }
+
+    setCocoLoading(true);
+    try {
+      const result = await generateTaskTemplateWithCoco({
+        title: titre.trim(),
+        lot: lot.trim() || undefined,
+        unit: unite.trim() || undefined,
+        technicalDescription: descriptionTechnique.trim() || undefined,
+        characteristics: caracteristiques
+          .split(/\r?\n/)
+          .map((value) => value.trim())
+          .filter(Boolean),
+        remarks: remarques.trim() || undefined,
+        materials: materialDrafts
+          .filter((row) => row.material_name.trim())
+          .map((row) => ({
+            name: row.material_name.trim(),
+            sourceUnit: row.source_unit.trim() || undefined,
+            ratioQuantity: parseNumberField(row.ratio_quantity) ?? undefined,
+            ratioUnit: row.ratio_unit.trim() || undefined,
+            lossPercent: parseNumberField(row.loss_percent) ?? undefined,
+            notes: row.notes.trim() || undefined,
+          })),
+        equipment: equipmentDrafts
+          .map((row) => row.equipment_name.trim())
+          .filter(Boolean),
+      });
+
+      if (!descriptionTechnique.trim()) setDescriptionTechnique(result.technicalDescription);
+      if (!caracteristiques.trim()) setCaracteristiques(result.characteristics.join("\n"));
+      if (!remarques.trim()) setRemarques(result.remarks);
+
+      if (advancedPreparationEnabled) {
+        setMaterialDrafts((current) => {
+          const names = new Set(current.map((row) => row.material_name.trim().toLocaleLowerCase("fr")));
+          const additions = result.materials
+            .filter((item) => !names.has(item.name.trim().toLocaleLowerCase("fr")))
+            .map((item) => createMaterialDraft({
+              material_name: item.name,
+              source_unit: item.sourceUnit,
+              ratio_quantity: item.ratioQuantity,
+              ratio_unit: item.ratioUnit,
+              loss_percent: item.lossPercent,
+              notes: item.notes,
+            }));
+          return [...current, ...additions];
+        });
+        setEquipmentDrafts((current) => {
+          const names = new Set(current.map((row) => row.equipment_name.trim().toLocaleLowerCase("fr")));
+          const additions = result.equipment
+            .filter((item) => !names.has(item.name.trim().toLocaleLowerCase("fr")))
+            .map((item) => createEquipmentDraft({
+              equipment_name: item.name,
+              is_required: item.required,
+              default_quantity: item.quantity,
+              unit: item.unit,
+              notes: item.notes,
+            }));
+          return [...current, ...additions];
+        });
+      }
+
+      const missing = result.missingInformation.length
+        ? ` À compléter : ${result.missingInformation.join(" ; ")}.`
+        : "";
+      setCocoMessage(
+        result.source === "remote"
+          ? `Suggestions Coco appliquées.${missing}`
+          : `Préparation métier locale appliquée.${missing}`,
+      );
+    } catch (err: any) {
+      setCocoError(err?.message ?? "La préparation Coco n'a pas pu être générée.");
+    } finally {
+      setCocoLoading(false);
+    }
   }
 
   async function handleSave() {
@@ -794,6 +882,35 @@ export default function TaskTemplateDrawer({
               onChange={(e) => setRemarques(e.target.value)}
             />
           </label>
+
+          <div className="rounded-2xl border border-violet-200 bg-violet-50/60 p-4">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <div className="text-sm font-semibold text-slate-900">Coco · préparation métier</div>
+                <div className="text-xs text-slate-500">
+                  {advancedPreparationEnabled ? "Technique, matériaux et matériel" : "Description technique et contrôles"}
+                </div>
+              </div>
+              <button
+                type="button"
+                className="rounded-xl bg-violet-700 px-3 py-2 text-sm font-medium text-white hover:bg-violet-800 disabled:cursor-not-allowed disabled:opacity-60"
+                onClick={() => void handleGenerateWithCoco()}
+                disabled={busy}
+              >
+                {cocoLoading ? "Préparation..." : "Préparer avec Coco"}
+              </button>
+            </div>
+            {cocoMessage ? (
+              <div className="mt-3 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-800">
+                {cocoMessage}
+              </div>
+            ) : null}
+            {cocoError ? (
+              <div className="mt-3 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
+                {cocoError}
+              </div>
+            ) : null}
+          </div>
 
           {advancedPreparationEnabled ? (
             <div className="space-y-4 rounded-2xl border border-blue-200 bg-blue-50/40 p-4">
