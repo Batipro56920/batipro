@@ -324,6 +324,8 @@ export default function TaskTemplateDrawer({
     setPreparationSchemaReady(true);
     setPreparationError(null);
     setLocalError(null);
+    setCocoMessage(null);
+    setCocoError(null);
   }, [
     open,
     template?.id,
