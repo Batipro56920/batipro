@@ -36,6 +36,19 @@ const STATUS_OPTIONS: TerrainFeedbackStatus[] = [
 const OPEN_STATUS_SET = new Set<TerrainFeedbackStatus>(["nouveau", "en_cours"]);
 const PRIORITY_URGENCIES = new Set(["critique", "urgente"]);
 
+type WorkflowScope = "all" | "open" | "priority";
+
+function getWorkflowScope(searchParams: URLSearchParams): WorkflowScope {
+  const scope = searchParams.get("scope");
+  return scope === "open" || scope === "priority" ? scope : "all";
+}
+
+function matchesWorkflowScope(row: TerrainFeedbackRow, scope: WorkflowScope) {
+  if (scope === "priority") return isPriorityFeedback(row);
+  if (scope === "open") return isOpenFeedback(row);
+  return true;
+}
+
 type DraftState = {
   status: TerrainFeedbackStatus;
   assigned_to: string;
@@ -111,6 +124,7 @@ export default function TerrainFeedbacksPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const urlChantierId = searchParams.get("chantierId") ?? "";
   const urlFeedbackId = searchParams.get("feedbackId") ?? "";
+  const workflowScope = getWorkflowScope(searchParams);
   const highlightedFeedbackRef = useRef<string | null>(null);
   const [rows, setRows] = useState<TerrainFeedbackRow[]>([]);
   const [chantiers, setChantiers] = useState<ChantierRow[]>([]);
@@ -132,6 +146,11 @@ export default function TerrainFeedbacksPage() {
     return map;
   }, [responsibles]);
 
+  const visibleRows = useMemo(
+    () => rows.filter((row) => matchesWorkflowScope(row, workflowScope)),
+    [rows, workflowScope],
+  );
+
   const selectedChantier = useMemo(() => {
     if (!filterChantierId) return null;
     return (
@@ -142,8 +161,8 @@ export default function TerrainFeedbacksPage() {
   }, [chantiers, filterChantierId, rows]);
 
   const highlightedFeedback = useMemo(
-    () => (urlFeedbackId ? rows.find((row) => row.id === urlFeedbackId) ?? null : null),
-    [rows, urlFeedbackId],
+    () => (urlFeedbackId ? visibleRows.find((row) => row.id === urlFeedbackId) ?? null : null),
+    [urlFeedbackId, visibleRows],
   );
 
   const workflowStats = useMemo(() => {
@@ -166,13 +185,13 @@ export default function TerrainFeedbacksPage() {
 
   useEffect(() => {
     if (loading || !urlFeedbackId || highlightedFeedbackRef.current === urlFeedbackId) return;
-    if (!rows.some((row) => row.id === urlFeedbackId)) return;
+    if (!visibleRows.some((row) => row.id === urlFeedbackId)) return;
 
     highlightedFeedbackRef.current = urlFeedbackId;
     window.requestAnimationFrame(() => {
       document.getElementById(`feedback-${urlFeedbackId}`)?.scrollIntoView({ block: "center", behavior: "smooth" });
     });
-  }, [loading, rows, urlFeedbackId]);
+  }, [loading, urlFeedbackId, visibleRows]);
 
   function applyChantierFilter(value: string) {
     setFilterChantierId(value);
@@ -187,6 +206,25 @@ export default function TerrainFeedbacksPage() {
     setSearchParams(nextParams, { replace: true });
   }
 
+  function applyWorkflowScope(scope: WorkflowScope) {
+    setFilterStatus("");
+    highlightedFeedbackRef.current = null;
+    const nextParams = new URLSearchParams(searchParams);
+    nextParams.delete("feedbackId");
+    if (scope === "all") nextParams.delete("scope");
+    else nextParams.set("scope", scope);
+    setSearchParams(nextParams, { replace: true });
+  }
+
+  function applyStatusFilter(status: TerrainFeedbackStatus | "") {
+    setFilterStatus(status);
+    highlightedFeedbackRef.current = null;
+    const nextParams = new URLSearchParams(searchParams);
+    nextParams.delete("feedbackId");
+    nextParams.delete("scope");
+    setSearchParams(nextParams, { replace: true });
+  }
+
   function clearTargetFilters() {
     setFilterChantierId("");
     setFilterIntervenantId("");
@@ -196,6 +234,7 @@ export default function TerrainFeedbacksPage() {
 
     const nextParams = new URLSearchParams(searchParams);
     nextParams.delete("chantierId");
+    nextParams.delete("scope");
     if (urlFeedbackId) nextParams.set("feedbackId", urlFeedbackId);
     setSearchParams(nextParams, { replace: true });
   }
@@ -522,29 +561,43 @@ export default function TerrainFeedbacksPage() {
           <div className="flex flex-wrap gap-2">
             <button
               type="button"
-              onClick={() => setFilterStatus("")}
-              className={["rounded-xl border px-3 py-2 text-sm font-medium", filterStatus === "" ? "border-slate-900 bg-slate-900 text-white" : "border-slate-200 text-slate-700 hover:bg-slate-50"].join(" ")}
+              onClick={() => applyWorkflowScope("all")}
+              className={["rounded-xl border px-3 py-2 text-sm font-medium", workflowScope === "all" && filterStatus === "" ? "border-slate-900 bg-slate-900 text-white" : "border-slate-200 text-slate-700 hover:bg-slate-50"].join(" ")}
             >
               Tous
             </button>
             <button
               type="button"
-              onClick={() => setFilterStatus("nouveau")}
-              className={["rounded-xl border px-3 py-2 text-sm font-medium", filterStatus === "nouveau" ? "border-blue-700 bg-blue-700 text-white" : "border-blue-200 text-blue-800 hover:bg-blue-50"].join(" ")}
+              onClick={() => applyWorkflowScope("open")}
+              className={["rounded-xl border px-3 py-2 text-sm font-medium", workflowScope === "open" ? "border-blue-700 bg-blue-700 text-white" : "border-blue-200 text-blue-800 hover:bg-blue-50"].join(" ")}
+            >
+              À traiter
+            </button>
+            <button
+              type="button"
+              onClick={() => applyWorkflowScope("priority")}
+              className={["rounded-xl border px-3 py-2 text-sm font-medium", workflowScope === "priority" ? "border-red-700 bg-red-700 text-white" : "border-red-200 text-red-800 hover:bg-red-50"].join(" ")}
+            >
+              Urgents
+            </button>
+            <button
+              type="button"
+              onClick={() => applyStatusFilter("nouveau")}
+              className={["rounded-xl border px-3 py-2 text-sm font-medium", workflowScope === "all" && filterStatus === "nouveau" ? "border-blue-700 bg-blue-700 text-white" : "border-blue-200 text-blue-800 hover:bg-blue-50"].join(" ")}
             >
               Nouveaux
             </button>
             <button
               type="button"
-              onClick={() => setFilterStatus("en_cours")}
-              className={["rounded-xl border px-3 py-2 text-sm font-medium", filterStatus === "en_cours" ? "border-amber-600 bg-amber-500 text-white" : "border-amber-200 text-amber-800 hover:bg-amber-50"].join(" ")}
+              onClick={() => applyStatusFilter("en_cours")}
+              className={["rounded-xl border px-3 py-2 text-sm font-medium", workflowScope === "all" && filterStatus === "en_cours" ? "border-amber-600 bg-amber-500 text-white" : "border-amber-200 text-amber-800 hover:bg-amber-50"].join(" ")}
             >
               En cours
             </button>
             <button
               type="button"
-              onClick={() => setFilterStatus("traite")}
-              className={["rounded-xl border px-3 py-2 text-sm font-medium", filterStatus === "traite" ? "border-emerald-700 bg-emerald-700 text-white" : "border-emerald-200 text-emerald-800 hover:bg-emerald-50"].join(" ")}
+              onClick={() => applyStatusFilter("traite")}
+              className={["rounded-xl border px-3 py-2 text-sm font-medium", workflowScope === "all" && filterStatus === "traite" ? "border-emerald-700 bg-emerald-700 text-white" : "border-emerald-200 text-emerald-800 hover:bg-emerald-50"].join(" ")}
             >
               Traités
             </button>
@@ -685,7 +738,7 @@ export default function TerrainFeedbacksPage() {
             <select
               className="w-full rounded-2xl border border-slate-200 px-3 py-3 text-sm"
               value={filterStatus}
-              onChange={(e) => setFilterStatus(e.target.value as TerrainFeedbackStatus | "")}
+              onChange={(e) => applyStatusFilter(e.target.value as TerrainFeedbackStatus | "")}
             >
               <option value="">{t("terrainFeedback.admin.allStatuses")}</option>
               {STATUS_OPTIONS.map((status) => (
@@ -724,13 +777,13 @@ export default function TerrainFeedbacksPage() {
         <div className="rounded-3xl border border-slate-200 bg-white p-6 text-sm text-slate-500 shadow-sm">
           {t("common.states.loading")}
         </div>
-      ) : rows.length === 0 ? (
+      ) : visibleRows.length === 0 ? (
         <div className="rounded-3xl border border-dashed border-slate-300 bg-white p-6 text-sm text-slate-500 shadow-sm">
           {t("terrainFeedback.admin.empty")}
         </div>
       ) : (
         <div className="space-y-4">
-          {rows.map((row) => {
+          {visibleRows.map((row) => {
             const draft = drafts[row.id];
             const isHighlighted = row.id === urlFeedbackId;
             return (
