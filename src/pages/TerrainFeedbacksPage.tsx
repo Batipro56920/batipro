@@ -56,6 +56,12 @@ type DraftState = {
   treatment_comment: string;
 };
 
+type CreatedReserveTarget = {
+  id: string;
+  title: string;
+  chantierId: string;
+};
+
 function badgeClass(tone: "blue" | "amber" | "green" | "red" | "slate") {
   if (tone === "green") return "border-emerald-200 bg-emerald-50 text-emerald-700";
   if (tone === "amber") return "border-amber-200 bg-amber-50 text-amber-700";
@@ -134,6 +140,7 @@ export default function TerrainFeedbacksPage() {
   const [error, setError] = useState<string | null>(null);
   const [savingId, setSavingId] = useState<string | null>(null);
   const [reserveCreatingId, setReserveCreatingId] = useState<string | null>(null);
+  const [createdReserveByFeedback, setCreatedReserveByFeedback] = useState<Record<string, CreatedReserveTarget>>({});
   const [filterChantierId, setFilterChantierId] = useState(urlChantierId);
   const [filterIntervenantId, setFilterIntervenantId] = useState("");
   const [filterStatus, setFilterStatus] = useState<TerrainFeedbackStatus | "">("");
@@ -429,6 +436,14 @@ export default function TerrainFeedbacksPage() {
       });
       await appendReserveActivity(row, reserve.id);
       await appendFeedbackActivity(row, nextDraft, row.assigned_to_name);
+      setCreatedReserveByFeedback((current) => ({
+        ...current,
+        [row.id]: {
+          id: reserve.id,
+          title: reserve.title,
+          chantierId: row.chantier_id,
+        },
+      }));
       await refresh();
     } catch (err: any) {
       setError(err?.message ?? "Erreur création réserve depuis le retour terrain.");
@@ -679,14 +694,23 @@ export default function TerrainFeedbacksPage() {
                       </button>
                     ) : null}
                     {row.chantier ? (
-                      <button
-                        type="button"
-                        onClick={() => void createReserveFromFeedback(row)}
-                        disabled={savingId === row.id || reserveCreatingId === row.id}
-                        className="rounded-lg border border-red-200 bg-red-50 px-2.5 py-1.5 text-xs font-semibold text-red-800 hover:bg-red-100 disabled:opacity-60"
-                      >
-                        {reserveCreatingId === row.id ? "Création..." : "Créer réserve"}
-                      </button>
+                      createdReserveByFeedback[row.id] ? (
+                        <Link
+                          to={`/chantiers/${createdReserveByFeedback[row.id].chantierId}/qualite?reserveId=${createdReserveByFeedback[row.id].id}&feedbackId=${row.id}`}
+                          className="rounded-lg border border-emerald-200 bg-emerald-50 px-2.5 py-1.5 text-xs font-semibold text-emerald-800 hover:bg-emerald-100"
+                        >
+                          Ouvrir la réserve
+                        </Link>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => void createReserveFromFeedback(row)}
+                          disabled={savingId === row.id || reserveCreatingId === row.id}
+                          className="rounded-lg border border-red-200 bg-red-50 px-2.5 py-1.5 text-xs font-semibold text-red-800 hover:bg-red-100 disabled:opacity-60"
+                        >
+                          {reserveCreatingId === row.id ? "Création..." : "Créer réserve"}
+                        </button>
+                      )
                     ) : null}
                   </div>
                 </div>
@@ -867,14 +891,23 @@ export default function TerrainFeedbacksPage() {
                             Passer en cours
                           </button>
                         ) : null}
-                        <button
-                          type="button"
-                          onClick={() => void createReserveFromFeedback(row)}
-                          disabled={savingId === row.id || reserveCreatingId === row.id}
-                          className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs font-semibold text-red-800 hover:bg-red-100 disabled:opacity-60"
-                        >
-                          {reserveCreatingId === row.id ? "Création réserve..." : "Créer une réserve"}
-                        </button>
+                        {createdReserveByFeedback[row.id] ? (
+                          <Link
+                            to={`/chantiers/${createdReserveByFeedback[row.id].chantierId}/qualite?reserveId=${createdReserveByFeedback[row.id].id}&feedbackId=${row.id}`}
+                            className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-800 hover:bg-emerald-100"
+                          >
+                            Ouvrir la réserve créée
+                          </Link>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => void createReserveFromFeedback(row)}
+                            disabled={savingId === row.id || reserveCreatingId === row.id}
+                            className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs font-semibold text-red-800 hover:bg-red-100 disabled:opacity-60"
+                          >
+                            {reserveCreatingId === row.id ? "Création réserve..." : "Créer une réserve"}
+                          </button>
+                        )}
                       </div>
                     ) : null}
                   </div>
