@@ -388,7 +388,8 @@ export default function ChantiersPage({ initialView = "list", initialFocus }: Ch
         eyebrow={headerCopy.eyebrow}
         title={headerCopy.title}
         description={headerCopy.description}
-        onNew={() => navigate("/chantiers/nouveau")}
+        onNewFromSignedQuote={() => navigate("/projets?chantier=a-creer")}
+        onNewBlank={() => navigate("/chantiers/nouveau")}
         onExport={() => exportChantiersCsv(visibleRows, "chantiers.csv")}
       />
       {initialFocus ? <ChantiersFocusPanel focus={initialFocus} /> : null}
@@ -418,7 +419,10 @@ export default function ChantiersPage({ initialView = "list", initialFocus }: Ch
       {loading ? (
         <ChantiersSkeleton />
       ) : visibleRows.length === 0 ? (
-        <ChantiersEmptyState onNew={() => navigate("/chantiers/nouveau")} />
+        <ChantiersEmptyState
+          onNewFromSignedQuote={() => navigate("/projets?chantier=a-creer")}
+          onNewBlank={() => navigate("/chantiers/nouveau")}
+        />
       ) : view === "cards" ? (
         <ChantiersCardsView rows={visibleRows} onPreview={setPreviewRow} actions={actions} />
       ) : view === "planning" ? (
