@@ -722,6 +722,15 @@ export default function ChantierPage() {
   const navigate = useNavigate();
   const { locale, t } = useI18n();
   const detailSection = getChantierDetailSection(location.pathname);
+  const targetedReserveId = useMemo(
+    () => new URLSearchParams(location.search).get("reserveId") ?? "",
+    [location.search],
+  );
+  const sourceFeedbackId = useMemo(
+    () => new URLSearchParams(location.search).get("feedbackId") ?? "",
+    [location.search],
+  );
+  const targetedReserveHandledRef = useRef<string | null>(null);
 
   const [item, setItem] = useState<ChantierRow | null>(null);
   const [crmContext, setCrmContext] = useState<CrmChantierContext | null>(null);
@@ -889,6 +898,10 @@ export default function ChantierPage() {
   const [reservesFilter, setReservesFilter] = useState<"ALL" | "OUVERTES" | "LEVEES">("ALL");
   const [reserveDrawerOpen, setReserveDrawerOpen] = useState(false);
   const [activeReserve, setActiveReserve] = useState<ChantierReserveRow | null>(null);
+  const targetedReserve = useMemo(
+    () => reserves.find((reserve) => reserve.id === targetedReserveId) ?? null,
+    [reserves, targetedReserveId],
+  );
   const [reserveDrawerTab, setReserveDrawerTab] = useState<"details" | "photos" | "plan">("details");
   const [reserveDrawerError, setReserveDrawerError] = useState<string | null>(null);
   const [reserveSaving, setReserveSaving] = useState(false);
@@ -2612,6 +2625,25 @@ export default function ChantierPage() {
     if (!id) return;
     void refreshReserves();
   }, [id]);
+
+  useEffect(() => {
+    if (!targetedReserveId) {
+      targetedReserveHandledRef.current = null;
+      return;
+    }
+    if (
+      detailSection !== "qualite" ||
+      reservesLoading ||
+      !targetedReserve ||
+      targetedReserveHandledRef.current === targetedReserveId
+    ) {
+      return;
+    }
+
+    targetedReserveHandledRef.current = targetedReserveId;
+    setReservesFilter("ALL");
+    openReserveDrawer(targetedReserve);
+  }, [detailSection, reservesLoading, targetedReserve, targetedReserveId]);
 
   useEffect(() => {
     if (!id) return;
@@ -6228,6 +6260,37 @@ export default function ChantierPage() {
           </div>
           </ChantierDocumentsSection>
         )}
+
+        {detailSection === "qualite" && targetedReserveId ? (
+          <div
+            className={[
+              "rounded-2xl border px-4 py-3 text-sm",
+              targetedReserve
+                ? "border-blue-200 bg-blue-50 text-blue-900"
+                : reservesLoading
+                  ? "border-slate-200 bg-slate-50 text-slate-700"
+                  : "border-amber-200 bg-amber-50 text-amber-900",
+            ].join(" ")}
+          >
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                {targetedReserve
+                  ? `Réserve ciblée : ${targetedReserve.title}`
+                  : reservesLoading
+                    ? "Ouverture de la réserve ciblée..."
+                    : "La réserve ciblée n'est pas disponible sur ce chantier."}
+              </div>
+              {sourceFeedbackId && id ? (
+                <Link
+                  to={`/retours-terrain?chantierId=${id}&feedbackId=${sourceFeedbackId}`}
+                  className="font-semibold text-blue-800 hover:underline"
+                >
+                  Retour terrain source
+                </Link>
+              ) : null}
+            </div>
+          </div>
+        ) : null}
 
         {/* ---------------- ONGLET RÉSERVES ---------------- */}
         {(detailSection === "execution" || detailSection === "qualite" || detailSection === "sav") && (
