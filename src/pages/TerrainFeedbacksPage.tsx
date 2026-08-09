@@ -399,7 +399,8 @@ export default function TerrainFeedbacksPage() {
   }
 
   async function createReserveFromFeedback(row: TerrainFeedbackRow) {
-    if (!row.chantier_id) {
+    const chantierId = row.chantier_id;
+    if (!chantierId) {
       setError("Retour terrain sans chantier associé.");
       return;
     }
@@ -408,7 +409,7 @@ export default function TerrainFeedbacksPage() {
     setError(null);
     try {
       const reserve = await createReserve({
-        chantier_id: row.chantier_id,
+        chantier_id: chantierId,
         title: row.title,
         description: buildReserveDescriptionFromFeedback(row),
         status: "OUVERTE",
@@ -441,7 +442,7 @@ export default function TerrainFeedbacksPage() {
         [row.id]: {
           id: reserve.id,
           title: reserve.title,
-          chantierId: row.chantier_id,
+          chantierId,
         },
       }));
       await refresh();
