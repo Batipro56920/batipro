@@ -1,6 +1,13 @@
-import { X } from "lucide-react";
+import { ArrowUpRight, X } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 import type { ClientMetrics, ClientWithMetrics } from "../types";
 import { dateOnly, eur } from "../../components/crmFormat";
+
+type PanelItem = {
+  id: string;
+  label: string;
+  path?: string;
+};
 
 export function ClientDetailDrawer({
   client,
@@ -11,6 +18,8 @@ export function ClientDetailDrawer({
   metrics: ClientMetrics;
   onClose: () => void;
 }) {
+  const navigate = useNavigate();
+
   if (!client) return null;
 
   const chantiers = metrics.chantiers.filter((row) => row.crm_client_id === client.id);
@@ -18,6 +27,11 @@ export function ClientDetailDrawer({
   const invoices = metrics.invoices.filter((row) => row.client_id === client.id);
   const sav = metrics.sav.filter((row) => row.client_id === client.id);
   const documents = metrics.documents.filter((row) => row.client_id === client.id);
+
+  function openLinkedItem(path: string) {
+    onClose();
+    navigate(path);
+  }
 
   return (
     <div className="fixed inset-0 z-40 flex justify-end bg-slate-950/20" role="dialog" aria-modal="true">
@@ -63,12 +77,50 @@ export function ClientDetailDrawer({
           </section>
 
           <section className="grid gap-3 sm:grid-cols-2">
-            <Panel title="Devis" items={quotes.map((row) => `${row.quote_number} · ${eur(row.montant_ht)}`)} />
-            <Panel title="Chantiers" items={chantiers.map((row) => `${row.nom} · ${row.status}`)} />
-            <Panel title="Facturation" items={invoices.map((row) => `${row.invoice_number ?? row.type} · ${eur(row.amount_ttc)}`)} />
-            <Panel title="SAV" items={sav.map((row) => `${row.titre} · ${row.statut}`)} />
-            <Panel title="Documents" items={documents.map((row) => row.nom)} />
-            <Panel title="Historique" items={[`Créé le ${dateOnly(client.created_at)}`, `Mis à jour le ${dateOnly(client.updated_at)}`]} />
+            <Panel
+              title="Devis"
+              items={quotes.map((row) => ({
+                id: row.id,
+                label: `${row.quote_number} · ${eur(row.montant_ht)}`,
+                path: `/crm/devis/${encodeURIComponent(row.id)}/edit`,
+              }))}
+              onOpen={openLinkedItem}
+            />
+            <Panel
+              title="Chantiers"
+              items={chantiers.map((row) => ({
+                id: row.id,
+                label: `${row.nom} · ${row.status}`,
+                path: `/chantiers/${encodeURIComponent(row.id)}`,
+              }))}
+              onOpen={openLinkedItem}
+            />
+            <Panel
+              title="Facturation"
+              items={invoices.map((row) => ({
+                id: row.id,
+                label: `${row.invoice_number ?? row.type} · ${eur(row.amount_ttc)}`,
+                path: `/factures?invoice=${encodeURIComponent(row.id)}`,
+              }))}
+              onOpen={openLinkedItem}
+            />
+            <Panel
+              title="SAV"
+              items={sav.map((row) => ({
+                id: row.id,
+                label: `${row.titre} · ${row.statut}`,
+                path: `/crm/sav?savId=${encodeURIComponent(row.id)}`,
+              }))}
+              onOpen={openLinkedItem}
+            />
+            <Panel title="Documents" items={documents.map((row) => ({ id: row.id, label: row.nom }))} />
+            <Panel
+              title="Historique"
+              items={[
+                { id: "created", label: `Créé le ${dateOnly(client.created_at)}` },
+                { id: "updated", label: `Mis à jour le ${dateOnly(client.updated_at)}` },
+              ]}
+            />
           </section>
 
           <section className="rounded-2xl border border-slate-200 p-4">
@@ -81,7 +133,7 @@ export function ClientDetailDrawer({
   );
 }
 
-function Panel({ title, items }: { title: string; items: string[] }) {
+function Panel({ title, items, onOpen }: { title: string; items: PanelItem[]; onOpen?: (path: string) => void }) {
   return (
     <div className="rounded-2xl border border-slate-200 p-4">
       <h4 className="text-sm font-semibold text-slate-950">{title}</h4>
@@ -89,7 +141,21 @@ function Panel({ title, items }: { title: string; items: string[] }) {
         {items.length === 0 ? (
           <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50 p-3 text-sm text-slate-500">Aucun élément.</div>
         ) : (
-          items.slice(0, 5).map((item) => <div key={item} className="rounded-xl bg-slate-50 p-2 text-sm text-slate-700">{item}</div>)
+          items.slice(0, 5).map((item) =>
+            item.path && onOpen ? (
+              <button
+                key={item.id}
+                type="button"
+                onClick={() => onOpen(item.path!)}
+                className="flex w-full items-center justify-between gap-3 rounded-xl bg-slate-50 p-2 text-left text-sm text-slate-700 transition hover:bg-blue-50 hover:text-blue-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+              >
+                <span className="min-w-0 break-words">{item.label}</span>
+                <ArrowUpRight className="h-4 w-4 shrink-0" aria-hidden="true" />
+              </button>
+            ) : (
+              <div key={item.id} className="rounded-xl bg-slate-50 p-2 text-sm text-slate-700">{item.label}</div>
+            ),
+          )
         )}
       </div>
     </div>
