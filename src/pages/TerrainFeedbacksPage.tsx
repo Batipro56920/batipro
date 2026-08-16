@@ -1,7 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { getChantiers, type ChantierRow } from "../services/chantiers.service";
-import { appendChantierActivityLog } from "../services/chantierActivityLog.service";
+import {
+  appendChantierActivityLog,
+  listTerrainFeedbackReserveLinks,
+} from "../services/chantierActivityLog.service";
 import { listIntervenants, type IntervenantRow } from "../services/intervenants.service";
 import { createReserve, type ReservePriority } from "../services/reserves.service";
 import {
@@ -274,10 +277,28 @@ export default function TerrainFeedbacksPage() {
         listIntervenants(),
         listTerrainFeedbackResponsibles().catch(() => []),
       ]);
+      const reserveLinks = await listTerrainFeedbackReserveLinks(
+        feedbackRows.map((row) => ({ id: row.id, chantierId: row.chantier_id })),
+      ).catch((err) => {
+        console.warn("[terrain-feedback] reserve links skipped", err);
+        return [];
+      });
+      const reserveTargets = Object.fromEntries(
+        reserveLinks.map((link) => [
+          link.feedbackId,
+          {
+            id: link.reserveId,
+            title: link.reserveTitle,
+            chantierId: link.chantierId,
+          },
+        ]),
+      );
+
       setRows(feedbackRows);
       setChantiers(chantierRows);
       setIntervenants(intervenantRows);
       setResponsibles(responsibleRows);
+      setCreatedReserveByFeedback(reserveTargets);
       syncDrafts(feedbackRows);
     } catch (err: any) {
       setError(err?.message ?? t("terrainFeedback.admin.loadError"));
@@ -1089,14 +1110,23 @@ export default function TerrainFeedbacksPage() {
                       </label>
 
                       {row.chantier ? (
-                        <button
-                          type="button"
-                          onClick={() => void createReserveFromFeedback(row)}
-                          disabled={savingId === row.id || reserveCreatingId === row.id}
-                          className="w-full rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-800 hover:bg-red-100 disabled:opacity-60"
-                        >
-                          {reserveCreatingId === row.id ? "Création de la réserve..." : "Créer une réserve chantier"}
-                        </button>
+                        createdReserveByFeedback[row.id] ? (
+                          <Link
+                            to={`/chantiers/${createdReserveByFeedback[row.id].chantierId}/qualite?reserveId=${createdReserveByFeedback[row.id].id}&feedbackId=${row.id}`}
+                            className="block w-full rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-center text-sm font-semibold text-emerald-800 hover:bg-emerald-100"
+                          >
+                            Ouvrir la réserve créée
+                          </Link>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => void createReserveFromFeedback(row)}
+                            disabled={savingId === row.id || reserveCreatingId === row.id}
+                            className="w-full rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-800 hover:bg-red-100 disabled:opacity-60"
+                          >
+                            {reserveCreatingId === row.id ? "Création de la réserve..." : "Créer une réserve chantier"}
+                          </button>
+                        )
                       ) : null}
 
                       <button
