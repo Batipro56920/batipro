@@ -152,12 +152,14 @@ export async function listTerrainFeedbackReserveLinks(
 
   if (reserveError) throw reserveError;
 
+  const reserveById = new Map<string, Record<string, unknown>>(
+    (reserveRows ?? []).map((reserve: Record<string, unknown>) => [String(reserve.id ?? ""), reserve]),
+  );
   const links: TerrainFeedbackReserveLink[] = [];
   const linkedFeedbackIds = new Set<string>();
-  for (const reserve of reserveRows ?? []) {
-    const reserveId = String(reserve.id ?? "").trim();
-    const activity = activityByReserveId.get(reserveId);
-    if (!activity || linkedFeedbackIds.has(activity.feedbackId) || reserve.status === "LEVEE") continue;
+  for (const [reserveId, activity] of activityByReserveId) {
+    const reserve = reserveById.get(reserveId);
+    if (!reserve || linkedFeedbackIds.has(activity.feedbackId) || reserve.status === "LEVEE") continue;
     if (String(reserve.chantier_id ?? "") !== activity.chantierId) continue;
 
     links.push({
