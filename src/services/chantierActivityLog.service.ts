@@ -100,6 +100,78 @@ export async function listChantierActivityLogs(
   throw error;
 }
 
+export type TerrainFeedbackReserveLink = {
+  feedbackId: string;
+  reserveId: string;
+  reserveTitle: string;
+  chantierId: string;
+};
+
+export async function listTerrainFeedbackReserveLinks(
+  feedbacks: Array<{ id: string; chantierId: string }>,
+): Promise<TerrainFeedbackReserveLink[]> {
+  const feedbackIds = new Set(feedbacks.map((feedback) => feedback.id).filter(Boolean));
+  const chantierIds = Array.from(new Set(feedbacks.map((feedback) => feedback.chantierId).filter(Boolean)));
+  if (feedbackIds.size === 0 || chantierIds.length === 0) return [];
+
+  const { data: activityRows, error: activityError } = await fromActivityLog()
+    .select(ACTIVITY_SELECT)
+    .in("chantier_id", chantierIds)
+    .eq("entity_type", "reserve")
+    .order("created_at", { ascending: false })
+    .limit(1000);
+
+  if (activityError) {
+    if (isMissingActivitySchemaError(activityError)) return [];
+    throw activityError;
+  }
+
+  const activityByReserveId = new Map<string, { feedbackId: string; chantierId: string }>();
+  for (const rawRow of activityRows ?? []) {
+    const row = normalizeActivityLogRow(rawRow);
+    const feedbackId = String(row.changes?.terrain_feedback_id ?? "").trim();
+    const reserveId = String(row.entity_id ?? "").trim();
+    if (
+      !feedbackIds.has(feedbackId) ||
+      !reserveId ||
+      row.changes?.source !== "terrain_feedback" ||
+      activityByReserveId.has(reserveId)
+    ) {
+      continue;
+    }
+    activityByReserveId.set(reserveId, { feedbackId, chantierId: row.chantier_id });
+  }
+
+  const reserveIds = Array.from(activityByReserveId.keys());
+  if (reserveIds.length === 0) return [];
+
+  const { data: reserveRows, error: reserveError } = await (supabase as any)
+    .from("chantier_reserves")
+    .select("id, chantier_id, title, status")
+    .in("id", reserveIds);
+
+  if (reserveError) throw reserveError;
+
+  const links: TerrainFeedbackReserveLink[] = [];
+  const linkedFeedbackIds = new Set<string>();
+  for (const reserve of reserveRows ?? []) {
+    const reserveId = String(reserve.id ?? "").trim();
+    const activity = activityByReserveId.get(reserveId);
+    if (!activity || linkedFeedbackIds.has(activity.feedbackId) || reserve.status === "LEVEE") continue;
+    if (String(reserve.chantier_id ?? "") !== activity.chantierId) continue;
+
+    links.push({
+      feedbackId: activity.feedbackId,
+      reserveId,
+      reserveTitle: String(reserve.title ?? "Réserve"),
+      chantierId: activity.chantierId,
+    });
+    linkedFeedbackIds.add(activity.feedbackId);
+  }
+
+  return links;
+}
+
 export async function appendChantierActivityLog(input: ChantierActivityLogInput): Promise<void> {
   const chantierId = String(input.chantierId ?? "").trim();
   const actionType = String(input.actionType ?? "").trim();
