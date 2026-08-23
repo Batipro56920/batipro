@@ -162,3 +162,130 @@ Règles opérationnelles : deux lignes d'information maximum par ligne de liste 
 ## Outil de validation visuelle
 
 `preview.html` (et `preview-mobile.html`, qui l'embarque en 390 px et 820 px) rendent l'écran pilote avec des données fictives, hors authentification, via `src/preview/DashboardPreview.tsx`. Ces entrées ne sont servies que par `vite dev` — `vite build` ne prend que `index.html` — et permettent de juger Light, Dark et mobile sans base de données. Elles demandent seulement `VITE_SUPABASE_URL` et `VITE_SUPABASE_ANON_KEY` présents dans `.env.local` pour que le client Supabase s'initialise ; supprimer ces trois fichiers n'a aucun effet sur l'application.
+
+---
+
+# Annexe A — Anatomie des primitives
+
+Valeurs fermes, applicables telles quelles. `h` = hauteur, `coarse` = sous `@media (pointer: coarse)`.
+
+## Champ texte
+h 36 / coarse 44 · px 12 · `rounded-field` · `bg-surface` + `border border-strong` · texte 14/20 `text-ink` · placeholder `text-muted`, **jamais porteur d'information** · `font-size: 16px` sur mobile.
+Label : `.bt-caption text-muted`, 6 px au-dessus, jamais en capitales. Requis : `*` en `text-danger` collé au label, pas de mention « (optionnel) ». Aide : `.bt-caption text-muted`, 4 px sous le champ, une ligne. Erreur : **remplace** l'aide (jamais empilée), `.bt-caption text-danger-on` + `border-danger` + `aria-invalid` + `aria-describedby`. Focus : `border-primary` + `box-shadow 0 0 0 3px color-mix(in srgb, var(--bt-primary) 18%, transparent)`, avec `outline: none` pour ne pas doubler l'anneau global. Disabled : `bg-interactive`, `border-subtle`, opacité 0.6, `cursor: not-allowed`. Préfixe/suffixe : icône 16 px `text-muted`, padding porté à 36 px de ce côté.
+
+## Textarea
+Mêmes règles · `py 8` · `min-h 88` · `resize-y` · `max-h 320`. Compteur de caractères `.bt-caption text-muted` aligné à droite sous le champ, apparaît à 80 % du quota, `text-warning-on` à 95 %.
+
+## Select
+Identique au champ + chevron 16 px `text-muted` à 12 px du bord droit, padding droit 34. Placeholder `text-muted`, valeur choisie `text-ink`. Multi-sélection : chips 24 px dans le champ, hauteur en `min-h`.
+
+## Checkbox / radio
+Boîte 18×18 (coarse 20) · `rounded-[5px]` / `rounded-full` · `border-strong` 1.5 px · `bg-surface`. Coché : `bg-primary`, `border-primary`, glyphe `--bt-primary-contrast` 12 px. Indéterminé : barre 10×2. Zone cliquable = boîte + label, `min-h 32 / coarse 44`, gap 10, label 14/20 `text-ink`, aide 13/18 `text-muted` alignée sur le label. Focus : anneau 2 px offset 2 sur la boîte seule.
+
+## Dropdown / menu
+`bg-elevated` + `border-subtle` + `shadow-elevated` + `rounded-card` · min-w 200 · max-w 320 · py 4. Item h 32 (coarse 44), px 10, 14/20, icône 16 à gauche, raccourci `.bt-caption text-muted` à droite. Hover `bg-interactive` · sélectionné `bg-selected` + `text-ink` (jamais une coche seule) · séparateur `border-t border-subtle` avec 4 px de marge · en-tête de groupe `.bt-caption text-muted` px 10 py 6 · item destructif `text-danger-on`, toujours en dernier après un séparateur. Ouverture 140 ms, offset 6 px de l'ancre, `flip` puis `shift` avec 8 px de marge de viewport.
+
+## Drawer
+Largeurs : ≥1280 → 560 · 1024–1279 → 480 · 640–1023 → 420 · <640 → feuille basse `width: 100vw`, `height: min(88dvh, …)`, `rounded-t-surface`, poignée 36×4 `bg-border-strong` centrée à 8 px du haut.
+Desktop : ancré à droite, `rounded-l-surface`, `bg-elevated`, `shadow-overlay`, `border-l border-subtle`. En-tête 56 px collant + `border-b border-subtle`, titre `.bt-section-title`, fermeture 32×32 à droite. Corps `p 20` (mobile 16). Pied 64 px collant + `border-t border-subtle`, actions à droite (mobile : pleine largeur empilées, primaire en haut). Overlay `--bt-overlay`, entrée 260 ms `--bt-ease-spring`, overlay en fondu 180 ms. Focus piégé, `Esc` ferme, focus rendu au déclencheur.
+
+## Modal
+Largeurs 400 / 520 / 680 · `max-height 88dvh` · `rounded-dialog` · `bg-elevated` + `shadow-overlay` · padding 24 (mobile 20). En-tête sans bordure quand le corps ne scrolle pas, `border-b` dès qu'il scrolle. Pied à 20 px de marge haute, actions à droite. `.bt-dialog-enter`. **Interdit au-delà de 6 champs** : passer en drawer ou en page.
+
+## Toast
+360 large (mobile `calc(100vw - 32px)`) · haut-droite desktop / bas mobile · offset 16 · gap 8 · 3 visibles max, les suivants en file. `bg-elevated` + `border-subtle` + `shadow-elevated` + `rounded-card`, px 14 py 12, icône 16 en ton de statut (jamais un fond entièrement teinté), titre `.bt-card-title`, détail `.bt-secondary text-muted`. Durées : succès 4 s, info 5 s, avec action 8 s, **erreur persistante**. `role="status"`, `role="alert"` si danger.
+
+## Tooltip
+px 8 py 5 · `rounded-field` · 12/16 · `bg-ink` avec texte `bg-surface` (inversion volontaire) · max-w 280 · offset 6 · ouverture 400 ms, fermeture 100 ms, 0 ms si un tooltip du même groupe vient de se fermer. Jamais interactif, jamais unique porteur d'une information, **jamais sur mobile** : sous `pointer: coarse` l'information passe en ligne secondaire.
+
+## Fil d'ariane
+13/18 `text-muted` · séparateur chevron 14 px `--bt-border-strong` · dernier segment `text-ink` non cliquable · hauteur 20 · marge basse 8 avant le titre. Au-delà de 4 niveaux : premier + points de suspension (menu) + deux derniers. Masqué sous 640 px, remplacé par une flèche retour 32×32 à gauche du titre.
+
+## Onglets de navigation locale
+Rail h 40, sans fond ni bordure de conteneur, `border-b border-subtle` sur toute la largeur. Onglet : px 12, 14/20, `text-muted` puis `text-ink` au survol ; actif `text-ink` + filet 2 px `bg-primary` aligné sur la bordure basse (`-mb-px`), transition 180 ms `--bt-ease-spring`. Pastille de compte `.bt-caption bt-num` `bg-interactive text-muted`, active `bg-primary-soft text-primary-on`. `role="tablist"`, flèches gauche/droite. Sous 640 px : scroll horizontal du rail seul, masque en dégradé 24 px à droite.
+
+## Pagination
+h 32 (coarse 44) · boutons carrés 32 · gap 4 · `rounded-field`. Page active `bg-selected text-ink` sans bordure ; autres `text-ink-secondary` hover `bg-interactive`. Fenêtre `1 … n−1 n n+1 … N`. À gauche `.bt-caption bt-num text-muted` : « 21–40 sur 312 ». Au-delà de 500 lignes : pagination par curseur, sans numéros. Mobile : Précédent / Suivant pleine largeur et « 3 / 16 » au centre.
+
+## Barre de recherche
+h 36 (coarse 44) · loupe 16 à gauche (padding gauche 34) · effacement 16 à droite dès qu'il y a du texte · debounce 250 ms · `Esc` vide · `/` focalise. Largeur 280 par défaut, 100 % sous 768. Le compte de résultats s'affiche **à côté du titre de section**, jamais sous le champ.
+
+## Table
+En-tête h 40, `bg-app` en clair et `bg-elevated` en sombre, `.bt-caption text-muted` **jamais en capitales**, `border-b border-subtle`, collant sous l'en-tête de page. Cellule h 44 (coarse 52), px 12, première cellule px 16 alignée sur le padding de la surface, texte 14/20 ; chiffres `.bt-num` alignés à droite, en-tête aligné à droite lui aussi. Lignes `divide-y divide-subtle`, hover `bg-interactive` 90 ms. Tri : en-tête cliquable, chevron 14 px visible sur la colonne triée seulement (opacité 0.4 au survol des autres), `aria-sort`. Sélection : checkbox en colonne 44 px, ligne sélectionnée `bg-selected` + rail gauche 2 px `bg-primary`, barre d'action de lot ancrée en bas (`bg-elevated` + `shadow-elevated`, h 56). Donnée absente : un tiret cadratin en `text-muted`, jamais une cellule vide, jamais « 0 ». Colonne gelée : la première seulement, `position: sticky; left: 0` + ombre droite 8 px au scroll. Sous 768 px la table devient une liste.
+
+---
+
+# Annexe B — Matrice d'états
+
+| État | Champ / select | Menu | Liste / table | Drawer / modal | Bouton |
+|---|---|---|---|---|---|
+| loading | champ inerte + spinner 14 px à droite, valeur conservée | item unique « Chargement… » `text-muted`, hauteur figée | overlay `bg-surface/60` sur le corps ; en-tête et filtres restent actifs ; **pas** de remplacement du contenu | corps remplacé par squelette, pied désactivé | largeur figée, libellé remplacé par un spinner 14 px, `aria-busy` |
+| skeleton | premier rendu seulement | — | 5 lignes reprenant la géométrie réelle : rail 3 px, bloc 60 % × 14, bloc 35 % × 12, `bg-interactive`, pulsation 1.6 s d'opacité 1 vers 0.55, jamais un balayage clair | idem dans le corps | — |
+| empty | — | « Aucun résultat » + rappel du terme cherché | icône 24 `text-muted`, titre `.bt-card-title`, phrase `.bt-secondary text-muted`, une action, py 40, **pas** de bordure pointillée | même bloc centré, pied réduit à « Fermer » | — |
+| error | `border-danger`, aide remplacée par le message `text-danger-on`, focus au premier champ fautif | item « Impossible de charger » + « Réessayer » | bandeau `bg-danger-soft text-danger-on` en tête de surface + filet 1 px `bg-danger` en bord haut ; **les lignes déjà chargées sont conservées** | bandeau au-dessus du pied, pied actif | variante inchangée, message en toast persistant |
+| disabled | `bg-interactive`, `border-subtle`, opacité 0.6, pas de hover | item opacité 0.6, non focusable, tooltip du motif | ligne opacité 0.6, rail de statut conservé à pleine opacité | pied grisé, corps lisible | opacité 0.6, `cursor: not-allowed`, aucun changement de teinte |
+| success | `border-success` 1200 ms puis retour, coche 14 px | — | ligne en `bg-success-soft` 600 ms puis fond normal | pied remplacé par un toast, fermeture 200 ms après | libellé « Enregistré » + coche 1400 ms, largeur figée |
+| offline | champ éditable, envoi différé, `.bt-caption text-warning-on` « sera envoyé à la reconnexion » | actions serveur retirées, pas grisées | bandeau `bg-warning-soft text-warning-on` h 32 sous l'en-tête + « à jour il y a 6 min » | pied : action primaire devient « Mettre en file » | primaire conservé, secondaires réseau retirés |
+
+---
+
+# Annexe C — Deux patterns du Dashboard
+
+## Sélecteur de vue segmenté
+Posé sur la ligne de base du `.bt-section-title`, aligné à droite, **jamais** sur sa propre ligne ni dans une barre d'outils. Piste `bg-interactive`, `rounded-full`, p 2, h 32 (coarse 44). Segment px 12, 13/18, poids 500, `rounded-full`, `min-w 72` ; inactif `text-muted` puis `text-ink-secondary` au survol, sans fond ; actif `bg-surface` + `border border-strong` + `text-ink` poids 550. Le fond actif se déplace en 180 ms `--bt-ease-spring` ; largeur et couleur du texte **ne s'animent pas**. `role="radiogroup"` et `role="radio" aria-checked` : ce n'est pas un `tablist`, le contenu n'est pas remplacé mais réordonné ; flèches gauche/droite circulaires. 2 à 4 segments, libellés d'un mot. Sous 640 px : piste pleine largeur sous le titre, segments `flex-1`, aucun scroll.
+
+## Bande de mesures cliquables
+Une seule rangée dans la surface, collée sous l'en-tête de section, `border-b border-subtle`, `bg-surface` — **aucun fond propre, aucune bordure autour d'une mesure, aucun radius, aucune ombre, aucune icône**. `divide-x divide-subtle`, chaque mesure `flex-1`, px 16 py 10, la première alignée sur le padding de la surface. Contenu dans cet ordre : label `.bt-caption text-muted` (12/16), puis valeur `.bt-num` 18/22 poids 650 `text-ink`, marge haute 2. Pas de delta, pas de sparkline, pas de sous-titre.
+États : hover `bg-interactive` 90 ms ; focus anneau 2 px offset **−2** (intérieur) ; **actif** = filet 2 px `bg-primary` en bord bas et label en `text-primary-on`, sans fond teinté ni gras supplémentaire. Un second clic sur la mesure active retire le filtre. `role="group"` et `aria-pressed`, libellé accessible « label : valeur ». Une valeur à zéro reste affichée : c'est une bonne nouvelle, pas un vide. **3 mesures par défaut, 4 au maximum.** Sous 640 px : grille 2×2, `divide-x` sur la colonne et `divide-y` entre les rangées, py 12 ; jamais de scroll horizontal.
+
+---
+
+# Annexe D — Grille et largeurs
+
+Conteneur max **1440**, centré. Padding de page : sous 640 → 16 · 640–1023 → 20 · 1024 et plus → 24 · 1536 et plus → 32. Grille 12 colonnes, gouttière 20 (24 à partir de 1280).
+Sidebar 264 déployée et 72 repliée (item 44×44), repli automatique sous 1280, hors flux sous 1024. Colonne latérale de contexte **360** fixe à partir de 1280, sinon elle repasse sous la colonne principale. Colonne principale `minmax(0,1fr)` plafonnée à **880** pour une liste ou un formulaire ; une table peut occuper toute la largeur. Paragraphe 72 caractères au maximum.
+
+Ce qui change exactement à chaque rupture :
+- **640** — une colonne stricte, drawer en feuille basse, table transformée en liste, fil d'ariane remplacé par une flèche retour, mesures en 2×2, actions secondaires réduites à leur icône.
+- **768** — retour des métadonnées de ligne à droite, table autorisée.
+- **1024** — sidebar dans le flux, formulaire sur 2 colonnes, drawer 420.
+- **1280** — colonne latérale 360, sidebar déployée, drawer 560.
+- **1536** — padding 32, gouttière 24 ; **aucune** nouvelle colonne, aucun agrandissement de police.
+
+---
+
+# Annexe E — Contrastes mesurés
+
+Vérifiés sur les valeurs réelles des tokens (WCAG 2.x).
+
+Conformes : en clair `text-muted` sur app **4.92**, sur surface **5.33**, sur interactive **4.78** ; `text-ink-secondary` sur surface **9.99** ; `primary-contrast` sur primary **5.17** et sur hover **6.64** ; danger-on sur soft **5.63** ; info-on sur soft **5.16** ; warning-on sur soft **4.85** ; neutral-on sur soft **7.31** ; primary-on sur soft **6.19**. En sombre : `text-muted` sur app **6.12**, sur surface **5.59**, sur elevated **5.11**, sur interactive **4.68** ; secondary sur surface **9.04** ; contrast sur primary **5.91** ; statuts on sur soft de **7.30** à **9.45**.
+
+Corrigés dans `theme.css` à l'issue de la mesure :
+
+| Paire | Avant | Après |
+|---|---|---|
+| clair, `success-on` sur `success-soft` | 4.49 | `#12703A` → **5.52** |
+| bouton succès, clair | blanc sur `#16A34A` = 3.30 | `--bt-success-strong #15803D` → **5.02** |
+| bouton succès, sombre | blanc sur `#34C77B` = 2.19 | `--bt-success-contrast #08111F` → **8.65** |
+| `border-strong` clair sur surface | 1.51 | `#8090A8` → **3.24** (WCAG 1.4.11) |
+| `border-strong` sombre sur surface | 1.75 | `#5F7392` → **3.57** |
+| opacité `disabled` | 0.45 → 2.33 | **0.6** → **3.30** |
+
+`--bt-border-subtle` (1.22 en clair, 1.30 en sombre) reste décoratif : il ne doit **jamais** servir de contour de contrôle. Le fond seul ne différencie pas une surface de l'application (1.08) : la limite est toujours portée par une bordure ou par du vide.
+
+---
+
+# Annexe F — Interdits vérifiables
+
+1. Aucune bordure ni ombre sur un chip ou un badge : fond doux, texte lisible, radius plein, rien d'autre.
+2. Aucune ombre sur un bloc statique : `shadow-*` est réservé à `bg-elevated` (menu, popover, drawer, modal, toast, barre flottante).
+3. Aucune surface de niveau 1 imbriquée dans une surface de niveau 1.
+4. Aucune couleur brute Tailwind (`slate-*`, `blue-*`, `bg-white`, `text-white`) dans un composant.
+5. Aucune capitale forcée ni `tracking` supérieur à 0.02em : pas d'eyebrow, pas d'en-tête de table en majuscules.
+6. Aucune bordure en pointillés, sauf pendant le survol d'un glisser-déposer.
+7. Quatre radius seulement (8 / 12 / 16 / 20) et jamais deux radius supérieurs à 12 px imbriqués.
+8. Aucune rangée de cartes KPI, aucune grille de quatre `StatCard`.
+9. Aucune animation de contenu : apparition de lignes, chiffres qui défilent, transition de page, réordonnancement, effet au scroll.
+10. Aucun statut communiqué par la couleur seule, aucun tooltip unique porteur d'information, aucun placeholder tenant lieu de label, aucun défilement horizontal de la page.
+11. Aucun bouton rouge plein hors confirmation destructive finale, et jamais plus d'une action primaire par section.
+12. Aucune hauteur minimale inférieure à 44 px sous `@media (pointer: coarse)`, segments, chips, mesures et cellules de pagination compris.

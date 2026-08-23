@@ -13,7 +13,9 @@ export type DashboardQueueFilter =
   /* Conserves pour que les anciens liens `?view=alertes` et `?view=materiel`
      retrouvent exactement le meme contenu qu'avant la refonte. */
   | "alertes"
-  | "materiel";
+  | "materiel"
+  /* Complement du filtre "urgences" : tout ce qui est ouvert sans etre critique. */
+  | "encours";
 
 /** Nature d'un element de la file : alertes chantier + demandes materiel. */
 export type DashboardQueueKind = DashboardAlertKind | "materiel_attente" | "materiel_validee";
@@ -33,6 +35,9 @@ export type MaterielSnapshot = {
 /** Une chose bloquee, sur un chantier, avec un lien pour la traiter. */
 export type DashboardQueueItem = {
   key: string;
+  /** Rang dans la source (alertes du service, puis materiel par date) : sert a
+   *  restituer l'ordre d'origine sur les filtres legacy. */
+  sourceIndex: number;
   kind: DashboardQueueKind;
   href: string;
   title: string;
@@ -70,6 +75,12 @@ export type DashboardSeveritySegment = {
   filter: DashboardQueueFilter;
 };
 
+/**
+ * Vue de la liste des chantiers. Reprend a l'identique les focus `?view=` d'origine :
+ * le tri ET la destination du lien changent avec la vue.
+ */
+export type DashboardChantierView = "priorite" | "recents" | "avancement" | "heures";
+
 export type DashboardChantierCard = {
   id: string;
   href: string;
@@ -85,6 +96,26 @@ export type DashboardChantierCard = {
   isLate: boolean;
   isOverHours: boolean;
   hoursLabel: string;
+  /** Libelle d'origine : heures consommees, ou invitation a preparer le chantier. */
+  nextAction: string;
+  /** Echeance proche (<= 7 jours) : recupere l intention de l ancienne liste "Cette semaine". */
+  dueSoonLabel: string | null;
+};
+
+/**
+ * Mesure de synthese cliquable : elle porte la valeur d'une ancienne carte KPI
+ * et declenche exactement le meme focus, sans occuper un bandeau de cartes.
+ */
+export type DashboardMeasure = {
+  key: "chantiers" | "alertes" | "avancement" | "heures";
+  label: string;
+  value: string;
+  hint: string;
+  tone: DashboardTone;
+  /** Reprend a l'identique le focus de la carte KPI d'origine. */
+  target:
+    | { kind: "tri"; view: DashboardChantierView }
+    | { kind: "filter"; filter: DashboardQueueFilter };
 };
 
 export type DashboardFilterChip = {

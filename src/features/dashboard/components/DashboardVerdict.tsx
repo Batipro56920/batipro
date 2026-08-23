@@ -1,9 +1,11 @@
 import { AlertTriangle, CheckCircle2, CircleAlert } from "lucide-react";
-import type { DashboardSeverity, DashboardSeveritySegment, DashboardVerdict as Verdict } from "../types";
+import type { DashboardQueueFilter, DashboardSeverity, DashboardSeveritySegment, DashboardVerdict as Verdict } from "../types";
 
 type DashboardVerdictProps = {
   verdict: Verdict;
   segments: DashboardSeveritySegment[];
+  activeFilter: DashboardQueueFilter;
+  onSelectFilter: (filter: DashboardQueueFilter) => void;
 };
 
 const VERDICT_ICON = {
@@ -22,7 +24,7 @@ const VERDICT_ICON_TONE = {
   normal: "bg-neutral-soft text-neutral-on",
 } as const;
 
-/** Accent de bord : le verdict est le seul bloc a porter une barre pleine hauteur. */
+/** Accent de bord du verdict, plus epais et plus sature que le rail des lignes de liste. */
 const VERDICT_ACCENT = {
   danger: "bg-danger",
   warning: "bg-warning",
@@ -40,9 +42,10 @@ const SEGMENT_FILL: Record<DashboardSeverity, string> = {
 /**
  * Titre reel de l'ecran : la reponse a "est-ce que ca necessite mon attention
  * maintenant ?" occupe le premier niveau de hierarchie, pas la salutation.
- * La repartition est indicative : la commande de filtrage reste les chips de la file.
+ * Les deux premiers segments filtrent la file ; "Sous controle" n'a rien a filtrer
+ * et reste donc un simple libelle, sans fausse affordance.
  */
-export function DashboardVerdict({ verdict, segments }: DashboardVerdictProps) {
+export function DashboardVerdict({ verdict, segments, activeFilter, onSelectFilter }: DashboardVerdictProps) {
   const Icon = VERDICT_ICON[verdict.tone];
   const total = segments.reduce((sum, segment) => sum + segment.value, 0);
   const visibleSegments = segments.filter((segment) => segment.value > 0);
@@ -60,9 +63,7 @@ export function DashboardVerdict({ verdict, segments }: DashboardVerdictProps) {
 
       {total > 0 ? (
         <div className="mt-4">
-          <p className="bt-caption text-muted">
-            Répartition des {total} chantier{total > 1 ? "s" : ""} actif{total > 1 ? "s" : ""}
-          </p>
+          <p className="bt-caption text-muted">Répartition par chantier</p>
           <div
             className="mt-1.5 flex h-2 gap-[2px] overflow-hidden rounded-full bg-track"
             role="img"
@@ -77,14 +78,41 @@ export function DashboardVerdict({ verdict, segments }: DashboardVerdictProps) {
             ))}
           </div>
 
-          <ul className="mt-2.5 flex flex-wrap items-center gap-x-4 gap-y-1.5">
-            {segments.map((segment) => (
-              <li key={segment.key} className="bt-caption inline-flex items-center gap-1.5">
-                <span aria-hidden className={`h-1.5 w-1.5 shrink-0 rounded-full ${SEGMENT_FILL[segment.key]}`} />
-                <span className="text-muted">{segment.label}</span>
-                <span className="bt-num font-semibold text-ink">{segment.value}</span>
-              </li>
-            ))}
+          {/* Chaque segment filtre la file en place : « Critique » cible les éléments
+              critiques, « À traiter » leur complément. Sans changement d’écran. */}
+          <ul className="mt-2 flex flex-wrap items-center gap-1">
+            {segments.map((segment) => {
+              const interactive = segment.filter !== "all" && segment.value > 0;
+              const active = interactive && activeFilter === segment.filter;
+
+              if (!interactive) {
+                return (
+                  <li key={segment.key} className="bt-tap bt-caption inline-flex items-center gap-1.5 px-2">
+                    <span aria-hidden className={`h-1.5 w-1.5 shrink-0 rounded-full ${SEGMENT_FILL[segment.key]}`} />
+                    <span className="text-muted">{segment.label}</span>
+                    <span className="bt-num font-semibold text-ink">{segment.value}</span>
+                  </li>
+                );
+              }
+
+              return (
+                <li key={segment.key}>
+                  <button
+                    type="button"
+                    title={segment.description}
+                    aria-pressed={active}
+                    onClick={() => onSelectFilter(active ? "all" : segment.filter)}
+                    className={`bt-tap bt-caption inline-flex items-center gap-1.5 rounded-lg px-2 transition-colors duration-[120ms] hover:bg-interactive ${
+                      active ? "bg-interactive" : ""
+                    }`}
+                  >
+                    <span aria-hidden className={`h-1.5 w-1.5 shrink-0 rounded-full ${SEGMENT_FILL[segment.key]}`} />
+                    <span className="text-muted">{segment.label}</span>
+                    <span className="bt-num font-semibold text-ink">{segment.value}</span>
+                  </button>
+                </li>
+              );
+            })}
           </ul>
         </div>
       ) : null}

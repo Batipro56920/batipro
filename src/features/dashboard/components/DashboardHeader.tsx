@@ -1,6 +1,6 @@
 import { useMemo } from "react";
 import { Link } from "react-router-dom";
-import { BriefcaseBusiness, FileText } from "lucide-react";
+import { BriefcaseBusiness, FileText, RotateCcw } from "lucide-react";
 import { Button } from "../../../components/ui/button";
 import { ThemeSelector } from "../../../design-system/theme/ThemeSelector";
 
@@ -8,6 +8,9 @@ type DashboardHeaderProps = {
   /** Nom d'affichage du profil connecte ; null tant qu'il n'est pas charge. */
   userName: string | null;
   locale: string;
+  /** Un filtre ou un tri est actif : l'ecran ne montre pas tout. */
+  isFiltered: boolean;
+  onReset: () => void;
 };
 
 function greeting(hour: number): string {
@@ -21,7 +24,7 @@ function greeting(hour: number): string {
  * La salutation ne consomme plus le premier niveau typographique — il revient au verdict.
  * Le selecteur de theme est une preference, pas une action : il vit sur la ligne de contexte.
  */
-export function DashboardHeader({ userName, locale }: DashboardHeaderProps) {
+export function DashboardHeader({ userName, locale, isFiltered, onReset }: DashboardHeaderProps) {
   const now = useMemo(() => new Date(), []);
 
   const dateLabel = useMemo(() => {
@@ -41,6 +44,14 @@ export function DashboardHeader({ userName, locale }: DashboardHeaderProps) {
       </div>
 
       <div className="flex items-center gap-2">
+        {/* Une seule reinitialisation pour toute la page : l'etat vit dans l'URL,
+            jamais en localStorage, pour eviter l'ecran filtre fantome. */}
+        {isFiltered ? (
+          <Button variant="ghost" size="md" onClick={onReset} className="shrink-0">
+            <RotateCcw className="h-4 w-4" strokeWidth={1.75} />
+            <span className="hidden sm:inline">Réinitialiser</span>
+          </Button>
+        ) : null}
         <Link to="/projets" className="flex-1 sm:flex-none">
           <Button variant="primary" size="md" className="w-full">
             <FileText className="h-4 w-4" strokeWidth={1.75} />

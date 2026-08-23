@@ -10,9 +10,8 @@ type DashboardPriorityFeedProps = {
   activeFilter: DashboardQueueFilter;
   onSelectFilter: (filter: DashboardQueueFilter) => void;
   totalCount: number;
+  compact: boolean;
 };
-
-const COLLAPSED_ROWS = 6;
 
 function QueueRow({ item }: { item: DashboardQueueItem }) {
   return (
@@ -47,11 +46,20 @@ function QueueRow({ item }: { item: DashboardQueueItem }) {
  * Zone centrale du dashboard : une file unique triee par score de priorite.
  * Les chips filtrent la liste EN PLACE, ils ne changent jamais d'ecran.
  */
-export function DashboardPriorityFeed({ items, chips, activeFilter, onSelectFilter, totalCount }: DashboardPriorityFeedProps) {
+export function DashboardPriorityFeed({ items, chips, activeFilter, onSelectFilter, totalCount, compact }: DashboardPriorityFeedProps) {
   const [expanded, setExpanded] = useState(false);
-  const visibleItems = expanded ? items : items.slice(0, COLLAPSED_ROWS);
+  // Sur mobile, au-dela de trois lignes le bloc suivant n est plus jamais atteint.
+  const collapsedRows = compact ? 3 : 6;
+  const visibleItems = expanded ? items : items.slice(0, collapsedRows);
   const hiddenCount = items.length - visibleItems.length;
-  const visibleChips = chips.filter((chip) => chip.key === "all" || chip.value > 0);
+  // "Alertes chantier" et "Matériel" restent des filtres d'URL valides, mais ils
+  // recouvrent trop largement la file pour occuper le rail en permanence.
+  const broadChips: DashboardQueueFilter[] = ["alertes", "materiel"];
+  const visibleChips = chips.filter(
+    (chip) =>
+      chip.key === "all" ||
+      (chip.value > 0 && (!broadChips.includes(chip.key) || activeFilter === chip.key)),
+  );
 
   return (
     <section className="overflow-hidden rounded-card border border-subtle bg-surface">
@@ -75,7 +83,7 @@ export function DashboardPriorityFeed({ items, chips, activeFilter, onSelectFilt
                 key={chip.key}
                 type="button"
                 aria-pressed={active}
-                onClick={() => onSelectFilter(chip.key)}
+                onClick={() => onSelectFilter(active && chip.key !== "all" ? "all" : chip.key)}
                 className={[
                   "bt-tap inline-flex shrink-0 items-center gap-1.5 rounded-full px-3 text-[13px] font-medium transition-colors duration-[120ms]",
                   active

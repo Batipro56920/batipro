@@ -13,23 +13,39 @@ import { DashboardPriorityFeed } from "../features/dashboard/components/Dashboar
 import { DashboardSkeleton } from "../features/dashboard/components/DashboardSkeleton";
 import { DashboardVerdict } from "../features/dashboard/components/DashboardVerdict";
 import { useDashboardMetrics } from "../features/dashboard/hooks/useDashboardMetrics";
-import type { DashboardQueueFilter, MaterielSnapshot } from "../features/dashboard/types";
+import { useMediaQuery } from "../features/dashboard/hooks/useMediaQuery";
+import type { DashboardChantierView, DashboardQueueFilter, MaterielSnapshot } from "../features/dashboard/types";
 
 const QUEUE_FILTERS = new Set<DashboardQueueFilter>(["all", "urgences", "qualite", "retards", "achats", "validations", "alertes", "materiel"]);
 
-/** Anciens liens `?view=` : on les fait atterrir sur le filtre equivalent. */
+const CHANTIER_VIEWS = new Set<DashboardChantierView>(["priorite", "recents", "avancement", "heures"]);
+
+/**
+ * Anciens liens `?view=`. Les cinq focus d'origine se répartissent sur deux axes :
+ * `alertes`/`materiel` filtrent la file, `chantiers`/`avancement`/`heures` trient
+ * la liste des chantiers et changent la destination de ses liens.
+ */
 const LEGACY_VIEW_FILTERS: Record<string, DashboardQueueFilter> = {
   alertes: "alertes",
   materiel: "materiel",
-  chantiers: "all",
-  avancement: "all",
-  heures: "all",
+};
+
+const LEGACY_VIEW_TRIS: Record<string, DashboardChantierView> = {
+  chantiers: "recents",
+  avancement: "avancement",
+  heures: "heures",
 };
 
 function filterFromQuery(filterParam: string | null, viewParam: string | null): DashboardQueueFilter {
   if (filterParam && QUEUE_FILTERS.has(filterParam as DashboardQueueFilter)) return filterParam as DashboardQueueFilter;
   if (viewParam && LEGACY_VIEW_FILTERS[viewParam]) return LEGACY_VIEW_FILTERS[viewParam];
   return "all";
+}
+
+function chantierViewFromQuery(triParam: string | null, viewParam: string | null): DashboardChantierView {
+  if (triParam && CHANTIER_VIEWS.has(triParam as DashboardChantierView)) return triParam as DashboardChantierView;
+  if (viewParam && LEGACY_VIEW_TRIS[viewParam]) return LEGACY_VIEW_TRIS[viewParam];
+  return "priorite";
 }
 
 function isMissingRelationError(message: string | undefined): boolean {
@@ -54,7 +70,12 @@ export default function DashboardPage() {
   const [userName, setUserName] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const activeFilter = filterFromQuery(searchParams.get("filter"), searchParams.get("view"));
+  const viewParam = searchParams.get("view");
+  const activeFilter = filterFromQuery(searchParams.get("filter"), viewParam);
+  const chantierView = chantierViewFromQuery(searchParams.get("tri"), viewParam);
+  const isFiltered = activeFilter !== "all" || chantierView !== "priorite";
+  // Mobile n'est pas le desktop empile : moins de lignes, activite commerciale repliee.
+  const isCompact = !useMediaQuery("(min-width: 640px)");
 
   useEffect(() => {
     let alive = true;
@@ -113,14 +134,38 @@ export default function DashboardPage() {
     };
   }, []);
 
-  function selectFilter(filter: DashboardQueueFilter) {
+  /** L'etat vit uniquement dans l'URL : pas de seconde source de verite. */
+  function updateParams(mutate: (params: URLSearchParams) => void) {
     setSearchParams((previous) => {
       const next = new URLSearchParams(previous);
+      // Le parametre legacy est consomme des la premiere interaction.
       next.delete("view");
-      if (filter === "all") next.delete("filter");
-      else next.set("filter", filter);
+      if (!next.has("filter") && activeFilter !== "all") next.set("filter", activeFilter);
+      if (!next.has("tri") && chantierView !== "priorite") next.set("tri", chantierView);
+      mutate(next);
       return next;
     }, { replace: true });
+  }
+
+  function selectFilter(filter: DashboardQueueFilter) {
+    updateParams((params) => {
+      if (filter === "all") params.delete("filter");
+      else params.set("filter", filter);
+    });
+  }
+
+  function selectChantierView(view: DashboardChantierView) {
+    updateParams((params) => {
+      if (view === "priorite") params.delete("tri");
+      else params.set("tri", view);
+    });
+  }
+
+  function resetFocus() {
+    updateParams((params) => {
+      params.delete("filter");
+      params.delete("tri");
+    });
   }
 
   const metrics = useDashboardMetrics({
@@ -128,6 +173,7 @@ export default function DashboardPage() {
     materiel,
     alerts,
     filter: activeFilter,
+    chantierView,
     locale,
     t,
   });
@@ -136,7 +182,7 @@ export default function DashboardPage() {
 
   return (
     <div className="mx-auto w-full max-w-[1440px] space-y-5 lg:space-y-6">
-      <DashboardHeader userName={userName} locale={locale} />
+      <DashboardHeader userName={userName} locale={locale} isFiltered={isFiltered} onReset={resetFocus} />
 
       {loading ? (
         <DashboardSkeleton />
@@ -144,7 +190,12 @@ export default function DashboardPage() {
         <DashboardEmptyState />
       ) : (
         <>
-          <DashboardVerdict verdict={metrics.verdict} segments={metrics.severitySegments} />
+          <DashboardVerdict
+            verdict={metrics.verdict}
+            segments={metrics.severitySegments}
+            activeFilter={activeFilter}
+            onSelectFilter={selectFilter}
+          />
 
           {/* Au-dela de 1280px la file garde une longueur de ligne lisible
               et la colonne de droite occupe la largeur au lieu de la gaspiller. */}
@@ -155,11 +206,23 @@ export default function DashboardPage() {
               activeFilter={activeFilter}
               onSelectFilter={selectFilter}
               totalCount={metrics.queue.length}
+              compact={isCompact}
             />
-            <DashboardBusinessPanel metrics={metrics.businessMetrics} defaultOpen />
+            <DashboardBusinessPanel metrics={metrics.businessMetrics} defaultOpen={!isCompact} />
           </div>
 
-          <DashboardChantiersPanel chantiers={metrics.chantierCards} portfolio={metrics.portfolio} />
+          {/* `key` : changer de tri remet la liste a son etat replie, comme le
+              faisait l'ancien focus. */}
+          <DashboardChantiersPanel
+            key={chantierView}
+            chantiers={metrics.chantierCards}
+            measures={metrics.measures}
+            chantierView={chantierView}
+            activeFilter={activeFilter}
+            onSelectView={selectChantierView}
+            onSelectFilter={selectFilter}
+            compact={isCompact}
+          />
         </>
       )}
     </div>

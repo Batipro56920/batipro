@@ -17,7 +17,9 @@ const CLIENT_DOCUMENT_ACTIONABLE_STATUSES = ["sent", "viewed", "modification_req
 const COLLECTABLE_INVOICE_STATUSES = ["sent", "partially_paid", "overdue"];
 
 function metricTone(metric: DashboardBusinessMetric, count: number | null): DashboardTone {
-  if (count === null) return metric.tone;
+  // Compteur indisponible : ton neutre. Une donnee absente ne se presente pas
+  // comme une donnee, encore moins comme une alerte.
+  if (count === null) return "normal";
   if (count === 0) return "success";
   return metric.tone === "normal" ? "warning" : metric.tone;
 }

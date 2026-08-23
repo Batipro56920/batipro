@@ -4,6 +4,8 @@ import type { DashboardAlertRow } from "../../../services/dashboardAlerts.servic
 import type {
   DashboardBusinessMetric,
   DashboardChantierCard,
+  DashboardChantierView,
+  DashboardMeasure,
   DashboardFilterChip,
   DashboardQueueFilter,
   DashboardQueueItem,
@@ -22,6 +24,7 @@ type DashboardMetricsInput = {
   materiel: MaterielSnapshot[];
   alerts: DashboardAlertRow[];
   filter: DashboardQueueFilter;
+  chantierView: DashboardChantierView;
   locale: string;
   t: Translator;
 };
@@ -73,7 +76,7 @@ const ALERT_KINDS: DashboardQueueKind[] = [
   "preparation_incomplete",
 ];
 
-const FILTER_KINDS: Record<Exclude<DashboardQueueFilter, "all" | "urgences">, DashboardQueueKind[]> = {
+const FILTER_KINDS: Record<Exclude<DashboardQueueFilter, "all" | "urgences" | "encours">, DashboardQueueKind[]> = {
   qualite: ["task_reprise", "reserve_urgente", "reserve_ouverte"],
   retards: ["task_retard", "achat_retard"],
   achats: ["achat_a_commander", "achat_non_livre", "materiel_validee"],
@@ -81,11 +84,6 @@ const FILTER_KINDS: Record<Exclude<DashboardQueueFilter, "all" | "urgences">, Da
   /* Equivalents des anciennes vues `?view=` : meme contenu qu'avant la refonte. */
   alertes: ALERT_KINDS,
   materiel: MATERIEL_KINDS,
-};
-
-const LEGACY_FILTER_LABELS: Partial<Record<DashboardQueueFilter, string>> = {
-  alertes: "Alertes chantier",
-  materiel: "Matériel",
 };
 
 export function formatHours(value: number, locale: string): string {
@@ -166,9 +164,10 @@ type ChantierContext = {
   bonus: number;
   isLate: boolean;
   isOverHours: boolean;
+  remainingDays: number | null;
 };
 
-export function useDashboardMetrics({ chantiers, materiel, alerts, filter, locale, t }: DashboardMetricsInput) {
+export function useDashboardMetrics({ chantiers, materiel, alerts, filter, chantierView, locale, t }: DashboardMetricsInput) {
   const todayTime = useMemo(() => startOfToday(), []);
 
   const chantierById = useMemo(() => {
@@ -209,7 +208,7 @@ export function useDashboardMetrics({ chantiers, materiel, alerts, filter, local
       else if (remaining !== null && remaining <= 7) bonus += 10;
       if (progress < 35 && remaining !== null && remaining <= 14) bonus += 8;
 
-      map.set(chantier.id, { bonus, isLate, isOverHours });
+      map.set(chantier.id, { bonus, isLate, isOverHours, remainingDays: remaining });
     });
 
     return map;
@@ -223,6 +222,7 @@ export function useDashboardMetrics({ chantiers, materiel, alerts, filter, local
       const days = daysSince(alert.sort_at, todayTime);
       items.push({
         key: alert.id,
+        sourceIndex: items.length,
         kind: alert.kind,
         href: alert.href,
         title: alert.title,
@@ -248,6 +248,7 @@ export function useDashboardMetrics({ chantiers, materiel, alerts, filter, local
 
       items.push({
         key: `materiel:${row.id}`,
+        sourceIndex: items.length,
         kind,
         href: `/chantiers/${row.chantier_id}/financier`,
         // Comme pour les alertes : le titre porte la nature, le detail porte les specifics.
@@ -288,8 +289,16 @@ export function useDashboardMetrics({ chantiers, materiel, alerts, filter, local
   const filteredQueue = useMemo(() => {
     if (filter === "all") return queue;
     if (filter === "urgences") return criticalItems;
+    if (filter === "encours") return queue.filter((item) => !item.isCritical);
+
     const kinds = FILTER_KINDS[filter];
-    return queue.filter((item) => kinds.includes(item.kind));
+    const rows = queue.filter((item) => kinds.includes(item.kind));
+    // Les filtres legacy restituent l'ordre d'origine (tri du service pour les
+    // alertes, creation decroissante pour le materiel), pas le tri par score.
+    if (filter === "alertes" || filter === "materiel") {
+      return [...rows].sort((a, b) => a.sourceIndex - b.sourceIndex);
+    }
+    return rows;
   }, [criticalItems, filter, queue]);
 
   const filterChips = useMemo<DashboardFilterChip[]>(() => {
@@ -298,21 +307,16 @@ export function useDashboardMetrics({ chantiers, materiel, alerts, filter, local
     const chips: DashboardFilterChip[] = [
       { key: "all", label: "Tout", value: queue.length, tone: "normal" },
       { key: "urgences", label: "Urgences", value: criticalItems.length, tone: "danger" },
-      { key: "qualite", label: "Qualité", value: countKinds(FILTER_KINDS.qualite), tone: "danger" },
       { key: "retards", label: "Retards", value: countKinds(FILTER_KINDS.retards), tone: "warning" },
       { key: "achats", label: "Achats", value: countKinds(FILTER_KINDS.achats), tone: "info" },
       { key: "validations", label: "Validations", value: countKinds(FILTER_KINDS.validations), tone: "warning" },
+      // Equivalents directs des anciennes vues ?view=alertes et ?view=materiel.
+      { key: "alertes", label: "Alertes chantier", value: countKinds(FILTER_KINDS.alertes), tone: "warning" },
+      { key: "materiel", label: "Matériel", value: countKinds(FILTER_KINDS.materiel), tone: "info" },
     ];
 
-    // Un filtre legacy arrive par l'URL : on lui donne un chip pour qu'il reste
-    // visible et desactivable, sans encombrer le rail en usage normal.
-    const legacyLabel = LEGACY_FILTER_LABELS[filter];
-    if (legacyLabel) {
-      chips.push({ key: filter, label: legacyLabel, value: countKinds(FILTER_KINDS[filter as "alertes" | "materiel"]), tone: "info" });
-    }
-
     return chips;
-  }, [criticalItems.length, filter, queue]);
+  }, [criticalItems.length, queue]);
 
   /** Chaque chantier actif appartient a un seul segment : la barre est une vraie part-a-tout. */
   const severityByChantier = useMemo(() => {
@@ -339,7 +343,7 @@ export function useDashboardMetrics({ chantiers, materiel, alerts, filter, local
 
     return [
       { key: "critical", label: "Critique", description: "Chantiers à traiter en premier", value: critical, filter: "urgences" },
-      { key: "action", label: "À traiter", description: "Chantiers avec des points ouverts", value: action, filter: "all" },
+      { key: "action", label: "À traiter", description: "Chantiers avec des points ouverts", value: action, filter: "encours" },
       { key: "control", label: "Sous contrôle", description: "Chantiers sans point ouvert", value: control, filter: "all" },
     ];
   }, [severityByChantier]);
@@ -397,15 +401,22 @@ export function useDashboardMetrics({ chantiers, materiel, alerts, filter, local
     });
 
     return orderedChantiers
-      .map((chantier) => {
+      .map((chantier, index) => {
         const entry = stats.get(chantier.id) ?? { items: 0, critical: 0, topScore: 0 };
         const context = chantierContext.get(chantier.id);
         const plannedHours = Number(chantier.heures_prevues ?? 0);
         const spentHours = Number(chantier.heures_passees ?? 0);
 
+        const progress = Math.max(0, Math.min(100, Number(chantier.avancement ?? 0)));
+        // Destination d'origine : les focus avancement/heures pointaient vers l'execution.
+        const href =
+          chantierView === "avancement" || chantierView === "heures"
+            ? `/chantiers/${chantier.id}/execution`
+            : `/chantiers/${chantier.id}`;
+
         const card: DashboardChantierCard = {
           id: chantier.id,
-          href: `/chantiers/${chantier.id}`,
+          href,
           name: chantier.nom,
           client: chantier.client || t("dashboard.missingClient"),
           status: chantierStatusLabel(chantier.status),
@@ -413,7 +424,7 @@ export function useDashboardMetrics({ chantiers, materiel, alerts, filter, local
           finishLabel: chantier.date_fin_prevue
             ? t("dashboard.finishPlanned", { date: chantier.date_fin_prevue })
             : t("dashboard.finishNotPlanned"),
-          progress: Math.max(0, Math.min(100, Number(chantier.avancement ?? 0))),
+          progress,
           severity: severityByChantier.get(chantier.id) ?? "control",
           itemCount: entry.items,
           criticalCount: entry.critical,
@@ -423,38 +434,98 @@ export function useDashboardMetrics({ chantiers, materiel, alerts, filter, local
             plannedHours > 0
               ? `${formatHours(spentHours, locale)} / ${formatHours(plannedHours, locale)}`
               : formatHours(spentHours, locale),
+          dueSoonLabel:
+            context?.remainingDays !== null && context?.remainingDays !== undefined && context.remainingDays >= 0 && context.remainingDays <= 7
+              ? context.remainingDays === 0
+                ? "Fin aujourd’hui"
+                : `Fin dans ${context.remainingDays} j`
+              : null,
+          nextAction:
+            plannedHours > 0
+              ? `${formatHours(spentHours, locale)} consommées`
+              : "Préparer les prochaines actions",
         };
 
-        return { card, topScore: entry.topScore };
+        return { card, topScore: entry.topScore, chantier, index };
       })
+      /* Chaque vue reproduit le tri de l'ancien focus `?view=`. */
       .sort((a, b) => {
-        if (a.topScore !== b.topScore) return b.topScore - a.topScore;
-        return a.card.name.localeCompare(b.card.name, "fr");
+        if (chantierView === "avancement") {
+          const diff = a.card.progress - b.card.progress;
+          if (diff !== 0) return diff;
+        } else if (chantierView === "heures") {
+          const gap = (chantier: ChantierRow) =>
+            Number(chantier.heures_passees ?? 0) - Number(chantier.heures_prevues ?? 0);
+          const diff = gap(b.chantier) - gap(a.chantier);
+          if (diff !== 0) return diff;
+        } else if (chantierView === "priorite") {
+          if (a.topScore !== b.topScore) return b.topScore - a.topScore;
+        }
+        // A egalite, on conserve l'ordre d'origine (creation decroissante),
+        // comme le faisaient les anciens focus.
+        return a.index - b.index;
       })
+      .filter((entry) =>
+        // L'ancien focus "heures" ne listait que les chantiers ayant une prévision.
+        chantierView === "heures" ? Number(entry.chantier.heures_prevues ?? 0) > 0 : true,
+      )
       .map((entry) => entry.card);
-  }, [chantierContext, locale, orderedChantiers, queue, severityByChantier, t]);
+  }, [chantierContext, chantierView, locale, orderedChantiers, queue, severityByChantier, t]);
 
   /**
-   * Agregats de portefeuille. Ils ne sont pas actionnables, donc ils ne montent pas
-   * en tete d'ecran : ils vivent au pied de la section Chantiers, ou ils font sens.
+   * Mesures de synthese. Chacune reprend la valeur, l'info-bulle et la destination
+   * de clic d'une carte KPI d'origine, mais sous forme de barre de tri : on garde
+   * l'interaction sans consommer un bandeau de cartes.
    */
-  const portfolio = useMemo(() => {
+  const measures = useMemo<DashboardMeasure[]>(() => {
     const count = chantiers.length;
     const avgProgress = count === 0 ? 0 : chantiers.reduce((sum, c) => sum + Number(c.avancement ?? 0), 0) / count;
     const plannedHours = chantiers.reduce((sum, c) => sum + Number(c.heures_prevues ?? 0), 0);
     const spentHours = chantiers.reduce((sum, c) => sum + Number(c.heures_passees ?? 0), 0);
 
-    return {
-      count,
-      avgProgressLabel: formatPercent(avgProgress),
-      hoursLabel:
-        plannedHours > 0
-          ? `${formatHours(spentHours, locale)} / ${formatHours(plannedHours, locale)}`
-          : formatHours(spentHours, locale),
-      isOverHours: plannedHours > 0 && spentHours > plannedHours,
-      pendingMaterielCount: pendingMateriel.length,
-    };
-  }, [chantiers, locale, pendingMateriel.length]);
+    return [
+      {
+        key: "alertes",
+        label: "Alertes chantier",
+        value: String(alerts.length),
+        hint: alerts.length > 0 ? "Réserves, tâches, achats, préparation" : "Aucune alerte active",
+        tone: alerts.length > 0 ? (criticalItems.length > 0 ? "danger" : "warning") : "success",
+        target: { kind: "filter", filter: "alertes" },
+      },
+      {
+        key: "chantiers",
+        label: "Chantiers actifs",
+        value: String(count),
+        hint: count === 0 ? "Aucun chantier actif" : "Pilotage opérationnel",
+        tone: count === 0 ? "warning" : "success",
+        target: { kind: "tri", view: "recents" },
+      },
+      {
+        key: "avancement",
+        label: "Avancement moyen",
+        value: formatPercent(avgProgress),
+        hint: count === 0 ? "Aucun chantier actif" : "Chantiers à faible progression",
+        tone: count === 0 ? "warning" : avgProgress < 35 ? "danger" : avgProgress < 65 ? "warning" : "success",
+        target: { kind: "tri", view: "avancement" },
+      },
+      {
+        key: "heures",
+        label: "Temps consommé",
+        value:
+          plannedHours > 0
+            ? `${formatHours(spentHours, locale)} / ${formatHours(plannedHours, locale)}`
+            : formatHours(spentHours, locale),
+        hint: plannedHours > 0 ? `${formatHours(plannedHours, locale)} prévues` : "Prévision non renseignée",
+        tone:
+          plannedHours > 0 && spentHours > plannedHours
+            ? "danger"
+            : plannedHours > 0 && spentHours > plannedHours * 0.85
+              ? "warning"
+              : "info",
+        target: { kind: "tri", view: "heures" },
+      },
+    ];
+  }, [alerts.length, chantiers, criticalItems.length, locale]);
 
   const businessMetrics = useMemo<DashboardBusinessMetric[]>(() => [
     { key: "invoices", label: "Factures à encaisser", value: "—", hint: "Factures émises non soldées", href: "/factures?status=a_encaisser", tone: "warning", actionable: true },
@@ -473,8 +544,8 @@ export function useDashboardMetrics({ chantiers, materiel, alerts, filter, local
     filterChips,
     filteredQueue,
     orderedChantiers,
+    measures,
     pendingMateriel,
-    portfolio,
     queue,
     severitySegments,
     verdict,

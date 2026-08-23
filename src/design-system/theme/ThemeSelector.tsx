@@ -31,14 +31,14 @@ export function ThemeSelector({ className = "" }: { className?: string }) {
             title={option.label}
             onClick={() => setMode(option.mode)}
             className={[
-              "bt-tap inline-flex items-center gap-1.5 rounded-lg px-2.5 text-[13px] font-medium transition-colors duration-[120ms]",
+              "bt-tap inline-flex items-center justify-center rounded-lg px-2 text-[13px] font-medium transition-colors duration-[120ms]",
               active
                 ? "bg-surface text-ink shadow-[0_1px_2px_rgb(11_18_32/0.08)] dark:bg-elevated dark:shadow-none dark:ring-1 dark:ring-subtle"
                 : "text-muted hover:text-ink",
             ].join(" ")}
           >
             <Icon className="h-4 w-4" strokeWidth={1.75} />
-            <span className="sr-only sm:not-sr-only">{option.label}</span>
+            <span className="sr-only">{option.label}</span>
           </button>
         );
       })}

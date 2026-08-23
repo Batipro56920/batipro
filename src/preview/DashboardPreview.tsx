@@ -10,7 +10,7 @@ import { DashboardHeader } from "../features/dashboard/components/DashboardHeade
 import { DashboardPriorityFeed } from "../features/dashboard/components/DashboardPriorityFeed";
 import { DashboardVerdict } from "../features/dashboard/components/DashboardVerdict";
 import { useDashboardMetrics } from "../features/dashboard/hooks/useDashboardMetrics";
-import type { DashboardQueueFilter } from "../features/dashboard/types";
+import type { DashboardChantierView, DashboardQueueFilter } from "../features/dashboard/types";
 import type { DashboardAlertRow } from "../services/dashboardAlerts.service";
 
 
@@ -65,7 +65,14 @@ const materiel = [
 
 export function DashboardPreview() {
   const [filter, setFilter] = useState<DashboardQueueFilter>("all");
-  const metrics = useDashboardMetrics({ chantiers, materiel, alerts, filter, locale: "fr-FR", t });
+  const [chantierView, setChantierView] = useState<DashboardChantierView>("priorite");
+  const metrics = useDashboardMetrics({ chantiers, materiel, alerts, filter, chantierView, locale: "fr-FR", t });
+  const isFiltered = filter !== "all" || chantierView !== "priorite";
+
+  function reset() {
+    setFilter("all");
+    setChantierView("priorite");
+  }
 
   return (
     <div className="min-h-screen bg-app">
@@ -96,8 +103,13 @@ export function DashboardPreview() {
           </header>
           <div className="bg-app p-4 md:p-6">
             <div className="mx-auto w-full max-w-[1440px] space-y-5 lg:space-y-6">
-              <DashboardHeader userName="Corentin" locale="fr-FR" />
-              <DashboardVerdict verdict={metrics.verdict} segments={metrics.severitySegments} />
+              <DashboardHeader userName="Corentin" locale="fr-FR" isFiltered={isFiltered} onReset={reset} />
+              <DashboardVerdict
+                verdict={metrics.verdict}
+                segments={metrics.severitySegments}
+                activeFilter={filter}
+                onSelectFilter={setFilter}
+              />
               <div className="grid items-start gap-5 xl:grid-cols-[minmax(0,1fr)_minmax(320px,380px)]">
                 <DashboardPriorityFeed
                   items={metrics.filteredQueue}
@@ -105,10 +117,20 @@ export function DashboardPreview() {
                   activeFilter={filter}
                   onSelectFilter={setFilter}
                   totalCount={metrics.queue.length}
+                  compact={false}
                 />
                 <DashboardBusinessPanel metrics={metrics.businessMetrics} defaultOpen />
               </div>
-              <DashboardChantiersPanel chantiers={metrics.chantierCards} portfolio={metrics.portfolio} />
+              <DashboardChantiersPanel
+                key={chantierView}
+                chantiers={metrics.chantierCards}
+                measures={metrics.measures}
+                chantierView={chantierView}
+                activeFilter={filter}
+                onSelectView={setChantierView}
+                onSelectFilter={setFilter}
+                compact={false}
+              />
             </div>
           </div>
         </main>

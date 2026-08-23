@@ -25,7 +25,7 @@
 
   /* Bordures */
   --bt-border-subtle: #e4e9f0;
-  --bt-border-strong: #c9d3e0;
+  --bt-border-strong: #8090a8;
 
   /* Texte */
   --bt-text-primary: #0b1220;
@@ -42,8 +42,10 @@
 
   /* Statuts : solid (traits, points, jauges) / soft (fond de chip) / on (texte sur soft) */
   --bt-success: #16a34a;
+  --bt-success-strong: #15803d;
+  --bt-success-contrast: #ffffff;
   --bt-success-soft: #e7f6ec;
-  --bt-success-on: #15803d;
+  --bt-success-on: #12703a;
   --bt-warning: #d97706;
   --bt-warning-soft: #fdf1dc;
   --bt-warning-on: #9a5b08;
@@ -81,7 +83,7 @@
   --bt-sidebar-contrast: #e8eefb;
 
   --bt-border-subtle: #223047;
-  --bt-border-strong: #33445f;
+  --bt-border-strong: #5f7392;
 
   --bt-text-primary: #eaf0f8;
   --bt-text-secondary: #afbdd0;
@@ -96,6 +98,8 @@
 
   /* Statuts desatures : ils ne doivent pas vibrer sur fond sombre. */
   --bt-success: #34c77b;
+  --bt-success-strong: #34c77b;
+  --bt-success-contrast: #08111f;
   --bt-success-soft: #0f2a1e;
   --bt-success-on: #5fdca0;
   --bt-warning: #e9a23b;
@@ -145,6 +149,8 @@
   --color-success: var(--bt-success);
   --color-success-soft: var(--bt-success-soft);
   --color-success-on: var(--bt-success-on);
+  --color-success-strong: var(--bt-success-strong);
+  --color-success-contrast: var(--bt-success-contrast);
   --color-warning: var(--bt-warning);
   --color-warning-soft: var(--bt-warning-soft);
   --color-warning-on: var(--bt-warning-on);

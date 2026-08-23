@@ -16,7 +16,7 @@ const variants: Record<ButtonVariant, string> = {
   secondary: "border border-strong bg-surface text-ink hover:bg-interactive",
   ghost: "text-ink-secondary hover:bg-interactive hover:text-ink",
   danger: "border border-danger/40 bg-danger-soft text-danger-on hover:border-danger/60",
-  success: "bg-success text-white hover:opacity-90",
+  success: "bg-success-strong text-success-contrast hover:opacity-90",
 };
 
 const sizes: Record<ButtonSize, string> = {
@@ -28,7 +28,7 @@ const sizes: Record<ButtonSize, string> = {
 export function Button({ variant = "default", size = "md", className = "", children, ...props }: ButtonProps) {
   return (
     <button
-      className={`inline-flex items-center justify-center gap-2 whitespace-nowrap font-medium transition-colors duration-[120ms] disabled:cursor-not-allowed disabled:opacity-45 ${sizes[size]} ${variants[variant]} ${className}`}
+      className={`inline-flex items-center justify-center gap-2 whitespace-nowrap font-medium transition-colors duration-[120ms] disabled:cursor-not-allowed disabled:opacity-60 ${sizes[size]} ${variants[variant]} ${className}`}
       {...props}
     >
       {children}
