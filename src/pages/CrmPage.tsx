@@ -204,7 +204,7 @@ export default function CrmPage({ section = "dashboard" }: Props) {
       const prospect = row.prospect_id ? prospectById.get(row.prospect_id) ?? null : null;
       const client = row.client_id ? clientById.get(row.client_id) ?? null : null;
       const opportunity = row.opportunity_id ? opportunityById.get(row.opportunity_id) ?? null : null;
-      const chantier = await transformAcceptedQuoteToChantier({ quote: row.statut === "accepte" ? row : await updateCrmQuote(row.id, { statut: "accepte" }), prospect, client, opportunity });
+      const chantier = await transformAcceptedQuoteToChantier({ quote: row, prospect, client, opportunity });
       createdChantierId = chantier.id;
     });
     if (createdChantierId) {

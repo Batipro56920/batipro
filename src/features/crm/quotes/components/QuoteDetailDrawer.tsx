@@ -116,9 +116,9 @@ export function QuoteDetailDrawer({
             <button type="button" onClick={() => actions.onPdf(quote)} className="rounded-xl border border-slate-200 px-3 py-2 text-sm font-medium hover:bg-slate-50">PDF</button>
             <button type="button" onClick={() => actions.onStatus(quote, "accepte")} className="rounded-xl border border-emerald-200 px-3 py-2 text-sm font-medium text-emerald-700 hover:bg-emerald-50">Accepter</button>
             <button type="button" onClick={() => actions.onStatus(quote, "refuse")} className="rounded-xl border border-red-200 px-3 py-2 text-sm font-medium text-red-700 hover:bg-red-50">Refuser</button>
-            {quote.chantierPath ? null : (
-              <button type="button" onClick={() => actions.onTransform(quote)} className="rounded-xl border border-slate-200 px-3 py-2 text-sm font-medium hover:bg-slate-50">Transformer chantier</button>
-            )}
+            {needsChantierHandoff(quote) ? (
+              <button type="button" onClick={() => actions.onTransform(quote)} className="rounded-xl border border-emerald-200 px-3 py-2 text-sm font-medium text-emerald-700 hover:bg-emerald-50">Créer le chantier</button>
+            ) : null}
             <button type="button" disabled className="rounded-xl border border-slate-200 px-3 py-2 text-sm font-medium text-slate-400" title="Duplication à finaliser dans le Quote Builder">Dupliquer</button>
           </div>
         </div>
