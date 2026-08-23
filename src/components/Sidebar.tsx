@@ -123,19 +123,19 @@ export default function Sidebar({ collapsed = false, onToggleCollapse, companyNa
   }, []);
 
   return (
-    <div className="flex h-full flex-col bg-[#0F2747] text-white">
-      <div className={["border-b border-white/10", collapsed ? "p-3" : "p-4"].join(" ")}>
+    <div className="flex h-full flex-col bg-sidebar text-sidebar-contrast">
+      <div className={["border-b border-sidebar-contrast/10", collapsed ? "p-3" : "p-4"].join(" ")}>
         <div className="flex items-center justify-between gap-2">
           <div className={["min-w-0 leading-none", collapsed ? "sr-only" : ""].join(" ")}>
-            <div className="flex items-center gap-2"><div className="grid h-8 w-8 shrink-0 place-items-center rounded-xl bg-white text-sm font-black text-[#0F2747]">B</div><div className="min-w-0"><div className="truncate text-sm font-bold tracking-tight">Batipro</div><div className="mt-0.5 truncate text-[11px] font-medium text-blue-100/70">ERP chantier</div></div></div>
+            <div className="flex items-center gap-2"><div className="grid h-8 w-8 shrink-0 place-items-center rounded-xl bg-sidebar-contrast text-sm font-black text-sidebar">B</div><div className="min-w-0"><div className="truncate text-sm font-bold tracking-tight">Batipro</div><div className="mt-0.5 truncate text-[11px] font-medium text-sidebar-contrast/60">ERP chantier</div></div></div>
           </div>
-          <button type="button" onClick={onToggleCollapse} className="hidden rounded-xl border border-white/10 bg-white/5 p-2 text-blue-100 transition hover:bg-white/10 lg:inline-flex" aria-label={collapsed ? t("layout.expandNavigation") : t("layout.collapseNavigation")} title={collapsed ? t("layout.expandNavigation") : t("layout.collapseNavigation")}>{collapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}</button>
+          <button type="button" onClick={onToggleCollapse} className="hidden rounded-xl border border-sidebar-contrast/10 bg-sidebar-contrast/5 p-2 text-sidebar-contrast/80 transition hover:bg-sidebar-contrast/10 lg:inline-flex" aria-label={collapsed ? t("layout.expandNavigation") : t("layout.collapseNavigation")} title={collapsed ? t("layout.expandNavigation") : t("layout.collapseNavigation")}>{collapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}</button>
         </div>
       </div>
       <nav className="flex-1 space-y-4 overflow-y-auto p-2.5">
-        {groups.map((group) => <div key={group.label}><div className={["px-3 pb-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-blue-100/45", collapsed ? "sr-only" : ""].join(" ")}>{group.label}</div><ul className="space-y-1">{group.items.map((item) => { const Icon = item.icon; return <li key={`${item.group}-${item.label}-${item.to}`}><NavLink to={item.to} end={Boolean(item.end)} className={({ isActive }) => ["group relative flex items-center rounded-xl px-3 py-2.5 text-sm font-medium transition duration-150", collapsed ? "justify-center gap-0" : "gap-3", isActive ? "bg-white text-[#0F2747] shadow-sm" : "text-blue-50/75 hover:bg-white/10 hover:text-white"].join(" ")} title={collapsed ? item.label : undefined}><Icon className="h-4 w-4 shrink-0" /><span className={collapsed ? "sr-only" : "truncate"}>{item.label}</span></NavLink></li>; })}</ul></div>)}
+        {groups.map((group) => <div key={group.label}><div className={["px-3 pb-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-sidebar-contrast/45", collapsed ? "sr-only" : ""].join(" ")}>{group.label}</div><ul className="space-y-1">{group.items.map((item) => { const Icon = item.icon; return <li key={`${item.group}-${item.label}-${item.to}`}><NavLink to={item.to} end={Boolean(item.end)} className={({ isActive }) => ["group relative flex items-center rounded-xl px-3 py-2.5 text-sm font-medium transition duration-150", collapsed ? "justify-center gap-0" : "gap-3", isActive ? "bg-sidebar-contrast text-sidebar shadow-sm" : "text-sidebar-contrast/75 hover:bg-sidebar-contrast/10 hover:text-sidebar-contrast"].join(" ")} title={collapsed ? item.label : undefined}><Icon className="h-4 w-4 shrink-0" /><span className={collapsed ? "sr-only" : "truncate"}>{item.label}</span></NavLink></li>; })}</ul></div>)}
       </nav>
-      <div className={["border-t border-white/10 p-3", collapsed ? "hidden" : ""].join(" ")}><div className="rounded-2xl bg-white/7 p-3"><div className="truncate text-xs font-semibold text-white">{companyName || "Entreprise"}</div><div className="mt-1 text-[11px] text-blue-100/65">Espace entreprise actif</div></div></div>
+      <div className={["border-t border-sidebar-contrast/10 p-3", collapsed ? "hidden" : ""].join(" ")}><div className="rounded-2xl bg-sidebar-contrast/7 p-3"><div className="truncate text-xs font-semibold text-sidebar-contrast">{companyName || "Entreprise"}</div><div className="mt-1 text-[11px] text-sidebar-contrast/60">Espace entreprise actif</div></div></div>
     </div>
   );
 }

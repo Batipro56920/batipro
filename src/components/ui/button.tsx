@@ -9,24 +9,28 @@ type ButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & {
   children: ReactNode;
 };
 
+/* Tokens semantiques uniquement : ces variantes suivent automatiquement le theme. */
 const variants: Record<ButtonVariant, string> = {
-  default: "bg-slate-950 text-white shadow-sm hover:bg-slate-800",
-  primary: "bg-blue-600 text-white shadow-sm shadow-blue-600/15 hover:bg-blue-700",
-  secondary: "border border-slate-200 bg-white text-slate-900 shadow-sm hover:border-slate-300 hover:bg-slate-50",
-  ghost: "text-slate-600 hover:bg-slate-100 hover:text-slate-950",
-  danger: "border border-red-200 bg-red-50 text-red-700 hover:bg-red-100",
-  success: "bg-emerald-600 text-white shadow-sm shadow-emerald-600/15 hover:bg-emerald-700",
+  default: "bg-ink text-surface hover:opacity-90",
+  primary: "bg-primary text-primary-contrast hover:bg-primary-hover active:bg-primary-active active:translate-y-[0.5px]",
+  secondary: "border border-strong bg-surface text-ink hover:bg-interactive",
+  ghost: "text-ink-secondary hover:bg-interactive hover:text-ink",
+  danger: "border border-danger/40 bg-danger-soft text-danger-on hover:border-danger/60",
+  success: "bg-success text-white hover:opacity-90",
 };
 
 const sizes: Record<ButtonSize, string> = {
-  sm: "h-8 rounded-lg px-2.5 text-xs",
-  md: "h-9 rounded-xl px-3 text-sm",
-  lg: "h-10 rounded-xl px-4 text-sm",
+  sm: "bt-tap rounded-field px-2.5 text-[13px]",
+  md: "h-9 rounded-field px-3 text-sm",
+  lg: "h-10 rounded-field px-4 text-sm",
 };
 
 export function Button({ variant = "default", size = "md", className = "", children, ...props }: ButtonProps) {
   return (
-    <button className={`inline-flex items-center justify-center gap-2 whitespace-nowrap font-medium transition disabled:cursor-not-allowed disabled:opacity-50 ${sizes[size]} ${variants[variant]} ${className}`} {...props}>
+    <button
+      className={`inline-flex items-center justify-center gap-2 whitespace-nowrap font-medium transition-colors duration-[120ms] disabled:cursor-not-allowed disabled:opacity-45 ${sizes[size]} ${variants[variant]} ${className}`}
+      {...props}
+    >
       {children}
     </button>
   );

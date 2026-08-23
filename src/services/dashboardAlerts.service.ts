@@ -4,11 +4,23 @@ import type { ChantierRow } from "./chantiers.service";
 export type DashboardAlertCategory = "reserve" | "task" | "purchase" | "preparation";
 export type DashboardAlertTone = "danger" | "warning";
 
+/** Nature precise de l alerte, calculee la ou les statuts bruts sont connus. */
+export type DashboardAlertKind =
+  | "reserve_urgente"
+  | "reserve_ouverte"
+  | "task_reprise"
+  | "task_retard"
+  | "achat_retard"
+  | "achat_a_commander"
+  | "achat_non_livre"
+  | "preparation_incomplete";
+
 export type DashboardAlertRow = {
   id: string;
   chantier_id: string;
   chantier_nom: string;
   category: DashboardAlertCategory;
+  kind: DashboardAlertKind;
   tone: DashboardAlertTone;
   title: string;
   detail: string;
@@ -163,6 +175,7 @@ export async function listDashboardAlerts(chantiers: ChantierRow[]): Promise<Das
       chantier_id: row.chantier_id,
       chantier_nom: chantierNameById.get(row.chantier_id) ?? "Chantier",
       category: "reserve",
+      kind: priority === "URGENTE" ? "reserve_urgente" : "reserve_ouverte",
       tone: priority === "URGENTE" ? "danger" : "warning",
       title: `Réserve ${priority === "URGENTE" ? "urgente" : "ouverte"}`,
       detail: asText(row.title, "Réserve chantier"),
@@ -187,6 +200,7 @@ export async function listDashboardAlerts(chantiers: ChantierRow[]): Promise<Das
         chantier_id: row.chantier_id,
         chantier_nom: chantierNameById.get(row.chantier_id) ?? "Chantier",
         category: "task",
+        kind: "task_reprise",
         tone: "danger",
         title: "Tâche à reprendre",
         detail: row.reprise_reason
@@ -204,6 +218,7 @@ export async function listDashboardAlerts(chantiers: ChantierRow[]): Promise<Das
         chantier_id: row.chantier_id,
         chantier_nom: chantierNameById.get(row.chantier_id) ?? "Chantier",
         category: "task",
+        kind: "task_retard",
         tone: "warning",
         title: "Tâche en retard",
         detail: `${asText(row.titre, "Tâche chantier")} - échéance ${dueDate}`,
@@ -218,13 +233,21 @@ export async function listDashboardAlerts(chantiers: ChantierRow[]): Promise<Das
     if (status === "livre" || status === "annule") continue;
     const expectedAt = row.livraison_prevue_le;
     const isLate = Boolean(expectedAt) && parseIsoDate(expectedAt) < todayTime;
+    // Une livraison en retard est plus grave qu'une commande passée en attente de livraison :
+    // la sévérité précédente était inversée.
+    const purchaseKind: DashboardAlertKind = isLate
+      ? "achat_retard"
+      : status === "a_commander"
+        ? "achat_a_commander"
+        : "achat_non_livre";
 
     alerts.push({
       id: `purchase:${row.id}`,
       chantier_id: row.chantier_id,
       chantier_nom: chantierNameById.get(row.chantier_id) ?? "Chantier",
       category: "purchase",
-      tone: isLate || status === "a_commander" ? "warning" : "danger",
+      kind: purchaseKind,
+      tone: purchaseKind === "achat_retard" ? "danger" : "warning",
       title: isLate ? "Approvisionnement en retard" : status === "a_commander" ? "Approvisionnement à commander" : "Approvisionnement non livré",
       detail: expectedAt
         ? `${asText(row.titre, "Demande fournisseur")} - livraison prévue ${expectedAt}`
@@ -241,6 +264,7 @@ export async function listDashboardAlerts(chantiers: ChantierRow[]): Promise<Das
       chantier_id: row.chantier_id,
       chantier_nom: chantierNameById.get(row.chantier_id) ?? "Chantier",
       category: "preparation",
+      kind: "preparation_incomplete",
       tone: "warning",
       title: "Préparation incomplète",
       detail: asText(row.commentaire, "Checklist préparation chantier à finaliser"),

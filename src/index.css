@@ -2,21 +2,25 @@
 
 @import "./design-system/theme/theme.css";
 
+/* Alias legacy : les anciennes classes utilitaires de l'app pointent desormais
+   sur les tokens semantiques, ce qui les rend theme-aware sans avoir a
+   retoucher chaque page. La source de verite reste theme.css. */
 :root {
   --safe-top: env(safe-area-inset-top);
   --safe-bottom: env(safe-area-inset-bottom);
-  --color-primary: #2563eb;
-  --color-primary-light: #93c5fd;
-  --color-bg-soft: #eff6ff;
-  --color-border-soft: #dbeafe;
-  --bt-bg: #F8FAFC;
-  --bt-surface: #ffffff;
-  --bt-surface-muted: #F1F5F9;
-  --bt-border: #E2E8F0;
-  --bt-text: #0f172a;
-  --bt-muted: #64748b;
+  --color-primary: var(--bt-primary);
+  --color-primary-light: var(--bt-primary-on-soft);
+  --color-bg-soft: var(--bt-primary-soft);
+  --color-border-soft: var(--bt-border-subtle);
+  --bt-bg: var(--bt-bg-app);
+  --bt-surface: var(--bt-bg-surface);
+  --bt-surface-muted: var(--bt-bg-interactive);
+  --bt-border: var(--bt-border-subtle);
+  --bt-text: var(--bt-text-primary);
+  --bt-muted: var(--bt-text-muted);
+  --sidebar-bg: var(--bt-bg-sidebar);
   --bt-radius: 1rem;
-  --bt-shadow: 0 1px 2px rgb(15 23 42 / 0.04), 0 10px 30px rgb(15 23 42 / 0.04);
+  --bt-shadow: var(--bt-shadow-elevated);
 }
 
 html,
@@ -35,10 +39,10 @@ body,
 
 body {
   -webkit-text-size-adjust: 100%;
-  background: var(--bt-bg);
-  color: var(--bt-text);
-  font-family: ui-sans-serif, "Aptos", "Segoe UI", system-ui, -apple-system, sans-serif;
-  font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  background: var(--bt-bg-app);
+  color: var(--bt-text-primary);
+  font-family: var(--font-sans);
+  font-feature-settings: "cv05", "ss01";
 }
 
 .section-title {

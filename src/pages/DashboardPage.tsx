@@ -2,28 +2,47 @@ import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { supabase } from "../lib/supabaseClient";
 import { listChantiers, type ChantierRow } from "../services/chantiers.service";
+import { getCurrentUserProfile } from "../services/currentUserProfile.service";
 import { listDashboardAlerts, type DashboardAlertRow } from "../services/dashboardAlerts.service";
 import { useI18n } from "../i18n";
 import { DashboardBusinessPanel } from "../features/dashboard/components/DashboardBusinessPanel";
+import { DashboardChantiersPanel } from "../features/dashboard/components/DashboardChantiersPanel";
 import { DashboardEmptyState } from "../features/dashboard/components/DashboardEmptyState";
 import { DashboardHeader } from "../features/dashboard/components/DashboardHeader";
-import { DashboardKpiGrid } from "../features/dashboard/components/DashboardKpiGrid";
 import { DashboardPriorityFeed } from "../features/dashboard/components/DashboardPriorityFeed";
-import { DashboardProjectsGrid } from "../features/dashboard/components/DashboardProjectsGrid";
 import { DashboardSkeleton } from "../features/dashboard/components/DashboardSkeleton";
+import { DashboardVerdict } from "../features/dashboard/components/DashboardVerdict";
 import { useDashboardMetrics } from "../features/dashboard/hooks/useDashboardMetrics";
-import type { DashboardView, MaterielSnapshot } from "../features/dashboard/types";
+import type { DashboardQueueFilter, MaterielSnapshot } from "../features/dashboard/types";
 
-const DASHBOARD_VIEWS = new Set<Exclude<DashboardView, null>>(["chantiers", "avancement", "heures", "materiel", "alertes"]);
+const QUEUE_FILTERS = new Set<DashboardQueueFilter>(["all", "urgences", "qualite", "retards", "achats", "validations", "alertes", "materiel"]);
 
-function dashboardViewFromQuery(value: string | null): DashboardView {
-  if (!value) return null;
-  return DASHBOARD_VIEWS.has(value as Exclude<DashboardView, null>) ? value as Exclude<DashboardView, null> : null;
+/** Anciens liens `?view=` : on les fait atterrir sur le filtre equivalent. */
+const LEGACY_VIEW_FILTERS: Record<string, DashboardQueueFilter> = {
+  alertes: "alertes",
+  materiel: "materiel",
+  chantiers: "all",
+  avancement: "all",
+  heures: "all",
+};
+
+function filterFromQuery(filterParam: string | null, viewParam: string | null): DashboardQueueFilter {
+  if (filterParam && QUEUE_FILTERS.has(filterParam as DashboardQueueFilter)) return filterParam as DashboardQueueFilter;
+  if (viewParam && LEGACY_VIEW_FILTERS[viewParam]) return LEGACY_VIEW_FILTERS[viewParam];
+  return "all";
 }
 
 function isMissingRelationError(message: string | undefined): boolean {
   const msg = String(message ?? "").toLowerCase();
   return msg.includes("does not exist") || msg.includes("relation") || msg.includes("schema cache");
+}
+
+/** Prenom si disponible, sinon la partie locale de l'e-mail. */
+function firstNameFrom(displayName: string | null, email: string | null): string | null {
+  const source = String(displayName ?? "").trim() || String(email ?? "").split("@")[0]?.trim() || "";
+  if (!source) return null;
+  const first = source.split(/[\s._-]+/).filter(Boolean)[0] ?? source;
+  return first.charAt(0).toUpperCase() + first.slice(1);
 }
 
 export default function DashboardPage() {
@@ -32,18 +51,31 @@ export default function DashboardPage() {
   const [chantiers, setChantiers] = useState<ChantierRow[]>([]);
   const [materiel, setMateriel] = useState<MaterielSnapshot[]>([]);
   const [alerts, setAlerts] = useState<DashboardAlertRow[]>([]);
-  const [activeView, setActiveView] = useState<DashboardView>(() => dashboardViewFromQuery(searchParams.get("view")));
+  const [userName, setUserName] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
+  const activeFilter = filterFromQuery(searchParams.get("filter"), searchParams.get("view"));
+
   useEffect(() => {
-    setActiveView(dashboardViewFromQuery(searchParams.get("view")));
-  }, [searchParams]);
+    let alive = true;
+
+    getCurrentUserProfile()
+      .then((profile) => {
+        if (alive) setUserName(firstNameFrom(profile?.display_name ?? null, profile?.email ?? null));
+      })
+      .catch(() => {
+        // Nom indisponible : l'en-tete se contente de la salutation.
+      });
+
+    return () => {
+      alive = false;
+    };
+  }, []);
 
   useEffect(() => {
     let alive = true;
 
     async function load() {
-      setLoading(true);
       try {
         const chantiersResult = await listChantiers({ scope: "actifs" });
         const activeChantierIds = chantiersResult.map((chantier) => chantier.id);
@@ -71,8 +103,7 @@ export default function DashboardPage() {
         setMateriel([]);
         setAlerts([]);
       } finally {
-        if (!alive) return;
-        setLoading(false);
+        if (alive) setLoading(false);
       }
     }
 
@@ -82,12 +113,12 @@ export default function DashboardPage() {
     };
   }, []);
 
-  function selectDashboardView(view: DashboardView) {
-    setActiveView(view);
+  function selectFilter(filter: DashboardQueueFilter) {
     setSearchParams((previous) => {
       const next = new URLSearchParams(previous);
-      if (view) next.set("view", view);
-      else next.delete("view");
+      next.delete("view");
+      if (filter === "all") next.delete("filter");
+      else next.set("filter", filter);
       return next;
     }, { replace: true });
   }
@@ -96,8 +127,7 @@ export default function DashboardPage() {
     chantiers,
     materiel,
     alerts,
-    activeView,
-    loading,
+    filter: activeFilter,
     locale,
     t,
   });
@@ -105,8 +135,8 @@ export default function DashboardPage() {
   const hasData = chantiers.length > 0 || alerts.length > 0 || materiel.length > 0;
 
   return (
-    <div className="space-y-4">
-      <DashboardHeader />
+    <div className="mx-auto w-full max-w-[1440px] space-y-5 lg:space-y-6">
+      <DashboardHeader userName={userName} locale={locale} />
 
       {loading ? (
         <DashboardSkeleton />
@@ -114,19 +144,22 @@ export default function DashboardPage() {
         <DashboardEmptyState />
       ) : (
         <>
-          <DashboardKpiGrid kpis={metrics.kpis} activeView={activeView} onSelect={selectDashboardView} />
+          <DashboardVerdict verdict={metrics.verdict} segments={metrics.severitySegments} />
 
-          <DashboardPriorityFeed
-            today={metrics.priorityToday}
-            week={metrics.priorityWeek}
-            focusRows={metrics.focusRows}
-            alerts={metrics.alertCards}
-            hasActiveFocus={activeView !== null}
-            onClearFocus={() => selectDashboardView(null)}
-          />
+          {/* Au-dela de 1280px la file garde une longueur de ligne lisible
+              et la colonne de droite occupe la largeur au lieu de la gaspiller. */}
+          <div className="grid items-start gap-5 xl:grid-cols-[minmax(0,1fr)_minmax(320px,380px)]">
+            <DashboardPriorityFeed
+              items={metrics.filteredQueue}
+              chips={metrics.filterChips}
+              activeFilter={activeFilter}
+              onSelectFilter={selectFilter}
+              totalCount={metrics.queue.length}
+            />
+            <DashboardBusinessPanel metrics={metrics.businessMetrics} defaultOpen />
+          </div>
 
-          <DashboardProjectsGrid projects={metrics.projects} />
-          <DashboardBusinessPanel metrics={metrics.businessMetrics} />
+          <DashboardChantiersPanel chantiers={metrics.chantierCards} portfolio={metrics.portfolio} />
         </>
       )}
     </div>

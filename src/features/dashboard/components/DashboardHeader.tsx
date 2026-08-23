@@ -1,29 +1,58 @@
+import { useMemo } from "react";
 import { Link } from "react-router-dom";
 import { BriefcaseBusiness, FileText } from "lucide-react";
 import { Button } from "../../../components/ui/button";
+import { ThemeSelector } from "../../../design-system/theme/ThemeSelector";
 
-export function DashboardHeader() {
+type DashboardHeaderProps = {
+  /** Nom d'affichage du profil connecte ; null tant qu'il n'est pas charge. */
+  userName: string | null;
+  locale: string;
+};
+
+function greeting(hour: number): string {
+  if (hour < 6) return "Bonne nuit";
+  if (hour < 18) return "Bonjour";
+  return "Bonsoir";
+}
+
+/**
+ * Niveau 0 : une ligne de contexte et une barre d'actions.
+ * La salutation ne consomme plus le premier niveau typographique — il revient au verdict.
+ * Le selecteur de theme est une preference, pas une action : il vit sur la ligne de contexte.
+ */
+export function DashboardHeader({ userName, locale }: DashboardHeaderProps) {
+  const now = useMemo(() => new Date(), []);
+
+  const dateLabel = useMemo(() => {
+    const formatted = now.toLocaleDateString(locale, { weekday: "long", day: "numeric", month: "long" });
+    return formatted.charAt(0).toUpperCase() + formatted.slice(1);
+  }, [locale, now]);
+
+  const hello = userName ? `${greeting(now.getHours())} ${userName}` : greeting(now.getHours());
+
   return (
-    <header className="border-b border-slate-200 bg-white px-4 py-4 sm:px-6">
-      <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-        <div className="min-w-0">
-          <h1 className="text-2xl font-semibold tracking-tight text-slate-950">Bonjour Corentin</h1>
-          <p className="mt-1 text-sm text-slate-500">À traiter aujourd'hui, sans bruit inutile.</p>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <Link to="/projets">
-            <Button variant="primary" size="md">
-              <FileText className="h-4 w-4" />
-              Créer devis
-            </Button>
-          </Link>
-          <Link to="/chantiers/nouveau">
-            <Button variant="secondary" size="md">
-              <BriefcaseBusiness className="h-4 w-4" />
-              Nouveau chantier
-            </Button>
-          </Link>
-        </div>
+    <header className="space-y-3">
+      <div className="flex items-center justify-between gap-3">
+        <p className="bt-caption min-w-0 truncate text-muted">
+          {dateLabel} <span aria-hidden>·</span> {hello}
+        </p>
+        <ThemeSelector className="shrink-0" />
+      </div>
+
+      <div className="flex items-center gap-2">
+        <Link to="/projets" className="flex-1 sm:flex-none">
+          <Button variant="primary" size="md" className="w-full">
+            <FileText className="h-4 w-4" strokeWidth={1.75} />
+            Créer devis
+          </Button>
+        </Link>
+        <Link to="/chantiers/nouveau" className="flex-1 sm:flex-none">
+          <Button variant="secondary" size="md" className="w-full">
+            <BriefcaseBusiness className="h-4 w-4" strokeWidth={1.75} />
+            Nouveau chantier
+          </Button>
+        </Link>
       </div>
     </header>
   );

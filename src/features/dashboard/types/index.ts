@@ -1,6 +1,22 @@
-import type { DashboardAlertRow } from "../../../services/dashboardAlerts.service";
+import type { DashboardAlertKind, DashboardAlertRow } from "../../../services/dashboardAlerts.service";
 
-export type DashboardView = "chantiers" | "avancement" | "heures" | "materiel" | "alertes" | null;
+export type DashboardTone = "normal" | "warning" | "danger" | "success" | "info";
+
+/** Filtre applique EN PLACE a la file "A traiter" (jamais un changement d'ecran). */
+export type DashboardQueueFilter =
+  | "all"
+  | "urgences"
+  | "qualite"
+  | "retards"
+  | "achats"
+  | "validations"
+  /* Conserves pour que les anciens liens `?view=alertes` et `?view=materiel`
+     retrouvent exactement le meme contenu qu'avant la refonte. */
+  | "alertes"
+  | "materiel";
+
+/** Nature d'un element de la file : alertes chantier + demandes materiel. */
+export type DashboardQueueKind = DashboardAlertKind | "materiel_attente" | "materiel_validee";
 
 export type MaterielSnapshot = {
   id: string;
@@ -14,37 +30,47 @@ export type MaterielSnapshot = {
   created_at: string | null;
 };
 
-export type DashboardTone = "normal" | "warning" | "danger" | "success" | "info";
-
-export type DashboardKpi = {
-  key: Exclude<DashboardView, null> | "marge";
-  label: string;
-  value: string;
-  hint: string;
-  tone: DashboardTone;
-  href?: string;
-};
-
-export type DashboardPriorityItem = {
+/** Une chose bloquee, sur un chantier, avec un lien pour la traiter. */
+export type DashboardQueueItem = {
   key: string;
+  kind: DashboardQueueKind;
   href: string;
   title: string;
-  subtitle: string;
-  meta: string;
-  detail?: string;
+  detail: string;
+  chantierId: string;
+  chantierNom: string;
   tone: DashboardTone;
+  /** Score de priorite calcule (cf. docs/charte-ux-batipro.md). */
+  score: number;
+  /** Au-dessus du seuil critique : double le trait de couleur par un libelle. */
+  isCritical: boolean;
+  ageDays: number;
+  ageLabel: string;
+  sortAt: string;
 };
 
-export type DashboardAlertCard = {
-  key: string;
+export type DashboardSeverity = "critical" | "action" | "control";
+
+/** Reponse litterale a "est-ce que ca necessite mon attention maintenant ?". */
+export type DashboardVerdict = {
+  tone: DashboardTone;
+  criticalCount: number;
+  criticalChantiers: number;
+  actionCount: number;
+  totalCount: number;
+  headline: string;
+};
+
+/** Segment de la barre de charge : chaque chantier actif appartient a un seul segment. */
+export type DashboardSeveritySegment = {
+  key: DashboardSeverity;
   label: string;
-  value: number;
   description: string;
-  href: string;
-  tone: DashboardTone;
+  value: number;
+  filter: DashboardQueueFilter;
 };
 
-export type DashboardProjectCard = {
+export type DashboardChantierCard = {
   id: string;
   href: string;
   name: string;
@@ -53,16 +79,39 @@ export type DashboardProjectCard = {
   statusTone: DashboardTone;
   finishLabel: string;
   progress: number;
-  nextAction: string;
+  severity: DashboardSeverity;
+  itemCount: number;
+  criticalCount: number;
+  isLate: boolean;
+  isOverHours: boolean;
+  hoursLabel: string;
 };
 
+export type DashboardFilterChip = {
+  key: DashboardQueueFilter;
+  label: string;
+  value: number;
+  tone: DashboardTone;
+};
+
+export type DashboardBusinessMetricKey =
+  | "invoices"
+  | "clientDocuments"
+  | "purchaseOrders"
+  | "quotes"
+  | "opportunities"
+  | "sav"
+  | "apporteurCommissions";
+
 export type DashboardBusinessMetric = {
-  key: string;
+  key: DashboardBusinessMetricKey;
   label: string;
   value: string;
   hint: string;
   href: string;
   tone: DashboardTone;
+  /** Un compteur "actionnable" alimente le total affiche sur la section repliee. */
+  actionable: boolean;
 };
 
 export type DashboardAlertCategory = DashboardAlertRow["category"];

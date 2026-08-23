@@ -265,8 +265,8 @@ export default function LayoutShell() {
 
   function renderQuickSearchLinks(compact = false) {
     return (
-      <div className={compact ? "mt-2 rounded-xl border border-slate-200 bg-white p-2" : "p-2"}>
-        <div className="px-2 pb-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">
+      <div className={compact ? "mt-2 rounded-xl border border-subtle bg-surface p-2" : "p-2"}>
+        <div className="px-2 pb-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-muted">
           Accès rapides Batipro
         </div>
         <div className={compact ? "space-y-1" : "grid gap-1 sm:grid-cols-2"}>
@@ -276,14 +276,14 @@ export default function LayoutShell() {
               type="button"
               onMouseDown={(event) => event.preventDefault()}
               onClick={() => openQuickLink(item.href)}
-              className="flex w-full items-start gap-3 rounded-xl px-3 py-2.5 text-left transition hover:bg-slate-50"
+              className="flex w-full items-start gap-3 rounded-xl px-3 py-2.5 text-left transition hover:bg-interactive"
             >
-              <span className="mt-0.5 rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-600 ring-1 ring-slate-200">
+              <span className="mt-0.5 rounded-full bg-interactive px-2 py-0.5 text-[11px] font-semibold text-ink-secondary ring-1 ring-subtle">
                 {item.badge}
               </span>
               <span className="min-w-0 flex-1">
-                <span className="block truncate text-sm font-semibold text-slate-950">{item.label}</span>
-                <span className="mt-0.5 block truncate text-xs text-slate-500">{item.description}</span>
+                <span className="block truncate text-sm font-semibold text-ink">{item.label}</span>
+                <span className="mt-0.5 block truncate text-xs text-muted">{item.description}</span>
               </span>
             </button>
           ))}
@@ -293,35 +293,35 @@ export default function LayoutShell() {
   }
 
   return (
-    <div className="min-h-[100dvh] w-full max-w-full overflow-x-hidden bg-[#F8FAFC] text-slate-900">
+    <div className="min-h-[100dvh] w-full max-w-full overflow-x-hidden bg-app text-ink">
       {/* Desktop: fixed sidebar column. Mobile: off-canvas drawer without content push. */}
       <div className={`app-layout ${sidebarCollapsed ? "sidebar-collapsed" : ""}`}>
-        <aside className={`sidebar border-r border-[#0F2747] bg-[#0F2747] ${sidebarOpen ? "open" : ""} ${sidebarCollapsed ? "collapsed" : ""}`}>
+        <aside className={`sidebar border-r border-sidebar bg-sidebar ${sidebarOpen ? "open" : ""} ${sidebarCollapsed ? "collapsed" : ""}`}>
           <Sidebar collapsed={sidebarCollapsed} companyName={companyName} onToggleCollapse={() => setSidebarCollapsed((value) => !value)} />
         </aside>
 
         <main className="content">
-          <header className="header-bar flex h-14 items-center justify-between gap-3 border-b border-[#E2E8F0] bg-white/95 px-4 shadow-sm shadow-slate-950/[0.02] backdrop-blur">
+          <header className="header-bar flex h-14 items-center justify-between gap-3 border-b border-subtle bg-surface/95 px-4  backdrop-blur">
             <div className="flex min-w-0 items-center gap-3">
               <button
                 type="button"
-                className="sidebar-toggle rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm shadow-sm hover:bg-slate-50"
+                className="sidebar-toggle rounded-xl border border-subtle bg-surface px-3 py-2 text-sm shadow-sm hover:bg-interactive"
                 onClick={() => setSidebarOpen((v) => !v)}
                 aria-label={sidebarOpen ? t("layout.closeMenu") : t("layout.openMenu")}
               >
                 {sidebarOpen ? <X size={18} /> : <Menu size={18} />}
               </button>
-              <span className="max-w-[10rem] truncate text-sm font-semibold tracking-tight text-[#0F172A] sm:max-w-[18rem]">
+              <span className="max-w-[10rem] truncate text-sm font-semibold tracking-tight text-ink sm:max-w-[18rem]">
                 {companyName}
               </span>
             </div>
 
             <div className="relative hidden min-w-0 max-w-xl flex-1 lg:block">
-              <label className="flex items-center rounded-xl border border-[#E2E8F0] bg-[#F8FAFC] px-3 py-1.5 text-sm text-slate-400 focus-within:border-blue-300 focus-within:bg-white focus-within:ring-2 focus-within:ring-blue-100">
+              <label className="flex items-center rounded-xl border border-subtle bg-app px-3 py-1.5 text-sm text-muted focus-within:border-primary focus-within:bg-surface focus-within:ring-2 focus-within:ring-primary/25">
                 <Search className="mr-2 h-4 w-4 shrink-0" />
                 <input
                   ref={searchInputRef}
-                  className="min-w-0 flex-1 bg-transparent text-sm text-slate-700 outline-none placeholder:text-slate-400"
+                  className="min-w-0 flex-1 bg-transparent text-sm text-ink-secondary outline-none placeholder:text-muted"
                   placeholder={SEARCH_PLACEHOLDER}
                   aria-label="Recherche globale"
                   value={searchQuery}
@@ -333,16 +333,16 @@ export default function LayoutShell() {
                   onKeyDown={onSearchKeyDown}
                   autoComplete="off"
                 />
-                <span className="ml-auto rounded-md border border-slate-200 bg-white px-1.5 py-0.5 text-[10px] font-medium text-slate-400">Ctrl K</span>
+                <span className="ml-auto rounded-md border border-subtle bg-surface px-1.5 py-0.5 text-[10px] font-medium text-muted">Ctrl K</span>
               </label>
 
               {searchOpen ? (
-                <div className="absolute left-0 right-0 top-12 z-50 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xl shadow-slate-950/10">
+                <div className="absolute left-0 right-0 top-12 z-50 overflow-hidden rounded-2xl border border-subtle bg-surface shadow-elevated">
                   {searchQuery.trim().length >= 2 ? (
                     searchLoading ? (
-                      <div className="px-4 py-3 text-sm text-slate-500">Recherche en cours...</div>
+                      <div className="px-4 py-3 text-sm text-muted">Recherche en cours...</div>
                     ) : searchError ? (
-                      <div className="px-4 py-3 text-sm text-red-600">{searchError}</div>
+                      <div className="px-4 py-3 text-sm text-danger-on">{searchError}</div>
                     ) : searchResults.length ? (
                       <div className="max-h-[26rem] overflow-y-auto p-1">
                         {searchResults.map((result) => (
@@ -351,18 +351,18 @@ export default function LayoutShell() {
                             type="button"
                             onMouseDown={(event) => event.preventDefault()}
                             onClick={() => openSearchResult(result)}
-                            className="flex w-full items-start gap-3 rounded-xl px-3 py-2.5 text-left transition hover:bg-slate-50"
+                            className="flex w-full items-start gap-3 rounded-xl px-3 py-2.5 text-left transition hover:bg-interactive"
                           >
-                            <span className="mt-0.5 rounded-full bg-blue-50 px-2 py-0.5 text-[11px] font-semibold text-blue-700 ring-1 ring-blue-100">{result.badge}</span>
+                            <span className="mt-0.5 rounded-full bg-primary-soft px-2 py-0.5 text-[11px] font-semibold text-primary-on ring-1 ring-primary/25">{result.badge}</span>
                             <span className="min-w-0 flex-1">
-                              <span className="block truncate text-sm font-semibold text-slate-950">{result.title}</span>
-                              <span className="mt-0.5 block truncate text-xs text-slate-500">{result.subtitle}</span>
+                              <span className="block truncate text-sm font-semibold text-ink">{result.title}</span>
+                              <span className="mt-0.5 block truncate text-xs text-muted">{result.subtitle}</span>
                             </span>
                           </button>
                         ))}
                       </div>
                     ) : (
-                      <div className="px-4 py-3 text-sm text-slate-500">Aucun résultat trouvé.</div>
+                      <div className="px-4 py-3 text-sm text-muted">Aucun résultat trouvé.</div>
                     )
                   ) : (
                     renderQuickSearchLinks()
@@ -375,28 +375,28 @@ export default function LayoutShell() {
               <button
                 type="button"
                 onClick={openMobileSearch}
-                className="grid h-9 w-9 place-items-center rounded-xl border border-slate-200 bg-white text-slate-600 shadow-sm transition hover:bg-slate-50 lg:hidden"
+                className="grid h-9 w-9 place-items-center rounded-xl border border-subtle bg-surface text-ink-secondary shadow-sm transition hover:bg-interactive lg:hidden"
                 aria-label="Recherche globale"
                 aria-expanded={searchOpen}
               >
                 <Search className="h-4 w-4" />
               </button>
               <details className="relative hidden sm:block">
-                <summary className="flex h-9 cursor-pointer list-none items-center gap-2 rounded-xl bg-[#3B82F6] px-3 text-sm font-medium text-white shadow-sm shadow-blue-600/15 transition hover:bg-blue-600">
+                <summary className="flex h-9 cursor-pointer list-none items-center gap-2 rounded-xl bg-primary px-3 text-sm font-medium text-primary-contrast transition-colors duration-[120ms] hover:bg-primary-hover">
                   <Plus className="h-4 w-4" />
                   Nouveau
                 </summary>
-                <div className="absolute right-0 top-11 z-40 w-56 overflow-hidden rounded-2xl border border-slate-200 bg-white p-1 text-sm shadow-xl shadow-slate-950/10">
-                  <Link to="/chantiers/nouveau" className="block rounded-xl px-3 py-2 text-slate-700 hover:bg-slate-50">Nouveau chantier</Link>
-                  <Link to="/projets?devis=nouveau" className="block rounded-xl px-3 py-2 text-slate-700 hover:bg-slate-50">Créer devis depuis projet</Link>
-                  <Link to="/crm/prospects?action=nouveau-prospect" className="block rounded-xl px-3 py-2 text-slate-700 hover:bg-slate-50">Nouveau prospect</Link>
+                <div className="absolute right-0 top-11 z-40 w-56 overflow-hidden rounded-2xl border border-subtle bg-surface p-1 text-sm shadow-elevated">
+                  <Link to="/chantiers/nouveau" className="block rounded-xl px-3 py-2 text-ink-secondary hover:bg-interactive">Nouveau chantier</Link>
+                  <Link to="/projets?devis=nouveau" className="block rounded-xl px-3 py-2 text-ink-secondary hover:bg-interactive">Créer devis depuis projet</Link>
+                  <Link to="/crm/prospects?action=nouveau-prospect" className="block rounded-xl px-3 py-2 text-ink-secondary hover:bg-interactive">Nouveau prospect</Link>
                 </div>
               </details>
               <button
                 type="button"
                 disabled
                 title="Notifications à connecter dans une prochaine étape."
-                className="hidden h-9 w-9 cursor-not-allowed place-items-center rounded-xl border border-slate-200 bg-white text-slate-300 shadow-sm md:grid"
+                className="hidden h-9 w-9 cursor-not-allowed place-items-center rounded-xl border border-subtle bg-surface text-muted shadow-sm md:grid"
                 aria-label="Notifications"
               >
                 <Bell className="h-4 w-4" />
@@ -405,7 +405,7 @@ export default function LayoutShell() {
                 type="button"
                 disabled
                 title="Centre d'aide à connecter dans une prochaine étape."
-                className="hidden h-9 w-9 cursor-not-allowed place-items-center rounded-xl border border-slate-200 bg-white text-slate-300 shadow-sm md:grid"
+                className="hidden h-9 w-9 cursor-not-allowed place-items-center rounded-xl border border-subtle bg-surface text-muted shadow-sm md:grid"
                 aria-label="Aide"
               >
                 <CircleHelp className="h-4 w-4" />
@@ -416,11 +416,11 @@ export default function LayoutShell() {
                 disabled={signingOut}
                 className={[
                   "flex h-9 items-center gap-2 rounded-xl border px-2.5 text-sm transition whitespace-nowrap",
-                  signingOut ? "border-slate-200 bg-slate-100 text-slate-500" : "border-slate-200 bg-white shadow-sm hover:bg-slate-50",
+                  signingOut ? "border-subtle bg-interactive text-muted" : "border-subtle bg-surface shadow-sm hover:bg-interactive",
                 ].join(" ")}
                 title={userEmail ?? t("layout.signOut")}
               >
-                <UserRound className="h-4 w-4 text-slate-500" />
+                <UserRound className="h-4 w-4 text-muted" />
                 <span className="sm:hidden">{signingOut ? "..." : t("layout.signOutShort")}</span>
                 <span className="hidden max-w-[9rem] truncate sm:inline">{signingOut ? t("layout.signingOut") : userEmail ?? t("layout.signOut")}</span>
               </button>
@@ -428,12 +428,12 @@ export default function LayoutShell() {
           </header>
 
           {searchOpen ? (
-            <div className="border-b border-slate-200 bg-white px-4 py-3 shadow-sm lg:hidden">
-              <label className="flex items-center rounded-xl border border-[#E2E8F0] bg-[#F8FAFC] px-3 py-2 text-sm text-slate-400 focus-within:border-blue-300 focus-within:bg-white focus-within:ring-2 focus-within:ring-blue-100">
+            <div className="border-b border-subtle bg-surface px-4 py-3 shadow-sm lg:hidden">
+              <label className="flex items-center rounded-xl border border-subtle bg-app px-3 py-2 text-sm text-muted focus-within:border-primary focus-within:bg-surface focus-within:ring-2 focus-within:ring-primary/25">
                 <Search className="mr-2 h-4 w-4 shrink-0" />
                 <input
                   ref={mobileSearchInputRef}
-                  className="min-w-0 flex-1 bg-transparent text-sm text-slate-700 outline-none placeholder:text-slate-400"
+                  className="min-w-0 flex-1 bg-transparent text-sm text-ink-secondary outline-none placeholder:text-muted"
                   placeholder={SEARCH_PLACEHOLDER}
                   aria-label="Recherche globale mobile"
                   value={searchQuery}
@@ -441,16 +441,16 @@ export default function LayoutShell() {
                   onKeyDown={onSearchKeyDown}
                   autoComplete="off"
                 />
-                <button type="button" onClick={() => setSearchOpen(false)} className="ml-2 rounded-lg p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700" aria-label="Fermer la recherche">
+                <button type="button" onClick={() => setSearchOpen(false)} className="ml-2 rounded-lg p-1 text-muted hover:bg-interactive hover:text-ink-secondary" aria-label="Fermer la recherche">
                   <X className="h-4 w-4" />
                 </button>
               </label>
               {searchQuery.trim().length >= 2 ? (
-                <div className="mt-2 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-lg shadow-slate-950/5">
+                <div className="mt-2 overflow-hidden rounded-xl border border-subtle bg-surface shadow-elevated">
                   {searchLoading ? (
-                    <div className="px-4 py-3 text-sm text-slate-500">Recherche en cours...</div>
+                    <div className="px-4 py-3 text-sm text-muted">Recherche en cours...</div>
                   ) : searchError ? (
-                    <div className="px-4 py-3 text-sm text-red-600">{searchError}</div>
+                    <div className="px-4 py-3 text-sm text-danger-on">{searchError}</div>
                   ) : searchResults.length ? (
                     <div className="max-h-80 overflow-y-auto p-1">
                       {searchResults.map((result) => (
@@ -458,18 +458,18 @@ export default function LayoutShell() {
                           key={`${result.kind}-${result.id}`}
                           type="button"
                           onClick={() => openSearchResult(result)}
-                          className="flex w-full items-start gap-3 rounded-xl px-3 py-2.5 text-left transition hover:bg-slate-50"
+                          className="flex w-full items-start gap-3 rounded-xl px-3 py-2.5 text-left transition hover:bg-interactive"
                         >
-                          <span className="mt-0.5 rounded-full bg-blue-50 px-2 py-0.5 text-[11px] font-semibold text-blue-700 ring-1 ring-blue-100">{result.badge}</span>
+                          <span className="mt-0.5 rounded-full bg-primary-soft px-2 py-0.5 text-[11px] font-semibold text-primary-on ring-1 ring-primary/25">{result.badge}</span>
                           <span className="min-w-0 flex-1">
-                            <span className="block truncate text-sm font-semibold text-slate-950">{result.title}</span>
-                            <span className="mt-0.5 block truncate text-xs text-slate-500">{result.subtitle}</span>
+                            <span className="block truncate text-sm font-semibold text-ink">{result.title}</span>
+                            <span className="mt-0.5 block truncate text-xs text-muted">{result.subtitle}</span>
                           </span>
                         </button>
                       ))}
                     </div>
                   ) : (
-                    <div className="px-4 py-3 text-sm text-slate-500">Aucun résultat trouvé.</div>
+                    <div className="px-4 py-3 text-sm text-muted">Aucun résultat trouvé.</div>
                   )}
                 </div>
               ) : (
@@ -478,7 +478,7 @@ export default function LayoutShell() {
             </div>
           ) : null}
 
-          <div className="content-body bg-[#F8FAFC] p-4 md:p-6">
+          <div className="content-body bg-app p-4 md:p-6">
             <Outlet />
             {location.pathname === "/assistant-direction" ? <CocoHistoricalImportPanel /> : null}
           </div>

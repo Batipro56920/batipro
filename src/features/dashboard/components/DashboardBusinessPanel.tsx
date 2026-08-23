@@ -1,66 +1,20 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { ArrowRight, BriefcaseBusiness } from "lucide-react";
+import { Button } from "../../../components/ui/button";
 import { supabase } from "../../../lib/supabaseClient";
+import { DashboardSection } from "./DashboardSection";
+import { TONE_SOFT } from "./tone";
 import type { DashboardBusinessMetric, DashboardTone } from "../types";
 
 type DashboardBusinessPanelProps = {
   metrics: DashboardBusinessMetric[];
+  defaultOpen?: boolean;
 };
 
-type BusinessMetricCounts = Partial<Record<DashboardBusinessMetric["key"], number>>;
-
-const toneClass = {
-  normal: "bg-slate-50 text-slate-700",
-  info: "bg-blue-50 text-blue-700",
-  success: "bg-emerald-50 text-emerald-700",
-  warning: "bg-amber-50 text-amber-700",
-  danger: "bg-red-50 text-red-700",
-};
+type BusinessMetricCounts = Partial<Record<string, number>>;
 
 const CLIENT_DOCUMENT_ACTIONABLE_STATUSES = ["sent", "viewed", "modification_requested", "expired"];
 const COLLECTABLE_INVOICE_STATUSES = ["sent", "partially_paid", "overdue"];
-const DASHBOARD_METRIC_HREFS: Partial<Record<DashboardBusinessMetric["key"], string>> = {
-  quotes: "/crm/devis?signatureStatus=attente_signature",
-  opportunities: "/projets",
-  invoices: "/factures?status=a_encaisser",
-  sav: "/crm/sav",
-};
-
-const DASHBOARD_METRIC_HINTS: Partial<Record<DashboardBusinessMetric["key"], string>> = {
-  quotes: "Envoyés, non signés ni refusés",
-  opportunities: "Projets commerciaux en cours",
-  invoices: "Factures émises non soldées",
-  sav: "Dossiers SAV non clôturés",
-  apporteurCommissions: "Statut Commission à payer",
-};
-
-const clientDocumentsMetric: DashboardBusinessMetric = {
-  key: "clientDocuments",
-  label: "Docs client en attente",
-  value: "—",
-  hint: "Validation / signature / relance client",
-  href: "/factures?clientWorkflow=actionable",
-  tone: "warning",
-};
-
-const purchaseOrdersMetric: DashboardBusinessMetric = {
-  key: "purchaseOrders",
-  label: "Commandes à traiter",
-  value: "—",
-  hint: "Bons de commande ouverts",
-  href: "/bons-commande?status=open",
-  tone: "warning",
-};
-
-const apporteurCommissionsMetric: DashboardBusinessMetric = {
-  key: "apporteurCommissions",
-  label: "Commissions à payer",
-  value: "—",
-  hint: "Apporteurs d'affaires",
-  href: "/crm/apporteurs?status=commission_a_payer",
-  tone: "warning",
-};
 
 function metricTone(metric: DashboardBusinessMetric, count: number | null): DashboardTone {
   if (count === null) return metric.tone;
@@ -135,14 +89,16 @@ async function loadBusinessMetricCounts(): Promise<BusinessMetricCounts> {
   };
 }
 
-export function DashboardBusinessPanel({ metrics }: DashboardBusinessPanelProps) {
+/**
+ * Niveau contexte : repliee par defaut, elle ne remonte que le total reellement
+ * actionnable (encaissements, documents client, commandes) sur son en-tete.
+ */
+export function DashboardBusinessPanel({ metrics, defaultOpen = false }: DashboardBusinessPanelProps) {
   const [counts, setCounts] = useState<BusinessMetricCounts>({});
-  const [loadingCounts, setLoadingCounts] = useState(false);
-  const panelMetrics = useMemo(() => [...metrics, clientDocumentsMetric, purchaseOrdersMetric, apporteurCommissionsMetric], [metrics]);
+  const [loadingCounts, setLoadingCounts] = useState(true);
 
   useEffect(() => {
     let alive = true;
-    setLoadingCounts(true);
     loadBusinessMetricCounts()
       .then((nextCounts) => {
         if (alive) setCounts(nextCounts);
@@ -159,40 +115,61 @@ export function DashboardBusinessPanel({ metrics }: DashboardBusinessPanelProps)
     };
   }, []);
 
+  const actionableTotal = useMemo(
+    () =>
+      metrics
+        .filter((metric) => metric.actionable)
+        .reduce<number>((sum, metric) => sum + (counts[metric.key] ?? 0), 0),
+    [counts, metrics],
+  );
+
+  // Un compteur indisponible n'est pas un compteur a zero : on n'annonce pas
+  // "Rien a traiter" quand la requete a echoue.
+  const hasCounts = Object.values(counts).some((value) => typeof value === "number");
+
+  const summary = loadingCounts
+    ? "Chargement…"
+    : !hasCounts
+      ? "Compteurs indisponibles"
+      : actionableTotal > 0
+        ? `${actionableTotal} en attente`
+        : "Rien à traiter";
+
   return (
-    <section className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm shadow-slate-950/[0.03]">
-      <div className="mb-4 flex items-start justify-between gap-3">
-        <div>
-          <div className="text-[11px] font-semibold uppercase tracking-[0.22em] text-blue-700">Business</div>
-          <h2 className="mt-1 text-xl font-semibold tracking-tight text-slate-950">CRM & rentabilité</h2>
-        </div>
-        <BriefcaseBusiness className="h-5 w-5 text-slate-300" />
-      </div>
-      <div className="grid gap-2 sm:grid-cols-2">
-        {panelMetrics.map((metric) => {
+    <DashboardSection
+      title="Activité commerciale"
+      summary={summary}
+      defaultOpen={defaultOpen}
+      action={
+        <Link to="/crm">
+          <Button variant="secondary" size="sm">Ouvrir le CRM</Button>
+        </Link>
+      }
+    >
+      <ul className="divide-y divide-subtle">
+        {metrics.map((metric) => {
           const count = counts[metric.key] ?? null;
-          const value = loadingCounts && count === null ? "..." : count === null ? metric.value : String(count);
+          const value = loadingCounts && count === null ? "…" : count === null ? metric.value : String(count);
           const tone = metricTone(metric, count);
-          const href = DASHBOARD_METRIC_HREFS[metric.key] ?? metric.href;
-          const hint = DASHBOARD_METRIC_HINTS[metric.key] ?? metric.hint;
 
           return (
-            <Link key={metric.key} to={href} className="group rounded-2xl border border-slate-200 p-3 transition hover:border-blue-200 hover:bg-blue-50/40">
-              <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0">
-                  <div className="truncate text-sm font-semibold text-slate-950">{metric.label}</div>
-                  <div className="mt-1 truncate text-xs text-slate-500">{hint}</div>
-                </div>
-                <span className={`rounded-full px-2.5 py-1 text-sm font-bold ${toneClass[tone]}`}>{value}</span>
-              </div>
-              <div className="mt-3 flex items-center gap-1 text-xs font-medium text-blue-700">
-                Ouvrir
-                <ArrowRight className="h-3.5 w-3.5 transition group-hover:translate-x-0.5" />
-              </div>
-            </Link>
+            <li key={metric.key}>
+              <Link
+                to={metric.href}
+                className="bt-row flex items-center justify-between gap-4 px-4 py-3 transition-colors duration-[90ms] hover:bg-interactive focus-visible:bg-interactive sm:px-5"
+              >
+                <span className="min-w-0 flex-1">
+                  <span className="bt-card-title block truncate text-ink">{metric.label}</span>
+                  <span className="bt-secondary mt-0.5 block truncate text-muted">{metric.hint}</span>
+                </span>
+                <span className={`bt-num shrink-0 rounded-full px-2.5 py-0.5 text-[13px] font-semibold ${TONE_SOFT[tone]}`}>
+                  {value}
+                </span>
+              </Link>
+            </li>
           );
         })}
-      </div>
-    </section>
+      </ul>
+    </DashboardSection>
   );
 }
