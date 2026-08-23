@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import type { ChantierActivityLogRow } from "../../../services/chantierActivityLog.service";
 import {
@@ -40,13 +40,24 @@ function formatJournalChanges(log: ChantierActivityLogRow): JournalChangeItem[] 
   const changes = (log.changes ?? {}) as Record<string, unknown>;
 
   if (log.entity_type === "feed_post") {
-    return [
+    const items: JournalChangeItem[] = [
       {
         label: "Audience",
         value: changes.visibility === "backoffice" ? "Back-office" : "Équipe chantier",
         tone: changes.visibility === "backoffice" ? "neutral" : "blue",
       },
     ];
+    const attachmentNames = Array.isArray(changes.attachment_names)
+      ? changes.attachment_names.map((value) => String(value)).filter(Boolean)
+      : [];
+    if (attachmentNames.length > 0) {
+      items.push({
+        label: attachmentNames.length > 1 ? "Pièces jointes" : "Pièce jointe",
+        value: attachmentNames.join(", "),
+        tone: "green",
+      });
+    }
+    return items;
   }
 
   if (log.entity_type === "terrain_feedback") {
@@ -180,7 +191,10 @@ export default function ChantierJournalSection({
   const [postsLoading, setPostsLoading] = useState(false);
   const [postsError, setPostsError] = useState<string | null>(null);
   const [postsSchemaReady, setPostsSchemaReady] = useState(true);
+  const [attachmentsSchemaReady, setAttachmentsSchemaReady] = useState(true);
   const [draft, setDraft] = useState("");
+  const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [visibility, setVisibility] = useState<ChantierFeedVisibility>("equipe");
   const [replyingToId, setReplyingToId] = useState<string | null>(null);
   const [publishing, setPublishing] = useState(false);
@@ -195,6 +209,7 @@ export default function ChantierJournalSection({
       const result = await listChantierFeedPosts(chantierId);
       setPosts(result.posts);
       setPostsSchemaReady(result.schemaReady);
+      setAttachmentsSchemaReady(result.attachmentsSchemaReady);
     } catch (postError: any) {
       setPosts([]);
       setPostsError(postError?.message ?? "Erreur chargement publications.");
@@ -219,16 +234,52 @@ export default function ChantierJournalSection({
         body,
         visibility,
         parentPostId: replyingToId,
+        files: selectedFiles,
       });
       setPosts((current) => [created, ...current]);
       setDraft("");
+      setSelectedFiles([]);
+      if (fileInputRef.current) fileInputRef.current.value = "";
       setReplyingToId(null);
       setPostsSchemaReady(true);
     } catch (postError: any) {
-      setPostsError(postError?.message ?? "Impossible de publier dans le fil chantier.");
+      const message = postError?.message ?? "Impossible de publier dans le fil chantier.";
+      await refreshPosts();
+      setPostsError(message);
     } finally {
       setPublishing(false);
     }
+  }
+
+  function selectFiles(files: FileList | null) {
+    if (!files) return;
+    const incoming = Array.from(files);
+    const invalid = incoming.find((file) => {
+      const type = String(file.type ?? "").toLowerCase();
+      const name = String(file.name ?? "").toLowerCase();
+      const allowedType = type.startsWith("image/") || type === "application/pdf" || name.endsWith(".pdf");
+      return !allowedType || file.size <= 0 || file.size > 20 * 1024 * 1024;
+    });
+    if (invalid) {
+      setPostsError("Seules les images et les PDF de 20 Mo maximum sont acceptés.");
+      if (fileInputRef.current) fileInputRef.current.value = "";
+      return;
+    }
+
+    setPostsError(null);
+    setSelectedFiles((current) => {
+      const merged = [...current, ...incoming];
+      const unique = merged.filter(
+        (file, index) =>
+          merged.findIndex((candidate) => candidate.name === file.name && candidate.size === file.size) === index,
+      );
+      return unique.slice(0, 4);
+    });
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  }
+
+  function removeSelectedFile(index: number) {
+    setSelectedFiles((current) => current.filter((_, fileIndex) => fileIndex !== index));
   }
 
   const postById = useMemo(
@@ -250,6 +301,7 @@ export default function ChantierJournalSection({
       changes: {
         visibility: post.visibility,
         parent_post_id: post.parent_post_id,
+        attachment_names: post.attachments.map((attachment) => attachment.file_name),
       },
       created_at: post.created_at,
     }));
@@ -393,6 +445,12 @@ export default function ChantierJournalSection({
         </div>
       ) : null}
 
+      {postsSchemaReady && !attachmentsSchemaReady ? (
+        <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+          Les messages texte fonctionnent. Applique le SQL complémentaire pour joindre des photos et PDF.
+        </div>
+      ) : null}
+
       {error && (
         <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
           {error}
@@ -430,7 +488,50 @@ export default function ChantierJournalSection({
           disabled={!postsSchemaReady || publishing}
           className="w-full resize-y rounded-xl border border-slate-200 bg-white px-3 py-3 text-sm text-slate-900 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100 disabled:bg-slate-100"
         />
+        {selectedFiles.length > 0 ? (
+          <div className="mt-3 grid gap-2 sm:grid-cols-2">
+            {selectedFiles.map((file, index) => (
+              <div
+                key={`${file.name}-${file.size}`}
+                className="flex min-w-0 items-center justify-between gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2"
+              >
+                <div className="min-w-0">
+                  <div className="truncate text-sm font-medium text-slate-800">{file.name}</div>
+                  <div className="text-xs text-slate-500">{(file.size / (1024 * 1024)).toFixed(1)} Mo</div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => removeSelectedFile(index)}
+                  disabled={publishing}
+                  className="shrink-0 rounded-lg border border-slate-200 px-2 py-1 text-xs text-slate-600 hover:bg-slate-100"
+                >
+                  Retirer
+                </button>
+              </div>
+            ))}
+          </div>
+        ) : null}
+
         <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex flex-wrap items-center gap-2">
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/jpeg,image/png,image/webp,application/pdf,.pdf"
+              multiple
+              hidden
+              onChange={(event) => selectFiles(event.target.files)}
+            />
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={!postsSchemaReady || !attachmentsSchemaReady || publishing || selectedFiles.length >= 4}
+              className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              Ajouter photo ou PDF
+            </button>
+            <span className="text-xs text-slate-500">4 fichiers maximum · 20 Mo chacun</span>
+          </div>
           <label className="flex items-center gap-2 text-sm text-slate-600">
             <span>Visible par</span>
             <select
@@ -566,6 +667,46 @@ export default function ChantierJournalSection({
                     >
                       {log.reason || "Action chantier"}
                     </div>
+                    {feedPost?.attachments.length ? (
+                      <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                        {feedPost.attachments.map((attachment) => {
+                          const isImage = String(attachment.mime_type ?? "").startsWith("image/");
+                          const content = isImage && attachment.signed_url ? (
+                            <img
+                              src={attachment.signed_url}
+                              alt={attachment.file_name}
+                              className="h-40 w-full object-cover"
+                              loading="lazy"
+                            />
+                          ) : (
+                            <div className="flex h-24 items-center justify-center bg-slate-50 px-4 text-center text-sm font-medium text-slate-700">
+                              {attachment.file_name}
+                            </div>
+                          );
+
+                          return attachment.signed_url ? (
+                            <a
+                              key={attachment.id}
+                              href={attachment.signed_url}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="overflow-hidden rounded-xl border border-slate-200 bg-white hover:border-blue-300"
+                            >
+                              {content}
+                              {isImage ? (
+                                <div className="truncate px-3 py-2 text-xs font-medium text-slate-600">
+                                  {attachment.file_name}
+                                </div>
+                              ) : null}
+                            </a>
+                          ) : (
+                            <div key={attachment.id} className="overflow-hidden rounded-xl border border-slate-200 bg-white">
+                              {content}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    ) : null}
                     <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-sm text-slate-500">
                       <span>{log.actor_name || "Utilisateur"}</span>
                       {log.actor_role ? <span>{log.actor_role}</span> : null}
