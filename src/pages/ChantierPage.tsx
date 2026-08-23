@@ -4632,7 +4632,7 @@ export default function ChantierPage() {
     documents: "Documents",
     equipe: "Équipe",
     sav: "SAV",
-    historique: "Historique",
+    historique: "Fil chantier",
   };
   const chantierPrimarySections: ChantierPrimarySection[] = [
     { key: "cockpit", label: "Cockpit", href: `/chantiers/${id}`, enabled: true },
@@ -4643,7 +4643,7 @@ export default function ChantierPage() {
     { key: "documents", label: "Documents", href: `/chantiers/${id}/documents`, enabled: isSectionEnabled("documents") },
     { key: "equipe", label: "Équipe", href: `/chantiers/${id}/equipe`, enabled: isSectionEnabled("equipe") },
     { key: "sav", label: "SAV", href: `/chantiers/${id}/sav`, enabled: isSectionEnabled("sav") },
-    { key: "historique", label: "Historique", href: `/chantiers/${id}/historique`, enabled: isSectionEnabled("historique") },
+    { key: "historique", label: "Fil chantier", href: `/chantiers/${id}/historique`, enabled: isSectionEnabled("historique") },
   ];
   useEffect(() => {
     if (tab === DEFAULT_TAB_BY_CHANTIER_SECTION[detailSection]) return;

@@ -1,3 +1,4 @@
+import { useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import type { ChantierActivityLogRow } from "../../../services/chantierActivityLog.service";
 
@@ -104,6 +105,37 @@ function changeToneClass(tone: JournalChangeItem["tone"] = "neutral") {
   return "border-slate-200 bg-slate-50 text-slate-700";
 }
 
+function journalDayKey(value: string): string {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "date-inconnue";
+  return [date.getFullYear(), String(date.getMonth() + 1).padStart(2, "0"), String(date.getDate()).padStart(2, "0")].join("-");
+}
+
+function journalDayLabel(value: string): string {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "Date inconnue";
+  const today = new Date();
+  const yesterday = new Date(today);
+  yesterday.setDate(today.getDate() - 1);
+  const key = journalDayKey(value);
+  if (key === journalDayKey(today.toISOString())) return "Aujourd'hui";
+  if (key === journalDayKey(yesterday.toISOString())) return "Hier";
+  const label = new Intl.DateTimeFormat("fr-FR", {
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+  }).format(date);
+  return label.charAt(0).toUpperCase() + label.slice(1);
+}
+
+function normalizeJournalSearch(value: unknown): string {
+  return String(value ?? "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase();
+}
+
 export default function ChantierJournalSection({
   logs,
   loading,
@@ -128,6 +160,48 @@ export default function ChantierJournalSection({
   const terrainFeedbackHref = chantierId
     ? `/retours-terrain?chantierId=${encodeURIComponent(chantierId)}`
     : null;
+  const [searchQuery, setSearchQuery] = useState("");
+  const [entityFilter, setEntityFilter] = useState("all");
+
+  const availableEntityTypes = useMemo(
+    () =>
+      Array.from(new Set(logs.map((log) => log.entity_type)))
+        .filter(Boolean)
+        .sort((left, right) => {
+          const leftLabel = left === "terrain_feedback" ? "Retour terrain" : entityLabel(left);
+          const rightLabel = right === "terrain_feedback" ? "Retour terrain" : entityLabel(right);
+          return leftLabel.localeCompare(rightLabel, "fr");
+        }),
+    [entityLabel, logs],
+  );
+
+  const filteredLogs = useMemo(() => {
+    const query = normalizeJournalSearch(searchQuery.trim());
+    return logs.filter((log) => {
+      if (entityFilter !== "all" && log.entity_type !== entityFilter) return false;
+      if (!query) return true;
+
+      const displayEntity = log.entity_type === "terrain_feedback" ? "Retour terrain" : entityLabel(log.entity_type);
+      const displayAction =
+        log.entity_type === "terrain_feedback" && log.action_type === "started"
+          ? "Prise en charge"
+          : actionLabel(log.action_type);
+      const changeText = formatJournalChanges(log)
+        .map((item) => `${item.label} ${item.value}`)
+        .join(" ");
+
+      return normalizeJournalSearch(
+        [
+          displayEntity,
+          displayAction,
+          log.reason,
+          log.actor_name,
+          log.actor_role,
+          changeText,
+        ].join(" "),
+      ).includes(query);
+    });
+  }, [actionLabel, entityFilter, entityLabel, logs, searchQuery]);
 
   function getJournalEntityLabel(entityType: string) {
     if (entityType === "terrain_feedback") return "Retour terrain";
@@ -182,9 +256,9 @@ export default function ChantierJournalSection({
     <div className="space-y-4">
       <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <div>
-          <div className="font-semibold section-title">Journal chantier</div>
+          <div className="font-semibold section-title">Fil chantier</div>
           <div className="text-sm text-slate-500">
-            Historique des actions, validations, consignes, réserves, retours terrain et temps saisis.
+            Toute l'activité utile du chantier, dans l'ordre chronologique et reliée aux objets métier.
           </div>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -209,8 +283,8 @@ export default function ChantierJournalSection({
 
       {!schemaReady && (
         <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-          Migration journal non appliquée : le tableau reste vide tant que
-          `20260402100000_batipro_v2_foundation_prepare_control_pilot.sql` n’est pas poussée sur Supabase.
+          Le fil chantier n'est pas disponible tant que la migration
+          `20260402100000_batipro_v2_foundation_prepare_control_pilot.sql` n'est pas appliquée sur Supabase.
         </div>
       )}
 
@@ -219,6 +293,53 @@ export default function ChantierJournalSection({
           {error}
         </div>
       )}
+
+      {logs.length > 0 ? (
+        <div className="grid gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-3 md:grid-cols-[minmax(0,1fr)_minmax(220px,auto)_auto] md:items-center">
+          <label className="min-w-0">
+            <span className="sr-only">Rechercher dans le fil chantier</span>
+            <input
+              type="search"
+              value={searchQuery}
+              onChange={(event) => setSearchQuery(event.target.value)}
+              placeholder="Rechercher une action, une personne, une réserve..."
+              className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+            />
+          </label>
+          <label>
+            <span className="sr-only">Filtrer par type d'événement</span>
+            <select
+              value={entityFilter}
+              onChange={(event) => setEntityFilter(event.target.value)}
+              className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+            >
+              <option value="all">Tous les événements</option>
+              {availableEntityTypes.map((entityType) => (
+                <option key={entityType} value={entityType}>
+                  {getJournalEntityLabel(entityType)}
+                </option>
+              ))}
+            </select>
+          </label>
+          <div className="flex items-center justify-between gap-3 md:justify-end">
+            <span className="whitespace-nowrap text-xs font-medium text-slate-500">
+              {filteredLogs.length} sur {logs.length}
+            </span>
+            {searchQuery || entityFilter !== "all" ? (
+              <button
+                type="button"
+                onClick={() => {
+                  setSearchQuery("");
+                  setEntityFilter("all");
+                }}
+                className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-700 hover:bg-slate-100"
+              >
+                Réinitialiser
+              </button>
+            ) : null}
+          </div>
+        </div>
+      ) : null}
 
       <div className="space-y-3">
         {loading ? (
@@ -229,14 +350,30 @@ export default function ChantierJournalSection({
           <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-5 text-sm text-slate-500">
             Aucun événement journalisé pour ce chantier.
           </div>
+        ) : filteredLogs.length === 0 ? (
+          <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-5 text-sm text-slate-500">
+            Aucun événement ne correspond à cette recherche.
+          </div>
         ) : (
-          logs.map((log) => {
+          filteredLogs.map((log, index) => {
             const feedbackHref = getFeedbackHref(log);
             const reserveHref = getReserveHref(log);
             const changeItems = formatJournalChanges(log);
+            const dayKey = journalDayKey(log.created_at);
+            const previousDayKey = index > 0 ? journalDayKey(filteredLogs[index - 1].created_at) : null;
 
             return (
-              <article key={log.id} className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+              <div key={log.id} className="space-y-3">
+                {dayKey !== previousDayKey ? (
+                  <div className="sticky top-0 z-10 flex items-center gap-3 bg-white/95 py-2 backdrop-blur">
+                    <div className="h-px flex-1 bg-slate-200" />
+                    <div className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">
+                      {journalDayLabel(log.created_at)}
+                    </div>
+                    <div className="h-px flex-1 bg-slate-200" />
+                  </div>
+                ) : null}
+                <article className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
                 <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
                   <div className="min-w-0">
                     <div className="flex flex-wrap gap-2">
@@ -290,7 +427,8 @@ export default function ChantierJournalSection({
                     ))}
                   </div>
                 ) : null}
-              </article>
+                </article>
+              </div>
             );
           })
         )}
