@@ -9,36 +9,16 @@ export default defineConfig({
       output: {
         manualChunks(id) {
           if (!id.includes("node_modules")) return undefined;
-          if (id.includes("@react-pdf")) {
-            return "react-pdf";
-          }
-          if (id.includes("pdfjs-dist")) {
-            return "pdf-viewer";
-          }
-          if (id.includes("jspdf")) {
-            return "jspdf";
-          }
-          if (id.includes("html2canvas")) {
-            return "html2canvas";
-          }
-          if (id.includes("recharts") || id.includes("d3-")) {
-            return "charts";
-          }
-          if (id.includes("@tiptap") || id.includes("prosemirror")) {
-            return "rich-text";
-          }
-          if (id.includes("@supabase")) {
-            return "supabase";
-          }
-          if (id.includes("@dnd-kit") || id.includes("@tanstack")) {
-            return "workspace";
-          }
-          if (id.includes("@radix-ui")) {
-            return "ui-radix";
-          }
-          if (id.includes("react") || id.includes("react-dom") || id.includes("react-router-dom")) {
-            return "react-vendor";
-          }
+          if (id.includes("@react-pdf")) return "react-pdf";
+          if (id.includes("pdfjs-dist")) return "pdf-viewer";
+          if (id.includes("jspdf")) return "jspdf";
+          if (id.includes("html2canvas")) return "html2canvas";
+          if (id.includes("recharts") || id.includes("d3-")) return "charts";
+          if (id.includes("@tiptap") || id.includes("prosemirror")) return "rich-text";
+          if (id.includes("@supabase")) return "supabase";
+          if (id.includes("@dnd-kit") || id.includes("@tanstack")) return "workspace";
+          if (id.includes("@radix-ui")) return "ui-radix";
+          if (id.includes("react") || id.includes("react-dom") || id.includes("react-router-dom")) return "react-vendor";
           return undefined;
         },
       },
@@ -60,6 +40,9 @@ export default defineConfig({
         navigateFallback: "/index.html",
         globPatterns: ["**/*.{js,css,html,ico,png,svg,webmanifest,woff2}"],
         maximumFileSizeToCacheInBytes: 3 * 1024 * 1024,
+        cleanupOutdatedCaches: true,
+        clientsClaim: true,
+        skipWaiting: true,
       },
     }),
   ],
