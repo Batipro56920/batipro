@@ -136,6 +136,11 @@ import {
   listChantierActivityLogs,
   type ChantierActivityLogRow,
 } from "../services/chantierActivityLog.service";
+import {
+  getTerrainFeedbackStatus,
+  updateTerrainFeedback,
+  type TerrainFeedbackStatus,
+} from "../services/terrainFeedback.service";
 import DevisImportDrawer, { type DevisImportResult } from "../components/chantiers/DevisImportDrawer";
 import TaskTemplateDrawer from "../components/TaskTemplateDrawer";
 import {
@@ -738,6 +743,9 @@ export default function ChantierPage() {
   const [loading, setLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [chantierActionSaving, setChantierActionSaving] = useState(false);
+  const [sourceFeedbackStatus, setSourceFeedbackStatus] = useState<TerrainFeedbackStatus | null>(null);
+  const [sourceFeedbackLoading, setSourceFeedbackLoading] = useState(false);
+  const [sourceFeedbackSaving, setSourceFeedbackSaving] = useState(false);
 
   const [tab, setTab] = useState<TabKey>("accueil");
   const [enabledChantierModules, setEnabledChantierModules] =
@@ -1449,6 +1457,39 @@ export default function ChantierPage() {
       setReservesError(err?.message ?? "Erreur chargement réserves.");
     } finally {
       setReservesLoading(false);
+    }
+  }
+
+  async function markSourceFeedbackTreated() {
+    if (!id || !sourceFeedbackId || sourceFeedbackSaving) return;
+
+    setSourceFeedbackSaving(true);
+    try {
+      const treatedAt = new Date().toISOString();
+      await updateTerrainFeedback(sourceFeedbackId, {
+        status: "traite",
+        treated_at: treatedAt,
+      });
+      setSourceFeedbackStatus("traite");
+      await recordChantierActivity({
+        actionType: "updated",
+        entityType: "terrain_feedback",
+        entityId: sourceFeedbackId,
+        reason: "Retour terrain traité depuis la réserve associée",
+        changes: {
+          status_to: "traite",
+          treated_at: treatedAt,
+          reserve_id: targetedReserveId || null,
+        },
+      });
+      setToast({ type: "ok", msg: "Retour terrain marqué comme traité." });
+    } catch (err: any) {
+      setToast({
+        type: "error",
+        msg: err?.message ?? "Impossible de mettre à jour le retour terrain.",
+      });
+    } finally {
+      setSourceFeedbackSaving(false);
     }
   }
 
@@ -2644,6 +2685,35 @@ export default function ChantierPage() {
     setReservesFilter("ALL");
     openReserveDrawer(targetedReserve);
   }, [detailSection, reservesLoading, targetedReserve, targetedReserveId]);
+
+  useEffect(() => {
+    let alive = true;
+
+    if (!id || !sourceFeedbackId) {
+      setSourceFeedbackStatus(null);
+      setSourceFeedbackLoading(false);
+      return () => {
+        alive = false;
+      };
+    }
+
+    setSourceFeedbackLoading(true);
+    void getTerrainFeedbackStatus(sourceFeedbackId, id)
+      .then((status) => {
+        if (alive) setSourceFeedbackStatus(status);
+      })
+      .catch((err) => {
+        console.warn("[terrain-feedback] source status unavailable", err);
+        if (alive) setSourceFeedbackStatus(null);
+      })
+      .finally(() => {
+        if (alive) setSourceFeedbackLoading(false);
+      });
+
+    return () => {
+      alive = false;
+    };
+  }, [id, sourceFeedbackId]);
 
   useEffect(() => {
     if (!id) return;
@@ -6281,12 +6351,34 @@ export default function ChantierPage() {
                     : "La réserve ciblée n'est pas disponible sur ce chantier."}
               </div>
               {sourceFeedbackId && id ? (
-                <Link
-                  to={`/retours-terrain?chantierId=${id}&feedbackId=${sourceFeedbackId}`}
-                  className="font-semibold text-blue-800 hover:underline"
-                >
-                  Retour terrain source
-                </Link>
+                <div className="flex flex-wrap items-center gap-2">
+                  {sourceFeedbackLoading ? (
+                    <span className="text-xs text-blue-700">Statut du retour...</span>
+                  ) : sourceFeedbackStatus === "traite" ? (
+                    <span className="rounded-lg border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700">
+                      Retour traité
+                    </span>
+                  ) : sourceFeedbackStatus === "classe_sans_suite" ? (
+                    <span className="rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-xs font-semibold text-slate-700">
+                      Retour classé
+                    </span>
+                  ) : sourceFeedbackStatus ? (
+                    <button
+                      type="button"
+                      onClick={() => void markSourceFeedbackTreated()}
+                      disabled={sourceFeedbackSaving}
+                      className="rounded-lg bg-blue-800 px-3 py-1.5 text-xs font-semibold text-white hover:bg-blue-900 disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      {sourceFeedbackSaving ? "Mise à jour..." : "Marquer le retour traité"}
+                    </button>
+                  ) : null}
+                  <Link
+                    to={`/retours-terrain?chantierId=${id}&feedbackId=${sourceFeedbackId}`}
+                    className="font-semibold text-blue-800 hover:underline"
+                  >
+                    Ouvrir le retour source
+                  </Link>
+                </div>
               ) : null}
             </div>
           </div>
