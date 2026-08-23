@@ -39,8 +39,6 @@ function getEmail(row: HTMLTableRowElement) {
 
 async function generateCredentials(intervenantId: string) {
   const { data, error } = await supabase.functions.invoke("generate-intervenant-link", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
     body: { intervenantId },
   });
   if (error) {
@@ -68,6 +66,11 @@ function buildCredentialsPanel(row: HTMLTableRowElement, intervenantId: string, 
   if (cells.length < 9) return;
   const contactCell = cells[6];
   let panel = contactCell.querySelector<HTMLElement>("[data-batipro-credentials]");
+  const revealed = revealedPasswords.get(intervenantId);
+  const stateKey = revealed ? `${revealed.loginId}:${revealed.password}` : `hidden:${email}`;
+
+  if (panel && panel.dataset.stateKey === stateKey) return;
+
   if (!panel) {
     panel = document.createElement("div");
     panel.dataset.batiproCredentials = "true";
@@ -75,7 +78,7 @@ function buildCredentialsPanel(row: HTMLTableRowElement, intervenantId: string, 
     contactCell.appendChild(panel);
   }
 
-  const revealed = revealedPasswords.get(intervenantId);
+  panel.dataset.stateKey = stateKey;
   const loginId = revealed?.loginId || email || "-";
   panel.innerHTML = "";
 
@@ -107,14 +110,17 @@ function buildCredentialsPanel(row: HTMLTableRowElement, intervenantId: string, 
 
   const generateButton = document.createElement("button");
   generateButton.type = "button";
-  generateButton.className = "rounded-lg border border-blue-300 bg-white px-2.5 py-1.5 font-semibold text-blue-900 hover:bg-blue-100";
+  generateButton.className = "rounded-lg border border-blue-300 bg-white px-2.5 py-1.5 font-semibold text-blue-900 hover:bg-blue-100 disabled:opacity-50";
   generateButton.textContent = revealed ? "Générer un nouveau mot de passe" : "Générer et afficher le mot de passe";
-  generateButton.addEventListener("click", async () => {
+  generateButton.addEventListener("click", async (event) => {
+    event.preventDefault();
+    event.stopPropagation();
     generateButton.disabled = true;
     generateButton.textContent = "Génération...";
     try {
       const credentials = await generateCredentials(intervenantId);
       revealedPasswords.set(intervenantId, credentials);
+      panel!.dataset.stateKey = "";
       buildCredentialsPanel(row, intervenantId, email);
     } catch (error) {
       const message = error instanceof Error ? error.message : "Erreur inconnue";
@@ -135,7 +141,9 @@ function buildCredentialsPanel(row: HTMLTableRowElement, intervenantId: string, 
     copyButton.type = "button";
     copyButton.className = "rounded-lg border border-blue-300 bg-white px-2.5 py-1.5 font-semibold text-blue-900 hover:bg-blue-100";
     copyButton.textContent = "Copier ID + mot de passe";
-    copyButton.addEventListener("click", async () => {
+    copyButton.addEventListener("click", async (event) => {
+      event.preventDefault();
+      event.stopPropagation();
       try {
         await navigator.clipboard.writeText(`ID : ${revealed.loginId}\nMot de passe : ${revealed.password}\nConnexion : ${revealed.loginUrl}`);
         copyButton.textContent = "Copié";
@@ -164,9 +172,7 @@ function enhanceAccountRows(root: ParentNode) {
     const buttons = Array.from(actionsCell.querySelectorAll<HTMLButtonElement>("button"));
     for (const button of buttons) {
       const label = (button.textContent ?? "").trim();
-      if (label === "Accès actif" || label === "Réinitialiser le mot de passe") {
-        button.style.display = "none";
-      }
+      if (label === "Accès actif" || label === "Réinitialiser le mot de passe") button.style.display = "none";
     }
   }
 }
