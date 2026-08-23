@@ -1461,7 +1461,7 @@ export default function ChantierPage() {
   }
 
   async function markSourceFeedbackTreated() {
-    if (!id || !sourceFeedbackId || sourceFeedbackSaving) return;
+    if (!id || !sourceFeedbackId || !targetedReserve || sourceFeedbackSaving) return;
 
     setSourceFeedbackSaving(true);
     try {
@@ -6362,7 +6362,7 @@ export default function ChantierPage() {
                     <span className="rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-xs font-semibold text-slate-700">
                       Retour classé
                     </span>
-                  ) : sourceFeedbackStatus ? (
+                  ) : targetedReserve && sourceFeedbackStatus ? (
                     <button
                       type="button"
                       onClick={() => void markSourceFeedbackTreated()}
