@@ -90,13 +90,7 @@ function ChantierHandoffAction({
     );
   }
 
-  if (compact) return null;
-
-  return (
-    <button type="button" onClick={() => actions.onTransform(row)} className="inline-flex h-9 items-center justify-center rounded-xl border border-slate-200 px-3 text-sm font-semibold text-slate-700 hover:bg-slate-50">
-      Transformer
-    </button>
-  );
+  return null;
 }
 
 function QuoteMobileCard({
@@ -223,9 +217,9 @@ export function QuotesTable({
                         <button type="button" onClick={() => actions.onStatus(row, "refuse")} className="block w-full rounded-xl px-3 py-2 text-left text-sm text-red-700 hover:bg-red-50">Refuser</button>
                         {row.chantierPath ? (
                           <Link to={row.chantierPath} className="block w-full rounded-xl px-3 py-2 text-left text-sm text-emerald-700 hover:bg-emerald-50">Ouvrir chantier</Link>
-                        ) : (
-                          <button type="button" onClick={() => actions.onTransform(row)} className="block w-full rounded-xl px-3 py-2 text-left text-sm hover:bg-slate-50">Transformer chantier</button>
-                        )}
+                        ) : needsChantierHandoff(row) ? (
+                          <button type="button" onClick={() => actions.onTransform(row)} className="block w-full rounded-xl px-3 py-2 text-left text-sm text-emerald-700 hover:bg-emerald-50">Créer le chantier</button>
+                        ) : null}
                         <button type="button" disabled className="block w-full rounded-xl px-3 py-2 text-left text-sm text-slate-400" title="Duplication à finaliser dans le Quote Builder">Dupliquer</button>
                         <button type="button" disabled className="block w-full rounded-xl px-3 py-2 text-left text-sm text-slate-400" title="Suppression à sécuriser">Supprimer</button>
                       </div>

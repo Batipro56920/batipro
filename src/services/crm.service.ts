@@ -1520,8 +1520,10 @@ export async function transformAcceptedQuoteToChantier(input: {
   opportunity?: CrmOpportunityRow | null;
 }): Promise<ChantierRow> {
   const { quote, prospect, client, opportunity } = input;
-  if (quote.statut !== "accepte") {
-    await updateCrmQuote(quote.id, { statut: "accepte", signature_status: "signe", accepted_at: new Date().toISOString() });
+  const hasClientApproval =
+    quote.statut === "accepte" || quote.signature_status === "signe" || quote.signature_status === "signé";
+  if (!hasClientApproval) {
+    throw new Error("Le devis doit être accepté ou signé avant de créer le chantier.");
   }
   const account = client ?? prospect ?? null;
   const clientName =
@@ -1622,7 +1624,7 @@ export async function transformAcceptedQuoteToChantier(input: {
       }
     }
   }
-  await updateCrmQuote(quote.id, { chantier_id: chantier.id, statut: "accepte", signature_status: "signe", accepted_at: quote.accepted_at ?? new Date().toISOString() });
+  await updateCrmQuote(quote.id, { chantier_id: chantier.id, statut: "accepte", accepted_at: quote.accepted_at ?? new Date().toISOString() });
   if (opportunity) {
     const wonStage = (await ensureCrmDefaults()).find((stage) => stage.is_won);
     await crmDb
