@@ -1,6 +1,13 @@
 import { useEffect, useMemo, useState } from "react";
 import type { TaskTemplateInput, TaskTemplateRow } from "../services/taskLibrary.service";
 import {
+  findLotProfileByName,
+  listTaskTemplateLotProfiles,
+  saveTaskTemplateLotProfile,
+  type TaskTemplateLotProfile,
+  type TaskTemplateLotProfileInput,
+} from "../services/taskTemplateLotProfiles.service";
+import {
   getTaskTemplatePreparation,
   type TaskTemplateEquipmentItemInput,
   type TaskTemplateFeeItemInput,
@@ -9,6 +16,11 @@ import {
 } from "../services/taskTemplatePreparation.service";
 import type { ProductCatalogItem } from "../features/product-catalog";
 import { getBestSupplierPrice, listProductCatalogItems } from "../features/product-catalog";
+import { TaskCostEngine } from "../features/task-cost-engine/TaskCostEngine";
+import {
+  generateWithCoco,
+  type TaskTemplateCocoResult,
+} from "../features/product-catalog/services/taskTemplateCocoAssistantBridge";
 import { useI18n } from "../i18n";
 
 type Props = {
@@ -194,6 +206,57 @@ function reorderItems<T>(items: T[], index: number, direction: -1 | 1) {
   return next;
 }
 
+function formatList(title: string, items: string[]) {
+  if (!items.length) return "";
+  return [title, ...items.map((item) => `- ${item}`)].join("\n");
+}
+
+function fillIfEmpty(existing: string, content: string) {
+  const cleanContent = content.trim();
+  if (!cleanContent) return existing;
+  const cleanExisting = existing.trim();
+  return cleanExisting ? existing : cleanContent;
+}
+
+function materialResultText(item: TaskTemplateCocoResult["materials"][number]) {
+  const quantity = item.quantity !== null ? `${item.quantity}${item.unit ? ` ${item.unit}` : ""}` : "";
+  return [item.label, quantity, item.detail].filter(Boolean).join(" - ");
+}
+
+function equipmentResultText(item: TaskTemplateCocoResult["equipment"][number]) {
+  const quantity = item.quantity !== null ? `${item.quantity}${item.unit ? ` ${item.unit}` : ""}` : "";
+  const required = item.required ? "obligatoire" : "";
+  return [item.label, quantity, required, item.detail].filter(Boolean).join(" - ");
+}
+
+function costSummaryLines(result: TaskTemplateCocoResult) {
+  const summary = result.costSummary;
+  if (summary.lines.length) return summary.lines;
+  return [
+    summary.materialCostHt !== null ? `Materiaux: ${summary.materialCostHt.toFixed(2)} EUR HT` : "",
+    summary.laborCostHt !== null ? `Main d'oeuvre: ${summary.laborCostHt.toFixed(2)} EUR HT` : "",
+    summary.feeCostHt !== null ? `Frais: ${summary.feeCostHt.toFixed(2)} EUR HT` : "",
+    summary.totalCostHt !== null ? `Total revient: ${summary.totalCostHt.toFixed(2)} EUR HT` : "",
+    summary.salePriceHt !== null ? `Prix vente: ${summary.salePriceHt.toFixed(2)} EUR HT` : "",
+    summary.marginRate !== null ? `Marge: ${summary.marginRate.toFixed(1)} %` : "",
+  ].filter(Boolean);
+}
+
+function CocoResultBlock({ title, items }: { title: string; items: string[] }) {
+  return (
+    <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+      <div className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">{title}</div>
+      {items.length ? (
+        <ul className="mt-2 space-y-1 text-sm leading-6 text-slate-700">
+          {items.map((item, index) => <li key={`${title}-${index}`}>- {item}</li>)}
+        </ul>
+      ) : (
+        <div className="mt-2 text-sm text-slate-500">Non renseigne.</div>
+      )}
+    </div>
+  );
+}
+
 export default function TaskTemplateDrawer({
   open,
   template,
@@ -216,15 +279,23 @@ export default function TaskTemplateDrawer({
   const [descriptionTechnique, setDescriptionTechnique] = useState("");
   const [caracteristiques, setCaracteristiques] = useState("");
   const [remarques, setRemarques] = useState("");
+  const [usageMetier, setUsageMetier] = useState("");
   const [materialDrafts, setMaterialDrafts] = useState<MaterialRatioDraft[]>([]);
   const [equipmentDrafts, setEquipmentDrafts] = useState<EquipmentDraft[]>([]);
   const [laborDrafts, setLaborDrafts] = useState<LaborDraft[]>([]);
   const [feeDrafts, setFeeDrafts] = useState<FeeDraft[]>([]);
   const [products, setProducts] = useState<ProductCatalogItem[]>([]);
+  const [lotProfiles, setLotProfiles] = useState<TaskTemplateLotProfile[]>([]);
+  const [lotProfilesLoading, setLotProfilesLoading] = useState(false);
+  const [lotProfilesError, setLotProfilesError] = useState<string | null>(null);
+  const [lotSettingsOpen, setLotSettingsOpen] = useState(false);
+  const [lotSettingsSaving, setLotSettingsSaving] = useState(false);
   const [preparationLoading, setPreparationLoading] = useState(false);
   const [preparationSchemaReady, setPreparationSchemaReady] = useState(true);
   const [preparationError, setPreparationError] = useState<string | null>(null);
   const [localError, setLocalError] = useState<string | null>(null);
+  const [cocoLoading, setCocoLoading] = useState(false);
+  const [cocoResult, setCocoResult] = useState<TaskTemplateCocoResult | null>(null);
 
   useEffect(() => {
     if (!open) return;
@@ -247,12 +318,22 @@ export default function TaskTemplateDrawer({
   useEffect(() => {
     if (!open) return;
     let alive = true;
-    listProductCatalogItems()
-      .then((items) => {
-        if (alive) setProducts(items);
+    setLotProfilesLoading(true);
+    Promise.all([listProductCatalogItems(), listTaskTemplateLotProfiles()])
+      .then(([items, profiles]) => {
+        if (!alive) return;
+        setProducts(items);
+        setLotProfiles(profiles);
+        setLotProfilesError(null);
       })
-      .catch(() => {
-        if (alive) setProducts([]);
+      .catch((err: any) => {
+        if (!alive) return;
+        setProducts([]);
+        setLotProfiles([]);
+        setLotProfilesError(err?.message ?? "Chargement des lots métier impossible.");
+      })
+      .finally(() => {
+        if (alive) setLotProfilesLoading(false);
       });
     return () => {
       alive = false;
@@ -271,6 +352,7 @@ export default function TaskTemplateDrawer({
       setDescriptionTechnique(template.description_technique ?? "");
       setCaracteristiques((template.caracteristiques ?? []).join("\n"));
       setRemarques(template.remarques ?? "");
+      setUsageMetier("");
       setLaborDrafts((template.labor_items ?? []).map((row) => createLaborDraft(row)));
       setFeeDrafts((template.fee_items ?? []).map((row) => createFeeDraft(row)));
     } else {
@@ -283,6 +365,7 @@ export default function TaskTemplateDrawer({
       setDescriptionTechnique(initialValues?.description_technique ?? "");
       setCaracteristiques((initialValues?.caracteristiques ?? []).join("\n"));
       setRemarques(initialValues?.remarques ?? "");
+      setUsageMetier("");
       setMaterialDrafts(
         (initialValues?.preparation_materials ?? []).map((row) =>
           createMaterialDraft({
@@ -314,9 +397,23 @@ export default function TaskTemplateDrawer({
     setPreparationSchemaReady(true);
     setPreparationError(null);
     setLocalError(null);
+    setCocoResult(null);
+    setCocoLoading(false);
   }, [
     open,
+    template,
     template?.id,
+    template?.titre,
+    template?.lot,
+    template?.unite,
+    template?.quantite_defaut,
+    template?.temps_prevu_par_unite_h,
+    template?.cout_reference_unitaire_ht,
+    template?.description_technique,
+    template?.caracteristiques,
+    template?.remarques,
+    template?.labor_items,
+    template?.fee_items,
     initialValues?.titre,
     initialValues?.lot,
     initialValues?.unite,
@@ -328,6 +425,8 @@ export default function TaskTemplateDrawer({
     initialValues?.remarques,
     initialValues?.preparation_materials,
     initialValues?.preparation_equipment,
+    initialValues?.labor_items,
+    initialValues?.fee_items,
   ]);
 
   useEffect(() => {
@@ -355,8 +454,7 @@ export default function TaskTemplateDrawer({
         setMaterialDrafts([]);
         setEquipmentDrafts([]);
       } finally {
-        if (!alive) return;
-        setPreparationLoading(false);
+        if (alive) setPreparationLoading(false);
       }
     }
 
@@ -369,33 +467,57 @@ export default function TaskTemplateDrawer({
 
   const busy = saving || deleting;
   const title = useMemo(() => (template ? `${t("common.actions.edit")} template` : t("bibliothequeTasks.new")), [t, template]);
+  const selectedLotProfile = useMemo(() => findLotProfileByName(lotProfiles, lot), [lotProfiles, lot]);
   const compositionTotals = useMemo(() => {
-    const materialCost = materialDrafts.reduce((sum, row) => {
-      const quantity = parseDraftAmount(row.ratio_quantity);
-      const lossMultiplier = 1 + parseDraftAmount(row.loss_percent) / 100;
-      return sum + quantity * lossMultiplier * parseDraftAmount(row.purchase_price_ht);
-    }, 0);
-    const materialSale = materialDrafts.reduce((sum, row) => {
-      const quantity = parseDraftAmount(row.ratio_quantity);
-      const lossMultiplier = 1 + parseDraftAmount(row.loss_percent) / 100;
-      return sum + quantity * lossMultiplier * parseDraftAmount(row.sale_price_ht);
-    }, 0);
-    const laborCost = laborDrafts.reduce(
-      (sum, row) => sum + parseDraftAmount(row.duration) * parseDraftAmount(row.hourlyCost),
-      0,
-    );
-    const laborSale = laborDrafts.reduce(
-      (sum, row) => sum + parseDraftAmount(row.duration) * parseDraftAmount(row.hourlySalePrice),
-      0,
-    );
-    const feeCost = feeDrafts.reduce((sum, row) => sum + parseDraftAmount(row.amountCostHt), 0);
-    const feeSale = feeDrafts.reduce((sum, row) => sum + parseDraftAmount(row.amountSaleHt), 0);
-    const cost = materialCost + laborCost + feeCost;
-    const sale = materialSale + laborSale + feeSale;
-    const margin = sale - cost;
-    const marginRate = sale > 0 ? (margin / sale) * 100 : 0;
-    return { materialCost, materialSale, laborCost, laborSale, feeCost, feeSale, cost, sale, margin, marginRate };
-  }, [materialDrafts, laborDrafts, feeDrafts]);
+    const engineTotals = TaskCostEngine.calculate({
+      materials: materialDrafts.map((row) => ({
+        quantity: parseDraftAmount(row.ratio_quantity),
+        unitCostHt: parseDraftAmount(row.purchase_price_ht),
+        unitSaleHt: parseDraftAmount(row.sale_price_ht),
+        lossPercent: parseDraftAmount(row.loss_percent),
+        marginRate: selectedLotProfile?.materialsMarginRate ?? null,
+      })),
+      labor: laborDrafts.map((row) => ({
+        durationHours: parseDraftAmount(row.duration),
+        hourlyCostHt: parseDraftAmount(row.hourlyCost),
+        hourlySaleHt: parseDraftAmount(row.hourlySalePrice),
+        marginRate: selectedLotProfile?.laborMarginRate ?? null,
+      })),
+      equipment: equipmentDrafts.map((row) => ({
+        quantity: parseDraftAmount(row.default_quantity) || 1,
+        unitCostHt: 0,
+        unitSaleHt: 0,
+        marginRate: selectedLotProfile?.equipmentMarginRate ?? null,
+      })),
+      fees: feeDrafts.map((row) => ({
+        amountCostHt: parseDraftAmount(row.amountCostHt),
+        amountSaleHt: parseDraftAmount(row.amountSaleHt),
+        marginRate: selectedLotProfile?.feesMarginRate ?? null,
+      })),
+      estimatedTimeHours: parseDraftAmount(tempsParUnite),
+    });
+
+    return {
+      materialCost: engineTotals.materialCost,
+      materialSale: engineTotals.materialSale,
+      laborCost: engineTotals.laborCost,
+      laborSale: engineTotals.laborSale,
+      equipmentCost: engineTotals.equipmentCost,
+      equipmentSale: engineTotals.equipmentSale,
+      feeCost: engineTotals.feeCost,
+      feeSale: engineTotals.feeSale,
+      cost: engineTotals.cost,
+      sale: engineTotals.sale,
+      margin: engineTotals.margin,
+      marginRate: engineTotals.marginRate,
+      estimatedTimeHours: engineTotals.estimatedTimeHours,
+      humanTimeHours: engineTotals.humanTimeHours,
+      teamTimeHours: engineTotals.teamTimeHours,
+      dailyCost: engineTotals.dailyCost,
+      profitabilityRate: engineTotals.profitabilityRate,
+      lines: engineTotals.lines,
+    };
+  }, [materialDrafts, laborDrafts, equipmentDrafts, feeDrafts, selectedLotProfile, tempsParUnite]);
 
   if (!open) return null;
 
@@ -421,6 +543,45 @@ export default function TaskTemplateDrawer({
     setFeeDrafts((prev) =>
       prev.map((row, rowIndex) => (rowIndex === index ? { ...row, ...patch } : row)),
     );
+  }
+
+  function applyLotProfile(profile: TaskTemplateLotProfile, mode: "soft" | "force" = "soft") {
+    if ((mode === "force" || !unite.trim()) && profile.defaultUnit) setUnite(profile.defaultUnit);
+    if ((mode === "force" || !tempsParUnite.trim()) && profile.averageTimeHours !== null) {
+      setTempsParUnite(toField(profile.averageTimeHours));
+    }
+
+    if (mode === "force" || equipmentDrafts.length === 0) {
+      const equipment = profile.defaultEquipment.map((name) => createEquipmentDraft({
+        equipment_name: name,
+        is_required: true,
+        default_quantity: null,
+        unit: null,
+        notes: "Profil lot",
+      }));
+      if (equipment.length) setEquipmentDrafts(equipment);
+    }
+
+    const notesFromProfile = [
+      formatList("Consignes chantier du lot", profile.chantierInstructions),
+      formatList("EPI par defaut", profile.defaultPpe),
+      formatList("Consommables par defaut", profile.defaultConsumables),
+      formatList("Documents DOE attendus", profile.doeDocuments),
+      formatList("Retours terrain attendus", profile.fieldReturns),
+    ].filter(Boolean).join("\n\n");
+    setRemarques((prev) => fillIfEmpty(prev, notesFromProfile));
+
+    const characteristicsFromProfile = [
+      formatList("Controles qualite du lot", profile.qualityControls),
+      formatList("Erreurs frequentes du lot", profile.commonMistakes),
+    ].filter(Boolean).join("\n\n");
+    setCaracteristiques((prev) => fillIfEmpty(prev, characteristicsFromProfile));
+  }
+
+  function selectLotProfile(name: string) {
+    setLot(name);
+    const profile = findLotProfileByName(lotProfiles, name);
+    if (profile) applyLotProfile(profile, "soft");
   }
 
   function applyProductToMaterial(index: number, productId: string) {
@@ -630,6 +791,72 @@ export default function TaskTemplateDrawer({
     await onSave(payload);
   }
 
+  async function handleGenerateWithCoco() {
+    setLocalError(null);
+    setCocoLoading(true);
+    try {
+      const result = await generateWithCoco({
+        title: titre,
+        unit: unite,
+        lot,
+        defaultQuantity: quantiteDefaut,
+        timePerUnit: tempsParUnite,
+        referenceUnitCostHt: coutReferenceUnitaire,
+        usage: usageMetier,
+        existingTechnicalDescription: descriptionTechnique,
+        existingCharacteristics: caracteristiques,
+        existingNotes: remarques,
+        materials: materialDrafts,
+        equipment: equipmentDrafts,
+        labor: laborDrafts,
+        fees: feeDrafts,
+        costSummary: compositionTotals,
+        products,
+        lotProfile: selectedLotProfile,
+      });
+
+      setCocoResult(result);
+
+      const materialLines = result.materials.map(materialResultText);
+      const equipmentLines = result.equipment.map(equipmentResultText);
+      const summaryLines = costSummaryLines(result);
+      const technicalContent = [
+        result.technicalDescription,
+        formatList("Mode operatoire COCO", result.procedure),
+      ].filter(Boolean).join("\n\n");
+      const characteristicsContent = [
+        formatList("Materiaux COCO", materialLines),
+        formatList("Materiel COCO", equipmentLines),
+        formatList("Consommables COCO", result.consumables),
+        formatList("EPI COCO", result.ppe),
+        formatList("Controles qualite COCO", result.controls),
+        formatList("Photos DOE attendues", result.doePhotos),
+        formatList("Documents DOE attendus", result.doeDocuments),
+        formatList("Resume couts COCO", summaryLines),
+        formatList("Caracteristiques COCO", result.characteristics),
+      ].filter(Boolean).join("\n\n");
+      const notesContent = [
+        formatList("Retours terrain a alimenter", result.fieldReturns),
+        formatList("Questions retour terrain", result.fieldReturnQuestions),
+        formatList("Erreurs a eviter", result.errorsToAvoid),
+        formatList("Points securite", result.safetyPoints),
+        formatList("Informations manquantes", result.missingInformation),
+      ].filter(Boolean).join("\n\n");
+
+      setDescriptionTechnique((prev) => fillIfEmpty(prev, technicalContent));
+      setCaracteristiques((prev) => fillIfEmpty(prev, characteristicsContent));
+      setRemarques((prev) => fillIfEmpty(prev, notesContent));
+
+      if (result.usedFallback) {
+        setLocalError(`Coco IA indisponible. Fallback local applique: ${result.errorMessage ?? "erreur inconnue"}`);
+      }
+    } catch (err: any) {
+      setLocalError(err?.message ?? "Coco n'a pas pu generer le template.");
+    } finally {
+      setCocoLoading(false);
+    }
+  }
+
   async function handleDelete() {
     if (!template?.id) return;
     const ok = window.confirm(t("taskTemplateDrawer.deleteConfirm", { name: template.titre }));
@@ -637,7 +864,25 @@ export default function TaskTemplateDrawer({
     await onDelete(template.id);
   }
 
+  async function handleSaveLotProfile(profile: TaskTemplateLotProfileInput) {
+    setLotSettingsSaving(true);
+    setLotProfilesError(null);
+    try {
+      await saveTaskTemplateLotProfile(profile);
+      const profiles = await listTaskTemplateLotProfiles();
+      setLotProfiles(profiles);
+      setLot(profile.name);
+      const savedProfile = findLotProfileByName(profiles, profile.name);
+      if (savedProfile) applyLotProfile(savedProfile, "soft");
+    } catch (err: any) {
+      setLotProfilesError(err?.message ?? "Enregistrement du lot impossible.");
+    } finally {
+      setLotSettingsSaving(false);
+    }
+  }
+
   return (
+    <>
     <div className="fixed inset-0 z-50">
       <div className="absolute inset-0 bg-black/40" onClick={onClose} />
       <div className="absolute right-0 top-0 h-screen w-[46vw] max-w-[860px] min-w-[360px] bg-white border-l shadow-xl flex flex-col">
@@ -667,12 +912,24 @@ export default function TaskTemplateDrawer({
           <div className="grid gap-3 md:grid-cols-2">
             <label className="block space-y-1">
               <div className="text-xs text-slate-600">{t("common.labels.lot")}</div>
-              <input
-                className="w-full rounded-xl border px-3 py-2 text-sm"
+              <select
+                className="w-full rounded-xl border bg-white px-3 py-2 text-sm"
                 value={lot}
-                onChange={(e) => setLot(e.target.value)}
-                placeholder="Ex: Peinture"
-              />
+                onChange={(e) => selectLotProfile(e.target.value)}
+              >
+                <option value="">Lot à définir</option>
+                {lotProfiles.filter((profile) => profile.isActive).map((profile) => (
+                  <option key={profile.id} value={profile.name}>{profile.name}</option>
+                ))}
+                {lot && !findLotProfileByName(lotProfiles, lot) ? <option value={lot}>{lot}</option> : null}
+              </select>
+              <div className="flex flex-wrap items-center gap-2">
+                <button type="button" className="text-xs font-semibold text-blue-700 hover:text-blue-900" onClick={() => setLotSettingsOpen(true)}>
+                  Paramétrer les lots
+                </button>
+                {lotProfilesLoading ? <span className="text-xs text-slate-500">Chargement...</span> : null}
+                {lotProfilesError ? <span className="text-xs text-red-600">{lotProfilesError}</span> : null}
+              </div>
             </label>
             <label className="block space-y-1">
               <div className="text-xs text-slate-600">{t("taskTemplateDrawer.fields.unit")}</div>
@@ -684,6 +941,16 @@ export default function TaskTemplateDrawer({
               />
             </label>
           </div>
+
+          <label className="block space-y-1">
+            <div className="text-xs text-slate-600">Usage metier</div>
+            <textarea
+              className="w-full rounded-xl border px-3 py-2 text-sm min-h-20"
+              value={usageMetier}
+              onChange={(e) => setUsageMetier(e.target.value)}
+              placeholder="Ex : application peinture facade sur support prepare, renovation interieure, pose en local humide..."
+            />
+          </label>
 
           <div className="grid gap-3 md:grid-cols-3">
             <label className="block space-y-1">
@@ -1182,7 +1449,17 @@ export default function TaskTemplateDrawer({
               </div>
 
               <div className="rounded-2xl border border-slate-200 bg-white p-4">
-                <div className="text-sm font-semibold text-slate-900">Calcul automatique ouvrage</div>
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div>
+                    <div className="text-sm font-semibold text-slate-900">Calcul automatique ouvrage</div>
+                    <div className="mt-1 text-xs text-slate-500">Calcul centralisé par TaskCostEngine.</div>
+                  </div>
+                  {selectedLotProfile ? (
+                    <div className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700">
+                      Marges lot {selectedLotProfile.name}
+                    </div>
+                  ) : null}
+                </div>
                 <div className="mt-3 grid gap-3 text-sm md:grid-cols-4">
                   <div className="rounded-xl bg-slate-50 p-3">
                     <div className="text-xs text-slate-500">Prix de revient HT</div>
@@ -1201,6 +1478,90 @@ export default function TaskTemplateDrawer({
                     <div className="font-semibold">{compositionTotals.marginRate.toFixed(1)} %</div>
                   </div>
                 </div>
+                <div className="mt-3 grid gap-3 text-sm md:grid-cols-4">
+                  <div className="rounded-xl bg-slate-50 p-3">
+                    <div className="text-xs text-slate-500">PR matériaux</div>
+                    <div className="font-semibold">{compositionTotals.materialCost.toFixed(2)} €</div>
+                  </div>
+                  <div className="rounded-xl bg-slate-50 p-3">
+                    <div className="text-xs text-slate-500">PR MO</div>
+                    <div className="font-semibold">{compositionTotals.laborCost.toFixed(2)} €</div>
+                  </div>
+                  <div className="rounded-xl bg-slate-50 p-3">
+                    <div className="text-xs text-slate-500">Temps homme</div>
+                    <div className="font-semibold">{compositionTotals.humanTimeHours.toFixed(2)} h</div>
+                  </div>
+                  <div className="rounded-xl bg-slate-50 p-3">
+                    <div className="text-xs text-slate-500">Rentabilité</div>
+                    <div className="font-semibold">{compositionTotals.profitabilityRate.toFixed(1)} %</div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="space-y-4 rounded-2xl border border-slate-200 bg-white p-4">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <div className="text-sm font-semibold text-slate-900">Assistant Coco - generation technique</div>
+                    <div className="mt-1 text-xs text-slate-500">
+                      Coco exploite la designation, l'unite, l'usage, les produits lies, les ratios, la main d'oeuvre et les frais avant de remplir les blocs techniques.
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    className={[
+                      "rounded-xl px-4 py-2 text-sm font-medium",
+                      cocoLoading || busy
+                        ? "bg-slate-200 text-slate-500"
+                        : "bg-blue-600 text-white hover:bg-blue-700",
+                    ].join(" ")}
+                    onClick={() => void handleGenerateWithCoco()}
+                    disabled={cocoLoading || busy || preparationLoading}
+                  >
+                    {cocoLoading ? "Coco réfléchit..." : "Generer avec Coco"}
+                  </button>
+                </div>
+
+                {cocoResult?.usedFallback ? (
+                  <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+                    Generation IA indisponible. Coco a applique un fallback local minimal a verifier.
+                    {cocoResult.errorMessage ? ` Detail : ${cocoResult.errorMessage}` : ""}
+                  </div>
+                ) : null}
+
+                {cocoResult ? (
+                  <div className="space-y-3">
+                    <div className="flex flex-wrap gap-2 text-xs">
+                      <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-slate-600">
+                        Confiance: {cocoResult.confidence}
+                      </span>
+                      {cocoResult.missingInformation.length ? (
+                        <span className="rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-amber-700">
+                          {cocoResult.missingInformation.length} information(s) manquante(s)
+                        </span>
+                      ) : null}
+                    </div>
+                    <div className="grid gap-3 lg:grid-cols-2">
+                      <CocoResultBlock title="Liste materiaux Coco" items={cocoResult.materials.map(materialResultText)} />
+                      <CocoResultBlock title="Liste materiel Coco" items={cocoResult.equipment.map(equipmentResultText)} />
+                      <CocoResultBlock title="Consommables" items={cocoResult.consumables} />
+                      <CocoResultBlock title="EPI" items={cocoResult.ppe} />
+                      <CocoResultBlock title="Mode operatoire complet" items={cocoResult.procedure} />
+                      <CocoResultBlock
+                        title="Controles / erreurs a eviter"
+                        items={[...cocoResult.controls, ...cocoResult.errorsToAvoid.map((item) => `Erreur: ${item}`)]}
+                      />
+                      <CocoResultBlock title="Securite" items={cocoResult.safetyPoints} />
+                      <CocoResultBlock title="Photos DOE" items={cocoResult.doePhotos} />
+                      <CocoResultBlock title="Documents DOE" items={cocoResult.doeDocuments} />
+                      <CocoResultBlock title="Retour terrain attendu" items={[...cocoResult.fieldReturns, ...cocoResult.fieldReturnQuestions]} />
+                      <CocoResultBlock title="Informations manquantes" items={cocoResult.missingInformation} />
+                    </div>
+                  </div>
+                ) : (
+                  <div className="rounded-xl border border-dashed border-slate-200 px-4 py-3 text-sm text-slate-500">
+                    Aucun resultat Coco pour le moment.
+                  </div>
+                )}
               </div>
             </div>
           ) : null}
@@ -1237,7 +1598,7 @@ export default function TaskTemplateDrawer({
                 busy ? "bg-slate-300 text-slate-700" : "bg-slate-900 text-white hover:bg-slate-800",
               ].join(" ")}
               onClick={handleSave}
-              disabled={busy || preparationLoading}
+              disabled={busy || preparationLoading || cocoLoading}
             >
               {saving ? t("common.states.saving") : t("common.actions.save")}
             </button>
@@ -1245,5 +1606,209 @@ export default function TaskTemplateDrawer({
         </div>
       </div>
     </div>
+    {lotSettingsOpen ? (
+      <LotProfilesDrawer
+        profiles={lotProfiles}
+        saving={lotSettingsSaving}
+        error={lotProfilesError}
+        onClose={() => setLotSettingsOpen(false)}
+        onSave={handleSaveLotProfile}
+      />
+    ) : null}
+    </>
+  );
+}
+
+function emptyLotProfileDraft(sortOrder: number): TaskTemplateLotProfileInput {
+  return {
+    name: "",
+    keywords: [],
+    laborMarginRate: 35,
+    equipmentMarginRate: 25,
+    materialsMarginRate: 30,
+    feesMarginRate: 20,
+    defaultUnit: "m2",
+    averageTimeHours: null,
+    qualityControls: [],
+    commonMistakes: [],
+    chantierInstructions: [],
+    defaultEquipment: [],
+    defaultPpe: [],
+    defaultConsumables: [],
+    doeDocuments: [],
+    fieldReturns: [],
+    sortOrder,
+    isActive: true,
+  };
+}
+
+function profileToInput(profile: TaskTemplateLotProfile): TaskTemplateLotProfileInput {
+  return {
+    id: profile.id,
+    name: profile.name,
+    keywords: profile.keywords,
+    laborMarginRate: profile.laborMarginRate,
+    equipmentMarginRate: profile.equipmentMarginRate,
+    materialsMarginRate: profile.materialsMarginRate,
+    feesMarginRate: profile.feesMarginRate,
+    defaultUnit: profile.defaultUnit,
+    averageTimeHours: profile.averageTimeHours,
+    qualityControls: profile.qualityControls,
+    commonMistakes: profile.commonMistakes,
+    chantierInstructions: profile.chantierInstructions,
+    defaultEquipment: profile.defaultEquipment,
+    defaultPpe: profile.defaultPpe,
+    defaultConsumables: profile.defaultConsumables,
+    doeDocuments: profile.doeDocuments,
+    fieldReturns: profile.fieldReturns,
+    sortOrder: profile.sortOrder,
+    isActive: profile.isActive,
+  };
+}
+
+function splitMultiline(value: string): string[] {
+  return value
+    .split(/\r?\n|,/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+}
+
+function LotProfilesDrawer({
+  profiles,
+  saving,
+  error,
+  onClose,
+  onSave,
+}: {
+  profiles: TaskTemplateLotProfile[];
+  saving: boolean;
+  error: string | null;
+  onClose: () => void;
+  onSave: (profile: TaskTemplateLotProfileInput) => Promise<void>;
+}) {
+  const [selectedId, setSelectedId] = useState(profiles[0]?.id ?? "__new__");
+  const selectedProfile = profiles.find((profile) => profile.id === selectedId) ?? null;
+  const [draft, setDraft] = useState<TaskTemplateLotProfileInput>(() =>
+    selectedProfile ? profileToInput(selectedProfile) : emptyLotProfileDraft(profiles.length + 1),
+  );
+
+  useEffect(() => {
+    const profile = profiles.find((row) => row.id === selectedId) ?? null;
+    setDraft(profile ? profileToInput(profile) : emptyLotProfileDraft(profiles.length + 1));
+  }, [profiles, selectedId]);
+
+  function patch(patch: Partial<TaskTemplateLotProfileInput>) {
+    setDraft((current) => ({ ...current, ...patch }));
+  }
+
+  return (
+    <div className="fixed inset-0 z-[60]">
+      <div className="absolute inset-0 bg-slate-950/40" onClick={onClose} />
+      <aside className="absolute right-0 top-0 flex h-screen w-full max-w-5xl flex-col bg-white shadow-2xl">
+        <div className="flex items-start justify-between gap-4 border-b border-slate-200 px-5 py-4">
+          <div>
+            <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-blue-700">Moteur métier</div>
+            <h2 className="mt-1 text-lg font-semibold text-slate-950">Paramétrer les lots</h2>
+            <p className="mt-1 text-sm text-slate-500">Profils communs à toute l'entreprise, lus et écrits en base.</p>
+          </div>
+          <button type="button" className="rounded-xl border px-3 py-2 text-sm hover:bg-slate-50" onClick={onClose}>Fermer</button>
+        </div>
+
+        <div className="grid min-h-0 flex-1 md:grid-cols-[260px_minmax(0,1fr)]">
+          <div className="border-r border-slate-200 p-4">
+            <button type="button" className="mb-3 w-full rounded-xl bg-slate-950 px-3 py-2 text-sm font-semibold text-white" onClick={() => setSelectedId("__new__")}>
+              Nouveau lot
+            </button>
+            <div className="space-y-2">
+              {profiles.map((profile) => (
+                <button
+                  key={profile.id}
+                  type="button"
+                  className={[
+                    "w-full rounded-xl px-3 py-2 text-left text-sm",
+                    profile.id === selectedId ? "bg-blue-50 font-semibold text-blue-800" : "hover:bg-slate-50",
+                  ].join(" ")}
+                  onClick={() => setSelectedId(profile.id)}
+                >
+                  {profile.name}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="min-h-0 overflow-y-auto p-5">
+            {error ? <div className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div> : null}
+            <div className="grid gap-4 lg:grid-cols-4">
+              <LotField label="Nom" value={draft.name} onChange={(name) => patch({ name })} className="lg:col-span-2" />
+              <LotField label="Unité par défaut" value={draft.defaultUnit ?? ""} onChange={(defaultUnit) => patch({ defaultUnit: defaultUnit || null })} />
+              <LotNumber label="Temps moyen h" value={draft.averageTimeHours} onChange={(averageTimeHours) => patch({ averageTimeHours })} />
+              <LotNumber label="Marge MO %" value={draft.laborMarginRate} onChange={(laborMarginRate) => patch({ laborMarginRate: laborMarginRate ?? 0 })} />
+              <LotNumber label="Marge matériel %" value={draft.equipmentMarginRate} onChange={(equipmentMarginRate) => patch({ equipmentMarginRate: equipmentMarginRate ?? 0 })} />
+              <LotNumber label="Marge matériaux %" value={draft.materialsMarginRate} onChange={(materialsMarginRate) => patch({ materialsMarginRate: materialsMarginRate ?? 0 })} />
+              <LotNumber label="Marge frais %" value={draft.feesMarginRate} onChange={(feesMarginRate) => patch({ feesMarginRate: feesMarginRate ?? 0 })} />
+            </div>
+
+            <div className="mt-4 grid gap-4 lg:grid-cols-2">
+              <LotList label="Mots clés" value={draft.keywords} onChange={(keywords) => patch({ keywords })} />
+              <LotList label="Contrôles qualité" value={draft.qualityControls} onChange={(qualityControls) => patch({ qualityControls })} />
+              <LotList label="Erreurs fréquentes" value={draft.commonMistakes} onChange={(commonMistakes) => patch({ commonMistakes })} />
+              <LotList label="Consignes chantier" value={draft.chantierInstructions} onChange={(chantierInstructions) => patch({ chantierInstructions })} />
+              <LotList label="Matériel par défaut" value={draft.defaultEquipment} onChange={(defaultEquipment) => patch({ defaultEquipment })} />
+              <LotList label="EPI" value={draft.defaultPpe} onChange={(defaultPpe) => patch({ defaultPpe })} />
+              <LotList label="Consommables" value={draft.defaultConsumables} onChange={(defaultConsumables) => patch({ defaultConsumables })} />
+              <LotList label="Documents DOE" value={draft.doeDocuments} onChange={(doeDocuments) => patch({ doeDocuments })} />
+              <LotList label="Retours terrain" value={draft.fieldReturns} onChange={(fieldReturns) => patch({ fieldReturns })} />
+            </div>
+          </div>
+        </div>
+
+        <div className="flex justify-end gap-2 border-t border-slate-200 p-4">
+          <button type="button" className="rounded-xl border px-4 py-2 text-sm hover:bg-slate-50" onClick={onClose}>Annuler</button>
+          <button type="button" className="rounded-xl bg-blue-700 px-4 py-2 text-sm font-semibold text-white disabled:opacity-60" disabled={saving || !draft.name.trim()} onClick={() => void onSave(draft)}>
+            {saving ? "Enregistrement..." : "Enregistrer le lot"}
+          </button>
+        </div>
+      </aside>
+    </div>
+  );
+}
+
+function LotField({ label, value, onChange, className = "" }: { label: string; value: string; onChange: (value: string) => void; className?: string }) {
+  return (
+    <label className={`block space-y-1 ${className}`}>
+      <div className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">{label}</div>
+      <input className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none focus:border-blue-300" value={value} onChange={(event) => onChange(event.target.value)} />
+    </label>
+  );
+}
+
+function LotNumber({ label, value, onChange }: { label: string; value: number | null; onChange: (value: number | null) => void }) {
+  return (
+    <label className="block space-y-1">
+      <div className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">{label}</div>
+      <input
+        className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none focus:border-blue-300"
+        inputMode="decimal"
+        value={value ?? ""}
+        onChange={(event) => {
+          const parsed = parseNumberField(event.target.value);
+          onChange(event.target.value.trim() === "" ? null : parsed);
+        }}
+      />
+    </label>
+  );
+}
+
+function LotList({ label, value, onChange }: { label: string; value: string[]; onChange: (value: string[]) => void }) {
+  return (
+    <label className="block space-y-1">
+      <div className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">{label}</div>
+      <textarea
+        className="min-h-24 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none focus:border-blue-300"
+        value={value.join("\n")}
+        onChange={(event) => onChange(splitMultiline(event.target.value))}
+        placeholder="Une ligne par élément"
+      />
+    </label>
   );
 }

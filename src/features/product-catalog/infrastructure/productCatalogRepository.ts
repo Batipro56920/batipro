@@ -1,8 +1,9 @@
 import { supabase } from "../../../lib/supabaseClient";
-import type { ProductCatalogDraft, ProductCatalogItem, ProductSupplierPrice } from "../domain/types";
+import type { ProductCatalogDraft, ProductCatalogItem, ProductKnowledge, ProductSupplierPrice } from "../domain/types";
 
 const TABLE = "product_catalog_items";
 const LEGACY_STORAGE_KEY = "batipro.product-catalog.v1";
+const KNOWLEDGE_DOCUMENT_ID = "__batipro_coco_product_knowledge__";
 
 type ProductCatalogRow = {
   id: string;
@@ -21,6 +22,8 @@ type ProductCatalogRow = {
   is_sellable?: boolean | null;
   supplier_prices: ProductCatalogItem["supplierPrices"];
   documents: ProductCatalogItem["documents"];
+  notes?: string | null;
+  analysis?: ProductCatalogItem["analysis"] | ProductKnowledge | null;
   price_history: ProductCatalogItem["priceHistory"];
   created_at: string;
   updated_at: string;
@@ -89,6 +92,10 @@ export function getBestSupplierPrice(product: ProductCatalogItem, supplierId?: s
 }
 
 function fromRow(row: ProductCatalogRow): ProductCatalogItem {
+  const documents = normalizeDocuments(row.documents ?? []);
+  const embeddedKnowledge = extractKnowledge(row.documents ?? []);
+  const rowAnalysis = row.analysis ?? null;
+  const rowKnowledge = isProductKnowledge(rowAnalysis) ? rowAnalysis : embeddedKnowledge;
   return {
     id: row.id,
     designation: row.designation,
@@ -105,7 +112,10 @@ function fromRow(row: ProductCatalogRow): ProductCatalogItem {
     targetMarginRate: Number(row.target_margin_rate ?? 0),
     isSellable: row.is_sellable !== false,
     supplierPrices: normalizeSupplierPrices(row.supplier_prices ?? []),
-    documents: row.documents ?? [],
+    documents,
+    notes: row.notes ?? null,
+    knowledge: rowKnowledge ?? null,
+    analysis: isProductKnowledge(rowAnalysis) ? null : rowAnalysis,
     priceHistory: row.price_history ?? [],
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -129,7 +139,7 @@ function toRow(product: ProductCatalogItem) {
     target_margin_rate: product.targetMarginRate,
     is_sellable: product.isSellable,
     supplier_prices: normalizeSupplierPrices(product.supplierPrices) as any,
-    documents: product.documents as any,
+    documents: withEmbeddedKnowledge(product.documents, product.knowledge ?? null) as any,
     price_history: product.priceHistory as any,
     created_at: product.createdAt,
     updated_at: new Date().toISOString(),
@@ -278,4 +288,39 @@ function removeLegacyProducts() {
   if (typeof window !== "undefined") {
     window.localStorage.removeItem(LEGACY_STORAGE_KEY);
   }
+}
+
+function normalizeDocuments(documents: ProductCatalogItem["documents"]): ProductCatalogItem["documents"] {
+  if (!Array.isArray(documents)) return [];
+  return documents.filter((document) => document?.id !== KNOWLEDGE_DOCUMENT_ID);
+}
+
+function extractKnowledge(documents: ProductCatalogItem["documents"]): ProductKnowledge | null {
+  if (!Array.isArray(documents)) return null;
+  const entry = documents.find((document) => document?.id === KNOWLEDGE_DOCUMENT_ID) as unknown as { knowledge?: ProductKnowledge } | undefined;
+  return isProductKnowledge(entry?.knowledge) ? entry.knowledge : null;
+}
+
+function isProductKnowledge(value: unknown): value is ProductKnowledge {
+  if (!value || typeof value !== "object") return false;
+  const candidate = value as Record<string, unknown>;
+  return Boolean(candidate.identity && candidate.materialUsage && candidate.procedure && candidate.confidence);
+}
+
+function withEmbeddedKnowledge(
+  documents: ProductCatalogItem["documents"],
+  knowledge: ProductKnowledge | null | undefined,
+): ProductCatalogItem["documents"] {
+  const visibleDocuments = normalizeDocuments(documents);
+  if (!knowledge) return visibleDocuments;
+  return [
+    ...visibleDocuments,
+    {
+      id: KNOWLEDGE_DOCUMENT_ID,
+      kind: "other",
+      name: "Connaissance IA Coco",
+      url: null,
+      knowledge,
+    } as unknown as ProductCatalogItem["documents"][number],
+  ];
 }

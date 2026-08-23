@@ -22,6 +22,84 @@ export type ProductDocument = {
   kind: ProductDocumentKind;
   name: string;
   url: string | null;
+  analysis?: {
+    materialUsage?: unknown;
+    [key: string]: unknown;
+  } | null;
+};
+
+export type ProductKnowledgeBlock<T> = {
+  value: T;
+  confidence: "high" | "medium" | "low";
+  reasoning: string;
+  sourceDocument: string | null;
+};
+
+export type ProductKnowledge = {
+  identity: ProductKnowledgeBlock<{
+    designation: string | null;
+    brand: string | null;
+    manufacturer: string | null;
+    manufacturerReference: string | null;
+    ean: string | null;
+    conditionnement: string | null;
+    unit: DocumentUnit | null;
+  }>;
+  supplier: ProductKnowledgeBlock<{
+    supplier: string | null;
+    supplierReference: string | null;
+    supplierProductCode: string | null;
+  }>;
+  pricing: ProductKnowledgeBlock<{
+    purchasePrice: number | null;
+    recommendedSalePrice: number | null;
+    currency: string | null;
+    vat: number | null;
+  }>;
+  materialUsage: ProductKnowledgeBlock<{
+    ratioQuantity: number | null;
+    ratioUnit: string | null;
+    sourceUnit: string | null;
+    lossPercent: number | null;
+    minimumOrder: number | null;
+    coverage: number | null;
+  }>;
+  application: ProductKnowledgeBlock<{
+    interior: boolean;
+    exterior: boolean;
+    wall: boolean;
+    floor: boolean;
+    ceiling: boolean;
+    wood: boolean;
+    metal: boolean;
+    placo: boolean;
+    concrete: boolean;
+    facade: boolean;
+  }>;
+  supports: ProductKnowledgeBlock<string[]>;
+  forbiddenSupports: ProductKnowledgeBlock<string[]>;
+  tools: ProductKnowledgeBlock<string[]>;
+  consumables: ProductKnowledgeBlock<string[]>;
+  PPE: ProductKnowledgeBlock<string[]>;
+  weatherLimits: ProductKnowledgeBlock<{
+    minTemperature: number | null;
+    maxTemperature: number | null;
+    humidity: string | null;
+    frost: string | null;
+    rain: string | null;
+    wind: string | null;
+    sun: string | null;
+  }>;
+  dryingTimes: ProductKnowledgeBlock<string[]>;
+  procedure: ProductKnowledgeBlock<string[]>;
+  controls: ProductKnowledgeBlock<string[]>;
+  commonMistakes: ProductKnowledgeBlock<string[]>;
+  doe: ProductKnowledgeBlock<string[]>;
+  fieldExperience: ProductKnowledgeBlock<string[]>;
+  confidence: ProductKnowledgeBlock<{
+    global: "high" | "medium" | "low";
+    missingInformation: string[];
+  }>;
 };
 
 export type ProductCatalogItem = {
@@ -41,6 +119,12 @@ export type ProductCatalogItem = {
   isSellable: boolean;
   supplierPrices: ProductSupplierPrice[];
   documents: ProductDocument[];
+  notes?: string | null;
+  knowledge?: ProductKnowledge | null;
+  analysis?: {
+    materialUsage?: unknown;
+    [key: string]: unknown;
+  } | null;
   priceHistory: Array<{
     id: string;
     purchasePriceHt: number | null;

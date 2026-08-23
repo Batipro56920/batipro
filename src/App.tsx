@@ -20,6 +20,7 @@ const ChantiersPage = lazy(() => import("./pages/ChantiersPage"));
 const ChantierNewPage = lazy(() => import("./pages/ChantierNewPage"));
 const ChantierPage = lazy(() => import("./pages/ChantierPage"));
 const ChantierVisitesPage = lazy(() => import("./pages/ChantierVisitesPage"));
+const KnowledgeImprovementsPage = lazy(() => import("./pages/KnowledgeImprovementsPage"));
 const ProjectsPage = lazy(() => import("./pages/ProjectsPage"));
 const ProjectDetailPage = lazy(() => import("./pages/ProjectDetailPage"));
 const ProjectAppointmentPage = lazy(() => import("./pages/ProjectAppointmentPage"));
@@ -348,6 +349,10 @@ export default function App() {
         <Route path="/chantiers/:id/qualite-cloture" element={<Navigate to="../qualite" replace />} />
         <Route path="/chantiers/:id/qualite-sav" element={<Navigate to="../qualite" replace />} />
         <Route path="/chantiers/:id/crm" element={<Navigate to=".." replace />} />
+        <Route
+          path="/ameliorations-ia"
+          element={<ChantierBackofficeRoute label="Chargement des ameliorations IA..."><KnowledgeImprovementsPage /></ChantierBackofficeRoute>}
+        />
         <Route
           path="/chantiers/:id/visites"
           element={

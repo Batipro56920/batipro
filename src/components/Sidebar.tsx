@@ -22,6 +22,7 @@ import {
   PackageSearch,
   TrendingUp,
   Wallet,
+  Sparkles,
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import type { CompanyFeatureModuleId } from "../config/companyFeatures";
@@ -163,6 +164,14 @@ export default function Sidebar({ collapsed = false, onToggleCollapse, companyNa
       label: t("sidebar.terrainFeedback"),
       icon: ClipboardList,
       feature: "journal_chantier" as const,
+      group: "Production",
+    },
+    {
+      to: "/ameliorations-ia",
+      label: "Améliorations IA",
+      icon: Sparkles,
+      feature: "preparation_chantier" as const,
+      permissionKey: "preparation_chantier" as const,
       group: "Production",
     },
     {
