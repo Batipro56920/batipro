@@ -26,6 +26,7 @@ import {
   TrendingUp,
   Wallet,
   MessageCircle,
+  Sparkles,
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import type { CompanyFeatureModuleId } from "../config/companyFeatures";
@@ -86,6 +87,7 @@ export default function Sidebar({ collapsed = false, onToggleCollapse, companyNa
     { to: "/temps", label: "Temps", icon: Clock3, feature: "temps" as const, permissionKey: "temps" as const, group: "Production" },
     { to: "/crm/sav", label: "SAV", icon: ClipboardList, permissionKey: "crm" as const, group: "Production" },
     { to: "/retours-terrain", label: t("sidebar.terrainFeedback"), icon: ClipboardList, feature: "journal_chantier" as const, group: "Production" },
+    { to: "/ameliorations-ia", label: "Améliorations IA", icon: Sparkles, feature: "preparation_chantier" as const, permissionKey: "preparation_chantier" as const, group: "Production" },
     { to: "/bibliotheque", label: "Bibliothèque tâches", icon: LibraryBig, feature: "documents" as const, permissionKey: "bibliotheque" as const, group: "Production" },
     { to: "/intervenants", label: "Profils & accès", icon: Users, permissionKey: "intervenants" as const, group: "Ressources" },
     { to: "/ressources/statistiques", label: "Statistiques", icon: ChartColumnBig, feature: "rapports" as const, permissionKey: "statistiques" as const, group: "Ressources" },

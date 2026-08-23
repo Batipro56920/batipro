@@ -1,8 +1,19 @@
 import { supabase } from "../../../lib/supabaseClient";
-import type { ProductCatalogDraft, ProductCatalogItem, ProductDocument, ProductDocumentAnalysis, ProductDocumentKind, ProductMaterialUsage, ProductSupplierPrice } from "../domain/types";
+import type {
+  ProductCatalogDraft,
+  ProductCatalogItem,
+  ProductDocument,
+  ProductDocumentAnalysis,
+  ProductDocumentKind,
+  ProductKnowledge,
+  ProductLegacyAnalysis,
+  ProductMaterialUsage,
+  ProductSupplierPrice,
+} from "../domain/types";
 
 const TABLE = "product_catalog_items";
 const LEGACY_STORAGE_KEY = "batipro.product-catalog.v1";
+const KNOWLEDGE_DOCUMENT_ID = "__batipro_coco_product_knowledge__";
 
 const PRODUCT_DOCUMENT_KINDS: ProductDocumentKind[] = [
   "technical_sheet",
@@ -32,6 +43,14 @@ type ProductCatalogRow = {
   is_sellable?: boolean | null;
   supplier_prices: ProductCatalogItem["supplierPrices"];
   documents: unknown;
+  /**
+   * `notes` et `analysis` n'existent pas encore comme colonnes SQL sur
+   * product_catalog_items : lecture defensive uniquement (toujours undefined
+   * aujourd'hui). La connaissance IA transite par le pseudo-document
+   * KNOWLEDGE_DOCUMENT_ID dans `documents`.
+   */
+  notes?: string | null;
+  analysis?: ProductLegacyAnalysis | ProductKnowledge | null;
   price_history: ProductCatalogItem["priceHistory"];
   created_at: string;
   updated_at: string;
@@ -119,10 +138,20 @@ export function getBestSupplierPrice(product: ProductCatalogItem, supplierId?: s
 }
 
 function fromRow(row: ProductCatalogRow): ProductCatalogItem {
+  // Calculs de prix issus de main : le prix de vente est recalcule depuis la
+  // marge cible quand aucun prix de vente n'a ete enregistre.
   const purchasePrice = Number(row.standard_purchase_price_ht ?? 0);
   const savedSalePrice = Number(row.recommended_sale_price_ht ?? 0);
   const marginRate = Number(row.target_margin_rate ?? 0);
   const salePrice = savedSalePrice > 0 ? savedSalePrice : computeSalePrice(purchasePrice, marginRate) ?? 0;
+
+  // Connaissance IA produit (bc4eeb6) : colonne `analysis` si elle existe un
+  // jour, sinon pseudo-document embarque dans `documents`.
+  const storedDocuments = normalizeProductDocuments(row.documents);
+  const documents = stripKnowledgeDocument(storedDocuments);
+  const embeddedKnowledge = extractKnowledge(storedDocuments);
+  const rowAnalysis = row.analysis ?? null;
+  const rowKnowledge = isProductKnowledge(rowAnalysis) ? rowAnalysis : embeddedKnowledge;
 
   return {
     id: row.id,
@@ -140,7 +169,10 @@ function fromRow(row: ProductCatalogRow): ProductCatalogItem {
     targetMarginRate: marginRate,
     isSellable: row.is_sellable !== false,
     supplierPrices: normalizeSupplierPrices(row.supplier_prices ?? []),
-    documents: normalizeProductDocuments(row.documents),
+    documents,
+    notes: row.notes ?? null,
+    knowledge: rowKnowledge ?? null,
+    analysis: isProductKnowledge(rowAnalysis) ? null : rowAnalysis,
     priceHistory: row.price_history ?? [],
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -164,7 +196,9 @@ function toRow(product: ProductCatalogItem) {
     target_margin_rate: product.targetMarginRate,
     is_sellable: product.isSellable,
     supplier_prices: normalizeSupplierPrices(product.supplierPrices) as any,
-    documents: normalizeProductDocuments(product.documents) as any,
+    // Embarquer AVANT de normaliser : normalizeProductDocuments preserve le
+    // champ `knowledge` du pseudo-document, l'ordre inverse le perdrait.
+    documents: normalizeProductDocuments(withEmbeddedKnowledge(product.documents, product.knowledge ?? null)) as any,
     price_history: product.priceHistory as any,
     created_at: product.createdAt,
     updated_at: new Date().toISOString(),
@@ -229,6 +263,7 @@ function normalizeProductDocuments(documents: unknown): ProductDocument[] {
           usage: defaultDocumentUsage("other"),
           notes: null,
           analysis: null,
+          knowledge: null,
         };
       }
 
@@ -239,6 +274,9 @@ function normalizeProductDocuments(documents: unknown): ProductDocument[] {
       const url = typeof source.url === "string" && source.url.trim() ? source.url.trim() : null;
       const notes = typeof source.notes === "string" && source.notes.trim() ? source.notes.trim() : null;
       const analysis = normalizeDocumentAnalysis(source.analysis);
+      // Le pseudo-document KNOWLEDGE_DOCUMENT_ID porte la connaissance IA Coco.
+      // Sans cette ligne, elle serait silencieusement effacee a chaque ecriture.
+      const knowledge = isProductKnowledge(source.knowledge) ? source.knowledge : null;
 
       return {
         id: typeof source.id === "string" && source.id.trim() ? source.id : buildLegacyDocumentId(index, `${kind}-${name}`),
@@ -248,9 +286,12 @@ function normalizeProductDocuments(documents: unknown): ProductDocument[] {
         usage: normalizeDocumentUsage(source.usage, kind),
         notes,
         analysis,
+        knowledge,
       };
     })
-    .filter((document): document is ProductDocument => Boolean(document && (document.name || document.url || document.notes || document.analysis)));
+    .filter((document): document is ProductDocument =>
+      Boolean(document && (document.name || document.url || document.notes || document.analysis || document.knowledge)),
+    );
 }
 
 function normalizeDocumentAnalysis(value: unknown): ProductDocumentAnalysis | null {
@@ -453,4 +494,45 @@ function removeLegacyProducts() {
   if (typeof window !== "undefined") {
     window.localStorage.removeItem(LEGACY_STORAGE_KEY);
   }
+}
+
+/** Retire le pseudo-document de connaissance IA de la liste visible par l'UI. */
+function stripKnowledgeDocument(documents: ProductDocument[]): ProductDocument[] {
+  if (!Array.isArray(documents)) return [];
+  return documents.filter((document) => document?.id !== KNOWLEDGE_DOCUMENT_ID);
+}
+
+/** Lit la connaissance IA portee par le pseudo-document. */
+function extractKnowledge(documents: ProductDocument[]): ProductKnowledge | null {
+  if (!Array.isArray(documents)) return null;
+  const entry = documents.find((document) => document?.id === KNOWLEDGE_DOCUMENT_ID);
+  return isProductKnowledge(entry?.knowledge) ? entry.knowledge : null;
+}
+
+function isProductKnowledge(value: unknown): value is ProductKnowledge {
+  if (!value || typeof value !== "object") return false;
+  const candidate = value as Record<string, unknown>;
+  return Boolean(candidate.identity && candidate.materialUsage && candidate.procedure && candidate.confidence);
+}
+
+/**
+ * Re-injecte la connaissance IA sous forme de pseudo-document avant ecriture.
+ * A remplacer par une vraie colonne `knowledge jsonb` sur product_catalog_items.
+ */
+function withEmbeddedKnowledge(
+  documents: ProductDocument[],
+  knowledge: ProductKnowledge | null | undefined,
+): ProductDocument[] {
+  const visibleDocuments = stripKnowledgeDocument(documents);
+  if (!knowledge) return visibleDocuments;
+  return [
+    ...visibleDocuments,
+    {
+      id: KNOWLEDGE_DOCUMENT_ID,
+      kind: "other",
+      name: "Connaissance IA Coco",
+      url: null,
+      knowledge,
+    },
+  ];
 }

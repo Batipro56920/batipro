@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { FileText, PackageSearch, Plus, RefreshCw, Trash2, X } from "lucide-react";
 import type { SupplierRow } from "../../../services/suppliers.service";
@@ -6,8 +6,16 @@ import { listSuppliers } from "../../../services/suppliers.service";
 import type { DocumentUnit } from "../../document-engine";
 import ProductFileImportPanel from "../components/ProductFileImportPanel";
 import ProductQuoteReaderPanel from "../components/ProductQuoteReaderPanel";
-import type { ProductCatalogDraft, ProductCatalogItem, ProductDocumentKind, ProductDocumentUsage, ProductSupplierPrice } from "../domain/types";
+import type {
+  ProductCatalogDraft,
+  ProductCatalogItem,
+  ProductDocumentKind,
+  ProductDocumentUsage,
+  ProductKnowledge,
+  ProductSupplierPrice,
+} from "../domain/types";
 import { deleteProductCatalogItem, listProductCatalogItems, saveProductCatalogItem } from "../infrastructure/productCatalogRepository";
+import { analyzeProductDocumentsWithCoco, emptyProductKnowledge } from "../services/productKnowledge.service";
 import { importProductsFromQuoteText, type ProductQuoteImportResult } from "../services/productQuoteImport.service";
 
 const EMPTY_DRAFT: ProductCatalogDraft = {
@@ -26,6 +34,7 @@ const EMPTY_DRAFT: ProductCatalogDraft = {
   isSellable: true,
   supplierPrices: [],
   documents: [],
+  knowledge: null,
 };
 
 const PRODUCT_DOCUMENT_KINDS: ProductDocumentKind[] = [
@@ -435,18 +444,62 @@ function ProductDrawer({ product, suppliers, onCancel, onSave }: { product: Prod
 
 function ProductForm({ product, suppliers, onCancel, onSave }: { product: ProductCatalogItem | ProductCatalogDraft; suppliers: SupplierRow[]; onCancel: () => void; onSave: (product: ProductCatalogItem | ProductCatalogDraft) => void | Promise<void> }) {
   const [draft, setDraft] = useState(product);
+  const [activeTab, setActiveTab] = useState<"product" | "knowledge">("product");
+  const [knowledgeLoading, setKnowledgeLoading] = useState(false);
+  const [knowledgeError, setKnowledgeError] = useState<string | null>(null);
 
   useEffect(() => {
     setDraft(product);
+    setActiveTab("product");
+    setKnowledgeLoading(false);
+    setKnowledgeError(null);
   }, [product]);
 
   function patch(patch: Partial<ProductCatalogItem | ProductCatalogDraft>) {
     setDraft((current) => ({ ...current, ...patch }));
   }
 
+  /**
+   * Recalcule le prix de vente conseille depuis le prix d'achat et la marge
+   * cible. Remplace `productDrawerPricingBridge.updateSalePrice`, qui pilotait
+   * les inputs via des setters natifs HTMLInputElement.
+   */
+  function changePurchasePrice(standardPurchasePriceHt: number) {
+    patch({
+      standardPurchasePriceHt,
+      recommendedSalePriceHt: computeSalePrice(standardPurchasePriceHt, draft.targetMarginRate),
+    });
+  }
+
+  function changeTargetMargin(targetMarginRate: number) {
+    patch({
+      targetMarginRate,
+      recommendedSalePriceHt: computeSalePrice(draft.standardPurchasePriceHt, targetMarginRate),
+    });
+  }
+
   function selectMainSupplier(id: string) {
     const supplier = suppliers.find((row) => row.id === id);
     patch({ mainSupplierId: supplier?.id ?? null, mainSupplierName: supplier?.name ?? null });
+  }
+
+  async function analyzeKnowledge(nextDraft: ProductCatalogItem | ProductCatalogDraft) {
+    setKnowledgeLoading(true);
+    setKnowledgeError(null);
+    try {
+      const knowledge = await analyzeProductDocumentsWithCoco(nextDraft);
+      setDraft((current) => ({ ...current, knowledge }));
+    } catch (err: any) {
+      setKnowledgeError(err?.message ?? "Analyse Coco produit impossible.");
+    } finally {
+      setKnowledgeLoading(false);
+    }
+  }
+
+  function updateDocuments(documents: ProductCatalogItem["documents"]) {
+    const nextDraft = { ...draft, documents };
+    setDraft(nextDraft);
+    if (documents.length !== draft.documents.length) void analyzeKnowledge(nextDraft);
   }
 
   return (
@@ -468,7 +521,14 @@ function ProductForm({ product, suppliers, onCancel, onSave }: { product: Produc
         onApply={patch}
       />
 
-      <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+      <div className="mb-4 mt-5 flex gap-2 border-b border-slate-200">
+        <button type="button" className={tabClass(activeTab === "product")} onClick={() => setActiveTab("product")}>Produit</button>
+        <button type="button" className={tabClass(activeTab === "knowledge")} onClick={() => setActiveTab("knowledge")}>Connaissance IA</button>
+      </div>
+
+      {activeTab === "product" ? (
+        <>
+          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
         <Field label="Désignation" value={draft.designation} onChange={(designation) => patch({ designation })} className="xl:col-span-2" />
         <Field label="Référence interne" value={draft.internalReference ?? ""} onChange={(internalReference) => patch({ internalReference })} />
         <Field label="Référence fabricant" value={draft.manufacturerReference ?? ""} onChange={(manufacturerReference) => patch({ manufacturerReference })} />
@@ -477,17 +537,94 @@ function ProductForm({ product, suppliers, onCancel, onSave }: { product: Produc
         <label className={labelClass}>Unité<Select className="mt-1" value={draft.unit} onChange={(unit) => patch({ unit: unit as DocumentUnit })} options={["u", "h", "ml", "m2", "m3", "forfait", "kg", "l"]} /></label>
         <NumberField label="TVA" value={draft.vatRate} onChange={(vatRate) => patch({ vatRate })} />
         <label className={labelClass}>Fournisseur principal<Select className="mt-1" value={draft.mainSupplierId ?? ""} onChange={selectMainSupplier} options={["", ...suppliers.map((supplier) => supplier.id)]} labels={Object.fromEntries([["", "Aucun"], ...suppliers.map((supplier) => [supplier.id, supplier.name])])} /></label>
-        <NumberField label="Prix achat standard" value={draft.standardPurchasePriceHt} onChange={(standardPurchasePriceHt) => patch({ standardPurchasePriceHt })} />
+        <NumberField label="Prix achat standard" value={draft.standardPurchasePriceHt} onChange={changePurchasePrice} />
         <NumberField label="Prix vente conseillé" value={draft.recommendedSalePriceHt} onChange={(recommendedSalePriceHt) => patch({ recommendedSalePriceHt })} />
-        <NumberField label="Marge cible %" value={draft.targetMarginRate} onChange={(targetMarginRate) => patch({ targetMarginRate })} />
+        <NumberField label="Marge cible %" value={draft.targetMarginRate} onChange={changeTargetMargin} />
         <label className={`${labelClass} flex items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2 normal-case tracking-normal text-slate-700`}>
           <input type="checkbox" checked={draft.isSellable} onChange={(event) => patch({ isSellable: event.target.checked })} />
           <span>Produit revendable / utilisable dans un ouvrage</span>
         </label>
       </div>
 
-      <SupplierPricesEditor unit={draft.unit} prices={draft.supplierPrices} suppliers={suppliers} onChange={(supplierPrices) => patch({ supplierPrices })} />
-      <ProductDocumentsEditor documents={draft.documents} onChange={(documents) => patch({ documents })} />
+          <ProductPricingSummary draft={draft} />
+          <SupplierPricesEditor unit={draft.unit} prices={draft.supplierPrices} suppliers={suppliers} onChange={(supplierPrices) => patch({ supplierPrices })} />
+          <ProductDocumentsEditor
+            documents={draft.documents}
+            busy={knowledgeLoading}
+            error={knowledgeError}
+            onAnalyze={() => void analyzeKnowledge(draft)}
+            onChange={updateDocuments}
+          />
+        </>
+      ) : (
+        <ProductKnowledgeEditor
+          knowledge={draft.knowledge ?? emptyProductKnowledge(draft)}
+          busy={knowledgeLoading}
+          error={knowledgeError}
+          onAnalyze={() => void analyzeKnowledge(draft)}
+          onChange={(knowledge) => patch({ knowledge })}
+        />
+      )}
+    </div>
+  );
+}
+
+function computeSalePrice(purchasePrice: number, marginRate: number) {
+  const purchase = Number(purchasePrice) || 0;
+  const margin = Number(marginRate) || 0;
+  return Math.round(purchase * (1 + margin / 100) * 100) / 100;
+}
+
+/**
+ * Synthese de prix du produit, remplacant `productDrawerPricingBridge`.
+ * Le bridge injectait ces metriques en DOM (`data-batipro-product-pricing-summary`)
+ * et lisait le ratio par regex sur les valeurs des inputs. Ici le ratio vient
+ * directement de la connaissance IA produit ou de l'analyse par document.
+ */
+function resolveProductRatio(draft: ProductCatalogItem | ProductCatalogDraft): { quantity: number; baseUnit: string } | null {
+  const knowledgeUsage = draft.knowledge?.materialUsage?.value;
+  if (knowledgeUsage?.ratioQuantity && knowledgeUsage.ratioQuantity > 0 && knowledgeUsage.sourceUnit) {
+    return { quantity: knowledgeUsage.ratioQuantity, baseUnit: knowledgeUsage.sourceUnit };
+  }
+  for (const document of draft.documents) {
+    const usage = document.analysis?.materialUsage;
+    if (usage && usage.ratioQuantity > 0 && usage.sourceUnit) {
+      return { quantity: usage.ratioQuantity, baseUnit: usage.sourceUnit };
+    }
+  }
+  return null;
+}
+
+function ProductPricingSummary({ draft }: { draft: ProductCatalogItem | ProductCatalogDraft }) {
+  const ratio = resolveProductRatio(draft);
+
+  const purchase = Number(draft.standardPurchasePriceHt) || 0;
+  const sale = Number(draft.recommendedSalePriceHt) || 0;
+  const purchasePerBaseUnit = ratio ? Math.round(purchase * ratio.quantity * 100) / 100 : null;
+  const salePerBaseUnit = ratio ? Math.round(sale * ratio.quantity * 100) / 100 : null;
+  const baseUnitLabel = ratio?.baseUnit ?? "m2";
+
+  return (
+    <div className="mt-4 grid gap-3 rounded-2xl border border-emerald-200 bg-emerald-50 p-3 text-sm md:grid-cols-4">
+      <PricingMetric label="Prix achat HT" value={purchase > 0 ? formatCurrency(purchase) : "A renseigner"} />
+      <PricingMetric label="Prix vente HT" value={sale > 0 ? formatCurrency(sale) : `achat + ${draft.targetMarginRate} %`} />
+      <PricingMetric
+        label={`Prix achat HT / ${baseUnitLabel}`}
+        value={purchasePerBaseUnit !== null ? formatCurrency(purchasePerBaseUnit) : "Ratio produit manquant"}
+      />
+      <PricingMetric
+        label={`Prix vente HT / ${baseUnitLabel}`}
+        value={salePerBaseUnit !== null ? formatCurrency(salePerBaseUnit) : "Ratio produit manquant"}
+      />
+    </div>
+  );
+}
+
+function PricingMetric({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-xl bg-white px-3 py-2">
+      <div className="text-[11px] font-semibold uppercase tracking-[0.12em] text-emerald-700">{label}</div>
+      <div className="mt-1 font-semibold text-slate-950">{value}</div>
     </div>
   );
 }
@@ -570,7 +707,19 @@ function SupplierPricesEditor({ unit, prices, suppliers, onChange }: { unit: Doc
   );
 }
 
-function ProductDocumentsEditor({ documents, onChange }: { documents: ProductCatalogItem["documents"]; onChange: (documents: ProductCatalogItem["documents"]) => void }) {
+function ProductDocumentsEditor({
+  documents,
+  busy,
+  error,
+  onAnalyze,
+  onChange,
+}: {
+  documents: ProductCatalogItem["documents"];
+  busy: boolean;
+  error: string | null;
+  onAnalyze: () => void;
+  onChange: (documents: ProductCatalogItem["documents"]) => void;
+}) {
   function addDocument(kind: ProductDocumentKind) {
     onChange([
       ...documents,
@@ -599,8 +748,13 @@ function ProductDocumentsEditor({ documents, onChange }: { documents: ProductCat
         <div>
           <div className="font-semibold text-slate-950">Documents liés</div>
           <p className="mt-1 text-sm text-slate-500">Ces documents servent ensuite aux tâches terrain et au DOE selon l'usage coché.</p>
+          <div className="mt-1 text-xs text-slate-500">{busy ? "Coco analyse les documents produit..." : "Chaque ajout relance l'analyse de connaissance IA."}</div>
+          {error ? <div className="mt-1 text-xs font-semibold text-red-600">{error}</div> : null}
         </div>
         <div className="flex flex-wrap gap-2">
+          <button type="button" className="rounded-xl border border-blue-200 bg-blue-50 px-3 py-2 text-xs font-semibold text-blue-700 hover:bg-blue-100 disabled:cursor-not-allowed disabled:opacity-60" onClick={onAnalyze} disabled={busy}>
+            {busy ? "Analyse..." : "Analyser avec Coco"}
+          </button>
           {PRODUCT_DOCUMENT_KINDS.map((kind) => (
             <button key={kind} type="button" className="rounded-xl border px-3 py-2 text-xs font-semibold hover:bg-slate-50" onClick={() => addDocument(kind)}>
               <FileText className="mr-1 inline h-3.5 w-3.5" /> {documentKindLabel(kind)}
@@ -679,6 +833,164 @@ function ProductDocumentsEditor({ documents, onChange }: { documents: ProductCat
         {!documents.length ? <div className="rounded-xl border border-dashed border-slate-200 p-4 text-sm text-slate-500">Aucun document lié.</div> : null}
       </div>
     </div>
+  );
+}
+
+function ProductKnowledgeEditor({
+  knowledge,
+  busy,
+  error,
+  onAnalyze,
+  onChange,
+}: {
+  knowledge: ProductKnowledge;
+  busy: boolean;
+  error: string | null;
+  onAnalyze: () => void;
+  onChange: (knowledge: ProductKnowledge) => void;
+}) {
+  function updateBlock<K extends keyof ProductKnowledge>(key: K, patch: Partial<ProductKnowledge[K]>) {
+    onChange({ ...knowledge, [key]: { ...knowledge[key], ...patch } });
+  }
+
+  function updateValue<K extends keyof ProductKnowledge>(key: K, value: ProductKnowledge[K]["value"]) {
+    updateBlock(key, { value } as Partial<ProductKnowledge[K]>);
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+          <div>
+            <div className="text-sm font-semibold text-slate-950">Connaissance IA produit</div>
+            <div className="mt-1 text-xs text-slate-500">Source métier persistante utilisée ensuite par les templates, sans relire les documents.</div>
+          </div>
+          <button type="button" className="rounded-xl border border-blue-200 bg-blue-50 px-3 py-2 text-sm font-semibold text-blue-700 hover:bg-blue-100 disabled:cursor-not-allowed disabled:opacity-60" onClick={onAnalyze} disabled={busy}>
+            {busy ? "Coco analyse..." : "Analyser les documents"}
+          </button>
+        </div>
+        {error ? <div className="mt-3 rounded-xl border border-red-200 bg-white px-3 py-2 text-sm font-semibold text-red-600">{error}</div> : null}
+      </div>
+
+      <div className="grid gap-4 xl:grid-cols-2">
+        <JsonKnowledgeBlock title="Identité" block={knowledge.identity} onValueChange={(value) => updateValue("identity", value as ProductKnowledge["identity"]["value"])} onMetaChange={(patch) => updateBlock("identity", patch)} />
+        <JsonKnowledgeBlock title="Fournisseur" block={knowledge.supplier} onValueChange={(value) => updateValue("supplier", value as ProductKnowledge["supplier"]["value"])} onMetaChange={(patch) => updateBlock("supplier", patch)} />
+        <JsonKnowledgeBlock title="Prix" block={knowledge.pricing} onValueChange={(value) => updateValue("pricing", value as ProductKnowledge["pricing"]["value"])} onMetaChange={(patch) => updateBlock("pricing", patch)} />
+        <JsonKnowledgeBlock title="Ratio / consommation" block={knowledge.materialUsage} onValueChange={(value) => updateValue("materialUsage", value as ProductKnowledge["materialUsage"]["value"])} onMetaChange={(patch) => updateBlock("materialUsage", patch)} />
+        <JsonKnowledgeBlock title="Application" block={knowledge.application} onValueChange={(value) => updateValue("application", value as ProductKnowledge["application"]["value"])} onMetaChange={(patch) => updateBlock("application", patch)} />
+        <JsonKnowledgeBlock title="Limites météo" block={knowledge.weatherLimits} onValueChange={(value) => updateValue("weatherLimits", value as ProductKnowledge["weatherLimits"]["value"])} onMetaChange={(patch) => updateBlock("weatherLimits", patch)} />
+      </div>
+
+      <div className="grid gap-4 xl:grid-cols-2">
+        <ListKnowledgeBlock title="Supports" block={knowledge.supports} onValueChange={(value) => updateValue("supports", value)} onMetaChange={(patch) => updateBlock("supports", patch)} />
+        <ListKnowledgeBlock title="Supports interdits" block={knowledge.forbiddenSupports} onValueChange={(value) => updateValue("forbiddenSupports", value)} onMetaChange={(patch) => updateBlock("forbiddenSupports", patch)} />
+        <ListKnowledgeBlock title="Outils" block={knowledge.tools} onValueChange={(value) => updateValue("tools", value)} onMetaChange={(patch) => updateBlock("tools", patch)} />
+        <ListKnowledgeBlock title="Consommables" block={knowledge.consumables} onValueChange={(value) => updateValue("consumables", value)} onMetaChange={(patch) => updateBlock("consumables", patch)} />
+        <ListKnowledgeBlock title="EPI" block={knowledge.PPE} onValueChange={(value) => updateValue("PPE", value)} onMetaChange={(patch) => updateBlock("PPE", patch)} />
+        <ListKnowledgeBlock title="Temps de séchage" block={knowledge.dryingTimes} onValueChange={(value) => updateValue("dryingTimes", value)} onMetaChange={(patch) => updateBlock("dryingTimes", patch)} />
+        <ListKnowledgeBlock title="Mode opératoire" block={knowledge.procedure} onValueChange={(value) => updateValue("procedure", value)} onMetaChange={(patch) => updateBlock("procedure", patch)} />
+        <ListKnowledgeBlock title="Contrôles" block={knowledge.controls} onValueChange={(value) => updateValue("controls", value)} onMetaChange={(patch) => updateBlock("controls", patch)} />
+        <ListKnowledgeBlock title="Erreurs à éviter" block={knowledge.commonMistakes} onValueChange={(value) => updateValue("commonMistakes", value)} onMetaChange={(patch) => updateBlock("commonMistakes", patch)} />
+        <ListKnowledgeBlock title="DOE" block={knowledge.doe} onValueChange={(value) => updateValue("doe", value)} onMetaChange={(patch) => updateBlock("doe", patch)} />
+        <ListKnowledgeBlock title="Retours terrain" block={knowledge.fieldExperience} onValueChange={(value) => updateValue("fieldExperience", value)} onMetaChange={(patch) => updateBlock("fieldExperience", patch)} />
+        <JsonKnowledgeBlock title="Confiance globale" block={knowledge.confidence} onValueChange={(value) => updateValue("confidence", value as ProductKnowledge["confidence"]["value"])} onMetaChange={(patch) => updateBlock("confidence", patch)} />
+      </div>
+    </div>
+  );
+}
+
+type KnowledgeBlockMeta = {
+  confidence: "high" | "medium" | "low";
+  reasoning: string;
+  sourceDocument: string | null;
+};
+
+function JsonKnowledgeBlock({
+  title,
+  block,
+  onValueChange,
+  onMetaChange,
+}: {
+  title: string;
+  block: KnowledgeBlockMeta & { value: unknown };
+  onValueChange: (value: unknown) => void;
+  onMetaChange: (patch: Partial<KnowledgeBlockMeta>) => void;
+}) {
+  const [parseError, setParseError] = useState<string | null>(null);
+  const serializedValue = JSON.stringify(block.value, null, 2);
+
+  return (
+    <KnowledgeShell title={title} block={block} onMetaChange={onMetaChange}>
+      <textarea
+        key={serializedValue}
+        className={`${textareaClass} font-mono text-xs`}
+        rows={8}
+        defaultValue={serializedValue}
+        onBlur={(event) => {
+          try {
+            onValueChange(JSON.parse(event.currentTarget.value));
+            setParseError(null);
+          } catch {
+            setParseError("JSON invalide : correction non enregistrée pour ce bloc.");
+          }
+        }}
+      />
+      {parseError ? <div className="mt-1 text-xs font-semibold text-red-600">{parseError}</div> : null}
+    </KnowledgeShell>
+  );
+}
+
+function ListKnowledgeBlock({
+  title,
+  block,
+  onValueChange,
+  onMetaChange,
+}: {
+  title: string;
+  block: KnowledgeBlockMeta & { value: string[] };
+  onValueChange: (value: string[]) => void;
+  onMetaChange: (patch: Partial<KnowledgeBlockMeta>) => void;
+}) {
+  return (
+    <KnowledgeShell title={title} block={block} onMetaChange={onMetaChange}>
+      <textarea
+        className={textareaClass}
+        rows={7}
+        value={block.value.join("\n")}
+        onChange={(event) => onValueChange(splitLines(event.target.value))}
+        placeholder="Une ligne par information exploitable"
+      />
+    </KnowledgeShell>
+  );
+}
+
+function KnowledgeShell({
+  title,
+  block,
+  children,
+  onMetaChange,
+}: {
+  title: string;
+  block: KnowledgeBlockMeta;
+  children: ReactNode;
+  onMetaChange: (patch: Partial<KnowledgeBlockMeta>) => void;
+}) {
+  return (
+    <section className="rounded-2xl border border-slate-200 p-4">
+      <div className="mb-3 flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
+        <div>
+          <div className="font-semibold text-slate-950">{title}</div>
+          <input className={`${inputClass} mt-2`} value={block.sourceDocument ?? ""} onChange={(event) => onMetaChange({ sourceDocument: event.target.value || null })} placeholder="Document source" />
+        </div>
+        <select className="h-9 rounded-xl border border-slate-200 bg-white px-2 text-xs font-semibold text-slate-700" value={block.confidence} onChange={(event) => onMetaChange({ confidence: event.target.value as KnowledgeBlockMeta["confidence"] })}>
+          <option value="high">Confiance haute</option>
+          <option value="medium">Confiance moyenne</option>
+          <option value="low">Confiance basse</option>
+        </select>
+      </div>
+      {children}
+      <textarea className={`${textareaClass} mt-2`} rows={2} value={block.reasoning} onChange={(event) => onMetaChange({ reasoning: event.target.value })} placeholder="Raisonnement / source / point à vérifier" />
+    </section>
   );
 }
 
@@ -794,8 +1106,23 @@ function nullableNonNegativeNumber(value: unknown) {
   return number !== null && number >= 0 ? number : null;
 }
 
+function splitLines(value: string) {
+  return value
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+}
+
+function tabClass(active: boolean) {
+  return [
+    "border-b-2 px-3 py-2 text-sm font-semibold",
+    active ? "border-blue-600 text-blue-700" : "border-transparent text-slate-500 hover:text-slate-900",
+  ].join(" ");
+}
+
 const labelClass = "block text-xs font-semibold uppercase tracking-[0.12em] text-slate-400";
 const inputClass = "h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm font-normal normal-case tracking-normal text-slate-950 outline-none focus:border-blue-300";
+const textareaClass = "w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-normal normal-case tracking-normal text-slate-950 outline-none focus:border-blue-300";
 
 function EmptyCatalogState({ onCreate }: { onCreate: () => void }) {
   return (

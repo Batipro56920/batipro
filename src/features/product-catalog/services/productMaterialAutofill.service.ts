@@ -1,12 +1,29 @@
 import type { ProductCatalogItem, ProductMaterialUsage } from "../domain/types";
-import { listProductCatalogItems } from "../infrastructure/productCatalogRepository";
 
-type ProductRatioHint = {
+/**
+ * Extraction du ratio materiau, de la perte et des notes techniques d'un produit.
+ *
+ * Remplace `taskTemplateProductAutofillBridge` (pilotage DOM par querySelector +
+ * setters natifs HTMLInputElement). La logique metier est identique, mais elle
+ * est ici pure et appelable depuis React.
+ *
+ * Ordre de priorite des sources :
+ *   1. product.knowledge.materialUsage  (connaissance IA Coco, bc4eeb6)
+ *   2. document.analysis.materialUsage  (analyse typee par document, main)
+ *   3. heuristique regex sur le texte des documents (main)
+ */
+
+export type ProductRatioHint = {
   quantity: number | null;
   sourceUnit: string | null;
   ratioUnit: string | null;
   lossPercent: number | null;
   notes: string;
+};
+
+export type ProductPricingHint = {
+  purchasePriceHt: number | null;
+  salePriceHt: number | null;
 };
 
 type RatioMatch = {
@@ -15,87 +32,25 @@ type RatioMatch = {
   ratioUnit: string;
 };
 
-let installed = false;
-let productsPromise: Promise<ProductCatalogItem[]> | null = null;
-
-export function installTaskTemplateProductAutofillBridge() {
-  if (installed || typeof window === "undefined" || typeof document === "undefined") return;
-  installed = true;
-  document.addEventListener("change", onPotentialProductSelection, true);
-}
-
-async function onPotentialProductSelection(event: Event) {
-  const select = event.target;
-  if (!(select instanceof HTMLSelectElement)) return;
-  if (!looksLikeTaskTemplateProductSelect(select)) return;
-
-  const productId = select.value;
-  if (!productId) return;
-
-  const row = findMaterialRow(select);
-  if (!row) return;
-
-  const products = await loadProducts();
-  const product = products.find((item) => item.id === productId);
-  if (!product) return;
-
-  window.setTimeout(() => applyProductTechnicalAutofill(row, product), 40);
-  window.setTimeout(() => applyProductTechnicalAutofill(row, product), 140);
-  window.setTimeout(() => applyProductTechnicalAutofill(row, product), 280);
-}
-
-function looksLikeTaskTemplateProductSelect(select: HTMLSelectElement) {
-  const firstOption = select.options.item(0)?.textContent?.toLowerCase() ?? "";
-  return firstOption.includes("ligne libre") && firstOption.includes("produit catalogue");
-}
-
-function findMaterialRow(select: HTMLSelectElement) {
-  return select.closest("div.space-y-3.rounded-2xl") as HTMLElement | null;
-}
-
-function loadProducts() {
-  productsPromise ??= listProductCatalogItems().catch(() => []);
-  return productsPromise;
-}
-
-function applyProductTechnicalAutofill(row: HTMLElement, product: ProductCatalogItem) {
-  const inputs = Array.from(row.querySelectorAll("input"));
-  if (inputs.length < 6) return;
-
-  const hint = getProductRatioHint(product);
-  const purchasePrice = getProductPurchaseUnitPrice(product);
-  const salePrice = getProductSaleUnitPrice(product, purchasePrice);
-  const templateUnit = getTemplateUnit(row);
-
-  setInputValue(inputs[0], product.designation);
-  setInputValue(inputs[1], hint.sourceUnit ?? templateUnit ?? "");
-  if (hint.quantity !== null) setInputValue(inputs[2], formatNumber(hint.quantity));
-  setInputValue(inputs[3], hint.ratioUnit ?? product.unit);
-  if (hint.lossPercent !== null) setInputValue(inputs[4], formatNumber(hint.lossPercent));
-  if (hint.notes) setInputValue(inputs[5], hint.notes);
-  if (inputs[6] && purchasePrice !== null) setInputValue(inputs[6], formatNumber(purchasePrice));
-  if (inputs[7] && salePrice !== null) setInputValue(inputs[7], formatNumber(salePrice));
-}
-
-function setInputValue(input: HTMLInputElement, value: string) {
-  if (input.value === value) return;
-  const valueSetter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
-  valueSetter?.call(input, value);
-  input.dispatchEvent(new Event("input", { bubbles: true }));
-  input.dispatchEvent(new Event("change", { bubbles: true }));
-}
-
-function getProductRatioHint(product: ProductCatalogItem): ProductRatioHint {
+export function getProductRatioHint(product: ProductCatalogItem): ProductRatioHint {
   const documentText = getProductDocumentText(product);
+  const knowledgeRatio = buildKnowledgeRatioMatch(product);
   const materialUsage = findProductMaterialUsage(product);
-  const structuredRatio = materialUsage ? buildStructuredRatioMatch(materialUsage) : null;
+  const structuredRatio = knowledgeRatio ?? (materialUsage ? buildStructuredRatioMatch(materialUsage) : null);
   const ratioMatch = structuredRatio ?? findRatioMatch(documentText);
   const lossMatch = documentText.match(/(?:Perte pr[eé]conis[eé]e|Perte extraite)\s*:\s*([0-9]+(?:[,.][0-9]+)?)\s*%/i);
 
-  const lossPercent = materialUsage?.lossPercent ?? parseLooseNumber(lossMatch?.[1]);
+  const knowledgeLoss = product.knowledge?.materialUsage?.value?.lossPercent ?? null;
+  const lossPercent = knowledgeLoss ?? materialUsage?.lossPercent ?? parseLooseNumber(lossMatch?.[1]);
 
   const taskNotes = product.documents
-    .filter((document) => document.usage?.task || document.kind === "technical_sheet" || document.kind === "application_scope" || document.kind === "work_method")
+    .filter(
+      (document) =>
+        document.usage?.task ||
+        document.kind === "technical_sheet" ||
+        document.kind === "application_scope" ||
+        document.kind === "work_method",
+    )
     .map((document) => {
       const note = String(document.notes ?? "").trim();
       return note ? `${document.name}: ${note}` : document.name;
@@ -113,10 +68,30 @@ function getProductRatioHint(product: ProductCatalogItem): ProductRatioHint {
   };
 }
 
+export function getProductPricingHint(product: ProductCatalogItem): ProductPricingHint {
+  const purchasePriceHt = getProductPurchaseUnitPrice(product);
+  return {
+    purchasePriceHt,
+    salePriceHt: getProductSaleUnitPrice(product, purchasePriceHt),
+  };
+}
+
+function buildKnowledgeRatioMatch(product: ProductCatalogItem): RatioMatch | null {
+  const usage = product.knowledge?.materialUsage?.value;
+  if (!usage) return null;
+  const quantity = usage.ratioQuantity;
+  const sourceUnit = normalizeUnit(usage.sourceUnit);
+  const ratioUnit = normalizeUnit(usage.ratioUnit);
+  if (quantity === null || quantity <= 0 || !sourceUnit || !ratioUnit) return null;
+  return { quantity, sourceUnit, ratioUnit };
+}
+
 function findProductMaterialUsage(product: ProductCatalogItem): ProductMaterialUsage | null {
   const usages = product.documents
     .map((document) => document.analysis?.materialUsage ?? null)
-    .filter((usage): usage is ProductMaterialUsage => Boolean(usage && usage.ratioQuantity > 0 && usage.ratioUnit && usage.sourceUnit))
+    .filter((usage): usage is ProductMaterialUsage =>
+      Boolean(usage && usage.ratioQuantity > 0 && usage.ratioUnit && usage.sourceUnit),
+    )
     .sort((a, b) => (b.confidence ?? 0) - (a.confidence ?? 0));
   return usages[0] ?? null;
 }
@@ -125,11 +100,7 @@ function buildStructuredRatioMatch(materialUsage: ProductMaterialUsage): RatioMa
   const sourceUnit = normalizeUnit(materialUsage.sourceUnit);
   const ratioUnit = normalizeUnit(materialUsage.ratioUnit);
   if (!sourceUnit || !ratioUnit || materialUsage.ratioQuantity <= 0) return null;
-  return {
-    quantity: materialUsage.ratioQuantity,
-    sourceUnit,
-    ratioUnit,
-  };
+  return { quantity: materialUsage.ratioQuantity, sourceUnit, ratioUnit };
 }
 
 function getProductPurchaseUnitPrice(product: ProductCatalogItem) {
@@ -187,28 +158,7 @@ function buildRendementRatioMatch(match: RegExpMatchArray | null): RatioMatch | 
   const sourceUnit = normalizeUnit(match[2]);
   const ratioUnit = normalizeUnit(match[3]);
   if (quantity === null || quantity <= 0 || !sourceUnit || !ratioUnit) return null;
-  return {
-    quantity: 1 / quantity,
-    sourceUnit,
-    ratioUnit,
-  };
-}
-
-function getTemplateUnit(row: HTMLElement): string | null {
-  const drawer = row.closest(".fixed.inset-0") as HTMLElement | null;
-  if (!drawer) return null;
-
-  const labels = Array.from(drawer.querySelectorAll("label"));
-  for (const label of labels) {
-    if (row.contains(label)) continue;
-    const labelText = normalizeKey(label.textContent);
-    if (!labelText.includes("unite")) continue;
-    const input = label.querySelector("input");
-    const value = normalizeUnit(input?.value);
-    if (value) return value;
-  }
-
-  return null;
+  return { quantity: 1 / quantity, sourceUnit, ratioUnit };
 }
 
 function parseLooseNumber(value: unknown): number | null {
@@ -222,7 +172,7 @@ function normalizePrice(value: unknown): number | null {
   return parsed !== null ? Math.round(parsed * 100) / 100 : null;
 }
 
-function normalizeUnit(value: unknown): string | null {
+export function normalizeUnit(value: unknown): string | null {
   const unit = normalizeKey(value);
   if (!unit) return null;
   if (["m2", "m 2"].includes(unit)) return "m2";
@@ -245,8 +195,4 @@ function normalizeKey(value: unknown): string {
     .replace(/\s+/g, " ")
     .trim()
     .toLowerCase();
-}
-
-function formatNumber(value: number) {
-  return Number.isInteger(value) ? String(value) : String(Math.round(value * 10000) / 10000);
 }

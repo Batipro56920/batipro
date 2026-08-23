@@ -1,5 +1,6 @@
 ﻿// src/services/chantierTasks.service.ts
 import { supabase } from "../lib/supabaseClient";
+import { createFieldKnowledgeForTask } from "../features/field-knowledge/FieldKnowledgeEngine";
 
 /* =========================================================
    TYPES
@@ -473,6 +474,13 @@ function normalizeTaskRow(row: any): ChantierTaskRow {
   } as ChantierTaskRow;
 }
 
+async function prepareFieldKnowledge(task: ChantierTaskRow): Promise<ChantierTaskRow> {
+  await createFieldKnowledgeForTask(task).catch((err) => {
+    console.warn("[field-knowledge] task preparation skipped", err);
+  });
+  return task;
+}
+
 function sortTaskRows(rows: ChantierTaskRow[]): ChantierTaskRow[] {
   return [...rows].sort((a, b) => {
     const orderDiff = Number(a.order_index ?? 0) - Number(b.order_index ?? 0);
@@ -720,7 +728,7 @@ export async function createTask(payload: CreateTaskPayload) {
     if (chantierTasksSupportsV3Columns !== false) {
       chantierTasksSupportsV3Columns = true;
     }
-    return normalizeTaskRow(first.data);
+    return prepareFieldKnowledge(normalizeTaskRow(first.data));
   }
 
   let baseInsert = insertWithTerrainColumns;
@@ -739,7 +747,7 @@ export async function createTask(payload: CreateTaskPayload) {
       if (chantierTasksSupportsTerrainTitleColumns !== false) {
         chantierTasksSupportsTerrainTitleColumns = true;
       }
-      return normalizeTaskRow(retryWithoutV3Columns.data);
+      return prepareFieldKnowledge(normalizeTaskRow(retryWithoutV3Columns.data));
     }
     baseError = retryWithoutV3Columns.error;
   }
@@ -756,7 +764,7 @@ export async function createTask(payload: CreateTaskPayload) {
       .single();
 
     if (!retryWithoutTerrainColumns.error) {
-      return normalizeTaskRow(retryWithoutTerrainColumns.data);
+      return prepareFieldKnowledge(normalizeTaskRow(retryWithoutTerrainColumns.data));
     }
     baseError = retryWithoutTerrainColumns.error;
   }
@@ -772,7 +780,7 @@ export async function createTask(payload: CreateTaskPayload) {
     .single();
 
   if (!fallback.error) {
-    return normalizeTaskRow(fallback.data);
+    return prepareFieldKnowledge(normalizeTaskRow(fallback.data));
   }
 
   if (!isMissingTaskColumnError(fallback.error, "devis_ligne_id")) {
@@ -789,7 +797,7 @@ export async function createTask(payload: CreateTaskPayload) {
     .single();
 
   if (fallbackWithoutDevisLine.error) throw fallbackWithoutDevisLine.error;
-  return normalizeTaskRow(fallbackWithoutDevisLine.data);
+  return prepareFieldKnowledge(normalizeTaskRow(fallbackWithoutDevisLine.data));
 }
 
 export async function updateTask(id: string, patch: UpdateTaskPatch) {

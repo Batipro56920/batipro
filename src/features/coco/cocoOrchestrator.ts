@@ -1,185 +1,389 @@
 import { supabase } from "../../lib/supabaseClient";
 
+/**
+ * Intentions Coco couvertes par la plateforme.
+ * Conserve depuis la version main : sert de reference pour les edge functions
+ * `analyze-product-documents`, `generate-task-template`, `create-field-knowledge`
+ * et `summarize-field-feedback`.
+ */
 export type CocoIntent =
   | "analyze_product"
   | "generate_task_template"
   | "prepare_field_task"
   | "summarize_field_feedback";
 
-export type CocoTaskMaterialContext = {
-  name: string;
-  sourceUnit?: string;
-  ratioQuantity?: number;
-  ratioUnit?: string;
-  lossPercent?: number;
-  notes?: string;
+export type CocoConfidence = "high" | "medium" | "low";
+
+export type CocoMaterialResult = {
+  label: string;
+  quantity: number | null;
+  unit: string | null;
+  detail: string | null;
 };
 
-export type CocoTaskTemplateContext = {
-  title: string;
-  lot?: string;
-  unit?: string;
-  technicalDescription?: string;
-  characteristics?: string[];
-  remarks?: string;
-  materials?: CocoTaskMaterialContext[];
-  equipment?: string[];
+export type CocoEquipmentResult = {
+  label: string;
+  quantity: number | null;
+  unit: string | null;
+  required: boolean;
+  detail: string | null;
+};
+
+export type CocoTaskTemplateCostSummary = {
+  materialCostHt: number | null;
+  materialSaleHt: number | null;
+  laborCostHt: number | null;
+  laborSaleHt: number | null;
+  equipmentCostHt: number | null;
+  equipmentSaleHt: number | null;
+  feeCostHt: number | null;
+  feeSaleHt: number | null;
+  totalCostHt: number | null;
+  salePriceHt: number | null;
+  marginHt: number | null;
+  marginRate: number | null;
+  estimatedTimeHours: number | null;
+  humanTimeHours: number | null;
+  teamTimeHours: number | null;
+  dailyCostHt: number | null;
+  profitabilityRate: number | null;
+  lines: string[];
 };
 
 export type CocoTaskTemplateResult = {
+  materials: CocoMaterialResult[];
+  equipment: CocoEquipmentResult[];
+  consumables: string[];
+  ppe: string[];
+  procedure: string[];
+  controls: string[];
+  errorsToAvoid: string[];
+  safetyPoints: string[];
+  doePhotos: string[];
+  doeDocuments: string[];
   technicalDescription: string;
   characteristics: string[];
-  remarks: string;
-  materials: Array<{
-    name: string;
-    sourceUnit?: string;
-    ratioQuantity?: number;
-    ratioUnit?: string;
-    lossPercent?: number;
-    notes?: string;
-  }>;
-  equipment: Array<{
-    name: string;
-    quantity?: number;
-    unit?: string;
-    required: boolean;
-    notes?: string;
-  }>;
-  controls: string[];
-  mistakesToAvoid: string[];
+  fieldReturns: string[];
+  fieldReturnQuestions: string[];
+  costSummary: CocoTaskTemplateCostSummary;
+  confidence: CocoConfidence;
   missingInformation: string[];
-  confidence: number;
-  source: "remote" | "local";
+  usedFallback?: boolean;
+  errorMessage?: string | null;
 };
 
-type CocoOrchestratorRequest = {
-  intent: CocoIntent;
-  context: CocoTaskTemplateContext;
+export type CocoTaskTemplateContext = {
+  task: {
+    title: string;
+    lot: string;
+    unit: string;
+    usage: string;
+    defaultQuantity: number | null;
+    timePerUnit: number | null;
+    referenceUnitCostHt: number | null;
+    existingTechnicalDescription: string;
+    existingCharacteristics: string;
+    existingNotes: string;
+  };
+  materials: Array<Record<string, unknown>>;
+  labor: Array<Record<string, unknown>>;
+  equipment: Array<Record<string, unknown>>;
+  fees: Array<Record<string, unknown>>;
+  lotProfile?: Record<string, unknown> | null;
+  costSummary: {
+    materialCost: number;
+    materialSale: number;
+    laborCost: number;
+    laborSale: number;
+    equipmentCost?: number;
+    equipmentSale?: number;
+    feeCost: number;
+    feeSale: number;
+    cost: number;
+    sale: number;
+    margin: number;
+    marginRate: number;
+    estimatedTimeHours?: number;
+    humanTimeHours?: number;
+    teamTimeHours?: number;
+    dailyCost?: number;
+    profitabilityRate?: number;
+    lines?: string[];
+  };
 };
+
+function text(value: unknown): string {
+  return String(value ?? "").trim();
+}
+
+function nullableText(value: unknown): string | null {
+  const valueText = text(value);
+  return valueText || null;
+}
+
+function nullableNumber(value: unknown): number | null {
+  if (value === null || value === undefined || value === "") return null;
+  const number = Number(String(value).replace(",", "."));
+  return Number.isFinite(number) ? number : null;
+}
+
+function stringArray(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return value.map((item) => text(item)).filter(Boolean);
+}
 
 function unique(values: string[]) {
   return [...new Set(values.map((value) => value.trim()).filter(Boolean))];
 }
 
-function normalizeResult(value: unknown): CocoTaskTemplateResult | null {
-  if (!value || typeof value !== "object") return null;
-  const payload = "result" in value && value.result && typeof value.result === "object"
-    ? value.result as Record<string, unknown>
-    : value as Record<string, unknown>;
-  if (!Array.isArray(payload.equipment) || !Array.isArray(payload.materials)) return null;
-
-  const strings = (entry: unknown) =>
-    Array.isArray(entry) ? entry.filter((item): item is string => typeof item === "string") : [];
-  const materials = payload.materials
-    .filter((item): item is Record<string, unknown> => Boolean(item) && typeof item === "object")
-    .map((item) => ({
-      name: String(item.name ?? item.material_name ?? "").trim(),
-      sourceUnit: typeof item.sourceUnit === "string" ? item.sourceUnit : undefined,
-      ratioQuantity: typeof item.ratioQuantity === "number" ? item.ratioQuantity : undefined,
-      ratioUnit: typeof item.ratioUnit === "string" ? item.ratioUnit : undefined,
-      lossPercent: typeof item.lossPercent === "number" ? item.lossPercent : undefined,
-      notes: typeof item.notes === "string" ? item.notes : undefined,
-    }))
-    .filter((item) => item.name.length > 0);
-  const equipment = payload.equipment
-    .map((item) => typeof item === "string" ? { name: item, required: true } : item)
-    .filter((item): item is Record<string, unknown> => Boolean(item) && typeof item === "object")
-    .map((item) => ({
-      name: String(item.name ?? item.equipment_name ?? "").trim(),
-      quantity: typeof item.quantity === "number" ? item.quantity : undefined,
-      unit: typeof item.unit === "string" ? item.unit : undefined,
-      required: item.required !== false,
-      notes: typeof item.notes === "string" ? item.notes : undefined,
-    }))
-    .filter((item) => item.name.length > 0);
-
-  return {
-    technicalDescription: String(payload.technicalDescription ?? payload.description_technique ?? "").trim(),
-    characteristics: strings(payload.characteristics ?? payload.caracteristiques),
-    remarks: String(payload.remarks ?? payload.remarques ?? "").trim(),
-    materials,
-    equipment,
-    controls: strings(payload.controls ?? payload.controles),
-    mistakesToAvoid: strings(payload.mistakesToAvoid ?? payload.erreurs_a_eviter),
-    missingInformation: strings(payload.missingInformation ?? payload.informations_manquantes),
-    confidence: typeof payload.confidence === "number" ? payload.confidence : 0.7,
-    source: "remote",
-  };
+function normalizeConfidence(value: unknown): CocoConfidence {
+  const normalized = text(value).toLowerCase();
+  if (normalized === "high" || normalized === "haute") return "high";
+  if (normalized === "medium" || normalized === "moyenne") return "medium";
+  return "low";
 }
 
-function buildLocalFallback(context: CocoTaskTemplateContext): CocoTaskTemplateResult {
-  const subject = `${context.lot ?? ""} ${context.title}`.toLocaleLowerCase("fr");
-  const equipment = ["EPI adaptés", "Protections de la zone", "Matériel de mesure et de contrôle"];
+/**
+ * Heuristique metier reprise de la version main de l'orchestrateur.
+ * Alimente le repli local quand aucun materiel n'est saisi dans le drawer.
+ */
+function buildTradeEquipmentSuggestions(lot: string, title: string): string[] {
+  const subject = `${lot} ${title}`.toLocaleLowerCase("fr");
+  const equipment = ["EPI adaptes", "Protections de la zone", "Materiel de mesure et de controle"];
 
   if (/peint|façade|facade|enduit/.test(subject)) {
-    equipment.push("Bâches de protection", "Adhésif de masquage", "Brosse et grattoir", "Rouleau adapté au produit");
+    equipment.push("Baches de protection", "Adhesif de masquage", "Brosse et grattoir", "Rouleau adapte au produit");
     if (/façade|facade/.test(subject)) equipment.push("Nettoyeur haute pression");
   } else if (/carrel|faïence|faience/.test(subject)) {
-    equipment.push("Malaxeur", "Peigne à colle", "Coupe-carreaux", "Système de nivellement");
+    equipment.push("Malaxeur", "Peigne a colle", "Coupe-carreaux", "Systeme de nivellement");
   } else if (/plâtr|platr|cloison|doublage/.test(subject)) {
-    equipment.push("Laser ou niveau", "Visseuse", "Cutter", "Lève-plaque selon hauteur");
+    equipment.push("Laser ou niveau", "Visseuse", "Cutter", "Leve-plaque selon hauteur");
   } else if (/maçon|macon|béton|beton|mortier/.test(subject)) {
-    equipment.push("Malaxeur ou bétonnière", "Truelle", "Niveau", "Règle de maçon");
+    equipment.push("Malaxeur ou betonniere", "Truelle", "Niveau", "Regle de macon");
   } else if (/plomb|sanitaire|chauffage/.test(subject)) {
-    equipment.push("Clés et pinces adaptées", "Coupe-tube", "Matériel de contrôle d'étanchéité");
+    equipment.push("Cles et pinces adaptees", "Coupe-tube", "Materiel de controle d'etancheite");
   } else if (/élect|elect/.test(subject)) {
-    equipment.push("VAT", "Multimètre", "Outillage isolé", "Matériel de repérage");
+    equipment.push("VAT", "Multimetre", "Outillage isole", "Materiel de reperage");
   }
 
-  const missingInformation: string[] = [];
-  if (!context.lot?.trim()) missingInformation.push("Lot métier à préciser");
-  if (!context.unit?.trim()) missingInformation.push("Unité d'ouvrage à préciser");
-  if (!context.materials?.length) missingInformation.push("Produits ou matériaux à rattacher depuis le catalogue");
+  return unique(equipment);
+}
 
-  const controls = [
-    "Contrôler l'état et la conformité du support avant démarrage",
-    "Vérifier les dimensions, niveaux et tolérances applicables",
-    "Contrôler l'aspect final et nettoyer la zone avant réception",
-  ];
-  const mistakesToAvoid = [
-    "Démarrer sur un support non préparé ou non conforme",
-    "Utiliser un produit sans vérifier sa fiche technique",
-    "Masquer un défaut au lieu de le signaler au conducteur de travaux",
-  ];
-  const details = [
-    context.unit ? `Unité d'ouvrage : ${context.unit}` : "",
-    context.materials?.length ? `${context.materials.length} matériau(x) rattaché(s)` : "",
-    "Préparation du support et protections à valider avant exécution",
-  ].filter(Boolean);
-
+function materialFromUnknown(value: unknown): CocoMaterialResult | null {
+  if (typeof value === "string") {
+    const label = text(value);
+    return label ? { label, quantity: null, unit: null, detail: null } : null;
+  }
+  const raw = value as Record<string, unknown> | null;
+  const label = nullableText(raw?.label ?? raw?.designation ?? raw?.name ?? raw?.materialName);
+  if (!label) return null;
   return {
-    technicalDescription: context.technicalDescription?.trim()
-      || `Préparer puis exécuter « ${context.title.trim()} » selon le support, les plans et les prescriptions des fabricants. Protéger les ouvrages adjacents, respecter les temps de mise en œuvre et réaliser les contrôles avant réception.`,
-    characteristics: context.characteristics?.length ? context.characteristics : details,
-    remarks: context.remarks?.trim()
-      || `Contrôles : ${controls.join(" ; ")}.
-Erreurs à éviter : ${mistakesToAvoid.join(" ; ")}.`,
-    materials: context.materials ?? [],
-    equipment: unique(equipment).map((name) => ({ name, quantity: 1, unit: "u", required: true })),
-    controls,
-    mistakesToAvoid,
-    missingInformation,
-    confidence: context.materials?.length ? 0.65 : 0.5,
-    source: "local",
+    label,
+    quantity: nullableNumber(raw?.quantity),
+    unit: nullableText(raw?.unit),
+    detail: nullableText(raw?.detail ?? raw?.notes ?? raw?.source),
   };
 }
 
-export async function runCocoOrchestrator({ intent, context }: CocoOrchestratorRequest) {
-  try {
-    const { data, error } = await supabase.functions.invoke("coco-orchestrator", {
-      body: { intent, context },
-    });
-    if (!error) {
-      const normalized = normalizeResult(data);
-      if (normalized) return normalized;
-    }
-  } catch {
-    // The local result keeps the preparation workflow usable before the Edge Function is deployed.
+function equipmentFromUnknown(value: unknown): CocoEquipmentResult | null {
+  if (typeof value === "string") {
+    const label = text(value);
+    return label ? { label, quantity: null, unit: null, required: false, detail: null } : null;
   }
-
-  return buildLocalFallback(context);
+  const raw = value as Record<string, unknown> | null;
+  const label = nullableText(raw?.label ?? raw?.designation ?? raw?.name ?? raw?.equipmentName);
+  if (!label) return null;
+  return {
+    label,
+    quantity: nullableNumber(raw?.quantity),
+    unit: nullableText(raw?.unit),
+    required: raw?.required === true,
+    detail: nullableText(raw?.detail ?? raw?.notes),
+  };
 }
 
-export function generateTaskTemplateWithCoco(context: CocoTaskTemplateContext) {
-  return runCocoOrchestrator({ intent: "generate_task_template", context });
+function normalizeCostSummary(value: unknown, context: CocoTaskTemplateContext): CocoTaskTemplateCostSummary {
+  if (Array.isArray(value)) {
+    return {
+      materialCostHt: context.costSummary.materialCost,
+      materialSaleHt: context.costSummary.materialSale,
+      laborCostHt: context.costSummary.laborCost,
+      laborSaleHt: context.costSummary.laborSale,
+      equipmentCostHt: context.costSummary.equipmentCost ?? 0,
+      equipmentSaleHt: context.costSummary.equipmentSale ?? 0,
+      feeCostHt: context.costSummary.feeCost,
+      feeSaleHt: context.costSummary.feeSale,
+      totalCostHt: context.costSummary.cost,
+      salePriceHt: context.costSummary.sale,
+      marginHt: context.costSummary.margin,
+      marginRate: context.costSummary.marginRate,
+      estimatedTimeHours: context.costSummary.estimatedTimeHours ?? null,
+      humanTimeHours: context.costSummary.humanTimeHours ?? null,
+      teamTimeHours: context.costSummary.teamTimeHours ?? null,
+      dailyCostHt: context.costSummary.dailyCost ?? null,
+      profitabilityRate: context.costSummary.profitabilityRate ?? null,
+      lines: stringArray(value),
+    };
+  }
+  const raw = value as Record<string, unknown> | null;
+  return {
+    materialCostHt: nullableNumber(raw?.materialCostHt ?? raw?.materialCost) ?? context.costSummary.materialCost,
+    materialSaleHt: nullableNumber(raw?.materialSaleHt ?? raw?.materialSale) ?? context.costSummary.materialSale,
+    laborCostHt: nullableNumber(raw?.laborCostHt ?? raw?.laborCost) ?? context.costSummary.laborCost,
+    laborSaleHt: nullableNumber(raw?.laborSaleHt ?? raw?.laborSale) ?? context.costSummary.laborSale,
+    equipmentCostHt: nullableNumber(raw?.equipmentCostHt ?? raw?.equipmentCost) ?? context.costSummary.equipmentCost ?? 0,
+    equipmentSaleHt: nullableNumber(raw?.equipmentSaleHt ?? raw?.equipmentSale) ?? context.costSummary.equipmentSale ?? 0,
+    feeCostHt: nullableNumber(raw?.feeCostHt ?? raw?.feeCost) ?? context.costSummary.feeCost,
+    feeSaleHt: nullableNumber(raw?.feeSaleHt ?? raw?.feeSale) ?? context.costSummary.feeSale,
+    totalCostHt: nullableNumber(raw?.totalCostHt ?? raw?.totalCost) ?? context.costSummary.cost,
+    salePriceHt: nullableNumber(raw?.salePriceHt ?? raw?.salePrice) ?? context.costSummary.sale,
+    marginHt: nullableNumber(raw?.marginHt ?? raw?.margin) ?? context.costSummary.margin,
+    marginRate: nullableNumber(raw?.marginRate) ?? context.costSummary.marginRate,
+    estimatedTimeHours: nullableNumber(raw?.estimatedTimeHours) ?? context.costSummary.estimatedTimeHours ?? null,
+    humanTimeHours: nullableNumber(raw?.humanTimeHours) ?? context.costSummary.humanTimeHours ?? null,
+    teamTimeHours: nullableNumber(raw?.teamTimeHours) ?? context.costSummary.teamTimeHours ?? null,
+    dailyCostHt: nullableNumber(raw?.dailyCostHt ?? raw?.dailyCost) ?? context.costSummary.dailyCost ?? null,
+    profitabilityRate: nullableNumber(raw?.profitabilityRate) ?? context.costSummary.profitabilityRate ?? null,
+    lines: stringArray(raw?.lines).length ? stringArray(raw?.lines) : stringArray(context.costSummary.lines),
+  };
+}
+
+function normalizeResult(raw: unknown, context: CocoTaskTemplateContext): CocoTaskTemplateResult {
+  const result = raw as Record<string, unknown> | null;
+  return {
+    materials: (Array.isArray(result?.materials) ? result.materials : []).map(materialFromUnknown).filter((item): item is CocoMaterialResult => Boolean(item)),
+    equipment: (Array.isArray(result?.equipment) ? result.equipment : []).map(equipmentFromUnknown).filter((item): item is CocoEquipmentResult => Boolean(item)),
+    consumables: stringArray(result?.consumables),
+    ppe: stringArray(result?.ppe ?? result?.PPE),
+    procedure: stringArray(result?.procedure),
+    controls: stringArray(result?.controls),
+    errorsToAvoid: stringArray(result?.errorsToAvoid),
+    safetyPoints: stringArray(result?.safetyPoints),
+    doePhotos: stringArray(result?.doePhotos),
+    doeDocuments: stringArray(result?.doeDocuments),
+    technicalDescription: text(result?.technicalDescription),
+    characteristics: stringArray(result?.characteristics),
+    fieldReturns: stringArray(result?.fieldReturns),
+    fieldReturnQuestions: stringArray(result?.fieldReturnQuestions),
+    costSummary: normalizeCostSummary(result?.costSummary, context),
+    confidence: normalizeConfidence(result?.confidence),
+    missingInformation: stringArray(result?.missingInformation),
+    usedFallback: result?.usedFallback === true,
+    errorMessage: nullableText(result?.errorMessage),
+  };
+}
+
+function fallbackResult(context: CocoTaskTemplateContext, error: unknown): CocoTaskTemplateResult {
+  const materials = context.materials
+    .map((row): CocoMaterialResult | null => {
+      const label = nullableText(row.materialName);
+      if (!label) return null;
+      return {
+        label,
+        quantity: nullableNumber(row.ratioQuantity),
+        unit: nullableText(row.ratioUnit ?? row.sourceUnit),
+        detail: nullableText(row.notes),
+      };
+    })
+    .filter((item): item is CocoMaterialResult => Boolean(item));
+  const equipmentRows = context.equipment
+    .map((row): CocoEquipmentResult | null => {
+      const label = nullableText(row.name);
+      if (!label) return null;
+      return {
+        label,
+        quantity: nullableNumber(row.defaultQuantity),
+        unit: nullableText(row.unit),
+        required: row.required === true,
+        detail: nullableText(row.notes),
+      };
+    })
+    .filter((item): item is CocoEquipmentResult => Boolean(item));
+
+  // Repli metier issu de la version main : suggere un outillage credible
+  // quand le drawer ne contient encore aucune ligne materiel.
+  const equipment = equipmentRows.length
+    ? equipmentRows
+    : buildTradeEquipmentSuggestions(context.task.lot, context.task.title).map((label) => ({
+        label,
+        quantity: 1,
+        unit: "u",
+        required: true,
+        detail: null,
+      }));
+
+  const missingInformation = ["Generation IA indisponible: resultat local minimal a verifier."];
+  if (!context.task.lot.trim()) missingInformation.push("Lot metier a preciser");
+  if (!context.task.unit.trim()) missingInformation.push("Unite d'ouvrage a preciser");
+  if (!materials.length) missingInformation.push("Produits ou materiaux a rattacher depuis le catalogue");
+
+  return {
+    materials,
+    equipment,
+    consumables: [],
+    ppe: [],
+    procedure: [
+      "Verifier le support, les dimensions et les contraintes chantier avant demarrage.",
+      "Preparer les materiaux, protections et outillages selon les ratios saisis.",
+      "Executer l'ouvrage conformement aux fiches produits et controler le rendu avant repli.",
+    ],
+    controls: ["Support pret", "Quantites coherentes", "Finition conforme", "Zone nettoyee"],
+    errorsToAvoid: [
+      "Demarrer sans verifier le support",
+      "Utiliser un produit sans verifier sa fiche technique",
+      "Oublier les pertes ou consommables",
+      "Ne pas tracer les ecarts terrain",
+    ],
+    safetyPoints: ["Verifier les EPI et protections collectives adaptes avant demarrage."],
+    doePhotos: ["Photo avant intervention", "Photo du support prepare", "Photo du resultat fini"],
+    doeDocuments: ["Fiches techniques des produits utilises"],
+    technicalDescription: context.task.existingTechnicalDescription || `${context.task.title} - preparation technique a completer depuis les donnees chantier.`,
+    characteristics: [
+      ...materials.map((item) => `${item.label}${item.quantity ? `: ${item.quantity} ${item.unit ?? ""}` : ""}`.trim()),
+      ...equipment.map((item) => `Materiel: ${item.label}`),
+    ],
+    fieldReturns: ["Signaler les ecarts de consommation, blocages support, manque materiel ou informations techniques."],
+    fieldReturnQuestions: ["Consommation reelle conforme au ratio ?", "Blocage ou support non conforme ?", "Photos DOE prises ?"],
+    costSummary: {
+      materialCostHt: context.costSummary.materialCost,
+      materialSaleHt: context.costSummary.materialSale,
+      laborCostHt: context.costSummary.laborCost,
+      laborSaleHt: context.costSummary.laborSale,
+      equipmentCostHt: context.costSummary.equipmentCost ?? 0,
+      equipmentSaleHt: context.costSummary.equipmentSale ?? 0,
+      feeCostHt: context.costSummary.feeCost,
+      feeSaleHt: context.costSummary.feeSale,
+      totalCostHt: context.costSummary.cost,
+      salePriceHt: context.costSummary.sale,
+      marginHt: context.costSummary.margin,
+      marginRate: context.costSummary.marginRate,
+      estimatedTimeHours: context.costSummary.estimatedTimeHours ?? null,
+      humanTimeHours: context.costSummary.humanTimeHours ?? null,
+      teamTimeHours: context.costSummary.teamTimeHours ?? null,
+      dailyCostHt: context.costSummary.dailyCost ?? null,
+      profitabilityRate: context.costSummary.profitabilityRate ?? null,
+      lines: context.costSummary.lines?.length ? context.costSummary.lines : [
+        `Materiaux: ${context.costSummary.materialCost.toFixed(2)} EUR HT`,
+        `Main d'oeuvre: ${context.costSummary.laborCost.toFixed(2)} EUR HT`,
+        `Frais: ${context.costSummary.feeCost.toFixed(2)} EUR HT`,
+        `Total revient: ${context.costSummary.cost.toFixed(2)} EUR HT`,
+      ],
+    },
+    confidence: "low",
+    missingInformation,
+    usedFallback: true,
+    errorMessage: error instanceof Error ? error.message : "Generation IA indisponible.",
+  };
+}
+
+export async function generateTaskTemplateWithCoco(context: CocoTaskTemplateContext): Promise<CocoTaskTemplateResult> {
+  try {
+    const { data, error } = await supabase.functions.invoke("generate-task-template", { body: context });
+    if (error) throw error;
+    const result = (data as { result?: unknown } | null)?.result;
+    if (!result) throw new Error("Reponse IA vide pour le template de tache.");
+    return normalizeResult(result, context);
+  } catch (error) {
+    return fallbackResult(context, error);
+  }
 }
