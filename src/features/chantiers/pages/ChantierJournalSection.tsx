@@ -1,6 +1,12 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import type { ChantierActivityLogRow } from "../../../services/chantierActivityLog.service";
+import {
+  createChantierFeedPost,
+  listChantierFeedPosts,
+  type ChantierFeedPostRow,
+  type ChantierFeedVisibility,
+} from "../../../services/chantierFeed.service";
 
 type JournalChangeItem = {
   label: string;
@@ -32,6 +38,16 @@ function formatStatusValue(value: unknown): string {
 
 function formatJournalChanges(log: ChantierActivityLogRow): JournalChangeItem[] {
   const changes = (log.changes ?? {}) as Record<string, unknown>;
+
+  if (log.entity_type === "feed_post") {
+    return [
+      {
+        label: "Audience",
+        value: changes.visibility === "backoffice" ? "Back-office" : "Équipe chantier",
+        tone: changes.visibility === "backoffice" ? "neutral" : "blue",
+      },
+    ];
+  }
 
   if (log.entity_type === "terrain_feedback") {
     const items: JournalChangeItem[] = [];
@@ -160,24 +176,104 @@ export default function ChantierJournalSection({
   const terrainFeedbackHref = chantierId
     ? `/retours-terrain?chantierId=${encodeURIComponent(chantierId)}`
     : null;
+  const [posts, setPosts] = useState<ChantierFeedPostRow[]>([]);
+  const [postsLoading, setPostsLoading] = useState(false);
+  const [postsError, setPostsError] = useState<string | null>(null);
+  const [postsSchemaReady, setPostsSchemaReady] = useState(true);
+  const [draft, setDraft] = useState("");
+  const [visibility, setVisibility] = useState<ChantierFeedVisibility>("equipe");
+  const [replyingToId, setReplyingToId] = useState<string | null>(null);
+  const [publishing, setPublishing] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [entityFilter, setEntityFilter] = useState("all");
 
+  async function refreshPosts() {
+    if (!chantierId) return;
+    setPostsLoading(true);
+    setPostsError(null);
+    try {
+      const result = await listChantierFeedPosts(chantierId);
+      setPosts(result.posts);
+      setPostsSchemaReady(result.schemaReady);
+    } catch (postError: any) {
+      setPosts([]);
+      setPostsError(postError?.message ?? "Erreur chargement publications.");
+    } finally {
+      setPostsLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    void refreshPosts();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [chantierId]);
+
+  async function publishPost() {
+    const body = draft.trim();
+    if (!chantierId || !body || publishing) return;
+    setPublishing(true);
+    setPostsError(null);
+    try {
+      const created = await createChantierFeedPost({
+        chantierId,
+        body,
+        visibility,
+        parentPostId: replyingToId,
+      });
+      setPosts((current) => [created, ...current]);
+      setDraft("");
+      setReplyingToId(null);
+      setPostsSchemaReady(true);
+    } catch (postError: any) {
+      setPostsError(postError?.message ?? "Impossible de publier dans le fil chantier.");
+    } finally {
+      setPublishing(false);
+    }
+  }
+
+  const postById = useMemo(
+    () => new Map(posts.map((post) => [post.id, post])),
+    [posts],
+  );
+
+  const feedLogs = useMemo<ChantierActivityLogRow[]>(() => {
+    const publicationLogs = posts.map<ChantierActivityLogRow>((post) => ({
+      id: `feed-post-${post.id}`,
+      chantier_id: post.chantier_id,
+      actor_id: post.author_id,
+      actor_name: post.author_name,
+      actor_role: post.author_role,
+      action_type: "published",
+      entity_type: "feed_post",
+      entity_id: post.id,
+      reason: post.body,
+      changes: {
+        visibility: post.visibility,
+        parent_post_id: post.parent_post_id,
+      },
+      created_at: post.created_at,
+    }));
+
+    return [...logs, ...publicationLogs].sort(
+      (left, right) => new Date(right.created_at).getTime() - new Date(left.created_at).getTime(),
+    );
+  }, [logs, posts]);
+
   const availableEntityTypes = useMemo(
     () =>
-      Array.from(new Set(logs.map((log) => log.entity_type)))
+      Array.from(new Set(feedLogs.map((log) => log.entity_type)))
         .filter(Boolean)
         .sort((left, right) => {
           const leftLabel = left === "terrain_feedback" ? "Retour terrain" : entityLabel(left);
           const rightLabel = right === "terrain_feedback" ? "Retour terrain" : entityLabel(right);
           return leftLabel.localeCompare(rightLabel, "fr");
         }),
-    [entityLabel, logs],
+    [entityLabel, feedLogs],
   );
 
   const filteredLogs = useMemo(() => {
     const query = normalizeJournalSearch(searchQuery.trim());
-    return logs.filter((log) => {
+    return feedLogs.filter((log) => {
       if (entityFilter !== "all" && log.entity_type !== entityFilter) return false;
       if (!query) return true;
 
@@ -201,14 +297,16 @@ export default function ChantierJournalSection({
         ].join(" "),
       ).includes(query);
     });
-  }, [actionLabel, entityFilter, entityLabel, logs, searchQuery]);
+  }, [actionLabel, entityFilter, entityLabel, feedLogs, searchQuery]);
 
   function getJournalEntityLabel(entityType: string) {
+    if (entityType === "feed_post") return "Publication";
     if (entityType === "terrain_feedback") return "Retour terrain";
     return entityLabel(entityType);
   }
 
   function getJournalActionLabel(log: ChantierActivityLogRow) {
+    if (log.entity_type === "feed_post") return "Message";
     if (log.entity_type === "terrain_feedback" && log.action_type === "started") {
       return "Prise en charge";
     }
@@ -216,6 +314,7 @@ export default function ChantierJournalSection({
   }
 
   function getJournalEntityTone(entityType: string) {
+    if (entityType === "feed_post") return "border-emerald-200 bg-emerald-50 text-emerald-700";
     if (entityType === "terrain_feedback") return "border-blue-200 bg-blue-50 text-blue-700";
     return tone(entityType);
   }
@@ -258,7 +357,7 @@ export default function ChantierJournalSection({
         <div>
           <div className="font-semibold section-title">Fil chantier</div>
           <div className="text-sm text-slate-500">
-            Toute l'activité utile du chantier, dans l'ordre chronologique et reliée aux objets métier.
+            Échanges d'équipe et événements métier réunis dans une seule chronologie chantier.
           </div>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -272,21 +371,27 @@ export default function ChantierJournalSection({
           ) : null}
           <button
             type="button"
-            onClick={() => void onRefresh()}
-            disabled={loading}
+            onClick={() => void Promise.all([onRefresh(), refreshPosts()])}
+            disabled={loading || postsLoading}
             className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-60"
           >
-            {loading ? "Chargement..." : "Rafraîchir"}
+            {loading || postsLoading ? "Chargement..." : "Rafraîchir"}
           </button>
         </div>
       </div>
 
       {!schemaReady && (
         <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-          Le fil chantier n'est pas disponible tant que la migration
+          Les événements automatiques ne sont pas disponibles tant que la migration
           `20260402100000_batipro_v2_foundation_prepare_control_pilot.sql` n'est pas appliquée sur Supabase.
         </div>
       )}
+
+      {!postsSchemaReady ? (
+        <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+          Les publications collaboratives seront disponibles après application du SQL du fil chantier dans Supabase.
+        </div>
+      ) : null}
 
       {error && (
         <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
@@ -294,7 +399,62 @@ export default function ChantierJournalSection({
         </div>
       )}
 
-      {logs.length > 0 ? (
+      {postsError ? (
+        <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          {postsError}
+        </div>
+      ) : null}
+
+      <section className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
+        {replyingToId && postById.get(replyingToId) ? (
+          <div className="mb-3 flex items-start justify-between gap-3 rounded-xl border border-blue-200 bg-blue-50 px-3 py-2 text-sm text-blue-800">
+            <div className="min-w-0">
+              <div className="text-xs font-semibold uppercase tracking-[0.12em]">Réponse à</div>
+              <div className="mt-1 truncate">{postById.get(replyingToId)?.body}</div>
+            </div>
+            <button
+              type="button"
+              onClick={() => setReplyingToId(null)}
+              className="shrink-0 rounded-lg border border-blue-200 bg-white px-2 py-1 text-xs font-medium hover:bg-blue-100"
+            >
+              Annuler
+            </button>
+          </div>
+        ) : null}
+
+        <textarea
+          value={draft}
+          onChange={(event) => setDraft(event.target.value)}
+          placeholder="Écrire une information utile à l'équipe chantier..."
+          rows={3}
+          disabled={!postsSchemaReady || publishing}
+          className="w-full resize-y rounded-xl border border-slate-200 bg-white px-3 py-3 text-sm text-slate-900 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100 disabled:bg-slate-100"
+        />
+        <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <label className="flex items-center gap-2 text-sm text-slate-600">
+            <span>Visible par</span>
+            <select
+              value={visibility}
+              onChange={(event) => setVisibility(event.target.value as ChantierFeedVisibility)}
+              disabled={!postsSchemaReady || publishing}
+              className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 disabled:bg-slate-100"
+            >
+              <option value="equipe">Équipe chantier</option>
+              <option value="backoffice">Back-office uniquement</option>
+            </select>
+          </label>
+          <button
+            type="button"
+            onClick={() => void publishPost()}
+            disabled={!postsSchemaReady || publishing || !draft.trim()}
+            className="rounded-xl bg-slate-950 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {publishing ? "Publication..." : replyingToId ? "Publier la réponse" : "Publier"}
+          </button>
+        </div>
+      </section>
+
+      {feedLogs.length > 0 ? (
         <div className="grid gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-3 md:grid-cols-[minmax(0,1fr)_minmax(220px,auto)_auto] md:items-center">
           <label className="min-w-0">
             <span className="sr-only">Rechercher dans le fil chantier</span>
@@ -323,7 +483,7 @@ export default function ChantierJournalSection({
           </label>
           <div className="flex items-center justify-between gap-3 md:justify-end">
             <span className="whitespace-nowrap text-xs font-medium text-slate-500">
-              {filteredLogs.length} sur {logs.length}
+              {filteredLogs.length} sur {feedLogs.length}
             </span>
             {searchQuery || entityFilter !== "all" ? (
               <button
@@ -342,11 +502,11 @@ export default function ChantierJournalSection({
       ) : null}
 
       <div className="space-y-3">
-        {loading ? (
+        {loading || postsLoading ? (
           <div className="rounded-2xl border border-slate-200 bg-slate-50 p-5 text-sm text-slate-500">
             Chargement du journal...
           </div>
-        ) : logs.length === 0 ? (
+        ) : feedLogs.length === 0 ? (
           <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-5 text-sm text-slate-500">
             Aucun événement journalisé pour ce chantier.
           </div>
@@ -359,6 +519,12 @@ export default function ChantierJournalSection({
             const feedbackHref = getFeedbackHref(log);
             const reserveHref = getReserveHref(log);
             const changeItems = formatJournalChanges(log);
+            const feedPost = log.entity_type === "feed_post" && log.entity_id
+              ? postById.get(log.entity_id) ?? null
+              : null;
+            const parentPost = feedPost?.parent_post_id
+              ? postById.get(feedPost.parent_post_id) ?? null
+              : null;
             const dayKey = journalDayKey(log.created_at);
             const previousDayKey = index > 0 ? journalDayKey(filteredLogs[index - 1].created_at) : null;
 
@@ -384,7 +550,20 @@ export default function ChantierJournalSection({
                         {getJournalActionLabel(log)}
                       </span>
                     </div>
-                    <div className="mt-3 text-base font-semibold text-slate-900">
+                    {parentPost ? (
+                      <div className="mt-3 rounded-xl border-l-4 border-blue-300 bg-blue-50 px-3 py-2 text-sm text-blue-900">
+                        <div className="text-xs font-semibold uppercase tracking-[0.12em] text-blue-600">
+                          En réponse à {parentPost.author_name || "un membre de l'équipe"}
+                        </div>
+                        <div className="mt-1 line-clamp-2">{parentPost.body}</div>
+                      </div>
+                    ) : null}
+                    <div
+                      className={[
+                        "mt-3 text-base text-slate-900",
+                        log.entity_type === "feed_post" ? "whitespace-pre-wrap font-medium" : "font-semibold",
+                      ].join(" ")}
+                    >
                       {log.reason || "Action chantier"}
                     </div>
                     <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-sm text-slate-500">
@@ -395,6 +574,21 @@ export default function ChantierJournalSection({
                   </div>
 
                   <div className="flex shrink-0 flex-wrap gap-2">
+                    {feedPost ? (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setReplyingToId(feedPost.id);
+                          setDraft("");
+                          window.requestAnimationFrame(() => {
+                            document.querySelector<HTMLTextAreaElement>('textarea[placeholder^="Écrire une information"]')?.focus();
+                          });
+                        }}
+                        className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-medium text-emerald-800 hover:bg-emerald-100"
+                      >
+                        Répondre
+                      </button>
+                    ) : null}
                     {feedbackHref ? (
                       <Link
                         to={feedbackHref}
