@@ -25,7 +25,7 @@
 | Retours terrain global (`/retours-terrain`, `/retours-terrain/:feedbackId`) | terminé | 889b184 |
 | Retours terrain chantier (`/chantiers/:id/retours-terrain`, `/chantiers/:id/retours-terrain/:feedbackId`) | terminé | 889b184 |
 | CRM dashboard (`/crm`) | terminé | 9157c69 |
-| CRM prospects (`/crm/prospects`) | à faire |  |
+| CRM prospects (`/crm/prospects`) | terminé | 732f3ed |
 | CRM clients (`/crm/clients`) | à faire |  |
 | CRM devis (`/crm/devis`, `/crm/devis/:id/edit`) | à faire |  |
 | CRM achats (`/crm/achats`) | à faire |  |
