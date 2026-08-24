@@ -24,6 +24,14 @@ export type ChantierBudgetLotRow = {
   achats_reels_ht: number;
 };
 
+export type ChantierLaborCostSummary = {
+  chantierId: string;
+  hours: number;
+  hourlyRateHt: number;
+  laborCostHt: number;
+  usesDefaultRate: boolean;
+};
+
 export type ChantierBudgetDashboard = {
   settings: ChantierBudgetSettingsRow;
   settingsSchemaReady: boolean;
@@ -179,6 +187,65 @@ export async function upsertChantierBudgetSettings(
 
   if (error) throw error;
   return normalizeSettingsRow(data ?? payload, chantierId);
+}
+
+export async function listChantierLaborCostSummaries(
+  chantierIds: string[],
+  period: { from?: string | null; to?: string | null } = {},
+): Promise<ChantierLaborCostSummary[]> {
+  const ids = Array.from(new Set(chantierIds.filter(Boolean)));
+  if (!ids.length) return [];
+
+  const settingsResult = await fromBudgetSettings()
+    .select("chantier_id,taux_horaire_mo_ht")
+    .in("chantier_id", ids);
+
+  let settingsSchemaReady = true;
+  const settingsByChantierId = new Map<string, number>();
+  if (settingsResult.error) {
+    if (!isMissingBudgetSettingsSchemaError(settingsResult.error)) throw settingsResult.error;
+    settingsSchemaReady = false;
+  } else {
+    (settingsResult.data ?? []).forEach((row: any) => {
+      settingsByChantierId.set(
+        String(row.chantier_id),
+        Math.max(0, normalizeNumber(row.taux_horaire_mo_ht) || DEFAULT_SETTINGS.taux_horaire_mo_ht),
+      );
+    });
+  }
+
+  let timeQuery = (supabase as any)
+    .from("chantier_time_entries")
+    .select("chantier_id,duration_hours,work_date")
+    .in("chantier_id", ids);
+  if (period.from) timeQuery = timeQuery.gte("work_date", period.from);
+  if (period.to) timeQuery = timeQuery.lte("work_date", period.to);
+
+  const timeResult = await timeQuery;
+  if (timeResult.error) throw timeResult.error;
+
+  const hoursByChantierId = new Map<string, number>();
+  (timeResult.data ?? []).forEach((row: any) => {
+    const chantierId = String(row.chantier_id ?? "");
+    if (!chantierId) return;
+    hoursByChantierId.set(
+      chantierId,
+      (hoursByChantierId.get(chantierId) ?? 0) + normalizeNumber(row.duration_hours),
+    );
+  });
+
+  return ids.map((chantierId) => {
+    const hours = hoursByChantierId.get(chantierId) ?? 0;
+    const hasConfiguredRate = settingsSchemaReady && settingsByChantierId.has(chantierId);
+    const hourlyRateHt = settingsByChantierId.get(chantierId) ?? DEFAULT_SETTINGS.taux_horaire_mo_ht;
+    return {
+      chantierId,
+      hours,
+      hourlyRateHt,
+      laborCostHt: hours * hourlyRateHt,
+      usesDefaultRate: !hasConfiguredRate,
+    };
+  });
 }
 
 export async function loadChantierBudgetDashboard(chantierId: string): Promise<ChantierBudgetDashboard> {
