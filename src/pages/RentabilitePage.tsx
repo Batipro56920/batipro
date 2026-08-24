@@ -44,6 +44,7 @@ type ProjectFinancialRow = {
   invoiceCount: number;
   purchaseOrderCount: number;
   laborHours: number;
+  laborHoursUsingChantierRate: number;
   laborCostHt: number;
   laborUsesDefaultRate: boolean;
   marginAfterLaborHt: number;
@@ -242,6 +243,7 @@ function buildProjectFinancialRows(
         .map((chantierId) => laborCosts.get(chantierId))
         .filter((row): row is ChantierLaborCostSummary => Boolean(row));
       const laborHours = laborRows.reduce((sum, row) => sum + row.hours, 0);
+      const laborHoursUsingChantierRate = laborRows.reduce((sum, row) => sum + row.hoursUsingChantierRate, 0);
       const laborCostHt = laborRows.reduce((sum, row) => sum + row.laborCostHt, 0);
       const metrics = buildFinancialDocumentMetrics(group.invoices, group.purchaseOrders);
       const marginAfterLaborHt = metrics.grossMarginHt - laborCostHt;
@@ -252,6 +254,7 @@ function buildProjectFinancialRows(
         invoiceCount: group.invoices.length,
         purchaseOrderCount: group.purchaseOrders.length,
         laborHours,
+        laborHoursUsingChantierRate,
         laborCostHt,
         laborUsesDefaultRate: laborRows.some((row) => row.usesDefaultRate),
         marginAfterLaborHt,
@@ -409,8 +412,13 @@ function ProjectProfitabilityPanel({
                     <td className="px-4 py-3 text-slate-700">{row.invoiceCount} facture(s) · {row.purchaseOrderCount} commande(s)</td>
                     <td className="px-4 py-3 text-right text-slate-700">
                       <div>{formatHours(row.laborHours)}</div>
-                      {row.laborUsesDefaultRate && row.laborHours > 0 ? (
-                        <div className="mt-0.5 text-[11px] text-amber-700">Taux par défaut</div>
+                      {row.laborHoursUsingChantierRate > 0 ? (
+                        <div className="mt-0.5 text-[11px] text-amber-700">
+                          Taux chantier sur {formatHours(row.laborHoursUsingChantierRate)}
+                        </div>
+                      ) : null}
+                      {row.laborUsesDefaultRate ? (
+                        <div className="mt-0.5 text-[11px] text-red-700">dont taux par défaut</div>
                       ) : null}
                     </td>
                     <td className="px-4 py-3 text-right text-slate-700">{formatCurrency(row.metrics.invoicedHt)}</td>
@@ -430,7 +438,7 @@ function ProjectProfitabilityPanel({
         </div>
       ) : null}
       <div className="border-t border-slate-100 bg-slate-50 px-4 py-3 text-xs text-slate-500">
-        Marge après MO = ventes HT émises - commandes fournisseurs HT engagées - coût des heures saisies. Elle n'inclut pas les frais chantier non saisis ni les paiements fournisseurs.
+        Marge après MO = ventes HT émises - commandes fournisseurs HT engagées - coût des heures saisies. Les heures utilisent le coût horaire de l'intervenant lorsqu'il est renseigné, sinon le taux du chantier. Elle n'inclut pas les frais chantier non saisis ni les paiements fournisseurs.
       </div>
     </section>
   );
