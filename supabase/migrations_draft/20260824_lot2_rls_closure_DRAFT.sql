@@ -170,16 +170,16 @@ drop policy if exists "Allow update chantier reserves" on public.chantier_reserv
 
 
 -- --- A.4 materiel_demandes : scope via jointure chantiers ------------------
--- ⚠️ À VÉRIFIER AVANT APPLICATION : les policies "scopées" existantes
--- (exists (select 1 from chantiers c where c.id = materiel_demandes.chantier_id))
--- ne filtrent en réalité RIEN (vrai pour toute ligne valide) — donc AUCUNE
--- policy actuelle n'est réellement restrictive ici. Avant d'appliquer, il faut
--- confirmer si le portail terrain (EmployeePortalV2Page, "demande matériel")
--- écrit dans cette table via une session authentifiée directe (auquel cas il
--- faut une policy intervenant, sur le modèle de chantier_reserves_intervenant_*)
--- ou exclusivement via une RPC security definer (qui contournerait cette RLS
--- de toute façon, comme pour terrain_feedbacks). Ci-dessous : admin uniquement,
--- à compléter si la vérification montre un besoin d'accès intervenant direct.
+-- Les policies "scopées" existantes (exists (select 1 from chantiers c where
+-- c.id = materiel_demandes.chantier_id)) ne filtrent en réalité RIEN (vrai
+-- pour toute ligne valide) — donc AUCUNE policy actuelle n'est réellement
+-- restrictive ici. Vérifié dans le code (pas seulement en base) : le portail
+-- terrain écrit exclusivement via la RPC security definer
+-- intervenant_materiel_create (src/services/intervenantPortal.service.ts:672,
+-- supabase/migrations/20260323120000_task_terrain_titles_v1.sql:182-188),
+-- qui contourne cette RLS comme terrain_feedbacks — admin uniquement ci-dessous
+-- est donc suffisant, sans impact sur le portail (token déprécié ou session
+-- réelle, les deux passent par la même RPC).
 do $$
 declare v_pol record;
 begin

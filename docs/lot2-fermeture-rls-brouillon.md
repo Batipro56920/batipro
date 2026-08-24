@@ -72,9 +72,15 @@ grant execute on function public.current_organization_id() to authenticated;
 
 ---
 
-## 3. Point d'attention avant application — `materiel_demandes`
+## 3. `materiel_demandes` — vérifié dans le code, sans impact
 
-Contrairement aux autres tables du Groupe A, je n'ai pas pu confirmer si le portail terrain (`EmployeePortalV2Page`, action "demande matériel") écrit dans `materiel_demandes` via une session authentifiée directe (auquel cas il faudrait une policy intervenant supplémentaire, sur le modèle de `chantier_reserves_intervenant_update`) ou exclusivement via une RPC `security definer` qui contournerait cette RLS de toute façon (comme pour `terrain_feedbacks`). Le brouillon ne pose qu'une policy admin-only pour l'instant — à vérifier avant application, sans quoi la création de demande matériel depuis le portail terrain (session réelle, pas le token déprécié) pourrait casser silencieusement.
+Vérification demandée faite directement dans le code (pas en base) :
+
+- **Écriture portail terrain** : `src/services/intervenantPortal.service.ts:672-680` (`intervenantMaterielCreate`) appelle la RPC `intervenant_materiel_create(p_token, p_payload)`. Sa définition la plus récente (`supabase/migrations/20260323120000_task_terrain_titles_v1.sql:182-188`) est `language plpgsql security definer set search_path = public, pg_temp`, `grant execute ... to anon, authenticated` (ligne 300-301). L'`INSERT INTO public.materiel_demandes` a lieu à l'intérieur de la fonction (ligne 246), après un contrôle d'accès via `_intervenant_assert_chantier_access(p_token, v_chantier_id)` (ligne 208) — le même helper que celui utilisé par `terrain_feedbacks`. Cette RPC couvre **les deux variantes du portail** (token déprécié ET session Auth réelle, `_intervenant_assert_chantier_access` bascule en interne sur les deux selon que `p_token` est renseigné ou non).
+- **Lecture portail terrain** : `intervenant_materiel_list` (même fichier de migration, ligne 304-327), même mécanisme.
+- **Côté admin** (`src/services/materielDemandes.service.ts`), utilisé uniquement par `ChantierPage.tsx` : `insert`/`update`/`delete` passent par le client Supabase standard (session admin authentifiée), donc bien soumis à la RLS — c'est exactement ce que couvre la nouvelle policy `materiel_demandes_admin_all` (`is_admin()` + organisation).
+
+**Conclusion : la fermeture RLS sur `materiel_demandes` est sans impact sur le portail terrain, RPC `security definer` de bout en bout.** Le brouillon SQL (§ groupe A.4) est appliqué tel quel, sans avertissement ni fonctionnalité désactivée.
 
 ---
 
