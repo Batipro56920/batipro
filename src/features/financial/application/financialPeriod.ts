@@ -13,6 +13,23 @@ export function parseFinancialPeriod(value: string | null | undefined): Financia
     : "all";
 }
 
+export type FinancialPeriodDateRange = {
+  from: string | null;
+  to: string | null;
+};
+
+export function getFinancialPeriodDateRange(
+  period: FinancialPeriod,
+  now = new Date(),
+): FinancialPeriodDateRange {
+  if (period === "all") return { from: null, to: null };
+  const start = getFinancialPeriodStart(period, now);
+  return {
+    from: formatLocalDate(start),
+    to: formatLocalDate(now),
+  };
+}
+
 export function isInFinancialPeriod(
   value: string | null | undefined,
   period: FinancialPeriod,
@@ -34,6 +51,13 @@ function getFinancialPeriodStart(period: Exclude<FinancialPeriod, "all">, now: D
     return new Date(now.getFullYear(), quarterStartMonth, 1);
   }
   return new Date(now.getFullYear(), now.getMonth(), 1);
+}
+
+function formatLocalDate(value: Date) {
+  const year = value.getFullYear();
+  const month = String(value.getMonth() + 1).padStart(2, "0");
+  const day = String(value.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
 }
 
 function parseLocalDate(value: string | null | undefined) {
