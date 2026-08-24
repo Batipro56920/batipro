@@ -8,6 +8,11 @@ import { listInvoices } from "../features/invoices/infrastructure/invoiceReposit
 import type { PurchaseOrderRecord, PurchaseOrderStatus } from "../features/purchase-orders";
 import { listPurchaseOrders } from "../features/purchase-orders";
 import {
+  buildFinancialDocumentMetrics,
+  isCommittedPurchaseOrder,
+  isIssuedInvoice,
+} from "../features/financial/application/financialMetrics";
+import {
   isInFinancialPeriod,
   parseFinancialPeriod,
   type FinancialPeriod,
@@ -515,51 +520,18 @@ function Td({ children, align = "left" }: { children?: ReactNode; align?: "left"
 }
 
 function buildSummary(invoices: InvoiceRecord[], purchaseOrders: PurchaseOrderRecord[]): FinancialSummary {
-  const issuedInvoices = invoices.filter(isIssuedInvoice);
-  const collectableInvoices = issuedInvoices.filter((invoice) => invoice.type !== "credit_note");
-  const committedOrders = purchaseOrders.filter(isCommittedPurchaseOrder);
-  const invoicedTtc = issuedInvoices.reduce(
-    (sum, invoice) => sum + getInvoiceSign(invoice) * getInvoiceTotals(invoice).totalTtc,
-    0,
-  );
-  const paidTtc = collectableInvoices.reduce((sum, invoice) => sum + getPaidAmount(invoice), 0);
-  const remainingToCollectTtc = collectableInvoices.reduce((sum, invoice) => sum + getRemainingAmount(invoice), 0);
-  const purchases = committedOrders.map((order) => order.document.totals ?? calculateDocumentTotals(order.document));
-  const purchasesTtc = purchases.reduce((sum, total) => sum + total.totalTtc, 0);
-  const purchasesHt = purchases.reduce((sum, total) => sum + total.totalHt, 0);
-  const vatCollected = issuedInvoices.reduce(
-    (sum, invoice) => sum + getInvoiceSign(invoice) * getInvoiceTotals(invoice).totalVat,
-    0,
-  );
-  const vatDeductible = purchases.reduce((sum, total) => sum + total.totalVat, 0);
-
+  const metrics = buildFinancialDocumentMetrics(invoices, purchaseOrders);
   return {
-    invoicedTtc: roundMoney(invoicedTtc),
-    paidTtc: roundMoney(paidTtc),
-    remainingToCollectTtc: roundMoney(remainingToCollectTtc),
-    purchasesTtc: roundMoney(purchasesTtc),
-    purchasesHt: roundMoney(purchasesHt),
-    vatCollected: roundMoney(vatCollected),
-    vatDeductible: roundMoney(vatDeductible),
-    vatBalance: roundMoney(vatCollected - vatDeductible),
-    cashForecast: roundMoney(paidTtc - purchasesTtc),
+    invoicedTtc: metrics.invoicedTtc,
+    paidTtc: metrics.paidTtc,
+    remainingToCollectTtc: metrics.remainingToCollectTtc,
+    purchasesTtc: metrics.purchasesTtc,
+    purchasesHt: metrics.purchasesHt,
+    vatCollected: metrics.vatCollected,
+    vatDeductible: metrics.vatDeductible,
+    vatBalance: metrics.vatBalance,
+    cashForecast: metrics.documentPositionTtc,
   };
-}
-
-function getInvoiceTotals(invoice: InvoiceRecord) {
-  return invoice.document.totals ?? calculateDocumentTotals(invoice.document);
-}
-
-function getInvoiceSign(invoice: InvoiceRecord) {
-  return invoice.type === "credit_note" ? -1 : 1;
-}
-
-function isIssuedInvoice(invoice: InvoiceRecord) {
-  return !["draft", "cancelled"].includes(invoice.status);
-}
-
-function isCommittedPurchaseOrder(order: PurchaseOrderRecord) {
-  return !["draft", "cancelled"].includes(order.status);
 }
 
 function buildVatRows(documents: BusinessDocument[]) {
