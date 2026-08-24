@@ -12,7 +12,7 @@ Un commit par bloc. Parite fonctionnelle 100 %.
 | 4 | Nouveau chantier (`/chantiers/nouveau`) | termine | e8aadd8 |
 | 5 | Planning chantier (`/chantiers/:id/planning`) | termine | d06be07 |
 | 6 | Suivi des temps (`/temps`, `/chantiers/:id/temps`) | termine | 1a8e003 |
-| 7 | Visites chantier (`/visites-chantier`, `/chantiers/:id/visites`) | a faire | |
+| 7 | Visites chantier (`/visites-chantier`, `/chantiers/:id/visites`) | termine | f05f45f |
 | 8 | Retours terrain (`/retours-terrain`, `/chantiers/:id/retours-terrain`) | a faire | |
 | 9 | CRM shell + dashboard (`/crm`) | a faire | |
 | 10 | CRM prospects / clients / contacts | a faire | |
