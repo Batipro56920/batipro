@@ -146,10 +146,14 @@ export default function RentabilitePage() {
         </button>
       </header>
 
-      {error ? <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</div> : null}
+      {error ? (
+        <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+          {error} <button type="button" onClick={() => void refresh()} className="ml-2 font-semibold underline">Réessayer</button>
+        </div>
+      ) : null}
       {loading ? <div className="bt-card rounded-xl bg-white p-8 text-center text-sm text-slate-500">Chargement de la rentabilité...</div> : null}
 
-      {!loading ? (
+      {!loading && !error ? (
         <>
           <section className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
             <Metric label="Facturé" value={formatCurrency(summary.invoicedTtc)} detail="Chiffre d'affaires TTC" />

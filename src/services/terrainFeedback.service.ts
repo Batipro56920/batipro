@@ -10,7 +10,8 @@ export type TerrainFeedbackCategory =
   | "qualite"
   | "securite"
   | "client"
-  | "organisation";
+  | "organisation"
+  | "fil_chantier";
 
 export type TerrainFeedbackUrgency = "faible" | "normale" | "urgente" | "critique";
 export type TerrainFeedbackStatus = "nouveau" | "en_cours" | "traite" | "classe_sans_suite";

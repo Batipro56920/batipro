@@ -43,6 +43,7 @@ const BibliothequeTasksPage = lazy(() => import("./pages/BibliothequeTasksPage")
 const StatistiquesPage = lazy(() => import("./pages/StatistiquesPage"));
 const MonEntreprisePage = lazy(() => import("./pages/MonEntreprisePage"));
 const TerrainFeedbacksPage = lazy(() => import("./pages/TerrainFeedbacksPage"));
+const FilChantierPage = lazy(() => import("./pages/FilChantierPage"));
 const ClientDocumentPage = lazy(() => import("./pages/ClientDocumentPage"));
 const ApporteursAffairesPage = lazy(() => import("./pages/ApporteursAffairesPage"));
 const ApporteurPortalPage = lazy(() => import("./pages/ApporteurPortalPage"));
@@ -472,6 +473,12 @@ export default function App() {
             <RequireCompanyFeature profilePermissionKey="intervenants">
               <RouteSuspense label="Chargement de l'intervenant..."><IntervenantDetailPage /></RouteSuspense>
             </RequireCompanyFeature>
+          }
+        />
+        <Route
+          path="/fil-chantier"
+          element={
+            <TerrainFeedbackBackofficeRoute label="Chargement du fil chantier..."><FilChantierPage /></TerrainFeedbackBackofficeRoute>
           }
         />
         <Route

@@ -1,4 +1,5 @@
 import { supabase } from "../../../lib/supabaseClient";
+import { normalizeBusinessDocument } from "../../document-engine";
 import { createPurchaseOrder } from "../application/purchaseOrderFactory";
 import type { PurchaseOrderCreateInput, PurchaseOrderRecord, PurchaseOrderStatus } from "../domain/types";
 
@@ -72,7 +73,7 @@ function fromRow(row: PurchaseOrderRow): PurchaseOrderRecord {
   return {
     id: row.id,
     status: row.status,
-    document: row.document,
+    document: normalizeBusinessDocument(row.document, "purchase_order"),
     supplierId: row.supplier_id,
     supplierName: row.supplier_name,
     projectId: row.project_id,

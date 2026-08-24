@@ -9,10 +9,6 @@ function formatDate(value: string | null) {
   return d.toLocaleString("fr-FR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
 }
 
-function isConversation(row: TerrainFeedbackRow) {
-  return String(row.category) === "fil_chantier";
-}
-
 type Thread = {
   chantierId: string;
   chantierName: string;
@@ -22,7 +18,7 @@ type Thread = {
   pending: number;
 };
 
-export default function ConversationsPage() {
+export default function FilChantierPage() {
   const [rows, setRows] = useState<TerrainFeedbackRow[]>([]);
   const [selectedId, setSelectedId] = useState("");
   const [query, setQuery] = useState("");
@@ -35,12 +31,11 @@ export default function ConversationsPage() {
     setLoading(true);
     setError(null);
     try {
-      const data = await listTerrainFeedbacks();
-      const filtered = data.filter(isConversation);
-      setRows(filtered);
-      if (!selectedId && filtered[0]?.chantier_id) setSelectedId(filtered[0].chantier_id);
+      const data = await listTerrainFeedbacks({ category: "fil_chantier" });
+      setRows(data);
+      if (!selectedId && data[0]?.chantier_id) setSelectedId(data[0].chantier_id);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Chargement des conversations impossible.");
+      setError(e instanceof Error ? e.message : "Chargement du fil chantier impossible.");
     } finally {
       setLoading(false);
     }
@@ -101,8 +96,8 @@ export default function ConversationsPage() {
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <div className="text-xs font-semibold uppercase tracking-[0.16em] text-blue-600">Communication terrain</div>
-          <h1 className="mt-1 text-2xl font-bold text-slate-950">Conversations chantier</h1>
-          <p className="mt-1 text-sm text-slate-500">Toutes les conversations terrain regroupées par chantier pour l'administration et la conduite de travaux.</p>
+          <h1 className="mt-1 text-2xl font-bold text-slate-950">Fil chantier</h1>
+          <p className="mt-1 text-sm text-slate-500">Tous les fils chantier regroupés par chantier pour l'administration et la conduite de travaux.</p>
         </div>
         <button type="button" onClick={() => void load()} className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50">
           <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} /> Actualiser
@@ -124,10 +119,10 @@ export default function ConversationsPage() {
               const active = selected?.chantierId === thread.chantierId;
               const last = thread.rows.at(-1);
               return <button key={thread.chantierId} type="button" onClick={() => setSelectedId(thread.chantierId)} className={`w-full border-b border-slate-100 px-4 py-3 text-left transition ${active ? "bg-blue-50" : "hover:bg-slate-50"}`}>
-                <div className="flex items-start justify-between gap-3"><div className="min-w-0"><div className="truncate text-sm font-bold text-slate-900">{thread.chantierName}</div><div className="truncate text-xs text-slate-500">{thread.client || last?.author?.nom || "Conversation chantier"}</div></div>{thread.pending ? <span className="rounded-full bg-blue-600 px-2 py-0.5 text-[11px] font-bold text-white">{thread.pending}</span> : null}</div>
+                <div className="flex items-start justify-between gap-3"><div className="min-w-0"><div className="truncate text-sm font-bold text-slate-900">{thread.chantierName}</div><div className="truncate text-xs text-slate-500">{thread.client || last?.author?.nom || "Fil chantier"}</div></div>{thread.pending ? <span className="rounded-full bg-blue-600 px-2 py-0.5 text-[11px] font-bold text-white">{thread.pending}</span> : null}</div>
                 <div className="mt-2 flex items-center justify-between gap-2"><div className="truncate text-xs text-slate-500">{last?.description || "Aucun message"}</div><div className="shrink-0 text-[10px] text-slate-400">{formatDate(thread.lastAt)}</div></div>
               </button>;
-            }) : <div className="p-6 text-center text-sm text-slate-500">Aucune conversation chantier pour le moment.</div>}
+            }) : <div className="p-6 text-center text-sm text-slate-500">{loading ? "Chargement..." : "Aucun fil chantier pour le moment."}</div>}
           </div>
         </aside>
 
@@ -143,7 +138,7 @@ export default function ConversationsPage() {
             <div className="border-t border-slate-200 bg-white p-3">
               {lastUnanswered ? <div className="flex items-end gap-2"><textarea rows={2} value={reply} onChange={(e) => setReply(e.target.value)} placeholder={`Répondre à ${lastUnanswered.author?.nom || "l'intervenant"}...`} className="min-h-[52px] flex-1 resize-none rounded-xl bg-slate-50 px-3 py-2.5 text-sm outline-none ring-1 ring-slate-200 focus:ring-blue-300" /><button type="button" onClick={() => void sendReply()} disabled={!reply.trim() || saving} className="flex h-12 w-12 items-center justify-center rounded-xl bg-blue-600 text-white disabled:opacity-40"><Send className="h-5 w-5" /></button></div> : <div className="rounded-xl bg-emerald-50 p-3 text-sm text-emerald-700">Tous les messages de ce chantier ont une réponse.</div>}
             </div>
-          </> : <div className="flex flex-1 items-center justify-center p-8 text-center text-sm text-slate-500">Sélectionne une conversation chantier.</div>}
+          </> : <div className="flex flex-1 items-center justify-center p-8 text-center text-sm text-slate-500">Sélectionne un fil chantier.</div>}
         </section>
       </div>
     </div>

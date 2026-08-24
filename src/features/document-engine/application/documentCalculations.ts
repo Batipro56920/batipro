@@ -44,9 +44,9 @@ export function calculateMeasuredQuantity(unit: string, length?: number | null, 
   return fallback;
 }
 
-function collectItemNodes(nodes: BusinessDocumentNode[]) {
+function collectItemNodes(nodes: BusinessDocumentNode[] | undefined | null) {
   const result: DocumentItemNode[] = [];
-  nodes.forEach((node) => {
+  (nodes ?? []).forEach((node) => {
     if (node.type === "line" || node.type === "composite") result.push(node);
     if (node.type === "section" || node.type === "subsection") result.push(...collectItemNodes(node.children));
   });
@@ -65,8 +65,10 @@ function calculateLineCostHt(line: DocumentItemNode) {
 }
 
 function calculateDeposit(document: BusinessDocument, totalTtc: Decimal) {
-  if (typeof document.terms.depositAmount === "number") return money(document.terms.depositAmount);
-  if (typeof document.terms.depositPercent === "number") return totalTtc.times(document.terms.depositPercent).div(100);
+  const terms = document.terms;
+  if (!terms) return money(0);
+  if (typeof terms.depositAmount === "number") return money(terms.depositAmount);
+  if (typeof terms.depositPercent === "number") return totalTtc.times(terms.depositPercent).div(100);
   return money(0);
 }
 

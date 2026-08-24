@@ -39,6 +39,21 @@ export function createEmptyBusinessDocument(kind: BusinessDocumentKind): Busines
   };
 }
 
+export function normalizeBusinessDocument(document: Partial<BusinessDocument> | null | undefined, kind: BusinessDocumentKind): BusinessDocument {
+  const empty = createEmptyBusinessDocument(kind);
+  if (!document) return empty;
+  return {
+    ...empty,
+    ...document,
+    company: document.company ?? empty.company,
+    recipient: document.recipient ?? empty.recipient,
+    settings: document.settings ?? empty.settings,
+    terms: document.terms ?? empty.terms,
+    nodes: document.nodes ?? empty.nodes,
+    attachments: document.attachments ?? empty.attachments,
+  };
+}
+
 export function documentKindLabel(kind: BusinessDocumentKind) {
   if (kind === "quote") return "Devis";
   if (kind === "invoice") return "Facture";
