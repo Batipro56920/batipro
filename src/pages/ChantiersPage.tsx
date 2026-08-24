@@ -11,7 +11,8 @@ import {
   type ChantierRow,
 } from "../services/chantiers.service";
 import { ChantiersHeader } from "../features/chantiers/list/components/ChantiersHeader";
-import { ChantiersKpiGrid, type ChantiersKpiKey } from "../features/chantiers/list/components/ChantiersKpiGrid";
+import { ChantiersMeasuresBand, type ChantiersMeasureKey } from "../features/chantiers/list/components/ChantiersMeasuresBand";
+import { ChantiersViewSwitch } from "../features/chantiers/list/components/ChantiersViewSwitch";
 import { ChantiersToolbar } from "../features/chantiers/list/components/ChantiersToolbar";
 import { ChantiersBulkBar } from "../features/chantiers/list/components/ChantiersBulkBar";
 import { ChantiersListView } from "../features/chantiers/list/components/ChantiersListView";
@@ -23,6 +24,7 @@ import { ChantiersSkeleton } from "../features/chantiers/list/components/Chantie
 import { ChantierQuickDrawer } from "../features/chantiers/list/components/ChantierQuickDrawer";
 import type { ChantierDerived, ChantierListFilter, ChantierListFilters, ChantierListView } from "../features/chantiers/list/types";
 import { computeChantierMetrics, deriveChantier, exportChantiersCsv, filterChantiers, uniqueClients } from "../features/chantiers/list/utils/chantiersListUtils";
+import { TONE_SOFT } from "../design-system/tone";
 
 const DEFAULT_FILTERS: ChantierListFilters = {
   query: "",
@@ -161,13 +163,13 @@ async function loadTerrainFeedbackSummaries(chantierIds: string[]): Promise<Terr
 function ChantiersFocusPanel({ focus }: { focus: ChantierListFocus }) {
   const copy = FOCUS_GUIDANCE[focus];
   return (
-    <section className="rounded-2xl border border-blue-100 bg-blue-50 p-4 text-sm text-blue-900 shadow-sm shadow-blue-950/[0.03]">
+    <section className={`rounded-card p-4 text-sm ${TONE_SOFT.info}`}>
       <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <h2 className="font-semibold text-blue-950">{copy.title}</h2>
-          <p className="mt-1 leading-6">{copy.description}</p>
+          <h2 className="bt-card-title text-ink">{copy.title}</h2>
+          <p className="bt-secondary mt-1">{copy.description}</p>
         </div>
-        <div className="shrink-0 rounded-xl border border-blue-200 bg-white px-3 py-2 text-xs font-semibold text-blue-800">
+        <div className="bt-caption shrink-0 rounded-field border border-strong bg-surface px-3 py-2 text-ink-secondary">
           {copy.cta}
         </div>
       </div>
@@ -186,18 +188,18 @@ function ChantiersTerrainFeedbackPanel({ metrics, onOpenAll }: { metrics: Chanti
     : `${metrics.terrainFeedbackOpen} retour${metrics.terrainFeedbackOpen > 1 ? "s" : ""} ouvert${metrics.terrainFeedbackOpen > 1 ? "s" : ""}`;
 
   return (
-    <section className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950 shadow-sm shadow-amber-950/[0.03]">
+    <section className={`rounded-card p-4 text-sm ${TONE_SOFT.warning}`}>
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0">
-          <h2 className="font-semibold text-amber-950">{title}</h2>
-          <p className="mt-1 leading-6 text-amber-900">{description}</p>
+          <h2 className="bt-card-title text-ink">{title}</h2>
+          <p className="bt-secondary mt-1">{description}</p>
         </div>
         <div className="flex shrink-0 flex-col gap-2 sm:items-end">
-          <div className="rounded-xl border border-amber-200 bg-white px-3 py-2 text-xs font-semibold text-amber-800">{metricLabel}</div>
+          <div className="bt-caption bt-num rounded-field border border-strong bg-surface px-3 py-2 text-ink-secondary">{metricLabel}</div>
           <button
             type="button"
             onClick={onOpenAll}
-            className="rounded-xl border border-amber-300 bg-white px-3 py-2 text-xs font-semibold text-amber-900 transition hover:bg-amber-100 focus:outline-none focus:ring-2 focus:ring-amber-300"
+            className="bt-tap rounded-field border border-strong bg-surface px-3 text-[13px] font-medium text-ink-secondary transition-colors duration-[120ms] hover:bg-interactive hover:text-ink"
           >
             Ouvrir tous les retours
           </button>
@@ -270,7 +272,7 @@ export default function ChantiersPage({ initialView = "list", initialFocus }: Ch
     setPreviewRow(null);
   }, [initialFocus, initialView]);
 
-  function applyKpiFilter(key: ChantiersKpiKey) {
+  function applyKpiFilter(key: ChantiersMeasureKey) {
     setSelectedIds([]);
 
     if (key === "active") {
@@ -393,7 +395,7 @@ export default function ChantiersPage({ initialView = "list", initialFocus }: Ch
         onExport={() => exportChantiersCsv(visibleRows, "chantiers.csv")}
       />
       {initialFocus ? <ChantiersFocusPanel focus={initialFocus} /> : null}
-      <ChantiersKpiGrid metrics={metrics} onSelect={applyKpiFilter} />
+      <ChantiersMeasuresBand metrics={metrics} onSelect={applyKpiFilter} />
       {showTerrainFeedbackPanel ? (
         <ChantiersTerrainFeedbackPanel
           metrics={metrics}
@@ -408,13 +410,25 @@ export default function ChantiersPage({ initialView = "list", initialFocus }: Ch
         filters={filters}
         onFilters={setFilters}
         clients={clients}
-        view={view}
-        onView={setView}
         onRefresh={() => void refresh()}
       />
       <ChantiersBulkBar selectedRows={selectedRows} saving={saving} onFinish={() => void runBulkStatus("TERMINE")} onArchive={() => void runBulkStatus("ARCHIVE")} onDeleteDrafts={() => void deleteSelectedDrafts()} />
 
-      {errorMsg ? <div className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm font-medium text-red-700">{errorMsg}</div> : null}
+      {errorMsg ? (
+        <div className={`rounded-card p-4 text-sm font-medium ${TONE_SOFT.danger}`}>{errorMsg}</div>
+      ) : null}
+
+      <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-2">
+        <div className="flex items-baseline gap-2">
+          <h2 className="bt-section-title text-ink">Chantiers</h2>
+          {!loading ? (
+            <span className="bt-caption bt-num text-muted">
+              {visibleRows.length} affiché{visibleRows.length > 1 ? "s" : ""}
+            </span>
+          ) : null}
+        </div>
+        <ChantiersViewSwitch view={view} onView={setView} />
+      </div>
 
       {loading ? (
         <ChantiersSkeleton />
@@ -436,7 +450,7 @@ export default function ChantiersPage({ initialView = "list", initialFocus }: Ch
       <ChantierQuickDrawer row={previewRow} actions={actions} onClose={() => setPreviewRow(null)} />
 
       {!loading && import.meta.env.DEV && debugCount !== null ? (
-        <div className="text-xs text-slate-400">
+        <div className="bt-caption text-muted">
           DEBUG: count={debugCount} list={items.length} visible={visibleRows.length}
         </div>
       ) : null}

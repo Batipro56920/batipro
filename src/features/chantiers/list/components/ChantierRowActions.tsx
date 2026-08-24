@@ -4,10 +4,21 @@ import { ConfirmDialog } from "../../../../components/feedback/ConfirmDialog";
 import { Button } from "../../../../components/ui/button";
 import type { ChantierListActions, ChantierDerived } from "../types";
 
+type MenuTone = "default" | "warning" | "danger";
+
 type CommercialAction = {
   href: string;
   label: string;
   icon: LucideIcon;
+};
+
+const MENU_ITEM_CLASS =
+  "bt-tap flex w-full items-center gap-2.5 rounded-field px-2.5 text-left text-sm font-medium transition-colors duration-[120ms]";
+
+const MENU_TONE: Record<MenuTone, string> = {
+  default: "text-ink-secondary hover:bg-interactive hover:text-ink",
+  warning: "text-warning-on hover:bg-interactive",
+  danger: "text-danger-on hover:bg-interactive",
 };
 
 function getTerrainFeedbackAction(row: ChantierDerived) {
@@ -23,7 +34,7 @@ function getTerrainFeedbackAction(row: ChantierDerived) {
       : hasOpen
         ? `Retours terrain (${openCount} à traiter)`
         : "Retours terrain",
-    tone: hasPriority ? "red" : hasOpen ? "amber" : "blue",
+    tone: (hasPriority ? "danger" : hasOpen ? "warning" : "default") as MenuTone,
   } as const;
 }
 
@@ -66,7 +77,20 @@ function getCommercialActions(row: ChantierDerived): CommercialAction[] {
   return actions;
 }
 
-export function ChantierRowActions({ row, actions }: { row: ChantierDerived; actions: ChantierListActions }) {
+/**
+ * Une action primaire ("Ouvrir") ; tout le reste passe en menu overflow,
+ * rendu selon l'anatomie de dropdown de l'annexe A.
+ */
+export function ChantierRowActions({
+  row,
+  actions,
+  menuPlacement = "down",
+}: {
+  row: ChantierDerived;
+  actions: ChantierListActions;
+  /** "up" quand le menu est ancre en pied de drawer : il ne doit pas sortir du cadre. */
+  menuPlacement?: "down" | "up";
+}) {
   const terminal = row.status === "TERMINE" || row.status === "ARCHIVE" || row.status === "ANNULE";
   const chantierBaseHref = `/chantiers/${encodeURIComponent(row.id)}`;
   const terrainFeedbackAction = getTerrainFeedbackAction(row);
@@ -75,17 +99,22 @@ export function ChantierRowActions({ row, actions }: { row: ChantierDerived; act
   return (
     <div className="flex items-center justify-end gap-2" onClick={(event) => event.stopPropagation()}>
       <Button type="button" size="sm" variant="primary" onClick={() => actions.onOpen(row)}>
-        <ExternalLink className="h-4 w-4" />
+        <ExternalLink className="h-4 w-4" strokeWidth={1.75} />
         Ouvrir
       </Button>
       <details className="relative">
-        <summary className="flex h-8 w-8 cursor-pointer list-none items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 transition hover:bg-slate-50">
-          <MoreHorizontal className="h-4 w-4" />
+        <summary
+          aria-label="Plus d'actions"
+          className="bt-tap flex w-8 cursor-pointer list-none items-center justify-center rounded-field border border-strong bg-surface text-ink-secondary transition-colors duration-[120ms] hover:bg-interactive hover:text-ink"
+        >
+          <MoreHorizontal className="h-4 w-4" strokeWidth={1.75} />
         </summary>
-        <div className="absolute right-0 z-20 mt-2 w-64 rounded-2xl border border-slate-200 bg-white p-2 shadow-xl shadow-slate-950/10">
-          <div className="px-3 pb-1 pt-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-400">
-            Espaces chantier
-          </div>
+        <div
+          className={`absolute right-0 z-20 w-[280px] max-w-[320px] rounded-card border border-subtle bg-elevated p-1 shadow-elevated ${
+            menuPlacement === "up" ? "bottom-full mb-1.5" : "mt-1.5"
+          }`}
+        >
+          <div className="bt-caption px-2.5 py-1.5 text-muted">Espaces chantier</div>
           <MenuLink icon={ClipboardList} label="Préparation" href={`${chantierBaseHref}/preparation`} />
           <MenuLink icon={Hammer} label="Tâches / exécution" href={`${chantierBaseHref}/execution`} />
           <MenuLink icon={Clock3} label="Temps chantier" href={`${chantierBaseHref}/temps`} />
@@ -98,20 +127,16 @@ export function ChantierRowActions({ row, actions }: { row: ChantierDerived; act
 
           {commercialActions.length > 0 ? (
             <>
-              <div className="my-2 border-t border-slate-100" />
-              <div className="px-3 pb-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-400">
-                Commercial
-              </div>
+              <div className="my-1 border-t border-subtle" />
+              <div className="bt-caption px-2.5 py-1.5 text-muted">Commercial</div>
               {commercialActions.map((action) => (
-                <MenuLink key={action.href} icon={action.icon} label={action.label} href={action.href} tone="blue" />
+                <MenuLink key={action.href} icon={action.icon} label={action.label} href={action.href} />
               ))}
             </>
           ) : null}
 
-          <div className="my-2 border-t border-slate-100" />
-          <div className="px-3 pb-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-400">
-            Gestion
-          </div>
+          <div className="my-1 border-t border-subtle" />
+          <div className="bt-caption px-2.5 py-1.5 text-muted">Gestion</div>
           {row.status !== "TERMINE" ? (
             <ConfirmDialog
               title="Marquer ce chantier terminé ?"
@@ -130,24 +155,34 @@ export function ChantierRowActions({ row, actions }: { row: ChantierDerived; act
               trigger={<MenuButton icon={Archive} label="Archiver" />}
             />
           ) : null}
+          {terminal ? <MenuButton icon={RotateCcw} label="Restaurer" onClick={() => actions.onRestore(row)} /> : null}
+          <MenuButton icon={Download} label="Export" onClick={() => actions.onExportRow(row)} />
+          <MenuButton icon={ExternalLink} label="Dupliquer" disabled title="Duplication chantier non supportée par l'API actuelle." />
+
+          <div className="my-1 border-t border-subtle" />
           {row.status !== "ANNULE" ? (
             <ConfirmDialog
               title="Annuler ce chantier ?"
               description="Le chantier sera exclu du pilotage opérationnel. Vous pourrez le restaurer ensuite si nécessaire."
               confirmLabel="Annuler le chantier"
               onConfirm={() => actions.onCancel(row)}
-              trigger={<MenuButton icon={Ban} label="Annuler" danger />}
+              trigger={<MenuButton icon={Ban} label="Annuler" tone="danger" />}
             />
           ) : null}
-          {terminal ? <MenuButton icon={RotateCcw} label="Restaurer" onClick={() => actions.onRestore(row)} /> : null}
-          <MenuButton icon={Download} label="Export" onClick={() => actions.onExportRow(row)} />
-          <MenuButton icon={ExternalLink} label="Dupliquer" disabled title="Duplication chantier non supportée par l'API actuelle." />
           <ConfirmDialog
             title="Supprimer ce brouillon ?"
             description="La suppression est logique et uniquement disponible pour les chantiers en brouillon."
             confirmLabel="Supprimer"
             onConfirm={() => actions.onDeleteDraft(row)}
-            trigger={<MenuButton icon={Trash2} label="Supprimer" danger disabled={row.status !== "BROUILLON"} title={row.status === "BROUILLON" ? undefined : "Suppression disponible uniquement sur les brouillons."} />}
+            trigger={
+              <MenuButton
+                icon={Trash2}
+                label="Supprimer"
+                tone="danger"
+                disabled={row.status !== "BROUILLON"}
+                title={row.status === "BROUILLON" ? undefined : "Suppression disponible uniquement sur les brouillons."}
+              />
+            }
           />
         </div>
       </details>
@@ -155,35 +190,39 @@ export function ChantierRowActions({ row, actions }: { row: ChantierDerived; act
   );
 }
 
-function MenuButton({ icon: Icon, label, onClick, disabled, danger, title }: { icon: LucideIcon; label: string; onClick?: () => void; disabled?: boolean; danger?: boolean; title?: string }) {
+function MenuButton({
+  icon: Icon,
+  label,
+  onClick,
+  disabled,
+  tone = "default",
+  title,
+}: {
+  icon: LucideIcon;
+  label: string;
+  onClick?: () => void;
+  disabled?: boolean;
+  tone?: MenuTone;
+  title?: string;
+}) {
   return (
     <button
       type="button"
       disabled={disabled}
       title={title}
       onClick={onClick}
-      className={["flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-sm font-medium transition disabled:cursor-not-allowed disabled:opacity-45", danger ? "text-red-700 hover:bg-red-50" : "text-slate-700 hover:bg-slate-50"].join(" ")}
+      className={`${MENU_ITEM_CLASS} ${MENU_TONE[tone]} disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:bg-transparent`}
     >
-      <Icon className="h-4 w-4" />
+      <Icon className="h-4 w-4 shrink-0" strokeWidth={1.75} />
       {label}
     </button>
   );
 }
 
-function MenuLink({ icon: Icon, label, href, tone = "blue" }: { icon: LucideIcon; label: string; href: string; tone?: "blue" | "amber" | "red" }) {
-  const className =
-    tone === "red"
-      ? "text-red-700 hover:bg-red-50"
-      : tone === "amber"
-        ? "text-amber-800 hover:bg-amber-50"
-        : "text-blue-700 hover:bg-blue-50";
-
+function MenuLink({ icon: Icon, label, href, tone = "default" }: { icon: LucideIcon; label: string; href: string; tone?: MenuTone }) {
   return (
-    <Link
-      to={href}
-      className={["flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-sm font-medium transition", className].join(" ")}
-    >
-      <Icon className="h-4 w-4" />
+    <Link to={href} className={`${MENU_ITEM_CLASS} ${MENU_TONE[tone]}`}>
+      <Icon className="h-4 w-4 shrink-0" strokeWidth={1.75} />
       {label}
     </Link>
   );

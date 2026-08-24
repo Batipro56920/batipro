@@ -1,7 +1,7 @@
-import { Search } from "lucide-react";
+import { RotateCcw, Search, X } from "lucide-react";
+import { useId, type ReactNode } from "react";
 import type { ChantierStatus } from "../../../../types/chantier";
-import { Input } from "../../../../components/ui/input";
-import type { ChantierListFilter, ChantierListFilters, ChantierListView } from "../types";
+import type { ChantierListFilter, ChantierListFilters } from "../types";
 import { statusLabel } from "../utils/chantiersListUtils";
 
 const SCOPES: Array<{ key: ChantierListFilter; label: string }> = [
@@ -13,6 +13,7 @@ const SCOPES: Array<{ key: ChantierListFilter; label: string }> = [
 ];
 
 const STATUSES: Array<"all" | ChantierStatus> = ["all", "BROUILLON", "PREPARATION", "EN_COURS", "EN_PAUSE", "TERMINE", "ARCHIVE", "ANNULE"];
+
 const PERIODS: Array<{ key: ChantierListFilters["period"]; label: string }> = [
   { key: "all", label: "Toute période" },
   { key: "this_month", label: "Ce mois" },
@@ -22,12 +23,9 @@ const PERIODS: Array<{ key: ChantierListFilters["period"]; label: string }> = [
   { key: "terrain_feedback", label: "Retours terrain ouverts" },
   { key: "terrain_feedback_priority", label: "Retours terrain urgents" },
 ];
-const VIEWS: Array<{ key: ChantierListView; label: string }> = [
-  { key: "list", label: "Liste" },
-  { key: "cards", label: "Cartes" },
-  { key: "planning", label: "Planning" },
-  { key: "kanban", label: "Kanban" },
-];
+
+const FIELD_CLASS =
+  "bt-control w-full rounded-field border border-strong bg-surface px-3 text-sm text-ink outline-none transition-colors duration-[120ms] focus:border-primary disabled:cursor-not-allowed disabled:border-subtle disabled:bg-interactive disabled:opacity-60";
 
 type Props = {
   scope: ChantierListFilter;
@@ -35,69 +33,162 @@ type Props = {
   filters: ChantierListFilters;
   onFilters: (filters: ChantierListFilters) => void;
   clients: string[];
-  view: ChantierListView;
-  onView: (view: ChantierListView) => void;
   onRefresh: () => void;
 };
 
-export function ChantiersToolbar({ scope, onScope, filters, onFilters, clients, view, onView, onRefresh }: Props) {
+function Field({ label, htmlFor, children }: { label: string; htmlFor: string; children: ReactNode }) {
   return (
-    <section className="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm shadow-slate-950/[0.03]">
-      <div className="flex flex-wrap items-center gap-2">
-        {SCOPES.map((entry) => (
-          <button
-            key={entry.key}
-            type="button"
-            className={["rounded-xl px-3 py-2 text-sm font-medium transition", scope === entry.key ? "bg-slate-950 text-white" : "text-slate-600 hover:bg-slate-50 hover:text-slate-950"].join(" ")}
-            onClick={() => onScope(entry.key)}
-          >
-            {entry.label}
-          </button>
-        ))}
-        <button type="button" className="ml-auto rounded-xl border border-slate-200 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50" onClick={onRefresh}>
+    <div className="min-w-0">
+      <label htmlFor={htmlFor} className="bt-caption mb-1.5 block text-muted">
+        {label}
+      </label>
+      {children}
+    </div>
+  );
+}
+
+/**
+ * Niveau 1 : le filtrage forme une unite manipulable.
+ * Le rail de perimetre reprend l'anatomie des onglets de navigation locale ;
+ * le selecteur de vue n'est plus ici, il vit sur la ligne de titre de la liste.
+ */
+export function ChantiersToolbar({ scope, onScope, filters, onFilters, clients, onRefresh }: Props) {
+  const id = useId();
+
+  return (
+    <section className="overflow-hidden rounded-card border border-subtle bg-surface">
+      <div className="flex items-center gap-1 overflow-x-auto border-b border-subtle px-2 [scrollbar-width:none] sm:px-3 [&::-webkit-scrollbar]:hidden">
+        <div role="group" aria-label="Périmètre des chantiers" className="flex items-center gap-1">
+          {SCOPES.map((entry) => {
+            const active = scope === entry.key;
+            return (
+              <button
+                key={entry.key}
+                type="button"
+                aria-pressed={active}
+                onClick={() => onScope(entry.key)}
+                className={`bt-control relative shrink-0 px-3 text-sm font-medium transition-colors duration-[120ms] ${
+                  active ? "text-ink" : "text-muted hover:text-ink"
+                }`}
+              >
+                {entry.label}
+                {active ? <span aria-hidden className="absolute inset-x-2 bottom-0 h-0.5 bg-primary" /> : null}
+              </button>
+            );
+          })}
+        </div>
+        <button
+          type="button"
+          onClick={onRefresh}
+          className="bt-control ml-auto inline-flex shrink-0 items-center gap-2 rounded-field px-3 text-sm font-medium text-ink-secondary transition-colors duration-[120ms] hover:bg-interactive hover:text-ink"
+        >
+          <RotateCcw className="h-4 w-4" strokeWidth={1.75} />
           Rafraîchir
         </button>
       </div>
 
-      <div className="mt-3 grid gap-2 lg:grid-cols-[minmax(260px,1fr)_repeat(4,minmax(130px,180px))]">
-        <label className="relative">
-          <Search className="pointer-events-none absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
-          <Input className="pl-9" value={filters.query} onChange={(event) => onFilters({ ...filters, query: event.target.value })} placeholder="Rechercher chantier, client, adresse..." />
-        </label>
-        <select className="h-9 rounded-xl border border-slate-200 bg-white px-3 text-sm" value={filters.status} onChange={(event) => onFilters({ ...filters, status: event.target.value as ChantierListFilters["status"] })}>
-          {STATUSES.map((status) => (
-            <option key={status} value={status}>
-              {status === "all" ? "Tous statuts" : statusLabel(status)}
-            </option>
-          ))}
-        </select>
-        <select className="h-9 rounded-xl border border-slate-200 bg-white px-3 text-sm" value={filters.client} onChange={(event) => onFilters({ ...filters, client: event.target.value })}>
-          <option value="">Tous clients</option>
-          {clients.map((client) => (
-            <option key={client} value={client}>{client}</option>
-          ))}
-        </select>
-        <select className="h-9 rounded-xl border border-slate-200 bg-white px-3 text-sm" value={filters.conducteur} onChange={(event) => onFilters({ ...filters, conducteur: event.target.value })} disabled title="Responsable à relier aux profils chantier.">
-          <option value="">Responsable</option>
-        </select>
-        <select className="h-9 rounded-xl border border-slate-200 bg-white px-3 text-sm" value={filters.period} onChange={(event) => onFilters({ ...filters, period: event.target.value as ChantierListFilters["period"] })}>
-          {PERIODS.map((period) => (
-            <option key={period.key} value={period.key}>{period.label}</option>
-          ))}
-        </select>
-      </div>
-
-      <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
-        <select className="h-9 rounded-xl border border-slate-200 bg-white px-3 text-sm" value={filters.type} onChange={(event) => onFilters({ ...filters, type: event.target.value })} disabled title="Type chantier à brancher quand la donnée existe.">
-          <option value="">Type chantier</option>
-        </select>
-        <div className="flex max-w-full overflow-x-auto rounded-xl border border-slate-200 bg-slate-50 p-1">
-          {VIEWS.map((entry) => (
-            <button key={entry.key} type="button" onClick={() => onView(entry.key)} className={["shrink-0 rounded-lg px-3 py-1.5 text-sm font-medium transition", view === entry.key ? "bg-white text-slate-950 shadow-sm" : "text-slate-500 hover:text-slate-950"].join(" ")}>
-              {entry.label}
-            </button>
-          ))}
+      <div className="grid gap-3 px-4 py-4 sm:grid-cols-2 sm:px-5 lg:grid-cols-[minmax(220px,1.6fr)_repeat(5,minmax(0,1fr))]">
+        <div className="min-w-0">
+          <label htmlFor={`${id}-query`} className="bt-caption mb-1.5 block text-muted">
+            Recherche
+          </label>
+          <div className="relative">
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" strokeWidth={1.75} />
+            <input
+              id={`${id}-query`}
+              type="text"
+              className={`${FIELD_CLASS} pl-[34px] pr-9 placeholder:text-muted`}
+              value={filters.query}
+              onChange={(event) => onFilters({ ...filters, query: event.target.value })}
+              onKeyDown={(event) => {
+                if (event.key === "Escape" && filters.query) onFilters({ ...filters, query: "" });
+              }}
+              placeholder="Chantier, client, adresse..."
+            />
+            {filters.query ? (
+              <button
+                type="button"
+                aria-label="Effacer la recherche"
+                onClick={() => onFilters({ ...filters, query: "" })}
+                className="absolute right-2 top-1/2 grid h-6 w-6 -translate-y-1/2 place-items-center rounded-field text-muted transition-colors duration-[120ms] hover:bg-interactive hover:text-ink"
+              >
+                <X className="h-4 w-4" strokeWidth={1.75} />
+              </button>
+            ) : null}
+          </div>
         </div>
+
+        <Field label="Statut" htmlFor={`${id}-status`}>
+          <select
+            id={`${id}-status`}
+            className={FIELD_CLASS}
+            value={filters.status}
+            onChange={(event) => onFilters({ ...filters, status: event.target.value as ChantierListFilters["status"] })}
+          >
+            {STATUSES.map((status) => (
+              <option key={status} value={status}>
+                {status === "all" ? "Tous statuts" : statusLabel(status)}
+              </option>
+            ))}
+          </select>
+        </Field>
+
+        <Field label="Client" htmlFor={`${id}-client`}>
+          <select
+            id={`${id}-client`}
+            className={FIELD_CLASS}
+            value={filters.client}
+            onChange={(event) => onFilters({ ...filters, client: event.target.value })}
+          >
+            <option value="">Tous clients</option>
+            {clients.map((client) => (
+              <option key={client} value={client}>
+                {client}
+              </option>
+            ))}
+          </select>
+        </Field>
+
+        <Field label="Responsable" htmlFor={`${id}-conducteur`}>
+          <select
+            id={`${id}-conducteur`}
+            className={FIELD_CLASS}
+            value={filters.conducteur}
+            onChange={(event) => onFilters({ ...filters, conducteur: event.target.value })}
+            disabled
+            title="Responsable à relier aux profils chantier."
+          >
+            <option value="">Responsable</option>
+          </select>
+        </Field>
+
+        <Field label="Période" htmlFor={`${id}-period`}>
+          <select
+            id={`${id}-period`}
+            className={FIELD_CLASS}
+            value={filters.period}
+            onChange={(event) => onFilters({ ...filters, period: event.target.value as ChantierListFilters["period"] })}
+          >
+            {PERIODS.map((period) => (
+              <option key={period.key} value={period.key}>
+                {period.label}
+              </option>
+            ))}
+          </select>
+        </Field>
+
+        <Field label="Type" htmlFor={`${id}-type`}>
+          <select
+            id={`${id}-type`}
+            className={FIELD_CLASS}
+            value={filters.type}
+            onChange={(event) => onFilters({ ...filters, type: event.target.value })}
+            disabled
+            title="Type chantier à brancher quand la donnée existe."
+          >
+            <option value="">Type chantier</option>
+          </select>
+        </Field>
       </div>
     </section>
   );

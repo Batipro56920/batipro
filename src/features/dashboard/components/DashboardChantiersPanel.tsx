@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Link } from "react-router-dom";
 import { Button } from "../../../components/ui/button";
 import { DashboardSection } from "./DashboardSection";
-import { TONE_SOFT, TONE_SOLID } from "./tone";
+import { TONE_SOFT, TONE_SOLID } from "../../../design-system/tone";
 import type {
   DashboardChantierCard,
   DashboardChantierView,

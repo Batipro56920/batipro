@@ -6,27 +6,27 @@ type Props = {
   onNewBlank: () => void;
 };
 
+/** Etat vide : une invitation, jamais une bordure pointillee (annexe F.6). */
 export function ChantiersEmptyState({ onNewFromSignedQuote, onNewBlank }: Props) {
   return (
-    <section className="rounded-2xl border border-dashed border-slate-300 bg-white p-10 text-center shadow-sm shadow-slate-950/[0.03]">
-      <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-blue-50 text-blue-700">
-        <Building2 className="h-6 w-6" />
-      </div>
-      <h2 className="mt-4 text-lg font-semibold text-slate-950">Aucun chantier à afficher</h2>
-      <p className="mx-auto mt-2 max-w-md text-sm text-slate-500">
+    <section className="flex flex-col items-center gap-3 rounded-card border border-subtle bg-surface px-6 py-10 text-center">
+      <span className="grid h-11 w-11 place-items-center rounded-full bg-primary-soft text-primary-on">
+        <Building2 className="h-6 w-6" strokeWidth={1.75} />
+      </span>
+      <h2 className="bt-card-title text-ink">Aucun chantier à afficher</h2>
+      <p className="bt-secondary max-w-md text-muted">
         Lancez la production depuis une affaire signée pour reprendre le client, le devis, les budgets et les tâches de préparation.
       </p>
-      <div className="mt-5 flex flex-wrap justify-center gap-2">
-        <Button type="button" variant="success" onClick={onNewFromSignedQuote}>
-          <Hammer className="h-4 w-4" />
+      <div className="mt-1 flex flex-wrap justify-center gap-2">
+        <Button type="button" variant="primary" onClick={onNewFromSignedQuote}>
+          <Hammer className="h-4 w-4" strokeWidth={1.75} />
           Depuis affaire signée
         </Button>
         <Button type="button" variant="secondary" onClick={onNewBlank}>
-          <Plus className="h-4 w-4" />
+          <Plus className="h-4 w-4" strokeWidth={1.75} />
           Chantier libre
         </Button>
       </div>
     </section>
   );
 }
-

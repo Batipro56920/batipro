@@ -1,5 +1,6 @@
 import { AlertTriangle, ArrowRight, CalendarDays } from "lucide-react";
 import { Link } from "react-router-dom";
+import { TONE_SOFT } from "../../../../design-system/tone";
 import type { ChantierDerived, ChantierListActions } from "../types";
 import { budgetLabel, shortDate } from "../utils/chantiersListUtils";
 import { ChantierProgress } from "./ChantierProgress";
@@ -11,6 +12,9 @@ const COLUMNS = [
   { key: "blocage", label: "Blocage" },
   { key: "termine", label: "Terminé" },
 ] as const;
+
+const ACTION_LINK_CLASS =
+  "bt-tap inline-flex w-full items-center justify-center gap-2 rounded-field border border-strong bg-surface px-3 text-[13px] font-medium text-ink-secondary transition-colors duration-[120ms] hover:bg-interactive hover:text-ink";
 
 function getTerrainFeedbackMeta(row: ChantierDerived) {
   const openCount = row.terrainFeedbackOpenCount ?? 0;
@@ -38,52 +42,52 @@ function BlockageSummary({ row }: { row: ChantierDerived }) {
 
   if (items.length === 0) return null;
 
-  return (
-    <div className="mt-3 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs font-semibold text-red-700">
-      {items.join(" · ")}
-    </div>
-  );
+  return <p className={`bt-caption mt-2 rounded-field px-2 py-1 ${TONE_SOFT.danger}`}>{items.join(" · ")}</p>;
 }
 
 function TerrainFeedbackLink({ row, compact = false }: { row: ChantierDerived; compact?: boolean }) {
   const feedback = getTerrainFeedbackMeta(row);
-  const tone = feedback.hasPriority
-    ? "border-red-200 bg-red-50 text-red-700 hover:bg-red-100"
-    : feedback.hasOpen
-      ? "border-amber-200 bg-amber-50 text-amber-800 hover:bg-amber-100"
-      : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50";
+  const tone = feedback.hasPriority ? TONE_SOFT.danger : feedback.hasOpen ? TONE_SOFT.warning : null;
   const label = feedback.hasOpen ? feedback.label : "Retours terrain";
 
   return (
     <Link
       to={`/retours-terrain?chantierId=${encodeURIComponent(row.id)}`}
-      className={[
-        "inline-flex items-center justify-center gap-2 rounded-xl border px-3 py-2 font-semibold transition",
-        compact ? "text-xs" : "text-sm",
-        tone,
-      ].join(" ")}
+      className={
+        tone
+          ? `bt-tap inline-flex w-full items-center justify-center gap-2 rounded-field px-3 font-medium transition-opacity duration-[120ms] hover:opacity-80 ${
+              compact ? "text-[13px]" : "text-sm"
+            } ${tone}`
+          : `${ACTION_LINK_CLASS} ${compact ? "text-[13px]" : "text-sm"}`
+      }
     >
-      <AlertTriangle className="h-4 w-4" />
-      {label}
-      <ArrowRight className="h-4 w-4" />
+      <AlertTriangle className="h-4 w-4 shrink-0" strokeWidth={1.75} />
+      <span className="truncate">{label}</span>
+      <ArrowRight className="h-4 w-4 shrink-0" strokeWidth={1.75} />
     </Link>
   );
 }
 
 function PlanningDelayLink({ row }: { row: ChantierDerived }) {
   return (
-    <Link
-      to={`/chantiers/${row.id}/planning`}
-      className="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-red-200 bg-white px-3 py-2 text-sm font-semibold text-red-700 transition hover:bg-red-50"
-    >
-      <CalendarDays className="h-4 w-4" />
+    <Link to={`/chantiers/${row.id}/planning`} className={ACTION_LINK_CLASS}>
+      <CalendarDays className="h-4 w-4 shrink-0" strokeWidth={1.75} />
       Recaler le planning
-      <ArrowRight className="h-4 w-4" />
+      <ArrowRight className="h-4 w-4 shrink-0" strokeWidth={1.75} />
     </Link>
   );
 }
 
-export function ChantiersKanbanView({ rows, onPreview, actions }: { rows: ChantierDerived[]; onPreview: (row: ChantierDerived) => void; actions: ChantierListActions }) {
+/** Colonnes de niveau 0 : seules les fiches sont des surfaces (pas de surface imbriquee). */
+export function ChantiersKanbanView({
+  rows,
+  onPreview,
+  actions,
+}: {
+  rows: ChantierDerived[];
+  onPreview: (row: ChantierDerived) => void;
+  actions: ChantierListActions;
+}) {
   const blockedRows = rows.filter(isBlockedChantier);
   const blockedIds = new Set(blockedRows.map((row) => row.id));
   const availableRows = rows.filter((row) => !blockedIds.has(row.id));
@@ -95,57 +99,68 @@ export function ChantiersKanbanView({ rows, onPreview, actions }: { rows: Chanti
   };
 
   return (
-    <section className="grid gap-3 xl:grid-cols-4">
+    <section className="grid gap-4 xl:grid-cols-4">
       {COLUMNS.map((column) => (
-        <div key={column.key} className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
-          <div className="sticky top-0 z-10 mb-3 flex items-center justify-between rounded-xl bg-slate-50 py-1">
-            <h3 className="font-semibold text-slate-950">{column.label}</h3>
-            <span className="rounded-full bg-white px-2 py-1 text-xs font-semibold text-slate-500">{byColumn[column.key].length}</span>
+        <div key={column.key} className="min-w-0">
+          <div className="sticky top-0 z-10 mb-2 flex items-center justify-between gap-2 border-b border-subtle bg-app py-2">
+            <h3 className="bt-section-title text-ink">{column.label}</h3>
+            <span className="bt-caption bt-num rounded-full bg-interactive px-2 py-0.5 text-muted">{byColumn[column.key].length}</span>
           </div>
-          <div className="space-y-3">
-            {byColumn[column.key].length ? byColumn[column.key].map((row) => {
-              const feedback = getTerrainFeedbackMeta(row);
-              return (
-                <article key={`${column.key}-${row.id}`} role="button" tabIndex={0} onClick={() => onPreview(row)} onKeyDown={(event) => event.key === "Enter" && onPreview(row)} className="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm transition hover:shadow-md">
-                  <div className="font-semibold text-slate-950">{row.nom}</div>
-                  <div className="mt-1 text-sm text-slate-500">{row.client ?? "Client non renseigné"}</div>
-                  <div className="mt-3">
-                    <ChantierProgress value={row.progress} />
-                  </div>
-                  <div className="mt-3 flex items-center justify-between gap-3 text-xs text-slate-500">
-                    <span className="truncate">{budgetLabel(row.budgetHt)}</span>
-                    <span className="shrink-0">{shortDate(row.date_fin_prevue ?? row.planning_end_date)}</span>
-                  </div>
-                  {column.key === "blocage" ? <BlockageSummary row={row} /> : null}
-                  {feedback.hasOpen && column.key !== "blocage" ? (
-                    <div className="mt-3" onClick={(event) => event.stopPropagation()}>
-                      <TerrainFeedbackLink row={row} compact />
+          <div className="space-y-2">
+            {byColumn[column.key].length ? (
+              byColumn[column.key].map((row) => {
+                const feedback = getTerrainFeedbackMeta(row);
+                return (
+                  <article
+                    key={`${column.key}-${row.id}`}
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => onPreview(row)}
+                    onKeyDown={(event) => event.key === "Enter" && onPreview(row)}
+                    className="cursor-pointer rounded-card border border-subtle bg-surface p-3 transition-colors duration-[120ms] hover:bg-interactive"
+                  >
+                    <div className="bt-card-title truncate text-ink">{row.nom}</div>
+                    <div className="bt-secondary mt-0.5 truncate text-muted">{row.client ?? "Client non renseigné"}</div>
+                    <div className="mt-2.5">
+                      <ChantierProgress value={row.progress} />
                     </div>
-                  ) : null}
-                  {column.key === "blocage" ? (
-                    <div className="mt-3 grid gap-2" onClick={(event) => event.stopPropagation()}>
-                      {row.isLate ? <PlanningDelayLink row={row} /> : null}
-                      {feedback.hasOpen ? (
-                        <>
-                          <TerrainFeedbackLink row={row} />
-                          <Link
-                            to={`/chantiers/${row.id}/qualite`}
-                            className="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm font-semibold text-red-700 transition hover:bg-red-100"
-                          >
-                            <AlertTriangle className="h-4 w-4" />
-                            Traiter en qualité
-                            <ArrowRight className="h-4 w-4" />
-                          </Link>
-                        </>
-                      ) : null}
+                    <div className="bt-caption bt-num mt-2 flex items-center justify-between gap-3 text-muted">
+                      <span className="truncate">{budgetLabel(row.budgetHt)}</span>
+                      <span className="shrink-0">{shortDate(row.date_fin_prevue ?? row.planning_end_date)}</span>
                     </div>
-                  ) : null}
-                  <div className="mt-3">
-                    <ChantierRowActions row={row} actions={actions} />
-                  </div>
-                </article>
-              );
-            }) : <div className="rounded-2xl border border-dashed border-slate-200 bg-white p-6 text-center text-sm text-slate-500">Aucun chantier</div>}
+                    {column.key === "blocage" ? <BlockageSummary row={row} /> : null}
+                    {feedback.hasOpen && column.key !== "blocage" ? (
+                      <div className="mt-2" onClick={(event) => event.stopPropagation()}>
+                        <TerrainFeedbackLink row={row} compact />
+                      </div>
+                    ) : null}
+                    {column.key === "blocage" ? (
+                      <div className="mt-2 grid gap-1.5" onClick={(event) => event.stopPropagation()}>
+                        {row.isLate ? <PlanningDelayLink row={row} /> : null}
+                        {feedback.hasOpen ? (
+                          <>
+                            <TerrainFeedbackLink row={row} />
+                            <Link
+                              to={`/chantiers/${row.id}/qualite`}
+                              className={`bt-tap inline-flex w-full items-center justify-center gap-2 rounded-field px-3 text-sm font-medium transition-opacity duration-[120ms] hover:opacity-80 ${TONE_SOFT.danger}`}
+                            >
+                              <AlertTriangle className="h-4 w-4 shrink-0" strokeWidth={1.75} />
+                              Traiter en qualité
+                              <ArrowRight className="h-4 w-4 shrink-0" strokeWidth={1.75} />
+                            </Link>
+                          </>
+                        ) : null}
+                      </div>
+                    ) : null}
+                    <div className="mt-2.5">
+                      <ChantierRowActions row={row} actions={actions} />
+                    </div>
+                  </article>
+                );
+              })
+            ) : (
+              <p className="bt-secondary rounded-card border border-subtle bg-surface px-3 py-6 text-center text-muted">Aucun chantier</p>
+            )}
           </div>
         </div>
       ))}

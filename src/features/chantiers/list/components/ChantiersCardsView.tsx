@@ -1,12 +1,24 @@
 import { AlertTriangle, CalendarDays, ClipboardList, Clock3, FileText, Hammer, MapPin, Users, type LucideIcon } from "lucide-react";
 import { Link } from "react-router-dom";
+import { TONE_SOFT, type Tone } from "../../../../design-system/tone";
 import type { ChantierDerived, ChantierListActions } from "../types";
 import { budgetLabel, commercialAmountLabel, commercialSourceLabel, hasCommercialContext, shortDate, timeLabel } from "../utils/chantiersListUtils";
 import { ChantierProgress } from "./ChantierProgress";
 import { ChantierRowActions } from "./ChantierRowActions";
 import { ChantierStatusPill } from "./ChantierStatusPill";
 
-export function ChantiersCardsView({ rows, onPreview, actions }: { rows: ChantierDerived[]; onPreview: (row: ChantierDerived) => void; actions: ChantierListActions }) {
+const QUICK_LINK_CLASS =
+  "bt-tap inline-flex items-center justify-center gap-1.5 rounded-field border border-strong bg-surface px-2 text-[13px] font-medium text-ink-secondary transition-colors duration-[120ms] hover:bg-interactive hover:text-ink";
+
+export function ChantiersCardsView({
+  rows,
+  onPreview,
+  actions,
+}: {
+  rows: ChantierDerived[];
+  onPreview: (row: ChantierDerived) => void;
+  actions: ChantierListActions;
+}) {
   return (
     <section className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
       {rows.map((row) => {
@@ -16,78 +28,89 @@ export function ChantiersCardsView({ rows, onPreview, actions }: { rows: Chantie
         const hasPriorityTerrainFeedbacks = terrainFeedbackPriorityCount > 0;
         const terrainFeedbackHref = `/retours-terrain?chantierId=${encodeURIComponent(row.id)}`;
         const qualityHref = `/chantiers/${row.id}/qualite`;
-        const qualityLinkTone = hasPriorityTerrainFeedbacks ? "red" : hasOpenTerrainFeedbacks ? "amber" : "slate";
+        const qualityLinkTone: Tone = hasPriorityTerrainFeedbacks ? "danger" : hasOpenTerrainFeedbacks ? "warning" : "normal";
         const terrainFeedbackLabel = hasPriorityTerrainFeedbacks
           ? `${terrainFeedbackPriorityCount} retour${terrainFeedbackPriorityCount > 1 ? "s" : ""} terrain urgent${terrainFeedbackPriorityCount > 1 ? "s" : ""}`
           : `${terrainFeedbackOpenCount} retour${terrainFeedbackOpenCount > 1 ? "s" : ""} terrain à traiter`;
 
         return (
-          <article key={row.id} role="button" tabIndex={0} onClick={() => onPreview(row)} onKeyDown={(event) => event.key === "Enter" && onPreview(row)} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm shadow-slate-950/[0.03] transition hover:-translate-y-0.5 hover:shadow-md">
-            <div className="flex items-start justify-between gap-3">
-              <div className="min-w-0">
-                <h3 className="truncate text-base font-semibold text-slate-950">{row.nom}</h3>
-                <p className="mt-1 truncate text-sm text-slate-500">{row.client ?? "Client non renseigné"}</p>
+          <article
+            key={row.id}
+            role="button"
+            tabIndex={0}
+            onClick={() => onPreview(row)}
+            onKeyDown={(event) => event.key === "Enter" && onPreview(row)}
+            className="relative cursor-pointer overflow-hidden rounded-card border border-subtle bg-surface transition-colors duration-[120ms] hover:bg-interactive"
+          >
+            {row.isLate ? <span aria-hidden className="absolute inset-y-0 left-0 w-[3px] bg-danger" /> : null}
+
+            <div className="px-4 py-3">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <h3 className="bt-card-title truncate text-ink">{row.nom}</h3>
+                  <p className="bt-secondary mt-0.5 truncate text-muted">{row.client ?? "Client non renseigné"}</p>
+                </div>
+                <ChantierStatusPill status={row.status} />
               </div>
-              <ChantierStatusPill status={row.status} />
-            </div>
-            {hasCommercialContext(row) ? (
-              <div className="mt-3 flex flex-wrap gap-1.5">
-                <span className="inline-flex items-center gap-1 rounded-full border border-blue-200 bg-blue-50 px-2 py-1 text-xs font-semibold text-blue-700">
-                  <FileText className="h-3 w-3" />
-                  {commercialSourceLabel(row)}
-                </span>
-                <span className="inline-flex rounded-full border border-emerald-200 bg-emerald-50 px-2 py-1 text-xs font-semibold text-emerald-700">
-                  {commercialAmountLabel(row)}
-                </span>
+
+              {hasCommercialContext(row) ? (
+                <div className="mt-2 flex flex-wrap gap-1.5">
+                  <span className={`bt-caption inline-flex items-center gap-1 rounded-full px-2 py-0.5 ${TONE_SOFT.info}`}>
+                    <FileText className="h-3 w-3" strokeWidth={1.75} />
+                    {commercialSourceLabel(row)}
+                  </span>
+                  <span className={`bt-caption bt-num inline-flex rounded-full px-2 py-0.5 ${TONE_SOFT.success}`}>{commercialAmountLabel(row)}</span>
+                </div>
+              ) : null}
+
+              <div className="bt-secondary mt-2 flex items-center gap-1.5 text-muted">
+                <MapPin className="h-3.5 w-3.5 shrink-0" strokeWidth={1.75} />
+                <span className="truncate">{row.adresse ?? "Adresse non renseignée"}</span>
               </div>
-            ) : null}
-            <div className="mt-3 flex items-center gap-2 text-sm text-slate-500">
-              <MapPin className="h-4 w-4" />
-              <span className="truncate">{row.adresse ?? "Adresse non renseignée"}</span>
+
+              <div className="mt-3">
+                <ChantierProgress value={row.progress} />
+              </div>
             </div>
-            <div className="mt-4">
-              <ChantierProgress value={row.progress} />
+
+            <div className="bt-caption bt-num flex flex-wrap items-center gap-x-2 gap-y-1 border-t border-subtle px-4 py-2 text-muted">
+              <span className="text-ink-secondary">{budgetLabel(row.budgetHt)}</span>
+              <span aria-hidden>·</span>
+              <span>{timeLabel(row.heures_prevues, row.heures_passees)}</span>
+              <span aria-hidden>·</span>
+              <span className="inline-flex items-center gap-1">
+                <CalendarDays className="h-3.5 w-3.5" strokeWidth={1.75} />
+                {shortDate(row.date_fin_prevue ?? row.planning_end_date)}
+              </span>
             </div>
-            <div className="mt-4 grid grid-cols-3 gap-2 text-sm">
-              <Metric label="Budget" value={budgetLabel(row.budgetHt)} />
-              <Metric label="Temps" value={timeLabel(row.heures_prevues, row.heures_passees)} />
-              <Metric label="Échéance" value={shortDate(row.date_fin_prevue ?? row.planning_end_date)} />
-            </div>
+
             {row.isLate || hasOpenTerrainFeedbacks ? (
-              <div className="mt-4 space-y-2">
+              <div className="space-y-1.5 border-t border-subtle px-4 py-2">
                 {row.isLate ? (
-                  <div className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm font-medium text-red-700">En retard</div>
+                  <p className={`bt-caption inline-flex rounded-full px-2 py-0.5 ${TONE_SOFT.danger}`}>En retard</p>
                 ) : null}
                 {hasOpenTerrainFeedbacks ? (
-                  <div className="grid gap-2 sm:grid-cols-2">
+                  <div className="grid gap-1.5 sm:grid-cols-2" onClick={(event) => event.stopPropagation()}>
                     <Link
                       to={terrainFeedbackHref}
-                      onClick={(event) => event.stopPropagation()}
-                      className={[
-                        "flex items-center justify-between gap-2 rounded-xl border px-3 py-2 text-sm font-medium transition focus:outline-none focus:ring-2 focus:ring-blue-200",
-                        hasPriorityTerrainFeedbacks
-                          ? "border-red-200 bg-red-50 text-red-700 hover:bg-red-100"
-                          : "border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100",
-                      ].join(" ")}
+                      className={`bt-tap flex items-center justify-between gap-2 rounded-field px-2.5 text-[13px] font-medium transition-opacity duration-[120ms] hover:opacity-80 ${
+                        hasPriorityTerrainFeedbacks ? TONE_SOFT.danger : TONE_SOFT.warning
+                      }`}
                       title="Ouvrir les retours terrain de ce chantier"
                     >
-                      <span>{terrainFeedbackLabel}</span>
-                      <AlertTriangle className="h-4 w-4 shrink-0" />
+                      <span className="truncate">{terrainFeedbackLabel}</span>
+                      <AlertTriangle className="h-4 w-4 shrink-0" strokeWidth={1.75} />
                     </Link>
-                    <Link
-                      to={qualityHref}
-                      onClick={(event) => event.stopPropagation()}
-                      className="flex items-center justify-between gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-200"
-                      title="Ouvrir la qualité et les réserves de ce chantier"
-                    >
-                      <span>Suivre en réserves</span>
-                      <AlertTriangle className="h-4 w-4 shrink-0" />
+                    <Link to={qualityHref} className={QUICK_LINK_CLASS} title="Ouvrir la qualité et les réserves de ce chantier">
+                      <span className="truncate">Suivre en réserves</span>
+                      <AlertTriangle className="h-4 w-4 shrink-0" strokeWidth={1.75} />
                     </Link>
                   </div>
                 ) : null}
               </div>
             ) : null}
-            <div className="mt-4 grid grid-cols-2 gap-2" onClick={(event) => event.stopPropagation()}>
+
+            <div className="grid grid-cols-2 gap-1.5 border-t border-subtle px-4 py-2 sm:grid-cols-4" onClick={(event) => event.stopPropagation()}>
               <QuickLink href={`/chantiers/${row.id}/preparation`} icon={ClipboardList} label="Préparer" />
               <QuickLink href={`/chantiers/${row.id}/execution`} icon={Hammer} label="Exécution" />
               <QuickLink href={`/chantiers/${row.id}/temps`} icon={Clock3} label="Temps" />
@@ -97,7 +120,8 @@ export function ChantiersCardsView({ rows, onPreview, actions }: { rows: Chantie
               <QuickLink href={`/chantiers/${row.id}/documents`} icon={FileText} label="Documents" />
               <QuickLink href={`/chantiers/${row.id}/equipe`} icon={Users} label="Équipe" />
             </div>
-            <div className="mt-4">
+
+            <div className="border-t border-subtle px-4 py-2">
               <ChantierRowActions row={row} actions={actions} />
             </div>
           </article>
@@ -107,32 +131,15 @@ export function ChantiersCardsView({ rows, onPreview, actions }: { rows: Chantie
   );
 }
 
-function Metric({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-xl bg-slate-50 p-3">
-      <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-400">{label}</div>
-      <div className="mt-1 truncate font-semibold text-slate-950">
-        {label === "Échéance" ? <CalendarDays className="mr-1 inline h-3.5 w-3.5 text-slate-400" /> : null}
-        {value}
-      </div>
-    </div>
-  );
-}
-
-function QuickLink({ href, icon: Icon, label, tone = "slate" }: { href: string; icon: LucideIcon; label: string; tone?: "slate" | "amber" | "red" }) {
+function QuickLink({ href, icon: Icon, label, tone = "normal" }: { href: string; icon: LucideIcon; label: string; tone?: Tone }) {
   const className =
-    tone === "red"
-      ? "border-red-200 bg-red-50 text-red-800 hover:bg-red-100"
-      : tone === "amber"
-        ? "border-amber-200 bg-amber-50 text-amber-800 hover:bg-amber-100"
-        : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50";
+    tone === "normal"
+      ? QUICK_LINK_CLASS
+      : `bt-tap inline-flex items-center justify-center gap-1.5 rounded-field px-2 text-[13px] font-medium transition-opacity duration-[120ms] hover:opacity-80 ${TONE_SOFT[tone]}`;
 
   return (
-    <Link
-      to={href}
-      className={`inline-flex h-9 items-center justify-center gap-1.5 rounded-xl border px-2 text-xs font-semibold transition ${className}`}
-    >
-      <Icon className="h-4 w-4" />
+    <Link to={href} className={className}>
+      <Icon className="h-4 w-4 shrink-0" strokeWidth={1.75} />
       <span className="truncate">{label}</span>
     </Link>
   );

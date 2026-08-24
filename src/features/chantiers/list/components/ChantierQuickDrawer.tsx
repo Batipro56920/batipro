@@ -2,6 +2,7 @@ import { AlertTriangle, ArrowRight, CalendarDays, CircleDollarSign, ClipboardLis
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { Button } from "../../../../components/ui/button";
+import { TONE_SOFT, type Tone } from "../../../../design-system/tone";
 import type { ChantierDerived, ChantierListActions } from "../types";
 import { budgetLabel, currency, shortDate, timeLabel } from "../utils/chantiersListUtils";
 import { ChantierProgress } from "./ChantierProgress";
@@ -9,7 +10,6 @@ import { ChantierRowActions } from "./ChantierRowActions";
 import { ChantierStatusPill } from "./ChantierStatusPill";
 
 const TABS = ["Vue rapide", "Tâches", "Temps", "Planning", "Financier", "Équipe", "Documents", "Retours terrain", "Alertes"] as const;
-type ShortcutTone = "blue" | "red" | "amber" | "slate";
 
 function getProjectHref(row: ChantierDerived) {
   if (row.crm_opportunity_id) return `/projets/opportunity-${row.crm_opportunity_id}`;
@@ -62,7 +62,7 @@ function getTerrainFeedbackInfo(row: ChantierDerived) {
       open,
       priority,
       hasOpen: true,
-      tone: "red" as const,
+      tone: "danger" as Tone,
       metric: `${priority} retour${priority > 1 ? "s" : ""} urgent${priority > 1 ? "s" : ""}`,
       description: `${open} retour${open > 1 ? "s" : ""} terrain ouvert${open > 1 ? "s" : ""}, dont ${priority} urgent${priority > 1 ? "s" : ""}. Ouvrir le pilotage permet de traiter le point, l'assigner ou créer une réserve chantier.`,
       cta: "Traiter les retours urgents",
@@ -75,7 +75,7 @@ function getTerrainFeedbackInfo(row: ChantierDerived) {
       open,
       priority,
       hasOpen: true,
-      tone: "amber" as const,
+      tone: "warning" as Tone,
       metric: `${open} retour${open > 1 ? "s" : ""} à traiter`,
       description: `${open} retour${open > 1 ? "s" : ""} terrain ouvert${open > 1 ? "s" : ""}. Le pilotage filtré permet de garder le lien entre le terrain, l'exécution, les documents et les réserves.`,
       cta: "Voir les retours chantier",
@@ -87,25 +87,11 @@ function getTerrainFeedbackInfo(row: ChantierDerived) {
     open,
     priority,
     hasOpen: false,
-    tone: "slate" as const,
+    tone: "normal" as Tone,
     metric: "Aucun retour ouvert",
     description: "Aucun retour terrain ouvert pour ce chantier. L'espace reste disponible pour contrôler les observations historisées ou les nouvelles remontées terrain.",
     cta: "Ouvrir les retours terrain",
   };
-}
-
-function shortcutLinkClasses(tone: ShortcutTone = "slate") {
-  if (tone === "red") return "border-red-200 bg-red-50 hover:border-red-300 hover:bg-red-100";
-  if (tone === "amber") return "border-amber-200 bg-amber-50 hover:border-amber-300 hover:bg-amber-100";
-  if (tone === "blue") return "border-blue-200 bg-blue-50 hover:border-blue-300 hover:bg-blue-100";
-  return "border-slate-200 bg-white hover:border-blue-200 hover:bg-blue-50";
-}
-
-function shortcutIconClasses(tone: ShortcutTone = "slate") {
-  if (tone === "red") return "bg-white text-red-700 group-hover:bg-red-50";
-  if (tone === "amber") return "bg-white text-amber-700 group-hover:bg-amber-50";
-  if (tone === "blue") return "bg-white text-blue-700 group-hover:bg-blue-50";
-  return "bg-slate-100 text-slate-600 group-hover:bg-white group-hover:text-blue-700";
 }
 
 function CommercialContext({ row }: { row: ChantierDerived }) {
@@ -120,46 +106,46 @@ function CommercialContext({ row }: { row: ChantierDerived }) {
   }
 
   return (
-    <div className="rounded-2xl border border-blue-100 bg-blue-50 p-4">
+    <div className={`rounded-card p-4 ${TONE_SOFT.info}`}>
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0">
-          <h3 className="font-semibold text-blue-950">Dossier commercial</h3>
-          <div className="mt-2 grid gap-2 text-sm text-blue-900 sm:grid-cols-2">
+          <h3 className="bt-card-title text-ink">Dossier commercial</h3>
+          <div className="mt-2 grid gap-2 text-sm sm:grid-cols-2">
             <div>
-              <span className="text-blue-700/80">Rattachement</span>
-              <div className="font-semibold">{getCommercialSourceLabel(row)}</div>
+              <span className="bt-caption text-muted">Rattachement</span>
+              <div className="bt-card-title text-ink">{getCommercialSourceLabel(row)}</div>
             </div>
             <div>
-              <span className="text-blue-700/80">Devis signé</span>
-              <div className="font-semibold">{budgetLabel(row.signed_quote_amount_ht)}</div>
+              <span className="bt-caption text-muted">Devis signé</span>
+              <div className="bt-card-title bt-num text-ink">{budgetLabel(row.signed_quote_amount_ht)}</div>
             </div>
             <div>
-              <span className="text-blue-700/80">Contact client</span>
-              <div className="font-semibold">{getClientContactLabel(row)}</div>
+              <span className="bt-caption text-muted">Contact client</span>
+              <div className="bt-card-title text-ink">{getClientContactLabel(row)}</div>
             </div>
             <div>
-              <span className="text-blue-700/80">Suite métier</span>
-              <div className="font-semibold">{getCommercialNextStepLabel({ quoteHref, billingHref })}</div>
+              <span className="bt-caption text-muted">Suite métier</span>
+              <div className="bt-card-title text-ink">{getCommercialNextStepLabel({ quoteHref, billingHref })}</div>
             </div>
           </div>
         </div>
         <div className="flex shrink-0 flex-wrap gap-2">
           {projectHref ? (
-            <Link to={projectHref} className="inline-flex h-9 items-center rounded-xl border border-blue-200 bg-white px-3 text-sm font-semibold text-blue-800 hover:bg-blue-100">
+            <Link to={projectHref} className="bt-tap inline-flex items-center rounded-field border border-strong bg-surface px-3 text-sm font-medium text-ink-secondary transition-colors duration-[120ms] hover:bg-interactive hover:text-ink">
               Projet commercial
             </Link>
           ) : null}
           {quoteHref ? (
-            <Link to={quoteHref} className="inline-flex h-9 items-center rounded-xl border border-blue-200 bg-white px-3 text-sm font-semibold text-blue-800 hover:bg-blue-100">
+            <Link to={quoteHref} className="bt-tap inline-flex items-center rounded-field border border-strong bg-surface px-3 text-sm font-medium text-ink-secondary transition-colors duration-[120ms] hover:bg-interactive hover:text-ink">
               Devis
             </Link>
           ) : null}
           {billingHref ? (
-            <Link to={billingHref} className="inline-flex h-9 items-center rounded-xl border border-blue-200 bg-white px-3 text-sm font-semibold text-blue-800 hover:bg-blue-100">
+            <Link to={billingHref} className="bt-tap inline-flex items-center rounded-field border border-strong bg-surface px-3 text-sm font-medium text-ink-secondary transition-colors duration-[120ms] hover:bg-interactive hover:text-ink">
               Facturer
             </Link>
           ) : null}
-          <Link to={financialHref} className="inline-flex h-9 items-center rounded-xl border border-blue-200 bg-white px-3 text-sm font-semibold text-blue-800 hover:bg-blue-100">
+          <Link to={financialHref} className="bt-tap inline-flex items-center rounded-field border border-strong bg-surface px-3 text-sm font-medium text-ink-secondary transition-colors duration-[120ms] hover:bg-interactive hover:text-ink">
             Financier chantier
           </Link>
         </div>
@@ -185,36 +171,51 @@ export function ChantierQuickDrawer({ row, actions, onClose }: { row: ChantierDe
     : row.isLate
       ? "Chantier en retard"
       : "Aucune alerte critique";
-  const alertTone = terrainFeedbackInfo.hasOpen ? terrainFeedbackInfo.tone : row.isLate ? "red" : "slate";
+  const alertTone: Tone = terrainFeedbackInfo.hasOpen ? terrainFeedbackInfo.tone : row.isLate ? "danger" : "normal";
   const alertCta = terrainFeedbackInfo.hasOpen ? terrainFeedbackInfo.cta : "Ouvrir la qualité";
 
   return (
-    <div className="fixed inset-0 z-40 flex justify-end bg-slate-950/20" onClick={onClose}>
-      <aside className="h-full w-full max-w-xl overflow-y-auto bg-white shadow-2xl" onClick={(event) => event.stopPropagation()}>
-        <div className="sticky top-0 z-10 border-b border-slate-200 bg-white/95 p-5 backdrop-blur">
+    <div className="fixed inset-0 z-40 flex justify-end bg-[color:var(--bt-overlay)]" onClick={onClose}>
+      <aside
+        className="flex h-full w-full flex-col overflow-y-auto border-l border-subtle bg-elevated shadow-overlay sm:w-[420px] lg:w-[480px] xl:w-[560px]"
+        onClick={(event) => event.stopPropagation()}
+      >
+        <div className="sticky top-0 z-10 border-b border-subtle bg-elevated/95 p-5 backdrop-blur">
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0">
-              <div className="mb-2"><ChantierStatusPill status={row.status} /></div>
-              <h2 className="truncate text-xl font-semibold text-slate-950">{row.nom}</h2>
-              <p className="mt-1 text-sm text-slate-500">{row.client ?? "Client non renseigné"}</p>
+              <div className="mb-2">
+                <ChantierStatusPill status={row.status} />
+              </div>
+              <h2 className="bt-page-title truncate text-ink">{row.nom}</h2>
+              <p className="bt-secondary mt-1 text-muted">{row.client ?? "Client non renseigné"}</p>
             </div>
             <Button type="button" variant="ghost" size="sm" onClick={onClose} aria-label="Fermer">
-              <X className="h-4 w-4" />
+              <X className="h-4 w-4" strokeWidth={1.75} />
             </Button>
           </div>
           <div className="mt-4">
-            <ChantierRowActions row={row} actions={actions} />
+            <ChantierRowActions row={row} actions={actions} menuPlacement="down" />
           </div>
         </div>
 
-        <div className="border-b border-slate-200 px-5 py-3">
-          <div className="flex gap-1 overflow-x-auto rounded-xl bg-slate-50 p-1">
-            {TABS.map((entry) => (
-              <button key={entry} type="button" onClick={() => setTab(entry)} className={["shrink-0 rounded-lg px-3 py-1.5 text-sm font-medium transition", tab === entry ? "bg-white text-slate-950 shadow-sm" : "text-slate-500 hover:text-slate-950"].join(" ")}>
+        <div role="tablist" aria-label="Sections du chantier" className="flex gap-1 overflow-x-auto border-b border-subtle px-5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+          {TABS.map((entry) => {
+            const active = tab === entry;
+            return (
+              <button
+                key={entry}
+                type="button"
+                role="tab"
+                aria-selected={active}
+                onClick={() => setTab(entry)}
+                className={`bt-tap shrink-0 whitespace-nowrap px-3 text-[13px] font-medium transition-colors duration-[180ms] ${
+                  active ? "-mb-px border-b-2 border-primary text-ink" : "text-muted hover:text-ink-secondary"
+                }`}
+              >
                 {entry}
               </button>
-            ))}
-          </div>
+            );
+          })}
         </div>
 
         <div className="space-y-4 p-5">
@@ -223,12 +224,12 @@ export function ChantierQuickDrawer({ row, actions, onClose }: { row: ChantierDe
               <InfoGrid row={row} />
               <CommercialContext row={row} />
               <QuickAccessPanel row={row} />
-              <div className="rounded-2xl border border-slate-200 p-4">
+              <div className="rounded-card border border-subtle p-4">
                 <ChantierProgress value={row.progress} />
               </div>
-              <div className="rounded-2xl border border-slate-200 p-4">
-                <h3 className="font-semibold text-slate-950">Description projet</h3>
-                <p className="mt-2 text-sm leading-6 text-slate-600">{row.crm_project_description || "Aucune description projet renseignée."}</p>
+              <div className="rounded-card border border-subtle p-4">
+                <h3 className="bt-card-title text-ink">Description projet</h3>
+                <p className="bt-secondary mt-2 text-muted">{row.crm_project_description || "Aucune description projet renseignée."}</p>
               </div>
             </>
           ) : tab === "Tâches" ? (
@@ -314,13 +315,13 @@ export function ChantierQuickDrawer({ row, actions, onClose }: { row: ChantierDe
 
 function QuickAccessPanel({ row }: { row: ChantierDerived }) {
   const terrainFeedbackInfo = getTerrainFeedbackInfo(row);
-  const qualityTone: ShortcutTone = terrainFeedbackInfo.priority > 0 ? "red" : terrainFeedbackInfo.hasOpen ? "amber" : "slate";
+  const qualityTone: Tone = terrainFeedbackInfo.priority > 0 ? "danger" : terrainFeedbackInfo.hasOpen ? "warning" : "normal";
   const links: Array<{
     label: string;
     description: string;
     href: string;
     icon: typeof ClipboardList;
-    tone?: ShortcutTone;
+    tone?: Tone;
   }> = [
     {
       label: "Préparer",
@@ -381,28 +382,31 @@ function QuickAccessPanel({ row }: { row: ChantierDerived }) {
   ];
 
   return (
-    <div className="rounded-2xl border border-slate-200 p-4">
+    <div className="rounded-card border border-subtle p-4">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <h3 className="font-semibold text-slate-950">Accès rapides chantier</h3>
-          <p className="mt-1 text-sm text-slate-500">Ouvrir directement le bon espace métier du dossier.</p>
+          <h3 className="bt-card-title text-ink">Accès rapides chantier</h3>
+          <p className="bt-secondary mt-1 text-muted">Ouvrir directement le bon espace métier du dossier.</p>
         </div>
       </div>
       <div className="mt-4 grid gap-2 sm:grid-cols-2">
         {links.map((link) => {
           const Icon = link.icon;
+          const tone = link.tone ?? "normal";
           return (
             <Link
               key={`${link.label}:${link.href}`}
               to={link.href}
-              className={`group flex items-start gap-3 rounded-2xl border p-3 transition ${shortcutLinkClasses(link.tone)}`}
+              className={`group flex items-start gap-3 rounded-field border border-strong bg-surface p-3 transition-colors duration-[120ms] hover:bg-interactive ${
+                tone !== "normal" ? TONE_SOFT[tone] : ""
+              }`}
             >
-              <span className={`mt-0.5 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-xl transition ${shortcutIconClasses(link.tone)}`}>
-                <Icon className="h-4 w-4" />
+              <span className="mt-0.5 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-field bg-interactive text-ink-secondary">
+                <Icon className="h-4 w-4" strokeWidth={1.75} />
               </span>
               <span className="min-w-0">
-                <span className="block text-sm font-semibold text-slate-950">{link.label}</span>
-                <span className="mt-0.5 block text-xs leading-5 text-slate-500">{link.description}</span>
+                <span className="bt-card-title block text-ink">{link.label}</span>
+                <span className="bt-caption mt-0.5 block text-muted">{link.description}</span>
               </span>
             </Link>
           );
@@ -419,7 +423,7 @@ function DetailShortcutPanel({
   icon: Icon,
   cta,
   metric,
-  tone = "blue",
+  tone = "info",
 }: {
   title: string;
   description: string;
@@ -427,28 +431,22 @@ function DetailShortcutPanel({
   icon: typeof ClipboardList;
   cta: string;
   metric: string;
-  tone?: ShortcutTone;
+  tone?: Tone;
 }) {
-  const toneClasses =
-    tone === "red"
-      ? "border-red-200 bg-red-50 text-red-800"
-      : tone === "amber"
-        ? "border-amber-200 bg-amber-50 text-amber-800"
-        : tone === "slate"
-          ? "border-slate-200 bg-slate-50 text-slate-700"
-          : "border-blue-100 bg-blue-50 text-blue-900";
-
   return (
-    <div className="rounded-2xl border border-slate-200 p-4">
-      <div className={`inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-sm font-semibold ${toneClasses}`}>
-        <Icon className="h-4 w-4" />
+    <div className="rounded-card border border-subtle p-4">
+      <div className={`inline-flex items-center gap-2 rounded-field px-3 py-2 text-sm font-medium ${TONE_SOFT[tone]}`}>
+        <Icon className="h-4 w-4" strokeWidth={1.75} />
         {metric}
       </div>
-      <h3 className="mt-4 text-base font-semibold text-slate-950">{title}</h3>
-      <p className="mt-2 text-sm leading-6 text-slate-600">{description}</p>
-      <Link to={href} className="mt-4 inline-flex h-10 items-center gap-2 rounded-xl bg-slate-950 px-4 text-sm font-semibold text-white hover:bg-slate-800">
+      <h3 className="bt-card-title mt-4 text-ink">{title}</h3>
+      <p className="bt-secondary mt-2 text-muted">{description}</p>
+      <Link
+        to={href}
+        className="bt-tap mt-4 inline-flex items-center gap-2 rounded-field bg-primary px-4 text-sm font-medium text-primary-contrast transition-colors duration-[120ms] hover:bg-primary-hover"
+      >
         {cta}
-        <ArrowRight className="h-4 w-4" />
+        <ArrowRight className="h-4 w-4" strokeWidth={1.75} />
       </Link>
     </div>
   );
@@ -466,9 +464,9 @@ function InfoGrid({ row }: { row: ChantierDerived }) {
   return (
     <div className="grid gap-3 sm:grid-cols-2">
       {items.map(([label, value]) => (
-        <div key={label} className="rounded-2xl border border-slate-200 p-4">
-          <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-400">{label}</div>
-          <div className="mt-1 font-semibold text-slate-950">{value}</div>
+        <div key={label} className="rounded-card border border-subtle p-4">
+          <div className="bt-caption text-muted">{label}</div>
+          <div className="bt-card-title bt-num mt-1 text-ink">{value}</div>
         </div>
       ))}
     </div>

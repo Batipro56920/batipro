@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { CheckCircle2 } from "lucide-react";
-import { TONE_SOFT, TONE_SOLID } from "./tone";
+import { TONE_SOFT, TONE_SOLID } from "../../../design-system/tone";
 import type { DashboardFilterChip, DashboardQueueFilter, DashboardQueueItem } from "../types";
 
 type DashboardPriorityFeedProps = {

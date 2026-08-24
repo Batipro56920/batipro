@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { AlertTriangle, ArrowRight, CalendarDays, ClipboardCheck, ClipboardList, Clock3, Eye, FileText, Hammer, ShieldCheck, Users } from "lucide-react";
 import { Link } from "react-router-dom";
+import { TONE_SOFT, type Tone } from "../../../../design-system/tone";
 import type { ChantierDerived } from "../types";
 import { shortDate } from "../utils/chantiersListUtils";
 import { ChantierProgress } from "./ChantierProgress";
@@ -24,7 +25,6 @@ type PlanningMilestone = {
 };
 
 type PlanningFilter = "all" | "late" | "unplanned" | "terrain" | "priority";
-type PlanningActionTone = "slate" | "red" | "amber" | "blue";
 
 const PLANNING_FILTER_LABELS: Record<PlanningFilter, string> = {
   all: "Tous les chantiers",
@@ -33,6 +33,11 @@ const PLANNING_FILTER_LABELS: Record<PlanningFilter, string> = {
   terrain: "Retours terrain ouverts",
   priority: "Retours terrain urgents",
 };
+
+const CHIP_CLASS = "bt-tap inline-flex items-center gap-1.5 rounded-field px-2 text-[13px] font-medium transition-opacity duration-[120ms] hover:opacity-80";
+
+const NEUTRAL_CHIP_CLASS =
+  "bt-tap inline-flex items-center gap-1.5 rounded-field border border-strong bg-surface px-2 text-[13px] font-medium text-ink-secondary transition-colors duration-[120ms] hover:bg-interactive hover:text-ink";
 
 function todayIso() {
   return new Date().toISOString().slice(0, 10);
@@ -128,7 +133,7 @@ function getNextPlanningAction(row: ChantierDerived) {
       href: getTerrainFeedbackHref(row),
       label: "Traiter urgence terrain",
       description: "Retour urgent avant recalage planning.",
-      tone: "red" as const,
+      tone: "danger" as Tone,
     };
   }
 
@@ -137,7 +142,7 @@ function getNextPlanningAction(row: ChantierDerived) {
       href: getTerrainFeedbackHref(row),
       label: "Traiter retour terrain",
       description: "Observation ouverte à arbitrer.",
-      tone: "amber" as const,
+      tone: "warning" as Tone,
     };
   }
 
@@ -146,7 +151,7 @@ function getNextPlanningAction(row: ChantierDerived) {
       href: getChantierHref(row, "preparation"),
       label: "Cadrer la préparation",
       description: "Jalon chantier manquant.",
-      tone: "amber" as const,
+      tone: "warning" as Tone,
     };
   }
 
@@ -155,7 +160,7 @@ function getNextPlanningAction(row: ChantierDerived) {
       href: getChantierHref(row, "planning"),
       label: "Recaler le planning",
       description: "Échéance dépassée à reprendre.",
-      tone: "red" as const,
+      tone: "danger" as Tone,
     };
   }
 
@@ -164,7 +169,7 @@ function getNextPlanningAction(row: ChantierDerived) {
       href: getChantierHref(row, "execution"),
       label: "Piloter l'exécution",
       description: `${row.progress}% d'avancement chantier.`,
-      tone: "blue" as const,
+      tone: "info" as Tone,
     };
   }
 
@@ -172,49 +177,12 @@ function getNextPlanningAction(row: ChantierDerived) {
     href: getChantierHref(row),
     label: "Contrôler le dossier",
     description: "Chantier à vérifier avant clôture.",
-    tone: "slate" as const,
+    tone: "normal" as Tone,
   };
 }
 
-function nextActionClasses(tone: PlanningActionTone) {
-  if (tone === "red") return "border-red-200 bg-red-50 text-red-800 hover:border-red-300 hover:bg-red-100";
-  if (tone === "amber") return "border-amber-200 bg-amber-50 text-amber-900 hover:border-amber-300 hover:bg-amber-100";
-  if (tone === "blue") return "border-blue-200 bg-blue-50 text-blue-800 hover:border-blue-300 hover:bg-blue-100";
-  return "border-slate-200 bg-slate-50 text-slate-800 hover:border-slate-300 hover:bg-white";
-}
-
-function PlanningFilterCard({
-  label,
-  value,
-  tone,
-  active,
-  onClick,
-}: {
-  label: string;
-  value: string | number;
-  tone: "slate" | "red" | "amber";
-  active: boolean;
-  onClick: () => void;
-}) {
-  const toneClass =
-    tone === "red"
-      ? "border-red-200 bg-red-50 text-red-700"
-      : tone === "amber"
-        ? "border-amber-200 bg-amber-50 text-amber-800"
-        : "border-slate-200 bg-slate-50 text-slate-950";
-  const activeClass = active ? "ring-2 ring-blue-300 ring-offset-2" : "hover:bg-white";
-
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={`rounded-xl border px-3 py-2 text-left transition ${toneClass} ${activeClass}`}
-      aria-pressed={active}
-    >
-      <div className="text-xs font-semibold uppercase opacity-80">{label}</div>
-      <div className="text-lg font-semibold">{value}</div>
-    </button>
-  );
+function toneChipClass(tone: Tone) {
+  return tone === "normal" ? NEUTRAL_CHIP_CLASS : `${CHIP_CLASS} ${TONE_SOFT[tone]}`;
 }
 
 function ChantierPlanningRow({ row, onPreview }: { row: ChantierDerived; onPreview: (row: ChantierDerived) => void }) {
@@ -224,228 +192,188 @@ function ChantierPlanningRow({ row, onPreview }: { row: ChantierDerived; onPrevi
   const openTerrainFeedbackCount = row.terrainFeedbackOpenCount ?? 0;
   const priorityTerrainFeedbackCount = row.terrainFeedbackPriorityCount ?? 0;
   const hasOpenTerrainFeedbacks = openTerrainFeedbackCount > 0;
-  const terrainFeedbackTone = priorityTerrainFeedbackCount > 0
-    ? "border-red-200 bg-red-50 text-red-800 hover:border-red-300 hover:bg-red-100"
-    : "border-amber-200 bg-amber-50 text-amber-800 hover:border-amber-300 hover:bg-amber-100";
+  const terrainFeedbackTone: Tone = priorityTerrainFeedbackCount > 0 ? "danger" : "warning";
+  const timingTone: Tone = row.isLate ? "danger" : milestone.isPlanningDate ? "info" : milestone.date ? "normal" : "warning";
 
   return (
-    <div className="grid w-full gap-3 rounded-2xl border border-slate-200 p-3 text-left transition hover:bg-slate-50 md:grid-cols-[160px_minmax(0,1fr)_180px_120px_auto] md:items-center">
+    <div className="relative grid w-full gap-3 px-4 py-3 text-left transition-colors duration-[90ms] hover:bg-interactive sm:px-5 md:grid-cols-[150px_minmax(0,1fr)_170px_110px_auto] md:items-start">
+      <span aria-hidden className={`absolute inset-y-0 left-0 w-[3px] ${row.isLate ? "bg-danger" : hasOpenTerrainFeedbacks ? "bg-warning" : "bg-transparent"}`} />
+
       <div>
-        <div className="text-sm font-semibold text-slate-950">{shortDate(milestone.date)}</div>
-        <div
-          className={[
-            "mt-1 inline-flex rounded-full px-2 py-0.5 text-xs font-semibold",
-            row.isLate
-              ? "bg-red-100 text-red-700"
-              : milestone.isPlanningDate
-                ? "bg-blue-50 text-blue-700"
-                : milestone.date
-                  ? "bg-slate-100 text-slate-700"
-                  : "bg-amber-100 text-amber-800",
-          ].join(" ")}
-        >
-          {timingLabel}
-        </div>
+        <div className="bt-card-title bt-num text-ink">{shortDate(milestone.date)}</div>
+        <span className={`bt-caption mt-1 inline-flex rounded-full px-2 py-0.5 ${TONE_SOFT[timingTone]}`}>{timingLabel}</span>
       </div>
+
       <div className="min-w-0">
-        <div className="truncate font-semibold text-slate-950">{row.nom}</div>
-        <div className="truncate text-sm text-slate-500">{row.client ?? "Client non renseigné"}</div>
-        <div className="mt-1 text-xs font-medium text-slate-500">{getPlanningWindowLabel(row)}</div>
+        <div className="bt-card-title truncate text-ink">{row.nom}</div>
+        <div className="bt-secondary truncate text-muted">{row.client ?? "Client non renseigné"}</div>
+        <div className="bt-caption mt-0.5 text-muted">{getPlanningWindowLabel(row)}</div>
+
         <div className="mt-2 flex flex-wrap gap-1.5">
-          <Link
-            to={nextAction.href}
-            className={`inline-flex min-h-7 items-center gap-1.5 rounded-lg border px-2 py-1 text-xs font-semibold transition ${nextActionClasses(nextAction.tone)}`}
-            title={nextAction.description}
-          >
-            <ArrowRight className="h-3.5 w-3.5" />
+          <Link to={nextAction.href} className={toneChipClass(nextAction.tone)} title={nextAction.description}>
+            <ArrowRight className="h-3.5 w-3.5 shrink-0" strokeWidth={1.75} />
             {nextAction.label}
           </Link>
           {hasOpenTerrainFeedbacks ? (
-            <Link
-              to={getTerrainFeedbackHref(row)}
-              className={`inline-flex h-7 items-center gap-1.5 rounded-lg border px-2 text-xs font-semibold transition ${terrainFeedbackTone}`}
-            >
-              <AlertTriangle className="h-3.5 w-3.5" />
+            <Link to={getTerrainFeedbackHref(row)} className={`${CHIP_CLASS} ${TONE_SOFT[terrainFeedbackTone]}`}>
+              <AlertTriangle className="h-3.5 w-3.5 shrink-0" strokeWidth={1.75} />
               {getTerrainFeedbackLabel(row)}
             </Link>
           ) : null}
         </div>
-        <div className="mt-2 flex flex-wrap gap-1.5">
+
+        <div className="mt-1.5 flex flex-wrap gap-1.5">
           {PLANNING_QUICK_LINKS.map((link) => {
             const Icon = link.icon;
             return (
-              <Link
-                key={link.path}
-                to={getChantierHref(row, link.path)}
-                className="inline-flex h-7 items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2 text-xs font-semibold text-slate-600 transition hover:border-blue-200 hover:bg-blue-50 hover:text-blue-800"
-              >
-                <Icon className="h-3.5 w-3.5" />
+              <Link key={link.path} to={getChantierHref(row, link.path)} className={NEUTRAL_CHIP_CLASS}>
+                <Icon className="h-3.5 w-3.5 shrink-0" strokeWidth={1.75} />
                 {link.label}
               </Link>
             );
           })}
-          <Link
-            to={getTerrainFeedbackHref(row)}
-            className="inline-flex h-7 items-center gap-1.5 rounded-lg border border-amber-200 bg-amber-50 px-2 text-xs font-semibold text-amber-800 transition hover:border-amber-300 hover:bg-amber-100"
-          >
-            <AlertTriangle className="h-3.5 w-3.5" />
+          <Link to={getTerrainFeedbackHref(row)} className={`${CHIP_CLASS} ${TONE_SOFT.warning}`}>
+            <AlertTriangle className="h-3.5 w-3.5 shrink-0" strokeWidth={1.75} />
             Retours terrain
           </Link>
         </div>
       </div>
+
       <ChantierProgress value={row.progress} />
-      <ChantierStatusPill status={row.status} />
-      <div className="flex flex-wrap gap-2 md:justify-end">
-        <button
-          type="button"
-          onClick={() => onPreview(row)}
-          className="inline-flex h-9 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-100"
-        >
-          <Eye className="h-4 w-4" />
+
+      <div>
+        <ChantierStatusPill status={row.status} />
+      </div>
+
+      <div className="flex flex-wrap gap-1.5 md:justify-end">
+        <button type="button" onClick={() => onPreview(row)} className={NEUTRAL_CHIP_CLASS}>
+          <Eye className="h-3.5 w-3.5 shrink-0" strokeWidth={1.75} />
           Aperçu
         </button>
-        <Link
-          to={getChantierHref(row)}
-          className="inline-flex h-9 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-100"
-        >
+        <Link to={getChantierHref(row)} className={NEUTRAL_CHIP_CLASS}>
           Dossier
         </Link>
-        <Link
-          to={nextAction.href}
-          className={`inline-flex h-9 items-center gap-2 rounded-xl border px-3 text-sm font-semibold shadow-sm transition ${nextActionClasses(nextAction.tone)}`}
-          title={nextAction.description}
-        >
+        <Link to={nextAction.href} className={toneChipClass(nextAction.tone)} title={nextAction.description}>
           {nextAction.label}
-          <ArrowRight className="h-4 w-4" />
+          <ArrowRight className="h-3.5 w-3.5 shrink-0" strokeWidth={1.75} />
         </Link>
       </div>
     </div>
   );
 }
 
-function UnplannedChantierCard({ row, onPreview }: { row: ChantierDerived; onPreview: (row: ChantierDerived) => void }) {
+function UnplannedChantierRow({ row, onPreview }: { row: ChantierDerived; onPreview: (row: ChantierDerived) => void }) {
   const hasOpenTerrainFeedbacks = (row.terrainFeedbackOpenCount ?? 0) > 0;
-  const terrainFeedbackTone = (row.terrainFeedbackPriorityCount ?? 0) > 0
-    ? "border-red-200 bg-red-50 text-red-800 hover:bg-red-100"
-    : "border-amber-200 bg-white text-amber-900 hover:bg-amber-100";
+  const terrainFeedbackTone: Tone = (row.terrainFeedbackPriorityCount ?? 0) > 0 ? "danger" : "warning";
 
   return (
-    <article className="rounded-2xl border border-amber-200 bg-amber-50 p-3">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+    <div className="relative px-4 py-3 transition-colors duration-[90ms] hover:bg-interactive sm:px-5">
+      <span aria-hidden className="absolute inset-y-0 left-0 w-[3px] bg-warning" />
+      <div className="flex flex-wrap items-start justify-between gap-2">
         <div className="min-w-0">
-          <div className="text-xs font-semibold uppercase text-amber-700">À planifier</div>
-          <h3 className="mt-1 truncate font-semibold text-slate-950">{row.nom}</h3>
-          <p className="truncate text-sm text-slate-600">{row.client ?? "Client non renseigné"}</p>
+          <span className={`bt-caption inline-flex rounded-full px-2 py-0.5 ${TONE_SOFT.warning}`}>À planifier</span>
+          <h4 className="bt-card-title mt-1 truncate text-ink">{row.nom}</h4>
+          <p className="bt-secondary truncate text-muted">{row.client ?? "Client non renseigné"}</p>
         </div>
         <ChantierStatusPill status={row.status} />
       </div>
-      <div className="mt-3 flex flex-wrap gap-2">
-        <Link
-          to={getChantierHref(row, "preparation")}
-          className="inline-flex h-9 items-center gap-2 rounded-xl bg-amber-900 px-3 text-sm font-semibold text-white transition hover:bg-amber-800"
-        >
+      <div className="mt-2 flex flex-wrap gap-1.5">
+        <Link to={getChantierHref(row, "preparation")} className={`${CHIP_CLASS} ${TONE_SOFT.warning}`}>
           Cadrer la préparation
-          <ArrowRight className="h-4 w-4" />
+          <ArrowRight className="h-3.5 w-3.5 shrink-0" strokeWidth={1.75} />
         </Link>
-        <Link
-          to={getChantierHref(row, "planning")}
-          className="inline-flex h-9 items-center gap-2 rounded-xl border border-amber-200 bg-white px-3 text-sm font-semibold text-amber-900 transition hover:bg-amber-100"
-        >
+        <Link to={getChantierHref(row, "planning")} className={NEUTRAL_CHIP_CLASS}>
           Ouvrir le planning
-          <CalendarDays className="h-4 w-4" />
+          <CalendarDays className="h-3.5 w-3.5 shrink-0" strokeWidth={1.75} />
         </Link>
-        <Link
-          to={getTerrainFeedbackHref(row)}
-          className={`inline-flex h-9 items-center gap-2 rounded-xl border px-3 text-sm font-semibold transition ${terrainFeedbackTone}`}
-        >
+        <Link to={getTerrainFeedbackHref(row)} className={`${CHIP_CLASS} ${TONE_SOFT[terrainFeedbackTone]}`}>
           Retours terrain{hasOpenTerrainFeedbacks ? ` · ${getTerrainFeedbackLabel(row)}` : ""}
-          <AlertTriangle className="h-4 w-4" />
+          <AlertTriangle className="h-3.5 w-3.5 shrink-0" strokeWidth={1.75} />
         </Link>
-        <Link
-          to={getChantierHref(row)}
-          className="inline-flex h-9 items-center rounded-xl border border-amber-200 bg-white px-3 text-sm font-semibold text-amber-900 transition hover:bg-amber-100"
-        >
+        <Link to={getChantierHref(row)} className={NEUTRAL_CHIP_CLASS}>
           Dossier
         </Link>
-        <button
-          type="button"
-          onClick={() => onPreview(row)}
-          className="inline-flex h-9 items-center gap-2 rounded-xl border border-amber-200 bg-white px-3 text-sm font-semibold text-amber-900 transition hover:bg-amber-100"
-        >
-          <Eye className="h-4 w-4" />
+        <button type="button" onClick={() => onPreview(row)} className={NEUTRAL_CHIP_CLASS}>
+          <Eye className="h-3.5 w-3.5 shrink-0" strokeWidth={1.75} />
           Aperçu
         </button>
       </div>
-    </article>
+    </div>
   );
 }
 
 export function ChantiersPlanningView({ rows, onPreview }: { rows: ChantierDerived[]; onPreview: (row: ChantierDerived) => void }) {
   const [activeFilter, setActiveFilter] = useState<PlanningFilter>("all");
-  const filteredRows = useMemo(
-    () => rows.filter((row) => matchesPlanningFilter(row, activeFilter)),
-    [activeFilter, rows],
-  );
-  const scheduledRows = filteredRows
-    .filter((row) => getPlanningMilestone(row).date)
-    .sort(comparePlanningRows);
-  const unplannedRows = filteredRows
-    .filter((row) => !getPlanningMilestone(row).date)
-    .sort(comparePlanningRows);
+  const filteredRows = useMemo(() => rows.filter((row) => matchesPlanningFilter(row, activeFilter)), [activeFilter, rows]);
+  const scheduledRows = filteredRows.filter((row) => getPlanningMilestone(row).date).sort(comparePlanningRows);
+  const unplannedRows = filteredRows.filter((row) => !getPlanningMilestone(row).date).sort(comparePlanningRows);
   const lateCount = rows.filter((row) => row.isLate).length;
   const toPlanCount = rows.filter((row) => !getPlanningMilestone(row).date).length;
   const activeCount = rows.length;
   const openTerrainFeedbackCount = rows.reduce((total, row) => total + (row.terrainFeedbackOpenCount ?? 0), 0);
   const priorityTerrainFeedbackCount = rows.reduce((total, row) => total + (row.terrainFeedbackPriorityCount ?? 0), 0);
 
+  const measures: Array<{ key: PlanningFilter; label: string; value: string | number; target: PlanningFilter }> = [
+    { key: "all", label: "Chantiers", value: activeCount, target: "all" },
+    { key: "late", label: "En retard", value: lateCount, target: "late" },
+    { key: "unplanned", label: "À planifier", value: toPlanCount, target: "unplanned" },
+    {
+      key: "terrain",
+      label: "Retours terrain",
+      value: priorityTerrainFeedbackCount > 0 ? `${priorityTerrainFeedbackCount} urgents` : openTerrainFeedbackCount,
+      target: priorityTerrainFeedbackCount > 0 ? "priority" : "terrain",
+    },
+  ];
+
   return (
-    <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm shadow-slate-950/[0.03]">
-      <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-        <div>
-          <h2 className="text-base font-semibold text-slate-950">Planning chantiers</h2>
-          <p className="text-sm text-slate-500">Vue chronologique priorisée par les retours terrain urgents, les alertes ouvertes et les échéances chantier.</p>
-        </div>
-        <div className="grid gap-2 sm:grid-cols-4 lg:min-w-[520px]">
-          <PlanningFilterCard
-            label="Chantiers"
-            value={activeCount}
-            tone="slate"
-            active={activeFilter === "all"}
-            onClick={() => setActiveFilter("all")}
-          />
-          <PlanningFilterCard
-            label="En retard"
-            value={lateCount}
-            tone="red"
-            active={activeFilter === "late"}
-            onClick={() => setActiveFilter("late")}
-          />
-          <PlanningFilterCard
-            label="À planifier"
-            value={toPlanCount}
-            tone="amber"
-            active={activeFilter === "unplanned"}
-            onClick={() => setActiveFilter("unplanned")}
-          />
-          <PlanningFilterCard
-            label="Retours terrain"
-            value={priorityTerrainFeedbackCount > 0 ? `${priorityTerrainFeedbackCount} urgents` : openTerrainFeedbackCount}
-            tone={priorityTerrainFeedbackCount > 0 ? "red" : "amber"}
-            active={activeFilter === "terrain" || activeFilter === "priority"}
-            onClick={() => setActiveFilter(priorityTerrainFeedbackCount > 0 ? "priority" : "terrain")}
-          />
-        </div>
+    <section className="overflow-hidden rounded-card border border-subtle bg-surface">
+      <div className="px-4 py-3 sm:px-5">
+        <h2 className="bt-section-title text-ink">Planning chantiers</h2>
+        <p className="bt-secondary mt-0.5 max-w-3xl text-muted">
+          Vue chronologique priorisée par les retours terrain urgents, les alertes ouvertes et les échéances chantier.
+        </p>
+      </div>
+
+      {/* Bande de mesures cliquables (annexe C) : elle remplace les cartes de filtre. */}
+      <div
+        role="group"
+        aria-label="Filtres du planning"
+        className="grid grid-cols-2 divide-x divide-y divide-subtle border-y border-subtle sm:grid-cols-4 sm:divide-y-0"
+      >
+        {measures.map((measure) => {
+          const active = measure.key === "terrain" ? activeFilter === "terrain" || activeFilter === "priority" : activeFilter === measure.key;
+          return (
+            <button
+              key={measure.key}
+              type="button"
+              aria-pressed={active}
+              onClick={() => setActiveFilter(measure.target)}
+              className="group bt-tap relative px-4 py-2.5 text-left transition-colors duration-[90ms] hover:bg-interactive focus-visible:outline-offset-[-2px] sm:px-5"
+            >
+              <span
+                className={`bt-caption block truncate transition-colors duration-[90ms] ${
+                  active ? "text-primary-on" : "text-muted group-hover:text-ink-secondary"
+                }`}
+              >
+                {measure.label}
+              </span>
+              <span className="bt-num mt-0.5 block text-[18px] font-[650] leading-[22px] text-ink">{measure.value}</span>
+              {active ? <span aria-hidden className="absolute inset-x-0 bottom-0 h-0.5 bg-primary" /> : null}
+            </button>
+          );
+        })}
       </div>
 
       {activeFilter !== "all" ? (
-        <div className="mb-4 flex flex-col gap-2 rounded-2xl border border-blue-100 bg-blue-50 px-3 py-2 text-sm text-blue-900 sm:flex-row sm:items-center sm:justify-between">
+        <div className="bt-secondary flex flex-col gap-2 border-b border-subtle px-4 py-2 text-ink-secondary sm:flex-row sm:items-center sm:justify-between sm:px-5">
           <span>
-            Filtre actif : <strong>{PLANNING_FILTER_LABELS[activeFilter]}</strong> · {filteredRows.length} chantier{filteredRows.length > 1 ? "s" : ""} affiché{filteredRows.length > 1 ? "s" : ""}.
+            Filtre actif : <strong className="text-ink">{PLANNING_FILTER_LABELS[activeFilter]}</strong> <span aria-hidden>·</span>{" "}
+            <span className="bt-num">{filteredRows.length}</span> chantier{filteredRows.length > 1 ? "s" : ""} affiché{filteredRows.length > 1 ? "s" : ""}.
           </span>
           <button
             type="button"
             onClick={() => setActiveFilter("all")}
-            className="rounded-xl border border-blue-200 bg-white px-3 py-1.5 text-xs font-semibold text-blue-800 hover:bg-blue-100"
+            className="bt-tap shrink-0 rounded-field px-2.5 text-[13px] font-medium text-ink-secondary transition-colors duration-[120ms] hover:bg-interactive hover:text-ink"
           >
             Réinitialiser
           </button>
@@ -453,29 +381,27 @@ export function ChantiersPlanningView({ rows, onPreview }: { rows: ChantierDeriv
       ) : null}
 
       {unplannedRows.length > 0 ? (
-        <div className="mb-5 rounded-2xl border border-amber-200 bg-amber-50/60 p-3">
-          <div className="mb-3 flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
-            <div>
-              <h3 className="text-sm font-semibold text-amber-950">Chantiers à cadrer</h3>
-              <p className="text-sm text-amber-800">Ces dossiers n'ont pas encore de jalon chantier exploitable ; ceux avec retours terrain ouverts remontent en premier.</p>
-            </div>
-            <span className="text-xs font-semibold uppercase text-amber-700">{unplannedRows.length} à reprendre</span>
+        <div className="border-b border-subtle">
+          <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1 px-4 pt-3 sm:px-5">
+            <h3 className="bt-card-title text-ink">Chantiers à cadrer</h3>
+            <span className="bt-caption bt-num text-muted">{unplannedRows.length} à reprendre</span>
           </div>
-          <div className="grid gap-3 lg:grid-cols-2">
+          <p className="bt-secondary px-4 pb-2 pt-0.5 text-muted sm:px-5">
+            Ces dossiers n'ont pas encore de jalon chantier exploitable ; ceux avec retours terrain ouverts remontent en premier.
+          </p>
+          <div className="divide-y divide-subtle border-t border-subtle">
             {unplannedRows.map((row) => (
-              <UnplannedChantierCard key={row.id} row={row} onPreview={onPreview} />
+              <UnplannedChantierRow key={row.id} row={row} onPreview={onPreview} />
             ))}
           </div>
         </div>
       ) : null}
 
-      <div className="space-y-3">
+      <div className="divide-y divide-subtle">
         {scheduledRows.length > 0 ? (
           scheduledRows.map((row) => <ChantierPlanningRow key={row.id} row={row} onPreview={onPreview} />)
         ) : unplannedRows.length === 0 ? (
-          <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-600">
-            Aucun chantier ne correspond au filtre planning actif.
-          </div>
+          <p className="bt-secondary px-4 py-10 text-center text-muted sm:px-5">Aucun chantier ne correspond au filtre planning actif.</p>
         ) : null}
       </div>
     </section>

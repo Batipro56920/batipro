@@ -3,7 +3,7 @@ import { Link } from "react-router-dom";
 import { Button } from "../../../components/ui/button";
 import { supabase } from "../../../lib/supabaseClient";
 import { DashboardSection } from "./DashboardSection";
-import { TONE_SOFT } from "./tone";
+import { TONE_SOFT } from "../../../design-system/tone";
 import type { DashboardBusinessMetric, DashboardTone } from "../types";
 
 type DashboardBusinessPanelProps = {

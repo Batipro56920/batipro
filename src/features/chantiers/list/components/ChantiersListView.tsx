@@ -1,5 +1,6 @@
 import { Bell, Clock3, FileText, MapPin, Users, type LucideIcon } from "lucide-react";
 import { Link } from "react-router-dom";
+import { TONE_SOFT, type Tone } from "../../../../design-system/tone";
 import type { ChantierDerived, ChantierListActions } from "../types";
 import { budgetLabel, commercialAmountLabel, commercialSourceLabel, hasCommercialContext, shortDate, timeLabel } from "../utils/chantiersListUtils";
 import { ChantierProgress } from "./ChantierProgress";
@@ -14,13 +15,20 @@ type Props = {
   actions: ChantierListActions;
 };
 
-const TABLE_COLUMNS = "40px minmax(260px,1.5fr) 110px 110px 130px 100px 120px 170px";
+const TABLE_COLUMNS = "44px minmax(240px,1.5fr) 110px 110px 130px 100px minmax(130px,auto) 170px";
+
+const CHECKBOX_CLASS =
+  "h-[18px] w-[18px] rounded-[5px] border-[1.5px] border-strong bg-surface accent-[var(--bt-primary)]";
 
 export function ChantiersListView({ rows, selectedIds, onToggleSelection, onPreview, actions }: Props) {
   return (
-    <section className="space-y-3 lg:overflow-hidden lg:rounded-2xl lg:border lg:border-slate-200 lg:bg-white lg:shadow-sm lg:shadow-slate-950/[0.03]">
-      <div className="hidden border-b border-slate-100 bg-slate-50 px-4 py-3 text-xs font-semibold uppercase tracking-[0.14em] text-slate-400 lg:grid lg:gap-3" style={{ gridTemplateColumns: TABLE_COLUMNS }}>
-        <span />
+    <section className="overflow-hidden rounded-card border border-subtle bg-surface">
+      {/* En-tete de table : jamais en capitales, aligne sur le padding de la surface. */}
+      <div
+        className="bt-caption hidden gap-3 border-b border-subtle bg-app px-4 py-3 text-muted lg:grid dark:bg-elevated"
+        style={{ gridTemplateColumns: TABLE_COLUMNS }}
+      >
+        <span aria-hidden />
         <span>Chantier</span>
         <span>Statut</span>
         <span>Budget</span>
@@ -30,73 +38,96 @@ export function ChantiersListView({ rows, selectedIds, onToggleSelection, onPrev
         <span className="text-right">Actions</span>
       </div>
 
-      <div className="hidden divide-y divide-slate-100 lg:block">
-        {rows.map((row) => (
-          <div
-            key={row.id}
-            role="button"
-            tabIndex={0}
-            onClick={() => onPreview(row)}
-            onKeyDown={(event) => event.key === "Enter" && onPreview(row)}
-            className="grid cursor-pointer items-center gap-3 px-4 py-3 transition hover:bg-slate-50"
-            style={{ gridTemplateColumns: TABLE_COLUMNS }}
-          >
-            <div onClick={(event) => event.stopPropagation()}>
-              <input type="checkbox" className="h-4 w-4 rounded border-slate-300" checked={selectedIds.includes(row.id)} onChange={() => onToggleSelection(row.id)} aria-label={`Sélectionner ${row.nom}`} />
-            </div>
-            <ChantierIdentity row={row} />
-            <ChantierStatusPill status={row.status} />
-            <div className="text-sm font-semibold text-slate-900">{budgetLabel(row.budgetHt)}</div>
-            <div className="text-sm text-slate-600">{timeLabel(row.heures_prevues, row.heures_passees)}</div>
-            <div className="text-sm text-slate-600">{shortDate(row.date_fin_prevue ?? row.planning_end_date)}</div>
-            <AlertBadges row={row} />
-            <ChantierRowActions row={row} actions={actions} />
-          </div>
-        ))}
-      </div>
-
-      <div className="grid gap-3 lg:hidden">
-        {rows.map((row) => (
-          <article
-            key={row.id}
-            role="button"
-            tabIndex={0}
-            onClick={() => onPreview(row)}
-            onKeyDown={(event) => event.key === "Enter" && onPreview(row)}
-            className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm shadow-slate-950/[0.03] transition hover:border-blue-200"
-          >
-            <div className="flex items-start gap-3">
-              <div className="pt-1" onClick={(event) => event.stopPropagation()}>
-                <input type="checkbox" className="h-4 w-4 rounded border-slate-300" checked={selectedIds.includes(row.id)} onChange={() => onToggleSelection(row.id)} aria-label={`Sélectionner ${row.nom}`} />
+      <div className="hidden divide-y divide-subtle lg:block">
+        {rows.map((row) => {
+          const selected = selectedIds.includes(row.id);
+          return (
+            <div
+              key={row.id}
+              role="button"
+              tabIndex={0}
+              onClick={() => onPreview(row)}
+              onKeyDown={(event) => event.key === "Enter" && onPreview(row)}
+              className={`relative grid cursor-pointer items-center gap-3 px-4 py-2.5 transition-colors duration-[90ms] ${
+                selected ? "bg-selected" : "hover:bg-interactive focus-visible:bg-interactive"
+              }`}
+              style={{ gridTemplateColumns: TABLE_COLUMNS }}
+            >
+              {selected ? <span aria-hidden className="absolute inset-y-0 left-0 w-0.5 bg-primary" /> : null}
+              <div onClick={(event) => event.stopPropagation()}>
+                <input
+                  type="checkbox"
+                  className={CHECKBOX_CLASS}
+                  checked={selected}
+                  onChange={() => onToggleSelection(row.id)}
+                  aria-label={`Sélectionner ${row.nom}`}
+                />
               </div>
-              <div className="min-w-0 flex-1">
-                <div className="flex flex-wrap items-start justify-between gap-2">
-                  <ChantierIdentity row={row} />
-                  <ChantierStatusPill status={row.status} />
-                </div>
-                <div className="mt-4">
-                  <ChantierProgress value={row.progress} />
-                </div>
+              <ChantierIdentity row={row} />
+              <div>
+                <ChantierStatusPill status={row.status} />
               </div>
-            </div>
-
-            <div className="mt-4 grid grid-cols-2 gap-2 text-sm">
-              <Metric label="Budget" value={budgetLabel(row.budgetHt)} />
-              <Metric label="Temps" value={timeLabel(row.heures_prevues, row.heures_passees)} />
-              <Metric label="Échéance" value={shortDate(row.date_fin_prevue ?? row.planning_end_date)} />
-              <div className="rounded-xl bg-slate-50 p-3">
-                <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-400">Alertes</div>
-                <div className="mt-2 flex flex-wrap gap-1.5">
-                  <AlertBadges row={row} />
-                </div>
-              </div>
-            </div>
-
-            <div className="mt-4 border-t border-slate-100 pt-3">
+              <div className="bt-num text-sm text-ink">{budgetLabel(row.budgetHt)}</div>
+              <div className="bt-num text-sm text-ink-secondary">{timeLabel(row.heures_prevues, row.heures_passees)}</div>
+              <div className="bt-num text-sm text-ink-secondary">{shortDate(row.date_fin_prevue ?? row.planning_end_date)}</div>
+              <AlertBadges row={row} />
               <ChantierRowActions row={row} actions={actions} />
             </div>
-          </article>
-        ))}
+          );
+        })}
+      </div>
+
+      {/* Sous 1024 px la table devient une liste : une colonne stricte, meme donnees. */}
+      <div className="divide-y divide-subtle lg:hidden">
+        {rows.map((row) => {
+          const selected = selectedIds.includes(row.id);
+          return (
+            <article
+              key={row.id}
+              role="button"
+              tabIndex={0}
+              onClick={() => onPreview(row)}
+              onKeyDown={(event) => event.key === "Enter" && onPreview(row)}
+              className={`bt-row relative px-4 py-3 transition-colors duration-[90ms] ${selected ? "bg-selected" : "hover:bg-interactive"}`}
+            >
+              {selected ? <span aria-hidden className="absolute inset-y-0 left-0 w-0.5 bg-primary" /> : null}
+              <div className="flex items-start gap-3">
+                <div className="pt-0.5" onClick={(event) => event.stopPropagation()}>
+                  <input
+                    type="checkbox"
+                    className={CHECKBOX_CLASS}
+                    checked={selected}
+                    onChange={() => onToggleSelection(row.id)}
+                    aria-label={`Sélectionner ${row.nom}`}
+                  />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-start justify-between gap-2">
+                    <ChantierIdentity row={row} />
+                    <ChantierStatusPill status={row.status} />
+                  </div>
+
+                  <div className="mt-3">
+                    <ChantierProgress value={row.progress} />
+                  </div>
+
+                  <p className="bt-caption bt-num mt-2 text-muted">
+                    {budgetLabel(row.budgetHt)} <span aria-hidden>·</span> {timeLabel(row.heures_prevues, row.heures_passees)}{" "}
+                    <span aria-hidden>·</span> {shortDate(row.date_fin_prevue ?? row.planning_end_date)}
+                  </p>
+
+                  <div className="mt-2">
+                    <AlertBadges row={row} />
+                  </div>
+
+                  <div className="mt-3">
+                    <ChantierRowActions row={row} actions={actions} />
+                  </div>
+                </div>
+              </div>
+            </article>
+          );
+        })}
       </div>
     </section>
   );
@@ -105,33 +136,22 @@ export function ChantiersListView({ rows, selectedIds, onToggleSelection, onPrev
 function ChantierIdentity({ row }: { row: ChantierDerived }) {
   return (
     <div className="min-w-0">
-      <div className="truncate font-semibold text-slate-950">{row.nom}</div>
-      <div className="mt-1 flex min-w-0 items-center gap-2 text-sm text-slate-500">
+      <div className="bt-card-title truncate text-ink">{row.nom}</div>
+      <div className="bt-secondary mt-0.5 flex min-w-0 items-center gap-1.5 text-muted">
         <span className="truncate">{row.client ?? "Client non renseigné"}</span>
-        <span className="text-slate-300">•</span>
-        <MapPin className="h-3.5 w-3.5 shrink-0" />
+        <span aria-hidden>·</span>
+        <MapPin className="h-3.5 w-3.5 shrink-0" strokeWidth={1.75} />
         <span className="truncate">{row.adresse ?? "Adresse non renseignée"}</span>
       </div>
       {hasCommercialContext(row) ? (
-        <div className="mt-2 flex flex-wrap gap-1.5">
-          <span className="inline-flex items-center gap-1 rounded-full border border-blue-200 bg-blue-50 px-2 py-1 text-xs font-semibold text-blue-700">
-            <FileText className="h-3 w-3" />
+        <div className="mt-1.5 flex flex-wrap gap-1.5">
+          <span className={`bt-caption inline-flex items-center gap-1 rounded-full px-2 py-0.5 ${TONE_SOFT.info}`}>
+            <FileText className="h-3 w-3" strokeWidth={1.75} />
             {commercialSourceLabel(row)}
           </span>
-          <span className="inline-flex rounded-full border border-emerald-200 bg-emerald-50 px-2 py-1 text-xs font-semibold text-emerald-700">
-            {commercialAmountLabel(row)}
-          </span>
+          <span className={`bt-caption bt-num inline-flex rounded-full px-2 py-0.5 ${TONE_SOFT.success}`}>{commercialAmountLabel(row)}</span>
         </div>
       ) : null}
-    </div>
-  );
-}
-
-function Metric({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-xl bg-slate-50 p-3">
-      <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-400">{label}</div>
-      <div className="mt-1 truncate font-semibold text-slate-950">{value}</div>
     </div>
   );
 }
@@ -140,14 +160,14 @@ function AlertBadges({ row }: { row: ChantierDerived }) {
   const terrainFeedbackOpenCount = row.terrainFeedbackOpenCount ?? 0;
   const terrainFeedbackPriorityCount = row.terrainFeedbackPriorityCount ?? 0;
   const hasOpenTerrainFeedbacks = terrainFeedbackOpenCount > 0;
-  const terrainTone = terrainFeedbackPriorityCount > 0 ? "red" : "amber";
+  const terrainTone: Tone = terrainFeedbackPriorityCount > 0 ? "danger" : "warning";
   const terrainLabel = terrainFeedbackPriorityCount > 0
     ? `${terrainFeedbackPriorityCount} retour${terrainFeedbackPriorityCount > 1 ? "s" : ""} urgent${terrainFeedbackPriorityCount > 1 ? "s" : ""}`
     : `${terrainFeedbackOpenCount} retour${terrainFeedbackOpenCount > 1 ? "s" : ""}`;
 
   return (
-    <div className="flex flex-wrap items-center gap-2">
-      {row.isLate ? <Badge icon={Bell} label="En retard" tone="red" /> : <Badge icon={Clock3} label="À jour" tone="slate" />}
+    <div className="flex flex-wrap items-center gap-1.5">
+      {row.isLate ? <Badge icon={Bell} label="En retard" tone="danger" /> : <Badge icon={Clock3} label="À jour" tone="normal" />}
       {hasOpenTerrainFeedbacks ? (
         <Badge
           icon={Bell}
@@ -157,21 +177,13 @@ function AlertBadges({ row }: { row: ChantierDerived }) {
           title="Ouvrir les retours terrain de ce chantier"
         />
       ) : null}
-      <Badge icon={Users} label="Équipe" tone="blue" />
+      <Badge icon={Users} label="Équipe" tone="info" />
     </div>
   );
 }
 
-function Badge({ icon: Icon, label, tone, href, title }: { icon: LucideIcon; label: string; tone: "red" | "slate" | "blue" | "amber"; href?: string; title?: string }) {
-  const classes =
-    tone === "red"
-      ? "border-red-200 bg-red-50 text-red-700"
-      : tone === "amber"
-        ? "border-amber-200 bg-amber-50 text-amber-700"
-        : tone === "blue"
-          ? "border-blue-200 bg-blue-50 text-blue-700"
-          : "border-slate-200 bg-slate-50 text-slate-600";
-  const className = `inline-flex items-center gap-1 rounded-full border px-2 py-1 text-xs font-medium ${classes}`;
+function Badge({ icon: Icon, label, tone, href, title }: { icon: LucideIcon; label: string; tone: Tone; href?: string; title?: string }) {
+  const className = `bt-caption inline-flex items-center gap-1 rounded-full px-2 py-0.5 ${TONE_SOFT[tone]}`;
 
   if (href) {
     return (
@@ -179,9 +191,9 @@ function Badge({ icon: Icon, label, tone, href, title }: { icon: LucideIcon; lab
         to={href}
         title={title}
         onClick={(event) => event.stopPropagation()}
-        className={`${className} transition hover:brightness-95 focus:outline-none focus:ring-2 focus:ring-blue-200`}
+        className={`${className} transition-opacity duration-[120ms] hover:opacity-80`}
       >
-        <Icon className="h-3 w-3" />
+        <Icon className="h-3 w-3" strokeWidth={1.75} />
         {label}
       </Link>
     );
@@ -189,7 +201,7 @@ function Badge({ icon: Icon, label, tone, href, title }: { icon: LucideIcon; lab
 
   return (
     <span className={className} title={title}>
-      <Icon className="h-3 w-3" />
+      <Icon className="h-3 w-3" strokeWidth={1.75} />
       {label}
     </span>
   );
