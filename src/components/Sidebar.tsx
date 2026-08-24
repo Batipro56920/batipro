@@ -79,7 +79,7 @@ export default function Sidebar({ collapsed = false, onToggleCollapse, companyNa
     { to: "/projets", label: "Projets commerciaux", icon: FolderKanban, permissionKey: "crm" as const, group: "Commerce" },
     { to: "/crm/apporteurs", label: "Apporteurs d’affaires", icon: Handshake, permissionKey: "crm" as const, group: "Commerce" },
     { to: "/chantiers", label: t("sidebar.chantiers"), icon: Hammer, feature: "preparation_chantier" as const, permissionKey: "preparation_chantier" as const, group: "Production" },
-    { to: "/conversations", label: "Conversations", icon: MessageCircle, feature: "journal_chantier" as const, group: "Production" },
+    { to: "/fil-chantier", label: "Fil chantier", icon: MessageCircle, feature: "journal_chantier" as const, group: "Production" },
     { to: "/taches", label: "Tâches chantier", icon: ClipboardList, feature: "preparation_chantier" as const, permissionKey: "preparation_chantier" as const, group: "Production" },
     { to: "/reserves", label: "Réserves chantier", icon: ClipboardList, feature: "preparation_chantier" as const, permissionKey: "preparation_chantier" as const, group: "Production" },
     { to: "/visites-chantier", label: "Visites chantier", icon: ClipboardList, feature: "validation_qualite" as const, group: "Production" },
