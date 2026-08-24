@@ -1,6 +1,6 @@
-import { NavLink } from "react-router-dom";
+import { NavLink, useSearchParams } from "react-router-dom";
 import type { FinancialPeriod } from "../application/financialPeriod";
-import { FINANCIAL_PERIOD_OPTIONS } from "../application/financialPeriod";
+import { FINANCIAL_PERIOD_OPTIONS, parseFinancialPeriod } from "../application/financialPeriod";
 
 const FINANCIAL_NAV_ITEMS = [
   { to: "/rentabilite", label: "Rentabilité" },
@@ -12,15 +12,20 @@ const FINANCIAL_NAV_ITEMS = [
 ] as const;
 
 export function FinancialNavigation() {
+  const [searchParams] = useSearchParams();
+  const period = parseFinancialPeriod(searchParams.get("period"));
+
   return (
     <nav
       className="flex w-full gap-2 overflow-x-auto rounded-2xl border border-slate-200 bg-white p-1 shadow-sm"
       aria-label="Navigation financière"
     >
-      {FINANCIAL_NAV_ITEMS.map((item) => (
+      {FINANCIAL_NAV_ITEMS.map((item) => {
+        const to = period === "all" ? item.to : `${item.to}?period=${period}`;
+        return (
         <NavLink
           key={item.to}
-          to={item.to}
+          to={to}
           end
           className={({ isActive }) => [
             "whitespace-nowrap rounded-xl px-4 py-2 text-sm font-semibold transition",
@@ -31,7 +36,8 @@ export function FinancialNavigation() {
         >
           {item.label}
         </NavLink>
-      ))}
+        );
+      })}
     </nav>
   );
 }
