@@ -7,6 +7,10 @@ import type { InvoiceRecord } from "../features/invoices/domain/types";
 import { listInvoices } from "../features/invoices/infrastructure/invoiceRepository";
 import type { PurchaseOrderRecord, PurchaseOrderStatus } from "../features/purchase-orders";
 import { listPurchaseOrders } from "../features/purchase-orders";
+import {
+  getCompanySettings,
+  type CompanyChargeEntry,
+} from "../services/companySettings.service";
 
 type ProfitabilitySummary = {
   invoicedHt: number;
@@ -21,9 +25,12 @@ type ProfitabilitySummary = {
   forecastNetTtc: number;
   openInvoices: number;
   openPurchases: number;
+  operatingChargesMonthly: number;
+  operatingChargesAnnual: number;
+  breakEvenMonthly: number | null;
 };
 
-const OPEN_PURCHASE_ORDER_STATUSES: PurchaseOrderStatus[] = ["draft", "sent", "confirmed", "partially_delivered"];
+const OPEN_PURCHASE_ORDER_STATUSES: PurchaseOrderStatus[] = ["sent", "confirmed", "partially_delivered"];
 
 function formatCurrency(value: number) {
   return new Intl.NumberFormat("fr-FR", { style: "currency", currency: "EUR", maximumFractionDigits: 0 }).format(value || 0);
@@ -57,16 +64,36 @@ function purchaseOrderHref(order: PurchaseOrderRecord) {
   return `/bons-commande?${params.toString()}`;
 }
 
-function buildSummary(invoices: InvoiceRecord[], purchaseOrders: PurchaseOrderRecord[]): ProfitabilitySummary {
-  const invoiceTotals = invoices.map((invoice) => invoice.document.totals ?? calculateDocumentTotals(invoice.document));
-  const purchaseTotals = purchaseOrders.map((order) => order.document.totals ?? calculateDocumentTotals(order.document));
-  const invoicedHt = invoiceTotals.reduce((sum, total) => sum + Number(total.totalHt ?? 0), 0);
-  const invoicedTtc = invoiceTotals.reduce((sum, total) => sum + Number(total.totalTtc ?? 0), 0);
-  const paidTtc = invoices.reduce((sum, invoice) => sum + getPaidAmount(invoice), 0);
-  const remainingTtc = invoices.reduce((sum, invoice) => sum + getRemainingAmount(invoice), 0);
+function buildSummary(
+  invoices: InvoiceRecord[],
+  purchaseOrders: PurchaseOrderRecord[],
+  charges: CompanyChargeEntry[],
+): ProfitabilitySummary {
+  const issuedInvoices = invoices.filter(isIssuedInvoice);
+  const collectableInvoices = issuedInvoices.filter((invoice) => invoice.type !== "credit_note");
+  const committedOrders = purchaseOrders.filter(isCommittedPurchaseOrder);
+  const invoicedHt = issuedInvoices.reduce(
+    (sum, invoice) => sum + getInvoiceSign(invoice) * getInvoiceTotals(invoice).totalHt,
+    0,
+  );
+  const invoicedTtc = issuedInvoices.reduce(
+    (sum, invoice) => sum + getInvoiceSign(invoice) * getInvoiceTotals(invoice).totalTtc,
+    0,
+  );
+  const paidTtc = collectableInvoices.reduce((sum, invoice) => sum + getPaidAmount(invoice), 0);
+  const remainingTtc = collectableInvoices.reduce((sum, invoice) => sum + getRemainingAmount(invoice), 0);
+  const purchaseTotals = committedOrders.map((order) => order.document.totals ?? calculateDocumentTotals(order.document));
   const purchasesHt = purchaseTotals.reduce((sum, total) => sum + Number(total.totalHt ?? 0), 0);
   const purchasesTtc = purchaseTotals.reduce((sum, total) => sum + Number(total.totalTtc ?? 0), 0);
   const estimatedMarginHt = invoicedHt - purchasesHt;
+  const estimatedMarginRate = invoicedHt > 0 ? (estimatedMarginHt / invoicedHt) * 100 : 0;
+  const operatingChargesMonthly = charges
+    .filter(isCurrentRecurringCharge)
+    .reduce((sum, charge) => sum + monthlyChargeAmount(charge), 0);
+  const operatingChargesAnnual = operatingChargesMonthly * 12;
+  const breakEvenMonthly = operatingChargesMonthly > 0 && estimatedMarginRate > 0
+    ? operatingChargesMonthly / (estimatedMarginRate / 100)
+    : null;
   return {
     invoicedHt,
     invoicedTtc,
@@ -75,12 +102,44 @@ function buildSummary(invoices: InvoiceRecord[], purchaseOrders: PurchaseOrderRe
     purchasesHt,
     purchasesTtc,
     estimatedMarginHt,
-    estimatedMarginRate: invoicedHt > 0 ? (estimatedMarginHt / invoicedHt) * 100 : 0,
+    estimatedMarginRate,
     cashPositionTtc: paidTtc - purchasesTtc,
     forecastNetTtc: invoicedTtc - purchasesTtc,
-    openInvoices: invoices.filter((row) => !["paid", "cancelled"].includes(row.status)).length,
-    openPurchases: purchaseOrders.filter((row) => isOpenPurchaseOrderStatus(row.status)).length,
+    openInvoices: collectableInvoices.filter((row) => row.status !== "paid").length,
+    openPurchases: committedOrders.filter((row) => isOpenPurchaseOrderStatus(row.status)).length,
+    operatingChargesMonthly,
+    operatingChargesAnnual,
+    breakEvenMonthly,
   };
+}
+
+function getInvoiceTotals(invoice: InvoiceRecord) {
+  return invoice.document.totals ?? calculateDocumentTotals(invoice.document);
+}
+
+function getInvoiceSign(invoice: InvoiceRecord) {
+  return invoice.type === "credit_note" ? -1 : 1;
+}
+
+function isIssuedInvoice(invoice: InvoiceRecord) {
+  return !["draft", "cancelled"].includes(invoice.status);
+}
+
+function isCommittedPurchaseOrder(order: PurchaseOrderRecord) {
+  return !["draft", "cancelled"].includes(order.status);
+}
+
+function isCurrentRecurringCharge(charge: CompanyChargeEntry) {
+  if (!charge.active || charge.frequency === "one_time") return false;
+  const today = new Date().toISOString().slice(0, 10);
+  return charge.start_date <= today && (!charge.end_date || charge.end_date >= today);
+}
+
+function monthlyChargeAmount(charge: CompanyChargeEntry) {
+  if (charge.frequency === "monthly") return charge.amount;
+  if (charge.frequency === "quarterly") return charge.amount / 3;
+  if (charge.frequency === "annual") return charge.amount / 12;
+  return 0;
 }
 
 function chartPercent(value: number, max: number) {
@@ -104,6 +163,7 @@ function getHealthStatus(summary: ProfitabilitySummary) {
 export default function RentabilitePage() {
   const [invoices, setInvoices] = useState<InvoiceRecord[]>([]);
   const [purchaseOrders, setPurchaseOrders] = useState<PurchaseOrderRecord[]>([]);
+  const [charges, setCharges] = useState<CompanyChargeEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -111,13 +171,19 @@ export default function RentabilitePage() {
     setLoading(true);
     setError(null);
     try {
-      const [invoiceRows, purchaseRows] = await Promise.all([listInvoices(), listPurchaseOrders()]);
+      const [invoiceRows, purchaseRows, settings] = await Promise.all([
+        listInvoices(),
+        listPurchaseOrders(),
+        getCompanySettings(),
+      ]);
       setInvoices(invoiceRows);
       setPurchaseOrders(purchaseRows);
+      setCharges(settings.charges_exploitation?.entries ?? []);
     } catch (err: any) {
       setError(err?.message ?? "Impossible de charger la rentabilité.");
       setInvoices([]);
       setPurchaseOrders([]);
+      setCharges([]);
     } finally {
       setLoading(false);
     }
@@ -127,21 +193,26 @@ export default function RentabilitePage() {
     void refresh();
   }, []);
 
-  const summary = useMemo(() => buildSummary(invoices, purchaseOrders), [invoices, purchaseOrders]);
-  const recentInvoices = invoices.slice(0, 6);
-  const recentPurchases = purchaseOrders.slice(0, 6);
+  const summary = useMemo(() => buildSummary(invoices, purchaseOrders, charges), [charges, invoices, purchaseOrders]);
+  const recentInvoices = invoices.filter(isIssuedInvoice).slice(0, 6);
+  const recentPurchases = purchaseOrders.filter(isCommittedPurchaseOrder).slice(0, 6);
 
   return (
     <div className="space-y-5">
-      <header className="flex flex-col gap-4 border-b border-slate-200 pb-4 lg:flex-row lg:items-end lg:justify-between">
-        <div>
-          <div className="section-title text-xs font-semibold uppercase tracking-[0.16em]">Pilotage financier</div>
-          <h1 className="mt-1 text-2xl font-bold text-slate-950">Rentabilité</h1>
-          <p className="mt-1 max-w-3xl text-sm text-slate-500">
-            Vue simple : ce qui est facturé, encaissé, dépensé, et la marge estimée.
-          </p>
+      <header className="flex flex-col gap-4 rounded-3xl border border-slate-200 bg-white p-5 shadow-sm lg:flex-row lg:items-start lg:justify-between">
+        <div className="flex gap-4">
+          <div className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-slate-900 text-white">
+            <TrendingUp className="h-5 w-5" />
+          </div>
+          <div>
+            <div className="text-xs font-semibold uppercase tracking-[0.18em] text-blue-600">Pilotage financier</div>
+            <h1 className="mt-1 text-2xl font-bold text-slate-950">Rentabilité</h1>
+            <p className="mt-1 max-w-3xl text-sm text-slate-500">
+              Marge brute documentée, encaissements et charges d'exploitation actuellement connues.
+            </p>
+          </div>
         </div>
-        <button type="button" onClick={() => void refresh()} className="inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 hover:bg-slate-50">
+        <button type="button" onClick={() => void refresh()} className="inline-flex h-10 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 hover:bg-slate-50">
           <RefreshCw className="h-4 w-4" /> Rafraîchir
         </button>
       </header>
@@ -152,10 +223,10 @@ export default function RentabilitePage() {
       {!loading ? (
         <>
           <section className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-            <Metric label="Facturé" value={formatCurrency(summary.invoicedTtc)} detail="Chiffre d'affaires TTC" />
+            <Metric label="Ventes émises" value={formatCurrency(summary.invoicedTtc)} detail="Hors brouillons et annulations, avoirs déduits" />
             <Metric label="Encaissé" value={formatCurrency(summary.paidTtc)} detail="Cash réellement reçu" />
             <Metric label="Reste à encaisser" value={formatCurrency(summary.remainingTtc)} detail={`${summary.openInvoices} facture(s) ouverte(s) · Voir les factures à encaisser`} tone={summary.remainingTtc > 0 ? "warning" : "neutral"} href={collectableInvoicesHref()} />
-            <Metric label="Marge estimée" value={formatCurrency(summary.estimatedMarginHt)} detail={`${formatRate(summary.estimatedMarginRate)} sur HT`} tone={summary.estimatedMarginHt < 0 ? "danger" : "success"} />
+            <Metric label="Marge brute documentée" value={formatCurrency(summary.estimatedMarginHt)} detail={`${formatRate(summary.estimatedMarginRate)} sur HT, avant charges d\'exploitation`} tone={summary.estimatedMarginHt < 0 ? "danger" : "success"} />
           </section>
 
           <section className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_360px]">
@@ -163,18 +234,18 @@ export default function RentabilitePage() {
               <div className="flex items-center gap-3">
                 <div className="grid h-10 w-10 place-items-center rounded-lg bg-blue-50 text-blue-700"><TrendingUp className="h-5 w-5" /></div>
                 <div>
-                  <div className="text-sm font-semibold text-slate-950">Lecture financière</div>
-                  <div className="text-xs text-slate-500">Entrées, sorties et solde prévisionnel.</div>
+                  <div className="text-sm font-semibold text-slate-950">Lecture documentaire</div>
+                  <div className="text-xs text-slate-500">Ventes émises, achats engagés et écart brut.</div>
                 </div>
               </div>
               <div className="mt-5 grid gap-3 md:grid-cols-3">
-                <FlowBlock label="Entrées prévues" value={formatCurrency(summary.invoicedTtc)} detail="Factures émises" />
-                <FlowBlock label="Sorties engagées" value={formatCurrency(summary.purchasesTtc)} detail="Bons de commande ouverts" href={purchaseOrdersHref()} />
-                <FlowBlock label="Net prévisionnel" value={formatCurrency(summary.forecastNetTtc)} detail="Facturé - achats" strong />
+                <FlowBlock label="Ventes émises" value={formatCurrency(summary.invoicedTtc)} detail="Factures hors brouillons, avoirs déduits" />
+                <FlowBlock label="Achats engagés" value={formatCurrency(summary.purchasesTtc)} detail="Commandes hors brouillons et annulations" href={purchaseOrdersHref()} />
+                <FlowBlock label="Écart documentaire" value={formatCurrency(summary.forecastNetTtc)} detail="Ventes TTC - achats TTC" strong />
               </div>
               <SimpleFinancialChart summary={summary} />
               <div className="mt-4 rounded-lg border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700">
-                Position encaissée estimée : <span className="font-semibold text-slate-950">{formatCurrency(summary.cashPositionTtc)}</span> après achats engagés.
+                Position simplifiée sur flux connus : <span className="font-semibold text-slate-950">{formatCurrency(summary.cashPositionTtc)}</span>. Elle ne constitue pas un solde bancaire.
               </div>
             </div>
 
@@ -183,7 +254,8 @@ export default function RentabilitePage() {
               <div className="mt-4 space-y-3 text-sm">
                 <WatchItem label="Factures ouvertes" value={String(summary.openInvoices)} detail={formatCurrency(summary.remainingTtc)} href={collectableInvoicesHref()} />
                 <WatchItem label="Achats ouverts" value={String(summary.openPurchases)} detail={formatCurrency(summary.purchasesTtc)} href={purchaseOrdersHref()} />
-                <WatchItem label="Marge HT" value={formatRate(summary.estimatedMarginRate)} detail={formatCurrency(summary.estimatedMarginHt)} />
+                <WatchItem label="Charges mensuelles" value={formatCurrency(summary.operatingChargesMonthly)} detail={`${formatCurrency(summary.operatingChargesAnnual)} / an`} href="/financier/charges-fixes" />
+                <WatchItem label="Seuil mensuel estimé" value={summary.breakEvenMonthly === null ? "À définir" : formatCurrency(summary.breakEvenMonthly)} detail="Selon marge brute documentée" href="/financier/charges-fixes" />
               </div>
             </aside>
           </section>
@@ -192,7 +264,7 @@ export default function RentabilitePage() {
             <DataPanel title="Dernières factures" empty={!recentInvoices.length ? "Aucune facture." : null}>
               {recentInvoices.map((invoice) => {
                 const totals = invoice.document.totals ?? calculateDocumentTotals(invoice.document);
-                return <Row key={invoice.id} title={invoice.document.number || "Facture sans numéro"} detail={invoice.document.recipient.displayName || "Client à définir"} value={formatCurrency(totals.totalTtc)} href={invoiceHref(invoice.id)} />;
+                return <Row key={invoice.id} title={invoice.document.number || "Facture sans numéro"} detail={invoice.document.recipient.displayName || "Client à définir"} value={formatCurrency(getInvoiceSign(invoice) * totals.totalTtc)} href={invoiceHref(invoice.id)} />;
               })}
             </DataPanel>
             <DataPanel title="Derniers achats" empty={!recentPurchases.length ? "Aucun achat." : null}>
@@ -244,8 +316,8 @@ function SimpleFinancialChart({ summary }: { summary: ProfitabilitySummary }) {
     <div className="mt-5 rounded-lg border border-slate-200 bg-white p-4">
       <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <div className="text-sm font-semibold text-slate-950">Santé de l’entreprise</div>
-          <div className="text-xs text-slate-500">Lecture rapide des rentrées, restes à encaisser et achats.</div>
+          <div className="text-sm font-semibold text-slate-950">Équilibre documentaire</div>
+          <div className="text-xs text-slate-500">Lecture limitée aux factures, encaissements et commandes enregistrés.</div>
         </div>
         <div className={`rounded-full px-3 py-1 text-xs font-semibold ${health.className}`}>{health.label}</div>
       </div>
