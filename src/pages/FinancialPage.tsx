@@ -57,8 +57,8 @@ const SECTION_CONFIG: Record<FinancialSection, {
   },
   tresorerie: {
     eyebrow: "Financier",
-    title: "Trésorerie",
-    description: "Lecture rapide du cash encaissé, des sorties engagées et du solde prévisionnel.",
+    title: "Position simplifiée",
+    description: "Lecture limitée aux règlements clients enregistrés et aux engagements fournisseurs connus.",
     icon: TrendingUp,
   },
   export: {
