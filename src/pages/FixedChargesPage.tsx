@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Calculator, Pencil, Plus, Save, Trash2, X } from "lucide-react";
+import { FinancialNavigation } from "../features/financial/components/FinancialNavigation";
 import {
   getCompanySettings,
   upsertCompanySettings,
@@ -179,6 +180,8 @@ export default function FixedChargesPage() {
           </div>
         </div>
       </header>
+
+      <FinancialNavigation />
 
       {error ? <div className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">{error}</div> : null}
       {notice ? <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-700">{notice}</div> : null}
