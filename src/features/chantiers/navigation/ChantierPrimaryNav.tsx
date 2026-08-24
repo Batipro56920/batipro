@@ -131,9 +131,11 @@ export function ChantierPrimaryNav({ sections }: { sections: ChantierPrimarySect
 
   useEffect(() => {
     let alive = true;
-    setTerrainFeedbackSummary(null);
 
     if (!chantierId || !terrainFeedbackEnabled) {
+      void Promise.resolve().then(() => {
+        if (alive) setTerrainFeedbackSummary(null);
+      });
       return () => {
         alive = false;
       };
@@ -141,6 +143,7 @@ export function ChantierPrimaryNav({ sections }: { sections: ChantierPrimarySect
 
     async function loadTerrainFeedbackSummary() {
       try {
+        if (alive) setTerrainFeedbackSummary(null);
         const rows = await listTerrainFeedbacks({ chantierId });
         if (!alive) return;
         const openRows = rows.filter((row) => OPEN_TERRAIN_FEEDBACK_STATUSES.has(row.status));
@@ -169,8 +172,8 @@ export function ChantierPrimaryNav({ sections }: { sections: ChantierPrimarySect
           to={section.href}
           end={section.key === "cockpit"}
           className={({ isActive }) => [
-            "rounded-xl px-3 py-2 text-sm font-semibold transition",
-            isActive ? "bg-slate-950 text-white shadow-sm" : "border border-slate-200 bg-white text-slate-700 hover:bg-slate-50",
+            "bt-tap inline-flex items-center rounded-field px-3 py-1.5 text-sm font-semibold transition",
+            isActive ? "bg-ink text-surface shadow-sm" : "border border-subtle bg-surface text-ink-secondary hover:bg-interactive",
           ].join(" ")}
         >
           {section.label}
@@ -183,10 +186,10 @@ export function ChantierPrimaryNav({ sections }: { sections: ChantierPrimarySect
           title={shortcut.title}
           aria-label={shortcut.title}
           className={({ isActive }) => [
-            "rounded-xl border px-3 py-2 text-sm font-semibold transition",
+            "bt-tap inline-flex items-center rounded-field border px-3 py-1.5 text-sm font-semibold transition",
             isActive
-              ? "border-blue-700 bg-blue-600 text-white shadow-sm shadow-blue-600/20"
-              : "border-blue-100 bg-blue-50 text-blue-800 hover:bg-blue-100",
+              ? "border-primary bg-primary text-primary-contrast shadow-sm"
+              : "border-primary/20 bg-primary-soft text-primary-on hover:bg-selected",
           ].join(" ")}
         >
           {shortcut.label}
@@ -198,10 +201,10 @@ export function ChantierPrimaryNav({ sections }: { sections: ChantierPrimarySect
           title={reserveTitle}
           aria-label={reserveTitle}
           className={({ isActive }) => [
-            "rounded-xl border px-3 py-2 text-sm font-semibold transition",
+            "bt-tap inline-flex items-center rounded-field border px-3 py-1.5 text-sm font-semibold transition",
             isActive
-              ? "border-red-700 bg-red-600 text-white shadow-sm shadow-red-600/20"
-              : "border-amber-200 bg-amber-50 text-amber-800 hover:bg-amber-100",
+              ? "border-danger bg-danger text-white shadow-sm"
+              : "border-warning/20 bg-warning-soft text-warning-on hover:bg-interactive",
           ].join(" ")}
         >
           Réserves
@@ -213,10 +216,10 @@ export function ChantierPrimaryNav({ sections }: { sections: ChantierPrimarySect
           title={terrainFeedbackTitle}
           aria-label={terrainFeedbackTitle}
           className={[
-            "inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-sm font-semibold transition",
+            "bt-tap inline-flex items-center gap-2 rounded-field border px-3 py-1.5 text-sm font-semibold transition",
             terrainFeedbackBadge?.priority
-              ? "border-red-200 bg-red-50 text-red-800 hover:bg-red-100"
-              : "border-blue-200 bg-blue-50 text-blue-800 hover:bg-blue-100",
+              ? "border-danger/20 bg-danger-soft text-danger-on hover:bg-interactive"
+              : "border-info/20 bg-info-soft text-info-on hover:bg-interactive",
           ].join(" ")}
         >
           <span>Retours terrain</span>
@@ -225,8 +228,8 @@ export function ChantierPrimaryNav({ sections }: { sections: ChantierPrimarySect
               className={[
                 "rounded-full px-2 py-0.5 text-[11px] font-bold leading-none",
                 terrainFeedbackBadge.priority
-                  ? "bg-red-600 text-white"
-                  : "border border-blue-200 bg-white text-blue-800",
+                  ? "bg-danger text-white"
+                  : "border border-info/20 bg-surface text-info-on",
               ].join(" ")}
             >
               {terrainFeedbackBadge.label}

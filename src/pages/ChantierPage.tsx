@@ -2,6 +2,19 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { ChangeEvent, DragEvent, FormEvent } from "react";
 import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
+import {
+  Archive,
+  Ban,
+  CheckCircle2,
+  ChevronLeft,
+  FileUp,
+  MoreHorizontal,
+  Pencil,
+  Plus,
+  RotateCcw,
+  Trash2,
+  Users,
+} from "lucide-react";
 
 import { deleteChantier, getChantierById, updateChantierStatus, type ChantierRow } from "../services/chantiers.service";
 
@@ -331,17 +344,17 @@ function CockpitFocusCard({
   tone?: "neutral" | "blue" | "success" | "warning";
 }) {
   const toneClass = {
-    neutral: "border-slate-200 bg-slate-50 text-slate-950",
-    blue: "border-blue-200 bg-blue-50 text-blue-900",
-    success: "border-emerald-200 bg-emerald-50 text-emerald-900",
-    warning: "border-amber-200 bg-amber-50 text-amber-900",
+    neutral: "border-subtle bg-surface text-ink",
+    blue: "border-primary/20 bg-primary-soft text-primary-on",
+    success: "border-success/20 bg-success-soft text-success-on",
+    warning: "border-warning/20 bg-warning-soft text-warning-on",
   }[tone];
 
   return (
-    <article className={`rounded-2xl border p-4 ${toneClass}`}>
-      <div className="text-[10px] font-semibold uppercase tracking-[0.14em] opacity-70">{label}</div>
-      <div className="mt-2 truncate text-lg font-bold">{value}</div>
-      <div className="mt-1 line-clamp-2 text-xs opacity-70">{helper}</div>
+    <article className={`rounded-card border px-3 py-2.5 ${toneClass}`}>
+      <div className="bt-caption text-current/70">{label}</div>
+      <div className="bt-card-title mt-1 truncate">{value}</div>
+      <div className="bt-caption mt-0.5 line-clamp-1 text-current/70">{helper}</div>
     </article>
   );
 }
@@ -4765,117 +4778,99 @@ export default function ChantierPage() {
     materielFilter === "__ALL__" ? materiel : materiel.filter((row) => row.statut === materielFilter);
   const activeTabLabel = detailSectionLabels[detailSection];
   const accueilPanel = (
-    <div className="space-y-5">
-      <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+    <div className="space-y-4">
+      <section className="rounded-surface border border-subtle bg-surface p-4 shadow-elevated">
+        <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_360px]">
+          <div className="min-w-0 space-y-4">
+            <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+              <div className="min-w-0">
+                <div className="flex flex-wrap items-center gap-2">
+                  <h2 className="bt-page-title min-w-0 truncate text-ink">{item.nom}</h2>
+                  <span className={["rounded-full border px-2 py-0.5 text-xs font-semibold", badge.className].join(" ")}>{badge.label}</span>
+                </div>
+                <div className="bt-secondary mt-1 flex flex-wrap gap-x-4 gap-y-1 text-muted">
+                  <span>{item.client || "Client non renseigné"}</span>
+                  <span>{item.adresse || "Adresse non renseignée"}</span>
+                  <span>{t("chantierPage.start")} {item.date_debut ?? "-"}</span>
+                  <span>{t("chantierPage.end")} {item.date_fin_prevue ?? "-"}</span>
+                </div>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <Link to={`/chantiers/${id}/execution`} className="bt-control inline-flex items-center gap-2 rounded-field bg-primary px-3 py-2 text-sm font-semibold text-primary-contrast hover:bg-primary-hover">
+                  <Plus className="h-4 w-4" strokeWidth={1.75} />
+                  Production
+                </Link>
+                <Link to={`/chantiers/${id}/documents`} className="bt-control inline-flex items-center gap-2 rounded-field border border-subtle bg-surface px-3 py-2 text-sm font-semibold text-ink-secondary hover:bg-interactive">
+                  <FileUp className="h-4 w-4" strokeWidth={1.75} />
+                  Documents
+                </Link>
+                <Link to={`/chantiers/${id}/qualite`} className="bt-control inline-flex items-center gap-2 rounded-field border border-subtle bg-surface px-3 py-2 text-sm font-semibold text-ink-secondary hover:bg-interactive">
+                  <CheckCircle2 className="h-4 w-4" strokeWidth={1.75} />
+                  Qualité
+                </Link>
+              </div>
+            </div>
+
+            <div className="grid gap-2 md:grid-cols-3 xl:grid-cols-6">
+              <CockpitFocusCard label="Statut" value={badge.label} helper={`${avancement}% d'avancement`} tone="blue" />
+              <CockpitFocusCard label="Planning" value={item.date_fin_prevue ?? "À planifier"} helper={item.date_debut ? `Début ${item.date_debut}` : "Début non renseigné"} />
+              <CockpitFocusCard label="Tâches" value={`${tasks.length}`} helper={`${todoTasksCount} à faire · ${inProgressTasksCount} en cours`} />
+              <CockpitFocusCard label="Réserves" value={`${reservesOuvertes}`} helper={reservesOuvertes > 0 ? "À lever" : "Aucune ouverte"} tone={reservesOuvertes > 0 ? "warning" : "success"} />
+              <CockpitFocusCard label="Documents" value={`${documents.length}`} helper="Plans, DOE, PV" />
+              <CockpitFocusCard label="Équipe" value={`${intervenants.length}`} helper={`${lotOptions.length} lot(s)`} />
+            </div>
+          </div>
+
+          <aside className="rounded-card border border-subtle bg-interactive p-3">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <div className="bt-caption text-muted">{t("chantiers.progress")}</div>
+                <div className="bt-metric mt-1 text-ink">{avancement}%</div>
+              </div>
+              <div className="text-right">
+                <div className="bt-caption text-muted">{t("chantierPage.hoursPlanned")}</div>
+                <div className="bt-card-title text-ink">{tempsPrevues} h</div>
+                <div className="bt-caption mt-1 text-muted">{t("chantierPage.hoursDone")} : {totalTempsReel} h</div>
+              </div>
+            </div>
+            <div className="mt-3 h-2 overflow-hidden rounded-full bg-track">
+              <div className="h-full rounded-full bg-primary" style={{ width: `${avancement}%` }} />
+            </div>
+            <div className="mt-3 flex flex-wrap gap-1.5">
+              <span className="rounded-full bg-success-soft px-2 py-1 text-xs font-semibold text-success-on">{completedTasksCount} terminée{completedTasksCount > 1 ? "s" : ""}</span>
+              <span className="rounded-full bg-warning-soft px-2 py-1 text-xs font-semibold text-warning-on">{inProgressTasksCount} en cours</span>
+              <span className="rounded-full bg-neutral-soft px-2 py-1 text-xs font-semibold text-neutral-on">{todoTasksCount} à faire</span>
+            </div>
+          </aside>
+        </div>
+      </section>
+
+      <section className="rounded-surface border border-subtle bg-surface p-4">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
           <div className="min-w-0">
-            <div className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-400">Informations chantier</div>
-            <div className="mt-2 flex flex-wrap items-start gap-2">
-              <h2 className="max-w-3xl text-2xl font-semibold leading-tight text-slate-950">{item.nom}</h2>
-              <span className={["rounded-full border px-2 py-1 text-xs", badge.className].join(" ")}>{badge.label}</span>
-            </div>
-            <div className="mt-3 flex flex-wrap gap-x-5 gap-y-2 text-sm text-slate-500">
-              <span>{t("chantierPage.start")} {item.date_debut ?? "—"}</span>
-              <span>{t("chantierPage.end")} {item.date_fin_prevue ?? "—"}</span>
+            <div className="bt-section-title text-ink">Points à surveiller</div>
+            <div className="bt-secondary mt-1 text-muted">
+              {alertCards.length === 0 ? t("chantierPage.noAlert") : `${alertCards.length} alerte${alertCards.length > 1 ? "s" : ""} à traiter`}
             </div>
           </div>
-          <div className="grid w-full gap-3 lg:max-w-md">
-            <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
-              <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">{t("chantiers.progress")}</div>
-              <div className="mt-1 text-2xl font-semibold text-slate-950">{avancement}%</div>
-              <div className="mt-3 h-2 overflow-hidden rounded-full bg-slate-200">
-                <div className="h-full rounded-full bg-blue-600" style={{ width: `${avancement}%` }} />
-              </div>
-            </div>
-            <div className="rounded-2xl border border-slate-200 bg-white p-3">
-              <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">Cycle de vie</div>
-              <div className="mt-3 flex flex-wrap gap-2">
-                {item.status !== "TERMINE" ? (
-                  <button
-                    type="button"
-                    disabled={chantierActionSaving}
-                    onClick={() => void applyChantierLifecycle("TERMINE")}
-                    className="rounded-xl border px-3 py-2 text-xs hover:bg-slate-50 disabled:opacity-50"
-                  >
-                    Marquer terminé
-                  </button>
-                ) : null}
-                {item.status !== "ARCHIVE" ? (
-                  <button
-                    type="button"
-                    disabled={chantierActionSaving}
-                    onClick={() => void applyChantierLifecycle("ARCHIVE")}
-                    className="rounded-xl border px-3 py-2 text-xs hover:bg-slate-50 disabled:opacity-50"
-                  >
-                    Archiver
-                  </button>
-                ) : null}
-                {(item.status === "TERMINE" || item.status === "ARCHIVE" || item.status === "ANNULE") ? (
-                  <button
-                    type="button"
-                    disabled={chantierActionSaving}
-                    onClick={() => void applyChantierLifecycle("EN_COURS")}
-                    className="rounded-xl border px-3 py-2 text-xs hover:bg-slate-50 disabled:opacity-50"
-                  >
-                    Restaurer
-                  </button>
-                ) : null}
-                {item.status !== "ANNULE" ? (
-                  <button
-                    type="button"
-                    disabled={chantierActionSaving}
-                    onClick={() => void applyChantierLifecycle("ANNULE")}
-                    className="rounded-xl border border-red-200 px-3 py-2 text-xs text-red-700 hover:bg-red-50 disabled:opacity-50"
-                  >
-                    Annuler
-                  </button>
-                ) : null}
-                <button
-                  type="button"
-                  disabled={chantierActionSaving}
-                  onClick={() => void softDeleteCurrentChantier()}
-                  className="rounded-xl border border-red-300 px-3 py-2 text-xs font-semibold text-red-700 hover:bg-red-50 disabled:opacity-50"
-                >
-                  Supprimer
-                </button>
-              </div>
-            </div>
+          <div className="flex flex-wrap gap-2">
+            {item.status !== "TERMINE" ? (
+              <button type="button" disabled={chantierActionSaving} onClick={() => void applyChantierLifecycle("TERMINE")} className="bt-control inline-flex items-center gap-2 rounded-field border border-subtle bg-surface px-3 py-2 text-sm font-semibold text-ink-secondary hover:bg-interactive disabled:opacity-50">
+                <CheckCircle2 className="h-4 w-4" strokeWidth={1.75} />
+                Terminer
+              </button>
+            ) : null}
+            {(item.status === "TERMINE" || item.status === "ARCHIVE" || item.status === "ANNULE") ? (
+              <button type="button" disabled={chantierActionSaving} onClick={() => void applyChantierLifecycle("EN_COURS")} className="bt-control inline-flex items-center gap-2 rounded-field border border-subtle bg-surface px-3 py-2 text-sm font-semibold text-ink-secondary hover:bg-interactive disabled:opacity-50">
+                <RotateCcw className="h-4 w-4" strokeWidth={1.75} />
+                Restaurer
+              </button>
+            ) : null}
           </div>
         </div>
-      </section>
-
-      <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        <div className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm">
-          <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">{t("chantiers.progress")}</div>
-          <div className="mt-2 text-2xl font-semibold text-slate-950">{avancement}%</div>
-        </div>
-        <div className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm">
-          <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">{t("chantierPage.hoursPlanned")}</div>
-          <div className="mt-2 text-2xl font-semibold text-slate-950">{tempsPrevues} h</div>
-        </div>
-        <div className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm">
-          <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">{t("chantierPage.hoursDone")}</div>
-          <div className="mt-2 text-2xl font-semibold text-slate-950">{totalTempsReel} h</div>
-        </div>
-        <div className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm">
-          <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">{t("intervenantAccess.tabs.reserves")}</div>
-          <div className="mt-2 text-2xl font-semibold text-slate-950">{reservesOuvertes}</div>
-        </div>
-      </section>
-
-      <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-        <div className="flex items-center justify-between gap-3">
-          <div>
-            <div className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-400">Alertes</div>
-            <div className="mt-1 text-lg font-semibold text-slate-950">Points à surveiller</div>
-          </div>
-          <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-medium text-slate-600">
-            {alertCards.length} alerte{alertCards.length > 1 ? "s" : ""}
-          </span>
-        </div>
-        <div className="mt-4 flex flex-wrap gap-2">
+        <div className="mt-3 flex flex-wrap gap-2">
           {alertCards.length === 0 ? (
-            <span className="inline-flex items-center rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-medium text-emerald-700">
+            <span className="inline-flex items-center rounded-full bg-success-soft px-3 py-1 text-xs font-semibold text-success-on">
               {t("chantierPage.noAlert")}
             </span>
           ) : (
@@ -4883,94 +4878,18 @@ export default function ChantierPage() {
               <span
                 key={alert.key}
                 className={[
-                  "inline-flex items-center rounded-full border px-3 py-1 text-xs font-medium",
+                  "inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold",
                   alert.tone === "danger"
-                    ? "border-red-200 bg-red-50 text-red-700"
+                    ? "bg-danger-soft text-danger-on"
                     : alert.tone === "warning"
-                      ? "border-amber-200 bg-amber-50 text-amber-700"
-                      : "border-emerald-200 bg-emerald-50 text-emerald-700",
+                      ? "bg-warning-soft text-warning-on"
+                      : "bg-success-soft text-success-on",
                 ].join(" ")}
               >
                 {alert.title}: {alert.detail}
               </span>
             ))
           )}
-        </div>
-      </section>
-
-      <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-        <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
-          <div>
-            <div className="text-[11px] font-semibold uppercase tracking-[0.2em] text-blue-600">Cockpit terrain</div>
-            <div className="mt-1 text-lg font-semibold text-slate-950">Ce qui compte aujourd'hui</div>
-            <p className="mt-1 max-w-2xl text-sm text-slate-500">
-              Statut, planning, équipe, réserves, documents et PV de réception accessibles sans passer par les onglets profonds.
-            </p>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            <Link to={`/chantiers/${id}/execution`} className="rounded-xl bg-blue-600 px-3 py-2 text-sm font-semibold text-white hover:bg-blue-700">
-              Ouvrir production
-            </Link>
-            <Link to={`/chantiers/${id}/documents`} className="rounded-xl border border-slate-200 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50">
-              Documents
-            </Link>
-            <Link to={`/chantiers/${id}/qualite`} className="rounded-xl border border-slate-200 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50">
-              PV / Réserves
-            </Link>
-          </div>
-        </div>
-        <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-6">
-          <CockpitFocusCard label="Statut" value={badge.label} helper={`${avancement}% d'avancement`} tone="blue" />
-          <CockpitFocusCard label="Planning" value={item.date_fin_prevue ?? "À planifier"} helper={item.date_debut ? `Début ${item.date_debut}` : "Date de début non renseignée"} />
-          <CockpitFocusCard label="Intervenants" value={`${intervenants.length}`} helper="Affectés au chantier" />
-          <CockpitFocusCard label="Réserves" value={`${reservesOuvertes}`} helper={reservesOuvertes > 0 ? "À lever" : "Aucune réserve ouverte"} tone={reservesOuvertes > 0 ? "warning" : "success"} />
-          <CockpitFocusCard label="Documents" value={`${documents.length}`} helper="Plans, DOE, photos, PV" />
-          <CockpitFocusCard label="PV réception" value={reservesOuvertes > 0 ? "À préparer" : "Prêt"} helper="Qualité / clôture" tone={reservesOuvertes > 0 ? "warning" : "success"} />
-        </div>
-      </section>
-
-      <section className="grid gap-3 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,0.8fr)]">
-        <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-          <div className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-400">Résumé rapide</div>
-          <div className="mt-1 text-lg font-semibold text-slate-950">Synthèse des tâches</div>
-          <div className="mt-4 grid gap-3 sm:grid-cols-2">
-            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-              <div className="text-sm text-slate-500">Nombre de tâches</div>
-              <div className="mt-2 text-2xl font-semibold text-slate-950">{tasks.length}</div>
-            </div>
-            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-              <div className="text-sm text-slate-500">Tâches terminées / en cours</div>
-              <div className="mt-2 text-2xl font-semibold text-slate-950">
-                {completedTasksCount} / {inProgressTasksCount}
-              </div>
-            </div>
-          </div>
-          <div className="mt-4 flex flex-wrap gap-2 text-xs text-slate-500">
-            <span className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-emerald-700">
-              {completedTasksCount} terminée{completedTasksCount > 1 ? "s" : ""}
-            </span>
-            <span className="rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-amber-700">
-              {inProgressTasksCount} en cours
-            </span>
-            <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-slate-700">
-              {todoTasksCount} à faire
-            </span>
-          </div>
-        </div>
-
-        <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-          <div className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-400">Pilotage</div>
-          <div className="mt-1 text-lg font-semibold text-slate-950">Vue rapide</div>
-          <div className="mt-4 space-y-3 text-sm text-slate-600">
-            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-              <div className="font-medium text-slate-900">Intervenants affectés</div>
-              <div className="mt-1 text-2xl font-semibold text-slate-950">{intervenants.length}</div>
-            </div>
-            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-              <div className="font-medium text-slate-900">Lots concernés</div>
-              <div className="mt-1 text-2xl font-semibold text-slate-950">{lotOptions.length}</div>
-            </div>
-          </div>
         </div>
       </section>
     </div>
@@ -5769,54 +5688,64 @@ export default function ChantierPage() {
         </div>
       ) : null}
 
-      <section className="sticky top-4 z-20 rounded-3xl border border-slate-200 bg-white/95 px-5 py-4 shadow-sm backdrop-blur">
-        <div className="flex flex-col gap-4">
-          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-            <div className="flex items-start gap-3">
-              <Link to="/chantiers" className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-slate-200 hover:bg-slate-50" aria-label={t("chantierPage.backToChantiers")}>
-                ←
+      <section className="sticky top-4 z-20 rounded-surface border border-subtle bg-surface/95 px-4 py-3 shadow-elevated backdrop-blur">
+        <div className="space-y-3">
+          <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+            <div className="flex min-w-0 items-start gap-3">
+              <Link to="/chantiers" className="bt-control inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-field border border-subtle bg-surface text-ink-secondary hover:bg-interactive" aria-label={t("chantierPage.backToChantiers")}>
+                <ChevronLeft className="h-4 w-4" strokeWidth={1.75} />
               </Link>
               <div className="min-w-0">
-                <div className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-400">Chantier</div>
-                <h1 className="max-w-3xl text-2xl font-semibold leading-tight text-slate-950">{item.nom}</h1>
-                <div className="mt-1 flex flex-wrap items-center gap-2 text-sm text-slate-500">
-                  <span>{item.client || "Client non renseigné"}</span>
-                  <span>·</span>
-                  <span>{item.adresse || "Adresse non renseignée"}</span>
-                  <span className={["rounded-full border px-2 py-0.5 text-xs", badge.className].join(" ")}>{badge.label}</span>
+                <div className="bt-caption text-muted">Chantier · {activeTabLabel}</div>
+                <div className="mt-0.5 flex min-w-0 flex-wrap items-center gap-2">
+                  <h1 className="bt-page-title min-w-0 truncate text-ink">{item.nom}</h1>
+                  <span className={["rounded-full border px-2 py-0.5 text-xs font-semibold", badge.className].join(" ")}>{badge.label}</span>
                 </div>
-                <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-slate-500">
-                  <span>Section : {activeTabLabel}</span>
-                  <span>Conducteur : à assigner</span>
-                  <span>Commercial : {crmContext?.opportunity?.responsable_id ? "Assigné" : "—"}</span>
-                  <span>Début : {item.date_debut ?? "—"}</span>
-                  <span>Fin : {item.date_fin_prevue ?? item.planning_end_date ?? "—"}</span>
-                  <span>Avancement : {avancement}%</span>
-                  <span className={alertCards.length ? "font-semibold text-red-700" : "font-semibold text-emerald-700"}>
+                <div className="bt-secondary mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-muted">
+                  <span>{item.client || "Client non renseigné"}</span>
+                  <span>{item.adresse || "Adresse non renseignée"}</span>
+                  <span>Fin {item.date_fin_prevue ?? item.planning_end_date ?? "-"}</span>
+                  <span className="font-semibold text-ink-secondary">{avancement}%</span>
+                  <span className={alertCards.length ? "font-semibold text-danger-on" : "font-semibold text-success-on"}>
                     {alertCards.length ? `${alertCards.length} alerte(s)` : "Aucune alerte critique"}
                   </span>
                 </div>
               </div>
             </div>
             <div className="flex flex-wrap items-center gap-2">
-              <button type="button" onClick={() => navigate(`/chantiers/${id}/preparation`)} className="rounded-xl border border-slate-200 px-3 py-2 text-sm font-medium hover:bg-slate-50">Modifier</button>
-              <button type="button" onClick={() => setTaskCreateDrawerOpen(true)} className="rounded-xl bg-blue-600 px-3 py-2 text-sm font-medium text-white hover:bg-blue-700">Ajouter tâche</button>
-              <button type="button" onClick={() => navigate(`/chantiers/${id}/equipe`)} className="rounded-xl border border-slate-200 px-3 py-2 text-sm font-medium hover:bg-slate-50">Ajouter intervenant</button>
-              <button type="button" onClick={() => navigate(`/chantiers/${id}/documents`)} className="rounded-xl border border-slate-200 px-3 py-2 text-sm font-medium hover:bg-slate-50">Ajouter document</button>
+              <button type="button" onClick={() => setTaskCreateDrawerOpen(true)} className="bt-control inline-flex items-center gap-2 rounded-field bg-primary px-3 py-2 text-sm font-semibold text-primary-contrast hover:bg-primary-hover">
+                <Plus className="h-4 w-4" strokeWidth={1.75} />
+                Ajouter tâche
+              </button>
+              <button type="button" onClick={() => navigate(`/chantiers/${id}/preparation`)} className="bt-control inline-flex items-center gap-2 rounded-field border border-subtle bg-surface px-3 py-2 text-sm font-semibold text-ink-secondary hover:bg-interactive">
+                <Pencil className="h-4 w-4" strokeWidth={1.75} />
+                Modifier
+              </button>
+              <button type="button" onClick={() => navigate(`/chantiers/${id}/equipe`)} className="bt-control inline-flex items-center gap-2 rounded-field border border-subtle bg-surface px-3 py-2 text-sm font-semibold text-ink-secondary hover:bg-interactive">
+                <Users className="h-4 w-4" strokeWidth={1.75} />
+                Équipe
+              </button>
+              <button type="button" onClick={() => navigate(`/chantiers/${id}/documents`)} className="bt-control inline-flex items-center gap-2 rounded-field border border-subtle bg-surface px-3 py-2 text-sm font-semibold text-ink-secondary hover:bg-interactive">
+                <FileUp className="h-4 w-4" strokeWidth={1.75} />
+                Document
+              </button>
               <details className="relative">
-                <summary className="cursor-pointer list-none rounded-xl border border-slate-200 px-3 py-2 text-sm font-medium hover:bg-slate-50">Actions</summary>
-                <div className="absolute right-0 z-30 mt-2 w-56 rounded-2xl border border-slate-200 bg-white p-2 shadow-xl shadow-slate-950/10">
-                  <button type="button" disabled={chantierActionSaving} onClick={() => void applyChantierLifecycle("TERMINE")} className="block w-full rounded-xl px-3 py-2 text-left text-sm hover:bg-slate-50 disabled:opacity-50">Marquer terminé</button>
-                  <button type="button" disabled={chantierActionSaving} onClick={() => void applyChantierLifecycle("ARCHIVE")} className="block w-full rounded-xl px-3 py-2 text-left text-sm hover:bg-slate-50 disabled:opacity-50">Archiver</button>
-                  <button type="button" disabled={chantierActionSaving} onClick={() => void applyChantierLifecycle("ANNULE")} className="block w-full rounded-xl px-3 py-2 text-left text-sm text-red-700 hover:bg-red-50 disabled:opacity-50">Annuler</button>
-                  <button type="button" disabled={chantierActionSaving} onClick={() => void softDeleteCurrentChantier()} className="block w-full rounded-xl px-3 py-2 text-left text-sm font-semibold text-red-700 hover:bg-red-50 disabled:opacity-50">Supprimer</button>
+                <summary className="bt-control inline-flex cursor-pointer list-none items-center gap-2 rounded-field border border-subtle bg-surface px-3 py-2 text-sm font-semibold text-ink-secondary hover:bg-interactive">
+                  <MoreHorizontal className="h-4 w-4" strokeWidth={1.75} />
+                  Actions
+                </summary>
+                <div className="absolute right-0 z-30 mt-2 w-56 rounded-surface border border-subtle bg-elevated p-2 shadow-overlay">
+                  <button type="button" disabled={chantierActionSaving} onClick={() => void applyChantierLifecycle("TERMINE")} className="flex w-full items-center gap-2 rounded-field px-3 py-2 text-left text-sm font-medium text-ink-secondary hover:bg-interactive disabled:opacity-50"><CheckCircle2 className="h-4 w-4" strokeWidth={1.75} />Marquer terminé</button>
+                  <button type="button" disabled={chantierActionSaving} onClick={() => void applyChantierLifecycle("ARCHIVE")} className="flex w-full items-center gap-2 rounded-field px-3 py-2 text-left text-sm font-medium text-ink-secondary hover:bg-interactive disabled:opacity-50"><Archive className="h-4 w-4" strokeWidth={1.75} />Archiver</button>
+                  <button type="button" disabled={chantierActionSaving} onClick={() => void applyChantierLifecycle("ANNULE")} className="flex w-full items-center gap-2 rounded-field px-3 py-2 text-left text-sm font-medium text-danger-on hover:bg-danger-soft disabled:opacity-50"><Ban className="h-4 w-4" strokeWidth={1.75} />Annuler</button>
+                  <button type="button" disabled={chantierActionSaving} onClick={() => void softDeleteCurrentChantier()} className="flex w-full items-center gap-2 rounded-field px-3 py-2 text-left text-sm font-semibold text-danger-on hover:bg-danger-soft disabled:opacity-50"><Trash2 className="h-4 w-4" strokeWidth={1.75} />Supprimer</button>
                 </div>
               </details>
             </div>
           </div>
 
-          <div className="space-y-3">
-            <div className="text-xs text-slate-500">
+          <div className="space-y-2">
+            <div className="bt-caption text-muted">
               Chantiers &gt; {item.nom} &gt; {detailSectionLabels[detailSection]}
             </div>
             <ChantierPrimaryNav sections={chantierPrimarySections} />
@@ -5824,7 +5753,7 @@ export default function ChantierPage() {
         </div>
       </section>
 
-      <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+      <div className="rounded-surface border border-subtle bg-surface p-4 shadow-sm">
         {detailSection === "execution" ? (
           <button
             type="button"
