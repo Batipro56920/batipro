@@ -14,10 +14,10 @@ export type CrmActionItem = {
 };
 
 const dotClass = {
-  normal: "bg-slate-300",
-  info: "bg-blue-500",
-  warning: "bg-amber-500",
-  danger: "bg-red-500",
+  normal: "bg-neutral",
+  info: "bg-info",
+  warning: "bg-warning",
+  danger: "bg-danger",
 };
 
 export function CrmActionCenter({
@@ -30,11 +30,11 @@ export function CrmActionCenter({
   onAppointment: () => void;
 }) {
   return (
-    <section className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm shadow-slate-950/[0.03]">
-      <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+    <section className="rounded-surface border border-subtle bg-surface p-4 shadow-sm">
+      <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <div className="text-[11px] font-semibold uppercase tracking-[0.22em] text-blue-700">Action center</div>
-          <h2 className="mt-1 text-xl font-semibold tracking-tight text-slate-950">Actions commerciales du jour</h2>
+          <div className="bt-caption text-primary-on">Action center</div>
+          <h2 className="bt-card-title mt-1 text-ink">Actions commerciales du jour</h2>
         </div>
         <div className="flex gap-2">
           <Button type="button" variant="secondary" size="sm" onClick={onTask}>
@@ -57,21 +57,21 @@ export function CrmActionCenter({
               <div className="flex items-start gap-3">
                 <span className={`mt-1.5 h-2.5 w-2.5 shrink-0 rounded-full ${dotClass[item.tone]}`} />
                 <div className="min-w-0 flex-1">
-                  <div className="truncate text-sm font-semibold text-slate-950">{item.title}</div>
-                  <div className="mt-0.5 text-xs text-slate-500">{item.meta}</div>
-                  {item.description ? <div className="mt-2 line-clamp-2 text-sm text-slate-600">{item.description}</div> : null}
-                  {item.disabledReason ? <div className="mt-2 text-xs font-medium text-slate-400">{item.disabledReason}</div> : null}
+                  <div className="truncate text-sm font-semibold text-ink">{item.title}</div>
+                  <div className="mt-0.5 text-xs text-muted">{item.meta}</div>
+                  {item.description ? <div className="mt-2 line-clamp-2 text-sm text-ink-secondary">{item.description}</div> : null}
+                  {item.disabledReason ? <div className="mt-2 text-xs font-medium text-muted">{item.disabledReason}</div> : null}
                 </div>
-                <CheckCircle2 className="h-4 w-4 text-slate-300" />
+                <CheckCircle2 className="h-4 w-4 text-muted" strokeWidth={1.75} />
               </div>
             );
 
             return item.href ? (
-              <Link key={item.id} to={item.href} className="block rounded-2xl border border-slate-200 bg-white p-3 transition hover:border-blue-200 hover:bg-blue-50/30">
+              <Link key={item.id} to={item.href} className="block rounded-card border border-subtle bg-surface p-3 transition hover:border-primary/30 hover:bg-interactive">
                 {content}
               </Link>
             ) : (
-              <div key={item.id} className="rounded-2xl border border-slate-200 bg-white p-3 opacity-80">
+              <div key={item.id} className="rounded-card border border-subtle bg-interactive p-3 opacity-90">
                 {content}
               </div>
             );

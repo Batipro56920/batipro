@@ -1,3 +1,5 @@
+import { Link } from "react-router-dom";
+import { CalendarDays, CircleAlert, HardHat, TrendingUp } from "lucide-react";
 import type { CrmClientRow, CrmDataset, CrmProspectRow, CrmQuoteRow } from "../../../services/crm.service";
 import { CrmActionCenter, type CrmActionItem } from "../components/CrmActionCenter";
 import { CrmAlertCenter, type CrmAlertItem } from "../components/CrmAlertCenter";
@@ -192,8 +194,73 @@ export default function CrmDashboardSection({
     .sort((a, b) => String(b.meta).localeCompare(String(a.meta), "fr"))
     .slice(0, 8);
 
+  const operations = [
+    {
+      label: "Relances en retard",
+      value: kpis.overdueTasks,
+      helper: overdueTasks.length > 0 ? "A traiter aujourd'hui" : "A jour",
+      href: "/crm/agenda",
+      tone: kpis.overdueTasks > 0 ? "danger" : "success",
+      icon: CircleAlert,
+    },
+    {
+      label: "RDV aujourd'hui",
+      value: kpis.appointmentsToday,
+      helper: todayAppointments.length > 0 ? "A preparer" : "Aucun RDV",
+      href: "/crm/agenda",
+      tone: todayAppointments.length > 0 ? "info" : "normal",
+      icon: CalendarDays,
+    },
+    {
+      label: "Pipeline ouvert",
+      value: eur(kpis.pipelineRevenue),
+      helper: `${data.opportunities.filter((row) => row.status === "ouverte").length} affaire(s)`,
+      href: "/crm/opportunites",
+      tone: kpis.pipelineRevenue > 0 ? "info" : "normal",
+      icon: TrendingUp,
+    },
+    {
+      label: "Chantiers CRM actifs",
+      value: kpis.crmActiveChantiers,
+      helper: `${kpis.crmFinishedChantiers} termine(s)`,
+      href: "/chantiers",
+      tone: kpis.crmActiveChantiers > 0 ? "success" : "normal",
+      icon: HardHat,
+    },
+  ];
+
+  const operationToneClass = {
+    normal: "border-subtle bg-interactive text-ink-secondary",
+    info: "border-info/20 bg-info-soft text-info-on",
+    success: "border-success/20 bg-success-soft text-success-on",
+    warning: "border-warning/20 bg-warning-soft text-warning-on",
+    danger: "border-danger/20 bg-danger-soft text-danger-on",
+  };
+
   return (
-    <div className="space-y-5">
+    <div className="space-y-4">
+      <section className="rounded-surface border border-subtle bg-surface p-4 shadow-sm">
+        <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-4">
+          {operations.map((item) => {
+            const Icon = item.icon;
+            return (
+              <Link key={item.label} to={item.href} className="group rounded-card border border-subtle bg-surface p-3 transition hover:border-primary/30 hover:bg-interactive">
+                <div className="flex items-start justify-between gap-3">
+                  <span className={`rounded-field border p-2 ${operationToneClass[item.tone as keyof typeof operationToneClass]}`}>
+                    <Icon className="h-4 w-4" strokeWidth={1.75} />
+                  </span>
+                  <span className="text-right">
+                    <span className="block text-sm font-semibold text-ink">{item.value}</span>
+                    <span className="mt-0.5 block text-xs text-muted">{item.helper}</span>
+                  </span>
+                </div>
+                <div className="mt-3 text-sm font-semibold text-ink">{item.label}</div>
+              </Link>
+            );
+          })}
+        </div>
+      </section>
+
       <CrmKpiGrid items={kpiItems} />
 
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_360px]">

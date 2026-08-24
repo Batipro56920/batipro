@@ -12,14 +12,14 @@ const PRIMARY_NAV: Array<{ key?: CrmSection; label: string; href: string }> = [
 
 function navClass(active: boolean) {
   return [
-    "shrink-0 rounded-xl px-3 py-2 text-sm font-medium transition",
-    active ? "bg-slate-950 text-white shadow-sm shadow-slate-950/10" : "text-slate-600 hover:bg-slate-50 hover:text-slate-950",
+    "bt-control shrink-0 rounded-field px-3 py-2 text-sm font-semibold transition",
+    active ? "bg-primary text-primary-contrast shadow-sm" : "text-ink-secondary hover:bg-interactive hover:text-ink",
   ].join(" ");
 }
 
 export function CrmNavigationTabs({ section }: { section: CrmSection }) {
   return (
-    <nav className="flex items-center gap-1 overflow-x-auto rounded-2xl border border-slate-200 bg-white p-1.5 shadow-sm shadow-slate-950/[0.03]" aria-label="Navigation CRM">
+    <nav className="flex items-center gap-1 overflow-x-auto rounded-surface border border-subtle bg-surface p-1.5 shadow-sm" aria-label="Navigation CRM">
       {PRIMARY_NAV.map((item) => (
         <Link key={item.href} to={item.href} className={navClass(Boolean(item.key && section === item.key))}>
           {item.label}

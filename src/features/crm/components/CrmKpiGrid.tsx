@@ -21,35 +21,43 @@ const icons: Record<string, LucideIcon> = {
 };
 
 const toneClasses = {
-  normal: "border-slate-200 bg-slate-50 text-slate-700",
-  info: "border-blue-200 bg-blue-50 text-blue-700",
-  success: "border-emerald-200 bg-emerald-50 text-emerald-700",
-  warning: "border-amber-200 bg-amber-50 text-amber-700",
-  danger: "border-red-200 bg-red-50 text-red-700",
+  normal: "border-subtle bg-interactive text-ink-secondary",
+  info: "border-info/20 bg-info-soft text-info-on",
+  success: "border-success/20 bg-success-soft text-success-on",
+  warning: "border-warning/20 bg-warning-soft text-warning-on",
+  danger: "border-danger/20 bg-danger-soft text-danger-on",
+};
+
+const barClasses = {
+  normal: "w-1/3 bg-neutral",
+  info: "w-1/2 bg-info",
+  success: "w-2/3 bg-success",
+  warning: "w-2/3 bg-warning",
+  danger: "w-full bg-danger",
 };
 
 export function CrmKpiGrid({ items }: { items: CrmKpiItem[] }) {
   return (
-    <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
+    <section className="grid gap-2 sm:grid-cols-2 xl:grid-cols-6">
       {items.map((item) => {
         const Icon = icons[item.key] ?? UsersRound;
         return (
           <Link
             key={item.key}
             to={item.href}
-            className="group rounded-2xl border border-slate-200 bg-white p-3 shadow-sm shadow-slate-950/[0.03] transition hover:-translate-y-0.5 hover:border-blue-200 hover:shadow-md"
+            className="group rounded-card border border-subtle bg-surface p-3 shadow-sm transition hover:border-primary/30 hover:bg-interactive"
           >
             <div className="flex items-start justify-between gap-3">
               <span className={`rounded-lg border p-1.5 ${toneClasses[item.tone]}`}>
-                <Icon className="h-4 w-4" />
+                <Icon className="h-4 w-4" strokeWidth={1.75} />
               </span>
-              <span className="h-1.5 w-10 rounded-full bg-slate-100">
-                <span className={`block h-1.5 rounded-full ${item.tone === "danger" ? "w-full bg-red-500" : item.tone === "warning" ? "w-2/3 bg-amber-500" : "w-1/2 bg-blue-500"}`} />
+              <span className="h-1.5 w-10 rounded-full bg-track">
+                <span className={`block h-1.5 rounded-full ${barClasses[item.tone]}`} />
               </span>
             </div>
-            <div className="mt-3 text-xl font-bold tracking-tight text-slate-950">{item.value}</div>
-            <div className="mt-1 text-sm font-semibold text-slate-800">{item.label}</div>
-            <div className="mt-0.5 line-clamp-2 text-xs leading-4 text-slate-500">{item.hint}</div>
+            <div className="bt-card-title mt-3 text-ink">{item.value}</div>
+            <div className="mt-1 text-sm font-semibold text-ink">{item.label}</div>
+            <div className="mt-0.5 line-clamp-2 text-xs leading-4 text-muted">{item.hint}</div>
           </Link>
         );
       })}
