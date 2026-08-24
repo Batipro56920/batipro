@@ -18,11 +18,11 @@ const badgeTone = {
 
 export function DashboardProjectsGrid({ projects }: DashboardProjectsGridProps) {
   return (
-    <section className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm shadow-slate-950/[0.03]">
+    <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
       <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <div className="text-[11px] font-semibold uppercase tracking-[0.22em] text-blue-700">Production</div>
-          <h2 className="mt-1 text-xl font-semibold tracking-tight text-slate-950">Chantiers en cours</h2>
+          <div className="text-[11px] font-semibold uppercase tracking-wide text-blue-700">Production</div>
+          <h2 className="mt-1 text-base font-semibold text-slate-950">Chantiers en cours</h2>
         </div>
         <Link to="/chantiers">
           <Button variant="secondary" size="sm">Voir tous les chantiers</Button>
@@ -42,7 +42,7 @@ export function DashboardProjectsGrid({ projects }: DashboardProjectsGridProps) 
       ) : (
         <div className="grid gap-3 md:grid-cols-2">
           {projects.map((project) => (
-            <Link key={project.id} to={project.href} className="group rounded-2xl border border-slate-200 bg-white p-4 transition hover:border-blue-200 hover:bg-blue-50/30">
+            <Link key={project.id} to={project.href} className="group rounded-lg border border-slate-200 bg-white p-4 transition hover:border-blue-200 hover:bg-blue-50/30">
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
                   <div className="truncate text-sm font-semibold text-slate-950">{project.name}</div>
@@ -74,3 +74,4 @@ export function DashboardProjectsGrid({ projects }: DashboardProjectsGridProps) 
     </section>
   );
 }
+

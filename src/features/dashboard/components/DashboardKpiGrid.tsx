@@ -1,4 +1,3 @@
-import type { ReactNode } from "react";
 import type { LucideIcon } from "lucide-react";
 import { AlertTriangle, Boxes, BriefcaseBusiness, Clock3, Euro, TimerReset } from "lucide-react";
 import { Link } from "react-router-dom";
@@ -25,24 +24,25 @@ const toneClasses: Record<DashboardKpi["tone"], string> = {
   normal: "bg-slate-100 text-slate-600",
   info: "bg-blue-50 text-blue-700",
   success: "bg-emerald-50 text-emerald-700",
-  warning: "bg-amber-50 text-amber-700",
+  warning: "bg-orange-50 text-orange-700",
   danger: "bg-red-50 text-red-700",
 };
 
-function KpiContent({ kpi, children }: { kpi: DashboardKpi; children?: ReactNode }) {
+function KpiContent({ kpi }: { kpi: DashboardKpi }) {
   const Icon = icons[kpi.key];
 
   return (
     <>
-      <div className="flex items-center justify-between gap-3">
-        <span className="text-sm font-medium text-slate-600">{kpi.label}</span>
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="truncate text-xs font-medium text-slate-500">{kpi.label}</div>
+          <div className="mt-2 text-2xl font-semibold text-slate-950">{kpi.value}</div>
+        </div>
         <span className={`rounded-lg p-2 ${toneClasses[kpi.tone]}`}>
           <Icon className="h-4 w-4" />
         </span>
       </div>
-      <div className="mt-3 text-2xl font-semibold tracking-tight text-slate-950">{kpi.value}</div>
-      <div className="mt-1 line-clamp-1 text-xs text-slate-500">{kpi.hint}</div>
-      {children}
+      <div className="mt-2 line-clamp-1 text-xs text-slate-500">{kpi.hint}</div>
     </>
   );
 }
@@ -51,21 +51,19 @@ export function DashboardKpiGrid({ kpis, activeView, onSelect }: DashboardKpiGri
   const visibleKpis = kpis.filter((kpi) => visibleKpiKeys.has(kpi.key));
 
   return (
-    <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+    <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4" aria-label="Indicateurs principaux">
       {visibleKpis.map((kpi) => {
         const selectableKey = kpi.key === "marge" ? null : kpi.key;
         const active = selectableKey && activeView === selectableKey;
-        const cardClassName = [
-          "group rounded-xl border border-slate-200 bg-white p-4 text-left shadow-sm shadow-slate-950/[0.02] transition hover:border-blue-200 hover:bg-blue-50/30 disabled:cursor-default",
-          active ? "border-blue-300 bg-blue-50/40 ring-1 ring-blue-200" : "",
+        const className = [
+          "min-h-28 rounded-lg border bg-white p-4 text-left shadow-sm transition",
+          active
+            ? "border-blue-300 ring-2 ring-blue-100"
+            : "border-slate-200 hover:border-blue-200 hover:shadow-md",
         ].join(" ");
 
         if (kpi.href) {
-          return (
-            <Link key={kpi.key} to={kpi.href} className={cardClassName}>
-              <KpiContent kpi={kpi} />
-            </Link>
-          );
+          return <Link key={kpi.key} to={kpi.href} className={className}><KpiContent kpi={kpi} /></Link>;
         }
 
         return (
@@ -74,7 +72,8 @@ export function DashboardKpiGrid({ kpis, activeView, onSelect }: DashboardKpiGri
             type="button"
             disabled={!selectableKey}
             onClick={() => selectableKey && onSelect(active ? null : selectableKey)}
-            className={cardClassName}
+            className={className}
+            aria-pressed={Boolean(active)}
           >
             <KpiContent kpi={kpi} />
           </button>

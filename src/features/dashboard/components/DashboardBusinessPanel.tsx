@@ -160,11 +160,11 @@ export function DashboardBusinessPanel({ metrics }: DashboardBusinessPanelProps)
   }, []);
 
   return (
-    <section className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm shadow-slate-950/[0.03]">
+    <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
       <div className="mb-4 flex items-start justify-between gap-3">
         <div>
-          <div className="text-[11px] font-semibold uppercase tracking-[0.22em] text-blue-700">Business</div>
-          <h2 className="mt-1 text-xl font-semibold tracking-tight text-slate-950">CRM & rentabilité</h2>
+          <div className="text-[11px] font-semibold uppercase tracking-wide text-blue-700">Business</div>
+          <h2 className="mt-1 text-base font-semibold text-slate-950">CRM & rentabilité</h2>
         </div>
         <BriefcaseBusiness className="h-5 w-5 text-slate-300" />
       </div>
@@ -177,7 +177,7 @@ export function DashboardBusinessPanel({ metrics }: DashboardBusinessPanelProps)
           const hint = DASHBOARD_METRIC_HINTS[metric.key] ?? metric.hint;
 
           return (
-            <Link key={metric.key} to={href} className="group rounded-2xl border border-slate-200 p-3 transition hover:border-blue-200 hover:bg-blue-50/40">
+            <Link key={metric.key} to={href} className="group rounded-lg border border-slate-200 p-3 transition hover:border-blue-200 hover:bg-blue-50/40">
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
                   <div className="truncate text-sm font-semibold text-slate-950">{metric.label}</div>
@@ -196,3 +196,4 @@ export function DashboardBusinessPanel({ metrics }: DashboardBusinessPanelProps)
     </section>
   );
 }
+

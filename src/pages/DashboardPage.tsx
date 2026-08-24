@@ -35,35 +35,23 @@ export default function DashboardPage() {
   const [activeView, setActiveView] = useState<DashboardView>(() => dashboardViewFromQuery(searchParams.get("view")));
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    setActiveView(dashboardViewFromQuery(searchParams.get("view")));
-  }, [searchParams]);
+  useEffect(() => { setActiveView(dashboardViewFromQuery(searchParams.get("view"))); }, [searchParams]);
 
   useEffect(() => {
     let alive = true;
-
     async function load() {
       setLoading(true);
       try {
         const chantiersResult = await listChantiers({ scope: "actifs" });
         const activeChantierIds = chantiersResult.map((chantier) => chantier.id);
-        const materielResult =
-          activeChantierIds.length === 0
-            ? { data: [], error: null }
-            : await supabase
-                .from("materiel_demandes")
-                .select("id, chantier_id, titre, designation, statut, status, quantite, unite, created_at")
-                .in("chantier_id", activeChantierIds)
-                .order("created_at", { ascending: false });
+        const materielResult = activeChantierIds.length === 0
+          ? { data: [], error: null }
+          : await supabase.from("materiel_demandes").select("id, chantier_id, titre, designation, statut, status, quantite, unite, created_at").in("chantier_id", activeChantierIds).order("created_at", { ascending: false });
         const alertsResult = await listDashboardAlerts(chantiersResult);
-
         if (!alive) return;
-
         setChantiers(chantiersResult);
         setAlerts(alertsResult);
-
         if (materielResult.error && !isMissingRelationError(materielResult.error.message)) throw materielResult.error;
-
         setMateriel((materielResult.data ?? []) as MaterielSnapshot[]);
       } catch {
         if (!alive) return;
@@ -71,62 +59,36 @@ export default function DashboardPage() {
         setMateriel([]);
         setAlerts([]);
       } finally {
-        if (!alive) return;
-        setLoading(false);
+        if (alive) setLoading(false);
       }
     }
-
     void load();
-    return () => {
-      alive = false;
-    };
+    return () => { alive = false; };
   }, []);
 
   function selectDashboardView(view: DashboardView) {
     setActiveView(view);
     setSearchParams((previous) => {
       const next = new URLSearchParams(previous);
-      if (view) next.set("view", view);
-      else next.delete("view");
+      if (view) next.set("view", view); else next.delete("view");
       return next;
     }, { replace: true });
   }
 
-  const metrics = useDashboardMetrics({
-    chantiers,
-    materiel,
-    alerts,
-    activeView,
-    loading,
-    locale,
-    t,
-  });
-
+  const metrics = useDashboardMetrics({ chantiers, materiel, alerts, activeView, loading, locale, t });
   const hasData = chantiers.length > 0 || alerts.length > 0 || materiel.length > 0;
 
   return (
-    <div className="space-y-4">
+    <div className="mx-auto w-full max-w-[1600px] space-y-4 px-1 pb-6">
       <DashboardHeader />
-
-      {loading ? (
-        <DashboardSkeleton />
-      ) : !hasData ? (
-        <DashboardEmptyState />
-      ) : (
+      {loading ? <DashboardSkeleton /> : !hasData ? <DashboardEmptyState /> : (
         <>
           <DashboardKpiGrid kpis={metrics.kpis} activeView={activeView} onSelect={selectDashboardView} />
-
-          <DashboardPriorityFeed
-            today={metrics.priorityToday}
-            week={metrics.priorityWeek}
-            focusRows={metrics.focusRows}
-            alerts={metrics.alertCards}
-            hasActiveFocus={activeView !== null}
-            onClearFocus={() => selectDashboardView(null)}
-          />
-
-          <DashboardProjectsGrid projects={metrics.projects} />
-          <DashboardBusinessPanel metrics={metrics.businessMetrics} />
+          <DashboardPriorityFeed today={metrics.priorityToday} week={metrics.priorityWeek} focusRows={metrics.focusRows} alerts={metrics.alertCards} hasActiveFocus={activeView !== null} onClearFocus={() => selectDashboardView(null)} />
+          <div className="grid items-start gap-4 xl:grid-cols-[minmax(0,1.45fr)_minmax(320px,0.75fr)]">
+            <DashboardProjectsGrid projects={metrics.projects} />
+            <DashboardBusinessPanel metrics={metrics.businessMetrics} />
+          </div>
         </>
       )}
     </div>
