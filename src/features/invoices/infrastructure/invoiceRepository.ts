@@ -1,5 +1,5 @@
 import { supabase } from "../../../lib/supabaseClient";
-import type { BusinessDocument } from "../../document-engine";
+import { normalizeBusinessDocument, type BusinessDocument } from "../../document-engine";
 import { createInvoice } from "../application/invoiceFactory";
 import { normalizeInvoiceStatus } from "../application/invoicePayments";
 import type { InvoicePayment, InvoiceRecord, InvoiceType } from "../domain/types";
@@ -89,7 +89,7 @@ function fromRow(row: InvoiceRow): InvoiceRecord {
     id: row.id,
     type: row.type,
     status: row.status,
-    document: row.document,
+    document: normalizeBusinessDocument(row.document, row.type === "credit_note" ? "credit_note" : "invoice"),
     sourceQuoteId: row.source_quote_id,
     projectId: row.project_id,
     chantierId: row.chantier_id,
