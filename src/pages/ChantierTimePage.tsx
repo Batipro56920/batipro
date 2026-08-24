@@ -61,9 +61,9 @@ function statusLabel(summary: TaskTimeSummary) {
 }
 
 function statusClass(summary: TaskTimeSummary) {
-  if (summary.tone === "over") return "border-red-200 bg-red-50 text-red-700";
-  if (summary.tone === "missing") return "border-amber-200 bg-amber-50 text-amber-700";
-  return "border-emerald-200 bg-emerald-50 text-emerald-700";
+  if (summary.tone === "over") return "border-danger/20 bg-danger-soft text-danger-on";
+  if (summary.tone === "missing") return "border-warning/20 bg-warning-soft text-warning-on";
+  return "border-success/20 bg-success-soft text-success-on";
 }
 
 export default function ChantierTimePage() {
@@ -299,37 +299,37 @@ export default function ChantierTimePage() {
   }
 
   if (!id) {
-    return <div className="rounded-2xl border bg-white p-6 text-sm text-slate-600">Chantier manquant.</div>;
+    return <div className="rounded-surface border border-subtle bg-surface p-4 text-sm text-muted">Chantier manquant.</div>;
   }
 
   if (loading) {
-    return <div className="rounded-2xl border bg-white p-6 text-sm text-slate-500">Chargement du suivi des temps...</div>;
+    return <div className="rounded-surface border border-subtle bg-surface p-4 text-sm text-muted">Chargement du suivi des temps...</div>;
   }
 
   if (error) {
-    return <div className="rounded-2xl border border-red-200 bg-red-50 p-6 text-sm text-red-700">{error}</div>;
+    return <div className="rounded-surface border border-danger/20 bg-danger-soft p-4 text-sm font-medium text-danger-on">{error}</div>;
   }
 
   return (
-    <div className="space-y-5">
-      <section className="rounded-3xl border border-slate-200 bg-white px-5 py-4 shadow-sm">
+    <div className="space-y-4">
+      <section className="rounded-surface border border-subtle bg-surface p-4 shadow-elevated">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
           <div className="min-w-0">
-            <div className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-400">Pilotage temps chantier</div>
-            <h1 className="mt-1 text-2xl font-semibold text-slate-950">{chantier?.nom ?? "Chantier"}</h1>
-            <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-sm text-slate-500">
+            <div className="bt-caption text-muted">Pilotage temps chantier</div>
+            <h1 className="bt-page-title mt-1 text-ink">{chantier?.nom ?? "Chantier"}</h1>
+            <div className="bt-secondary mt-1 flex flex-wrap gap-x-4 gap-y-1 text-muted">
               <span>{chantier?.client || "Client non renseigné"}</span>
               <span>{tasks.length} tache{tasks.length > 1 ? "s" : ""}</span>
               <span>{intervenants.length} intervenant{intervenants.length > 1 ? "s" : ""}</span>
             </div>
           </div>
           <div className="flex flex-wrap gap-2">
-            <Link to="/temps" className="rounded-xl border border-slate-200 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50">
+            <Link to="/temps" className="bt-control inline-flex items-center rounded-field border border-subtle bg-surface px-3 py-2 text-sm font-semibold text-ink-secondary hover:bg-interactive">
               <ArrowLeft className="mr-1 inline h-4 w-4" /> Temps global
             </Link>
-            <Link to={`/chantiers/${id}/execution`} className="rounded-xl border border-blue-200 bg-blue-50 px-3 py-2 text-sm font-medium text-blue-800 hover:bg-blue-100">Taches / execution</Link>
-            <Link to={`/chantiers/${id}/equipe`} className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-medium text-emerald-800 hover:bg-emerald-100">Equipe</Link>
-            <Link to={`/chantiers/${id}/planning`} className="rounded-xl border border-slate-200 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50">Planning</Link>
+            <Link to={`/chantiers/${id}/execution`} className="bt-control inline-flex items-center rounded-field border border-primary/20 bg-primary-soft px-3 py-2 text-sm font-semibold text-primary-on hover:bg-selected">Taches / execution</Link>
+            <Link to={`/chantiers/${id}/equipe`} className="bt-control inline-flex items-center rounded-field border border-subtle bg-surface px-3 py-2 text-sm font-semibold text-ink-secondary hover:bg-interactive">Equipe</Link>
+            <Link to={`/chantiers/${id}/planning`} className="bt-control inline-flex items-center rounded-field border border-subtle bg-surface px-3 py-2 text-sm font-semibold text-ink-secondary hover:bg-interactive">Planning</Link>
           </div>
         </div>
       </section>

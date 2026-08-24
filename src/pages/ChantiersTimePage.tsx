@@ -123,10 +123,10 @@ function getTimeNextAction(row: TimeRow): TimeNextAction {
 }
 
 function timeActionClasses(tone: TimeActionTone) {
-  if (tone === "red") return "border-red-200 bg-red-600 text-white hover:bg-red-700";
-  if (tone === "amber") return "border-amber-200 bg-amber-600 text-white hover:bg-amber-700";
-  if (tone === "blue") return "border-blue-200 bg-blue-600 text-white hover:bg-blue-700";
-  return "border-slate-200 bg-slate-950 text-white hover:bg-slate-800";
+  if (tone === "red") return "border-danger/20 bg-danger text-white hover:brightness-95";
+  if (tone === "amber") return "border-warning/20 bg-warning text-white hover:brightness-95";
+  if (tone === "blue") return "border-primary/20 bg-primary text-primary-contrast hover:bg-primary-hover";
+  return "border-subtle bg-ink text-surface hover:brightness-110";
 }
 
 async function loadTaskPlannedHoursByChantier(chantierIds: string[]): Promise<Record<string, number>> {
@@ -197,24 +197,24 @@ function TimeFilterCard({
 }) {
   const toneClass =
     tone === "red"
-      ? "border-red-200 bg-red-50 text-red-700"
+      ? "border-danger/20 bg-danger-soft text-danger-on"
       : tone === "amber"
-        ? "border-amber-200 bg-amber-50 text-amber-700"
+        ? "border-warning/20 bg-warning-soft text-warning-on"
         : tone === "green"
-          ? "border-emerald-200 bg-emerald-50 text-emerald-700"
-          : "border-slate-200 bg-white text-slate-950";
-  const activeClass = active ? "ring-2 ring-blue-300 ring-offset-2" : "hover:bg-slate-50";
+          ? "border-success/20 bg-success-soft text-success-on"
+          : "border-subtle bg-surface text-ink";
+  const activeClass = active ? "ring-2 ring-primary ring-offset-2 ring-offset-app" : "hover:bg-interactive";
 
   return (
     <button
       type="button"
       onClick={onClick}
-      className={`rounded-2xl border p-4 text-left shadow-sm transition ${toneClass} ${activeClass}`}
+      className={`rounded-card border p-3 text-left shadow-sm transition ${toneClass} ${activeClass}`}
       aria-pressed={active}
     >
-      <div className="text-xs font-semibold uppercase opacity-75">{label}</div>
-      <div className="mt-2 text-2xl font-semibold">{value}</div>
-      {helper ? <div className="mt-1 text-xs font-semibold opacity-90">{helper}</div> : null}
+      <div className="bt-caption opacity-75">{label}</div>
+      <div className="bt-metric mt-1">{value}</div>
+      {helper ? <div className="bt-caption mt-1 font-semibold opacity-90">{helper}</div> : null}
     </button>
   );
 }
@@ -327,23 +327,23 @@ export default function ChantiersTimePage() {
   }, []);
 
   return (
-    <div className="space-y-5">
-      <section className="rounded-3xl border border-slate-200 bg-white px-5 py-4 shadow-sm">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+    <div className="space-y-4">
+      <section className="rounded-surface border border-subtle bg-surface p-4 shadow-elevated">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
           <div className="min-w-0">
-            <div className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-400">Pilotage</div>
-            <h1 className="mt-1 text-2xl font-semibold text-slate-950">Suivi des temps chantier</h1>
-            <p className="mt-2 max-w-3xl text-sm text-slate-500">
+            <div className="bt-caption text-muted">Pilotage</div>
+            <h1 className="bt-page-title mt-1 text-ink">Suivi des temps chantier</h1>
+            <p className="bt-secondary mt-1 max-w-3xl text-muted">
               Priorisez les chantiers actifs en dépassement, sans saisie ou avec retours terrain ouverts, puis ouvrez directement le suivi temps, les tâches, le planning, la qualité ou l'équipe.
             </p>
           </div>
-          <button type="button" onClick={() => void refresh()} disabled={loading} className="inline-flex h-10 items-center gap-2 rounded-xl border border-slate-200 px-3 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50">
+          <button type="button" onClick={() => void refresh()} disabled={loading} className="bt-control inline-flex items-center gap-2 rounded-field border border-subtle bg-surface px-3 py-2 text-sm font-semibold text-ink-secondary hover:bg-interactive disabled:opacity-50">
             <RefreshCw className="h-4 w-4" /> Actualiser
           </button>
         </div>
       </section>
 
-      <section className="grid gap-3 md:grid-cols-6">
+      <section className="grid gap-3 md:grid-cols-3 xl:grid-cols-6">
         <TimeFilterCard
           label="Chantiers actifs"
           value={chantiers.length}
@@ -351,12 +351,12 @@ export default function ChantiersTimePage() {
           active={activeFilter === "all"}
           onClick={() => setActiveFilter("all")}
         />
-        <article className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+        <article className="rounded-card border border-subtle bg-surface p-3 shadow-sm">
           <div className="text-xs font-semibold uppercase text-slate-400">Prévu actif</div>
           <div className="mt-2 text-2xl font-semibold text-slate-950">{formatHours(totals.planned)}</div>
           {totals.plannedFromTasks > 0 ? <div className="mt-1 text-xs font-semibold text-slate-500">Inclut {totals.plannedFromTasks} prévu{totals.plannedFromTasks > 1 ? "s" : ""} calculé{totals.plannedFromTasks > 1 ? "s" : ""} depuis les tâches</div> : null}
         </article>
-        <article className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+        <article className="rounded-card border border-subtle bg-surface p-3 shadow-sm">
           <div className="text-xs font-semibold uppercase text-slate-400">Saisi actif</div>
           <div className="mt-2 text-2xl font-semibold text-slate-950">{formatHours(totals.logged)}</div>
         </article>
