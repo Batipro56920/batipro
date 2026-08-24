@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { AlertTriangle, RefreshCw, TrendingUp } from "lucide-react";
 import { calculateDocumentTotals } from "../features/document-engine";
 import { getPaidAmount, getRemainingAmount } from "../features/invoices/application/invoicePayments";
@@ -7,6 +7,15 @@ import type { InvoiceRecord } from "../features/invoices/domain/types";
 import { listInvoices } from "../features/invoices/infrastructure/invoiceRepository";
 import type { PurchaseOrderRecord, PurchaseOrderStatus } from "../features/purchase-orders";
 import { listPurchaseOrders } from "../features/purchase-orders";
+import {
+  isInFinancialPeriod,
+  parseFinancialPeriod,
+  type FinancialPeriod,
+} from "../features/financial/application/financialPeriod";
+import {
+  FinancialNavigation,
+  FinancialPeriodSelector,
+} from "../features/financial/components/FinancialNavigation";
 import {
   getCompanySettings,
   type CompanyChargeEntry,
@@ -161,6 +170,8 @@ function getHealthStatus(summary: ProfitabilitySummary) {
 }
 
 export default function RentabilitePage() {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const period = parseFinancialPeriod(searchParams.get("period"));
   const [invoices, setInvoices] = useState<InvoiceRecord[]>([]);
   const [purchaseOrders, setPurchaseOrders] = useState<PurchaseOrderRecord[]>([]);
   const [charges, setCharges] = useState<CompanyChargeEntry[]>([]);
@@ -193,9 +204,27 @@ export default function RentabilitePage() {
     void refresh();
   }, []);
 
-  const summary = useMemo(() => buildSummary(invoices, purchaseOrders, charges), [charges, invoices, purchaseOrders]);
-  const recentInvoices = invoices.filter(isIssuedInvoice).slice(0, 6);
-  const recentPurchases = purchaseOrders.filter(isCommittedPurchaseOrder).slice(0, 6);
+  const scopedInvoices = useMemo(
+    () => invoices.filter((invoice) => isInFinancialPeriod(invoice.document.issueDate, period)),
+    [invoices, period],
+  );
+  const scopedPurchaseOrders = useMemo(
+    () => purchaseOrders.filter((order) => isInFinancialPeriod(order.document.issueDate || order.createdAt, period)),
+    [period, purchaseOrders],
+  );
+  const summary = useMemo(
+    () => buildSummary(scopedInvoices, scopedPurchaseOrders, charges),
+    [charges, scopedInvoices, scopedPurchaseOrders],
+  );
+  const recentInvoices = scopedInvoices.filter(isIssuedInvoice).slice(0, 6);
+  const recentPurchases = scopedPurchaseOrders.filter(isCommittedPurchaseOrder).slice(0, 6);
+
+  function onPeriodChange(nextPeriod: FinancialPeriod) {
+    const nextParams = new URLSearchParams(searchParams);
+    if (nextPeriod === "all") nextParams.delete("period");
+    else nextParams.set("period", nextPeriod);
+    setSearchParams(nextParams, { replace: true });
+  }
 
   return (
     <div className="space-y-5">
@@ -222,6 +251,8 @@ export default function RentabilitePage() {
 
       {!loading ? (
         <>
+          <FinancialNavigation />
+          <FinancialPeriodSelector value={period} onChange={onPeriodChange} />
           <section className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
             <Metric label="Ventes émises" value={formatCurrency(summary.invoicedTtc)} detail="Hors brouillons et annulations, avoirs déduits" />
             <Metric label="Encaissé" value={formatCurrency(summary.paidTtc)} detail="Cash réellement reçu" />
