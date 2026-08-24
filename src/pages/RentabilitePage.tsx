@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Link, useSearchParams } from "react-router-dom";
-import { AlertTriangle, RefreshCw, TrendingUp } from "lucide-react";
+import { AlertTriangle, CheckCircle2, RefreshCw, TrendingUp } from "lucide-react";
 import { calculateDocumentTotals } from "../features/document-engine";
 import type { InvoiceRecord } from "../features/invoices/domain/types";
 import { listInvoices } from "../features/invoices/infrastructure/invoiceRepository";
@@ -57,6 +57,17 @@ type ProfitabilitySummary = {
   operatingChargesMonthly: number;
   operatingChargesAnnual: number;
   breakEvenMonthly: number | null;
+};
+
+type FinancialCoverage = {
+  totalDocuments: number;
+  attachedDocuments: number;
+  coverageRate: number;
+  unassignedInvoices: number;
+  unassignedPurchaseOrders: number;
+  unassignedSalesHt: number;
+  unassignedPurchasesHt: number;
+  riskRows: number;
 };
 
 function formatCurrency(value: number) {
@@ -116,6 +127,31 @@ function buildSummary(
     operatingChargesAnnual: operatingCharges.annual,
     breakEvenMonthly: getBreakEvenMonthly(operatingCharges.monthly, metrics.grossMarginRate),
   };
+}
+
+function projectRiskScore(row: ProjectFinancialRow) {
+  if (!row.project) return 100;
+  let score = 0;
+  if (row.metrics.purchasesHt > 0 && row.metrics.invoicedHt <= 0) score += 30;
+  if (row.metrics.grossMarginHt < 0) score += 20;
+  if (row.metrics.remainingToCollectTtc > 0) score += 10;
+  return score;
+}
+
+function getProjectSignal(row: ProjectFinancialRow) {
+  if (!row.project) {
+    return { label: "À rattacher", className: "bg-amber-50 text-amber-700" };
+  }
+  if (row.metrics.purchasesHt > 0 && row.metrics.invoicedHt <= 0) {
+    return { label: "Achats sans vente", className: "bg-red-50 text-red-700" };
+  }
+  if (row.metrics.grossMarginHt < 0) {
+    return { label: "Marge négative", className: "bg-red-50 text-red-700" };
+  }
+  if (row.metrics.remainingToCollectTtc > 0) {
+    return { label: "À encaisser", className: "bg-amber-50 text-amber-700" };
+  }
+  return { label: "Documenté", className: "bg-emerald-50 text-emerald-700" };
 }
 
 function buildProjectFinancialRows(
@@ -187,10 +223,69 @@ function buildProjectFinancialRows(
       metrics: buildFinancialDocumentMetrics(group.invoices, group.purchaseOrders),
     }))
     .sort((left, right) => {
-      if (left.project === null) return 1;
-      if (right.project === null) return -1;
+      const riskDifference = projectRiskScore(right) - projectRiskScore(left);
+      if (riskDifference !== 0) return riskDifference;
       return right.metrics.invoicedHt - left.metrics.invoicedHt;
     });
+}
+
+function buildFinancialCoverage(rows: ProjectFinancialRow[]): FinancialCoverage {
+  const unassigned = rows.find((row) => row.project === null);
+  const totalDocuments = rows.reduce((sum, row) => sum + row.invoiceCount + row.purchaseOrderCount, 0);
+  const unassignedInvoices = unassigned?.invoiceCount ?? 0;
+  const unassignedPurchaseOrders = unassigned?.purchaseOrderCount ?? 0;
+  const unassignedDocuments = unassignedInvoices + unassignedPurchaseOrders;
+  const attachedDocuments = Math.max(0, totalDocuments - unassignedDocuments);
+
+  return {
+    totalDocuments,
+    attachedDocuments,
+    coverageRate: totalDocuments > 0 ? (attachedDocuments / totalDocuments) * 100 : 100,
+    unassignedInvoices,
+    unassignedPurchaseOrders,
+    unassignedSalesHt: unassigned?.metrics.invoicedHt ?? 0,
+    unassignedPurchasesHt: unassigned?.metrics.purchasesHt ?? 0,
+    riskRows: rows.filter((row) => row.project && projectRiskScore(row) >= 20).length,
+  };
+}
+
+function FinancialDataQualityPanel({ coverage }: { coverage: FinancialCoverage }) {
+  const complete = coverage.totalDocuments === 0 || coverage.coverageRate === 100;
+  return (
+    <section className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_360px]">
+      <div className="bt-card rounded-xl bg-white p-5">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <div className="text-sm font-semibold text-slate-950">Qualité des données financières</div>
+            <div className="mt-1 text-xs text-slate-500">Un dossier fiable commence par des factures et commandes correctement rattachées.</div>
+          </div>
+          <div className={`inline-flex items-center gap-2 self-start rounded-full px-3 py-1 text-xs font-semibold ${complete ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-700"}`}>
+            {complete ? <CheckCircle2 className="h-3.5 w-3.5" /> : <AlertTriangle className="h-3.5 w-3.5" />}
+            {formatRate(coverage.coverageRate)} rattaché
+          </div>
+        </div>
+        <div className="mt-4 h-2 overflow-hidden rounded-full bg-slate-100">
+          <div className={`h-full rounded-full ${complete ? "bg-emerald-500" : "bg-amber-400"}`} style={{ width: `${Math.max(0, Math.min(100, coverage.coverageRate))}%` }} />
+        </div>
+        <div className="mt-3 text-xs text-slate-500">
+          {coverage.attachedDocuments} document(s) rattaché(s) sur {coverage.totalDocuments}. Le taux porte sur le nombre de documents, pas sur leur montant.
+        </div>
+      </div>
+      <aside className="bt-card rounded-xl bg-white p-5">
+        <div className="text-sm font-semibold text-slate-950">À corriger en priorité</div>
+        <div className="mt-3 space-y-2 text-sm">
+          <div className="flex items-center justify-between gap-3"><span className="text-slate-600">Factures non rattachées</span><span className="font-bold text-slate-950">{coverage.unassignedInvoices}</span></div>
+          <div className="flex items-center justify-between gap-3"><span className="text-slate-600">Commandes non rattachées</span><span className="font-bold text-slate-950">{coverage.unassignedPurchaseOrders}</span></div>
+          <div className="flex items-center justify-between gap-3"><span className="text-slate-600">Dossiers à risque</span><span className="font-bold text-slate-950">{coverage.riskRows}</span></div>
+        </div>
+        {(coverage.unassignedSalesHt !== 0 || coverage.unassignedPurchasesHt !== 0) ? (
+          <div className="mt-3 rounded-lg bg-amber-50 p-3 text-xs text-amber-800">
+            Non rattaché : {formatCurrency(coverage.unassignedSalesHt)} de ventes HT et {formatCurrency(coverage.unassignedPurchasesHt)} d'achats HT.
+          </div>
+        ) : null}
+      </aside>
+    </section>
+  );
 }
 
 function ProjectProfitabilityPanel({
@@ -205,9 +300,9 @@ function ProjectProfitabilityPanel({
   return (
     <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
       <div className="border-b border-slate-100 p-4">
-        <h2 className="font-semibold text-slate-950">Rentabilité par dossier</h2>
+        <h2 className="font-semibold text-slate-950">Marge documentée par dossier</h2>
         <p className="mt-1 text-sm text-slate-500">
-          Ventilation des factures émises et commandes engagées de la période, par projet et chantier rattachés.
+          Les dossiers nécessitant une action remontent en premier : rattachement manquant, achats sans vente ou marge brute négative.
         </p>
       </div>
       {loading ? <div className="p-6 text-sm text-slate-500">Chargement des rattachements projets...</div> : null}
@@ -218,10 +313,11 @@ function ProjectProfitabilityPanel({
       ) : null}
       {!loading && !error ? (
         <div className="overflow-x-auto p-4">
-          <table className="min-w-[980px] text-sm">
+          <table className="min-w-[1080px] text-sm">
             <thead className="bg-slate-50 text-slate-600">
               <tr>
                 <th className="px-4 py-3 text-left font-medium">Dossier</th>
+                <th className="px-4 py-3 text-left font-medium">Signal</th>
                 <th className="px-4 py-3 text-left font-medium">Documents</th>
                 <th className="px-4 py-3 text-right font-medium">Ventes HT</th>
                 <th className="px-4 py-3 text-right font-medium">Achats HT</th>
@@ -236,6 +332,7 @@ function ProjectProfitabilityPanel({
                   ? row.project?.chantiers.find((item) => item.id === row.chantierIds[0]) ?? null
                   : null;
                 const marginTone = row.metrics.grossMarginHt < 0 ? "text-red-700" : "text-emerald-700";
+                const signal = getProjectSignal(row);
                 return (
                   <tr key={row.key} className="border-t border-slate-100">
                     <td className="px-4 py-3">
@@ -262,9 +359,8 @@ function ProjectProfitabilityPanel({
                         </>
                       )}
                     </td>
-                    <td className="px-4 py-3 text-slate-700">
-                      {row.invoiceCount} facture(s) · {row.purchaseOrderCount} commande(s)
-                    </td>
+                    <td className="px-4 py-3"><span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${signal.className}`}>{signal.label}</span></td>
+                    <td className="px-4 py-3 text-slate-700">{row.invoiceCount} facture(s) · {row.purchaseOrderCount} commande(s)</td>
                     <td className="px-4 py-3 text-right text-slate-700">{formatCurrency(row.metrics.invoicedHt)}</td>
                     <td className="px-4 py-3 text-right text-slate-700">{formatCurrency(row.metrics.purchasesHt)}</td>
                     <td className={`px-4 py-3 text-right font-semibold ${marginTone}`}>{formatCurrency(row.metrics.grossMarginHt)}</td>
@@ -274,16 +370,15 @@ function ProjectProfitabilityPanel({
                 );
               })}
               {!rows.length ? (
-                <tr>
-                  <td colSpan={7} className="px-4 py-8 text-center text-slate-500">
-                    Aucun document financier sur cette période.
-                  </td>
-                </tr>
+                <tr><td colSpan={8} className="px-4 py-8 text-center text-slate-500">Aucun document financier sur cette période.</td></tr>
               ) : null}
             </tbody>
           </table>
         </div>
       ) : null}
+      <div className="border-t border-slate-100 bg-slate-50 px-4 py-3 text-xs text-slate-500">
+        Marge documentée = ventes HT émises - commandes fournisseurs HT engagées. Elle n'inclut pas encore le coût réel de la main-d'œuvre, les frais chantier non saisis ni les paiements fournisseurs.
+      </div>
     </section>
   );
 }
@@ -309,11 +404,7 @@ function getHealthStatus(summary: ProfitabilitySummary) {
 export default function RentabilitePage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const period = parseFinancialPeriod(searchParams.get("period"));
-  const {
-    projects,
-    loading: projectsLoading,
-    error: projectsError,
-  } = useProjectsData();
+  const { projects, loading: projectsLoading, error: projectsError } = useProjectsData();
   const [invoices, setInvoices] = useState<InvoiceRecord[]>([]);
   const [purchaseOrders, setPurchaseOrders] = useState<PurchaseOrderRecord[]>([]);
   const [charges, setCharges] = useState<CompanyChargeEntry[]>([]);
@@ -324,11 +415,7 @@ export default function RentabilitePage() {
     setLoading(true);
     setError(null);
     try {
-      const [invoiceRows, purchaseRows, settings] = await Promise.all([
-        listInvoices(),
-        listPurchaseOrders(),
-        getCompanySettings(),
-      ]);
+      const [invoiceRows, purchaseRows, settings] = await Promise.all([listInvoices(), listPurchaseOrders(), getCompanySettings()]);
       setInvoices(invoiceRows);
       setPurchaseOrders(purchaseRows);
       setCharges(settings.charges_exploitation?.entries ?? []);
@@ -342,28 +429,15 @@ export default function RentabilitePage() {
     }
   }
 
-  useEffect(() => {
-    void refresh();
-  }, []);
+  useEffect(() => { void refresh(); }, []);
 
-  const scopedInvoices = useMemo(
-    () => invoices.filter((invoice) => isInFinancialPeriod(invoice.document.issueDate, period)),
-    [invoices, period],
-  );
-  const scopedPurchaseOrders = useMemo(
-    () => purchaseOrders.filter((order) => isInFinancialPeriod(order.document.issueDate || order.createdAt, period)),
-    [period, purchaseOrders],
-  );
-  const summary = useMemo(
-    () => buildSummary(scopedInvoices, scopedPurchaseOrders, charges),
-    [charges, scopedInvoices, scopedPurchaseOrders],
-  );
+  const scopedInvoices = useMemo(() => invoices.filter((invoice) => isInFinancialPeriod(invoice.document.issueDate, period)), [invoices, period]);
+  const scopedPurchaseOrders = useMemo(() => purchaseOrders.filter((order) => isInFinancialPeriod(order.document.issueDate || order.createdAt, period)), [period, purchaseOrders]);
+  const summary = useMemo(() => buildSummary(scopedInvoices, scopedPurchaseOrders, charges), [charges, scopedInvoices, scopedPurchaseOrders]);
   const recentInvoices = scopedInvoices.filter(isIssuedInvoice).slice(0, 6);
   const recentPurchases = scopedPurchaseOrders.filter(isCommittedPurchaseOrder).slice(0, 6);
-  const projectFinancialRows = useMemo(
-    () => buildProjectFinancialRows(scopedInvoices, scopedPurchaseOrders, projects),
-    [projects, scopedInvoices, scopedPurchaseOrders],
-  );
+  const projectFinancialRows = useMemo(() => buildProjectFinancialRows(scopedInvoices, scopedPurchaseOrders, projects), [projects, scopedInvoices, scopedPurchaseOrders]);
+  const financialCoverage = useMemo(() => buildFinancialCoverage(projectFinancialRows), [projectFinancialRows]);
 
   function onPeriodChange(nextPeriod: FinancialPeriod) {
     const nextParams = new URLSearchParams(searchParams);
@@ -376,20 +450,14 @@ export default function RentabilitePage() {
     <div className="space-y-5">
       <header className="flex flex-col gap-4 rounded-3xl border border-slate-200 bg-white p-5 shadow-sm lg:flex-row lg:items-start lg:justify-between">
         <div className="flex gap-4">
-          <div className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-slate-900 text-white">
-            <TrendingUp className="h-5 w-5" />
-          </div>
+          <div className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-slate-900 text-white"><TrendingUp className="h-5 w-5" /></div>
           <div>
             <div className="text-xs font-semibold uppercase tracking-[0.18em] text-blue-600">Pilotage financier</div>
             <h1 className="mt-1 text-2xl font-bold text-slate-950">Rentabilité</h1>
-            <p className="mt-1 max-w-3xl text-sm text-slate-500">
-              Marge brute documentée, encaissements et charges d'exploitation actuellement connues.
-            </p>
+            <p className="mt-1 max-w-3xl text-sm text-slate-500">Marge brute documentée, encaissements et charges d'exploitation actuellement connues.</p>
           </div>
         </div>
-        <button type="button" onClick={() => void refresh()} className="inline-flex h-10 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 hover:bg-slate-50">
-          <RefreshCw className="h-4 w-4" /> Rafraîchir
-        </button>
+        <button type="button" onClick={() => void refresh()} className="inline-flex h-10 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 hover:bg-slate-50"><RefreshCw className="h-4 w-4" /> Rafraîchir</button>
       </header>
 
       {error ? <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</div> : null}
@@ -403,17 +471,14 @@ export default function RentabilitePage() {
             <Metric label="Ventes émises" value={formatCurrency(summary.invoicedTtc)} detail="Hors brouillons et annulations, avoirs déduits" />
             <Metric label="Encaissé" value={formatCurrency(summary.paidTtc)} detail="Cash réellement reçu" />
             <Metric label="Reste à encaisser" value={formatCurrency(summary.remainingTtc)} detail={`${summary.openInvoices} facture(s) ouverte(s) · Voir les factures à encaisser`} tone={summary.remainingTtc > 0 ? "warning" : "neutral"} href={collectableInvoicesHref()} />
-            <Metric label="Marge brute documentée" value={formatCurrency(summary.estimatedMarginHt)} detail={`${formatRate(summary.estimatedMarginRate)} sur HT, avant charges d\'exploitation`} tone={summary.estimatedMarginHt < 0 ? "danger" : "success"} />
+            <Metric label="Marge brute documentée" value={formatCurrency(summary.estimatedMarginHt)} detail={`${formatRate(summary.estimatedMarginRate)} sur HT, avant charges d'exploitation`} tone={summary.estimatedMarginHt < 0 ? "danger" : "success"} />
           </section>
 
           <section className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_360px]">
             <div className="bt-card rounded-xl bg-white p-5">
               <div className="flex items-center gap-3">
                 <div className="grid h-10 w-10 place-items-center rounded-lg bg-blue-50 text-blue-700"><TrendingUp className="h-5 w-5" /></div>
-                <div>
-                  <div className="text-sm font-semibold text-slate-950">Lecture documentaire</div>
-                  <div className="text-xs text-slate-500">Ventes émises, achats engagés et écart brut.</div>
-                </div>
+                <div><div className="text-sm font-semibold text-slate-950">Lecture documentaire</div><div className="text-xs text-slate-500">Ventes émises, achats engagés et écart brut.</div></div>
               </div>
               <div className="mt-5 grid gap-3 md:grid-cols-3">
                 <FlowBlock label="Ventes émises" value={formatCurrency(summary.invoicedTtc)} detail="Factures hors brouillons, avoirs déduits" />
@@ -421,9 +486,7 @@ export default function RentabilitePage() {
                 <FlowBlock label="Écart documentaire" value={formatCurrency(summary.forecastNetTtc)} detail="Ventes TTC - achats TTC" strong />
               </div>
               <SimpleFinancialChart summary={summary} />
-              <div className="mt-4 rounded-lg border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700">
-                Position simplifiée sur flux connus : <span className="font-semibold text-slate-950">{formatCurrency(summary.cashPositionTtc)}</span>. Elle ne constitue pas un solde bancaire.
-              </div>
+              <div className="mt-4 rounded-lg border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700">Position simplifiée sur flux connus : <span className="font-semibold text-slate-950">{formatCurrency(summary.cashPositionTtc)}</span>. Elle ne constitue pas un solde bancaire.</div>
             </div>
 
             <aside className="bt-card rounded-xl bg-white p-5">
@@ -437,11 +500,9 @@ export default function RentabilitePage() {
             </aside>
           </section>
 
-          <ProjectProfitabilityPanel
-            rows={projectFinancialRows}
-            loading={projectsLoading}
-            error={projectsError}
-          />
+          <FinancialDataQualityPanel coverage={financialCoverage} />
+
+          <ProjectProfitabilityPanel rows={projectFinancialRows} loading={projectsLoading} error={projectsError} />
 
           <section className="grid gap-4 xl:grid-cols-2">
             <DataPanel title="Dernières factures" empty={!recentInvoices.length ? "Aucune facture." : null}>
@@ -467,22 +528,14 @@ function Metric({ label, value, detail, tone = "neutral", href }: { label: strin
   const toneClass = tone === "success" ? "text-emerald-700" : tone === "warning" ? "text-amber-700" : tone === "danger" ? "text-red-700" : "text-slate-950";
   const className = "bt-card rounded-xl bg-white p-4 transition hover:border-blue-200 hover:shadow-sm";
   const content = <><div className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">{label}</div><div className={`mt-2 text-2xl font-bold ${toneClass}`}>{value}</div><div className="mt-1 text-xs text-slate-500">{detail}</div></>;
-
-  if (href) {
-    return <Link to={href} className={`${className} block focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2`}>{content}</Link>;
-  }
-
+  if (href) return <Link to={href} className={`${className} block focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2`}>{content}</Link>;
   return <div className={className}>{content}</div>;
 }
 
 function FlowBlock({ label, value, detail, strong = false, href }: { label: string; value: string; detail: string; strong?: boolean; href?: string }) {
   const className = strong ? "rounded-lg border border-blue-200 bg-blue-50 p-4" : "rounded-lg border border-slate-200 bg-slate-50 p-4";
   const content = <><div className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">{label}</div><div className="mt-2 text-lg font-bold text-slate-950">{value}</div><div className="mt-1 text-xs text-slate-500">{detail}</div></>;
-
-  if (href) {
-    return <Link to={href} className={`${className} block transition hover:border-blue-200 hover:bg-blue-50/50 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2`}>{content}</Link>;
-  }
-
+  if (href) return <Link to={href} className={`${className} block transition hover:border-blue-200 hover:bg-blue-50/50 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2`}>{content}</Link>;
   return <div className={className}>{content}</div>;
 }
 
@@ -494,23 +547,17 @@ function SimpleFinancialChart({ summary }: { summary: ProfitabilitySummary }) {
     { label: "À encaisser", value: summary.remainingTtc, className: "bg-amber-400" },
     { label: "Achats engagés", value: summary.purchasesTtc, className: "bg-slate-400" },
   ];
-
   return (
     <div className="mt-5 rounded-lg border border-slate-200 bg-white p-4">
       <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-        <div>
-          <div className="text-sm font-semibold text-slate-950">Équilibre documentaire</div>
-          <div className="text-xs text-slate-500">Lecture limitée aux factures, encaissements et commandes enregistrés.</div>
-        </div>
+        <div><div className="text-sm font-semibold text-slate-950">Équilibre documentaire</div><div className="text-xs text-slate-500">Lecture limitée aux factures, encaissements et commandes enregistrés.</div></div>
         <div className={`rounded-full px-3 py-1 text-xs font-semibold ${health.className}`}>{health.label}</div>
       </div>
       <div className="mt-4 space-y-3">
         {rows.map((row) => (
           <div key={row.label} className="grid gap-2 sm:grid-cols-[120px_minmax(0,1fr)_100px] sm:items-center">
             <div className="text-xs font-medium text-slate-600">{row.label}</div>
-            <div className="h-3 overflow-hidden rounded-full bg-slate-100">
-              <div className={`h-full rounded-full ${row.className}`} style={{ width: `${chartPercent(row.value, maxValue)}%` }} />
-            </div>
+            <div className="h-3 overflow-hidden rounded-full bg-slate-100"><div className={`h-full rounded-full ${row.className}`} style={{ width: `${chartPercent(row.value, maxValue)}%` }} /></div>
             <div className="text-right text-xs font-semibold text-slate-900">{formatCurrency(row.value)}</div>
           </div>
         ))}
@@ -523,11 +570,7 @@ function SimpleFinancialChart({ summary }: { summary: ProfitabilitySummary }) {
 function WatchItem({ label, value, detail, href }: { label: string; value: string; detail: string; href?: string }) {
   const className = "flex items-center justify-between gap-3 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 transition hover:border-blue-200 hover:bg-blue-50/50";
   const content = <><div><div className="font-medium text-slate-900">{label}</div><div className="text-xs text-slate-500">{detail}</div></div><div className="text-sm font-bold text-slate-950">{value}</div></>;
-
-  if (href) {
-    return <Link to={href} className={`${className} focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2`}>{content}</Link>;
-  }
-
+  if (href) return <Link to={href} className={`${className} focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2`}>{content}</Link>;
   return <div className={className}>{content}</div>;
 }
 
@@ -539,13 +582,7 @@ function Row({ title, detail, value, href }: { title?: string | null; detail: st
   return (
     <div className="flex items-center justify-between gap-3 rounded-lg border border-slate-200 px-3 py-2 text-sm">
       <div className="min-w-0">
-        {href ? (
-          <Link to={href} className="block truncate font-medium text-blue-700 hover:text-blue-800">
-            {title || "Sans numéro"}
-          </Link>
-        ) : (
-          <div className="truncate font-medium text-slate-950">{title || "Sans numéro"}</div>
-        )}
+        {href ? <Link to={href} className="block truncate font-medium text-blue-700 hover:text-blue-800">{title || "Sans numéro"}</Link> : <div className="truncate font-medium text-slate-950">{title || "Sans numéro"}</div>}
         <div className="truncate text-xs text-slate-500">{detail}</div>
       </div>
       <div className="shrink-0 font-semibold text-slate-950">{value}</div>
