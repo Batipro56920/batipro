@@ -2,11 +2,19 @@ import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { AlertTriangle, RefreshCw, TrendingUp } from "lucide-react";
 import { calculateDocumentTotals } from "../features/document-engine";
-import { getPaidAmount, getRemainingAmount } from "../features/invoices/application/invoicePayments";
 import type { InvoiceRecord } from "../features/invoices/domain/types";
 import { listInvoices } from "../features/invoices/infrastructure/invoiceRepository";
-import type { PurchaseOrderRecord, PurchaseOrderStatus } from "../features/purchase-orders";
+import type { PurchaseOrderRecord } from "../features/purchase-orders";
 import { listPurchaseOrders } from "../features/purchase-orders";
+import {
+  buildFinancialDocumentMetrics,
+  getBreakEvenMonthly,
+  getInvoiceSign,
+  getOperatingChargeMetrics,
+  isCommittedPurchaseOrder,
+  isIssuedInvoice,
+  isOpenPurchaseOrderStatus,
+} from "../features/financial/application/financialMetrics";
 import {
   isInFinancialPeriod,
   parseFinancialPeriod,
@@ -39,8 +47,6 @@ type ProfitabilitySummary = {
   breakEvenMonthly: number | null;
 };
 
-const OPEN_PURCHASE_ORDER_STATUSES: PurchaseOrderStatus[] = ["sent", "confirmed", "partially_delivered"];
-
 function formatCurrency(value: number) {
   return new Intl.NumberFormat("fr-FR", { style: "currency", currency: "EUR", maximumFractionDigits: 0 }).format(value || 0);
 }
@@ -61,10 +67,6 @@ function purchaseOrdersHref() {
   return "/bons-commande?status=open";
 }
 
-function isOpenPurchaseOrderStatus(status: PurchaseOrderStatus) {
-  return OPEN_PURCHASE_ORDER_STATUSES.includes(status);
-}
-
 function purchaseOrderHref(order: PurchaseOrderRecord) {
   const params = new URLSearchParams({ purchaseOrderId: order.id });
   if (isOpenPurchaseOrderStatus(order.status)) {
@@ -78,77 +80,30 @@ function buildSummary(
   purchaseOrders: PurchaseOrderRecord[],
   charges: CompanyChargeEntry[],
 ): ProfitabilitySummary {
-  const issuedInvoices = invoices.filter(isIssuedInvoice);
-  const collectableInvoices = issuedInvoices.filter((invoice) => invoice.type !== "credit_note");
-  const committedOrders = purchaseOrders.filter(isCommittedPurchaseOrder);
-  const invoicedHt = issuedInvoices.reduce(
-    (sum, invoice) => sum + getInvoiceSign(invoice) * getInvoiceTotals(invoice).totalHt,
-    0,
-  );
-  const invoicedTtc = issuedInvoices.reduce(
-    (sum, invoice) => sum + getInvoiceSign(invoice) * getInvoiceTotals(invoice).totalTtc,
-    0,
-  );
-  const paidTtc = collectableInvoices.reduce((sum, invoice) => sum + getPaidAmount(invoice), 0);
-  const remainingTtc = collectableInvoices.reduce((sum, invoice) => sum + getRemainingAmount(invoice), 0);
-  const purchaseTotals = committedOrders.map((order) => order.document.totals ?? calculateDocumentTotals(order.document));
-  const purchasesHt = purchaseTotals.reduce((sum, total) => sum + Number(total.totalHt ?? 0), 0);
-  const purchasesTtc = purchaseTotals.reduce((sum, total) => sum + Number(total.totalTtc ?? 0), 0);
-  const estimatedMarginHt = invoicedHt - purchasesHt;
-  const estimatedMarginRate = invoicedHt > 0 ? (estimatedMarginHt / invoicedHt) * 100 : 0;
-  const operatingChargesMonthly = charges
-    .filter(isCurrentRecurringCharge)
-    .reduce((sum, charge) => sum + monthlyChargeAmount(charge), 0);
-  const operatingChargesAnnual = operatingChargesMonthly * 12;
-  const breakEvenMonthly = operatingChargesMonthly > 0 && estimatedMarginRate > 0
-    ? operatingChargesMonthly / (estimatedMarginRate / 100)
-    : null;
+  const metrics = buildFinancialDocumentMetrics(invoices, purchaseOrders);
+  const operatingCharges = getOperatingChargeMetrics(charges);
+
   return {
-    invoicedHt,
-    invoicedTtc,
-    paidTtc,
-    remainingTtc,
-    purchasesHt,
-    purchasesTtc,
-    estimatedMarginHt,
-    estimatedMarginRate,
-    cashPositionTtc: paidTtc - purchasesTtc,
-    forecastNetTtc: invoicedTtc - purchasesTtc,
-    openInvoices: collectableInvoices.filter((row) => row.status !== "paid").length,
-    openPurchases: committedOrders.filter((row) => isOpenPurchaseOrderStatus(row.status)).length,
-    operatingChargesMonthly,
-    operatingChargesAnnual,
-    breakEvenMonthly,
+    invoicedHt: metrics.invoicedHt,
+    invoicedTtc: metrics.invoicedTtc,
+    paidTtc: metrics.paidTtc,
+    remainingTtc: metrics.remainingToCollectTtc,
+    purchasesHt: metrics.purchasesHt,
+    purchasesTtc: metrics.purchasesTtc,
+    estimatedMarginHt: metrics.grossMarginHt,
+    estimatedMarginRate: metrics.grossMarginRate,
+    cashPositionTtc: metrics.documentPositionTtc,
+    forecastNetTtc: metrics.invoicedTtc - metrics.purchasesTtc,
+    openInvoices: invoices.filter(isIssuedInvoice).filter(
+      (invoice) => invoice.type !== "credit_note" && invoice.status !== "paid",
+    ).length,
+    openPurchases: purchaseOrders.filter(isCommittedPurchaseOrder).filter(
+      (order) => isOpenPurchaseOrderStatus(order.status),
+    ).length,
+    operatingChargesMonthly: operatingCharges.monthly,
+    operatingChargesAnnual: operatingCharges.annual,
+    breakEvenMonthly: getBreakEvenMonthly(operatingCharges.monthly, metrics.grossMarginRate),
   };
-}
-
-function getInvoiceTotals(invoice: InvoiceRecord) {
-  return invoice.document.totals ?? calculateDocumentTotals(invoice.document);
-}
-
-function getInvoiceSign(invoice: InvoiceRecord) {
-  return invoice.type === "credit_note" ? -1 : 1;
-}
-
-function isIssuedInvoice(invoice: InvoiceRecord) {
-  return !["draft", "cancelled"].includes(invoice.status);
-}
-
-function isCommittedPurchaseOrder(order: PurchaseOrderRecord) {
-  return !["draft", "cancelled"].includes(order.status);
-}
-
-function isCurrentRecurringCharge(charge: CompanyChargeEntry) {
-  if (!charge.active || charge.frequency === "one_time") return false;
-  const today = new Date().toISOString().slice(0, 10);
-  return charge.start_date <= today && (!charge.end_date || charge.end_date >= today);
-}
-
-function monthlyChargeAmount(charge: CompanyChargeEntry) {
-  if (charge.frequency === "monthly") return charge.amount;
-  if (charge.frequency === "quarterly") return charge.amount / 3;
-  if (charge.frequency === "annual") return charge.amount / 12;
-  return 0;
 }
 
 function chartPercent(value: number, max: number) {
