@@ -1,6 +1,7 @@
 ﻿// src/pages/ChantierNewPage.tsx
 import { useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
+import { ArrowLeft, CalendarDays, CheckCircle2, MapPin, Plus, RotateCcw } from "lucide-react";
 import type { ChantierStatus } from "../types/chantier";
 import { createChantier } from "../services/chantiers.service";
 import { useI18n } from "../i18n";
@@ -57,55 +58,70 @@ export default function ChantierNewPage() {
   }
 
   return (
-    <div className="max-w-4xl mx-auto space-y-6">
-      {/* Breadcrumb + header */}
-      <div className="flex items-start justify-between gap-4">
-        <div className="space-y-2">
-          <div className="text-sm text-slate-500">
-            <Link to="/chantiers" className="hover:underline">
-              {t("chantierNew.breadcrumb")}
-            </Link>{" "}
-            <span className="mx-1">/</span>
-            <span className="text-slate-700">{t("chantierNew.title")}</span>
+    <div className="mx-auto max-w-6xl space-y-4">
+      <header className="rounded-surface border border-subtle bg-surface p-4 shadow-elevated">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+          <div className="flex min-w-0 items-start gap-3">
+            <Link to="/chantiers" className="bt-control inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-field border border-subtle bg-surface text-ink-secondary hover:bg-interactive" aria-label={t("chantierNew.back")}>
+              <ArrowLeft className="h-4 w-4" strokeWidth={1.75} />
+            </Link>
+            <div className="min-w-0">
+              <div className="bt-caption text-muted">
+                <Link to="/chantiers" className="hover:text-ink">{t("chantierNew.breadcrumb")}</Link>
+                <span aria-hidden> / </span>
+                {t("chantierNew.title")}
+              </div>
+              <div className="mt-1 flex flex-wrap items-center gap-2">
+                <h1 className="bt-page-title text-ink">{t("chantierNew.title")}</h1>
+                <span className="rounded-full border border-subtle bg-neutral-soft px-2 py-0.5 text-xs font-semibold text-neutral-on">
+                  {form.status === "PREPARATION"
+                    ? t("common.chantierStatus.PREPARATION")
+                    : form.status === "EN_COURS"
+                    ? t("common.chantierStatus.EN_COURS")
+                    : t("common.chantierStatus.TERMINE")}
+                </span>
+              </div>
+              <p className="bt-secondary mt-1 max-w-2xl text-muted">{t("chantierNew.subtitle")}</p>
+            </div>
           </div>
 
-          <div className="flex items-center gap-3">
-            <h1 className="text-3xl font-bold">{t("chantierNew.title")}</h1>
-            <span className="text-xs px-2 py-1 rounded-full border bg-slate-50 text-slate-700">
-              {form.status === "PREPARATION"
-                ? t("common.chantierStatus.PREPARATION")
-                : form.status === "EN_COURS"
-                ? t("common.chantierStatus.EN_COURS")
-                : t("common.chantierStatus.TERMINE")}
-            </span>
+          <div className="flex flex-wrap gap-2">
+            <Link to="/chantiers" className="bt-control inline-flex items-center justify-center rounded-field border border-subtle bg-surface px-3 py-2 text-sm font-semibold text-ink-secondary hover:bg-interactive">
+              {t("common.actions.cancel")}
+            </Link>
+            <button
+              type="submit"
+              form="new-chantier-form"
+              disabled={!canSubmit}
+              className={[
+                "bt-control inline-flex items-center justify-center gap-2 rounded-field px-3 py-2 text-sm font-semibold transition",
+                canSubmit
+                  ? "bg-primary text-primary-contrast hover:bg-primary-hover"
+                  : "cursor-not-allowed bg-neutral-soft text-muted",
+              ].join(" ")}
+            >
+              <Plus className="h-4 w-4" strokeWidth={1.75} />
+              {loading ? t("chantierNew.creating") : t("chantierNew.submit")}
+            </button>
           </div>
-
-          <div className="text-slate-500">{t("chantierNew.subtitle")}</div>
         </div>
+      </header>
 
-        <Link
-          to="/chantiers"
-          className="rounded-xl border px-4 py-2 hover:bg-slate-50 transition"
-        >
-          {t("chantierNew.back")}
-        </Link>
-      </div>
-
-      {/* Form card */}
-      <form onSubmit={onSubmit} className="rounded-2xl border bg-white p-6 space-y-6">
+      <form id="new-chantier-form" onSubmit={onSubmit} className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_320px]">
+        <section className="rounded-surface border border-subtle bg-surface p-4 shadow-sm">
         {errorMsg && (
-          <div className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+          <div className="mb-4 rounded-card border border-danger/20 bg-danger-soft p-3 text-sm font-medium text-danger-on">
             {t("chantierNew.errorPrefix", { message: errorMsg })}
           </div>
         )}
 
-        <div className="grid gap-5">
+        <div className="grid gap-4">
           <div className="space-y-2">
-            <label className="text-sm font-medium">
-              {t("chantierNew.fields.name")} <span className="text-red-600">*</span>
+            <label className="bt-caption text-ink-secondary">
+              {t("chantierNew.fields.name")} <span className="text-danger">*</span>
             </label>
             <input
-              className="w-full rounded-xl border px-3 py-2"
+              className="bt-control w-full rounded-field border border-subtle bg-surface px-3 py-2 text-sm text-ink outline-none transition placeholder:text-muted focus:border-primary"
               placeholder={t("chantierNew.placeholders.name")}
               value={form.nom}
               onChange={(e) => setForm((p) => ({ ...p, nom: e.target.value }))}
@@ -113,9 +129,9 @@ export default function ChantierNewPage() {
           </div>
 
           <div className="space-y-2">
-            <label className="text-sm font-medium">{t("chantierNew.fields.client")}</label>
+            <label className="bt-caption text-ink-secondary">{t("chantierNew.fields.client")}</label>
             <input
-              className="w-full rounded-xl border px-3 py-2"
+              className="bt-control w-full rounded-field border border-subtle bg-surface px-3 py-2 text-sm text-ink outline-none transition placeholder:text-muted focus:border-primary"
               placeholder={t("chantierNew.placeholders.client")}
               value={form.client}
               onChange={(e) => setForm((p) => ({ ...p, client: e.target.value }))}
@@ -123,38 +139,39 @@ export default function ChantierNewPage() {
           </div>
 
           <div className="space-y-2">
-            <label className="text-sm font-medium">{t("chantierNew.fields.address")}</label>
+            <label className="bt-caption text-ink-secondary">{t("chantierNew.fields.address")}</label>
             <textarea
-              className="w-full rounded-xl border px-3 py-2 min-h-[84px]"
+              className="min-h-[84px] w-full rounded-field border border-subtle bg-surface px-3 py-2 text-sm text-ink outline-none transition placeholder:text-muted focus:border-primary"
               placeholder={t("chantierNew.placeholders.address")}
               value={form.adresse}
               onChange={(e) => setForm((p) => ({ ...p, adresse: e.target.value }))}
             />
           </div>
 
-          <div className="grid md:grid-cols-2 gap-4">
+          <div className="grid gap-4 md:grid-cols-2">
             <div className="space-y-2">
-              <label className="text-sm font-medium">{t("chantierNew.fields.startDate")}</label>
+              <label className="bt-caption text-ink-secondary">{t("chantierNew.fields.startDate")}</label>
               <input
                 type="date"
-                className="w-full rounded-xl border px-3 py-2"
+                className="bt-control w-full rounded-field border border-subtle bg-surface px-3 py-2 text-sm text-ink outline-none transition focus:border-primary"
                 value={form.date_debut}
                 onChange={(e) => setForm((p) => ({ ...p, date_debut: e.target.value }))}
               />
               <button
                 type="button"
-                className="text-xs text-slate-600 hover:underline"
+                className="inline-flex items-center gap-1 text-xs font-semibold text-primary-on hover:text-primary"
                 onClick={() => setForm((p) => ({ ...p, date_debut: todayISO() }))}
               >
+                <RotateCcw className="h-3.5 w-3.5" strokeWidth={1.75} />
                 {t("chantierNew.setToday")}
               </button>
             </div>
 
             <div className="space-y-2">
-              <label className="text-sm font-medium">{t("chantierNew.fields.endDate")}</label>
+              <label className="bt-caption text-ink-secondary">{t("chantierNew.fields.endDate")}</label>
               <input
                 type="date"
-                className="w-full rounded-xl border px-3 py-2"
+                className="bt-control w-full rounded-field border border-subtle bg-surface px-3 py-2 text-sm text-ink outline-none transition focus:border-primary"
                 value={form.date_fin_prevue}
                 onChange={(e) => setForm((p) => ({ ...p, date_fin_prevue: e.target.value }))}
               />
@@ -162,9 +179,9 @@ export default function ChantierNewPage() {
           </div>
 
           <div className="space-y-2">
-            <label className="text-sm font-medium">{t("chantierNew.fields.status")}</label>
+            <label className="bt-caption text-ink-secondary">{t("chantierNew.fields.status")}</label>
             <select
-              className="w-full rounded-xl border px-3 py-2 bg-white"
+              className="bt-control w-full rounded-field border border-subtle bg-surface px-3 py-2 text-sm text-ink outline-none transition focus:border-primary"
               value={form.status}
               onChange={(e) =>
                 setForm((p) => ({ ...p, status: e.target.value as ChantierStatus }))
@@ -176,25 +193,43 @@ export default function ChantierNewPage() {
             </select>
           </div>
         </div>
+        </section>
 
-        <div className="flex items-center justify-end gap-3">
-          <Link to="/chantiers" className="rounded-xl border px-4 py-2 hover:bg-slate-50 transition">
-            {t("common.actions.cancel")}
-          </Link>
-
-          <button
-            type="submit"
-            disabled={!canSubmit}
-            className={[
-              "rounded-xl px-4 py-2 transition",
-              canSubmit
-                ? "bg-slate-900 text-white hover:bg-slate-800"
-                : "bg-slate-200 text-slate-500 cursor-not-allowed",
-            ].join(" ")}
-          >
-            {loading ? t("chantierNew.creating") : t("chantierNew.submit")}
-          </button>
-        </div>
+        <aside className="rounded-surface border border-subtle bg-surface p-4 shadow-sm lg:sticky lg:top-24 lg:self-start">
+          <div className="bt-section-title text-ink">Synthèse</div>
+          <div className="mt-3 space-y-3">
+            <div className="rounded-card border border-subtle bg-interactive p-3">
+              <div className="bt-caption text-muted">Nom</div>
+              <div className="bt-card-title mt-1 truncate text-ink">{form.nom.trim() || t("chantierNew.placeholders.name")}</div>
+            </div>
+            <div className="rounded-card border border-subtle bg-interactive p-3">
+              <div className="flex items-center gap-2 text-muted">
+                <MapPin className="h-4 w-4" strokeWidth={1.75} />
+                <span className="bt-caption">Contexte</span>
+              </div>
+              <div className="bt-secondary mt-1 text-ink">{form.client.trim() || t("chantierNew.placeholders.client")}</div>
+              <div className="bt-caption mt-1 line-clamp-2 text-muted">{form.adresse.trim() || t("chantierNew.placeholders.address")}</div>
+            </div>
+            <div className="rounded-card border border-subtle bg-interactive p-3">
+              <div className="flex items-center gap-2 text-muted">
+                <CalendarDays className="h-4 w-4" strokeWidth={1.75} />
+                <span className="bt-caption">Planning</span>
+              </div>
+              <div className="bt-secondary mt-1 text-ink">
+                {form.date_debut || "-"} - {form.date_fin_prevue || "-"}
+              </div>
+            </div>
+            <div className="rounded-card border border-subtle bg-primary-soft p-3 text-primary-on">
+              <div className="flex items-center gap-2">
+                <CheckCircle2 className="h-4 w-4" strokeWidth={1.75} />
+                <span className="bt-caption">Création</span>
+              </div>
+              <div className="bt-secondary mt-1">
+                {canSubmit ? "Prêt à créer le chantier." : "Le nom du chantier est obligatoire."}
+              </div>
+            </div>
+          </div>
+        </aside>
       </form>
     </div>
   );
