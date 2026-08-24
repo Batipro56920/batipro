@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
-import { Link, useLocation } from "react-router-dom";
+import { Link, useLocation, useSearchParams } from "react-router-dom";
 import { Banknote, FileSpreadsheet, Landmark, RefreshCw, TrendingUp, Wallet } from "lucide-react";
 import { calculateDocumentTotals, type BusinessDocument } from "../features/document-engine";
 import { getPaidAmount, getRemainingAmount } from "../features/invoices/application/invoicePayments";
@@ -7,6 +7,15 @@ import type { InvoiceRecord } from "../features/invoices/domain/types";
 import { listInvoices } from "../features/invoices/infrastructure/invoiceRepository";
 import type { PurchaseOrderRecord, PurchaseOrderStatus } from "../features/purchase-orders";
 import { listPurchaseOrders } from "../features/purchase-orders";
+import {
+  isInFinancialPeriod,
+  parseFinancialPeriod,
+  type FinancialPeriod,
+} from "../features/financial/application/financialPeriod";
+import {
+  FinancialNavigation,
+  FinancialPeriodSelector,
+} from "../features/financial/components/FinancialNavigation";
 
 type FinancialSection = "encaissements" | "decaissements" | "tva" | "tresorerie" | "export";
 
@@ -62,7 +71,9 @@ const SECTION_CONFIG: Record<FinancialSection, {
 
 export default function FinancialPage() {
   const location = useLocation();
+  const [searchParams, setSearchParams] = useSearchParams();
   const section = getSection(location.pathname);
+  const period = parseFinancialPeriod(searchParams.get("period"));
   const config = SECTION_CONFIG[section];
   const Icon = config.icon;
   const [invoices, setInvoices] = useState<InvoiceRecord[]>([]);
@@ -95,7 +106,25 @@ export default function FinancialPage() {
     void refresh();
   }, [section]);
 
-  const summary = useMemo(() => buildSummary(invoices, purchaseOrders), [invoices, purchaseOrders]);
+  const scopedInvoices = useMemo(
+    () => invoices.filter((invoice) => isInFinancialPeriod(invoice.document.issueDate, period)),
+    [invoices, period],
+  );
+  const scopedPurchaseOrders = useMemo(
+    () => purchaseOrders.filter((order) => isInFinancialPeriod(order.document.issueDate || order.createdAt, period)),
+    [period, purchaseOrders],
+  );
+  const summary = useMemo(
+    () => buildSummary(scopedInvoices, scopedPurchaseOrders),
+    [scopedInvoices, scopedPurchaseOrders],
+  );
+
+  function onPeriodChange(nextPeriod: FinancialPeriod) {
+    const nextParams = new URLSearchParams(searchParams);
+    if (nextPeriod === "all") nextParams.delete("period");
+    else nextParams.set("period", nextPeriod);
+    setSearchParams(nextParams, { replace: true });
+  }
 
   return (
     <div className="space-y-6">
@@ -124,42 +153,16 @@ export default function FinancialPage() {
 
       {!loading ? (
         <>
-          <FinancialTabs active={section} />
-          {section === "encaissements" ? <EncaissementsView invoices={invoices} summary={summary} /> : null}
-          {section === "decaissements" ? <DecaissementsView purchaseOrders={purchaseOrders} summary={summary} /> : null}
-          {section === "tva" ? <TvaView invoices={invoices} purchaseOrders={purchaseOrders} summary={summary} /> : null}
+          <FinancialNavigation />
+          <FinancialPeriodSelector value={period} onChange={onPeriodChange} />
+          {section === "encaissements" ? <EncaissementsView invoices={scopedInvoices} summary={summary} /> : null}
+          {section === "decaissements" ? <DecaissementsView purchaseOrders={scopedPurchaseOrders} summary={summary} /> : null}
+          {section === "tva" ? <TvaView invoices={scopedInvoices} purchaseOrders={scopedPurchaseOrders} summary={summary} /> : null}
           {section === "tresorerie" ? <TresorerieView summary={summary} /> : null}
-          {section === "export" ? <ExportView invoices={invoices} purchaseOrders={purchaseOrders} summary={summary} /> : null}
+          {section === "export" ? <ExportView invoices={scopedInvoices} purchaseOrders={scopedPurchaseOrders} summary={summary} /> : null}
         </>
       ) : null}
     </div>
-  );
-}
-
-function FinancialTabs({ active }: { active: FinancialSection }) {
-  const items: Array<[FinancialSection, string, string]> = [
-    ["encaissements", "Encaissements", "/financier/encaissements"],
-    ["decaissements", "Engagements fournisseurs", "/financier/decaissements"],
-    ["tva", "TVA", "/financier/tva"],
-    ["tresorerie", "Trésorerie", "/financier/tresorerie"],
-    ["export", "Export comptable", "/financier/export-comptable"],
-  ];
-
-  return (
-    <nav className="flex w-full gap-2 overflow-x-auto rounded-2xl border border-slate-200 bg-white p-1 shadow-sm" aria-label="Navigation financier">
-      {items.map(([id, label, to]) => (
-        <Link
-          key={id}
-          to={to}
-          className={[
-            "whitespace-nowrap rounded-xl px-4 py-2 text-sm font-semibold transition",
-            active === id ? "bg-slate-950 text-white" : "text-slate-600 hover:bg-slate-100 hover:text-slate-950",
-          ].join(" ")}
-        >
-          {label}
-        </Link>
-      ))}
-    </nav>
   );
 }
 
