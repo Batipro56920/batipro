@@ -1,5 +1,15 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
+import {
+  AlertTriangle,
+  Building2,
+  CalendarClock,
+  Camera,
+  CheckCircle2,
+  ClipboardList,
+  RefreshCw,
+  Save,
+} from "lucide-react";
 import { getChantiers, type ChantierRow } from "../services/chantiers.service";
 import {
   appendChantierActivityLog,
@@ -66,11 +76,11 @@ type CreatedReserveTarget = {
 };
 
 function badgeClass(tone: "blue" | "amber" | "green" | "red" | "slate") {
-  if (tone === "green") return "border-emerald-200 bg-emerald-50 text-emerald-700";
-  if (tone === "amber") return "border-amber-200 bg-amber-50 text-amber-700";
-  if (tone === "red") return "border-red-200 bg-red-50 text-red-700";
-  if (tone === "blue") return "border-blue-200 bg-blue-50 text-blue-700";
-  return "border-slate-200 bg-slate-50 text-slate-700";
+  if (tone === "green") return "border-success/20 bg-success-soft text-success-on";
+  if (tone === "amber") return "border-warning/20 bg-warning-soft text-warning-on";
+  if (tone === "red") return "border-danger/20 bg-danger-soft text-danger-on";
+  if (tone === "blue") return "border-primary/20 bg-primary-soft text-primary-on";
+  return "border-subtle bg-interactive text-ink-secondary";
 }
 
 function statusTone(status: TerrainFeedbackStatus) {
@@ -249,7 +259,7 @@ export default function TerrainFeedbacksPage() {
     setSearchParams(nextParams, { replace: true });
   }
 
-  function syncDrafts(nextRows: TerrainFeedbackRow[]) {
+  const syncDrafts = useCallback((nextRows: TerrainFeedbackRow[]) => {
     const nextDrafts: Record<string, DraftState> = {};
     nextRows.forEach((row) => {
       nextDrafts[row.id] = {
@@ -260,9 +270,9 @@ export default function TerrainFeedbacksPage() {
       };
     });
     setDrafts(nextDrafts);
-  }
+  }, []);
 
-  async function refresh() {
+  const refresh = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
@@ -307,11 +317,11 @@ export default function TerrainFeedbacksPage() {
     } finally {
       setLoading(false);
     }
-  }
+  }, [filterCategory, filterChantierId, filterIntervenantId, filterStatus, syncDrafts, t]);
 
   useEffect(() => {
     void refresh();
-  }, [filterCategory, filterChantierId, filterIntervenantId, filterStatus]);
+  }, [refresh]);
 
   function updateDraft(id: string, patch: Partial<DraftState>) {
     setDrafts((current) => ({
@@ -475,23 +485,47 @@ export default function TerrainFeedbacksPage() {
   }
 
   return (
-    <div className="space-y-5">
-      <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-slate-950">{t("terrainFeedback.admin.title")}</h1>
-          <p className="text-slate-500">{t("terrainFeedback.admin.subtitle")}</p>
+    <div className="space-y-4">
+      <header className="rounded-surface border border-subtle bg-surface p-4 shadow-elevated">
+        <div className="flex flex-col gap-3 xl:flex-row xl:items-start xl:justify-between">
+          <div className="min-w-0">
+            <div className="bt-caption flex items-center gap-2 text-muted">
+              <ClipboardList className="h-4 w-4" strokeWidth={1.75} />
+              Pilotage production
+            </div>
+            <h1 className="bt-page-title mt-1 text-ink">{t("terrainFeedback.admin.title")}</h1>
+            <div className="bt-secondary mt-1 flex flex-wrap gap-x-4 gap-y-1 text-muted">
+              <span>{visibleRows.length} visible{visibleRows.length > 1 ? "s" : ""}</span>
+              <span>{workflowStats.open} a traiter</span>
+              <span>{workflowStats.priority} prioritaire{workflowStats.priority > 1 ? "s" : ""}</span>
+              {selectedChantier ? <span>{selectedChantier.nom}</span> : null}
+            </div>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {filterChantierId ? (
+              <Link
+                to={`/chantiers/${filterChantierId}`}
+                className="bt-control inline-flex items-center gap-2 rounded-field bg-primary px-3 py-2 text-sm font-semibold text-primary-contrast hover:bg-primary-hover"
+              >
+                <Building2 className="h-4 w-4" strokeWidth={1.75} />
+                Fiche chantier
+              </Link>
+            ) : null}
+            <button
+              type="button"
+              onClick={() => void refresh()}
+              disabled={loading}
+              className="bt-control inline-flex items-center gap-2 rounded-field border border-subtle bg-surface px-3 py-2 text-sm font-semibold text-ink-secondary hover:bg-interactive disabled:opacity-50"
+            >
+              <RefreshCw className="h-4 w-4" strokeWidth={1.75} />
+              {t("common.actions.refresh")}
+            </button>
+          </div>
         </div>
-        <button
-          type="button"
-          onClick={() => void refresh()}
-          className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-50"
-        >
-          {t("common.actions.refresh")}
-        </button>
-      </div>
+      </header>
 
       {urlFeedbackId ? (
-        <section className="rounded-3xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-900 shadow-sm">
+        <section className="rounded-surface border border-primary/20 bg-primary-soft px-4 py-3 text-sm font-medium text-primary-on shadow-sm">
           {highlightedFeedback ? (
             <span>
               Retour ciblé depuis la recherche globale : <strong>{highlightedFeedback.title}</strong>.
@@ -504,7 +538,7 @@ export default function TerrainFeedbacksPage() {
               <button
                 type="button"
                 onClick={clearTargetFilters}
-                className="rounded-xl border border-blue-200 bg-white px-3 py-2 text-xs font-semibold text-blue-800 hover:bg-blue-50"
+                className="bt-control rounded-field border border-primary/20 bg-surface px-3 py-2 text-xs font-semibold text-primary-on hover:bg-interactive"
               >
                 Réinitialiser les filtres
               </button>
@@ -514,69 +548,69 @@ export default function TerrainFeedbacksPage() {
       ) : null}
 
       {filterChantierId ? (
-        <section className="rounded-3xl border border-blue-200 bg-blue-50 px-4 py-3 shadow-sm">
+        <section className="rounded-surface border border-primary/20 bg-primary-soft px-4 py-3 shadow-sm">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
             <div className="min-w-0 flex-1">
-              <div className="text-xs font-semibold uppercase tracking-[0.18em] text-blue-700">
+              <div className="bt-caption text-primary-on">
                 Vue chantier filtrée
               </div>
-              <div className="mt-1 text-sm text-blue-900">
+              <div className="bt-secondary mt-1 text-primary-on">
                 Retours terrain liés à {selectedChantier?.nom ?? "ce chantier"}. Ouvre directement la zone utile pour traiter le sujet.
               </div>
               <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
-                <div className="rounded-2xl border border-blue-200 bg-white/80 px-3 py-2">
-                  <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-blue-700">À traiter</div>
-                  <div className="mt-1 text-lg font-semibold text-blue-950">{workflowStats.open}</div>
+                <div className="rounded-card border border-primary/20 bg-surface px-3 py-2">
+                  <div className="bt-caption text-primary-on">À traiter</div>
+                  <div className="bt-card-title mt-1 text-primary-on">{workflowStats.open}</div>
                 </div>
-                <div className="rounded-2xl border border-red-200 bg-white/80 px-3 py-2">
-                  <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-red-700">Urgents</div>
-                  <div className="mt-1 text-lg font-semibold text-red-950">{workflowStats.priority}</div>
+                <div className="rounded-card border border-danger/20 bg-danger-soft px-3 py-2">
+                  <div className="bt-caption text-danger-on">Urgents</div>
+                  <div className="bt-card-title mt-1 text-danger-on">{workflowStats.priority}</div>
                 </div>
-                <div className="rounded-2xl border border-amber-200 bg-white/80 px-3 py-2">
-                  <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-amber-700">Sans responsable</div>
-                  <div className="mt-1 text-lg font-semibold text-amber-950">{workflowStats.unassigned}</div>
+                <div className="rounded-card border border-warning/20 bg-warning-soft px-3 py-2">
+                  <div className="bt-caption text-warning-on">Sans responsable</div>
+                  <div className="bt-card-title mt-1 text-warning-on">{workflowStats.unassigned}</div>
                 </div>
-                <div className="rounded-2xl border border-slate-200 bg-white/80 px-3 py-2">
-                  <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Avec photos</div>
-                  <div className="mt-1 text-lg font-semibold text-slate-950">{workflowStats.withPhotos}</div>
+                <div className="rounded-card border border-subtle bg-surface px-3 py-2">
+                  <div className="bt-caption text-muted">Avec photos</div>
+                  <div className="bt-card-title mt-1 text-ink">{workflowStats.withPhotos}</div>
                 </div>
               </div>
             </div>
             <div className="flex flex-wrap gap-2 lg:max-w-xs lg:justify-end">
               <Link
                 to={`/chantiers/${filterChantierId}`}
-                className="rounded-xl bg-blue-700 px-3 py-2 text-sm font-semibold text-white hover:bg-blue-800"
+                className="bt-control inline-flex items-center rounded-field bg-primary px-3 py-2 text-sm font-semibold text-primary-contrast hover:bg-primary-hover"
               >
                 Fiche chantier
               </Link>
               <Link
                 to={`/chantiers/${filterChantierId}/execution`}
-                className="rounded-xl border border-blue-200 bg-white px-3 py-2 text-sm font-medium text-blue-800 hover:bg-blue-50"
+                className="bt-control rounded-field border border-subtle bg-surface px-3 py-2 text-sm font-semibold text-ink-secondary hover:bg-interactive"
               >
                 Exécution
               </Link>
               <Link
                 to={`/chantiers/${filterChantierId}/planning`}
-                className="rounded-xl border border-blue-200 bg-white px-3 py-2 text-sm font-medium text-blue-800 hover:bg-blue-50"
+                className="bt-control rounded-field border border-subtle bg-surface px-3 py-2 text-sm font-semibold text-ink-secondary hover:bg-interactive"
               >
                 Planning
               </Link>
               <Link
                 to={`/chantiers/${filterChantierId}/documents`}
-                className="rounded-xl border border-blue-200 bg-white px-3 py-2 text-sm font-medium text-blue-800 hover:bg-blue-50"
+                className="bt-control rounded-field border border-subtle bg-surface px-3 py-2 text-sm font-semibold text-ink-secondary hover:bg-interactive"
               >
                 Documents
               </Link>
               <Link
                 to={`/chantiers/${filterChantierId}/qualite`}
-                className="rounded-xl border border-blue-200 bg-white px-3 py-2 text-sm font-medium text-blue-800 hover:bg-blue-50"
+                className="bt-control rounded-field border border-info/20 bg-info-soft px-3 py-2 text-sm font-semibold text-info-on hover:bg-interactive"
               >
                 Qualité / réserves
               </Link>
               <button
                 type="button"
                 onClick={() => applyChantierFilter("")}
-                className="rounded-xl border border-blue-200 bg-white px-3 py-2 text-sm font-medium text-blue-800 hover:bg-blue-50"
+                className="bt-control rounded-field border border-subtle bg-surface px-3 py-2 text-sm font-semibold text-ink-secondary hover:bg-interactive"
               >
                 Voir tous les retours
               </button>
@@ -585,13 +619,13 @@ export default function TerrainFeedbacksPage() {
         </section>
       ) : null}
 
-      <section className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+      <section className="rounded-surface border border-subtle bg-surface p-4 shadow-sm">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
           <div>
-            <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
+            <div className="bt-caption text-muted">
               Pilotage terrain
             </div>
-            <div className="mt-1 text-lg font-semibold text-slate-950">
+            <div className="bt-card-title mt-1 text-ink">
               Retours à traiter et priorités ouvertes
             </div>
           </div>
@@ -599,80 +633,83 @@ export default function TerrainFeedbacksPage() {
             <button
               type="button"
               onClick={() => applyWorkflowScope("all")}
-              className={["rounded-xl border px-3 py-2 text-sm font-medium", workflowScope === "all" && filterStatus === "" ? "border-slate-900 bg-slate-900 text-white" : "border-slate-200 text-slate-700 hover:bg-slate-50"].join(" ")}
+              className={["bt-control rounded-field border px-3 py-2 text-sm font-semibold", workflowScope === "all" && filterStatus === "" ? "border-primary bg-primary text-primary-contrast" : "border-subtle bg-surface text-ink-secondary hover:bg-interactive"].join(" ")}
             >
               Tous
             </button>
             <button
               type="button"
               onClick={() => applyWorkflowScope("open")}
-              className={["rounded-xl border px-3 py-2 text-sm font-medium", workflowScope === "open" ? "border-blue-700 bg-blue-700 text-white" : "border-blue-200 text-blue-800 hover:bg-blue-50"].join(" ")}
+              className={["bt-control rounded-field border px-3 py-2 text-sm font-semibold", workflowScope === "open" ? "border-primary bg-primary text-primary-contrast" : "border-primary/20 bg-primary-soft text-primary-on hover:bg-interactive"].join(" ")}
             >
               À traiter
             </button>
             <button
               type="button"
               onClick={() => applyWorkflowScope("priority")}
-              className={["rounded-xl border px-3 py-2 text-sm font-medium", workflowScope === "priority" ? "border-red-700 bg-red-700 text-white" : "border-red-200 text-red-800 hover:bg-red-50"].join(" ")}
+              className={["bt-control rounded-field border px-3 py-2 text-sm font-semibold", workflowScope === "priority" ? "border-danger bg-danger text-white" : "border-danger/20 bg-danger-soft text-danger-on hover:bg-interactive"].join(" ")}
             >
               Urgents
             </button>
             <button
               type="button"
               onClick={() => applyStatusFilter("nouveau")}
-              className={["rounded-xl border px-3 py-2 text-sm font-medium", workflowScope === "all" && filterStatus === "nouveau" ? "border-blue-700 bg-blue-700 text-white" : "border-blue-200 text-blue-800 hover:bg-blue-50"].join(" ")}
+              className={["bt-control rounded-field border px-3 py-2 text-sm font-semibold", workflowScope === "all" && filterStatus === "nouveau" ? "border-primary bg-primary text-primary-contrast" : "border-subtle bg-surface text-ink-secondary hover:bg-interactive"].join(" ")}
             >
               Nouveaux
             </button>
             <button
               type="button"
               onClick={() => applyStatusFilter("en_cours")}
-              className={["rounded-xl border px-3 py-2 text-sm font-medium", workflowScope === "all" && filterStatus === "en_cours" ? "border-amber-600 bg-amber-500 text-white" : "border-amber-200 text-amber-800 hover:bg-amber-50"].join(" ")}
+              className={["bt-control rounded-field border px-3 py-2 text-sm font-semibold", workflowScope === "all" && filterStatus === "en_cours" ? "border-warning bg-warning text-white" : "border-warning/20 bg-warning-soft text-warning-on hover:bg-interactive"].join(" ")}
             >
               En cours
             </button>
             <button
               type="button"
               onClick={() => applyStatusFilter("traite")}
-              className={["rounded-xl border px-3 py-2 text-sm font-medium", workflowScope === "all" && filterStatus === "traite" ? "border-emerald-700 bg-emerald-700 text-white" : "border-emerald-200 text-emerald-800 hover:bg-emerald-50"].join(" ")}
+              className={["bt-control rounded-field border px-3 py-2 text-sm font-semibold", workflowScope === "all" && filterStatus === "traite" ? "border-success bg-success text-success-contrast" : "border-success/20 bg-success-soft text-success-on hover:bg-interactive"].join(" ")}
             >
               Traités
             </button>
           </div>
         </div>
 
-        <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
-          <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-            <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">Chargés</div>
-            <div className="mt-2 text-2xl font-semibold text-slate-950">{workflowStats.total}</div>
+        <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-5">
+          <div className="rounded-card border border-subtle bg-interactive px-3 py-2">
+            <div className="bt-caption text-muted">Chargés</div>
+            <div className="bt-card-title mt-1 text-ink">{workflowStats.total}</div>
           </div>
-          <div className="rounded-2xl border border-blue-200 bg-blue-50 p-4">
-            <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-blue-700">À traiter</div>
-            <div className="mt-2 text-2xl font-semibold text-blue-950">{workflowStats.open}</div>
+          <div className="rounded-card border border-primary/20 bg-primary-soft px-3 py-2">
+            <div className="bt-caption text-primary-on">À traiter</div>
+            <div className="bt-card-title mt-1 text-primary-on">{workflowStats.open}</div>
           </div>
-          <div className="rounded-2xl border border-red-200 bg-red-50 p-4">
-            <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-red-700">Urgents</div>
-            <div className="mt-2 text-2xl font-semibold text-red-950">{workflowStats.priority}</div>
+          <div className="rounded-card border border-danger/20 bg-danger-soft px-3 py-2">
+            <div className="bt-caption text-danger-on">Urgents</div>
+            <div className="bt-card-title mt-1 text-danger-on">{workflowStats.priority}</div>
           </div>
-          <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4">
-            <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-amber-700">Sans responsable</div>
-            <div className="mt-2 text-2xl font-semibold text-amber-950">{workflowStats.unassigned}</div>
+          <div className="rounded-card border border-warning/20 bg-warning-soft px-3 py-2">
+            <div className="bt-caption text-warning-on">Sans responsable</div>
+            <div className="bt-card-title mt-1 text-warning-on">{workflowStats.unassigned}</div>
           </div>
-          <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
-            <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-emerald-700">Traités</div>
-            <div className="mt-2 text-2xl font-semibold text-emerald-950">{workflowStats.treated}</div>
+          <div className="rounded-card border border-success/20 bg-success-soft px-3 py-2">
+            <div className="bt-caption text-success-on">Traités</div>
+            <div className="bt-card-title mt-1 text-success-on">{workflowStats.treated}</div>
           </div>
         </div>
 
         {workflowStats.priorityRows.length > 0 ? (
-          <div className="mt-4 rounded-2xl border border-red-200 bg-red-50 p-4">
-            <div className="text-xs font-semibold uppercase tracking-[0.16em] text-red-700">Priorités ouvertes</div>
+          <div className="mt-4 rounded-card border border-danger/20 bg-danger-soft p-3">
+            <div className="bt-caption flex items-center gap-2 text-danger-on">
+              <AlertTriangle className="h-4 w-4" strokeWidth={1.75} />
+              Priorités ouvertes
+            </div>
             <div className="mt-3 space-y-2">
               {workflowStats.priorityRows.map((row) => (
-                <div key={row.id} className="flex flex-col gap-3 rounded-xl border border-red-100 bg-white px-3 py-3 md:flex-row md:items-center md:justify-between">
+                <div key={row.id} className="flex flex-col gap-3 rounded-card border border-danger/20 bg-surface px-3 py-3 md:flex-row md:items-center md:justify-between">
                   <div className="min-w-0">
-                    <div className="truncate text-sm font-semibold text-slate-950">{row.title}</div>
-                    <div className="mt-1 text-xs text-slate-500">
+                    <div className="truncate text-sm font-semibold text-ink">{row.title}</div>
+                    <div className="mt-1 text-xs text-muted">
                       {row.chantier?.nom ?? "Chantier non renseigné"} • {t(`terrainFeedback.urgencies.${row.urgency}`)} • {t(`terrainFeedback.statuses.${row.status}`)}
                     </div>
                   </div>
@@ -681,25 +718,25 @@ export default function TerrainFeedbacksPage() {
                       <>
                         <Link
                           to={`/chantiers/${row.chantier.id}/execution`}
-                          className="rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50"
+                          className="bt-control rounded-field border border-subtle bg-surface px-2.5 py-1.5 text-xs font-semibold text-ink-secondary hover:bg-interactive"
                         >
                           Exécution
                         </Link>
                         <Link
                           to={`/chantiers/${row.chantier.id}/planning`}
-                          className="rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50"
+                          className="bt-control rounded-field border border-subtle bg-surface px-2.5 py-1.5 text-xs font-semibold text-ink-secondary hover:bg-interactive"
                         >
                           Planning
                         </Link>
                         <Link
                           to={`/chantiers/${row.chantier.id}/documents`}
-                          className="rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50"
+                          className="bt-control rounded-field border border-subtle bg-surface px-2.5 py-1.5 text-xs font-semibold text-ink-secondary hover:bg-interactive"
                         >
                           Documents
                         </Link>
                         <Link
                           to={`/chantiers/${row.chantier.id}/qualite`}
-                          className="rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50"
+                          className="bt-control rounded-field border border-subtle bg-surface px-2.5 py-1.5 text-xs font-semibold text-ink-secondary hover:bg-interactive"
                         >
                           Réserves
                         </Link>
@@ -710,7 +747,7 @@ export default function TerrainFeedbacksPage() {
                         type="button"
                         onClick={() => void startProcessing(row)}
                         disabled={savingId === row.id || reserveCreatingId === row.id}
-                        className="rounded-lg bg-red-700 px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-red-800 disabled:opacity-60"
+                        className="bt-control rounded-field bg-danger px-2.5 py-1.5 text-xs font-semibold text-white hover:brightness-95 disabled:opacity-60"
                       >
                         Passer en cours
                       </button>
@@ -719,7 +756,7 @@ export default function TerrainFeedbacksPage() {
                       createdReserveByFeedback[row.id] ? (
                         <Link
                           to={`/chantiers/${createdReserveByFeedback[row.id].chantierId}/qualite?reserveId=${createdReserveByFeedback[row.id].id}&feedbackId=${row.id}`}
-                          className="rounded-lg border border-emerald-200 bg-emerald-50 px-2.5 py-1.5 text-xs font-semibold text-emerald-800 hover:bg-emerald-100"
+                          className="bt-control rounded-field border border-success/20 bg-success-soft px-2.5 py-1.5 text-xs font-semibold text-success-on hover:bg-interactive"
                         >
                           Ouvrir la réserve
                         </Link>
@@ -728,7 +765,7 @@ export default function TerrainFeedbacksPage() {
                           type="button"
                           onClick={() => void createReserveFromFeedback(row)}
                           disabled={savingId === row.id || reserveCreatingId === row.id}
-                          className="rounded-lg border border-red-200 bg-red-50 px-2.5 py-1.5 text-xs font-semibold text-red-800 hover:bg-red-100 disabled:opacity-60"
+                          className="bt-control rounded-field border border-danger/20 bg-danger-soft px-2.5 py-1.5 text-xs font-semibold text-danger-on hover:bg-interactive disabled:opacity-60"
                         >
                           {reserveCreatingId === row.id ? "Création..." : "Créer réserve"}
                         </button>
@@ -742,15 +779,15 @@ export default function TerrainFeedbacksPage() {
         ) : null}
       </section>
 
-      <section className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm">
-        <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
+      <section className="rounded-surface border border-subtle bg-surface p-4 shadow-sm">
+        <div className="bt-caption text-muted">
           {t("terrainFeedback.admin.filters")}
         </div>
         <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
           <label className="space-y-1 text-sm">
-            <div className="text-xs font-medium text-slate-500">{t("terrainFeedback.admin.siteFilter")}</div>
+            <div className="text-xs font-medium text-muted">{t("terrainFeedback.admin.siteFilter")}</div>
             <select
-              className="w-full rounded-2xl border border-slate-200 px-3 py-3 text-sm"
+              className="bt-control w-full rounded-field border border-subtle bg-surface px-3 py-2 text-sm text-ink outline-none focus:border-primary"
               value={filterChantierId}
               onChange={(e) => applyChantierFilter(e.target.value)}
             >
@@ -764,9 +801,9 @@ export default function TerrainFeedbacksPage() {
           </label>
 
           <label className="space-y-1 text-sm">
-            <div className="text-xs font-medium text-slate-500">{t("terrainFeedback.admin.authorFilter")}</div>
+            <div className="text-xs font-medium text-muted">{t("terrainFeedback.admin.authorFilter")}</div>
             <select
-              className="w-full rounded-2xl border border-slate-200 px-3 py-3 text-sm"
+              className="bt-control w-full rounded-field border border-subtle bg-surface px-3 py-2 text-sm text-ink outline-none focus:border-primary"
               value={filterIntervenantId}
               onChange={(e) => setFilterIntervenantId(e.target.value)}
             >
@@ -780,9 +817,9 @@ export default function TerrainFeedbacksPage() {
           </label>
 
           <label className="space-y-1 text-sm">
-            <div className="text-xs font-medium text-slate-500">{t("common.labels.status")}</div>
+            <div className="text-xs font-medium text-muted">{t("common.labels.status")}</div>
             <select
-              className="w-full rounded-2xl border border-slate-200 px-3 py-3 text-sm"
+              className="bt-control w-full rounded-field border border-subtle bg-surface px-3 py-2 text-sm text-ink outline-none focus:border-primary"
               value={filterStatus}
               onChange={(e) => applyStatusFilter(e.target.value as TerrainFeedbackStatus | "")}
             >
@@ -796,9 +833,9 @@ export default function TerrainFeedbacksPage() {
           </label>
 
           <label className="space-y-1 text-sm">
-            <div className="text-xs font-medium text-slate-500">{t("common.labels.category")}</div>
+            <div className="text-xs font-medium text-muted">{t("common.labels.category")}</div>
             <select
-              className="w-full rounded-2xl border border-slate-200 px-3 py-3 text-sm"
+              className="bt-control w-full rounded-field border border-subtle bg-surface px-3 py-2 text-sm text-ink outline-none focus:border-primary"
               value={filterCategory}
               onChange={(e) => setFilterCategory(e.target.value as TerrainFeedbackCategory | "")}
             >
@@ -814,17 +851,17 @@ export default function TerrainFeedbacksPage() {
       </section>
 
       {error ? (
-        <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+        <div className="rounded-surface border border-danger/20 bg-danger-soft px-4 py-3 text-sm font-medium text-danger-on">
           {error}
         </div>
       ) : null}
 
       {loading ? (
-        <div className="rounded-3xl border border-slate-200 bg-white p-6 text-sm text-slate-500 shadow-sm">
+        <div className="rounded-surface border border-subtle bg-surface p-4 text-sm text-muted shadow-sm">
           {t("common.states.loading")}
         </div>
       ) : visibleRows.length === 0 ? (
-        <div className="rounded-3xl border border-dashed border-slate-300 bg-white p-6 text-sm text-slate-500 shadow-sm">
+        <div className="rounded-surface border border-dashed border-subtle bg-surface p-4 text-sm text-muted shadow-sm">
           {t("terrainFeedback.admin.empty")}
         </div>
       ) : (
@@ -837,19 +874,19 @@ export default function TerrainFeedbacksPage() {
                 key={row.id}
                 id={`feedback-${row.id}`}
                 className={[
-                  "scroll-mt-24 rounded-3xl border bg-white p-5 shadow-sm transition",
-                  isHighlighted ? "border-blue-400 ring-2 ring-blue-100" : "border-slate-200",
+                  "scroll-mt-24 rounded-surface border bg-surface p-4 shadow-sm transition",
+                  isHighlighted ? "border-primary ring-2 ring-primary/20" : "border-subtle",
                 ].join(" ")}
               >
                 <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-2">
                       {isHighlighted ? (
-                        <span className="inline-flex rounded-full border border-blue-200 bg-blue-50 px-2.5 py-1 text-xs font-semibold text-blue-700">
+                        <span className="inline-flex rounded-full border border-primary/20 bg-primary-soft px-2.5 py-1 text-xs font-semibold text-primary-on">
                           Résultat recherché
                         </span>
                       ) : null}
-                      <h2 className="text-lg font-semibold text-slate-950">{row.title}</h2>
+                      <h2 className="text-base font-semibold text-ink">{row.title}</h2>
                       <span className={["inline-flex rounded-full border px-2.5 py-1 text-xs font-semibold", badgeClass(statusTone(row.status))].join(" ")}>
                         {t(`terrainFeedback.statuses.${row.status}`)}
                       </span>
@@ -860,9 +897,9 @@ export default function TerrainFeedbacksPage() {
                         {t(`terrainFeedback.categories.${row.category}`)}
                       </span>
                     </div>
-                    <div className="mt-2 text-sm text-slate-500">
+                    <div className="mt-2 text-sm text-muted">
                       {row.chantier ? (
-                        <Link to={`/chantiers/${row.chantier.id}`} className="font-medium text-blue-700 hover:underline">
+                        <Link to={`/chantiers/${row.chantier.id}`} className="font-medium text-primary-on hover:underline">
                           {row.chantier.nom}
                         </Link>
                       ) : (
@@ -870,36 +907,36 @@ export default function TerrainFeedbacksPage() {
                       )} • {(row.author?.nom ?? t("common.states.unavailable"))} •{" "}
                       {row.created_at ? new Date(row.created_at).toLocaleString(locale) : t("common.states.unavailable")}
                     </div>
-                    <div className="mt-4 whitespace-pre-wrap text-sm text-slate-700">{row.description}</div>
+                    <div className="mt-3 whitespace-pre-wrap text-sm leading-6 text-ink-secondary">{row.description}</div>
                     {row.chantier ? (
                       <div className="mt-4 flex flex-wrap gap-2">
                         <Link
                           to={`/chantiers/${row.chantier.id}`}
-                          className="rounded-xl border border-slate-200 px-3 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50"
+                          className="bt-control rounded-field border border-subtle bg-surface px-3 py-2 text-xs font-semibold text-ink-secondary hover:bg-interactive"
                         >
                           Fiche chantier
                         </Link>
                         <Link
                           to={`/chantiers/${row.chantier.id}/execution`}
-                          className="rounded-xl border border-blue-200 bg-blue-50 px-3 py-2 text-xs font-semibold text-blue-800 hover:bg-blue-100"
+                          className="bt-control rounded-field border border-primary/20 bg-primary-soft px-3 py-2 text-xs font-semibold text-primary-on hover:bg-interactive"
                         >
                           Traiter en exécution
                         </Link>
                         <Link
                           to={`/chantiers/${row.chantier.id}/planning`}
-                          className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+                          className="bt-control rounded-field border border-subtle bg-surface px-3 py-2 text-xs font-semibold text-ink-secondary hover:bg-interactive"
                         >
                           Planning
                         </Link>
                         <Link
                           to={`/chantiers/${row.chantier.id}/documents`}
-                          className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+                          className="bt-control rounded-field border border-subtle bg-surface px-3 py-2 text-xs font-semibold text-ink-secondary hover:bg-interactive"
                         >
                           Documents
                         </Link>
                         <Link
                           to={`/chantiers/${row.chantier.id}/qualite`}
-                          className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-800 hover:bg-amber-100"
+                          className="bt-control rounded-field border border-info/20 bg-info-soft px-3 py-2 text-xs font-semibold text-info-on hover:bg-interactive"
                         >
                           Qualité / réserves
                         </Link>
@@ -908,7 +945,7 @@ export default function TerrainFeedbacksPage() {
                             type="button"
                             onClick={() => void startProcessing(row)}
                             disabled={savingId === row.id || reserveCreatingId === row.id}
-                            className="rounded-xl border border-slate-900 bg-slate-900 px-3 py-2 text-xs font-semibold text-white hover:bg-slate-800 disabled:opacity-60"
+                            className="bt-control rounded-field bg-primary px-3 py-2 text-xs font-semibold text-primary-contrast hover:bg-primary-hover disabled:opacity-60"
                           >
                             Passer en cours
                           </button>
@@ -916,7 +953,7 @@ export default function TerrainFeedbacksPage() {
                         {createdReserveByFeedback[row.id] ? (
                           <Link
                             to={`/chantiers/${createdReserveByFeedback[row.id].chantierId}/qualite?reserveId=${createdReserveByFeedback[row.id].id}&feedbackId=${row.id}`}
-                            className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-800 hover:bg-emerald-100"
+                            className="bt-control rounded-field border border-success/20 bg-success-soft px-3 py-2 text-xs font-semibold text-success-on hover:bg-interactive"
                           >
                             Ouvrir la réserve créée
                           </Link>
@@ -925,7 +962,7 @@ export default function TerrainFeedbacksPage() {
                             type="button"
                             onClick={() => void createReserveFromFeedback(row)}
                             disabled={savingId === row.id || reserveCreatingId === row.id}
-                            className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs font-semibold text-red-800 hover:bg-red-100 disabled:opacity-60"
+                            className="bt-control rounded-field border border-danger/20 bg-danger-soft px-3 py-2 text-xs font-semibold text-danger-on hover:bg-interactive disabled:opacity-60"
                           >
                             {reserveCreatingId === row.id ? "Création réserve..." : "Créer une réserve"}
                           </button>
@@ -935,42 +972,43 @@ export default function TerrainFeedbacksPage() {
                   </div>
                 </div>
 
-                <div className="mt-5 grid gap-5 xl:grid-cols-[minmax(0,1.15fr)_minmax(0,0.85fr)]">
+                <div className="mt-4 grid gap-4 xl:grid-cols-[minmax(0,1.15fr)_minmax(0,0.85fr)]">
                   <div className="space-y-4">
-                    <div className="rounded-2xl border border-slate-200 bg-slate-50/80 p-4">
-                      <div className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">
+                    <div className="rounded-card border border-subtle bg-interactive p-3">
+                      <div className="bt-caption flex items-center gap-2 text-muted">
+                        <Building2 className="h-4 w-4" strokeWidth={1.75} />
                         {t("terrainFeedback.admin.context")}
                       </div>
                       <div className="mt-3 grid gap-3 md:grid-cols-2">
                         <div>
-                          <div className="text-xs text-slate-500">{t("terrainFeedback.admin.site")}</div>
+                          <div className="text-xs text-muted">{t("terrainFeedback.admin.site")}</div>
                           {row.chantier ? (
                             <Link
                               to={`/chantiers/${row.chantier.id}`}
-                              className="mt-1 inline-flex text-sm font-medium text-blue-700 hover:underline"
+                              className="mt-1 inline-flex text-sm font-medium text-primary-on hover:underline"
                             >
                               {row.chantier.nom}
                             </Link>
                           ) : (
-                            <div className="mt-1 text-sm font-medium text-slate-900">-</div>
+                            <div className="mt-1 text-sm font-medium text-ink">-</div>
                           )}
                         </div>
                         <div>
-                          <div className="text-xs text-slate-500">{t("terrainFeedback.admin.author")}</div>
-                          <div className="mt-1 text-sm font-medium text-slate-900">{row.author?.nom ?? "-"}</div>
-                          <div className="mt-1 text-xs text-slate-500">
+                          <div className="text-xs text-muted">{t("terrainFeedback.admin.author")}</div>
+                          <div className="mt-1 text-sm font-medium text-ink">{row.author?.nom ?? "-"}</div>
+                          <div className="mt-1 text-xs text-muted">
                             {[row.author?.email, row.author?.telephone].filter(Boolean).join(" • ") || "-"}
                           </div>
                         </div>
                         <div>
-                          <div className="text-xs text-slate-500">{t("terrainFeedback.admin.createdAt")}</div>
-                          <div className="mt-1 text-sm font-medium text-slate-900">
+                          <div className="text-xs text-muted">{t("terrainFeedback.admin.createdAt")}</div>
+                          <div className="mt-1 text-sm font-medium text-ink">
                             {row.created_at ? new Date(row.created_at).toLocaleString(locale) : "-"}
                           </div>
                         </div>
                         <div>
-                          <div className="text-xs text-slate-500">{t("terrainFeedback.admin.treatedAt")}</div>
-                          <div className="mt-1 text-sm font-medium text-slate-900">
+                          <div className="text-xs text-muted">{t("terrainFeedback.admin.treatedAt")}</div>
+                          <div className="mt-1 text-sm font-medium text-ink">
                             {row.treated_at ? new Date(row.treated_at).toLocaleString(locale) : t("terrainFeedback.admin.notProcessed")}
                           </div>
                         </div>
@@ -978,8 +1016,9 @@ export default function TerrainFeedbacksPage() {
                     </div>
 
                     {row.attachments.length > 0 ? (
-                      <div className="rounded-2xl border border-slate-200 bg-slate-50/80 p-4">
-                        <div className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">
+                      <div className="rounded-card border border-subtle bg-interactive p-3">
+                        <div className="bt-caption flex items-center gap-2 text-muted">
+                          <Camera className="h-4 w-4" strokeWidth={1.75} />
                           {t("terrainFeedback.admin.photos")}
                         </div>
                         <div className="mt-3 grid grid-cols-2 gap-3 lg:grid-cols-3">
@@ -989,7 +1028,7 @@ export default function TerrainFeedbacksPage() {
                               href={attachment.public_url}
                               target="_blank"
                               rel="noreferrer"
-                              className="overflow-hidden rounded-2xl border border-slate-200 bg-white"
+                              className="overflow-hidden rounded-card border border-subtle bg-surface"
                             >
                               <img
                                 src={attachment.public_url}
@@ -997,27 +1036,28 @@ export default function TerrainFeedbacksPage() {
                                 className="h-32 w-full object-cover"
                                 loading="lazy"
                               />
-                              <div className="px-3 py-2 text-xs text-slate-500">{attachment.file_name}</div>
+                              <div className="px-3 py-2 text-xs text-muted">{attachment.file_name}</div>
                             </a>
                           ))}
                         </div>
                       </div>
                     ) : null}
 
-                    <div className="rounded-2xl border border-slate-200 bg-slate-50/80 p-4">
-                      <div className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">
+                    <div className="rounded-card border border-subtle bg-interactive p-3">
+                      <div className="bt-caption flex items-center gap-2 text-muted">
+                        <CalendarClock className="h-4 w-4" strokeWidth={1.75} />
                         {t("terrainFeedback.admin.history")}
                       </div>
                       <div className="mt-3 space-y-3">
                         {row.history.length === 0 ? (
-                          <div className="text-sm text-slate-500">{t("terrainFeedback.admin.noHistory")}</div>
+                          <div className="text-sm text-muted">{t("terrainFeedback.admin.noHistory")}</div>
                         ) : (
                           row.history.map((item) => (
-                            <div key={item.id} className="rounded-2xl border border-slate-200 bg-white px-4 py-3">
-                              <div className="text-sm font-medium text-slate-900">
+                            <div key={item.id} className="rounded-card border border-subtle bg-surface px-3 py-2">
+                              <div className="text-sm font-medium text-ink">
                                 {item.changed_by_name || t("terrainFeedback.admin.system")}
                               </div>
-                              <div className="mt-1 text-xs text-slate-500">
+                              <div className="mt-1 text-xs text-muted">
                                 {item.created_at ? new Date(item.created_at).toLocaleString(locale) : "-"} • {item.action}
                               </div>
                             </div>
@@ -1027,35 +1067,36 @@ export default function TerrainFeedbacksPage() {
                     </div>
                   </div>
 
-                  <div className="rounded-2xl border border-slate-200 bg-white p-4">
-                    <div className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">
+                  <div className="rounded-card border border-subtle bg-surface p-3">
+                    <div className="bt-caption flex items-center gap-2 text-muted">
+                      <CheckCircle2 className="h-4 w-4" strokeWidth={1.75} />
                       {t("terrainFeedback.admin.processing")}
                     </div>
                     {row.chantier ? (
-                      <div className="mt-3 rounded-2xl border border-slate-200 bg-slate-50 p-3">
-                        <div className="text-xs font-medium text-slate-500">Contexte chantier</div>
+                      <div className="mt-3 rounded-card border border-subtle bg-interactive p-3">
+                        <div className="text-xs font-medium text-muted">Contexte chantier</div>
                         <div className="mt-2 flex flex-wrap gap-2">
                           <Link
                             to={`/chantiers/${row.chantier.id}/execution`}
-                            className="rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-100"
+                            className="bt-control rounded-field border border-subtle bg-surface px-2.5 py-1.5 text-xs font-semibold text-ink-secondary hover:bg-interactive"
                           >
                             Exécution
                           </Link>
                           <Link
                             to={`/chantiers/${row.chantier.id}/planning`}
-                            className="rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-100"
+                            className="bt-control rounded-field border border-subtle bg-surface px-2.5 py-1.5 text-xs font-semibold text-ink-secondary hover:bg-interactive"
                           >
                             Planning
                           </Link>
                           <Link
                             to={`/chantiers/${row.chantier.id}/documents`}
-                            className="rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-100"
+                            className="bt-control rounded-field border border-subtle bg-surface px-2.5 py-1.5 text-xs font-semibold text-ink-secondary hover:bg-interactive"
                           >
                             Documents
                           </Link>
                           <Link
                             to={`/chantiers/${row.chantier.id}/qualite`}
-                            className="rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-100"
+                            className="bt-control rounded-field border border-info/20 bg-info-soft px-2.5 py-1.5 text-xs font-semibold text-info-on hover:bg-interactive"
                           >
                             Réserves
                           </Link>
@@ -1064,9 +1105,9 @@ export default function TerrainFeedbacksPage() {
                     ) : null}
                     <div className="mt-4 space-y-4">
                       <label className="space-y-1 text-sm">
-                        <div className="text-xs font-medium text-slate-500">{t("common.labels.status")}</div>
+                        <div className="text-xs font-medium text-muted">{t("common.labels.status")}</div>
                         <select
-                          className="w-full rounded-2xl border border-slate-200 px-3 py-3 text-sm"
+                          className="bt-control w-full rounded-field border border-subtle bg-surface px-3 py-2 text-sm text-ink outline-none focus:border-primary"
                           value={draft?.status ?? row.status}
                           onChange={(e) => updateDraft(row.id, { status: e.target.value as TerrainFeedbackStatus })}
                         >
@@ -1079,9 +1120,9 @@ export default function TerrainFeedbacksPage() {
                       </label>
 
                       <label className="space-y-1 text-sm">
-                        <div className="text-xs font-medium text-slate-500">{t("terrainFeedback.admin.assignedTo")}</div>
+                        <div className="text-xs font-medium text-muted">{t("terrainFeedback.admin.assignedTo")}</div>
                         <select
-                          className="w-full rounded-2xl border border-slate-200 px-3 py-3 text-sm"
+                          className="bt-control w-full rounded-field border border-subtle bg-surface px-3 py-2 text-sm text-ink outline-none focus:border-primary"
                           value={draft?.assigned_to ?? row.assigned_to ?? ""}
                           onChange={(e) =>
                             updateDraft(row.id, {
@@ -1100,9 +1141,9 @@ export default function TerrainFeedbacksPage() {
                       </label>
 
                       <label className="space-y-1 text-sm">
-                        <div className="text-xs font-medium text-slate-500">{t("terrainFeedback.admin.processingComment")}</div>
+                        <div className="text-xs font-medium text-muted">{t("terrainFeedback.admin.processingComment")}</div>
                         <textarea
-                          className="min-h-36 w-full rounded-2xl border border-slate-200 px-3 py-3 text-sm"
+                          className="min-h-28 w-full rounded-field border border-subtle bg-surface px-3 py-2 text-sm text-ink outline-none placeholder:text-muted focus:border-primary"
                           value={draft?.treatment_comment ?? row.treatment_comment ?? ""}
                           onChange={(e) => updateDraft(row.id, { treatment_comment: e.target.value })}
                           placeholder={t("terrainFeedback.admin.processingCommentPlaceholder")}
@@ -1113,7 +1154,7 @@ export default function TerrainFeedbacksPage() {
                         createdReserveByFeedback[row.id] ? (
                           <Link
                             to={`/chantiers/${createdReserveByFeedback[row.id].chantierId}/qualite?reserveId=${createdReserveByFeedback[row.id].id}&feedbackId=${row.id}`}
-                            className="block w-full rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-center text-sm font-semibold text-emerald-800 hover:bg-emerald-100"
+                            className="bt-control block w-full rounded-field border border-success/20 bg-success-soft px-4 py-2.5 text-center text-sm font-semibold text-success-on hover:bg-interactive"
                           >
                             Ouvrir la réserve créée
                           </Link>
@@ -1122,7 +1163,7 @@ export default function TerrainFeedbacksPage() {
                             type="button"
                             onClick={() => void createReserveFromFeedback(row)}
                             disabled={savingId === row.id || reserveCreatingId === row.id}
-                            className="w-full rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-800 hover:bg-red-100 disabled:opacity-60"
+                            className="bt-control w-full rounded-field border border-danger/20 bg-danger-soft px-4 py-2.5 text-sm font-semibold text-danger-on hover:bg-interactive disabled:opacity-60"
                           >
                             {reserveCreatingId === row.id ? "Création de la réserve..." : "Créer une réserve chantier"}
                           </button>
@@ -1133,8 +1174,9 @@ export default function TerrainFeedbacksPage() {
                         type="button"
                         onClick={() => void saveRow(row)}
                         disabled={savingId === row.id || reserveCreatingId === row.id}
-                        className="w-full rounded-2xl bg-blue-700 px-4 py-3 text-sm font-semibold text-white shadow-[0_10px_20px_rgba(30,64,175,0.22)] hover:bg-blue-800 disabled:opacity-60"
+                        className="bt-control inline-flex w-full items-center justify-center gap-2 rounded-field bg-primary px-4 py-2.5 text-sm font-semibold text-primary-contrast hover:bg-primary-hover disabled:opacity-60"
                       >
+                        <Save className="h-4 w-4" strokeWidth={1.75} />
                         {savingId === row.id ? t("common.states.saving") : t("common.actions.save")}
                       </button>
                     </div>
