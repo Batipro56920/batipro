@@ -1,5 +1,15 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
+import {
+  AlertTriangle,
+  ArrowLeft,
+  BriefcaseBusiness,
+  CalendarDays,
+  ClipboardCheck,
+  Clock3,
+  FileText,
+  Users,
+} from "lucide-react";
 
 import ChantierPlanningSection from "../features/chantiers/pages/ChantierPlanningSection";
 import { getChantierById, type ChantierRow } from "../services/chantiers.service";
@@ -82,7 +92,7 @@ export default function ChantierPlanningPage() {
 
   if (!id) {
     return (
-      <div className="rounded-2xl border bg-white p-6 text-sm text-slate-600">
+      <div className="rounded-surface border border-subtle bg-surface p-4 text-sm text-muted">
         Chantier manquant.
       </div>
     );
@@ -90,7 +100,7 @@ export default function ChantierPlanningPage() {
 
   if (loading) {
     return (
-      <div className="rounded-2xl border bg-white p-6 text-sm text-slate-500">
+      <div className="rounded-surface border border-subtle bg-surface p-4 text-sm text-muted">
         Chargement de l'agenda et du planning chantier...
       </div>
     );
@@ -98,7 +108,7 @@ export default function ChantierPlanningPage() {
 
   if (error) {
     return (
-      <div className="rounded-2xl border border-red-200 bg-red-50 p-6 text-sm text-red-700">
+      <div className="rounded-surface border border-danger/20 bg-danger-soft p-4 text-sm font-medium text-danger-on">
         {error}
       </div>
     );
@@ -108,32 +118,74 @@ export default function ChantierPlanningPage() {
   const qualityHref = `/chantiers/${encodeURIComponent(id)}/qualite`;
 
   return (
-    <div className="space-y-5">
-      <section className="rounded-3xl border border-slate-200 bg-white px-5 py-4 shadow-sm">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-          <div className="min-w-0">
-            <div className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-400">
-              Agenda interventions / planning chantier
+    <div className="space-y-4">
+      <section className="rounded-surface border border-subtle bg-surface p-4 shadow-elevated">
+        <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+          <div className="min-w-0 flex-1">
+            <div className="flex items-start gap-3">
+              <Link
+                to={`/chantiers/${id}`}
+                className="bt-control inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-field border border-subtle bg-surface text-ink-secondary hover:bg-interactive"
+                aria-label="Retour au dossier chantier"
+              >
+                <ArrowLeft className="h-4 w-4" strokeWidth={1.75} />
+              </Link>
+              <div className="min-w-0">
+                <div className="bt-caption text-muted">Agenda interventions / planning chantier</div>
+                <h1 className="bt-page-title mt-1 truncate text-ink">{chantier?.nom ?? "Chantier"}</h1>
+              </div>
             </div>
-            <h1 className="mt-1 text-2xl font-semibold text-slate-950">
-              {chantier?.nom ?? "Chantier"}
-            </h1>
-            <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-sm text-slate-500">
-              <span>{chantier?.client || "Client non renseigné"}</span>
-              <span>Début : {chantier?.date_debut ?? chantier?.planning_start_date ?? "-"}</span>
-              <span>Fin : {chantier?.date_fin_prevue ?? chantier?.planning_end_date ?? "-"}</span>
-              <span>{activeIntervenantsCount} intervenant{activeIntervenantsCount > 1 ? "s" : ""} affecté{activeIntervenantsCount > 1 ? "s" : ""}</span>
-              <span className={terrainFeedbackSummary.priority > 0 ? "font-semibold text-red-700" : terrainFeedbackSummary.open > 0 ? "font-semibold text-blue-700" : "text-slate-500"}>
-                {terrainFeedbackLabel}
-              </span>
+
+            <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+              <div className="rounded-card border border-subtle bg-interactive px-3 py-2">
+                <div className="flex items-center gap-2 text-muted">
+                  <BriefcaseBusiness className="h-4 w-4" strokeWidth={1.75} />
+                  <span className="bt-caption">Client</span>
+                </div>
+                <div className="bt-card-title mt-1 truncate text-ink">{chantier?.client || "Client non renseigné"}</div>
+              </div>
+              <div className="rounded-card border border-subtle bg-interactive px-3 py-2">
+                <div className="flex items-center gap-2 text-muted">
+                  <CalendarDays className="h-4 w-4" strokeWidth={1.75} />
+                  <span className="bt-caption">Période</span>
+                </div>
+                <div className="bt-card-title mt-1 truncate text-ink">
+                  {chantier?.date_debut ?? chantier?.planning_start_date ?? "-"} - {chantier?.date_fin_prevue ?? chantier?.planning_end_date ?? "-"}
+                </div>
+              </div>
+              <div className="rounded-card border border-subtle bg-interactive px-3 py-2">
+                <div className="flex items-center gap-2 text-muted">
+                  <Users className="h-4 w-4" strokeWidth={1.75} />
+                  <span className="bt-caption">Équipe</span>
+                </div>
+                <div className="bt-card-title mt-1 text-ink">{activeIntervenantsCount} intervenant{activeIntervenantsCount > 1 ? "s" : ""}</div>
+              </div>
+              <div
+                className={[
+                  "rounded-card border px-3 py-2",
+                  terrainFeedbackSummary.priority > 0
+                    ? "border-danger/20 bg-danger-soft text-danger-on"
+                    : terrainFeedbackSummary.open > 0
+                      ? "border-warning/20 bg-warning-soft text-warning-on"
+                      : "border-subtle bg-interactive text-muted",
+                ].join(" ")}
+              >
+                <div className="flex items-center gap-2">
+                  <AlertTriangle className="h-4 w-4" strokeWidth={1.75} />
+                  <span className="bt-caption">Retours terrain</span>
+                </div>
+                <div className="bt-card-title mt-1 truncate">{terrainFeedbackLabel}</div>
+              </div>
             </div>
+
             {terrainFeedbackSummary.open > 0 ? (
-              <div className={[
-                "mt-3 flex flex-col gap-3 rounded-2xl border px-3 py-2 text-sm sm:flex-row sm:items-center sm:justify-between",
-                terrainFeedbackSummary.priority > 0
-                  ? "border-red-200 bg-red-50 text-red-800"
-                  : "border-amber-200 bg-amber-50 text-amber-800",
-              ].join(" ")}
+              <div
+                className={[
+                  "mt-3 flex flex-col gap-3 rounded-card border px-3 py-2 text-sm sm:flex-row sm:items-center sm:justify-between",
+                  terrainFeedbackSummary.priority > 0
+                    ? "border-danger/20 bg-danger-soft text-danger-on"
+                    : "border-warning/20 bg-warning-soft text-warning-on",
+                ].join(" ")}
               >
                 <span>
                   À arbitrer avant de figer le planning : les retours terrain ouverts peuvent impacter les affectations, délais, reprises ou réserves qualité.
@@ -142,10 +194,8 @@ export default function ChantierPlanningPage() {
                   <Link
                     to={terrainFeedbackHref}
                     className={[
-                      "rounded-xl border bg-white px-3 py-2 text-xs font-semibold hover:bg-white/80",
-                      terrainFeedbackSummary.priority > 0
-                        ? "border-red-200 text-red-800"
-                        : "border-amber-200 text-amber-800",
+                      "rounded-field border bg-surface px-3 py-2 text-xs font-semibold hover:bg-interactive",
+                      terrainFeedbackSummary.priority > 0 ? "border-danger/20 text-danger-on" : "border-warning/20 text-warning-on",
                     ].join(" ")}
                   >
                     Ouvrir les retours à arbitrer
@@ -153,10 +203,8 @@ export default function ChantierPlanningPage() {
                   <Link
                     to={qualityHref}
                     className={[
-                      "rounded-xl border bg-white px-3 py-2 text-xs font-semibold hover:bg-white/80",
-                      terrainFeedbackSummary.priority > 0
-                        ? "border-red-200 text-red-800"
-                        : "border-amber-200 text-amber-800",
+                      "rounded-field border bg-surface px-3 py-2 text-xs font-semibold hover:bg-interactive",
+                      terrainFeedbackSummary.priority > 0 ? "border-danger/20 text-danger-on" : "border-warning/20 text-warning-on",
                     ].join(" ")}
                   >
                     Voir qualité / réserves
@@ -165,64 +213,45 @@ export default function ChantierPlanningPage() {
               </div>
             ) : null}
           </div>
-          <div className="flex flex-wrap gap-2">
-            <Link
-              to="/planning"
-              className="rounded-xl border border-slate-200 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
-            >
+
+          <div className="flex max-w-3xl flex-wrap gap-2 xl:justify-end">
+            <Link to="/planning" className="bt-control inline-flex items-center gap-2 rounded-field border border-subtle bg-surface px-3 py-2 text-sm font-semibold text-ink-secondary hover:bg-interactive">
+              <CalendarDays className="h-4 w-4" strokeWidth={1.75} />
               Planning global
             </Link>
-            <Link
-              to={`/chantiers/${id}`}
-              className="rounded-xl border border-slate-200 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
-            >
+            <Link to={`/chantiers/${id}`} className="bt-control inline-flex items-center gap-2 rounded-field border border-subtle bg-surface px-3 py-2 text-sm font-semibold text-ink-secondary hover:bg-interactive">
+              <ClipboardCheck className="h-4 w-4" strokeWidth={1.75} />
               Dossier chantier
             </Link>
-            <Link
-              to={`/chantiers/${id}/preparation`}
-              className="rounded-xl border border-cyan-200 bg-cyan-50 px-3 py-2 text-sm font-medium text-cyan-800 hover:bg-cyan-100"
-            >
+            <Link to={`/chantiers/${id}/preparation`} className="bt-control inline-flex items-center rounded-field border border-subtle bg-surface px-3 py-2 text-sm font-semibold text-ink-secondary hover:bg-interactive">
               Préparation
             </Link>
-            <Link
-              to={`/chantiers/${id}/equipe`}
-              className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-medium text-emerald-800 hover:bg-emerald-100"
-            >
+            <Link to={`/chantiers/${id}/equipe`} className="bt-control inline-flex items-center rounded-field border border-subtle bg-surface px-3 py-2 text-sm font-semibold text-ink-secondary hover:bg-interactive">
               Équipe affectée
             </Link>
-            <Link
-              to={`/chantiers/${id}/execution`}
-              className="rounded-xl border border-blue-200 bg-blue-50 px-3 py-2 text-sm font-medium text-blue-800 hover:bg-blue-100"
-            >
+            <Link to={`/chantiers/${id}/execution`} className="bt-control inline-flex items-center rounded-field border border-primary/20 bg-primary-soft px-3 py-2 text-sm font-semibold text-primary-on hover:bg-selected">
               Tâches / exécution
             </Link>
-            <Link
-              to={`/chantiers/${id}/temps`}
-              className="rounded-xl border border-slate-300 bg-slate-50 px-3 py-2 text-sm font-medium text-slate-800 hover:bg-slate-100"
-            >
+            <Link to={`/chantiers/${id}/temps`} className="bt-control inline-flex items-center gap-2 rounded-field border border-subtle bg-surface px-3 py-2 text-sm font-semibold text-ink-secondary hover:bg-interactive">
+              <Clock3 className="h-4 w-4" strokeWidth={1.75} />
               Suivi des temps
             </Link>
-            <Link
-              to={`/chantiers/${id}/documents`}
-              className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
-            >
+            <Link to={`/chantiers/${id}/documents`} className="bt-control inline-flex items-center gap-2 rounded-field border border-subtle bg-surface px-3 py-2 text-sm font-semibold text-ink-secondary hover:bg-interactive">
+              <FileText className="h-4 w-4" strokeWidth={1.75} />
               Documents
             </Link>
-            <Link
-              to={qualityHref}
-              className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm font-medium text-red-800 hover:bg-red-100"
-            >
+            <Link to={qualityHref} className="bt-control inline-flex items-center rounded-field border border-info/20 bg-info-soft px-3 py-2 text-sm font-semibold text-info-on hover:bg-interactive">
               Qualité / réserves
             </Link>
             <Link
               to={terrainFeedbackHref}
               className={[
-                "rounded-xl border px-3 py-2 text-sm font-medium hover:bg-amber-100",
+                "bt-control inline-flex items-center rounded-field border px-3 py-2 text-sm font-semibold",
                 terrainFeedbackSummary.priority > 0
-                  ? "border-red-200 bg-red-50 text-red-800"
+                  ? "border-danger/20 bg-danger-soft text-danger-on hover:bg-interactive"
                   : terrainFeedbackSummary.open > 0
-                    ? "border-amber-200 bg-amber-50 text-amber-800"
-                    : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50",
+                    ? "border-warning/20 bg-warning-soft text-warning-on hover:bg-interactive"
+                    : "border-subtle bg-surface text-ink-secondary hover:bg-interactive",
               ].join(" ")}
             >
               {terrainFeedbackSummary.open > 0 ? `Retours terrain (${terrainFeedbackLabel})` : "Retours terrain"}
