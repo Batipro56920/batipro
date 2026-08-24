@@ -185,7 +185,7 @@ function buildSummaryCards(context: CocoDirectionContext | null) {
 
 function TextListCard({ title, items, fallback }: { title: string; items: string[]; fallback: string }) {
   return (
-    <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+    <div className="border-l-2 border-slate-200 pl-3">
       <div className="text-xs font-semibold text-slate-950">{title}</div>
       {items.length ? (
         <ul className="mt-2 space-y-1 text-xs leading-5 text-slate-600">
@@ -357,12 +357,12 @@ export default function AssistantDirectionPage() {
   }
 
   if (access === "checking") {
-    return <div className="rounded-xl border border-slate-200 bg-white p-8 text-center text-sm text-slate-500">Verification de l'acces a l'Assistant Direction COCO...</div>;
+    return <div className="border-b border-slate-200 bg-white px-4 py-10 text-center text-sm text-slate-500 sm:px-6">Verification de l'acces a l'Assistant Direction COCO...</div>;
   }
 
   if (access === "denied") {
     return (
-      <div className="mx-auto max-w-3xl rounded-xl border border-amber-200 bg-amber-50 p-6 text-amber-900">
+      <div className="mx-auto max-w-3xl rounded-lg border border-amber-200 bg-amber-50 p-6 text-amber-900">
         <div className="flex items-start gap-3">
           <div className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-white text-amber-700"><Lock className="h-5 w-5" /></div>
           <div>
@@ -376,24 +376,22 @@ export default function AssistantDirectionPage() {
   }
 
   return (
-    <div className="space-y-5">
-      <header className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm shadow-slate-950/[0.03]">
-        <div className="p-5 sm:p-6">
-          <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+    <div className="space-y-4">
+      <header className="border-b border-slate-200 bg-white px-4 py-4 sm:px-6">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
             <div className="min-w-0">
-              <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-blue-700"><BrainCircuit className="h-4 w-4" /> Assistant Direction COCO</div>
-              <h1 className="mt-2 text-3xl font-bold tracking-tight text-slate-950">Anticipation entreprise</h1>
-              <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-500">Bras droit IA du dirigeant : chantiers, planning, temps, materiel, devis, charge, marge et tresorerie quand les donnees existent.</p>
+              <div className="flex items-center gap-2 text-xs font-semibold text-blue-700"><BrainCircuit className="h-4 w-4" /> Assistant Direction COCO</div>
+              <h1 className="mt-1 text-2xl font-semibold tracking-tight text-slate-950">Anticipation entreprise</h1>
+              <p className="mt-1 max-w-3xl text-sm text-slate-500">Risques, priorites et brouillons controles a partir des donnees Batipro disponibles.</p>
             </div>
-            <div className="rounded-lg border border-blue-100 bg-blue-50 px-4 py-3 text-sm text-blue-900">
-              <div className="font-semibold">Garde-fou</div>
-              <div className="mt-1 text-xs leading-5">Analyse, prepare et propose uniquement. Aucune donnee Batipro n'est modifiee sans validation humaine.</div>
+            <div className="flex max-w-xl items-start gap-2 rounded-lg border border-blue-100 bg-blue-50 px-3 py-2 text-xs leading-5 text-blue-900">
+              <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0" />
+              <span><strong>Lecture seule.</strong> Analyse et propositions uniquement; toute action metier reste validee par l'admin.</span>
             </div>
           </div>
-        </div>
       </header>
 
-      <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm shadow-slate-950/[0.03]">
+      <section className="border-y border-slate-200 bg-white px-4 py-3 sm:px-6">
         <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
           <div>
             <div className="flex items-center gap-2 text-sm font-semibold text-slate-950"><ShieldCheck className="h-4 w-4 text-emerald-600" /> Productivite controlee</div>
@@ -401,11 +399,11 @@ export default function AssistantDirectionPage() {
           </div>
           <span className="inline-flex w-fit rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-800">Validation admin obligatoire</span>
         </div>
-        <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+        <div className="mt-3 divide-y divide-slate-200 border-y border-slate-200">
           {COCO_ASSISTANT_ARCHITECTURE.map((assistant) => (
-            <div key={assistant.id} className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+            <div key={assistant.id} className="grid gap-1 py-2.5 md:grid-cols-[190px_minmax(0,1fr)] md:items-start md:gap-4">
               <div className="text-sm font-semibold text-slate-950">{assistant.label}</div>
-              <p className="mt-1 text-xs leading-5 text-slate-600">{assistant.scope}</p>
+              <p className="text-xs leading-5 text-slate-600">{assistant.scope}</p>
             </div>
           ))}
         </div>
@@ -525,8 +523,8 @@ export default function AssistantDirectionPage() {
         </section>
       ) : null}
 
-      <section className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_340px]">
-        <div className="flex min-h-[620px] flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm shadow-slate-950/[0.03]">
+      <section className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_320px]">
+        <div className="flex min-h-[620px] flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm shadow-slate-950/[0.03]">
           <div className="flex items-center justify-between gap-3 border-b border-slate-200 px-4 py-3">
             <div>
               <div className="text-sm font-semibold text-slate-950">Conversation direction</div>
@@ -580,27 +578,27 @@ export default function AssistantDirectionPage() {
           </form>
         </div>
 
-        <aside className="space-y-4">
+        <aside className="h-fit divide-y divide-slate-200 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm shadow-slate-950/[0.03]">
           {summaryCards.length ? (
-            <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm shadow-slate-950/[0.03]">
+            <section className="p-4">
               <div className="text-sm font-semibold text-slate-950">Lecture rapide</div>
-              <div className="mt-3 grid grid-cols-2 gap-2">
+              <div className="mt-3 grid grid-cols-2 gap-x-3 gap-y-4">
                 {summaryCards.map((card) => (
-                  <div key={card.label} className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+                  <div key={card.label} className="border-l-2 border-slate-200 pl-3">
                     <div className="text-[11px] font-medium text-slate-500">{card.label}</div>
                     <div className="mt-1 text-lg font-semibold text-slate-950">{card.value}</div>
                     <div className="mt-1 text-[11px] text-slate-500">{card.hint}</div>
                   </div>
                 ))}
               </div>
-            </div>
+            </section>
           ) : null}
 
-          <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm shadow-slate-950/[0.03]">
+          <section className="p-4">
             <div className="flex items-center gap-2 text-sm font-semibold text-slate-950"><ClipboardCheck className="h-4 w-4 text-blue-600" /> Brouillons controles</div>
-            <div className="mt-3 space-y-2">
+            <div className="mt-3 divide-y divide-slate-200 border-y border-slate-200">
               {CONTROLLED_DRAFT_CATEGORIES.map((draft) => (
-                <div key={`${draft.module}-${draft.label}`} className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+                <div key={`${draft.module}-${draft.label}`} className="py-3">
                   <div className="flex items-center justify-between gap-2">
                     <div className="min-w-0 text-xs font-semibold text-slate-950">{draft.label}</div>
                     <span className="shrink-0 rounded-full border border-slate-200 bg-white px-2 py-0.5 text-[10px] font-semibold text-slate-500">{draft.status}</span>
@@ -610,9 +608,9 @@ export default function AssistantDirectionPage() {
                 </div>
               ))}
             </div>
-          </div>
+          </section>
 
-          <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm shadow-slate-950/[0.03]">
+          <section className="p-4">
             <div className="flex items-center justify-between gap-3">
               <div className="flex items-center gap-2 text-sm font-semibold text-slate-950"><ClipboardCheck className="h-4 w-4 text-emerald-600" /> Brouillons recents</div>
               <button type="button" onClick={() => void refreshControlledDrafts()} disabled={controlledDraftsLoading} className="inline-flex h-8 items-center gap-1 rounded-lg border border-slate-200 bg-white px-2 text-[11px] font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-60">
@@ -622,10 +620,10 @@ export default function AssistantDirectionPage() {
             <p className="mt-2 text-xs leading-5 text-slate-500">Suivi dirigeant des propositions IA historisees. Les boutons changent uniquement le statut du brouillon et ne creent ni devis, ni tache, ni planning, ni commande.</p>
             {controlledDraftsError ? <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-2 text-xs text-amber-800">{controlledDraftsError}</div> : null}
             <div className="mt-3 space-y-2">
-              {controlledDraftsLoading && !controlledDrafts.length ? <div className="flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 p-3 text-xs text-slate-500"><Loader2 className="h-3.5 w-3.5 animate-spin" /> Chargement des brouillons...</div> : null}
-              {!controlledDraftsLoading && !controlledDrafts.length ? <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-xs leading-5 text-slate-500">Aucun brouillon controle historise pour le moment.</div> : null}
+              {controlledDraftsLoading && !controlledDrafts.length ? <div className="flex items-center gap-2 border-y border-slate-200 py-3 text-xs text-slate-500"><Loader2 className="h-3.5 w-3.5 animate-spin" /> Chargement des brouillons...</div> : null}
+              {!controlledDraftsLoading && !controlledDrafts.length ? <div className="border-y border-slate-200 py-3 text-xs leading-5 text-slate-500">Aucun brouillon controle historise pour le moment.</div> : null}
               {controlledDrafts.map((record) => (
-                <div key={record.id} className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+                <div key={record.id} className="border-t border-slate-200 pt-3 first:border-t-0 first:pt-0">
                   <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0">
                       <div className="truncate text-xs font-semibold text-slate-950">{record.draft.title}</div>
@@ -644,18 +642,18 @@ export default function AssistantDirectionPage() {
                 </div>
               ))}
             </div>
-          </div>
+          </section>
 
-          <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm shadow-slate-950/[0.03]">
+          <section className="p-4">
             <div className="flex items-center gap-2 text-sm font-semibold text-slate-950"><Sparkles className="h-4 w-4 text-blue-600" /> Questions rapides</div>
             <div className="mt-3 flex flex-wrap gap-2">
               {COCO_DIRECTION_QUICK_QUESTIONS.map((question) => (
                 <button key={question.label} type="button" onClick={() => void askAssistant(question.prompt)} disabled={sending || loadingContext} className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-left text-xs font-medium text-slate-700 hover:border-blue-200 hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-60">{question.label}</button>
               ))}
             </div>
-          </div>
+          </section>
 
-          <div className="rounded-xl border border-slate-200 bg-white p-4 text-sm shadow-sm shadow-slate-950/[0.03]">
+          <section className="p-4 text-sm">
             <div className="flex items-center gap-2 font-semibold text-slate-950"><AlertTriangle className="h-4 w-4 text-amber-500" /> Points analyses</div>
             <ul className="mt-3 space-y-2 text-slate-600">
               <li>Avancement prevu vs reel des chantiers</li>
@@ -666,10 +664,10 @@ export default function AssistantDirectionPage() {
               <li>Charge equipe, besoin de sous-traitance ou d'embauche</li>
               <li>Marge et tresorerie quand les donnees existent</li>
             </ul>
-          </div>
+          </section>
 
           {context?.risks.length ? (
-            <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950 shadow-sm shadow-slate-950/[0.03]">
+            <section className="bg-amber-50 p-4 text-sm text-amber-950">
               <div className="font-semibold">Signaux detectes</div>
               <div className="mt-3 space-y-2">
                 {context.risks.slice(0, 5).map((risk) => (
@@ -679,7 +677,7 @@ export default function AssistantDirectionPage() {
                   </div>
                 ))}
               </div>
-            </div>
+            </section>
           ) : null}
         </aside>
       </section>
