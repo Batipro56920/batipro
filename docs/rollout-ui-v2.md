@@ -8,7 +8,7 @@ Un commit par bloc. Parite fonctionnelle 100 %.
 | 0 | Dashboard | deja valide | 3c8a143 |
 | 1 | Liste Chantiers (`/chantiers`, `/planning`, `/taches`, `/reserves`) | termine | 29ad7c0 |
 | 2 | Shell / navigation (LayoutShell, Sidebar) | deja conforme V2 | - |
-| 3 | Cockpit chantier (`/chantiers/:id/*`) | a faire | |
+| 3 | Cockpit chantier (`/chantiers/:id/*`) | termine | da16618 |
 | 4 | Nouveau chantier (`/chantiers/nouveau`) | a faire | |
 | 5 | Planning chantier (`/chantiers/:id/planning`) | a faire | |
 | 6 | Suivi des temps (`/temps`, `/chantiers/:id/temps`) | a faire | |
