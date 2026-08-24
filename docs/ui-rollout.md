@@ -22,8 +22,8 @@
 | Suivi temps global (`/temps`) | terminé | 1a8e003 |
 | Suivi temps chantier (`/chantiers/:id/temps`) | terminé | 1a8e003 |
 | Visites chantier détail (`/chantiers/:id/visites`) | terminé | f05f45f |
-| Retours terrain global (`/retours-terrain`, `/retours-terrain/:feedbackId`) | à faire |  |
-| Retours terrain chantier (`/chantiers/:id/retours-terrain`, `/chantiers/:id/retours-terrain/:feedbackId`) | à faire |  |
+| Retours terrain global (`/retours-terrain`, `/retours-terrain/:feedbackId`) | terminé | 889b184 |
+| Retours terrain chantier (`/chantiers/:id/retours-terrain`, `/chantiers/:id/retours-terrain/:feedbackId`) | terminé | 889b184 |
 | CRM dashboard (`/crm`) | à faire |  |
 | CRM prospects (`/crm/prospects`) | à faire |  |
 | CRM clients (`/crm/clients`) | à faire |  |
