@@ -17,6 +17,7 @@ import {
   isOpenPurchaseOrderStatus,
 } from "../features/financial/application/financialMetrics";
 import {
+  getFinancialPeriodDateRange,
   isInFinancialPeriod,
   parseFinancialPeriod,
   type FinancialPeriod,
@@ -26,6 +27,10 @@ import {
   FinancialPeriodSelector,
 } from "../features/financial/components/FinancialNavigation";
 import { useProjectsData } from "../features/projects/hooks/useProjectsData";
+import {
+  listChantierLaborCostSummaries,
+  type ChantierLaborCostSummary,
+} from "../services/chantierBudget.service";
 import type { ProjectRecord } from "../features/projects/types";
 import {
   getCompanySettings,
@@ -38,6 +43,11 @@ type ProjectFinancialRow = {
   chantierIds: string[];
   invoiceCount: number;
   purchaseOrderCount: number;
+  laborHours: number;
+  laborCostHt: number;
+  laborUsesDefaultRate: boolean;
+  marginAfterLaborHt: number;
+  marginAfterLaborRate: number;
   metrics: FinancialDocumentMetrics;
 };
 
@@ -72,6 +82,10 @@ type FinancialCoverage = {
 
 function formatCurrency(value: number) {
   return new Intl.NumberFormat("fr-FR", { style: "currency", currency: "EUR", maximumFractionDigits: 0 }).format(value || 0);
+}
+
+function formatHours(value: number) {
+  return `${new Intl.NumberFormat("fr-FR", { maximumFractionDigits: 1 }).format(value || 0)} h`;
 }
 
 function formatRate(value: number) {
@@ -133,7 +147,7 @@ function projectRiskScore(row: ProjectFinancialRow) {
   if (!row.project) return 100;
   let score = 0;
   if (row.metrics.purchasesHt > 0 && row.metrics.invoicedHt <= 0) score += 30;
-  if (row.metrics.grossMarginHt < 0) score += 20;
+  if (row.marginAfterLaborHt < 0) score += 20;
   if (row.metrics.remainingToCollectTtc > 0) score += 10;
   return score;
 }
@@ -145,8 +159,8 @@ function getProjectSignal(row: ProjectFinancialRow) {
   if (row.metrics.purchasesHt > 0 && row.metrics.invoicedHt <= 0) {
     return { label: "Achats sans vente", className: "bg-red-50 text-red-700" };
   }
-  if (row.metrics.grossMarginHt < 0) {
-    return { label: "Marge négative", className: "bg-red-50 text-red-700" };
+  if (row.marginAfterLaborHt < 0) {
+    return { label: "Marge après MO négative", className: "bg-red-50 text-red-700" };
   }
   if (row.metrics.remainingToCollectTtc > 0) {
     return { label: "À encaisser", className: "bg-amber-50 text-amber-700" };
@@ -158,6 +172,7 @@ function buildProjectFinancialRows(
   invoices: InvoiceRecord[],
   purchaseOrders: PurchaseOrderRecord[],
   projects: ProjectRecord[],
+  laborCosts: Map<string, ChantierLaborCostSummary>,
 ): ProjectFinancialRow[] {
   const projectByRef = new Map<string, ProjectRecord>();
   const projectByChantierId = new Map<string, ProjectRecord>();
@@ -213,15 +228,37 @@ function buildProjectFinancialRows(
     if (order.chantierId) group.chantierIds.add(order.chantierId);
   });
 
+  laborCosts.forEach((labor) => {
+    if (labor.hours <= 0) return;
+    const project = projectByChantierId.get(labor.chantierId) ?? null;
+    const group = getGroup(project);
+    group.chantierIds.add(labor.chantierId);
+  });
+
   return Array.from(groups.entries())
-    .map(([key, group]) => ({
-      key,
-      project: group.project,
-      chantierIds: Array.from(group.chantierIds),
-      invoiceCount: group.invoices.length,
-      purchaseOrderCount: group.purchaseOrders.length,
-      metrics: buildFinancialDocumentMetrics(group.invoices, group.purchaseOrders),
-    }))
+    .map(([key, group]) => {
+      const chantierIds = Array.from(group.chantierIds);
+      const laborRows = chantierIds
+        .map((chantierId) => laborCosts.get(chantierId))
+        .filter((row): row is ChantierLaborCostSummary => Boolean(row));
+      const laborHours = laborRows.reduce((sum, row) => sum + row.hours, 0);
+      const laborCostHt = laborRows.reduce((sum, row) => sum + row.laborCostHt, 0);
+      const metrics = buildFinancialDocumentMetrics(group.invoices, group.purchaseOrders);
+      const marginAfterLaborHt = metrics.grossMarginHt - laborCostHt;
+      return {
+        key,
+        project: group.project,
+        chantierIds,
+        invoiceCount: group.invoices.length,
+        purchaseOrderCount: group.purchaseOrders.length,
+        laborHours,
+        laborCostHt,
+        laborUsesDefaultRate: laborRows.some((row) => row.usesDefaultRate),
+        marginAfterLaborHt,
+        marginAfterLaborRate: metrics.invoicedHt > 0 ? (marginAfterLaborHt / metrics.invoicedHt) * 100 : 0,
+        metrics,
+      };
+    })
     .sort((left, right) => {
       const riskDifference = projectRiskScore(right) - projectRiskScore(left);
       if (riskDifference !== 0) return riskDifference;
@@ -292,17 +329,19 @@ function ProjectProfitabilityPanel({
   rows,
   loading,
   error,
+  laborError,
 }: {
   rows: ProjectFinancialRow[];
   loading: boolean;
   error: string | null;
+  laborError: string | null;
 }) {
   return (
     <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
       <div className="border-b border-slate-100 p-4">
-        <h2 className="font-semibold text-slate-950">Marge documentée par dossier</h2>
+        <h2 className="font-semibold text-slate-950">Marge après main-d'œuvre par dossier</h2>
         <p className="mt-1 text-sm text-slate-500">
-          Les dossiers nécessitant une action remontent en premier : rattachement manquant, achats sans vente ou marge brute négative.
+          Les dossiers nécessitant une action remontent en premier : rattachement manquant, achats sans vente ou marge après main-d'œuvre négative.
         </p>
       </div>
       {loading ? <div className="p-6 text-sm text-slate-500">Chargement des rattachements projets...</div> : null}
@@ -311,17 +350,24 @@ function ProjectProfitabilityPanel({
           Ventilation indisponible : {error}
         </div>
       ) : null}
+      {!loading && !error && laborError ? (
+        <div className="mx-4 mt-4 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+          Coût de main-d'œuvre indisponible : {laborError}
+        </div>
+      ) : null}
       {!loading && !error ? (
         <div className="overflow-x-auto p-4">
-          <table className="min-w-[1080px] text-sm">
+          <table className="min-w-[1360px] text-sm">
             <thead className="bg-slate-50 text-slate-600">
               <tr>
                 <th className="px-4 py-3 text-left font-medium">Dossier</th>
                 <th className="px-4 py-3 text-left font-medium">Signal</th>
                 <th className="px-4 py-3 text-left font-medium">Documents</th>
+                <th className="px-4 py-3 text-right font-medium">Heures</th>
                 <th className="px-4 py-3 text-right font-medium">Ventes HT</th>
                 <th className="px-4 py-3 text-right font-medium">Achats HT</th>
-                <th className="px-4 py-3 text-right font-medium">Marge brute</th>
+                <th className="px-4 py-3 text-right font-medium">MO réelle</th>
+                <th className="px-4 py-3 text-right font-medium">Marge après MO</th>
                 <th className="px-4 py-3 text-right font-medium">Taux</th>
                 <th className="px-4 py-3 text-right font-medium">À encaisser</th>
               </tr>
@@ -331,7 +377,7 @@ function ProjectProfitabilityPanel({
                 const chantier = row.chantierIds.length === 1
                   ? row.project?.chantiers.find((item) => item.id === row.chantierIds[0]) ?? null
                   : null;
-                const marginTone = row.metrics.grossMarginHt < 0 ? "text-red-700" : "text-emerald-700";
+                const marginTone = row.marginAfterLaborHt < 0 ? "text-red-700" : "text-emerald-700";
                 const signal = getProjectSignal(row);
                 return (
                   <tr key={row.key} className="border-t border-slate-100">
@@ -361,23 +407,30 @@ function ProjectProfitabilityPanel({
                     </td>
                     <td className="px-4 py-3"><span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${signal.className}`}>{signal.label}</span></td>
                     <td className="px-4 py-3 text-slate-700">{row.invoiceCount} facture(s) · {row.purchaseOrderCount} commande(s)</td>
+                    <td className="px-4 py-3 text-right text-slate-700">
+                      <div>{formatHours(row.laborHours)}</div>
+                      {row.laborUsesDefaultRate && row.laborHours > 0 ? (
+                        <div className="mt-0.5 text-[11px] text-amber-700">Taux par défaut</div>
+                      ) : null}
+                    </td>
                     <td className="px-4 py-3 text-right text-slate-700">{formatCurrency(row.metrics.invoicedHt)}</td>
                     <td className="px-4 py-3 text-right text-slate-700">{formatCurrency(row.metrics.purchasesHt)}</td>
-                    <td className={`px-4 py-3 text-right font-semibold ${marginTone}`}>{formatCurrency(row.metrics.grossMarginHt)}</td>
-                    <td className={`px-4 py-3 text-right font-semibold ${marginTone}`}>{formatRate(row.metrics.grossMarginRate)}</td>
+                    <td className="px-4 py-3 text-right text-slate-700">{formatCurrency(row.laborCostHt)}</td>
+                    <td className={`px-4 py-3 text-right font-semibold ${marginTone}`}>{formatCurrency(row.marginAfterLaborHt)}</td>
+                    <td className={`px-4 py-3 text-right font-semibold ${marginTone}`}>{formatRate(row.marginAfterLaborRate)}</td>
                     <td className="px-4 py-3 text-right text-slate-700">{formatCurrency(row.metrics.remainingToCollectTtc)}</td>
                   </tr>
                 );
               })}
               {!rows.length ? (
-                <tr><td colSpan={8} className="px-4 py-8 text-center text-slate-500">Aucun document financier sur cette période.</td></tr>
+                <tr><td colSpan={10} className="px-4 py-8 text-center text-slate-500">Aucun document financier sur cette période.</td></tr>
               ) : null}
             </tbody>
           </table>
         </div>
       ) : null}
       <div className="border-t border-slate-100 bg-slate-50 px-4 py-3 text-xs text-slate-500">
-        Marge documentée = ventes HT émises - commandes fournisseurs HT engagées. Elle n'inclut pas encore le coût réel de la main-d'œuvre, les frais chantier non saisis ni les paiements fournisseurs.
+        Marge après MO = ventes HT émises - commandes fournisseurs HT engagées - coût des heures saisies. Elle n'inclut pas les frais chantier non saisis ni les paiements fournisseurs.
       </div>
     </section>
   );
@@ -408,6 +461,9 @@ export default function RentabilitePage() {
   const [invoices, setInvoices] = useState<InvoiceRecord[]>([]);
   const [purchaseOrders, setPurchaseOrders] = useState<PurchaseOrderRecord[]>([]);
   const [charges, setCharges] = useState<CompanyChargeEntry[]>([]);
+  const [laborCosts, setLaborCosts] = useState<Map<string, ChantierLaborCostSummary>>(() => new Map());
+  const [laborLoading, setLaborLoading] = useState(false);
+  const [laborError, setLaborError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -431,12 +487,47 @@ export default function RentabilitePage() {
 
   useEffect(() => { void refresh(); }, []);
 
+  useEffect(() => {
+    const chantierIds = Array.from(new Set(projects.flatMap((project) => project.chantiers.map((chantier) => chantier.id))));
+    if (!chantierIds.length) {
+      setLaborCosts(new Map());
+      setLaborError(null);
+      setLaborLoading(false);
+      return;
+    }
+
+    let alive = true;
+    setLaborLoading(true);
+    setLaborError(null);
+    listChantierLaborCostSummaries(chantierIds, getFinancialPeriodDateRange(period))
+      .then((rows) => {
+        if (!alive) return;
+        setLaborCosts(new Map(rows.map((row) => [row.chantierId, row])));
+      })
+      .catch((err: any) => {
+        if (!alive) return;
+        setLaborCosts(new Map());
+        setLaborError(err?.message ?? "Coûts de main-d'œuvre indisponibles.");
+      })
+      .finally(() => {
+        if (!alive) return;
+        setLaborLoading(false);
+      });
+
+    return () => {
+      alive = false;
+    };
+  }, [period, projects]);
+
   const scopedInvoices = useMemo(() => invoices.filter((invoice) => isInFinancialPeriod(invoice.document.issueDate, period)), [invoices, period]);
   const scopedPurchaseOrders = useMemo(() => purchaseOrders.filter((order) => isInFinancialPeriod(order.document.issueDate || order.createdAt, period)), [period, purchaseOrders]);
   const summary = useMemo(() => buildSummary(scopedInvoices, scopedPurchaseOrders, charges), [charges, scopedInvoices, scopedPurchaseOrders]);
   const recentInvoices = scopedInvoices.filter(isIssuedInvoice).slice(0, 6);
   const recentPurchases = scopedPurchaseOrders.filter(isCommittedPurchaseOrder).slice(0, 6);
-  const projectFinancialRows = useMemo(() => buildProjectFinancialRows(scopedInvoices, scopedPurchaseOrders, projects), [projects, scopedInvoices, scopedPurchaseOrders]);
+  const projectFinancialRows = useMemo(
+    () => buildProjectFinancialRows(scopedInvoices, scopedPurchaseOrders, projects, laborCosts),
+    [laborCosts, projects, scopedInvoices, scopedPurchaseOrders],
+  );
   const financialCoverage = useMemo(() => buildFinancialCoverage(projectFinancialRows), [projectFinancialRows]);
 
   function onPeriodChange(nextPeriod: FinancialPeriod) {
@@ -502,7 +593,12 @@ export default function RentabilitePage() {
 
           <FinancialDataQualityPanel coverage={financialCoverage} />
 
-          <ProjectProfitabilityPanel rows={projectFinancialRows} loading={projectsLoading} error={projectsError} />
+          <ProjectProfitabilityPanel
+            rows={projectFinancialRows}
+            loading={projectsLoading || laborLoading}
+            error={projectsError}
+            laborError={laborError}
+          />
 
           <section className="grid gap-4 xl:grid-cols-2">
             <DataPanel title="Dernières factures" empty={!recentInvoices.length ? "Aucune facture." : null}>
