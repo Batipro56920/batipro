@@ -239,9 +239,10 @@ select {
 
 .sidebar {
   width: 248px;
-  height: 100vh;
-  height: 100svh;
-  height: 100dvh;
+  /* En grille, l aside doit s etirer sur sa rangee : une hauteur figee la
+     laissait plus courte que le contenu, d ou le fond bleu interrompu. */
+  height: 100%;
+  min-height: 0;
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
   background: var(--sidebar-bg, #fff);
@@ -286,6 +287,33 @@ select {
 
 .sidebar-toggle {
   display: none;
+}
+
+/* ------------------------------------------------------------------ *
+ * Coquille desktop ancree au viewport.
+ * .app-layout recoit une hauteur DEFINIE, et pas seulement un min-height :
+ * sans elle la rangee de grille grandissait avec le contenu tandis que la
+ * sidebar gardait la sienne. La chaine min-height: 0 est ce qui permet
+ * enfin a .content-body de defiler a l interieur, au lieu de faire
+ * defiler tout le document.
+ * ------------------------------------------------------------------ */
+@media (min-width: 1025px) {
+  .app-layout {
+    height: 100vh;
+    height: 100svh;
+    height: 100dvh;
+    overflow: hidden;
+  }
+
+  .content,
+  .layout-content {
+    height: 100%;
+    min-height: 0;
+  }
+
+  .content-body {
+    min-height: 0;
+  }
 }
 
 @media (max-width: 1024px) {

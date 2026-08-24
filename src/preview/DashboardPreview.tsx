@@ -4,6 +4,7 @@
  * Entree servie par `vite dev` uniquement (`/preview.html`).
  */
 import { useState } from "react";
+import Sidebar from "../components/Sidebar";
 import { DashboardBusinessPanel } from "../features/dashboard/components/DashboardBusinessPanel";
 import { DashboardChantiersPanel } from "../features/dashboard/components/DashboardChantiersPanel";
 import { DashboardHeader } from "../features/dashboard/components/DashboardHeader";
@@ -75,34 +76,19 @@ export function DashboardPreview() {
   }
 
   return (
-    <div className="min-h-screen bg-app">
-      <div className="flex">
-        <aside className="hidden w-[248px] shrink-0 bg-sidebar p-4 text-white lg:block">
-          <div className="flex items-center gap-2">
-            <div className="grid h-8 w-8 place-items-center rounded-xl bg-white text-sm font-black text-sidebar">B</div>
-            <div>
-              <div className="text-sm font-bold">Batipro</div>
-              <div className="text-[11px] text-blue-100/70">ERP chantier</div>
-            </div>
-          </div>
-          <nav className="mt-6 space-y-1">
-            {["Dashboard", "Chantiers", "Projets", "CRM", "Factures", "Intervenants"].map((label, index) => (
-              <div
-                key={label}
-                className={`rounded-xl px-3 py-2.5 text-sm font-medium ${index === 0 ? "bg-white text-sidebar" : "text-blue-50/75"}`}
-              >
-                {label}
-              </div>
-            ))}
-          </nav>
-        </aside>
+    // Coquille reelle (.app-layout / .sidebar / .content) : c'est elle qu'il faut
+    // exercer pour verifier la hauteur de la sidebar, pas une maquette ad hoc.
+    <div className="app-layout">
+      <aside className="sidebar border-r border-sidebar bg-sidebar">
+        <Sidebar collapsed={false} companyName="Batipro" onToggleCollapse={() => {}} />
+      </aside>
 
-        <main className="min-w-0 flex-1">
-          <header className="flex h-14 items-center border-b border-subtle bg-surface/95 px-4 text-sm text-muted">
-            Batipro · Aperçu design system
-          </header>
-          <div className="bg-app p-4 md:p-6">
-            <div className="mx-auto w-full max-w-[1440px] space-y-5 lg:space-y-6">
+      <main className="content">
+        <header className="header-bar flex h-14 items-center border-b border-subtle bg-surface/95 px-4 text-sm text-muted backdrop-blur">
+          Batipro · Aperçu design system
+        </header>
+        <div className="content-body bg-app p-4 md:p-6">
+          <div className="mx-auto w-full max-w-[1440px] space-y-5 lg:space-y-6">
               <DashboardHeader userName="Corentin" locale="fr-FR" isFiltered={isFiltered} onReset={reset} />
               <DashboardVerdict
                 verdict={metrics.verdict}
@@ -131,10 +117,9 @@ export function DashboardPreview() {
                 onSelectFilter={setFilter}
                 compact={false}
               />
-            </div>
           </div>
-        </main>
-      </div>
+        </div>
+      </main>
     </div>
   );
 }
