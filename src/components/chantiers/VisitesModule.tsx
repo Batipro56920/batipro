@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { FileText, Plus } from "lucide-react";
 import type { IntervenantRow } from "../../services/intervenants.service";
 import { listByChantier as listDocumentsByChantier, getSignedUrl, type ChantierDocumentRow } from "../../services/chantierDocuments.service";
 import { listVisites, type ChantierVisiteRow } from "../../services/chantierVisites.service";
@@ -98,27 +99,28 @@ export default function VisitesModule({
 
   return (
     <div className="space-y-4">
-      <div className="flex items-start justify-between gap-3">
+      <div className="flex items-start justify-between gap-3 rounded-surface border border-subtle bg-surface p-4 shadow-sm">
         <div>
-          <div className="font-semibold section-title">Visites de chantier</div>
-          <div className="text-sm text-slate-500">Creation de compte-rendu pro avec snapshot fige.</div>
+          <div className="bt-section-title text-ink">Visites de chantier</div>
+          <div className="bt-secondary mt-1 text-muted">Creation de compte-rendu pro avec snapshot fige.</div>
         </div>
         <button
           type="button"
-          className="rounded-xl px-4 py-2 text-sm bg-slate-900 text-white hover:bg-slate-800"
+          className="bt-control inline-flex items-center gap-2 rounded-field bg-primary px-3 py-2 text-sm font-semibold text-primary-contrast hover:bg-primary-hover"
           onClick={() => setWizardOpen(true)}
         >
+          <Plus className="h-4 w-4" strokeWidth={1.75} />
           Nouvelle visite
         </button>
       </div>
 
-      {error && <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>}
+      {error && <div className="rounded-card border border-danger/20 bg-danger-soft px-4 py-3 text-sm font-medium text-danger-on">{error}</div>}
 
       {targetedVisitId ? (
         <div
           className={[
-            "rounded-xl border px-4 py-3 text-sm",
-            targetedVisitMissing ? "border-amber-200 bg-amber-50 text-amber-900" : "border-blue-200 bg-blue-50 text-blue-900",
+            "rounded-card border px-4 py-3 text-sm",
+            targetedVisitMissing ? "border-warning/20 bg-warning-soft text-warning-on" : "border-primary/20 bg-primary-soft text-primary-on",
           ].join(" ")}
         >
           <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
@@ -126,7 +128,7 @@ export default function VisitesModule({
               <div className="font-semibold">
                 {targetedVisitMissing ? "Visite chantier ciblee introuvable" : "Visite chantier ciblee depuis la recherche globale"}
               </div>
-              <p className={targetedVisitMissing ? "mt-1 text-amber-800" : "mt-1 text-blue-800"}>
+              <p className="mt-1">
                 {targetedVisit
                   ? `${targetedVisit.titre || "Visite"} ${targetedVisit.numero ? `#${targetedVisit.numero}` : ""} est surlignee dans l'historique.`
                   : "Le lien de recherche pointe vers une visite supprimee ou non visible avec les droits actuels."}
@@ -138,7 +140,7 @@ export default function VisitesModule({
                   type="button"
                   onClick={() => void openPdf(targetedVisit)}
                   disabled={openingPdfId === targetedVisit.id}
-                  className="rounded-lg border border-blue-200 bg-white px-4 py-2 text-sm font-semibold text-blue-700 hover:bg-blue-50 disabled:cursor-not-allowed disabled:border-slate-200 disabled:text-slate-400"
+                  className="rounded-field border border-primary/20 bg-surface px-4 py-2 text-sm font-semibold text-primary-on hover:bg-interactive disabled:cursor-not-allowed disabled:border-subtle disabled:text-muted"
                 >
                   {openingPdfId === targetedVisit.id ? "Ouverture..." : "Ouvrir le PDF"}
                 </button>
@@ -147,7 +149,7 @@ export default function VisitesModule({
                 <button
                   type="button"
                   onClick={onClearTargetedVisit}
-                  className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700"
+                  className="rounded-field border border-subtle bg-surface px-4 py-2 text-sm font-semibold text-ink-secondary hover:bg-interactive"
                 >
                   Retirer le ciblage
                 </button>
@@ -157,12 +159,12 @@ export default function VisitesModule({
         </div>
       ) : null}
 
-      <div className="rounded-2xl border bg-white p-4">
-        <div className="font-medium mb-2">Historique des visites</div>
+      <div className="rounded-surface border border-subtle bg-surface p-4 shadow-sm">
+        <div className="bt-card-title mb-3 text-ink">Historique des visites</div>
         {loading ? (
-          <div className="text-sm text-slate-500">Chargement...</div>
+          <div className="text-sm text-muted">Chargement...</div>
         ) : visites.length === 0 ? (
-          <div className="text-sm text-slate-500">Aucune visite enregistree.</div>
+          <div className="rounded-card border border-dashed border-subtle bg-interactive p-4 text-sm text-muted">Aucune visite enregistree.</div>
         ) : (
           <div className="space-y-3">
             {visites.map((visite) => {
@@ -173,8 +175,8 @@ export default function VisitesModule({
                   ref={isTargeted ? targetedVisitRef : undefined}
                   data-visite-target={isTargeted ? "true" : undefined}
                   className={[
-                    "rounded-xl border p-3 scroll-mt-24",
-                    isTargeted ? "border-blue-300 bg-blue-50 ring-2 ring-blue-100" : "border-slate-200 bg-white",
+                    "rounded-card border p-3 scroll-mt-24",
+                    isTargeted ? "border-primary/40 bg-primary-soft ring-2 ring-primary/20" : "border-subtle bg-surface",
                   ].join(" ")}
                 >
                   <div className="flex flex-wrap items-center justify-between gap-2">
@@ -183,24 +185,25 @@ export default function VisitesModule({
                       {new Date(visite.visit_datetime).toLocaleDateString("fr-FR")}
                     </div>
                     <div className="flex items-center gap-2">
-                      {isTargeted ? <span className="rounded-full border border-blue-200 bg-white px-2 py-0.5 text-xs font-medium text-blue-700">Cible recherche</span> : null}
+                      {isTargeted ? <span className="rounded-full border border-primary/20 bg-surface px-2 py-0.5 text-xs font-medium text-primary-on">Cible recherche</span> : null}
                       {visite.phase && <span className="text-xs rounded-full border px-2 py-0.5">{visite.phase}</span>}
                       <button
                         type="button"
                         disabled={!visite.pdf_document_id || openingPdfId === visite.id}
                         className={[
-                          "rounded-lg border px-3 py-1 text-xs",
+                          "inline-flex items-center gap-1 rounded-field border px-3 py-1 text-xs font-semibold",
                           visite.pdf_document_id && openingPdfId !== visite.id
-                            ? "hover:bg-slate-50"
-                            : "text-slate-400 border-slate-200",
+                            ? "border-subtle text-ink-secondary hover:bg-interactive"
+                            : "text-muted border-subtle",
                         ].join(" ")}
                         onClick={() => void openPdf(visite)}
                       >
+                        <FileText className="h-3.5 w-3.5" strokeWidth={1.75} />
                         {openingPdfId === visite.id ? "Ouverture..." : "Exporter PDF"}
                       </button>
                     </div>
                   </div>
-                  <div className="text-xs text-slate-500 mt-1">
+                  <div className="bt-caption mt-1 text-muted">
                     Redacteur: {visite.redactor_email || "-"} | PDF: {visite.pdf_document_id ? "OK" : "-"}
                   </div>
                 </div>
