@@ -8,6 +8,7 @@ import type { PurchaseOrderRecord } from "../features/purchase-orders";
 import { listPurchaseOrders } from "../features/purchase-orders";
 import {
   buildFinancialDocumentMetrics,
+  type FinancialDocumentMetrics,
   getBreakEvenMonthly,
   getInvoiceSign,
   getOperatingChargeMetrics,
@@ -24,10 +25,21 @@ import {
   FinancialNavigation,
   FinancialPeriodSelector,
 } from "../features/financial/components/FinancialNavigation";
+import { useProjectsData } from "../features/projects/hooks/useProjectsData";
+import type { ProjectRecord } from "../features/projects/types";
 import {
   getCompanySettings,
   type CompanyChargeEntry,
 } from "../services/companySettings.service";
+
+type ProjectFinancialRow = {
+  key: string;
+  project: ProjectRecord | null;
+  chantierIds: string[];
+  invoiceCount: number;
+  purchaseOrderCount: number;
+  metrics: FinancialDocumentMetrics;
+};
 
 type ProfitabilitySummary = {
   invoicedHt: number;
@@ -106,6 +118,176 @@ function buildSummary(
   };
 }
 
+function buildProjectFinancialRows(
+  invoices: InvoiceRecord[],
+  purchaseOrders: PurchaseOrderRecord[],
+  projects: ProjectRecord[],
+): ProjectFinancialRow[] {
+  const projectByRef = new Map<string, ProjectRecord>();
+  const projectByChantierId = new Map<string, ProjectRecord>();
+
+  projects.forEach((project) => {
+    [
+      project.id,
+      project.sourceId,
+      project.opportunity?.id,
+      project.prospect?.id,
+      ...project.quotes.map((quote) => quote.id),
+    ].filter((value): value is string => Boolean(value)).forEach((value) => projectByRef.set(value, project));
+    project.chantiers.forEach((chantier) => projectByChantierId.set(chantier.id, project));
+  });
+
+  const groups = new Map<string, {
+    project: ProjectRecord | null;
+    invoices: InvoiceRecord[];
+    purchaseOrders: PurchaseOrderRecord[];
+    chantierIds: Set<string>;
+  }>();
+
+  function getGroup(project: ProjectRecord | null) {
+    const key = project?.id ?? "unassigned";
+    const existing = groups.get(key);
+    if (existing) return existing;
+    const created = {
+      project,
+      invoices: [] as InvoiceRecord[],
+      purchaseOrders: [] as PurchaseOrderRecord[],
+      chantierIds: new Set<string>(),
+    };
+    groups.set(key, created);
+    return created;
+  }
+
+  invoices.filter(isIssuedInvoice).forEach((invoice) => {
+    const project = (invoice.chantierId ? projectByChantierId.get(invoice.chantierId) : null)
+      ?? (invoice.projectId ? projectByRef.get(invoice.projectId) : null)
+      ?? (invoice.sourceQuoteId ? projectByRef.get(invoice.sourceQuoteId) : null)
+      ?? null;
+    const group = getGroup(project);
+    group.invoices.push(invoice);
+    if (invoice.chantierId) group.chantierIds.add(invoice.chantierId);
+  });
+
+  purchaseOrders.filter(isCommittedPurchaseOrder).forEach((order) => {
+    const project = (order.chantierId ? projectByChantierId.get(order.chantierId) : null)
+      ?? (order.projectId ? projectByRef.get(order.projectId) : null)
+      ?? null;
+    const group = getGroup(project);
+    group.purchaseOrders.push(order);
+    if (order.chantierId) group.chantierIds.add(order.chantierId);
+  });
+
+  return Array.from(groups.entries())
+    .map(([key, group]) => ({
+      key,
+      project: group.project,
+      chantierIds: Array.from(group.chantierIds),
+      invoiceCount: group.invoices.length,
+      purchaseOrderCount: group.purchaseOrders.length,
+      metrics: buildFinancialDocumentMetrics(group.invoices, group.purchaseOrders),
+    }))
+    .sort((left, right) => {
+      if (left.project === null) return 1;
+      if (right.project === null) return -1;
+      return right.metrics.invoicedHt - left.metrics.invoicedHt;
+    });
+}
+
+function ProjectProfitabilityPanel({
+  rows,
+  loading,
+  error,
+}: {
+  rows: ProjectFinancialRow[];
+  loading: boolean;
+  error: string | null;
+}) {
+  return (
+    <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+      <div className="border-b border-slate-100 p-4">
+        <h2 className="font-semibold text-slate-950">Rentabilité par dossier</h2>
+        <p className="mt-1 text-sm text-slate-500">
+          Ventilation des factures émises et commandes engagées de la période, par projet et chantier rattachés.
+        </p>
+      </div>
+      {loading ? <div className="p-6 text-sm text-slate-500">Chargement des rattachements projets...</div> : null}
+      {!loading && error ? (
+        <div className="m-4 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
+          Ventilation indisponible : {error}
+        </div>
+      ) : null}
+      {!loading && !error ? (
+        <div className="overflow-x-auto p-4">
+          <table className="min-w-[980px] text-sm">
+            <thead className="bg-slate-50 text-slate-600">
+              <tr>
+                <th className="px-4 py-3 text-left font-medium">Dossier</th>
+                <th className="px-4 py-3 text-left font-medium">Documents</th>
+                <th className="px-4 py-3 text-right font-medium">Ventes HT</th>
+                <th className="px-4 py-3 text-right font-medium">Achats HT</th>
+                <th className="px-4 py-3 text-right font-medium">Marge brute</th>
+                <th className="px-4 py-3 text-right font-medium">Taux</th>
+                <th className="px-4 py-3 text-right font-medium">À encaisser</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((row) => {
+                const chantier = row.chantierIds.length === 1
+                  ? row.project?.chantiers.find((item) => item.id === row.chantierIds[0]) ?? null
+                  : null;
+                const marginTone = row.metrics.grossMarginHt < 0 ? "text-red-700" : "text-emerald-700";
+                return (
+                  <tr key={row.key} className="border-t border-slate-100">
+                    <td className="px-4 py-3">
+                      {row.project ? (
+                        <>
+                          <Link to={`/projets/${row.project.id}`} className="font-semibold text-blue-700 hover:text-blue-800">
+                            {row.project.name}
+                          </Link>
+                          <div className="mt-0.5 text-xs text-slate-500">{row.project.clientName}</div>
+                          {chantier ? (
+                            <Link to={`/chantiers/${chantier.id}/financier`} className="mt-1 block text-xs font-medium text-slate-600 hover:text-blue-700">
+                              Chantier : {chantier.nom}
+                            </Link>
+                          ) : row.chantierIds.length > 1 ? (
+                            <div className="mt-1 text-xs text-slate-500">{row.chantierIds.length} chantiers rattachés</div>
+                          ) : (
+                            <div className="mt-1 text-xs text-slate-500">Projet commercial</div>
+                          )}
+                        </>
+                      ) : (
+                        <>
+                          <div className="font-semibold text-amber-700">Documents non rattachés</div>
+                          <div className="mt-0.5 text-xs text-slate-500">Projet ou chantier à compléter</div>
+                        </>
+                      )}
+                    </td>
+                    <td className="px-4 py-3 text-slate-700">
+                      {row.invoiceCount} facture(s) · {row.purchaseOrderCount} commande(s)
+                    </td>
+                    <td className="px-4 py-3 text-right text-slate-700">{formatCurrency(row.metrics.invoicedHt)}</td>
+                    <td className="px-4 py-3 text-right text-slate-700">{formatCurrency(row.metrics.purchasesHt)}</td>
+                    <td className={`px-4 py-3 text-right font-semibold ${marginTone}`}>{formatCurrency(row.metrics.grossMarginHt)}</td>
+                    <td className={`px-4 py-3 text-right font-semibold ${marginTone}`}>{formatRate(row.metrics.grossMarginRate)}</td>
+                    <td className="px-4 py-3 text-right text-slate-700">{formatCurrency(row.metrics.remainingToCollectTtc)}</td>
+                  </tr>
+                );
+              })}
+              {!rows.length ? (
+                <tr>
+                  <td colSpan={7} className="px-4 py-8 text-center text-slate-500">
+                    Aucun document financier sur cette période.
+                  </td>
+                </tr>
+              ) : null}
+            </tbody>
+          </table>
+        </div>
+      ) : null}
+    </section>
+  );
+}
+
 function chartPercent(value: number, max: number) {
   if (max <= 0) return 0;
   return Math.max(6, Math.min(100, Math.round((Math.max(0, value) / max) * 100)));
@@ -127,6 +309,11 @@ function getHealthStatus(summary: ProfitabilitySummary) {
 export default function RentabilitePage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const period = parseFinancialPeriod(searchParams.get("period"));
+  const {
+    projects,
+    loading: projectsLoading,
+    error: projectsError,
+  } = useProjectsData();
   const [invoices, setInvoices] = useState<InvoiceRecord[]>([]);
   const [purchaseOrders, setPurchaseOrders] = useState<PurchaseOrderRecord[]>([]);
   const [charges, setCharges] = useState<CompanyChargeEntry[]>([]);
@@ -173,6 +360,10 @@ export default function RentabilitePage() {
   );
   const recentInvoices = scopedInvoices.filter(isIssuedInvoice).slice(0, 6);
   const recentPurchases = scopedPurchaseOrders.filter(isCommittedPurchaseOrder).slice(0, 6);
+  const projectFinancialRows = useMemo(
+    () => buildProjectFinancialRows(scopedInvoices, scopedPurchaseOrders, projects),
+    [projects, scopedInvoices, scopedPurchaseOrders],
+  );
 
   function onPeriodChange(nextPeriod: FinancialPeriod) {
     const nextParams = new URLSearchParams(searchParams);
@@ -245,6 +436,12 @@ export default function RentabilitePage() {
               </div>
             </aside>
           </section>
+
+          <ProjectProfitabilityPanel
+            rows={projectFinancialRows}
+            loading={projectsLoading}
+            error={projectsError}
+          />
 
           <section className="grid gap-4 xl:grid-cols-2">
             <DataPanel title="Dernières factures" empty={!recentInvoices.length ? "Aucune facture." : null}>
