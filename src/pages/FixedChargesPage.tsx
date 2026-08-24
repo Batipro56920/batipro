@@ -94,7 +94,6 @@ export default function FixedChargesPage() {
   const variableMonthly = variableCharges.reduce((sum, entry) => sum + monthlyEquivalent(entry), 0);
   const exploitationAnnual = fixedAnnual + variableMonthly * 12;
   const exploitationMonthly = exploitationAnnual / 12;
-  const breakEvenMonthly = exploitationMonthly / 0.7;
 
   function openNewChargeDrawer() {
     setEditingCharge(null);
@@ -193,7 +192,7 @@ export default function FixedChargesPage() {
             <Metric label="Fixes mensuelles" value={formatCurrency(fixedMonthly)} hint="Charges fixes actives" />
             <Metric label="Fixes annuelles" value={formatCurrency(fixedAnnual)} hint="Projection annuelle" />
             <Metric label="Variables mensuelles" value={formatCurrency(variableMonthly)} hint="Charges variables actives" />
-            <Metric label="Seuil mensuel estimé" value={formatCurrency(breakEvenMonthly)} hint="Hypothèse marge 30%" />
+            <Metric label="Exploitation mensuelle" value={formatCurrency(exploitationMonthly)} hint="Charges fixes et variables actives" />
           </section>
 
           <section className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
