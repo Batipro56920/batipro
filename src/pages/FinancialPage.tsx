@@ -36,8 +36,8 @@ const SECTION_CONFIG: Record<FinancialSection, {
   },
   decaissements: {
     eyebrow: "Financier",
-    title: "Décaissements",
-    description: "Suivi des bons de commande et des dépenses fournisseurs engagées.",
+    title: "Engagements fournisseurs",
+    description: "Suivi des bons de commande engagés. Les paiements fournisseurs ne sont pas encore enregistrés dans Batipro.",
     icon: Wallet,
   },
   tva: {
@@ -74,9 +74,11 @@ export default function FinancialPage() {
     setLoading(true);
     setError(null);
     try {
+      const needsInvoices = section !== "decaissements";
+      const needsPurchaseOrders = section !== "encaissements";
       const [invoiceRows, purchaseRows] = await Promise.all([
-        listInvoices(),
-        listPurchaseOrders(),
+        needsInvoices ? listInvoices() : Promise.resolve([]),
+        needsPurchaseOrders ? listPurchaseOrders() : Promise.resolve([]),
       ]);
       setInvoices(invoiceRows);
       setPurchaseOrders(purchaseRows);
@@ -91,7 +93,7 @@ export default function FinancialPage() {
 
   useEffect(() => {
     void refresh();
-  }, []);
+  }, [section]);
 
   const summary = useMemo(() => buildSummary(invoices, purchaseOrders), [invoices, purchaseOrders]);
 
@@ -137,7 +139,7 @@ export default function FinancialPage() {
 function FinancialTabs({ active }: { active: FinancialSection }) {
   const items: Array<[FinancialSection, string, string]> = [
     ["encaissements", "Encaissements", "/financier/encaissements"],
-    ["decaissements", "Décaissements", "/financier/decaissements"],
+    ["decaissements", "Engagements fournisseurs", "/financier/decaissements"],
     ["tva", "TVA", "/financier/tva"],
     ["tresorerie", "Trésorerie", "/financier/tresorerie"],
     ["export", "Export comptable", "/financier/export-comptable"],
@@ -162,8 +164,9 @@ function FinancialTabs({ active }: { active: FinancialSection }) {
 }
 
 function EncaissementsView({ invoices, summary }: { invoices: InvoiceRecord[]; summary: FinancialSummary }) {
-  const openInvoices = useMemo(() => invoices.filter(isOpenInvoice), [invoices]);
-  const collectableInvoices = useMemo(() => invoices.filter(isCollectableInvoice), [invoices]);
+  const financialInvoices = useMemo(() => invoices.filter(isIssuedInvoice), [invoices]);
+  const openInvoices = useMemo(() => financialInvoices.filter(isOpenInvoice), [financialInvoices]);
+  const collectableInvoices = useMemo(() => financialInvoices.filter(isCollectableInvoice), [financialInvoices]);
   const overdueInvoices = useMemo(() => collectableInvoices.filter(isInvoiceOverdue), [collectableInvoices]);
   const priorityInvoices = useMemo(
     () => [...collectableInvoices].sort(compareInvoicePriority).slice(0, 5),
@@ -194,7 +197,7 @@ function EncaissementsView({ invoices, summary }: { invoices: InvoiceRecord[]; s
             </tr>
           </thead>
           <tbody>
-            {invoices.map((invoice) => {
+            {financialInvoices.map((invoice) => {
               const totals = invoice.document.totals ?? calculateDocumentTotals(invoice.document);
               return (
                 <tr key={invoice.id} className="border-t border-slate-100">
@@ -263,7 +266,8 @@ function InvoicePriorityPanel({ invoices, collectableCount }: { invoices: Invoic
 }
 
 function DecaissementsView({ purchaseOrders, summary }: { purchaseOrders: PurchaseOrderRecord[]; summary: FinancialSummary }) {
-  const openOrders = useMemo(() => purchaseOrders.filter(isOpenPurchaseOrder), [purchaseOrders]);
+  const committedOrders = useMemo(() => purchaseOrders.filter(isCommittedPurchaseOrder), [purchaseOrders]);
+  const openOrders = useMemo(() => committedOrders.filter(isOpenPurchaseOrder), [committedOrders]);
   const overdueOrders = useMemo(() => openOrders.filter(isPurchaseOrderOverdue), [openOrders]);
   const priorityOrders = useMemo(
     () => [...openOrders].sort(comparePurchaseOrderPriority).slice(0, 5),
@@ -274,14 +278,14 @@ function DecaissementsView({ purchaseOrders, summary }: { purchaseOrders: Purcha
     <div className="space-y-5">
       <MetricGrid
         metrics={[
-          ["Commandes TTC", formatCurrency(summary.purchasesTtc), "Engagement fournisseurs"],
-          ["Commandes HT", formatCurrency(summary.purchasesHt), "Base achats"],
+          ["Engagé TTC", formatCurrency(summary.purchasesTtc), "Commandes hors brouillons et annulations"],
+          ["Engagé HT", formatCurrency(summary.purchasesHt), "Base achats documentée"],
           ["Commandes ouvertes", String(openOrders.length), "À livrer ou confirmer"],
           ["Livraisons en retard", String(overdueOrders.length), "Date prévue dépassée"],
         ]}
       />
       <PurchaseOrderPriorityPanel orders={priorityOrders} openCount={openOrders.length} />
-      <DataPanel title="Décaissements fournisseurs" description="Bons de commande à suivre avant réception et paiement.">
+      <DataPanel title="Engagements fournisseurs" description="Bons de commande engagés à suivre avant réception. Aucun paiement fournisseur n'est déduit ici.">
         <table className="min-w-full text-sm">
           <thead className="bg-slate-50 text-slate-600">
             <tr>
@@ -293,7 +297,7 @@ function DecaissementsView({ purchaseOrders, summary }: { purchaseOrders: Purcha
             </tr>
           </thead>
           <tbody>
-            {purchaseOrders.map((order) => {
+            {committedOrders.map((order) => {
               const totals = order.document.totals ?? calculateDocumentTotals(order.document);
               return (
                 <tr key={order.id} className="border-t border-slate-100">
@@ -361,17 +365,17 @@ function PurchaseOrderPriorityPanel({ orders, openCount }: { orders: PurchaseOrd
 }
 
 function TvaView({ invoices, purchaseOrders, summary }: { invoices: InvoiceRecord[]; purchaseOrders: PurchaseOrderRecord[]; summary: FinancialSummary }) {
-  const invoiceBreakdown = buildVatRows(invoices.map((invoice) => invoice.document));
-  const purchaseBreakdown = buildVatRows(purchaseOrders.map((order) => order.document));
+  const invoiceBreakdown = buildVatRows(invoices.filter(isIssuedInvoice).map((invoice) => invoice.document));
+  const purchaseBreakdown = buildVatRows(purchaseOrders.filter(isCommittedPurchaseOrder).map((order) => order.document));
 
   return (
     <div className="space-y-5">
       <MetricGrid
         metrics={[
-          ["TVA collectée", formatCurrency(summary.vatCollected), "Factures clients"],
-          ["TVA déductible", formatCurrency(summary.vatDeductible), "Achats fournisseurs"],
-          ["Solde TVA estimé", formatCurrency(summary.vatBalance), "Collectée - déductible"],
-          ["Base HT nette", formatCurrency(summary.invoicedTtc - summary.vatCollected - summary.purchasesHt), "Indicateur de marge"],
+          ["TVA collectée estimée", formatCurrency(summary.vatCollected), "Factures émises, avoirs déduits"],
+          ["TVA déductible estimée", formatCurrency(summary.vatDeductible), "Commandes engagées, hors factures fournisseurs"],
+          ["Solde documentaire", formatCurrency(summary.vatBalance), "Estimation non déclarative"],
+          ["Écart HT documentaire", formatCurrency(summary.invoicedTtc - summary.vatCollected - summary.purchasesHt), "Ventes émises - achats engagés"],
         ]}
       />
       <div className="grid gap-5 xl:grid-cols-2">
@@ -388,16 +392,16 @@ function TresorerieView({ summary }: { summary: FinancialSummary }) {
       <MetricGrid
         metrics={[
           ["Cash encaissé", formatCurrency(summary.paidTtc), "Règlements reçus"],
-          ["Décaissements engagés", formatCurrency(summary.purchasesTtc), "Commandes fournisseurs"],
-          ["Solde prévisionnel", formatCurrency(summary.cashForecast), "Encaissé - commandes"],
+          ["Engagements fournisseurs", formatCurrency(summary.purchasesTtc), "Commandes hors brouillons et annulations"],
+          ["Position simplifiée", formatCurrency(summary.cashForecast), "Encaissé - engagements fournisseurs"],
           ["Reste à encaisser", formatCurrency(summary.remainingToCollectTtc), "Potentiel court terme"],
         ]}
       />
-      <DataPanel title="Lecture trésorerie" description="Cette V1 consolide les factures et bons de commande existants. Les vrais comptes bancaires et échéanciers seront à raccorder ensuite.">
+      <DataPanel title="Position sur flux connus" description="Estimation limitée aux règlements clients enregistrés et aux commandes engagées. Elle ne constitue pas un solde de trésorerie bancaire.">
         <div className="grid gap-4 md:grid-cols-3">
           <PlainKpi label="Entrées connues" value={formatCurrency(summary.paidTtc)} />
-          <PlainKpi label="Sorties engagées" value={formatCurrency(summary.purchasesTtc)} />
-          <PlainKpi label="Projection simple" value={formatCurrency(summary.cashForecast)} />
+          <PlainKpi label="Engagements connus" value={formatCurrency(summary.purchasesTtc)} />
+          <PlainKpi label="Position simplifiée" value={formatCurrency(summary.cashForecast)} />
         </div>
       </DataPanel>
     </div>
@@ -409,8 +413,8 @@ function ExportView({ invoices, purchaseOrders, summary }: { invoices: InvoiceRe
     <div className="space-y-5">
       <MetricGrid
         metrics={[
-          ["Factures exportables", String(invoices.length), "Ventes"],
-          ["Achats exportables", String(purchaseOrders.length), "Fournisseurs"],
+          ["Factures préparées", String(invoices.filter(isIssuedInvoice).length), "Documents de vente émis"],
+          ["Achats préparés", String(purchaseOrders.filter(isCommittedPurchaseOrder).length), "Commandes engagées"],
           ["TVA nette", formatCurrency(summary.vatBalance), "Solde estimé"],
           ["Total mouvements", formatCurrency(summary.invoicedTtc + summary.purchasesTtc), "Volume TTC"],
         ]}
@@ -508,13 +512,22 @@ function Td({ children, align = "left" }: { children?: ReactNode; align?: "left"
 }
 
 function buildSummary(invoices: InvoiceRecord[], purchaseOrders: PurchaseOrderRecord[]): FinancialSummary {
-  const invoicedTtc = invoices.reduce((sum, invoice) => sum + getInvoiceTotals(invoice).totalTtc, 0);
-  const paidTtc = invoices.reduce((sum, invoice) => sum + getPaidAmount(invoice), 0);
-  const remainingToCollectTtc = invoices.reduce((sum, invoice) => sum + getRemainingAmount(invoice), 0);
-  const purchases = purchaseOrders.map((order) => order.document.totals ?? calculateDocumentTotals(order.document));
+  const issuedInvoices = invoices.filter(isIssuedInvoice);
+  const collectableInvoices = issuedInvoices.filter((invoice) => invoice.type !== "credit_note");
+  const committedOrders = purchaseOrders.filter(isCommittedPurchaseOrder);
+  const invoicedTtc = issuedInvoices.reduce(
+    (sum, invoice) => sum + getInvoiceSign(invoice) * getInvoiceTotals(invoice).totalTtc,
+    0,
+  );
+  const paidTtc = collectableInvoices.reduce((sum, invoice) => sum + getPaidAmount(invoice), 0);
+  const remainingToCollectTtc = collectableInvoices.reduce((sum, invoice) => sum + getRemainingAmount(invoice), 0);
+  const purchases = committedOrders.map((order) => order.document.totals ?? calculateDocumentTotals(order.document));
   const purchasesTtc = purchases.reduce((sum, total) => sum + total.totalTtc, 0);
   const purchasesHt = purchases.reduce((sum, total) => sum + total.totalHt, 0);
-  const vatCollected = invoices.reduce((sum, invoice) => sum + getInvoiceTotals(invoice).totalVat, 0);
+  const vatCollected = issuedInvoices.reduce(
+    (sum, invoice) => sum + getInvoiceSign(invoice) * getInvoiceTotals(invoice).totalVat,
+    0,
+  );
   const vatDeductible = purchases.reduce((sum, total) => sum + total.totalVat, 0);
 
   return {
@@ -534,16 +547,29 @@ function getInvoiceTotals(invoice: InvoiceRecord) {
   return invoice.document.totals ?? calculateDocumentTotals(invoice.document);
 }
 
+function getInvoiceSign(invoice: InvoiceRecord) {
+  return invoice.type === "credit_note" ? -1 : 1;
+}
+
+function isIssuedInvoice(invoice: InvoiceRecord) {
+  return !["draft", "cancelled"].includes(invoice.status);
+}
+
+function isCommittedPurchaseOrder(order: PurchaseOrderRecord) {
+  return !["draft", "cancelled"].includes(order.status);
+}
+
 function buildVatRows(documents: BusinessDocument[]) {
   const byRate = new Map<number, { rate: number; baseHt: number; vatAmount: number }>();
   documents.forEach((document) => {
     const totals = document.totals ?? calculateDocumentTotals(document);
+    const sign = document.kind === "credit_note" ? -1 : 1;
     totals.vatBreakdown.forEach((row) => {
       const current = byRate.get(row.rate) ?? { rate: row.rate, baseHt: 0, vatAmount: 0 };
       byRate.set(row.rate, {
         rate: row.rate,
-        baseHt: roundMoney(current.baseHt + row.baseHt),
-        vatAmount: roundMoney(current.vatAmount + row.vatAmount),
+        baseHt: roundMoney(current.baseHt + sign * row.baseHt),
+        vatAmount: roundMoney(current.vatAmount + sign * row.vatAmount),
       });
     });
   });
@@ -571,7 +597,7 @@ function purchaseOrderHref(orderId: string, status?: "open") {
 }
 
 function isOpenInvoice(invoice: InvoiceRecord) {
-  return !["paid", "cancelled"].includes(invoice.status) && getRemainingAmount(invoice) > 0;
+  return invoice.type !== "credit_note" && !["paid", "cancelled"].includes(invoice.status) && getRemainingAmount(invoice) > 0;
 }
 
 function isCollectableInvoice(invoice: InvoiceRecord) {
@@ -616,7 +642,7 @@ function getInvoiceDueTime(value: string | null) {
 }
 
 function isOpenPurchaseOrder(order: PurchaseOrderRecord) {
-  return !["delivered", "cancelled"].includes(order.status);
+  return isCommittedPurchaseOrder(order) && order.status !== "delivered";
 }
 
 function comparePurchaseOrderPriority(left: PurchaseOrderRecord, right: PurchaseOrderRecord) {
