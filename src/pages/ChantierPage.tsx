@@ -139,8 +139,10 @@ import {
 } from "../services/chantierActivityLog.service";
 import {
   getTerrainFeedbackStatus,
+  getTerrainFeedbackSummary,
   updateTerrainFeedback,
   type TerrainFeedbackStatus,
+  type TerrainFeedbackSummary,
 } from "../services/terrainFeedback.service";
 import DevisImportDrawer, { type DevisImportResult } from "../components/chantiers/DevisImportDrawer";
 import TaskTemplateDrawer from "../components/TaskTemplateDrawer";
@@ -393,6 +395,24 @@ function taskStepStatusBadgeClass(status: ChantierTaskStepStatus) {
   if (status === "termine") return "border-emerald-200 bg-emerald-50 text-emerald-700";
   if (status === "en_cours") return "border-amber-200 bg-amber-50 text-amber-700";
   return "border-slate-200 bg-slate-50 text-slate-700";
+}
+
+function terrainFeedbackCategoryLabel(category: TerrainFeedbackSummary["category"]) {
+  if (category === "observation_chantier") return "Observation chantier";
+  if (category === "qualite") return "Qualité";
+  if (category === "securite") return "Sécurité";
+  if (category === "organisation") return "Organisation";
+  if (category === "suggestion") return "Suggestion";
+  if (category === "blocage") return "Blocage";
+  if (category === "anomalie") return "Anomalie";
+  return "Client";
+}
+
+function terrainFeedbackUrgencyLabel(urgency: TerrainFeedbackSummary["urgency"]) {
+  if (urgency === "critique") return "Critique";
+  if (urgency === "urgente") return "Urgente";
+  if (urgency === "faible") return "Faible";
+  return "Normale";
 }
 
 function chantierActivityEntityLabel(entityType: string) {
@@ -910,6 +930,8 @@ export default function ChantierPage() {
   const [reserveSourceFeedbackId, setReserveSourceFeedbackId] = useState("");
   const [reserveSourceFeedbackStatus, setReserveSourceFeedbackStatus] =
     useState<TerrainFeedbackStatus | null>(null);
+  const [reserveSourceFeedbackSummary, setReserveSourceFeedbackSummary] =
+    useState<TerrainFeedbackSummary | null>(null);
   const [reserveSourceFeedbackLoading, setReserveSourceFeedbackLoading] = useState(false);
   const targetedReserve = useMemo(
     () => reserves.find((reserve) => reserve.id === targetedReserveId) ?? null,
@@ -1476,7 +1498,12 @@ export default function ChantierPage() {
         treated_at: treatedAt,
       });
       if (feedbackId === sourceFeedbackId) setSourceFeedbackStatus("traite");
-      if (feedbackId === reserveSourceFeedbackId) setReserveSourceFeedbackStatus("traite");
+      if (feedbackId === reserveSourceFeedbackId) {
+        setReserveSourceFeedbackStatus("traite");
+        setReserveSourceFeedbackSummary((current) =>
+          current ? { ...current, status: "traite" } : current,
+        );
+      }
       await recordChantierActivity({
         actionType: "updated",
         entityType: "terrain_feedback",
@@ -2730,6 +2757,7 @@ export default function ChantierPage() {
     if (!reserveDrawerOpen || !id || !reserveId) {
       setReserveSourceFeedbackId("");
       setReserveSourceFeedbackStatus(null);
+      setReserveSourceFeedbackSummary(null);
       setReserveSourceFeedbackLoading(false);
       return () => {
         alive = false;
@@ -2738,6 +2766,7 @@ export default function ChantierPage() {
 
     setReserveSourceFeedbackId("");
     setReserveSourceFeedbackStatus(null);
+    setReserveSourceFeedbackSummary(null);
     setReserveSourceFeedbackLoading(true);
 
     void (async () => {
@@ -2752,12 +2781,13 @@ export default function ChantierPage() {
       if (!feedbackId) return;
 
       try {
-        const status = await getTerrainFeedbackStatus(feedbackId, id);
-        if (!alive || !status) return;
+        const summary = await getTerrainFeedbackSummary(feedbackId, id);
+        if (!alive || !summary) return;
         setReserveSourceFeedbackId(feedbackId);
-        setReserveSourceFeedbackStatus(status);
+        setReserveSourceFeedbackStatus(summary.status);
+        setReserveSourceFeedbackSummary(summary);
       } catch (err) {
-        console.warn("[terrain-feedback] reserve source status unavailable", err);
+        console.warn("[terrain-feedback] reserve source summary unavailable", err);
       }
     })().finally(() => {
       if (alive) setReserveSourceFeedbackLoading(false);
@@ -8283,8 +8313,30 @@ export default function ChantierPage() {
                           <div className="mt-1 text-sm">Recherche du retour terrain associé...</div>
                         ) : (
                           <div className="mt-2 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                            <div className="flex flex-wrap items-center gap-2">
-                              <span className="font-semibold">Retour terrain</span>
+                            <div className="min-w-0">
+                              <div className="flex flex-wrap items-center gap-2">
+                                <span className="font-semibold">
+                                  {reserveSourceFeedbackSummary?.title ?? "Retour terrain"}
+                                </span>
+                                {reserveSourceFeedbackSummary ? (
+                                  <>
+                                    <span className="rounded-lg border border-blue-200 bg-white px-2.5 py-1 text-xs font-semibold text-blue-700">
+                                      {terrainFeedbackCategoryLabel(reserveSourceFeedbackSummary.category)}
+                                    </span>
+                                    <span
+                                      className={[
+                                        "rounded-lg border px-2.5 py-1 text-xs font-semibold",
+                                        reserveSourceFeedbackSummary.urgency === "critique"
+                                          ? "border-red-200 bg-red-50 text-red-700"
+                                          : reserveSourceFeedbackSummary.urgency === "urgente"
+                                            ? "border-amber-200 bg-amber-50 text-amber-700"
+                                            : "border-slate-200 bg-white text-slate-700",
+                                      ].join(" ")}
+                                    >
+                                      {terrainFeedbackUrgencyLabel(reserveSourceFeedbackSummary.urgency)}
+                                    </span>
+                                  </>
+                                ) : null}
                               {reserveSourceFeedbackStatus === "traite" ? (
                                 <span className="rounded-lg border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700">
                                   Traité
@@ -8302,8 +8354,14 @@ export default function ChantierPage() {
                                   Nouveau
                                 </span>
                               )}
+                              </div>
+                              {reserveSourceFeedbackSummary?.description ? (
+                                <div className="mt-2 line-clamp-2 text-xs text-blue-800">
+                                  {reserveSourceFeedbackSummary.description}
+                                </div>
+                              ) : null}
                             </div>
-                            <div className="flex flex-wrap items-center gap-2">
+                            <div className="flex shrink-0 flex-wrap items-center gap-2">
                               {reserveSourceFeedbackStatus !== "traite" &&
                               reserveSourceFeedbackStatus !== "classe_sans_suite" ? (
                                 <button
