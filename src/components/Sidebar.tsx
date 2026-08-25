@@ -34,12 +34,7 @@ import {
   getCompanySettings,
   getEnabledCompanyModulesFromSettings,
 } from "../services/companySettings.service";
-import {
-  getCurrentProfileFeaturePermissions,
-  hasProfileFeaturePermission,
-  type ProfileFeaturePermissionKey,
-  type ProfileFeaturePermissions,
-} from "../services/profileFeaturePermissions.service";
+import { getCurrentUserProfile } from "../services/currentUserProfile.service";
 
 type Props = {
   collapsed?: boolean;
@@ -50,20 +45,20 @@ type Props = {
 export default function Sidebar({ collapsed = false, onToggleCollapse, companyName }: Props) {
   const { t } = useI18n();
   const [enabledModules, setEnabledModules] = useState<Set<CompanyFeatureModuleId> | null>(null);
-  const [profilePermissions, setProfilePermissions] = useState<{ role: string | null; permissions: ProfileFeaturePermissions } | null>(null);
+  const [profileAccess, setProfileAccess] = useState<{ role: string | null; allowedGroups: string[] | null } | null>(null);
 
   useEffect(() => {
     let alive = true;
     async function loadFeatureSettings() {
       try {
-        const [settings, profileResult] = await Promise.all([getCompanySettings(), getCurrentProfileFeaturePermissions()]);
+        const [settings, profile] = await Promise.all([getCompanySettings(), getCurrentUserProfile()]);
         if (!alive) return;
         setEnabledModules(new Set(getEnabledCompanyModulesFromSettings(settings)));
-        setProfilePermissions({ role: profileResult.role, permissions: profileResult.permissions });
+        setProfileAccess({ role: profile?.role ?? null, allowedGroups: profile?.allowed_sidebar_groups ?? null });
       } catch {
         if (!alive) return;
         setEnabledModules(null);
-        setProfilePermissions(null);
+        setProfileAccess(null);
       }
     }
     void loadFeatureSettings();
@@ -103,14 +98,15 @@ export default function Sidebar({ collapsed = false, onToggleCollapse, companyNa
     { to: "/financier/charges-fixes", label: "Charges fixes", icon: Calculator, permissionKey: "entreprise_parametres" as const, group: "Financier" },
     { to: "/financier/export-comptable", label: "Export comptable", icon: FileSpreadsheet, feature: "rapports" as const, permissionKey: "statistiques" as const, group: "Financier" },
     { to: "/ressources/profils-types", label: "Profils types", icon: Users, permissionKey: "entreprise_parametres" as const, group: "Paramètres" },
+    { to: "/entreprise/personnel", label: "Personnel", icon: Users, group: "Paramètres", adminOnly: true },
     { to: "/entreprise", label: "Mon entreprise", icon: Building2, permissionKey: "entreprise_parametres" as const, group: "Paramètres" },
   ].filter((item) => {
-    const role = String(profilePermissions?.role ?? "").trim().toUpperCase();
+    const role = String(profileAccess?.role ?? "").trim().toUpperCase();
     const adminAllowed = !("adminOnly" in item && item.adminOnly) || role === "ADMIN";
     const featureAllowed = !item.feature || !enabledModules || enabledModules.has(item.feature);
-    const permissionKey = (item.permissionKey ?? item.feature ?? null) as ProfileFeaturePermissionKey | null;
-    const profileAllowed = !permissionKey || !profilePermissions ? true : hasProfileFeaturePermission(profilePermissions.permissions, permissionKey, profilePermissions.role);
-    return adminAllowed && featureAllowed && profileAllowed;
+    const allowedGroups = profileAccess?.allowedGroups ?? null;
+    const groupAllowed = role === "ADMIN" || !allowedGroups || allowedGroups.includes(item.group);
+    return adminAllowed && featureAllowed && groupAllowed;
   });
 
   const groups = nav.reduce<Array<{ label: string; items: typeof nav }>>((acc, item) => {
