@@ -537,7 +537,10 @@ function buildSummary(invoices: InvoiceRecord[], purchaseOrders: PurchaseOrderRe
 function buildVatRows(documents: BusinessDocument[]) {
   const byRate = new Map<number, { rate: number; baseHt: number; vatAmount: number }>();
   documents.forEach((document) => {
-    const totals = document.totals ?? calculateDocumentTotals(document);
+    const totals =
+      document.totals && Array.isArray(document.totals.vatBreakdown)
+        ? document.totals
+        : calculateDocumentTotals(document);
     const sign = document.kind === "credit_note" ? -1 : 1;
     totals.vatBreakdown.forEach((row) => {
       const current = byRate.get(row.rate) ?? { rate: row.rate, baseHt: 0, vatAmount: 0 };
