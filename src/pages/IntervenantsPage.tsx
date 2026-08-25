@@ -22,18 +22,10 @@ type IntervenantLinkRow = {
   chantier_id: string;
 };
 
-type ProfileType =
-  | "dirigeant"
-  | "administratif"
-  | "commercial"
-  | "comptable"
-  | "chef_de_projet"
-  | "conducteur_de_travaux"
-  | "intervenant"
-  | "chef_de_chantier"
-  | "sous_traitant"
-  | "client"
-  | "fournisseur";
+// "Profils & accès" gère le terrain (ouvriers, sous-traitants) et, plus tard, le portail
+// client — pas les profils bureau (dirigeant, comptable, commercial...), qui se gèrent
+// depuis Personnel avec un vrai rôle BUREAU, pas une étiquette dérivée d'un intitulé de poste.
+type ProfileType = "intervenant" | "chef_de_chantier" | "sous_traitant" | "client";
 
 type ProfileFilter = "all" | ProfileType;
 
@@ -92,17 +84,10 @@ const INTERVENANT_STATUS_LABELS: Record<IntervenantStatus, string> = {
 };
 
 const PROFILE_TYPE_LABELS: Record<ProfileType, string> = {
-  dirigeant: "Dirigeant",
-  administratif: "Administratif",
-  commercial: "Commercial",
-  comptable: "Comptable",
-  chef_de_projet: "Chef de projet",
-  conducteur_de_travaux: "Conducteur de travaux",
   intervenant: "Intervenant",
   chef_de_chantier: "Chef de chantier",
   sous_traitant: "Sous-traitant",
   client: "Client",
-  fournisseur: "Fournisseur",
 };
 
 const PROFILE_FILTERS: Array<{ key: ProfileFilter; label: string }> = [
@@ -110,14 +95,7 @@ const PROFILE_FILTERS: Array<{ key: ProfileFilter; label: string }> = [
   { key: "intervenant", label: PROFILE_TYPE_LABELS.intervenant },
   { key: "chef_de_chantier", label: PROFILE_TYPE_LABELS.chef_de_chantier },
   { key: "sous_traitant", label: PROFILE_TYPE_LABELS.sous_traitant },
-  { key: "conducteur_de_travaux", label: PROFILE_TYPE_LABELS.conducteur_de_travaux },
-  { key: "chef_de_projet", label: PROFILE_TYPE_LABELS.chef_de_projet },
-  { key: "commercial", label: PROFILE_TYPE_LABELS.commercial },
-  { key: "administratif", label: PROFILE_TYPE_LABELS.administratif },
-  { key: "comptable", label: PROFILE_TYPE_LABELS.comptable },
-  { key: "dirigeant", label: PROFILE_TYPE_LABELS.dirigeant },
   { key: "client", label: PROFILE_TYPE_LABELS.client },
-  { key: "fournisseur", label: PROFILE_TYPE_LABELS.fournisseur },
 ];
 
 export default function IntervenantsPage() {
@@ -874,33 +852,18 @@ function getProfileAccessSummary(row: IntervenantRow & { chantier_ids: string[] 
     accessStatus,
     portalLabel: profileType === "client"
       ? "Portail client à venir"
-      : profileType === "fournisseur"
-        ? "Portail fournisseur à venir"
-        : hasPortalAccount
-          ? "Portail terrain actif"
-          : hasInvitation
-            ? "Portail terrain invité"
-            : "Portail terrain disponible",
+      : hasPortalAccount
+        ? "Portail terrain actif"
+        : hasInvitation
+          ? "Portail terrain invité"
+          : "Portail terrain disponible",
   };
 }
 
 function inferProfileType(row: IntervenantRow, roleSource: string): ProfileType {
   if (row.status === "subcontractor") return "sous_traitant";
   if (roleSource.includes("chef") && roleSource.includes("chantier")) return "chef_de_chantier";
-  if (roleSource.includes("conducteur")) return "conducteur_de_travaux";
-  if (roleSource.includes("projet")) return "chef_de_projet";
-  if (
-    roleSource.includes("commercial") ||
-    roleSource.includes("commerce") ||
-    roleSource.includes("charge d'affaires") ||
-    roleSource.includes("chargé d'affaires") ||
-    roleSource.includes("business developer")
-  ) return "commercial";
-  if (roleSource.includes("compt")) return "comptable";
-  if (roleSource.includes("admin")) return "administratif";
-  if (roleSource.includes("dirigeant") || roleSource.includes("gerant") || roleSource.includes("gérant")) return "dirigeant";
   if (roleSource.includes("client")) return "client";
-  if (roleSource.includes("fournisseur")) return "fournisseur";
   return "intervenant";
 }
 
