@@ -1,7 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
 import type { TaskTemplateInput, TaskTemplateRow } from "../services/taskLibrary.service";
 import {
+  applyMeasuredLossToTaskTemplatePrice,
   getTaskTemplatePreparation,
+  listMeasuredMaterialLoss,
+  type MeasuredMaterialLoss,
   type TaskTemplateEquipmentItemInput,
   type TaskTemplateFeeItemInput,
   type TaskTemplateLaborItemInput,
@@ -38,6 +41,7 @@ type MaterialRatioDraft = {
   sale_price_ht: string;
   price_source: string;
   manual_override: boolean;
+  is_main_material: boolean;
   notes: string;
 };
 
@@ -108,6 +112,7 @@ function createMaterialDraft(row?: {
     sale_price_ht: toField((row as any)?.sale_price_ht ?? null),
     price_source: String((row as any)?.price_source ?? "manual"),
     manual_override: (row as any)?.manual_override === true,
+    is_main_material: (row as any)?.is_main_material === true,
     notes: String(row?.notes ?? ""),
   };
 }
@@ -227,6 +232,9 @@ export default function TaskTemplateDrawer({
   const [preparationLoading, setPreparationLoading] = useState(false);
   const [preparationSchemaReady, setPreparationSchemaReady] = useState(true);
   const [preparationError, setPreparationError] = useState<string | null>(null);
+  const [measuredLoss, setMeasuredLoss] = useState<MeasuredMaterialLoss[]>([]);
+  const [applyingLossId, setApplyingLossId] = useState<string | null>(null);
+  const [applyLossMessage, setApplyLossMessage] = useState<string | null>(null);
   const [localError, setLocalError] = useState<string | null>(null);
   const [cocoLoading, setCocoLoading] = useState(false);
   const [cocoMessage, setCocoMessage] = useState<string | null>(null);
@@ -363,6 +371,9 @@ export default function TaskTemplateDrawer({
         setPreparationSchemaReady(result.schemaReady);
         setMaterialDrafts(result.materials.map((row) => createMaterialDraft(row)));
         setEquipmentDrafts(result.equipment.map((row) => createEquipmentDraft(row)));
+        listMeasuredMaterialLoss(templateId)
+          .then((rows) => { if (alive) setMeasuredLoss(rows); })
+          .catch(() => { if (alive) setMeasuredLoss([]); });
       } catch (err: any) {
         if (!alive) return;
         setPreparationError(err?.message ?? "Erreur chargement préparation avancée.");
@@ -417,6 +428,21 @@ export default function TaskTemplateDrawer({
     setMaterialDrafts((prev) =>
       prev.map((row, rowIndex) => (rowIndex === index ? { ...row, ...patch } : row)),
     );
+  }
+
+  async function applyMeasuredLoss(loss: MeasuredMaterialLoss) {
+    if (!template?.id || applyingLossId) return;
+    setApplyingLossId(loss.material_ratio_id);
+    setApplyLossMessage(null);
+    try {
+      const nextPrice = await applyMeasuredLossToTaskTemplatePrice(template.id, loss);
+      setCoutReferenceUnitaire(toField(nextPrice));
+      setApplyLossMessage(`Prix de référence mis à jour (${nextPrice.toFixed(2)} € HT) à partir de la perte mesurée sur ${loss.chantiers_count} chantier(s).`);
+    } catch (err: any) {
+      setApplyLossMessage(err?.message ?? "Application impossible.");
+    } finally {
+      setApplyingLossId(null);
+    }
   }
 
   function updateEquipmentDraft(index: number, patch: Partial<EquipmentDraft>) {
@@ -509,6 +535,7 @@ export default function TaskTemplateDrawer({
         sale_price_ht: salePrice,
         price_source: row.price_source.trim() || "manual",
         manual_override: row.manual_override,
+        is_main_material: row.is_main_material,
         notes: row.notes.trim() || null,
         sort_order: index,
       });
@@ -959,6 +986,10 @@ export default function TaskTemplateDrawer({
                   </button>
                 </div>
 
+                {applyLossMessage ? (
+                  <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">{applyLossMessage}</div>
+                ) : null}
+
                 {materialDrafts.length === 0 ? (
                   <div className="rounded-xl border border-dashed border-slate-200 px-4 py-3 text-sm text-slate-500">
                     Aucune donnée de préparation définie.
@@ -968,7 +999,18 @@ export default function TaskTemplateDrawer({
                     {materialDrafts.map((row, index) => (
                       <div key={row.id} className="space-y-3 rounded-2xl border border-slate-200 bg-slate-50 p-3">
                         <div className="flex flex-wrap items-center justify-between gap-2">
-                          <div className="text-xs font-medium text-slate-700">Matériau #{index + 1}</div>
+                          <div className="flex items-center gap-3">
+                            <div className="text-xs font-medium text-slate-700">Matériau #{index + 1}</div>
+                            <label className="flex items-center gap-1.5 text-xs text-slate-600">
+                              <input
+                                type="checkbox"
+                                checked={row.is_main_material}
+                                onChange={(e) => updateMaterialDraft(index, { is_main_material: e.target.checked })}
+                                disabled={busy}
+                              />
+                              Matériau principal (suivi de perte)
+                            </label>
+                          </div>
                           <div className="flex gap-2">
                             <button
                               type="button"
@@ -1089,6 +1131,26 @@ export default function TaskTemplateDrawer({
                             Source : {row.manual_override ? "manuel" : row.price_source || "manuel"}
                           </div>
                         </div>
+
+                        {row.is_main_material ? (() => {
+                          const loss = measuredLoss.find((entry) => entry.material_name === row.material_name.trim());
+                          if (!loss || loss.measured_loss_percent === null) return null;
+                          return (
+                            <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                              <span>
+                                Perte mesurée sur le terrain : <strong>{loss.measured_loss_percent}%</strong> (perte prévue : {loss.planned_loss_percent ?? 0}%) — sur {loss.chantiers_count} chantier{loss.chantiers_count > 1 ? "s" : ""}
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => void applyMeasuredLoss(loss)}
+                                disabled={applyingLossId === loss.material_ratio_id || busy}
+                                className="shrink-0 rounded-lg border border-amber-300 bg-white px-2.5 py-1.5 font-semibold hover:bg-amber-100 disabled:opacity-50"
+                              >
+                                {applyingLossId === loss.material_ratio_id ? "Application..." : "Appliquer au prix"}
+                              </button>
+                            </div>
+                          );
+                        })() : null}
                       </div>
                     ))}
                   </div>

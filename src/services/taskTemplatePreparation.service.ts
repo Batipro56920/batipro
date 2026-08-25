@@ -15,6 +15,8 @@ export type TaskTemplateMaterialRatioRow = {
   sale_price_ht: number | null;
   price_source: string | null;
   manual_override: boolean;
+  /** Matériau principal (poste de coût dominant) : seuls ceux-ci sont suivis en consommation réelle côté terrain. */
+  is_main_material: boolean;
   notes: string | null;
   sort_order: number;
   created_at: string | null;
@@ -32,6 +34,7 @@ export type TaskTemplateMaterialRatioInput = {
   sale_price_ht?: number | null;
   price_source?: string | null;
   manual_override?: boolean;
+  is_main_material?: boolean;
   notes?: string | null;
   sort_order?: number | null;
 };
@@ -144,6 +147,7 @@ const MATERIAL_SELECT = [
   "sale_price_ht",
   "price_source",
   "manual_override",
+  "is_main_material",
   "notes",
   "sort_order",
   "created_at",
@@ -200,6 +204,7 @@ function normalizeMaterialRow(row: any): TaskTemplateMaterialRatioRow {
     sale_price_ht: normalizeNumber(row?.sale_price_ht),
     price_source: normalizeText(row?.price_source),
     manual_override: row?.manual_override === true,
+    is_main_material: row?.is_main_material === true,
     notes: normalizeText(row?.notes),
     sort_order: Math.max(0, Math.trunc(normalizeNumber(row?.sort_order) ?? 0)),
     created_at: normalizeText(row?.created_at),
@@ -246,6 +251,7 @@ function normalizeMaterialInput(
     sale_price_ht,
     price_source: normalizeText(item.price_source),
     manual_override: item.manual_override === true,
+    is_main_material: item.is_main_material === true,
     notes: normalizeText(item.notes),
     sort_order: Math.max(0, Math.trunc(normalizeNumber(item.sort_order) ?? index)),
   };
@@ -519,4 +525,89 @@ export function estimateTaskTemplatePreparation(
       sort_order: item.sort_order,
     })),
   };
+}
+
+export type MeasuredMaterialLoss = {
+  material_ratio_id: string;
+  task_template_id: string;
+  material_name: string;
+  ratio_quantity: number;
+  ratio_unit: string;
+  planned_loss_percent: number | null;
+  purchase_price_ht: number | null;
+  chantiers_count: number;
+  theoretical_quantity: number;
+  actual_quantity: number;
+  measured_loss_percent: number | null;
+};
+
+/** Perte réelle mesurée sur le terrain (tous chantiers confondus), matériaux principaux du template. */
+export async function listMeasuredMaterialLoss(taskTemplateId: string): Promise<MeasuredMaterialLoss[]> {
+  const { data, error } = await (supabase as any)
+    .from("task_template_material_measured_loss")
+    .select("*")
+    .eq("task_template_id", taskTemplateId);
+
+  if (error) {
+    if (isMissingPreparationSchemaError(error)) return [];
+    throw new Error(error.message);
+  }
+
+  return (data ?? []).map((row: any) => ({
+    material_ratio_id: String(row.material_ratio_id ?? ""),
+    task_template_id: String(row.task_template_id ?? ""),
+    material_name: String(row.material_name ?? ""),
+    ratio_quantity: normalizeNumber(row.ratio_quantity) ?? 0,
+    ratio_unit: String(row.ratio_unit ?? ""),
+    planned_loss_percent: normalizeNumber(row.planned_loss_percent),
+    purchase_price_ht: normalizeNumber(row.purchase_price_ht),
+    chantiers_count: Math.max(0, Math.trunc(normalizeNumber(row.chantiers_count) ?? 0)),
+    theoretical_quantity: normalizeNumber(row.theoretical_quantity) ?? 0,
+    actual_quantity: normalizeNumber(row.actual_quantity) ?? 0,
+    measured_loss_percent: normalizeNumber(row.measured_loss_percent),
+  }));
+}
+
+/**
+ * Applique un écart de perte mesurée au prix de référence du template — jamais
+ * automatique, seulement au clic explicite de l'admin. Ajoute une entrée à
+ * price_history (même principe que product_catalog_items.priceHistory).
+ */
+export async function applyMeasuredLossToTaskTemplatePrice(
+  taskTemplateId: string,
+  loss: MeasuredMaterialLoss,
+): Promise<number> {
+  const plannedLossPercent = loss.planned_loss_percent ?? 0;
+  const measuredLossPercent = loss.measured_loss_percent ?? plannedLossPercent;
+  const purchasePrice = loss.purchase_price_ht ?? 0;
+  const deltaCostHt = loss.ratio_quantity * purchasePrice * (measuredLossPercent - plannedLossPercent) / 100;
+
+  const { data: current, error: fetchError } = await (supabase as any)
+    .from("task_templates")
+    .select("cout_reference_unitaire_ht, price_history")
+    .eq("id", taskTemplateId)
+    .maybeSingle();
+  if (fetchError) throw new Error(fetchError.message);
+
+  const previousPrice = normalizeNumber(current?.cout_reference_unitaire_ht) ?? 0;
+  const nextPrice = Math.max(0, Math.round((previousPrice + deltaCostHt) * 100) / 100);
+  const history = Array.isArray(current?.price_history) ? current.price_history : [];
+  const entry = {
+    date: new Date().toISOString(),
+    source: "perte mesurée",
+    material_name: loss.material_name,
+    previous_price_ht: previousPrice,
+    new_price_ht: nextPrice,
+    measured_loss_percent: measuredLossPercent,
+    planned_loss_percent: plannedLossPercent,
+    chantiers_count: loss.chantiers_count,
+  };
+
+  const { error: updateError } = await (supabase as any)
+    .from("task_templates")
+    .update({ cout_reference_unitaire_ht: nextPrice, price_history: [...history, entry] })
+    .eq("id", taskTemplateId);
+  if (updateError) throw new Error(updateError.message);
+
+  return nextPrice;
 }

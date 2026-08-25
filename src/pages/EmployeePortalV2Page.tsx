@@ -12,7 +12,9 @@ import {
   intervenantGetTasks,
   intervenantInformationRequestList,
   intervenantMaterielCreate,
+  intervenantMaterialConsumptionCreate,
   intervenantSession,
+  intervenantTaskMainMaterials,
   intervenantTerrainFeedbackCreate,
   intervenantTerrainFeedbackList,
   intervenantTimeCreate,
@@ -23,6 +25,7 @@ import {
   type IntervenantDocument,
   type IntervenantInformationRequest,
   type IntervenantTask,
+  type IntervenantTaskMainMaterial,
   type IntervenantTerrainFeedback,
 } from "../services/intervenantPortal.service";
 import {
@@ -150,6 +153,8 @@ export default function EmployeePortalV2Page() {
   const [timeQty, setTimeQty] = useState("");
   const [timeWentWell, setTimeWentWell] = useState<boolean | null>(null);
   const [savingTime, setSavingTime] = useState(false);
+  const [mainMaterials, setMainMaterials] = useState<IntervenantTaskMainMaterial[]>([]);
+  const [materialConsumptionQty, setMaterialConsumptionQty] = useState<Record<string, string>>({});
   const [checklist, setChecklist] = useState<IntervenantDailyChecklist | null>(null);
   const [savingChecklistKey, setSavingChecklistKey] = useState<string | null>(null);
   const [imprevuMode, setImprevuMode] = useState<"none" | "materiel" | "blocage">("none");
@@ -206,6 +211,15 @@ export default function EmployeePortalV2Page() {
       .catch(() => { if (alive) setChecklist(null); });
     return () => { alive = false; };
   }, [token, selected?.id, refreshKey]);
+
+  useEffect(() => {
+    let alive = true;
+    if (!selected || !timeTaskId) { setMainMaterials([]); return; }
+    intervenantTaskMainMaterials(token, selected.id, timeTaskId)
+      .then((rows) => { if (alive) setMainMaterials(rows); })
+      .catch(() => { if (alive) setMainMaterials([]); });
+    return () => { alive = false; };
+  }, [token, selected?.id, timeTaskId]);
 
   async function toggleChecklistItem(key: "has_equipment" | "has_materials" | "has_information") {
     if (savingChecklistKey) return;
@@ -292,8 +306,24 @@ export default function EmployeePortalV2Page() {
         duration_hours: hours,
         quantite_realisee: qty !== null && Number.isFinite(qty) ? qty : null,
       });
+      await Promise.all(
+        mainMaterials.map(async (material) => {
+          const raw = materialConsumptionQty[material.material_ratio_id]?.trim();
+          if (!raw) return;
+          const consumed = Number(raw.replace(",", "."));
+          if (!Number.isFinite(consumed) || consumed <= 0) return;
+          await intervenantMaterialConsumptionCreate(token, {
+            chantier_id: selected.id,
+            task_id: timeTaskId,
+            material_ratio_id: material.material_ratio_id,
+            quantite_consommee: consumed,
+            work_date: isoToday(),
+          });
+        }),
+      );
       setTimeHours("");
       setTimeQty("");
+      setMaterialConsumptionQty({});
       if (timeWentWell === false) {
         setImprevuMode("blocage");
         setBlocageText(`Souci sur "${pendingTasks.find((t) => t.id === timeTaskId)?.titre ?? "la tâche"}" : `);
@@ -421,6 +451,16 @@ export default function EmployeePortalV2Page() {
                   <input value={timeQty} onChange={(e) => setTimeQty(e.target.value)} inputMode="decimal" placeholder={`Quantité (${pendingTasks.find((t) => t.id === timeTaskId)?.unite})`} className="min-w-0 flex-1 rounded-xl border border-slate-200 px-3 py-3 text-sm" />
                 ) : null}
               </div>
+              {mainMaterials.map((material) => (
+                <input
+                  key={material.material_ratio_id}
+                  value={materialConsumptionQty[material.material_ratio_id] ?? ""}
+                  onChange={(e) => setMaterialConsumptionQty((prev) => ({ ...prev, [material.material_ratio_id]: e.target.value }))}
+                  inputMode="decimal"
+                  placeholder={`${material.material_name} utilisé(e) — ${material.ratio_unit}`}
+                  className="w-full rounded-xl border border-slate-200 px-3 py-3 text-sm"
+                />
+              ))}
               <div>
                 <div className="text-xs font-semibold text-slate-500">Ça s'est bien passé ?</div>
                 <div className="mt-1.5 grid grid-cols-2 gap-2">

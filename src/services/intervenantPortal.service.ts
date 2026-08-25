@@ -669,6 +669,44 @@ export async function intervenantTimeList(token: string, chantierId: string): Pr
   }));
 }
 
+export type IntervenantTaskMainMaterial = {
+  material_ratio_id: string;
+  material_name: string;
+  ratio_unit: string;
+};
+
+/** Matériau(x) principal(aux) d'une tâche (marqués sur le modèle) — pour savoir si un champ de consommation doit apparaître. */
+export async function intervenantTaskMainMaterials(
+  token: string,
+  chantierId: string,
+  taskId: string,
+): Promise<IntervenantTaskMainMaterial[]> {
+  const { data, error } = await (supabase as any).rpc("intervenant_task_main_materials", {
+    p_token: normalizePortalToken(token),
+    p_chantier_id: chantierId,
+    p_task_id: taskId,
+  });
+  if (error) throw new Error(rpcMessage(error, "Chargement matériaux impossible."));
+
+  const rows = Array.isArray(data) ? data : [];
+  return rows.map((row) => ({
+    material_ratio_id: String(row.material_ratio_id ?? ""),
+    material_name: String(row.material_name ?? ""),
+    ratio_unit: String(row.ratio_unit ?? ""),
+  }));
+}
+
+export async function intervenantMaterialConsumptionCreate(
+  token: string,
+  payload: { chantier_id: string; task_id: string; material_ratio_id: string; quantite_consommee: number; work_date?: string | null },
+): Promise<void> {
+  const { error } = await (supabase as any).rpc("intervenant_material_consumption_create", {
+    p_token: normalizePortalToken(token),
+    p_payload: payload,
+  });
+  if (error) throw new Error(rpcMessage(error, "Enregistrement consommation impossible."));
+}
+
 export async function intervenantMaterielCreate(
   token: string,
   payload: IntervenantMaterielCreatePayload,
