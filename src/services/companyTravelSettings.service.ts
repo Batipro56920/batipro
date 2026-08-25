@@ -1,6 +1,7 @@
 import { DEFAULT_QUOTE_TRAVEL_COST_SETTINGS } from "../features/quotes/builder/quoteBuilderTravelCosts";
 import type { QuoteTravelCostSettings } from "../features/quotes/builder/types";
 import { supabase } from "../lib/supabaseClient";
+import { getCurrentOrganizationId } from "./currentUserProfile.service";
 
 const TABLE = "company_settings";
 
@@ -65,10 +66,7 @@ export function normalizeCompanyTravelSettings(value: unknown, fallbackCompanyAd
 }
 
 export async function getCompanyTravelSettings(): Promise<CompanyTravelSettings> {
-  const { data: userData, error: userError } = await supabase.auth.getUser();
-  if (userError) throw new Error(userError.message);
-  const userId = userData.user?.id;
-  if (!userId) throw new Error("Utilisateur non authentifie.");
+  const userId = await getCurrentOrganizationId();
 
   const withTravelSettings = await supabase
     .from(TABLE)

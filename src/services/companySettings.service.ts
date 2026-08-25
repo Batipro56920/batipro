@@ -1,4 +1,5 @@
 import { supabase } from "../lib/supabaseClient";
+import { getCurrentOrganizationId } from "./currentUserProfile.service";
 import {
   getDefaultCompanyInterfaceMode,
   getEffectiveCompanyFeatureModules,
@@ -158,6 +159,13 @@ async function getCurrentUserId(): Promise<string> {
   return data.user.id;
 }
 
+// Utilisé pour les requêtes/écritures sur company_settings.organization_id (la
+// vraie organisation, pas l'utilisateur créateur) — distinct de getCurrentUserId()
+// ci-dessus, encore utilisé pour l'espace de nommage du logo dans Storage.
+async function getOrganizationId(): Promise<string> {
+  return await getCurrentOrganizationId();
+}
+
 function withDefaults(orgId: string, row?: Partial<CompanySettingsRow>): CompanySettingsRow {
   const rowAny = row as any;
   const logoPath = (rowAny?.logo_path ?? rowAny?.logo_url ?? null) as string | null;
@@ -197,7 +205,7 @@ function withPersistenceStatus(row: CompanySettingsRow, status: CompanySettingsR
 export async function getCompanySettings(): Promise<CompanySettingsRow> {
   let userId: string;
   try {
-    userId = await getCurrentUserId();
+    userId = await getOrganizationId();
   } catch {
     const cached = loadLatestLocalSettings();
     if (cached) {
@@ -259,7 +267,7 @@ export async function upsertCompanySettings(
     >
   >,
 ): Promise<CompanySettingsRow> {
-  const userId = await getCurrentUserId();
+  const userId = await getOrganizationId();
   const nowIso = new Date().toISOString();
   const currentLocal = withDefaults(userId, loadLocalSettings(userId) ?? undefined);
   const businessProfile =

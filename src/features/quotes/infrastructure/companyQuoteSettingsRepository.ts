@@ -1,5 +1,6 @@
 import { addDays, format } from "date-fns";
 import { supabase } from "../../../lib/supabaseClient";
+import { getCurrentOrganizationId } from "../../../services/currentUserProfile.service";
 import { DEFAULT_COMPANY_QUOTE_SETTINGS, type CompanyQuoteSettings } from "../domain/QuoteSettings";
 import type { QuoteVatRate } from "../domain/QuoteEnums";
 
@@ -137,11 +138,7 @@ function toDbPatch(patch: Partial<CompanyQuoteSettings>) {
 }
 
 async function currentOrgId(): Promise<string> {
-  const { data, error } = await supabase.auth.getUser();
-  if (error) throw new Error(error.message);
-  const id = data.user?.id;
-  if (!id) throw new Error("Utilisateur non authentifie.");
-  return id;
+  return await getCurrentOrganizationId();
 }
 
 function normalizeVat(value: number): QuoteVatRate {

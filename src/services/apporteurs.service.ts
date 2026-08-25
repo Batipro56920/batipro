@@ -1,5 +1,6 @@
 import { createPortalClient } from "./portalSupabaseClient";
 import { supabase } from "../lib/supabaseClient";
+import { getCurrentOrganizationId } from "./currentUserProfile.service";
 
 export type ApporteurType =
   | "agent_immobilier"
@@ -87,15 +88,8 @@ type LeadCrmLinkInput = Partial<Pick<ApporteurLeadRow, "crm_prospect_id" | "crm_
 
 type SupabaseColumnError = { code?: string | null; message?: string | null };
 
-async function getCurrentUserId(): Promise<string> {
-  const { data, error } = await supabase.auth.getUser();
-  if (error) throw new Error(error.message);
-  if (!data.user?.id) throw new Error("Utilisateur non authentifié.");
-  return data.user.id;
-}
-
 async function getOrganizationId(): Promise<string> {
-  return await getCurrentUserId();
+  return await getCurrentOrganizationId();
 }
 
 function normalizePositiveOrZeroNumber(value: number, fieldLabel: string) {
