@@ -83,6 +83,7 @@ export type ProfilePermissionModulePillar = {
 export type BusinessProfilePresetId =
   | "dirigeant"
   | "commercial"
+  | "chef_de_projet"
   | "conducteur_de_travaux"
   | "comptable"
   | "administratif"
@@ -190,6 +191,24 @@ export const BUSINESS_PROFILE_PERMISSION_PRESETS: BusinessProfilePermissionPrese
       entreprise_parametres: false,
       intervenants: false,
       bibliotheque: true,
+    },
+  },
+  {
+    id: "chef_de_projet",
+    label: "Chef de projet",
+    roleLabel: "Pilotage projet",
+    description: "Accès complet à l'entreprise, au commerce et aux chantiers, à l'exception du module financier (budget, marges, facturation).",
+    permissions: {
+      ...(Object.fromEntries(PROFILE_PERMISSION_KEYS.map((key) => [key, true])) as ProfileFeaturePermissions),
+      budget: false,
+      budget_create: false,
+      budget_edit: false,
+      budget_delete: false,
+      chantier_financier_view: false,
+      chantier_financier_edit: false,
+      chantier_financier_margin: false,
+      chantier_financier_billing: false,
+      finance_margin_edit: false,
     },
   },
   {

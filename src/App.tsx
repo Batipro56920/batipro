@@ -39,6 +39,7 @@ const IntervenantPortalPage = lazy(() => import("./pages/IntervenantPortalPage")
 const IntervenantDetailPage = lazy(() => import("./pages/IntervenantDetailPage"));
 const IntervenantsPage = lazy(() => import("./pages/IntervenantsPage"));
 const ProfileAccessPresetsPage = lazy(() => import("./pages/ProfileAccessPresetsPage"));
+const PersonnelPage = lazy(() => import("./pages/PersonnelPage"));
 const BibliothequeTasksPage = lazy(() => import("./pages/BibliothequeTasksPage"));
 const StatistiquesPage = lazy(() => import("./pages/StatistiquesPage"));
 const MonEntreprisePage = lazy(() => import("./pages/MonEntreprisePage"));
@@ -466,6 +467,10 @@ export default function App() {
               <RouteSuspense label="Chargement des profils types..."><ProfileAccessPresetsPage /></RouteSuspense>
             </RequireCompanyFeature>
           }
+        />
+        <Route
+          path="/entreprise/personnel"
+          element={<RouteSuspense label="Chargement du personnel..."><PersonnelPage /></RouteSuspense>}
         />
         <Route
           path="/intervenants/:id"

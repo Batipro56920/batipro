@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import type { ReactNode } from "react";
 import { Navigate, useLocation } from "react-router-dom";
 import { supabase } from "../lib/supabaseClient";
-import { getCurrentUserProfile, isAdminProfile } from "../services/currentUserProfile.service";
+import { getCurrentUserProfile, isBackofficeProfile } from "../services/currentUserProfile.service";
 import { useI18n } from "../i18n";
 import { readStoredIntervenantToken } from "../utils/intervenantSession";
 
@@ -54,7 +54,7 @@ export default function RequireAuth({ children }: { children: ReactNode }) {
         const profile = await getCurrentUserProfile();
         if (!alive) return;
 
-        if (isAdminProfile(profile)) {
+        if (isBackofficeProfile(profile)) {
           setGateState({
             checking: false,
             allowed: true,
@@ -130,7 +130,7 @@ export default function RequireAuth({ children }: { children: ReactNode }) {
             ? {
                 from: location,
                 authError: gateState.denied
-                  ? "Accès refusé : ce compte n'a pas le rôle ADMIN."
+                  ? "Accès refusé : ce compte n'a pas accès à l'espace bureau."
                   : undefined,
               }
             : undefined

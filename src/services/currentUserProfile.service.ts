@@ -11,14 +11,9 @@ export type CurrentUserProfile = {
   email: string | null;
   organization_id: string | null;
   feature_permissions?: Record<string, unknown>;
+  /** Catégories de Sidebar autorisées pour ce compte bureau. null = accès complet. */
+  allowed_sidebar_groups: string[] | null;
 };
-
-const ADMIN_EMAILS = new Set(
-  String(import.meta.env.VITE_ADMIN_EMAILS ?? "")
-    .split(",")
-    .map((value) => value.trim().toLowerCase())
-    .filter(Boolean),
-);
 
 function normalizeText(value: unknown): string | null {
   const text = String(value ?? "").trim();
@@ -34,8 +29,10 @@ function normalizeFeaturePermissions(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : {};
 }
 
-function isWhitelistedAdminEmail(email: string | null | undefined): boolean {
-  return !!email && ADMIN_EMAILS.has(String(email).trim().toLowerCase());
+function normalizeAllowedSidebarGroups(value: unknown): string[] | null {
+  if (!Array.isArray(value)) return null;
+  const groups = value.map((entry) => normalizeText(entry)).filter((entry): entry is string => Boolean(entry));
+  return groups.length > 0 ? groups : null;
 }
 
 function isTransientNetworkError(error: unknown): boolean {
@@ -50,9 +47,7 @@ function isTransientNetworkError(error: unknown): boolean {
 
 function buildFallbackProfile(user: User): CurrentUserProfile {
   const email = normalizeText(user.email);
-  const role =
-    normalizeRole(user.app_metadata?.role) ??
-    (isWhitelistedAdminEmail(email) ? "ADMIN" : null);
+  const role = normalizeRole(user.app_metadata?.role);
   const displayName =
     normalizeText(user.user_metadata?.display_name) ??
     normalizeText(user.user_metadata?.full_name) ??
@@ -65,6 +60,7 @@ function buildFallbackProfile(user: User): CurrentUserProfile {
     email,
     organization_id: null,
     feature_permissions: {},
+    allowed_sidebar_groups: null,
   };
 }
 
@@ -107,7 +103,7 @@ export async function getCurrentUserProfile(): Promise<CurrentUserProfile | null
 
   let query = await (supabase as any)
     .from("profiles")
-    .select("id, role, display_name, organization_id, feature_permissions")
+    .select("id, role, display_name, organization_id, feature_permissions, allowed_sidebar_groups")
     .eq("id", user.id)
     .maybeSingle();
 
@@ -126,7 +122,7 @@ export async function getCurrentUserProfile(): Promise<CurrentUserProfile | null
       return fallbackProfile;
     }
 
-    if (isWhitelistedAdminEmail(fallbackEmail) || isTransientNetworkError(error)) {
+    if (isTransientNetworkError(error)) {
       return fallbackProfile;
     }
 
@@ -144,6 +140,7 @@ export async function getCurrentUserProfile(): Promise<CurrentUserProfile | null
     email: fallbackEmail,
     organization_id: normalizeText(data.organization_id),
     feature_permissions: normalizeFeaturePermissions(data.feature_permissions),
+    allowed_sidebar_groups: normalizeAllowedSidebarGroups(data.allowed_sidebar_groups),
   };
 }
 
@@ -154,11 +151,18 @@ export async function getCurrentOrganizationId(): Promise<string> {
 }
 
 export function isAdminProfile(profile: CurrentUserProfile | null): boolean {
-  return normalizeRole(profile?.role) === "ADMIN" || isWhitelistedAdminEmail(profile?.email);
+  return normalizeRole(profile?.role) === "ADMIN";
 }
 
 export function isIntervenantProfile(profile: CurrentUserProfile | null): boolean {
   return normalizeRole(profile?.role) === "INTERVENANT";
+}
+
+const BACKOFFICE_ROLES = new Set(["ADMIN", "BUREAU"]);
+
+export function isBackofficeProfile(profile: CurrentUserProfile | null): boolean {
+  const role = normalizeRole(profile?.role);
+  return role !== null && BACKOFFICE_ROLES.has(role);
 }
 
 export async function hasLinkedIntervenantAccount(userId: string): Promise<boolean> {
@@ -199,7 +203,7 @@ export async function getCurrentUserHomeRoute(): Promise<CurrentUserHomeRoute> {
   if (!user?.id) return "/login";
 
   const profile = await getCurrentUserProfile();
-  if (isAdminProfile(profile)) return "/dashboard";
+  if (isBackofficeProfile(profile)) return "/dashboard";
   if (isIntervenantProfile(profile)) return "/portail/employe";
   if (await hasLinkedIntervenantAccount(user.id)) return "/portail/employe";
   return "/login";
