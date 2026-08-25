@@ -387,6 +387,16 @@ export const BUSINESS_PROFILE_PERMISSION_PRESETS: BusinessProfilePermissionPrese
   },
 ];
 
+/**
+ * Sous-ensemble de BUSINESS_PROFILE_PERMISSION_PRESETS pertinent pour "Profils & accès"
+ * (page terrain : ouvriers, sous-traitants). Les profils bureau (dirigeant, comptable,
+ * chef de projet...) n'ont rien à faire ici — ils se gèrent depuis Personnel, où l'accès
+ * est déterminé par profiles.role, pas par ce preset.
+ */
+export const FIELD_PROFILE_PERMISSION_PRESETS: BusinessProfilePermissionPreset[] = BUSINESS_PROFILE_PERMISSION_PRESETS.filter(
+  (preset) => preset.id === "intervenant_terrain" || preset.id === "sous_traitant",
+);
+
 const BUSINESS_PROFILE_PRESET_ID_SET = new Set<BusinessProfilePresetId>(
   BUSINESS_PROFILE_PERMISSION_PRESETS.map((preset) => preset.id),
 );

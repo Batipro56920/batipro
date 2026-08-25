@@ -14,6 +14,7 @@ import {
 } from "../services/intervenants.service";
 import {
   BUSINESS_PROFILE_PERMISSION_PRESETS,
+  FIELD_PROFILE_PERMISSION_PRESETS,
   clearProfileFeaturePermissionOverrideForUser,
   detachProfileFeaturePermissionPresetForUser,
   getProfilePermissionModuleMatrix,
@@ -456,7 +457,7 @@ export default function IntervenantDetailPage() {
             {row.user_id ? (
               <>
                 <div className="mt-3 space-y-2">
-                  {BUSINESS_PROFILE_PERMISSION_PRESETS.map((preset) => {
+                  {FIELD_PROFILE_PERMISSION_PRESETS.map((preset) => {
                     const linked = permissionsResult?.permissionPresetId === preset.id;
                     return (
                       <button
