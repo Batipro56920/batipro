@@ -68,6 +68,17 @@ export async function generateBackofficeAccount(input: { email: string; displayN
   return result;
 }
 
+export async function resetBackofficeAccountPassword(userId: string): Promise<{ accessUrl: string; email: string }> {
+  const targetUserId = String(userId ?? "").trim();
+  if (!targetUserId) throw new Error("Utilisateur cible manquant.");
+  const result = await invokeEdgeFunction<{ ok: boolean; accessUrl?: string; email?: string; error?: string }>(
+    "reset-backoffice-account-password",
+    { userId: targetUserId },
+  );
+  if (!result?.ok) throw new Error(result?.error ?? "Réinitialisation impossible.");
+  return { accessUrl: result.accessUrl ?? "", email: result.email ?? "" };
+}
+
 export async function setBackofficeAccountAllowedGroups(userId: string, allowedSidebarGroups: string[] | null): Promise<void> {
   const targetUserId = String(userId ?? "").trim();
   if (!targetUserId) throw new Error("Utilisateur cible manquant.");

@@ -3,6 +3,7 @@ import {
   SIDEBAR_GROUPS,
   generateBackofficeAccount,
   listBackofficeAccounts,
+  resetBackofficeAccountPassword,
   setBackofficeAccountAllowedGroups,
   type BackofficeAccount,
 } from "../services/backofficeAccounts.service";
@@ -56,6 +57,8 @@ function AccountRow({ account, onUpdated }: { account: BackofficeAccount; onUpda
   const [groups, setGroups] = useState<string[] | null>(account.allowedSidebarGroups);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [resetting, setResetting] = useState(false);
+  const [resetResult, setResetResult] = useState<string | null>(null);
 
   const isAdmin = account.role === "ADMIN";
   const dirty = JSON.stringify(groups) !== JSON.stringify(account.allowedSidebarGroups);
@@ -73,6 +76,21 @@ function AccountRow({ account, onUpdated }: { account: BackofficeAccount; onUpda
     }
   }
 
+  async function onResetPassword() {
+    setResetting(true);
+    setError(null);
+    setResetResult(null);
+    try {
+      const { accessUrl } = await resetBackofficeAccountPassword(account.id);
+      setResetResult(accessUrl);
+      if (accessUrl) await navigator.clipboard.writeText(accessUrl).catch(() => undefined);
+    } catch (err: any) {
+      setError(err?.message ?? "Réinitialisation impossible.");
+    } finally {
+      setResetting(false);
+    }
+  }
+
   return (
     <div className="rounded-2xl border bg-white p-5">
       <div className="flex flex-wrap items-center justify-between gap-2">
@@ -80,8 +98,25 @@ function AccountRow({ account, onUpdated }: { account: BackofficeAccount; onUpda
           <div className="font-semibold text-slate-900">{account.displayName || account.email || account.id}</div>
           <div className="text-xs text-slate-500">{account.email}</div>
         </div>
-        <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-600">{account.role}</span>
+        <div className="flex items-center gap-2">
+          <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-600">{account.role}</span>
+          <button
+            type="button"
+            onClick={() => void onResetPassword()}
+            disabled={resetting}
+            className="text-xs font-semibold text-slate-500 underline decoration-dotted hover:text-slate-900 disabled:opacity-50"
+          >
+            {resetting ? "Génération..." : "Réinitialiser le mot de passe"}
+          </button>
+        </div>
       </div>
+
+      {resetResult ? (
+        <div className="mt-3 rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-xs text-emerald-800">
+          Nouveau mot de passe copié dans le presse-papiers :
+          <pre className="mt-1 whitespace-pre-wrap">{resetResult}</pre>
+        </div>
+      ) : null}
 
       {isAdmin ? (
         <p className="mt-3 text-xs text-slate-500">Compte administrateur : accès complet, non modifiable ici.</p>
