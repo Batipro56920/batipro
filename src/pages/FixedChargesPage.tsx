@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Calculator, Pencil, Plus, Save, Trash2, X } from "lucide-react";
+import { FinancialNavigation } from "../features/financial/components/FinancialNavigation";
 import {
   getCompanySettings,
   upsertCompanySettings,
@@ -93,7 +94,6 @@ export default function FixedChargesPage() {
   const variableMonthly = variableCharges.reduce((sum, entry) => sum + monthlyEquivalent(entry), 0);
   const exploitationAnnual = fixedAnnual + variableMonthly * 12;
   const exploitationMonthly = exploitationAnnual / 12;
-  const breakEvenMonthly = exploitationMonthly / 0.7;
 
   function openNewChargeDrawer() {
     setEditingCharge(null);
@@ -180,6 +180,8 @@ export default function FixedChargesPage() {
         </div>
       </header>
 
+      <FinancialNavigation />
+
       {error ? <div className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">{error}</div> : null}
       {notice ? <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-700">{notice}</div> : null}
       {loading ? <div className="rounded-3xl border border-slate-200 bg-white p-8 text-center text-sm text-slate-500">Chargement des charges fixes...</div> : null}
@@ -190,7 +192,7 @@ export default function FixedChargesPage() {
             <Metric label="Fixes mensuelles" value={formatCurrency(fixedMonthly)} hint="Charges fixes actives" />
             <Metric label="Fixes annuelles" value={formatCurrency(fixedAnnual)} hint="Projection annuelle" />
             <Metric label="Variables mensuelles" value={formatCurrency(variableMonthly)} hint="Charges variables actives" />
-            <Metric label="Seuil mensuel estimé" value={formatCurrency(breakEvenMonthly)} hint="Hypothèse marge 30%" />
+            <Metric label="Exploitation mensuelle" value={formatCurrency(exploitationMonthly)} hint="Charges fixes et variables actives" />
           </section>
 
           <section className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">

@@ -348,6 +348,10 @@ export default function IntervenantsPage() {
       setError("Ajoute d'abord un accès chantier à ce profil pour ouvrir son portail terrain.");
       return;
     }
+    if (!String(row.email ?? "").trim()) {
+      setError("Renseigne d'abord un email sur cette fiche : le lien du portail est envoyé à cette adresse.");
+      return;
+    }
 
     const portalWindow = window.open("about:blank", "_blank");
     if (portalWindow) {
@@ -536,11 +540,17 @@ export default function IntervenantsPage() {
                       <button
                         type="button"
                         onClick={() => onOpenPortal(row)}
-                        disabled={row.chantier_ids.length === 0 || openingPortalId === row.id}
-                        title={row.chantier_ids.length === 0 ? "Aucun chantier rattaché" : `Ouvrir le portail terrain sur ${firstChantierName}`}
+                        disabled={row.chantier_ids.length === 0 || !String(row.email ?? "").trim() || openingPortalId === row.id}
+                        title={
+                          row.chantier_ids.length === 0
+                            ? "Aucun chantier rattaché"
+                            : !String(row.email ?? "").trim()
+                              ? "Renseigne un email sur cette fiche pour ouvrir le portail"
+                              : `Ouvrir le portail terrain sur ${firstChantierName}`
+                        }
                         className={[
                           "rounded-xl border px-3 py-2 text-sm",
-                          row.chantier_ids.length === 0 || openingPortalId === row.id
+                          row.chantier_ids.length === 0 || !String(row.email ?? "").trim() || openingPortalId === row.id
                             ? "bg-slate-100 text-slate-400 border-slate-200"
                             : "hover:bg-slate-50",
                         ].join(" ")}

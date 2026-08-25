@@ -354,6 +354,7 @@ export function ProjectQuotesTab({ project }: { project: ProjectRecord }) {
   const [billingKey, setBillingKey] = useState<string | null>(null);
   const [billingError, setBillingError] = useState<string | null>(null);
   const [chantierActionKey, setChantierActionKey] = useState<string | null>(null);
+  const [automaticChantierQuoteId, setAutomaticChantierQuoteId] = useState<string | null>(null);
   const [chantierError, setChantierError] = useState<string | null>(null);
   const [createdChantierLink, setCreatedChantierLink] = useState<CreatedChantierLink | null>(null);
   const [existingInvoices, setExistingInvoices] = useState<InvoiceRecord[]>([]);
@@ -394,7 +395,7 @@ export function ProjectQuotesTab({ project }: { project: ProjectRecord }) {
     return chantierPath(chantierId, "/preparation");
   }
 
-  async function createChantierFromQuote(quoteId: string) {
+  async function createChantierFromQuote(quoteId: string, automatic = false) {
     const quote = project.quotes.find((item) => item.id === quoteId);
     if (!quote || chantierActionKey) return;
     if (quote.statut !== "accepte") {
@@ -413,6 +414,7 @@ export function ProjectQuotesTab({ project }: { project: ProjectRecord }) {
     }
 
     setChantierActionKey(quoteId);
+    setAutomaticChantierQuoteId(automatic ? quoteId : null);
     setChantierError(null);
     try {
       const created = await transformAcceptedQuoteToChantier({
@@ -426,6 +428,7 @@ export function ProjectQuotesTab({ project }: { project: ProjectRecord }) {
       setChantierError(error instanceof Error ? error.message : "Creation du chantier impossible depuis ce devis.");
     } finally {
       setChantierActionKey(null);
+      setAutomaticChantierQuoteId(null);
     }
   }
 
@@ -448,7 +451,7 @@ export function ProjectQuotesTab({ project }: { project: ProjectRecord }) {
       return;
     }
 
-    void createChantierFromQuote(quote.id);
+    void createChantierFromQuote(quote.id, true);
   }, [chantierActionKey, chantierQuoteId, navigate, project.quotes, searchParams, setSearchParams]);
 
   async function createInvoiceFromQuote(quoteId: string, invoiceType: InvoiceType) {
@@ -484,6 +487,20 @@ export function ProjectQuotesTab({ project }: { project: ProjectRecord }) {
   return (
     <Panel title="Devis" description="Pre-devis, devis final, variantes, signatures et relances." actions={<Link to={`/projets/${project.id}/devis/nouveau`} className="text-sm font-semibold text-blue-700 hover:text-blue-800">Creer devis</Link>}>
       <div className="space-y-4">
+        {automaticChantierQuoteId && chantierActionKey === automaticChantierQuoteId ? (
+          <div
+            aria-live="polite"
+            className="rounded-2xl border border-blue-200 bg-blue-50 p-4 text-sm text-blue-900"
+          >
+            <div className="font-semibold">Création du chantier lancée depuis la liste des projets</div>
+            <div className="mt-1 text-blue-700">
+              Le devis {
+                project.quotes.find((quote) => quote.id === automaticChantierQuoteId)?.quote_number ??
+                automaticChantierQuoteId
+              } est en cours de transformation. Le lien vers la préparation apparaîtra ici dès que le chantier sera prêt.
+            </div>
+          </div>
+        ) : null}
         {acceptedQuote ? (
           <div className="flex flex-col gap-3 rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800 lg:flex-row lg:items-center lg:justify-between">
             <div>
@@ -496,7 +513,11 @@ export function ProjectQuotesTab({ project }: { project: ProjectRecord }) {
               </Link>
             ) : (
               <button type="button" onClick={() => void createChantierFromQuote(acceptedQuote.id)} disabled={chantierActionKey !== null} className="inline-flex h-9 items-center justify-center rounded-xl border border-emerald-200 bg-white px-3 text-sm font-semibold text-emerald-700 hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-60">
-                {chantierActionKey === acceptedQuote.id ? "Creation..." : "Créer chantier"}
+                {chantierActionKey === acceptedQuote.id
+                  ? automaticChantierQuoteId === acceptedQuote.id
+                    ? "Création automatique..."
+                    : "Création..."
+                  : "Créer chantier"}
               </button>
             )}
           </div>
@@ -566,7 +587,11 @@ export function ProjectQuotesTab({ project }: { project: ProjectRecord }) {
                               title={canCreateChantier ? "Creer le chantier depuis ce devis accepte" : "Un chantier est deja lie a ce devis"}
                               className="inline-flex h-8 items-center rounded-lg border border-emerald-200 bg-emerald-50 px-2.5 text-xs font-semibold text-emerald-700 hover:bg-emerald-100 disabled:bg-slate-50 disabled:text-slate-400"
                             >
-                              {isCreatingChantier ? "Creation..." : "Créer chantier"}
+                              {isCreatingChantier
+                                ? automaticChantierQuoteId === quote.id
+                                  ? "Création automatique..."
+                                  : "Création..."
+                                : "Créer chantier"}
                             </button>
                           ) : null}
                           {quoteInvoices.length ? (

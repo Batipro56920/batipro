@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { AlertTriangle, CalendarDays, CheckCircle2, ChevronRight, ClipboardList, FileText, Home, LogOut, MapPin, MessageCircle, Phone, RefreshCw, Send, Wrench } from "lucide-react";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 
 import { supabase } from "../lib/supabaseClient";
 import {
@@ -23,7 +23,31 @@ import {
   type IntervenantTask,
   type IntervenantTerrainFeedback,
 } from "../services/intervenantPortal.service";
-import { AUTH_SESSION_PORTAL_TOKEN, clearStoredIntervenantSession } from "../utils/intervenantSession";
+import {
+  AUTH_SESSION_PORTAL_TOKEN,
+  clearStoredIntervenantSession,
+  extractIntervenantToken,
+  persistIntervenantToken,
+  readStoredIntervenantToken,
+} from "../utils/intervenantSession";
+
+/**
+ * A portal link generated from "Ouvrir portail" (admin preview / terrain access)
+ * carries a bare `?token=` — it is never an authenticated Supabase session.
+ * Resolve that token first, remember it for subsequent loads in this browser,
+ * and only fall back to the logged-in session sentinel when no token is present
+ * anywhere (the "real account, logged in with email/password" case).
+ */
+function resolvePortalToken(search: string): string {
+  const fromUrl = extractIntervenantToken(search);
+  if (fromUrl) {
+    persistIntervenantToken(fromUrl);
+    return fromUrl;
+  }
+  const stored = readStoredIntervenantToken();
+  if (stored) return stored;
+  return AUTH_SESSION_PORTAL_TOKEN;
+}
 
 type Tab = "accueil" | "chantier" | "renseigner" | "fil";
 
@@ -87,6 +111,8 @@ function Pill({ children, tone = "slate" }: { children: React.ReactNode; tone?: 
 
 export default function EmployeePortalV2Page() {
   const navigate = useNavigate();
+  const location = useLocation();
+  const token = useMemo(() => resolvePortalToken(location.search), [location.search]);
   const [tab, setTab] = useState<Tab>("accueil");
   const [name, setName] = useState("Intervenant");
   const [chantiers, setChantiers] = useState<IntervenantChantier[]>([]);
@@ -107,7 +133,6 @@ export default function EmployeePortalV2Page() {
       setLoading(true);
       setError(null);
       try {
-        const token = AUTH_SESSION_PORTAL_TOKEN;
         const [session, rows] = await Promise.all([intervenantSession(token), intervenantGetChantiers(token)]);
         if (!alive) return;
         const sites = rows.length ? rows : session.chantiers;
@@ -137,7 +162,7 @@ export default function EmployeePortalV2Page() {
     }
     void load();
     return () => { alive = false; };
-  }, [refreshKey]);
+  }, [refreshKey, token]);
 
   const selected = useMemo(() => chantiers.find((c) => c.id === selectedId) ?? chantiers[0] ?? null, [chantiers, selectedId]);
   const data = selected ? dataByChantier[selected.id] ?? EMPTY : EMPTY;
@@ -174,7 +199,7 @@ export default function EmployeePortalV2Page() {
     if (!selected || !message.trim() || sending) return;
     setSending(true);
     try {
-      await intervenantTerrainFeedbackCreate(AUTH_SESSION_PORTAL_TOKEN, {
+      await intervenantTerrainFeedbackCreate(token, {
         chantier_id: selected.id,
         category: "fil_chantier",
         urgency: "normale",
@@ -194,7 +219,7 @@ export default function EmployeePortalV2Page() {
     if (!Number.isFinite(hours) || hours <= 0) return;
     setSavingTime(true);
     try {
-      await intervenantTimeCreate(AUTH_SESSION_PORTAL_TOKEN, {
+      await intervenantTimeCreate(token, {
         chantier_id: selected.id,
         task_id: timeTaskId,
         work_date: isoToday(),
@@ -208,7 +233,7 @@ export default function EmployeePortalV2Page() {
   }
 
   async function completeTask(task: IntervenantTask) {
-    await intervenantUpdateTaskStatus(AUTH_SESSION_PORTAL_TOKEN, task.id, "FAIT");
+    await intervenantUpdateTaskStatus(token, task.id, "FAIT");
     setRefreshKey((v) => v + 1);
   }
 
