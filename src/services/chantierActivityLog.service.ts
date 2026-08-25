@@ -175,6 +175,39 @@ export async function listTerrainFeedbackReserveLinks(
   return links;
 }
 
+export async function getTerrainFeedbackSourceIdForReserve(
+  reserveId: string,
+  chantierId: string,
+): Promise<string | null> {
+  const normalizedReserveId = String(reserveId ?? "").trim();
+  const normalizedChantierId = String(chantierId ?? "").trim();
+  if (!normalizedReserveId || !normalizedChantierId) return null;
+
+  const { data, error } = await fromActivityLog()
+    .select("changes")
+    .eq("chantier_id", normalizedChantierId)
+    .eq("entity_type", "reserve")
+    .eq("entity_id", normalizedReserveId)
+    .order("created_at", { ascending: false })
+    .limit(20);
+
+  if (error) {
+    if (isMissingActivitySchemaError(error)) return null;
+    throw error;
+  }
+
+  for (const row of (data ?? []) as Array<Record<string, unknown>>) {
+    const changes =
+      row.changes && typeof row.changes === "object"
+        ? (row.changes as Record<string, unknown>)
+        : {};
+    const feedbackId = String(changes.terrain_feedback_id ?? "").trim();
+    if (changes.source === "terrain_feedback" && feedbackId) return feedbackId;
+  }
+
+  return null;
+}
+
 export async function appendChantierActivityLog(input: ChantierActivityLogInput): Promise<void> {
   const chantierId = String(input.chantierId ?? "").trim();
   const actionType = String(input.actionType ?? "").trim();
