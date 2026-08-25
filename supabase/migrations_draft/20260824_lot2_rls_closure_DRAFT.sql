@@ -45,6 +45,31 @@ grant execute on function public.current_organization_id() to authenticated;
 comment on function public.current_organization_id() is
   'Organisation (unique, CB Renovation) de l''utilisateur courant. NULL si non authentifié ou sans profil — toute policy organization_id = (select current_organization_id()) refuse alors l''accès par construction (NULL ne matche jamais).';
 
+-- INCIDENT (Groupe 2, appliqué le 2026-08-25) : la première version de
+-- chantier_tasks_admin_all faisait un "exists (select 1 from chantiers c
+-- where ...)" en ligne. chantiers_select_intervenant, de son côté, interroge
+-- chantier_tasks. Résultat : chantiers -> chantier_tasks -> chantiers, RLS
+-- récursive infinie (erreur Postgres 42P17), détectée immédiatement par le
+-- test de vérification post-application et corrigée avant de continuer. La
+-- fonction ci-dessous casse le cycle (SECURITY DEFINER = la lecture de
+-- chantiers qu'elle fait en interne n'est plus soumise à la RLS de chantiers).
+-- Toute table qui référence chantiers via chantier_id doit passer par elle,
+-- jamais par un "exists (select ... from chantiers ...)" en ligne.
+create or replace function public.chantier_organization_id(p_chantier_id uuid)
+returns uuid
+language sql
+stable
+security definer
+set search_path = public, pg_temp
+as $$
+  select organization_id from public.chantiers where id = p_chantier_id
+$$;
+
+grant execute on function public.chantier_organization_id(uuid) to authenticated;
+
+comment on function public.chantier_organization_id(uuid) is
+  'SECURITY DEFINER lookup de l''organization_id d''un chantier, utilisé par les policies des tables qui référencent chantiers (chantier_tasks, materiel_demandes...) pour éviter toute récursion RLS vers chantiers.';
+
 
 -- ----------------------------------------------------------------------------
 -- GROUPE 0bis — Nettoyage advisory GraphQL/anon sur organizations (Lot 1)
@@ -130,19 +155,11 @@ create policy chantier_tasks_admin_all
   to authenticated
   using (
     public.is_admin()
-    and exists (
-      select 1 from public.chantiers c
-      where c.id = chantier_tasks.chantier_id
-        and c.organization_id = (select public.current_organization_id())
-    )
+    and public.chantier_organization_id(chantier_tasks.chantier_id) = (select public.current_organization_id())
   )
   with check (
     public.is_admin()
-    and exists (
-      select 1 from public.chantiers c
-      where c.id = chantier_tasks.chantier_id
-        and c.organization_id = (select public.current_organization_id())
-    )
+    and public.chantier_organization_id(chantier_tasks.chantier_id) = (select public.current_organization_id())
   );
 
 -- Recréée à l'identique de l'existant :
@@ -188,25 +205,20 @@ begin
   end loop;
 end $$;
 
+-- Passe par chantier_organization_id() (voir Groupe 0), pas par un "exists
+-- (select ... from chantiers ...)" en ligne, pour la même raison que
+-- chantier_tasks_admin_all (cf. incident documenté en Groupe 0).
 create policy materiel_demandes_admin_all
   on public.materiel_demandes
   for all
   to authenticated
   using (
     public.is_admin()
-    and exists (
-      select 1 from public.chantiers c
-      where c.id = materiel_demandes.chantier_id
-        and c.organization_id = (select public.current_organization_id())
-    )
+    and public.chantier_organization_id(materiel_demandes.chantier_id) = (select public.current_organization_id())
   )
   with check (
     public.is_admin()
-    and exists (
-      select 1 from public.chantiers c
-      where c.id = materiel_demandes.chantier_id
-        and c.organization_id = (select public.current_organization_id())
-    )
+    and public.chantier_organization_id(materiel_demandes.chantier_id) = (select public.current_organization_id())
   );
 
 

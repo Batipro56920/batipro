@@ -48,6 +48,18 @@ Toutes suivent l'un de ces deux états actuels, vérifiés en direct :
 
 ---
 
+## 1bis. Incident Groupe 2 — récursion RLS, détecté et corrigé immédiatement
+
+Après application du Groupe 2, le test de vérification (`UPDATE ... RETURNING` en admin sur `chantiers`/`chantier_tasks`) a échoué avec `ERROR 42P17: infinite recursion detected in policy for relation "chantiers"`.
+
+**Cause** : `chantiers_select_intervenant` interroge `chantier_tasks` ; la première version de `chantier_tasks_admin_all` interrogeait `chantiers` en retour (`exists (select 1 from chantiers c where ...)`) — cycle `chantiers → chantier_tasks → chantiers`. Chaque sous-requête dans une policy est elle-même soumise à la RLS de la table qu'elle interroge, sauf si elle passe par une fonction `SECURITY DEFINER` — ce n'était pas le cas ici.
+
+**Correction appliquée immédiatement** (avant de continuer, conformément à la consigne) : nouvelle fonction `chantier_organization_id(uuid)`, `SECURITY DEFINER`, qui lit `chantiers` sans redéclencher sa RLS — `chantier_tasks_admin_all` a été recréée pour l'utiliser à la place de la sous-requête en ligne. Re-testé : `chantiers` et `chantier_tasks` accessibles en lecture/écriture par l'admin, comptes identiques à avant migration (3 chantiers, 12 tâches).
+
+`materiel_demandes_admin_all` (Groupe 3, pas encore appliqué) avait la même forme — corrigée dans le brouillon avant application pour ne pas reproduire l'incident.
+
+---
+
 ## 2. Fonction stable de résolution de l'organisation
 
 ```sql
@@ -69,6 +81,8 @@ grant execute on function public.current_organization_id() to authenticated;
 **Pourquoi `stable` (pas `volatile`)** : un appel `stable` enveloppé en `(select public.current_organization_id())` dans une policy est traité par Postgres comme un InitPlan à évaluation unique par requête, plutôt que ré-exécuté ligne par ligne — c'est le pattern recommandé par Supabase pour les fonctions d'auth utilisées en RLS. Chaque policy du brouillon utilise systématiquement cette forme enveloppée.
 
 **Impact perf attendu** : la fonction fait une lecture indexée sur la clé primaire de `profiles` (3 lignes aujourd'hui) — coût sub-milliseconde, évalué une fois par requête grâce au wrapping ci-dessus, pas une fois par ligne parcourue. Le `security definer` ajoute un coût fixe de changement de rôle, identique à celui déjà payé par `is_admin()` partout ailleurs dans le schéma — non mesurable à cette échelle, et resterait négligeable même à plusieurs dizaines d'utilisateurs. Retourne `NULL` si l'appelant n'a pas de profil (ex. le compte `auth.users` orphelin détecté en Lot 1, `b.j-y@wanadoo.fr`) — `organization_id = NULL` échoue systématiquement en RLS (`NULL` ne matche jamais), donc refus par défaut, jamais d'ouverture accidentelle.
+
+**Deuxième fonction, ajoutée suite à l'incident §1bis** : `chantier_organization_id(p_chantier_id uuid)`, même forme (`stable security definer set search_path = public, pg_temp`), utilisée par toute policy d'une table qui référence `chantiers` via `chantier_id` (`chantier_tasks_admin_all`, `materiel_demandes_admin_all`) — jamais un `exists (select ... from chantiers ...)` en ligne, pour éviter toute récursion RLS vers `chantiers`.
 
 ---
 

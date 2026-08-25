@@ -168,7 +168,8 @@ create policy chantiers_auth_update on public.chantiers for update to authentica
 
 
 -- ----------------------------------------------------------------------------
--- GROUPE 0 — retirer la fonction et restaurer le grant anon sur organizations
+-- GROUPE 0 — retirer les fonctions et restaurer le grant anon sur organizations
 -- ----------------------------------------------------------------------------
 grant select on public.organizations to anon;
+drop function if exists public.chantier_organization_id(uuid);
 drop function if exists public.current_organization_id();
