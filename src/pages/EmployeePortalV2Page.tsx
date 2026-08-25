@@ -9,7 +9,6 @@ import {
   intervenantDailyChecklistUpsert,
   intervenantGetChantiers,
   intervenantGetDocuments,
-  intervenantGetPlanning,
   intervenantGetTasks,
   intervenantInformationRequestList,
   intervenantMaterielCreate,
@@ -23,7 +22,6 @@ import {
   type IntervenantDailyChecklist,
   type IntervenantDocument,
   type IntervenantInformationRequest,
-  type IntervenantPlanning,
   type IntervenantTask,
   type IntervenantTerrainFeedback,
 } from "../services/intervenantPortal.service";
@@ -57,14 +55,13 @@ type Tab = "accueil" | "chantier" | "renseigner" | "fil";
 
 type SiteData = {
   tasks: IntervenantTask[];
-  planning: IntervenantPlanning;
   documents: IntervenantDocument[];
   consignes: IntervenantConsigne[];
   requests: IntervenantInformationRequest[];
   feedbacks: IntervenantTerrainFeedback[];
 };
 
-const EMPTY: SiteData = { tasks: [], planning: { chantier_id: null, lots: [] }, documents: [], consignes: [], requests: [], feedbacks: [] };
+const EMPTY: SiteData = { tasks: [], documents: [], consignes: [], requests: [], feedbacks: [] };
 
 function isoToday() {
   const d = new Date();
@@ -177,15 +174,14 @@ export default function EmployeePortalV2Page() {
         const first = selectedId && sites.some((site) => site.id === selectedId) ? selectedId : sites[0]?.id ?? "";
         setSelectedId(first);
         const entries = await Promise.all(sites.map(async (site) => {
-          const [tasks, planning, documents, consignes, requests, feedbacks] = await Promise.all([
+          const [tasks, documents, consignes, requests, feedbacks] = await Promise.all([
             intervenantGetTasks(token, site.id).catch(() => []),
-            intervenantGetPlanning(token, site.id).catch(() => ({ chantier_id: site.id, lots: [] })),
             intervenantGetDocuments(token, site.id).catch(() => []),
             intervenantConsigneList(token, site.id).catch(() => []),
             intervenantInformationRequestList(token, site.id).catch(() => []),
             intervenantTerrainFeedbackList(token, site.id).catch(() => []),
           ]);
-          return [site.id, { tasks, planning, documents, consignes, requests, feedbacks } as SiteData] as const;
+          return [site.id, { tasks, documents, consignes, requests, feedbacks } as SiteData] as const;
         }));
         if (!alive) return;
         setDataByChantier(Object.fromEntries(entries));
@@ -408,8 +404,6 @@ export default function EmployeePortalV2Page() {
           </Card>
 
           <Card><div className="flex items-center justify-between"><h3 className="font-bold">Prochaine tâche</h3><CalendarDays className="h-5 w-5 text-blue-600" /></div>{next ? <div className="mt-3 rounded-xl bg-blue-50 p-3"><div className="text-xs font-semibold text-blue-700">{formatDate(taskDate(next))}</div><div className="mt-1 font-bold">{next.titre}</div><div className="mt-1 text-sm text-slate-600">{[next.lot, next.zone_nom].filter(Boolean).join(" · ")}</div></div> : <div className="mt-3 text-sm text-slate-500">Aucune tâche à venir.</div>}</Card>
-
-          <Card><div className="flex items-center justify-between"><h3 className="font-bold">Planning global</h3><Pill tone="slate">Gantt chantier</Pill></div><div className="mt-4 space-y-3">{data.planning.lots.length ? data.planning.lots.map((lot) => <div key={lot.lot}><div className="flex items-center justify-between gap-2 text-xs"><span className="font-semibold">{lot.lot}</span><span className="text-slate-500">{formatDate(lot.start_date)} → {formatDate(lot.end_date)}</span></div><div className="mt-1 h-2 rounded-full bg-slate-100"><div className="h-full rounded-full bg-blue-600" style={{ width: `${lot.progress_pct}%` }} /></div></div>) : <div className="text-sm text-slate-500">Planning non renseigné.</div>}</div></Card>
 
           <Card><div className="flex items-center justify-between"><h3 className="font-bold">Informations utiles</h3><FileText className="h-5 w-5 text-slate-500" /></div><div className="mt-3 grid gap-2"><div className="rounded-xl bg-slate-50 p-3 text-sm"><span className="font-semibold">{unread}</span> consigne(s) non lue(s)</div><div className="rounded-xl bg-slate-50 p-3 text-sm"><span className="font-semibold">{data.documents.length}</span> document(s) terrain</div><div className="rounded-xl bg-slate-50 p-3 text-sm"><span className="font-semibold">{openRequests}</span> demande(s) en attente</div></div></Card>
         </> : null}
