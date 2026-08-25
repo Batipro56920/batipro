@@ -1,4 +1,5 @@
 import { supabase } from "../lib/supabaseClient";
+import { getCurrentOrganizationId } from "./currentUserProfile.service";
 
 const crmDb = supabase as any;
 
@@ -135,11 +136,7 @@ function isMissingCrmSchema(error: unknown): boolean {
 }
 
 async function currentOrgId(): Promise<string> {
-  const { data, error } = await supabase.auth.getUser();
-  if (error) throw new Error(error.message);
-  const id = data.user?.id;
-  if (!id) throw new Error("Utilisateur non authentifie.");
-  return id;
+  return await getCurrentOrganizationId();
 }
 
 function storageSafeName(name: string) {

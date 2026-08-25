@@ -3,6 +3,7 @@ import { createChantier, getChantiers, updateChantier, type ChantierRow } from "
 import { createDevis, createDevisLigne } from "./devis.service";
 import { createTask } from "./chantierTasks.service";
 import { list as listTaskTemplates, type TaskTemplateRow } from "./taskLibrary.service";
+import { getCurrentOrganizationId } from "./currentUserProfile.service";
 import { supabase } from "../lib/supabaseClient";
 
 const crmDb = supabase as any;
@@ -518,11 +519,7 @@ function normalizeTags(value: unknown): string[] {
 }
 
 async function currentOrgId(): Promise<string> {
-  const { data, error } = await supabase.auth.getUser();
-  if (error) throw new Error(error.message);
-  const id = data.user?.id;
-  if (!id) throw new Error("Utilisateur non authentifié.");
-  return id;
+  return await getCurrentOrganizationId();
 }
 
 function isMissingCrmSchema(error: unknown): boolean {

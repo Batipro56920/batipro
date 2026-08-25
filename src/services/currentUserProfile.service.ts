@@ -9,6 +9,7 @@ export type CurrentUserProfile = {
   role: CurrentUserRole | null;
   display_name: string | null;
   email: string | null;
+  organization_id: string | null;
   feature_permissions?: Record<string, unknown>;
 };
 
@@ -62,6 +63,7 @@ function buildFallbackProfile(user: User): CurrentUserProfile {
     role,
     display_name: displayName,
     email,
+    organization_id: null,
     feature_permissions: {},
   };
 }
@@ -105,14 +107,14 @@ export async function getCurrentUserProfile(): Promise<CurrentUserProfile | null
 
   let query = await (supabase as any)
     .from("profiles")
-    .select("id, role, display_name, feature_permissions")
+    .select("id, role, display_name, organization_id, feature_permissions")
     .eq("id", user.id)
     .maybeSingle();
 
   if (query.error && isMissingFeaturePermissionsColumnError(query.error)) {
     query = await (supabase as any)
       .from("profiles")
-      .select("id, role, display_name")
+      .select("id, role, display_name, organization_id")
       .eq("id", user.id)
       .maybeSingle();
   }
@@ -140,8 +142,15 @@ export async function getCurrentUserProfile(): Promise<CurrentUserProfile | null
     role: normalizeRole(data.role) ?? fallbackProfile.role,
     display_name: normalizeText(data.display_name) ?? fallbackProfile.display_name,
     email: fallbackEmail,
+    organization_id: normalizeText(data.organization_id),
     feature_permissions: normalizeFeaturePermissions(data.feature_permissions),
   };
+}
+
+export async function getCurrentOrganizationId(): Promise<string> {
+  const profile = await getCurrentUserProfile();
+  if (!profile?.organization_id) throw new Error("Organisation introuvable pour cet utilisateur.");
+  return profile.organization_id;
 }
 
 export function isAdminProfile(profile: CurrentUserProfile | null): boolean {

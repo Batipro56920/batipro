@@ -1,4 +1,5 @@
 import { supabase } from "../../../lib/supabaseClient";
+import { getCurrentOrganizationId } from "../../../services/currentUserProfile.service";
 import type { QuoteLibraryDataset, QuoteLibraryFilters, QuoteLibraryItem, QuoteLibraryItemType, QuoteLibraryTemplate, QuoteImportRow } from "../domain/QuoteLibrary";
 import type { QuoteVatRate } from "../domain/QuoteEnums";
 
@@ -215,11 +216,7 @@ async function parseImportRows(file: File): Promise<Array<Record<string, any>>> 
 }
 
 async function currentOrgId(): Promise<string> {
-  const { data, error } = await supabase.auth.getUser();
-  if (error) throw new Error(error.message);
-  const id = data.user?.id;
-  if (!id) throw new Error("Utilisateur non authentifie.");
-  return id;
+  return await getCurrentOrganizationId();
 }
 
 function typeForTab(tab: string): QuoteLibraryItemType | null {
