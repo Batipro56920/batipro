@@ -1,15 +1,18 @@
 import { useEffect, useMemo, useState } from "react";
-import { AlertTriangle, CalendarDays, CheckCircle2, ChevronRight, ClipboardList, FileText, Home, LogOut, MapPin, MessageCircle, Phone, RefreshCw, Send, Wrench } from "lucide-react";
+import { AlertTriangle, CalendarDays, CheckCircle2, ChevronRight, ClipboardList, FileText, Home, LogOut, MapPin, MessageCircle, PackageSearch, Phone, RefreshCw, Send, ShieldAlert, Wrench } from "lucide-react";
 import { useLocation, useNavigate } from "react-router-dom";
 
 import { supabase } from "../lib/supabaseClient";
 import {
   intervenantConsigneList,
+  intervenantDailyChecklistGet,
+  intervenantDailyChecklistUpsert,
   intervenantGetChantiers,
   intervenantGetDocuments,
   intervenantGetPlanning,
   intervenantGetTasks,
   intervenantInformationRequestList,
+  intervenantMaterielCreate,
   intervenantSession,
   intervenantTerrainFeedbackCreate,
   intervenantTerrainFeedbackList,
@@ -17,6 +20,7 @@ import {
   intervenantUpdateTaskStatus,
   type IntervenantChantier,
   type IntervenantConsigne,
+  type IntervenantDailyChecklist,
   type IntervenantDocument,
   type IntervenantInformationRequest,
   type IntervenantPlanning,
@@ -93,6 +97,27 @@ function nextTask(tasks: IntervenantTask[]) {
     })[0] ?? null;
 }
 
+function isToday(value: string | null | undefined) {
+  return !!value && value === isoToday();
+}
+
+/** "Ma semaine" : les prochains jours avec tâche, groupés par date — pensé pour un ouvrier (où je vais, quoi faire), pas un Gantt par lot. */
+function upcomingByDay(tasks: IntervenantTask[]) {
+  const groups = new Map<string, IntervenantTask[]>();
+  for (const task of tasks) {
+    if (taskDone(task)) continue;
+    const date = taskDate(task);
+    if (!date) continue;
+    const list = groups.get(date) ?? [];
+    list.push(task);
+    groups.set(date, list);
+  }
+  return Array.from(groups.entries())
+    .sort(([a], [b]) => a.localeCompare(b))
+    .slice(0, 7)
+    .map(([date, items]) => ({ date, items: [...items].sort((a, b) => a.order_index - b.order_index) }));
+}
+
 function progress(data: SiteData, chantier: IntervenantChantier) {
   const explicit = Number(chantier.avancement ?? NaN);
   if (Number.isFinite(explicit)) return Math.max(0, Math.min(100, Math.round(explicit)));
@@ -125,7 +150,18 @@ export default function EmployeePortalV2Page() {
   const [sending, setSending] = useState(false);
   const [timeTaskId, setTimeTaskId] = useState("");
   const [timeHours, setTimeHours] = useState("");
+  const [timeQty, setTimeQty] = useState("");
+  const [timeWentWell, setTimeWentWell] = useState<boolean | null>(null);
   const [savingTime, setSavingTime] = useState(false);
+  const [checklist, setChecklist] = useState<IntervenantDailyChecklist | null>(null);
+  const [savingChecklistKey, setSavingChecklistKey] = useState<string | null>(null);
+  const [imprevuMode, setImprevuMode] = useState<"none" | "materiel" | "blocage">("none");
+  const [materielTitre, setMaterielTitre] = useState("");
+  const [materielQuantite, setMaterielQuantite] = useState("");
+  const [materielUnite, setMaterielUnite] = useState("");
+  const [savingMateriel, setSavingMateriel] = useState(false);
+  const [blocageText, setBlocageText] = useState("");
+  const [sendingBlocage, setSendingBlocage] = useState(false);
 
   useEffect(() => {
     let alive = true;
@@ -165,6 +201,39 @@ export default function EmployeePortalV2Page() {
   }, [refreshKey, token]);
 
   const selected = useMemo(() => chantiers.find((c) => c.id === selectedId) ?? chantiers[0] ?? null, [chantiers, selectedId]);
+
+  useEffect(() => {
+    let alive = true;
+    if (!selected) { setChecklist(null); return; }
+    intervenantDailyChecklistGet(token, isoToday())
+      .then((row) => { if (alive) setChecklist(row); })
+      .catch(() => { if (alive) setChecklist(null); });
+    return () => { alive = false; };
+  }, [token, selected?.id, refreshKey]);
+
+  async function toggleChecklistItem(key: "has_equipment" | "has_materials" | "has_information") {
+    if (savingChecklistKey) return;
+    setSavingChecklistKey(key);
+    try {
+      const values = {
+        has_equipment: checklist?.has_equipment ?? false,
+        has_materials: checklist?.has_materials ?? false,
+        has_information: checklist?.has_information ?? false,
+      };
+      const next = await intervenantDailyChecklistUpsert(token, {
+        chantier_id: selected?.id ?? null,
+        checklist_date: isoToday(),
+        ...values,
+        [key]: !values[key],
+      });
+      setChecklist(next);
+    } catch {
+      // silencieux : la checklist est un confort, pas un blocage
+    } finally {
+      setSavingChecklistKey(null);
+    }
+  }
+
   const data = selected ? dataByChantier[selected.id] ?? EMPTY : EMPTY;
   const next = useMemo(() => nextTask(data.tasks), [data.tasks]);
   const pct = selected ? progress(data, selected) : 0;
@@ -195,15 +264,15 @@ export default function EmployeePortalV2Page() {
     navigate("/login", { replace: true });
   }
 
-  async function sendMessage() {
+  async function sendMessage(category: string = "fil_chantier") {
     if (!selected || !message.trim() || sending) return;
     setSending(true);
     try {
       await intervenantTerrainFeedbackCreate(token, {
         chantier_id: selected.id,
-        category: "fil_chantier",
-        urgency: "normale",
-        title: "Message chantier",
+        category,
+        urgency: category === "blocage" ? "urgente" : "normale",
+        title: category === "blocage" ? "Blocage signalé" : "Message chantier",
         description: message.trim(),
       });
       setMessage("");
@@ -217,6 +286,7 @@ export default function EmployeePortalV2Page() {
     if (!selected || !timeTaskId || !timeHours.trim() || savingTime) return;
     const hours = Number(timeHours.replace(",", "."));
     if (!Number.isFinite(hours) || hours <= 0) return;
+    const qty = timeQty.trim() ? Number(timeQty.replace(",", ".")) : null;
     setSavingTime(true);
     try {
       await intervenantTimeCreate(token, {
@@ -224,8 +294,15 @@ export default function EmployeePortalV2Page() {
         task_id: timeTaskId,
         work_date: isoToday(),
         duration_hours: hours,
+        quantite_realisee: qty !== null && Number.isFinite(qty) ? qty : null,
       });
       setTimeHours("");
+      setTimeQty("");
+      if (timeWentWell === false) {
+        setImprevuMode("blocage");
+        setBlocageText(`Souci sur "${pendingTasks.find((t) => t.id === timeTaskId)?.titre ?? "la tâche"}" : `);
+      }
+      setTimeWentWell(null);
       setRefreshKey((v) => v + 1);
     } finally {
       setSavingTime(false);
@@ -235,6 +312,46 @@ export default function EmployeePortalV2Page() {
   async function completeTask(task: IntervenantTask) {
     await intervenantUpdateTaskStatus(token, task.id, "FAIT");
     setRefreshKey((v) => v + 1);
+  }
+
+  async function saveMateriel() {
+    if (!selected || !materielTitre.trim() || savingMateriel) return;
+    setSavingMateriel(true);
+    try {
+      await intervenantMaterielCreate(token, {
+        chantier_id: selected.id,
+        task_id: timeTaskId || null,
+        titre: materielTitre.trim(),
+        quantite: materielQuantite.trim() ? Number(materielQuantite.replace(",", ".")) : null,
+        unite: materielUnite.trim() || null,
+      });
+      setMaterielTitre("");
+      setMaterielQuantite("");
+      setMaterielUnite("");
+      setImprevuMode("none");
+      setRefreshKey((v) => v + 1);
+    } finally {
+      setSavingMateriel(false);
+    }
+  }
+
+  async function sendBlocage() {
+    if (!selected || !blocageText.trim() || sendingBlocage) return;
+    setSendingBlocage(true);
+    try {
+      await intervenantTerrainFeedbackCreate(token, {
+        chantier_id: selected.id,
+        category: "blocage",
+        urgency: "urgente",
+        title: "Blocage signalé",
+        description: blocageText.trim(),
+      });
+      setBlocageText("");
+      setImprevuMode("none");
+      setRefreshKey((v) => v + 1);
+    } finally {
+      setSendingBlocage(false);
+    }
   }
 
   if (loading) return <div className="flex min-h-dvh items-center justify-center bg-slate-50 text-sm font-semibold text-slate-500">Chargement du portail terrain...</div>;
@@ -257,7 +374,24 @@ export default function EmployeePortalV2Page() {
           <Card className="border-blue-200">
             <div className="flex items-center justify-between gap-3"><div><div className="text-[11px] font-bold uppercase tracking-[0.18em] text-blue-700">Prochaine intervention</div><h2 className="mt-1 text-xl font-bold">{selected.nom}</h2></div><Pill tone="blue">{formatDate(taskDate(next ?? {} as IntervenantTask))}</Pill></div>
             <div className="mt-4 rounded-xl bg-slate-50 p-3"><div className="text-xs font-semibold text-slate-500">Prochaine tâche</div><div className="mt-1 text-base font-bold">{next?.titre ?? "Aucune tâche planifiée"}</div>{next ? <div className="mt-1 text-sm text-slate-500">{[next.lot, next.zone_nom, next.corps_etat].filter(Boolean).join(" · ")}</div> : null}</div>
-            <button type="button" onClick={() => setTab("chantier")} className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl bg-slate-950 px-4 py-3 text-sm font-bold text-white">Voir le chantier <ChevronRight className="h-4 w-4" /></button>
+            <div className="mt-3 grid grid-cols-2 gap-2">
+              <button type="button" onClick={() => setTab("chantier")} className="flex items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-900">Voir le chantier <ChevronRight className="h-4 w-4" /></button>
+              <button type="button" onClick={() => { if (next) setTimeTaskId(next.id); setTab("renseigner"); }} className="flex items-center justify-center gap-2 rounded-xl bg-slate-950 px-4 py-3 text-sm font-bold text-white"><CheckCircle2 className="h-4 w-4" />Faire le point</button>
+            </div>
+          </Card>
+
+          <Card>
+            <div className="flex items-center justify-between"><h3 className="font-bold">Ma semaine</h3><Pill tone="slate">{selected.nom}</Pill></div>
+            <div className="mt-3 space-y-3">
+              {upcomingByDay(data.tasks).length ? upcomingByDay(data.tasks).map(({ date, items }) => (
+                <div key={date} className={`rounded-xl border p-3 ${isToday(date) ? "border-blue-300 bg-blue-50" : "border-slate-200 bg-white"}`}>
+                  <div className={`text-xs font-bold uppercase tracking-wide ${isToday(date) ? "text-blue-700" : "text-slate-500"}`}>{isToday(date) ? "Aujourd'hui" : formatDate(date)}</div>
+                  <div className="mt-1.5 space-y-1.5">
+                    {items.map((task) => <div key={task.id} className="text-sm font-semibold text-slate-900">{task.titre}<span className="ml-1.5 font-normal text-slate-500">{[task.lot, task.zone_nom].filter(Boolean).join(" · ")}</span></div>)}
+                  </div>
+                </div>
+              )) : <div className="rounded-xl bg-slate-50 p-3 text-sm text-slate-500">Aucune tâche planifiée pour l'instant.</div>}
+            </div>
           </Card>
 
           <div className="grid gap-4 sm:grid-cols-2">
@@ -282,15 +416,80 @@ export default function EmployeePortalV2Page() {
 
         {tab === "renseigner" && selected ? <>
           <Card><div className="flex items-center justify-between"><h2 className="text-lg font-bold">À renseigner</h2><ClipboardList className="h-5 w-5 text-blue-600" /></div><p className="mt-1 text-sm text-slate-500">Saisir uniquement les données terrain utiles.</p></Card>
-          <Card><h3 className="font-bold">Temps passé sur une tâche</h3><div className="mt-3 space-y-3"><select value={timeTaskId} onChange={(e) => setTimeTaskId(e.target.value)} className="w-full rounded-xl border border-slate-200 px-3 py-3 text-sm"><option value="">Choisir une tâche</option>{pendingTasks.map((task) => <option key={task.id} value={task.id}>{task.titre}</option>)}</select><div className="flex gap-2"><input value={timeHours} onChange={(e) => setTimeHours(e.target.value)} inputMode="decimal" placeholder="Ex. 3,5 h" className="min-w-0 flex-1 rounded-xl border border-slate-200 px-3 py-3 text-sm" /><button type="button" onClick={saveTime} disabled={savingTime} className="rounded-xl bg-slate-950 px-4 py-3 text-sm font-bold text-white">Enregistrer</button></div></div></Card>
+
+          <Card>
+            <h3 className="font-bold">Faire le point sur une tâche</h3>
+            <div className="mt-3 space-y-3">
+              <select value={timeTaskId} onChange={(e) => setTimeTaskId(e.target.value)} className="w-full rounded-xl border border-slate-200 px-3 py-3 text-sm"><option value="">Choisir une tâche</option>{pendingTasks.map((task) => <option key={task.id} value={task.id}>{task.titre}</option>)}</select>
+              <div className="flex gap-2">
+                <input value={timeHours} onChange={(e) => setTimeHours(e.target.value)} inputMode="decimal" placeholder="Heures, ex. 3,5" className="min-w-0 flex-1 rounded-xl border border-slate-200 px-3 py-3 text-sm" />
+                {pendingTasks.find((t) => t.id === timeTaskId)?.unite ? (
+                  <input value={timeQty} onChange={(e) => setTimeQty(e.target.value)} inputMode="decimal" placeholder={`Quantité (${pendingTasks.find((t) => t.id === timeTaskId)?.unite})`} className="min-w-0 flex-1 rounded-xl border border-slate-200 px-3 py-3 text-sm" />
+                ) : null}
+              </div>
+              <div>
+                <div className="text-xs font-semibold text-slate-500">Ça s'est bien passé ?</div>
+                <div className="mt-1.5 grid grid-cols-2 gap-2">
+                  <button type="button" onClick={() => setTimeWentWell(true)} className={`rounded-xl border px-3 py-2.5 text-sm font-bold ${timeWentWell === true ? "border-emerald-300 bg-emerald-50 text-emerald-700" : "border-slate-200 text-slate-600"}`}>Oui, tout va bien</button>
+                  <button type="button" onClick={() => setTimeWentWell(false)} className={`rounded-xl border px-3 py-2.5 text-sm font-bold ${timeWentWell === false ? "border-red-300 bg-red-50 text-red-700" : "border-slate-200 text-slate-600"}`}>Non, un souci</button>
+                </div>
+              </div>
+              <button type="button" onClick={saveTime} disabled={savingTime || !timeTaskId || !timeHours.trim()} className="w-full rounded-xl bg-slate-950 px-4 py-3 text-sm font-bold text-white disabled:opacity-40">{savingTime ? "Enregistrement..." : "Enregistrer"}</button>
+            </div>
+          </Card>
+
           <Card><h3 className="font-bold">Avancement des tâches</h3><div className="mt-3 space-y-2">{pendingTasks.slice(0, 10).map((task) => <div key={task.id} className="flex items-center justify-between gap-3 rounded-xl border border-slate-200 p-3"><div className="min-w-0"><div className="truncate text-sm font-semibold">{task.titre}</div><div className="text-xs text-slate-500">{formatDate(taskDate(task))}</div></div><button type="button" onClick={() => completeTask(task)} className="shrink-0 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-bold text-emerald-700">Terminer</button></div>)}</div></Card>
-          <button type="button" onClick={() => setTab("fil")} className="flex w-full items-center justify-center gap-2 rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm font-bold text-blue-700"><MessageCircle className="h-4 w-4" />Photo, remarque, blocage ou question</button>
+
+          <Card>
+            <h3 className="font-bold">Un imprévu ?</h3>
+            <div className="mt-3 grid grid-cols-3 gap-2">
+              <button type="button" onClick={() => setImprevuMode(imprevuMode === "materiel" ? "none" : "materiel")} className={`flex flex-col items-center gap-1.5 rounded-xl border p-3 text-center text-xs font-bold ${imprevuMode === "materiel" ? "border-blue-300 bg-blue-50 text-blue-700" : "border-slate-200 text-slate-600"}`}><PackageSearch className="h-5 w-5" />Matériel manquant</button>
+              <button type="button" onClick={() => setImprevuMode(imprevuMode === "blocage" ? "none" : "blocage")} className={`flex flex-col items-center gap-1.5 rounded-xl border p-3 text-center text-xs font-bold ${imprevuMode === "blocage" ? "border-red-300 bg-red-50 text-red-700" : "border-slate-200 text-slate-600"}`}><ShieldAlert className="h-5 w-5" />Blocage</button>
+              <button type="button" onClick={() => setTab("fil")} className="flex flex-col items-center gap-1.5 rounded-xl border border-slate-200 p-3 text-center text-xs font-bold text-slate-600"><MessageCircle className="h-5 w-5" />Photo / remarque</button>
+            </div>
+
+            {imprevuMode === "materiel" ? (
+              <div className="mt-3 space-y-2 rounded-xl bg-slate-50 p-3">
+                <input value={materielTitre} onChange={(e) => setMaterielTitre(e.target.value)} placeholder="Quoi ? Ex. Colle carrelage" className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm" />
+                <div className="flex gap-2">
+                  <input value={materielQuantite} onChange={(e) => setMaterielQuantite(e.target.value)} inputMode="decimal" placeholder="Quantité" className="min-w-0 flex-1 rounded-xl border border-slate-200 px-3 py-2.5 text-sm" />
+                  <input value={materielUnite} onChange={(e) => setMaterielUnite(e.target.value)} placeholder="Unité" className="min-w-0 flex-1 rounded-xl border border-slate-200 px-3 py-2.5 text-sm" />
+                </div>
+                <button type="button" onClick={saveMateriel} disabled={savingMateriel || !materielTitre.trim()} className="w-full rounded-xl bg-slate-950 px-4 py-2.5 text-sm font-bold text-white disabled:opacity-40">{savingMateriel ? "Envoi..." : "Envoyer la demande"}</button>
+              </div>
+            ) : null}
+
+            {imprevuMode === "blocage" ? (
+              <div className="mt-3 space-y-2 rounded-xl bg-slate-50 p-3">
+                <textarea rows={3} value={blocageText} onChange={(e) => setBlocageText(e.target.value)} placeholder="Décris le blocage en quelques mots..." className="w-full resize-none rounded-xl border border-slate-200 px-3 py-2.5 text-sm" />
+                <button type="button" onClick={sendBlocage} disabled={sendingBlocage || !blocageText.trim()} className="w-full rounded-xl bg-red-600 px-4 py-2.5 text-sm font-bold text-white disabled:opacity-40">{sendingBlocage ? "Envoi..." : "Signaler le blocage"}</button>
+              </div>
+            ) : null}
+          </Card>
+
+          <Card>
+            <h3 className="font-bold">Checklist du jour</h3>
+            <div className="mt-3 grid grid-cols-3 gap-2">
+              {([
+                ["has_equipment", "Équipement"],
+                ["has_materials", "Matériel"],
+                ["has_information", "Infos reçues"],
+              ] as const).map(([key, label]) => {
+                const checked = Boolean(checklist?.[key]);
+                return (
+                  <button key={key} type="button" onClick={() => toggleChecklistItem(key)} disabled={savingChecklistKey === key} className={`flex flex-col items-center gap-1.5 rounded-xl border p-3 text-center text-xs font-bold ${checked ? "border-emerald-300 bg-emerald-50 text-emerald-700" : "border-slate-200 text-slate-500"}`}>
+                    <CheckCircle2 className="h-5 w-5" />{label}
+                  </button>
+                );
+              })}
+            </div>
+          </Card>
         </> : null}
 
         {tab === "fil" && selected ? <>
           <Card><div className="flex items-center justify-between"><div><div className="text-[11px] font-bold uppercase tracking-[0.18em] text-blue-700">Fil chantier</div><h2 className="mt-1 text-lg font-bold">{selected.nom}</h2></div><MessageCircle className="h-6 w-6 text-blue-600" /></div><p className="mt-2 text-sm text-slate-500">Conversation interne chantier, pensée comme WhatsApp. Les messages restent rattachés au chantier.</p></Card>
           <div className="space-y-2">{data.feedbacks.length ? [...data.feedbacks].sort((a, b) => String(a.created_at).localeCompare(String(b.created_at))).map((item) => <div key={item.id} className={`flex ${item.author_intervenant_id ? "justify-end" : "justify-start"}`}><div className={`max-w-[88%] rounded-2xl px-4 py-3 text-sm shadow-sm ${item.author_intervenant_id ? "bg-blue-600 text-white" : "border border-slate-200 bg-white text-slate-800"}`}><div>{item.description || item.title}</div><div className={`mt-1 text-[10px] ${item.author_intervenant_id ? "text-blue-100" : "text-slate-400"}`}>{item.created_at ? new Date(item.created_at).toLocaleString("fr-FR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }) : ""}</div></div></div>) : <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-6 text-center text-sm text-slate-500">Aucun message sur ce chantier.</div>}</div>
-          <div className="sticky bottom-20 rounded-2xl border border-slate-200 bg-white p-2 shadow-lg"><div className="flex items-end gap-2"><textarea rows={2} value={message} onChange={(e) => setMessage(e.target.value)} placeholder="Écrire un message chantier..." className="min-h-[52px] flex-1 resize-none rounded-xl border-0 bg-slate-50 px-3 py-2.5 text-sm outline-none" /><button type="button" onClick={sendMessage} disabled={!message.trim() || sending} className="flex h-12 w-12 items-center justify-center rounded-xl bg-blue-600 text-white disabled:opacity-40"><Send className="h-5 w-5" /></button></div></div>
+          <div className="sticky bottom-20 rounded-2xl border border-slate-200 bg-white p-2 shadow-lg"><div className="flex items-end gap-2"><textarea rows={2} value={message} onChange={(e) => setMessage(e.target.value)} placeholder="Écrire un message chantier..." className="min-h-[52px] flex-1 resize-none rounded-xl border-0 bg-slate-50 px-3 py-2.5 text-sm outline-none" /><button type="button" onClick={() => sendMessage()} disabled={!message.trim() || sending} className="flex h-12 w-12 items-center justify-center rounded-xl bg-blue-600 text-white disabled:opacity-40"><Send className="h-5 w-5" /></button></div></div>
         </> : null}
       </main>
 
