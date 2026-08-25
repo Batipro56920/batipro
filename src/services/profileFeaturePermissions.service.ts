@@ -1,4 +1,5 @@
 import { supabase } from "../lib/supabaseClient";
+import { getCurrentOrganizationId } from "./currentUserProfile.service";
 import {
   COMPANY_FEATURE_MODULES,
   COMPANY_FEATURE_PILLAR_LABELS,
@@ -6,8 +7,12 @@ import {
   type CompanyFeaturePillar,
 } from "../config/companyFeatures";
 
+export type CompanyFeatureModuleActionSuffix = "_create" | "_edit" | "_delete";
+export type CompanyFeatureModuleActionKey = `${CompanyFeatureModuleId}${CompanyFeatureModuleActionSuffix}`;
+
 export type ProfileFeaturePermissionKey =
   | CompanyFeatureModuleId
+  | CompanyFeatureModuleActionKey
   | "intervenants"
   | "crm"
   | "crm_prospects"
@@ -39,7 +44,12 @@ export type ProfileFeaturePermissions = Partial<Record<ProfileFeaturePermissionK
 
 export type ProfileFeaturePermissionsResult = {
   role: string | null;
+  /** Profil type auquel ce compte est rattaché en direct, ou null s'il est en droits personnalisés. */
+  permissionPresetId: BusinessProfilePresetId | null;
+  /** Droits effectifs (profil type + exceptions fusionnés). C'est ce qu'il faut utiliser pour tout contrôle d'accès. */
   permissions: ProfileFeaturePermissions;
+  /** Uniquement les exceptions explicites par rapport au profil type (ou l'intégralité des droits si aucun profil type n'est rattaché). */
+  overrides: ProfileFeaturePermissions;
   schemaReady: boolean;
 };
 
@@ -53,6 +63,21 @@ export type ProfilePermissionSection = {
   id: string;
   label: string;
   permissions: ProfilePermissionDefinition[];
+};
+
+export type ProfilePermissionModuleAction = "view" | "create" | "edit" | "delete";
+
+export type ProfilePermissionModuleRow = {
+  moduleId: CompanyFeatureModuleId;
+  label: string;
+  description: string;
+  keys: Record<ProfilePermissionModuleAction, ProfileFeaturePermissionKey>;
+};
+
+export type ProfilePermissionModulePillar = {
+  pillar: CompanyFeaturePillar;
+  label: string;
+  modules: ProfilePermissionModuleRow[];
 };
 
 export type BusinessProfilePresetId =
@@ -79,8 +104,23 @@ export type BusinessProfilePermissionPresetsResult = {
 
 const PROFILE_PERMISSION_PRESETS_TABLE = "profile_permission_presets";
 
+const MODULE_ACTION_SUFFIXES: Array<{ action: Exclude<ProfilePermissionModuleAction, "view">; suffix: CompanyFeatureModuleActionSuffix; label: string }> = [
+  { action: "create", suffix: "_create", label: "Créer" },
+  { action: "edit", suffix: "_edit", label: "Modifier" },
+  { action: "delete", suffix: "_delete", label: "Supprimer" },
+];
+
+function moduleActionKey(moduleId: CompanyFeatureModuleId, suffix: CompanyFeatureModuleActionSuffix): CompanyFeatureModuleActionKey {
+  return `${moduleId}${suffix}` as CompanyFeatureModuleActionKey;
+}
+
+const MODULE_ACTION_KEYS: CompanyFeatureModuleActionKey[] = COMPANY_FEATURE_MODULES.flatMap((module) =>
+  MODULE_ACTION_SUFFIXES.map(({ suffix }) => moduleActionKey(module.id, suffix)),
+);
+
 const PROFILE_PERMISSION_KEYS: ProfileFeaturePermissionKey[] = [
   ...COMPANY_FEATURE_MODULES.map((module) => module.id),
+  ...MODULE_ACTION_KEYS,
   "intervenants",
   "crm",
   "crm_prospects",
@@ -185,6 +225,10 @@ export const BUSINESS_PROFILE_PERMISSION_PRESETS: BusinessProfilePermissionPrese
       entreprise_parametres: false,
       finance_margin_edit: false,
       finance_purchases: true,
+      // Le conducteur voit et alimente le journal chantier, mais ne purge pas l'historique.
+      journal_chantier_delete: false,
+      // Les réserves qu'il lève restent tracées : pas de suppression définitive côté terrain.
+      reserves_delete: false,
     },
   },
   {
@@ -218,6 +262,11 @@ export const BUSINESS_PROFILE_PERMISSION_PRESETS: BusinessProfilePermissionPrese
       entreprise_parametres: false,
       intervenants: false,
       bibliotheque: false,
+      // Lecture financière large, mais aucune création/suppression hors facturation/achats.
+      budget_create: false,
+      budget_edit: false,
+      budget_delete: false,
+      rapports_delete: false,
     },
   },
   {
@@ -250,6 +299,7 @@ export const BUSINESS_PROFILE_PERMISSION_PRESETS: BusinessProfilePermissionPrese
       statistiques: false,
       entreprise_parametres: false,
       intervenants: false,
+      documents_delete: false,
     },
   },
   {
@@ -278,6 +328,10 @@ export const BUSINESS_PROFILE_PERMISSION_PRESETS: BusinessProfilePermissionPrese
       chantier_financier_edit: false,
       chantier_financier_margin: false,
       chantier_financier_billing: false,
+      // Le terrain déclare et suit, mais ne purge rien définitivement.
+      documents_delete: false,
+      reserves_delete: false,
+      journal_chantier_delete: false,
     },
   },
   {
@@ -305,11 +359,20 @@ export const BUSINESS_PROFILE_PERMISSION_PRESETS: BusinessProfilePermissionPrese
       chantier_financier_edit: false,
       chantier_financier_margin: false,
       chantier_financier_billing: false,
+      // Un partenaire externe ne modifie ni ne supprime les tâches, seulement les exécute.
+      taches_create: false,
+      taches_delete: false,
+      documents_delete: false,
+      journal_chantier_delete: false,
     },
   },
 ];
 
-const EXTRA_PERMISSION_DEFINITIONS: Record<Exclude<ProfileFeaturePermissionKey, CompanyFeatureModuleId>, ProfilePermissionDefinition> = {
+const BUSINESS_PROFILE_PRESET_ID_SET = new Set<BusinessProfilePresetId>(
+  BUSINESS_PROFILE_PERMISSION_PRESETS.map((preset) => preset.id),
+);
+
+const EXTRA_PERMISSION_DEFINITIONS: Record<Exclude<ProfileFeaturePermissionKey, CompanyFeatureModuleId | CompanyFeatureModuleActionKey>, ProfilePermissionDefinition> = {
   intervenants: { key: "intervenants", label: "Intervenants", description: "Accès à l’onglet intervenants dans les chantiers et à la page globale des intervenants." },
   crm: { key: "crm", label: "CRM", description: "Accès au cockpit CRM, prospects, clients, opportunités, devis, agenda et SAV." },
   crm_prospects: { key: "crm_prospects", label: "Gerer prospects", description: "Creation, modification, qualification et archivage des prospects." },
@@ -346,6 +409,12 @@ function normalizeText(value: unknown): string | null {
   return text || null;
 }
 
+function normalizeBusinessProfilePresetId(value: unknown): BusinessProfilePresetId | null {
+  const text = String(value ?? "").trim();
+  return BUSINESS_PROFILE_PRESET_ID_SET.has(text as BusinessProfilePresetId) ? (text as BusinessProfilePresetId) : null;
+}
+
+/** Normalise un jeu de droits "sparse" : ne garde que les clés explicitement true/false, ignore le reste. Sert de base aux exceptions (overrides) par utilisateur. */
 function normalizePermissions(raw: unknown): ProfileFeaturePermissions {
   const input = raw && typeof raw === "object" && !Array.isArray(raw) ? (raw as Record<string, unknown>) : {};
   const output: ProfileFeaturePermissions = {};
@@ -356,9 +425,24 @@ function normalizePermissions(raw: unknown): ProfileFeaturePermissions {
   return output;
 }
 
+/** Pour les modules qui n'ont pas encore de créer/modifier/supprimer explicite, aligne ces 3 actions sur "voir" par défaut — l'admin peut ensuite les affiner précisément dans l'éditeur de profil type. */
+function withDerivedModuleActionDefaults(base: ProfileFeaturePermissions): ProfileFeaturePermissions {
+  const result: ProfileFeaturePermissions = { ...base };
+  for (const module of COMPANY_FEATURE_MODULES) {
+    const view = base[module.id] === true;
+    for (const { suffix } of MODULE_ACTION_SUFFIXES) {
+      const key = moduleActionKey(module.id, suffix);
+      if (result[key] === undefined) result[key] = view;
+    }
+  }
+  return result;
+}
+
+/** Normalise un preset de profil type : toutes les clés sont explicites (true/false), avec dérivation créer/modifier/supprimer depuis "voir" quand non précisé. */
 function normalizePresetPermissions(raw: ProfileFeaturePermissions): ProfileFeaturePermissions {
+  const withDefaults = withDerivedModuleActionDefaults(raw);
   const output: ProfileFeaturePermissions = {};
-  for (const key of PROFILE_PERMISSION_KEYS) output[key] = raw[key] === true;
+  for (const key of PROFILE_PERMISSION_KEYS) output[key] = withDefaults[key] === true;
   return output;
 }
 
@@ -398,8 +482,17 @@ function mergePresetTemplates(rows: Array<{ preset_id: string; permissions: unkn
   return BUSINESS_PROFILE_PERMISSION_PRESETS.map((preset) => {
     const defaultPermissions = normalizePresetPermissions(preset.permissions);
     const savedPermissions = byId.get(preset.id);
-    return { ...preset, permissions: savedPermissions ? { ...defaultPermissions, ...savedPermissions } : defaultPermissions };
+    return { ...preset, permissions: savedPermissions ? normalizePresetPermissions({ ...defaultPermissions, ...savedPermissions }) : defaultPermissions };
   });
+}
+
+/** Fusionne le profil type rattaché (s'il y en a un) avec les exceptions explicites de l'utilisateur pour obtenir ses droits effectifs. */
+async function computeEffectivePermissions(presetId: BusinessProfilePresetId | null, overrides: ProfileFeaturePermissions): Promise<ProfileFeaturePermissions> {
+  if (!presetId) return overrides;
+  const { presets } = await listBusinessProfilePermissionPresets();
+  const preset = presets.find((entry) => entry.id === presetId) ?? getBusinessProfilePermissionPreset(presetId);
+  const base = preset ? normalizePresetPermissions(preset.permissions) : {};
+  return { ...base, ...overrides };
 }
 
 export function isCompanyModulePermissionKey(key: ProfileFeaturePermissionKey): key is CompanyFeatureModuleId {
@@ -407,17 +500,22 @@ export function isCompanyModulePermissionKey(key: ProfileFeaturePermissionKey): 
 }
 
 export function getBusinessProfilePermissionPreset(presetId: BusinessProfilePresetId): BusinessProfilePermissionPreset | null {
-  return BUSINESS_PROFILE_PERMISSION_PRESETS.find((preset) => preset.id === presetId) ?? null;
+  const preset = BUSINESS_PROFILE_PERMISSION_PRESETS.find((entry) => entry.id === presetId) ?? null;
+  return preset ? { ...preset, permissions: normalizePresetPermissions(preset.permissions) } : null;
 }
 
 export async function listBusinessProfilePermissionPresets(): Promise<BusinessProfilePermissionPresetsResult> {
-  const userId = await getCurrentUserId();
-  if (!userId) return { presets: mergePresetTemplates(null), schemaReady: supportsProfilePermissionPresetTemplates !== false };
+  let organizationId: string;
+  try {
+    organizationId = await getCurrentOrganizationId();
+  } catch {
+    return { presets: mergePresetTemplates(null), schemaReady: supportsProfilePermissionPresetTemplates !== false };
+  }
 
   const query = await (supabase as any)
     .from(PROFILE_PERMISSION_PRESETS_TABLE)
     .select("preset_id, permissions")
-    .eq("organization_id", userId);
+    .eq("organization_id", organizationId);
 
   if (query.error) {
     if (isMissingPresetTemplatesTableError(query.error)) {
@@ -433,16 +531,15 @@ export async function listBusinessProfilePermissionPresets(): Promise<BusinessPr
 
 export async function saveBusinessProfilePermissionPreset(presetId: BusinessProfilePresetId, permissions: ProfileFeaturePermissions): Promise<ProfileFeaturePermissions> {
   await assertCurrentUserCanManageProfilePermissions();
-  const userId = await getCurrentUserId();
-  if (!userId) throw new Error("Utilisateur non authentifié.");
   if (!getBusinessProfilePermissionPreset(presetId)) throw new Error("Profil métier inconnu.");
+  const organizationId = await getCurrentOrganizationId();
 
   const nextPermissions = normalizePresetPermissions(permissions);
   const { data, error } = await (supabase as any)
     .from(PROFILE_PERMISSION_PRESETS_TABLE)
     .upsert(
       {
-        organization_id: userId,
+        organization_id: organizationId,
         preset_id: presetId,
         permissions: nextPermissions,
         updated_at: new Date().toISOString(),
@@ -518,13 +615,50 @@ export function getProfilePermissionSections(): ProfilePermissionSection[] {
   ];
 }
 
+/** Matrice Voir / Créer / Modifier / Supprimer par module chantier, groupée par pilier — pour l'éditeur de profils types. */
+export function getProfilePermissionModuleMatrix(): ProfilePermissionModulePillar[] {
+  return (Object.keys(COMPANY_FEATURE_PILLAR_LABELS) as CompanyFeaturePillar[]).map((pillar) => ({
+    pillar,
+    label: COMPANY_FEATURE_PILLAR_LABELS[pillar],
+    modules: COMPANY_FEATURE_MODULES.filter((module) => module.pillar === pillar).map((module) => ({
+      moduleId: module.id,
+      label: module.label,
+      description: module.description,
+      keys: {
+        view: module.id,
+        create: moduleActionKey(module.id, "_create"),
+        edit: moduleActionKey(module.id, "_edit"),
+        delete: moduleActionKey(module.id, "_delete"),
+      },
+    })),
+  }));
+}
+
+export const PROFILE_PERMISSION_MODULE_ACTION_LABELS: Record<ProfilePermissionModuleAction, string> = {
+  view: "Voir",
+  create: "Créer",
+  edit: "Modifier",
+  delete: "Supprimer",
+};
+
 export async function getCurrentProfileFeaturePermissions(): Promise<ProfileFeaturePermissionsResult> {
   const userId = await getCurrentUserId();
-  if (!userId) return { role: null, permissions: {}, schemaReady: supportsProfileFeaturePermissions !== false };
+  if (!userId) {
+    return { role: null, permissionPresetId: null, permissions: {}, overrides: {}, schemaReady: supportsProfileFeaturePermissions !== false };
+  }
+  return loadProfileFeaturePermissions(userId);
+}
 
+export async function getProfileFeaturePermissionsForUser(userId: string): Promise<ProfileFeaturePermissionsResult> {
+  const targetUserId = String(userId ?? "").trim();
+  if (!targetUserId) throw new Error("Utilisateur cible manquant.");
+  return loadProfileFeaturePermissions(targetUserId);
+}
+
+async function loadProfileFeaturePermissions(userId: string): Promise<ProfileFeaturePermissionsResult> {
   const query = await (supabase as any)
     .from("profiles")
-    .select(supportsProfileFeaturePermissions === false ? "role" : "role, feature_permissions")
+    .select(supportsProfileFeaturePermissions === false ? "role" : "role, feature_permissions, permission_preset_id")
     .eq("id", userId)
     .maybeSingle();
 
@@ -533,50 +667,43 @@ export async function getCurrentProfileFeaturePermissions(): Promise<ProfileFeat
       supportsProfileFeaturePermissions = false;
       const fallback = await (supabase as any).from("profiles").select("role").eq("id", userId).maybeSingle();
       if (fallback.error) throw new Error(fallback.error.message);
-      return { role: normalizeText(fallback.data?.role), permissions: {}, schemaReady: false };
+      return { role: normalizeText(fallback.data?.role), permissionPresetId: null, permissions: {}, overrides: {}, schemaReady: false };
     }
     throw new Error(query.error.message);
   }
 
   if (supportsProfileFeaturePermissions !== false) supportsProfileFeaturePermissions = true;
-  return { role: normalizeText(query.data?.role), permissions: normalizePermissions(query.data?.feature_permissions), schemaReady: true };
+  const overrides = normalizePermissions(query.data?.feature_permissions);
+  const permissionPresetId = normalizeBusinessProfilePresetId(query.data?.permission_preset_id);
+  const permissions = await computeEffectivePermissions(permissionPresetId, overrides);
+  return { role: normalizeText(query.data?.role), permissionPresetId, permissions, overrides, schemaReady: true };
 }
 
 export async function setCurrentProfileFeaturePermission(key: ProfileFeaturePermissionKey, enabled: boolean): Promise<ProfileFeaturePermissions> {
   const userId = await getCurrentUserId();
   if (!userId) throw new Error("Utilisateur non authentifié.");
-  if (!PROFILE_PERMISSION_KEY_SET.has(key)) throw new Error("Permission profil inconnue.");
-
-  const current = await getCurrentProfileFeaturePermissions();
-  if (!isAdminRole(current.role)) throw new Error("Seul un profil ADMIN peut activer cette permission.");
-  if (!current.schemaReady) throw new Error("Migration permissions profil non appliquée sur Supabase.");
-
-  return updateProfileFeaturePermissionsForUser(userId, { ...current.permissions, [key]: enabled });
+  const result = await setProfileFeaturePermissionOverrideForUser(userId, key, enabled);
+  return result.permissions;
 }
 
 export async function setCurrentProfileFeaturePermissionPreset(presetId: BusinessProfilePresetId): Promise<ProfileFeaturePermissions> {
   const userId = await getCurrentUserId();
   if (!userId) throw new Error("Utilisateur non authentifié.");
-  return setProfileFeaturePermissionPresetForUser(userId, presetId);
+  const result = await setProfileFeaturePermissionPresetForUser(userId, presetId);
+  return result.permissions;
 }
 
-export async function setProfileFeaturePermissionPresetForUser(userId: string, presetId: BusinessProfilePresetId): Promise<ProfileFeaturePermissions> {
+/** Rattache un utilisateur en direct à un profil type : il suit désormais ce profil type en temps réel, sans exception. */
+export async function setProfileFeaturePermissionPresetForUser(userId: string, presetId: BusinessProfilePresetId): Promise<ProfileFeaturePermissionsResult> {
+  await assertCurrentUserCanManageProfilePermissions();
   const targetUserId = String(userId ?? "").trim();
   if (!targetUserId) throw new Error("Utilisateur cible manquant.");
-  const { presets } = await listBusinessProfilePermissionPresets();
-  const preset = presets.find((entry) => entry.id === presetId) ?? getBusinessProfilePermissionPreset(presetId);
-  if (!preset) throw new Error("Profil métier inconnu.");
-  return updateProfileFeaturePermissionsForUser(targetUserId, normalizePresetPermissions(preset.permissions));
-}
+  if (!getBusinessProfilePermissionPreset(presetId)) throw new Error("Profil métier inconnu.");
 
-async function updateProfileFeaturePermissionsForUser(userId: string, nextPermissions: ProfileFeaturePermissions): Promise<ProfileFeaturePermissions> {
-  await assertCurrentUserCanManageProfilePermissions();
-  const { data, error } = await (supabase as any)
+  const { error } = await (supabase as any)
     .from("profiles")
-    .update({ feature_permissions: normalizePermissions(nextPermissions) })
-    .eq("id", userId)
-    .select("feature_permissions")
-    .maybeSingle();
+    .update({ permission_preset_id: presetId, feature_permissions: {} })
+    .eq("id", targetUserId);
 
   if (error) {
     if (isMissingFeaturePermissionsColumnError(error)) {
@@ -587,7 +714,67 @@ async function updateProfileFeaturePermissionsForUser(userId: string, nextPermis
   }
 
   supportsProfileFeaturePermissions = true;
-  return normalizePermissions(data?.feature_permissions);
+  return loadProfileFeaturePermissions(targetUserId);
+}
+
+/** Détache un utilisateur de son profil type : ses droits effectifs actuels deviennent une copie figée et personnalisée. */
+export async function detachProfileFeaturePermissionPresetForUser(userId: string): Promise<ProfileFeaturePermissionsResult> {
+  await assertCurrentUserCanManageProfilePermissions();
+  const targetUserId = String(userId ?? "").trim();
+  if (!targetUserId) throw new Error("Utilisateur cible manquant.");
+
+  const current = await loadProfileFeaturePermissions(targetUserId);
+  if (!current.permissionPresetId) return current;
+
+  const { error } = await (supabase as any)
+    .from("profiles")
+    .update({ permission_preset_id: null, feature_permissions: current.permissions })
+    .eq("id", targetUserId);
+
+  if (error) throw new Error(error.message);
+  return loadProfileFeaturePermissions(targetUserId);
+}
+
+/** Ajoute/modifie une exception ponctuelle pour un utilisateur (que ce dernier suive un profil type ou soit en droits personnalisés). */
+export async function setProfileFeaturePermissionOverrideForUser(userId: string, key: ProfileFeaturePermissionKey, enabled: boolean): Promise<ProfileFeaturePermissionsResult> {
+  await assertCurrentUserCanManageProfilePermissions();
+  const targetUserId = String(userId ?? "").trim();
+  if (!targetUserId) throw new Error("Utilisateur cible manquant.");
+  if (!PROFILE_PERMISSION_KEY_SET.has(key)) throw new Error("Permission profil inconnue.");
+
+  const current = await loadProfileFeaturePermissions(targetUserId);
+  const nextOverrides = { ...current.overrides, [key]: enabled };
+  await updateProfileFeaturePermissionsForUser(targetUserId, nextOverrides);
+  return loadProfileFeaturePermissions(targetUserId);
+}
+
+/** Retire l'exception d'un utilisateur pour une permission donnée : il retrouve la valeur de son profil type (s'il en a un), ou "non accordé" sinon. */
+export async function clearProfileFeaturePermissionOverrideForUser(userId: string, key: ProfileFeaturePermissionKey): Promise<ProfileFeaturePermissionsResult> {
+  await assertCurrentUserCanManageProfilePermissions();
+  const targetUserId = String(userId ?? "").trim();
+  if (!targetUserId) throw new Error("Utilisateur cible manquant.");
+
+  const current = await loadProfileFeaturePermissions(targetUserId);
+  const nextOverrides = { ...current.overrides };
+  delete nextOverrides[key];
+  await updateProfileFeaturePermissionsForUser(targetUserId, nextOverrides);
+  return loadProfileFeaturePermissions(targetUserId);
+}
+
+async function updateProfileFeaturePermissionsForUser(userId: string, nextOverrides: ProfileFeaturePermissions): Promise<void> {
+  const { error } = await (supabase as any)
+    .from("profiles")
+    .update({ feature_permissions: nextOverrides })
+    .eq("id", userId);
+
+  if (error) {
+    if (isMissingFeaturePermissionsColumnError(error)) {
+      supportsProfileFeaturePermissions = false;
+      throw new Error("Migration permissions profil non appliquée sur Supabase.");
+    }
+    throw new Error(error.message);
+  }
+  supportsProfileFeaturePermissions = true;
 }
 
 export function hasProfileFeaturePermission(permissions: ProfileFeaturePermissions | null | undefined, key: ProfileFeaturePermissionKey, role: string | null | undefined = "ADMIN"): boolean {
