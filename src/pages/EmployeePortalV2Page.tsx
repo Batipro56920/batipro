@@ -39,20 +39,25 @@ import {
 
 /**
  * A portal link generated from "Ouvrir portail" (admin preview / terrain access)
- * carries a bare `?token=` — it is never an authenticated Supabase session.
- * Resolve that token first, remember it for subsequent loads in this browser,
- * and only fall back to the logged-in session sentinel when no token is present
- * anywhere (the "real account, logged in with email/password" case).
+ * carries a bare `?token=` — it is never an authenticated Supabase session, and it is
+ * scoped to a single chantier. Once opened, that token used to stay in localStorage
+ * and silently override a real account's session on every later visit — an intervenant
+ * with a genuine email/password login would keep seeing only that one chantier instead
+ * of their full access. An explicit `?token=` in the URL always wins (that is a deliberate
+ * "open this link now" action), but absent that, a real Supabase session always takes
+ * priority over a leftover stored token — the stored token is only a fallback for
+ * token-only access (no account at all).
  */
-function resolvePortalToken(search: string): string {
+async function resolveEffectivePortalToken(search: string): Promise<string> {
   const fromUrl = extractIntervenantToken(search);
   if (fromUrl) {
     persistIntervenantToken(fromUrl);
     return fromUrl;
   }
+  const { data } = await supabase.auth.getSession();
+  if (data.session) return AUTH_SESSION_PORTAL_TOKEN;
   const stored = readStoredIntervenantToken();
-  if (stored) return stored;
-  return AUTH_SESSION_PORTAL_TOKEN;
+  return stored || AUTH_SESSION_PORTAL_TOKEN;
 }
 
 type Tab = "accueil" | "chantier" | "renseigner" | "fil";
@@ -145,7 +150,8 @@ function Pill({ children, tone = "slate" }: { children: React.ReactNode; tone?: 
 export default function EmployeePortalV2Page() {
   const navigate = useNavigate();
   const location = useLocation();
-  const token = useMemo(() => resolvePortalToken(location.search), [location.search]);
+  const [resolvedToken, setResolvedToken] = useState<string | null>(null);
+  const token = resolvedToken ?? AUTH_SESSION_PORTAL_TOKEN;
   const [tab, setTab] = useState<Tab>("accueil");
   const [name, setName] = useState("Intervenant");
   const [intervenantId, setIntervenantId] = useState("");
@@ -175,6 +181,15 @@ export default function EmployeePortalV2Page() {
   const [sendingBlocage, setSendingBlocage] = useState(false);
 
   useEffect(() => {
+    let alive = true;
+    void resolveEffectivePortalToken(location.search).then((resolved) => {
+      if (alive) setResolvedToken(resolved);
+    });
+    return () => { alive = false; };
+  }, [location.search]);
+
+  useEffect(() => {
+    if (resolvedToken === null) return;
     let alive = true;
     async function load() {
       setLoading(true);
@@ -218,7 +233,11 @@ export default function EmployeePortalV2Page() {
     }
     void load();
     return () => { alive = false; };
-  }, [refreshKey, token]);
+    // token est dérivé de resolvedToken avec un repli qui peut être la même valeur (le sentinel
+    // AUTH_SESSION) avant et après résolution : dépendre de resolvedToken garantit que cet effet
+    // se redéclenche bien une fois le token réellement résolu, même quand la valeur ne change pas.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [refreshKey, resolvedToken]);
 
   const selected = useMemo(() => chantiers.find((c) => c.id === selectedId) ?? chantiers[0] ?? null, [chantiers, selectedId]);
 
