@@ -963,17 +963,17 @@ export default function BibliothequeTasksPage() {
       ) : (
         <>
           <div className="hidden overflow-hidden rounded-2xl border bg-white md:block">
-            <table className="w-full text-sm">
+            <table className="w-full table-fixed text-sm">
               <thead className="bg-slate-50 text-slate-600">
                 <tr>
-                  <th className="px-4 py-3 text-left font-medium">{t("bibliothequeTasks.headers.title")}</th>
-                  <th className="px-4 py-3 text-left font-medium">{t("bibliothequeTasks.headers.lot")}</th>
-                  <th className="px-4 py-3 text-left font-medium">{t("bibliothequeTasks.headers.unit")}</th>
-                  <th className="px-4 py-3 text-left font-medium">{t("bibliothequeTasks.headers.defaultQuantity")}</th>
-                  <th className="px-4 py-3 text-left font-medium">{t("bibliothequeTasks.headers.timePerUnit")}</th>
-                  <th className="px-4 py-3 text-left font-medium">Coût ref.</th>
-                  <th className="px-4 py-3 text-left font-medium">{t("bibliothequeTasks.headers.updatedAt")}</th>
-                  <th className="px-4 py-3 text-left font-medium">{t("common.actions.edit")}</th>
+                  <th className="w-[28%] px-4 py-3 text-left font-medium">{t("bibliothequeTasks.headers.title")}</th>
+                  <th className="w-[10%] px-4 py-3 text-left font-medium">{t("bibliothequeTasks.headers.lot")}</th>
+                  <th className="w-[7%] px-4 py-3 text-left font-medium">{t("bibliothequeTasks.headers.unit")}</th>
+                  <th className="w-[8%] px-4 py-3 text-left font-medium">{t("bibliothequeTasks.headers.defaultQuantity")}</th>
+                  <th className="w-[9%] px-4 py-3 text-left font-medium">{t("bibliothequeTasks.headers.timePerUnit")}</th>
+                  <th className="w-[9%] px-4 py-3 text-left font-medium">Coût ref.</th>
+                  <th className="w-[9%] px-4 py-3 text-left font-medium">{t("bibliothequeTasks.headers.updatedAt")}</th>
+                  <th className="w-[20%] px-4 py-3 text-left font-medium">{t("common.actions.edit")}</th>
                 </tr>
               </thead>
               <tbody>
