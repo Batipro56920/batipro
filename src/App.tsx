@@ -135,7 +135,7 @@ function StatistiquesRoute() {
 
 function EmployeePortalRoute() {
   return (
-    <RequireAuth>
+    <RequireAuth allow="intervenant">
       <RouteSuspense label="Chargement du portail employe...">
         <IntervenantPortalPage />
       </RouteSuspense>

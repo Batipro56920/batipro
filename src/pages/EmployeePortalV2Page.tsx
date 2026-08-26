@@ -4,6 +4,8 @@ import { useLocation, useNavigate } from "react-router-dom";
 
 import { supabase } from "../lib/supabaseClient";
 import {
+  intervenantChantierFeedCreate,
+  intervenantChantierFeedList,
   intervenantConsigneList,
   intervenantDailyChecklistGet,
   intervenantDailyChecklistUpsert,
@@ -16,17 +18,16 @@ import {
   intervenantSession,
   intervenantTaskMainMaterials,
   intervenantTerrainFeedbackCreate,
-  intervenantTerrainFeedbackList,
   intervenantTimeCreate,
   intervenantUpdateTaskStatus,
   type IntervenantChantier,
+  type IntervenantChantierFeedPost,
   type IntervenantConsigne,
   type IntervenantDailyChecklist,
   type IntervenantDocument,
   type IntervenantInformationRequest,
   type IntervenantTask,
   type IntervenantTaskMainMaterial,
-  type IntervenantTerrainFeedback,
 } from "../services/intervenantPortal.service";
 import {
   AUTH_SESSION_PORTAL_TOKEN,
@@ -61,10 +62,10 @@ type SiteData = {
   documents: IntervenantDocument[];
   consignes: IntervenantConsigne[];
   requests: IntervenantInformationRequest[];
-  feedbacks: IntervenantTerrainFeedback[];
+  feed: IntervenantChantierFeedPost[];
 };
 
-const EMPTY: SiteData = { tasks: [], documents: [], consignes: [], requests: [], feedbacks: [] };
+const EMPTY: SiteData = { tasks: [], documents: [], consignes: [], requests: [], feed: [] };
 
 function isoToday() {
   const d = new Date();
@@ -125,6 +126,13 @@ function progress(data: SiteData, chantier: IntervenantChantier) {
   return Math.round((data.tasks.filter(taskDone).length / data.tasks.length) * 100);
 }
 
+/** Avancement courant de la tâche (quantité réalisée / quantité prévue), pour préremplir la saisie du jour. */
+function taskProgressPercent(task: IntervenantTask | null | undefined): number {
+  if (!task || !task.quantite || task.quantite <= 0) return 0;
+  const done = Number(task.quantite_realisee ?? 0);
+  return Math.max(0, Math.min(100, Math.round((done / task.quantite) * 100)));
+}
+
 function Card({ children, className = "" }: { children: React.ReactNode; className?: string }) {
   return <section className={`rounded-2xl border border-slate-200 bg-white p-4 shadow-sm ${className}`}>{children}</section>;
 }
@@ -140,6 +148,7 @@ export default function EmployeePortalV2Page() {
   const token = useMemo(() => resolvePortalToken(location.search), [location.search]);
   const [tab, setTab] = useState<Tab>("accueil");
   const [name, setName] = useState("Intervenant");
+  const [intervenantId, setIntervenantId] = useState("");
   const [chantiers, setChantiers] = useState<IntervenantChantier[]>([]);
   const [selectedId, setSelectedId] = useState("");
   const [dataByChantier, setDataByChantier] = useState<Record<string, SiteData>>({});
@@ -150,7 +159,7 @@ export default function EmployeePortalV2Page() {
   const [sending, setSending] = useState(false);
   const [timeTaskId, setTimeTaskId] = useState("");
   const [timeHours, setTimeHours] = useState("");
-  const [timeQty, setTimeQty] = useState("");
+  const [timeProgressPercent, setTimeProgressPercent] = useState("");
   const [timeWentWell, setTimeWentWell] = useState<boolean | null>(null);
   const [savingTime, setSavingTime] = useState(false);
   const [mainMaterials, setMainMaterials] = useState<IntervenantTaskMainMaterial[]>([]);
@@ -175,21 +184,31 @@ export default function EmployeePortalV2Page() {
         if (!alive) return;
         const sites = rows.length ? rows : session.chantiers;
         setName(session.intervenant.nom || "Intervenant");
+        setIntervenantId(session.intervenant.id || "");
         setChantiers(sites);
-        const first = selectedId && sites.some((site) => site.id === selectedId) ? selectedId : sites[0]?.id ?? "";
-        setSelectedId(first);
         const entries = await Promise.all(sites.map(async (site) => {
-          const [tasks, documents, consignes, requests, feedbacks] = await Promise.all([
+          const [tasks, documents, consignes, requests, feed] = await Promise.all([
             intervenantGetTasks(token, site.id).catch(() => []),
             intervenantGetDocuments(token, site.id).catch(() => []),
             intervenantConsigneList(token, site.id).catch(() => []),
             intervenantInformationRequestList(token, site.id).catch(() => []),
-            intervenantTerrainFeedbackList(token, site.id).catch(() => []),
+            intervenantChantierFeedList(token, site.id).catch(() => []),
           ]);
-          return [site.id, { tasks, documents, consignes, requests, feedbacks } as SiteData] as const;
+          return [site.id, { tasks, documents, consignes, requests, feed } as SiteData] as const;
         }));
         if (!alive) return;
-        setDataByChantier(Object.fromEntries(entries));
+        const dataMap = Object.fromEntries(entries);
+        setDataByChantier(dataMap);
+
+        // Chantier du jour : si un seul chantier a une tâche planifiée aujourd'hui, on l'ouvre directement.
+        // Sinon (plusieurs, ou aucun), l'ouvrier choisit via le sélecteur — sans écraser un choix déjà fait.
+        setSelectedId((current) => {
+          if (current && sites.some((site) => site.id === current)) return current;
+          const todaysSiteIds = sites
+            .filter((site) => (dataMap[site.id]?.tasks ?? []).some((t) => !taskDone(t) && isToday(taskDate(t))))
+            .map((site) => site.id);
+          return todaysSiteIds[0] ?? sites[0]?.id ?? "";
+        });
       } catch (e) {
         if (!alive) return;
         setError(e instanceof Error ? e.message : "Portail terrain indisponible.");
@@ -202,6 +221,36 @@ export default function EmployeePortalV2Page() {
   }, [refreshKey, token]);
 
   const selected = useMemo(() => chantiers.find((c) => c.id === selectedId) ?? chantiers[0] ?? null, [chantiers, selectedId]);
+
+  // Chaque chantier a son propre espace "à renseigner" / "fil" : un brouillon commencé sur un
+  // chantier ne doit pas se retrouver envoyé sur un autre après un changement de sélection.
+  useEffect(() => {
+    setMessage("");
+    setTimeTaskId("");
+    setTimeHours("");
+    setTimeProgressPercent("");
+    setTimeWentWell(null);
+    setMaterialConsumptionQty({});
+    setImprevuMode("none");
+    setMaterielTitre("");
+    setMaterielQuantite("");
+    setMaterielUnite("");
+    setBlocageText("");
+  }, [selected?.id]);
+
+  const todaysChantierIds = useMemo(() => {
+    const ids = new Set<string>();
+    for (const site of chantiers) {
+      const siteData = dataByChantier[site.id];
+      if (siteData?.tasks.some((t) => !taskDone(t) && isToday(taskDate(t)))) ids.add(site.id);
+    }
+    return ids;
+  }, [chantiers, dataByChantier]);
+
+  const orderedChantiers = useMemo(
+    () => [...chantiers].sort((a, b) => Number(todaysChantierIds.has(b.id)) - Number(todaysChantierIds.has(a.id))),
+    [chantiers, todaysChantierIds],
+  );
 
   useEffect(() => {
     let alive = true;
@@ -220,6 +269,12 @@ export default function EmployeePortalV2Page() {
       .catch(() => { if (alive) setMainMaterials([]); });
     return () => { alive = false; };
   }, [token, selected?.id, timeTaskId]);
+
+  useEffect(() => {
+    const task = (selected ? dataByChantier[selected.id]?.tasks ?? [] : []).find((t) => t.id === timeTaskId);
+    setTimeProgressPercent(task ? String(taskProgressPercent(task)) : "");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [timeTaskId]);
 
   async function toggleChecklistItem(key: "has_equipment" | "has_materials" | "has_information") {
     if (savingChecklistKey) return;
@@ -274,17 +329,11 @@ export default function EmployeePortalV2Page() {
     navigate("/login", { replace: true });
   }
 
-  async function sendMessage(category: string = "fil_chantier") {
+  async function sendMessage() {
     if (!selected || !message.trim() || sending) return;
     setSending(true);
     try {
-      await intervenantTerrainFeedbackCreate(token, {
-        chantier_id: selected.id,
-        category,
-        urgency: category === "blocage" ? "urgente" : "normale",
-        title: category === "blocage" ? "Blocage signalé" : "Message chantier",
-        description: message.trim(),
-      });
+      await intervenantChantierFeedCreate(token, { chantier_id: selected.id, body: message.trim() });
       setMessage("");
       setRefreshKey((v) => v + 1);
     } finally {
@@ -296,7 +345,7 @@ export default function EmployeePortalV2Page() {
     if (!selected || !timeTaskId || !timeHours.trim() || savingTime) return;
     const hours = Number(timeHours.replace(",", "."));
     if (!Number.isFinite(hours) || hours <= 0) return;
-    const qty = timeQty.trim() ? Number(timeQty.replace(",", ".")) : null;
+    const progressPercent = timeProgressPercent.trim() ? Number(timeProgressPercent.replace(",", ".")) : null;
     setSavingTime(true);
     try {
       await intervenantTimeCreate(token, {
@@ -304,7 +353,7 @@ export default function EmployeePortalV2Page() {
         task_id: timeTaskId,
         work_date: isoToday(),
         duration_hours: hours,
-        quantite_realisee: qty !== null && Number.isFinite(qty) ? qty : null,
+        progress_percent: progressPercent !== null && Number.isFinite(progressPercent) ? progressPercent : null,
       });
       await Promise.all(
         mainMaterials.map(async (material) => {
@@ -322,7 +371,7 @@ export default function EmployeePortalV2Page() {
         }),
       );
       setTimeHours("");
-      setTimeQty("");
+      setTimeProgressPercent("");
       setMaterialConsumptionQty({});
       if (timeWentWell === false) {
         setImprevuMode("blocage");
@@ -394,7 +443,14 @@ export default function EmployeePortalV2Page() {
       </header>
 
       <main className="mx-auto max-w-3xl space-y-4 px-4 py-4">
-        {chantiers.length > 1 ? <select value={selected?.id ?? ""} onChange={(e) => setSelectedId(e.target.value)} className="w-full rounded-xl border border-slate-200 bg-white px-3 py-3 font-semibold">{chantiers.map((c) => <option key={c.id} value={c.id}>{c.nom}</option>)}</select> : null}
+        {chantiers.length > 1 ? <>
+          <select value={selected?.id ?? ""} onChange={(e) => setSelectedId(e.target.value)} className="w-full rounded-xl border border-slate-200 bg-white px-3 py-3 font-semibold">
+            {orderedChantiers.map((c) => <option key={c.id} value={c.id}>{c.nom}{todaysChantierIds.has(c.id) ? " — aujourd'hui" : ""}</option>)}
+          </select>
+          {selected && !todaysChantierIds.has(selected.id) && todaysChantierIds.size > 0 ? (
+            <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-800">Tu as une tâche planifiée aujourd'hui sur un autre chantier.</div>
+          ) : null}
+        </> : null}
 
         {tab === "accueil" && selected ? <>
           <Card className="border-blue-200">
@@ -439,18 +495,30 @@ export default function EmployeePortalV2Page() {
         </> : null}
 
         {tab === "renseigner" && selected ? <>
-          <Card><div className="flex items-center justify-between"><h2 className="text-lg font-bold">À renseigner</h2><ClipboardList className="h-5 w-5 text-blue-600" /></div><p className="mt-1 text-sm text-slate-500">Saisir uniquement les données terrain utiles.</p></Card>
+          <Card><div className="flex items-center justify-between"><div><div className="text-[11px] font-bold uppercase tracking-[0.18em] text-blue-700">{selected.nom}</div><h2 className="mt-1 text-lg font-bold">À renseigner</h2></div><ClipboardList className="h-5 w-5 text-blue-600" /></div><p className="mt-1 text-sm text-slate-500">Saisir uniquement les données terrain utiles à ce chantier.</p></Card>
 
           <Card>
             <h3 className="font-bold">Faire le point sur une tâche</h3>
             <div className="mt-3 space-y-3">
               <select value={timeTaskId} onChange={(e) => setTimeTaskId(e.target.value)} className="w-full rounded-xl border border-slate-200 px-3 py-3 text-sm"><option value="">Choisir une tâche</option>{pendingTasks.map((task) => <option key={task.id} value={task.id}>{task.titre}</option>)}</select>
-              <div className="flex gap-2">
-                <input value={timeHours} onChange={(e) => setTimeHours(e.target.value)} inputMode="decimal" placeholder="Heures, ex. 3,5" className="min-w-0 flex-1 rounded-xl border border-slate-200 px-3 py-3 text-sm" />
-                {pendingTasks.find((t) => t.id === timeTaskId)?.unite ? (
-                  <input value={timeQty} onChange={(e) => setTimeQty(e.target.value)} inputMode="decimal" placeholder={`Quantité (${pendingTasks.find((t) => t.id === timeTaskId)?.unite})`} className="min-w-0 flex-1 rounded-xl border border-slate-200 px-3 py-3 text-sm" />
-                ) : null}
-              </div>
+              <input value={timeHours} onChange={(e) => setTimeHours(e.target.value)} inputMode="decimal" placeholder="Heures passées, ex. 3,5" className="w-full rounded-xl border border-slate-200 px-3 py-3 text-sm" />
+              {timeTaskId ? (
+                <div>
+                  <div className="flex items-center justify-between text-xs font-semibold text-slate-500">
+                    <span>Où en est la tâche aujourd'hui ?</span>
+                    <span className="text-slate-900">{timeProgressPercent || 0}%</span>
+                  </div>
+                  <input
+                    type="range"
+                    min={0}
+                    max={100}
+                    value={timeProgressPercent || 0}
+                    onChange={(e) => setTimeProgressPercent(e.target.value)}
+                    className="mt-2 w-full"
+                  />
+                  <p className="mt-1 text-xs text-slate-400">Avancement global de la tâche, pas seulement d'aujourd'hui — utile quand une tâche se fait en plusieurs étapes (ex. structure, pose, bandes) difficiles à mesurer en m² au jour le jour.</p>
+                </div>
+              ) : null}
               {mainMaterials.map((material) => (
                 <input
                   key={material.material_ratio_id}
@@ -521,8 +589,8 @@ export default function EmployeePortalV2Page() {
         </> : null}
 
         {tab === "fil" && selected ? <>
-          <Card><div className="flex items-center justify-between"><div><div className="text-[11px] font-bold uppercase tracking-[0.18em] text-blue-700">Fil chantier</div><h2 className="mt-1 text-lg font-bold">{selected.nom}</h2></div><MessageCircle className="h-6 w-6 text-blue-600" /></div><p className="mt-2 text-sm text-slate-500">Conversation interne chantier, pensée comme WhatsApp. Les messages restent rattachés au chantier.</p></Card>
-          <div className="space-y-2">{data.feedbacks.length ? [...data.feedbacks].sort((a, b) => String(a.created_at).localeCompare(String(b.created_at))).map((item) => <div key={item.id} className={`flex ${item.author_intervenant_id ? "justify-end" : "justify-start"}`}><div className={`max-w-[88%] rounded-2xl px-4 py-3 text-sm shadow-sm ${item.author_intervenant_id ? "bg-blue-600 text-white" : "border border-slate-200 bg-white text-slate-800"}`}><div>{item.description || item.title}</div><div className={`mt-1 text-[10px] ${item.author_intervenant_id ? "text-blue-100" : "text-slate-400"}`}>{item.created_at ? new Date(item.created_at).toLocaleString("fr-FR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }) : ""}</div></div></div>) : <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-6 text-center text-sm text-slate-500">Aucun message sur ce chantier.</div>}</div>
+          <Card><div className="flex items-center justify-between"><div><div className="text-[11px] font-bold uppercase tracking-[0.18em] text-blue-700">Fil chantier</div><h2 className="mt-1 text-lg font-bold">{selected.nom}</h2></div><MessageCircle className="h-6 w-6 text-blue-600" /></div><p className="mt-2 text-sm text-slate-500">Fil partagé du chantier : visible par tous les intervenants (ouvriers, sous-traitants) et par le bureau.</p></Card>
+          <div className="space-y-2">{data.feed.length ? data.feed.map((item) => <div key={item.id} className={`flex ${item.author_intervenant_id === intervenantId ? "justify-end" : "justify-start"}`}><div className={`max-w-[88%] rounded-2xl px-4 py-3 text-sm shadow-sm ${item.author_intervenant_id === intervenantId ? "bg-blue-600 text-white" : "border border-slate-200 bg-white text-slate-800"}`}><div className={`text-[10px] font-semibold uppercase tracking-wide ${item.author_intervenant_id === intervenantId ? "text-blue-100" : "text-slate-400"}`}>{item.author_intervenant_id === intervenantId ? "Toi" : item.author_name || "Équipe"}</div><div className="mt-0.5 whitespace-pre-wrap">{item.body}</div><div className={`mt-1 text-[10px] ${item.author_intervenant_id === intervenantId ? "text-blue-100" : "text-slate-400"}`}>{item.created_at ? new Date(item.created_at).toLocaleString("fr-FR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }) : ""}</div></div></div>) : <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-6 text-center text-sm text-slate-500">Aucun message sur ce chantier.</div>}</div>
           <div className="sticky bottom-20 rounded-2xl border border-slate-200 bg-white p-2 shadow-lg"><div className="flex items-end gap-2"><textarea rows={2} value={message} onChange={(e) => setMessage(e.target.value)} placeholder="Écrire un message chantier..." className="min-h-[52px] flex-1 resize-none rounded-xl border-0 bg-slate-50 px-3 py-2.5 text-sm outline-none" /><button type="button" onClick={() => sendMessage()} disabled={!message.trim() || sending} className="flex h-12 w-12 items-center justify-center rounded-xl bg-blue-600 text-white disabled:opacity-40"><Send className="h-5 w-5" /></button></div></div>
         </> : null}
       </main>
