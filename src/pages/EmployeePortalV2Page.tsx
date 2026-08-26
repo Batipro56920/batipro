@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
-import { AlertTriangle, CalendarDays, CheckCircle2, ChevronRight, ClipboardList, FileText, Home, LogOut, MapPin, MessageCircle, PackageSearch, Phone, RefreshCw, Send, ShieldAlert, Wrench } from "lucide-react";
+import { AlertTriangle, CalendarDays, Camera, CheckCircle2, ChevronRight, ClipboardList, FileText, Home, LogOut, MapPin, MessageCircle, PackageSearch, Phone, RefreshCw, Send, ShieldAlert, Wrench } from "lucide-react";
 import { useLocation, useNavigate } from "react-router-dom";
 
 import { supabase } from "../lib/supabaseClient";
 import {
   intervenantChantierFeedCreate,
   intervenantChantierFeedList,
+  intervenantChantierFeedUploadPhoto,
   intervenantConsigneList,
   intervenantDailyChecklistGet,
   intervenantDailyChecklistUpsert,
@@ -163,6 +164,8 @@ export default function EmployeePortalV2Page() {
   const [refreshKey, setRefreshKey] = useState(0);
   const [message, setMessage] = useState("");
   const [sending, setSending] = useState(false);
+  const [sendingPhoto, setSendingPhoto] = useState(false);
+  const [photoError, setPhotoError] = useState<string | null>(null);
   const [timeTaskId, setTimeTaskId] = useState("");
   const [timeHours, setTimeHours] = useState("");
   const [timeProgressPercent, setTimeProgressPercent] = useState("");
@@ -357,6 +360,21 @@ export default function EmployeePortalV2Page() {
       setRefreshKey((v) => v + 1);
     } finally {
       setSending(false);
+    }
+  }
+
+  async function sendPhoto(file: File | null) {
+    if (!selected || !file || sendingPhoto) return;
+    setSendingPhoto(true);
+    setPhotoError(null);
+    try {
+      await intervenantChantierFeedUploadPhoto(token, { chantier_id: selected.id, body: message.trim(), file });
+      setMessage("");
+      setRefreshKey((v) => v + 1);
+    } catch (err) {
+      setPhotoError(err instanceof Error ? err.message : "Envoi photo impossible.");
+    } finally {
+      setSendingPhoto(false);
     }
   }
 
@@ -566,7 +584,7 @@ export default function EmployeePortalV2Page() {
             <div className="mt-3 grid grid-cols-3 gap-2">
               <button type="button" onClick={() => setImprevuMode(imprevuMode === "materiel" ? "none" : "materiel")} className={`flex flex-col items-center gap-1.5 rounded-xl border p-3 text-center text-xs font-bold ${imprevuMode === "materiel" ? "border-blue-300 bg-blue-50 text-blue-700" : "border-slate-200 text-slate-600"}`}><PackageSearch className="h-5 w-5" />Matériel manquant</button>
               <button type="button" onClick={() => setImprevuMode(imprevuMode === "blocage" ? "none" : "blocage")} className={`flex flex-col items-center gap-1.5 rounded-xl border p-3 text-center text-xs font-bold ${imprevuMode === "blocage" ? "border-red-300 bg-red-50 text-red-700" : "border-slate-200 text-slate-600"}`}><ShieldAlert className="h-5 w-5" />Blocage</button>
-              <button type="button" onClick={() => setTab("fil")} className="flex flex-col items-center gap-1.5 rounded-xl border border-slate-200 p-3 text-center text-xs font-bold text-slate-600"><MessageCircle className="h-5 w-5" />Photo / remarque</button>
+              <button type="button" onClick={() => setTab("fil")} className="flex flex-col items-center gap-1.5 rounded-xl border border-slate-200 p-3 text-center text-xs font-bold text-slate-600"><Camera className="h-5 w-5" />Photo / remarque</button>
             </div>
 
             {imprevuMode === "materiel" ? (
@@ -609,8 +627,25 @@ export default function EmployeePortalV2Page() {
 
         {tab === "fil" && selected ? <>
           <Card><div className="flex items-center justify-between"><div><div className="text-[11px] font-bold uppercase tracking-[0.18em] text-blue-700">Fil chantier</div><h2 className="mt-1 text-lg font-bold">{selected.nom}</h2></div><MessageCircle className="h-6 w-6 text-blue-600" /></div><p className="mt-2 text-sm text-slate-500">Fil partagé du chantier : visible par tous les intervenants (ouvriers, sous-traitants) et par le bureau.</p></Card>
-          <div className="space-y-2">{data.feed.length ? data.feed.map((item) => <div key={item.id} className={`flex ${item.author_intervenant_id === intervenantId ? "justify-end" : "justify-start"}`}><div className={`max-w-[88%] rounded-2xl px-4 py-3 text-sm shadow-sm ${item.author_intervenant_id === intervenantId ? "bg-blue-600 text-white" : "border border-slate-200 bg-white text-slate-800"}`}><div className={`text-[10px] font-semibold uppercase tracking-wide ${item.author_intervenant_id === intervenantId ? "text-blue-100" : "text-slate-400"}`}>{item.author_intervenant_id === intervenantId ? "Toi" : item.author_name || "Équipe"}</div><div className="mt-0.5 whitespace-pre-wrap">{item.body}</div><div className={`mt-1 text-[10px] ${item.author_intervenant_id === intervenantId ? "text-blue-100" : "text-slate-400"}`}>{item.created_at ? new Date(item.created_at).toLocaleString("fr-FR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }) : ""}</div></div></div>) : <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-6 text-center text-sm text-slate-500">Aucun message sur ce chantier.</div>}</div>
-          <div className="sticky bottom-20 rounded-2xl border border-slate-200 bg-white p-2 shadow-lg"><div className="flex items-end gap-2"><textarea rows={2} value={message} onChange={(e) => setMessage(e.target.value)} placeholder="Écrire un message chantier..." className="min-h-[52px] flex-1 resize-none rounded-xl border-0 bg-slate-50 px-3 py-2.5 text-sm outline-none" /><button type="button" onClick={() => sendMessage()} disabled={!message.trim() || sending} className="flex h-12 w-12 items-center justify-center rounded-xl bg-blue-600 text-white disabled:opacity-40"><Send className="h-5 w-5" /></button></div></div>
+          {photoError ? <div className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs font-semibold text-red-700">{photoError}</div> : null}
+          <div className="space-y-2">{data.feed.length ? data.feed.map((item) => <div key={item.id} className={`flex ${item.author_intervenant_id === intervenantId ? "justify-end" : "justify-start"}`}><div className={`max-w-[88%] rounded-2xl px-4 py-3 text-sm shadow-sm ${item.author_intervenant_id === intervenantId ? "bg-blue-600 text-white" : "border border-slate-200 bg-white text-slate-800"}`}><div className={`text-[10px] font-semibold uppercase tracking-wide ${item.author_intervenant_id === intervenantId ? "text-blue-100" : "text-slate-400"}`}>{item.author_intervenant_id === intervenantId ? "Toi" : item.author_name || "Équipe"}</div><div className="mt-0.5 whitespace-pre-wrap">{item.body}</div>{item.attachment ? (item.attachment.mime_type?.startsWith("image/") && item.attachment.signed_url ? (<a href={item.attachment.signed_url} target="_blank" rel="noreferrer" className="mt-2 block overflow-hidden rounded-xl border border-white/20"><img src={item.attachment.signed_url} alt={item.attachment.file_name} className="max-h-64 w-full object-cover" /></a>) : item.attachment.signed_url ? (<a href={item.attachment.signed_url} target="_blank" rel="noreferrer" className={`mt-2 flex items-center gap-2 rounded-xl border px-3 py-2 text-xs font-semibold ${item.author_intervenant_id === intervenantId ? "border-white/30 text-white" : "border-slate-200 text-slate-700"}`}><FileText className="h-4 w-4 shrink-0" /><span className="truncate">{item.attachment.file_name}</span></a>) : null) : null}<div className={`mt-1 text-[10px] ${item.author_intervenant_id === intervenantId ? "text-blue-100" : "text-slate-400"}`}>{item.created_at ? new Date(item.created_at).toLocaleString("fr-FR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }) : ""}</div></div></div>) : <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-6 text-center text-sm text-slate-500">Aucun message sur ce chantier.</div>}</div>
+          <div className="sticky bottom-20 rounded-2xl border border-slate-200 bg-white p-2 shadow-lg">
+            <div className="flex items-end gap-2">
+              <textarea rows={2} value={message} onChange={(e) => setMessage(e.target.value)} placeholder="Écrire un message, ou ajoute une photo..." className="min-h-[52px] flex-1 resize-none rounded-xl border-0 bg-slate-50 px-3 py-2.5 text-sm outline-none" />
+              <label className="flex h-12 w-12 shrink-0 cursor-pointer items-center justify-center rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-50">
+                <input
+                  type="file"
+                  accept="image/*,application/pdf"
+                  capture="environment"
+                  className="hidden"
+                  disabled={sendingPhoto}
+                  onChange={(e) => { void sendPhoto(e.target.files?.[0] ?? null); e.target.value = ""; }}
+                />
+                {sendingPhoto ? <RefreshCw className="h-5 w-5 animate-spin" /> : <Camera className="h-5 w-5" />}
+              </label>
+              <button type="button" onClick={() => sendMessage()} disabled={!message.trim() || sending} className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-blue-600 text-white disabled:opacity-40"><Send className="h-5 w-5" /></button>
+            </div>
+          </div>
         </> : null}
       </main>
 

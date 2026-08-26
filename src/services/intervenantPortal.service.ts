@@ -907,6 +907,14 @@ export async function intervenantTerrainFeedbackList(
   return rows.map((row) => mapTerrainFeedback((row ?? {}) as Record<string, unknown>));
 }
 
+export type IntervenantChantierFeedAttachment = {
+  id: string;
+  file_name: string;
+  mime_type: string | null;
+  size_bytes: number | null;
+  signed_url: string | null;
+};
+
 export type IntervenantChantierFeedPost = {
   id: string;
   chantier_id: string;
@@ -919,9 +927,13 @@ export type IntervenantChantierFeedPost = {
   parent_post_id: string | null;
   created_at: string | null;
   updated_at: string | null;
+  attachment: IntervenantChantierFeedAttachment | null;
 };
 
 function mapChantierFeedPost(row: Record<string, unknown>): IntervenantChantierFeedPost {
+  const attachmentRow = (row.attachment && typeof row.attachment === "object" ? row.attachment : null) as
+    | Record<string, unknown>
+    | null;
   return {
     id: String(row.id ?? ""),
     chantier_id: String(row.chantier_id ?? ""),
@@ -934,6 +946,15 @@ function mapChantierFeedPost(row: Record<string, unknown>): IntervenantChantierF
     parent_post_id: asNullableString(row.parent_post_id),
     created_at: asNullableString(row.created_at),
     updated_at: asNullableString(row.updated_at),
+    attachment: attachmentRow
+      ? {
+          id: String(attachmentRow.id ?? ""),
+          file_name: String(attachmentRow.file_name ?? ""),
+          mime_type: asNullableString(attachmentRow.mime_type),
+          size_bytes: attachmentRow.size_bytes === null || attachmentRow.size_bytes === undefined ? null : Number(attachmentRow.size_bytes),
+          signed_url: asNullableString(attachmentRow.signed_url),
+        }
+      : null,
   };
 }
 
@@ -964,6 +985,30 @@ export async function intervenantChantierFeedCreate(
   if (error) throw new Error(rpcMessage(error, "Envoi message impossible."));
 
   return mapChantierFeedPost((data && typeof data === "object" ? data : {}) as Record<string, unknown>);
+}
+
+/** Envoie une photo (ou un PDF) dans le fil chantier partagé : crée le message et la pièce jointe en un seul appel. */
+export async function intervenantChantierFeedUploadPhoto(
+  token: string,
+  payload: { chantier_id: string; body?: string; file: File },
+): Promise<IntervenantChantierFeedPost> {
+  const formData = new FormData();
+  formData.set("token", normalizePortalToken(token) ?? "");
+  formData.set("chantier_id", payload.chantier_id);
+  formData.set("body", payload.body ?? "");
+  formData.set("file", payload.file);
+
+  const { data, error } = await supabase.functions.invoke("intervenant-chantier-feed-upload", {
+    body: formData,
+  });
+  if (error) throw new Error(rpcMessage(error, "Envoi photo impossible."));
+
+  const row = (data && typeof data === "object" ? (data as Record<string, unknown>).post : null) as
+    | Record<string, unknown>
+    | null;
+  if (!row) throw new Error("Message introuvable dans la reponse.");
+
+  return mapChantierFeedPost(row);
 }
 
 export async function intervenantTerrainFeedbackUploadPhoto(
