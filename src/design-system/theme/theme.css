@@ -1,12 +1,9 @@
 @import url("https://rsms.me/inter/inter.css");
 
-/* Dark mode pilote par la classe `.dark` posee sur <html> (Tailwind v4). */
-@custom-variant dark (&:where(.dark, .dark *));
-
 /* ------------------------------------------------------------------ *
  * Tokens semantiques Batipro.
  * Les composants ne referencent JAMAIS une couleur brute : ils passent
- * par ces tokens, ce qui rend le dark mode gratuit et le theme evolutif.
+ * par ces tokens.
  * ------------------------------------------------------------------ */
 :root {
   color-scheme: light;
@@ -69,59 +66,6 @@
   --bt-ease-spring: cubic-bezier(0.32, 0.72, 0, 1);
 }
 
-.dark {
-  color-scheme: dark;
-
-  /* Quatre paliers reellement distincts : la profondeur se lit sans bordure. */
-  --bt-bg-app: #0b111c;
-  --bt-bg-sidebar: #0b1526;
-  --bt-bg-surface: #131b2a;
-  --bt-bg-elevated: #1a2333;
-  --bt-bg-interactive: #1f2a3c;
-  --bt-bg-selected: #16294a;
-  --bt-track: #26314a;
-  --bt-sidebar-contrast: #e8eefb;
-
-  --bt-border-subtle: #223047;
-  --bt-border-strong: #5f7392;
-
-  --bt-text-primary: #eaf0f8;
-  --bt-text-secondary: #afbdd0;
-  --bt-text-muted: #8494ab;
-
-  --bt-primary: #4c8dff;
-  --bt-primary-hover: #6ba1ff;
-  --bt-primary-active: #3d7bee;
-  --bt-primary-contrast: #08111f;
-  --bt-primary-soft: #132444;
-  --bt-primary-on-soft: #93baff;
-
-  /* Statuts desatures : ils ne doivent pas vibrer sur fond sombre. */
-  --bt-success: #34c77b;
-  --bt-success-strong: #34c77b;
-  --bt-success-contrast: #08111f;
-  --bt-success-soft: #0f2a1e;
-  --bt-success-on: #5fdca0;
-  --bt-warning: #e9a23b;
-  --bt-warning-soft: #2a1f0e;
-  --bt-warning-on: #f0be6e;
-  --bt-danger: #f26d6d;
-  --bt-danger-soft: #2b1315;
-  --bt-danger-on: #fb9494;
-  --bt-info: #48b8e8;
-  --bt-info-soft: #0c2430;
-  --bt-info-on: #7bd0f2;
-  --bt-neutral: #7a8aa0;
-  --bt-neutral-soft: #1c2637;
-  --bt-neutral-on: #a7b5c8;
-
-  --bt-shadow-elevated: 0 1px 2px rgb(0 0 0 / 0.4), 0 12px 32px -8px rgb(0 0 0 / 0.55);
-  --bt-shadow-overlay: 0 24px 64px -16px rgb(0 0 0 / 0.7);
-  --bt-overlay: rgb(0 0 0 / 0.6);
-}
-
-/* `inline` est obligatoire : sans lui Tailwind figerait la valeur au build
-   et les utilitaires ne suivraient pas le changement de theme. */
 @theme inline {
   --color-app: var(--bt-bg-app);
   --color-sidebar: var(--bt-bg-sidebar);

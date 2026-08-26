@@ -2,7 +2,6 @@ import { useMemo } from "react";
 import { Link } from "react-router-dom";
 import { BriefcaseBusiness, FileText, RotateCcw } from "lucide-react";
 import { Button } from "../../../components/ui/button";
-import { ThemeSelector } from "../../../design-system/theme/ThemeSelector";
 
 type DashboardHeaderProps = {
   /** Nom d'affichage du profil connecte ; null tant qu'il n'est pas charge. */
@@ -22,7 +21,6 @@ function greeting(hour: number): string {
 /**
  * Niveau 0 : une ligne de contexte et une barre d'actions.
  * La salutation ne consomme plus le premier niveau typographique — il revient au verdict.
- * Le selecteur de theme est une preference, pas une action : il vit sur la ligne de contexte.
  */
 export function DashboardHeader({ userName, locale, isFiltered, onReset }: DashboardHeaderProps) {
   const now = useMemo(() => new Date(), []);
@@ -36,12 +34,9 @@ export function DashboardHeader({ userName, locale, isFiltered, onReset }: Dashb
 
   return (
     <header className="space-y-3">
-      <div className="flex items-center justify-between gap-3">
-        <p className="bt-caption min-w-0 truncate text-muted">
-          {dateLabel} <span aria-hidden>·</span> {hello}
-        </p>
-        <ThemeSelector className="shrink-0" />
-      </div>
+      <p className="bt-caption min-w-0 truncate text-muted">
+        {dateLabel} <span aria-hidden>·</span> {hello}
+      </p>
 
       <div className="flex items-center gap-2">
         {/* Une seule reinitialisation pour toute la page : l'etat vit dans l'URL,

@@ -29,21 +29,6 @@
         }).catch(() => {});
       }
     </script>
-    <script>
-      (function () {
-        try {
-          var stored = localStorage.getItem("batipro.theme");
-          var mode = stored === "light" || stored === "dark" || stored === "system" ? stored : "system";
-          var dark = mode === "dark" || (mode === "system" && window.matchMedia("(prefers-color-scheme: dark)").matches);
-          var root = document.documentElement;
-          root.classList.toggle("dark", dark);
-          root.dataset.theme = dark ? "dark" : "light";
-          root.style.colorScheme = dark ? "dark" : "light";
-        } catch (error) {
-          /* preference indisponible : on garde le theme clair par defaut */
-        }
-      })();
-    </script>
   </head>
   <body>
     <div id="root"></div>

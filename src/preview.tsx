@@ -5,14 +5,11 @@
  */
 import ReactDOM from "react-dom/client";
 import { MemoryRouter } from "react-router-dom";
-import { ThemeProvider } from "./design-system/theme/ThemeProvider";
 import { DashboardPreview } from "./preview/DashboardPreview";
 import "./index.css";
 
 ReactDOM.createRoot(document.getElementById("root")!).render(
-  <ThemeProvider>
-    <MemoryRouter>
-      <DashboardPreview />
-    </MemoryRouter>
-  </ThemeProvider>,
+  <MemoryRouter>
+    <DashboardPreview />
+  </MemoryRouter>,
 );
