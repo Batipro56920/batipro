@@ -669,6 +669,44 @@ export async function intervenantTimeList(token: string, chantierId: string): Pr
   }));
 }
 
+export type IntervenantTaskMainMaterial = {
+  material_ratio_id: string;
+  material_name: string;
+  ratio_unit: string;
+};
+
+/** Matériau(x) principal(aux) d'une tâche (marqués sur le modèle) — pour savoir si un champ de consommation doit apparaître. */
+export async function intervenantTaskMainMaterials(
+  token: string,
+  chantierId: string,
+  taskId: string,
+): Promise<IntervenantTaskMainMaterial[]> {
+  const { data, error } = await (supabase as any).rpc("intervenant_task_main_materials", {
+    p_token: normalizePortalToken(token),
+    p_chantier_id: chantierId,
+    p_task_id: taskId,
+  });
+  if (error) throw new Error(rpcMessage(error, "Chargement matériaux impossible."));
+
+  const rows = Array.isArray(data) ? data : [];
+  return rows.map((row) => ({
+    material_ratio_id: String(row.material_ratio_id ?? ""),
+    material_name: String(row.material_name ?? ""),
+    ratio_unit: String(row.ratio_unit ?? ""),
+  }));
+}
+
+export async function intervenantMaterialConsumptionCreate(
+  token: string,
+  payload: { chantier_id: string; task_id: string; material_ratio_id: string; quantite_consommee: number; work_date?: string | null },
+): Promise<void> {
+  const { error } = await (supabase as any).rpc("intervenant_material_consumption_create", {
+    p_token: normalizePortalToken(token),
+    p_payload: payload,
+  });
+  if (error) throw new Error(rpcMessage(error, "Enregistrement consommation impossible."));
+}
+
 export async function intervenantMaterielCreate(
   token: string,
   payload: IntervenantMaterielCreatePayload,
@@ -867,6 +905,65 @@ export async function intervenantTerrainFeedbackList(
 
   const rows = Array.isArray(data) ? data : [];
   return rows.map((row) => mapTerrainFeedback((row ?? {}) as Record<string, unknown>));
+}
+
+export type IntervenantChantierFeedPost = {
+  id: string;
+  chantier_id: string;
+  author_id: string | null;
+  author_name: string | null;
+  author_role: string | null;
+  author_intervenant_id: string | null;
+  body: string;
+  visibility: string;
+  parent_post_id: string | null;
+  created_at: string | null;
+  updated_at: string | null;
+};
+
+function mapChantierFeedPost(row: Record<string, unknown>): IntervenantChantierFeedPost {
+  return {
+    id: String(row.id ?? ""),
+    chantier_id: String(row.chantier_id ?? ""),
+    author_id: asNullableString(row.author_id),
+    author_name: asNullableString(row.author_name),
+    author_role: asNullableString(row.author_role),
+    author_intervenant_id: asNullableString(row.author_intervenant_id),
+    body: String(row.body ?? ""),
+    visibility: String(row.visibility ?? "equipe"),
+    parent_post_id: asNullableString(row.parent_post_id),
+    created_at: asNullableString(row.created_at),
+    updated_at: asNullableString(row.updated_at),
+  };
+}
+
+/** Fil chantier partagé : mêmes publications que le bureau (chantier_feed_posts), pas un fil personnel par auteur. */
+export async function intervenantChantierFeedList(
+  token: string,
+  chantierId: string,
+): Promise<IntervenantChantierFeedPost[]> {
+  const { data, error } = await (supabase as any).rpc("intervenant_chantier_feed_list", {
+    p_token: normalizePortalToken(token),
+    p_chantier_id: chantierId,
+  });
+  if (error) throw new Error(rpcMessage(error, "Chargement fil chantier impossible."));
+
+  const rows = Array.isArray(data) ? data : [];
+  return rows.map((row) => mapChantierFeedPost((row ?? {}) as Record<string, unknown>));
+}
+
+export async function intervenantChantierFeedCreate(
+  token: string,
+  payload: { chantier_id: string; body: string },
+): Promise<IntervenantChantierFeedPost> {
+  const { data, error } = await (supabase as any).rpc("intervenant_chantier_feed_create", {
+    p_token: normalizePortalToken(token),
+    p_chantier_id: payload.chantier_id,
+    p_body: payload.body,
+  });
+  if (error) throw new Error(rpcMessage(error, "Envoi message impossible."));
+
+  return mapChantierFeedPost((data && typeof data === "object" ? data : {}) as Record<string, unknown>);
 }
 
 export async function intervenantTerrainFeedbackUploadPhoto(

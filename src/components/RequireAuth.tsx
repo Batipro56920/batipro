@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import type { ReactNode } from "react";
 import { Navigate, useLocation } from "react-router-dom";
 import { supabase } from "../lib/supabaseClient";
-import { getCurrentUserProfile, isBackofficeProfile } from "../services/currentUserProfile.service";
+import { getCurrentUserProfile, hasLinkedIntervenantAccount, isBackofficeProfile, isIntervenantProfile } from "../services/currentUserProfile.service";
 import { useI18n } from "../i18n";
 import { readStoredIntervenantToken } from "../utils/intervenantSession";
 
@@ -24,7 +24,7 @@ function isTransientAuthNetworkError(error: unknown): boolean {
   );
 }
 
-export default function RequireAuth({ children }: { children: ReactNode }) {
+export default function RequireAuth({ children, allow = "backoffice" }: { children: ReactNode; allow?: "backoffice" | "intervenant" }) {
   const location = useLocation();
   const { t } = useI18n();
   const [gateState, setGateState] = useState<AuthGateState>({
@@ -55,6 +55,20 @@ export default function RequireAuth({ children }: { children: ReactNode }) {
         if (!alive) return;
 
         if (isBackofficeProfile(profile)) {
+          setGateState({
+            checking: false,
+            allowed: true,
+            redirectTo: "/login",
+            denied: false,
+          });
+          return;
+        }
+
+        if (
+          allow === "intervenant" &&
+          (isIntervenantProfile(profile) || (profile?.id ? await hasLinkedIntervenantAccount(profile.id) : false))
+        ) {
+          if (!alive) return;
           setGateState({
             checking: false,
             allowed: true,
@@ -109,7 +123,7 @@ export default function RequireAuth({ children }: { children: ReactNode }) {
       alive = false;
       sub.subscription.unsubscribe();
     };
-  }, []);
+  }, [allow]);
 
   if (gateState.checking) {
     return (
