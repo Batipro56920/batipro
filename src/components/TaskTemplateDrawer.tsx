@@ -15,6 +15,11 @@ import { getBestSupplierPrice, listProductCatalogItems } from "../features/produ
 import { generateTaskTemplateWithCoco } from "../features/coco/cocoOrchestrator";
 import { useI18n } from "../i18n";
 
+// Méthode de calcul du prix de vente CB Rénovation : prix de vente HT = déboursé sec x coefficient
+// frais généraux (main d'œuvre + fournitures) x coefficient bénéfice et aléas.
+const FRAIS_GENERAUX_COEFFICIENT = 1.305;
+const BENEFICE_ALEAS_COEFFICIENT = 1.111;
+
 type Props = {
   open: boolean;
   template: TaskTemplateRow | null;
@@ -400,26 +405,17 @@ export default function TaskTemplateDrawer({
       const lossMultiplier = 1 + parseDraftAmount(row.loss_percent) / 100;
       return sum + quantity * lossMultiplier * parseDraftAmount(row.purchase_price_ht);
     }, 0);
-    const materialSale = materialDrafts.reduce((sum, row) => {
-      const quantity = parseDraftAmount(row.ratio_quantity);
-      const lossMultiplier = 1 + parseDraftAmount(row.loss_percent) / 100;
-      return sum + quantity * lossMultiplier * parseDraftAmount(row.sale_price_ht);
-    }, 0);
     const laborCost = laborDrafts.reduce(
       (sum, row) => sum + parseDraftAmount(row.duration) * parseDraftAmount(row.hourlyCost),
       0,
     );
-    const laborSale = laborDrafts.reduce(
-      (sum, row) => sum + parseDraftAmount(row.duration) * parseDraftAmount(row.hourlySalePrice),
-      0,
-    );
     const feeCost = feeDrafts.reduce((sum, row) => sum + parseDraftAmount(row.amountCostHt), 0);
-    const feeSale = feeDrafts.reduce((sum, row) => sum + parseDraftAmount(row.amountSaleHt), 0);
+    // Déboursé sec (matière + main d'œuvre + consommables) x coefficient frais généraux x coefficient bénéfice et aléas.
     const cost = materialCost + laborCost + feeCost;
-    const sale = materialSale + laborSale + feeSale;
+    const sale = cost * FRAIS_GENERAUX_COEFFICIENT * BENEFICE_ALEAS_COEFFICIENT;
     const margin = sale - cost;
     const marginRate = sale > 0 ? (margin / sale) * 100 : 0;
-    return { materialCost, materialSale, laborCost, laborSale, feeCost, feeSale, cost, sale, margin, marginRate };
+    return { materialCost, laborCost, feeCost, cost, sale, margin, marginRate };
   }, [materialDrafts, laborDrafts, feeDrafts]);
 
   if (!open) return null;
