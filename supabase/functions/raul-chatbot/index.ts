@@ -15,6 +15,13 @@ const DEFAULT_RAUL_INSTRUCTIONS = [
   "Ne promets pas d'action dans Supabase ou Batipro si l'outil ne te donne pas explicitement accès à cette action.",
   "Si une demande touche aux droits, aux secrets, à la production ou à une décision métier sensible, demande une validation humaine.",
 ].join("\n");
+const DEFAULT_RAUL_WORKER_INSTRUCTIONS = [
+  "Tu es Raul, l'assistant Batipro pour les ouvriers sur le terrain.",
+  "Réponds en français, très court, simple et concret — pas de jargon informatique, une réponse directement utile sur le chantier.",
+  "Tu aides sur : où trouver une info sur sa tâche du jour, comment déclarer un imprévu, du matériel manquant ou un matériau utilisé, comment lire une consigne ou un document du chantier.",
+  "Tu n'as pas accès aux données financières, aux marges, ni aux autres chantiers que celui en cours — ne réponds pas à ce sujet, redirige vers le bureau.",
+  "Ne promets jamais d'action que tu ne peux pas réellement faire.",
+].join("\n");
 
 type ChatRole = "user" | "assistant";
 type ChatMessage = {
@@ -25,6 +32,8 @@ type ChatMessage = {
 type RequestBody = {
   message?: string;
   history?: ChatMessage[];
+  token?: string;
+  chantier_id?: string;
 };
 
 type ProfileRow = {
@@ -95,30 +104,48 @@ function extractOutputText(payload: any) {
   return parts.join("\n").trim();
 }
 
-async function assertCanUseRaul(req: Request) {
-  const token = getBearerToken(req);
-  if (!token) return { allowed: false, status: 401, error: "Session utilisateur manquante." };
+function normalizeString(value: unknown) {
+  return String(value ?? "").trim();
+}
 
+async function assertCanUseRaul(req: Request, body: RequestBody) {
   const supabaseUrl = requireEnv("SUPABASE_URL");
   const serviceRoleKey = requireEnv("SUPABASE_SERVICE_ROLE_KEY");
   const admin = createClient(supabaseUrl, serviceRoleKey, {
     auth: { persistSession: false, autoRefreshToken: false },
   });
 
-  const { data: userData, error: userError } = await admin.auth.getUser(token);
-  const userId = userData.user?.id ?? null;
-  if (userError || !userId) return { allowed: false, status: 401, error: "Session utilisateur invalide." };
+  // Chemin bureau : session Supabase réelle + permission chatbot_raul.
+  const bearerToken = getBearerToken(req);
+  if (bearerToken) {
+    const { data: userData } = await admin.auth.getUser(bearerToken);
+    const userId = userData.user?.id ?? null;
+    if (userId) {
+      const { data: profile } = await admin
+        .from("profiles")
+        .select("role, feature_permissions")
+        .eq("id", userId)
+        .maybeSingle();
+      if (profileCanUseRaul(profile as ProfileRow | null)) {
+        return { allowed: true, status: 200, error: null, scope: "backoffice" as const };
+      }
+    }
+  }
 
-  const { data: profile, error: profileError } = await admin
-    .from("profiles")
-    .select("role, feature_permissions")
-    .eq("id", userId)
-    .maybeSingle();
+  // Chemin portail ouvrier : jeton chantier_access (ou compte intervenant), scopé à un chantier.
+  const portalToken = normalizeString(body.token);
+  const chantierId = normalizeString(body.chantier_id);
+  if (portalToken && chantierId) {
+    const { data: intervenantId, error: accessError } = await admin.rpc("_intervenant_assert_chantier_access", {
+      p_token: portalToken,
+      p_chantier_id: chantierId,
+    });
+    if (!accessError && normalizeString(intervenantId)) {
+      return { allowed: true, status: 200, error: null, scope: "intervenant" as const };
+    }
+  }
 
-  if (profileError) return { allowed: false, status: 500, error: "Lecture du profil impossible." };
-  if (!profileCanUseRaul(profile as ProfileRow | null)) return { allowed: false, status: 403, error: "Raul n'est pas actif pour ce profil." };
-
-  return { allowed: true, status: 200, error: null };
+  return { allowed: false, status: 403, error: "Raul n'est pas actif pour ce profil.", scope: null };
 }
 
 serve(async (req) => {
@@ -132,7 +159,7 @@ serve(async (req) => {
     return json({ error: "Invalid JSON body" }, 400);
   }
 
-  const access = await assertCanUseRaul(req);
+  const access = await assertCanUseRaul(req, body);
   if (!access.allowed) return json({ error: access.error }, access.status);
 
   const message = normalizeMessage(body.message, 4000);
@@ -140,7 +167,10 @@ serve(async (req) => {
 
   const openAiKey = requireEnv("OPENAI_API_KEY");
   const model = optionalEnv("OPENAI_RAUL_MODEL") || optionalEnv("OPENAI_MODEL") || "gpt-4.1-mini";
-  const instructions = optionalEnv("OPENAI_RAUL_SYSTEM_PROMPT") || DEFAULT_RAUL_INSTRUCTIONS;
+  const instructions =
+    access.scope === "intervenant"
+      ? optionalEnv("OPENAI_RAUL_WORKER_SYSTEM_PROMPT") || DEFAULT_RAUL_WORKER_INSTRUCTIONS
+      : optionalEnv("OPENAI_RAUL_SYSTEM_PROMPT") || DEFAULT_RAUL_INSTRUCTIONS;
   const history = sanitizeHistory(body.history).filter((entry) => entry.content !== message);
 
   const response = await fetch("https://api.openai.com/v1/responses", {
