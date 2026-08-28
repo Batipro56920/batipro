@@ -3,7 +3,7 @@ import { Link } from "react-router-dom";
 import type { IntervenantRow } from "../../../services/intervenants.service";
 import DailyChantierPlanning from "../../../components/chantiers/DailyChantierPlanning";
 
-const PlanningBoard = lazy(() => import("../../../components/chantiers/PlanningBoard"));
+const PlanningPage = lazy(() => import("../../planning/PlanningPage"));
 
 type PlanningMode = "daily" | "gantt";
 
@@ -64,10 +64,10 @@ export default function ChantierPlanningSection({
               Exécution
             </Link>
             <Link
-              to={`/chantiers/${chantierId}/equipe`}
+              to={`/chantiers/${chantierId}/preparation`}
               className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
             >
-              Équipe
+              Préparation
             </Link>
             <Link
               to={`/chantiers/${chantierId}/documents`}
@@ -95,7 +95,7 @@ export default function ChantierPlanningSection({
         <DailyChantierPlanning chantierId={chantierId} chantierName={chantierName} intervenants={intervenants} />
       ) : (
         <Suspense fallback={<div className="rounded-2xl border bg-white p-4 text-sm text-slate-500">Chargement du Gantt chantier...</div>}>
-          <PlanningBoard chantierId={chantierId} chantierName={chantierName} intervenants={intervenants} />
+          <PlanningPage chantierId={chantierId} chantierName={chantierName} intervenants={intervenants} />
         </Suspense>
       )}
     </div>

@@ -17,7 +17,9 @@ import {
   addDays,
 } from "./planning.utils";
 import {
+  createDependency,
   createPlanningEntry,
+  deleteDependency,
   deletePlanningEntry,
   getDependencies,
   getPlanningEntries,
@@ -204,6 +206,29 @@ export default function PlanningPage({ chantierId, chantierName, intervenants }:
     }
   }
 
+  async function handleCreateDependency(predecessorTaskId: string) {
+    if (!selectedTask) return;
+    try {
+      const created = await createDependency({
+        chantier_id: chantierId,
+        predecessor_task_id: predecessorTaskId,
+        successor_task_id: selectedTask.id,
+      });
+      setDependencies((prev) => [...prev, created]);
+    } catch (err: any) {
+      setError(err?.message ?? "Erreur création dépendance.");
+    }
+  }
+
+  async function handleDeleteDependency(dependencyId: string) {
+    try {
+      await deleteDependency(dependencyId);
+      setDependencies((prev) => prev.filter((d) => d.id !== dependencyId));
+    } catch (err: any) {
+      setError(err?.message ?? "Erreur suppression dépendance.");
+    }
+  }
+
   async function handleToggleLock() {
     if (!selectedEntry) return;
     try {
@@ -328,11 +353,14 @@ export default function PlanningPage({ chantierId, chantierName, intervenants }:
           selectedEntry={selectedEntry}
           selectedTask={selectedTask}
           dependencies={dependencies}
+          allTasks={tasks}
           onToggleLock={handleToggleLock}
           onDeleteEntry={handleDeleteEntry}
           onClearSelection={() => setSelectedEntryId(null)}
           unplannedTasks={unplannedTasks}
           onCreateEntry={handleCreateEntry}
+          onCreateDependency={handleCreateDependency}
+          onDeleteDependency={handleDeleteDependency}
         />
       </div>
     </div>

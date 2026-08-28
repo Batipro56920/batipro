@@ -33,28 +33,12 @@ const PRIORITY_TERRAIN_FEEDBACK_URGENCIES = new Set(["critique", "urgente"]);
 
 const CHANTIER_PILOTAGE_SHORTCUTS: ChantierPilotageShortcut[] = [
   {
-    key: "planning-chantier",
-    label: "Planning",
-    href: "planning",
-    title: "Ouvrir le planning détaillé de ce chantier",
-    moduleId: "planning",
-    sectionKeys: ["execution", "equipe"],
-  },
-  {
     key: "temps-chantier",
     label: "Temps",
     href: "temps",
     title: "Ouvrir le suivi des temps de ce chantier",
     moduleId: "temps",
     sectionKeys: ["execution", "equipe"],
-  },
-  {
-    key: "visites-chantier",
-    label: "Visites",
-    href: "visites",
-    title: "Ouvrir les visites et comptes rendus de ce chantier",
-    moduleId: "validation_qualite",
-    sectionKeys: ["qualite", "sav"],
   },
 ];
 

@@ -1,4 +1,4 @@
-import { Bell, Clock3, FileText, MapPin, Users, type LucideIcon } from "lucide-react";
+import { Bell, Clock3, FileText, MapPin, type LucideIcon } from "lucide-react";
 import { Link } from "react-router-dom";
 import type { ChantierDerived, ChantierListActions } from "../types";
 import { budgetLabel, commercialAmountLabel, commercialSourceLabel, hasCommercialContext, shortDate, timeLabel } from "../utils/chantiersListUtils";
@@ -157,7 +157,6 @@ function AlertBadges({ row }: { row: ChantierDerived }) {
           title="Ouvrir les retours terrain de ce chantier"
         />
       ) : null}
-      <Badge icon={Users} label="Équipe" tone="blue" />
     </div>
   );
 }

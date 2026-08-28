@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { AlertTriangle, ArrowRight, CalendarDays, ClipboardCheck, ClipboardList, Clock3, Eye, FileText, Hammer, ShieldCheck, Users } from "lucide-react";
+import { AlertTriangle, ArrowRight, CalendarDays, ClipboardCheck, ClipboardList, Clock3, Eye, FileText, Hammer, ShieldCheck } from "lucide-react";
 import { Link } from "react-router-dom";
 import type { ChantierDerived } from "../types";
 import { shortDate } from "../utils/chantiersListUtils";
@@ -12,7 +12,6 @@ const PLANNING_QUICK_LINKS = [
   { label: "Temps", path: "temps", icon: Clock3 },
   { label: "Planning", path: "planning", icon: CalendarDays },
   { label: "Documents", path: "documents", icon: FileText },
-  { label: "Équipe", path: "equipe", icon: Users },
   { label: "Qualité", path: "qualite", icon: ShieldCheck },
   { label: "Visites", path: "visites", icon: ClipboardCheck },
 ] as const;
