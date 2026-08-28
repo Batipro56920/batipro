@@ -9,7 +9,7 @@ import {
   type SupplierRow,
 } from "../services/suppliers.service";
 import { useI18n } from "../i18n";
-import { PurchaseOrdersPanel, StockTrackingPanel } from "../features/purchase-orders";
+import { ProductStockLevelsPanel, PurchaseOrdersPanel, StockTrackingPanel } from "../features/purchase-orders";
 
 type SupplierFormState = {
   name: string;
@@ -312,7 +312,12 @@ export default function FournisseursPage({ initialTab = "suppliers" }: Fournisse
       )}
 
       {activeTab === "orders" ? <PurchaseOrdersPanel suppliers={suppliers} /> : null}
-      {activeTab === "stock" ? <StockTrackingPanel suppliers={suppliers} /> : null}
+      {activeTab === "stock" ? (
+        <div className="space-y-4">
+          <ProductStockLevelsPanel />
+          <StockTrackingPanel suppliers={suppliers} />
+        </div>
+      ) : null}
 
       {activeTab === "suppliers" && activeSupplierId ? (
         <div className={[
