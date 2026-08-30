@@ -1,6 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import type { ChantierActivityLogRow } from "../../../services/chantierActivityLog.service";
+import {
+  appendChantierActivityLog,
+  type ChantierActivityLogRow,
+} from "../../../services/chantierActivityLog.service";
+import { createChantierConsigne } from "../../../services/chantierConsignes.service";
 import {
   createChantierFeedPost,
   listChantierFeedPosts,
@@ -198,6 +202,8 @@ export default function ChantierJournalSection({
   const [visibility, setVisibility] = useState<ChantierFeedVisibility>("equipe");
   const [replyingToId, setReplyingToId] = useState<string | null>(null);
   const [publishing, setPublishing] = useState(false);
+  const [convertingPostId, setConvertingPostId] = useState<string | null>(null);
+  const [createdConsigneByPostId, setCreatedConsigneByPostId] = useState<Record<string, string>>({});
   const [searchQuery, setSearchQuery] = useState("");
   const [entityFilter, setEntityFilter] = useState("all");
 
@@ -251,6 +257,39 @@ export default function ChantierJournalSection({
     }
   }
 
+  async function createConsigneFromPost(post: ChantierFeedPostRow) {
+    if (!chantierId || convertingPostId || post.visibility !== "equipe") return;
+    setConvertingPostId(post.id);
+    setPostsError(null);
+    try {
+      const consigne = await createChantierConsigne({
+        chantier_id: chantierId,
+        description: post.body,
+        priority: "normale",
+        applies_to_all: true,
+      });
+      await appendChantierActivityLog({
+        chantierId,
+        actionType: "created",
+        entityType: "consigne",
+        entityId: consigne.id,
+        reason: "Consigne créée depuis le fil chantier",
+        changes: {
+          source: "feed_post",
+          feed_post_id: post.id,
+          title: consigne.title,
+          priority: consigne.priority,
+        },
+      });
+      setCreatedConsigneByPostId((current) => ({ ...current, [post.id]: consigne.id }));
+      await onRefresh();
+    } catch (conversionError: any) {
+      setPostsError(conversionError?.message ?? "Impossible de créer la consigne.");
+    } finally {
+      setConvertingPostId(null);
+    }
+  }
+
   function selectFiles(files: FileList | null) {
     if (!files) return;
     const incoming = Array.from(files);
@@ -286,6 +325,17 @@ export default function ChantierJournalSection({
     () => new Map(posts.map((post) => [post.id, post])),
     [posts],
   );
+
+  const consigneByPostId = useMemo(() => {
+    const links = new Map<string, string>(Object.entries(createdConsigneByPostId));
+    for (const log of logs) {
+      if (log.entity_type !== "consigne" || !log.entity_id) continue;
+      const changes = (log.changes ?? {}) as Record<string, unknown>;
+      const postId = changes.source === "feed_post" ? String(changes.feed_post_id ?? "").trim() : "";
+      if (postId && !links.has(postId)) links.set(postId, log.entity_id);
+    }
+    return links;
+  }, [createdConsigneByPostId, logs]);
 
   const feedLogs = useMemo<ChantierActivityLogRow[]>(() => {
     const publicationLogs = posts.map<ChantierActivityLogRow>((post) => ({
@@ -623,6 +673,7 @@ export default function ChantierJournalSection({
             const feedPost = log.entity_type === "feed_post" && log.entity_id
               ? postById.get(log.entity_id) ?? null
               : null;
+            const consigneId = feedPost ? consigneByPostId.get(feedPost.id) ?? null : null;
             const parentPost = feedPost?.parent_post_id
               ? postById.get(feedPost.parent_post_id) ?? null
               : null;
@@ -715,6 +766,23 @@ export default function ChantierJournalSection({
                   </div>
 
                   <div className="flex shrink-0 flex-wrap gap-2">
+                    {feedPost && consigneId && chantierId ? (
+                      <Link
+                        to={`/chantiers/${encodeURIComponent(chantierId)}/preparation?consigneId=${encodeURIComponent(consigneId)}`}
+                        className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm font-medium text-amber-800 hover:bg-amber-100"
+                      >
+                        Ouvrir la consigne
+                      </Link>
+                    ) : feedPost?.visibility === "equipe" ? (
+                      <button
+                        type="button"
+                        onClick={() => void createConsigneFromPost(feedPost)}
+                        disabled={Boolean(convertingPostId)}
+                        className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm font-medium text-amber-800 hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        {convertingPostId === feedPost.id ? "Création..." : "Créer une consigne"}
+                      </button>
+                    ) : null}
                     {feedPost ? (
                       <button
                         type="button"
