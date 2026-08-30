@@ -754,6 +754,10 @@ export default function ChantierPage() {
     () => new URLSearchParams(location.search).get("feedbackId") ?? "",
     [location.search],
   );
+  const targetedConsigneId = useMemo(
+    () => new URLSearchParams(location.search).get("consigneId") ?? "",
+    [location.search],
+  );
   const targetedReserveHandledRef = useRef<string | null>(null);
 
   const [item, setItem] = useState<ChantierRow | null>(null);
@@ -7662,7 +7666,13 @@ export default function ChantierPage() {
 
         {/* ---------------- ONGLET MATÉRIEL ---------------- */}
         {detailSection === "preparation" && (
-          <ChantierInstructionsSection>
+          <ChantierInstructionsSection
+            targetLoading={consignesLoading}
+            targetReady={Boolean(
+              targetedConsigneId &&
+              consignes.some((consigne) => consigne.id === targetedConsigneId),
+            )}
+          >
           <div className="space-y-4">
             <div className="flex items-center justify-between">
               <div>
@@ -7862,7 +7872,18 @@ export default function ChantierPage() {
                     : "Aujourd'hui";
 
                   return (
-                    <article key={row.id} className="rounded-xl border p-4 space-y-3">
+                    <article
+                      key={row.id}
+                      id={`consigne-${row.id}`}
+                      data-consigne-id={row.id}
+                      tabIndex={-1}
+                      className={[
+                        "scroll-mt-28 rounded-xl border p-4 space-y-3 outline-none transition-colors",
+                        row.id === targetedConsigneId
+                          ? "border-blue-300 bg-blue-50 ring-2 ring-blue-100"
+                          : "border-slate-200 bg-white",
+                      ].join(" ")}
+                    >
                       <div className="flex flex-wrap items-start justify-between gap-3">
                         <div className="min-w-0">
                           <div className="flex flex-wrap items-center gap-2">
