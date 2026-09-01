@@ -26,6 +26,7 @@ import {
   intervenantSession,
   intervenantStockDeclarationCreate,
   intervenantStockReceptionCreate,
+  intervenantTaskEquipment,
   intervenantTaskMainMaterials,
   intervenantTerrainFeedbackCreate,
   intervenantTimeCreate,
@@ -39,6 +40,7 @@ import {
   type IntervenantPlanningLot,
   type IntervenantProductCatalogItem,
   type IntervenantTask,
+  type IntervenantTaskEquipment,
   type IntervenantTaskMainMaterial,
 } from "../services/intervenantPortal.service";
 import {
@@ -200,6 +202,7 @@ export default function EmployeePortalV2Page() {
   const [savingChecklistKey, setSavingChecklistKey] = useState<string | null>(null);
   const [planningLots, setPlanningLots] = useState<IntervenantPlanningLot[]>([]);
   const [matinMaterialsByTask, setMatinMaterialsByTask] = useState<Record<string, IntervenantTaskMainMaterial[]>>({});
+  const [matinEquipmentByTask, setMatinEquipmentByTask] = useState<Record<string, IntervenantTaskEquipment[]>>({});
   const [matinGapReported, setMatinGapReported] = useState<Record<string, boolean>>({});
   const [matinReportingKey, setMatinReportingKey] = useState<string | null>(null);
   const [selectedTaskIds, setSelectedTaskIds] = useState<string[]>([]);
@@ -399,6 +402,17 @@ export default function EmployeePortalV2Page() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token, selected?.id, selectedTaskIds.join(",")]);
 
+  // Onglet Matin : matériel/outillage prévu pour les tâches choisies (même principe que les matériaux).
+  useEffect(() => {
+    if (!selected || selectedTaskIds.length === 0) { setMatinEquipmentByTask({}); return; }
+    let alive = true;
+    Promise.all(
+      selectedTaskIds.map(async (taskId) => [taskId, await intervenantTaskEquipment(token, selected.id, taskId).catch(() => [])] as const),
+    ).then((entries) => { if (alive) setMatinEquipmentByTask(Object.fromEntries(entries)); });
+    return () => { alive = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [token, selected?.id, selectedTaskIds.join(",")]);
+
   async function toggleSelectedTask(taskId: string) {
     if (!selected || savingDailyPlan) return;
     const next = selectedTaskIds.includes(taskId) ? selectedTaskIds.filter((id) => id !== taskId) : [...selectedTaskIds, taskId];
@@ -459,6 +473,24 @@ export default function EmployeePortalV2Page() {
         titre: material.material_name,
         quantite: material.expected_quantity,
         unite: material.ratio_unit,
+      });
+      setMatinGapReported((prev) => ({ ...prev, [key]: true }));
+    } finally {
+      setMatinReportingKey(null);
+    }
+  }
+
+  async function reportMatinEquipmentGap(task: IntervenantTask, equipment: IntervenantTaskEquipment) {
+    if (!selected || matinReportingKey) return;
+    const key = `${task.id}:${equipment.equipment_item_id}`;
+    setMatinReportingKey(key);
+    try {
+      await intervenantMaterielCreate(token, {
+        chantier_id: selected.id,
+        task_id: task.id,
+        titre: equipment.equipment_name,
+        quantite: equipment.default_quantity,
+        unite: equipment.unit,
       });
       setMatinGapReported((prev) => ({ ...prev, [key]: true }));
     } finally {
@@ -924,6 +956,45 @@ export default function EmployeePortalV2Page() {
                   </div>
                 );
               }) : <div className="rounded-xl bg-slate-50 p-3 text-sm text-slate-500">Choisis des tâches ci-dessus pour voir les matériaux prévus.</div>}
+            </div>
+          </Card>
+
+          <Card>
+            <h3 className="font-bold">Matériel nécessaire pour aujourd'hui</h3>
+            <p className="mt-1 text-xs text-slate-500">Outillage et équipement prévus par les modèles des tâches choisies ci-dessus.</p>
+            <div className="mt-3 space-y-3">
+              {selectedTaskIds.length ? selectedTaskIds.map((taskId) => {
+                const task = pendingTasks.find((t) => t.id === taskId);
+                const equipmentItems = matinEquipmentByTask[taskId] ?? [];
+                if (!task || !equipmentItems.length) return null;
+                return (
+                  <div key={taskId} className="rounded-xl border border-slate-200 p-3">
+                    <div className="text-sm font-bold">{task.titre}</div>
+                    <div className="mt-2 space-y-1.5">
+                      {equipmentItems.map((equipment) => {
+                        const key = `${task.id}:${equipment.equipment_item_id}`;
+                        const reported = matinGapReported[key];
+                        return (
+                          <div key={key} className="flex items-center justify-between gap-2 rounded-lg bg-slate-50 px-3 py-2 text-xs">
+                            <span className="min-w-0 truncate font-semibold text-slate-700">
+                              {equipment.equipment_name}
+                              {equipment.default_quantity != null ? ` — ${equipment.default_quantity}${equipment.unit ? ` ${equipment.unit}` : ""}` : ""}
+                              {equipment.is_required ? "" : " (optionnel)"}
+                            </span>
+                            {reported ? (
+                              <span className="shrink-0 font-semibold text-emerald-700">Signalé</span>
+                            ) : (
+                              <button type="button" onClick={() => reportMatinEquipmentGap(task, equipment)} disabled={matinReportingKey === key} className="shrink-0 font-semibold text-amber-700 disabled:opacity-50">
+                                {matinReportingKey === key ? "..." : "Il m'en manque"}
+                              </button>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              }) : <div className="rounded-xl bg-slate-50 p-3 text-sm text-slate-500">Choisis des tâches ci-dessus pour voir le matériel prévu.</div>}
             </div>
           </Card>
 

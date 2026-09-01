@@ -709,6 +709,39 @@ export async function intervenantTaskMainMaterials(
   }));
 }
 
+export type IntervenantTaskEquipment = {
+  equipment_item_id: string;
+  equipment_name: string;
+  is_required: boolean;
+  default_quantity: number | null;
+  unit: string | null;
+  notes: string | null;
+};
+
+/** Matériel/outillage prévu pour une tâche (modèle de tâche) — pour la préparation de journée (onglet Matin). */
+export async function intervenantTaskEquipment(
+  token: string,
+  chantierId: string,
+  taskId: string,
+): Promise<IntervenantTaskEquipment[]> {
+  const { data, error } = await (supabase as any).rpc("intervenant_task_equipment", {
+    p_token: normalizePortalToken(token),
+    p_chantier_id: chantierId,
+    p_task_id: taskId,
+  });
+  if (error) throw new Error(rpcMessage(error, "Chargement matériel impossible."));
+
+  const rows = Array.isArray(data) ? data : [];
+  return rows.map((row) => ({
+    equipment_item_id: String(row.equipment_item_id ?? ""),
+    equipment_name: String(row.equipment_name ?? ""),
+    is_required: asNullableBoolean(row.is_required) ?? false,
+    default_quantity: asNullableNumber(row.default_quantity),
+    unit: asNullableString(row.unit),
+    notes: asNullableString(row.notes),
+  }));
+}
+
 export async function intervenantMaterialConsumptionCreate(
   token: string,
   payload: { chantier_id: string; task_id: string; material_ratio_id: string; quantite_consommee: number; work_date?: string | null },
