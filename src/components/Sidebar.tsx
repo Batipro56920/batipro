@@ -68,6 +68,7 @@ export default function Sidebar({ collapsed = false, onToggleCollapse, companyNa
   const nav = [
     { to: "/dashboard", label: t("sidebar.dashboard"), icon: LayoutDashboard, group: "Pilotage", end: true },
     { to: "/assistant-direction", label: "Assistant COCO", icon: BrainCircuit, group: "Pilotage", adminOnly: true },
+    { to: "/assistant-direction/amelioration", label: "Amélioration COCO", icon: TrendingUp, group: "Pilotage", adminOnly: true },
     { to: "/rentabilite", label: "Rentabilité", icon: TrendingUp, feature: "rapports" as const, permissionKey: "statistiques" as const, group: "Pilotage" },
     { to: "/crm", label: "CRM", icon: BriefcaseBusiness, permissionKey: "crm" as const, group: "Commerce", end: true },
     { to: "/projets", label: "Projets commerciaux", icon: FolderKanban, permissionKey: "crm" as const, group: "Commerce" },

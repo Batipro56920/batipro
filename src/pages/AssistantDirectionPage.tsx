@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState, type ChangeEvent, type FormEvent } from "react";
+import { Link } from "react-router-dom";
 import { AlertTriangle, BrainCircuit, ClipboardCheck, Loader2, Lock, Paperclip, RefreshCw, Send, ShieldCheck, Sparkles, X } from "lucide-react";
 import { getCurrentUserProfile, type CurrentUserProfile } from "../services/currentUserProfile.service";
 import {
@@ -398,6 +399,14 @@ export default function AssistantDirectionPage() {
             <p className="mt-1 max-w-4xl text-sm leading-6 text-slate-600">COCO peut analyser les donnees reelles, preparer des brouillons et pre-remplir la reflexion metier. Validation, envoi, creation definitive, suppression, planning officiel et commandes restent reserves a l'admin.</p>
           </div>
           <span className="inline-flex w-fit rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-800">Validation admin obligatoire</span>
+        </div>
+        <div className="mt-3 flex flex-wrap gap-2">
+          <Link to="/assistant-direction/amelioration" className="inline-flex items-center gap-2 rounded-lg bg-blue-700 px-4 py-2 text-xs font-semibold text-white hover:bg-blue-800">
+            <BrainCircuit className="h-4 w-4" /> Configurer l'amélioration métier
+          </Link>
+          <Link to="/assistant-direction/anciens-devis" className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50">
+            Collecte historique
+          </Link>
         </div>
         <div className="mt-3 divide-y divide-slate-200 border-y border-slate-200">
           {COCO_ASSISTANT_ARCHITECTURE.map((assistant) => (
