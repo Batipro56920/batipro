@@ -137,6 +137,10 @@ export type IntervenantDailyChecklist = {
   has_equipment: boolean | null;
   has_materials: boolean | null;
   has_information: boolean | null;
+  /** Checklist fin de chantier (onglet Soir), même ligne que la checklist du matin. */
+  site_propre: boolean | null;
+  materiel_range: boolean | null;
+  camion_range: boolean | null;
   validated_at: string | null;
   created_at: string | null;
   updated_at: string | null;
@@ -673,9 +677,14 @@ export type IntervenantTaskMainMaterial = {
   material_ratio_id: string;
   material_name: string;
   ratio_unit: string;
+  ratio_quantity: number | null;
+  source_unit: string | null;
+  loss_percent: number | null;
+  /** Quantité prévue pour la tâche (chantier_tasks.quantite * ratio_quantity, pertes incluses) — pour le pré-remplissage de l'onglet Matin. */
+  expected_quantity: number | null;
 };
 
-/** Matériau(x) principal(aux) d'une tâche (marqués sur le modèle) — pour savoir si un champ de consommation doit apparaître. */
+/** Matériau(x) principal(aux) d'une tâche (marqués sur le modèle) — pour savoir si un champ de consommation doit apparaître, et ce qui est prévu (onglet Matin). */
 export async function intervenantTaskMainMaterials(
   token: string,
   chantierId: string,
@@ -693,6 +702,10 @@ export async function intervenantTaskMainMaterials(
     material_ratio_id: String(row.material_ratio_id ?? ""),
     material_name: String(row.material_name ?? ""),
     ratio_unit: String(row.ratio_unit ?? ""),
+    ratio_quantity: asNullableNumber(row.ratio_quantity),
+    source_unit: asNullableString(row.source_unit),
+    loss_percent: asNullableNumber(row.loss_percent),
+    expected_quantity: asNullableNumber(row.expected_quantity),
   }));
 }
 
@@ -866,6 +879,9 @@ export async function intervenantDailyChecklistGet(
     has_equipment: asNullableBoolean(row.has_equipment),
     has_materials: asNullableBoolean(row.has_materials),
     has_information: asNullableBoolean(row.has_information),
+    site_propre: asNullableBoolean(row.site_propre),
+    materiel_range: asNullableBoolean(row.materiel_range),
+    camion_range: asNullableBoolean(row.camion_range),
     validated_at: asNullableString(row.validated_at),
     created_at: asNullableString(row.created_at),
     updated_at: asNullableString(row.updated_at),
@@ -883,6 +899,9 @@ export async function intervenantDailyChecklistUpsert(
     has_equipment?: boolean | null;
     has_materials?: boolean | null;
     has_information?: boolean | null;
+    site_propre?: boolean | null;
+    materiel_range?: boolean | null;
+    camion_range?: boolean | null;
     validate?: boolean;
   },
 ): Promise<IntervenantDailyChecklist> {
@@ -904,6 +923,9 @@ export async function intervenantDailyChecklistUpsert(
     has_equipment: asNullableBoolean(row.has_equipment),
     has_materials: asNullableBoolean(row.has_materials),
     has_information: asNullableBoolean(row.has_information),
+    site_propre: asNullableBoolean(row.site_propre),
+    materiel_range: asNullableBoolean(row.materiel_range),
+    camion_range: asNullableBoolean(row.camion_range),
     validated_at: asNullableString(row.validated_at),
     created_at: asNullableString(row.created_at),
     updated_at: asNullableString(row.updated_at),
