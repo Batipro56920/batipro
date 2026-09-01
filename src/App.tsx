@@ -21,9 +21,7 @@ const ChantiersPage = lazy(() => import("./pages/ChantiersPage"));
 const ChantiersTimePage = lazy(() => import("./pages/ChantiersTimePage"));
 const ChantierNewPage = lazy(() => import("./pages/ChantierNewPage"));
 const ChantierPage = lazy(() => import("./pages/ChantierPage"));
-const ChantierPlanningPage = lazy(() => import("./pages/ChantierPlanningPage"));
 const ChantierTimePage = lazy(() => import("./pages/ChantierTimePage"));
-const ChantierVisitesPage = lazy(() => import("./pages/ChantierVisitesPage"));
 const KnowledgeImprovementsPage = lazy(() => import("./pages/KnowledgeImprovementsPage"));
 const ProjectsPage = lazy(() => import("./pages/ProjectsPage"));
 const ProjectDetailPage = lazy(() => import("./pages/ProjectDetailPage"));
@@ -107,6 +105,12 @@ function TerrainFeedbackBackofficeRoute({ label, children }: { label: string; ch
       <RouteSuspense label={label}>{children}</RouteSuspense>
     </RequireCompanyFeature>
   );
+}
+
+function ChantierSectionRedirect({ section }: { section?: string }) {
+  const { id } = useParams();
+  if (!id) return <Navigate to="/chantiers" replace />;
+  return <Navigate to={section ? `/chantiers/${id}/${section}` : `/chantiers/${id}`} replace />;
 }
 
 function ChantierTerrainFeedbackRedirect() {
@@ -410,7 +414,7 @@ export default function App() {
         <Route path="/chantiers/:id" element={<ChantierBackofficeRoute label="Chargement du chantier..."><ChantierPage /></ChantierBackofficeRoute>} />
         <Route path="/chantiers/:id/preparation" element={<ChantierBackofficeRoute label="Chargement du chantier..."><ChantierPage /></ChantierBackofficeRoute>} />
         <Route path="/chantiers/:id/execution" element={<ChantierBackofficeRoute label="Chargement du chantier..."><ChantierPage /></ChantierBackofficeRoute>} />
-        <Route path="/chantiers/:id/planning" element={<ChantierBackofficeRoute label="Chargement du planning chantier..."><ChantierPlanningPage /></ChantierBackofficeRoute>} />
+        <Route path="/chantiers/:id/planning" element={<ChantierSectionRedirect section="execution" />} />
         <Route path="/chantiers/:id/temps" element={<ChantierTimeBackofficeRoute label="Chargement des temps chantier..."><ChantierTimePage /></ChantierTimeBackofficeRoute>} />
         <Route path="/chantiers/:id/financier" element={<ChantierBackofficeRoute label="Chargement du chantier..."><ChantierPage /></ChantierBackofficeRoute>} />
         <Route path="/chantiers/:id/qualite" element={<ChantierBackofficeRoute label="Chargement du chantier..."><ChantierPage /></ChantierBackofficeRoute>} />
@@ -418,15 +422,15 @@ export default function App() {
         <Route path="/chantiers/:id/equipe" element={<ChantierBackofficeRoute label="Chargement du chantier..."><ChantierPage /></ChantierBackofficeRoute>} />
         <Route path="/chantiers/:id/sav" element={<ChantierBackofficeRoute label="Chargement du chantier..."><ChantierPage /></ChantierBackofficeRoute>} />
         <Route path="/chantiers/:id/historique" element={<ChantierBackofficeRoute label="Chargement du chantier..."><ChantierPage /></ChantierBackofficeRoute>} />
-        <Route path="/chantiers/:id/taches" element={<Navigate to="../execution" replace />} />
-        <Route path="/chantiers/:id/reserves" element={<Navigate to="../qualite" replace />} />
-        <Route path="/chantiers/:id/visites-chantier" element={<Navigate to="../visites" replace />} />
-        <Route path="/chantiers/:id/notes" element={<Navigate to="../execution" replace />} />
-        <Route path="/chantiers/:id/imprevus" element={<Navigate to="../financier" replace />} />
-        <Route path="/chantiers/:id/production" element={<Navigate to="../execution" replace />} />
-        <Route path="/chantiers/:id/qualite-cloture" element={<Navigate to="../qualite" replace />} />
-        <Route path="/chantiers/:id/qualite-sav" element={<Navigate to="../qualite" replace />} />
-        <Route path="/chantiers/:id/crm" element={<Navigate to=".." replace />} />
+        <Route path="/chantiers/:id/taches" element={<ChantierSectionRedirect section="execution" />} />
+        <Route path="/chantiers/:id/reserves" element={<ChantierSectionRedirect section="qualite" />} />
+        <Route path="/chantiers/:id/visites-chantier" element={<ChantierSectionRedirect section="qualite" />} />
+        <Route path="/chantiers/:id/notes" element={<ChantierSectionRedirect section="execution" />} />
+        <Route path="/chantiers/:id/imprevus" element={<ChantierSectionRedirect section="financier" />} />
+        <Route path="/chantiers/:id/production" element={<ChantierBackofficeRoute label="Chargement du chantier..."><ChantierPage /></ChantierBackofficeRoute>} />
+        <Route path="/chantiers/:id/qualite-cloture" element={<ChantierBackofficeRoute label="Chargement du chantier..."><ChantierPage /></ChantierBackofficeRoute>} />
+        <Route path="/chantiers/:id/qualite-sav" element={<ChantierBackofficeRoute label="Chargement du chantier..."><ChantierPage /></ChantierBackofficeRoute>} />
+        <Route path="/chantiers/:id/crm" element={<ChantierSectionRedirect />} />
         <Route
           path="/chantiers/:id/retours-terrain"
           element={
@@ -443,14 +447,7 @@ export default function App() {
           path="/ameliorations-ia"
           element={<ChantierBackofficeRoute label="Chargement des ameliorations IA..."><KnowledgeImprovementsPage /></ChantierBackofficeRoute>}
         />
-        <Route
-          path="/chantiers/:id/visites"
-          element={
-            <RequireCompanyFeature moduleId="validation_qualite">
-              <RouteSuspense label="Chargement des visites chantier..."><ChantierVisitesPage /></RouteSuspense>
-            </RequireCompanyFeature>
-          }
-        />
+        <Route path="/chantiers/:id/visites" element={<ChantierSectionRedirect section="qualite" />} />
 
         <Route
           path="/intervenants"

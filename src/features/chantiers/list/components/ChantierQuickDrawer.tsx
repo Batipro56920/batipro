@@ -1,4 +1,4 @@
-import { AlertTriangle, ArrowRight, CalendarDays, CircleDollarSign, ClipboardList, Clock3, FileText, Hammer, Users, X } from "lucide-react";
+import { AlertTriangle, ArrowRight, CalendarDays, CircleDollarSign, ClipboardList, Clock3, FileText, Hammer, X } from "lucide-react";
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { Button } from "../../../../components/ui/button";
@@ -9,7 +9,7 @@ import { ChantierProgress } from "./ChantierProgress";
 import { ChantierRowActions } from "./ChantierRowActions";
 import { ChantierStatusPill } from "./ChantierStatusPill";
 
-const TABS = ["Vue rapide", "Tâches", "Temps", "Planning", "Financier", "Équipe", "Documents", "Retours terrain", "Alertes"] as const;
+const TABS = ["Vue rapide", "Tâches", "Temps", "Planning", "Financier", "Documents", "Retours terrain", "Alertes"] as const;
 
 function getProjectHref(row: ChantierDerived) {
   if (row.crm_opportunity_id) return `/projets/opportunity-${row.crm_opportunity_id}`;
@@ -268,15 +268,6 @@ export function ChantierQuickDrawer({ row, actions, onClose }: { row: ChantierDe
               cta="Ouvrir le financier"
               metric={budgetLabel(row.budgetHt)}
             />
-          ) : tab === "Équipe" ? (
-            <DetailShortcutPanel
-              title="Équipe chantier"
-              description="Retrouver les intervenants rattachés, les affectations et la coordination terrain du chantier."
-              href={`/chantiers/${row.id}/equipe`}
-              icon={Users}
-              cta="Ouvrir l'équipe"
-              metric={timeLabel(row.heures_prevues, row.heures_passees)}
-            />
           ) : tab === "Documents" ? (
             <DetailShortcutPanel
               title="Documents chantier"
@@ -372,12 +363,6 @@ function QuickAccessPanel({ row }: { row: ChantierDerived }) {
       description: "Plans, pièces liées et DOE",
       href: `/chantiers/${row.id}/documents`,
       icon: FileText,
-    },
-    {
-      label: "Équipe",
-      description: "Intervenants et accès terrain",
-      href: `/chantiers/${row.id}/equipe`,
-      icon: Users,
     },
   ];
 

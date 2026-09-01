@@ -1,10 +1,10 @@
 import { lazy, Suspense, useState } from "react";
 import { Link } from "react-router-dom";
-import { AlertTriangle, ClipboardList, FileText, LayoutGrid, Users } from "lucide-react";
+import { FileText, Users } from "lucide-react";
 import type { IntervenantRow } from "../../../services/intervenants.service";
 import DailyChantierPlanning from "../../../components/chantiers/DailyChantierPlanning";
 
-const PlanningBoard = lazy(() => import("../../../components/chantiers/PlanningBoard"));
+const PlanningPage = lazy(() => import("../../planning/PlanningPage"));
 
 type PlanningMode = "daily" | "gantt";
 
@@ -42,49 +42,55 @@ export default function ChantierPlanningSection({
               </span>
             </div>
           </div>
-          <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-end">
-            <div className="inline-flex rounded-field border border-subtle bg-interactive p-1">
-              <button
-                type="button"
-                onClick={() => setMode("daily")}
-                className={[
-                  "bt-tap inline-flex items-center gap-2 rounded-field px-3 py-1.5 text-sm font-semibold transition",
-                  mode === "daily" ? "bg-ink text-surface shadow-sm" : "text-ink-secondary hover:bg-surface",
-                ].join(" ")}
-              >
-                <ClipboardList className="h-4 w-4" strokeWidth={1.75} />
-                Agenda interventions
-              </button>
-              <button
-                type="button"
-                onClick={() => setMode("gantt")}
-                className={[
-                  "bt-tap inline-flex items-center gap-2 rounded-field px-3 py-1.5 text-sm font-semibold transition",
-                  mode === "gantt" ? "bg-ink text-surface shadow-sm" : "text-ink-secondary hover:bg-surface",
-                ].join(" ")}
-              >
-                <LayoutGrid className="h-4 w-4" strokeWidth={1.75} />
-                Gantt chantier
-              </button>
-            </div>
-            <div className="flex flex-wrap gap-2">
-              <Link to={`/chantiers/${chantierId}/execution`} className="bt-control inline-flex items-center rounded-field border border-subtle bg-surface px-3 py-2 text-sm font-semibold text-ink-secondary hover:bg-interactive">
-                Exécution
-              </Link>
-              <Link to={`/chantiers/${chantierId}/equipe`} className="bt-control inline-flex items-center rounded-field border border-subtle bg-surface px-3 py-2 text-sm font-semibold text-ink-secondary hover:bg-interactive">
-                Équipe
-              </Link>
-              <Link to={`/chantiers/${chantierId}/documents`} className="bt-control inline-flex items-center rounded-field border border-subtle bg-surface px-3 py-2 text-sm font-semibold text-ink-secondary hover:bg-interactive">
-                Documents
-              </Link>
-              <Link to={terrainFeedbackHref} className="bt-control inline-flex items-center gap-2 rounded-field border border-warning/20 bg-warning-soft px-3 py-2 text-sm font-semibold text-warning-on hover:bg-interactive">
-                <AlertTriangle className="h-4 w-4" strokeWidth={1.75} />
-                Retours terrain
-              </Link>
-              <Link to={`/chantiers/${chantierId}/qualite`} className="bt-control inline-flex items-center rounded-field border border-info/20 bg-info-soft px-3 py-2 text-sm font-semibold text-info-on hover:bg-interactive">
-                Qualité / réserves
-              </Link>
-            </div>
+        </div>
+        <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-end">
+          <div className="inline-flex rounded-2xl border border-slate-200 bg-slate-50 p-1">
+            <button
+              type="button"
+              onClick={() => setMode("daily")}
+              className={["rounded-xl px-3 py-2 text-sm font-semibold transition", mode === "daily" ? "bg-slate-950 text-white shadow-sm" : "text-slate-600 hover:bg-white"].join(" ")}
+            >
+              Agenda interventions
+            </button>
+            <button
+              type="button"
+              onClick={() => setMode("gantt")}
+              className={["rounded-xl px-3 py-2 text-sm font-semibold transition", mode === "gantt" ? "bg-slate-950 text-white shadow-sm" : "text-slate-600 hover:bg-white"].join(" ")}
+            >
+              Gantt chantier
+            </button>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Link
+              to={`/chantiers/${chantierId}/execution`}
+              className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+            >
+              Exécution
+            </Link>
+            <Link
+              to={`/chantiers/${chantierId}/preparation`}
+              className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+            >
+              Préparation
+            </Link>
+            <Link
+              to={`/chantiers/${chantierId}/documents`}
+              className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+            >
+              Documents
+            </Link>
+            <Link
+              to={terrainFeedbackHref}
+              className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm font-semibold text-amber-800 hover:bg-amber-100"
+            >
+              Retours terrain
+            </Link>
+            <Link
+              to={`/chantiers/${chantierId}/qualite`}
+              className="rounded-xl border border-blue-200 bg-blue-50 px-3 py-2 text-sm font-semibold text-blue-800 hover:bg-blue-100"
+            >
+              Qualité / réserves
+            </Link>
           </div>
         </div>
       </div>
@@ -92,8 +98,8 @@ export default function ChantierPlanningSection({
       {mode === "daily" ? (
         <DailyChantierPlanning chantierId={chantierId} chantierName={chantierName} intervenants={intervenants} />
       ) : (
-        <Suspense fallback={<div className="rounded-surface border border-subtle bg-surface p-4 text-sm text-muted">Chargement du Gantt chantier...</div>}>
-          <PlanningBoard chantierId={chantierId} chantierName={chantierName} intervenants={intervenants} />
+        <Suspense fallback={<div className="rounded-2xl border bg-white p-4 text-sm text-slate-500">Chargement du Gantt chantier...</div>}>
+          <PlanningPage chantierId={chantierId} chantierName={chantierName} intervenants={intervenants} />
         </Suspense>
       )}
     </div>

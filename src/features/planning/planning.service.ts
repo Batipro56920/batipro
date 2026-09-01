@@ -180,13 +180,19 @@ export async function createDependency(payload: {
   return data;
 }
 
+export async function deleteDependency(id: string): Promise<void> {
+  if (!id) throw new Error("id manquant.");
+  const { error } = await supabase.from("task_dependencies").delete().eq("id", id);
+  if (error) throw new Error(error.message);
+}
+
 export async function getPlanningTasks(chantierId: string): Promise<PlanningTaskRow[]> {
   if (!chantierId) throw new Error("chantierId manquant.");
   const { data, error } = await supabase
     .from("chantier_tasks")
     .select("*")
     .eq("chantier_id", chantierId)
-    .order("ordre", { ascending: true })
+    .order("order_index", { ascending: true })
     .overrideTypes<PlanningTaskRow[]>();
 
   if (error) throw new Error(error.message);

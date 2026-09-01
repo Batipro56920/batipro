@@ -3,7 +3,7 @@ import type { BusinessDocumentNode, FlatDocumentNode } from "../domain/types";
 export function flattenDocumentNodes(nodes: BusinessDocumentNode[]) {
   const result: FlatDocumentNode[] = [];
 
-  nodes
+  (nodes ?? [])
     .slice()
     .sort(byOrder)
     .forEach((node, index) => {
@@ -22,7 +22,7 @@ function pushNode(result: FlatDocumentNode[], node: BusinessDocumentNode, number
   result.push({ id: node.id, number, depth, node });
 
   if (node.type !== "section" && node.type !== "subsection") return;
-  node.children
+  (node.children ?? [])
     .slice()
     .sort(byOrder)
     .forEach((child, index) => {

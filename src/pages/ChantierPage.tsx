@@ -13,8 +13,8 @@ import {
   Plus,
   RotateCcw,
   Trash2,
-  Users,
 } from "lucide-react";
+import ChantierTerrainFeedbackFeed from "../features/chantiers/pages/ChantierTerrainFeedbackFeed";
 
 import { deleteChantier, getChantierById, updateChantierStatus, type ChantierRow } from "../services/chantiers.service";
 
@@ -221,19 +221,17 @@ type ChantierDetailSectionKey =
   | "financier"
   | "qualite"
   | "documents"
-  | "equipe"
   | "sav"
   | "historique";
 
 type ToastState = { type: "ok" | "error"; msg: string } | null;
 
 function getChantierDetailSection(pathname: string): ChantierDetailSectionKey {
-  if (pathname.endsWith("/preparation")) return "preparation";
+  if (pathname.endsWith("/preparation") || pathname.endsWith("/equipe")) return "preparation";
   if (pathname.endsWith("/execution") || pathname.endsWith("/production")) return "execution";
   if (pathname.endsWith("/financier")) return "financier";
   if (pathname.endsWith("/qualite") || pathname.endsWith("/qualite-cloture") || pathname.endsWith("/qualite-sav")) return "qualite";
   if (pathname.endsWith("/documents")) return "documents";
-  if (pathname.endsWith("/equipe")) return "equipe";
   if (pathname.endsWith("/sav")) return "sav";
   if (pathname.endsWith("/historique")) return "historique";
   return "cockpit";
@@ -246,7 +244,6 @@ const DEFAULT_TAB_BY_CHANTIER_SECTION: Record<ChantierDetailSectionKey, TabKey> 
   financier: "budget",
   qualite: "reserves",
   documents: "documents",
-  equipe: "intervenants",
   sav: "reserves",
   historique: "journal",
 };
@@ -767,6 +764,10 @@ export default function ChantierPage() {
   );
   const sourceFeedbackId = useMemo(
     () => new URLSearchParams(location.search).get("feedbackId") ?? "",
+    [location.search],
+  );
+  const targetedConsigneId = useMemo(
+    () => new URLSearchParams(location.search).get("consigneId") ?? "",
     [location.search],
   );
   const targetedReserveHandledRef = useRef<string | null>(null);
@@ -4780,7 +4781,6 @@ export default function ChantierPage() {
     financier: ["budget", "achats", "pilotage", "rapports"],
     qualite: ["reserves", "visite", "doe"],
     documents: ["documents", "doe"],
-    equipe: ["intervenants", "planning", "temps"],
     sav: ["reserves", "visite"],
     historique: ["journal"],
   };
@@ -4796,7 +4796,6 @@ export default function ChantierPage() {
     financier: "Financier",
     qualite: "Qualité",
     documents: "Documents",
-    equipe: "Équipe",
     sav: "SAV",
     historique: "Fil chantier",
   };
@@ -4807,7 +4806,6 @@ export default function ChantierPage() {
     { key: "financier", label: "Financier", href: `/chantiers/${id}/financier`, enabled: isSectionEnabled("financier") },
     { key: "qualite", label: "Qualité", href: `/chantiers/${id}/qualite`, enabled: isSectionEnabled("qualite") },
     { key: "documents", label: "Documents", href: `/chantiers/${id}/documents`, enabled: isSectionEnabled("documents") },
-    { key: "equipe", label: "Équipe", href: `/chantiers/${id}/equipe`, enabled: isSectionEnabled("equipe") },
     { key: "sav", label: "SAV", href: `/chantiers/${id}/sav`, enabled: isSectionEnabled("sav") },
     { key: "historique", label: "Fil chantier", href: `/chantiers/${id}/historique`, enabled: isSectionEnabled("historique") },
   ];
@@ -5804,10 +5802,6 @@ export default function ChantierPage() {
                 <Pencil className="h-4 w-4" strokeWidth={1.75} />
                 Modifier
               </button>
-              <button type="button" onClick={() => navigate(`/chantiers/${id}/equipe`)} className="bt-control inline-flex items-center gap-2 rounded-field border border-subtle bg-surface px-3 py-2 text-sm font-semibold text-ink-secondary hover:bg-interactive">
-                <Users className="h-4 w-4" strokeWidth={1.75} />
-                Équipe
-              </button>
               <button type="button" onClick={() => navigate(`/chantiers/${id}/documents`)} className="bt-control inline-flex items-center gap-2 rounded-field border border-subtle bg-surface px-3 py-2 text-sm font-semibold text-ink-secondary hover:bg-interactive">
                 <FileUp className="h-4 w-4" strokeWidth={1.75} />
                 Document
@@ -5846,6 +5840,11 @@ export default function ChantierPage() {
             + {t("chantierPage.addTask")}
           </button>
         ) : null}
+        {detailSection === "execution" && id && (
+          <div className="mb-6">
+            <ChantierTerrainFeedbackFeed chantierId={id} />
+          </div>
+        )}
         {detailSection === "cockpit" && accueilPanel}
         {detailSection === "preparation" && id && <ChantierPreparationSection chantierId={id} />}
         {detailSection === "preparation" && id && (
@@ -5887,9 +5886,15 @@ export default function ChantierPage() {
             documents={documents}
           />
         )}
+        {detailSection === "financier" && (
+          <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400 mb-2">
+            Suivi financier — budget, achats, imprévus
+          </div>
+        )}
         {(detailSection === "preparation" || detailSection === "financier") && id && (
           <ChantierPurchasesSection chantierId={id} tasks={tasks} zones={zones} />
         )}
+        {detailSection === "financier" && id && <ChantierFinancialSection chantierId={id} />}
         {detailSection === "financier" && id && (
           <ChantierUnforeseenSection
             chantierId={id}
@@ -5897,7 +5902,6 @@ export default function ChantierPage() {
             zones={zones}
           />
         )}
-        {detailSection === "financier" && id && <ChantierFinancialSection chantierId={id} />}
         {/* ---------------- ONGLET TEMPS ---------------- */}
         {detailSection === "execution" && (
           <ChantierTimeSection>
@@ -6100,7 +6104,7 @@ export default function ChantierPage() {
         )}
 
         {/* ---------------- ONGLET INTERVENANTS ---------------- */}
-        {(detailSection === "preparation" || detailSection === "equipe") && (
+        {detailSection === "preparation" && (
           <ChantierIntervenantsSection>
           <div className="space-y-6">
             <div className="flex items-center justify-between">
@@ -6397,7 +6401,7 @@ export default function ChantierPage() {
         ) : null}
 
         {/* ---------------- ONGLET RÉSERVES ---------------- */}
-        {(detailSection === "execution" || detailSection === "qualite" || detailSection === "sav") && (
+        {(detailSection === "qualite" || detailSection === "sav") && (
           <ChantierReservesSection>
           <div className="space-y-4">
             <div className="flex flex-wrap items-start justify-between gap-3">
@@ -7586,7 +7590,13 @@ export default function ChantierPage() {
 
         {/* ---------------- ONGLET MATÉRIEL ---------------- */}
         {detailSection === "preparation" && (
-          <ChantierInstructionsSection>
+          <ChantierInstructionsSection
+            targetLoading={consignesLoading}
+            targetReady={Boolean(
+              targetedConsigneId &&
+              consignes.some((consigne) => consigne.id === targetedConsigneId),
+            )}
+          >
           <div className="space-y-4">
             <div className="flex items-center justify-between">
               <div>
@@ -7786,7 +7796,18 @@ export default function ChantierPage() {
                     : "Aujourd'hui";
 
                   return (
-                    <article key={row.id} className="rounded-xl border p-4 space-y-3">
+                    <article
+                      key={row.id}
+                      id={`consigne-${row.id}`}
+                      data-consigne-id={row.id}
+                      tabIndex={-1}
+                      className={[
+                        "scroll-mt-28 rounded-xl border p-4 space-y-3 outline-none transition-colors",
+                        row.id === targetedConsigneId
+                          ? "border-blue-300 bg-blue-50 ring-2 ring-blue-100"
+                          : "border-slate-200 bg-white",
+                      ].join(" ")}
+                    >
                       <div className="flex flex-wrap items-start justify-between gap-3">
                         <div className="min-w-0">
                           <div className="flex flex-wrap items-center gap-2">
@@ -8113,6 +8134,11 @@ export default function ChantierPage() {
         )}
 
         {detailSection === "financier" && item && (
+          <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400 mt-6 mb-2">
+            Rapports &amp; export
+          </div>
+        )}
+        {detailSection === "financier" && item && (
           <ChantierReportsSection
             chantier={item}
             onDocumentsRefresh={async () => {
@@ -8176,6 +8202,7 @@ export default function ChantierPage() {
           tab !== "messagerie" &&
           tab !== "rapports" &&
           tab !== "doe" &&
+          tab !== "budget" &&
           tab !== "visite" && (
             <div className="space-y-3">
               <div className="font-semibold">{String(tab)}</div>

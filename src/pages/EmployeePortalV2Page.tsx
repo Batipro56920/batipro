@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
-import { AlertTriangle, CalendarDays, Camera, CheckCircle2, ChevronRight, ClipboardList, FileText, Home, LogOut, MapPin, MessageCircle, PackageSearch, Phone, RefreshCw, Send, ShieldAlert, Wrench } from "lucide-react";
+import { AlertTriangle, Boxes, CalendarDays, Camera, CheckCircle2, ChevronRight, ClipboardList, FileText, Home, LogOut, MapPin, MessageCircle, PackageSearch, Phone, Plus, RefreshCw, Send, ShieldAlert, Wrench } from "lucide-react";
 import { useLocation, useNavigate } from "react-router-dom";
 
 import { supabase } from "../lib/supabaseClient";
+import RaulPortalWidget from "../components/RaulPortalWidget";
 import {
   intervenantChantierFeedCreate,
   intervenantChantierFeedList,
@@ -14,9 +15,13 @@ import {
   intervenantGetDocuments,
   intervenantGetTasks,
   intervenantInformationRequestList,
+  intervenantDeliverySlipExtract,
   intervenantMaterielCreate,
   intervenantMaterialConsumptionCreate,
+  intervenantProductCatalogSearch,
   intervenantSession,
+  intervenantStockDeclarationCreate,
+  intervenantStockReceptionCreate,
   intervenantTaskMainMaterials,
   intervenantTerrainFeedbackCreate,
   intervenantTimeCreate,
@@ -27,6 +32,7 @@ import {
   type IntervenantDailyChecklist,
   type IntervenantDocument,
   type IntervenantInformationRequest,
+  type IntervenantProductCatalogItem,
   type IntervenantTask,
   type IntervenantTaskMainMaterial,
 } from "../services/intervenantPortal.service";
@@ -182,6 +188,33 @@ export default function EmployeePortalV2Page() {
   const [savingMateriel, setSavingMateriel] = useState(false);
   const [blocageText, setBlocageText] = useState("");
   const [sendingBlocage, setSendingBlocage] = useState(false);
+  const [stockQuery, setStockQuery] = useState("");
+  const [stockResults, setStockResults] = useState<IntervenantProductCatalogItem[]>([]);
+  const [stockSearching, setStockSearching] = useState(false);
+  const [stockPicked, setStockPicked] = useState<IntervenantProductCatalogItem | null>(null);
+  const [stockQuantite, setStockQuantite] = useState("");
+  const [savingStock, setSavingStock] = useState(false);
+  const [stockAddedToday, setStockAddedToday] = useState<Array<{ id: string; designation: string; quantity: string; unit: string }>>([]);
+
+  type SlipLine = {
+    designation: string;
+    quantity: string;
+    unit: string;
+    productId: string | null;
+    productDesignation: string | null;
+    productUnit: string | null;
+  };
+  const [slipUploading, setSlipUploading] = useState(false);
+  const [slipError, setSlipError] = useState<string | null>(null);
+  const [slipLines, setSlipLines] = useState<SlipLine[]>([]);
+  const [slipStoragePath, setSlipStoragePath] = useState<string | null>(null);
+  const [slipStorageBucket, setSlipStorageBucket] = useState<string | null>(null);
+  const [slipEditingIndex, setSlipEditingIndex] = useState<number | null>(null);
+  const [slipSearchQuery, setSlipSearchQuery] = useState("");
+  const [slipSearchResults, setSlipSearchResults] = useState<IntervenantProductCatalogItem[]>([]);
+  const [slipSearching, setSlipSearching] = useState(false);
+  const [slipSubmitting, setSlipSubmitting] = useState(false);
+  const [slipDoneCount, setSlipDoneCount] = useState<number | null>(null);
 
   useEffect(() => {
     let alive = true;
@@ -426,6 +459,138 @@ export default function EmployeePortalV2Page() {
     setRefreshKey((v) => v + 1);
   }
 
+  useEffect(() => {
+    if (!selected) return;
+    if (!stockQuery.trim()) {
+      setStockResults([]);
+      return;
+    }
+    let alive = true;
+    setStockSearching(true);
+    const timer = window.setTimeout(() => {
+      void intervenantProductCatalogSearch(token, selected.id, stockQuery.trim())
+        .then((rows) => { if (alive) setStockResults(rows); })
+        .catch(() => { if (alive) setStockResults([]); })
+        .finally(() => { if (alive) setStockSearching(false); });
+    }, 300);
+    return () => { alive = false; window.clearTimeout(timer); };
+  }, [stockQuery, selected, token]);
+
+  useEffect(() => {
+    if (slipEditingIndex === null || !selected) return;
+    if (!slipSearchQuery.trim()) {
+      setSlipSearchResults([]);
+      return;
+    }
+    let alive = true;
+    setSlipSearching(true);
+    const timer = window.setTimeout(() => {
+      void intervenantProductCatalogSearch(token, selected.id, slipSearchQuery.trim())
+        .then((rows) => { if (alive) setSlipSearchResults(rows); })
+        .catch(() => { if (alive) setSlipSearchResults([]); })
+        .finally(() => { if (alive) setSlipSearching(false); });
+    }, 300);
+    return () => { alive = false; window.clearTimeout(timer); };
+  }, [slipSearchQuery, slipEditingIndex, selected, token]);
+
+  async function handleSlipPhoto(file: File | null) {
+    if (!file || !selected || slipUploading) return;
+    setSlipUploading(true);
+    setSlipError(null);
+    setSlipDoneCount(null);
+    try {
+      const result = await intervenantDeliverySlipExtract(token, selected.id, file);
+      setSlipStoragePath(result.storage_path);
+      setSlipStorageBucket(result.storage_bucket);
+      setSlipLines(
+        result.lines.map((line) => ({
+          designation: line.designation,
+          quantity: String(line.quantity),
+          unit: line.unit,
+          productId: null,
+          productDesignation: null,
+          productUnit: null,
+        })),
+      );
+      if (result.lines.length === 0) setSlipError("Aucune ligne de matériau reconnue sur cette photo.");
+    } catch (err: any) {
+      setSlipError(err?.message ?? "Lecture impossible.");
+    } finally {
+      setSlipUploading(false);
+    }
+  }
+
+  function startEditingSlipLine(index: number) {
+    setSlipEditingIndex(index);
+    setSlipSearchQuery(slipLines[index]?.designation ?? "");
+    setSlipSearchResults([]);
+  }
+
+  function pickProductForSlipLine(index: number, product: IntervenantProductCatalogItem) {
+    setSlipLines((prev) =>
+      prev.map((line, i) =>
+        i === index ? { ...line, productId: product.id, productDesignation: product.designation, productUnit: product.unit } : line,
+      ),
+    );
+    setSlipEditingIndex(null);
+    setSlipSearchQuery("");
+    setSlipSearchResults([]);
+  }
+
+  function removeSlipLine(index: number) {
+    setSlipLines((prev) => prev.filter((_, i) => i !== index));
+  }
+
+  async function submitSlipLines() {
+    if (!selected || slipSubmitting) return;
+    const ready = slipLines.filter((line) => line.productId && line.quantity.trim());
+    if (ready.length === 0) return;
+    setSlipSubmitting(true);
+    setSlipError(null);
+    try {
+      for (const line of ready) {
+        await intervenantStockReceptionCreate(token, {
+          chantier_id: selected.id,
+          product_id: line.productId as string,
+          quantity: Number(line.quantity.replace(",", ".")),
+          source_storage_bucket: slipStorageBucket,
+          source_storage_path: slipStoragePath,
+        });
+      }
+      setSlipDoneCount(ready.length);
+      setSlipLines([]);
+      setSlipStoragePath(null);
+      setSlipStorageBucket(null);
+    } catch (err: any) {
+      setSlipError(err?.message ?? "Enregistrement impossible.");
+    } finally {
+      setSlipSubmitting(false);
+    }
+  }
+
+  async function saveStockDeclaration() {
+    if (!selected || !stockPicked || !stockQuantite.trim() || savingStock) return;
+    setSavingStock(true);
+    try {
+      const quantity = Number(stockQuantite.replace(",", "."));
+      await intervenantStockDeclarationCreate(token, {
+        chantier_id: selected.id,
+        product_id: stockPicked.id,
+        quantity,
+      });
+      setStockAddedToday((prev) => [
+        { id: stockPicked.id, designation: stockPicked.designation, quantity: stockQuantite, unit: stockPicked.unit },
+        ...prev,
+      ]);
+      setStockPicked(null);
+      setStockQuantite("");
+      setStockQuery("");
+      setStockResults([]);
+    } finally {
+      setSavingStock(false);
+    }
+  }
+
   async function saveMateriel() {
     if (!selected || !materielTitre.trim() || savingMateriel) return;
     setSavingMateriel(true);
@@ -607,6 +772,162 @@ export default function EmployeePortalV2Page() {
           </Card>
 
           <Card>
+            <h3 className="font-bold">Bon de livraison</h3>
+            <p className="mt-1 text-xs text-slate-500">Prends en photo le bon quand tu récupères du matériel — l'IA lit les lignes, tu valides ce qui part en stock.</p>
+            <div className="mt-3 space-y-2">
+              <label className="flex w-full cursor-pointer items-center justify-center gap-2 rounded-xl border border-dashed border-slate-300 bg-slate-50 px-4 py-3 text-sm font-bold text-slate-700">
+                <input
+                  type="file"
+                  accept="image/*"
+                  capture="environment"
+                  className="hidden"
+                  disabled={slipUploading}
+                  onChange={(e) => { void handleSlipPhoto(e.target.files?.[0] ?? null); e.target.value = ""; }}
+                />
+                {slipUploading ? <RefreshCw className="h-5 w-5 animate-spin" /> : <Camera className="h-5 w-5" />}
+                {slipUploading ? "Lecture en cours..." : "Photo du bon de livraison"}
+              </label>
+
+              {slipError ? <div className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs font-semibold text-red-700">{slipError}</div> : null}
+              {slipDoneCount ? <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-700">{slipDoneCount} matériau{slipDoneCount > 1 ? "x" : ""} ajouté{slipDoneCount > 1 ? "s" : ""} au stock.</div> : null}
+
+              {slipLines.length > 0 ? (
+                <div className="space-y-2">
+                  {slipLines.map((line, index) => (
+                    <div key={index} className="rounded-xl border border-slate-200 p-3">
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0">
+                          <div className="truncate text-sm font-semibold text-slate-900">{line.designation}</div>
+                          {line.productDesignation ? (
+                            <div className="mt-0.5 truncate text-xs font-semibold text-emerald-700">→ {line.productDesignation}</div>
+                          ) : (
+                            <div className="mt-0.5 text-xs font-semibold text-amber-700">Produit à associer</div>
+                          )}
+                        </div>
+                        <button type="button" onClick={() => removeSlipLine(index)} className="shrink-0 text-xs font-semibold text-slate-400">Retirer</button>
+                      </div>
+
+                      {slipEditingIndex === index ? (
+                        <div className="relative mt-2">
+                          <input
+                            autoFocus
+                            value={slipSearchQuery}
+                            onChange={(e) => setSlipSearchQuery(e.target.value)}
+                            placeholder="Chercher le produit correspondant..."
+                            className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"
+                          />
+                          {slipSearchQuery.trim() && (slipSearching || slipSearchResults.length > 0) ? (
+                            <div className="absolute z-10 mt-1 w-full overflow-hidden rounded-xl border border-slate-200 bg-white shadow-lg">
+                              {slipSearching ? (
+                                <div className="px-3 py-2.5 text-xs text-slate-500">Recherche...</div>
+                              ) : (
+                                slipSearchResults.map((product) => (
+                                  <button
+                                    key={product.id}
+                                    type="button"
+                                    onClick={() => pickProductForSlipLine(index, product)}
+                                    className="block w-full truncate px-3 py-2.5 text-left text-sm hover:bg-slate-50"
+                                  >
+                                    {product.designation} <span className="text-xs text-slate-400">({product.unit})</span>
+                                  </button>
+                                ))
+                              )}
+                            </div>
+                          ) : null}
+                        </div>
+                      ) : (
+                        <button type="button" onClick={() => startEditingSlipLine(index)} className="mt-2 text-xs font-semibold text-blue-700">
+                          {line.productDesignation ? "Changer le produit" : "Associer un produit"}
+                        </button>
+                      )}
+
+                      <div className="mt-2 flex items-center gap-2">
+                        <input
+                          value={line.quantity}
+                          onChange={(e) => setSlipLines((prev) => prev.map((l, i) => (i === index ? { ...l, quantity: e.target.value } : l)))}
+                          inputMode="decimal"
+                          className="w-24 rounded-xl border border-slate-200 px-3 py-2 text-sm"
+                        />
+                        <span className="text-xs text-slate-500">{line.productUnit ?? line.unit}</span>
+                      </div>
+                    </div>
+                  ))}
+
+                  <button
+                    type="button"
+                    onClick={submitSlipLines}
+                    disabled={slipSubmitting || !slipLines.some((l) => l.productId && l.quantity.trim())}
+                    className="w-full rounded-xl bg-slate-950 px-4 py-2.5 text-sm font-bold text-white disabled:opacity-40"
+                  >
+                    {slipSubmitting ? "Enregistrement..." : "Valider et mettre en stock"}
+                  </button>
+                </div>
+              ) : null}
+            </div>
+          </Card>
+
+          <Card>
+            <h3 className="font-bold">Matériaux utilisés aujourd'hui</h3>
+            <p className="mt-1 text-xs text-slate-500">Ce que tu as pris ou posé aujourd'hui, pour garder le stock à jour. Ex. 10 plaques de placo, une boîte de vis 25mm...</p>
+            <div className="mt-3 space-y-2">
+              {stockPicked ? (
+                <div className="flex items-center justify-between gap-2 rounded-xl border border-blue-200 bg-blue-50 px-3 py-2.5">
+                  <div className="min-w-0">
+                    <div className="truncate text-sm font-semibold text-blue-900">{stockPicked.designation}</div>
+                    <div className="text-xs text-blue-700">{stockPicked.unit}</div>
+                  </div>
+                  <button type="button" onClick={() => { setStockPicked(null); setStockQuantite(""); }} className="shrink-0 text-xs font-semibold text-blue-700">Changer</button>
+                </div>
+              ) : (
+                <div className="relative">
+                  <input
+                    value={stockQuery}
+                    onChange={(e) => setStockQuery(e.target.value)}
+                    placeholder="Chercher un matériau... Ex. placo, vis 25mm"
+                    className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm"
+                  />
+                  {stockQuery.trim() && (stockSearching || stockResults.length > 0) ? (
+                    <div className="absolute z-10 mt-1 w-full overflow-hidden rounded-xl border border-slate-200 bg-white shadow-lg">
+                      {stockSearching ? (
+                        <div className="px-3 py-2.5 text-xs text-slate-500">Recherche...</div>
+                      ) : (
+                        stockResults.map((product) => (
+                          <button
+                            key={product.id}
+                            type="button"
+                            onClick={() => { setStockPicked(product); setStockQuery(""); setStockResults([]); }}
+                            className="block w-full truncate px-3 py-2.5 text-left text-sm hover:bg-slate-50"
+                          >
+                            {product.designation} <span className="text-xs text-slate-400">({product.unit})</span>
+                          </button>
+                        ))
+                      )}
+                    </div>
+                  ) : null}
+                </div>
+              )}
+              {stockPicked ? (
+                <div className="flex gap-2">
+                  <input value={stockQuantite} onChange={(e) => setStockQuantite(e.target.value)} inputMode="decimal" placeholder={`Quantité (${stockPicked.unit})`} className="min-w-0 flex-1 rounded-xl border border-slate-200 px-3 py-2.5 text-sm" />
+                  <button type="button" onClick={saveStockDeclaration} disabled={savingStock || !stockQuantite.trim()} className="flex shrink-0 items-center gap-1.5 rounded-xl bg-slate-950 px-4 py-2.5 text-sm font-bold text-white disabled:opacity-40">
+                    {savingStock ? "..." : <><Plus className="h-4 w-4" />Ajouter</>}
+                  </button>
+                </div>
+              ) : null}
+              {stockAddedToday.length > 0 ? (
+                <div className="space-y-1.5 pt-1">
+                  {stockAddedToday.map((entry, i) => (
+                    <div key={`${entry.id}-${i}`} className="flex items-center gap-2 text-xs text-slate-600">
+                      <Boxes className="h-3.5 w-3.5 shrink-0 text-slate-400" />
+                      <span className="truncate">{entry.quantity} {entry.unit} — {entry.designation}</span>
+                    </div>
+                  ))}
+                </div>
+              ) : null}
+            </div>
+          </Card>
+
+          <Card>
             <h3 className="font-bold">Checklist du jour</h3>
             <div className="mt-3 grid grid-cols-3 gap-2">
               {([
@@ -655,6 +976,8 @@ export default function EmployeePortalV2Page() {
         ["renseigner", "À renseigner", CheckCircle2],
         ["fil", "Fil", MessageCircle],
       ] as const).map(([key, label, Icon]) => <button key={key} type="button" onClick={() => setTab(key)} className={`flex min-h-14 flex-col items-center justify-center gap-1 rounded-xl px-1 text-[11px] font-semibold ${tab === key ? "bg-blue-50 text-blue-700" : "text-slate-500"}`}><Icon className="h-5 w-5" /><span>{label}</span></button>)}</div></nav>
+
+      <RaulPortalWidget token={token} chantierId={selected?.id ?? null} />
     </div>
   );
 }

@@ -11,20 +11,28 @@ function findConsigneTarget(consigneId: string) {
   return byDataAttribute ?? document.getElementById(`consigne-${consigneId}`);
 }
 
-export default function ChantierInstructionsSection({ children }: { children: React.ReactNode }) {
+export default function ChantierInstructionsSection({
+  children,
+  targetReady = false,
+  targetLoading = false,
+}: {
+  children: React.ReactNode;
+  targetReady?: boolean;
+  targetLoading?: boolean;
+}) {
   const [searchParams, setSearchParams] = useSearchParams();
   const targetedConsigneId = searchParams.get("consigneId") ?? "";
   const sectionRef = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
-    if (!targetedConsigneId) return;
+    if (!targetedConsigneId || !targetReady) return;
     const frame = window.requestAnimationFrame(() => {
       const target = findConsigneTarget(targetedConsigneId) ?? sectionRef.current;
       target?.scrollIntoView({ behavior: "smooth", block: "center" });
       if (target instanceof HTMLElement) target.focus({ preventScroll: true });
     });
     return () => window.cancelAnimationFrame(frame);
-  }, [targetedConsigneId]);
+  }, [targetReady, targetedConsigneId]);
 
   function clearConsigneTarget() {
     if (!targetedConsigneId) return;
@@ -44,9 +52,13 @@ export default function ChantierInstructionsSection({ children }: { children: Re
         <div className="rounded-2xl border border-blue-200 bg-blue-50 p-4 text-sm text-blue-900">
           <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
             <div>
-              <div className="font-semibold">Consigne ciblée depuis un lien Batipro</div>
+              <div className="font-semibold">Consigne ciblée depuis le journal chantier</div>
               <p className="mt-1 text-blue-800">
-                La consigne concernée est recherchée dans la liste, puis la zone Consignes reste affichée si l'élément n'est plus visible ou accessible.
+                {targetLoading
+                  ? "Chargement de la consigne ciblée..."
+                  : targetReady
+                    ? "La consigne créée depuis la publication est mise en évidence ci-dessous."
+                    : "Cette consigne n'est plus visible ou n'est pas accessible sur ce chantier."}
               </p>
             </div>
             <button

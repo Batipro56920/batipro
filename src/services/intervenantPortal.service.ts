@@ -707,6 +707,101 @@ export async function intervenantMaterialConsumptionCreate(
   if (error) throw new Error(rpcMessage(error, "Enregistrement consommation impossible."));
 }
 
+export type IntervenantProductCatalogItem = {
+  id: string;
+  designation: string;
+  unit: string;
+  category: string | null;
+};
+
+/** Recherche libre dans le catalogue produits, pour la déclaration de matériaux utilisés (indépendante de la tâche). */
+export async function intervenantProductCatalogSearch(
+  token: string,
+  chantierId: string,
+  query: string,
+): Promise<IntervenantProductCatalogItem[]> {
+  const { data, error } = await (supabase as any).rpc("intervenant_product_catalog_search", {
+    p_token: normalizePortalToken(token),
+    p_chantier_id: chantierId,
+    p_query: query,
+  });
+  if (error) throw new Error(rpcMessage(error, "Recherche produit impossible."));
+
+  const rows = Array.isArray(data) ? data : [];
+  return rows.map((row) => ({
+    id: String(row.id ?? ""),
+    designation: String(row.designation ?? ""),
+    unit: String(row.unit ?? ""),
+    category: asNullableString(row.category),
+  }));
+}
+
+/** Déclaration libre d'un matériau utilisé aujourd'hui (n'importe quel produit du catalogue) — crée une sortie de stock. */
+export async function intervenantStockDeclarationCreate(
+  token: string,
+  payload: { chantier_id: string; product_id: string; quantity: number; work_date?: string | null; note?: string | null },
+): Promise<void> {
+  const { error } = await (supabase as any).rpc("intervenant_stock_declaration_create", {
+    p_token: normalizePortalToken(token),
+    p_payload: payload,
+  });
+  if (error) throw new Error(rpcMessage(error, "Enregistrement matériau impossible."));
+}
+
+export type IntervenantDeliverySlipLine = { designation: string; quantity: number; unit: string };
+export type IntervenantDeliverySlipExtractResult = {
+  lines: IntervenantDeliverySlipLine[];
+  storage_path: string;
+  storage_bucket: string;
+};
+
+/** Envoie la photo d'un bon de livraison, l'IA lit les lignes de matériaux — à valider ensuite avant création en stock. */
+export async function intervenantDeliverySlipExtract(
+  token: string,
+  chantierId: string,
+  file: File,
+): Promise<IntervenantDeliverySlipExtractResult> {
+  const formData = new FormData();
+  formData.set("token", normalizePortalToken(token) ?? "");
+  formData.set("chantier_id", chantierId);
+  formData.set("file", file);
+
+  const { data, error } = await supabase.functions.invoke("intervenant-delivery-slip-extract", {
+    body: formData,
+  });
+  if (error) throw new Error(rpcMessage(error, "Lecture du bon de livraison impossible."));
+
+  const payload = (data && typeof data === "object" ? data : {}) as Record<string, unknown>;
+  const rows = Array.isArray(payload.lines) ? payload.lines : [];
+  return {
+    lines: rows.map((row: any) => ({
+      designation: String(row?.designation ?? ""),
+      quantity: Number(row?.quantity ?? 0),
+      unit: String(row?.unit ?? "u"),
+    })),
+    storage_path: String(payload.storage_path ?? ""),
+    storage_bucket: String(payload.storage_bucket ?? ""),
+  };
+}
+
+/** Crée une entrée de stock validée par l'ouvrier à partir d'une ligne lue sur un bon de livraison. */
+export async function intervenantStockReceptionCreate(
+  token: string,
+  payload: {
+    chantier_id: string;
+    product_id: string;
+    quantity: number;
+    source_storage_bucket?: string | null;
+    source_storage_path?: string | null;
+  },
+): Promise<void> {
+  const { error } = await (supabase as any).rpc("intervenant_stock_reception_create", {
+    p_token: normalizePortalToken(token),
+    p_payload: payload,
+  });
+  if (error) throw new Error(rpcMessage(error, "Création entrée de stock impossible."));
+}
+
 export async function intervenantMaterielCreate(
   token: string,
   payload: IntervenantMaterielCreatePayload,

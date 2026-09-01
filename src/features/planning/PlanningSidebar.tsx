@@ -1,26 +1,34 @@
-﻿import type { PlanningEntryRow, PlanningTaskRow, TaskDependencyRow } from "./planning.service";
+﻿import { useState } from "react";
+import type { PlanningEntryRow, PlanningTaskRow, TaskDependencyRow } from "./planning.service";
 
 type Props = {
   selectedEntry: PlanningEntryRow | null;
   selectedTask: PlanningTaskRow | null;
   dependencies: TaskDependencyRow[];
+  allTasks: PlanningTaskRow[];
   onToggleLock: () => void;
   onDeleteEntry: () => void;
   onClearSelection: () => void;
   unplannedTasks: PlanningTaskRow[];
   onCreateEntry: (task: PlanningTaskRow) => void;
+  onCreateDependency: (predecessorTaskId: string) => void;
+  onDeleteDependency: (dependencyId: string) => void;
 };
 
 export default function PlanningSidebar({
   selectedEntry,
   selectedTask,
   dependencies,
+  allTasks,
   onToggleLock,
   onDeleteEntry,
   onClearSelection,
   unplannedTasks,
   onCreateEntry,
+  onCreateDependency,
+  onDeleteDependency,
 }: Props) {
+  const [predecessorPick, setPredecessorPick] = useState("");
   const taskDeps = selectedTask
     ? dependencies.filter(
         (d) => d.predecessor_task_id === selectedTask.id || d.successor_task_id === selectedTask.id,
@@ -67,20 +75,62 @@ export default function PlanningSidebar({
             </div>
           </div>
 
-          <div className="space-y-1">
+          <div className="space-y-2">
             <div className="text-xs text-slate-500">Dépendances</div>
             {taskDeps.length === 0 ? (
               <div className="text-xs text-slate-400">Aucune dépendance.</div>
             ) : (
-              <ul className="text-xs text-slate-600 list-disc ml-4">
-                {taskDeps.map((d) => (
-                  <li key={d.id}>
-                    {d.predecessor_task_id === selectedTask.id ? "Successeur" : "Prédécesseur"} —{" "}
-                    {d.type}
-                  </li>
-                ))}
+              <ul className="text-xs text-slate-600 space-y-1">
+                {taskDeps.map((d) => {
+                  const isSuccessor = d.predecessor_task_id === selectedTask.id;
+                  const otherTaskId = isSuccessor ? d.successor_task_id : d.predecessor_task_id;
+                  const otherTitle = allTasks.find((t) => t.id === otherTaskId)?.titre ?? otherTaskId.slice(0, 6);
+                  return (
+                    <li key={d.id} className="flex items-center justify-between gap-2">
+                      <span className="truncate">
+                        {isSuccessor ? "Doit précéder : " : "Doit suivre : "}
+                        {otherTitle}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => onDeleteDependency(d.id)}
+                        className="shrink-0 text-slate-400 hover:text-red-600"
+                        title="Retirer cette dépendance"
+                      >
+                        ✕
+                      </button>
+                    </li>
+                  );
+                })}
               </ul>
             )}
+            <div className="flex items-center gap-2">
+              <select
+                value={predecessorPick}
+                onChange={(e) => setPredecessorPick(e.target.value)}
+                className="flex-1 rounded-xl border px-2 py-1.5 text-xs"
+              >
+                <option value="">Doit suivre la tâche…</option>
+                {allTasks
+                  .filter((t) => t.id !== selectedTask.id)
+                  .map((t) => (
+                    <option key={t.id} value={t.id}>
+                      {t.titre}
+                    </option>
+                  ))}
+              </select>
+              <button
+                type="button"
+                disabled={!predecessorPick}
+                onClick={() => {
+                  onCreateDependency(predecessorPick);
+                  setPredecessorPick("");
+                }}
+                className="rounded-xl border px-3 py-1.5 text-xs hover:bg-slate-50 disabled:opacity-40"
+              >
+                Ajouter
+              </button>
+            </div>
           </div>
 
           <div className="flex flex-wrap gap-2">
