@@ -932,6 +932,50 @@ export async function intervenantDailyChecklistUpsert(
   };
 }
 
+export type IntervenantDailyTaskPlanEntry = {
+  task_id: string;
+  order_index: number;
+};
+
+function mapDailyTaskPlanRows(data: unknown): IntervenantDailyTaskPlanEntry[] {
+  const rows = Array.isArray(data) ? data : [];
+  return rows
+    .map((row: any) => ({ task_id: String(row.task_id ?? ""), order_index: Number(row.order_index ?? 0) }))
+    .filter((row) => row.task_id);
+}
+
+/** "J'organise ma journée" (onglet Matin) : tâches choisies par l'ouvrier pour aujourd'hui, dans l'ordre qu'il a défini. */
+export async function intervenantDailyTaskPlanGet(
+  token: string,
+  chantierId: string,
+  planDate: string,
+): Promise<IntervenantDailyTaskPlanEntry[]> {
+  const { data, error } = await (supabase as any).rpc("intervenant_daily_task_plan_get", {
+    p_token: normalizePortalToken(token),
+    p_chantier_id: chantierId,
+    p_plan_date: planDate,
+  });
+  if (error) throw new Error(rpcMessage(error, "Chargement de l'organisation du jour impossible."));
+  return mapDailyTaskPlanRows(data);
+}
+
+/** Remplace entièrement la sélection/ordre du jour par la liste fournie. */
+export async function intervenantDailyTaskPlanSet(
+  token: string,
+  chantierId: string,
+  planDate: string,
+  taskIds: string[],
+): Promise<IntervenantDailyTaskPlanEntry[]> {
+  const { data, error } = await (supabase as any).rpc("intervenant_daily_task_plan_set", {
+    p_token: normalizePortalToken(token),
+    p_chantier_id: chantierId,
+    p_plan_date: planDate,
+    p_task_ids: taskIds,
+  });
+  if (error) throw new Error(rpcMessage(error, "Enregistrement de l'organisation du jour impossible."));
+  return mapDailyTaskPlanRows(data);
+}
+
 export async function intervenantInformationRequestCreate(
   token: string,
   payload: {
