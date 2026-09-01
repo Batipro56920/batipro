@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { AlertTriangle, Boxes, CalendarDays, Camera, CheckCircle2, ChevronRight, ClipboardList, FileText, Home, LogOut, MapPin, MessageCircle, PackageSearch, Phone, Plus, RefreshCw, Send, ShieldAlert, Wrench } from "lucide-react";
+import { AlertTriangle, Boxes, CalendarDays, Camera, CheckCircle2, Circle, FileText, ListOrdered, LogOut, MapPin, MessageCircle, Moon, PackageSearch, Plus, RefreshCw, Send, ShieldAlert, Sunrise, Wrench } from "lucide-react";
 import { useLocation, useNavigate } from "react-router-dom";
 
 import { supabase } from "../lib/supabaseClient";
@@ -11,9 +11,13 @@ import {
   intervenantConsigneList,
   intervenantDailyChecklistGet,
   intervenantDailyChecklistUpsert,
+  intervenantDailyTaskPlanGet,
+  intervenantDailyTaskPlanSet,
   intervenantGetChantiers,
   intervenantGetDocuments,
+  intervenantGetPlanning,
   intervenantGetTasks,
+  intervenantInformationRequestCreate,
   intervenantInformationRequestList,
   intervenantDeliverySlipExtract,
   intervenantMaterielCreate,
@@ -22,6 +26,7 @@ import {
   intervenantSession,
   intervenantStockDeclarationCreate,
   intervenantStockReceptionCreate,
+  intervenantTaskEquipment,
   intervenantTaskMainMaterials,
   intervenantTerrainFeedbackCreate,
   intervenantTimeCreate,
@@ -32,8 +37,10 @@ import {
   type IntervenantDailyChecklist,
   type IntervenantDocument,
   type IntervenantInformationRequest,
+  type IntervenantPlanningLot,
   type IntervenantProductCatalogItem,
   type IntervenantTask,
+  type IntervenantTaskEquipment,
   type IntervenantTaskMainMaterial,
 } from "../services/intervenantPortal.service";
 import {
@@ -67,7 +74,7 @@ async function resolveEffectivePortalToken(search: string): Promise<string> {
   return stored || AUTH_SESSION_PORTAL_TOKEN;
 }
 
-type Tab = "accueil" | "chantier" | "renseigner" | "fil";
+type Tab = "chantier" | "matin" | "soir" | "fil";
 
 type SiteData = {
   tasks: IntervenantTask[];
@@ -79,9 +86,18 @@ type SiteData = {
 
 const EMPTY: SiteData = { tasks: [], documents: [], consignes: [], requests: [], feed: [] };
 
-function isoToday() {
-  const d = new Date();
+function isoDate(d: Date) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+function isoToday() {
+  return isoDate(new Date());
+}
+
+function isoTomorrow() {
+  const d = new Date();
+  d.setDate(d.getDate() + 1);
+  return isoDate(d);
 }
 
 function formatDate(value: string | null | undefined) {
@@ -100,34 +116,37 @@ function taskDone(task: IntervenantTask) {
   return ["FAIT", "TERMINE", "DONE", "COMPLETED"].includes(status) || ["termine_intervenant", "valide_admin"].includes(task.quality_status);
 }
 
-function nextTask(tasks: IntervenantTask[]) {
-  return [...tasks]
-    .filter((task) => !taskDone(task))
-    .sort((a, b) => {
-      const ad = taskDate(a) ? Date.parse(`${taskDate(a)}T00:00:00`) : Number.MAX_SAFE_INTEGER;
-      const bd = taskDate(b) ? Date.parse(`${taskDate(b)}T00:00:00`) : Number.MAX_SAFE_INTEGER;
-      return ad - bd || a.order_index - b.order_index;
-    })[0] ?? null;
-}
-
 function isToday(value: string | null | undefined) {
   return !!value && value === isoToday();
 }
 
-/** "Ma semaine" : les prochains jours avec tâche, groupés par date — pensé pour un ouvrier (où je vais, quoi faire), pas un Gantt par lot. */
-function upcomingByDay(tasks: IntervenantTask[]) {
+/** Une tâche pluri-jours démarrée hier (ou avant) et pas encore finie reste "active aujourd'hui", contrairement à isToday qui ne matche que le jour exact de date_debut. Utilisé pour l'onglet Matin. */
+function isActiveToday(task: IntervenantTask) {
+  const start = task.date_debut ?? task.date ?? task.date_fin;
+  if (!start) return false;
+  const end = task.date_fin ?? task.date_debut ?? task.date ?? start;
+  const today = isoToday();
+  return start <= today && today <= end;
+}
+
+const NO_DATE_GROUP = "__sans_date__";
+
+/** Toutes les tâches non terminées, groupées par date (les tâches sans date à part, en dernier) — la liste complète, pas un aperçu. */
+function allTasksByDay(tasks: IntervenantTask[]) {
   const groups = new Map<string, IntervenantTask[]>();
   for (const task of tasks) {
     if (taskDone(task)) continue;
-    const date = taskDate(task);
-    if (!date) continue;
+    const date = taskDate(task) ?? NO_DATE_GROUP;
     const list = groups.get(date) ?? [];
     list.push(task);
     groups.set(date, list);
   }
   return Array.from(groups.entries())
-    .sort(([a], [b]) => a.localeCompare(b))
-    .slice(0, 7)
+    .sort(([a], [b]) => {
+      if (a === NO_DATE_GROUP) return 1;
+      if (b === NO_DATE_GROUP) return -1;
+      return a.localeCompare(b);
+    })
     .map(([date, items]) => ({ date, items: [...items].sort((a, b) => a.order_index - b.order_index) }));
 }
 
@@ -159,7 +178,7 @@ export default function EmployeePortalV2Page() {
   const location = useLocation();
   const [resolvedToken, setResolvedToken] = useState<string | null>(null);
   const token = resolvedToken ?? AUTH_SESSION_PORTAL_TOKEN;
-  const [tab, setTab] = useState<Tab>("accueil");
+  const [tab, setTab] = useState<Tab>("chantier");
   const [name, setName] = useState("Intervenant");
   const [intervenantId, setIntervenantId] = useState("");
   const [chantiers, setChantiers] = useState<IntervenantChantier[]>([]);
@@ -181,6 +200,14 @@ export default function EmployeePortalV2Page() {
   const [materialConsumptionQty, setMaterialConsumptionQty] = useState<Record<string, string>>({});
   const [checklist, setChecklist] = useState<IntervenantDailyChecklist | null>(null);
   const [savingChecklistKey, setSavingChecklistKey] = useState<string | null>(null);
+  const [planningLots, setPlanningLots] = useState<IntervenantPlanningLot[]>([]);
+  const [matinMaterialsByTask, setMatinMaterialsByTask] = useState<Record<string, IntervenantTaskMainMaterial[]>>({});
+  const [matinEquipmentByTask, setMatinEquipmentByTask] = useState<Record<string, IntervenantTaskEquipment[]>>({});
+  const [matinGapReported, setMatinGapReported] = useState<Record<string, boolean>>({});
+  const [matinReportingKey, setMatinReportingKey] = useState<string | null>(null);
+  const [selectedTaskIds, setSelectedTaskIds] = useState<string[]>([]);
+  const [dailyPlanLoaded, setDailyPlanLoaded] = useState(false);
+  const [savingDailyPlan, setSavingDailyPlan] = useState(false);
   const [imprevuMode, setImprevuMode] = useState<"none" | "materiel" | "blocage">("none");
   const [materielTitre, setMaterielTitre] = useState("");
   const [materielQuantite, setMaterielQuantite] = useState("");
@@ -188,6 +215,11 @@ export default function EmployeePortalV2Page() {
   const [savingMateriel, setSavingMateriel] = useState(false);
   const [blocageText, setBlocageText] = useState("");
   const [sendingBlocage, setSendingBlocage] = useState(false);
+  const [demainKind, setDemainKind] = useState<"materiel" | "information">("materiel");
+  const [demainTitre, setDemainTitre] = useState("");
+  const [demainQuantite, setDemainQuantite] = useState("");
+  const [demainUnite, setDemainUnite] = useState("");
+  const [savingDemain, setSavingDemain] = useState(false);
   const [stockQuery, setStockQuery] = useState("");
   const [stockResults, setStockResults] = useState<IntervenantProductCatalogItem[]>([]);
   const [stockSearching, setStockSearching] = useState(false);
@@ -277,7 +309,7 @@ export default function EmployeePortalV2Page() {
 
   const selected = useMemo(() => chantiers.find((c) => c.id === selectedId) ?? chantiers[0] ?? null, [chantiers, selectedId]);
 
-  // Chaque chantier a son propre espace "à renseigner" / "fil" : un brouillon commencé sur un
+  // Chaque chantier a son propre espace "soir" / "fil" : un brouillon commencé sur un
   // chantier ne doit pas se retrouver envoyé sur un autre après un changement de sélection.
   useEffect(() => {
     setMessage("");
@@ -291,6 +323,10 @@ export default function EmployeePortalV2Page() {
     setMaterielQuantite("");
     setMaterielUnite("");
     setBlocageText("");
+    setDemainTitre("");
+    setDemainQuantite("");
+    setDemainUnite("");
+    setMatinGapReported({});
   }, [selected?.id]);
 
   const todaysChantierIds = useMemo(() => {
@@ -318,6 +354,15 @@ export default function EmployeePortalV2Page() {
 
   useEffect(() => {
     let alive = true;
+    if (!selected) { setPlanningLots([]); return; }
+    intervenantGetPlanning(token, selected.id)
+      .then((planning) => { if (alive) setPlanningLots(planning.lots); })
+      .catch(() => { if (alive) setPlanningLots([]); });
+    return () => { alive = false; };
+  }, [token, selected?.id, refreshKey]);
+
+  useEffect(() => {
+    let alive = true;
     if (!selected || !timeTaskId) { setMainMaterials([]); return; }
     intervenantTaskMainMaterials(token, selected.id, timeTaskId)
       .then((rows) => { if (alive) setMainMaterials(rows); })
@@ -325,13 +370,72 @@ export default function EmployeePortalV2Page() {
     return () => { alive = false; };
   }, [token, selected?.id, timeTaskId]);
 
+  const activeTasksTodayIds = useMemo(
+    () => (selected ? (dataByChantier[selected.id]?.tasks ?? []).filter((t) => !taskDone(t) && isActiveToday(t)).map((t) => t.id) : []),
+    [selected, dataByChantier],
+  );
+
+  // Onglet Matin : "J'organise ma journée" — charge la sélection mémorisée pour aujourd'hui ; à défaut, propose les tâches prévues aujourd'hui.
+  useEffect(() => {
+    let alive = true;
+    setDailyPlanLoaded(false);
+    if (!selected) { setSelectedTaskIds([]); return; }
+    intervenantDailyTaskPlanGet(token, selected.id, isoToday())
+      .then((rows) => {
+        if (!alive) return;
+        setSelectedTaskIds(rows.length ? rows.map((r) => r.task_id) : activeTasksTodayIds);
+        setDailyPlanLoaded(true);
+      })
+      .catch(() => { if (alive) { setSelectedTaskIds(activeTasksTodayIds); setDailyPlanLoaded(true); } });
+    return () => { alive = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [token, selected?.id]);
+
+  // Onglet Matin : matériaux prévus pour les tâches choisies par l'ouvrier (pré-remplissage, pas de saisie).
+  useEffect(() => {
+    if (!selected || selectedTaskIds.length === 0) { setMatinMaterialsByTask({}); return; }
+    let alive = true;
+    Promise.all(
+      selectedTaskIds.map(async (taskId) => [taskId, await intervenantTaskMainMaterials(token, selected.id, taskId).catch(() => [])] as const),
+    ).then((entries) => { if (alive) setMatinMaterialsByTask(Object.fromEntries(entries)); });
+    return () => { alive = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [token, selected?.id, selectedTaskIds.join(",")]);
+
+  // Onglet Matin : matériel/outillage prévu pour les tâches choisies (même principe que les matériaux).
+  useEffect(() => {
+    if (!selected || selectedTaskIds.length === 0) { setMatinEquipmentByTask({}); return; }
+    let alive = true;
+    Promise.all(
+      selectedTaskIds.map(async (taskId) => [taskId, await intervenantTaskEquipment(token, selected.id, taskId).catch(() => [])] as const),
+    ).then((entries) => { if (alive) setMatinEquipmentByTask(Object.fromEntries(entries)); });
+    return () => { alive = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [token, selected?.id, selectedTaskIds.join(",")]);
+
+  async function toggleSelectedTask(taskId: string) {
+    if (!selected || savingDailyPlan) return;
+    const next = selectedTaskIds.includes(taskId) ? selectedTaskIds.filter((id) => id !== taskId) : [...selectedTaskIds, taskId];
+    setSelectedTaskIds(next);
+    setSavingDailyPlan(true);
+    try {
+      await intervenantDailyTaskPlanSet(token, selected.id, isoToday(), next);
+    } catch {
+      // silencieux : l'organisation du jour est un confort, pas un blocage — la sélection reste correcte localement
+    } finally {
+      setSavingDailyPlan(false);
+    }
+  }
+
   useEffect(() => {
     const task = (selected ? dataByChantier[selected.id]?.tasks ?? [] : []).find((t) => t.id === timeTaskId);
     setTimeProgressPercent(task ? String(taskProgressPercent(task)) : "");
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [timeTaskId]);
 
-  async function toggleChecklistItem(key: "has_equipment" | "has_materials" | "has_information") {
+  type ChecklistKey = "has_equipment" | "has_materials" | "has_information" | "site_propre" | "materiel_range" | "camion_range";
+
+  async function toggleChecklistItem(key: ChecklistKey) {
     if (savingChecklistKey) return;
     setSavingChecklistKey(key);
     try {
@@ -339,6 +443,9 @@ export default function EmployeePortalV2Page() {
         has_equipment: checklist?.has_equipment ?? false,
         has_materials: checklist?.has_materials ?? false,
         has_information: checklist?.has_information ?? false,
+        site_propre: checklist?.site_propre ?? false,
+        materiel_range: checklist?.materiel_range ?? false,
+        camion_range: checklist?.camion_range ?? false,
       };
       const next = await intervenantDailyChecklistUpsert(token, {
         chantier_id: selected?.id ?? null,
@@ -354,29 +461,78 @@ export default function EmployeePortalV2Page() {
     }
   }
 
+  /** Onglet Matin : signaler en un geste qu'un matériau prévu manque, avec la quantité déjà connue du système. */
+  async function reportMatinMaterialGap(task: IntervenantTask, material: IntervenantTaskMainMaterial) {
+    if (!selected || matinReportingKey) return;
+    const key = `${task.id}:${material.material_ratio_id}`;
+    setMatinReportingKey(key);
+    try {
+      await intervenantMaterielCreate(token, {
+        chantier_id: selected.id,
+        task_id: task.id,
+        titre: material.material_name,
+        quantite: material.expected_quantity,
+        unite: material.ratio_unit,
+      });
+      setMatinGapReported((prev) => ({ ...prev, [key]: true }));
+    } finally {
+      setMatinReportingKey(null);
+    }
+  }
+
+  async function reportMatinEquipmentGap(task: IntervenantTask, equipment: IntervenantTaskEquipment) {
+    if (!selected || matinReportingKey) return;
+    const key = `${task.id}:${equipment.equipment_item_id}`;
+    setMatinReportingKey(key);
+    try {
+      await intervenantMaterielCreate(token, {
+        chantier_id: selected.id,
+        task_id: task.id,
+        titre: equipment.equipment_name,
+        quantite: equipment.default_quantity,
+        unite: equipment.unit,
+      });
+      setMatinGapReported((prev) => ({ ...prev, [key]: true }));
+    } finally {
+      setMatinReportingKey(null);
+    }
+  }
+
+  async function saveDemain() {
+    if (!selected || !demainTitre.trim() || savingDemain) return;
+    setSavingDemain(true);
+    try {
+      if (demainKind === "materiel") {
+        await intervenantMaterielCreate(token, {
+          chantier_id: selected.id,
+          task_id: null,
+          titre: demainTitre.trim(),
+          quantite: demainQuantite.trim() ? Number(demainQuantite.replace(",", ".")) : null,
+          unite: demainUnite.trim() || null,
+          date_souhaitee: isoTomorrow(),
+        });
+      } else {
+        await intervenantInformationRequestCreate(token, {
+          chantier_id: selected.id,
+          request_date: isoTomorrow(),
+          subject: "Besoin pour demain",
+          message: demainTitre.trim(),
+        });
+      }
+      setDemainTitre("");
+      setDemainQuantite("");
+      setDemainUnite("");
+      setRefreshKey((v) => v + 1);
+    } finally {
+      setSavingDemain(false);
+    }
+  }
+
   const data = selected ? dataByChantier[selected.id] ?? EMPTY : EMPTY;
-  const next = useMemo(() => nextTask(data.tasks), [data.tasks]);
   const pct = selected ? progress(data, selected) : 0;
-  const unread = data.consignes.filter((c) => !c.is_read).length;
   const openRequests = data.requests.filter((r) => r.status !== "traitee").length;
   const pendingTasks = data.tasks.filter((t) => !taskDone(t));
-
-  const toFill = useMemo(() => {
-    const rows: Array<{ title: string; detail: string; action: "time" | "task" | "fil" }> = [];
-    const current = nextTask(data.tasks);
-    if (current) rows.push({ title: "Avancement de la prochaine tâche", detail: current.titre, action: "task" });
-    if (current) rows.push({ title: "Temps passé", detail: `Renseigner le temps réel sur ${current.titre}`, action: "time" });
-    rows.push({ title: "Photo, remarque ou blocage", detail: "Ajouter l'information directement au fil chantier", action: "fil" });
-    return rows;
-  }, [data.tasks]);
-
-  const toRead = useMemo(() => {
-    const items = [
-      ...data.consignes.filter((c) => !c.is_read).map((c) => ({ title: c.title, detail: c.description || "Consigne chantier", tone: c.priority === "urgente" ? "red" : "amber" as const })),
-      ...data.requests.filter((r) => r.admin_reply).map((r) => ({ title: r.subject, detail: r.admin_reply || "Réponse disponible", tone: "blue" as const })),
-    ];
-    return items.slice(0, 6);
-  }, [data.consignes, data.requests]);
+  const unreadConsignes = data.consignes.filter((c) => !c.is_read);
 
   async function logout() {
     clearStoredIntervenantSession();
@@ -654,22 +810,40 @@ export default function EmployeePortalV2Page() {
           ) : null}
         </> : null}
 
-        {tab === "accueil" && selected ? <>
-          <Card className="border-blue-200">
-            <div className="flex items-center justify-between gap-3"><div><div className="text-[11px] font-bold uppercase tracking-[0.18em] text-blue-700">Prochaine intervention</div><h2 className="mt-1 text-xl font-bold">{selected.nom}</h2></div><Pill tone="blue">{formatDate(taskDate(next ?? {} as IntervenantTask))}</Pill></div>
-            <div className="mt-4 rounded-xl bg-slate-50 p-3"><div className="text-xs font-semibold text-slate-500">Prochaine tâche</div><div className="mt-1 text-base font-bold">{next?.titre ?? "Aucune tâche planifiée"}</div>{next ? <div className="mt-1 text-sm text-slate-500">{[next.lot, next.zone_nom, next.corps_etat].filter(Boolean).join(" · ")}</div> : null}</div>
-            <div className="mt-3 grid grid-cols-2 gap-2">
-              <button type="button" onClick={() => setTab("chantier")} className="flex items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-900">Voir le chantier <ChevronRight className="h-4 w-4" /></button>
-              <button type="button" onClick={() => { if (next) setTimeTaskId(next.id); setTab("renseigner"); }} className="flex items-center justify-center gap-2 rounded-xl bg-slate-950 px-4 py-3 text-sm font-bold text-white"><CheckCircle2 className="h-4 w-4" />Faire le point</button>
-            </div>
+        {tab === "chantier" && selected ? <>
+          <Card>
+            <div className="flex items-start justify-between gap-3"><div><div className="text-[11px] font-bold uppercase tracking-[0.18em] text-blue-700">Chantier</div><h2 className="mt-1 text-xl font-bold">{selected.nom}</h2><div className="mt-1 text-sm text-slate-500">{selected.client || "Client non renseigné"}</div></div><Pill tone="green">{pct}%</Pill></div>
+            <div className="mt-4 h-2 overflow-hidden rounded-full bg-slate-100"><div className="h-full rounded-full bg-blue-600" style={{ width: `${pct}%` }} /></div>
+            <a href={selected.adresse ? `https://maps.apple.com/?q=${encodeURIComponent(selected.adresse)}` : undefined} className="mt-4 flex items-center gap-3 rounded-xl border border-slate-200 p-3"><MapPin className="h-5 w-5 text-blue-600" /><span className="text-sm"><span className="block font-semibold">Adresse</span><span className="text-slate-500">{selected.adresse || "Non renseignée"}</span></span></a>
           </Card>
 
+          {planningLots.length ? (
+            <Card>
+              <div className="flex items-center justify-between"><h3 className="font-bold">Planning</h3><CalendarDays className="h-5 w-5 text-blue-600" /></div>
+              <div className="mt-3 space-y-2">
+                {planningLots.map((lot) => (
+                  <div key={lot.lot} className="rounded-xl border border-slate-200 p-3">
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="text-sm font-bold">{lot.lot}</div>
+                      <Pill tone={lot.progress_pct >= 100 ? "green" : "slate"}>{lot.progress_pct}%</Pill>
+                    </div>
+                    <div className="mt-1 text-xs text-slate-500">
+                      {[lot.start_date ? formatDate(lot.start_date) : null, lot.end_date ? formatDate(lot.end_date) : null].filter(Boolean).join(" → ") || "Dates non renseignées"}
+                      {" · "}{lot.done_tasks}/{lot.total_tasks} tâche{lot.total_tasks > 1 ? "s" : ""}
+                    </div>
+                    <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-slate-100"><div className="h-full rounded-full bg-blue-600" style={{ width: `${lot.progress_pct}%` }} /></div>
+                  </div>
+                ))}
+              </div>
+            </Card>
+          ) : null}
+
           <Card>
-            <div className="flex items-center justify-between"><h3 className="font-bold">Ma semaine</h3><Pill tone="slate">{selected.nom}</Pill></div>
+            <div className="flex items-center justify-between"><h3 className="font-bold">Toutes les tâches</h3><Pill tone="slate">{pendingTasks.length}</Pill></div>
             <div className="mt-3 space-y-3">
-              {upcomingByDay(data.tasks).length ? upcomingByDay(data.tasks).map(({ date, items }) => (
+              {allTasksByDay(data.tasks).length ? allTasksByDay(data.tasks).map(({ date, items }) => (
                 <div key={date} className={`rounded-xl border p-3 ${isToday(date) ? "border-blue-300 bg-blue-50" : "border-slate-200 bg-white"}`}>
-                  <div className={`text-xs font-bold uppercase tracking-wide ${isToday(date) ? "text-blue-700" : "text-slate-500"}`}>{isToday(date) ? "Aujourd'hui" : formatDate(date)}</div>
+                  <div className={`text-xs font-bold uppercase tracking-wide ${isToday(date) ? "text-blue-700" : "text-slate-500"}`}>{date === NO_DATE_GROUP ? "Sans date" : isToday(date) ? "Aujourd'hui" : formatDate(date)}</div>
                   <div className="mt-1.5 space-y-1.5">
                     {items.map((task) => <div key={task.id} className="text-sm font-semibold text-slate-900">{task.titre}<span className="ml-1.5 font-normal text-slate-500">{[task.lot, task.zone_nom].filter(Boolean).join(" · ")}</span></div>)}
                   </div>
@@ -678,26 +852,173 @@ export default function EmployeePortalV2Page() {
             </div>
           </Card>
 
-          <div className="grid gap-4 sm:grid-cols-2">
-            <Card><div className="flex items-center justify-between"><h3 className="font-bold">À renseigner</h3><Pill tone={toFill.length ? "amber" : "green"}>{toFill.length}</Pill></div><div className="mt-3 space-y-2">{toFill.map((item) => <button key={item.title} onClick={() => setTab(item.action === "fil" ? "fil" : "renseigner")} className="flex w-full items-center justify-between rounded-xl border border-slate-200 p-3 text-left"><span><span className="block text-sm font-semibold">{item.title}</span><span className="mt-0.5 block text-xs text-slate-500">{item.detail}</span></span><ChevronRight className="h-4 w-4 text-slate-400" /></button>)}</div></Card>
-            <Card><div className="flex items-center justify-between"><h3 className="font-bold">À consulter</h3><Pill tone={toRead.length ? "blue" : "green"}>{toRead.length}</Pill></div><div className="mt-3 space-y-2">{toRead.length ? toRead.map((item, index) => <div key={`${item.title}-${index}`} className="rounded-xl border border-slate-200 p-3"><div className="text-sm font-semibold">{item.title}</div><div className="mt-1 text-xs text-slate-500">{item.detail}</div></div>) : <div className="rounded-xl bg-slate-50 p-3 text-sm text-slate-500">Rien de nouveau à consulter.</div>}</div></Card>
-          </div>
+          <Card>
+            <div className="flex items-center justify-between"><h3 className="font-bold">Informations utiles</h3><FileText className="h-5 w-5 text-slate-500" /></div>
+            <div className="mt-3 space-y-2">
+              {unreadConsignes.length ? unreadConsignes.slice(0, 4).map((c) => (
+                <div key={c.id} className={`rounded-xl border p-3 text-sm ${c.priority === "urgente" ? "border-red-200 bg-red-50" : "border-amber-200 bg-amber-50"}`}>
+                  <div className="font-semibold">{c.title}</div>
+                  {c.description ? <div className="mt-0.5 text-xs text-slate-600">{c.description}</div> : null}
+                </div>
+              )) : <div className="rounded-xl bg-slate-50 p-3 text-sm text-slate-500">Aucune consigne non lue.</div>}
+              <div className="grid grid-cols-2 gap-2 pt-1">
+                <div className="rounded-xl bg-slate-50 p-3 text-sm"><span className="font-semibold">{data.documents.length}</span> document(s) terrain</div>
+                <div className="rounded-xl bg-slate-50 p-3 text-sm"><span className="font-semibold">{openRequests}</span> demande(s) en attente</div>
+              </div>
+            </div>
+          </Card>
         </> : null}
 
-        {tab === "chantier" && selected ? <>
-          <Card>
-            <div className="flex items-start justify-between gap-3"><div><div className="text-[11px] font-bold uppercase tracking-[0.18em] text-blue-700">Accueil chantier</div><h2 className="mt-1 text-xl font-bold">{selected.nom}</h2><div className="mt-1 text-sm text-slate-500">{selected.client || "Client non renseigné"}</div></div><Pill tone="green">{pct}%</Pill></div>
-            <div className="mt-4 h-2 overflow-hidden rounded-full bg-slate-100"><div className="h-full rounded-full bg-blue-600" style={{ width: `${pct}%` }} /></div>
-            <div className="mt-4 grid gap-2 sm:grid-cols-2"><a href={selected.adresse ? `https://maps.apple.com/?q=${encodeURIComponent(selected.adresse)}` : undefined} className="flex items-center gap-3 rounded-xl border border-slate-200 p-3"><MapPin className="h-5 w-5 text-blue-600" /><span className="text-sm"><span className="block font-semibold">Adresse</span><span className="text-slate-500">{selected.adresse || "Non renseignée"}</span></span></a><div className="flex items-center gap-3 rounded-xl border border-slate-200 p-3"><Phone className="h-5 w-5 text-blue-600" /><span className="text-sm"><span className="block font-semibold">Téléphone client</span><span className="text-slate-500">À renseigner dans la fiche chantier</span></span></div></div>
+        {tab === "matin" && selected ? <>
+          <Card className="border-blue-200">
+            <div className="flex items-center justify-between gap-3">
+              <div><div className="text-[11px] font-bold uppercase tracking-[0.18em] text-blue-700">{selected.nom}</div><h2 className="mt-1 text-xl font-bold">Matin</h2></div>
+              <Sunrise className="h-6 w-6 text-blue-600" />
+            </div>
+            <p className="mt-1 text-sm text-slate-500">Prépare ta journée : vérifie que tu as ce qu'il faut avant de commencer.</p>
           </Card>
 
-          <Card><div className="flex items-center justify-between"><h3 className="font-bold">Prochaine tâche</h3><CalendarDays className="h-5 w-5 text-blue-600" /></div>{next ? <div className="mt-3 rounded-xl bg-blue-50 p-3"><div className="text-xs font-semibold text-blue-700">{formatDate(taskDate(next))}</div><div className="mt-1 font-bold">{next.titre}</div><div className="mt-1 text-sm text-slate-600">{[next.lot, next.zone_nom].filter(Boolean).join(" · ")}</div></div> : <div className="mt-3 text-sm text-slate-500">Aucune tâche à venir.</div>}</Card>
+          <Card>
+            <div className="flex items-center justify-between"><h3 className="font-bold">J'organise ma journée</h3><ListOrdered className="h-5 w-5 text-blue-600" /></div>
+            <p className="mt-1 text-xs text-slate-500">Choisis les tâches que tu fais aujourd'hui, dans l'ordre où tu veux les faire — même si un planning existe déjà, c'est toi qui décides.</p>
+            {!dailyPlanLoaded ? (
+              <div className="mt-3 text-sm text-slate-500">Chargement...</div>
+            ) : (
+              <div className="mt-3 space-y-3">
+                {selectedTaskIds.length ? (
+                  <div className="space-y-1.5">
+                    {selectedTaskIds.map((taskId, index) => {
+                      const task = pendingTasks.find((t) => t.id === taskId);
+                      if (!task) return null;
+                      return (
+                        <button key={taskId} type="button" onClick={() => toggleSelectedTask(taskId)} className="flex w-full items-center gap-3 rounded-xl border border-blue-300 bg-blue-50 p-3 text-left">
+                          <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-blue-600 text-xs font-bold text-white">{index + 1}</span>
+                          <span className="min-w-0 flex-1">
+                            <span className="block truncate text-sm font-bold text-slate-900">{task.titre}</span>
+                            <span className="block truncate text-xs text-slate-500">{[task.lot, task.zone_nom].filter(Boolean).join(" · ")}</span>
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                ) : null}
+                {pendingTasks.filter((t) => !selectedTaskIds.includes(t.id)).length ? (
+                  <div className="space-y-1.5">
+                    {selectedTaskIds.length ? <div className="pt-1 text-xs font-semibold uppercase tracking-wide text-slate-400">Autres tâches</div> : null}
+                    {pendingTasks.filter((t) => !selectedTaskIds.includes(t.id)).map((task) => (
+                      <button key={task.id} type="button" onClick={() => toggleSelectedTask(task.id)} className="flex w-full items-center gap-3 rounded-xl border border-slate-200 p-3 text-left">
+                        <Circle className="h-5 w-5 shrink-0 text-slate-300" />
+                        <span className="min-w-0 flex-1">
+                          <span className="block truncate text-sm font-semibold text-slate-900">{task.titre}</span>
+                          <span className="block truncate text-xs text-slate-500">{[task.lot, task.zone_nom].filter(Boolean).join(" · ")}{isActiveToday(task) ? " · prévu aujourd'hui" : ""}</span>
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                ) : null}
+                {!pendingTasks.length ? <div className="rounded-xl bg-slate-50 p-3 text-sm text-slate-500">Aucune tâche en attente sur ce chantier.</div> : null}
+              </div>
+            )}
+          </Card>
 
-          <Card><div className="flex items-center justify-between"><h3 className="font-bold">Informations utiles</h3><FileText className="h-5 w-5 text-slate-500" /></div><div className="mt-3 grid gap-2"><div className="rounded-xl bg-slate-50 p-3 text-sm"><span className="font-semibold">{unread}</span> consigne(s) non lue(s)</div><div className="rounded-xl bg-slate-50 p-3 text-sm"><span className="font-semibold">{data.documents.length}</span> document(s) terrain</div><div className="rounded-xl bg-slate-50 p-3 text-sm"><span className="font-semibold">{openRequests}</span> demande(s) en attente</div></div></Card>
+          <Card>
+            <h3 className="font-bold">Matériaux prévus pour aujourd'hui</h3>
+            <p className="mt-1 text-xs text-slate-500">D'après les tâches choisies ci-dessus, calculé depuis les modèles de tâches.</p>
+            <div className="mt-3 space-y-3">
+              {selectedTaskIds.length ? selectedTaskIds.map((taskId) => {
+                const task = pendingTasks.find((t) => t.id === taskId);
+                const materials = matinMaterialsByTask[taskId] ?? [];
+                if (!task || !materials.length) return null;
+                return (
+                  <div key={taskId} className="rounded-xl border border-slate-200 p-3">
+                    <div className="text-sm font-bold">{task.titre}</div>
+                    <div className="mt-2 space-y-1.5">
+                      {materials.map((material) => {
+                        const key = `${task.id}:${material.material_ratio_id}`;
+                        const reported = matinGapReported[key];
+                        return (
+                          <div key={key} className="flex items-center justify-between gap-2 rounded-lg bg-slate-50 px-3 py-2 text-xs">
+                            <span className="min-w-0 truncate font-semibold text-slate-700">
+                              {material.material_name}
+                              {material.expected_quantity != null ? ` — prévu ${material.expected_quantity} ${material.ratio_unit}` : ` (${material.ratio_unit})`}
+                            </span>
+                            {reported ? (
+                              <span className="shrink-0 font-semibold text-emerald-700">Signalé</span>
+                            ) : (
+                              <button type="button" onClick={() => reportMatinMaterialGap(task, material)} disabled={matinReportingKey === key} className="shrink-0 font-semibold text-amber-700 disabled:opacity-50">
+                                {matinReportingKey === key ? "..." : "Il m'en manque"}
+                              </button>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              }) : <div className="rounded-xl bg-slate-50 p-3 text-sm text-slate-500">Choisis des tâches ci-dessus pour voir les matériaux prévus.</div>}
+            </div>
+          </Card>
+
+          <Card>
+            <h3 className="font-bold">Matériel nécessaire pour aujourd'hui</h3>
+            <p className="mt-1 text-xs text-slate-500">Outillage et équipement prévus par les modèles des tâches choisies ci-dessus.</p>
+            <div className="mt-3 space-y-3">
+              {selectedTaskIds.length ? selectedTaskIds.map((taskId) => {
+                const task = pendingTasks.find((t) => t.id === taskId);
+                const equipmentItems = matinEquipmentByTask[taskId] ?? [];
+                if (!task || !equipmentItems.length) return null;
+                return (
+                  <div key={taskId} className="rounded-xl border border-slate-200 p-3">
+                    <div className="text-sm font-bold">{task.titre}</div>
+                    <div className="mt-2 space-y-1.5">
+                      {equipmentItems.map((equipment) => {
+                        const key = `${task.id}:${equipment.equipment_item_id}`;
+                        const reported = matinGapReported[key];
+                        return (
+                          <div key={key} className="flex items-center justify-between gap-2 rounded-lg bg-slate-50 px-3 py-2 text-xs">
+                            <span className="min-w-0 truncate font-semibold text-slate-700">
+                              {equipment.equipment_name}
+                              {equipment.default_quantity != null ? ` — ${equipment.default_quantity}${equipment.unit ? ` ${equipment.unit}` : ""}` : ""}
+                              {equipment.is_required ? "" : " (optionnel)"}
+                            </span>
+                            {reported ? (
+                              <span className="shrink-0 font-semibold text-emerald-700">Signalé</span>
+                            ) : (
+                              <button type="button" onClick={() => reportMatinEquipmentGap(task, equipment)} disabled={matinReportingKey === key} className="shrink-0 font-semibold text-amber-700 disabled:opacity-50">
+                                {matinReportingKey === key ? "..." : "Il m'en manque"}
+                              </button>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              }) : <div className="rounded-xl bg-slate-50 p-3 text-sm text-slate-500">Choisis des tâches ci-dessus pour voir le matériel prévu.</div>}
+            </div>
+          </Card>
+
+          <Card>
+            <h3 className="font-bold">Suis-je prêt ?</h3>
+            <div className="mt-3 grid grid-cols-3 gap-2">
+              {([
+                ["has_equipment", "Équipement"],
+                ["has_materials", "Matériel"],
+                ["has_information", "Infos reçues"],
+              ] as const).map(([key, label]) => {
+                const checked = Boolean(checklist?.[key]);
+                return (
+                  <button key={key} type="button" onClick={() => toggleChecklistItem(key)} disabled={savingChecklistKey === key} className={`flex flex-col items-center gap-1.5 rounded-xl border p-3 text-center text-xs font-bold ${checked ? "border-emerald-300 bg-emerald-50 text-emerald-700" : "border-slate-200 text-slate-500"}`}>
+                    <CheckCircle2 className="h-5 w-5" />{label}
+                  </button>
+                );
+              })}
+            </div>
+          </Card>
         </> : null}
 
-        {tab === "renseigner" && selected ? <>
-          <Card><div className="flex items-center justify-between"><div><div className="text-[11px] font-bold uppercase tracking-[0.18em] text-blue-700">{selected.nom}</div><h2 className="mt-1 text-lg font-bold">À renseigner</h2></div><ClipboardList className="h-5 w-5 text-blue-600" /></div><p className="mt-1 text-sm text-slate-500">Saisir uniquement les données terrain utiles à ce chantier.</p></Card>
+        {tab === "soir" && selected ? <>
+          <Card><div className="flex items-center justify-between"><div><div className="text-[11px] font-bold uppercase tracking-[0.18em] text-blue-700">{selected.nom}</div><h2 className="mt-1 text-lg font-bold">Soir</h2></div><Moon className="h-5 w-5 text-blue-600" /></div><p className="mt-1 text-sm text-slate-500">Fais le point sur la journée et prépare demain.</p></Card>
 
           <Card>
             <h3 className="font-bold">Faire le point sur une tâche</h3>
@@ -731,6 +1052,68 @@ export default function EmployeePortalV2Page() {
                   className="w-full rounded-xl border border-slate-200 px-3 py-3 text-sm"
                 />
               ))}
+
+              <div className="rounded-xl bg-slate-50 p-3">
+                <div className="text-xs font-semibold text-slate-500">Autre matériau utilisé aujourd'hui</div>
+                <p className="mt-0.5 text-xs text-slate-400">Pas dans la liste ci-dessus ? Cherche-le pour garder le stock à jour.</p>
+                <div className="mt-2 space-y-2">
+                  {stockPicked ? (
+                    <div className="flex items-center justify-between gap-2 rounded-xl border border-blue-200 bg-blue-50 px-3 py-2.5">
+                      <div className="min-w-0">
+                        <div className="truncate text-sm font-semibold text-blue-900">{stockPicked.designation}</div>
+                        <div className="text-xs text-blue-700">{stockPicked.unit}</div>
+                      </div>
+                      <button type="button" onClick={() => { setStockPicked(null); setStockQuantite(""); }} className="shrink-0 text-xs font-semibold text-blue-700">Changer</button>
+                    </div>
+                  ) : (
+                    <div className="relative">
+                      <input
+                        value={stockQuery}
+                        onChange={(e) => setStockQuery(e.target.value)}
+                        placeholder="Chercher un matériau... Ex. placo, vis 25mm"
+                        className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm"
+                      />
+                      {stockQuery.trim() && (stockSearching || stockResults.length > 0) ? (
+                        <div className="absolute z-10 mt-1 w-full overflow-hidden rounded-xl border border-slate-200 bg-white shadow-lg">
+                          {stockSearching ? (
+                            <div className="px-3 py-2.5 text-xs text-slate-500">Recherche...</div>
+                          ) : (
+                            stockResults.map((product) => (
+                              <button
+                                key={product.id}
+                                type="button"
+                                onClick={() => { setStockPicked(product); setStockQuery(""); setStockResults([]); }}
+                                className="block w-full truncate px-3 py-2.5 text-left text-sm hover:bg-slate-50"
+                              >
+                                {product.designation} <span className="text-xs text-slate-400">({product.unit})</span>
+                              </button>
+                            ))
+                          )}
+                        </div>
+                      ) : null}
+                    </div>
+                  )}
+                  {stockPicked ? (
+                    <div className="flex gap-2">
+                      <input value={stockQuantite} onChange={(e) => setStockQuantite(e.target.value)} inputMode="decimal" placeholder={`Quantité (${stockPicked.unit})`} className="min-w-0 flex-1 rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm" />
+                      <button type="button" onClick={saveStockDeclaration} disabled={savingStock || !stockQuantite.trim()} className="flex shrink-0 items-center gap-1.5 rounded-xl bg-slate-950 px-4 py-2.5 text-sm font-bold text-white disabled:opacity-40">
+                        {savingStock ? "..." : <><Plus className="h-4 w-4" />Ajouter</>}
+                      </button>
+                    </div>
+                  ) : null}
+                  {stockAddedToday.length > 0 ? (
+                    <div className="space-y-1.5 pt-1">
+                      {stockAddedToday.map((entry, i) => (
+                        <div key={`${entry.id}-${i}`} className="flex items-center gap-2 text-xs text-slate-600">
+                          <Boxes className="h-3.5 w-3.5 shrink-0 text-slate-400" />
+                          <span className="truncate">{entry.quantity} {entry.unit} — {entry.designation}</span>
+                        </div>
+                      ))}
+                    </div>
+                  ) : null}
+                </div>
+              </div>
+
               <div>
                 <div className="text-xs font-semibold text-slate-500">Ça s'est bien passé ?</div>
                 <div className="mt-1.5 grid grid-cols-2 gap-2">
@@ -742,7 +1125,29 @@ export default function EmployeePortalV2Page() {
             </div>
           </Card>
 
-          <Card><h3 className="font-bold">Avancement des tâches</h3><div className="mt-3 space-y-2">{pendingTasks.slice(0, 10).map((task) => <div key={task.id} className="flex items-center justify-between gap-3 rounded-xl border border-slate-200 p-3"><div className="min-w-0"><div className="truncate text-sm font-semibold">{task.titre}</div><div className="text-xs text-slate-500">{formatDate(taskDate(task))}</div></div><button type="button" onClick={() => completeTask(task)} className="shrink-0 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-bold text-emerald-700">Terminer</button></div>)}</div></Card>
+          <Card>
+            <h3 className="font-bold">Avancement des tâches</h3>
+            <div className="mt-3 space-y-2">
+              {pendingTasks.map((task) => {
+                const pctTask = taskProgressPercent(task);
+                return (
+                  <div key={task.id} className="rounded-xl border border-slate-200 p-3">
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="min-w-0">
+                        <div className="truncate text-sm font-semibold">{task.titre}</div>
+                        <div className="text-xs text-slate-500">{formatDate(taskDate(task))}</div>
+                      </div>
+                      <div className="flex shrink-0 items-center gap-2">
+                        <span className="text-sm font-bold text-slate-700">{pctTask}%</span>
+                        <button type="button" onClick={() => completeTask(task)} className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-bold text-emerald-700">Terminer</button>
+                      </div>
+                    </div>
+                    <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-slate-100"><div className="h-full rounded-full bg-blue-600" style={{ width: `${pctTask}%` }} /></div>
+                  </div>
+                );
+              })}
+            </div>
+          </Card>
 
           <Card>
             <h3 className="font-bold">Un imprévu ?</h3>
@@ -867,73 +1272,31 @@ export default function EmployeePortalV2Page() {
           </Card>
 
           <Card>
-            <h3 className="font-bold">Matériaux utilisés aujourd'hui</h3>
-            <p className="mt-1 text-xs text-slate-500">Ce que tu as pris ou posé aujourd'hui, pour garder le stock à jour. Ex. 10 plaques de placo, une boîte de vis 25mm...</p>
+            <h3 className="font-bold">Besoins pour demain</h3>
+            <p className="mt-1 text-xs text-slate-500">Anticipe ce qu'il te faudra demain, pour que ce soit prêt à temps.</p>
+            <div className="mt-3 grid grid-cols-2 gap-2">
+              <button type="button" onClick={() => setDemainKind("materiel")} className={`rounded-xl border px-3 py-2.5 text-sm font-bold ${demainKind === "materiel" ? "border-blue-300 bg-blue-50 text-blue-700" : "border-slate-200 text-slate-600"}`}>Matériau / matériel</button>
+              <button type="button" onClick={() => setDemainKind("information")} className={`rounded-xl border px-3 py-2.5 text-sm font-bold ${demainKind === "information" ? "border-blue-300 bg-blue-50 text-blue-700" : "border-slate-200 text-slate-600"}`}>Information</button>
+            </div>
             <div className="mt-3 space-y-2">
-              {stockPicked ? (
-                <div className="flex items-center justify-between gap-2 rounded-xl border border-blue-200 bg-blue-50 px-3 py-2.5">
-                  <div className="min-w-0">
-                    <div className="truncate text-sm font-semibold text-blue-900">{stockPicked.designation}</div>
-                    <div className="text-xs text-blue-700">{stockPicked.unit}</div>
-                  </div>
-                  <button type="button" onClick={() => { setStockPicked(null); setStockQuantite(""); }} className="shrink-0 text-xs font-semibold text-blue-700">Changer</button>
-                </div>
-              ) : (
-                <div className="relative">
-                  <input
-                    value={stockQuery}
-                    onChange={(e) => setStockQuery(e.target.value)}
-                    placeholder="Chercher un matériau... Ex. placo, vis 25mm"
-                    className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm"
-                  />
-                  {stockQuery.trim() && (stockSearching || stockResults.length > 0) ? (
-                    <div className="absolute z-10 mt-1 w-full overflow-hidden rounded-xl border border-slate-200 bg-white shadow-lg">
-                      {stockSearching ? (
-                        <div className="px-3 py-2.5 text-xs text-slate-500">Recherche...</div>
-                      ) : (
-                        stockResults.map((product) => (
-                          <button
-                            key={product.id}
-                            type="button"
-                            onClick={() => { setStockPicked(product); setStockQuery(""); setStockResults([]); }}
-                            className="block w-full truncate px-3 py-2.5 text-left text-sm hover:bg-slate-50"
-                          >
-                            {product.designation} <span className="text-xs text-slate-400">({product.unit})</span>
-                          </button>
-                        ))
-                      )}
-                    </div>
-                  ) : null}
-                </div>
-              )}
-              {stockPicked ? (
+              <input value={demainTitre} onChange={(e) => setDemainTitre(e.target.value)} placeholder={demainKind === "materiel" ? "Quoi ? Ex. Colle carrelage" : "Quelle information te manque ?"} className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm" />
+              {demainKind === "materiel" ? (
                 <div className="flex gap-2">
-                  <input value={stockQuantite} onChange={(e) => setStockQuantite(e.target.value)} inputMode="decimal" placeholder={`Quantité (${stockPicked.unit})`} className="min-w-0 flex-1 rounded-xl border border-slate-200 px-3 py-2.5 text-sm" />
-                  <button type="button" onClick={saveStockDeclaration} disabled={savingStock || !stockQuantite.trim()} className="flex shrink-0 items-center gap-1.5 rounded-xl bg-slate-950 px-4 py-2.5 text-sm font-bold text-white disabled:opacity-40">
-                    {savingStock ? "..." : <><Plus className="h-4 w-4" />Ajouter</>}
-                  </button>
+                  <input value={demainQuantite} onChange={(e) => setDemainQuantite(e.target.value)} inputMode="decimal" placeholder="Quantité" className="min-w-0 flex-1 rounded-xl border border-slate-200 px-3 py-2.5 text-sm" />
+                  <input value={demainUnite} onChange={(e) => setDemainUnite(e.target.value)} placeholder="Unité" className="min-w-0 flex-1 rounded-xl border border-slate-200 px-3 py-2.5 text-sm" />
                 </div>
               ) : null}
-              {stockAddedToday.length > 0 ? (
-                <div className="space-y-1.5 pt-1">
-                  {stockAddedToday.map((entry, i) => (
-                    <div key={`${entry.id}-${i}`} className="flex items-center gap-2 text-xs text-slate-600">
-                      <Boxes className="h-3.5 w-3.5 shrink-0 text-slate-400" />
-                      <span className="truncate">{entry.quantity} {entry.unit} — {entry.designation}</span>
-                    </div>
-                  ))}
-                </div>
-              ) : null}
+              <button type="button" onClick={saveDemain} disabled={savingDemain || !demainTitre.trim()} className="w-full rounded-xl bg-slate-950 px-4 py-2.5 text-sm font-bold text-white disabled:opacity-40">{savingDemain ? "Envoi..." : "Envoyer pour demain"}</button>
             </div>
           </Card>
 
           <Card>
-            <h3 className="font-bold">Checklist du jour</h3>
+            <h3 className="font-bold">Checklist fin de chantier</h3>
             <div className="mt-3 grid grid-cols-3 gap-2">
               {([
-                ["has_equipment", "Équipement"],
-                ["has_materials", "Matériel"],
-                ["has_information", "Infos reçues"],
+                ["site_propre", "Chantier propre"],
+                ["materiel_range", "Matériel rangé"],
+                ["camion_range", "Camion rangé"],
               ] as const).map(([key, label]) => {
                 const checked = Boolean(checklist?.[key]);
                 return (
@@ -971,9 +1334,9 @@ export default function EmployeePortalV2Page() {
       </main>
 
       <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-slate-200 bg-white/95 px-2 pb-[max(8px,env(safe-area-inset-bottom))] pt-2 backdrop-blur"><div className="mx-auto grid max-w-3xl grid-cols-4 gap-1">{([
-        ["accueil", "Accueil", Home],
         ["chantier", "Chantier", Wrench],
-        ["renseigner", "À renseigner", CheckCircle2],
+        ["matin", "Matin", Sunrise],
+        ["soir", "Soir", Moon],
         ["fil", "Fil", MessageCircle],
       ] as const).map(([key, label, Icon]) => <button key={key} type="button" onClick={() => setTab(key)} className={`flex min-h-14 flex-col items-center justify-center gap-1 rounded-xl px-1 text-[11px] font-semibold ${tab === key ? "bg-blue-50 text-blue-700" : "text-slate-500"}`}><Icon className="h-5 w-5" /><span>{label}</span></button>)}</div></nav>
 

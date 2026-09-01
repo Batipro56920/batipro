@@ -137,6 +137,10 @@ export type IntervenantDailyChecklist = {
   has_equipment: boolean | null;
   has_materials: boolean | null;
   has_information: boolean | null;
+  /** Checklist fin de chantier (onglet Soir), même ligne que la checklist du matin. */
+  site_propre: boolean | null;
+  materiel_range: boolean | null;
+  camion_range: boolean | null;
   validated_at: string | null;
   created_at: string | null;
   updated_at: string | null;
@@ -673,9 +677,14 @@ export type IntervenantTaskMainMaterial = {
   material_ratio_id: string;
   material_name: string;
   ratio_unit: string;
+  ratio_quantity: number | null;
+  source_unit: string | null;
+  loss_percent: number | null;
+  /** Quantité prévue pour la tâche (chantier_tasks.quantite * ratio_quantity, pertes incluses) — pour le pré-remplissage de l'onglet Matin. */
+  expected_quantity: number | null;
 };
 
-/** Matériau(x) principal(aux) d'une tâche (marqués sur le modèle) — pour savoir si un champ de consommation doit apparaître. */
+/** Matériau(x) principal(aux) d'une tâche (marqués sur le modèle) — pour savoir si un champ de consommation doit apparaître, et ce qui est prévu (onglet Matin). */
 export async function intervenantTaskMainMaterials(
   token: string,
   chantierId: string,
@@ -693,6 +702,43 @@ export async function intervenantTaskMainMaterials(
     material_ratio_id: String(row.material_ratio_id ?? ""),
     material_name: String(row.material_name ?? ""),
     ratio_unit: String(row.ratio_unit ?? ""),
+    ratio_quantity: asNullableNumber(row.ratio_quantity),
+    source_unit: asNullableString(row.source_unit),
+    loss_percent: asNullableNumber(row.loss_percent),
+    expected_quantity: asNullableNumber(row.expected_quantity),
+  }));
+}
+
+export type IntervenantTaskEquipment = {
+  equipment_item_id: string;
+  equipment_name: string;
+  is_required: boolean;
+  default_quantity: number | null;
+  unit: string | null;
+  notes: string | null;
+};
+
+/** Matériel/outillage prévu pour une tâche (modèle de tâche) — pour la préparation de journée (onglet Matin). */
+export async function intervenantTaskEquipment(
+  token: string,
+  chantierId: string,
+  taskId: string,
+): Promise<IntervenantTaskEquipment[]> {
+  const { data, error } = await (supabase as any).rpc("intervenant_task_equipment", {
+    p_token: normalizePortalToken(token),
+    p_chantier_id: chantierId,
+    p_task_id: taskId,
+  });
+  if (error) throw new Error(rpcMessage(error, "Chargement matériel impossible."));
+
+  const rows = Array.isArray(data) ? data : [];
+  return rows.map((row) => ({
+    equipment_item_id: String(row.equipment_item_id ?? ""),
+    equipment_name: String(row.equipment_name ?? ""),
+    is_required: asNullableBoolean(row.is_required) ?? false,
+    default_quantity: asNullableNumber(row.default_quantity),
+    unit: asNullableString(row.unit),
+    notes: asNullableString(row.notes),
   }));
 }
 
@@ -866,6 +912,9 @@ export async function intervenantDailyChecklistGet(
     has_equipment: asNullableBoolean(row.has_equipment),
     has_materials: asNullableBoolean(row.has_materials),
     has_information: asNullableBoolean(row.has_information),
+    site_propre: asNullableBoolean(row.site_propre),
+    materiel_range: asNullableBoolean(row.materiel_range),
+    camion_range: asNullableBoolean(row.camion_range),
     validated_at: asNullableString(row.validated_at),
     created_at: asNullableString(row.created_at),
     updated_at: asNullableString(row.updated_at),
@@ -883,6 +932,9 @@ export async function intervenantDailyChecklistUpsert(
     has_equipment?: boolean | null;
     has_materials?: boolean | null;
     has_information?: boolean | null;
+    site_propre?: boolean | null;
+    materiel_range?: boolean | null;
+    camion_range?: boolean | null;
     validate?: boolean;
   },
 ): Promise<IntervenantDailyChecklist> {
@@ -904,10 +956,57 @@ export async function intervenantDailyChecklistUpsert(
     has_equipment: asNullableBoolean(row.has_equipment),
     has_materials: asNullableBoolean(row.has_materials),
     has_information: asNullableBoolean(row.has_information),
+    site_propre: asNullableBoolean(row.site_propre),
+    materiel_range: asNullableBoolean(row.materiel_range),
+    camion_range: asNullableBoolean(row.camion_range),
     validated_at: asNullableString(row.validated_at),
     created_at: asNullableString(row.created_at),
     updated_at: asNullableString(row.updated_at),
   };
+}
+
+export type IntervenantDailyTaskPlanEntry = {
+  task_id: string;
+  order_index: number;
+};
+
+function mapDailyTaskPlanRows(data: unknown): IntervenantDailyTaskPlanEntry[] {
+  const rows = Array.isArray(data) ? data : [];
+  return rows
+    .map((row: any) => ({ task_id: String(row.task_id ?? ""), order_index: Number(row.order_index ?? 0) }))
+    .filter((row) => row.task_id);
+}
+
+/** "J'organise ma journée" (onglet Matin) : tâches choisies par l'ouvrier pour aujourd'hui, dans l'ordre qu'il a défini. */
+export async function intervenantDailyTaskPlanGet(
+  token: string,
+  chantierId: string,
+  planDate: string,
+): Promise<IntervenantDailyTaskPlanEntry[]> {
+  const { data, error } = await (supabase as any).rpc("intervenant_daily_task_plan_get", {
+    p_token: normalizePortalToken(token),
+    p_chantier_id: chantierId,
+    p_plan_date: planDate,
+  });
+  if (error) throw new Error(rpcMessage(error, "Chargement de l'organisation du jour impossible."));
+  return mapDailyTaskPlanRows(data);
+}
+
+/** Remplace entièrement la sélection/ordre du jour par la liste fournie. */
+export async function intervenantDailyTaskPlanSet(
+  token: string,
+  chantierId: string,
+  planDate: string,
+  taskIds: string[],
+): Promise<IntervenantDailyTaskPlanEntry[]> {
+  const { data, error } = await (supabase as any).rpc("intervenant_daily_task_plan_set", {
+    p_token: normalizePortalToken(token),
+    p_chantier_id: chantierId,
+    p_plan_date: planDate,
+    p_task_ids: taskIds,
+  });
+  if (error) throw new Error(rpcMessage(error, "Enregistrement de l'organisation du jour impossible."));
+  return mapDailyTaskPlanRows(data);
 }
 
 export async function intervenantInformationRequestCreate(
