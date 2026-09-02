@@ -176,9 +176,31 @@ Réponds uniquement en JSON valide, sans markdown, avec cette forme exacte :
   "finalWriteBlocked": true
 }`;
 
+const IMPROVEMENT_REWRITE_PROMPT = `Tu es COCO, assistant opérationnel d'une entreprise du bâtiment.
+L'administrateur te donne un constat chantier et un texte libre qu'il a modifié. Ce texte peut être une phrase, des mots-clés ou une instruction incomplète.
+
+Tu dois transformer ce texte en une décision courte, précise et directement exécutable, sans inventer de personne, fournisseur, date, quantité ou donnée absente.
+Tu prépares aussi les champs nécessaires à l'action Batipro autorisée dans le contexte. Tu ne changes jamais actionType et tu n'exécutes rien : l'administrateur cliquera ensuite sur Appliquer.
+
+Pour create_purchase_request, title doit désigner clairement ce qu'il faut louer/acheter/réserver. supplierName, dueDate, quantity et unit restent null si absents. Pour publish_decision, reprends simplement la décision dans confirmationMessage.
+
+Réponds uniquement en JSON valide, sans markdown :
+{
+  "proposal": "décision opérationnelle complète",
+  "action": {
+    "actionType": "create_purchase_request" | "publish_decision",
+    "title": "titre opérationnel ou null",
+    "supplierName": "fournisseur explicitement cité ou null",
+    "quantity": 1,
+    "unit": "unité ou null",
+    "dueDate": "YYYY-MM-DD ou null",
+    "confirmationMessage": "message bref à publier dans le fil chantier"
+  }
+}`;
+
 type ChatRole = "user" | "assistant";
 type ChatMessage = { role?: ChatRole; content?: string };
-type RequestBody = { mode?: "direction_chat" | "visit_quote_draft"; message?: string; history?: ChatMessage[]; context?: unknown };
+type RequestBody = { mode?: "direction_chat" | "visit_quote_draft" | "improvement_rewrite"; message?: string; history?: ChatMessage[]; context?: unknown };
 type ProfileRow = { role?: string | null; feature_permissions?: Record<string, unknown> | null };
 
 function json(body: unknown, status = 200) {
@@ -304,6 +326,29 @@ function normalizeControlledDraft(raw: Record<string, unknown>) {
   };
 }
 
+function normalizeImprovementProposal(raw: Record<string, unknown>, message: string, context: unknown) {
+  const contextRow = context && typeof context === "object" ? context as Record<string, unknown> : {};
+  const allowedActionType = contextRow.allowedActionType === "create_purchase_request"
+    ? "create_purchase_request"
+    : "publish_decision";
+  const action = raw.action && typeof raw.action === "object" ? raw.action as Record<string, unknown> : {};
+  const quantityValue = Number(action.quantity);
+  const dueDate = normalizeMessage(action.dueDate, 10);
+  return {
+    proposal: normalizeMessage(raw.proposal, 2400) || message,
+    action: {
+      actionType: allowedActionType,
+      title: normalizeMessage(action.title, 180) || null,
+      supplierName: normalizeMessage(action.supplierName, 160) || null,
+      quantity: Number.isFinite(quantityValue) && quantityValue > 0 ? quantityValue : 1,
+      unit: normalizeMessage(action.unit, 40) || null,
+      dueDate: /^\d{4}-\d{2}-\d{2}$/.test(dueDate) ? dueDate : null,
+      confirmationMessage: normalizeMessage(action.confirmationMessage, 1800)
+        || `✅ Décision appliquée par COCO : ${normalizeMessage(raw.proposal, 1800) || message}`,
+    },
+  };
+}
+
 async function assertCanUseAssistant(req: Request) {
   const token = getBearerToken(req);
   if (!token) return { allowed: false, status: 401, error: "Session utilisateur manquante." };
@@ -357,6 +402,25 @@ serve(async (req) => {
       return json({ draft });
     } catch (error) {
       return json({ error: error instanceof Error ? error.message : "Réponse IA non exploitable." }, 502);
+    }
+  }
+
+  if (body.mode === "improvement_rewrite") {
+    const message = normalizeMessage(body.message, 2400);
+    if (!message) return json({ error: "Texte de décision manquant." }, 400);
+    const result = await callOpenAI({
+      instructions: IMPROVEMENT_REWRITE_PROMPT,
+      payload: [{
+        role: "user",
+        content: `Contexte Batipro et action autorisée :\n${trimContext(body.context, 12000)}\n\nTexte saisi par l'administrateur :\n${message}`,
+      }],
+      maxOutputTokens: 700,
+    });
+    if (!result.ok) return json({ error: "OpenAI request failed" }, 502);
+    try {
+      return json(normalizeImprovementProposal(parseJsonObject(result.text) as Record<string, unknown>, message, body.context));
+    } catch (error) {
+      return json({ error: error instanceof Error ? error.message : "Proposition IA non exploitable." }, 502);
     }
   }
 

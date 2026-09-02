@@ -26,10 +26,25 @@ export type CocoLearningSignal = {
   proposedAction: string;
   evidence: string[];
   sourceKeys: CocoLearningSourceKey[];
+  sourceId?: string;
   chantierId?: string;
   chantierName?: string;
+  taskId?: string;
+  actionTitle?: string;
   detectedAt?: string;
   targetHref?: string;
+};
+
+export type CocoImprovementActionType = "create_purchase_request" | "publish_decision";
+
+export type CocoImprovementPlan = {
+  actionType: CocoImprovementActionType;
+  title: string | null;
+  supplierName: string | null;
+  quantity: number;
+  unit: string | null;
+  dueDate: string | null;
+  confirmationMessage: string;
 };
 
 export const DEFAULT_COCO_LEARNING_SETTINGS: CocoLearningSettings = {
@@ -144,7 +159,16 @@ function cleanFeedBody(value: unknown) {
     .trim();
 }
 
-function immediateFeedSignal(row: Row, chantierName: string | undefined): CocoLearningSignal | null {
+function normalizeComparableText(value: unknown) {
+  return String(value ?? "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLocaleLowerCase("fr")
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+}
+
+function immediateFeedSignal(row: Row, chantierName: string | undefined, tasks: Row[]): CocoLearningSignal | null {
   const raw = String(row.body ?? "").trim();
   const body = cleanFeedBody(raw);
   if (!body) return null;
@@ -156,6 +180,13 @@ function immediateFeedSignal(row: Row, chantierName: string | undefined): CocoLe
 
   const taskMatch = body.match(/(?:souci|problème|probleme)\s+sur\s+["“]?([^"”]+)["”]?\s*:/i);
   const taskLabel = taskMatch?.[1]?.trim();
+  const equipmentMatch = body.match(/(?:louer|acheter|réserver|reserver)\s+(?:un|une|le|la|des|du|de la)?\s*([^,.;]+?)(?:\s+avant|\s+pour|$)/i);
+  const equipmentLabel = equipmentMatch?.[1]?.trim();
+  const normalizedTaskLabel = normalizeComparableText(taskLabel);
+  const matchedTask = normalizedTaskLabel
+    ? tasks.find((task) => String(task.chantier_id) === String(row.chantier_id)
+      && normalizeComparableText(task.titre).includes(normalizedTaskLabel))
+    : undefined;
   return {
     id: `feed-immediate-${String(row.id)}`,
     kind: "immediate",
@@ -164,12 +195,15 @@ function immediateFeedSignal(row: Row, chantierName: string | undefined): CocoLe
     title: isSafety ? "Risque sécurité signalé" : taskLabel ? `Blocage · ${taskLabel}` : "Blocage chantier signalé",
     finding: body,
     proposedAction: isEquipment
-      ? "Décider maintenant qui réserve ou loue le matériel nécessaire, puis confirmer sa disponibilité à l'équipe avant l'intervention."
+      ? `Créer une demande pour ${equipmentLabel || "le matériel nécessaire"}, préciser qui s'en charge, puis confirmer sa disponibilité à l'équipe avant l'intervention.`
       : "Attribuer ce blocage, décider de l'action corrective et confirmer la solution dans le fil chantier.",
     evidence: [raw],
     sourceKeys: ["chantier_feed"],
+    sourceId: String(row.id ?? "") || undefined,
     chantierId: String(row.chantier_id ?? "") || undefined,
     chantierName,
+    taskId: String(matchedTask?.id ?? "") || undefined,
+    actionTitle: equipmentLabel ? `Location · ${equipmentLabel}` : undefined,
     detectedAt: String(row.created_at ?? "") || undefined,
     targetHref: row.chantier_id ? `/chantiers/${String(row.chantier_id)}/historique` : "/chantiers",
   };
@@ -179,7 +213,7 @@ export async function analyzeCocoLearning(settings: CocoLearningSettings): Promi
   const normalized = normalizeSettings(settings);
   const since = new Date(Date.now() - normalized.lookbackDays * 86_400_000).toISOString();
   const enabled = normalized.sources;
-  const [tasks, consumptions, feed, feedbacks, reserves, purchases, chantiers] = await Promise.all([
+  const [tasks, consumptions, feed, feedbacks, reserves, purchases, chantiers, appliedActions] = await Promise.all([
     enabled.task_times || enabled.planning ? safeRows("chantier_tasks", "id, chantier_id, task_template_id, titre, status, temps_prevu_h, temps_reel_h, date_fin, created_at") : [],
     enabled.material_consumption ? safeRows("chantier_task_material_consumptions", "id, chantier_task_id, material_ratio_id, quantite_consommee, created_at", since) : [],
     enabled.chantier_feed ? safeRows("chantier_feed_posts", "id, chantier_id, body, visibility, created_at", since) : [],
@@ -187,6 +221,7 @@ export async function analyzeCocoLearning(settings: CocoLearningSettings): Promi
     enabled.reserves ? safeRows("chantier_reserves", "id, chantier_id, title, description, status, created_at", since) : [],
     enabled.purchases ? safeRows("chantier_purchase_requests", "id, chantier_id, titre, statut_commande, cout_prevu_ht, cout_reel_ht, created_at", since) : [],
     safeRows("chantiers", "id, nom, created_at"),
+    safeRows("coco_improvement_actions", "signal_id, created_at"),
   ]);
   const sourceCounts: Record<CocoLearningSourceKey, number> = {
     task_times: tasks.filter((row) => Number(row.temps_reel_h) > 0).length,
@@ -202,7 +237,7 @@ export async function analyzeCocoLearning(settings: CocoLearningSettings): Promi
 
   if (enabled.chantier_feed) {
     feed.forEach((row) => {
-      const signal = immediateFeedSignal(row, chantierNameById.get(String(row.chantier_id)));
+      const signal = immediateFeedSignal(row, chantierNameById.get(String(row.chantier_id)), tasks);
       if (signal) signals.push(signal);
     });
   }
@@ -225,6 +260,7 @@ export async function analyzeCocoLearning(settings: CocoLearningSettings): Promi
         proposedAction: "Attribuer le retour, décider de la correction et confirmer la prise en charge à l'équipe.",
         evidence: [`Urgence : ${urgency || "blocage"}`],
         sourceKeys: ["terrain_feedback"],
+        sourceId: String(row.id ?? "") || undefined,
         chantierId: chantierId || undefined,
         chantierName: chantierNameById.get(chantierId),
         detectedAt: String(row.created_at ?? "") || undefined,
@@ -263,5 +299,108 @@ export async function analyzeCocoLearning(settings: CocoLearningSettings): Promi
   if (enabled.purchases && purchaseDrift.length >= normalized.minimumSamples) {
     signals.push({ id: "purchase-drift", kind: "trend", category: "achats", priority: "normale", title: "Coûts d'achat supérieurs aux prévisions", finding: `${purchaseDrift.length} approvisionnements dépassent le coût prévu de plus de 10 %.`, proposedAction: "Proposer une mise à jour des prix d'achat de référence et identifier les fournisseurs ou familles concernés.", evidence: purchaseDrift.slice(0, 3).map((row) => String(row.titre ?? "Approvisionnement")), sourceKeys: ["purchases"], targetHref: "/fournisseurs" });
   }
-  return { signals: signals.sort((a, b) => (a.kind === "immediate" ? -1 : 1) - (b.kind === "immediate" ? -1 : 1)), sourceCounts, analyzedAt: new Date().toISOString() };
+  const appliedSignalIds = new Set(appliedActions.map((row) => String(row.signal_id ?? "")).filter(Boolean));
+  return {
+    signals: signals
+      .filter((signal) => !appliedSignalIds.has(signal.id))
+      .sort((a, b) => (a.kind === "immediate" ? -1 : 1) - (b.kind === "immediate" ? -1 : 1)),
+    sourceCounts,
+    analyzedAt: new Date().toISOString(),
+  };
+}
+
+function actionTypeForSignal(signal: CocoLearningSignal): CocoImprovementActionType {
+  return signal.kind === "immediate" && signal.category === "materiel" && signal.chantierId
+    ? "create_purchase_request"
+    : "publish_decision";
+}
+
+function normalizeImprovementPlan(value: unknown, signal: CocoLearningSignal): CocoImprovementPlan {
+  const row = (value ?? {}) as Record<string, unknown>;
+  const expectedActionType = actionTypeForSignal(signal);
+  const quantity = Number(row.quantity);
+  const dueDate = String(row.dueDate ?? "").trim();
+  return {
+    actionType: expectedActionType,
+    title: String(row.title ?? "").trim() || null,
+    supplierName: String(row.supplierName ?? "").trim() || null,
+    quantity: Number.isFinite(quantity) && quantity > 0 ? quantity : 1,
+    unit: String(row.unit ?? "").trim() || null,
+    dueDate: /^\d{4}-\d{2}-\d{2}$/.test(dueDate) ? dueDate : null,
+    confirmationMessage: String(row.confirmationMessage ?? "").trim(),
+  };
+}
+
+export async function regenerateCocoImprovementProposal(
+  signal: CocoLearningSignal,
+  editedText: string,
+): Promise<{ proposal: string; plan: CocoImprovementPlan }> {
+  const message = editedText.trim();
+  if (!message) throw new Error("Écris au moins quelques mots pour guider COCO.");
+  if (!signal.chantierId) throw new Error("Cette proposition n'est pas encore reliée à un chantier précis.");
+  const allowedActionType = actionTypeForSignal(signal);
+  const { data, error } = await supabase.functions.invoke("coco-direction-assistant", {
+    body: {
+      mode: "improvement_rewrite",
+      message,
+      context: {
+        signalId: signal.id,
+        kind: signal.kind,
+        category: signal.category,
+        title: signal.title,
+        finding: signal.finding,
+        chantierId: signal.chantierId,
+        chantierName: signal.chantierName ?? null,
+        taskId: signal.taskId ?? null,
+        allowedActionType,
+      },
+    },
+  });
+  if (error) throw error;
+  const response = (data ?? {}) as Record<string, unknown>;
+  const proposal = String(response.proposal ?? "").trim();
+  if (!proposal) throw new Error("COCO n'a pas produit de proposition exploitable.");
+  return { proposal, plan: normalizeImprovementPlan(response.action, signal) };
+}
+
+export async function applyCocoImprovementAction(input: {
+  signal: CocoLearningSignal;
+  decisionText: string;
+  plan?: CocoImprovementPlan | null;
+}): Promise<{ purchaseRequestId?: string; feedPostId?: string }> {
+  const decisionText = input.decisionText.trim();
+  const signal = input.signal;
+  if (!decisionText) throw new Error("La décision est vide.");
+  if (!signal.chantierId) throw new Error("Cette décision n'est pas reliée à un chantier précis.");
+  const actionType = actionTypeForSignal(signal);
+  const plan = input.plan?.actionType === actionType
+    ? input.plan
+    : normalizeImprovementPlan({}, signal);
+  const sourceType = signal.sourceKeys.includes("chantier_feed") ? "chantier_feed" : "terrain_feedback";
+  const { data, error } = await (supabase as any).rpc("apply_coco_improvement_action", {
+    p_signal_id: signal.id,
+    p_source_type: sourceType,
+    p_source_id: signal.sourceId ?? null,
+    p_chantier_id: signal.chantierId,
+    p_task_id: signal.taskId ?? null,
+    p_decision_text: decisionText,
+    p_action_type: actionType,
+    p_action_payload: {
+      title: plan.title ?? (actionType === "create_purchase_request" ? signal.actionTitle ?? decisionText.slice(0, 180) : null),
+      supplierName: plan.supplierName,
+      quantity: plan.quantity,
+      unit: plan.unit,
+      dueDate: plan.dueDate,
+      confirmationMessage: plan.confirmationMessage || `✅ Décision appliquée par COCO : ${decisionText}`,
+    },
+  });
+  if (error) {
+    const message = String(error.message ?? "");
+    if (missingSchema(error) || message.includes("apply_coco_improvement_action")) {
+      throw new Error("La migration permettant à COCO d'appliquer les décisions n'est pas encore installée.");
+    }
+    if (message.includes("coco_action_already_applied")) throw new Error("Cette décision a déjà été appliquée.");
+    throw new Error(message || "Application impossible.");
+  }
+  return (data ?? {}) as { purchaseRequestId?: string; feedPostId?: string };
 }
