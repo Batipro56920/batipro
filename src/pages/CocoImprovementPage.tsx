@@ -7,23 +7,28 @@ const categoryLabel: Record<CocoLearningSignal["category"], string> = { temps: "
 
 function SignalCard({ signal, onChanged }: { signal: CocoLearningSignal; onChanged: (signal: CocoLearningSignal, state: "applied" | "active" | "pending" | "dismissed", message: string) => void }) {
   const immediate = signal.kind === "immediate";
-  const [selectedOptionId, setSelectedOptionId] = useState(signal.actionOptions[0]?.id ?? "");
-  const selectedOption = signal.actionOptions.find((option) => option.id === selectedOptionId) ?? signal.actionOptions[0];
-  const [decision, setDecision] = useState(selectedOption?.proposal ?? signal.proposedAction);
-  const [plan, setPlan] = useState<CocoImprovementPlan | null>(null);
-  const [selectedTemplateIds, setSelectedTemplateIds] = useState<string[]>(selectedOption?.templateIds ?? []);
+  const [selectedOptionIds, setSelectedOptionIds] = useState<string[]>(signal.actionOptions[0]?.id ? [signal.actionOptions[0].id] : []);
+  const selectedOptions = signal.actionOptions.filter((option) => selectedOptionIds.includes(option.id));
+  const [decision, setDecision] = useState(signal.actionOptions[0]?.proposal ?? signal.proposedAction);
+  const [generatedByOption, setGeneratedByOption] = useState<Record<string, { proposal: string; plan: CocoImprovementPlan }>>({});
+  const [selectedTemplateIds, setSelectedTemplateIds] = useState<string[]>(signal.actionOptions.find((option) => option.actionType === "add_equipment_to_templates")?.templateIds ?? []);
   const [regenerating, setRegenerating] = useState(false);
   const [applying, setApplying] = useState(false);
   const [changingState, setChangingState] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
-  const effectiveOption: CocoImprovementOption | undefined = selectedOption ? { ...selectedOption, templateIds: selectedOption.actionType === "add_equipment_to_templates" ? selectedTemplateIds : selectedOption.templateIds } : undefined;
-  const canApply = Boolean(signal.chantierId && signal.sourceRefs.length && effectiveOption && (effectiveOption.actionType !== "add_equipment_to_templates" || effectiveOption.templateIds?.length));
+  const effectiveOptions = selectedOptions.map((option) => ({ ...option, templateIds: option.actionType === "add_equipment_to_templates" ? selectedTemplateIds : option.templateIds }));
+  const selectedTemplateOption = selectedOptions.find((option) => option.actionType === "add_equipment_to_templates");
+  const canApply = Boolean(signal.chantierId && signal.sourceRefs.length && effectiveOptions.length && effectiveOptions.every((option) => option.actionType !== "add_equipment_to_templates" || option.templateIds?.length));
 
-  function chooseOption(option: CocoImprovementOption) {
-    setSelectedOptionId(option.id);
-    setDecision(option.proposal);
-    setSelectedTemplateIds(option.templateIds ?? []);
-    setPlan(null);
+  function toggleOption(option: CocoImprovementOption) {
+    const nextIds = selectedOptionIds.includes(option.id)
+      ? selectedOptionIds.filter((id) => id !== option.id)
+      : [...selectedOptionIds, option.id];
+    setSelectedOptionIds(nextIds);
+    const nextOptions = signal.actionOptions.filter((item) => nextIds.includes(item.id));
+    setDecision(nextOptions.map((item) => item.proposal).join("\n\n"));
+    if (option.actionType === "add_equipment_to_templates" && !selectedOptionIds.includes(option.id)) setSelectedTemplateIds(option.templateIds ?? []);
+    setGeneratedByOption({});
     setActionError(null);
   }
 
@@ -31,10 +36,10 @@ function SignalCard({ signal, onChanged }: { signal: CocoLearningSignal; onChang
     setRegenerating(true);
     setActionError(null);
     try {
-      if (!effectiveOption) throw new Error("Choisis d'abord ce que COCO doit modifier.");
-      const result = await regenerateCocoImprovementProposal(signal, decision, effectiveOption);
-      setDecision(result.proposal);
-      setPlan(result.plan);
+      if (!effectiveOptions.length) throw new Error("Choisis au moins une modification à réaliser.");
+      const results = await Promise.all(effectiveOptions.map(async (option) => ({ option, result: await regenerateCocoImprovementProposal(signal, decision, option) })));
+      setDecision(results.map(({ result }) => result.proposal).join("\n\n"));
+      setGeneratedByOption(Object.fromEntries(results.map(({ option, result }) => [option.id, result])));
     } catch (reason) {
       setActionError(reason instanceof Error ? reason.message : "Régénération impossible.");
     } finally {
@@ -46,9 +51,30 @@ function SignalCard({ signal, onChanged }: { signal: CocoLearningSignal; onChang
     setApplying(true);
     setActionError(null);
     try {
-      if (!effectiveOption) throw new Error("Choisis d'abord ce que COCO doit modifier.");
-      await applyCocoImprovementAction({ signal, decisionText: decision, option: effectiveOption, plan });
-      onChanged(signal, "applied", `Décision appliquée : ${effectiveOption.detail}`);
+      if (!effectiveOptions.length) throw new Error("Choisis au moins une modification à réaliser.");
+      let preparedActions = generatedByOption;
+      if (effectiveOptions.length > 1 && effectiveOptions.some((option) => !preparedActions[option.id])) {
+        const results = await Promise.all(effectiveOptions.map(async (option) => ({ option, result: await regenerateCocoImprovementProposal(signal, decision, option) })));
+        preparedActions = Object.fromEntries(results.map(({ option, result }) => [option.id, result]));
+        setDecision(results.map(({ result }) => result.proposal).join("\n\n"));
+        setGeneratedByOption(preparedActions);
+      }
+      for (const option of effectiveOptions) {
+        const generated = preparedActions[option.id];
+        try {
+          await applyCocoImprovementAction({
+            signal,
+            decisionText: generated?.proposal ?? (effectiveOptions.length === 1 ? decision : option.proposal),
+            option,
+            plan: generated?.plan,
+            actionExecutionId: `${signal.signalKey}:${option.id}`,
+          });
+        } catch (reason) {
+          if (!(reason instanceof Error) || !reason.message.includes("déjà été appliquée")) throw reason;
+        }
+      }
+      await setCocoDetectionState(signal.signalKey, "applied");
+      onChanged(signal, "applied", `${effectiveOptions.length} modification${effectiveOptions.length > 1 ? "s" : ""} appliquée${effectiveOptions.length > 1 ? "s" : ""} par COCO.`);
     } catch (reason) {
       setActionError(reason instanceof Error ? reason.message : "Application impossible.");
     } finally {
@@ -73,18 +99,18 @@ function SignalCard({ signal, onChanged }: { signal: CocoLearningSignal; onChang
     <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between"><div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><span className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${signal.state === "pending" ? "bg-slate-200 text-slate-700" : immediate ? "bg-red-100 text-red-800" : signal.kind === "trend" ? "bg-amber-100 text-amber-800" : "bg-blue-100 text-blue-800"}`}>{signal.state === "pending" ? "En attente" : immediate ? "À traiter maintenant" : signal.kind === "trend" ? "Tendance confirmée" : "Piste d'amélioration"}</span><span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">{categoryLabel[signal.category]}</span>{signal.sourceRefs.length > 1 ? <span className="rounded-full bg-violet-100 px-2.5 py-1 text-[11px] font-semibold text-violet-800">{signal.sourceRefs.length} sources regroupées</span> : null}</div><h3 className="mt-2 text-base font-semibold text-slate-950">{signal.title}</h3>{signal.chantierName ? <div className="mt-1 text-xs font-medium text-blue-700">{signal.chantierName}</div> : null}{signal.detectedAt ? <div className="mt-1 text-xs text-slate-400">Signalé le {new Date(signal.detectedAt).toLocaleString("fr-FR")}</div> : null}</div>{signal.targetHref ? <Link to={signal.targetHref} className={`inline-flex shrink-0 items-center justify-center gap-2 rounded-lg px-3 py-2 text-xs font-semibold ${immediate ? "bg-red-700 text-white hover:bg-red-800" : "border border-slate-200 bg-white text-blue-700 hover:bg-slate-50"}`}>Voir la source <ExternalLink className="h-3.5 w-3.5" /></Link> : null}</div>
     <p className="mt-3 text-sm leading-6 text-slate-700">{signal.finding}</p>
     {signal.actionOptions.length ? <div className={`mt-3 rounded-xl p-3 ${immediate ? "bg-white" : "bg-blue-50"}`}>
-      <fieldset><legend className="text-sm font-semibold text-slate-950">Ce que COCO peut réellement faire</legend><div className="mt-2 space-y-2">{signal.actionOptions.map((option) => <label key={option.id} className={`block cursor-pointer rounded-xl border p-3 ${selectedOptionId === option.id ? "border-blue-500 bg-blue-50" : "border-slate-200 bg-white"}`}><span className="flex items-start gap-2"><input type="radio" name={`option-${signal.id}`} className="mt-1" checked={selectedOptionId === option.id} onChange={() => chooseOption(option)} /><span><span className="block text-sm font-semibold text-slate-900">{option.label}</span><span className="mt-1 block text-xs leading-5 text-slate-500">{option.detail}</span></span></span></label>)}</div></fieldset>
-      {selectedOption?.actionType === "add_equipment_to_templates" && (selectedOption.templateIds?.length ?? 0) > 1 ? <fieldset className="mt-3"><legend className="text-xs font-semibold text-slate-700">Templates à modifier</legend><div className="mt-2 flex flex-wrap gap-2">{selectedOption.templateIds?.map((id, index) => <label key={id} className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs"><input type="checkbox" checked={selectedTemplateIds.includes(id)} onChange={() => { setSelectedTemplateIds((current) => current.includes(id) ? current.filter((value) => value !== id) : [...current, id]); setPlan(null); }} />{selectedOption.templateTitles?.[index] ?? "Template"}</label>)}</div></fieldset> : null}
+      <fieldset><legend className="text-sm font-semibold text-slate-950">Ce que COCO peut réellement faire <span className="font-normal text-slate-500">· plusieurs choix possibles</span></legend><div className="mt-2 space-y-2">{signal.actionOptions.map((option) => <label key={option.id} className={`block cursor-pointer rounded-xl border p-3 ${selectedOptionIds.includes(option.id) ? "border-blue-500 bg-blue-50" : "border-slate-200 bg-white"}`}><span className="flex items-start gap-2"><input type="checkbox" className="mt-1" checked={selectedOptionIds.includes(option.id)} onChange={() => toggleOption(option)} /><span><span className="block text-sm font-semibold text-slate-900">{option.label}</span><span className="mt-1 block text-xs leading-5 text-slate-500">{option.detail}</span></span></span></label>)}</div></fieldset>
+      {selectedTemplateOption && (selectedTemplateOption.templateIds?.length ?? 0) > 1 ? <fieldset className="mt-3"><legend className="text-xs font-semibold text-slate-700">Templates à modifier</legend><div className="mt-2 flex flex-wrap gap-2">{selectedTemplateOption.templateIds?.map((id, index) => <label key={id} className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs"><input type="checkbox" checked={selectedTemplateIds.includes(id)} onChange={() => { setSelectedTemplateIds((current) => current.includes(id) ? current.filter((value) => value !== id) : [...current, id]); setGeneratedByOption({}); }} />{selectedTemplateOption.templateTitles?.[index] ?? "Template"}</label>)}</div></fieldset> : null}
       <label className="text-sm font-semibold text-slate-950" htmlFor={`decision-${signal.id}`}>Décision proposée</label>
       <textarea
         id={`decision-${signal.id}`}
         value={decision}
-        onChange={(event) => { setDecision(event.target.value); setPlan(null); }}
+        onChange={(event) => { setDecision(event.target.value); setGeneratedByOption({}); }}
         rows={4}
         className="mt-2 w-full resize-y rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm leading-6 text-slate-900 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
         placeholder="Écris une décision ou seulement des mots-clés…"
       />
-      {effectiveOption ? <div className="mt-2 rounded-lg bg-emerald-50 px-3 py-2 text-xs leading-5 text-emerald-800"><strong>COCO appliquera exactement :</strong> {effectiveOption.detail}</div> : null}
+      {effectiveOptions.length ? <div className="mt-2 rounded-lg bg-emerald-50 px-3 py-2 text-xs leading-5 text-emerald-800"><strong>COCO appliquera :</strong><ul className="mt-1 list-disc pl-4">{effectiveOptions.map((option) => <li key={option.id}>{option.detail}</li>)}</ul></div> : null}
       {actionError ? <div className="mt-2 rounded-lg bg-red-50 px-3 py-2 text-xs text-red-700">{actionError}</div> : null}
       <div className="mt-3 grid gap-2 sm:grid-cols-2">
         <button type="button" onClick={() => void regenerate()} disabled={regenerating || applying || !decision.trim() || !canApply} className="inline-flex items-center justify-center gap-2 rounded-lg border border-blue-200 bg-white px-3 py-2.5 text-sm font-semibold text-blue-700 hover:bg-blue-50 disabled:opacity-50"><RefreshCw className={`h-4 w-4 ${regenerating ? "animate-spin" : ""}`} />{regenerating ? "Régénération…" : "Régénérer une proposition"}</button>

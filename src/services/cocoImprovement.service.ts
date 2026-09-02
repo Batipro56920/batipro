@@ -523,7 +523,7 @@ export async function regenerateCocoImprovementProposal(
   return { proposal, plan: planFromOption(option, response.action) };
 }
 
-export async function setCocoDetectionState(signalKey: string, status: "active" | "pending" | "dismissed") {
+export async function setCocoDetectionState(signalKey: string, status: "active" | "pending" | "dismissed" | "applied") {
   const { data: authData, error: authError } = await supabase.auth.getUser();
   if (authError || !authData.user) throw new Error("Connexion requise pour modifier cette détection.");
   const { error } = await (supabase as any).from("coco_improvement_signal_states").upsert({
@@ -540,6 +540,7 @@ export async function applyCocoImprovementAction(input: {
   decisionText: string;
   option: CocoImprovementOption;
   plan?: CocoImprovementPlan | null;
+  actionExecutionId?: string;
 }): Promise<{ purchaseRequestId?: string; feedPostId?: string }> {
   const decisionText = input.decisionText.trim();
   const signal = input.signal;
@@ -550,7 +551,7 @@ export async function applyCocoImprovementAction(input: {
   const sourceRef = signal.sourceRefs.find((ref) => ref.key === "chantier_feed") ?? signal.sourceRefs[0];
   if (!sourceRef) throw new Error("Cette proposition n'est pas reliée à une donnée source précise.");
   const { data, error } = await (supabase as any).rpc("apply_coco_improvement_action", {
-    p_signal_id: signal.signalKey,
+    p_signal_id: input.actionExecutionId ?? signal.signalKey,
     p_source_type: sourceRef.key,
     p_source_id: sourceRef.id,
     p_chantier_id: signal.chantierId,

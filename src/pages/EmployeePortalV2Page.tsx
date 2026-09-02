@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { AlertTriangle, Boxes, CalendarDays, Camera, CheckCircle2, Circle, FileText, ListOrdered, LogOut, MapPin, MessageCircle, Moon, PackageSearch, Plus, RefreshCw, Send, ShieldAlert, Sunrise, Wrench } from "lucide-react";
+import { AlertTriangle, Boxes, CalendarDays, Camera, CheckCircle2, Circle, FileText, ListOrdered, LogOut, MapPin, MessageCircle, Moon, PackageSearch, Paperclip, Plus, RefreshCw, Send, ShieldAlert, Sunrise, Wrench } from "lucide-react";
 import { useLocation, useNavigate } from "react-router-dom";
 
 import { supabase } from "../lib/supabaseClient";
@@ -308,6 +308,7 @@ export default function EmployeePortalV2Page() {
   }, [refreshKey, resolvedToken]);
 
   const selected = useMemo(() => chantiers.find((c) => c.id === selectedId) ?? chantiers[0] ?? null, [chantiers, selectedId]);
+  const selectedChantierId = selected?.id ?? "";
 
   // Chaque chantier a son propre espace "soir" / "fil" : un brouillon commencé sur un
   // chantier ne doit pas se retrouver envoyé sur un autre après un changement de sélection.
@@ -326,7 +327,28 @@ export default function EmployeePortalV2Page() {
     setDemainTitre("");
     setDemainQuantite("");
     setDemainUnite("");
+    setChecklist(null);
+    setPlanningLots([]);
+    setMainMaterials([]);
+    setSelectedTaskIds([]);
+    setDailyPlanLoaded(false);
+    setMatinMaterialsByTask({});
+    setMatinEquipmentByTask({});
     setMatinGapReported({});
+    setStockQuery("");
+    setStockResults([]);
+    setStockPicked(null);
+    setStockQuantite("");
+    setStockAddedToday([]);
+    setSlipLines([]);
+    setSlipStoragePath(null);
+    setSlipStorageBucket(null);
+    setSlipEditingIndex(null);
+    setSlipSearchQuery("");
+    setSlipSearchResults([]);
+    setSlipDoneCount(null);
+    setSlipError(null);
+    setPhotoError(null);
   }, [selected?.id]);
 
   const todaysChantierIds = useMemo(() => {
@@ -345,30 +367,30 @@ export default function EmployeePortalV2Page() {
 
   useEffect(() => {
     let alive = true;
-    if (!selected) { setChecklist(null); return; }
+    if (!selectedChantierId) { setChecklist(null); return; }
     intervenantDailyChecklistGet(token, isoToday())
-      .then((row) => { if (alive) setChecklist(row); })
+      .then((row) => { if (alive) setChecklist(!row.chantier_id || row.chantier_id === selectedChantierId ? row : null); })
       .catch(() => { if (alive) setChecklist(null); });
     return () => { alive = false; };
-  }, [token, selected?.id, refreshKey]);
+  }, [token, selectedChantierId, refreshKey]);
 
   useEffect(() => {
     let alive = true;
-    if (!selected) { setPlanningLots([]); return; }
-    intervenantGetPlanning(token, selected.id)
+    if (!selectedChantierId) { setPlanningLots([]); return; }
+    intervenantGetPlanning(token, selectedChantierId)
       .then((planning) => { if (alive) setPlanningLots(planning.lots); })
       .catch(() => { if (alive) setPlanningLots([]); });
     return () => { alive = false; };
-  }, [token, selected?.id, refreshKey]);
+  }, [token, selectedChantierId, refreshKey]);
 
   useEffect(() => {
     let alive = true;
-    if (!selected || !timeTaskId) { setMainMaterials([]); return; }
-    intervenantTaskMainMaterials(token, selected.id, timeTaskId)
+    if (!selectedChantierId || !timeTaskId) { setMainMaterials([]); return; }
+    intervenantTaskMainMaterials(token, selectedChantierId, timeTaskId)
       .then((rows) => { if (alive) setMainMaterials(rows); })
       .catch(() => { if (alive) setMainMaterials([]); });
     return () => { alive = false; };
-  }, [token, selected?.id, timeTaskId]);
+  }, [token, selectedChantierId, timeTaskId]);
 
   const activeTasksTodayIds = useMemo(
     () => (selected ? (dataByChantier[selected.id]?.tasks ?? []).filter((t) => !taskDone(t) && isActiveToday(t)).map((t) => t.id) : []),
@@ -1315,11 +1337,11 @@ export default function EmployeePortalV2Page() {
           <div className="space-y-2">{data.feed.length ? data.feed.map((item) => <div key={item.id} className={`flex ${item.author_intervenant_id === intervenantId ? "justify-end" : "justify-start"}`}><div className={`max-w-[88%] rounded-2xl px-4 py-3 text-sm shadow-sm ${item.author_intervenant_id === intervenantId ? "bg-blue-600 text-white" : "border border-slate-200 bg-white text-slate-800"}`}><div className={`text-[10px] font-semibold uppercase tracking-wide ${item.author_intervenant_id === intervenantId ? "text-blue-100" : "text-slate-400"}`}>{item.author_intervenant_id === intervenantId ? "Toi" : item.author_name || "Équipe"}</div><div className="mt-0.5 whitespace-pre-wrap">{item.body}</div>{item.attachment ? (item.attachment.mime_type?.startsWith("image/") && item.attachment.signed_url ? (<a href={item.attachment.signed_url} target="_blank" rel="noreferrer" className="mt-2 block overflow-hidden rounded-xl border border-white/20"><img src={item.attachment.signed_url} alt={item.attachment.file_name} className="max-h-64 w-full object-cover" /></a>) : item.attachment.signed_url ? (<a href={item.attachment.signed_url} target="_blank" rel="noreferrer" className={`mt-2 flex items-center gap-2 rounded-xl border px-3 py-2 text-xs font-semibold ${item.author_intervenant_id === intervenantId ? "border-white/30 text-white" : "border-slate-200 text-slate-700"}`}><FileText className="h-4 w-4 shrink-0" /><span className="truncate">{item.attachment.file_name}</span></a>) : null) : null}<div className={`mt-1 text-[10px] ${item.author_intervenant_id === intervenantId ? "text-blue-100" : "text-slate-400"}`}>{item.created_at ? new Date(item.created_at).toLocaleString("fr-FR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }) : ""}</div></div></div>) : <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-6 text-center text-sm text-slate-500">Aucun message sur ce chantier.</div>}</div>
           <div className="sticky bottom-20 rounded-2xl border border-slate-200 bg-white p-2 shadow-lg">
             <div className="flex items-end gap-2">
-              <textarea rows={2} value={message} onChange={(e) => setMessage(e.target.value)} placeholder="Écrire un message, ou ajoute une photo..." className="min-h-[52px] flex-1 resize-none rounded-xl border-0 bg-slate-50 px-3 py-2.5 text-sm outline-none" />
-              <label className="flex h-12 w-12 shrink-0 cursor-pointer items-center justify-center rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-50">
+              <textarea rows={2} value={message} onChange={(e) => setMessage(e.target.value)} placeholder="Écrire un message…" className="min-h-[52px] min-w-0 flex-1 resize-none rounded-xl border-0 bg-slate-50 px-3 py-2.5 text-sm outline-none" />
+              <label title="Prendre une photo" aria-label="Prendre une photo" className="flex h-11 w-11 shrink-0 cursor-pointer items-center justify-center rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-50">
                 <input
                   type="file"
-                  accept="image/*,application/pdf"
+                  accept="image/*"
                   capture="environment"
                   className="hidden"
                   disabled={sendingPhoto}
@@ -1327,7 +1349,17 @@ export default function EmployeePortalV2Page() {
                 />
                 {sendingPhoto ? <RefreshCw className="h-5 w-5 animate-spin" /> : <Camera className="h-5 w-5" />}
               </label>
-              <button type="button" onClick={() => sendMessage()} disabled={!message.trim() || sending} className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-blue-600 text-white disabled:opacity-40"><Send className="h-5 w-5" /></button>
+              <label title="Ajouter une photo ou un fichier PDF" aria-label="Ajouter une photo ou un fichier PDF" className="flex h-11 w-11 shrink-0 cursor-pointer items-center justify-center rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-50">
+                <input
+                  type="file"
+                  accept="image/*,application/pdf,.pdf"
+                  className="hidden"
+                  disabled={sendingPhoto}
+                  onChange={(e) => { void sendPhoto(e.target.files?.[0] ?? null); e.target.value = ""; }}
+                />
+                <Paperclip className="h-5 w-5" />
+              </label>
+              <button type="button" onClick={() => sendMessage()} disabled={!message.trim() || sending} className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-blue-600 text-white disabled:opacity-40"><Send className="h-5 w-5" /></button>
             </div>
           </div>
         </> : null}

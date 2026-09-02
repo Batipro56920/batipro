@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
-import { MessageCircle, RefreshCw, Send, Search, AlertTriangle } from "lucide-react";
-import { listTerrainFeedbacks, updateTerrainFeedback, type TerrainFeedbackRow } from "../services/terrainFeedback.service";
+import { MessageCircle, RefreshCw, Send, Search, AlertTriangle, FileText } from "lucide-react";
+import { listChantiers, type ChantierRow } from "../services/chantiers.service";
+import { createChantierFeedPost, listAllChantierFeedPosts, type ChantierFeedPostRow } from "../services/chantierFeed.service";
 
 function formatDate(value: string | null) {
   if (!value) return "";
@@ -13,13 +14,14 @@ type Thread = {
   chantierId: string;
   chantierName: string;
   client: string | null;
-  rows: TerrainFeedbackRow[];
+  rows: ChantierFeedPostRow[];
   lastAt: string | null;
   pending: number;
 };
 
 export default function FilChantierPage() {
-  const [rows, setRows] = useState<TerrainFeedbackRow[]>([]);
+  const [rows, setRows] = useState<ChantierFeedPostRow[]>([]);
+  const [chantiers, setChantiers] = useState<ChantierRow[]>([]);
   const [selectedId, setSelectedId] = useState("");
   const [query, setQuery] = useState("");
   const [reply, setReply] = useState("");
@@ -31,9 +33,14 @@ export default function FilChantierPage() {
     setLoading(true);
     setError(null);
     try {
-      const data = await listTerrainFeedbacks({ category: "fil_chantier" });
-      setRows(data);
-      if (!selectedId && data[0]?.chantier_id) setSelectedId(data[0].chantier_id);
+      const [feedResult, chantierRows] = await Promise.all([
+        listAllChantierFeedPosts(),
+        listChantiers({ scope: "all" }),
+      ]);
+      if (!feedResult.schemaReady) throw new Error("Le SQL du fil chantier n'est pas encore appliqué sur Supabase.");
+      setRows(feedResult.posts);
+      setChantiers(chantierRows);
+      setSelectedId((current) => current || feedResult.posts[0]?.chantier_id || "");
     } catch (e) {
       setError(e instanceof Error ? e.message : "Chargement du fil chantier impossible.");
     } finally {
@@ -44,7 +51,7 @@ export default function FilChantierPage() {
   useEffect(() => { void load(); }, []);
 
   const threads = useMemo<Thread[]>(() => {
-    const map = new Map<string, TerrainFeedbackRow[]>();
+    const map = new Map<string, ChantierFeedPostRow[]>();
     for (const row of rows) {
       const current = map.get(row.chantier_id) ?? [];
       current.push(row);
@@ -53,16 +60,18 @@ export default function FilChantierPage() {
     return Array.from(map.entries()).map(([chantierId, items]) => {
       const sorted = [...items].sort((a, b) => String(a.created_at).localeCompare(String(b.created_at)));
       const last = sorted.at(-1) ?? items[0];
+      const chantier = chantiers.find((item) => item.id === chantierId);
+      const repliedPostIds = new Set(sorted.map((row) => row.parent_post_id).filter(Boolean));
       return {
         chantierId,
-        chantierName: last?.chantier?.nom ?? "Chantier",
-        client: last?.chantier?.client ?? null,
+        chantierName: chantier?.nom ?? "Chantier",
+        client: chantier?.client ?? null,
         rows: sorted,
         lastAt: last?.created_at ?? null,
-        pending: sorted.filter((row) => !row.treatment_comment).length,
+        pending: sorted.filter((row) => row.author_intervenant_id && !repliedPostIds.has(row.id)).length,
       };
     }).sort((a, b) => String(b.lastAt).localeCompare(String(a.lastAt)));
-  }, [rows]);
+  }, [chantiers, rows]);
 
   const visibleThreads = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -71,16 +80,22 @@ export default function FilChantierPage() {
   }, [query, threads]);
 
   const selected = visibleThreads.find((thread) => thread.chantierId === selectedId) ?? visibleThreads[0] ?? null;
-  const lastUnanswered = selected ? [...selected.rows].reverse().find((row) => !row.treatment_comment) ?? null : null;
+  useEffect(() => { setReply(""); }, [selected?.chantierId]);
+  const lastUnanswered = selected ? (() => {
+    const repliedPostIds = new Set(selected.rows.map((row) => row.parent_post_id).filter(Boolean));
+    return [...selected.rows].reverse().find((row) => row.author_intervenant_id && !repliedPostIds.has(row.id)) ?? null;
+  })() : null;
 
   async function sendReply() {
     if (!lastUnanswered || !reply.trim() || saving) return;
     setSaving(true);
     setError(null);
     try {
-      await updateTerrainFeedback(lastUnanswered.id, {
-        treatment_comment: reply.trim(),
-        status: "en_cours",
+      await createChantierFeedPost({
+        chantierId: lastUnanswered.chantier_id,
+        body: reply.trim(),
+        visibility: "equipe",
+        parentPostId: lastUnanswered.id,
       });
       setReply("");
       await load();
@@ -119,8 +134,8 @@ export default function FilChantierPage() {
               const active = selected?.chantierId === thread.chantierId;
               const last = thread.rows.at(-1);
               return <button key={thread.chantierId} type="button" onClick={() => setSelectedId(thread.chantierId)} className={`w-full border-b border-slate-100 px-4 py-3 text-left transition ${active ? "bg-blue-50" : "hover:bg-slate-50"}`}>
-                <div className="flex items-start justify-between gap-3"><div className="min-w-0"><div className="truncate text-sm font-bold text-slate-900">{thread.chantierName}</div><div className="truncate text-xs text-slate-500">{thread.client || last?.author?.nom || "Fil chantier"}</div></div>{thread.pending ? <span className="rounded-full bg-blue-600 px-2 py-0.5 text-[11px] font-bold text-white">{thread.pending}</span> : null}</div>
-                <div className="mt-2 flex items-center justify-between gap-2"><div className="truncate text-xs text-slate-500">{last?.description || "Aucun message"}</div><div className="shrink-0 text-[10px] text-slate-400">{formatDate(thread.lastAt)}</div></div>
+                <div className="flex items-start justify-between gap-3"><div className="min-w-0"><div className="truncate text-sm font-bold text-slate-900">{thread.chantierName}</div><div className="truncate text-xs text-slate-500">{thread.client || last?.author_name || "Fil chantier"}</div></div>{thread.pending ? <span className="rounded-full bg-blue-600 px-2 py-0.5 text-[11px] font-bold text-white">{thread.pending}</span> : null}</div>
+                <div className="mt-2 flex items-center justify-between gap-2"><div className="truncate text-xs text-slate-500">{last?.body || "Aucun message"}</div><div className="shrink-0 text-[10px] text-slate-400">{formatDate(thread.lastAt)}</div></div>
               </button>;
             }) : <div className="p-6 text-center text-sm text-slate-500">{loading ? "Chargement..." : "Aucun fil chantier pour le moment."}</div>}
           </div>
@@ -130,13 +145,13 @@ export default function FilChantierPage() {
           {selected ? <>
             <div className="border-b border-slate-200 px-4 py-3"><div className="flex items-center gap-3"><div className="flex h-10 w-10 items-center justify-center rounded-full bg-blue-50 text-blue-700"><MessageCircle className="h-5 w-5" /></div><div><div className="font-bold text-slate-950">{selected.chantierName}</div><div className="text-xs text-slate-500">{selected.client || "Fil chantier interne"}</div></div></div></div>
             <div className="flex-1 space-y-3 overflow-y-auto bg-slate-50 p-4">
-              {selected.rows.map((row) => <div key={row.id} className="space-y-2">
-                <div className="flex justify-start"><div className="max-w-[82%] rounded-2xl rounded-bl-md bg-white px-4 py-3 text-sm shadow-sm ring-1 ring-slate-200"><div className="mb-1 text-[11px] font-bold text-slate-500">{row.author?.nom || "Intervenant"}</div><div className="whitespace-pre-wrap text-slate-900">{row.description}</div><div className="mt-1 text-[10px] text-slate-400">{formatDate(row.created_at)}</div></div></div>
-                {row.treatment_comment ? <div className="flex justify-end"><div className="max-w-[82%] rounded-2xl rounded-br-md bg-blue-600 px-4 py-3 text-sm text-white shadow-sm"><div className="mb-1 text-[11px] font-bold text-blue-100">Équipe Batipro</div><div className="whitespace-pre-wrap">{row.treatment_comment}</div></div></div> : null}
-              </div>)}
+              {selected.rows.map((row) => {
+                const fromTerrain = Boolean(row.author_intervenant_id);
+                return <div key={row.id} className={`flex ${fromTerrain ? "justify-start" : "justify-end"}`}><div className={`max-w-[82%] rounded-2xl px-4 py-3 text-sm shadow-sm ${fromTerrain ? "rounded-bl-md bg-white text-slate-900 ring-1 ring-slate-200" : "rounded-br-md bg-blue-600 text-white"}`}><div className={`mb-1 text-[11px] font-bold ${fromTerrain ? "text-slate-500" : "text-blue-100"}`}>{fromTerrain ? row.author_name || "Intervenant" : row.author_name || "Équipe Batipro"}</div><div className="whitespace-pre-wrap">{row.body}</div>{row.attachments.map((attachment) => attachment.mime_type?.startsWith("image/") && attachment.signed_url ? <a key={attachment.id} href={attachment.signed_url} target="_blank" rel="noreferrer" className="mt-2 block overflow-hidden rounded-xl border border-white/20"><img src={attachment.signed_url} alt={attachment.file_name} className="max-h-72 w-full object-cover" /></a> : attachment.signed_url ? <a key={attachment.id} href={attachment.signed_url} target="_blank" rel="noreferrer" className={`mt-2 flex items-center gap-2 rounded-xl border px-3 py-2 text-xs font-semibold ${fromTerrain ? "border-slate-200" : "border-white/30"}`}><FileText className="h-4 w-4" /><span className="truncate">{attachment.file_name}</span></a> : null)}<div className={`mt-1 text-[10px] ${fromTerrain ? "text-slate-400" : "text-blue-100"}`}>{formatDate(row.created_at)}</div></div></div>;
+              })}
             </div>
             <div className="border-t border-slate-200 bg-white p-3">
-              {lastUnanswered ? <div className="flex items-end gap-2"><textarea rows={2} value={reply} onChange={(e) => setReply(e.target.value)} placeholder={`Répondre à ${lastUnanswered.author?.nom || "l'intervenant"}...`} className="min-h-[52px] flex-1 resize-none rounded-xl bg-slate-50 px-3 py-2.5 text-sm outline-none ring-1 ring-slate-200 focus:ring-blue-300" /><button type="button" onClick={() => void sendReply()} disabled={!reply.trim() || saving} className="flex h-12 w-12 items-center justify-center rounded-xl bg-blue-600 text-white disabled:opacity-40"><Send className="h-5 w-5" /></button></div> : <div className="rounded-xl bg-emerald-50 p-3 text-sm text-emerald-700">Tous les messages de ce chantier ont une réponse.</div>}
+              {lastUnanswered ? <div className="flex items-end gap-2"><textarea rows={2} value={reply} onChange={(e) => setReply(e.target.value)} placeholder={`Répondre à ${lastUnanswered.author_name || "l'intervenant"}...`} className="min-h-[52px] flex-1 resize-none rounded-xl bg-slate-50 px-3 py-2.5 text-sm outline-none ring-1 ring-slate-200 focus:ring-blue-300" /><button type="button" onClick={() => void sendReply()} disabled={!reply.trim() || saving} className="flex h-12 w-12 items-center justify-center rounded-xl bg-blue-600 text-white disabled:opacity-40"><Send className="h-5 w-5" /></button></div> : <div className="rounded-xl bg-emerald-50 p-3 text-sm text-emerald-700">Tous les messages de ce chantier ont une réponse.</div>}
             </div>
           </> : <div className="flex flex-1 items-center justify-center p-8 text-center text-sm text-slate-500">Sélectionne un fil chantier.</div>}
         </section>

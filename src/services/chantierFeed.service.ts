@@ -21,6 +21,7 @@ export type ChantierFeedPostRow = {
   author_id: string | null;
   author_name: string | null;
   author_role: string | null;
+  author_intervenant_id: string | null;
   body: string;
   visibility: ChantierFeedVisibility;
   parent_post_id: string | null;
@@ -35,6 +36,7 @@ const FEED_POST_SELECT = [
   "author_id",
   "author_name",
   "author_role",
+  "author_intervenant_id",
   "body",
   "visibility",
   "parent_post_id",
@@ -72,6 +74,7 @@ function normalizePost(row: Record<string, unknown>): ChantierFeedPostRow {
     author_id: normalizeText(row.author_id),
     author_name: normalizeText(row.author_name),
     author_role: normalizeText(row.author_role),
+    author_intervenant_id: normalizeText(row.author_intervenant_id),
     body: String(row.body ?? "").trim(),
     visibility: normalizeVisibility(row.visibility),
     parent_post_id: normalizeText(row.parent_post_id),
@@ -171,6 +174,36 @@ export async function listChantierFeedPosts(
     .eq("chantier_id", normalizedChantierId)
     .order("created_at", { ascending: false })
     .limit(200);
+
+  if (error) {
+    if (isMissingTableError(error, "chantier_feed_posts")) {
+      return { posts: [], schemaReady: false, attachmentsSchemaReady: false };
+    }
+    throw new Error(error.message);
+  }
+
+  const posts = ((data ?? []) as Array<Record<string, unknown>>).map(normalizePost);
+  const attachmentResult = await listAttachmentsByPostIds(posts.map((post) => post.id));
+  return {
+    posts: posts.map((post) => ({
+      ...post,
+      attachments: attachmentResult.attachmentsByPostId.get(post.id) ?? [],
+    })),
+    schemaReady: true,
+    attachmentsSchemaReady: attachmentResult.schemaReady,
+  };
+}
+
+/** Charge les publications de tous les chantiers visibles par le compte bureau. */
+export async function listAllChantierFeedPosts(): Promise<{
+  posts: ChantierFeedPostRow[];
+  schemaReady: boolean;
+  attachmentsSchemaReady: boolean;
+}> {
+  const { data, error } = await fromFeedPosts()
+    .select(FEED_POST_SELECT)
+    .order("created_at", { ascending: false })
+    .limit(500);
 
   if (error) {
     if (isMissingTableError(error, "chantier_feed_posts")) {
