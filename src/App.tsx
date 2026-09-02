@@ -13,6 +13,7 @@ import AppEntryPage from "./pages/AppEntryPage";
 
 const DashboardPage = lazy(() => import("./pages/DashboardPage"));
 const AssistantDirectionPage = lazy(() => import("./pages/AssistantDirectionPage"));
+const CocoImprovementPage = lazy(() => import("./pages/CocoImprovementPage"));
 const CocoHistoricalQuotesPage = lazy(() => import("./pages/CocoHistoricalQuotesPage"));
 const RentabilitePage = lazy(() => import("./pages/RentabilitePage"));
 const CrmPage = lazy(() => import("./pages/CrmPage"));
@@ -177,6 +178,7 @@ export default function App() {
       >
         <Route path="/dashboard" element={<RouteSuspense label="Chargement du dashboard..."><DashboardPage /></RouteSuspense>} />
         <Route path="/assistant-direction" element={<RouteSuspense label="Chargement de l'assistant direction..."><AssistantDirectionPage /></RouteSuspense>} />
+        <Route path="/assistant-direction/amelioration" element={<RouteSuspense label="Chargement du moteur d'amélioration COCO..."><CocoImprovementPage /></RouteSuspense>} />
         <Route path="/assistant-direction/anciens-devis" element={<RouteSuspense label="Chargement de la collecte historique COCO..."><CocoHistoricalQuotesPage /></RouteSuspense>} />
         <Route
           path="/rentabilite"

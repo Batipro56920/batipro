@@ -176,9 +176,33 @@ Réponds uniquement en JSON valide, sans markdown, avec cette forme exacte :
   "finalWriteBlocked": true
 }`;
 
+const IMPROVEMENT_REWRITE_PROMPT = `Tu es COCO, assistant opérationnel d'une entreprise du bâtiment.
+L'administrateur te donne un constat chantier et un texte libre qu'il a modifié. Ce texte peut être une phrase, des mots-clés ou une instruction incomplète.
+
+Tu dois transformer ce texte en une décision courte, précise et directement exécutable, sans inventer de personne, de cible ou de donnée absente.
+L'opération Batipro autorisée, son matériel, ses identifiants de templates et son client sont imposés dans le contexte. Tu ne les changes jamais et tu ne proposes aucune autre opération. Tu n'exécutes rien : l'administrateur cliquera ensuite sur Appliquer.
+
+Actions possibles :
+- create_task_template_with_equipment : créer un template depuis la tâche identifiée, y ajouter le matériel puis relier la tâche ;
+- add_equipment_to_templates : ajouter le matériel aux seuls templates déjà sélectionnés ;
+- add_client_note : ajouter un pense-bête à la fiche client identifiée ;
+- publish_decision : publier seulement la décision dans le fil chantier.
+
+Pour add_client_note, clientNote contient uniquement le pense-bête à enregistrer. Dans les autres cas, clientNote vaut null. confirmationMessage décrit brièvement ce qui aura réellement été modifié.
+
+Réponds uniquement en JSON valide, sans markdown :
+{
+  "proposal": "décision opérationnelle complète",
+  "action": {
+    "actionType": "create_task_template_with_equipment" | "add_equipment_to_templates" | "add_client_note" | "publish_decision",
+    "clientNote": "pense-bête client ou null",
+    "confirmationMessage": "message bref à publier dans le fil chantier"
+  }
+}`;
+
 type ChatRole = "user" | "assistant";
 type ChatMessage = { role?: ChatRole; content?: string };
-type RequestBody = { mode?: "direction_chat" | "visit_quote_draft"; message?: string; history?: ChatMessage[]; context?: unknown };
+type RequestBody = { mode?: "direction_chat" | "visit_quote_draft" | "improvement_rewrite"; message?: string; history?: ChatMessage[]; context?: unknown };
 type ProfileRow = { role?: string | null; feature_permissions?: Record<string, unknown> | null };
 
 function json(body: unknown, status = 200) {
@@ -304,6 +328,25 @@ function normalizeControlledDraft(raw: Record<string, unknown>) {
   };
 }
 
+function normalizeImprovementProposal(raw: Record<string, unknown>, message: string, context: unknown) {
+  const contextRow = context && typeof context === "object" ? context as Record<string, unknown> : {};
+  const allowedActionTypes = new Set(["create_task_template_with_equipment", "add_equipment_to_templates", "add_client_note", "publish_decision"]);
+  const requestedActionType = normalizeMessage(contextRow.allowedActionType, 80);
+  const allowedActionType = allowedActionTypes.has(requestedActionType) ? requestedActionType : "publish_decision";
+  const action = raw.action && typeof raw.action === "object" ? raw.action as Record<string, unknown> : {};
+  return {
+    proposal: normalizeMessage(raw.proposal, 2400) || message,
+    action: {
+      actionType: allowedActionType,
+      clientNote: allowedActionType === "add_client_note"
+        ? normalizeMessage(action.clientNote, 1200) || normalizeMessage(contextRow.currentClientNote, 1200) || message
+        : null,
+      confirmationMessage: normalizeMessage(action.confirmationMessage, 1800)
+        || `✅ Décision appliquée par COCO : ${normalizeMessage(raw.proposal, 1800) || message}`,
+    },
+  };
+}
+
 async function assertCanUseAssistant(req: Request) {
   const token = getBearerToken(req);
   if (!token) return { allowed: false, status: 401, error: "Session utilisateur manquante." };
@@ -357,6 +400,25 @@ serve(async (req) => {
       return json({ draft });
     } catch (error) {
       return json({ error: error instanceof Error ? error.message : "Réponse IA non exploitable." }, 502);
+    }
+  }
+
+  if (body.mode === "improvement_rewrite") {
+    const message = normalizeMessage(body.message, 2400);
+    if (!message) return json({ error: "Texte de décision manquant." }, 400);
+    const result = await callOpenAI({
+      instructions: IMPROVEMENT_REWRITE_PROMPT,
+      payload: [{
+        role: "user",
+        content: `Contexte Batipro et action autorisée :\n${trimContext(body.context, 12000)}\n\nTexte saisi par l'administrateur :\n${message}`,
+      }],
+      maxOutputTokens: 700,
+    });
+    if (!result.ok) return json({ error: "OpenAI request failed" }, 502);
+    try {
+      return json(normalizeImprovementProposal(parseJsonObject(result.text) as Record<string, unknown>, message, body.context));
+    } catch (error) {
+      return json({ error: error instanceof Error ? error.message : "Proposition IA non exploitable." }, 502);
     }
   }
 
