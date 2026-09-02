@@ -18,6 +18,7 @@ export type CocoLearningSettings = {
 
 export type CocoLearningSignal = {
   id: string;
+  kind: "immediate" | "trend" | "opportunity";
   category: "temps" | "materiaux" | "materiel" | "methode" | "qualite" | "planning" | "achats";
   priority: "haute" | "normale" | "faible";
   title: string;
@@ -25,6 +26,9 @@ export type CocoLearningSignal = {
   proposedAction: string;
   evidence: string[];
   sourceKeys: CocoLearningSourceKey[];
+  chantierId?: string;
+  chantierName?: string;
+  detectedAt?: string;
   targetHref?: string;
 };
 
@@ -133,17 +137,56 @@ function includesAny(value: unknown, words: string[]) {
   return words.some((word) => text.includes(word));
 }
 
+function cleanFeedBody(value: unknown) {
+  return String(value ?? "")
+    .replace(/^\s*(?:🔴|🟠|⚠️)\s*/u, "")
+    .replace(/^blocage signalé\s*:\s*/i, "")
+    .trim();
+}
+
+function immediateFeedSignal(row: Row, chantierName: string | undefined): CocoLearningSignal | null {
+  const raw = String(row.body ?? "").trim();
+  const body = cleanFeedBody(raw);
+  if (!body) return null;
+  const isBlocker = includesAny(raw, ["blocage signalé", "blocage", "bloqué", "bloque", "impossible", "ne peut pas", "on ne peut pas"]);
+  const isSafety = includesAny(raw, ["danger", "dangereux", "sécurité", "securite", "accident", "risque grave"]);
+  const isUrgent = includesAny(raw, ["urgent", "urgence", "avant de partir", "arrêt chantier", "arret chantier"]);
+  const isEquipment = includesAny(raw, ["marteau piqueur", "matériel", "materiel", "outil", "machine", "échafaud", "echafaud", "louer", "location"]);
+  if (!isBlocker && !isSafety && !isUrgent) return null;
+
+  const taskMatch = body.match(/(?:souci|problème|probleme)\s+sur\s+["“]?([^"”]+)["”]?\s*:/i);
+  const taskLabel = taskMatch?.[1]?.trim();
+  return {
+    id: `feed-immediate-${String(row.id)}`,
+    kind: "immediate",
+    category: isSafety ? "qualite" : isEquipment ? "materiel" : "methode",
+    priority: "haute",
+    title: isSafety ? "Risque sécurité signalé" : taskLabel ? `Blocage · ${taskLabel}` : "Blocage chantier signalé",
+    finding: body,
+    proposedAction: isEquipment
+      ? "Décider maintenant qui réserve ou loue le matériel nécessaire, puis confirmer sa disponibilité à l'équipe avant l'intervention."
+      : "Attribuer ce blocage, décider de l'action corrective et confirmer la solution dans le fil chantier.",
+    evidence: [raw],
+    sourceKeys: ["chantier_feed"],
+    chantierId: String(row.chantier_id ?? "") || undefined,
+    chantierName,
+    detectedAt: String(row.created_at ?? "") || undefined,
+    targetHref: row.chantier_id ? `/chantiers/${String(row.chantier_id)}/historique` : "/chantiers",
+  };
+}
+
 export async function analyzeCocoLearning(settings: CocoLearningSettings): Promise<{ signals: CocoLearningSignal[]; sourceCounts: Record<CocoLearningSourceKey, number>; analyzedAt: string }> {
   const normalized = normalizeSettings(settings);
   const since = new Date(Date.now() - normalized.lookbackDays * 86_400_000).toISOString();
   const enabled = normalized.sources;
-  const [tasks, consumptions, feed, feedbacks, reserves, purchases] = await Promise.all([
+  const [tasks, consumptions, feed, feedbacks, reserves, purchases, chantiers] = await Promise.all([
     enabled.task_times || enabled.planning ? safeRows("chantier_tasks", "id, chantier_id, task_template_id, titre, status, temps_prevu_h, temps_reel_h, date_fin, created_at") : [],
     enabled.material_consumption ? safeRows("chantier_task_material_consumptions", "id, chantier_task_id, material_ratio_id, quantite_consommee, created_at", since) : [],
     enabled.chantier_feed ? safeRows("chantier_feed_posts", "id, chantier_id, body, visibility, created_at", since) : [],
     enabled.terrain_feedback ? safeRows("terrain_feedbacks", "id, chantier_id, category, urgency, title, description, status, created_at", since) : [],
     enabled.reserves ? safeRows("chantier_reserves", "id, chantier_id, title, description, status, created_at", since) : [],
     enabled.purchases ? safeRows("chantier_purchase_requests", "id, chantier_id, titre, statut_commande, cout_prevu_ht, cout_reel_ht, created_at", since) : [],
+    safeRows("chantiers", "id, nom, created_at"),
   ]);
   const sourceCounts: Record<CocoLearningSourceKey, number> = {
     task_times: tasks.filter((row) => Number(row.temps_reel_h) > 0).length,
@@ -155,36 +198,70 @@ export async function analyzeCocoLearning(settings: CocoLearningSettings): Promi
     planning: tasks.filter((row) => row.date_fin).length,
   };
   const signals: CocoLearningSignal[] = [];
+  const chantierNameById = new Map(chantiers.map((row) => [String(row.id), String(row.nom ?? "Chantier")]));
+
+  if (enabled.chantier_feed) {
+    feed.forEach((row) => {
+      const signal = immediateFeedSignal(row, chantierNameById.get(String(row.chantier_id)));
+      if (signal) signals.push(signal);
+    });
+  }
+
+  if (enabled.terrain_feedback) {
+    feedbacks.forEach((row) => {
+      const urgency = String(row.urgency ?? "").toLowerCase();
+      const category = String(row.category ?? "").toLowerCase();
+      const status = String(row.status ?? "").toLowerCase();
+      if (!["urgente", "critique"].includes(urgency) && category !== "blocage") return;
+      if (["traite", "traité", "ferme", "fermée", "classe_sans_suite"].includes(status)) return;
+      const chantierId = String(row.chantier_id ?? "");
+      signals.push({
+        id: `feedback-immediate-${String(row.id)}`,
+        kind: "immediate",
+        category: category === "blocage" ? "methode" : "qualite",
+        priority: "haute",
+        title: String(row.title ?? "Retour terrain urgent"),
+        finding: String(row.description ?? "Un retour terrain demande une décision rapide."),
+        proposedAction: "Attribuer le retour, décider de la correction et confirmer la prise en charge à l'équipe.",
+        evidence: [`Urgence : ${urgency || "blocage"}`],
+        sourceKeys: ["terrain_feedback"],
+        chantierId: chantierId || undefined,
+        chantierName: chantierNameById.get(chantierId),
+        detectedAt: String(row.created_at ?? "") || undefined,
+        targetHref: row.id ? `/retours-terrain?feedbackId=${encodeURIComponent(String(row.id))}` : "/retours-terrain",
+      });
+    });
+  }
   const comparable = tasks.filter((row) => Number(row.temps_prevu_h) > 0 && Number(row.temps_reel_h) > 0);
   const lateTime = comparable.filter((row) => Number(row.temps_reel_h) > Number(row.temps_prevu_h) * 1.15);
   if (enabled.task_times && lateTime.length >= normalized.minimumSamples) {
     const planned = lateTime.reduce((sum, row) => sum + Number(row.temps_prevu_h), 0);
     const actual = lateTime.reduce((sum, row) => sum + Number(row.temps_reel_h), 0);
-    signals.push({ id: "time-drift", category: "temps", priority: "haute", title: "Temps prévus régulièrement dépassés", finding: `${lateTime.length} tâches dépassent leur temps prévu de plus de 15 %.`, proposedAction: `Proposer de relever les temps de référence concernés après revue (${Math.round(((actual / planned) - 1) * 100)} % d'écart cumulé).`, evidence: [`${Math.round(planned)} h prévues`, `${Math.round(actual)} h réalisées`], sourceKeys: ["task_times"], targetHref: "/temps" });
+    signals.push({ id: "time-drift", kind: "trend", category: "temps", priority: "normale", title: "Temps prévus régulièrement dépassés", finding: `${lateTime.length} tâches dépassent leur temps prévu de plus de 15 %.`, proposedAction: `Proposer de relever les temps de référence concernés après revue (${Math.round(((actual / planned) - 1) * 100)} % d'écart cumulé).`, evidence: [`${Math.round(planned)} h prévues`, `${Math.round(actual)} h réalisées`], sourceKeys: ["task_times"], targetHref: "/temps" });
   }
   if (enabled.material_consumption && consumptions.length >= normalized.minimumSamples) {
-    signals.push({ id: "material-learning", category: "materiaux", priority: "normale", title: "Consommations terrain disponibles", finding: `${consumptions.length} déclarations peuvent fiabiliser les ratios et coefficients de perte.`, proposedAction: "Comparer par modèle la quantité théorique et la consommation réelle, puis proposer un nouveau ratio sans l'appliquer automatiquement.", evidence: [`${consumptions.length} saisies sur ${normalized.lookbackDays} jours`], sourceKeys: ["material_consumption"], targetHref: "/bibliotheque" });
+    signals.push({ id: "material-learning", kind: "opportunity", category: "materiaux", priority: "faible", title: "Consommations terrain disponibles", finding: `${consumptions.length} déclarations peuvent fiabiliser les ratios et coefficients de perte.`, proposedAction: "Comparer par modèle la quantité théorique et la consommation réelle, puis proposer un nouveau ratio sans l'appliquer automatiquement.", evidence: [`${consumptions.length} saisies sur ${normalized.lookbackDays} jours`], sourceKeys: ["material_consumption"], targetHref: "/bibliotheque" });
   }
   const fieldText = [...feed.map((row) => row.body), ...feedbacks.map((row) => `${row.title} ${row.description}`)];
   const equipmentMentions = fieldText.filter((text) => includesAny(text, ["manque matériel", "manque materiel", "outil", "machine", "échafaud", "echafaud"]));
   if ((enabled.chantier_feed || enabled.terrain_feedback) && equipmentMentions.length >= normalized.minimumSamples) {
-    signals.push({ id: "equipment-missing", category: "materiel", priority: "haute", title: "Matériel manquant mentionné plusieurs fois", finding: `${equipmentMentions.length} messages ou retours signalent un problème de matériel/outillage.`, proposedAction: "Proposer d'ajouter le matériel récurrent aux modèles de tâches et aux contrôles du matin.", evidence: equipmentMentions.slice(0, 3).map((value) => String(value).slice(0, 120)), sourceKeys: ["chantier_feed", "terrain_feedback"], targetHref: "/bibliotheque?readiness=missing_preparation" });
+    signals.push({ id: "equipment-missing", kind: "trend", category: "materiel", priority: "normale", title: "Matériel manquant mentionné plusieurs fois", finding: `${equipmentMentions.length} messages ou retours signalent un problème de matériel/outillage.`, proposedAction: "Proposer d'ajouter le matériel récurrent aux modèles de tâches et aux contrôles du matin.", evidence: equipmentMentions.slice(0, 3).map((value) => String(value).slice(0, 120)), sourceKeys: ["chantier_feed", "terrain_feedback"], targetHref: "/bibliotheque?readiness=missing_preparation" });
   }
   const methodMentions = fieldText.filter((text) => includesAny(text, ["erreur", "refaire", "reprise", "pas prévu", "pas prevu", "difficulté", "difficulte", "support"]));
   if ((enabled.chantier_feed || enabled.terrain_feedback) && methodMentions.length >= normalized.minimumSamples) {
-    signals.push({ id: "method-feedback", category: "methode", priority: "normale", title: "Difficultés d'exécution récurrentes", finding: `${methodMentions.length} éléments du fil chantier ou des retours terrain décrivent une erreur, une reprise ou une difficulté.`, proposedAction: "Proposer une amélioration du mode opératoire, des prérequis et des points de contrôle des tâches concernées.", evidence: methodMentions.slice(0, 3).map((value) => String(value).slice(0, 120)), sourceKeys: ["chantier_feed", "terrain_feedback"], targetHref: "/retours-terrain" });
+    signals.push({ id: "method-feedback", kind: "trend", category: "methode", priority: "normale", title: "Difficultés d'exécution récurrentes", finding: `${methodMentions.length} éléments du fil chantier ou des retours terrain décrivent une erreur, une reprise ou une difficulté.`, proposedAction: "Proposer une amélioration du mode opératoire, des prérequis et des points de contrôle des tâches concernées.", evidence: methodMentions.slice(0, 3).map((value) => String(value).slice(0, 120)), sourceKeys: ["chantier_feed", "terrain_feedback"], targetHref: "/retours-terrain" });
   }
   if (enabled.reserves && reserves.length >= normalized.minimumSamples) {
-    signals.push({ id: "quality-reserves", category: "qualite", priority: "normale", title: "Réserves à transformer en prévention", finding: `${reserves.length} réserves ont été enregistrées pendant la période analysée.`, proposedAction: "Regrouper les réserves par tâche et proposer des points de contrôle avant fermeture des travaux.", evidence: reserves.slice(0, 3).map((row) => String(row.title ?? row.description ?? "Réserve")), sourceKeys: ["reserves"], targetHref: "/reserves" });
+    signals.push({ id: "quality-reserves", kind: "trend", category: "qualite", priority: "normale", title: "Réserves à transformer en prévention", finding: `${reserves.length} réserves ont été enregistrées pendant la période analysée.`, proposedAction: "Regrouper les réserves par tâche et proposer des points de contrôle avant fermeture des travaux.", evidence: reserves.slice(0, 3).map((row) => String(row.title ?? row.description ?? "Réserve")), sourceKeys: ["reserves"], targetHref: "/reserves" });
   }
   const today = new Date().toISOString().slice(0, 10);
   const lateTasks = tasks.filter((row) => row.date_fin && String(row.date_fin) < today && !["FAIT", "TERMINE", "TERMINEE"].includes(String(row.status).toUpperCase()));
   if (enabled.planning && lateTasks.length >= normalized.minimumSamples) {
-    signals.push({ id: "planning-drift", category: "planning", priority: "haute", title: "Retards de planning récurrents", finding: `${lateTasks.length} tâches non terminées ont une date de fin dépassée.`, proposedAction: "Proposer des durées plus réalistes et signaler les dépendances ou ressources qui provoquent les reports.", evidence: lateTasks.slice(0, 3).map((row) => String(row.titre ?? "Tâche en retard")), sourceKeys: ["planning", "chantier_feed"], targetHref: "/planning" });
+    signals.push({ id: "planning-drift", kind: "trend", category: "planning", priority: "normale", title: "Retards de planning récurrents", finding: `${lateTasks.length} tâches non terminées ont une date de fin dépassée.`, proposedAction: "Proposer des durées plus réalistes et signaler les dépendances ou ressources qui provoquent les reports.", evidence: lateTasks.slice(0, 3).map((row) => String(row.titre ?? "Tâche en retard")), sourceKeys: ["planning", "chantier_feed"], targetHref: "/planning" });
   }
   const purchaseDrift = purchases.filter((row) => Number(row.cout_prevu_ht) > 0 && Number(row.cout_reel_ht) > Number(row.cout_prevu_ht) * 1.1);
   if (enabled.purchases && purchaseDrift.length >= normalized.minimumSamples) {
-    signals.push({ id: "purchase-drift", category: "achats", priority: "normale", title: "Coûts d'achat supérieurs aux prévisions", finding: `${purchaseDrift.length} approvisionnements dépassent le coût prévu de plus de 10 %.`, proposedAction: "Proposer une mise à jour des prix d'achat de référence et identifier les fournisseurs ou familles concernés.", evidence: purchaseDrift.slice(0, 3).map((row) => String(row.titre ?? "Approvisionnement")), sourceKeys: ["purchases"], targetHref: "/fournisseurs" });
+    signals.push({ id: "purchase-drift", kind: "trend", category: "achats", priority: "normale", title: "Coûts d'achat supérieurs aux prévisions", finding: `${purchaseDrift.length} approvisionnements dépassent le coût prévu de plus de 10 %.`, proposedAction: "Proposer une mise à jour des prix d'achat de référence et identifier les fournisseurs ou familles concernés.", evidence: purchaseDrift.slice(0, 3).map((row) => String(row.titre ?? "Approvisionnement")), sourceKeys: ["purchases"], targetHref: "/fournisseurs" });
   }
-  return { signals, sourceCounts, analyzedAt: new Date().toISOString() };
+  return { signals: signals.sort((a, b) => (a.kind === "immediate" ? -1 : 1) - (b.kind === "immediate" ? -1 : 1)), sourceCounts, analyzedAt: new Date().toISOString() };
 }
