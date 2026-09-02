@@ -179,21 +179,23 @@ Réponds uniquement en JSON valide, sans markdown, avec cette forme exacte :
 const IMPROVEMENT_REWRITE_PROMPT = `Tu es COCO, assistant opérationnel d'une entreprise du bâtiment.
 L'administrateur te donne un constat chantier et un texte libre qu'il a modifié. Ce texte peut être une phrase, des mots-clés ou une instruction incomplète.
 
-Tu dois transformer ce texte en une décision courte, précise et directement exécutable, sans inventer de personne, fournisseur, date, quantité ou donnée absente.
-Tu prépares aussi les champs nécessaires à l'action Batipro autorisée dans le contexte. Tu ne changes jamais actionType et tu n'exécutes rien : l'administrateur cliquera ensuite sur Appliquer.
+Tu dois transformer ce texte en une décision courte, précise et directement exécutable, sans inventer de personne, de cible ou de donnée absente.
+L'opération Batipro autorisée, son matériel, ses identifiants de templates et son client sont imposés dans le contexte. Tu ne les changes jamais et tu ne proposes aucune autre opération. Tu n'exécutes rien : l'administrateur cliquera ensuite sur Appliquer.
 
-Pour create_purchase_request, title doit désigner clairement ce qu'il faut louer/acheter/réserver. supplierName, dueDate, quantity et unit restent null si absents. Pour publish_decision, reprends simplement la décision dans confirmationMessage.
+Actions possibles :
+- create_task_template_with_equipment : créer un template depuis la tâche identifiée, y ajouter le matériel puis relier la tâche ;
+- add_equipment_to_templates : ajouter le matériel aux seuls templates déjà sélectionnés ;
+- add_client_note : ajouter un pense-bête à la fiche client identifiée ;
+- publish_decision : publier seulement la décision dans le fil chantier.
+
+Pour add_client_note, clientNote contient uniquement le pense-bête à enregistrer. Dans les autres cas, clientNote vaut null. confirmationMessage décrit brièvement ce qui aura réellement été modifié.
 
 Réponds uniquement en JSON valide, sans markdown :
 {
   "proposal": "décision opérationnelle complète",
   "action": {
-    "actionType": "create_purchase_request" | "publish_decision",
-    "title": "titre opérationnel ou null",
-    "supplierName": "fournisseur explicitement cité ou null",
-    "quantity": 1,
-    "unit": "unité ou null",
-    "dueDate": "YYYY-MM-DD ou null",
+    "actionType": "create_task_template_with_equipment" | "add_equipment_to_templates" | "add_client_note" | "publish_decision",
+    "clientNote": "pense-bête client ou null",
     "confirmationMessage": "message bref à publier dans le fil chantier"
   }
 }`;
@@ -328,21 +330,17 @@ function normalizeControlledDraft(raw: Record<string, unknown>) {
 
 function normalizeImprovementProposal(raw: Record<string, unknown>, message: string, context: unknown) {
   const contextRow = context && typeof context === "object" ? context as Record<string, unknown> : {};
-  const allowedActionType = contextRow.allowedActionType === "create_purchase_request"
-    ? "create_purchase_request"
-    : "publish_decision";
+  const allowedActionTypes = new Set(["create_task_template_with_equipment", "add_equipment_to_templates", "add_client_note", "publish_decision"]);
+  const requestedActionType = normalizeMessage(contextRow.allowedActionType, 80);
+  const allowedActionType = allowedActionTypes.has(requestedActionType) ? requestedActionType : "publish_decision";
   const action = raw.action && typeof raw.action === "object" ? raw.action as Record<string, unknown> : {};
-  const quantityValue = Number(action.quantity);
-  const dueDate = normalizeMessage(action.dueDate, 10);
   return {
     proposal: normalizeMessage(raw.proposal, 2400) || message,
     action: {
       actionType: allowedActionType,
-      title: normalizeMessage(action.title, 180) || null,
-      supplierName: normalizeMessage(action.supplierName, 160) || null,
-      quantity: Number.isFinite(quantityValue) && quantityValue > 0 ? quantityValue : 1,
-      unit: normalizeMessage(action.unit, 40) || null,
-      dueDate: /^\d{4}-\d{2}-\d{2}$/.test(dueDate) ? dueDate : null,
+      clientNote: allowedActionType === "add_client_note"
+        ? normalizeMessage(action.clientNote, 1200) || normalizeMessage(contextRow.currentClientNote, 1200) || message
+        : null,
       confirmationMessage: normalizeMessage(action.confirmationMessage, 1800)
         || `✅ Décision appliquée par COCO : ${normalizeMessage(raw.proposal, 1800) || message}`,
     },
