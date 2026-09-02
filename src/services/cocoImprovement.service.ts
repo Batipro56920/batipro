@@ -223,8 +223,8 @@ function clientDisplayName(row: Row | undefined) {
 }
 
 function templateSimilarity(task: Row, template: Row) {
-  const taskTokens = new Set(normalizeComparableText(`${task.titre} ${task.lot} ${task.description_technique}`).split(" ").filter((token) => token.length > 3));
-  const templateTokens = normalizeComparableText(`${template.titre} ${template.lot} ${template.description_technique}`).split(" ").filter((token) => token.length > 3);
+  const taskTokens = new Set(normalizeComparableText([task.titre, task.lot].filter(Boolean).join(" ")).split(" ").filter((token) => token.length > 3));
+  const templateTokens = normalizeComparableText([template.titre, template.lot].filter(Boolean).join(" ")).split(" ").filter((token) => token.length > 3);
   return templateTokens.filter((token) => taskTokens.has(token)).length;
 }
 
