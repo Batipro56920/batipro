@@ -15,6 +15,7 @@ const DEFAULT_RAUL_INSTRUCTIONS = [
   "Réponds en français, de façon courte, concrète et orientée chantier.",
   "Tu aides les profils autorisés sur l'organisation, les devis, les chantiers, les tâches, les réserves, les documents et le pilotage terrain.",
   "Tu peux analyser les photos et fichiers joints au message lorsqu'ils sont fournis.",
+  "Quand une photo est jointe, base tes conseils sur ce que tu vois réellement et signale ce qui n'est pas certain.",
   "Ne promets pas d'action dans Supabase ou Batipro si l'outil ne te donne pas explicitement accès à cette action.",
   "Si une demande touche aux droits, aux secrets, à la production ou à une décision métier sensible, demande une validation humaine.",
 ].join("\n");
@@ -23,8 +24,19 @@ const DEFAULT_RAUL_WORKER_INSTRUCTIONS = [
   "Tu es Raul, l'assistant Batipro pour les ouvriers sur le terrain.",
   "Réponds en français, très court, simple et concret — pas de jargon informatique, une réponse directement utile sur le chantier.",
   "Tu aides sur : où trouver une info sur sa tâche du jour, comment déclarer un imprévu, du matériel manquant ou un matériau utilisé, comment lire une consigne, une photo ou un document du chantier.",
+  "Quand une photo est jointe, base ta réponse sur ce que tu vois réellement et dis clairement ce qui reste incertain.",
   "Tu n'as pas accès aux données financières, aux marges, ni aux autres chantiers que celui en cours — ne réponds pas à ce sujet, redirige vers le bureau.",
   "Ne promets jamais d'action que tu ne peux pas réellement faire.",
+].join("\n");
+
+const TECH_SHEET_INSTRUCTIONS = [
+  "La demande nécessite un livrable visuel.",
+  "Tu DOIS utiliser l'outil image_generation pour produire une fiche technique illustrée en français.",
+  "Conçois une fiche chantier professionnelle, lisible sur téléphone et imprimable : grand titre, vue d'ensemble ou schéma principal, flèches et annotations, matériel nécessaire, étapes ou détails de mise en œuvre, points de vigilance et sécurité.",
+  "Si une photo chantier est fournie, utilise-la comme référence visuelle pour que la fiche corresponde à la situation réelle, sans inventer des éléments absents.",
+  "N'invente jamais de norme, de cote, de charge, de dimension ou de valeur technique non fournie ou non certaine. Si une valeur manque, reste générique ou indique qu'elle doit être vérifiée.",
+  "Privilégie une mise en page paysage 3:2, claire, sobre et professionnelle, avec du texte français correctement orthographié.",
+  "Après l'image, ajoute seulement une courte phrase indiquant que la fiche est prête et, si nécessaire, une réserve technique importante.",
 ].join("\n");
 
 type ChatRole = "user" | "assistant";
@@ -122,6 +134,23 @@ function extractOutputText(payload: any) {
   return parts.join("\n").trim();
 }
 
+function extractGeneratedImage(payload: any) {
+  for (const item of Array.isArray(payload?.output) ? payload.output : []) {
+    if (item?.type === "image_generation_call" && typeof item?.result === "string" && item.result.length > 100) {
+      return `data:image/jpeg;base64,${item.result}`;
+    }
+  }
+  return null;
+}
+
+function wantsVisualTechnicalSheet(message: string) {
+  if (/\b(sans image|texte seulement|pas d['’]?image)\b/i.test(message)) return false;
+  if (/\b(fiche technique|fiche chantier|fiche illustr[eé]e|infographie)\b/i.test(message)) return true;
+  const visualNoun = /\b(sch[eé]ma|image|visuel|illustration|dessin)\b/i.test(message);
+  const creationVerb = /\b(fais|faire|cr[eé]e|cr[eé]er|g[eé]n[eè]re|g[eé]n[eé]rer|produis|produire|fabrique|dessine)\b/i.test(message);
+  return visualNoun && creationVerb;
+}
+
 async function assertCanUseRaul(req: Request, body: RequestBody) {
   const supabaseUrl = requireEnv("SUPABASE_URL");
   const serviceRoleKey = requireEnv("SUPABASE_SERVICE_ROLE_KEY");
@@ -148,9 +177,6 @@ async function assertCanUseRaul(req: Request, body: RequestBody) {
         return { allowed: true, status: 200, error: null, scope: "backoffice" as const };
       }
 
-      // Le portail employé utilise le marqueur __AUTH_SESSION__. Dans ce cas,
-      // l'accès chantier doit être vérifié avec le JWT réel de l'utilisateur,
-      // afin que la RPC puisse résoudre auth.uid().
       if (chantierId && (!portalToken || portalToken === AUTH_SESSION_PORTAL_TOKEN)) {
         const userClient = createClient(supabaseUrl, serviceRoleKey, {
           global: { headers: { Authorization: `Bearer ${bearerToken}` } },
@@ -168,7 +194,6 @@ async function assertCanUseRaul(req: Request, body: RequestBody) {
     }
   }
 
-  // Ancien accès portail par jeton explicite : on garde ce chemin pour compatibilité.
   if (portalToken && portalToken !== AUTH_SESSION_PORTAL_TOKEN && chantierId) {
     const { data: intervenantId, error: accessError } = await admin.rpc(
       "_intervenant_assert_chantier_access",
@@ -206,16 +231,37 @@ serve(async (req) => {
 
   for (const attachment of attachments) {
     if (attachment.mimeType.startsWith("image/")) {
-      userContent.push({ type: "input_image", image_url: attachment.dataUrl });
+      userContent.push({ type: "input_image", image_url: attachment.dataUrl, detail: "high" });
     } else {
       userContent.push({ type: "input_file", filename: attachment.name, file_data: attachment.dataUrl });
     }
   }
 
-  const instructions =
+  const baseInstructions =
     access.scope === "intervenant"
       ? optionalEnv("OPENAI_RAUL_WORKER_SYSTEM_PROMPT") || DEFAULT_RAUL_WORKER_INSTRUCTIONS
       : optionalEnv("OPENAI_RAUL_SYSTEM_PROMPT") || DEFAULT_RAUL_INSTRUCTIONS;
+
+  const visualRequest = wantsVisualTechnicalSheet(message);
+  const requestPayload: Record<string, unknown> = {
+    model: visualRequest
+      ? optionalEnv("OPENAI_RAUL_VISUAL_MODEL") || "gpt-5.6-sol"
+      : optionalEnv("OPENAI_RAUL_MODEL") || optionalEnv("OPENAI_MODEL") || "gpt-4.1-mini",
+    instructions: visualRequest ? `${baseInstructions}\n\n${TECH_SHEET_INSTRUCTIONS}` : baseInstructions,
+    input: [...history, { role: "user", content: userContent }],
+    max_output_tokens: visualRequest ? 900 : 700,
+  };
+
+  if (!visualRequest) requestPayload.temperature = 0.3;
+  if (visualRequest) {
+    requestPayload.tools = [{
+      type: "image_generation",
+      size: "1536x1024",
+      quality: "medium",
+      output_format: "jpeg",
+      output_compression: 85,
+    }];
+  }
 
   const response = await fetch("https://api.openai.com/v1/responses", {
     method: "POST",
@@ -223,23 +269,29 @@ serve(async (req) => {
       Authorization: `Bearer ${requireEnv("OPENAI_API_KEY")}`,
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({
-      model: optionalEnv("OPENAI_RAUL_MODEL") || optionalEnv("OPENAI_MODEL") || "gpt-4.1-mini",
-      instructions,
-      input: [...history, { role: "user", content: userContent }],
-      temperature: 0.3,
-      max_output_tokens: 700,
-    }),
+    body: JSON.stringify(requestPayload),
   });
 
   if (!response.ok) {
     const details = await response.text();
-    console.error("Raul OpenAI request failed", response.status, details.slice(0, 1000));
-    return json({ error: "Raul n'a pas pu analyser la demande pour le moment." }, 502);
+    console.error("Raul OpenAI request failed", response.status, details.slice(0, 1500));
+    return json({ error: visualRequest ? "Raul n'a pas pu générer la fiche visuelle pour le moment." : "Raul n'a pas pu analyser la demande pour le moment." }, 502);
   }
 
   const data = await response.json();
   const reply = extractOutputText(data);
-  if (!reply) return json({ error: "Réponse vide de Raul." }, 502);
-  return json({ reply });
+  const generatedImage = extractGeneratedImage(data);
+
+  if (visualRequest && !generatedImage) {
+    console.error("Raul visual request completed without image_generation_call", JSON.stringify(data?.output ?? []).slice(0, 1500));
+    return json({ error: "Raul a préparé le contenu mais l'image n'a pas été générée. Réessaie dans quelques secondes." }, 502);
+  }
+
+  if (!reply && !generatedImage) return json({ error: "Réponse vide de Raul." }, 502);
+
+  return json({
+    reply: reply || "La fiche technique illustrée est prête.",
+    generated_image: generatedImage,
+    generated_image_name: generatedImage ? "fiche-technique-raul.jpg" : null,
+  });
 });
