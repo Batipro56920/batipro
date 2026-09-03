@@ -424,9 +424,16 @@ export default function App() {
         <Route path="/chantiers/:id/equipe" element={<ChantierBackofficeRoute label="Chargement du chantier..."><ChantierPage /></ChantierBackofficeRoute>} />
         <Route path="/chantiers/:id/sav" element={<ChantierBackofficeRoute label="Chargement du chantier..."><ChantierPage /></ChantierBackofficeRoute>} />
         <Route path="/chantiers/:id/historique" element={<ChantierBackofficeRoute label="Chargement du chantier..."><ChantierPage /></ChantierBackofficeRoute>} />
+        <Route path="/chantiers/:id/terrain" element={<ChantierBackofficeRoute label="Chargement du fil chantier..."><ChantierPage /></ChantierBackofficeRoute>} />
+        <Route path="/chantiers/:id/photos" element={<ChantierBackofficeRoute label="Chargement des photos du chantier..."><ChantierPage /></ChantierBackofficeRoute>} />
+        <Route path="/chantiers/:id/consignes" element={<ChantierBackofficeRoute label="Chargement des consignes du chantier..."><ChantierPage /></ChantierBackofficeRoute>} />
+        <Route path="/chantiers/:id/messages" element={<ChantierBackofficeRoute label="Chargement des messages du chantier..."><ChantierPage /></ChantierBackofficeRoute>} />
+        <Route path="/chantiers/:id/visites" element={<ChantierBackofficeRoute label="Chargement des visites du chantier..."><ChantierPage /></ChantierBackofficeRoute>} />
+        <Route path="/chantiers/:id/reception" element={<ChantierBackofficeRoute label="Chargement de la réception du chantier..."><ChantierPage /></ChantierBackofficeRoute>} />
+        <Route path="/chantiers/:id/doe" element={<ChantierBackofficeRoute label="Chargement du DOE du chantier..."><ChantierPage /></ChantierBackofficeRoute>} />
         <Route path="/chantiers/:id/taches" element={<ChantierSectionRedirect section="execution" />} />
         <Route path="/chantiers/:id/reserves" element={<ChantierBackofficeRoute label="Chargement des réserves chantier..."><ChantierPage /></ChantierBackofficeRoute>} />
-        <Route path="/chantiers/:id/visites-chantier" element={<ChantierSectionRedirect section="qualite" />} />
+        <Route path="/chantiers/:id/visites-chantier" element={<ChantierSectionRedirect section="visites" />} />
         <Route path="/chantiers/:id/notes" element={<ChantierSectionRedirect section="execution" />} />
         <Route path="/chantiers/:id/imprevus" element={<ChantierSectionRedirect section="financier" />} />
         <Route path="/chantiers/:id/production" element={<ChantierBackofficeRoute label="Chargement du chantier..."><ChantierPage /></ChantierBackofficeRoute>} />
@@ -445,8 +452,6 @@ export default function App() {
             <TerrainFeedbackBackofficeRoute label="Ouverture du retour terrain..."><ChantierTerrainFeedbackRedirect /></TerrainFeedbackBackofficeRoute>
           }
         />
-        <Route path="/chantiers/:id/visites" element={<ChantierSectionRedirect section="qualite" />} />
-
         <Route
           path="/intervenants"
           element={

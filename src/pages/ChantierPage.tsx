@@ -11,10 +11,8 @@ import {
   MoreHorizontal,
   Pencil,
   Plus,
-  RotateCcw,
   Trash2,
 } from "lucide-react";
-import ChantierTerrainFeedbackFeed from "../features/chantiers/pages/ChantierTerrainFeedbackFeed";
 
 import { deleteChantier, getChantierById, updateChantierStatus, type ChantierRow } from "../services/chantiers.service";
 
@@ -189,7 +187,12 @@ import {
 } from "../services/companySettings.service";
 import { useI18n } from "../i18n";
 import type { ChantierTabKey } from "../features/chantiers/types";
-import { ChantierPrimaryNav, type ChantierPrimarySection } from "../features/chantiers/navigation/ChantierPrimaryNav";
+import {
+  ChantierPrimaryNav,
+  ChantierSecondaryNav,
+  type ChantierPrimarySection,
+  type ChantierSecondarySection,
+} from "../features/chantiers/navigation/ChantierPrimaryNav";
 import ChantierDoeSection from "../features/chantiers/pages/ChantierDoeSection";
 import ChantierFinancialSection from "../features/chantiers/pages/ChantierFinancialSection";
 import ChantierEquipmentSection from "../features/chantiers/pages/ChantierEquipmentSection";
@@ -227,9 +230,15 @@ type ChantierDetailSectionKey =
   | "qualite"
   | "reserves"
   | "documents"
+  | "doe"
   | "sav"
   | "retours"
-  | "historique";
+  | "historique"
+  | "photos"
+  | "consignes"
+  | "messages"
+  | "visites"
+  | "reception";
 
 type ToastState = { type: "ok" | "error"; msg: string } | null;
 
@@ -240,12 +249,18 @@ function getChantierDetailSection(pathname: string): ChantierDetailSectionKey {
   if (pathname.endsWith("/temps")) return "temps";
   if (pathname.endsWith("/achats")) return "achats";
   if (pathname.endsWith("/financier")) return "financier";
-  if (pathname.endsWith("/qualite") || pathname.endsWith("/qualite-cloture") || pathname.endsWith("/qualite-sav")) return "qualite";
+  if (pathname.endsWith("/qualite")) return "qualite";
   if (pathname.endsWith("/reserves")) return "reserves";
   if (pathname.endsWith("/documents")) return "documents";
-  if (pathname.endsWith("/sav")) return "sav";
+  if (pathname.endsWith("/doe")) return "doe";
+  if (pathname.endsWith("/sav") || pathname.endsWith("/qualite-sav")) return "sav";
   if (pathname.endsWith("/retours-terrain")) return "retours";
-  if (pathname.endsWith("/historique")) return "historique";
+  if (pathname.endsWith("/historique") || pathname.endsWith("/terrain")) return "historique";
+  if (pathname.endsWith("/photos")) return "photos";
+  if (pathname.endsWith("/consignes")) return "consignes";
+  if (pathname.endsWith("/messages")) return "messages";
+  if (pathname.endsWith("/visites")) return "visites";
+  if (pathname.endsWith("/reception") || pathname.endsWith("/qualite-cloture")) return "reception";
   return "cockpit";
 }
 
@@ -260,9 +275,15 @@ const DEFAULT_TAB_BY_CHANTIER_SECTION: Record<ChantierDetailSectionKey, TabKey> 
   qualite: "reserves",
   reserves: "reserves",
   documents: "documents",
+  doe: "doe",
   sav: "reserves",
   retours: "journal",
   historique: "journal",
+  photos: "photos",
+  consignes: "consignes",
+  messages: "messagerie",
+  visites: "visite",
+  reception: "visite",
 };
 
 /* ---------------- helpers ---------------- */
@@ -346,33 +367,6 @@ function getTaskDisplayTitle(task: ChantierTaskRow): string {
     String((task as any).titre_terrain ?? "").trim() ||
     stripLegacyPrefix(String(task.titre ?? "")) ||
     "Sans titre"
-  );
-}
-
-function CockpitFocusCard({
-  label,
-  value,
-  helper,
-  tone = "neutral",
-}: {
-  label: string;
-  value: string;
-  helper: string;
-  tone?: "neutral" | "blue" | "success" | "warning";
-}) {
-  const toneClass = {
-    neutral: "border-subtle bg-surface text-ink",
-    blue: "border-primary/20 bg-primary-soft text-primary-on",
-    success: "border-success/20 bg-success-soft text-success-on",
-    warning: "border-warning/20 bg-warning-soft text-warning-on",
-  }[tone];
-
-  return (
-    <article className={`rounded-card border px-3 py-2.5 ${toneClass}`}>
-      <div className="bt-caption text-current/70">{label}</div>
-      <div className="bt-card-title mt-1 truncate">{value}</div>
-      <div className="bt-caption mt-0.5 line-clamp-1 text-current/70">{helper}</div>
-    </article>
   );
 }
 
@@ -2995,10 +2989,6 @@ export default function ChantierPage() {
   }, [tasks]);
   const completedTasksCount = useMemo(() => tasks.filter((task) => task.status === "FAIT").length, [tasks]);
   const inProgressTasksCount = useMemo(() => tasks.filter((task) => task.status === "EN_COURS").length, [tasks]);
-  const todoTasksCount = useMemo(
-    () => tasks.filter((task) => task.status !== "FAIT" && task.status !== "EN_COURS").length,
-    [tasks],
-  );
 
   async function applyChantierLifecycle(status: ChantierRow["status"]) {
     if (!item) return;
@@ -4793,18 +4783,24 @@ export default function ChantierPage() {
 
   const sectionRequiredTabs: Record<ChantierDetailSectionKey, TabKey[]> = {
     cockpit: ["accueil"],
-    preparation: ["preparer", "localisation", "intervenants", "materiel", "achats", "consignes"],
-    execution: ["devis-taches", "planning", "temps", "photos", "messagerie", "reserves"],
+    preparation: ["preparer", "localisation", "intervenants"],
+    execution: ["devis-taches", "notes"],
     planning: ["planning"],
     temps: ["temps"],
-    achats: ["achats"],
-    financier: ["budget", "achats", "pilotage", "rapports"],
-    qualite: ["reserves", "visite", "doe"],
+    achats: ["achats", "materiel"],
+    financier: ["budget", "pilotage", "rapports"],
+    qualite: ["reserves"],
     reserves: ["reserves"],
-    documents: ["documents", "doe"],
+    documents: ["documents"],
+    doe: ["doe"],
     sav: ["reserves", "visite"],
     retours: ["journal"],
     historique: ["journal"],
+    photos: ["photos"],
+    consignes: ["consignes"],
+    messages: ["messagerie"],
+    visites: ["visite"],
+    reception: ["visite"],
   };
   const isSectionEnabled = (section: ChantierDetailSectionKey) =>
     section === "cockpit" ||
@@ -4822,20 +4818,80 @@ export default function ChantierPage() {
     qualite: "Qualité",
     reserves: "Réserves",
     documents: "Documents",
+    doe: "DOE",
     sav: "SAV",
     retours: "Retours terrain",
     historique: "Fil chantier",
+    photos: "Photos et fichiers",
+    consignes: "Consignes",
+    messages: "Messages à traiter",
+    visites: "Visites",
+    reception: "Réception",
   };
+  const activeWorkspace =
+    detailSection === "cockpit"
+      ? "cockpit"
+      : detailSection === "preparation"
+        ? "preparation"
+        : ["execution", "planning", "temps", "achats"].includes(detailSection)
+          ? "production"
+          : ["historique", "retours", "photos", "consignes", "messages"].includes(detailSection)
+            ? "terrain"
+            : ["qualite", "reserves", "visites", "reception", "sav"].includes(detailSection)
+              ? "qualite"
+              : detailSection === "financier"
+                ? "financier"
+                : "documents";
+  const productionEnabled = ["execution", "planning", "temps", "achats"].some((section) =>
+    isSectionEnabled(section as ChantierDetailSectionKey),
+  );
+  const terrainEnabled = ["historique", "retours", "photos", "consignes", "messages"].some((section) =>
+    isSectionEnabled(section as ChantierDetailSectionKey),
+  );
+  const qualityEnabled = ["qualite", "visites", "reception", "sav"].some((section) =>
+    isSectionEnabled(section as ChantierDetailSectionKey),
+  );
+  const documentsEnabled = ["documents", "doe"].some((section) =>
+    isSectionEnabled(section as ChantierDetailSectionKey),
+  );
   const chantierPrimarySections: ChantierPrimarySection[] = [
-    { key: "cockpit", label: "Cockpit", href: `/chantiers/${id}`, enabled: true },
-    { key: "preparation", label: "Préparation", href: `/chantiers/${id}/preparation`, enabled: isSectionEnabled("preparation") },
-    { key: "execution", label: "Exécution", href: `/chantiers/${id}/execution`, enabled: isSectionEnabled("execution") },
-    { key: "financier", label: "Financier", href: `/chantiers/${id}/financier`, enabled: isSectionEnabled("financier") },
-    { key: "qualite", label: "Qualité", href: `/chantiers/${id}/qualite`, enabled: isSectionEnabled("qualite") },
-    { key: "documents", label: "Documents", href: `/chantiers/${id}/documents`, enabled: isSectionEnabled("documents") },
-    { key: "sav", label: "SAV", href: `/chantiers/${id}/sav`, enabled: isSectionEnabled("sav") },
-    { key: "historique", label: "Fil chantier", href: `/chantiers/${id}/historique`, enabled: isSectionEnabled("historique") },
+    { key: "cockpit", label: "Vue d'ensemble", href: `/chantiers/${id}`, enabled: true, active: activeWorkspace === "cockpit" },
+    { key: "preparation", label: "Préparer", href: `/chantiers/${id}/preparation`, enabled: isSectionEnabled("preparation"), active: activeWorkspace === "preparation" },
+    { key: "production", label: "Produire", href: isSectionEnabled("execution") ? `/chantiers/${id}/execution` : isSectionEnabled("planning") ? `/chantiers/${id}/planning` : isSectionEnabled("temps") ? `/chantiers/${id}/temps` : `/chantiers/${id}/achats`, enabled: productionEnabled, active: activeWorkspace === "production" },
+    { key: "terrain", label: "Terrain", href: isSectionEnabled("historique") ? `/chantiers/${id}/terrain` : isSectionEnabled("retours") ? `/chantiers/${id}/retours-terrain` : isSectionEnabled("photos") ? `/chantiers/${id}/photos` : isSectionEnabled("consignes") ? `/chantiers/${id}/consignes` : `/chantiers/${id}/messages`, enabled: terrainEnabled, active: activeWorkspace === "terrain" },
+    { key: "qualite", label: "Qualité", href: isSectionEnabled("qualite") ? `/chantiers/${id}/qualite` : isSectionEnabled("visites") ? `/chantiers/${id}/visites` : isSectionEnabled("reception") ? `/chantiers/${id}/reception` : `/chantiers/${id}/sav`, enabled: qualityEnabled, active: activeWorkspace === "qualite" },
+    { key: "financier", label: "Finances", href: `/chantiers/${id}/financier`, enabled: isSectionEnabled("financier"), active: activeWorkspace === "financier" },
+    { key: "documents", label: "Documents", href: isSectionEnabled("documents") ? `/chantiers/${id}/documents` : `/chantiers/${id}/doe`, enabled: documentsEnabled, active: activeWorkspace === "documents" },
   ];
+  const chantierSecondarySections: ChantierSecondarySection[] =
+    activeWorkspace === "production"
+      ? [
+          { key: "execution", label: "Tâches", href: `/chantiers/${id}/execution`, enabled: isSectionEnabled("execution"), active: detailSection === "execution" },
+          { key: "planning", label: "Planning", href: `/chantiers/${id}/planning`, enabled: isSectionEnabled("planning"), active: detailSection === "planning" },
+          { key: "temps", label: "Temps", href: `/chantiers/${id}/temps`, enabled: isSectionEnabled("temps"), active: detailSection === "temps" },
+          { key: "achats", label: "Achats et matériel", href: `/chantiers/${id}/achats`, enabled: isSectionEnabled("achats"), active: detailSection === "achats" },
+        ]
+      : activeWorkspace === "terrain"
+        ? [
+            { key: "historique", label: "Fil chantier", href: `/chantiers/${id}/terrain`, enabled: isSectionEnabled("historique"), active: detailSection === "historique" },
+            { key: "retours", label: "Retours terrain", href: `/chantiers/${id}/retours-terrain`, enabled: isSectionEnabled("retours"), active: detailSection === "retours" },
+            { key: "photos", label: "Photos et fichiers", href: `/chantiers/${id}/photos`, enabled: isSectionEnabled("photos"), active: detailSection === "photos" },
+            { key: "consignes", label: "Consignes", href: `/chantiers/${id}/consignes`, enabled: isSectionEnabled("consignes"), active: detailSection === "consignes" },
+            { key: "messages", label: "Messages à traiter", href: `/chantiers/${id}/messages`, enabled: isSectionEnabled("messages"), active: detailSection === "messages" },
+          ]
+        : activeWorkspace === "qualite"
+          ? [
+              { key: "reserves", label: "Réserves", href: `/chantiers/${id}/qualite`, enabled: isSectionEnabled("qualite"), active: detailSection === "qualite" || detailSection === "reserves", badge: reservesOuvertes > 0 ? String(reservesOuvertes) : null, priority: reservesOuvertes > 0 },
+              { key: "visites", label: "Visites", href: `/chantiers/${id}/visites`, enabled: isSectionEnabled("visites"), active: detailSection === "visites" },
+              { key: "reception", label: "Réception", href: `/chantiers/${id}/reception`, enabled: isSectionEnabled("reception"), active: detailSection === "reception" },
+              { key: "sav", label: "SAV", href: `/chantiers/${id}/sav`, enabled: isSectionEnabled("sav"), active: detailSection === "sav" },
+            ]
+          : activeWorkspace === "documents"
+            ? [
+                { key: "documents", label: "Bibliothèque", href: `/chantiers/${id}/documents`, enabled: isSectionEnabled("documents"), active: detailSection === "documents" },
+                { key: "doe", label: "DOE", href: `/chantiers/${id}/doe`, enabled: isSectionEnabled("doe"), active: detailSection === "doe" },
+              ]
+            : [];
   useEffect(() => {
     if (tab === DEFAULT_TAB_BY_CHANTIER_SECTION[detailSection]) return;
     setTab(DEFAULT_TAB_BY_CHANTIER_SECTION[detailSection]);
@@ -4887,119 +4943,101 @@ export default function ChantierPage() {
   const activeTabLabel = detailSectionLabels[detailSection];
   const accueilPanel = (
     <div className="space-y-4">
-      <section className="rounded-surface border border-subtle bg-surface p-4 shadow-elevated">
-        <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_360px]">
-          <div className="min-w-0 space-y-4">
-            <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-              <div className="min-w-0">
-                <div className="flex flex-wrap items-center gap-2">
-                  <h2 className="bt-page-title min-w-0 truncate text-ink">{item.nom}</h2>
-                  <span className={["rounded-full border px-2 py-0.5 text-xs font-semibold", badge.className].join(" ")}>{badge.label}</span>
-                </div>
-                <div className="bt-secondary mt-1 flex flex-wrap gap-x-4 gap-y-1 text-muted">
-                  <span>{item.client || "Client non renseigné"}</span>
-                  <span>{item.adresse || "Adresse non renseignée"}</span>
-                  <span>{t("chantierPage.start")} {item.date_debut ?? "-"}</span>
-                  <span>{t("chantierPage.end")} {item.date_fin_prevue ?? "-"}</span>
-                </div>
-              </div>
-              <div className="flex flex-wrap gap-2">
-                <Link to={`/chantiers/${id}/execution`} className="bt-control inline-flex items-center gap-2 rounded-field bg-primary px-3 py-2 text-sm font-semibold text-primary-contrast hover:bg-primary-hover">
-                  <Plus className="h-4 w-4" strokeWidth={1.75} />
-                  Production
-                </Link>
-                <Link to={`/chantiers/${id}/documents`} className="bt-control inline-flex items-center gap-2 rounded-field border border-subtle bg-surface px-3 py-2 text-sm font-semibold text-ink-secondary hover:bg-interactive">
-                  <FileUp className="h-4 w-4" strokeWidth={1.75} />
-                  Documents
-                </Link>
-                <Link to={`/chantiers/${id}/qualite`} className="bt-control inline-flex items-center gap-2 rounded-field border border-subtle bg-surface px-3 py-2 text-sm font-semibold text-ink-secondary hover:bg-interactive">
-                  <CheckCircle2 className="h-4 w-4" strokeWidth={1.75} />
-                  Qualité
-                </Link>
-              </div>
-            </div>
-
-            <div className="grid gap-2 md:grid-cols-3 xl:grid-cols-6">
-              <CockpitFocusCard label="Statut" value={badge.label} helper={`${avancement}% d'avancement`} tone="blue" />
-              <CockpitFocusCard label="Planning" value={item.date_fin_prevue ?? "À planifier"} helper={item.date_debut ? `Début ${item.date_debut}` : "Début non renseigné"} />
-              <CockpitFocusCard label="Tâches" value={`${tasks.length}`} helper={`${todoTasksCount} à faire · ${inProgressTasksCount} en cours`} />
-              <CockpitFocusCard label="Réserves" value={`${reservesOuvertes}`} helper={reservesOuvertes > 0 ? "À lever" : "Aucune ouverte"} tone={reservesOuvertes > 0 ? "warning" : "success"} />
-              <CockpitFocusCard label="Documents" value={`${documents.length}`} helper="Plans, DOE, PV" />
-              <CockpitFocusCard label="Équipe" value={`${intervenants.length}`} helper={`${lotOptions.length} lot(s)`} />
-            </div>
-          </div>
-
-          <aside className="rounded-card border border-subtle bg-interactive p-3">
+      <div className="grid gap-4 xl:grid-cols-[minmax(0,1.5fr)_minmax(280px,0.5fr)]">
+        <div className="space-y-4">
+          <section className="rounded-surface border border-subtle bg-surface p-4 shadow-sm">
             <div className="flex items-center justify-between gap-3">
               <div>
-                <div className="bt-caption text-muted">{t("chantiers.progress")}</div>
-                <div className="bt-metric mt-1 text-ink">{avancement}%</div>
+                <div className="bt-section-title text-ink">À traiter maintenant</div>
+                <div className="bt-secondary mt-1 text-muted">Les actions qui demandent une décision sur ce chantier.</div>
               </div>
-              <div className="text-right">
-                <div className="bt-caption text-muted">{t("chantierPage.hoursPlanned")}</div>
-                <div className="bt-card-title text-ink">{tempsPrevues} h</div>
-                <div className="bt-caption mt-1 text-muted">{t("chantierPage.hoursDone")} : {totalTempsReel} h</div>
+              <span className="rounded-full bg-danger-soft px-2.5 py-1 text-xs font-semibold text-danger-on">
+                {alertCards.length + (reservesOuvertes > 0 ? 1 : 0)} action{alertCards.length + (reservesOuvertes > 0 ? 1 : 0) > 1 ? "s" : ""}
+              </span>
+            </div>
+            <div className="mt-3 divide-y divide-subtle">
+              {reservesOuvertes > 0 ? (
+                <Link to={`/chantiers/${id}/qualite`} className="flex items-center justify-between gap-3 py-3 hover:text-primary-on">
+                  <div>
+                    <div className="text-sm font-semibold text-ink">Réserves à lever</div>
+                    <div className="bt-secondary mt-0.5 text-muted">{reservesOuvertes} réserve{reservesOuvertes > 1 ? "s" : ""} encore ouverte{reservesOuvertes > 1 ? "s" : ""}</div>
+                  </div>
+                  <span className="text-sm font-semibold text-primary-on">Traiter →</span>
+                </Link>
+              ) : null}
+              {alertCards.map((alert) => {
+                const href = alert.key === "temps"
+                  ? `/chantiers/${id}/temps`
+                  : alert.key === "budget"
+                    ? `/chantiers/${id}/financier`
+                    : `/chantiers/${id}/execution`;
+                return (
+                  <Link key={alert.key} to={href} className="flex items-center justify-between gap-3 py-3 hover:text-primary-on">
+                    <div>
+                      <div className="text-sm font-semibold text-ink">{alert.title}</div>
+                      <div className="bt-secondary mt-0.5 text-muted">{alert.detail}</div>
+                    </div>
+                    <span className="text-sm font-semibold text-primary-on">Ouvrir →</span>
+                  </Link>
+                );
+              })}
+              {alertCards.length === 0 && reservesOuvertes === 0 ? (
+                <div className="py-4 text-sm font-medium text-success-on">Aucune action urgente sur ce chantier.</div>
+              ) : null}
+            </div>
+          </section>
+
+          <section className="rounded-surface border border-subtle bg-surface p-4 shadow-sm">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <div className="bt-section-title text-ink">Travail en cours</div>
+                <div className="bt-secondary mt-1 text-muted">Les tâches actuellement réalisées par l'équipe.</div>
               </div>
+              <Link to={`/chantiers/${id}/execution`} className="text-sm font-semibold text-primary-on">Ouvrir Produire →</Link>
+            </div>
+            <div className="mt-3 divide-y divide-subtle">
+              {tasks.filter((task) => task.status === "EN_COURS").slice(0, 4).map((task) => (
+                <button key={task.id} type="button" onClick={() => setTaskDetailOpenId(task.id)} className="flex w-full items-center justify-between gap-3 py-3 text-left hover:text-primary-on">
+                  <div className="min-w-0">
+                    <div className="truncate text-sm font-semibold text-ink">{getTaskDisplayTitle(task)}</div>
+                    <div className="bt-secondary mt-0.5 text-muted">{getTaskAssignedIntervenantNames(task).join(", ") || "Intervenant non affecté"}</div>
+                  </div>
+                  <span className="shrink-0 text-sm font-semibold text-ink-secondary">{computeTaskProgress(task).displayPercent}%</span>
+                </button>
+              ))}
+              {inProgressTasksCount === 0 ? (
+                <div className="py-4 text-sm text-muted">Aucune tâche en cours. Ouvre Produire pour démarrer ou affecter une tâche.</div>
+              ) : null}
+            </div>
+          </section>
+        </div>
+
+        <aside className="space-y-4">
+          <section className="rounded-surface border border-subtle bg-surface p-4 shadow-sm">
+            <div className="flex items-center justify-between gap-3">
+              <div className="bt-section-title text-ink">Avancement</div>
+              <div className="bt-metric text-ink">{avancement}%</div>
             </div>
             <div className="mt-3 h-2 overflow-hidden rounded-full bg-track">
               <div className="h-full rounded-full bg-primary" style={{ width: `${avancement}%` }} />
             </div>
-            <div className="mt-3 flex flex-wrap gap-1.5">
-              <span className="rounded-full bg-success-soft px-2 py-1 text-xs font-semibold text-success-on">{completedTasksCount} terminée{completedTasksCount > 1 ? "s" : ""}</span>
-              <span className="rounded-full bg-warning-soft px-2 py-1 text-xs font-semibold text-warning-on">{inProgressTasksCount} en cours</span>
-              <span className="rounded-full bg-neutral-soft px-2 py-1 text-xs font-semibold text-neutral-on">{todoTasksCount} à faire</span>
+            <div className="mt-4 space-y-2 text-sm">
+              <div className="flex justify-between gap-3"><span className="text-muted">Tâches</span><strong>{completedTasksCount} / {tasks.length} terminées</strong></div>
+              <div className="flex justify-between gap-3"><span className="text-muted">Temps</span><strong>{totalTempsReel} h / {tempsPrevues} h</strong></div>
+              <div className="flex justify-between gap-3"><span className="text-muted">Fin prévue</span><strong>{item.date_fin_prevue ?? item.planning_end_date ?? "À planifier"}</strong></div>
             </div>
-          </aside>
-        </div>
-      </section>
+          </section>
 
-      <section className="rounded-surface border border-subtle bg-surface p-4">
-        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-          <div className="min-w-0">
-            <div className="bt-section-title text-ink">Points à surveiller</div>
-            <div className="bt-secondary mt-1 text-muted">
-              {alertCards.length === 0 ? t("chantierPage.noAlert") : `${alertCards.length} alerte${alertCards.length > 1 ? "s" : ""} à traiter`}
+          <section className="rounded-surface border border-subtle bg-surface p-4 shadow-sm">
+            <div className="bt-section-title text-ink">Accès directs</div>
+            <div className="mt-3 grid gap-2">
+              <Link to={`/chantiers/${id}/planning`} className="rounded-field border border-subtle px-3 py-2 text-sm font-semibold text-ink-secondary hover:bg-interactive">Planning du chantier</Link>
+              <Link to={`/chantiers/${id}/terrain`} className="rounded-field border border-subtle px-3 py-2 text-sm font-semibold text-ink-secondary hover:bg-interactive">Dernières nouvelles terrain</Link>
+              <Link to={`/chantiers/${id}/documents`} className="rounded-field border border-subtle px-3 py-2 text-sm font-semibold text-ink-secondary hover:bg-interactive">Documents du chantier</Link>
             </div>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            {item.status !== "TERMINE" ? (
-              <button type="button" disabled={chantierActionSaving} onClick={() => void applyChantierLifecycle("TERMINE")} className="bt-control inline-flex items-center gap-2 rounded-field border border-subtle bg-surface px-3 py-2 text-sm font-semibold text-ink-secondary hover:bg-interactive disabled:opacity-50">
-                <CheckCircle2 className="h-4 w-4" strokeWidth={1.75} />
-                Terminer
-              </button>
-            ) : null}
-            {(item.status === "TERMINE" || item.status === "ARCHIVE" || item.status === "ANNULE") ? (
-              <button type="button" disabled={chantierActionSaving} onClick={() => void applyChantierLifecycle("EN_COURS")} className="bt-control inline-flex items-center gap-2 rounded-field border border-subtle bg-surface px-3 py-2 text-sm font-semibold text-ink-secondary hover:bg-interactive disabled:opacity-50">
-                <RotateCcw className="h-4 w-4" strokeWidth={1.75} />
-                Restaurer
-              </button>
-            ) : null}
-          </div>
-        </div>
-        <div className="mt-3 flex flex-wrap gap-2">
-          {alertCards.length === 0 ? (
-            <span className="inline-flex items-center rounded-full bg-success-soft px-3 py-1 text-xs font-semibold text-success-on">
-              {t("chantierPage.noAlert")}
-            </span>
-          ) : (
-            alertCards.map((alert) => (
-              <span
-                key={alert.key}
-                className={[
-                  "inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold",
-                  alert.tone === "danger"
-                    ? "bg-danger-soft text-danger-on"
-                    : alert.tone === "warning"
-                      ? "bg-warning-soft text-warning-on"
-                      : "bg-success-soft text-success-on",
-                ].join(" ")}
-              >
-                {alert.title}: {alert.detail}
-              </span>
-            ))
-          )}
-        </div>
-      </section>
+          </section>
+        </aside>
+      </div>
     </div>
   );
 
@@ -5821,17 +5859,24 @@ export default function ChantierPage() {
               </div>
             </div>
             <div className="flex flex-wrap items-center gap-2">
-              <button type="button" onClick={() => setTaskCreateDrawerOpen(true)} className="bt-control inline-flex items-center gap-2 rounded-field bg-primary px-3 py-2 text-sm font-semibold text-primary-contrast hover:bg-primary-hover">
-                <Plus className="h-4 w-4" strokeWidth={1.75} />
-                Ajouter tâche
-              </button>
+              <details className="relative">
+                <summary className="bt-control inline-flex cursor-pointer list-none items-center gap-2 rounded-field bg-primary px-3 py-2 text-sm font-semibold text-primary-contrast hover:bg-primary-hover">
+                  <Plus className="h-4 w-4" strokeWidth={1.75} />
+                  Ajouter à ce chantier
+                </summary>
+                <div className="absolute right-0 z-30 mt-2 w-64 rounded-surface border border-subtle bg-elevated p-2 shadow-overlay">
+                  <button type="button" onClick={() => setTaskCreateDrawerOpen(true)} className="flex w-full items-center gap-2 rounded-field px-3 py-2 text-left text-sm font-medium text-ink-secondary hover:bg-interactive"><Plus className="h-4 w-4" strokeWidth={1.75} />Nouvelle tâche</button>
+                  <button type="button" onClick={() => navigate(`/chantiers/${id}/terrain`)} className="flex w-full items-center gap-2 rounded-field px-3 py-2 text-left text-sm font-medium text-ink-secondary hover:bg-interactive">Écrire dans le fil chantier</button>
+                  <button type="button" onClick={openDocumentModal} className="flex w-full items-center gap-2 rounded-field px-3 py-2 text-left text-sm font-medium text-ink-secondary hover:bg-interactive"><FileUp className="h-4 w-4" strokeWidth={1.75} />Photo ou document</button>
+                  <button type="button" onClick={() => navigate(`/chantiers/${id}/retours-terrain`)} className="flex w-full items-center gap-2 rounded-field px-3 py-2 text-left text-sm font-medium text-ink-secondary hover:bg-interactive">Nouveau retour terrain</button>
+                  <button type="button" onClick={() => openReserveDrawer(null)} className="flex w-full items-center gap-2 rounded-field px-3 py-2 text-left text-sm font-medium text-ink-secondary hover:bg-interactive">Nouvelle réserve</button>
+                  <button type="button" onClick={() => navigate(`/chantiers/${id}/temps`)} className="flex w-full items-center gap-2 rounded-field px-3 py-2 text-left text-sm font-medium text-ink-secondary hover:bg-interactive">Saisir du temps</button>
+                  <button type="button" onClick={() => navigate(`/chantiers/${id}/achats`)} className="flex w-full items-center gap-2 rounded-field px-3 py-2 text-left text-sm font-medium text-ink-secondary hover:bg-interactive">Achat ou matériel</button>
+                </div>
+              </details>
               <button type="button" onClick={() => navigate(`/chantiers/${id}/preparation`)} className="bt-control inline-flex items-center gap-2 rounded-field border border-subtle bg-surface px-3 py-2 text-sm font-semibold text-ink-secondary hover:bg-interactive">
                 <Pencil className="h-4 w-4" strokeWidth={1.75} />
                 Modifier
-              </button>
-              <button type="button" onClick={() => navigate(`/chantiers/${id}/documents`)} className="bt-control inline-flex items-center gap-2 rounded-field border border-subtle bg-surface px-3 py-2 text-sm font-semibold text-ink-secondary hover:bg-interactive">
-                <FileUp className="h-4 w-4" strokeWidth={1.75} />
-                Document
               </button>
               <details className="relative">
                 <summary className="bt-control inline-flex cursor-pointer list-none items-center gap-2 rounded-field border border-subtle bg-surface px-3 py-2 text-sm font-semibold text-ink-secondary hover:bg-interactive">
@@ -5850,9 +5895,11 @@ export default function ChantierPage() {
 
           <div className="space-y-2">
             <div className="bt-caption text-muted">
-              Chantiers &gt; {item.nom} &gt; {detailSectionLabels[detailSection]}
+              Chantiers &gt; {item.nom} &gt; {chantierPrimarySections.find((section) => section.active)?.label ?? detailSectionLabels[detailSection]}
+              {chantierSecondarySections.length > 0 ? ` > ${detailSectionLabels[detailSection]}` : ""}
             </div>
             <ChantierPrimaryNav sections={chantierPrimarySections} />
+            <ChantierSecondaryNav sections={chantierSecondarySections} />
           </div>
         </div>
       </section>
@@ -5867,11 +5914,6 @@ export default function ChantierPage() {
             + {t("chantierPage.addTask")}
           </button>
         ) : null}
-        {detailSection === "execution" && id && (
-          <div className="mb-6">
-            <ChantierTerrainFeedbackFeed chantierId={id} />
-          </div>
-        )}
         {detailSection === "cockpit" && accueilPanel}
         {detailSection === "retours" && id && (
           <Suspense fallback={<div className="rounded-2xl border border-slate-200 bg-white p-4 text-sm text-slate-500">Chargement des retours terrain du chantier...</div>}>
@@ -5923,7 +5965,7 @@ export default function ChantierPage() {
             Suivi financier — budget, achats, imprévus
           </div>
         )}
-        {(detailSection === "preparation" || detailSection === "financier" || detailSection === "achats") && id && (
+        {detailSection === "achats" && id && (
           <ChantierPurchasesSection chantierId={id} tasks={tasks} zones={zones} />
         )}
         {detailSection === "financier" && id && <ChantierFinancialSection chantierId={id} />}
@@ -5935,7 +5977,7 @@ export default function ChantierPage() {
           />
         )}
         {/* ---------------- ONGLET TEMPS ---------------- */}
-        {(detailSection === "execution" || detailSection === "temps") && (
+        {detailSection === "temps" && (
           <ChantierTimeSection>
           <div className="space-y-3">
             <div className="flex items-center justify-between">
@@ -6433,7 +6475,7 @@ export default function ChantierPage() {
         ) : null}
 
         {/* ---------------- ONGLET RÉSERVES ---------------- */}
-        {(detailSection === "qualite" || detailSection === "reserves" || detailSection === "sav") && (
+        {(detailSection === "qualite" || detailSection === "reserves") && (
           <ChantierReservesSection>
           <div className="space-y-4">
             <div className="flex flex-wrap items-start justify-between gap-3">
@@ -7621,7 +7663,7 @@ export default function ChantierPage() {
         )}
 
         {/* ---------------- ONGLET MATÉRIEL ---------------- */}
-        {detailSection === "preparation" && (
+        {detailSection === "consignes" && (
           <ChantierInstructionsSection
             targetLoading={consignesLoading}
             targetReady={Boolean(
@@ -7914,7 +7956,7 @@ export default function ChantierPage() {
         )}
 
         {/* ---------------- ONGLET MATÉRIEL ---------------- */}
-        {detailSection === "preparation" && (
+        {detailSection === "achats" && (
           <ChantierEquipmentSection>
           <div className="space-y-4">
             <div className="flex items-center justify-between">
@@ -8136,11 +8178,11 @@ export default function ChantierPage() {
           </ChantierEquipmentSection>
         )}
 
-        {(detailSection === "execution" || detailSection === "planning") && id && (
+        {detailSection === "planning" && id && (
           <ChantierPlanningSection chantierId={id} chantierName={item?.nom ?? null} intervenants={intervenants} />
         )}
 
-        {detailSection === "execution" && id && (
+        {detailSection === "photos" && id && (
           <ChantierPhotosSection chantierId={id} tasks={tasks} zones={zones} />
         )}
 
@@ -8157,7 +8199,7 @@ export default function ChantierPage() {
           />
         )}
 
-        {detailSection === "execution" && id && (
+        {detailSection === "messages" && id && (
           <ChantierMessagingSection
             chantierId={id}
             intervenants={intervenants}
@@ -8182,7 +8224,7 @@ export default function ChantierPage() {
           />
         )}
 
-        {(detailSection === "qualite" || detailSection === "documents") && id && (
+        {detailSection === "doe" && id && (
           <ChantierDoeSection
             chantierId={id}
             chantierName={item?.nom ?? "Chantier"}
@@ -8197,7 +8239,7 @@ export default function ChantierPage() {
           />
         )}
 
-        {detailSection === "qualite" && id && (
+        {detailSection === "visites" && id && (
           <ChantierVisitSection
             chantierId={id}
             chantier={item}
@@ -8210,7 +8252,7 @@ export default function ChantierPage() {
           />
         )}
 
-        {detailSection === "qualite" && item && (
+        {detailSection === "reception" && item && (
           <ReceptionReportPanel chantier={item} reserves={reserves} onReservesRefresh={refreshReserves} />
         )}
 
@@ -9053,17 +9095,6 @@ export default function ChantierPage() {
     </div>
   );
 }
-
-
-
-
-
-
-
-
-
-
-
 
 
 
