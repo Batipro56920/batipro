@@ -173,7 +173,7 @@ function AlertBadges({ row }: { row: ChantierDerived }) {
           icon={Bell}
           label={terrainLabel}
           tone={terrainTone}
-          href={`/retours-terrain?chantierId=${encodeURIComponent(row.id)}`}
+          href={`/chantiers/${encodeURIComponent(row.id)}/retours-terrain`}
           title="Ouvrir les retours terrain de ce chantier"
         />
       ) : null}

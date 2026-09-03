@@ -1,5 +1,5 @@
 ﻿  // src/pages/ChantierPage.tsx
-import { useEffect, useMemo, useRef, useState } from "react";
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import type { ChangeEvent, DragEvent, FormEvent } from "react";
 import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import {
@@ -212,16 +212,23 @@ import ChantierUnforeseenSection from "../features/chantiers/pages/ChantierUnfor
 import ChantierVisitSection from "../features/chantiers/pages/ChantierVisitSection";
 import { ReceptionReportPanel } from "../features/reception-reports";
 
+const TerrainFeedbacksPage = lazy(() => import("./TerrainFeedbacksPage"));
+
 /* ---------------- types ---------------- */
 type TabKey = ChantierTabKey;
 type ChantierDetailSectionKey =
   | "cockpit"
   | "preparation"
   | "execution"
+  | "planning"
+  | "temps"
+  | "achats"
   | "financier"
   | "qualite"
+  | "reserves"
   | "documents"
   | "sav"
+  | "retours"
   | "historique";
 
 type ToastState = { type: "ok" | "error"; msg: string } | null;
@@ -229,10 +236,15 @@ type ToastState = { type: "ok" | "error"; msg: string } | null;
 function getChantierDetailSection(pathname: string): ChantierDetailSectionKey {
   if (pathname.endsWith("/preparation") || pathname.endsWith("/equipe")) return "preparation";
   if (pathname.endsWith("/execution") || pathname.endsWith("/production")) return "execution";
+  if (pathname.endsWith("/planning")) return "planning";
+  if (pathname.endsWith("/temps")) return "temps";
+  if (pathname.endsWith("/achats")) return "achats";
   if (pathname.endsWith("/financier")) return "financier";
   if (pathname.endsWith("/qualite") || pathname.endsWith("/qualite-cloture") || pathname.endsWith("/qualite-sav")) return "qualite";
+  if (pathname.endsWith("/reserves")) return "reserves";
   if (pathname.endsWith("/documents")) return "documents";
   if (pathname.endsWith("/sav")) return "sav";
+  if (pathname.endsWith("/retours-terrain")) return "retours";
   if (pathname.endsWith("/historique")) return "historique";
   return "cockpit";
 }
@@ -241,10 +253,15 @@ const DEFAULT_TAB_BY_CHANTIER_SECTION: Record<ChantierDetailSectionKey, TabKey> 
   cockpit: "accueil",
   preparation: "preparer",
   execution: "devis-taches",
+  planning: "planning",
+  temps: "temps",
+  achats: "achats",
   financier: "budget",
   qualite: "reserves",
+  reserves: "reserves",
   documents: "documents",
   sav: "reserves",
+  retours: "journal",
   historique: "journal",
 };
 
@@ -2720,7 +2737,7 @@ export default function ChantierPage() {
       return;
     }
     if (
-      detailSection !== "qualite" ||
+      (detailSection !== "qualite" && detailSection !== "reserves") ||
       reservesLoading ||
       !targetedReserve ||
       targetedReserveHandledRef.current === targetedReserveId
@@ -4778,10 +4795,15 @@ export default function ChantierPage() {
     cockpit: ["accueil"],
     preparation: ["preparer", "localisation", "intervenants", "materiel", "achats", "consignes"],
     execution: ["devis-taches", "planning", "temps", "photos", "messagerie", "reserves"],
+    planning: ["planning"],
+    temps: ["temps"],
+    achats: ["achats"],
     financier: ["budget", "achats", "pilotage", "rapports"],
     qualite: ["reserves", "visite", "doe"],
+    reserves: ["reserves"],
     documents: ["documents", "doe"],
     sav: ["reserves", "visite"],
+    retours: ["journal"],
     historique: ["journal"],
   };
   const isSectionEnabled = (section: ChantierDetailSectionKey) =>
@@ -4793,10 +4815,15 @@ export default function ChantierPage() {
     cockpit: "Cockpit",
     preparation: "Préparation",
     execution: "Exécution",
+    planning: "Planning",
+    temps: "Temps",
+    achats: "Achats",
     financier: "Financier",
     qualite: "Qualité",
+    reserves: "Réserves",
     documents: "Documents",
     sav: "SAV",
+    retours: "Retours terrain",
     historique: "Fil chantier",
   };
   const chantierPrimarySections: ChantierPrimarySection[] = [
@@ -5846,6 +5873,11 @@ export default function ChantierPage() {
           </div>
         )}
         {detailSection === "cockpit" && accueilPanel}
+        {detailSection === "retours" && id && (
+          <Suspense fallback={<div className="rounded-2xl border border-slate-200 bg-white p-4 text-sm text-slate-500">Chargement des retours terrain du chantier...</div>}>
+            <TerrainFeedbacksPage chantierId={id} embedded />
+          </Suspense>
+        )}
         {detailSection === "preparation" && id && <ChantierPreparationSection chantierId={id} />}
         {detailSection === "preparation" && id && (
           <ChantierLocationSection
@@ -5891,7 +5923,7 @@ export default function ChantierPage() {
             Suivi financier — budget, achats, imprévus
           </div>
         )}
-        {(detailSection === "preparation" || detailSection === "financier") && id && (
+        {(detailSection === "preparation" || detailSection === "financier" || detailSection === "achats") && id && (
           <ChantierPurchasesSection chantierId={id} tasks={tasks} zones={zones} />
         )}
         {detailSection === "financier" && id && <ChantierFinancialSection chantierId={id} />}
@@ -5903,7 +5935,7 @@ export default function ChantierPage() {
           />
         )}
         {/* ---------------- ONGLET TEMPS ---------------- */}
-        {detailSection === "execution" && (
+        {(detailSection === "execution" || detailSection === "temps") && (
           <ChantierTimeSection>
           <div className="space-y-3">
             <div className="flex items-center justify-between">
@@ -6347,7 +6379,7 @@ export default function ChantierPage() {
           </ChantierDocumentsSection>
         )}
 
-        {detailSection === "qualite" && targetedReserveId ? (
+        {(detailSection === "qualite" || detailSection === "reserves") && targetedReserveId ? (
           <div
             className={[
               "rounded-2xl border px-4 py-3 text-sm",
@@ -6389,7 +6421,7 @@ export default function ChantierPage() {
                     </button>
                   ) : null}
                   <Link
-                    to={`/retours-terrain?chantierId=${id}&feedbackId=${sourceFeedbackId}`}
+                    to={`/chantiers/${encodeURIComponent(id)}/retours-terrain?feedbackId=${encodeURIComponent(sourceFeedbackId)}`}
                     className="font-semibold text-blue-800 hover:underline"
                   >
                     Ouvrir le retour source
@@ -6401,7 +6433,7 @@ export default function ChantierPage() {
         ) : null}
 
         {/* ---------------- ONGLET RÉSERVES ---------------- */}
-        {(detailSection === "qualite" || detailSection === "sav") && (
+        {(detailSection === "qualite" || detailSection === "reserves" || detailSection === "sav") && (
           <ChantierReservesSection>
           <div className="space-y-4">
             <div className="flex flex-wrap items-start justify-between gap-3">
@@ -8104,7 +8136,7 @@ export default function ChantierPage() {
           </ChantierEquipmentSection>
         )}
 
-        {detailSection === "execution" && id && (
+        {(detailSection === "execution" || detailSection === "planning") && id && (
           <ChantierPlanningSection chantierId={id} chantierName={item?.nom ?? null} intervenants={intervenants} />
         )}
 
@@ -8335,7 +8367,7 @@ export default function ChantierPage() {
                                 </button>
                               ) : null}
                               <Link
-                                to={`/retours-terrain?chantierId=${id}&feedbackId=${reserveSourceFeedbackId}`}
+                                to={`/chantiers/${encodeURIComponent(id)}/retours-terrain?feedbackId=${encodeURIComponent(reserveSourceFeedbackId)}`}
                                 className="font-semibold text-blue-800 hover:underline"
                               >
                                 Ouvrir le retour source
@@ -9021,12 +9053,6 @@ export default function ChantierPage() {
     </div>
   );
 }
-
-
-
-
-
-
 
 
 

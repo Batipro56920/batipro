@@ -4,9 +4,10 @@ import { Link, useParams, useSearchParams } from "react-router-dom";
 import ChantierChapterDrawer from "../components/ChantierChapterDrawer";
 
 function buildTerrainFeedbackHref(chantierId: string, feedbackId?: string) {
-  const params = new URLSearchParams({ chantierId });
+  const params = new URLSearchParams();
   if (feedbackId) params.set("feedbackId", feedbackId);
-  return `/retours-terrain?${params.toString()}`;
+  const query = params.toString();
+  return `/chantiers/${encodeURIComponent(chantierId)}/retours-terrain${query ? `?${query}` : ""}`;
 }
 
 export default function ChantierReservesSection({ children }: { children: ReactNode }) {

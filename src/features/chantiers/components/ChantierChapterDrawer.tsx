@@ -11,6 +11,7 @@ type ChantierChapterDrawerProps = {
   autoOpenKey?: string;
   autoOpenLabel?: string;
   onAutoOpenClear?: () => void;
+  preview?: ReactNode;
   children: ReactNode;
 };
 
@@ -24,6 +25,7 @@ export default function ChantierChapterDrawer({
   autoOpenKey = "",
   autoOpenLabel = "Element cible depuis la recherche globale",
   onAutoOpenClear,
+  preview,
   children,
 }: ChantierChapterDrawerProps) {
   const [open, setOpen] = useState(false);
@@ -31,7 +33,8 @@ export default function ChantierChapterDrawer({
 
   useEffect(() => {
     if (!autoOpenKey) return;
-    setOpen(true);
+    const frame = window.requestAnimationFrame(() => setOpen(true));
+    return () => window.cancelAnimationFrame(frame);
   }, [autoOpenKey]);
 
   function clearAutoOpenTarget() {
@@ -114,7 +117,7 @@ export default function ChantierChapterDrawer({
           </button>
         </div>
         <div className={["batipro-chapter-preview mt-4", previewClassName].filter(Boolean).join(" ")}>
-          {children}
+          {preview ?? children}
         </div>
       </section>
 

@@ -65,11 +65,17 @@ function matchesStatusFilter(order: PurchaseOrderRecord, filter: PurchaseOrderSt
   return order.status === filter;
 }
 
-export function PurchaseOrdersPanel({ suppliers }: { suppliers: SupplierRow[] }) {
+export function PurchaseOrdersPanel({
+  suppliers,
+  chantierId: lockedChantierId = "",
+}: {
+  suppliers: SupplierRow[];
+  chantierId?: string;
+}) {
   const [searchParams, setSearchParams] = useSearchParams();
   const urlPurchaseOrderId = searchParams.get("purchaseOrderId") ?? "";
   const urlSupplierId = searchParams.get("supplierId") ?? "";
-  const urlChantierId = searchParams.get("chantierId") ?? "";
+  const urlChantierId = lockedChantierId || searchParams.get("chantierId") || "";
   const urlProjectId = searchParams.get("projectId") ?? "";
   const urlNewOrder = searchParams.get("newOrder") === "1";
   const statusQueryParam = searchParams.get("status") ?? "";
@@ -84,12 +90,11 @@ export function PurchaseOrdersPanel({ suppliers }: { suppliers: SupplierRow[] })
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<PurchaseOrderStatusFilter>(initialStatusFilter);
   const [supplierFilter, setSupplierFilter] = useState(urlSupplierId || "all");
-  const [chantierFilter, setChantierFilter] = useState(urlChantierId || "all");
+  const [chantierFilter, setChantierFilter] = useState(lockedChantierId || urlChantierId || "all");
   const [projectFilter, setProjectFilter] = useState(urlProjectId || "all");
   const [chantierOptions, setChantierOptions] = useState<ChantierListOption[]>([]);
   const [projectOptions, setProjectOptions] = useState<ProjectListOption[]>([]);
   const [chantierOptionsLoaded, setChantierOptionsLoaded] = useState(false);
-  const totals = useMemo(() => buildTotals(orders), [orders]);
   const chantierById = useMemo(
     () => new Map(chantierOptions.map((chantier) => [chantier.id, chantier])),
     [chantierOptions],
@@ -103,8 +108,10 @@ export function PurchaseOrdersPanel({ suppliers }: { suppliers: SupplierRow[] })
     return map;
   }, [projectOptions]);
   const targetedOrder = useMemo(
-    () => (urlPurchaseOrderId ? orders.find((order) => order.id === urlPurchaseOrderId) ?? null : null),
-    [orders, urlPurchaseOrderId],
+    () => (urlPurchaseOrderId
+      ? orders.find((order) => order.id === urlPurchaseOrderId && (!lockedChantierId || order.chantierId === lockedChantierId)) ?? null
+      : null),
+    [lockedChantierId, orders, urlPurchaseOrderId],
   );
   const targetedOrderMissing = Boolean(urlPurchaseOrderId && !loading && !targetedOrder);
 
@@ -134,6 +141,7 @@ export function PurchaseOrdersPanel({ suppliers }: { suppliers: SupplierRow[] })
       return matchesText && matchesStatus && matchesSupplier && matchesChantier && matchesProject;
     });
   }, [chantierById, chantierFilter, orders, projectById, projectFilter, query, statusFilter, supplierFilter]);
+  const totals = useMemo(() => buildTotals(filteredOrders), [filteredOrders]);
   const targetedOrderVisible = useMemo(
     () => Boolean(urlPurchaseOrderId && filteredOrders.some((order) => order.id === urlPurchaseOrderId)),
     [filteredOrders, urlPurchaseOrderId],
@@ -152,7 +160,7 @@ export function PurchaseOrdersPanel({ suppliers }: { suppliers: SupplierRow[] })
     const project = projectById.get(projectFilter) ?? null;
     return project ? formatProjectDisplayName(project) : "projet sélectionné";
   }, [projectById, projectFilter]);
-  const hasActiveListFilters = Boolean(query.trim()) || statusFilter !== "all" || supplierFilter !== "all" || chantierFilter !== "all" || projectFilter !== "all";
+  const hasActiveListFilters = Boolean(query.trim()) || statusFilter !== "all" || supplierFilter !== "all" || (!lockedChantierId && chantierFilter !== "all") || projectFilter !== "all";
   const emptyStateCopy = useMemo(
     () => buildEmptyStateCopy({
       chantierName: activeChantierName,
@@ -210,6 +218,11 @@ export function PurchaseOrdersPanel({ suppliers }: { suppliers: SupplierRow[] })
   }, [urlSupplierId]);
 
   useEffect(() => {
+    if (!lockedChantierId) return;
+    setChantierFilter(lockedChantierId);
+  }, [lockedChantierId]);
+
+  useEffect(() => {
     const nextChantier = urlChantierId || "all";
     setChantierFilter((current) => current === nextChantier ? current : nextChantier);
   }, [urlChantierId]);
@@ -229,7 +242,7 @@ export function PurchaseOrdersPanel({ suppliers }: { suppliers: SupplierRow[] })
 
     const requestedStatusFilter = isPurchaseOrderStatusFilter(statusQueryParam) ? statusQueryParam : "all";
     const requestedSupplierFilter = urlSupplierId && targetedOrder.supplierId === urlSupplierId ? urlSupplierId : "all";
-    const requestedChantierFilter = urlChantierId && targetedOrder.chantierId === urlChantierId ? urlChantierId : "all";
+    const requestedChantierFilter = lockedChantierId || (urlChantierId && targetedOrder.chantierId === urlChantierId ? urlChantierId : "all");
     const requestedProjectFilter = urlProjectId && orderMatchesProjectFilter(targetedOrder, urlProjectId, projectById) ? urlProjectId : "all";
     setSelectedOrder(targetedOrder);
     setQuery("");
@@ -239,7 +252,7 @@ export function PurchaseOrdersPanel({ suppliers }: { suppliers: SupplierRow[] })
     setProjectFilter(requestedProjectFilter);
     setError(null);
     openedOrderFromUrlRef.current = urlPurchaseOrderId;
-  }, [loading, projectById, statusQueryParam, targetedOrder, urlChantierId, urlProjectId, urlPurchaseOrderId, urlSupplierId]);
+  }, [loading, lockedChantierId, projectById, statusQueryParam, targetedOrder, urlChantierId, urlProjectId, urlPurchaseOrderId, urlSupplierId]);
 
   useEffect(() => {
     if (!urlPurchaseOrderId || !targetedOrder || loading || !targetedOrderVisible) return;
@@ -324,6 +337,7 @@ export function PurchaseOrdersPanel({ suppliers }: { suppliers: SupplierRow[] })
   }
 
   function updateChantierFilter(nextChantierId: string) {
+    if (lockedChantierId) return;
     setChantierFilter(nextChantierId);
     const nextParams = new URLSearchParams(searchParams);
     nextParams.delete("purchaseOrderId");
@@ -357,14 +371,14 @@ export function PurchaseOrdersPanel({ suppliers }: { suppliers: SupplierRow[] })
     setQuery("");
     setStatusFilter("all");
     setSupplierFilter("all");
-    setChantierFilter("all");
+    setChantierFilter(lockedChantierId || "all");
     setProjectFilter("all");
     const nextParams = new URLSearchParams(searchParams);
     nextParams.delete("purchaseOrderId");
     nextParams.delete("newOrder");
     nextParams.delete("status");
     nextParams.delete("supplierId");
-    nextParams.delete("chantierId");
+    if (!lockedChantierId) nextParams.delete("chantierId");
     nextParams.delete("projectId");
     setSearchParams(nextParams, { replace: true });
   }
@@ -424,7 +438,11 @@ export function PurchaseOrdersPanel({ suppliers }: { suppliers: SupplierRow[] })
           <div>
             <div className="text-xs font-semibold uppercase tracking-[0.18em] text-blue-600">Achats fournisseurs</div>
             <h2 className="mt-2 text-xl font-bold text-slate-950">Bons de commande</h2>
-            <p className="mt-1 text-sm text-slate-500">Commandes liées aux fournisseurs, projets, chantiers et à la rentabilité.</p>
+            <p className="mt-1 text-sm text-slate-500">
+              {lockedChantierId
+                ? "Commandes, livraisons et achats rattachés uniquement à ce chantier."
+                : "Commandes liées aux fournisseurs, projets, chantiers et à la rentabilité."}
+            </p>
           </div>
           <div className="flex flex-wrap gap-2">
             <button type="button" onClick={() => void refresh()} className="inline-flex h-10 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 hover:bg-slate-50"><RefreshCw className="h-4 w-4" /> Rafraîchir</button>
@@ -436,7 +454,7 @@ export function PurchaseOrdersPanel({ suppliers }: { suppliers: SupplierRow[] })
         {error ? <div className="mt-4 rounded-2xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</div> : null}
         {loading ? <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-500">Chargement des bons de commande...</div> : null}
         <div className="mt-5 grid gap-3 md:grid-cols-3">
-          <Metric label="Commandes" value={`${orders.length}`} />
+          <Metric label="Commandes" value={`${filteredOrders.length}`} />
           <Metric label="Achats HT" value={formatCurrency(totals.ht)} />
           <Metric label="Achats TTC" value={formatCurrency(totals.ttc)} />
         </div>
@@ -538,13 +556,15 @@ export function PurchaseOrdersPanel({ suppliers }: { suppliers: SupplierRow[] })
                 Liste filtrée sur {activeChantierName} pour suivre les achats et livraisons liés au chantier.
               </p>
             </div>
-            <button
-              type="button"
-              onClick={() => updateChantierFilter("all")}
-              className="rounded-xl border border-blue-200 bg-white px-4 py-2 text-sm font-semibold text-blue-700 hover:bg-blue-100"
-            >
-              Afficher tous les chantiers
-            </button>
+            {!lockedChantierId ? (
+              <button
+                type="button"
+                onClick={() => updateChantierFilter("all")}
+                className="rounded-xl border border-blue-200 bg-white px-4 py-2 text-sm font-semibold text-blue-700 hover:bg-blue-100"
+              >
+                Afficher tous les chantiers
+              </button>
+            ) : null}
           </div>
         </div>
       ) : null}
@@ -574,12 +594,14 @@ export function PurchaseOrdersPanel({ suppliers }: { suppliers: SupplierRow[] })
               <option value="all">Tous projets</option>
               {projectOptions.map((project) => <option key={project.id} value={project.id}>{formatProjectOptionLabel(project)}</option>)}
             </select>
-            <select className={selectClass} value={chantierFilter} onChange={(event) => updateChantierFilter(event.target.value)}>
-              <option value="all">Tous chantiers</option>
-              {chantierOptions.map((chantier) => (
-                <option key={chantier.id} value={chantier.id}>{formatChantierDisplayName(chantier)}</option>
-              ))}
-            </select>
+            {!lockedChantierId ? (
+              <select className={selectClass} value={chantierFilter} onChange={(event) => updateChantierFilter(event.target.value)}>
+                <option value="all">Tous chantiers</option>
+                {chantierOptions.map((chantier) => (
+                  <option key={chantier.id} value={chantier.id}>{formatChantierDisplayName(chantier)}</option>
+                ))}
+              </select>
+            ) : null}
           </div>
         </div>
       ) : null}

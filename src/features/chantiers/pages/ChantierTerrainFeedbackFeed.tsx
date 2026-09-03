@@ -93,7 +93,7 @@ export default function ChantierTerrainFeedbackFeed({ chantierId }: { chantierId
           </div>
         </div>
         <Link
-          to={`/retours-terrain?chantierId=${encodeURIComponent(chantierId)}`}
+          to={`/chantiers/${encodeURIComponent(chantierId)}/retours-terrain`}
           className="shrink-0 rounded-xl border border-slate-200 px-3 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50"
         >
           Tout voir

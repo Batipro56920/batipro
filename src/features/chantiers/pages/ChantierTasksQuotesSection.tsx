@@ -8,7 +8,7 @@ export default function ChantierTasksQuotesSection({ children }: { children: Rea
   const [searchParams, setSearchParams] = useSearchParams();
   const targetedTaskId = searchParams.get("taskId") ?? "";
   const encodedChantierId = id ? encodeURIComponent(id) : "";
-  const terrainFeedbackHref = id ? `/retours-terrain?chantierId=${encodedChantierId}` : "/retours-terrain";
+  const terrainFeedbackHref = id ? `/chantiers/${encodedChantierId}/retours-terrain` : "/retours-terrain";
   const reservesHref = id ? `/chantiers/${encodedChantierId}/qualite` : "/reserves";
   const taskLibraryReadyHref = "/bibliotheque?q=chantier%20production";
   const taskLibraryHiddenHref = "/bibliotheque?readiness=chantier_hidden";

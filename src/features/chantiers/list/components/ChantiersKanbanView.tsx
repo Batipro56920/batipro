@@ -52,7 +52,7 @@ function TerrainFeedbackLink({ row, compact = false }: { row: ChantierDerived; c
 
   return (
     <Link
-      to={`/retours-terrain?chantierId=${encodeURIComponent(row.id)}`}
+      to={`/chantiers/${encodeURIComponent(row.id)}/retours-terrain`}
       className={
         tone
           ? `bt-tap inline-flex w-full items-center justify-center gap-2 rounded-field px-3 font-medium transition-opacity duration-[120ms] hover:opacity-80 ${

@@ -33,12 +33,28 @@ const PRIORITY_TERRAIN_FEEDBACK_URGENCIES = new Set(["critique", "urgente"]);
 
 const CHANTIER_PILOTAGE_SHORTCUTS: ChantierPilotageShortcut[] = [
   {
+    key: "planning-chantier",
+    label: "Planning",
+    href: "planning",
+    title: "Ouvrir le planning de ce chantier",
+    moduleId: "planning",
+    sectionKeys: ["execution"],
+  },
+  {
     key: "temps-chantier",
     label: "Temps",
     href: "temps",
     title: "Ouvrir le suivi des temps de ce chantier",
     moduleId: "temps",
     sectionKeys: ["execution", "equipe"],
+  },
+  {
+    key: "achats-chantier",
+    label: "Achats",
+    href: "achats",
+    title: "Gérer les achats et commandes de ce chantier",
+    moduleId: "approvisionnement",
+    sectionKeys: ["preparation", "financier"],
   },
 ];
 
@@ -58,10 +74,10 @@ export function ChantierPrimaryNav({ sections }: { sections: ChantierPrimarySect
     Boolean(chantierId) &&
     enabledSectionKeys.has("qualite") &&
     isModuleEnabled("reserves", enabledModules);
-  const reserveHref = chantierId ? `/chantiers/${encodeURIComponent(chantierId)}/qualite` : "/reserves";
+  const reserveHref = chantierId ? `/chantiers/${encodeURIComponent(chantierId)}/reserves` : "/reserves";
   const terrainFeedbackEnabled = Boolean(chantierId) && isModuleEnabled("journal_chantier", enabledModules);
   const terrainFeedbackHref = chantierId
-    ? `/retours-terrain?chantierId=${encodeURIComponent(chantierId)}`
+    ? `/chantiers/${encodeURIComponent(chantierId)}/retours-terrain`
     : "/retours-terrain";
   const pilotageShortcuts = useMemo(() => {
     if (!chantierId) return [];
@@ -90,7 +106,7 @@ export function ChantierPrimaryNav({ sections }: { sections: ChantierPrimarySect
     };
   }, [terrainFeedbackSummary]);
   const reserveTitle = "Ouvrir les réserves qualité de ce chantier";
-  const terrainFeedbackTitle = terrainFeedbackBadge?.title ?? "Voir les retours terrain filtrés sur ce chantier";
+  const terrainFeedbackTitle = terrainFeedbackBadge?.title ?? "Voir les retours terrain dans le dossier de ce chantier";
 
   useEffect(() => {
     let alive = true;
@@ -199,11 +215,13 @@ export function ChantierPrimaryNav({ sections }: { sections: ChantierPrimarySect
           to={terrainFeedbackHref}
           title={terrainFeedbackTitle}
           aria-label={terrainFeedbackTitle}
-          className={[
+          className={({ isActive }) => [
             "bt-tap inline-flex items-center gap-2 rounded-field border px-3 py-1.5 text-sm font-semibold transition",
-            terrainFeedbackBadge?.priority
-              ? "border-danger/20 bg-danger-soft text-danger-on hover:bg-interactive"
-              : "border-info/20 bg-info-soft text-info-on hover:bg-interactive",
+            isActive
+              ? "border-primary bg-primary text-primary-contrast shadow-sm"
+              : terrainFeedbackBadge?.priority
+                ? "border-danger/20 bg-danger-soft text-danger-on hover:bg-interactive"
+                : "border-info/20 bg-info-soft text-info-on hover:bg-interactive",
           ].join(" ")}
         >
           <span>Retours terrain</span>

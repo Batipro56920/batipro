@@ -138,10 +138,16 @@ function buildFeedbackActivityChanges(
   };
 }
 
-export default function TerrainFeedbacksPage() {
+export default function TerrainFeedbacksPage({
+  chantierId: lockedChantierId = "",
+  embedded = false,
+}: {
+  chantierId?: string;
+  embedded?: boolean;
+} = {}) {
   const { locale, t } = useI18n();
   const [searchParams, setSearchParams] = useSearchParams();
-  const urlChantierId = searchParams.get("chantierId") ?? "";
+  const urlChantierId = lockedChantierId || searchParams.get("chantierId") || "";
   const urlFeedbackId = searchParams.get("feedbackId") ?? "";
   const workflowScope = getWorkflowScope(searchParams);
   const highlightedFeedbackRef = useRef<string | null>(null);
@@ -154,7 +160,7 @@ export default function TerrainFeedbacksPage() {
   const [savingId, setSavingId] = useState<string | null>(null);
   const [reserveCreatingId, setReserveCreatingId] = useState<string | null>(null);
   const [createdReserveByFeedback, setCreatedReserveByFeedback] = useState<Record<string, CreatedReserveTarget>>({});
-  const [filterChantierId, setFilterChantierId] = useState(urlChantierId);
+  const [filterChantierId, setFilterChantierId] = useState(lockedChantierId || urlChantierId);
   const [filterIntervenantId, setFilterIntervenantId] = useState("");
   const [filterStatus, setFilterStatus] = useState<TerrainFeedbackStatus | "">("");
   const [filterCategory, setFilterCategory] = useState<TerrainFeedbackCategory | "">("");
@@ -200,8 +206,9 @@ export default function TerrainFeedbacksPage() {
   }, [rows]);
 
   useEffect(() => {
-    setFilterChantierId((current) => (current === urlChantierId ? current : urlChantierId));
-  }, [urlChantierId]);
+    const nextChantierId = lockedChantierId || urlChantierId;
+    setFilterChantierId((current) => (current === nextChantierId ? current : nextChantierId));
+  }, [lockedChantierId, urlChantierId]);
 
   useEffect(() => {
     if (loading || !urlFeedbackId || highlightedFeedbackRef.current === urlFeedbackId) return;
@@ -214,6 +221,7 @@ export default function TerrainFeedbacksPage() {
   }, [loading, urlFeedbackId, visibleRows]);
 
   function applyChantierFilter(value: string) {
+    if (lockedChantierId) return;
     setFilterChantierId(value);
     const nextParams = new URLSearchParams(searchParams);
     nextParams.delete("feedbackId");
@@ -246,14 +254,14 @@ export default function TerrainFeedbacksPage() {
   }
 
   function clearTargetFilters() {
-    setFilterChantierId("");
+    setFilterChantierId(lockedChantierId);
     setFilterIntervenantId("");
     setFilterStatus("");
     setFilterCategory("");
     highlightedFeedbackRef.current = null;
 
     const nextParams = new URLSearchParams(searchParams);
-    nextParams.delete("chantierId");
+    if (!lockedChantierId) nextParams.delete("chantierId");
     nextParams.delete("scope");
     if (urlFeedbackId) nextParams.set("feedbackId", urlFeedbackId);
     setSearchParams(nextParams, { replace: true });
@@ -491,9 +499,11 @@ export default function TerrainFeedbacksPage() {
           <div className="min-w-0">
             <div className="bt-caption flex items-center gap-2 text-muted">
               <ClipboardList className="h-4 w-4" strokeWidth={1.75} />
-              Pilotage production
+              {embedded ? "Dossier chantier" : "Pilotage production"}
             </div>
-            <h1 className="bt-page-title mt-1 text-ink">{t("terrainFeedback.admin.title")}</h1>
+            <h1 className="bt-page-title mt-1 text-ink">
+              {embedded ? "Retours terrain du chantier" : t("terrainFeedback.admin.title")}
+            </h1>
             <div className="bt-secondary mt-1 flex flex-wrap gap-x-4 gap-y-1 text-muted">
               <span>{visibleRows.length} visible{visibleRows.length > 1 ? "s" : ""}</span>
               <span>{workflowStats.open} a traiter</span>
@@ -502,7 +512,7 @@ export default function TerrainFeedbacksPage() {
             </div>
           </div>
           <div className="flex flex-wrap gap-2">
-            {filterChantierId ? (
+            {filterChantierId && !embedded ? (
               <Link
                 to={`/chantiers/${filterChantierId}`}
                 className="bt-control inline-flex items-center gap-2 rounded-field bg-primary px-3 py-2 text-sm font-semibold text-primary-contrast hover:bg-primary-hover"
@@ -784,21 +794,23 @@ export default function TerrainFeedbacksPage() {
           {t("terrainFeedback.admin.filters")}
         </div>
         <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-          <label className="space-y-1 text-sm">
-            <div className="text-xs font-medium text-muted">{t("terrainFeedback.admin.siteFilter")}</div>
-            <select
-              className="bt-control w-full rounded-field border border-subtle bg-surface px-3 py-2 text-sm text-ink outline-none focus:border-primary"
-              value={filterChantierId}
-              onChange={(e) => applyChantierFilter(e.target.value)}
-            >
-              <option value="">{t("terrainFeedback.admin.allSites")}</option>
-              {chantiers.map((chantier) => (
-                <option key={chantier.id} value={chantier.id}>
-                  {chantier.nom}
-                </option>
-              ))}
-            </select>
-          </label>
+          {!lockedChantierId ? (
+            <label className="space-y-1 text-sm">
+              <div className="text-xs font-medium text-muted">{t("terrainFeedback.admin.siteFilter")}</div>
+              <select
+                className="bt-control w-full rounded-field border border-subtle bg-surface px-3 py-2 text-sm text-ink outline-none focus:border-primary"
+                value={filterChantierId}
+                onChange={(e) => applyChantierFilter(e.target.value)}
+              >
+                <option value="">{t("terrainFeedback.admin.allSites")}</option>
+                {chantiers.map((chantier) => (
+                  <option key={chantier.id} value={chantier.id}>
+                    {chantier.nom}
+                  </option>
+                ))}
+              </select>
+            </label>
+          ) : null}
 
           <label className="space-y-1 text-sm">
             <div className="text-xs font-medium text-muted">{t("terrainFeedback.admin.authorFilter")}</div>

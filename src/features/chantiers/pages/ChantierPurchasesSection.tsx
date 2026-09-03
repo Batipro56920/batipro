@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
 
 import ApprovisionnementTab from "../../../components/chantiers/ApprovisionnementTab";
+import { PurchaseOrdersPanel } from "../../purchase-orders/components/PurchaseOrdersPanel";
 import { supabase } from "../../../lib/supabaseClient";
 import type { ChantierTaskRow } from "../../../services/chantierTasks.service";
 import type { ChantierZoneRow } from "../../../services/chantierZones.service";
+import { listSuppliers, type SupplierRow } from "../../../services/suppliers.service";
 import ChantierChapterDrawer from "../components/ChantierChapterDrawer";
 
 type PurchaseOrderStatus = "draft" | "sent" | "confirmed" | "partially_delivered" | "delivered" | "cancelled";
@@ -26,12 +27,11 @@ export default function ChantierPurchasesSection({
   tasks: ChantierTaskRow[];
   zones: ChantierZoneRow[];
 }) {
-  const purchaseOrdersHref = `/bons-commande?chantierId=${encodeURIComponent(chantierId)}`;
-  const openPurchaseOrdersHref = `${purchaseOrdersHref}&status=open`;
-  const newPurchaseOrderHref = `${purchaseOrdersHref}&newOrder=1`;
   const [purchaseOrders, setPurchaseOrders] = useState<PurchaseOrderSummaryRow[]>([]);
   const [purchaseOrdersLoading, setPurchaseOrdersLoading] = useState(true);
   const [purchaseOrdersError, setPurchaseOrdersError] = useState(false);
+  const [suppliers, setSuppliers] = useState<SupplierRow[]>([]);
+  const [suppliersError, setSuppliersError] = useState(false);
   const purchaseOrderSummary = useMemo(() => buildPurchaseOrderSummary(purchaseOrders), [purchaseOrders]);
 
   useEffect(() => {
@@ -66,65 +66,70 @@ export default function ChantierPurchasesSection({
     };
   }, [chantierId]);
 
+  useEffect(() => {
+    let ignore = false;
+    setSuppliersError(false);
+    listSuppliers()
+      .then((rows) => {
+        if (!ignore) setSuppliers(rows);
+      })
+      .catch(() => {
+        if (!ignore) {
+          setSuppliers([]);
+          setSuppliersError(true);
+        }
+      });
+    return () => {
+      ignore = true;
+    };
+  }, []);
+
   return (
     <ChantierChapterDrawer
       eyebrow="Approvisionnement"
-      title="Materiel et achats"
-      subtitle="Demandes et besoins materiel du chantier. La saisie detaillee se fait dans le panneau lateral."
-      actionLabel="Gerer l'approvisionnement"
+      title="Matériel, achats et commandes"
+      subtitle="Besoins, commandes fournisseurs et livraisons rattachés à ce chantier, sans quitter son dossier."
+      actionLabel="Gérer les achats du chantier"
       previewClassName="batipro-chapter-preview--purchases"
+      preview={<ApprovisionnementTab chantierId={chantierId} tasks={tasks} zones={zones} />}
     >
       <div className="mb-4 rounded-2xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-900">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
           <div>
             <div className="font-semibold">Suite achat liee au chantier</div>
             <div className="mt-1 text-blue-800/80">
-              Controlez les produits disponibles ou transformez les besoins materiel en commande fournisseur depuis les modules achats.
+              Contrôlez les besoins, créez les bons de commande et suivez les livraisons directement dans ce dossier chantier.
             </div>
             <div className="mt-3 flex flex-wrap gap-2">
               <PurchaseOrderSummaryBadge
                 label="Bons chantier"
                 value={purchaseOrdersLoading ? "..." : String(purchaseOrderSummary.total)}
-                href={purchaseOrdersHref}
               />
               <PurchaseOrderSummaryBadge
                 label="Ouverts"
                 value={purchaseOrdersLoading ? "..." : String(purchaseOrderSummary.open)}
                 tone={purchaseOrderSummary.open > 0 ? "blue" : "slate"}
-                href={openPurchaseOrdersHref}
               />
               {purchaseOrdersError ? (
                 <span className="inline-flex items-center rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-800">
                   Suivi commandes indisponible
                 </span>
               ) : purchaseOrderSummary.late > 0 ? (
-                <PurchaseOrderSummaryBadge label="Livraisons en retard" value={String(purchaseOrderSummary.late)} tone="amber" href={openPurchaseOrdersHref} />
+                <PurchaseOrderSummaryBadge label="Livraisons en retard" value={String(purchaseOrderSummary.late)} tone="amber" />
               ) : null}
             </div>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            <Link
-              to="/catalogue-produits"
-              className="inline-flex shrink-0 items-center justify-center rounded-xl border border-blue-200 bg-white px-3 py-2 text-sm font-semibold text-blue-800 hover:bg-blue-100"
-            >
-              Catalogue produits
-            </Link>
-            <Link
-              to={newPurchaseOrderHref}
-              className="inline-flex shrink-0 items-center justify-center rounded-xl bg-blue-700 px-3 py-2 text-sm font-semibold text-white hover:bg-blue-800"
-            >
-              Nouveau bon chantier
-            </Link>
-            <Link
-              to={purchaseOrdersHref}
-              className="inline-flex shrink-0 items-center justify-center rounded-xl border border-blue-200 bg-white px-3 py-2 text-sm font-semibold text-blue-800 hover:bg-blue-100"
-            >
-              Bons de commande chantier
-            </Link>
           </div>
         </div>
       </div>
       <ApprovisionnementTab chantierId={chantierId} tasks={tasks} zones={zones} />
+      <div className="mt-6 border-t border-slate-200 pt-6">
+        {suppliersError ? (
+          <div className="mb-4 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+            Les fournisseurs n'ont pas pu être chargés. Les commandes existantes restent consultables, mais la création peut être limitée.
+          </div>
+        ) : null}
+        <PurchaseOrdersPanel suppliers={suppliers} chantierId={chantierId} />
+      </div>
     </ChantierChapterDrawer>
   );
 }
@@ -149,12 +154,10 @@ function PurchaseOrderSummaryBadge({
   label,
   value,
   tone = "slate",
-  href,
 }: {
   label: string;
   value: string;
   tone?: "slate" | "blue" | "amber";
-  href?: string;
 }) {
   const toneClass = {
     amber: "border-amber-200 bg-amber-50 text-amber-800 hover:bg-amber-100",
@@ -168,14 +171,6 @@ function PurchaseOrderSummaryBadge({
       {label}
     </>
   );
-
-  if (href) {
-    return (
-      <Link to={href} className={className}>
-        {content}
-      </Link>
-    );
-  }
 
   return <span className={className}>{content}</span>;
 }
