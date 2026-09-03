@@ -13,8 +13,14 @@ const historyActionLabel: Record<CocoImprovementHistoryItem["actionType"], strin
 };
 
 function ImprovementHistory({ items, loading, onReopen, onDelete }: { items: CocoImprovementHistoryItem[]; loading: boolean; onReopen: (item: CocoImprovementHistoryItem) => Promise<void>; onDelete: (item: CocoImprovementHistoryItem) => Promise<void> }) {
+  const pageSize = 10;
   const [busyId, setBusyId] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [page, setPage] = useState(1);
+  const pageCount = Math.max(1, Math.ceil(items.length / pageSize));
+  const currentPage = Math.min(page, pageCount);
+  const visibleItems = items.slice((currentPage - 1) * pageSize, currentPage * pageSize);
 
   async function run(item: CocoImprovementHistoryItem, action: "reopen" | "delete") {
     if (action === "delete" && !window.confirm("Supprimer cette amélioration de l’historique ? Les modifications déjà réalisées dans Batipro resteront en place.")) return;
@@ -32,12 +38,13 @@ function ImprovementHistory({ items, loading, onReopen, onDelete }: { items: Coc
   if (loading) return <div className="p-6 text-center text-sm text-slate-500"><Loader2 className="mx-auto mb-2 h-5 w-5 animate-spin" />Chargement de l’historique…</div>;
   if (!items.length) return <div className="rounded-xl border border-dashed border-slate-200 p-6 text-center text-sm text-slate-500">Aucune amélioration appliquée dans l’historique.</div>;
 
-  return <div className="space-y-3">{actionError ? <div className="rounded-lg bg-red-50 px-3 py-2 text-xs text-red-700">{actionError}</div> : null}{items.map((item) => <article key={item.id} className="rounded-xl border border-slate-200 bg-slate-50 p-4">
-    <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between"><div><div className="text-xs font-semibold uppercase tracking-wide text-emerald-700">{historyActionLabel[item.actionType] ?? "Amélioration appliquée"}</div><h3 className="mt-1 font-semibold text-slate-950">{item.chantierName}</h3><div className="mt-1 text-xs text-slate-500">Appliquée le {new Date(item.createdAt).toLocaleString("fr-FR")}</div></div><Link to={`/chantiers/${item.chantierId}/historique`} className="inline-flex shrink-0 items-center justify-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-blue-700 hover:bg-blue-50">Voir le chantier <ExternalLink className="h-3.5 w-3.5" /></Link></div>
-    <p className="mt-3 whitespace-pre-wrap text-sm leading-6 text-slate-700">{item.decisionText}</p>
-    <div className="mt-3 rounded-lg bg-blue-50 px-3 py-2 text-xs leading-5 text-blue-800">Rouvrir permet de réexaminer la détection ou de choisir une autre proposition. Les changements déjà appliqués restent en place.</div>
-    <div className="mt-3 flex flex-wrap gap-2"><button type="button" onClick={() => void run(item, "reopen")} disabled={busyId === item.id} className="inline-flex items-center gap-2 rounded-lg border border-blue-200 bg-white px-3 py-2 text-xs font-semibold text-blue-700 hover:bg-blue-50 disabled:opacity-50"><RotateCcw className="h-4 w-4" />Rouvrir la détection</button><button type="button" onClick={() => void run(item, "delete")} disabled={busyId === item.id} className="inline-flex items-center gap-2 rounded-lg border border-red-200 bg-white px-3 py-2 text-xs font-semibold text-red-700 hover:bg-red-50 disabled:opacity-50"><Trash2 className="h-4 w-4" />Supprimer de l’historique</button></div>
-  </article>)}</div>;
+  return <div>{actionError ? <div className="mb-3 rounded-lg bg-red-50 px-3 py-2 text-xs text-red-700">{actionError}</div> : null}<div className="divide-y divide-slate-200 overflow-hidden rounded-xl border border-slate-200 bg-white">{visibleItems.map((item) => {
+    const expanded = expandedId === item.id;
+    return <article key={item.id}>
+      <button type="button" onClick={() => setExpandedId((current) => current === item.id ? null : item.id)} aria-expanded={expanded} className="flex w-full items-center justify-between gap-4 px-4 py-3 text-left hover:bg-slate-50"><span className="min-w-0"><span className="block truncate text-sm font-semibold text-slate-950">{historyActionLabel[item.actionType] ?? "Amélioration appliquée"}</span><span className="mt-0.5 block truncate text-xs text-slate-500">{item.chantierName} · {new Date(item.createdAt).toLocaleDateString("fr-FR")}</span></span>{expanded ? <ChevronUp className="h-4 w-4 shrink-0 text-slate-400" /> : <ChevronDown className="h-4 w-4 shrink-0 text-slate-400" />}</button>
+      {expanded ? <div className="border-t border-slate-100 bg-slate-50 px-4 py-4"><p className="whitespace-pre-wrap text-sm leading-6 text-slate-700">{item.decisionText}</p><div className="mt-3 rounded-lg bg-blue-50 px-3 py-2 text-xs leading-5 text-blue-800">Rouvrir permet de réexaminer la détection ou de choisir une autre proposition. Les changements déjà appliqués restent en place.</div><div className="mt-3 flex flex-wrap gap-2"><Link to={`/chantiers/${item.chantierId}/historique`} className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-blue-700 hover:bg-blue-50">Voir le chantier <ExternalLink className="h-3.5 w-3.5" /></Link><button type="button" onClick={() => void run(item, "reopen")} disabled={busyId === item.id} className="inline-flex items-center gap-2 rounded-lg border border-blue-200 bg-white px-3 py-2 text-xs font-semibold text-blue-700 hover:bg-blue-50 disabled:opacity-50"><RotateCcw className="h-4 w-4" />Rouvrir</button><button type="button" onClick={() => void run(item, "delete")} disabled={busyId === item.id} className="inline-flex items-center gap-2 rounded-lg border border-red-200 bg-white px-3 py-2 text-xs font-semibold text-red-700 hover:bg-red-50 disabled:opacity-50"><Trash2 className="h-4 w-4" />Supprimer</button></div></div> : null}
+    </article>;
+  })}</div>{pageCount > 1 ? <div className="mt-4 flex items-center justify-between gap-3"><button type="button" onClick={() => setPage(Math.max(1, currentPage - 1))} disabled={currentPage === 1} className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 disabled:opacity-40">Précédent</button><span className="text-xs text-slate-500">Page {currentPage} sur {pageCount}</span><button type="button" onClick={() => setPage(Math.min(pageCount, currentPage + 1))} disabled={currentPage === pageCount} className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 disabled:opacity-40">Suivant</button></div> : null}</div>;
 }
 
 function SignalCard({ signal, onChanged }: { signal: CocoLearningSignal; onChanged: (signal: CocoLearningSignal, state: "applied" | "active" | "pending" | "dismissed", message: string) => void }) {
