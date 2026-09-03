@@ -278,12 +278,13 @@ export async function createChantierFeedPost(input: {
 
   const attachments: ChantierFeedAttachmentRow[] = [];
   for (const file of files) {
+    const isImage = String(file.type ?? "").startsWith("image/");
     const document = await uploadDocument({
       chantierId,
       file,
       title: file.name,
-      category: "Fil chantier",
-      documentType: String(file.type ?? "").startsWith("image/") ? "PHOTO" : "PDF",
+      category: isImage ? "Photos" : "Divers",
+      documentType: isImage ? "PHOTO" : "PDF",
       visibility_mode: post.visibility === "backoffice" ? "RESTRICTED" : "GLOBAL",
       accessIntervenantIds: [],
     });

@@ -120,7 +120,7 @@ serve(async (req) => {
         storage_path: storagePath,
         mime_type: contentType,
         size_bytes: file.size,
-        category: "Fil chantier",
+        category: contentType.startsWith("image/") ? "Photos" : "Divers",
         document_type: contentType.startsWith("image/") ? "PHOTO" : "PDF",
         visibility_mode: "GLOBAL",
         visibility: "INTERVENANT",
