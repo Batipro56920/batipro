@@ -23,7 +23,6 @@ const ChantiersTimePage = lazy(() => import("./pages/ChantiersTimePage"));
 const ChantierNewPage = lazy(() => import("./pages/ChantierNewPage"));
 const ChantierPage = lazy(() => import("./pages/ChantierPage"));
 const ChantierTimePage = lazy(() => import("./pages/ChantierTimePage"));
-const KnowledgeImprovementsPage = lazy(() => import("./pages/KnowledgeImprovementsPage"));
 const ProjectsPage = lazy(() => import("./pages/ProjectsPage"));
 const ProjectDetailPage = lazy(() => import("./pages/ProjectDetailPage"));
 const ProjectAppointmentPage = lazy(() => import("./pages/ProjectAppointmentPage"));
@@ -444,10 +443,6 @@ export default function App() {
           element={
             <TerrainFeedbackBackofficeRoute label="Ouverture du retour terrain..."><ChantierTerrainFeedbackRedirect /></TerrainFeedbackBackofficeRoute>
           }
-        />
-        <Route
-          path="/ameliorations-ia"
-          element={<ChantierBackofficeRoute label="Chargement des ameliorations IA..."><KnowledgeImprovementsPage /></ChantierBackofficeRoute>}
         />
         <Route path="/chantiers/:id/visites" element={<ChantierSectionRedirect section="qualite" />} />
 
