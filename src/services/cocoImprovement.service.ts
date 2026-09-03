@@ -42,6 +42,7 @@ export type CocoImprovementActionType =
   | "create_task_template_with_equipment"
   | "add_equipment_to_templates"
   | "add_client_note"
+  | "create_purchase_request"
   | "publish_decision";
 
 export type CocoImprovementOption = {
@@ -67,6 +68,20 @@ export type CocoImprovementPlan = {
   clientId?: string;
   clientNote?: string;
   confirmationMessage: string;
+};
+
+export type CocoImprovementHistoryItem = {
+  id: string;
+  signalId: string;
+  signalKey: string;
+  chantierId: string;
+  chantierName: string;
+  taskId?: string;
+  decisionText: string;
+  actionType: CocoImprovementActionType;
+  actionPayload: Record<string, unknown>;
+  result: Record<string, unknown>;
+  createdAt: string;
 };
 
 export const DEFAULT_COCO_LEARNING_SETTINGS: CocoLearningSettings = {
@@ -541,6 +556,52 @@ export async function setCocoDetectionState(signalKey: string, status: "active" 
     updated_at: new Date().toISOString(),
   }, { onConflict: "signal_key" });
   if (error) throw new Error(missingSchema(error) ? "La migration des états de détection n'est pas encore installée." : error.message);
+}
+
+function originalSignalKey(signalId: string) {
+  const segments = signalId.split(":");
+  return segments[0] === "chantier" && segments.length >= 5
+    ? segments.slice(0, -1).join(":")
+    : signalId;
+}
+
+export async function getCocoImprovementHistory(): Promise<CocoImprovementHistoryItem[]> {
+  const [actions, chantiers, states] = await Promise.all([
+    safeRows("coco_improvement_actions", "id, signal_id, chantier_id, task_id, decision_text, action_type, action_payload, result, created_at"),
+    safeRows("chantiers", "id, nom"),
+    safeRows("coco_improvement_signal_states", "signal_key, status"),
+  ]);
+  const chantierNames = new Map(chantiers.map((row) => [String(row.id), String(row.nom ?? "Chantier")]));
+  const deletedHistoryIds = new Set(
+    states
+      .filter((row) => String(row.signal_key).startsWith("history-action:") && row.status === "dismissed")
+      .map((row) => String(row.signal_key).slice("history-action:".length)),
+  );
+
+  return actions
+    .filter((row) => !deletedHistoryIds.has(String(row.id)))
+    .map((row) => ({
+      id: String(row.id),
+      signalId: String(row.signal_id),
+      signalKey: originalSignalKey(String(row.signal_id)),
+      chantierId: String(row.chantier_id),
+      chantierName: chantierNames.get(String(row.chantier_id)) ?? "Chantier",
+      taskId: String(row.task_id ?? "") || undefined,
+      decisionText: String(row.decision_text ?? ""),
+      actionType: String(row.action_type) as CocoImprovementActionType,
+      actionPayload: (row.action_payload ?? {}) as Record<string, unknown>,
+      result: (row.result ?? {}) as Record<string, unknown>,
+      createdAt: String(row.created_at ?? ""),
+    }))
+    .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+}
+
+export async function reopenCocoImprovement(item: CocoImprovementHistoryItem) {
+  await setCocoDetectionState(item.signalKey, "active");
+}
+
+export async function hideCocoImprovementFromHistory(actionId: string) {
+  await setCocoDetectionState(`history-action:${actionId}`, "dismissed");
 }
 
 export async function applyCocoImprovementAction(input: {

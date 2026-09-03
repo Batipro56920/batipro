@@ -1,9 +1,44 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { AlertTriangle, ArrowLeft, BrainCircuit, CheckCircle2, ChevronDown, ChevronUp, Clock3, Database, ExternalLink, Loader2, PauseCircle, RefreshCw, RotateCcw, Save, ShieldCheck, Sparkles, Trash2 } from "lucide-react";
-import { COCO_LEARNING_SOURCES, DEFAULT_COCO_LEARNING_SETTINGS, analyzeCocoLearning, applyCocoImprovementAction, getCocoLearningSettings, regenerateCocoImprovementProposal, saveCocoLearningSettings, setCocoDetectionState, type CocoImprovementOption, type CocoImprovementPlan, type CocoLearningSettings, type CocoLearningSignal, type CocoLearningSourceKey } from "../services/cocoImprovement.service";
+import { AlertTriangle, ArrowLeft, BrainCircuit, CheckCircle2, ChevronDown, ChevronUp, Clock3, Database, ExternalLink, History, Loader2, PauseCircle, RefreshCw, RotateCcw, Save, ShieldCheck, Sparkles, Trash2 } from "lucide-react";
+import { COCO_LEARNING_SOURCES, DEFAULT_COCO_LEARNING_SETTINGS, analyzeCocoLearning, applyCocoImprovementAction, getCocoImprovementHistory, getCocoLearningSettings, hideCocoImprovementFromHistory, regenerateCocoImprovementProposal, reopenCocoImprovement, saveCocoLearningSettings, setCocoDetectionState, type CocoImprovementHistoryItem, type CocoImprovementOption, type CocoImprovementPlan, type CocoLearningSettings, type CocoLearningSignal, type CocoLearningSourceKey } from "../services/cocoImprovement.service";
 
 const categoryLabel: Record<CocoLearningSignal["category"], string> = { temps: "Temps", materiaux: "Matériaux", materiel: "Matériel", methode: "Méthode", qualite: "Qualité", planning: "Planning", achats: "Achats" };
+const historyActionLabel: Record<CocoImprovementHistoryItem["actionType"], string> = {
+  create_task_template_with_equipment: "Template de tâche créé",
+  add_equipment_to_templates: "Matériel ajouté aux templates",
+  add_client_note: "Pense-bête client ajouté",
+  create_purchase_request: "Demande d’achat créée",
+  publish_decision: "Décision publiée",
+};
+
+function ImprovementHistory({ items, loading, onReopen, onDelete }: { items: CocoImprovementHistoryItem[]; loading: boolean; onReopen: (item: CocoImprovementHistoryItem) => Promise<void>; onDelete: (item: CocoImprovementHistoryItem) => Promise<void> }) {
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
+
+  async function run(item: CocoImprovementHistoryItem, action: "reopen" | "delete") {
+    if (action === "delete" && !window.confirm("Supprimer cette amélioration de l’historique ? Les modifications déjà réalisées dans Batipro resteront en place.")) return;
+    setBusyId(item.id);
+    setActionError(null);
+    try {
+      await (action === "reopen" ? onReopen(item) : onDelete(item));
+    } catch (reason) {
+      setActionError(reason instanceof Error ? reason.message : "Modification de l’historique impossible.");
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  if (loading) return <div className="p-6 text-center text-sm text-slate-500"><Loader2 className="mx-auto mb-2 h-5 w-5 animate-spin" />Chargement de l’historique…</div>;
+  if (!items.length) return <div className="rounded-xl border border-dashed border-slate-200 p-6 text-center text-sm text-slate-500">Aucune amélioration appliquée dans l’historique.</div>;
+
+  return <div className="space-y-3">{actionError ? <div className="rounded-lg bg-red-50 px-3 py-2 text-xs text-red-700">{actionError}</div> : null}{items.map((item) => <article key={item.id} className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+    <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between"><div><div className="text-xs font-semibold uppercase tracking-wide text-emerald-700">{historyActionLabel[item.actionType] ?? "Amélioration appliquée"}</div><h3 className="mt-1 font-semibold text-slate-950">{item.chantierName}</h3><div className="mt-1 text-xs text-slate-500">Appliquée le {new Date(item.createdAt).toLocaleString("fr-FR")}</div></div><Link to={`/chantiers/${item.chantierId}/historique`} className="inline-flex shrink-0 items-center justify-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-blue-700 hover:bg-blue-50">Voir le chantier <ExternalLink className="h-3.5 w-3.5" /></Link></div>
+    <p className="mt-3 whitespace-pre-wrap text-sm leading-6 text-slate-700">{item.decisionText}</p>
+    <div className="mt-3 rounded-lg bg-blue-50 px-3 py-2 text-xs leading-5 text-blue-800">Rouvrir permet de réexaminer la détection ou de choisir une autre proposition. Les changements déjà appliqués restent en place.</div>
+    <div className="mt-3 flex flex-wrap gap-2"><button type="button" onClick={() => void run(item, "reopen")} disabled={busyId === item.id} className="inline-flex items-center gap-2 rounded-lg border border-blue-200 bg-white px-3 py-2 text-xs font-semibold text-blue-700 hover:bg-blue-50 disabled:opacity-50"><RotateCcw className="h-4 w-4" />Rouvrir la détection</button><button type="button" onClick={() => void run(item, "delete")} disabled={busyId === item.id} className="inline-flex items-center gap-2 rounded-lg border border-red-200 bg-white px-3 py-2 text-xs font-semibold text-red-700 hover:bg-red-50 disabled:opacity-50"><Trash2 className="h-4 w-4" />Supprimer de l’historique</button></div>
+  </article>)}</div>;
+}
 
 function SignalCard({ signal, onChanged }: { signal: CocoLearningSignal; onChanged: (signal: CocoLearningSignal, state: "applied" | "active" | "pending" | "dismissed", message: string) => void }) {
   const immediate = signal.kind === "immediate";
@@ -132,6 +167,9 @@ export default function CocoImprovementPage() {
   const [analyzing, setAnalyzing] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [signals, setSignals] = useState<CocoLearningSignal[]>([]);
+  const [history, setHistory] = useState<CocoImprovementHistoryItem[]>([]);
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [historyLoading, setHistoryLoading] = useState(true);
   const [sourceCounts, setSourceCounts] = useState<Partial<Record<CocoLearningSourceKey, number>>>({});
   const [analyzedAt, setAnalyzedAt] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -139,13 +177,17 @@ export default function CocoImprovementPage() {
 
   async function runAnalysis(activeSettings: CocoLearningSettings) { setAnalyzing(true); setError(null); try { const result = await analyzeCocoLearning(activeSettings); setSignals(result.signals); setSourceCounts(result.sourceCounts); setAnalyzedAt(result.analyzedAt); } catch (reason) { setError(reason instanceof Error ? reason.message : "Analyse impossible."); } finally { setAnalyzing(false); } }
 
-  useEffect(() => { let alive = true; getCocoLearningSettings().then(async (result) => { if (!alive) return; setSettings(result.settings); setSchemaReady(result.schemaReady); if (result.settings.enabled) await runAnalysis(result.settings); }).catch((reason) => { if (alive) setError(reason instanceof Error ? reason.message : "Chargement impossible."); }).finally(() => { if (alive) setLoading(false); }); return () => { alive = false; }; }, []);
+  async function loadHistory() { setHistoryLoading(true); try { setHistory(await getCocoImprovementHistory()); } catch (reason) { setError(reason instanceof Error ? reason.message : "Historique impossible à charger."); } finally { setHistoryLoading(false); } }
+
+  useEffect(() => { let alive = true; getCocoLearningSettings().then(async (result) => { if (!alive) return; setSettings(result.settings); setSchemaReady(result.schemaReady); await Promise.all([result.settings.enabled ? runAnalysis(result.settings) : Promise.resolve(), loadHistory()]); }).catch((reason) => { if (alive) setError(reason instanceof Error ? reason.message : "Chargement impossible."); }).finally(() => { if (alive) setLoading(false); }); return () => { alive = false; }; }, []);
 
   const immediate = useMemo(() => signals.filter((signal) => signal.state === "active" && signal.kind === "immediate"), [signals]);
   const improvements = useMemo(() => signals.filter((signal) => signal.state === "active" && signal.kind !== "immediate"), [signals]);
   const pending = useMemo(() => signals.filter((signal) => signal.state === "pending"), [signals]);
   const enabledCount = useMemo(() => Object.values(settings.sources).filter(Boolean).length, [settings.sources]);
-  function handleSignalChanged(signal: CocoLearningSignal, state: "applied" | "active" | "pending" | "dismissed", message: string) { setSignals((current) => state === "applied" || state === "dismissed" ? current.filter((item) => item.signalKey !== signal.signalKey) : current.map((item) => item.signalKey === signal.signalKey ? { ...item, state } : item)); setNotice(message); }
+  function handleSignalChanged(signal: CocoLearningSignal, state: "applied" | "active" | "pending" | "dismissed", message: string) { setSignals((current) => state === "applied" || state === "dismissed" ? current.filter((item) => item.signalKey !== signal.signalKey) : current.map((item) => item.signalKey === signal.signalKey ? { ...item, state } : item)); setNotice(message); if (state === "applied") void loadHistory(); }
+  async function reopenHistoryItem(item: CocoImprovementHistoryItem) { await reopenCocoImprovement(item); setNotice("Détection rouverte et remise dans les éléments à traiter."); await runAnalysis(settings); }
+  async function deleteHistoryItem(item: CocoImprovementHistoryItem) { await hideCocoImprovementFromHistory(item.id); setHistory((current) => current.filter((entry) => entry.id !== item.id)); setNotice("Amélioration supprimée de l’historique. Les changements déjà appliqués dans Batipro sont conservés."); }
   function toggleSource(key: CocoLearningSourceKey) { setSettings((current) => ({ ...current, sources: { ...current.sources, [key]: !current.sources[key] } })); }
   async function saveSettings() { setSaving(true); setError(null); setNotice(null); try { await saveCocoLearningSettings(settings); setSchemaReady(true); setNotice("Sources enregistrées. L'analyse a été actualisée."); if (settings.enabled) await runAnalysis(settings); } catch (reason) { setError(reason instanceof Error ? reason.message : "Enregistrement impossible."); } finally { setSaving(false); } }
 
@@ -153,6 +195,7 @@ export default function CocoImprovementPage() {
 
   return <div className="space-y-5 pb-10"><header className="border-b border-slate-200 bg-white px-4 py-5 sm:px-6"><Link to="/assistant-direction" className="inline-flex items-center gap-2 text-xs font-semibold text-slate-500 hover:text-slate-900"><ArrowLeft className="h-4 w-4" /> Assistant Direction</Link><div className="mt-3 flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between"><div><div className="flex items-center gap-2 text-xs font-semibold text-blue-700"><BrainCircuit className="h-4 w-4" /> COCO · décisions et amélioration</div><h1 className="mt-1 text-2xl font-semibold text-slate-950">Ce qui demande une décision</h1><p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600">COCO surveille les données choisies, remonte chaque blocage dès son premier signalement et distingue les urgences des tendances qui peuvent améliorer les références métier.</p></div><button type="button" onClick={() => void runAnalysis(settings)} disabled={analyzing || !settings.enabled} className="inline-flex items-center justify-center gap-2 rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50"><RefreshCw className={`h-4 w-4 ${analyzing ? "animate-spin" : ""}`} />Actualiser</button></div></header>
     <main className="space-y-5 px-4 sm:px-6">{!schemaReady ? <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900"><strong>Configuration non persistée.</strong> La migration Supabase des sources doit être appliquée.</div> : null}{error ? <div className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</div> : null}{notice ? <div className="rounded-xl border border-blue-200 bg-blue-50 p-3 text-sm text-blue-800">{notice}</div> : null}
+      <section className="rounded-2xl border border-emerald-200 bg-white"><button type="button" onClick={() => setHistoryOpen((value) => !value)} className="flex w-full items-center justify-between gap-3 p-5 text-left"><span><span className="flex items-center gap-2 font-semibold text-slate-950"><History className="h-4 w-4 text-emerald-700" /> Améliorations appliquées ({history.length})</span><span className="mt-1 block text-sm text-slate-500">Retrouver, consulter, rouvrir ou retirer une amélioration de l’historique.</span></span>{historyOpen ? <ChevronUp className="h-5 w-5 text-slate-400" /> : <ChevronDown className="h-5 w-5 text-slate-400" />}</button>{historyOpen ? <div className="border-t border-slate-200 p-5"><ImprovementHistory items={history} loading={historyLoading} onReopen={reopenHistoryItem} onDelete={deleteHistoryItem} /></div> : null}</section>
       <section className="grid gap-3 sm:grid-cols-3"><div className={`rounded-2xl border p-4 ${immediate.length ? "border-red-200 bg-red-50" : "border-emerald-200 bg-emerald-50"}`}><div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-slate-600"><AlertTriangle className="h-4 w-4" /> À traiter maintenant</div><div className="mt-2 text-3xl font-semibold text-slate-950">{immediate.length}</div><div className="mt-1 text-xs text-slate-600">Un seul blocage suffit pour apparaître.</div></div><div className="rounded-2xl border border-amber-200 bg-amber-50 p-4"><div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-slate-600"><Sparkles className="h-4 w-4" /> Améliorations</div><div className="mt-2 text-3xl font-semibold text-slate-950">{improvements.length}</div><div className="mt-1 text-xs text-slate-600">Tendances et références à fiabiliser.</div></div><div className="rounded-2xl border border-slate-200 bg-white p-4"><div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-slate-600"><Clock3 className="h-4 w-4" /> Dernier contrôle</div><div className="mt-2 text-sm font-semibold text-slate-950">{analyzing ? "Analyse en cours" : analyzedAt ? new Date(analyzedAt).toLocaleString("fr-FR") : "Non analysé"}</div><div className="mt-1 text-xs text-slate-600">{enabledCount} source(s) active(s).</div></div></section>
       <section className="rounded-2xl border border-red-200 bg-white p-5"><div className="flex items-start gap-3"><div className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-red-100 text-red-700"><AlertTriangle className="h-5 w-5" /></div><div><h2 className="font-semibold text-slate-950">À traiter maintenant</h2><p className="mt-1 text-sm text-slate-500">Blocages, urgences et risques remontent immédiatement, sans attendre une répétition.</p></div></div><div className="mt-4 space-y-3">{immediate.length ? immediate.map((signal) => <SignalCard key={signal.id} signal={signal} onChanged={handleSignalChanged} />) : <div className="rounded-xl bg-emerald-50 p-4 text-sm text-emerald-800">Aucun blocage ou retour urgent détecté dans les sources actives.</div>}</div></section>
       {pending.length ? <section className="rounded-2xl border border-slate-300 bg-slate-50 p-5"><h2 className="font-semibold text-slate-950">En attente ({pending.length})</h2><p className="mt-1 text-sm text-slate-500">Ces détections restent mémorisées sans encombrer les décisions immédiates.</p><div className="mt-4 space-y-3">{pending.map((signal) => <SignalCard key={signal.id} signal={signal} onChanged={handleSignalChanged} />)}</div></section> : null}
