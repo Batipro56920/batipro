@@ -302,8 +302,12 @@ function immediateFeedSignal(row: Row, chantier: Row | undefined, tasks: Row[], 
   const isBlocker = includesAny(raw, ["blocage signalé", "blocage", "bloqué", "bloque", "impossible", "ne peut pas", "on ne peut pas"]);
   const isSafety = includesAny(raw, ["danger", "dangereux", "sécurité", "securite", "accident", "risque grave"]);
   const isUrgent = includesAny(raw, ["urgent", "urgence", "avant de partir", "arrêt chantier", "arret chantier"]);
+  // "Retour terrain :" est le libellé même de la fonctionnalité dédiée (onglet "Retours terrain") :
+  // un ouvrier qui préfixe son message ainsi signale explicitement quelque chose à faire remonter,
+  // même sans urgence — ça doit apparaître, pas seulement les blocages/dangers.
+  const isFieldReturn = includesAny(raw, ["retour terrain"]);
   const isEquipment = includesAny(raw, ["marteau piqueur", "matériel", "materiel", "outil", "machine", "échafaud", "echafaud", "louer", "location"]);
-  if (!isBlocker && !isSafety && !isUrgent) return null;
+  if (!isBlocker && !isSafety && !isUrgent && !isFieldReturn) return null;
 
   const taskLabel = taskLabelFromText(body);
   const matchedTask = findTask(tasks, String(row.chantier_id), body);
@@ -315,8 +319,12 @@ function immediateFeedSignal(row: Row, chantier: Row | undefined, tasks: Row[], 
     state: "active",
     kind: "immediate",
     category: isSafety ? "qualite" : isEquipment ? "materiel" : "methode",
-    priority: "haute",
-    title: isSafety ? "Risque sécurité signalé" : taskLabel ? `Blocage · ${taskLabel}` : "Blocage chantier signalé",
+    priority: isBlocker || isSafety || isUrgent ? "haute" : "normale",
+    title: isSafety
+      ? "Risque sécurité signalé"
+      : isBlocker || isUrgent
+        ? (taskLabel ? `Blocage · ${taskLabel}` : "Blocage chantier signalé")
+        : (taskLabel ? `Retour terrain · ${taskLabel}` : "Retour terrain signalé"),
     finding: body,
     proposedAction: actionOptions[0]?.proposal ?? "Publier la décision corrective dans le fil chantier.",
     evidence: [raw],
