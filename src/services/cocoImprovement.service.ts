@@ -43,7 +43,8 @@ export type CocoImprovementActionType =
   | "add_equipment_to_templates"
   | "add_client_note"
   | "create_purchase_request"
-  | "publish_decision";
+  | "publish_decision"
+  | "add_procedure_step_to_templates";
 
 export type CocoImprovementOption = {
   id: string;
@@ -52,6 +53,7 @@ export type CocoImprovementOption = {
   detail: string;
   proposal: string;
   equipmentName?: string;
+  procedureStep?: string;
   templateIds?: string[];
   templateTitles?: string[];
   clientId?: string;
@@ -64,6 +66,7 @@ export type CocoImprovementPlan = {
   actionType: CocoImprovementActionType;
   optionId: string;
   equipmentName?: string;
+  procedureStep?: string;
   templateIds?: string[];
   clientId?: string;
   clientNote?: string;
@@ -243,10 +246,91 @@ function templateSimilarity(task: Row, template: Row) {
   return templateTokens.filter((token) => taskTokens.has(token)).length;
 }
 
+// Mots trop génériques pour servir d'indice de rapprochement texte -> template
+// (sinon presque tout retour terrain "matche" un peu tous les templates).
+const TEMPLATE_MATCH_STOPWORDS = new Set([
+  "pour", "avec", "dans", "cette", "faut", "penser", "avant", "apres", "plus", "moins",
+  "bien", "tres", "toujours", "jamais", "chaque", "leur", "leurs", "sans", "sous", "sur",
+  "meilleure", "meilleur", "afin", "que", "qui", "les", "des", "une", "un", "sujetions",
+]);
+
+function textTokensForMatch(value: unknown) {
+  return normalizeComparableText(value)
+    .split(" ")
+    .filter((token) => token.length > 3 && !TEMPLATE_MATCH_STOPWORDS.has(token));
+}
+
+function templatesMatchingText(text: string, templates: Row[], excludeId?: string, limit = 3) {
+  const textTokens = new Set(textTokensForMatch(text));
+  if (!textTokens.size) return [] as Row[];
+  return templates
+    .map((template) => {
+      const templateTokens = textTokensForMatch(template.titre);
+      const lotTokens = textTokensForMatch(template.lot);
+      const score = templateTokens.filter((token) => textTokens.has(token)).length * 3
+        + lotTokens.filter((token) => textTokens.has(token)).length;
+      return { template, score };
+    })
+    .filter(({ template, score }) => score > 0 && String(template.id) !== String(excludeId ?? ""))
+    .sort((a, b) => b.score - a.score)
+    .slice(0, limit)
+    .map(({ template }) => template);
+}
+
+function procedureStepOptionFor(input: { finding: string; task?: Row; templates: Row[] }): CocoImprovementOption | null {
+  const { finding, task, templates } = input;
+  if (!templates.length) return null;
+  const step = finding.trim();
+  if (!step) return null;
+
+  let candidates: Row[] = [];
+  if (task?.task_template_id) {
+    const linked = templates.find((template) => String(template.id) === String(task.task_template_id));
+    if (linked) candidates = [linked];
+  }
+  if (!candidates.length) {
+    const fromTask = task ? templatesMatchingText(String(task.titre ?? ""), templates, undefined, 3) : [];
+    const fromFinding = templatesMatchingText(step, templates, undefined, 3);
+    const seen = new Set<string>();
+    candidates = [...fromTask, ...fromFinding].filter((template) => {
+      const id = String(template.id);
+      if (seen.has(id)) return false;
+      seen.add(id);
+      return true;
+    }).slice(0, 3);
+  }
+
+  const templateIds = candidates.map((template) => String(template.id));
+  const templateTitles = candidates.map((template) => String(template.titre));
+  const label = templateTitles.length
+    ? `Compléter le mode opératoire (${templateTitles.length > 1 ? `${templateTitles.length} templates proposés` : templateTitles[0]})`
+    : "Compléter le mode opératoire d’un template";
+  const detail = templateTitles.length
+    ? `COCO ajoute ce pas d'exécution au mode opératoire du/des template(s) : ${templateTitles.join(" · ")}. Choisis le ou les bons templates avant d'appliquer.`
+    : "Aucun template évident détecté : choisis manuellement le ou les templates concernés par ce retour terrain.";
+  return {
+    id: `procedure-step-${task?.id ? String(task.id) : normalizeComparableText(step).slice(0, 40)}`,
+    actionType: "add_procedure_step_to_templates",
+    label,
+    detail,
+    proposal: templateTitles.length
+      ? `J’ajoute « ${step} » au mode opératoire du template « ${templateTitles[0]} »${templateTitles.length > 1 ? ` (et ${templateTitles.length - 1} autre(s) sélectionné(s))` : ""}.`
+      : `J’ajoute « ${step} » au mode opératoire du template que tu sélectionnes.`,
+    procedureStep: step,
+    templateIds,
+    templateTitles,
+    confirmationMessage: `✅ COCO a complété le mode opératoire de ${templateTitles.length || "0"} template(s) avec ce retour terrain.`,
+  };
+}
+
 function actionOptionsFor(input: { finding: string; task?: Row; chantier?: Row; client?: Row; templates: Row[] }) {
   const { finding, task, chantier, client, templates } = input;
   const equipmentName = equipmentFromText(finding);
-  if (!task || !equipmentName) return [] as CocoImprovementOption[];
+  if (!equipmentName) {
+    const procedureOption = procedureStepOptionFor({ finding, task, templates });
+    return procedureOption ? [procedureOption] : [];
+  }
+  if (!task) return [] as CocoImprovementOption[];
   const taskTitle = String(task.titre ?? "la tâche");
   const options: CocoImprovementOption[] = [];
   if (task.task_template_id) {
@@ -355,7 +439,9 @@ function immediateFeedSignal(row: Row, chantier: Row | undefined, tasks: Row[], 
   };
 }
 
-export async function analyzeCocoLearning(settings: CocoLearningSettings): Promise<{ signals: CocoLearningSignal[]; sourceCounts: Record<CocoLearningSourceKey, number>; analyzedAt: string }> {
+export type CocoTemplateOption = { id: string; titre: string; lot: string | null };
+
+export async function analyzeCocoLearning(settings: CocoLearningSettings): Promise<{ signals: CocoLearningSignal[]; sourceCounts: Record<CocoLearningSourceKey, number>; analyzedAt: string; allTemplates: CocoTemplateOption[] }> {
   const normalized = normalizeSettings(settings);
   const since = new Date(Date.now() - normalized.lookbackDays * 86_400_000).toISOString();
   const enabled = normalized.sources;
@@ -490,6 +576,9 @@ export async function analyzeCocoLearning(settings: CocoLearningSettings): Promi
       .sort((a, b) => (a.kind === "immediate" ? -1 : 1) - (b.kind === "immediate" ? -1 : 1)),
     sourceCounts,
     analyzedAt: new Date().toISOString(),
+    allTemplates: templates
+      .map((row) => ({ id: String(row.id), titre: String(row.titre ?? ""), lot: row.lot ? String(row.lot) : null }))
+      .sort((a, b) => a.titre.localeCompare(b.titre, "fr")),
   };
 }
 
@@ -499,6 +588,7 @@ function planFromOption(option: CocoImprovementOption, value?: unknown): CocoImp
     actionType: option.actionType,
     optionId: option.id,
     equipmentName: option.equipmentName,
+    procedureStep: option.procedureStep,
     templateIds: option.templateIds,
     clientId: option.clientId,
     clientNote: String(row.clientNote ?? option.clientNote ?? "").trim() || undefined,
@@ -629,6 +719,7 @@ export async function applyCocoImprovementAction(input: {
     p_action_type: option.actionType,
     p_action_payload: {
       equipmentName: plan.equipmentName,
+      procedureStep: option.actionType === "add_procedure_step_to_templates" ? (plan.procedureStep ?? decisionText) : plan.procedureStep,
       templateIds: plan.templateIds,
       clientId: plan.clientId,
       clientNote: option.actionType === "add_client_note" ? (input.plan?.optionId === option.id ? plan.clientNote : decisionText) : plan.clientNote,

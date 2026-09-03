@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { AlertTriangle, ArrowLeft, BrainCircuit, CheckCircle2, ChevronDown, ChevronUp, Clock3, Database, ExternalLink, History, Loader2, PauseCircle, RefreshCw, RotateCcw, Save, ShieldCheck, Sparkles, Trash2 } from "lucide-react";
-import { COCO_LEARNING_SOURCES, DEFAULT_COCO_LEARNING_SETTINGS, analyzeCocoLearning, applyCocoImprovementAction, getCocoImprovementHistory, getCocoLearningSettings, hideCocoImprovementFromHistory, regenerateCocoImprovementProposal, reopenCocoImprovement, saveCocoLearningSettings, setCocoDetectionState, type CocoImprovementHistoryItem, type CocoImprovementOption, type CocoImprovementPlan, type CocoLearningSettings, type CocoLearningSignal, type CocoLearningSourceKey } from "../services/cocoImprovement.service";
+import { COCO_LEARNING_SOURCES, DEFAULT_COCO_LEARNING_SETTINGS, analyzeCocoLearning, applyCocoImprovementAction, getCocoImprovementHistory, getCocoLearningSettings, hideCocoImprovementFromHistory, regenerateCocoImprovementProposal, reopenCocoImprovement, saveCocoLearningSettings, setCocoDetectionState, type CocoImprovementHistoryItem, type CocoImprovementOption, type CocoImprovementPlan, type CocoLearningSettings, type CocoLearningSignal, type CocoLearningSourceKey, type CocoTemplateOption } from "../services/cocoImprovement.service";
 
 const categoryLabel: Record<CocoLearningSignal["category"], string> = { temps: "Temps", materiaux: "Matériaux", materiel: "Matériel", methode: "Méthode", qualite: "Qualité", planning: "Planning", achats: "Achats" };
 const historyActionLabel: Record<CocoImprovementHistoryItem["actionType"], string> = {
@@ -10,7 +10,9 @@ const historyActionLabel: Record<CocoImprovementHistoryItem["actionType"], strin
   add_client_note: "Pense-bête client ajouté",
   create_purchase_request: "Demande d’achat créée",
   publish_decision: "Décision publiée",
+  add_procedure_step_to_templates: "Mode opératoire complété",
 };
+const TEMPLATE_PICKER_ACTION_TYPES = new Set<CocoImprovementOption["actionType"]>(["add_equipment_to_templates", "add_procedure_step_to_templates"]);
 
 function ImprovementHistory({ items, loading, onReopen, onDelete }: { items: CocoImprovementHistoryItem[]; loading: boolean; onReopen: (item: CocoImprovementHistoryItem) => Promise<void>; onDelete: (item: CocoImprovementHistoryItem) => Promise<void> }) {
   const pageSize = 10;
@@ -47,20 +49,29 @@ function ImprovementHistory({ items, loading, onReopen, onDelete }: { items: Coc
   })}</div>{pageCount > 1 ? <div className="mt-4 flex items-center justify-between gap-3"><button type="button" onClick={() => setPage(Math.max(1, currentPage - 1))} disabled={currentPage === 1} className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 disabled:opacity-40">Précédent</button><span className="text-xs text-slate-500">Page {currentPage} sur {pageCount}</span><button type="button" onClick={() => setPage(Math.min(pageCount, currentPage + 1))} disabled={currentPage === pageCount} className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 disabled:opacity-40">Suivant</button></div> : null}</div>;
 }
 
-function SignalCard({ signal, onChanged }: { signal: CocoLearningSignal; onChanged: (signal: CocoLearningSignal, state: "applied" | "active" | "pending" | "dismissed", message: string) => void }) {
+function SignalCard({ signal, allTemplates, onChanged }: { signal: CocoLearningSignal; allTemplates: CocoTemplateOption[]; onChanged: (signal: CocoLearningSignal, state: "applied" | "active" | "pending" | "dismissed", message: string) => void }) {
   const immediate = signal.kind === "immediate";
   const [selectedOptionIds, setSelectedOptionIds] = useState<string[]>(signal.actionOptions[0]?.id ? [signal.actionOptions[0].id] : []);
   const selectedOptions = signal.actionOptions.filter((option) => selectedOptionIds.includes(option.id));
   const [decision, setDecision] = useState(signal.actionOptions[0]?.proposal ?? signal.proposedAction);
   const [generatedByOption, setGeneratedByOption] = useState<Record<string, { proposal: string; plan: CocoImprovementPlan }>>({});
-  const [selectedTemplateIds, setSelectedTemplateIds] = useState<string[]>(signal.actionOptions.find((option) => option.actionType === "add_equipment_to_templates")?.templateIds ?? []);
+  const [selectedTemplateIds, setSelectedTemplateIds] = useState<string[]>(signal.actionOptions.find((option) => TEMPLATE_PICKER_ACTION_TYPES.has(option.actionType))?.templateIds ?? []);
+  const [templateQuery, setTemplateQuery] = useState("");
   const [regenerating, setRegenerating] = useState(false);
   const [applying, setApplying] = useState(false);
   const [changingState, setChangingState] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
-  const effectiveOptions = selectedOptions.map((option) => ({ ...option, templateIds: option.actionType === "add_equipment_to_templates" ? selectedTemplateIds : option.templateIds }));
-  const selectedTemplateOption = selectedOptions.find((option) => option.actionType === "add_equipment_to_templates");
-  const canApply = Boolean(signal.chantierId && signal.sourceRefs.length && effectiveOptions.length && effectiveOptions.every((option) => option.actionType !== "add_equipment_to_templates" || option.templateIds?.length));
+  const effectiveOptions = selectedOptions.map((option) => ({ ...option, templateIds: TEMPLATE_PICKER_ACTION_TYPES.has(option.actionType) ? selectedTemplateIds : option.templateIds }));
+  const selectedTemplateOption = selectedOptions.find((option) => TEMPLATE_PICKER_ACTION_TYPES.has(option.actionType));
+  const canApply = Boolean(signal.chantierId && signal.sourceRefs.length && effectiveOptions.length && effectiveOptions.every((option) => !TEMPLATE_PICKER_ACTION_TYPES.has(option.actionType) || option.templateIds?.length));
+  const templateTitleById = useMemo(() => new Map(allTemplates.map((template) => [template.id, template.titre])), [allTemplates]);
+  const templateSearchResults = useMemo(() => {
+    const query = templateQuery.trim().toLocaleLowerCase("fr");
+    if (!query) return [];
+    return allTemplates
+      .filter((template) => !selectedTemplateIds.includes(template.id) && template.titre.toLocaleLowerCase("fr").includes(query))
+      .slice(0, 8);
+  }, [templateQuery, allTemplates, selectedTemplateIds]);
 
   function toggleOption(option: CocoImprovementOption) {
     const nextIds = selectedOptionIds.includes(option.id)
@@ -69,9 +80,20 @@ function SignalCard({ signal, onChanged }: { signal: CocoLearningSignal; onChang
     setSelectedOptionIds(nextIds);
     const nextOptions = signal.actionOptions.filter((item) => nextIds.includes(item.id));
     setDecision(nextOptions.map((item) => item.proposal).join("\n\n"));
-    if (option.actionType === "add_equipment_to_templates" && !selectedOptionIds.includes(option.id)) setSelectedTemplateIds(option.templateIds ?? []);
+    if (TEMPLATE_PICKER_ACTION_TYPES.has(option.actionType) && !selectedOptionIds.includes(option.id)) setSelectedTemplateIds(option.templateIds ?? []);
     setGeneratedByOption({});
     setActionError(null);
+  }
+
+  function addTemplate(templateId: string) {
+    setSelectedTemplateIds((current) => (current.includes(templateId) ? current : [...current, templateId]));
+    setTemplateQuery("");
+    setGeneratedByOption({});
+  }
+
+  function removeTemplate(templateId: string) {
+    setSelectedTemplateIds((current) => current.filter((id) => id !== templateId));
+    setGeneratedByOption({});
   }
 
   async function regenerate() {
@@ -142,7 +164,21 @@ function SignalCard({ signal, onChanged }: { signal: CocoLearningSignal; onChang
     <p className="mt-3 text-sm leading-6 text-slate-700">{signal.finding}</p>
     {signal.actionOptions.length ? <div className={`mt-3 rounded-xl p-3 ${immediate ? "bg-white" : "bg-blue-50"}`}>
       <fieldset><legend className="text-sm font-semibold text-slate-950">Ce que COCO peut réellement faire <span className="font-normal text-slate-500">· plusieurs choix possibles</span></legend><div className="mt-2 space-y-2">{signal.actionOptions.map((option) => <label key={option.id} className={`block cursor-pointer rounded-xl border p-3 ${selectedOptionIds.includes(option.id) ? "border-blue-500 bg-blue-50" : "border-slate-200 bg-white"}`}><span className="flex items-start gap-2"><input type="checkbox" className="mt-1" checked={selectedOptionIds.includes(option.id)} onChange={() => toggleOption(option)} /><span><span className="block text-sm font-semibold text-slate-900">{option.label}</span><span className="mt-1 block text-xs leading-5 text-slate-500">{option.detail}</span></span></span></label>)}</div></fieldset>
-      {selectedTemplateOption && (selectedTemplateOption.templateIds?.length ?? 0) > 1 ? <fieldset className="mt-3"><legend className="text-xs font-semibold text-slate-700">Templates à modifier</legend><div className="mt-2 flex flex-wrap gap-2">{selectedTemplateOption.templateIds?.map((id, index) => <label key={id} className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs"><input type="checkbox" checked={selectedTemplateIds.includes(id)} onChange={() => { setSelectedTemplateIds((current) => current.includes(id) ? current.filter((value) => value !== id) : [...current, id]); setGeneratedByOption({}); }} />{selectedTemplateOption.templateTitles?.[index] ?? "Template"}</label>)}</div></fieldset> : null}
+      {selectedTemplateOption ? <fieldset className="mt-3"><legend className="text-xs font-semibold text-slate-700">Templates à modifier {!selectedTemplateIds.length ? <span className="font-normal text-amber-700">· choisis-en au moins un</span> : null}</legend>
+        <div className="mt-2 flex flex-wrap gap-2">
+          {selectedTemplateIds.length ? selectedTemplateIds.map((id) => <span key={id} className="inline-flex items-center gap-2 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-xs text-blue-900">{templateTitleById.get(id) ?? selectedTemplateOption.templateTitles?.[selectedTemplateOption.templateIds?.indexOf(id) ?? -1] ?? "Template"}<button type="button" onClick={() => removeTemplate(id)} className="text-blue-500 hover:text-blue-800" aria-label="Retirer ce template">×</button></span>) : <span className="text-xs text-slate-500">Aucun template sélectionné pour l’instant.</span>}
+        </div>
+        <div className="relative mt-2">
+          <input
+            type="text"
+            value={templateQuery}
+            onChange={(event) => setTemplateQuery(event.target.value)}
+            placeholder="Chercher un template à ajouter (titre)…"
+            className="w-full rounded-lg border border-slate-200 px-3 py-2 text-xs outline-none focus:border-blue-500"
+          />
+          {templateSearchResults.length ? <div className="absolute z-10 mt-1 w-full overflow-hidden rounded-lg border border-slate-200 bg-white shadow-lg">{templateSearchResults.map((template) => <button key={template.id} type="button" onClick={() => addTemplate(template.id)} className="block w-full px-3 py-2 text-left text-xs hover:bg-blue-50">{template.titre}{template.lot ? <span className="ml-2 text-slate-400">· {template.lot}</span> : null}</button>)}</div> : null}
+        </div>
+      </fieldset> : null}
       <label className="text-sm font-semibold text-slate-950" htmlFor={`decision-${signal.id}`}>Décision proposée</label>
       <textarea
         id={`decision-${signal.id}`}
@@ -174,6 +210,7 @@ export default function CocoImprovementPage() {
   const [analyzing, setAnalyzing] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [signals, setSignals] = useState<CocoLearningSignal[]>([]);
+  const [allTemplates, setAllTemplates] = useState<CocoTemplateOption[]>([]);
   const [history, setHistory] = useState<CocoImprovementHistoryItem[]>([]);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [historyLoading, setHistoryLoading] = useState(true);
@@ -182,7 +219,7 @@ export default function CocoImprovementPage() {
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  async function runAnalysis(activeSettings: CocoLearningSettings) { setAnalyzing(true); setError(null); try { const result = await analyzeCocoLearning(activeSettings); setSignals(result.signals); setSourceCounts(result.sourceCounts); setAnalyzedAt(result.analyzedAt); } catch (reason) { setError(reason instanceof Error ? reason.message : "Analyse impossible."); } finally { setAnalyzing(false); } }
+  async function runAnalysis(activeSettings: CocoLearningSettings) { setAnalyzing(true); setError(null); try { const result = await analyzeCocoLearning(activeSettings); setSignals(result.signals); setSourceCounts(result.sourceCounts); setAnalyzedAt(result.analyzedAt); setAllTemplates(result.allTemplates); } catch (reason) { setError(reason instanceof Error ? reason.message : "Analyse impossible."); } finally { setAnalyzing(false); } }
 
   async function loadHistory() { setHistoryLoading(true); try { setHistory(await getCocoImprovementHistory()); } catch (reason) { setError(reason instanceof Error ? reason.message : "Historique impossible à charger."); } finally { setHistoryLoading(false); } }
 
@@ -204,9 +241,9 @@ export default function CocoImprovementPage() {
     <main className="space-y-5 px-4 sm:px-6">{!schemaReady ? <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900"><strong>Configuration non persistée.</strong> La migration Supabase des sources doit être appliquée.</div> : null}{error ? <div className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</div> : null}{notice ? <div className="rounded-xl border border-blue-200 bg-blue-50 p-3 text-sm text-blue-800">{notice}</div> : null}
       <section className="rounded-2xl border border-emerald-200 bg-white"><button type="button" onClick={() => setHistoryOpen((value) => !value)} className="flex w-full items-center justify-between gap-3 p-5 text-left"><span><span className="flex items-center gap-2 font-semibold text-slate-950"><History className="h-4 w-4 text-emerald-700" /> Améliorations appliquées ({history.length})</span><span className="mt-1 block text-sm text-slate-500">Retrouver, consulter, rouvrir ou retirer une amélioration de l’historique.</span></span>{historyOpen ? <ChevronUp className="h-5 w-5 text-slate-400" /> : <ChevronDown className="h-5 w-5 text-slate-400" />}</button>{historyOpen ? <div className="border-t border-slate-200 p-5"><ImprovementHistory items={history} loading={historyLoading} onReopen={reopenHistoryItem} onDelete={deleteHistoryItem} /></div> : null}</section>
       <section className="grid gap-3 sm:grid-cols-3"><div className={`rounded-2xl border p-4 ${immediate.length ? "border-red-200 bg-red-50" : "border-emerald-200 bg-emerald-50"}`}><div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-slate-600"><AlertTriangle className="h-4 w-4" /> À traiter maintenant</div><div className="mt-2 text-3xl font-semibold text-slate-950">{immediate.length}</div><div className="mt-1 text-xs text-slate-600">Un seul blocage suffit pour apparaître.</div></div><div className="rounded-2xl border border-amber-200 bg-amber-50 p-4"><div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-slate-600"><Sparkles className="h-4 w-4" /> Améliorations</div><div className="mt-2 text-3xl font-semibold text-slate-950">{improvements.length}</div><div className="mt-1 text-xs text-slate-600">Tendances et références à fiabiliser.</div></div><div className="rounded-2xl border border-slate-200 bg-white p-4"><div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-slate-600"><Clock3 className="h-4 w-4" /> Dernier contrôle</div><div className="mt-2 text-sm font-semibold text-slate-950">{analyzing ? "Analyse en cours" : analyzedAt ? new Date(analyzedAt).toLocaleString("fr-FR") : "Non analysé"}</div><div className="mt-1 text-xs text-slate-600">{enabledCount} source(s) active(s).</div></div></section>
-      <section className="rounded-2xl border border-red-200 bg-white p-5"><div className="flex items-start gap-3"><div className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-red-100 text-red-700"><AlertTriangle className="h-5 w-5" /></div><div><h2 className="font-semibold text-slate-950">À traiter maintenant</h2><p className="mt-1 text-sm text-slate-500">Blocages, urgences et risques remontent immédiatement, sans attendre une répétition.</p></div></div><div className="mt-4 space-y-3">{immediate.length ? immediate.map((signal) => <SignalCard key={signal.id} signal={signal} onChanged={handleSignalChanged} />) : <div className="rounded-xl bg-emerald-50 p-4 text-sm text-emerald-800">Aucun blocage ou retour urgent détecté dans les sources actives.</div>}</div></section>
-      {pending.length ? <section className="rounded-2xl border border-slate-300 bg-slate-50 p-5"><h2 className="font-semibold text-slate-950">En attente ({pending.length})</h2><p className="mt-1 text-sm text-slate-500">Ces détections restent mémorisées sans encombrer les décisions immédiates.</p><div className="mt-4 space-y-3">{pending.map((signal) => <SignalCard key={signal.id} signal={signal} onChanged={handleSignalChanged} />)}</div></section> : null}
-      <section className="rounded-2xl border border-slate-200 bg-white p-5"><h2 className="font-semibold text-slate-950">Améliorations proposées</h2><p className="mt-1 text-sm text-slate-500">Ici seulement, COCO attend plusieurs cas comparables avant de parler de tendance et de proposer de modifier un ratio, un temps, un prix ou une méthode.</p><div className="mt-4 space-y-3">{improvements.length ? improvements.map((signal) => <SignalCard key={signal.id} signal={signal} onChanged={handleSignalChanged} />) : <div className="rounded-xl border border-dashed border-slate-200 p-6 text-center text-sm text-slate-500">Pas encore assez de données comparables pour proposer une modification de référence.</div>}</div></section>
+      <section className="rounded-2xl border border-red-200 bg-white p-5"><div className="flex items-start gap-3"><div className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-red-100 text-red-700"><AlertTriangle className="h-5 w-5" /></div><div><h2 className="font-semibold text-slate-950">À traiter maintenant</h2><p className="mt-1 text-sm text-slate-500">Blocages, urgences et risques remontent immédiatement, sans attendre une répétition.</p></div></div><div className="mt-4 space-y-3">{immediate.length ? immediate.map((signal) => <SignalCard key={signal.id} signal={signal} allTemplates={allTemplates} onChanged={handleSignalChanged} />) : <div className="rounded-xl bg-emerald-50 p-4 text-sm text-emerald-800">Aucun blocage ou retour urgent détecté dans les sources actives.</div>}</div></section>
+      {pending.length ? <section className="rounded-2xl border border-slate-300 bg-slate-50 p-5"><h2 className="font-semibold text-slate-950">En attente ({pending.length})</h2><p className="mt-1 text-sm text-slate-500">Ces détections restent mémorisées sans encombrer les décisions immédiates.</p><div className="mt-4 space-y-3">{pending.map((signal) => <SignalCard key={signal.id} signal={signal} allTemplates={allTemplates} onChanged={handleSignalChanged} />)}</div></section> : null}
+      <section className="rounded-2xl border border-slate-200 bg-white p-5"><h2 className="font-semibold text-slate-950">Améliorations proposées</h2><p className="mt-1 text-sm text-slate-500">Ici seulement, COCO attend plusieurs cas comparables avant de parler de tendance et de proposer de modifier un ratio, un temps, un prix ou une méthode.</p><div className="mt-4 space-y-3">{improvements.length ? improvements.map((signal) => <SignalCard key={signal.id} signal={signal} allTemplates={allTemplates} onChanged={handleSignalChanged} />) : <div className="rounded-xl border border-dashed border-slate-200 p-6 text-center text-sm text-slate-500">Pas encore assez de données comparables pour proposer une modification de référence.</div>}</div></section>
       <section className="rounded-2xl border border-slate-200 bg-white"><button type="button" onClick={() => setSettingsOpen((value) => !value)} className="flex w-full items-center justify-between gap-3 p-5 text-left"><span><span className="flex items-center gap-2 font-semibold text-slate-950"><Database className="h-4 w-4 text-blue-700" /> Sources analysées</span><span className="mt-1 block text-sm text-slate-500">{enabledCount} sources actives · réglage secondaire</span></span>{settingsOpen ? <ChevronUp className="h-5 w-5 text-slate-400" /> : <ChevronDown className="h-5 w-5 text-slate-400" />}</button>{settingsOpen ? <div className="border-t border-slate-200 p-5"><div className="flex items-start gap-2 rounded-xl bg-blue-50 p-3 text-xs leading-5 text-blue-900"><ShieldCheck className="mt-0.5 h-4 w-4 shrink-0" /><span>Ces choix déterminent où COCO lit. Ils ne déterminent pas si un blocage est important : tout signal critique est remonté dès la première occurrence.</span></div><div className="mt-4 grid gap-3 lg:grid-cols-2">{COCO_LEARNING_SOURCES.map((source) => <label key={source.key} className="flex cursor-pointer items-start gap-3 rounded-xl border border-slate-200 p-4"><input className="mt-1" type="checkbox" checked={settings.sources[source.key]} onChange={() => toggleSource(source.key)} /><span className="min-w-0 flex-1"><span className="flex items-center justify-between gap-2 text-sm font-semibold text-slate-950"><span>{source.label}</span>{sourceCounts[source.key] !== undefined ? <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] text-slate-600">{sourceCounts[source.key]}</span> : null}</span><span className="mt-1 block text-xs leading-5 text-slate-500">{source.detail}</span></span></label>)}</div><div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between"><label className="text-xs font-semibold text-slate-700">Période observée<select className="mt-1 block w-56 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm" value={settings.lookbackDays} onChange={(event) => setSettings((current) => ({ ...current, lookbackDays: Number(event.target.value) }))}><option value={90}>3 mois</option><option value={180}>6 mois</option><option value={365}>12 mois</option><option value={730}>24 mois</option></select></label><button type="button" onClick={() => void saveSettings()} disabled={saving || enabledCount === 0} className="inline-flex items-center justify-center gap-2 rounded-lg bg-blue-700 px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-50"><Save className="h-4 w-4" />{saving ? "Enregistrement..." : "Enregistrer les sources"}</button></div></div> : null}</section>
     </main></div>;
 }
