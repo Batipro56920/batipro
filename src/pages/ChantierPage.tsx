@@ -5769,7 +5769,7 @@ export default function ChantierPage() {
         </div>
       ) : null}
 
-      <section className="sticky top-4 z-20 rounded-surface border border-subtle bg-surface/95 px-4 py-3 shadow-elevated backdrop-blur">
+      <section className="rounded-surface border border-subtle bg-surface/95 px-4 py-3 shadow-elevated backdrop-blur">
         <div className="space-y-3">
           <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
             <div className="flex min-w-0 items-start gap-3">
