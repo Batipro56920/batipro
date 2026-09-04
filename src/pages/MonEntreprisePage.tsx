@@ -14,6 +14,9 @@ import {
   type CompanyInterfaceMode,
 } from "../config/companyFeatures";
 import {
+  DEFAULT_PURCHASE_ORDER_LEGAL_MENTIONS,
+  DEFAULT_PURCHASE_ORDER_PAYMENT_TERMS,
+  DEFAULT_PURCHASE_ORDER_WASTE_MANAGEMENT,
   getCompanyLogoSignedUrl,
   getCompanySettings,
   upsertCompanySettings,
@@ -40,6 +43,9 @@ type CompanyFormState = {
   email: string;
   siret: string;
   insurance_decennale: string;
+  default_payment_terms: string;
+  default_legal_mentions: string;
+  default_waste_management: string;
   primary_color: string;
   secondary_color: string;
 };
@@ -59,6 +65,9 @@ function toCompanyForm(settings: CompanySettingsRow): CompanyFormState {
     email: settings.email ?? "",
     siret: settings.siret ?? "",
     insurance_decennale: settings.insurance_decennale ?? "",
+    default_payment_terms: settings.default_payment_terms ?? "",
+    default_legal_mentions: settings.default_legal_mentions ?? "",
+    default_waste_management: settings.default_waste_management ?? "",
     primary_color: settings.primary_color ?? "#2563eb",
     secondary_color: settings.secondary_color ?? "#0f172a",
   };
@@ -100,6 +109,9 @@ export default function MonEntreprisePage() {
     email: "",
     siret: "",
     insurance_decennale: "",
+    default_payment_terms: "",
+    default_legal_mentions: "",
+    default_waste_management: "",
     primary_color: "#2563eb",
     secondary_color: "#0f172a",
   });
@@ -392,6 +404,41 @@ export default function MonEntreprisePage() {
               <div className="text-sm font-medium">{t("monEntreprise.logoTitle")}</div>
               <input type="file" accept="image/*" onChange={(e) => setLogoFile(e.target.files?.[0] ?? null)} className="block w-full text-sm" />
               <div className="text-xs text-slate-500">{t("monEntreprise.logoHint")}</div>
+            </div>
+
+            <div className="rounded-xl border p-3 space-y-3">
+              <div>
+                <div className="text-sm font-medium">Textes des bons de commande</div>
+                <div className="text-xs text-slate-500">Utilises par defaut sur chaque nouveau bon de commande. Modifiables ici sans toucher au code.</div>
+              </div>
+              <label className="space-y-1 text-sm block">
+                <div className="text-xs text-slate-600">Conditions de commande</div>
+                <textarea
+                  className="min-h-20 w-full rounded-xl border px-3 py-2 text-sm"
+                  placeholder={DEFAULT_PURCHASE_ORDER_PAYMENT_TERMS}
+                  value={companyForm.default_payment_terms}
+                  onChange={(e) => setCompanyForm((prev) => ({ ...prev, default_payment_terms: e.target.value }))}
+                />
+              </label>
+              <label className="space-y-1 text-sm block">
+                <div className="text-xs text-slate-600">Mentions legales</div>
+                <textarea
+                  className="min-h-20 w-full rounded-xl border px-3 py-2 text-sm"
+                  placeholder={DEFAULT_PURCHASE_ORDER_LEGAL_MENTIONS}
+                  value={companyForm.default_legal_mentions}
+                  onChange={(e) => setCompanyForm((prev) => ({ ...prev, default_legal_mentions: e.target.value }))}
+                />
+              </label>
+              <label className="space-y-1 text-sm block">
+                <div className="text-xs text-slate-600">Gestion des dechets</div>
+                <textarea
+                  className="min-h-20 w-full rounded-xl border px-3 py-2 text-sm"
+                  placeholder={DEFAULT_PURCHASE_ORDER_WASTE_MANAGEMENT}
+                  value={companyForm.default_waste_management}
+                  onChange={(e) => setCompanyForm((prev) => ({ ...prev, default_waste_management: e.target.value }))}
+                />
+              </label>
+              <div className="text-xs text-slate-400">Champ vide = texte par defaut ci-dessus utilise automatiquement.</div>
             </div>
 
             <div className="flex justify-end">

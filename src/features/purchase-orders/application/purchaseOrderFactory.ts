@@ -1,4 +1,9 @@
 import { calculateDocumentTotals, createEmptyBusinessDocument } from "../../document-engine";
+import {
+  DEFAULT_PURCHASE_ORDER_LEGAL_MENTIONS,
+  DEFAULT_PURCHASE_ORDER_PAYMENT_TERMS,
+  DEFAULT_PURCHASE_ORDER_WASTE_MANAGEMENT,
+} from "../../../services/companySettings.service";
 import type { PurchaseOrderCreateInput, PurchaseOrderRecord } from "../domain/types";
 
 export function createPurchaseOrder(input: PurchaseOrderCreateInput = {}): PurchaseOrderRecord {
@@ -17,7 +22,9 @@ export function createPurchaseOrder(input: PurchaseOrderCreateInput = {}): Purch
     },
     terms: {
       ...document.terms,
-      paymentTerms: "Commande fournisseur liee au projet ou chantier Batipro.",
+      paymentTerms: input.terms?.paymentTerms ?? DEFAULT_PURCHASE_ORDER_PAYMENT_TERMS,
+      legalMentions: input.terms?.legalMentions ?? DEFAULT_PURCHASE_ORDER_LEGAL_MENTIONS,
+      wasteManagement: input.terms?.wasteManagement ?? DEFAULT_PURCHASE_ORDER_WASTE_MANAGEMENT,
       depositPercent: null,
       depositAmount: null,
     },

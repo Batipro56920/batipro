@@ -41,6 +41,7 @@ export type DocumentParty = {
   phone?: string | null;
   address?: string | null;
   siret?: string | null;
+  logoDataUrl?: string | null;
 };
 
 export type DocumentAttachment = {

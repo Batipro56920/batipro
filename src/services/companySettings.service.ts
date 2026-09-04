@@ -49,6 +49,9 @@ export type CompanySettingsRow = {
   email: string | null;
   siret: string | null;
   insurance_decennale: string | null;
+  default_payment_terms: string | null;
+  default_legal_mentions: string | null;
+  default_waste_management: string | null;
   primary_color: string;
   secondary_color: string;
   business_profile: CompanyBusinessProfile;
@@ -60,6 +63,13 @@ export type CompanySettingsRow = {
   updated_at: string;
   persistence_status?: "supabase" | "local_fallback";
 };
+
+export const DEFAULT_PURCHASE_ORDER_PAYMENT_TERMS =
+  "Commande passee pour les besoins du chantier ou projet indique. Livraison a l'adresse du chantier sauf mention contraire. Paiement a 30 jours fin de mois, date de facture.";
+export const DEFAULT_PURCHASE_ORDER_LEGAL_MENTIONS =
+  "Le fournisseur reste proprietaire des marchandises jusqu'au paiement integral de la commande (clause de reserve de propriete). Toute non-conformite ou anomalie de livraison doit etre signalee sous 48 heures.";
+export const DEFAULT_PURCHASE_ORDER_WASTE_MANAGEMENT =
+  "Les emballages et dechets lies a la livraison sont repris par le fournisseur ou evacues conformement a la reglementation en vigueur sur le chantier.";
 
 export type CompanyBrandingPdf = {
   companyName: string;
@@ -185,6 +195,9 @@ function withDefaults(orgId: string, row?: Partial<CompanySettingsRow>): Company
     email: row?.email ?? null,
     siret: row?.siret ?? null,
     insurance_decennale: row?.insurance_decennale ?? null,
+    default_payment_terms: row?.default_payment_terms ?? null,
+    default_legal_mentions: row?.default_legal_mentions ?? null,
+    default_waste_management: row?.default_waste_management ?? null,
     primary_color: normalizeHexColor(row?.primary_color, "#2563eb"),
     secondary_color: normalizeHexColor(row?.secondary_color, "#0f172a"),
     business_profile: businessProfile,
@@ -257,6 +270,9 @@ export async function upsertCompanySettings(
       | "email"
       | "siret"
       | "insurance_decennale"
+      | "default_payment_terms"
+      | "default_legal_mentions"
+      | "default_waste_management"
       | "primary_color"
       | "secondary_color"
       | "business_profile"
@@ -299,6 +315,24 @@ export async function upsertCompanySettings(
           ? patch.insurance_decennale.trim()
           : null
         : currentLocal.insurance_decennale,
+    default_payment_terms:
+      patch.default_payment_terms !== undefined
+        ? patch.default_payment_terms
+          ? patch.default_payment_terms.trim()
+          : null
+        : currentLocal.default_payment_terms,
+    default_legal_mentions:
+      patch.default_legal_mentions !== undefined
+        ? patch.default_legal_mentions
+          ? patch.default_legal_mentions.trim()
+          : null
+        : currentLocal.default_legal_mentions,
+    default_waste_management:
+      patch.default_waste_management !== undefined
+        ? patch.default_waste_management
+          ? patch.default_waste_management.trim()
+          : null
+        : currentLocal.default_waste_management,
     primary_color: normalizeHexColor(
       patch.primary_color ?? currentLocal.primary_color,
       "#2563eb",
@@ -440,6 +474,27 @@ export async function getCompanyBrandingForPdf(): Promise<CompanyBrandingPdf> {
       primaryColor: "#2563eb",
       secondaryColor: "#0f172a",
       logoDataUrl: null,
+    };
+  }
+}
+
+export async function getPurchaseOrderDefaultTerms(): Promise<{
+  paymentTerms: string;
+  legalMentions: string;
+  wasteManagement: string;
+}> {
+  try {
+    const settings = await getCompanySettings();
+    return {
+      paymentTerms: settings.default_payment_terms?.trim() || DEFAULT_PURCHASE_ORDER_PAYMENT_TERMS,
+      legalMentions: settings.default_legal_mentions?.trim() || DEFAULT_PURCHASE_ORDER_LEGAL_MENTIONS,
+      wasteManagement: settings.default_waste_management?.trim() || DEFAULT_PURCHASE_ORDER_WASTE_MANAGEMENT,
+    };
+  } catch {
+    return {
+      paymentTerms: DEFAULT_PURCHASE_ORDER_PAYMENT_TERMS,
+      legalMentions: DEFAULT_PURCHASE_ORDER_LEGAL_MENTIONS,
+      wasteManagement: DEFAULT_PURCHASE_ORDER_WASTE_MANAGEMENT,
     };
   }
 }

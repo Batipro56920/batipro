@@ -25,6 +25,7 @@ import { getBestSupplierPrice, listProductCatalogItems } from "../../product-cat
 import { buildProjects } from "../../projects/utils/projectMappers";
 import type { PurchaseOrderRecord, PurchaseOrderStatus } from "../domain/types";
 import { PurchaseOrderStatusBadge } from "./PurchaseOrderStatusBadge";
+import { getCompanyBrandingForPdf, type CompanyBrandingPdf } from "../../../services/companySettings.service";
 
 type ChantierOption = {
   id: string;
@@ -66,9 +67,25 @@ export function PurchaseOrderEditor({
   const [products, setProducts] = useState<ProductCatalogItem[]>([]);
   const [chantiers, setChantiers] = useState<ChantierOption[]>([]);
   const [projects, setProjects] = useState<ProjectOption[]>([]);
+  const [branding, setBranding] = useState<CompanyBrandingPdf | null>(null);
   const document = order.document;
   const totals = document.totals ?? calculateDocumentTotals(document);
   const rows = useMemo(() => flattenDocumentNodes(document.nodes), [document.nodes]);
+  const documentForOutput = useMemo<BusinessDocument>(() => {
+    if (!branding) return document;
+    return {
+      ...document,
+      company: {
+        ...document.company,
+        displayName: branding.companyName || document.company.displayName,
+        address: branding.address || document.company.address,
+        phone: branding.phone || document.company.phone,
+        email: branding.email || document.company.email,
+        siret: branding.siret || document.company.siret,
+        logoDataUrl: branding.logoDataUrl,
+      },
+    };
+  }, [document, branding]);
   const selectedChantier = useMemo(
     () => chantiers.find((chantier) => chantier.id === order.chantierId) ?? null,
     [chantiers, order.chantierId],
@@ -89,6 +106,10 @@ export function PurchaseOrderEditor({
 
   useEffect(() => {
     listProductCatalogItems().then(setProducts).catch(() => setProducts([]));
+  }, []);
+
+  useEffect(() => {
+    getCompanyBrandingForPdf().then(setBranding).catch(() => setBranding(null));
   }, []);
 
   useEffect(() => {
@@ -269,7 +290,7 @@ export function PurchaseOrderEditor({
         </div>
         <div className="flex flex-wrap gap-2">
           <Button variant="secondary" onClick={() => setPreviewOpen((open) => !open)}>Preview</Button>
-          <Button variant="secondary" onClick={() => downloadBusinessDocumentPdf(document)}><Download className="h-4 w-4" /> PDF</Button>
+          <Button variant="secondary" onClick={() => downloadBusinessDocumentPdf(documentForOutput)}><Download className="h-4 w-4" /> PDF</Button>
           <Button variant="secondary" onClick={() => setSendOpen(true)}><Send className="h-4 w-4" /> Envoyer</Button>
           <Button variant="primary" onClick={() => void save()} disabled={saving}><Save className="h-4 w-4" /> {saving ? "Enregistrement..." : "Enregistrer"}</Button>
           <Button variant="secondary" onClick={closeEditor}>Fermer</Button>
@@ -395,8 +416,8 @@ export function PurchaseOrderEditor({
         </aside>
       </section>
 
-      {previewOpen ? <DocumentPreview document={document} /> : null}
-      {sendOpen ? <DocumentSendDialog document={document} onClose={() => setSendOpen(false)} onDownload={() => downloadBusinessDocumentPdf(document)} /> : null}
+      {previewOpen ? <DocumentPreview document={documentForOutput} /> : null}
+      {sendOpen ? <DocumentSendDialog document={documentForOutput} onClose={() => setSendOpen(false)} onDownload={() => downloadBusinessDocumentPdf(documentForOutput)} /> : null}
     </div>
   );
 }

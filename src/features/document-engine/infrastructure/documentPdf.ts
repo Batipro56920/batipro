@@ -46,14 +46,22 @@ function drawHeader(pdf: jsPDF, document: BusinessDocument) {
 
   pdf.setFillColor(...COLORS.navy);
   pdf.rect(0, 0, PAGE.width, 30, "F");
+
+  let textX = PAGE.marginX;
+  const logo = document.company.logoDataUrl;
+  if (logo) {
+    const box = drawHeaderLogo(pdf, logo);
+    if (box) textX = PAGE.marginX + box.width + 5;
+  }
+
   pdf.setTextColor(...COLORS.white);
   pdf.setFont("helvetica", "bold");
   pdf.setFontSize(12);
-  pdf.text(safe(document.company.displayName || "Batipro"), PAGE.marginX, 11);
+  pdf.text(safe(document.company.displayName || "Batipro"), textX, 11);
   pdf.setFont("helvetica", "normal");
   pdf.setFontSize(8.3);
-  pdf.text(safe(document.company.address || document.company.email || document.company.phone || "ERP chantier et rénovation"), PAGE.marginX, 18);
-  if (document.company.siret) pdf.text(`SIRET ${safe(document.company.siret)}`, PAGE.marginX, 24);
+  pdf.text(safe(document.company.address || document.company.email || document.company.phone || "ERP chantier et rénovation"), textX, 18);
+  if (document.company.siret) pdf.text(`SIRET ${safe(document.company.siret)}`, textX, 24);
 
   pdf.setFillColor(...COLORS.blue);
   pdf.roundedRect(142, 8, 54, 14, 2, 2, "F");
@@ -85,6 +93,32 @@ function drawHeader(pdf: jsPDF, document: BusinessDocument) {
   }
 
   return 86;
+}
+
+function drawHeaderLogo(pdf: jsPDF, logoDataUrl: string): { width: number; height: number } | null {
+  try {
+    const format = detectImageFormat(logoDataUrl);
+    const props = pdf.getImageProperties(logoDataUrl);
+    const maxWidth = 22;
+    const maxHeight = 20;
+    let width = maxWidth;
+    let height = (props.height / props.width) * width;
+    if (height > maxHeight) {
+      height = maxHeight;
+      width = (props.width / props.height) * height;
+    }
+    pdf.addImage(logoDataUrl, format, PAGE.marginX, (30 - height) / 2, width, height);
+    return { width, height };
+  } catch {
+    return null;
+  }
+}
+
+function detectImageFormat(dataUrl: string): string {
+  const match = /^data:image\/(png|jpe?g|webp|gif)/i.exec(dataUrl);
+  const ext = match?.[1]?.toLowerCase();
+  if (ext === "jpg" || ext === "jpeg") return "JPEG";
+  return ext ? ext.toUpperCase() : "PNG";
 }
 
 function drawDocumentTable(pdf: jsPDF, document: BusinessDocument, rows: FlatDocumentNode[], startY: number) {

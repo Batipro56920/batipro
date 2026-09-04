@@ -23,4 +23,9 @@ export type PurchaseOrderCreateInput = {
   supplierName?: string | null;
   projectId?: string | null;
   chantierId?: string | null;
+  terms?: {
+    paymentTerms?: string;
+    legalMentions?: string;
+    wasteManagement?: string;
+  };
 };

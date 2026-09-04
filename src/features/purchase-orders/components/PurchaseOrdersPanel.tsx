@@ -7,6 +7,7 @@ import { calculateDocumentTotals } from "../../document-engine";
 import { buildProjects } from "../../projects/utils/projectMappers";
 import type { SupplierRow } from "../../../services/suppliers.service";
 import { createAndSavePurchaseOrder, listPurchaseOrders, savePurchaseOrder } from "../infrastructure/purchaseOrderRepository";
+import { getPurchaseOrderDefaultTerms } from "../../../services/companySettings.service";
 import type { PurchaseOrderRecord, PurchaseOrderStatus } from "../domain/types";
 import { PurchaseOrderEditor } from "./PurchaseOrderEditor";
 import { PurchaseOrderStatusBadge } from "./PurchaseOrderStatusBadge";
@@ -403,11 +404,13 @@ export function PurchaseOrdersPanel({
       ? suppliers.find((supplier) => supplier.id === effectiveSupplierId) ?? null
       : suppliers[0] ?? null;
     const contextualChantier = effectiveChantierId ? chantierById.get(effectiveChantierId) ?? null : null;
+    const terms = await getPurchaseOrderDefaultTerms();
     const order = await createAndSavePurchaseOrder({
       supplierId: contextualSupplier?.id ?? null,
       supplierName: contextualSupplier?.name ?? null,
       projectId: effectiveProjectId,
       chantierId: effectiveChantierId,
+      terms,
     });
     const savedOrder = contextualChantier?.adresse
       ? await savePurchaseOrder({
