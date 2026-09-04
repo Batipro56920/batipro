@@ -371,12 +371,12 @@ export function PurchaseOrderEditor({
             <Button variant="secondary" onClick={() => addLine("materiel")}><Plus className="h-4 w-4" /> Materiel</Button>
           </div>
 
-          <div className="overflow-hidden rounded-2xl border border-slate-200">
-            <div className="grid grid-cols-[70px_1fr_90px_90px_110px_90px_120px] bg-blue-600 px-3 py-2 text-xs font-bold uppercase tracking-[0.12em] text-white">
+          <div className="overflow-x-auto rounded-2xl border border-slate-200">
+            <div className="min-w-[760px] grid grid-cols-[70px_1fr_90px_90px_110px_90px_120px] gap-2 bg-blue-600 px-3 py-2 text-xs font-bold uppercase tracking-[0.12em] text-white">
               <span>N</span><span>Designation</span><span>Qte</span><span>Unite</span><span>Prix achat HT</span><span>TVA</span><span className="text-right">Total TTC</span>
             </div>
             {rows.length ? rows.map((row) => (
-              <div key={row.id} className={`grid grid-cols-[70px_1fr_90px_90px_110px_90px_120px] items-center gap-2 border-t border-slate-100 px-3 py-2 text-sm ${row.node.type === "section" ? "bg-blue-50 font-bold" : row.node.type === "subsection" ? "bg-slate-50 font-semibold" : ""}`}>
+              <div key={row.id} className={`min-w-[760px] grid grid-cols-[70px_1fr_90px_90px_110px_90px_120px] items-center gap-2 border-t border-slate-100 px-3 py-2 text-sm ${row.node.type === "section" ? "bg-blue-50 font-bold" : row.node.type === "subsection" ? "bg-slate-50 font-semibold" : ""}`}>
                 <span className="font-mono text-xs text-slate-500">{row.number}</span>
                 <input className={cellClass} value={row.node.title} onChange={(event) => updateNode(row.id, { title: event.target.value })} />
                 {isItem(row.node) ? <NumberCell value={row.node.quantity} onChange={(quantity) => updateNode(row.id, { quantity } as Partial<BusinessDocumentNode>)} /> : <span />}
