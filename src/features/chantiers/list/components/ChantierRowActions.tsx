@@ -28,7 +28,7 @@ function getTerrainFeedbackAction(row: ChantierDerived) {
   const hasOpen = openCount > 0;
 
   return {
-    href: `/retours-terrain?chantierId=${encodeURIComponent(row.id)}`,
+    href: `/chantiers/${encodeURIComponent(row.id)}/retours-terrain`,
     label: hasPriority
       ? `Retours terrain (${priorityCount} urgent${priorityCount > 1 ? "s" : ""})`
       : hasOpen

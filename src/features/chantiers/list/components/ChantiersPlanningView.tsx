@@ -111,7 +111,7 @@ function getPlanningWindowLabel(row: ChantierDerived) {
 }
 
 function getTerrainFeedbackHref(row: ChantierDerived) {
-  return `/retours-terrain?chantierId=${encodeURIComponent(row.id)}`;
+  return `/chantiers/${encodeURIComponent(row.id)}/retours-terrain`;
 }
 
 function getTerrainFeedbackLabel(row: ChantierDerived) {

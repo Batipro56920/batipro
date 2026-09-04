@@ -1121,13 +1121,15 @@ export type IntervenantChantierFeedPost = {
   parent_post_id: string | null;
   created_at: string | null;
   updated_at: string | null;
-  attachment: IntervenantChantierFeedAttachment | null;
+  attachments: IntervenantChantierFeedAttachment[];
 };
 
 function mapChantierFeedPost(row: Record<string, unknown>): IntervenantChantierFeedPost {
-  const attachmentRow = (row.attachment && typeof row.attachment === "object" ? row.attachment : null) as
-    | Record<string, unknown>
-    | null;
+  const attachmentRows = Array.isArray(row.attachments)
+    ? row.attachments
+    : row.attachment && typeof row.attachment === "object"
+      ? [row.attachment]
+      : [];
   return {
     id: String(row.id ?? ""),
     chantier_id: String(row.chantier_id ?? ""),
@@ -1140,15 +1142,16 @@ function mapChantierFeedPost(row: Record<string, unknown>): IntervenantChantierF
     parent_post_id: asNullableString(row.parent_post_id),
     created_at: asNullableString(row.created_at),
     updated_at: asNullableString(row.updated_at),
-    attachment: attachmentRow
-      ? {
-          id: String(attachmentRow.id ?? ""),
-          file_name: String(attachmentRow.file_name ?? ""),
-          mime_type: asNullableString(attachmentRow.mime_type),
-          size_bytes: attachmentRow.size_bytes === null || attachmentRow.size_bytes === undefined ? null : Number(attachmentRow.size_bytes),
-          signed_url: asNullableString(attachmentRow.signed_url),
-        }
-      : null,
+    attachments: attachmentRows.map((value) => {
+      const attachment = (value ?? {}) as Record<string, unknown>;
+      return {
+        id: String(attachment.id ?? ""),
+        file_name: String(attachment.file_name ?? ""),
+        mime_type: asNullableString(attachment.mime_type),
+        size_bytes: attachment.size_bytes === null || attachment.size_bytes === undefined ? null : Number(attachment.size_bytes),
+        signed_url: asNullableString(attachment.signed_url),
+      };
+    }),
   };
 }
 
@@ -1157,13 +1160,17 @@ export async function intervenantChantierFeedList(
   token: string,
   chantierId: string,
 ): Promise<IntervenantChantierFeedPost[]> {
-  const { data, error } = await (supabase as any).rpc("intervenant_chantier_feed_list", {
-    p_token: normalizePortalToken(token),
-    p_chantier_id: chantierId,
+  const { data: edgeData, error: edgeError } = await supabase.functions.invoke("intervenant-chantier-feed-upload", {
+    body: {
+      action: "list",
+      token: normalizePortalToken(token),
+      chantier_id: chantierId,
+    },
   });
-  if (error) throw new Error(rpcMessage(error, "Chargement fil chantier impossible."));
-
-  const rows = Array.isArray(data) ? data : [];
+  if (edgeError) throw new Error(rpcMessage(edgeError, "Chargement fil chantier impossible."));
+  const rows = edgeData && typeof edgeData === "object" && Array.isArray((edgeData as Record<string, unknown>).posts)
+    ? (edgeData as { posts: unknown[] }).posts
+    : [];
   return rows.map((row) => mapChantierFeedPost((row ?? {}) as Record<string, unknown>));
 }
 
@@ -1181,16 +1188,16 @@ export async function intervenantChantierFeedCreate(
   return mapChantierFeedPost((data && typeof data === "object" ? data : {}) as Record<string, unknown>);
 }
 
-/** Envoie une photo (ou un PDF) dans le fil chantier partagé : crée le message et la pièce jointe en un seul appel. */
-export async function intervenantChantierFeedUploadPhoto(
+/** Envoie jusqu'à 6 photos/PDF dans une seule publication du fil chantier partagé. */
+export async function intervenantChantierFeedUploadFiles(
   token: string,
-  payload: { chantier_id: string; body?: string; file: File },
+  payload: { chantier_id: string; body?: string; files: File[] },
 ): Promise<IntervenantChantierFeedPost> {
   const formData = new FormData();
   formData.set("token", normalizePortalToken(token) ?? "");
   formData.set("chantier_id", payload.chantier_id);
   formData.set("body", payload.body ?? "");
-  formData.set("file", payload.file);
+  for (const file of payload.files) formData.append("files", file);
 
   const { data, error } = await supabase.functions.invoke("intervenant-chantier-feed-upload", {
     body: formData,

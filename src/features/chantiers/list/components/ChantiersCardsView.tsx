@@ -26,7 +26,7 @@ export function ChantiersCardsView({
         const terrainFeedbackPriorityCount = row.terrainFeedbackPriorityCount ?? 0;
         const hasOpenTerrainFeedbacks = terrainFeedbackOpenCount > 0;
         const hasPriorityTerrainFeedbacks = terrainFeedbackPriorityCount > 0;
-        const terrainFeedbackHref = `/retours-terrain?chantierId=${encodeURIComponent(row.id)}`;
+  const terrainFeedbackHref = `/chantiers/${encodeURIComponent(row.id)}/retours-terrain`;
         const qualityHref = `/chantiers/${row.id}/qualite`;
         const qualityLinkTone: Tone = hasPriorityTerrainFeedbacks ? "danger" : hasOpenTerrainFeedbacks ? "warning" : "normal";
         const terrainFeedbackLabel = hasPriorityTerrainFeedbacks

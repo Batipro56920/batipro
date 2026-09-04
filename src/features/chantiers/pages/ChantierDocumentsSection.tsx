@@ -9,7 +9,7 @@ export default function ChantierDocumentsSection({ children }: { children: React
   const targetedDocumentId = searchParams.get("documentId") ?? "";
   const executionHref = id ? `/chantiers/${encodeURIComponent(id)}/execution` : "/chantiers";
   const qualiteHref = id ? `/chantiers/${encodeURIComponent(id)}/qualite` : "/chantiers";
-  const terrainFeedbackHref = id ? `/retours-terrain?chantierId=${encodeURIComponent(id)}` : "/retours-terrain";
+  const terrainFeedbackHref = id ? `/chantiers/${encodeURIComponent(id)}/retours-terrain` : "/retours-terrain";
 
   function clearTargetedDocument() {
     if (!searchParams.has("documentId")) return;

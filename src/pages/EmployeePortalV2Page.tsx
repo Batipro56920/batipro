@@ -7,7 +7,7 @@ import RaulPortalWidget from "../components/RaulPortalWidget";
 import {
   intervenantChantierFeedCreate,
   intervenantChantierFeedList,
-  intervenantChantierFeedUploadPhoto,
+  intervenantChantierFeedUploadFiles,
   intervenantConsigneList,
   intervenantDailyChecklistGet,
   intervenantDailyChecklistUpsert,
@@ -190,6 +190,7 @@ export default function EmployeePortalV2Page() {
   const [message, setMessage] = useState("");
   const [sending, setSending] = useState(false);
   const [sendingPhoto, setSendingPhoto] = useState(false);
+  const [feedFiles, setFeedFiles] = useState<File[]>([]);
   const [photoError, setPhotoError] = useState<string | null>(null);
   const [timeTaskId, setTimeTaskId] = useState("");
   const [timeHours, setTimeHours] = useState("");
@@ -349,6 +350,7 @@ export default function EmployeePortalV2Page() {
     setSlipDoneCount(null);
     setSlipError(null);
     setPhotoError(null);
+    setFeedFiles([]);
   }, [selected?.id]);
 
   const todaysChantierIds = useMemo(() => {
@@ -563,30 +565,60 @@ export default function EmployeePortalV2Page() {
   }
 
   async function sendMessage() {
-    if (!selected || !message.trim() || sending) return;
-    setSending(true);
+    if (!selected || (!message.trim() && feedFiles.length === 0) || sending || sendingPhoto) return;
+    const hasFiles = feedFiles.length > 0;
+    if (hasFiles) setSendingPhoto(true);
+    else setSending(true);
+    setPhotoError(null);
     try {
-      await intervenantChantierFeedCreate(token, { chantier_id: selected.id, body: message.trim() });
+      if (hasFiles) {
+        await intervenantChantierFeedUploadFiles(token, {
+          chantier_id: selected.id,
+          body: message.trim(),
+          files: feedFiles,
+        });
+      } else {
+        await intervenantChantierFeedCreate(token, { chantier_id: selected.id, body: message.trim() });
+      }
       setMessage("");
+      setFeedFiles([]);
       setRefreshKey((v) => v + 1);
+    } catch (err) {
+      setPhotoError(err instanceof Error ? err.message : "Envoi impossible.");
     } finally {
       setSending(false);
+      setSendingPhoto(false);
     }
   }
 
-  async function sendPhoto(file: File | null) {
-    if (!selected || !file || sendingPhoto) return;
-    setSendingPhoto(true);
+  function addFeedFiles(files: FileList | null) {
+    if (!files?.length) return;
     setPhotoError(null);
-    try {
-      await intervenantChantierFeedUploadPhoto(token, { chantier_id: selected.id, body: message.trim(), file });
-      setMessage("");
-      setRefreshKey((v) => v + 1);
-    } catch (err) {
-      setPhotoError(err instanceof Error ? err.message : "Envoi photo impossible.");
-    } finally {
-      setSendingPhoto(false);
+    const incoming = Array.from(files);
+    const supportedTypes = new Set(["image/jpeg", "image/png", "image/webp", "application/pdf"]);
+    const supported = incoming.filter((file) => supportedTypes.has(file.type.toLowerCase()));
+    const remaining = Math.max(0, 6 - feedFiles.length);
+    const next = [...feedFiles, ...supported.slice(0, remaining)];
+    if (next.reduce((total, file) => total + file.size, 0) > 40 * 1024 * 1024) {
+      setPhotoError("L'ensemble des pièces jointes ne doit pas dépasser 40 Mo.");
+      return;
     }
+    if (supported.length !== incoming.length) {
+      setPhotoError("Format non pris en charge. Utilise une photo JPG, PNG, WebP ou un PDF.");
+    } else if (supported.length > remaining) {
+      setPhotoError("Maximum 6 photos ou fichiers par publication.");
+    }
+    setFeedFiles(next);
+  }
+
+  function removeFeedFile(index: number) {
+    setFeedFiles((current) => current.filter((_, currentIndex) => currentIndex !== index));
+    if (photoError) setPhotoError(null);
+  }
+
+  function formatFeedFileSize(bytes: number) {
+    if (bytes < 1024 * 1024) return `${Math.max(1, Math.round(bytes / 1024))} Ko`;
+    return `${(bytes / (1024 * 1024)).toFixed(1).replace(".", ",")} Mo`;
   }
 
   async function saveTime() {
@@ -1334,8 +1366,53 @@ export default function EmployeePortalV2Page() {
         {tab === "fil" && selected ? <>
           <Card><div className="flex items-center justify-between"><div><div className="text-[11px] font-bold uppercase tracking-[0.18em] text-blue-700">Fil chantier</div><h2 className="mt-1 text-lg font-bold">{selected.nom}</h2></div><MessageCircle className="h-6 w-6 text-blue-600" /></div><p className="mt-2 text-sm text-slate-500">Fil partagé du chantier : visible par tous les intervenants (ouvriers, sous-traitants) et par le bureau.</p></Card>
           {photoError ? <div className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs font-semibold text-red-700">{photoError}</div> : null}
-          <div className="space-y-2">{data.feed.length ? data.feed.map((item) => <div key={item.id} className={`flex ${item.author_intervenant_id === intervenantId ? "justify-end" : "justify-start"}`}><div className={`max-w-[88%] rounded-2xl px-4 py-3 text-sm shadow-sm ${item.author_intervenant_id === intervenantId ? "bg-blue-600 text-white" : "border border-slate-200 bg-white text-slate-800"}`}><div className={`text-[10px] font-semibold uppercase tracking-wide ${item.author_intervenant_id === intervenantId ? "text-blue-100" : "text-slate-400"}`}>{item.author_intervenant_id === intervenantId ? "Toi" : item.author_name || "Équipe"}</div><div className="mt-0.5 whitespace-pre-wrap">{item.body}</div>{item.attachment ? (item.attachment.mime_type?.startsWith("image/") && item.attachment.signed_url ? (<a href={item.attachment.signed_url} target="_blank" rel="noreferrer" className="mt-2 block overflow-hidden rounded-xl border border-white/20"><img src={item.attachment.signed_url} alt={item.attachment.file_name} className="max-h-64 w-full object-cover" /></a>) : item.attachment.signed_url ? (<a href={item.attachment.signed_url} target="_blank" rel="noreferrer" className={`mt-2 flex items-center gap-2 rounded-xl border px-3 py-2 text-xs font-semibold ${item.author_intervenant_id === intervenantId ? "border-white/30 text-white" : "border-slate-200 text-slate-700"}`}><FileText className="h-4 w-4 shrink-0" /><span className="truncate">{item.attachment.file_name}</span></a>) : null) : null}<div className={`mt-1 text-[10px] ${item.author_intervenant_id === intervenantId ? "text-blue-100" : "text-slate-400"}`}>{item.created_at ? new Date(item.created_at).toLocaleString("fr-FR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }) : ""}</div></div></div>) : <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-6 text-center text-sm text-slate-500">Aucun message sur ce chantier.</div>}</div>
+          <div className="space-y-2">
+            {data.feed.length ? data.feed.map((item) => {
+              const ownPost = item.author_intervenant_id === intervenantId;
+              return (
+                <div key={item.id} className={`flex ${ownPost ? "justify-end" : "justify-start"}`}>
+                  <div className={`max-w-[88%] rounded-2xl px-4 py-3 text-sm shadow-sm ${ownPost ? "bg-blue-600 text-white" : "border border-slate-200 bg-white text-slate-800"}`}>
+                    <div className={`text-[10px] font-semibold uppercase tracking-wide ${ownPost ? "text-blue-100" : "text-slate-400"}`}>{ownPost ? "Toi" : item.author_name || "Équipe"}</div>
+                    <div className="mt-0.5 whitespace-pre-wrap">{item.body}</div>
+                    {item.attachments.length ? (
+                      <div className={`mt-2 ${item.attachments.length > 1 ? "grid grid-cols-2 gap-1.5" : "block"}`}>
+                        {item.attachments.map((attachment, index) => {
+                          if (!attachment.signed_url) return null;
+                          const wideFirstPhoto = item.attachments.length === 3 && index === 0;
+                          return attachment.mime_type?.startsWith("image/") ? (
+                            <a key={attachment.id || index} href={attachment.signed_url} target="_blank" rel="noreferrer" className={`block overflow-hidden rounded-xl border ${ownPost ? "border-white/20" : "border-slate-200"} ${wideFirstPhoto ? "col-span-2" : ""}`}>
+                              <img src={attachment.signed_url} alt={attachment.file_name || "Photo du chantier"} loading="lazy" className={item.attachments.length > 1 ? "h-36 w-full object-cover" : "max-h-72 w-full object-cover"} />
+                            </a>
+                          ) : (
+                            <a key={attachment.id || index} href={attachment.signed_url} target="_blank" rel="noreferrer" className={`flex items-center gap-2 rounded-xl border px-3 py-2 text-xs font-semibold ${ownPost ? "border-white/30 text-white" : "border-slate-200 text-slate-700"}`}>
+                              <FileText className="h-4 w-4 shrink-0" /><span className="truncate">{attachment.file_name || "Pièce jointe"}</span>
+                            </a>
+                          );
+                        })}
+                      </div>
+                    ) : null}
+                    <div className={`mt-1 text-[10px] ${ownPost ? "text-blue-100" : "text-slate-400"}`}>{item.created_at ? new Date(item.created_at).toLocaleString("fr-FR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }) : ""}</div>
+                  </div>
+                </div>
+              );
+            }) : <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-6 text-center text-sm text-slate-500">Aucun message sur ce chantier.</div>}
+          </div>
           <div className="sticky bottom-20 rounded-2xl border border-slate-200 bg-white p-2 shadow-lg">
+            {feedFiles.length ? (
+              <div className="mb-2 space-y-1.5">
+                <div className="flex items-center justify-between gap-3 px-1 text-xs font-semibold text-slate-500">
+                  <span>{feedFiles.length} pièce{feedFiles.length > 1 ? "s" : ""} jointe{feedFiles.length > 1 ? "s" : ""} sélectionnée{feedFiles.length > 1 ? "s" : ""} · {feedFiles.length}/6</span>
+                  <button type="button" onClick={() => setFeedFiles([])} className="text-slate-500 hover:text-slate-700">Tout retirer</button>
+                </div>
+                {feedFiles.map((file, index) => (
+                  <div key={`${file.name}-${file.size}-${file.lastModified}-${index}`} className="flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
+                    {file.type.startsWith("image/") ? <Camera className="h-4 w-4 shrink-0 text-blue-600" /> : <FileText className="h-4 w-4 shrink-0 text-slate-500" />}
+                    <div className="min-w-0 flex-1"><div className="truncate text-xs font-semibold text-slate-700">{file.name}</div><div className="text-[10px] text-slate-400">{formatFeedFileSize(file.size)}</div></div>
+                    <button type="button" onClick={() => removeFeedFile(index)} className="shrink-0 rounded-lg px-2 py-1 text-xs font-semibold text-red-600 hover:bg-red-50" aria-label={`Retirer ${file.name}`}>Retirer</button>
+                  </div>
+                ))}
+              </div>
+            ) : null}
             <div className="flex items-end gap-2">
               <textarea rows={2} value={message} onChange={(e) => setMessage(e.target.value)} placeholder="Écrire un message…" className="min-h-[52px] min-w-0 flex-1 resize-none rounded-xl border-0 bg-slate-50 px-3 py-2.5 text-sm outline-none" />
               <label title="Prendre une photo" aria-label="Prendre une photo" className="flex h-11 w-11 shrink-0 cursor-pointer items-center justify-center rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-50">
@@ -1344,22 +1421,23 @@ export default function EmployeePortalV2Page() {
                   accept="image/*"
                   capture="environment"
                   className="hidden"
-                  disabled={sendingPhoto}
-                  onChange={(e) => { void sendPhoto(e.target.files?.[0] ?? null); e.target.value = ""; }}
+                  disabled={sending || sendingPhoto || feedFiles.length >= 6}
+                  onChange={(e) => { addFeedFiles(e.target.files); e.target.value = ""; }}
                 />
-                {sendingPhoto ? <RefreshCw className="h-5 w-5 animate-spin" /> : <Camera className="h-5 w-5" />}
+                <Camera className="h-5 w-5" />
               </label>
-              <label title="Ajouter une photo ou un fichier PDF" aria-label="Ajouter une photo ou un fichier PDF" className="flex h-11 w-11 shrink-0 cursor-pointer items-center justify-center rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-50">
+              <label title="Ajouter plusieurs photos ou PDF" aria-label="Ajouter plusieurs photos ou PDF" className="flex h-11 w-11 shrink-0 cursor-pointer items-center justify-center rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-50">
                 <input
                   type="file"
+                  multiple
                   accept="image/*,application/pdf,.pdf"
                   className="hidden"
-                  disabled={sendingPhoto}
-                  onChange={(e) => { void sendPhoto(e.target.files?.[0] ?? null); e.target.value = ""; }}
+                  disabled={sending || sendingPhoto || feedFiles.length >= 6}
+                  onChange={(e) => { addFeedFiles(e.target.files); e.target.value = ""; }}
                 />
                 <Paperclip className="h-5 w-5" />
               </label>
-              <button type="button" onClick={() => sendMessage()} disabled={!message.trim() || sending} className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-blue-600 text-white disabled:opacity-40"><Send className="h-5 w-5" /></button>
+              <button type="button" onClick={() => sendMessage()} disabled={(!message.trim() && !feedFiles.length) || sending || sendingPhoto} className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-blue-600 text-white disabled:opacity-40" aria-label="Envoyer la publication">{sending || sendingPhoto ? <RefreshCw className="h-5 w-5 animate-spin" /> : <Send className="h-5 w-5" />}</button>
             </div>
           </div>
         </> : null}

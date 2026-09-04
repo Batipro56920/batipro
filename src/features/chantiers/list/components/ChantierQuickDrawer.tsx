@@ -54,7 +54,7 @@ function getCommercialNextStepLabel(params: { quoteHref: string | null; billingH
 function getTerrainFeedbackInfo(row: ChantierDerived) {
   const open = row.terrainFeedbackOpenCount ?? 0;
   const priority = row.terrainFeedbackPriorityCount ?? 0;
-  const href = `/retours-terrain?chantierId=${encodeURIComponent(row.id)}`;
+  const href = `/chantiers/${encodeURIComponent(row.id)}/retours-terrain`;
 
   if (priority > 0) {
     return {

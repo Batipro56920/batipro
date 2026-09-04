@@ -189,7 +189,7 @@ export default function ChantierJournalSection({
   const { id: routeChantierId } = useParams<{ id: string }>();
   const chantierId = logs.find((log) => log.chantier_id)?.chantier_id ?? routeChantierId ?? null;
   const terrainFeedbackHref = chantierId
-    ? `/retours-terrain?chantierId=${encodeURIComponent(chantierId)}`
+    ? `/chantiers/${encodeURIComponent(chantierId)}/retours-terrain`
     : null;
   const [posts, setPosts] = useState<ChantierFeedPostRow[]>([]);
   const [postsLoading, setPostsLoading] = useState(false);
@@ -426,13 +426,13 @@ export default function ChantierJournalSection({
     if (!targetChantierId) return null;
 
     if (log.entity_type === "terrain_feedback" && log.entity_id) {
-      return `/retours-terrain?chantierId=${encodeURIComponent(targetChantierId)}&feedbackId=${encodeURIComponent(log.entity_id)}`;
+      return `/chantiers/${encodeURIComponent(targetChantierId)}/retours-terrain?feedbackId=${encodeURIComponent(log.entity_id)}`;
     }
 
     const changes = (log.changes ?? {}) as Record<string, unknown>;
     const sourceFeedbackId = String(changes.terrain_feedback_id ?? "").trim();
     if (log.entity_type === "reserve" && changes.source === "terrain_feedback" && sourceFeedbackId) {
-      return `/retours-terrain?chantierId=${encodeURIComponent(targetChantierId)}&feedbackId=${encodeURIComponent(sourceFeedbackId)}`;
+      return `/chantiers/${encodeURIComponent(targetChantierId)}/retours-terrain?feedbackId=${encodeURIComponent(sourceFeedbackId)}`;
     }
 
     return null;
