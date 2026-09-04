@@ -571,7 +571,7 @@ export function PurchaseOrdersPanel({
 
       {!loading ? (
         <div className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm">
-          <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_160px_200px_200px_200px]">
+          <div className="grid grid-cols-1 gap-3 lg:grid-cols-[minmax(0,1fr)_160px_200px_200px_200px]">
             <label className="relative block">
               <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
               <input className={inputClassWithIcon} placeholder="Rechercher commande, fournisseur, projet, chantier..." value={query} onChange={(event) => setQuery(event.target.value)} />
