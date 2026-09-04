@@ -14,6 +14,7 @@ import { listReserveMarkers, type ReservePlanMarkerRow } from "../../services/re
 import { listReserveDocuments } from "../../services/reserveDocuments.service";
 import {
   createVisite,
+  listVisiteFull,
   listVisites,
   setActions,
   setParticipants,
@@ -93,6 +94,7 @@ type ReportDocumentPrepared = {
 
 type Props = {
   open: boolean;
+  visiteId?: string | null;
   chantierId: string;
   chantierName: string;
   chantierReference?: string | null;
@@ -202,6 +204,7 @@ async function blobToDataUrl(blob: Blob): Promise<string> {
 
 export default function VisiteWizardDrawer({
   open,
+  visiteId,
   chantierId,
   chantierName,
   chantierReference,
@@ -381,7 +384,7 @@ export default function VisiteWizardDrawer({
   useEffect(() => {
     if (!open) return;
     resetState();
-  }, [open]);
+  }, [open, visiteId]);
 
   useEffect(() => {
     if (!open || !chantierId || visite) return;
@@ -391,29 +394,69 @@ export default function VisiteWizardDrawer({
       setLoadingInit(true);
       setError(null);
       try {
-        const { data: authData } = await supabase.auth.getUser();
-        const redactorEmail = authData.user?.email ?? null;
+        let currentVisite: ChantierVisiteRow;
+        let builtSnapshot: VisiteSnapshot;
+        let loadedParticipants: Awaited<ReturnType<typeof listVisiteFull>>["participants"] = [];
+        let loadedActions: Awaited<ReturnType<typeof listVisiteFull>>["actions"] = [];
+        let loadedDocumentIds: string[] = [];
 
-        const created = await createVisite({
-          chantier_id: chantierId,
-          titre: "Visite de chantier",
-          visit_datetime: new Date(defaultVisitDateTime()).toISOString(),
-          redactor_email: redactorEmail,
-        });
+        if (visiteId) {
+          const full = await listVisiteFull(visiteId);
+          if (full.visite.chantier_id !== chantierId) {
+            throw new Error("Ce rapport n'appartient pas au chantier sélectionné.");
+          }
+          currentVisite = full.visite;
+          builtSnapshot = full.snapshot?.data ?? await buildVisiteSnapshot({
+            chantierId,
+            chantier: { id: chantierId, nom: chantierName ?? null, adresse: chantierAddress ?? null },
+          });
+          loadedParticipants = full.participants;
+          loadedActions = full.actions;
+          loadedDocumentIds = full.links.map((link) => link.document_id);
+        } else {
+          const { data: authData } = await supabase.auth.getUser();
+          const redactorEmail = authData.user?.email ?? null;
+          currentVisite = await createVisite({
+            chantier_id: chantierId,
+            titre: "Visite de chantier",
+            visit_datetime: new Date(defaultVisitDateTime()).toISOString(),
+            redactor_email: redactorEmail,
+          });
+          builtSnapshot = await buildVisiteSnapshot({
+            chantierId,
+            chantier: { id: chantierId, nom: chantierName ?? null, adresse: chantierAddress ?? null },
+          });
+          await upsertSnapshot(currentVisite.id, builtSnapshot);
+        }
+
         if (!active) return;
-
-        const builtSnapshot = await buildVisiteSnapshot({
-          chantierId,
-          chantier: { id: chantierId, nom: chantierName ?? null, adresse: chantierAddress ?? null },
-        });
-        await upsertSnapshot(created.id, builtSnapshot);
-
-        if (!active) return;
-        setVisite(created);
         setSnapshot(builtSnapshot);
-        setNumero(created.numero ?? null);
-        setTitre(created.titre || `Visite #${created.numero ?? 1}`);
-        setVisitDateTime(new Date(created.visit_datetime).toISOString().slice(0, 16));
+        setNumero(currentVisite.numero ?? null);
+        setTitre(currentVisite.titre || `Visite #${currentVisite.numero ?? 1}`);
+        setPhase(currentVisite.phase ?? "");
+        setObjectif(currentVisite.objectif ?? "");
+        setMeteo(currentVisite.meteo ?? "");
+        setIncludeInDoe(Boolean(currentVisite.include_in_doe));
+        setNotesTerrain(currentVisite.notes_terrain ?? "");
+        setPointsPositifs(currentVisite.points_positifs ?? "");
+        setPointsBloquants(currentVisite.points_bloquants ?? "");
+        setSynthese(currentVisite.synthese ?? "");
+        setSynthesePoints(currentVisite.synthese_points_cles ?? []);
+        setRemarquesPlanning(currentVisite.remarques_planning ?? "");
+        setVisitDateTime(new Date(currentVisite.visit_datetime).toISOString().slice(0, 16));
+        setSelectedParticipantIds(loadedParticipants.filter((row) => row.intervenant_id).map((row) => row.intervenant_id as string));
+        setOtherParticipants(loadedParticipants.filter((row) => !row.intervenant_id).map((row) => row.nom).join("\n"));
+        setActionsDraft(loadedActions.length ? loadedActions.map((row) => ({
+          id: row.id || crypto.randomUUID(),
+          description: row.description ?? row.action_text ?? "",
+          responsable_type: row.responsable_type ?? "AUTRE",
+          intervenant_id: row.intervenant_id ?? null,
+          responsable_nom: row.responsable_nom ?? row.responsable ?? "",
+          echeance: row.echeance ?? row.due_date ?? "",
+          statut: row.statut ?? "A_FAIRE",
+          commentaire: row.commentaire ?? "",
+        })) : [createActionDraft()]);
+        setSelectedDocumentIds(loadedDocumentIds);
         setLotsDraft(builtSnapshot.lots.map((lot) => ({ ...lot })));
         setPlanningDraft(
           (builtSnapshot.planning ?? []).map((row) => ({
@@ -434,6 +477,7 @@ export default function VisiteWizardDrawer({
           nextReserveState[reserve.id] = { include: true, comment: "" };
         });
         setReserveStateById(nextReserveState);
+        setVisite(currentVisite);
       } catch (err: any) {
         if (!active) return;
         setError(err?.message ?? "Erreur initialisation visite.");
@@ -445,7 +489,7 @@ export default function VisiteWizardDrawer({
     return () => {
       active = false;
     };
-  }, [open, chantierId, chantierName, chantierAddress, visite]);
+  }, [open, visiteId, chantierId, chantierName, chantierAddress, visite]);
 
   const selectedDocs = useMemo(
     () => documents.filter((doc) => selectedDocumentIds.includes(doc.id)),
@@ -1262,7 +1306,7 @@ export default function VisiteWizardDrawer({
       <div className="absolute right-0 top-0 h-screen w-full sm:w-[92vw] lg:w-[84vw] lg:min-w-[1080px] 2xl:w-[70vw] bg-white border-l shadow-xl flex flex-col">
         <div className="px-4 py-3 border-b flex items-center justify-between">
           <div>
-            <div className="font-semibold">Visite de chantier</div>
+            <div className="font-semibold">{visiteId ? "Rapport de visite" : "Nouveau rapport de visite"}</div>
             <div className="text-xs text-slate-500">Autosave {autosaving ? "..." : "actif"}</div>
           </div>
           <button type="button" className="rounded-xl border px-2 py-1 text-sm hover:bg-slate-50" onClick={onClose}>x</button>
@@ -1612,4 +1656,3 @@ export default function VisiteWizardDrawer({
     </div>
   );
 }
-

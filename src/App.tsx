@@ -19,6 +19,7 @@ const RentabilitePage = lazy(() => import("./pages/RentabilitePage"));
 const CrmPage = lazy(() => import("./pages/CrmPage"));
 const CrmQuoteEditRedirectPage = lazy(() => import("./pages/CrmQuoteEditRedirectPage"));
 const ChantiersPage = lazy(() => import("./pages/ChantiersPage"));
+const ChantierVisitReportsPage = lazy(() => import("./pages/ChantierVisitReportsPage"));
 const ChantiersTimePage = lazy(() => import("./pages/ChantiersTimePage"));
 const ChantierNewPage = lazy(() => import("./pages/ChantierNewPage"));
 const ChantierPage = lazy(() => import("./pages/ChantierPage"));
@@ -403,7 +404,7 @@ export default function App() {
           path="/visites-chantier"
           element={
             <RequireCompanyFeature moduleId="validation_qualite">
-              <RouteSuspense label="Ouverture des visites chantier..."><ChantiersPage initialView="kanban" initialFocus="visits" /></RouteSuspense>
+              <RouteSuspense label="Ouverture des rapports de visite..."><ChantierVisitReportsPage /></RouteSuspense>
             </RequireCompanyFeature>
           }
         />

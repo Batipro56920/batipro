@@ -31,6 +31,7 @@ export default function VisitesModule({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [wizardOpen, setWizardOpen] = useState(false);
+  const [selectedVisitId, setSelectedVisitId] = useState<string | null>(null);
   const [visites, setVisites] = useState<ChantierVisiteRow[]>([]);
   const [documents, setDocuments] = useState<ChantierDocumentRow[]>([]);
   const [openingPdfId, setOpeningPdfId] = useState<string | null>(null);
@@ -101,16 +102,19 @@ export default function VisitesModule({
     <div className="space-y-4">
       <div className="flex items-start justify-between gap-3 rounded-surface border border-subtle bg-surface p-4 shadow-sm">
         <div>
-          <div className="bt-section-title text-ink">Visites de chantier</div>
-          <div className="bt-secondary mt-1 text-muted">Creation de compte-rendu pro avec snapshot fige.</div>
+          <div className="bt-section-title text-ink">Rapports de visite</div>
+          <div className="bt-secondary mt-1 text-muted">Rapports propres à ce chantier uniquement.</div>
         </div>
         <button
           type="button"
           className="bt-control inline-flex items-center gap-2 rounded-field bg-primary px-3 py-2 text-sm font-semibold text-primary-contrast hover:bg-primary-hover"
-          onClick={() => setWizardOpen(true)}
+          onClick={() => {
+            setSelectedVisitId(null);
+            setWizardOpen(true);
+          }}
         >
           <Plus className="h-4 w-4" strokeWidth={1.75} />
-          Nouvelle visite
+          Nouveau rapport
         </button>
       </div>
 
@@ -160,11 +164,11 @@ export default function VisitesModule({
       ) : null}
 
       <div className="rounded-surface border border-subtle bg-surface p-4 shadow-sm">
-        <div className="bt-card-title mb-3 text-ink">Historique des visites</div>
+        <div className="bt-card-title mb-3 text-ink">Rapports de ce chantier</div>
         {loading ? (
           <div className="text-sm text-muted">Chargement...</div>
         ) : visites.length === 0 ? (
-          <div className="rounded-card border border-dashed border-subtle bg-interactive p-4 text-sm text-muted">Aucune visite enregistree.</div>
+          <div className="rounded-card border border-dashed border-subtle bg-interactive p-4 text-sm text-muted">Aucun rapport de visite enregistré.</div>
         ) : (
           <div className="space-y-3">
             {visites.map((visite) => {
@@ -187,6 +191,16 @@ export default function VisitesModule({
                     <div className="flex items-center gap-2">
                       {isTargeted ? <span className="rounded-full border border-primary/20 bg-surface px-2 py-0.5 text-xs font-medium text-primary-on">Cible recherche</span> : null}
                       {visite.phase && <span className="text-xs rounded-full border px-2 py-0.5">{visite.phase}</span>}
+                      <button
+                        type="button"
+                        className="rounded-field border border-subtle px-3 py-1 text-xs font-semibold text-ink-secondary hover:bg-interactive"
+                        onClick={() => {
+                          setSelectedVisitId(visite.id);
+                          setWizardOpen(true);
+                        }}
+                      >
+                        Consulter / modifier
+                      </button>
                       <button
                         type="button"
                         disabled={!visite.pdf_document_id || openingPdfId === visite.id}
@@ -215,6 +229,7 @@ export default function VisitesModule({
 
       <VisiteWizardDrawer
         open={wizardOpen}
+        visiteId={selectedVisitId}
         chantierId={chantierId}
         chantierName={chantierName}
         chantierReference={chantierReference}
@@ -222,7 +237,10 @@ export default function VisitesModule({
         clientName={clientName}
         intervenants={intervenants}
         documents={documents}
-        onClose={() => setWizardOpen(false)}
+        onClose={() => {
+          setWizardOpen(false);
+          setSelectedVisitId(null);
+        }}
         onSaved={async () => {
           await refreshAll();
           if (onDocumentsRefresh) {
