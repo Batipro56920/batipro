@@ -290,6 +290,28 @@ export async function listVisites(chantierId: string): Promise<ChantierVisiteRow
   return (data ?? []).map(normalizeVisite);
 }
 
+export async function listAllVisites(): Promise<ChantierVisiteRow[]> {
+  const { data, error } = await sb
+    .from("chantier_visites")
+    .select(VISITE_SELECT)
+    .order("visit_datetime", { ascending: false });
+
+  if (error) {
+    if (isSchemaColumnError(error, "chantier_visites")) {
+      const legacy = await sb
+        .from("chantier_visites")
+        .select(VISITE_SELECT_LEGACY)
+        .order("visit_datetime", { ascending: false });
+      if (legacy.error) throw new Error(legacy.error.message);
+      return (legacy.data ?? []).map((row: any) => normalizeVisite(row));
+    }
+    if (isMissingTableError(error, "chantier_visites")) return [];
+    throw new Error(error.message);
+  }
+
+  return (data ?? []).map(normalizeVisite);
+}
+
 export async function getNextVisiteNumero(chantierId: string): Promise<number> {
   if (!chantierId) throw new Error("chantierId manquant.");
 
