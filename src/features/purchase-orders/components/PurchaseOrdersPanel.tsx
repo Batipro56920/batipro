@@ -616,8 +616,8 @@ export function PurchaseOrdersPanel({
         />
       ) : null}
 
-      {!loading ? <div className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
-        <table className="min-w-full divide-y divide-slate-100 text-sm">
+      {!loading ? <div className="overflow-x-auto rounded-3xl border border-slate-200 bg-white shadow-sm">
+        <table className="w-full min-w-[900px] divide-y divide-slate-100 text-sm">
           <thead className="bg-slate-50 text-left text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">
             <tr>
               <th className="px-4 py-3">Numero</th>
