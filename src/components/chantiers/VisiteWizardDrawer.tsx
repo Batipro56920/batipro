@@ -220,6 +220,7 @@ export default function VisiteWizardDrawer({
   const [saving, setSaving] = useState(false);
   const [autosaving, setAutosaving] = useState(false);
   const [loadingInit, setLoadingInit] = useState(false);
+  const [initAttempt, setInitAttempt] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [iaInfo, setIaInfo] = useState<string | null>(null);
 
@@ -489,7 +490,7 @@ export default function VisiteWizardDrawer({
     return () => {
       active = false;
     };
-  }, [open, visiteId, chantierId, chantierName, chantierAddress, visite]);
+  }, [open, visiteId, chantierId, chantierName, chantierAddress, visite, initAttempt]);
 
   const selectedDocs = useMemo(
     () => documents.filter((doc) => selectedDocumentIds.includes(doc.id)),
@@ -1307,23 +1308,47 @@ export default function VisiteWizardDrawer({
         <div className="px-4 py-3 border-b flex items-center justify-between">
           <div>
             <div className="font-semibold">{visiteId ? "Rapport de visite" : "Nouveau rapport de visite"}</div>
-            <div className="text-xs text-slate-500">Autosave {autosaving ? "..." : "actif"}</div>
+            <div className="text-xs text-slate-500">
+              {loadingInit ? "Préparation des données du chantier…" : visite ? `Enregistrement automatique ${autosaving ? "en cours…" : "actif"}` : "Rapport non initialisé"}
+            </div>
           </div>
           <button type="button" className="rounded-xl border px-2 py-1 text-sm hover:bg-slate-50" onClick={onClose}>x</button>
         </div>
 
         <div className="px-4 py-2 border-b flex flex-wrap gap-2">
-          <button type="button" className={tab === "details" ? "tab-btn tab-btn--active" : "tab-btn tab-btn--inactive"} onClick={() => setTab("details")}>Détails</button>
-          <button type="button" className={tab === "preview" ? "tab-btn tab-btn--active" : "tab-btn tab-btn--inactive"} onClick={() => setTab("preview")}>Aperçu</button>
-          <button type="button" className={tab === "export" ? "tab-btn tab-btn--active" : "tab-btn tab-btn--inactive"} onClick={() => setTab("export")}>Export</button>
+          <button type="button" disabled={!visite || !snapshot} className={tab === "details" ? "tab-btn tab-btn--active" : "tab-btn tab-btn--inactive"} onClick={() => setTab("details")}>1. Informations</button>
+          <button type="button" disabled={!visite || !snapshot} className={tab === "preview" ? "tab-btn tab-btn--active" : "tab-btn tab-btn--inactive"} onClick={() => setTab("preview")}>2. Contenu du rapport</button>
+          <button type="button" disabled={!visite || !snapshot} className={tab === "export" ? "tab-btn tab-btn--active" : "tab-btn tab-btn--inactive"} onClick={() => setTab("export")}>3. Finalisation &amp; PDF</button>
         </div>
 
         <div className="flex-1 overflow-y-auto px-4 py-4 bg-slate-50/40 space-y-4">
-          {loadingInit && <div className="text-sm text-slate-500">Initialisation de la visite...</div>}
-          {error && <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>}
+          {loadingInit && (
+            <div className="rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-800">
+              COCO rassemble les tâches, réserves, jalons, intervenants et documents de ce chantier…
+            </div>
+          )}
+          {error && (
+            <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+              <div className="font-semibold">Le rapport n’a pas pu être préparé.</div>
+              <div className="mt-1">{error}</div>
+              {!visite ? (
+                <button
+                  type="button"
+                  className="mt-3 rounded-lg border border-red-300 bg-white px-3 py-2 font-semibold hover:bg-red-100"
+                  onClick={() => setInitAttempt((value) => value + 1)}
+                >
+                  Réessayer la préparation
+                </button>
+              ) : null}
+            </div>
+          )}
 
-          {tab === "details" && (
+          {tab === "details" && visite && snapshot && (
             <div className="rounded-2xl border bg-white p-4 space-y-4">
+              <div>
+                <div className="font-semibold text-slate-900">Informations de la visite</div>
+                <p className="mt-1 text-sm text-slate-500">Renseigne le contexte, puis passe à l’étape 2 pour contrôler les données collectées automatiquement sur ce chantier.</p>
+              </div>
               <div className="grid gap-3 md:grid-cols-4">
                 <label className="space-y-1 text-sm md:col-span-2">
                   <div className="text-xs text-slate-600">Date / heure</div>
@@ -1386,6 +1411,10 @@ export default function VisiteWizardDrawer({
 
           {tab === "preview" && snapshot && (
             <div className="space-y-4">
+              <div className="rounded-2xl border border-blue-200 bg-blue-50 p-4">
+                <div className="font-semibold text-blue-950">Contenu du rapport</div>
+                <p className="mt-1 text-sm text-blue-800">Vérifie, commente ou exclue les informations du chantier avant de générer le rapport final.</p>
+              </div>
               <div className="rounded-2xl border bg-white p-4">
                 <div className="font-semibold mb-3">Indicateurs automatiques</div>
                 <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-6">
