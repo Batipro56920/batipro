@@ -418,6 +418,22 @@ function taskMaterialResultText(item: { label: string; quantity: number | null; 
   return [item.label, quantity, item.detail].filter(Boolean).join(" - ");
 }
 
+const PROCEDURE_STEP_TITLE_MAX_LENGTH = 90;
+
+// COCO renvoie des etapes redigees comme des paragraphes ("1. X : Y. Objectif :
+// ... Matériel : ... Durée : ... Contrôle : ... Risque : ..."). Une carte
+// d'etape doit rester un intitule court ; le detail va dans le commentaire.
+function splitProcedureStepText(raw: string): { title: string; detail: string } {
+  const cleaned = raw.trim().replace(/^\d+[.)]\s*/, "");
+  const firstSentenceEnd = cleaned.search(/[.:]\s/);
+  let title = firstSentenceEnd > 0 ? cleaned.slice(0, firstSentenceEnd).trim() : cleaned;
+  if (title.length > PROCEDURE_STEP_TITLE_MAX_LENGTH) {
+    title = `${title.slice(0, PROCEDURE_STEP_TITLE_MAX_LENGTH).trim()}…`;
+  }
+  const detail = cleaned === title ? "" : cleaned;
+  return { title: title || cleaned.slice(0, PROCEDURE_STEP_TITLE_MAX_LENGTH), detail };
+}
+
 function taskStepStatusLabel(status: ChantierTaskStepStatus) {
   if (status === "en_cours") return "En cours";
   if (status === "termine") return "Terminé";
@@ -4218,6 +4234,20 @@ export default function ChantierPage() {
     }
   }
 
+  async function quickAssignTaskIntervenant(task: ChantierTaskRow, intervenantId: string) {
+    const nextIds = intervenantId ? [intervenantId] : [];
+    setTasks((prev) => prev.map((x) => (x.id === task.id ? { ...x, intervenant_id: intervenantId || null } : x)));
+    setTaskAssigneeIdsByTaskId((prev) => ({ ...prev, [task.id]: nextIds }));
+    try {
+      await updateTask(task.id, { intervenant_id: intervenantId || null } as any);
+      await replaceTaskAssignees(task.id, nextIds);
+      setToast({ type: "ok", msg: intervenantId ? "Intervenant affecté." : "Intervenant retiré." });
+    } catch (e: any) {
+      await refreshTasksOnly();
+      setToast({ type: "error", msg: e?.message ?? "Erreur affectation intervenant." });
+    }
+  }
+
   async function prepareTaskWithCoco() {
     if (!activeTaskDetail || !id) return;
     setTechniqueCocoLoading(true);
@@ -4280,7 +4310,9 @@ export default function ChantierPage() {
       let stepsCreated = 0;
       if (existingSteps.length === 0 && result.procedure.length) {
         for (let index = 0; index < result.procedure.length; index += 1) {
-          await createTaskStep({ chantier_id: id, task_id: task.id, titre: result.procedure[index], ordre: index });
+          const { title: stepTitle, detail: stepDetail } = splitProcedureStepText(result.procedure[index]);
+          const created = await createTaskStep({ chantier_id: id, task_id: task.id, titre: stepTitle, ordre: index });
+          if (stepDetail) await updateTaskStep(created.id, { commentaire: stepDetail });
           stepsCreated += 1;
         }
         await refreshTaskStepsOnly();
@@ -5130,6 +5162,32 @@ export default function ChantierPage() {
           </section>
 
           <section className="rounded-surface border border-subtle bg-surface p-4 shadow-sm">
+            <div className="flex items-center justify-between gap-3">
+              <div className="bt-section-title text-ink">Devis</div>
+              <Link to={`/chantiers/${id}/preparer`} className="text-sm font-semibold text-primary-on">
+                {devis.length ? "Voir →" : "Importer →"}
+              </Link>
+            </div>
+            {devis.length === 0 ? (
+              <div className="mt-3 text-sm text-muted">Aucun devis rattaché à ce chantier.</div>
+            ) : (
+              <div className="mt-3 space-y-2">
+                {devis.map((row) => (
+                  <div key={row.id} className="rounded-field border border-subtle px-3 py-2 text-sm">
+                    <div className="font-semibold text-ink">{row.nom}</div>
+                  </div>
+                ))}
+                {item.signed_quote_amount_ttc !== null && item.signed_quote_amount_ttc !== undefined ? (
+                  <div className="flex justify-between gap-3 pt-1 text-sm">
+                    <span className="text-muted">Montant signé TTC</span>
+                    <strong>{formatTaskMoney(item.signed_quote_amount_ttc)}</strong>
+                  </div>
+                ) : null}
+              </div>
+            )}
+          </section>
+
+          <section className="rounded-surface border border-subtle bg-surface p-4 shadow-sm">
             <div className="bt-section-title text-ink">Accès directs</div>
             <div className="mt-3 grid gap-2">
               <Link to={`/chantiers/${id}/planning`} className="rounded-field border border-subtle px-3 py-2 text-sm font-semibold text-ink-secondary hover:bg-interactive">Planning du chantier</Link>
@@ -5470,6 +5528,21 @@ export default function ChantierPage() {
                             {activeTaskDetail.date_debut ?? activeTaskDetail.date ?? "—"} →{" "}
                             {activeTaskDetail.date_fin ?? "—"}
                           </div>
+                        </div>
+                        <div className="rounded-2xl bg-white p-4">
+                          <div className="text-xs text-slate-500">Intervenant</div>
+                          <select
+                            className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-2 py-1.5 text-sm font-semibold text-slate-950"
+                            value={(taskAssigneeIdsByTaskId[activeTaskDetail.id] ?? uniqueIds([activeTaskDetail.intervenant_id]))[0] ?? ""}
+                            onChange={(event) => void quickAssignTaskIntervenant(activeTaskDetail, event.target.value)}
+                          >
+                            <option value="">Non affecté</option>
+                            {intervenants.map((it) => (
+                              <option key={it.id} value={it.id}>
+                                {it.nom}
+                              </option>
+                            ))}
+                          </select>
                         </div>
                       </div>
                     </section>
