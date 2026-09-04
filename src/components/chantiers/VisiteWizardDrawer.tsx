@@ -7,6 +7,8 @@ import {
   type VisiteSnapshotLot,
   type VisiteSnapshotReserveFocus,
   type VisiteSnapshotTaskFocus,
+  type VisiteTechnicalCheck,
+  type VisiteTerrainNote,
 } from "../../lib/buildVisiteSnapshot";
 import type { IntervenantRow } from "../../services/intervenants.service";
 import type { ChantierDocumentRow } from "../../services/chantierDocuments.service";
@@ -32,8 +34,9 @@ import { listDoeItemsByChantierId, upsertDoeItem } from "../../services/chantier
 import { generateVisiteCompteRenduPdfBlob } from "../../services/chantierVisitesPdf.service";
 import { generateVisiteSynthese } from "../../services/visiteSynthese.service";
 import { getCompanyBrandingForPdf } from "../../services/companySettings.service";
-import { getTasksByChantierId } from "../../services/chantierTasks.service";
+import { createTask, getTasksByChantierId } from "../../services/chantierTasks.service";
 import { generateVisiteClientReportPdfBlob } from "../../services/chantierClientReportPdf.service";
+import { createReserve } from "../../services/reserves.service";
 
 type MainTab = "details" | "preview" | "export";
 type TasksTab = "done" | "todo";
@@ -62,6 +65,10 @@ type PlanningRow = {
 type ItemState = {
   include: boolean;
   comment: string;
+};
+
+type TerrainNoteDraft = VisiteTerrainNote & {
+  photo_files: File[];
 };
 
 type ReservePlanPreparedItem = {
@@ -125,6 +132,29 @@ function createActionDraft(): ActionDraft {
     statut: "A_FAIRE",
     commentaire: "",
   };
+}
+
+function createTerrainNote(): TerrainNoteDraft {
+  return { id: crypto.randomUUID(), text: "", task_id: null, photo_annotations: [], photo_files: [] };
+}
+
+function splitTechnicalChecks(value: string | null | undefined): string[] {
+  return String(value ?? "")
+    .split(/\n|;|•/g)
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function suggestedChecksForTask(task: VisiteSnapshotTaskFocus): string[] {
+  const configured = splitTechnicalChecks(task.points_controle);
+  if (configured.length > 0) return configured;
+  const text = `${task.lot ?? ""} ${task.titre}`.toLowerCase();
+  if (/dallage|béton|beton/.test(text)) return ["Niveaux, pentes et épaisseur", "Ferraillage et enrobage", "Joints et état de surface"];
+  if (/démolition|demolition/.test(text)) return ["Zone sécurisée et étaiement", "Réseaux repérés et consignés", "Déchets triés et évacués"];
+  if (/placo|cloison|doublage/.test(text)) return ["Implantation et aplomb", "Ossature et entraxes", "Isolation, réseaux et parements"];
+  if (/électric|electric/.test(text)) return ["Implantation conforme aux plans", "Protections et sections adaptées", "Essais et repérage réalisés"];
+  if (/plomberie|sanitaire/.test(text)) return ["Implantation et pentes", "Étanchéité et essais", "Fixations et accessibilité"];
+  return ["Conformité aux plans", "Qualité d’exécution", "Protection et nettoyage"];
 }
 
 function parseOtherParticipants(value: string): string[] {
@@ -203,6 +233,14 @@ async function blobToDataUrl(blob: Blob): Promise<string> {
   });
 }
 
+function TerrainPhotoPreview({ file, alt }: { file: File; alt: string }) {
+  const url = useMemo(() => URL.createObjectURL(file), [file]);
+  useEffect(() => {
+    return () => URL.revokeObjectURL(url);
+  }, [url]);
+  return <img src={url} alt={alt} className="h-24 w-full rounded-lg object-cover" />;
+}
+
 export default function VisiteWizardDrawer({
   open,
   visiteId,
@@ -241,6 +279,10 @@ export default function VisiteWizardDrawer({
   const [otherParticipants, setOtherParticipants] = useState("");
 
   const [notesTerrain, setNotesTerrain] = useState("");
+  const [terrainNotes, setTerrainNotes] = useState<TerrainNoteDraft[]>([createTerrainNote()]);
+  const [technicalChecks, setTechnicalChecks] = useState<VisiteTechnicalCheck[]>([]);
+  const [transformingNoteId, setTransformingNoteId] = useState<string | null>(null);
+  const [terrainInfo, setTerrainInfo] = useState<string | null>(null);
   const [pointsPositifs, setPointsPositifs] = useState("");
   const [pointsBloquants, setPointsBloquants] = useState("");
   const [synthese, setSynthese] = useState("");
@@ -367,6 +409,10 @@ export default function VisiteWizardDrawer({
     setSelectedParticipantIds([]);
     setOtherParticipants("");
     setNotesTerrain("");
+    setTerrainNotes([createTerrainNote()]);
+    setTechnicalChecks([]);
+    setTransformingNoteId(null);
+    setTerrainInfo(null);
     setPointsPositifs("");
     setPointsBloquants("");
     setSynthese("");
@@ -422,6 +468,7 @@ export default function VisiteWizardDrawer({
           loadedActions = full.actions;
           loadedDocumentIds = full.links.map((link) => link.document_id);
         } else {
+          const previousVisit = (await listVisites(chantierId))[0] ?? null;
           const { data: authData } = await supabase.auth.getUser();
           const redactorEmail = authData.user?.email ?? null;
           currentVisite = await createVisite({
@@ -435,6 +482,17 @@ export default function VisiteWizardDrawer({
             chantier: { id: chantierId, nom: chantierName ?? null, adresse: chantierAddress ?? null },
           });
           await upsertSnapshot(currentVisite.id, builtSnapshot);
+          if (previousVisit) {
+            const previousFull = await listVisiteFull(previousVisit.id).catch(() => null);
+            loadedActions = (previousFull?.actions ?? [])
+              .filter((row) => row.statut !== "FAIT")
+              .map((row) => ({
+                ...row,
+                id: crypto.randomUUID(),
+                visite_id: currentVisite.id,
+                commentaire: [row.commentaire, `Repris de la visite #${previousVisit.numero ?? "-"}`].filter(Boolean).join(" · "),
+              }));
+          }
         }
 
         if (!active) return;
@@ -446,6 +504,24 @@ export default function VisiteWizardDrawer({
         setMeteo(currentVisite.meteo ?? "");
         setIncludeInDoe(Boolean(currentVisite.include_in_doe));
         setNotesTerrain(currentVisite.notes_terrain ?? "");
+        const savedTerrainNotes = builtSnapshot.ui?.terrain_notes ?? [];
+        setTerrainNotes(savedTerrainNotes.length > 0
+          ? savedTerrainNotes.map((note) => ({ ...note, photo_files: [] }))
+          : currentVisite.notes_terrain
+            ? [{ ...createTerrainNote(), text: currentVisite.notes_terrain }]
+            : [createTerrainNote()]);
+        const savedTechnicalChecks = builtSnapshot.ui?.technical_checks ?? [];
+        setTechnicalChecks(savedTechnicalChecks.length > 0
+          ? savedTechnicalChecks
+          : [...(builtSnapshot.tasks_a_faire ?? []), ...(builtSnapshot.tasks_realisees ?? [])]
+              .flatMap((task) => suggestedChecksForTask(task).map((label) => ({
+                id: `${task.id}:${label}`,
+                task_id: task.id,
+                label,
+                status: "A_CONTROLER" as const,
+                comment: "",
+              })))
+              .slice(0, 60));
         setPointsPositifs(currentVisite.points_positifs ?? "");
         setPointsBloquants(currentVisite.points_bloquants ?? "");
         setSynthese(currentVisite.synthese ?? "");
@@ -469,22 +545,23 @@ export default function VisiteWizardDrawer({
         setPlanningDraft(
           (builtSnapshot.planning ?? []).map((row) => ({
             ...row,
-            include: true,
-            comment: "",
+            include: builtSnapshot.ui?.planning_state?.find((saved) => saved.id === row.id)?.include ?? true,
+            comment: builtSnapshot.ui?.planning_state?.find((saved) => saved.id === row.id)?.comment ?? "",
           })),
         );
 
         const nextTaskState: Record<string, ItemState> = {};
         [...(builtSnapshot.tasks_realisees ?? []), ...(builtSnapshot.tasks_a_faire ?? [])].forEach((task) => {
-          nextTaskState[task.id] = { include: true, comment: "" };
+          nextTaskState[task.id] = builtSnapshot.ui?.task_state?.[task.id] ?? { include: true, comment: "" };
         });
         setTaskStateById(nextTaskState);
 
         const nextReserveState: Record<string, ItemState> = {};
         (builtSnapshot.reserves_focus ?? []).forEach((reserve) => {
-          nextReserveState[reserve.id] = { include: true, comment: "" };
+          nextReserveState[reserve.id] = builtSnapshot.ui?.reserve_state?.[reserve.id] ?? { include: true, comment: "" };
         });
         setReserveStateById(nextReserveState);
+        setIntervenantNotes(builtSnapshot.ui?.intervenant_notes ?? {});
         setVisite(currentVisite);
       } catch (err: any) {
         if (!active) return;
@@ -511,9 +588,27 @@ export default function VisiteWizardDrawer({
   }, [documents]);
 
   const allPhotoFiles = useMemo(
-    () => [...photoFiles, ...Object.values(lotPhotoFiles).flat()],
-    [photoFiles, lotPhotoFiles],
+    () => [...photoFiles, ...Object.values(lotPhotoFiles).flat(), ...terrainNotes.flatMap((note) => note.photo_files)],
+    [photoFiles, lotPhotoFiles, terrainNotes],
   );
+
+  const combinedNotesTerrain = useMemo(() => {
+    const structured = terrainNotes
+      .map((note, index) => {
+        const text = note.text.trim();
+        if (!text) return "";
+        const task = [...(snapshot?.tasks_realisees ?? []), ...(snapshot?.tasks_a_faire ?? [])].find((row) => row.id === note.task_id);
+        const annotations = note.photo_annotations.filter(Boolean).join(" · ");
+        return `${index + 1}. ${task ? `[${task.titre}] ` : ""}${text}${annotations ? ` — Photos : ${annotations}` : ""}`;
+      })
+      .filter(Boolean)
+      .join("\n");
+    const technicalSummary = technicalChecks
+      .filter((check) => check.status !== "A_CONTROLER" || check.comment.trim())
+      .map((check) => `${check.status === "CONFORME" ? "Conforme" : check.status === "A_CORRIGER" ? "À corriger" : "À contrôler"} : ${check.label}${check.comment.trim() ? ` — ${check.comment.trim()}` : ""}`)
+      .join("\n");
+    return [structured || notesTerrain, technicalSummary ? `Contrôles techniques :\n${technicalSummary}` : ""].filter(Boolean).join("\n\n");
+  }, [terrainNotes, notesTerrain, snapshot, technicalChecks]);
 
   async function saveNow() {
     if (!visite || !snapshot) return;
@@ -539,7 +634,9 @@ export default function VisiteWizardDrawer({
       objectif,
       meteo,
       includeInDoe,
-      notesTerrain,
+      notesTerrain: combinedNotesTerrain,
+      terrainNotes,
+      technicalChecks,
       pointsPositifs,
       pointsBloquants,
       synthese,
@@ -570,7 +667,7 @@ export default function VisiteWizardDrawer({
         include_in_doe: includeInDoe,
         points_positifs: pointsPositifs || null,
         points_bloquants: pointsBloquants || null,
-        notes_terrain: notesTerrain || null,
+        notes_terrain: combinedNotesTerrain || null,
         remarques_planning: remarquesPlanning || null,
         synthese: synthese || null,
         synthese_points_cles: synthesePoints,
@@ -600,6 +697,13 @@ export default function VisiteWizardDrawer({
           reserve_state: reserveStateById,
           planning_state: planningDraft.map((row) => ({ id: row.id, include: row.include, comment: row.comment })),
           intervenant_notes: intervenantNotes,
+          terrain_notes: terrainNotes.map((note) => ({
+            id: note.id,
+            text: note.text,
+            task_id: note.task_id,
+            photo_annotations: note.photo_annotations,
+          })),
+          technical_checks: technicalChecks,
         },
       } as any);
 
@@ -642,6 +746,8 @@ export default function VisiteWizardDrawer({
     selectedParticipantIds,
     otherParticipants,
     notesTerrain,
+    terrainNotes,
+    technicalChecks,
     pointsPositifs,
     pointsBloquants,
     synthese,
@@ -674,13 +780,59 @@ export default function VisiteWizardDrawer({
     }
   }
 
+  async function transformTerrainNote(note: TerrainNoteDraft, target: "TASK" | "RESERVE" | "REMINDER") {
+    const text = note.text.trim();
+    if (!text) {
+      setTerrainInfo("Écris d’abord le constat à transformer.");
+      return;
+    }
+    const linkedTask = [...tasksDone, ...tasksTodo].find((task) => task.id === note.task_id) ?? null;
+    setTransformingNoteId(note.id);
+    setTerrainInfo(null);
+    try {
+      if (target === "TASK") {
+        await createTask({
+          chantier_id: chantierId,
+          titre: text,
+          titre_terrain: text,
+          corps_etat: linkedTask?.lot ?? null,
+          lot: linkedTask?.lot ?? null,
+          description_technique: `Créée depuis le constat de la visite #${numero ?? "-"}.`,
+          status: "A_FAIRE",
+          priorite: "normale",
+        });
+        setTerrainInfo("Tâche créée dans ce chantier.");
+      } else if (target === "RESERVE") {
+        await createReserve({
+          chantier_id: chantierId,
+          task_id: linkedTask?.id ?? null,
+          title: text,
+          description: `Constat de la visite #${numero ?? "-"}${linkedTask ? ` — tâche : ${linkedTask.titre}` : ""}`,
+          status: "OUVERTE",
+          priority: "NORMALE",
+        });
+        setTerrainInfo("Réserve créée dans ce chantier.");
+      } else {
+        setActionsDraft((prev) => [
+          ...prev.filter((row) => row.description.trim().length > 0),
+          { ...createActionDraft(), description: text, commentaire: `Rappel créé depuis les notes terrain${linkedTask ? ` — ${linkedTask.titre}` : ""}` },
+        ]);
+        setTerrainInfo("Rappel ajouté aux actions de la visite.");
+      }
+    } catch (err: any) {
+      setTerrainInfo(err?.message ?? "Le constat n’a pas pu être transformé.");
+    } finally {
+      setTransformingNoteId(null);
+    }
+  }
+
   async function onGenerateSyntheseIA() {
     if (!snapshot) return;
     setIaInfo(null);
     try {
       const ai = await generateVisiteSynthese({
         visite_id: visite?.id,
-        notes_terrain: notesTerrain,
+        notes_terrain: combinedNotesTerrain,
         points_bloquants: pointsBloquants,
         snapshot,
         actions: actions.map((a) => ({ description: a.description, statut: a.statut })),
@@ -721,6 +873,10 @@ export default function VisiteWizardDrawer({
     const pendingPhotos = [
       ...photoFiles.map((file) => ({ file, lot: null as string | null })),
       ...Object.entries(lotPhotoFiles).flatMap(([lot, files]) => files.map((file) => ({ file, lot }))),
+      ...terrainNotes.flatMap((note) => {
+        const linkedTask = [...tasksDone, ...tasksTodo].find((task) => task.id === note.task_id);
+        return note.photo_files.map((file) => ({ file, lot: linkedTask?.titre ?? "Note terrain" }));
+      }),
     ];
     for (let i = 0; i < pendingPhotos.length; i += 1) {
       const dateTag = new Date(visitDateTime).toISOString().slice(0, 10);
@@ -1028,7 +1184,7 @@ export default function VisiteWizardDrawer({
         resume: synthese,
         pointsPositifs,
         pointsBloquants,
-        notesTerrain,
+        notesTerrain: combinedNotesTerrain,
         remarquesPlanning,
         participants: participants.map((p) => ({ nom: p.nom, type: p.type, present: p.present })),
         snapshot: snapshotExport!,
@@ -1116,7 +1272,7 @@ export default function VisiteWizardDrawer({
         resume: synthese,
         pointsPositifs,
         pointsBloquants,
-        notesTerrain,
+        notesTerrain: combinedNotesTerrain,
         remarquesPlanning,
         participants: participants.map((p) => ({ nom: p.nom, type: p.type, present: p.present })),
         snapshot: snapshotExport!,
@@ -1647,8 +1803,107 @@ export default function VisiteWizardDrawer({
               </details>
 
               <details open className="rounded-2xl border bg-white p-4 space-y-3">
-                <summary className="font-semibold cursor-pointer">Notes terrain</summary>
-                <textarea className="w-full rounded-xl border px-3 py-2 text-sm min-h-24" placeholder="Saisie libre terrain" value={notesTerrain} onChange={(e) => setNotesTerrain(e.target.value)} />
+                <summary className="font-semibold cursor-pointer">Notes et constats terrain</summary>
+                <p className="mt-2 text-sm text-slate-500">Crée plusieurs constats, relie-les à une tâche et transforme-les sans ressaisie.</p>
+                <div className="mt-3 space-y-3">
+                  {terrainNotes.map((note, noteIndex) => (
+                    <div key={note.id} className="rounded-xl border p-3 space-y-3">
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="text-sm font-semibold">Constat {noteIndex + 1}</div>
+                        {terrainNotes.length > 1 && (
+                          <button type="button" className="text-xs font-medium text-red-600 hover:underline" onClick={() => setTerrainNotes((prev) => prev.filter((row) => row.id !== note.id))}>Supprimer</button>
+                        )}
+                      </div>
+                      <select
+                        className="w-full rounded-lg border px-3 py-2 text-sm"
+                        value={note.task_id ?? ""}
+                        onChange={(e) => setTerrainNotes((prev) => prev.map((row) => row.id === note.id ? { ...row, task_id: e.target.value || null } : row))}
+                      >
+                        <option value="">Constat général du chantier</option>
+                        {[...tasksTodo, ...tasksDone].map((task) => <option key={task.id} value={task.id}>{task.lot ? `${task.lot} — ` : ""}{task.titre}</option>)}
+                      </select>
+                      <textarea
+                        className="min-h-20 w-full rounded-lg border px-3 py-2 text-sm"
+                        placeholder="Décris ce que tu constates…"
+                        value={note.text}
+                        onChange={(e) => setTerrainNotes((prev) => prev.map((row) => row.id === note.id ? { ...row, text: e.target.value } : row))}
+                      />
+                      <label className="inline-flex cursor-pointer items-center gap-2 rounded-lg border px-3 py-2 text-xs font-medium hover:bg-slate-50">
+                        <Camera className="h-4 w-4" /> Ajouter des photos
+                        <input
+                          type="file"
+                          accept="image/*"
+                          multiple
+                          className="sr-only"
+                          onChange={(e) => {
+                            const files = Array.from(e.target.files ?? []);
+                            setTerrainNotes((prev) => prev.map((row) => row.id === note.id ? {
+                              ...row,
+                              photo_files: [...row.photo_files, ...files],
+                              photo_annotations: [...row.photo_annotations, ...files.map(() => "")],
+                            } : row));
+                            setUploadedPhotoDocIds([]);
+                            e.currentTarget.value = "";
+                          }}
+                        />
+                      </label>
+                      {note.photo_files.length > 0 && (
+                        <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                          {note.photo_files.map((file, photoIndex) => (
+                            <div key={`${file.name}-${file.lastModified}-${photoIndex}`} className="rounded-xl border p-2">
+                              <TerrainPhotoPreview file={file} alt={`Photo du constat ${noteIndex + 1}`} />
+                              <input
+                                className="mt-2 w-full rounded-lg border px-2 py-1.5 text-xs"
+                                placeholder="Annotation / légende de la photo"
+                                value={note.photo_annotations[photoIndex] ?? ""}
+                                onChange={(e) => setTerrainNotes((prev) => prev.map((row) => row.id === note.id ? {
+                                  ...row,
+                                  photo_annotations: row.photo_annotations.map((value, index) => index === photoIndex ? e.target.value : value),
+                                } : row))}
+                              />
+                              <button type="button" className="mt-1 text-xs text-red-600 hover:underline" onClick={() => setTerrainNotes((prev) => prev.map((row) => row.id === note.id ? {
+                                ...row,
+                                photo_files: row.photo_files.filter((_, index) => index !== photoIndex),
+                                photo_annotations: row.photo_annotations.filter((_, index) => index !== photoIndex),
+                              } : row))}>Retirer</button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                      <div className="flex flex-wrap gap-2">
+                        <button type="button" disabled={transformingNoteId === note.id} className="rounded-lg border px-3 py-2 text-xs font-medium hover:bg-slate-50" onClick={() => void transformTerrainNote(note, "TASK")}>Créer une tâche</button>
+                        <button type="button" disabled={transformingNoteId === note.id} className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs font-medium text-red-800 hover:bg-red-100" onClick={() => void transformTerrainNote(note, "RESERVE")}>Créer une réserve</button>
+                        <button type="button" disabled={transformingNoteId === note.id} className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-medium text-amber-900 hover:bg-amber-100" onClick={() => void transformTerrainNote(note, "REMINDER")}>Créer un rappel</button>
+                      </div>
+                    </div>
+                  ))}
+                  <button type="button" className="rounded-lg border px-3 py-2 text-sm font-medium hover:bg-slate-50" onClick={() => setTerrainNotes((prev) => [...prev, createTerrainNote()])}>+ Ajouter un constat</button>
+                  {terrainInfo && <div className="text-sm font-medium text-blue-700">{terrainInfo}</div>}
+                </div>
+              </details>
+
+              <details open className="rounded-2xl border bg-white p-4 space-y-3">
+                <summary className="font-semibold cursor-pointer">Contrôles techniques proposés</summary>
+                <p className="mt-2 text-sm text-slate-500">Les contrôles viennent des tâches et de leur métier. Tu gardes la décision finale.</p>
+                <div className="mt-3 max-h-96 space-y-2 overflow-auto">
+                  {technicalChecks.map((check) => {
+                    const task = [...tasksTodo, ...tasksDone].find((row) => row.id === check.task_id);
+                    return (
+                      <div key={check.id} className="grid gap-2 rounded-xl border p-3 lg:grid-cols-[minmax(220px,1fr)_160px_minmax(220px,1fr)] lg:items-center">
+                        <div>
+                          <div className="text-sm font-medium">{check.label}</div>
+                          <div className="text-xs text-slate-500">{task?.lot ? `${task.lot} — ` : ""}{task?.titre ?? "Tâche"}</div>
+                        </div>
+                        <select className="rounded-lg border px-2 py-2 text-sm" value={check.status} onChange={(e) => setTechnicalChecks((prev) => prev.map((row) => row.id === check.id ? { ...row, status: e.target.value as VisiteTechnicalCheck["status"] } : row))}>
+                          <option value="A_CONTROLER">À contrôler</option>
+                          <option value="CONFORME">Conforme</option>
+                          <option value="A_CORRIGER">À corriger</option>
+                        </select>
+                        <input className="rounded-lg border px-3 py-2 text-sm" placeholder="Commentaire du contrôle" value={check.comment} onChange={(e) => setTechnicalChecks((prev) => prev.map((row) => row.id === check.id ? { ...row, comment: e.target.value } : row))} />
+                      </div>
+                    );
+                  })}
+                </div>
               </details>
 
               <details open className="rounded-2xl border bg-white p-4 space-y-3">
