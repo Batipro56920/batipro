@@ -207,6 +207,7 @@ import ChantierNotesSection from "../features/chantiers/pages/ChantierNotesSecti
 import ChantierPhotosSection from "../features/chantiers/pages/ChantierPhotosSection";
 import ChantierPlanningSection from "../features/chantiers/pages/ChantierPlanningSection";
 import ChantierPreparationSection from "../features/chantiers/pages/ChantierPreparationSection";
+import ChantierMaterialsSection from "../features/chantiers/pages/ChantierMaterialsSection";
 import ChantierPurchasesSection from "../features/chantiers/pages/ChantierPurchasesSection";
 import ChantierReportsSection from "../features/chantiers/pages/ChantierReportsSection";
 import ChantierReservesSection from "../features/chantiers/pages/ChantierReservesSection";
@@ -6495,6 +6496,8 @@ export default function ChantierPage() {
           </div>
           </ChantierIntervenantsSection>
         )}
+
+        {detailSection === "preparation" && id && <ChantierMaterialsSection chantierId={id} />}
 
         {/* ---------------- ONGLET DOCUMENTS ---------------- */}
         {detailSection === "documents" && (
