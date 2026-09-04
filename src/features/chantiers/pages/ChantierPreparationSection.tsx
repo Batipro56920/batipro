@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import type { FormEvent, ReactNode } from "react";
+import { Link } from "react-router-dom";
 
 import DevisImportDrawer, { type DevisImportResult } from "../../../components/chantiers/DevisImportDrawer";
 import PreparationChecklistTab from "../../../components/chantiers/PreparationChecklistTab";
@@ -21,9 +22,33 @@ import {
   listIntervenantsByChantierId,
   type IntervenantRow,
 } from "../../../services/intervenants.service";
+import {
+  estimateTaskTemplatePreparation,
+  listTaskTemplatePreparationByTemplateIds,
+} from "../../../services/taskTemplatePreparation.service";
+import { calculateDocumentTotals, type DocumentItemNode, type DocumentSectionNode, type DocumentUnit } from "../../document-engine";
+import { createPurchaseOrder } from "../../purchase-orders/application/purchaseOrderFactory";
+import { savePurchaseOrder } from "../../purchase-orders/infrastructure/purchaseOrderRepository";
+
+type MaterialLineDraft = {
+  id: string;
+  material_name: string;
+  quantity: number;
+  unit: string;
+  estimated_cost_ht: number | null;
+  source: "auto" | "manual";
+  taskCount: number;
+};
+
+const DOCUMENT_UNITS: DocumentUnit[] = ["u", "h", "ml", "m2", "m3", "forfait", "kg", "l"];
+
+function toDocumentUnit(unit: string): DocumentUnit {
+  const normalized = unit.trim().toLowerCase() as DocumentUnit;
+  return DOCUMENT_UNITS.includes(normalized) ? normalized : "u";
+}
 
 type ToastState = { type: "ok" | "error"; msg: string } | null;
-type DrawerKey = "tasks" | "quotes" | "checklist" | null;
+type DrawerKey = "tasks" | "quotes" | "checklist" | "materials" | null;
 
 function toNumberOrNull(value: string) {
   const raw = String(value ?? "").trim().replace(",", ".");
@@ -109,6 +134,15 @@ export default function ChantierPreparationSection({ chantierId }: { chantierId:
   const [taskUnit, setTaskUnit] = useState("");
   const [taskHours, setTaskHours] = useState("1");
   const [taskIntervenantId, setTaskIntervenantId] = useState("");
+
+  const [materialLines, setMaterialLines] = useState<MaterialLineDraft[]>([]);
+  const [materialsGenerating, setMaterialsGenerating] = useState(false);
+  const [materialsCreating, setMaterialsCreating] = useState(false);
+  const [materialsError, setMaterialsError] = useState<string | null>(null);
+  const [manualMaterialName, setManualMaterialName] = useState("");
+  const [manualMaterialQuantity, setManualMaterialQuantity] = useState("1");
+  const [manualMaterialUnit, setManualMaterialUnit] = useState("");
+  const [createdPurchaseOrder, setCreatedPurchaseOrder] = useState<{ id: string; number: string } | null>(null);
 
   useEffect(() => {
     if (!toast) return;
@@ -259,6 +293,138 @@ export default function ChantierPreparationSection({ chantierId }: { chantierId:
     }
   }
 
+  async function generateMaterialsFromTasks() {
+    setMaterialsGenerating(true);
+    setMaterialsError(null);
+    setCreatedPurchaseOrder(null);
+    try {
+      const templateIds = Array.from(
+        new Set(tasks.map((task) => task.task_template_id).filter((value): value is string => Boolean(value))),
+      );
+      const preparation = await listTaskTemplatePreparationByTemplateIds(templateIds);
+      if (!preparation.schemaReady) {
+        setMaterialsError("Migration preparation avancee non appliquee sur Supabase.");
+        return;
+      }
+
+      const aggregated = new Map<string, MaterialLineDraft>();
+      for (const task of tasks) {
+        if (!task.task_template_id) continue;
+        const estimate = estimateTaskTemplatePreparation(
+          task,
+          preparation.materialsByTemplateId[task.task_template_id] ?? [],
+          preparation.equipmentByTemplateId[task.task_template_id] ?? [],
+        );
+        for (const material of estimate.materials) {
+          const key = `${material.material_name.trim().toLowerCase()}__${material.ratio_unit.trim().toLowerCase()}`;
+          const existing = aggregated.get(key);
+          if (existing) {
+            existing.quantity = Math.round((existing.quantity + material.estimated_quantity) * 1000) / 1000;
+            existing.estimated_cost_ht = (existing.estimated_cost_ht ?? 0) + (material.estimated_purchase_cost_ht ?? 0);
+            existing.taskCount += 1;
+          } else {
+            aggregated.set(key, {
+              id: key,
+              material_name: material.material_name,
+              quantity: material.estimated_quantity,
+              unit: material.ratio_unit,
+              estimated_cost_ht: material.estimated_purchase_cost_ht,
+              source: "auto",
+              taskCount: 1,
+            });
+          }
+        }
+      }
+
+      setMaterialLines((current) => [
+        ...Array.from(aggregated.values()).sort((a, b) => a.material_name.localeCompare(b.material_name, "fr")),
+        ...current.filter((line) => line.source === "manual"),
+      ]);
+
+      if (aggregated.size === 0) {
+        setMaterialsError(
+          "Aucun ratio materiau compatible trouve sur les taches de ce chantier (templates sans ratios, ou unites incompatibles).",
+        );
+      }
+    } catch (err: any) {
+      setMaterialsError(err?.message ?? "Erreur generation liste materiaux.");
+    } finally {
+      setMaterialsGenerating(false);
+    }
+  }
+
+  function addManualMaterialLine() {
+    const name = manualMaterialName.trim();
+    if (!name) return;
+    const quantity = toNumberOrNull(manualMaterialQuantity) ?? 1;
+    setMaterialLines((current) => [
+      ...current,
+      {
+        id: `manual-${Date.now()}`,
+        material_name: name,
+        quantity,
+        unit: manualMaterialUnit.trim(),
+        estimated_cost_ht: null,
+        source: "manual",
+        taskCount: 0,
+      },
+    ]);
+    setManualMaterialName("");
+    setManualMaterialQuantity("1");
+    setManualMaterialUnit("");
+  }
+
+  function removeMaterialLine(id: string) {
+    setMaterialLines((current) => current.filter((line) => line.id !== id));
+  }
+
+  function updateMaterialLineQuantity(id: string, value: string) {
+    const quantity = toNumberOrNull(value) ?? 0;
+    setMaterialLines((current) => current.map((line) => (line.id === id ? { ...line, quantity } : line)));
+  }
+
+  async function createPurchaseOrderFromMaterials() {
+    if (materialLines.length === 0) return;
+    setMaterialsCreating(true);
+    setMaterialsError(null);
+    try {
+      const order = createPurchaseOrder({ chantierId });
+      const lineNodes: DocumentItemNode[] = materialLines.map((line, index) => ({
+        id: crypto.randomUUID(),
+        type: "line",
+        parentId: null,
+        order: index,
+        title: line.material_name,
+        kind: "fourniture",
+        quantity: line.quantity,
+        unit: toDocumentUnit(line.unit),
+        unitPriceHt: line.estimated_cost_ht !== null && line.quantity > 0 ? Math.round((line.estimated_cost_ht / line.quantity) * 100) / 100 : 0,
+        vatRate: 20,
+        description: line.unit && toDocumentUnit(line.unit) === "u" && line.unit.toLowerCase() !== "u" ? `Unite d'origine : ${line.unit}` : undefined,
+      }));
+      const section: DocumentSectionNode = {
+        id: crypto.randomUUID(),
+        type: "section",
+        parentId: null,
+        order: 0,
+        title: "Materiaux (calcule depuis les taches du chantier)",
+        children: lineNodes.map((line, index) => ({ ...line, parentId: null, order: index })),
+      };
+      const nextDocument = { ...order.document, nodes: [section] };
+      const saved = await savePurchaseOrder({
+        ...order,
+        document: { ...nextDocument, totals: calculateDocumentTotals(nextDocument) },
+      });
+      setCreatedPurchaseOrder({ id: saved.id, number: saved.document.number });
+      setMaterialLines([]);
+      setToast({ type: "ok", msg: `Bon de commande ${saved.document.number} cree.` });
+    } catch (err: any) {
+      setMaterialsError(err?.message ?? "Erreur creation du bon de commande.");
+    } finally {
+      setMaterialsCreating(false);
+    }
+  }
+
   async function deleteTask(task: ChantierTaskRow) {
     if (!canDeleteTasks) {
       setToast({ type: "error", msg: "Suppression reservee aux profils admin et conducteur de travaux." });
@@ -313,6 +479,13 @@ export default function ChantierPreparationSection({ chantierId }: { chantierId:
       value: "Prep",
       helper: "Points de preparation operationnelle du chantier",
       action: "Ouvrir",
+    },
+    {
+      key: "materials" as const,
+      title: "Materiaux",
+      value: `${materialLines.length}`,
+      helper: "Calcules depuis les ratios des taches, ou ajoutes a la main",
+      action: "Preparer",
     },
   ];
 
@@ -531,6 +704,136 @@ export default function ChantierPreparationSection({ chantierId }: { chantierId:
           onClose={() => setActiveDrawer(null)}
         >
           <PreparationChecklistTab chantierId={chantierId} />
+        </Drawer>
+      ) : null}
+
+      {activeDrawer === "materials" ? (
+        <Drawer
+          title="Liste de materiaux"
+          subtitle="Calculee a partir des ratios materiaux (bibliotheque de taches) x quantites des taches de ce chantier."
+          onClose={() => setActiveDrawer(null)}
+        >
+          <div className="space-y-4">
+            <div className="flex flex-col gap-3 rounded-2xl border border-blue-200 bg-blue-50/60 p-4 lg:flex-row lg:items-center lg:justify-between">
+              <div className="text-sm text-slate-700">
+                Ajuste ou complete la liste avant de creer le bon de commande. Une fois cree, il est geré dans le module
+                Bons de commande.
+              </div>
+              <button
+                type="button"
+                onClick={() => void generateMaterialsFromTasks()}
+                disabled={materialsGenerating}
+                className="shrink-0 rounded-xl border border-blue-300 bg-white px-4 py-2 text-sm font-medium text-blue-800 hover:bg-blue-100 disabled:opacity-60"
+              >
+                {materialsGenerating ? "Calcul..." : "Calculer depuis les taches"}
+              </button>
+            </div>
+
+            {materialsError ? (
+              <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+                {materialsError}
+              </div>
+            ) : null}
+
+            {createdPurchaseOrder ? (
+              <div className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
+                <span>Bon de commande {createdPurchaseOrder.number} cree.</span>
+                <Link
+                  to={`/bons-commande?purchaseOrderId=${createdPurchaseOrder.id}`}
+                  className="rounded-xl border border-emerald-300 bg-white px-3 py-1.5 text-xs font-semibold text-emerald-800 hover:bg-emerald-100"
+                >
+                  Ouvrir le bon de commande
+                </Link>
+              </div>
+            ) : null}
+
+            {materialLines.length > 0 ? (
+              <div className="space-y-2">
+                {materialLines.map((line) => (
+                  <div key={line.id} className="flex flex-wrap items-center gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3">
+                    <div className="min-w-[160px] flex-1">
+                      <div className="font-medium text-slate-950">{line.material_name}</div>
+                      <div className="text-xs text-slate-500">
+                        {line.source === "auto" ? `Auto - ${line.taskCount} tache(s)` : "Ajout manuel"}
+                        {line.estimated_cost_ht !== null ? ` - ~${line.estimated_cost_ht.toFixed(2)} EUR HT` : ""}
+                      </div>
+                    </div>
+                    <input
+                      value={line.quantity}
+                      onChange={(event) => updateMaterialLineQuantity(line.id, event.target.value)}
+                      inputMode="decimal"
+                      className="w-24 rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-900"
+                    />
+                    <span className="w-14 text-sm text-slate-500">{line.unit || "u"}</span>
+                    <button
+                      type="button"
+                      onClick={() => removeMaterialLine(line.id)}
+                      className="rounded-xl border border-red-200 px-3 py-2 text-xs font-medium text-red-700 hover:bg-red-50"
+                    >
+                      Retirer
+                    </button>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50 px-4 py-5 text-sm text-slate-500">
+                Aucune ligne pour l'instant. Calcule depuis les taches ou ajoute une ligne manuellement.
+              </div>
+            )}
+
+            <div className="flex flex-wrap items-end gap-3 border-t border-slate-200 pt-4">
+              <label className="space-y-1 text-xs text-slate-600">
+                <div>Ajouter manuellement</div>
+                <input
+                  value={manualMaterialName}
+                  onChange={(event) => setManualMaterialName(event.target.value)}
+                  placeholder="Designation"
+                  className="w-48 rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-900"
+                />
+              </label>
+              <label className="space-y-1 text-xs text-slate-600">
+                <div>Qte</div>
+                <input
+                  value={manualMaterialQuantity}
+                  onChange={(event) => setManualMaterialQuantity(event.target.value)}
+                  inputMode="decimal"
+                  className="w-20 rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-900"
+                />
+              </label>
+              <label className="space-y-1 text-xs text-slate-600">
+                <div>Unite</div>
+                <input
+                  value={manualMaterialUnit}
+                  onChange={(event) => setManualMaterialUnit(event.target.value)}
+                  placeholder="u, m2, ml..."
+                  className="w-24 rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-900"
+                />
+              </label>
+              <button
+                type="button"
+                onClick={addManualMaterialLine}
+                disabled={!manualMaterialName.trim()}
+                className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+              >
+                + Ajouter la ligne
+              </button>
+              <button
+                type="button"
+                onClick={() => void createPurchaseOrderFromMaterials()}
+                disabled={materialLines.length === 0 || materialsCreating}
+                className={[
+                  "ml-auto rounded-2xl px-5 py-3 text-sm font-semibold",
+                  materialLines.length === 0 || materialsCreating
+                    ? "bg-slate-200 text-slate-500"
+                    : "bg-emerald-600 text-white hover:bg-emerald-700",
+                ].join(" ")}
+              >
+                {materialsCreating
+                  ? "Creation..."
+                  : `Creer bon de commande (${materialLines.length} ligne${materialLines.length > 1 ? "s" : ""})`}
+              </button>
+            </div>
+          </div>
         </Drawer>
       ) : null}
 
