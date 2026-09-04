@@ -58,10 +58,18 @@ serve(async (req) => {
 
     const accounts = await Promise.all(
       (profiles ?? []).map(async (profile: any) => {
-        const { data: authUser } = await admin.auth.admin.getUserById(profile.id);
+        let email: string | null = null;
+        try {
+          const { data: authUser } = await admin.auth.admin.getUserById(profile.id);
+          email = authUser?.user?.email ?? null;
+        } catch {
+          // Profil sans utilisateur auth correspondant (compte orphelin) :
+          // on l'affiche quand même plutot que de faire echouer toute la liste.
+          email = null;
+        }
         return {
           id: profile.id,
-          email: authUser?.user?.email ?? null,
+          email,
           displayName: profile.display_name ?? null,
           role: profile.role,
           allowedSidebarGroups: profile.allowed_sidebar_groups ?? null,
