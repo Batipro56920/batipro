@@ -51,13 +51,7 @@ const SEARCH_QUICK_LINKS = [
     badge: "Planning",
   },
   {
-    label: "Tâches chantier",
-    description: "Suivre les travaux à exécuter",
-    href: "/taches",
-    badge: "Exécution",
-  },
-  {
-    label: "Bibliothèque tâches",
+    label: "Bibliothèque de tâches",
     description: "Ouvrir les modèles utilisés pour devis, préparation et chantier",
     href: "/bibliotheque",
     badge: "Référentiel",
