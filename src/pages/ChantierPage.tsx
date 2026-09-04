@@ -156,6 +156,7 @@ import {
   type TerrainFeedbackSummary,
 } from "../services/terrainFeedback.service";
 import DevisImportDrawer, { type DevisImportResult } from "../components/chantiers/DevisImportDrawer";
+import { generateTaskTemplateWithCoco, type CocoTaskTemplateResult } from "../features/coco/cocoOrchestrator";
 import TaskTemplateDrawer from "../components/TaskTemplateDrawer";
 import {
   create as createTaskTemplate,
@@ -404,6 +405,17 @@ function parseTaskCaracteristiquesText(value: string): string[] {
     .split(/\r?\n/)
     .map((line) => line.trim())
     .filter((line) => line.length > 0);
+}
+
+function fillIfEmptyTechnique(existing: string, content: string): string {
+  const cleanContent = content.trim();
+  if (!cleanContent) return existing;
+  return existing.trim() ? existing : cleanContent;
+}
+
+function taskMaterialResultText(item: { label: string; quantity: number | null; unit: string | null; detail: string | null }): string {
+  const quantity = item.quantity !== null ? `${item.quantity}${item.unit ? ` ${item.unit}` : ""}` : "";
+  return [item.label, quantity, item.detail].filter(Boolean).join(" - ");
 }
 
 function taskStepStatusLabel(status: ChantierTaskStepStatus) {
@@ -1088,6 +1100,9 @@ export default function ChantierPage() {
   const [techniqueMateriaux, setTechniqueMateriaux] = useState("");
   const [techniqueContraintes, setTechniqueContraintes] = useState("");
   const [techniquePointsControle, setTechniquePointsControle] = useState("");
+  const [techniqueCocoLoading, setTechniqueCocoLoading] = useState(false);
+  const [techniqueCocoMessage, setTechniqueCocoMessage] = useState<string | null>(null);
+  const [techniqueCocoError, setTechniqueCocoError] = useState<string | null>(null);
 
   // Devis
   const [devis, setDevis] = useState<DevisRow[]>([]);
@@ -3282,6 +3297,8 @@ export default function ChantierPage() {
     setTechniqueMateriaux(String((activeTaskDetail as any).materiaux ?? ""));
     setTechniqueContraintes(String((activeTaskDetail as any).contraintes ?? ""));
     setTechniquePointsControle(String((activeTaskDetail as any).points_controle ?? ""));
+    setTechniqueCocoMessage(null);
+    setTechniqueCocoError(null);
   }, [activeTaskDetail?.id, activeTaskDetail]);
 
   useEffect(() => {
@@ -4198,6 +4215,90 @@ export default function ChantierPage() {
     } catch (e: any) {
       await refreshTasksOnly();
       setToast({ type: "error", msg: e?.message ?? "Erreur validation qualité." });
+    }
+  }
+
+  async function prepareTaskWithCoco() {
+    if (!activeTaskDetail || !id) return;
+    setTechniqueCocoLoading(true);
+    setTechniqueCocoMessage(null);
+    setTechniqueCocoError(null);
+    try {
+      const task = activeTaskDetail;
+      const result: CocoTaskTemplateResult = await generateTaskTemplateWithCoco({
+        task: {
+          title: String((task as any).titre ?? ""),
+          lot: String((task as any).lot ?? (task as any).corps_etat ?? ""),
+          unit: String((task as any).unite ?? ""),
+          usage: "",
+          defaultQuantity: Number.isFinite(Number((task as any).quantite)) ? Number((task as any).quantite) : null,
+          timePerUnit: null,
+          referenceUnitCostHt: Number.isFinite(Number((task as any).prix_unitaire_devis_ht))
+            ? Number((task as any).prix_unitaire_devis_ht)
+            : null,
+          existingTechnicalDescription: techniqueDescription,
+          existingCharacteristics: techniqueCaracteristiques,
+          existingNotes: "",
+        },
+        materials: [],
+        labor: [],
+        equipment: [],
+        fees: [],
+        costSummary: {
+          materialCost: 0,
+          materialSale: 0,
+          laborCost: 0,
+          laborSale: 0,
+          feeCost: 0,
+          feeSale: 0,
+          cost: 0,
+          sale: 0,
+          margin: 0,
+          marginRate: 0,
+        },
+      });
+
+      const nextDescription = fillIfEmptyTechnique(techniqueDescription, result.technicalDescription);
+      const nextCaracteristiques = fillIfEmptyTechnique(techniqueCaracteristiques, result.characteristics.join("\n"));
+      const materiauxLines = [
+        ...result.materials.map((item) => taskMaterialResultText(item)),
+        ...result.consumables,
+      ];
+      const nextMateriaux = fillIfEmptyTechnique(techniqueMateriaux, materiauxLines.join("\n"));
+      const contraintesLines = [...result.errorsToAvoid, ...result.safetyPoints];
+      const nextContraintes = fillIfEmptyTechnique(techniqueContraintes, contraintesLines.join("\n"));
+      const nextPointsControle = fillIfEmptyTechnique(techniquePointsControle, result.controls.join("\n"));
+
+      setTechniqueDescription(nextDescription);
+      setTechniqueCaracteristiques(nextCaracteristiques);
+      setTechniqueMateriaux(nextMateriaux);
+      setTechniqueContraintes(nextContraintes);
+      setTechniquePointsControle(nextPointsControle);
+      setTechniqueEditing(true);
+
+      const existingSteps = taskStepsByTaskId.get(task.id) ?? [];
+      let stepsCreated = 0;
+      if (existingSteps.length === 0 && result.procedure.length) {
+        for (let index = 0; index < result.procedure.length; index += 1) {
+          await createTaskStep({ chantier_id: id, task_id: task.id, titre: result.procedure[index], ordre: index });
+          stepsCreated += 1;
+        }
+        await refreshTaskStepsOnly();
+      }
+
+      if (result.usedFallback) {
+        setTechniqueCocoError(
+          `Coco IA indisponible, repli local applique : ${result.errorMessage ?? "erreur inconnue"}`,
+        );
+      } else {
+        setTechniqueCocoMessage(
+          `Suggestions Coco ajoutees dans les champs vides.${stepsCreated ? ` ${stepsCreated} etape(s) operationnelle(s) creee(s).` : ""}${result.missingInformation.length ? ` A completer : ${result.missingInformation.join(" ; ")}.` : ""}`,
+        );
+      }
+    } catch (e: any) {
+      setTechniqueCocoError(e?.message ?? "Preparation Coco impossible.");
+    } finally {
+      setTechniqueCocoLoading(false);
     }
   }
 
@@ -5474,6 +5575,14 @@ export default function ChantierPage() {
                           5. Technique
                         </div>
                         <div className="flex flex-wrap gap-2">
+                          <button
+                            type="button"
+                            disabled={techniqueCocoLoading}
+                            onClick={() => void prepareTaskWithCoco()}
+                            className="rounded-xl bg-violet-700 px-3 py-2 text-xs font-medium text-white hover:bg-violet-800 disabled:cursor-not-allowed disabled:opacity-60"
+                          >
+                            {techniqueCocoLoading ? "Préparation..." : "Préparer avec Coco"}
+                          </button>
                           {techniqueEditing ? (
                             <>
                               <button
@@ -5511,6 +5620,16 @@ export default function ChantierPage() {
                           )}
                         </div>
                       </div>
+                      {techniqueCocoMessage ? (
+                        <div className="mt-3 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-800">
+                          {techniqueCocoMessage}
+                        </div>
+                      ) : null}
+                      {techniqueCocoError ? (
+                        <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                          {techniqueCocoError}
+                        </div>
+                      ) : null}
                       <div className="mt-4 space-y-3">
                         <div className="rounded-2xl bg-white p-4">
                           <div className="text-xs text-slate-500">Description technique</div>
