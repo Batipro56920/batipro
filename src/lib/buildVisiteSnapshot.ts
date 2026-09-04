@@ -21,6 +21,22 @@ export type VisiteSnapshotTaskFocus = {
   intervenant: string | null;
   date_prevue: string | null;
   retard: boolean;
+  points_controle?: string | null;
+};
+
+export type VisiteTerrainNote = {
+  id: string;
+  text: string;
+  task_id: string | null;
+  photo_annotations: string[];
+};
+
+export type VisiteTechnicalCheck = {
+  id: string;
+  task_id: string;
+  label: string;
+  status: "A_CONTROLER" | "CONFORME" | "A_CORRIGER";
+  comment: string;
 };
 
 export type VisiteSnapshotReserveFocus = {
@@ -83,6 +99,14 @@ export type VisiteSnapshot = {
   reserves_focus: VisiteSnapshotReserveFocus[];
   planning: VisiteSnapshotPlanning[];
   documents: VisiteSnapshotDocument[];
+  ui?: {
+    task_state?: Record<string, { include: boolean; comment: string }>;
+    reserve_state?: Record<string, { include: boolean; comment: string }>;
+    planning_state?: Array<{ id: string; include: boolean; comment: string }>;
+    intervenant_notes?: Record<string, string>;
+    terrain_notes?: VisiteTerrainNote[];
+    technical_checks?: VisiteTechnicalCheck[];
+  };
 };
 
 function normalizeText(value: unknown, fallback = ""): string {
@@ -168,6 +192,7 @@ function parseSnapshot(input: unknown): VisiteSnapshot {
     reserves_focus: Array.isArray(raw.reserves_focus) ? raw.reserves_focus : [],
     planning: Array.isArray(raw.planning) ? raw.planning : [],
     documents: Array.isArray(raw.documents) ? raw.documents : [],
+    ui: raw.ui && typeof raw.ui === "object" ? raw.ui : undefined,
   };
 }
 
@@ -255,6 +280,7 @@ export async function buildVisiteSnapshot(input: {
         intervenant: task.intervenant_id ? intervenantById.get(task.intervenant_id) ?? null : null,
         date_prevue: datePrevue,
         retard,
+        points_controle: task.points_controle ?? null,
       };
     });
 
