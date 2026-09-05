@@ -1,4 +1,5 @@
-import { useRef, useState, type ChangeEvent, type FormEvent } from "react";
+import { useEffect, useRef, useState, type ChangeEvent, type FormEvent } from "react";
+import { createPortal } from "react-dom";
 import { Camera, FileText, HardHat, Maximize2, Paperclip, Send, X } from "lucide-react";
 import { supabase } from "../lib/supabaseClient";
 import { prepareRaulAttachments, RAUL_FILE_ACCEPT, type RaulAttachment } from "./raulAttachments";
@@ -11,7 +12,9 @@ function RaulAvatar({ compact = false }: { compact?: boolean }) { return <span c
 
 export default function RaulPortalWidget({ token, chantierId }: { token: string; chantierId: string | null }) {
   const [open, setOpen] = useState(false); const [input, setInput] = useState(""); const [messages, setMessages] = useState<RaulChatMessage[]>([WELCOME_MESSAGE]); const [attachments, setAttachments] = useState<RaulAttachment[]>([]); const [preparingAttachment, setPreparingAttachment] = useState(false); const [sending, setSending] = useState(false); const [error, setError] = useState<string | null>(null); const [expandedImage, setExpandedImage] = useState<string | null>(null);
+  const [dockNode, setDockNode] = useState<HTMLElement | null>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null); const fileInputRef = useRef<HTMLInputElement>(null);
+  useEffect(() => { setDockNode(document.getElementById("raul-widget-dock-portal")); }, []);
   if (!chantierId) return null;
 
   async function addFiles(event: ChangeEvent<HTMLInputElement>) { const files = event.target.files ? Array.from(event.target.files) : []; event.target.value = ""; if (!files.length) return; setPreparingAttachment(true); setError(null); try { const prepared = await prepareRaulAttachments(files, attachments.length); if (prepared.attachments.length) setAttachments((prev) => [...prev, ...prepared.attachments]); if (prepared.errors.length) setError(prepared.errors.join(" ")); } finally { setPreparingAttachment(false); } }
@@ -33,8 +36,11 @@ export default function RaulPortalWidget({ token, chantierId }: { token: string;
     } catch (err) { const message = getErrorMessage(err); setError(message); setMessages((prev) => [...prev, { role: "assistant", content: message }]); } finally { setSending(false); }
   }
 
-  return <><div className="fixed bottom-24 right-3 z-40 max-w-[calc(100vw-1.5rem)]">
-    {open ? <section className="mb-3 flex h-[min(520px,calc(100dvh-10rem))] w-[min(360px,calc(100vw-1.5rem))] flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl shadow-slate-950/20">
+  const triggerButton = <button type="button" onClick={() => setOpen((value) => !value)} title="Raul" className="flex min-h-14 flex-col items-center justify-center gap-1 rounded-xl px-1 text-[11px] font-semibold text-slate-500" aria-label={open ? "Fermer Raul" : "Ouvrir Raul"}><RaulAvatar compact /><span>Raul</span></button>;
+  return <>
+    {dockNode ? createPortal(triggerButton, dockNode) : <div className="fixed bottom-24 right-3 z-40">{triggerButton}</div>}
+    {open ? <div className="fixed bottom-24 right-3 z-40 max-w-[calc(100vw-1.5rem)]">
+    <section className="mb-3 flex h-[min(520px,calc(100dvh-10rem))] w-[min(360px,calc(100vw-1.5rem))] flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl shadow-slate-950/20">
       <header className="flex items-center justify-between gap-3 border-b border-slate-200 bg-slate-950 px-4 py-3 text-white"><div className="flex min-w-0 items-center gap-3"><RaulAvatar /><div className="min-w-0"><div className="truncate text-sm font-semibold">Raul</div><div className="truncate text-xs text-slate-300">Assistant chantier</div></div></div><button type="button" onClick={() => setOpen(false)} className="grid h-9 w-9 place-items-center rounded-xl text-slate-200 hover:bg-white/10" aria-label="Fermer Raul"><X className="h-4 w-4" /></button></header>
       <div className="flex-1 space-y-3 overflow-y-auto bg-slate-50 p-4">{messages.map((message, index) => { const fromUser = message.role === "user"; return <div key={`${message.role}-${index}`} className={fromUser ? "flex justify-end" : "flex justify-start"}><div className={["max-w-[92%] rounded-2xl px-3 py-2 text-sm leading-6", fromUser ? "bg-blue-600 text-white" : "border border-slate-200 bg-white text-slate-800"].join(" ")}>{message.attachments?.map((item, i) => <div key={`${item.name}-${i}`} className="mb-1 flex items-center gap-1 rounded-lg bg-black/10 px-2 py-1 text-xs"><Camera className="h-3 w-3" /><span className="truncate">Photo jointe : {item.name}</span></div>)}{message.generatedImage ? <button type="button" onClick={() => setExpandedImage(message.generatedImage ?? null)} className="group relative mb-2 block w-full overflow-hidden rounded-xl border border-slate-200 bg-slate-100 text-left" aria-label="Agrandir la fiche technique"><img src={message.generatedImage} alt="Fiche technique illustrée générée par Raul" className="h-auto w-full" /><span className="absolute bottom-2 right-2 flex items-center gap-1 rounded-full bg-black/70 px-2 py-1 text-[11px] font-medium text-white"><Maximize2 className="h-3 w-3" />Agrandir</span></button> : null}{message.content}</div></div>; })}{sending ? <div className="rounded-xl bg-blue-50 px-3 py-2 text-xs font-medium text-blue-700">Raul prépare la réponse. Une fiche illustrée peut prendre un peu plus de temps…</div> : null}{error ? <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">{error}</div> : null}</div>
       <form onSubmit={sendMessage} className="border-t border-slate-200 bg-white p-3">{preparingAttachment ? <div className="mb-2 rounded-xl bg-blue-50 px-3 py-2 text-xs font-medium text-blue-700">Préparation de la photo…</div> : null}{attachments.length ? <div className="mb-2 flex flex-wrap gap-2">{attachments.map((item, index) => <span key={`${item.name}-${index}`} className="flex max-w-full items-center gap-1 rounded-lg border border-green-200 bg-green-50 px-2 py-1 text-xs font-medium text-green-800">{item.mime_type.startsWith("image/") ? <Camera className="h-3 w-3" /> : <FileText className="h-3 w-3" />}<span className="max-w-44 truncate">✓ {item.name}</span><button type="button" onClick={() => setAttachments((prev) => prev.filter((_, i) => i !== index))}><X className="h-3 w-3" /></button></span>)}</div> : null}
@@ -42,7 +48,8 @@ export default function RaulPortalWidget({ token, chantierId }: { token: string;
         <div className="mb-2 flex gap-2"><button type="button" disabled={preparingAttachment || sending} onClick={() => cameraInputRef.current?.click()} className="flex h-9 items-center gap-1 rounded-xl border border-slate-200 px-2 text-xs font-medium text-slate-700 disabled:opacity-50"><Camera className="h-4 w-4" />Photo</button><button type="button" disabled={preparingAttachment || sending} onClick={() => fileInputRef.current?.click()} className="flex h-9 items-center gap-1 rounded-xl border border-slate-200 px-2 text-xs font-medium text-slate-700 disabled:opacity-50"><Paperclip className="h-4 w-4" />Fichier</button></div>
         <div className="flex items-end gap-2"><label className="min-w-0 flex-1"><span className="sr-only">Message à Raul</span><textarea value={input} onChange={(event) => setInput(event.target.value)} rows={2} className="max-h-28 min-h-12 w-full resize-none rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100" placeholder={attachments.length ? "Pose ta question ou demande une fiche technique…" : "Écris à Raul..."} /></label><button type="submit" disabled={preparingAttachment || sending || (!input.trim() && attachments.length === 0)} className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-slate-950 text-white disabled:bg-slate-200 disabled:text-slate-500" aria-label="Envoyer à Raul"><Send className="h-4 w-4" /></button></div>
       </form>
-    </section> : null}
-    <button type="button" onClick={() => setOpen((value) => !value)} title="Raul" className="ml-auto grid h-12 w-12 place-items-center rounded-2xl bg-slate-950 text-white shadow-xl shadow-slate-950/20" aria-label={open ? "Fermer Raul" : "Ouvrir Raul"}><RaulAvatar compact /></button>
-  </div><RaulImageLightbox src={expandedImage} onClose={() => setExpandedImage(null)} /></>;
+    </section>
+    </div> : null}
+    <RaulImageLightbox src={expandedImage} onClose={() => setExpandedImage(null)} />
+  </>;
 }

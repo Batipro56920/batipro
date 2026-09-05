@@ -386,6 +386,8 @@ export default function LayoutShell() {
                   <Link to="/crm/prospects?action=nouveau-prospect" className="block rounded-xl px-3 py-2 text-ink-secondary hover:bg-interactive">Nouveau prospect</Link>
                 </div>
               </details>
+              <div id="assistant-widget-dock-coco" className="grid" />
+              <div id="assistant-widget-dock-raul" className="grid" />
               <button
                 type="button"
                 disabled

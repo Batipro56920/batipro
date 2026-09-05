@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
-import { BarChart3, Bot, Brain, RefreshCw, Send, ShieldCheck, Sparkles, X } from "lucide-react";
+import { createPortal } from "react-dom";
+import { BarChart3, Brain, RefreshCw, Send, ShieldCheck, Sparkles, X } from "lucide-react";
 import {
   COCO_DIRECTION_QUICK_QUESTIONS,
   askCocoDirectionAssistant,
@@ -39,6 +40,11 @@ export default function CocoDirectionAssistantWidget() {
   const [checking, setChecking] = useState(true);
   const [allowed, setAllowed] = useState(false);
   const [open, setOpen] = useState(false);
+  const [dockNode, setDockNode] = useState<HTMLElement | null>(null);
+
+  useEffect(() => {
+    setDockNode(document.getElementById("assistant-widget-dock-coco"));
+  }, []);
   const [loadingContext, setLoadingContext] = useState(false);
   const [context, setContext] = useState<CocoDirectionContext | null>(null);
   const [messages, setMessages] = useState<CocoDirectionChatMessage[]>([WELCOME_MESSAGE]);
@@ -116,9 +122,25 @@ export default function CocoDirectionAssistantWidget() {
 
   if (checking || !allowed) return null;
 
+  const triggerButton = (
+    <button
+      type="button"
+      onClick={() => setOpen((value) => !value)}
+      className="grid h-9 w-9 place-items-center rounded-xl border border-subtle bg-surface text-ink-secondary shadow-sm transition hover:bg-interactive"
+      aria-label={open ? "Fermer Assistant Direction COCO" : "Ouvrir Assistant Direction COCO"}
+      title="Assistant Direction COCO"
+    >
+      {open ? <BarChart3 className="h-4 w-4" /> : <Sparkles className="h-4 w-4" />}
+    </button>
+  );
+
   return (
-    <div className="fixed bottom-4 left-4 z-50 max-w-[calc(100vw-2rem)] sm:bottom-5 sm:left-5">
+    <>
+      {dockNode ? createPortal(triggerButton, dockNode) : (
+        <div className="fixed bottom-4 left-4 z-50">{triggerButton}</div>
+      )}
       {open ? (
+        <div className="fixed bottom-4 left-4 z-50 max-w-[calc(100vw-2rem)] sm:bottom-5 sm:left-5">
         <section className="mb-3 flex h-[min(680px,calc(100dvh-7rem))] w-[min(720px,calc(100vw-2rem))] flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl shadow-slate-950/20">
           <header className="flex items-center justify-between gap-3 border-b border-slate-200 bg-[#0F2747] px-4 py-3 text-white">
             <div className="flex min-w-0 items-center gap-3">
@@ -195,13 +217,8 @@ export default function CocoDirectionAssistantWidget() {
             </main>
           </div>
         </section>
+        </div>
       ) : null}
-
-      <button type="button" onClick={() => setOpen((value) => !value)} className="ml-auto flex h-12 items-center gap-2 rounded-2xl bg-[#0F2747] px-3 pr-4 text-sm font-semibold text-white shadow-xl shadow-slate-950/20 hover:bg-[#173B68]" aria-label={open ? "Fermer Assistant Direction COCO" : "Ouvrir Assistant Direction COCO"}>
-        <span className="grid h-8 w-8 place-items-center rounded-xl bg-white text-[#0F2747]">{open ? <BarChart3 className="h-4 w-4" /> : <Sparkles className="h-4 w-4" />}</span>
-        <span className="hidden sm:inline">Direction COCO</span>
-        <Bot className="h-4 w-4 sm:hidden" />
-      </button>
-    </div>
+    </>
   );
 }
