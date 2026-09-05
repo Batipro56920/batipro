@@ -209,7 +209,6 @@ import ChantierPlanningSection from "../features/chantiers/pages/ChantierPlannin
 import ChantierPreparationSection from "../features/chantiers/pages/ChantierPreparationSection";
 import ChantierMaterialsSection from "../features/chantiers/pages/ChantierMaterialsSection";
 import ChantierPurchasesSection from "../features/chantiers/pages/ChantierPurchasesSection";
-import ChantierReportsSection from "../features/chantiers/pages/ChantierReportsSection";
 import ChantierReservesSection from "../features/chantiers/pages/ChantierReservesSection";
 import ChantierTasksQuotesSection from "../features/chantiers/pages/ChantierTasksQuotesSection";
 import ChantierTimeSection from "../features/chantiers/pages/ChantierTimeSection";
@@ -8398,23 +8397,6 @@ export default function ChantierPage() {
           <ChantierMessagingSection
             chantierId={id}
             intervenants={intervenants}
-            onActivityRefresh={() => void refreshActivityLogs()}
-          />
-        )}
-
-        {detailSection === "financier" && item && (
-          <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400 mt-6 mb-2">
-            Rapports &amp; export
-          </div>
-        )}
-        {detailSection === "financier" && item && (
-          <ChantierReportsSection
-            chantier={item}
-            onDocumentsRefresh={async () => {
-              const data = await refreshChantierDocuments();
-              setDocuments(data);
-              await refreshDoeDocumentIds();
-            }}
             onActivityRefresh={() => void refreshActivityLogs()}
           />
         )}
