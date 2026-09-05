@@ -1,4 +1,4 @@
-﻿export type PlanningPeriod = "week" | "2weeks" | "month";
+﻿export type PlanningPeriod = "day" | "week" | "2weeks" | "month";
 
 export function parseDate(dateStr: string): Date {
   // dateStr expected YYYY-MM-DD
@@ -58,7 +58,10 @@ export function startOfMonth(date: Date): Date {
 export function getPeriodRange(anchor: Date, period: PlanningPeriod) {
   let start = startOfWeek(anchor);
   let days = 7;
-  if (period === "2weeks") {
+  if (period === "day") {
+    start = new Date(anchor.getFullYear(), anchor.getMonth(), anchor.getDate());
+    days = 1;
+  } else if (period === "2weeks") {
     days = 14;
   } else if (period === "month") {
     start = startOfMonth(anchor);

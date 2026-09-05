@@ -61,10 +61,11 @@ export default function PlanningGanttView({
     return groups;
   }, [viewDays]);
 
-  const timelineWidth = viewDays.length * dayWidth;
   const bandWidth = dayWidth * 7;
   const todayOffset = diffDays(viewStart, new Date(new Date().toDateString()));
   const showTodayLine = todayOffset >= 0 && todayOffset < viewDays.length;
+  const gridTemplateColumns = `repeat(${viewDays.length}, minmax(${dayWidth}px, 1fr))`;
+  const minTimelineWidth = viewDays.length * dayWidth;
 
   if (tasks.length === 0) {
     return (
@@ -78,7 +79,7 @@ export default function PlanningGanttView({
     <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
       <div className="flex">
         <div className="w-[260px] shrink-0 border-r border-slate-200">
-          <div className="grid grid-cols-[56px_56px_1fr] items-center gap-2 border-b border-slate-200 bg-slate-50 px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+          <div className="grid grid-cols-[56px_56px_1fr] items-center gap-2 border-b border-slate-200 bg-slate-50 px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500" style={{ height: ROW_HEIGHT }}>
             <span>Début</span>
             <span>Fin</span>
             <span>Titre</span>
@@ -112,70 +113,70 @@ export default function PlanningGanttView({
           </div>
         </div>
 
-        <div className="min-w-0 flex-1 overflow-x-auto">
-          <div style={{ width: timelineWidth }}>
-            <div className="flex border-b border-slate-200 bg-white">
-              {weekGroups.map((group) => (
+        <div className="relative min-w-0 flex-1 overflow-x-auto">
+          <div
+            className="relative"
+            style={{
+              minWidth: minTimelineWidth,
+              display: "grid",
+              gridTemplateColumns,
+              gridTemplateRows: `${ROW_HEIGHT}px repeat(${tasks.length}, ${ROW_HEIGHT}px)`,
+              backgroundImage: `repeating-linear-gradient(to right, #f8fafc 0, #f8fafc ${bandWidth}px, #ffffff ${bandWidth}px, #ffffff ${bandWidth * 2}px)`,
+            }}
+          >
+            {showTodayLine ? (
+              <div
+                className="pointer-events-none absolute top-0 bottom-0 z-10 w-px bg-red-500"
+                style={{ left: `calc(${todayOffset} / ${viewDays.length} * 100% + ${dayWidth / 2}px)` }}
+              />
+            ) : null}
+
+            {weekGroups.map((group, groupIndex) => {
+              const startIndex = weekGroups.slice(0, groupIndex).reduce((sum, g) => sum + g.days.length, 0);
+              return (
                 <div
                   key={group.label}
-                  className="shrink-0 border-r border-slate-100 py-2 text-center text-[11px] font-medium text-slate-500"
-                  style={{ width: group.days.length * dayWidth }}
+                  className="border-b border-r border-slate-200 py-2 text-center text-[11px] font-medium text-slate-500"
+                  style={{ gridColumn: `${startIndex + 1} / span ${group.days.length}`, gridRow: 1 }}
                 >
                   Semaine du {formatShortDate(formatDate(group.days[0]))}
                 </div>
-              ))}
-            </div>
+              );
+            })}
 
-            <div
-              className="relative"
-              style={{
-                backgroundImage: `repeating-linear-gradient(to right, #f8fafc 0, #f8fafc ${bandWidth}px, #ffffff ${bandWidth}px, #ffffff ${bandWidth * 2}px)`,
-              }}
-            >
-              {showTodayLine ? (
-                <div
-                  className="pointer-events-none absolute top-0 bottom-0 z-10 w-px bg-red-500"
-                  style={{ left: todayOffset * dayWidth + dayWidth / 2 }}
-                />
-              ) : null}
+            {tasks.map((task, taskIndex) => {
+              const entry = entryByTask.get(task.id);
+              if (!entry) return null;
 
-              {tasks.map((task) => {
-                const entry = entryByTask.get(task.id);
-                if (!entry) {
-                  return <div key={task.id} style={{ height: ROW_HEIGHT }} />;
-                }
+              const start = parseDate(entry.start_date);
+              const end = parseDate(entry.end_date);
+              const duration = Math.max(1, diffDays(start, end) + 1);
+              const leftDays = diffDays(viewStart, start);
+              if (leftDays + duration <= 0 || leftDays >= viewDays.length) return null;
 
-                const start = parseDate(entry.start_date);
-                const end = parseDate(entry.end_date);
-                const duration = Math.max(1, diffDays(start, end) + 1);
-                const leftDays = diffDays(viewStart, start);
-                const barLeft = leftDays * dayWidth;
-                const barWidth = Math.max(dayWidth - 4, duration * dayWidth - 4);
-                const isConflict = conflictEntryIds.has(entry.id);
-                const isViolated = violatedEntryIds.has(entry.id);
-                const isSelected = selectedEntryId === entry.id;
+              const colStart = Math.max(1, leftDays + 1);
+              const colEnd = Math.min(viewDays.length + 1, leftDays + 1 + duration);
+              const isConflict = conflictEntryIds.has(entry.id);
+              const isViolated = violatedEntryIds.has(entry.id);
+              const isSelected = selectedEntryId === entry.id;
 
-                return (
-                  <div key={task.id} className="relative" style={{ height: ROW_HEIGHT }}>
-                    {leftDays + duration >= 0 && leftDays <= viewDays.length ? (
-                      <button
-                        type="button"
-                        onClick={() => onSelectEntry(entry)}
-                        title={task.titre}
-                        className={[
-                          "absolute top-1/2 flex h-[18px] -translate-y-1/2 items-center rounded px-2 text-left text-[11px] font-medium text-white shadow-sm transition",
-                          statusBarClass(task.status, isConflict, isViolated),
-                          isSelected ? "ring-2 ring-offset-1 ring-slate-900" : "",
-                        ].join(" ")}
-                        style={{ left: barLeft + 2, width: barWidth }}
-                      >
-                        <span className="truncate">{task.titre}</span>
-                      </button>
-                    ) : null}
-                  </div>
-                );
-              })}
-            </div>
+              return (
+                <button
+                  key={task.id}
+                  type="button"
+                  onClick={() => onSelectEntry(entry)}
+                  title={task.titre}
+                  className={[
+                    "z-[1] m-1 flex items-center overflow-hidden rounded px-2 text-left text-[11px] font-medium text-white shadow-sm transition",
+                    statusBarClass(task.status, isConflict, isViolated),
+                    isSelected ? "ring-2 ring-offset-1 ring-slate-900" : "",
+                  ].join(" ")}
+                  style={{ gridColumn: `${colStart} / ${colEnd}`, gridRow: taskIndex + 2 }}
+                >
+                  <span className="truncate">{task.titre}</span>
+                </button>
+              );
+            })}
           </div>
         </div>
       </div>

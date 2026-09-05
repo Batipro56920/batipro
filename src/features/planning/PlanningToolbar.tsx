@@ -74,6 +74,7 @@ export default function PlanningToolbar({
             value={period}
             onChange={(e) => onPeriodChange(e.target.value as PlanningPeriod)}
           >
+            <option value="day">Jour</option>
             <option value="week">Semaine</option>
             <option value="2weeks">2 semaines</option>
             <option value="month">Mois</option>
