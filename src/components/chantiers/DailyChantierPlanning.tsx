@@ -17,6 +17,7 @@ import {
   getTaskPlanningTitle,
   normalizeBlockStatus,
 } from "./planningBoard.utils";
+import { getPlanningEntries, type PlanningEntryRow } from "../../features/planning/planning.service";
 
 type Props = {
   chantierId: string;
@@ -26,14 +27,23 @@ type Props = {
 
 type DailyBlock = {
   id: string;
-  segment: PlanningCalendarSegment;
+  segment: PlanningCalendarSegment | null;
   task: PlanningCalendarTask;
+  intervenantId: string;
+  orderInDay: number;
+  comment: string | null;
   title: string;
   load: number;
   plannedHours: number;
   status: string;
   progress: number;
 };
+
+function taskStatusToBlockStatus(status: string): string {
+  if (status === "FAIT") return "termine";
+  if (status === "EN_COURS") return "en_cours";
+  return "planifie";
+}
 
 function todayKey() {
   return formatDateKey(new Date());
@@ -77,22 +87,27 @@ function workerLabel(intervenantId: string, intervenants: IntervenantRow[]) {
   return intervenant.entreprise ? `${intervenant.nom} · ${intervenant.entreprise}` : intervenant.nom;
 }
 
-function buildDailyBlocks(state: PlanningCalendarState | null, selectedDate: string): DailyBlock[] {
+function buildDailyBlocks(state: PlanningCalendarState | null, entries: PlanningEntryRow[], selectedDate: string): DailyBlock[] {
   if (!state) return [];
   const tasksById = new Map(state.tasks.map((task) => [task.id, task]));
   const blocks: DailyBlock[] = [];
+  const taskIdsWithSegmentToday = new Set<string>();
 
   for (const segment of state.segments) {
     const task = tasksById.get(segment.task_id);
     if (!task) continue;
     const dayLoad = distributeDayLoads(segment.duration_days, segment.start_date, state.settings).find((item) => item.date === selectedDate);
     if (!dayLoad) continue;
+    taskIdsWithSegmentToday.add(segment.task_id);
     const status = normalizeBlockStatus(segment.status, segment.progress_percent);
     const plannedHours = Math.round(dayLoad.load * state.settings.hoursPerDay * 100) / 100;
     blocks.push({
       id: segment.id,
       segment,
       task,
+      intervenantId: segment.intervenant_id ?? "unassigned",
+      orderInDay: segment.order_in_day,
+      comment: segment.comment,
       title: getSegmentPlanningTitle(segment, task),
       load: dayLoad.load,
       plannedHours,
@@ -101,11 +116,33 @@ function buildDailyBlocks(state: PlanningCalendarState | null, selectedDate: str
     });
   }
 
+  // Taches planifiees depuis le Gantt (planning_entries) mais sans bloc segment dedie pour ce jour :
+  // on les fait apparaitre ici aussi pour que l'agenda et le Gantt restent coherents.
+  for (const entry of entries) {
+    if (taskIdsWithSegmentToday.has(entry.task_id)) continue;
+    if (selectedDate < entry.start_date || selectedDate > entry.end_date) continue;
+    const task = tasksById.get(entry.task_id);
+    if (!task) continue;
+    const durationDays = Math.max(1, Math.round((parseDateKey(entry.end_date).getTime() - parseDateKey(entry.start_date).getTime()) / 86400000) + 1);
+    const plannedHours = Math.round(((task.temps_prevu_h ?? state.settings.hoursPerDay) / durationDays) * 100) / 100;
+    blocks.push({
+      id: `entry-${entry.id}`,
+      segment: null,
+      task,
+      intervenantId: entry.assigned_intervenant_ids?.[0] ?? "unassigned",
+      orderInDay: 0,
+      comment: null,
+      title: getTaskPlanningTitle(task),
+      load: 1,
+      plannedHours,
+      status: taskStatusToBlockStatus(task.status),
+      progress: 0,
+    });
+  }
+
   return blocks.sort((left, right) => {
-    const leftWorker = left.segment.intervenant_id ?? "unassigned";
-    const rightWorker = right.segment.intervenant_id ?? "unassigned";
-    if (leftWorker !== rightWorker) return leftWorker.localeCompare(rightWorker);
-    if (left.segment.order_in_day !== right.segment.order_in_day) return left.segment.order_in_day - right.segment.order_in_day;
+    if (left.intervenantId !== right.intervenantId) return left.intervenantId.localeCompare(right.intervenantId);
+    if (left.orderInDay !== right.orderInDay) return left.orderInDay - right.orderInDay;
     return left.title.localeCompare(right.title, "fr", { sensitivity: "base" });
   });
 }
@@ -127,7 +164,7 @@ function BlockCard({ block }: { block: DailyBlock }) {
         <span>{block.load < 1 ? `${Math.round(block.load * 100)}% journée` : "Journée"}</span>
         {block.progress > 0 ? <span>{block.progress}% avancé</span> : null}
       </div>
-      {block.segment.comment ? <p className="mt-3 text-xs leading-5 text-slate-500">{block.segment.comment}</p> : null}
+      {block.comment ? <p className="mt-3 text-xs leading-5 text-slate-500">{block.comment}</p> : null}
     </article>
   );
 }
@@ -135,6 +172,7 @@ function BlockCard({ block }: { block: DailyBlock }) {
 export default function DailyChantierPlanning({ chantierId, chantierName, intervenants }: Props) {
   const [selectedDate, setSelectedDate] = useState(todayKey);
   const [state, setState] = useState<PlanningCalendarState | null>(null);
+  const [entries, setEntries] = useState<PlanningEntryRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
@@ -142,7 +180,12 @@ export default function DailyChantierPlanning({ chantierId, chantierName, interv
     setLoading(true);
     setErrorMsg(null);
     try {
-      setState(await getPlanningCalendarState(chantierId));
+      const [calendarState, entryRows] = await Promise.all([
+        getPlanningCalendarState(chantierId),
+        getPlanningEntries(chantierId).catch(() => []),
+      ]);
+      setState(calendarState);
+      setEntries(entryRows);
     } catch (error: any) {
       setErrorMsg(error?.message ?? "Impossible de charger le planning quotidien.");
     } finally {
@@ -154,16 +197,19 @@ export default function DailyChantierPlanning({ chantierId, chantierName, interv
     void refresh();
   }, [refresh]);
 
-  const blocks = useMemo(() => buildDailyBlocks(state, selectedDate), [selectedDate, state]);
+  const blocks = useMemo(() => buildDailyBlocks(state, entries, selectedDate), [selectedDate, state, entries]);
   const unplannedTasks = useMemo(() => {
     if (!state) return [];
-    const plannedTaskIds = new Set(state.segments.map((segment) => segment.task_id));
+    const plannedTaskIds = new Set([
+      ...state.segments.map((segment) => segment.task_id),
+      ...entries.map((entry) => entry.task_id),
+    ]);
     return state.tasks.filter((task) => !plannedTaskIds.has(task.id) && task.status !== "FAIT");
-  }, [state]);
+  }, [state, entries]);
   const groups = useMemo(() => {
     const grouped = new Map<string, DailyBlock[]>();
     for (const block of blocks) {
-      const key = block.segment.intervenant_id ?? "unassigned";
+      const key = block.intervenantId;
       const list = grouped.get(key) ?? [];
       list.push(block);
       grouped.set(key, list);

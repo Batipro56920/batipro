@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import type { PlanningEntryRow, PlanningTaskRow } from "./planning.service";
 import { diffDays, formatDate, parseDate, startOfWeek } from "./planning.utils";
 
@@ -67,6 +67,20 @@ export default function PlanningGanttView({
   const gridTemplateColumns = `repeat(${viewDays.length}, minmax(${dayWidth}px, 1fr))`;
   const minTimelineWidth = viewDays.length * dayWidth;
 
+  const scrollRef = useRef<HTMLDivElement | null>(null);
+
+  function scrollToToday(behavior: ScrollBehavior = "auto") {
+    const container = scrollRef.current;
+    if (!container || !showTodayLine) return;
+    const targetLeft = (todayOffset / viewDays.length) * container.scrollWidth - container.clientWidth / 2;
+    container.scrollTo({ left: Math.max(0, targetLeft), behavior });
+  }
+
+  useEffect(() => {
+    scrollToToday();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [viewDays.length]);
+
   if (tasks.length === 0) {
     return (
       <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-6 text-center text-sm text-slate-500">
@@ -77,6 +91,15 @@ export default function PlanningGanttView({
 
   return (
     <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
+      <div className="flex items-center justify-end border-b border-slate-100 px-3 py-1.5">
+        <button
+          type="button"
+          onClick={() => scrollToToday("smooth")}
+          className="rounded-lg border border-slate-200 px-2.5 py-1 text-[11px] font-semibold text-slate-600 hover:bg-slate-50"
+        >
+          Aujourd'hui
+        </button>
+      </div>
       <div className="flex">
         <div className="w-[260px] shrink-0 border-r border-slate-200">
           <div className="grid grid-cols-[56px_56px_1fr] items-center gap-2 border-b border-slate-200 bg-slate-50 px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500" style={{ height: ROW_HEIGHT }}>
@@ -113,7 +136,7 @@ export default function PlanningGanttView({
           </div>
         </div>
 
-        <div className="relative min-w-0 flex-1 overflow-x-auto">
+        <div ref={scrollRef} className="relative min-w-0 flex-1 overflow-x-auto">
           <div
             className="relative"
             style={{

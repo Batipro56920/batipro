@@ -78,6 +78,35 @@ export function clampEndDate(start: Date, end: Date) {
   return end < start ? start : end;
 }
 
+/**
+ * Plage continue pour le Gantt : pas de pagination par periode, une seule bande de jours qui
+ * s'etend pour couvrir toutes les taches planifiees (+ marge), avec un plafond raisonnable pour
+ * eviter une grille demesuree si des dates aberrantes existent.
+ */
+export function getContinuousPlanningRange(entries: Array<{ start_date: string; end_date: string }>, anchor: Date) {
+  const PAD_BEFORE = 14;
+  const PAD_AFTER = 60;
+  const MAX_SPAN = 365;
+
+  let earliest = addDays(anchor, -PAD_BEFORE);
+  let latest = addDays(anchor, PAD_AFTER);
+  for (const entry of entries) {
+    const start = parseDate(entry.start_date);
+    const end = parseDate(entry.end_date);
+    if (start < earliest) earliest = start;
+    if (end > latest) latest = end;
+  }
+
+  const rangeStart = startOfWeek(earliest);
+  let span = diffDays(rangeStart, latest) + 1;
+  if (span > MAX_SPAN) span = MAX_SPAN;
+  if (span < 1) span = 1;
+
+  const days: Date[] = [];
+  for (let i = 0; i < span; i += 1) days.push(addDays(rangeStart, i));
+  return { start: rangeStart, days };
+}
+
 export type DependencyRow = {
   predecessor_task_id: string;
   successor_task_id: string;

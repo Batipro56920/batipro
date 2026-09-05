@@ -10,8 +10,7 @@ import {
   checkDependencyViolations,
   checkIntervenantConflicts,
   computeSequentialSchedule,
-  getPeriodRange,
-  type PlanningPeriod,
+  getContinuousPlanningRange,
   formatDate,
   parseDate,
   addDays,
@@ -46,7 +45,6 @@ export default function PlanningPage({ chantierId, chantierName, intervenants }:
   const [tasks, setTasks] = useState<PlanningTaskRow[]>([]);
 
   const [viewMode, setViewMode] = useState<"gantt" | "team">("gantt");
-  const [period, setPeriod] = useState<PlanningPeriod>("week");
   const [anchorDate] = useState(new Date());
 
   const [lotFilter, setLotFilter] = useState("");
@@ -87,8 +85,8 @@ export default function PlanningPage({ chantierId, chantierName, intervenants }:
   }, [chantierId]);
 
   const { start: viewStart, days: viewDays } = useMemo(
-    () => getPeriodRange(anchorDate, period),
-    [anchorDate, period],
+    () => getContinuousPlanningRange(entries, anchorDate),
+    [entries, anchorDate],
   );
 
   const entryByTask = useMemo(() => {
@@ -300,8 +298,6 @@ export default function PlanningPage({ chantierId, chantierName, intervenants }:
   return (
     <div className="space-y-4">
       <PlanningToolbar
-        period={period}
-        onPeriodChange={setPeriod}
         viewMode={viewMode}
         onViewModeChange={setViewMode}
         lotFilter={lotFilter}

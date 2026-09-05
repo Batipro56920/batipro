@@ -1,10 +1,6 @@
-﻿import type { PlanningPeriod } from "./planning.utils";
-
-type Option = { value: string; label: string };
+﻿type Option = { value: string; label: string };
 
 type Props = {
-  period: PlanningPeriod;
-  onPeriodChange: (value: PlanningPeriod) => void;
   viewMode: "gantt" | "team";
   onViewModeChange: (value: "gantt" | "team") => void;
   lotFilter: string;
@@ -23,8 +19,6 @@ type Props = {
 };
 
 export default function PlanningToolbar({
-  period,
-  onPeriodChange,
   viewMode,
   onViewModeChange,
   lotFilter,
@@ -65,20 +59,6 @@ export default function PlanningToolbar({
           >
             Vue équipe
           </button>
-        </div>
-
-        <div className="flex items-center gap-2">
-          <span className="text-xs text-slate-500">Période</span>
-          <select
-            className="rounded-xl border px-3 py-1.5 text-xs"
-            value={period}
-            onChange={(e) => onPeriodChange(e.target.value as PlanningPeriod)}
-          >
-            <option value="day">Jour</option>
-            <option value="week">Semaine</option>
-            <option value="2weeks">2 semaines</option>
-            <option value="month">Mois</option>
-          </select>
         </div>
 
         <div className="ml-auto flex items-center gap-2">
