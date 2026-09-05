@@ -269,18 +269,18 @@ export default function BudgetTab({ chantierId }: BudgetTabProps) {
           ["Encaissé", formatMoney(paidTtc), "TTC reçu"],
           ["Reste à encaisser", formatMoney(remainingToCollect), `Reste à facturer ${formatMoney(remainingToInvoice)}`],
         ].map(([label, value, hint]) => (
-          <div key={String(label)} className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm">
-            <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">{label}</div>
-            <div className="mt-2 text-xl font-semibold text-slate-950">{value}</div>
-            <div className="mt-1 text-xs text-slate-500">{hint}</div>
+          <div key={String(label)} className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
+            <div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-400">{label}</div>
+            <div className="mt-1.5 text-base font-semibold text-slate-950">{value}</div>
+            <div className="mt-0.5 text-xs text-slate-500">{hint}</div>
           </div>
         ))}
       </section>
 
       <section className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-        <div className="rounded-3xl border border-slate-200 bg-slate-50 p-4">
+        <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
           <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">CA prevu HT</div>
-          <div className="mt-2 text-2xl font-semibold text-slate-950">
+          <div className="mt-1.5 text-base font-semibold text-slate-950">
             {formatMoney(dashboard?.chiffreAffairesPrevuHt ?? 0)}
           </div>
           <div className="mt-1 text-xs text-slate-500">
@@ -289,9 +289,9 @@ export default function BudgetTab({ chantierId }: BudgetTabProps) {
           </div>
         </div>
 
-        <div className="rounded-3xl border border-slate-200 bg-slate-50 p-4">
+        <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
           <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">Couts prevus HT</div>
-          <div className="mt-2 text-2xl font-semibold text-slate-950">
+          <div className="mt-1.5 text-base font-semibold text-slate-950">
             {formatMoney(dashboard?.coutPrevuHt ?? 0)}
           </div>
           <div className="mt-1 text-xs text-slate-500">
@@ -299,9 +299,9 @@ export default function BudgetTab({ chantierId }: BudgetTabProps) {
           </div>
         </div>
 
-        <div className="rounded-3xl border border-slate-200 bg-slate-50 p-4">
+        <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
           <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">Couts reels HT</div>
-          <div className="mt-2 text-2xl font-semibold text-slate-950">
+          <div className="mt-1.5 text-base font-semibold text-slate-950">
             {formatMoney(dashboard?.coutReelHt ?? 0)}
           </div>
           <div className="mt-1 text-xs text-slate-500">
@@ -309,11 +309,11 @@ export default function BudgetTab({ chantierId }: BudgetTabProps) {
           </div>
         </div>
 
-        <div className="rounded-3xl border border-slate-200 bg-slate-50 p-4">
+        <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
           <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">Marge reelle</div>
           <div
             className={[
-              "mt-2 text-2xl font-semibold",
+              "mt-1.5 text-base font-semibold",
               marginToneClass(
                 dashboard?.margeReellePct ?? 0,
                 dashboard?.settings.objectif_marge_pct ?? 25,
@@ -329,16 +329,16 @@ export default function BudgetTab({ chantierId }: BudgetTabProps) {
         </div>
       </section>
 
-      <section className="grid gap-6 xl:grid-cols-[380px_minmax(0,1fr)]">
+      <section className="grid gap-4 xl:grid-cols-[340px_minmax(0,1fr)]">
         <div className="space-y-6">
           <form
-            className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm"
+            className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm"
             onSubmit={(event) => void saveSettings(event)}
           >
             <div className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-400">
               Parametres
             </div>
-            <h2 className="mt-1 text-lg font-semibold text-slate-950">Regles de calcul</h2>
+            <h2 className="mt-1 text-base font-semibold text-slate-950">Regles de calcul</h2>
 
             <div className="mt-5 grid gap-3 sm:grid-cols-2">
               <label className="space-y-1 text-xs text-slate-600">
@@ -379,7 +379,7 @@ export default function BudgetTab({ chantierId }: BudgetTabProps) {
             </div>
           </form>
 
-          <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+          <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
             <div className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-400">Alertes budget</div>
             <div className="mt-4 space-y-2">
               {(dashboard?.alertes ?? []).length === 0 ? (
@@ -400,13 +400,13 @@ export default function BudgetTab({ chantierId }: BudgetTabProps) {
           </div>
         </div>
 
-        <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
           <div className="flex items-center justify-between gap-3">
             <div>
               <div className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-400">
                 Ventilation par lot
               </div>
-              <h2 className="mt-1 text-lg font-semibold text-slate-950">MO + achats</h2>
+              <h2 className="mt-1 text-base font-semibold text-slate-950">MO + achats</h2>
             </div>
             <div className="text-xs text-slate-500">{lotRows.length} lot(s)</div>
           </div>
@@ -466,10 +466,10 @@ export default function BudgetTab({ chantierId }: BudgetTabProps) {
         </div>
       </section>
 
-      <section className="grid gap-6 xl:grid-cols-3">
-        <form className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm" onSubmit={(event) => void addExpense(event)}>
+      <section className="grid gap-4 xl:grid-cols-3">
+        <form className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm" onSubmit={(event) => void addExpense(event)}>
           <div className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-400">Coûts réels</div>
-          <h2 className="mt-1 text-lg font-semibold text-slate-950">Ajouter une dépense</h2>
+          <h2 className="mt-1 text-base font-semibold text-slate-950">Ajouter une dépense</h2>
           <div className="mt-4 space-y-3">
             <input className="w-full rounded-xl border px-3 py-2 text-sm" value={expenseForm.supplier_name} onChange={(e) => setExpenseForm((p) => ({ ...p, supplier_name: e.target.value }))} placeholder="Fournisseur" />
             <select className="w-full rounded-xl border px-3 py-2 text-sm" value={expenseForm.category} onChange={(e) => setExpenseForm((p) => ({ ...p, category: e.target.value }))}>
@@ -487,9 +487,9 @@ export default function BudgetTab({ chantierId }: BudgetTabProps) {
           </div>
         </form>
 
-        <form className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm" onSubmit={(event) => void addBilling(event)}>
+        <form className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm" onSubmit={(event) => void addBilling(event)}>
           <div className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-400">Facturation client</div>
-          <h2 className="mt-1 text-lg font-semibold text-slate-950">Acompte / situation</h2>
+          <h2 className="mt-1 text-base font-semibold text-slate-950">Acompte / situation</h2>
           <div className="mt-4 space-y-3">
             <select className="w-full rounded-xl border px-3 py-2 text-sm" value={billingForm.type} onChange={(e) => setBillingForm((p) => ({ ...p, type: e.target.value }))}>
               {["acompte", "situation", "facture_finale", "avoir", "autre"].map((value) => <option key={value} value={value}>{value}</option>)}
@@ -506,9 +506,9 @@ export default function BudgetTab({ chantierId }: BudgetTabProps) {
           </div>
         </form>
 
-        <form className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm" onSubmit={(event) => void addChangeOrder(event)}>
+        <form className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm" onSubmit={(event) => void addChangeOrder(event)}>
           <div className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-400">Avenants</div>
-          <h2 className="mt-1 text-lg font-semibold text-slate-950">Travaux supplémentaires</h2>
+          <h2 className="mt-1 text-base font-semibold text-slate-950">Travaux supplémentaires</h2>
           <div className="mt-4 space-y-3">
             <input className="w-full rounded-xl border px-3 py-2 text-sm" value={changeOrderForm.description} onChange={(e) => setChangeOrderForm((p) => ({ ...p, description: e.target.value }))} placeholder="Description" required />
             <input className="w-full rounded-xl border px-3 py-2 text-sm" value={changeOrderForm.amount_ht} onChange={(e) => setChangeOrderForm((p) => ({ ...p, amount_ht: e.target.value }))} placeholder="Montant HT" inputMode="decimal" required />
@@ -520,7 +520,7 @@ export default function BudgetTab({ chantierId }: BudgetTabProps) {
         </form>
       </section>
 
-      <section className="grid gap-6 xl:grid-cols-3">
+      <section className="grid gap-4 xl:grid-cols-3">
         <FinanceList title="Achats / dépenses" rows={expenses.map((row) => `${row.description} · ${row.supplier_name ?? "—"} · ${formatMoney(row.amount_ht)} HT · ${row.status}`)} />
         <FinanceList title="Situations / facturation" rows={billings.map((row) => `${row.label} · ${formatMoney(row.amount_ttc)} TTC · encaissé ${formatMoney(row.paid_amount_ttc)} · ${row.payment_status}`)} />
         <FinanceList title="Avenants financiers" rows={financeChangeOrders.map((row) => `${row.description} · ${formatMoney(row.amount_ht)} HT · ${row.status}`)} />
@@ -531,7 +531,7 @@ export default function BudgetTab({ chantierId }: BudgetTabProps) {
 
 function FinanceList({ title, rows }: { title: string; rows: string[] }) {
   return (
-    <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+    <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
       <div className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-400">{title}</div>
       <div className="mt-4 space-y-2">
         {rows.length === 0 ? (
