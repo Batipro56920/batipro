@@ -35,22 +35,9 @@ export type ChantierClientBillingRow = {
   updated_at: string;
 };
 
-export type ChantierFinancialChangeOrderRow = {
-  id: string;
-  chantier_id: string;
-  crm_quote_id: string | null;
-  description: string;
-  amount_ht: number;
-  status: "propose" | "accepte" | "refuse";
-  document_id: string | null;
-  created_at: string;
-  updated_at: string;
-};
-
 export type ChantierFinanceDataset = {
   expenses: ChantierFinancialExpenseRow[];
   billings: ChantierClientBillingRow[];
-  changeOrders: ChantierFinancialChangeOrderRow[];
   schemaReady: boolean;
 };
 
@@ -58,8 +45,6 @@ const EXPENSE_SELECT =
   "id, chantier_id, supplier_name, expense_date, category, description, amount_ht, tva, amount_ttc, invoice_document_id, status, created_at, updated_at";
 const BILLING_SELECT =
   "id, chantier_id, crm_invoice_id, type, label, amount_ht, amount_ttc, billed_at, due_date, paid_amount_ttc, paid_at, payment_status, created_at, updated_at";
-const CHANGE_ORDER_SELECT =
-  "id, chantier_id, crm_quote_id, description, amount_ht, status, document_id, created_at, updated_at";
 
 function isMissingFinanceSchema(error: unknown): boolean {
   const code = String((error as any)?.code ?? "");
@@ -87,16 +72,14 @@ async function listRows<T>(table: string, select: string, chantierId: string): P
 }
 
 export async function loadChantierFinanceDataset(chantierId: string): Promise<ChantierFinanceDataset> {
-  const [expenses, billings, changeOrders] = await Promise.all([
+  const [expenses, billings] = await Promise.all([
     listRows<ChantierFinancialExpenseRow>("chantier_financial_expenses", EXPENSE_SELECT, chantierId),
     listRows<ChantierClientBillingRow>("chantier_client_billings", BILLING_SELECT, chantierId),
-    listRows<ChantierFinancialChangeOrderRow>("chantier_financial_change_orders", CHANGE_ORDER_SELECT, chantierId),
   ]);
   return {
     expenses: expenses.rows,
     billings: billings.rows,
-    changeOrders: changeOrders.rows,
-    schemaReady: expenses.schemaReady && billings.schemaReady && changeOrders.schemaReady,
+    schemaReady: expenses.schemaReady && billings.schemaReady,
   };
 }
 
@@ -154,24 +137,4 @@ export async function createChantierClientBilling(input: Partial<ChantierClientB
     .single();
   if (error) throw error;
   return data as ChantierClientBillingRow;
-}
-
-export async function createChantierFinancialChangeOrder(input: Partial<ChantierFinancialChangeOrderRow>) {
-  if (!input.chantier_id) throw new Error("chantier_id manquant.");
-  const { data, error } = await db
-    .from("chantier_financial_change_orders")
-    .insert([
-      {
-        chantier_id: input.chantier_id,
-        crm_quote_id: input.crm_quote_id || null,
-        description: input.description || "Avenant / travaux supplémentaires",
-        amount_ht: numberValue(input.amount_ht),
-        status: input.status || "propose",
-        document_id: input.document_id || null,
-      },
-    ])
-    .select(CHANGE_ORDER_SELECT)
-    .single();
-  if (error) throw error;
-  return data as ChantierFinancialChangeOrderRow;
 }

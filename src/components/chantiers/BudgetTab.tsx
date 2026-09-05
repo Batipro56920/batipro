@@ -7,7 +7,6 @@ import {
 } from "../../services/chantierBudget.service";
 import {
   createChantierClientBilling,
-  createChantierFinancialChangeOrder,
   createChantierFinancialExpense,
   loadChantierFinanceDataset,
   type ChantierFinanceDataset,
@@ -75,12 +74,6 @@ export default function BudgetTab({ chantierId }: BudgetTabProps) {
     amount_ttc: "",
     payment_status: "a_facturer",
   });
-  const [changeOrderForm, setChangeOrderForm] = useState({
-    description: "",
-    amount_ht: "",
-    status: "propose",
-  });
-
   const lotRows = useMemo(() => dashboard?.lots ?? [], [dashboard]);
 
   async function refreshBudget() {
@@ -182,42 +175,18 @@ export default function BudgetTab({ chantierId }: BudgetTabProps) {
     }
   }
 
-  async function addChangeOrder(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    setSaving(true);
-    setError(null);
-    try {
-      await createChantierFinancialChangeOrder({
-        chantier_id: chantierId,
-        description: changeOrderForm.description,
-        amount_ht: parseFrenchNumber(changeOrderForm.amount_ht),
-        status: changeOrderForm.status as any,
-      });
-      setChangeOrderForm({ description: "", amount_ht: "", status: "propose" });
-      await refreshBudget();
-    } catch (err: any) {
-      setError(err?.message ?? "Erreur ajout avenant.");
-    } finally {
-      setSaving(false);
-    }
-  }
-
   const expenses = finance?.expenses ?? [];
   const billings = finance?.billings ?? [];
-  const financeChangeOrders = finance?.changeOrders ?? [];
   const extraExpensesHt = expenses.reduce((sum, row) => sum + Number(row.amount_ht ?? 0), 0);
   const billedTtc = billings.reduce((sum, row) => sum + Number(row.amount_ttc ?? 0), 0);
   const paidTtc = billings.reduce((sum, row) => sum + Number(row.paid_amount_ttc ?? 0), 0);
-  const acceptedChangeOrdersHt = financeChangeOrders
-    .filter((row) => row.status === "accepte")
-    .reduce((sum, row) => sum + Number(row.amount_ht ?? 0), 0);
   const signedQuoteHt = Number(chantier?.signed_quote_amount_ht ?? dashboard?.chiffreAffairesBaseHt ?? 0);
   const realCostHt = Number(dashboard?.coutReelHt ?? 0) + extraExpensesHt;
   const forecastCostHt =
     Number(chantier?.budget_labor_planned_ht ?? 0) +
     Number(chantier?.budget_materials_planned_ht ?? 0) +
     Number(chantier?.budget_subcontracting_planned_ht ?? 0);
-  const expectedRevenueHt = signedQuoteHt + Number(dashboard?.avenantsValidesHt ?? 0) + acceptedChangeOrdersHt;
+  const expectedRevenueHt = signedQuoteHt + Number(dashboard?.avenantsValidesHt ?? 0);
   const forecastMarginHt = expectedRevenueHt - (forecastCostHt || Number(dashboard?.coutPrevuHt ?? 0));
   const realMarginHt = expectedRevenueHt - realCostHt;
   const remainingToInvoice = Math.max(0, Number(chantier?.signed_quote_amount_ttc ?? expectedRevenueHt) - billedTtc);
@@ -466,7 +435,7 @@ export default function BudgetTab({ chantierId }: BudgetTabProps) {
         </div>
       </section>
 
-      <section className="grid gap-4 xl:grid-cols-3">
+      <section className="grid gap-4 xl:grid-cols-2">
         <form className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm" onSubmit={(event) => void addExpense(event)}>
           <div className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-400">Coûts réels</div>
           <h2 className="mt-1 text-base font-semibold text-slate-950">Ajouter une dépense</h2>
@@ -505,25 +474,11 @@ export default function BudgetTab({ chantierId }: BudgetTabProps) {
             <button disabled={saving || !finance?.schemaReady} className="w-full rounded-xl bg-slate-900 px-4 py-2 text-sm text-white disabled:opacity-50">Ajouter facturation</button>
           </div>
         </form>
-
-        <form className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm" onSubmit={(event) => void addChangeOrder(event)}>
-          <div className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-400">Avenants</div>
-          <h2 className="mt-1 text-base font-semibold text-slate-950">Travaux supplémentaires</h2>
-          <div className="mt-4 space-y-3">
-            <input className="w-full rounded-xl border px-3 py-2 text-sm" value={changeOrderForm.description} onChange={(e) => setChangeOrderForm((p) => ({ ...p, description: e.target.value }))} placeholder="Description" required />
-            <input className="w-full rounded-xl border px-3 py-2 text-sm" value={changeOrderForm.amount_ht} onChange={(e) => setChangeOrderForm((p) => ({ ...p, amount_ht: e.target.value }))} placeholder="Montant HT" inputMode="decimal" required />
-            <select className="w-full rounded-xl border px-3 py-2 text-sm" value={changeOrderForm.status} onChange={(e) => setChangeOrderForm((p) => ({ ...p, status: e.target.value }))}>
-              {["propose", "accepte", "refuse"].map((value) => <option key={value} value={value}>{value}</option>)}
-            </select>
-            <button disabled={saving || !finance?.schemaReady} className="w-full rounded-xl bg-slate-900 px-4 py-2 text-sm text-white disabled:opacity-50">Ajouter avenant</button>
-          </div>
-        </form>
       </section>
 
-      <section className="grid gap-4 xl:grid-cols-3">
+      <section className="grid gap-4 xl:grid-cols-2">
         <FinanceList title="Achats / dépenses" rows={expenses.map((row) => `${row.description} · ${row.supplier_name ?? "—"} · ${formatMoney(row.amount_ht)} HT · ${row.status}`)} />
         <FinanceList title="Situations / facturation" rows={billings.map((row) => `${row.label} · ${formatMoney(row.amount_ttc)} TTC · encaissé ${formatMoney(row.paid_amount_ttc)} · ${row.payment_status}`)} />
-        <FinanceList title="Avenants financiers" rows={financeChangeOrders.map((row) => `${row.description} · ${formatMoney(row.amount_ht)} HT · ${row.status}`)} />
       </section>
     </div>
   );
