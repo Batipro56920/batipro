@@ -9,7 +9,7 @@ import {
   type SupplierRow,
 } from "../services/suppliers.service";
 import { useI18n } from "../i18n";
-import { ProductStockLevelsPanel, PurchaseOrdersPanel, StockTrackingPanel } from "../features/purchase-orders";
+import { DeliveryNotePanel, ProductStockLevelsPanel, PurchaseOrdersPanel, StockTrackingPanel } from "../features/purchase-orders";
 
 type SupplierFormState = {
   name: string;
@@ -23,7 +23,7 @@ type SupplierFormState = {
   is_active: boolean;
 };
 
-type FournisseursTab = "suppliers" | "orders" | "stock";
+type FournisseursTab = "suppliers" | "orders" | "stock" | "delivery";
 
 const EMPTY_SUPPLIER: SupplierFormState = {
   name: "",
@@ -52,7 +52,7 @@ function toSupplierForm(row: SupplierRow): SupplierFormState {
 }
 
 function isFournisseursTab(value: string | null): value is FournisseursTab {
-  return value === "suppliers" || value === "orders" || value === "stock";
+  return value === "suppliers" || value === "orders" || value === "stock" || value === "delivery";
 }
 
 type FournisseursPageProps = {
@@ -286,6 +286,7 @@ export default function FournisseursPage({ initialTab = "suppliers" }: Fournisse
         {[
           ["suppliers", "Fournisseurs"],
           ["orders", "Bons de commande"],
+          ["delivery", "Bon de livraison"],
           ["stock", "Stock"],
         ].map(([id, label]) => (
           <button
@@ -312,6 +313,7 @@ export default function FournisseursPage({ initialTab = "suppliers" }: Fournisse
       )}
 
       {activeTab === "orders" ? <PurchaseOrdersPanel suppliers={suppliers} /> : null}
+      {activeTab === "delivery" ? <DeliveryNotePanel suppliers={suppliers} /> : null}
       {activeTab === "stock" ? (
         <div className="space-y-4">
           <ProductStockLevelsPanel />

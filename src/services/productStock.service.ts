@@ -72,6 +72,7 @@ export async function createStockReception(input: {
   productId: string;
   quantity: number;
   note?: string | null;
+  chantierId?: string | null;
 }): Promise<void> {
   if (!input.productId) throw new Error("Produit manquant.");
   if (!(input.quantity > 0)) throw new Error("Quantité invalide.");
@@ -81,6 +82,7 @@ export async function createStockReception(input: {
     quantity: input.quantity,
     source: "reception_manuelle",
     note: input.note?.trim() || null,
+    chantier_id: input.chantierId || null,
   });
   if (error) throw new Error(error.message);
 }
