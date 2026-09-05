@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef } from "react";
 import type { PlanningEntryRow, PlanningTaskRow } from "./planning.service";
-import { diffDays, formatDate, parseDate, startOfWeek } from "./planning.utils";
+import { diffDays, formatDate, isWeekend, parseDate, startOfWeek } from "./planning.utils";
 
 type Props = {
   tasks: PlanningTaskRow[];
@@ -16,6 +16,13 @@ type Props = {
 };
 
 const ROW_HEIGHT = 34;
+const WEEK_HEADER_HEIGHT = 22;
+const DAY_HEADER_HEIGHT = 30;
+const WEEKDAY_LETTERS = ["D", "L", "M", "M", "J", "V", "S"];
+
+function weekdayLetter(date: Date) {
+  return WEEKDAY_LETTERS[date.getDay()];
+}
 
 function statusBarClass(status: string, conflict: boolean, violated: boolean) {
   if (conflict || violated) return "bg-red-500";
@@ -61,7 +68,6 @@ export default function PlanningGanttView({
     return groups;
   }, [viewDays]);
 
-  const bandWidth = dayWidth * 7;
   const todayOffset = diffDays(viewStart, new Date(new Date().toDateString()));
   const showTodayLine = todayOffset >= 0 && todayOffset < viewDays.length;
   const gridTemplateColumns = `repeat(${viewDays.length}, minmax(${dayWidth}px, 1fr))`;
@@ -102,7 +108,10 @@ export default function PlanningGanttView({
       </div>
       <div className="flex">
         <div className="w-[260px] shrink-0 border-r border-slate-200">
-          <div className="grid grid-cols-[56px_56px_1fr] items-center gap-2 border-b border-slate-200 bg-slate-50 px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500" style={{ height: ROW_HEIGHT }}>
+          <div
+            className="grid grid-cols-[56px_56px_1fr] items-center gap-2 border-b border-slate-200 bg-slate-50 px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500"
+            style={{ height: WEEK_HEADER_HEIGHT + DAY_HEADER_HEIGHT }}
+          >
             <span>Début</span>
             <span>Fin</span>
             <span>Titre</span>
@@ -143,8 +152,11 @@ export default function PlanningGanttView({
               minWidth: minTimelineWidth,
               display: "grid",
               gridTemplateColumns,
-              gridTemplateRows: `${ROW_HEIGHT}px repeat(${tasks.length}, ${ROW_HEIGHT}px)`,
-              backgroundImage: `repeating-linear-gradient(to right, #f8fafc 0, #f8fafc ${bandWidth}px, #ffffff ${bandWidth}px, #ffffff ${bandWidth * 2}px)`,
+              gridTemplateRows: `${WEEK_HEADER_HEIGHT}px ${DAY_HEADER_HEIGHT}px repeat(${tasks.length}, ${ROW_HEIGHT}px)`,
+              backgroundImage: [
+                `repeating-linear-gradient(to right, transparent 0, transparent ${dayWidth - 1}px, #e2e8f0 ${dayWidth - 1}px, #e2e8f0 ${dayWidth}px)`,
+                `repeating-linear-gradient(to right, transparent 0px, transparent ${dayWidth * 5}px, #f1f5f9 ${dayWidth * 5}px, #f1f5f9 ${dayWidth * 7}px)`,
+              ].join(", "),
             }}
           >
             {showTodayLine ? (
@@ -159,13 +171,27 @@ export default function PlanningGanttView({
               return (
                 <div
                   key={group.label}
-                  className="border-b border-r border-slate-200 py-2 text-center text-[11px] font-medium text-slate-500"
+                  className="border-b border-r border-slate-200 bg-slate-50 py-2 text-center text-[11px] font-medium text-slate-500"
                   style={{ gridColumn: `${startIndex + 1} / span ${group.days.length}`, gridRow: 1 }}
                 >
                   Semaine du {formatShortDate(formatDate(group.days[0]))}
                 </div>
               );
             })}
+
+            {viewDays.map((day, index) => (
+              <div
+                key={`day-${formatDate(day)}`}
+                className={[
+                  "flex flex-col items-center justify-center gap-0.5 border-b border-r border-slate-200 text-[10px] font-medium",
+                  isWeekend(day) ? "bg-slate-100 text-slate-400" : "bg-slate-50 text-slate-500",
+                ].join(" ")}
+                style={{ gridColumn: index + 1, gridRow: 2 }}
+              >
+                <span className="uppercase leading-none">{weekdayLetter(day)}</span>
+                <span className="text-[11px] font-semibold leading-none text-slate-700">{day.getDate()}</span>
+              </div>
+            ))}
 
             {tasks.map((task, taskIndex) => {
               const entry = entryByTask.get(task.id);
@@ -194,7 +220,7 @@ export default function PlanningGanttView({
                     statusBarClass(task.status, isConflict, isViolated),
                     isSelected ? "ring-2 ring-offset-1 ring-slate-900" : "",
                   ].join(" ")}
-                  style={{ gridColumn: `${colStart} / ${colEnd}`, gridRow: taskIndex + 2 }}
+                  style={{ gridColumn: `${colStart} / ${colEnd}`, gridRow: taskIndex + 3 }}
                 >
                   <span className="truncate">{task.titre}</span>
                 </button>
