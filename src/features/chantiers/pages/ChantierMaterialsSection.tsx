@@ -346,6 +346,7 @@ export default function ChantierMaterialsSection({ chantierId }: { chantierId: s
       title="Materiaux"
       subtitle="Calcules a partir des ratios materiaux (bibliotheque de taches) x quantites des taches, tous rattaches au catalogue produits."
       actionLabel="Gerer les materiaux"
+      previewClassName="batipro-chapter-preview--materials"
       preview={preview}
     >
       <div className="space-y-4">

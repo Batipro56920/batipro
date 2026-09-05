@@ -80,6 +80,7 @@ export default function ChantierChapterDrawer({
         .batipro-chapter-preview--documents .overflow-hidden,
         .batipro-chapter-preview--documents .overflow-x-auto { max-height: 280px; overflow: hidden; }
         .batipro-chapter-preview--purchases > div > :not(:last-child) { display: none; }
+        .batipro-chapter-preview--materials > div > div:first-child { display: flex; }
         .batipro-chapter-preview--tasks-quotes > div > :first-child > :not(:last-child) { display: none; }
         .batipro-chapter-preview--tasks-quotes > div > :last-child > :not(:last-child) { display: none; }
         .batipro-chapter-preview--tasks-quotes > div { gap: 1rem; }
