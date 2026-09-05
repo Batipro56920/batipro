@@ -326,17 +326,15 @@ export default function ChantierMaterialsSection({ chantierId }: { chantierId: s
 
   const previewList = preparations.length ? preparations : null;
 
-  const preview = (
-    <div className="space-y-2">
-      {loading ? (
-        <div className="text-sm text-slate-500">Chargement...</div>
-      ) : previewList ? (
-        previewList.map((row) => <MaterialLineRow key={row.id} row={row} status={deriveStatus(row, purchaseOrderById)} compact />)
-      ) : (
-        <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-500">
-          Aucune ligne calculee. Ouvre "Gerer les materiaux" pour lancer le calcul depuis les taches.
-        </div>
-      )}
+  const preview = loading ? (
+    <div className="text-sm text-slate-500">Chargement...</div>
+  ) : previewList ? (
+    <div className="divide-y divide-slate-100 rounded-xl border border-slate-100">
+      {previewList.map((row) => <MaterialLineRow key={row.id} row={row} status={deriveStatus(row, purchaseOrderById)} compact />)}
+    </div>
+  ) : (
+    <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-500">
+      Aucune ligne calculee. Ouvre "Gerer les materiaux" pour lancer le calcul depuis les taches.
     </div>
   );
 
@@ -506,6 +504,20 @@ function MaterialLineRow({
     if (!query || !products) return [];
     return products.filter((product) => product.designation.toLowerCase().includes(query)).slice(0, 6);
   }, [relinkQuery, products]);
+
+  if (compact) {
+    return (
+      <div className="flex items-center gap-3 px-3 py-2 text-sm">
+        <span className="min-w-0 flex-1 truncate text-slate-800">{row.materialName}</span>
+        <span className="shrink-0 text-xs text-slate-400">
+          {row.quantity} {row.unit || "u"}
+        </span>
+        <span className={["shrink-0 rounded-full border px-2 py-0.5 text-[11px] font-semibold", status.className].join(" ")}>
+          {status.label}
+        </span>
+      </div>
+    );
+  }
 
   return (
     <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3">
