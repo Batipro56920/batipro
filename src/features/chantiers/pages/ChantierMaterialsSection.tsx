@@ -7,10 +7,10 @@ import {
   estimateTaskTemplatePreparation,
   listTaskTemplatePreparationByTemplateIds,
 } from "../../../services/taskTemplatePreparation.service";
-import { listProductCatalogItems, type ProductCatalogItem } from "../../product-catalog";
+import { listProductCatalogItems, saveProductCatalogItem, type ProductCatalogDraft, type ProductCatalogItem } from "../../product-catalog";
+import { listSuppliers, type SupplierRow } from "../../../services/suppliers.service";
 import {
   calculateDocumentTotals,
-  flattenDocumentNodes,
   type DocumentItemNode,
   type DocumentSectionNode,
   type DocumentUnit,
@@ -19,35 +19,22 @@ import { createPurchaseOrder } from "../../purchase-orders/application/purchaseO
 import { listPurchaseOrders, savePurchaseOrder } from "../../purchase-orders/infrastructure/purchaseOrderRepository";
 import type { PurchaseOrderRecord } from "../../purchase-orders/domain/types";
 import { getPurchaseOrderDefaultTerms } from "../../../services/companySettings.service";
-
-type MaterialLineDraft = {
-  id: string;
-  material_name: string;
-  quantity: number;
-  unit: string;
-  estimated_cost_ht: number | null;
-  source: "auto" | "manual";
-  taskCount: number;
-  productId: string | null;
-  supplierId: string | null;
-  supplierName: string | null;
-};
-
-type OrderStatus = { orderedQuantity: number; pos: Array<{ id: string; number: string }> };
+import {
+  addManualMaterialPreparation,
+  linkMaterialPreparationsToPurchaseOrder,
+  listChantierMaterialPreparations,
+  removeMaterialPreparation,
+  updateMaterialPreparation,
+  upsertComputedMaterialPreparations,
+  type ChantierMaterialPreparationRow,
+  type MaterialPreparationComputedLine,
+} from "../../../services/chantierMaterialPreparation.service";
 
 const DOCUMENT_UNITS: DocumentUnit[] = ["u", "h", "ml", "m2", "m3", "forfait", "kg", "l"];
 
 function toDocumentUnit(unit: string): DocumentUnit {
   const normalized = unit.trim().toLowerCase() as DocumentUnit;
   return DOCUMENT_UNITS.includes(normalized) ? normalized : "u";
-}
-
-function normalizeName(value: string) {
-  return value
-    .normalize("NFD")
-    .replace(/[̀-ͯ]/g, "")
-    .toLowerCase()
-    .trim();
 }
 
 function toNumberOrNull(value: string) {
@@ -57,33 +44,53 @@ function toNumberOrNull(value: string) {
   return Number.isFinite(parsed) ? parsed : null;
 }
 
+type PreparationStatus = { key: "non_commande" | "en_commande" | "en_stock"; label: string; className: string };
+
+function deriveStatus(prep: ChantierMaterialPreparationRow, purchaseOrderById: Map<string, PurchaseOrderRecord>): PreparationStatus {
+  const po = prep.purchaseOrderId ? purchaseOrderById.get(prep.purchaseOrderId) ?? null : null;
+  if (!po || po.status === "draft" || po.status === "cancelled") {
+    return { key: "non_commande", label: "Non commande", className: "border-slate-200 bg-slate-100 text-slate-600" };
+  }
+  if (po.status === "delivered") {
+    return { key: "en_stock", label: "En stock", className: "border-emerald-200 bg-emerald-50 text-emerald-700" };
+  }
+  return { key: "en_commande", label: "En commande", className: "border-amber-200 bg-amber-50 text-amber-700" };
+}
+
+type GapModalState = { prepId: string | null; materialName: string; unit: string };
+
 export default function ChantierMaterialsSection({ chantierId }: { chantierId: string }) {
   const [tasks, setTasks] = useState<ChantierTaskRow[]>([]);
   const [products, setProducts] = useState<ProductCatalogItem[]>([]);
+  const [suppliers, setSuppliers] = useState<SupplierRow[]>([]);
   const [existingOrders, setExistingOrders] = useState<PurchaseOrderRecord[]>([]);
+  const [preparations, setPreparations] = useState<ChantierMaterialPreparationRow[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const [materialLines, setMaterialLines] = useState<MaterialLineDraft[]>([]);
   const [generating, setGenerating] = useState(false);
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [createdOrders, setCreatedOrders] = useState<Array<{ id: string; number: string; supplierName: string | null }>>([]);
-  const [manualName, setManualName] = useState("");
-  const [manualQuantity, setManualQuantity] = useState("1");
-  const [manualUnit, setManualUnit] = useState("");
+  const [productQuery, setProductQuery] = useState("");
+  const [gapModal, setGapModal] = useState<GapModalState | null>(null);
+  const [savingProduct, setSavingProduct] = useState(false);
 
   async function refreshBase() {
     setLoading(true);
     try {
-      const [taskResult, productRows, orderRows] = await Promise.all([
+      const [taskResult, productRows, supplierRows, orderRows, preparationRows] = await Promise.all([
         getTasksByChantierIdDetailed(chantierId),
         listProductCatalogItems().catch(() => []),
+        listSuppliers().catch(() => []),
         listPurchaseOrders().catch(() => []),
+        listChantierMaterialPreparations(chantierId).catch(() => []),
       ]);
       setTasks(taskResult.tasks);
       setProducts(productRows);
+      setSuppliers(supplierRows);
       setExistingOrders(orderRows.filter((order) => order.chantierId === chantierId));
+      setPreparations(preparationRows);
     } finally {
       setLoading(false);
     }
@@ -95,26 +102,12 @@ export default function ChantierMaterialsSection({ chantierId }: { chantierId: s
   }, [chantierId]);
 
   const productById = useMemo(() => new Map(products.map((product) => [product.id, product])), [products]);
-
-  // Quantite deja presente sur des bons de commande existants de ce chantier, par nom de materiau normalise.
-  const orderedByName = useMemo(() => {
-    const map = new Map<string, OrderStatus>();
-    for (const order of existingOrders) {
-      const rows = flattenDocumentNodes(order.document.nodes);
-      for (const row of rows) {
-        if (row.node.type !== "line" && row.node.type !== "composite") continue;
-        const key = normalizeName(row.node.title);
-        if (!key) continue;
-        const current = map.get(key) ?? { orderedQuantity: 0, pos: [] };
-        current.orderedQuantity += Number((row.node as DocumentItemNode).quantity) || 0;
-        if (!current.pos.some((entry) => entry.id === order.id)) {
-          current.pos.push({ id: order.id, number: order.document.number });
-        }
-        map.set(key, current);
-      }
-    }
-    return map;
-  }, [existingOrders]);
+  const purchaseOrderById = useMemo(() => new Map(existingOrders.map((order) => [order.id, order])), [existingOrders]);
+  const filteredCatalog = useMemo(() => {
+    const query = productQuery.trim().toLowerCase();
+    if (!query) return [];
+    return products.filter((product) => product.designation.toLowerCase().includes(query)).slice(0, 6);
+  }, [productQuery, products]);
 
   async function generateFromTasks() {
     setGenerating(true);
@@ -130,7 +123,7 @@ export default function ChantierMaterialsSection({ chantierId }: { chantierId: s
         return;
       }
 
-      const aggregated = new Map<string, MaterialLineDraft>();
+      const aggregated = new Map<string, MaterialPreparationComputedLine>();
       for (const task of tasks) {
         if (!task.task_template_id) continue;
         const estimate = estimateTaskTemplatePreparation(
@@ -146,17 +139,14 @@ export default function ChantierMaterialsSection({ chantierId }: { chantierId: s
           const existing = aggregated.get(key);
           if (existing) {
             existing.quantity = Math.round((existing.quantity + material.estimated_quantity) * 1000) / 1000;
-            existing.estimated_cost_ht = (existing.estimated_cost_ht ?? 0) + (material.estimated_purchase_cost_ht ?? 0);
-            existing.taskCount += 1;
+            existing.unitCostHt = (existing.unitCostHt ?? 0) + (material.estimated_purchase_cost_ht ?? 0);
           } else {
             aggregated.set(key, {
-              id: key,
-              material_name: material.material_name,
+              aggregationKey: key,
+              materialName: material.material_name,
               quantity: material.estimated_quantity,
               unit: material.ratio_unit,
-              estimated_cost_ht: material.estimated_purchase_cost_ht,
-              source: "auto",
-              taskCount: 1,
+              unitCostHt: material.estimated_purchase_cost_ht,
               productId: material.product_id,
               supplierId,
               supplierName,
@@ -165,12 +155,11 @@ export default function ChantierMaterialsSection({ chantierId }: { chantierId: s
         }
       }
 
-      setMaterialLines((current) => [
-        ...Array.from(aggregated.values()).sort((a, b) => a.material_name.localeCompare(b.material_name, "fr")),
-        ...current.filter((line) => line.source === "manual"),
-      ]);
+      const computed = Array.from(aggregated.values());
+      const nextPreparations = await upsertComputedMaterialPreparations(chantierId, computed);
+      setPreparations(nextPreparations);
 
-      if (aggregated.size === 0) {
+      if (computed.length === 0) {
         setError("Aucun ratio materiau compatible trouve sur les taches de ce chantier.");
       }
     } catch (err: any) {
@@ -180,48 +169,131 @@ export default function ChantierMaterialsSection({ chantierId }: { chantierId: s
     }
   }
 
-  function addManualLine() {
-    const name = manualName.trim();
-    if (!name) return;
-    const quantity = toNumberOrNull(manualQuantity) ?? 1;
-    setMaterialLines((current) => [
-      ...current,
-      {
-        id: `manual-${Date.now()}`,
-        material_name: name,
-        quantity,
-        unit: manualUnit.trim(),
-        estimated_cost_ht: null,
-        source: "manual",
-        taskCount: 0,
-        productId: null,
-        supplierId: null,
-        supplierName: null,
-      },
-    ]);
-    setManualName("");
-    setManualQuantity("1");
-    setManualUnit("");
+  async function addFromCatalog(product: ProductCatalogItem) {
+    try {
+      const row = await addManualMaterialPreparation(chantierId, {
+        materialName: product.designation,
+        quantity: 1,
+        unit: product.unit,
+        productId: product.id,
+        supplierId: product.mainSupplierId,
+        supplierName: product.mainSupplierName,
+        unitCostHt: product.standardPurchasePriceHt,
+      });
+      setPreparations((current) => [...current, row].sort((a, b) => a.materialName.localeCompare(b.materialName, "fr")));
+      setProductQuery("");
+    } catch (err: any) {
+      setError(err?.message ?? "Erreur ajout materiau.");
+    }
   }
 
-  function removeLine(id: string) {
-    setMaterialLines((current) => current.filter((line) => line.id !== id));
-  }
-
-  function updateLineQuantity(id: string, value: string) {
+  async function updateLineQuantity(id: string, value: string) {
     const quantity = toNumberOrNull(value) ?? 0;
-    setMaterialLines((current) => current.map((line) => (line.id === id ? { ...line, quantity } : line)));
+    setPreparations((current) => current.map((row) => (row.id === id ? { ...row, quantity } : row)));
+    try {
+      await updateMaterialPreparation(id, { quantity });
+    } catch (err: any) {
+      setError(err?.message ?? "Erreur mise a jour quantite.");
+    }
+  }
+
+  async function removeLine(id: string) {
+    setPreparations((current) => current.filter((row) => row.id !== id));
+    try {
+      await removeMaterialPreparation(id);
+    } catch (err: any) {
+      setError(err?.message ?? "Erreur suppression ligne.");
+    }
+  }
+
+  async function submitProductQuickCreate(values: { designation: string; unit: DocumentUnit; supplierId: string; priceHt: number }) {
+    setSavingProduct(true);
+    setError(null);
+    try {
+      const supplier = suppliers.find((row) => row.id === values.supplierId) ?? null;
+      const draft: ProductCatalogDraft = {
+        designation: values.designation,
+        internalReference: null,
+        manufacturerReference: null,
+        brand: null,
+        category: null,
+        unit: values.unit,
+        vatRate: 20,
+        mainSupplierId: supplier?.id ?? null,
+        mainSupplierName: supplier?.name ?? null,
+        standardPurchasePriceHt: values.priceHt,
+        recommendedSalePriceHt: values.priceHt,
+        targetMarginRate: 30,
+        isSellable: true,
+        supplierPrices: supplier
+          ? [
+              {
+                id: crypto.randomUUID(),
+                supplierId: supplier.id,
+                supplierName: supplier.name,
+                priceHt: values.priceHt,
+                discountPercent: null,
+                startDate: null,
+                endDate: null,
+                packaging: null,
+                minimumQuantity: null,
+                deliveryLeadTimeDays: null,
+              },
+            ]
+          : [],
+        documents: [],
+        notes: null,
+      };
+      const saved = await saveProductCatalogItem(draft, "creation rapide preparation chantier");
+      setProducts((current) => [...current, saved]);
+
+      if (gapModal?.prepId) {
+        const updated = await updateMaterialPreparation(gapModal.prepId, {
+          productId: saved.id,
+          supplierId: saved.mainSupplierId,
+          supplierName: saved.mainSupplierName,
+          unitCostHt: saved.standardPurchasePriceHt,
+        });
+        setPreparations((current) => current.map((row) => (row.id === updated.id ? updated : row)));
+      } else {
+        const row = await addManualMaterialPreparation(chantierId, {
+          materialName: saved.designation,
+          quantity: 1,
+          unit: saved.unit,
+          productId: saved.id,
+          supplierId: saved.mainSupplierId,
+          supplierName: saved.mainSupplierName,
+          unitCostHt: saved.standardPurchasePriceHt,
+        });
+        setPreparations((current) => [...current, row]);
+      }
+      setGapModal(null);
+      setProductQuery("");
+    } catch (err: any) {
+      setError(err?.message ?? "Erreur creation produit.");
+    } finally {
+      setSavingProduct(false);
+    }
   }
 
   async function createOrdersBySupplier() {
-    if (materialLines.length === 0) return;
+    const orderableLines = preparations.filter((row) => !row.purchaseOrderId);
+    if (orderableLines.length === 0) return;
+    const blockedLines = orderableLines.filter((row) => !row.productId || !row.supplierId);
+    const readyLines = orderableLines.filter((row) => row.productId && row.supplierId);
+
+    if (readyLines.length === 0) {
+      setError("Tous les materiaux restants n'ont pas de produit catalogue / fournisseur resolu. Cree le produit avant de commander.");
+      return;
+    }
+
     setCreating(true);
     setError(null);
     try {
-      const groups = new Map<string, { supplierId: string | null; supplierName: string | null; lines: MaterialLineDraft[] }>();
-      for (const line of materialLines) {
-        const key = line.supplierId ?? "__NONE__";
-        const group = groups.get(key) ?? { supplierId: line.supplierId, supplierName: line.supplierName, lines: [] };
+      const groups = new Map<string, { supplierId: string; supplierName: string | null; lines: ChantierMaterialPreparationRow[] }>();
+      for (const line of readyLines) {
+        const key = line.supplierId as string;
+        const group = groups.get(key) ?? { supplierId: key, supplierName: line.supplierName, lines: [] };
         group.lines.push(line);
         groups.set(key, group);
       }
@@ -235,14 +307,12 @@ export default function ChantierMaterialsSection({ chantierId }: { chantierId: s
           type: "line",
           parentId: null,
           order: index,
-          title: line.material_name,
+          title: line.materialName,
           kind: "fourniture",
           quantity: line.quantity,
           unit: toDocumentUnit(line.unit),
           unitPriceHt:
-            line.estimated_cost_ht !== null && line.quantity > 0
-              ? Math.round((line.estimated_cost_ht / line.quantity) * 100) / 100
-              : 0,
+            line.unitCostHt !== null && line.quantity > 0 ? Math.round((line.unitCostHt / line.quantity) * 100) / 100 : 0,
           vatRate: 20,
         }));
         const section: DocumentSectionNode = {
@@ -258,12 +328,16 @@ export default function ChantierMaterialsSection({ chantierId }: { chantierId: s
           ...order,
           document: { ...nextDocument, totals: calculateDocumentTotals(nextDocument) },
         });
+        await linkMaterialPreparationsToPurchaseOrder(group.lines.map((line) => line.id), saved.id);
         created.push({ id: saved.id, number: saved.document.number, supplierName: saved.supplierName });
       }
 
       setCreatedOrders(created);
-      setMaterialLines([]);
-      setNotice(`${created.length} bon(s) de commande cree(s).`);
+      setNotice(
+        blockedLines.length
+          ? `${created.length} bon(s) de commande cree(s). ${blockedLines.length} materiau(x) sans produit catalogue reste(nt) a resoudre.`
+          : `${created.length} bon(s) de commande cree(s).`,
+      );
       await refreshBase();
     } catch (err: any) {
       setError(err?.message ?? "Erreur creation des bons de commande.");
@@ -272,14 +346,14 @@ export default function ChantierMaterialsSection({ chantierId }: { chantierId: s
     }
   }
 
-  const previewList = materialLines.length ? materialLines : null;
+  const previewList = preparations.length ? preparations : null;
 
   const preview = (
     <div className="space-y-2">
       {loading ? (
         <div className="text-sm text-slate-500">Chargement...</div>
       ) : previewList ? (
-        previewList.map((line) => <MaterialLineRow key={line.id} line={line} orderedByName={orderedByName} compact />)
+        previewList.map((row) => <MaterialLineRow key={row.id} row={row} status={deriveStatus(row, purchaseOrderById)} compact />)
       ) : (
         <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-500">
           Aucune ligne calculee. Ouvre "Gerer les materiaux" pour lancer le calcul depuis les taches.
@@ -292,15 +366,16 @@ export default function ChantierMaterialsSection({ chantierId }: { chantierId: s
     <ChantierChapterDrawer
       eyebrow="Preparation chantier"
       title="Materiaux"
-      subtitle="Calcules a partir des ratios materiaux (bibliotheque de taches) x quantites des taches, ou ajoutes a la main."
+      subtitle="Calcules a partir des ratios materiaux (bibliotheque de taches) x quantites des taches, tous rattaches au catalogue produits."
       actionLabel="Gerer les materiaux"
       preview={preview}
     >
       <div className="space-y-4">
         <div className="flex flex-col gap-3 rounded-2xl border border-blue-200 bg-blue-50/60 p-4 lg:flex-row lg:items-center lg:justify-between">
           <div className="text-sm text-slate-700">
-            Chaque materiau relie a un produit catalogue est rattache a son fournisseur principal : "Creer les bons de
-            commande" cree un bon par fournisseur.
+            Chaque materiau doit etre rattache a un produit du catalogue (et son fournisseur) : "Creer les bons de
+            commande" cree un bon par fournisseur. Sans produit resolu, la ligne reste bloquee tant que le produit
+            n'est pas cree.
           </div>
           <button
             type="button"
@@ -339,122 +414,138 @@ export default function ChantierMaterialsSection({ chantierId }: { chantierId: s
           </div>
         ) : null}
 
-        {materialLines.length > 0 ? (
+        {preparations.length > 0 ? (
           <div className="space-y-2">
-            {materialLines.map((line) => (
+            {preparations.map((row) => (
               <MaterialLineRow
-                key={line.id}
-                line={line}
-                orderedByName={orderedByName}
-                onQuantityChange={(value) => updateLineQuantity(line.id, value)}
-                onRemove={() => removeLine(line.id)}
+                key={row.id}
+                row={row}
+                status={deriveStatus(row, purchaseOrderById)}
+                onQuantityChange={(value) => updateLineQuantity(row.id, value)}
+                onRemove={row.purchaseOrderId ? undefined : () => removeLine(row.id)}
+                onCreateProduct={() => setGapModal({ prepId: row.id, materialName: row.materialName, unit: row.unit })}
               />
             ))}
           </div>
         ) : (
           <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50 px-4 py-5 text-sm text-slate-500">
-            Aucune ligne pour l'instant. Calcule depuis les taches ou ajoute une ligne manuellement.
+            Aucune ligne pour l'instant. Calcule depuis les taches ou ajoute un produit du catalogue ci-dessous.
           </div>
         )}
 
-        <div className="flex flex-wrap items-end gap-3 border-t border-slate-200 pt-4">
-          <label className="space-y-1 text-xs text-slate-600">
-            <div>Ajouter manuellement</div>
+        <div className="space-y-2 border-t border-slate-200 pt-4">
+          <div className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">Ajouter un materiau depuis le catalogue produits</div>
+          <div className="flex flex-wrap items-center gap-3">
             <input
-              value={manualName}
-              onChange={(event) => setManualName(event.target.value)}
-              placeholder="Designation"
-              className="w-48 rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-900"
+              value={productQuery}
+              onChange={(event) => setProductQuery(event.target.value)}
+              placeholder="Rechercher un produit du catalogue..."
+              className="w-64 rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-900"
             />
-          </label>
-          <label className="space-y-1 text-xs text-slate-600">
-            <div>Qte</div>
-            <input
-              value={manualQuantity}
-              onChange={(event) => setManualQuantity(event.target.value)}
-              inputMode="decimal"
-              className="w-20 rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-900"
-            />
-          </label>
-          <label className="space-y-1 text-xs text-slate-600">
-            <div>Unite</div>
-            <input
-              value={manualUnit}
-              onChange={(event) => setManualUnit(event.target.value)}
-              placeholder="u, m2, ml..."
-              className="w-24 rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-900"
-            />
-          </label>
-          <button
-            type="button"
-            onClick={addManualLine}
-            disabled={!manualName.trim()}
-            className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50"
-          >
-            + Ajouter la ligne
-          </button>
-          <button
-            type="button"
-            onClick={() => void createOrdersBySupplier()}
-            disabled={materialLines.length === 0 || creating}
-            className={[
-              "ml-auto rounded-2xl px-5 py-3 text-sm font-semibold",
-              materialLines.length === 0 || creating ? "bg-slate-200 text-slate-500" : "bg-emerald-600 text-white hover:bg-emerald-700",
-            ].join(" ")}
-          >
-            {creating ? "Creation..." : "Creer les bons de commande"}
-          </button>
+            <button
+              type="button"
+              onClick={() => setGapModal({ prepId: null, materialName: productQuery.trim(), unit: "u" })}
+              className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+            >
+              Produit introuvable ? Creer un produit
+            </button>
+            <button
+              type="button"
+              onClick={() => void createOrdersBySupplier()}
+              disabled={preparations.filter((row) => !row.purchaseOrderId).length === 0 || creating}
+              className={[
+                "ml-auto rounded-2xl px-5 py-3 text-sm font-semibold",
+                preparations.filter((row) => !row.purchaseOrderId).length === 0 || creating
+                  ? "bg-slate-200 text-slate-500"
+                  : "bg-emerald-600 text-white hover:bg-emerald-700",
+              ].join(" ")}
+            >
+              {creating ? "Creation..." : "Creer les bons de commande"}
+            </button>
+          </div>
+          {filteredCatalog.length ? (
+            <div className="grid gap-2 sm:grid-cols-2">
+              {filteredCatalog.map((product) => (
+                <button
+                  key={product.id}
+                  type="button"
+                  onClick={() => void addFromCatalog(product)}
+                  className="rounded-xl border border-slate-200 bg-white p-3 text-left text-sm hover:border-blue-200 hover:bg-blue-50"
+                >
+                  <div className="font-semibold text-slate-950">{product.designation}</div>
+                  <div className="mt-1 text-xs text-slate-500">
+                    {product.unit} - {product.mainSupplierName ?? "fournisseur non defini"}
+                  </div>
+                </button>
+              ))}
+            </div>
+          ) : null}
         </div>
       </div>
+
+      {gapModal ? (
+        <ProductQuickCreateModal
+          initial={gapModal}
+          suppliers={suppliers}
+          saving={savingProduct}
+          onCancel={() => setGapModal(null)}
+          onSubmit={(values) => void submitProductQuickCreate(values)}
+        />
+      ) : null}
     </ChantierChapterDrawer>
   );
 }
 
 function MaterialLineRow({
-  line,
-  orderedByName,
+  row,
+  status,
   onQuantityChange,
   onRemove,
+  onCreateProduct,
   compact,
 }: {
-  line: MaterialLineDraft;
-  orderedByName: Map<string, OrderStatus>;
+  row: ChantierMaterialPreparationRow;
+  status: PreparationStatus;
   onQuantityChange?: (value: string) => void;
   onRemove?: () => void;
+  onCreateProduct?: () => void;
   compact?: boolean;
 }) {
-  const status = orderedByName.get(normalizeName(line.material_name));
-  const orderedQuantity = status?.orderedQuantity ?? 0;
-  const badge =
-    orderedQuantity <= 0
-      ? { label: "Pas commande", className: "border-slate-200 bg-slate-100 text-slate-600" }
-      : orderedQuantity >= line.quantity
-        ? { label: "Commande", className: "border-emerald-200 bg-emerald-50 text-emerald-700" }
-        : { label: `Partiel (${orderedQuantity}/${line.quantity})`, className: "border-amber-200 bg-amber-50 text-amber-700" };
-
   return (
     <div className="flex flex-wrap items-center gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3">
       <div className="min-w-[160px] flex-1">
-        <div className="font-medium text-slate-950">{line.material_name}</div>
+        <div className="font-medium text-slate-950">{row.materialName}</div>
         <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-slate-500">
           <span>
-            {line.source === "auto" ? `Auto - ${line.taskCount} tache(s)` : "Ajout manuel"}
-            {line.supplierName ? ` - ${line.supplierName}` : line.productId ? " - fournisseur non defini" : ""}
+            {row.source === "auto" ? "Auto - depuis les taches" : "Ajout manuel"}
+            {row.supplierName ? ` - ${row.supplierName}` : ""}
           </span>
-          <span className={["rounded-full border px-2 py-0.5 font-semibold", badge.className].join(" ")}>{badge.label}</span>
+          <span className={["rounded-full border px-2 py-0.5 font-semibold", status.className].join(" ")}>{status.label}</span>
+          {!row.productId ? (
+            <span className="rounded-full border border-red-200 bg-red-50 px-2 py-0.5 font-semibold text-red-700">Produit a creer</span>
+          ) : null}
         </div>
       </div>
       {onQuantityChange ? (
         <input
-          value={line.quantity}
+          value={row.quantity}
           onChange={(event) => onQuantityChange(event.target.value)}
           inputMode="decimal"
           className="w-24 rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-900"
         />
       ) : (
-        <span className="text-sm font-semibold text-slate-900">{line.quantity}</span>
+        <span className="text-sm font-semibold text-slate-900">{row.quantity}</span>
       )}
-      <span className="w-14 text-sm text-slate-500">{line.unit || "u"}</span>
+      <span className="w-14 text-sm text-slate-500">{row.unit || "u"}</span>
+      {!compact && !row.productId && onCreateProduct ? (
+        <button
+          type="button"
+          onClick={onCreateProduct}
+          className="rounded-xl border border-blue-200 px-3 py-2 text-xs font-medium text-blue-700 hover:bg-blue-50"
+        >
+          Creer le produit
+        </button>
+      ) : null}
       {!compact && onRemove ? (
         <button
           type="button"
@@ -464,6 +555,104 @@ function MaterialLineRow({
           Retirer
         </button>
       ) : null}
+    </div>
+  );
+}
+
+function ProductQuickCreateModal({
+  initial,
+  suppliers,
+  saving,
+  onCancel,
+  onSubmit,
+}: {
+  initial: GapModalState;
+  suppliers: SupplierRow[];
+  saving: boolean;
+  onCancel: () => void;
+  onSubmit: (values: { designation: string; unit: DocumentUnit; supplierId: string; priceHt: number }) => void;
+}) {
+  const [designation, setDesignation] = useState(initial.materialName);
+  const [unit, setUnit] = useState<DocumentUnit>(toDocumentUnit(initial.unit));
+  const [supplierId, setSupplierId] = useState(suppliers[0]?.id ?? "");
+  const [priceHt, setPriceHt] = useState("");
+
+  const priceValue = toNumberOrNull(priceHt);
+  const canSubmit = designation.trim().length > 0 && Boolean(supplierId) && priceValue !== null && priceValue >= 0;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 p-4">
+      <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-5 shadow-xl">
+        <div className="text-sm font-semibold uppercase tracking-[0.12em] text-blue-600">Nouveau produit catalogue</div>
+        <p className="mt-1 text-xs text-slate-500">
+          Demande le prix au fournisseur puis enregistre-le ici : ce materiau sera desormais reconnu automatiquement.
+        </p>
+
+        <div className="mt-4 space-y-3">
+          <label className="block space-y-1 text-sm">
+            <div className="text-xs text-slate-600">Designation</div>
+            <input
+              value={designation}
+              onChange={(event) => setDesignation(event.target.value)}
+              className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-900"
+            />
+          </label>
+          <div className="grid grid-cols-2 gap-3">
+            <label className="block space-y-1 text-sm">
+              <div className="text-xs text-slate-600">Unite</div>
+              <select
+                value={unit}
+                onChange={(event) => setUnit(event.target.value as DocumentUnit)}
+                className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-900"
+              >
+                {DOCUMENT_UNITS.map((value) => (
+                  <option key={value} value={value}>{value}</option>
+                ))}
+              </select>
+            </label>
+            <label className="block space-y-1 text-sm">
+              <div className="text-xs text-slate-600">Prix d'achat HT</div>
+              <input
+                value={priceHt}
+                onChange={(event) => setPriceHt(event.target.value)}
+                inputMode="decimal"
+                placeholder="0.00"
+                className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-900"
+              />
+            </label>
+          </div>
+          <label className="block space-y-1 text-sm">
+            <div className="text-xs text-slate-600">Fournisseur</div>
+            <select
+              value={supplierId}
+              onChange={(event) => setSupplierId(event.target.value)}
+              className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-900"
+            >
+              <option value="">Selectionner</option>
+              {suppliers.map((supplier) => (
+                <option key={supplier.id} value={supplier.id}>{supplier.name}</option>
+              ))}
+            </select>
+          </label>
+        </div>
+
+        <div className="mt-5 flex justify-end gap-2">
+          <button type="button" onClick={onCancel} className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50">
+            Annuler
+          </button>
+          <button
+            type="button"
+            disabled={!canSubmit || saving}
+            onClick={() => canSubmit && onSubmit({ designation: designation.trim(), unit, supplierId, priceHt: priceValue ?? 0 })}
+            className={[
+              "rounded-xl px-4 py-2 text-sm font-semibold",
+              !canSubmit || saving ? "bg-slate-200 text-slate-500" : "bg-blue-600 text-white hover:bg-blue-700",
+            ].join(" ")}
+          >
+            {saving ? "Enregistrement..." : "Creer le produit"}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
