@@ -19,6 +19,7 @@ export type PurchaseOrderRecord = {
 };
 
 export type PurchaseOrderCreateInput = {
+  number?: string;
   supplierId?: string | null;
   supplierName?: string | null;
   projectId?: string | null;

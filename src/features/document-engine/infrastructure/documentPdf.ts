@@ -21,10 +21,11 @@ export function createBusinessDocumentPdf(document: BusinessDocument) {
   const rows = flattenDocumentNodes(document.nodes);
   const totals = document.totals ?? calculateDocumentTotals(document);
   const template = getDocumentTemplate(document);
+  const showPricing = document.kind !== "purchase_order";
 
   let y = drawHeader(pdf, document);
-  y = drawDocumentTable(pdf, document, rows, y);
-  y = drawTotals(pdf, document, totals, y + 8);
+  y = drawDocumentTable(pdf, document, rows, y, showPricing);
+  if (showPricing) y = drawTotals(pdf, document, totals, y + 8);
   y = drawTerms(pdf, document, y + 8);
   y = drawConditionSheet(pdf, document, y + 2);
 
@@ -121,27 +122,27 @@ function detectImageFormat(dataUrl: string): string {
   return ext ? ext.toUpperCase() : "PNG";
 }
 
-function drawDocumentTable(pdf: jsPDF, document: BusinessDocument, rows: FlatDocumentNode[], startY: number) {
+function drawDocumentTable(pdf: jsPDF, document: BusinessDocument, rows: FlatDocumentNode[], startY: number, showPricing: boolean) {
   let y = startY;
   y = ensureSpace(pdf, y, 14, () => drawContinuationHeader(pdf, document));
-  drawTableHeader(pdf, y);
+  drawTableHeader(pdf, y, showPricing);
   y += 9;
 
   rows.forEach((row) => {
     const height = rowHeight(pdf, row);
     y = ensureSpace(pdf, y, height + 2, () => {
       drawContinuationHeader(pdf, document);
-      drawTableHeader(pdf, 42);
+      drawTableHeader(pdf, 42, showPricing);
     });
     if (y === 42) y += 9;
-    drawRow(pdf, row, y, height);
+    drawRow(pdf, row, y, height, showPricing);
     y += height;
   });
 
   return y;
 }
 
-function drawRow(pdf: jsPDF, row: FlatDocumentNode, y: number, height: number) {
+function drawRow(pdf: jsPDF, row: FlatDocumentNode, y: number, height: number, showPricing: boolean) {
   if (row.node.type === "section") {
     pdf.setFillColor(...COLORS.lightBlue);
     pdf.setDrawColor(...COLORS.border);
@@ -203,12 +204,17 @@ function drawRow(pdf: jsPDF, row: FlatDocumentNode, y: number, height: number) {
   if (notes) pdf.text(split(pdf, safe(notes), 80, 3), 34, y + 9);
   pdf.setFontSize(8);
   pdf.setTextColor(...COLORS.slate);
-  pdf.text(formatNumber(item.quantity), 126, y, { align: "right" });
-  pdf.text(unitLabel(item.unit), 140, y);
-  pdf.text(formatCurrency(item.unitPriceHt), 163, y, { align: "right" });
-  pdf.text(`${formatNumber(item.vatRate)}%`, 176, y, { align: "right" });
-  pdf.setFont("helvetica", "bold");
-  pdf.text(formatCurrency(total), 194, y, { align: "right" });
+  if (showPricing) {
+    pdf.text(formatNumber(item.quantity), 126, y, { align: "right" });
+    pdf.text(unitLabel(item.unit), 140, y);
+    pdf.text(formatCurrency(item.unitPriceHt), 163, y, { align: "right" });
+    pdf.text(`${formatNumber(item.vatRate)}%`, 176, y, { align: "right" });
+    pdf.setFont("helvetica", "bold");
+    pdf.text(formatCurrency(total), 194, y, { align: "right" });
+  } else {
+    pdf.text(formatNumber(item.quantity), 165, y, { align: "right" });
+    pdf.text(unitLabel(item.unit), 172, y);
+  }
 }
 
 function drawTotals(pdf: jsPDF, document: BusinessDocument, totals: NonNullable<BusinessDocument["totals"]>, startY: number) {
@@ -252,12 +258,17 @@ function drawTotals(pdf: jsPDF, document: BusinessDocument, totals: NonNullable<
 
 function drawTerms(pdf: jsPDF, document: BusinessDocument, startY: number) {
   const template = getDocumentTemplate(document);
-  const blocks = [
-    [template.legalBlockTitle, document.terms.paymentTerms],
-    ["Mentions legales", document.terms.legalMentions],
-    ["Gestion des dechets", document.terms.wasteManagement],
-    ["Notes", document.terms.footerNotes],
-  ].filter(([, value]) => String(value ?? "").trim());
+  const isPurchaseOrder = document.kind === "purchase_order";
+  const blocks = (
+    isPurchaseOrder
+      ? [["Notes", document.terms.footerNotes]]
+      : [
+          [template.legalBlockTitle, document.terms.paymentTerms],
+          ["Mentions legales", document.terms.legalMentions],
+          ["Gestion des dechets", document.terms.wasteManagement],
+          ["Notes", document.terms.footerNotes],
+        ]
+  ).filter(([, value]) => String(value ?? "").trim());
 
   let y = startY;
   blocks.forEach(([title, value]) => {
@@ -363,7 +374,7 @@ function drawInfoCard(pdf: jsPDF, x: number, y: number, width: number, height: n
   lines.filter(Boolean).slice(0, 6).forEach((line, index) => pdf.text(safe(line), x + 5, y + 15 + index * 4.7, { maxWidth: width - 10 }));
 }
 
-function drawTableHeader(pdf: jsPDF, y: number) {
+function drawTableHeader(pdf: jsPDF, y: number, showPricing: boolean) {
   pdf.setFillColor(...COLORS.blue);
   pdf.roundedRect(PAGE.marginX, y - 6, PAGE.contentWidth, 10, 1.5, 1.5, "F");
   pdf.setTextColor(...COLORS.white);
@@ -371,11 +382,16 @@ function drawTableHeader(pdf: jsPDF, y: number) {
   pdf.setFontSize(7.6);
   pdf.text("N", 18, y);
   pdf.text("Designation", 34, y);
-  pdf.text("Qte", 126, y, { align: "right" });
-  pdf.text("Unite", 140, y);
-  pdf.text("PU HT", 163, y, { align: "right" });
-  pdf.text("TVA", 176, y, { align: "right" });
-  pdf.text("Total HT", 194, y, { align: "right" });
+  if (showPricing) {
+    pdf.text("Qte", 126, y, { align: "right" });
+    pdf.text("Unite", 140, y);
+    pdf.text("PU HT", 163, y, { align: "right" });
+    pdf.text("TVA", 176, y, { align: "right" });
+    pdf.text("Total HT", 194, y, { align: "right" });
+  } else {
+    pdf.text("Qte", 165, y, { align: "right" });
+    pdf.text("Unite", 172, y);
+  }
   pdf.setTextColor(...COLORS.slate);
 }
 

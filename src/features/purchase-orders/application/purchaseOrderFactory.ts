@@ -11,7 +11,7 @@ export function createPurchaseOrder(input: PurchaseOrderCreateInput = {}): Purch
   const document = createEmptyBusinessDocument("purchase_order");
   const nextDocument = {
     ...document,
-    number: createPurchaseOrderNumber(),
+    number: input.number ?? createPurchaseOrderNumber(),
     title: "Bon de commande fournisseur",
     projectId: input.projectId ?? null,
     chantierId: input.chantierId ?? null,

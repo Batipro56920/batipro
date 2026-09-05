@@ -64,6 +64,7 @@ export function PurchaseOrderEditor({
   const [productQuery, setProductQuery] = useState("");
   const [catalogInsertPending, setCatalogInsertPending] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [sendValidationError, setSendValidationError] = useState<string | null>(null);
   const [products, setProducts] = useState<ProductCatalogItem[]>([]);
   const [chantiers, setChantiers] = useState<ChantierOption[]>([]);
   const [projects, setProjects] = useState<ProjectOption[]>([]);
@@ -269,6 +270,18 @@ export function PurchaseOrderEditor({
     }
   }
 
+  function openSend() {
+    const missing: string[] = [];
+    if (!order.deliveryAddress?.trim()) missing.push("adresse de livraison");
+    if (!order.expectedDeliveryDate) missing.push("date de livraison souhaitee");
+    if (missing.length) {
+      setSendValidationError(`Renseigne ${missing.join(" et ")} avant d'envoyer ce bon.`);
+      return;
+    }
+    setSendValidationError(null);
+    setSendOpen(true);
+  }
+
   function closeEditor() {
     if (catalogInsertPending) {
       const confirmed = window.confirm("Un produit catalogue vient d'etre ajoute au bon. Fermer sans enregistrer peut perdre cette ligne. Fermer quand meme ?");
@@ -291,11 +304,18 @@ export function PurchaseOrderEditor({
         <div className="flex flex-wrap gap-2">
           <Button variant="secondary" onClick={() => setPreviewOpen((open) => !open)}>Preview</Button>
           <Button variant="secondary" onClick={() => downloadBusinessDocumentPdf(documentForOutput)}><Download className="h-4 w-4" /> PDF</Button>
-          <Button variant="secondary" onClick={() => setSendOpen(true)}><Send className="h-4 w-4" /> Envoyer</Button>
+          <Button variant="secondary" onClick={openSend}><Send className="h-4 w-4" /> Envoyer</Button>
           <Button variant="primary" onClick={() => void save()} disabled={saving}><Save className="h-4 w-4" /> {saving ? "Enregistrement..." : "Enregistrer"}</Button>
           <Button variant="secondary" onClick={closeEditor}>Fermer</Button>
         </div>
       </header>
+
+      {sendValidationError ? (
+        <div className="mt-4 flex items-start gap-3 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-700" />
+          <p>{sendValidationError}</p>
+        </div>
+      ) : null}
 
       {catalogInsertPending ? (
         <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
@@ -382,6 +402,15 @@ export function PurchaseOrderEditor({
             <label className={`${labelClass} md:col-span-2 xl:col-span-3`}>
               Adresse livraison chantier
               <input className={inputClass} value={order.deliveryAddress ?? ""} onChange={(event) => updateOrder({ deliveryAddress: event.target.value || null, document: { ...document, siteAddress: event.target.value } })} />
+            </label>
+            <label className={`${labelClass} md:col-span-2 xl:col-span-3`}>
+              Note
+              <textarea
+                className={`${inputClass} h-20 resize-vertical py-2`}
+                placeholder="Precision utile pour le fournisseur ou la reception (optionnel)"
+                value={document.terms.footerNotes ?? ""}
+                onChange={(event) => updateDocument({ terms: { ...document.terms, footerNotes: event.target.value } })}
+              />
             </label>
           </div>
 

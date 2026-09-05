@@ -9,6 +9,9 @@ export function DocumentPreview({ document, onDownload, onSend }: { document: Bu
   const rows = flattenDocumentNodes(document.nodes);
   const totals = document.totals ?? calculateDocumentTotals(document);
   const template = getDocumentTemplate(document);
+  const showPricing = document.kind !== "purchase_order";
+  const isPurchaseOrder = document.kind === "purchase_order";
+  const tableColsClass = showPricing ? "grid-cols-[70px_1fr_90px_90px_110px]" : "grid-cols-[70px_1fr_90px_90px]";
 
   return (
     <div className="rounded-3xl border border-slate-200 bg-slate-100 p-4">
@@ -49,38 +52,44 @@ export function DocumentPreview({ document, onDownload, onSend }: { document: Bu
           {document.description ? <p className="mt-8 rounded-2xl bg-slate-50 p-5 text-sm leading-6 text-slate-700">{document.description}</p> : null}
 
           <div className="mt-8 overflow-hidden rounded-2xl border border-slate-200">
-            <div className="grid grid-cols-[70px_1fr_90px_90px_110px] bg-blue-600 px-4 py-2.5 text-xs font-bold uppercase tracking-[0.12em] text-white">
+            <div className={`grid ${tableColsClass} bg-blue-600 px-4 py-2.5 text-xs font-bold uppercase tracking-[0.12em] text-white`}>
               <span>N°</span>
               <span>Désignation</span>
               <span className="text-right">Qté</span>
               <span>Unité</span>
-              <span className="text-right">Total HT</span>
+              {showPricing ? <span className="text-right">Total HT</span> : null}
             </div>
-            {rows.map((row) => <DocumentPreviewRow key={row.id} row={row} />)}
+            {rows.map((row) => <DocumentPreviewRow key={row.id} row={row} showPricing={showPricing} colsClass={tableColsClass} />)}
           </div>
 
-          <section className="mt-8 grid gap-6 lg:grid-cols-[1fr_340px]">
+          <section className={showPricing ? "mt-8 grid gap-6 lg:grid-cols-[1fr_340px]" : "mt-8"}>
             <div className="space-y-4 text-sm leading-6 text-slate-700">
-              <PreviewBlock title={template.legalBlockTitle} value={document.terms.paymentTerms} />
-              <PreviewBlock title="Mentions légales" value={document.terms.legalMentions} />
-              <PreviewBlock title="Gestion des déchets" value={document.terms.wasteManagement} />
+              {isPurchaseOrder ? null : (
+                <>
+                  <PreviewBlock title={template.legalBlockTitle} value={document.terms.paymentTerms} />
+                  <PreviewBlock title="Mentions légales" value={document.terms.legalMentions} />
+                  <PreviewBlock title="Gestion des déchets" value={document.terms.wasteManagement} />
+                </>
+              )}
               <PreviewBlock title="Notes de bas de page" value={document.terms.footerNotes} />
             </div>
-            <div className="h-fit rounded-2xl border border-slate-200 bg-slate-50 p-5">
-              <TotalRow label="Total HT" value={totals.totalHt} />
-              <TotalRow label="TVA" value={totals.totalVat} />
-              <TotalRow label="Total TTC" value={totals.totalTtc} strong />
-              <div className="mt-4 rounded-xl bg-blue-600 px-4 py-3 text-white">
-                <div className="flex justify-between text-sm font-bold"><span>Net à payer</span><span>{formatCurrency(totals.totalTtc)}</span></div>
-              </div>
-              {totals.vatBreakdown.length ? (
-                <div className="mt-4 space-y-1 text-xs text-slate-600">
-                  {totals.vatBreakdown.map((line) => (
-                    <div key={line.rate} className="flex justify-between"><span>TVA {line.rate}%</span><span>{formatCurrency(line.vatAmount)}</span></div>
-                  ))}
+            {showPricing ? (
+              <div className="h-fit rounded-2xl border border-slate-200 bg-slate-50 p-5">
+                <TotalRow label="Total HT" value={totals.totalHt} />
+                <TotalRow label="TVA" value={totals.totalVat} />
+                <TotalRow label="Total TTC" value={totals.totalTtc} strong />
+                <div className="mt-4 rounded-xl bg-blue-600 px-4 py-3 text-white">
+                  <div className="flex justify-between text-sm font-bold"><span>Net à payer</span><span>{formatCurrency(totals.totalTtc)}</span></div>
                 </div>
-              ) : null}
-            </div>
+                {totals.vatBreakdown.length ? (
+                  <div className="mt-4 space-y-1 text-xs text-slate-600">
+                    {totals.vatBreakdown.map((line) => (
+                      <div key={line.rate} className="flex justify-between"><span>TVA {line.rate}%</span><span>{formatCurrency(line.vatAmount)}</span></div>
+                    ))}
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
           </section>
 
           <ConditionSheetPreview sheet={document.conditionSheet} />
@@ -124,12 +133,13 @@ function InfoCard({ title, lines }: { title: string; lines: Array<string | null 
   );
 }
 
-function DocumentPreviewRow({ row }: { row: FlatDocumentNode }) {
+function DocumentPreviewRow({ row, showPricing, colsClass }: { row: FlatDocumentNode; showPricing: boolean; colsClass: string }) {
+  const spanClass = showPricing ? "col-span-4" : "col-span-3";
   if (row.node.type === "section") {
-    return <div className="grid grid-cols-[70px_1fr_90px_90px_110px] bg-blue-50 px-4 py-3 text-sm font-bold text-slate-950"><span>{row.number}</span><span className="col-span-4">{row.node.title}</span></div>;
+    return <div className={`grid ${colsClass} bg-blue-50 px-4 py-3 text-sm font-bold text-slate-950`}><span>{row.number}</span><span className={spanClass}>{row.node.title}</span></div>;
   }
   if (row.node.type === "subsection") {
-    return <div className="grid grid-cols-[70px_1fr_90px_90px_110px] bg-slate-50 px-4 py-2.5 text-sm font-semibold text-slate-900"><span>{row.number}</span><span className="col-span-4">{row.node.title}</span></div>;
+    return <div className={`grid ${colsClass} bg-slate-50 px-4 py-2.5 text-sm font-semibold text-slate-900`}><span>{row.number}</span><span className={spanClass}>{row.node.title}</span></div>;
   }
   if (row.node.type === "text") {
     return <div className="border-t border-slate-100 px-4 py-3 text-sm leading-6 text-slate-600">{row.node.content}</div>;
@@ -139,7 +149,7 @@ function DocumentPreviewRow({ row }: { row: FlatDocumentNode }) {
   }
   const item = row.node as DocumentItemNode;
   return (
-    <div className="grid grid-cols-[70px_1fr_90px_90px_110px] border-t border-slate-100 px-4 py-3 text-sm text-slate-700">
+    <div className={`grid ${colsClass} border-t border-slate-100 px-4 py-3 text-sm text-slate-700`}>
       <span>{row.number}</span>
       <span>
         <span className="font-medium text-slate-950">{item.title}</span>
@@ -147,7 +157,7 @@ function DocumentPreviewRow({ row }: { row: FlatDocumentNode }) {
       </span>
       <span className="text-right">{item.quantity}</span>
       <span>{formatUnit(item.unit)}</span>
-      <span className="text-right font-semibold text-slate-950">{formatCurrency(item.quantity * item.unitPriceHt)}</span>
+      {showPricing ? <span className="text-right font-semibold text-slate-950">{formatCurrency(item.quantity * item.unitPriceHt)}</span> : null}
     </div>
   );
 }

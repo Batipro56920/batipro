@@ -59,8 +59,36 @@ export async function savePurchaseOrder(order: PurchaseOrderRecord) {
 }
 
 export async function createAndSavePurchaseOrder(input: PurchaseOrderCreateInput = {}) {
-  const order = createPurchaseOrder(input);
+  const [number] = await generateSequentialPurchaseOrderNumbers(1);
+  const order = createPurchaseOrder({ ...input, number });
   return savePurchaseOrder(order);
+}
+
+/**
+ * Numerotation bon de commande au format AAAAMMJJNN (jour + sequence quotidienne), ex:
+ * 2026090501 puis 2026090502, 2026090603 le lendemain. `count` reserve plusieurs numeros
+ * consecutifs d'un coup (creation par lot, un bon par fournisseur).
+ */
+export async function generateSequentialPurchaseOrderNumbers(count: number): Promise<string[]> {
+  const now = new Date();
+  const prefix = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, "0")}${String(now.getDate()).padStart(2, "0")}`;
+
+  const { data, error } = await supabase
+    .from(TABLE as any)
+    .select("document")
+    .like("document->>number", `${prefix}%`)
+    .overrideTypes<Array<{ document: { number?: string } }>>();
+  if (error) throw new Error(error.message);
+
+  let maxSeq = 0;
+  for (const row of data ?? []) {
+    const num = String(row.document?.number ?? "");
+    if (!num.startsWith(prefix)) continue;
+    const seq = parseInt(num.slice(prefix.length), 10);
+    if (Number.isFinite(seq) && seq > maxSeq) maxSeq = seq;
+  }
+
+  return Array.from({ length: Math.max(1, count) }, (_, index) => `${prefix}${String(maxSeq + 1 + index).padStart(2, "0")}`);
 }
 
 export async function updatePurchaseOrderStatus(id: string, status: PurchaseOrderStatus) {

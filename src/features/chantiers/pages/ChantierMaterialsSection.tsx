@@ -20,7 +20,7 @@ import {
   type DocumentSectionNode,
 } from "../../document-engine";
 import { createPurchaseOrder } from "../../purchase-orders/application/purchaseOrderFactory";
-import { listPurchaseOrders, savePurchaseOrder } from "../../purchase-orders/infrastructure/purchaseOrderRepository";
+import { generateSequentialPurchaseOrderNumbers, listPurchaseOrders, savePurchaseOrder } from "../../purchase-orders/infrastructure/purchaseOrderRepository";
 import type { PurchaseOrderRecord } from "../../purchase-orders/domain/types";
 import { getPurchaseOrderDefaultTerms } from "../../../services/companySettings.service";
 import {
@@ -277,9 +277,11 @@ export default function ChantierMaterialsSection({ chantierId }: { chantierId: s
       }
 
       const terms = await getPurchaseOrderDefaultTerms();
+      const groupList = Array.from(groups.values());
+      const numbers = await generateSequentialPurchaseOrderNumbers(groupList.length);
       const created: Array<{ id: string; number: string; supplierName: string | null }> = [];
-      for (const group of groups.values()) {
-        const order = createPurchaseOrder({ chantierId, supplierId: group.supplierId, supplierName: group.supplierName, terms });
+      for (const [index, group] of groupList.entries()) {
+        const order = createPurchaseOrder({ number: numbers[index], chantierId, supplierId: group.supplierId, supplierName: group.supplierName, terms });
         const lineNodes: DocumentItemNode[] = group.lines.map((line, index) => ({
           id: crypto.randomUUID(),
           type: "line",
