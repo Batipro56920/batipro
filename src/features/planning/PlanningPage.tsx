@@ -330,9 +330,9 @@ export default function PlanningPage({ chantierId, chantierName, intervenants }:
               dayWidth={DAY_WIDTH}
               conflictEntryIds={conflictEntryIds}
               violatedEntryIds={violatedEntryIds}
+              selectedEntryId={selectedEntryId}
               onSelectEntry={selectEntry}
               onCreateEntry={handleCreateEntry}
-              onUpdateEntryDates={handleUpdateEntryDates}
             />
           ) : (
             <PlanningTeamView
@@ -361,6 +361,7 @@ export default function PlanningPage({ chantierId, chantierName, intervenants }:
           onCreateEntry={handleCreateEntry}
           onCreateDependency={handleCreateDependency}
           onDeleteDependency={handleDeleteDependency}
+          onUpdateEntryDates={handleUpdateEntryDates}
         />
       </div>
     </div>

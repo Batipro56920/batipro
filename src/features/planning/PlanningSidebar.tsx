@@ -13,6 +13,7 @@ type Props = {
   onCreateEntry: (task: PlanningTaskRow) => void;
   onCreateDependency: (predecessorTaskId: string) => void;
   onDeleteDependency: (dependencyId: string) => void;
+  onUpdateEntryDates: (entryId: string, start: string, end: string) => void;
 };
 
 export default function PlanningSidebar({
@@ -27,6 +28,7 @@ export default function PlanningSidebar({
   onCreateEntry,
   onCreateDependency,
   onDeleteDependency,
+  onUpdateEntryDates,
 }: Props) {
   const [predecessorPick, setPredecessorPick] = useState("");
   const taskDeps = selectedTask
@@ -65,14 +67,26 @@ export default function PlanningSidebar({
               <div className="text-slate-500">Statut</div>
               <div>{selectedTask.status}</div>
             </div>
-            <div>
+            <label className="block">
               <div className="text-slate-500">Début</div>
-              <div>{selectedEntry.start_date}</div>
-            </div>
-            <div>
+              <input
+                type="date"
+                value={selectedEntry.start_date}
+                max={selectedEntry.end_date}
+                onChange={(e) => onUpdateEntryDates(selectedEntry.id, e.target.value, selectedEntry.end_date)}
+                className="mt-0.5 w-full rounded-lg border border-slate-200 px-2 py-1 text-xs"
+              />
+            </label>
+            <label className="block">
               <div className="text-slate-500">Fin</div>
-              <div>{selectedEntry.end_date}</div>
-            </div>
+              <input
+                type="date"
+                value={selectedEntry.end_date}
+                min={selectedEntry.start_date}
+                onChange={(e) => onUpdateEntryDates(selectedEntry.id, selectedEntry.start_date, e.target.value)}
+                className="mt-0.5 w-full rounded-lg border border-slate-200 px-2 py-1 text-xs"
+              />
+            </label>
           </div>
 
           <div className="space-y-2">
