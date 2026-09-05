@@ -203,6 +203,20 @@ export default function ChantierMaterialsSection({ chantierId }: { chantierId: s
     }
   }
 
+  async function relinkLineProduct(id: string, product: ProductCatalogItem) {
+    try {
+      const updated = await updateMaterialPreparation(id, {
+        productId: product.id,
+        supplierId: product.mainSupplierId,
+        supplierName: product.mainSupplierName,
+        unitCostHt: product.standardPurchasePriceHt,
+      });
+      setPreparations((current) => current.map((row) => (row.id === updated.id ? updated : row)));
+    } catch (err: any) {
+      setError(err?.message ?? "Erreur liaison produit.");
+    }
+  }
+
   async function submitProductQuickCreate(values: { designation: string; unit: ReturnType<typeof toDocumentUnit>; supplierId: string; priceHt: number }) {
     setSavingProduct(true);
     setError(null);
@@ -243,8 +257,8 @@ export default function ChantierMaterialsSection({ chantierId }: { chantierId: s
   async function createOrdersBySupplier() {
     const orderableLines = preparations.filter((row) => !row.purchaseOrderId);
     if (orderableLines.length === 0) return;
-    const blockedLines = orderableLines.filter((row) => !row.productId || !row.supplierId);
-    const readyLines = orderableLines.filter((row) => row.productId && row.supplierId);
+    const blockedLines = orderableLines.filter((row) => !row.productId || (!row.supplierId && !row.supplierName));
+    const readyLines = orderableLines.filter((row) => row.productId && (row.supplierId || row.supplierName));
 
     if (readyLines.length === 0) {
       setError("Tous les materiaux restants n'ont pas de produit catalogue / fournisseur resolu. Cree le produit avant de commander.");
@@ -254,10 +268,10 @@ export default function ChantierMaterialsSection({ chantierId }: { chantierId: s
     setCreating(true);
     setError(null);
     try {
-      const groups = new Map<string, { supplierId: string; supplierName: string | null; lines: ChantierMaterialPreparationRow[] }>();
+      const groups = new Map<string, { supplierId: string | null; supplierName: string | null; lines: ChantierMaterialPreparationRow[] }>();
       for (const line of readyLines) {
-        const key = line.supplierId as string;
-        const group = groups.get(key) ?? { supplierId: key, supplierName: line.supplierName, lines: [] };
+        const key = line.supplierId ?? line.supplierName ?? "__unknown__";
+        const group = groups.get(key) ?? { supplierId: line.supplierId, supplierName: line.supplierName, lines: [] };
         group.lines.push(line);
         groups.set(key, group);
       }
@@ -385,9 +399,11 @@ export default function ChantierMaterialsSection({ chantierId }: { chantierId: s
                 key={row.id}
                 row={row}
                 status={deriveStatus(row, purchaseOrderById)}
+                products={products}
                 onQuantityChange={(value) => updateLineQuantity(row.id, value)}
                 onRemove={row.purchaseOrderId ? undefined : () => removeLine(row.id)}
                 onCreateProduct={() => setGapModal({ prepId: row.id, materialName: row.materialName, unit: row.unit })}
+                onRelink={(product) => void relinkLineProduct(row.id, product)}
               />
             ))}
           </div>
@@ -399,13 +415,32 @@ export default function ChantierMaterialsSection({ chantierId }: { chantierId: s
 
         <div className="space-y-2 border-t border-slate-200 pt-4">
           <div className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">Ajouter un materiau depuis le catalogue produits</div>
-          <div className="flex flex-wrap items-center gap-3">
-            <input
-              value={productQuery}
-              onChange={(event) => setProductQuery(event.target.value)}
-              placeholder="Rechercher un produit du catalogue..."
-              className="w-64 rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-900"
-            />
+          <input
+            value={productQuery}
+            onChange={(event) => setProductQuery(event.target.value)}
+            placeholder="Rechercher un produit du catalogue..."
+            className="w-full max-w-md rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-900"
+          />
+          {filteredCatalog.length ? (
+            <div className="grid gap-2 sm:grid-cols-2">
+              {filteredCatalog.map((product) => (
+                <button
+                  key={product.id}
+                  type="button"
+                  onClick={() => void addFromCatalog(product)}
+                  className="rounded-xl border border-slate-200 bg-white p-3 text-left text-sm hover:border-blue-200 hover:bg-blue-50"
+                >
+                  <div className="font-semibold text-slate-950">{product.designation}</div>
+                  <div className="mt-1 text-xs text-slate-500">
+                    {product.unit} - {product.mainSupplierName ?? "fournisseur non defini"}
+                  </div>
+                </button>
+              ))}
+            </div>
+          ) : productQuery.trim() ? (
+            <div className="text-xs text-slate-400">Aucun produit catalogue ne correspond a "{productQuery.trim()}".</div>
+          ) : null}
+          <div className="flex flex-wrap items-center gap-3 pt-1">
             <button
               type="button"
               onClick={() => setGapModal({ prepId: null, materialName: productQuery.trim(), unit: "u" })}
@@ -427,23 +462,6 @@ export default function ChantierMaterialsSection({ chantierId }: { chantierId: s
               {creating ? "Creation..." : "Creer les bons de commande"}
             </button>
           </div>
-          {filteredCatalog.length ? (
-            <div className="grid gap-2 sm:grid-cols-2">
-              {filteredCatalog.map((product) => (
-                <button
-                  key={product.id}
-                  type="button"
-                  onClick={() => void addFromCatalog(product)}
-                  className="rounded-xl border border-slate-200 bg-white p-3 text-left text-sm hover:border-blue-200 hover:bg-blue-50"
-                >
-                  <div className="font-semibold text-slate-950">{product.designation}</div>
-                  <div className="mt-1 text-xs text-slate-500">
-                    {product.unit} - {product.mainSupplierName ?? "fournisseur non defini"}
-                  </div>
-                </button>
-              ))}
-            </div>
-          ) : null}
         </div>
       </div>
 
@@ -463,61 +481,120 @@ export default function ChantierMaterialsSection({ chantierId }: { chantierId: s
 function MaterialLineRow({
   row,
   status,
+  products,
   onQuantityChange,
   onRemove,
   onCreateProduct,
+  onRelink,
   compact,
 }: {
   row: ChantierMaterialPreparationRow;
   status: PreparationStatus;
+  products?: ProductCatalogItem[];
   onQuantityChange?: (value: string) => void;
   onRemove?: () => void;
   onCreateProduct?: () => void;
+  onRelink?: (product: ProductCatalogItem) => void;
   compact?: boolean;
 }) {
+  const [relinkOpen, setRelinkOpen] = useState(false);
+  const [relinkQuery, setRelinkQuery] = useState("");
+
+  const relinkResults = useMemo(() => {
+    const query = relinkQuery.trim().toLowerCase();
+    if (!query || !products) return [];
+    return products.filter((product) => product.designation.toLowerCase().includes(query)).slice(0, 6);
+  }, [relinkQuery, products]);
+
   return (
-    <div className="flex flex-wrap items-center gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3">
-      <div className="min-w-[160px] flex-1">
-        <div className="font-medium text-slate-950">{row.materialName}</div>
-        <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-slate-500">
-          <span>
-            {row.source === "auto" ? "Auto - depuis les taches" : "Ajout manuel"}
-            {row.supplierName ? ` - ${row.supplierName}` : ""}
-          </span>
-          <span className={["rounded-full border px-2 py-0.5 font-semibold", status.className].join(" ")}>{status.label}</span>
-          {!row.productId ? (
-            <span className="rounded-full border border-red-200 bg-red-50 px-2 py-0.5 font-semibold text-red-700">Produit a creer</span>
+    <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3">
+      <div className="flex flex-wrap items-center gap-3">
+        <div className="min-w-[160px] flex-1">
+          <div className="font-medium text-slate-950">{row.materialName}</div>
+          <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-slate-500">
+            <span>
+              {row.source === "auto" ? "Auto - depuis les taches" : "Ajout manuel"}
+              {row.supplierName ? ` - ${row.supplierName}` : ""}
+            </span>
+            <span className={["rounded-full border px-2 py-0.5 font-semibold", status.className].join(" ")}>{status.label}</span>
+            {!row.productId ? (
+              <span className="rounded-full border border-red-200 bg-red-50 px-2 py-0.5 font-semibold text-red-700">Produit a creer</span>
+            ) : null}
+          </div>
+        </div>
+        {onQuantityChange ? (
+          <input
+            value={row.quantity}
+            onChange={(event) => onQuantityChange(event.target.value)}
+            inputMode="decimal"
+            className="w-24 rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-900"
+          />
+        ) : (
+          <span className="text-sm font-semibold text-slate-900">{row.quantity}</span>
+        )}
+        <span className="w-14 text-sm text-slate-500">{row.unit || "u"}</span>
+        {!compact && onRelink ? (
+          <button
+            type="button"
+            onClick={() => setRelinkOpen((open) => !open)}
+            className="rounded-xl border border-slate-200 px-3 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50"
+          >
+            {row.productId ? "Changer de produit" : "Lier un produit existant"}
+          </button>
+        ) : null}
+        {!compact && !row.productId && onCreateProduct ? (
+          <button
+            type="button"
+            onClick={onCreateProduct}
+            className="rounded-xl border border-blue-200 px-3 py-2 text-xs font-medium text-blue-700 hover:bg-blue-50"
+          >
+            Creer le produit
+          </button>
+        ) : null}
+        {!compact && onRemove ? (
+          <button
+            type="button"
+            onClick={onRemove}
+            className="rounded-xl border border-red-200 px-3 py-2 text-xs font-medium text-red-700 hover:bg-red-50"
+          >
+            Retirer
+          </button>
+        ) : null}
+      </div>
+
+      {relinkOpen && onRelink ? (
+        <div className="mt-3 space-y-2 rounded-xl border border-slate-100 bg-slate-50 p-3">
+          <input
+            autoFocus
+            value={relinkQuery}
+            onChange={(event) => setRelinkQuery(event.target.value)}
+            placeholder="Rechercher un produit du catalogue..."
+            className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-900"
+          />
+          {relinkResults.length ? (
+            <div className="grid gap-2 sm:grid-cols-2">
+              {relinkResults.map((product) => (
+                <button
+                  key={product.id}
+                  type="button"
+                  onClick={() => {
+                    onRelink(product);
+                    setRelinkOpen(false);
+                    setRelinkQuery("");
+                  }}
+                  className="rounded-xl border border-slate-200 bg-white p-2 text-left text-sm hover:border-blue-200 hover:bg-blue-50"
+                >
+                  <div className="font-semibold text-slate-950">{product.designation}</div>
+                  <div className="mt-0.5 text-xs text-slate-500">
+                    {product.unit} - {product.mainSupplierName ?? "fournisseur non defini"}
+                  </div>
+                </button>
+              ))}
+            </div>
+          ) : relinkQuery.trim() ? (
+            <div className="text-xs text-slate-400">Aucun produit ne correspond.</div>
           ) : null}
         </div>
-      </div>
-      {onQuantityChange ? (
-        <input
-          value={row.quantity}
-          onChange={(event) => onQuantityChange(event.target.value)}
-          inputMode="decimal"
-          className="w-24 rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-900"
-        />
-      ) : (
-        <span className="text-sm font-semibold text-slate-900">{row.quantity}</span>
-      )}
-      <span className="w-14 text-sm text-slate-500">{row.unit || "u"}</span>
-      {!compact && !row.productId && onCreateProduct ? (
-        <button
-          type="button"
-          onClick={onCreateProduct}
-          className="rounded-xl border border-blue-200 px-3 py-2 text-xs font-medium text-blue-700 hover:bg-blue-50"
-        >
-          Creer le produit
-        </button>
-      ) : null}
-      {!compact && onRemove ? (
-        <button
-          type="button"
-          onClick={onRemove}
-          className="rounded-xl border border-red-200 px-3 py-2 text-xs font-medium text-red-700 hover:bg-red-50"
-        >
-          Retirer
-        </button>
       ) : null}
     </div>
   );
