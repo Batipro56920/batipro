@@ -19,13 +19,13 @@ import {
   intervenantGetTasks,
   intervenantInformationRequestCreate,
   intervenantInformationRequestList,
+  intervenantDeliveryNoteSubmit,
   intervenantDeliverySlipExtract,
   intervenantMaterielCreate,
   intervenantMaterialConsumptionCreate,
   intervenantProductCatalogSearch,
   intervenantSession,
   intervenantStockDeclarationCreate,
-  intervenantStockReceptionCreate,
   intervenantTaskEquipment,
   intervenantTaskMainMaterials,
   intervenantTerrainFeedbackCreate,
@@ -248,6 +248,7 @@ export default function EmployeePortalV2Page() {
   const [slipSearching, setSlipSearching] = useState(false);
   const [slipSubmitting, setSlipSubmitting] = useState(false);
   const [slipDoneCount, setSlipDoneCount] = useState<number | null>(null);
+  const [slipMatchedPo, setSlipMatchedPo] = useState<boolean | null>(null);
 
   useEffect(() => {
     let alive = true;
@@ -708,6 +709,7 @@ export default function EmployeePortalV2Page() {
     setSlipUploading(true);
     setSlipError(null);
     setSlipDoneCount(null);
+    setSlipMatchedPo(null);
     try {
       const result = await intervenantDeliverySlipExtract(token, selected.id, file);
       setSlipStoragePath(result.storage_path);
@@ -758,16 +760,19 @@ export default function EmployeePortalV2Page() {
     setSlipSubmitting(true);
     setSlipError(null);
     try {
-      for (const line of ready) {
-        await intervenantStockReceptionCreate(token, {
-          chantier_id: selected.id,
-          product_id: line.productId as string,
+      const result = await intervenantDeliveryNoteSubmit(token, {
+        chantier_id: selected.id,
+        storage_bucket: slipStorageBucket,
+        storage_path: slipStoragePath,
+        lines: ready.map((line) => ({
+          designation: line.designation,
           quantity: Number(line.quantity.replace(",", ".")),
-          source_storage_bucket: slipStorageBucket,
-          source_storage_path: slipStoragePath,
-        });
-      }
-      setSlipDoneCount(ready.length);
+          unit: line.unit,
+          product_id: line.productId,
+        })),
+      });
+      setSlipDoneCount(result.linesPosted);
+      setSlipMatchedPo(result.status === "matched");
       setSlipLines([]);
       setSlipStoragePath(null);
       setSlipStorageBucket(null);
@@ -1248,7 +1253,12 @@ export default function EmployeePortalV2Page() {
               </label>
 
               {slipError ? <div className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs font-semibold text-red-700">{slipError}</div> : null}
-              {slipDoneCount ? <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-700">{slipDoneCount} matériau{slipDoneCount > 1 ? "x" : ""} ajouté{slipDoneCount > 1 ? "s" : ""} au stock.</div> : null}
+              {slipDoneCount ? (
+                <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-700">
+                  {slipDoneCount} matériau{slipDoneCount > 1 ? "x" : ""} ajouté{slipDoneCount > 1 ? "s" : ""} au stock.{" "}
+                  {slipMatchedPo ? "Bon de commande correspondant rapproché et passé « Livré »." : "Aucun bon de commande correspondant trouvé, à traiter au bureau."}
+                </div>
+              ) : null}
 
               {slipLines.length > 0 ? (
                 <div className="space-y-2">

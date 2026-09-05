@@ -830,6 +830,49 @@ export async function intervenantDeliverySlipExtract(
   };
 }
 
+export type IntervenantDeliveryNoteSubmitResult = {
+  deliveryNoteId: string | null;
+  purchaseOrderId: string | null;
+  status: "matched" | "unmatched";
+  linesPosted: number;
+};
+
+/**
+ * Enregistre la reception validee par l'ouvrier dans le module Bon de livraison : poste chaque
+ * ligne resolue en stock, tente de rapprocher un bon de commande ouvert sur ce chantier (et le
+ * passe "Livre" si trouve), sinon reste "sans bon de commande" pour traitement au bureau.
+ */
+export async function intervenantDeliveryNoteSubmit(
+  token: string,
+  payload: {
+    chantier_id: string;
+    storage_bucket?: string | null;
+    storage_path?: string | null;
+    lines: Array<{ designation: string; quantity: number; unit: string; product_id: string | null }>;
+  },
+): Promise<IntervenantDeliveryNoteSubmitResult> {
+  const { data, error } = await supabase.functions.invoke("intervenant-delivery-note-submit", {
+    body: {
+      token: normalizePortalToken(token),
+      chantier_id: payload.chantier_id,
+      storage_bucket: payload.storage_bucket ?? null,
+      storage_path: payload.storage_path ?? null,
+      lines: payload.lines,
+    },
+  });
+  if (error) throw new Error(rpcMessage(error, "Enregistrement du bon de livraison impossible."));
+
+  const result = (data && typeof data === "object" ? data : {}) as Record<string, unknown>;
+  if (typeof result.error === "string") throw new Error(result.error);
+
+  return {
+    deliveryNoteId: result.delivery_note_id ? String(result.delivery_note_id) : null,
+    purchaseOrderId: result.purchase_order_id ? String(result.purchase_order_id) : null,
+    status: result.status === "matched" ? "matched" : "unmatched",
+    linesPosted: Number(result.lines_posted ?? 0),
+  };
+}
+
 /** Crée une entrée de stock validée par l'ouvrier à partir d'une ligne lue sur un bon de livraison. */
 export async function intervenantStockReceptionCreate(
   token: string,
