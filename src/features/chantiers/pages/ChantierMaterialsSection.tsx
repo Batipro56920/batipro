@@ -56,6 +56,8 @@ function deriveStatus(prep: ChantierMaterialPreparationRow, purchaseOrderById: M
 
 type GapModalState = { prepId: string | null; materialName: string; unit: string };
 
+type SkippedTaskInfo = { taskId: string; title: string; reason: string };
+
 export default function ChantierMaterialsSection({ chantierId }: { chantierId: string }) {
   const [tasks, setTasks] = useState<ChantierTaskRow[]>([]);
   const [products, setProducts] = useState<ProductCatalogItem[]>([]);
@@ -72,6 +74,7 @@ export default function ChantierMaterialsSection({ chantierId }: { chantierId: s
   const [productQuery, setProductQuery] = useState("");
   const [gapModal, setGapModal] = useState<GapModalState | null>(null);
   const [savingProduct, setSavingProduct] = useState(false);
+  const [skippedTasks, setSkippedTasks] = useState<SkippedTaskInfo[]>([]);
 
   async function refreshBase() {
     setLoading(true);
@@ -110,6 +113,7 @@ export default function ChantierMaterialsSection({ chantierId }: { chantierId: s
     setGenerating(true);
     setError(null);
     setCreatedOrders([]);
+    setSkippedTasks([]);
     try {
       const templateIds = Array.from(
         new Set(tasks.map((task) => task.task_template_id).filter((value): value is string => Boolean(value))),
@@ -121,13 +125,30 @@ export default function ChantierMaterialsSection({ chantierId }: { chantierId: s
       }
 
       const aggregated = new Map<string, MaterialPreparationComputedLine>();
+      const skipped: SkippedTaskInfo[] = [];
       for (const task of tasks) {
-        if (!task.task_template_id) continue;
+        if (!task.task_template_id) {
+          skipped.push({ taskId: task.id, title: task.titre, reason: "Aucun modele de tache lie" });
+          continue;
+        }
+        const materials = preparation.materialsByTemplateId[task.task_template_id] ?? [];
+        if (materials.length === 0) {
+          skipped.push({ taskId: task.id, title: task.titre, reason: "Modele de tache sans ratio materiau configure" });
+          continue;
+        }
         const estimate = estimateTaskTemplatePreparation(
           task,
-          preparation.materialsByTemplateId[task.task_template_id] ?? [],
+          materials,
           preparation.equipmentByTemplateId[task.task_template_id] ?? [],
         );
+        if (!estimate.canEstimate) {
+          const reason =
+            estimate.taskQuantity === null || estimate.taskQuantity <= 0 || !estimate.taskUnit
+              ? "Quantite ou unite manquante sur la tache"
+              : `Unite de la tache ("${estimate.taskUnit}") incompatible avec les ratios du modele`;
+          skipped.push({ taskId: task.id, title: task.titre, reason });
+          continue;
+        }
         for (const material of estimate.materials) {
           const product = material.product_id ? productById.get(material.product_id) ?? null : null;
           const supplierId = product?.mainSupplierId ?? material.supplier_id ?? null;
@@ -155,6 +176,7 @@ export default function ChantierMaterialsSection({ chantierId }: { chantierId: s
       const computed = Array.from(aggregated.values());
       const nextPreparations = await upsertComputedMaterialPreparations(chantierId, computed);
       setPreparations(nextPreparations);
+      setSkippedTasks(skipped);
 
       if (computed.length === 0) {
         setError("Aucun ratio materiau compatible trouve sur les taches de ce chantier.");
@@ -382,6 +404,22 @@ export default function ChantierMaterialsSection({ chantierId }: { chantierId: s
         {notice ? (
           <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
             {notice}
+          </div>
+        ) : null}
+
+        {skippedTasks.length > 0 ? (
+          <div className="space-y-2 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+            <div className="font-semibold">
+              {skippedTasks.length} tache(s) non prises en compte dans le calcul
+            </div>
+            <ul className="space-y-1">
+              {skippedTasks.map((item) => (
+                <li key={item.taskId} className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5">
+                  <span className="font-medium">{item.title}</span>
+                  <span className="text-amber-800/80">{item.reason}</span>
+                </li>
+              ))}
+            </ul>
           </div>
         ) : null}
 
