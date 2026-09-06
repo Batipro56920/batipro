@@ -160,6 +160,7 @@ function buildInstructions() {
     "Interdictions: ne copie pas adresses, téléphone, fax, mail, mentions légales, COV, FDES, certifications, copyright, sites web, sauf utilité métier directe.",
     "Le fournisseur ne doit jamais devenir CB RENOVATION si ce nom vient du client, de l'entreprise utilisatrice ou d'une adresse de devis.",
     "Le ratio doit être numérique quand il est présent ou déductible. Sinon null avec reasoning.",
+    "Pour materialUsage : ratioQuantity est la quantité consommée (dans ratioUnit, l'unité du produit lui-même, ex kg, L, u) pour UNE unité de sourceUnit, qui est l'unité de surface/volume/longueur couverte par l'application (ex m2, m3, ml) — jamais l'unité du produit. Exemple : \"consommation 1,6 kg/m2\" donne ratioQuantity=1.6, ratioUnit=\"kg\", sourceUnit=\"m2\".",
     "Le mode opératoire doit être une liste chronologique d'actions terrain, pas un paragraphe.",
     "Les outils doivent être exploitables terrain.",
     "fieldExperience reste vide aujourd'hui.",
