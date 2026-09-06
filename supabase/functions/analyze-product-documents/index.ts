@@ -155,6 +155,8 @@ function buildInstructions() {
     "",
     "Tu dois répondre à: fabricant, vendeur, prix achat, prix conseillé, unité, ratio numérique, unité du ratio, supports, outils, EPI, limites météo, erreurs, mode opératoire, DOE.",
     "",
+    "Si le champ documentsText est present, c'est le texte reel extrait des documents fournisseur (fiche technique, notice...) : lis-le entierement et en priorite, il contient les donnees a extraire (notamment le taux de consommation/ratio, souvent exprime en kg/m2, L/m2 ou u/ml).",
+    "",
     "Interdictions: ne copie pas adresses, téléphone, fax, mail, mentions légales, COV, FDES, certifications, copyright, sites web, sauf utilité métier directe.",
     "Le fournisseur ne doit jamais devenir CB RENOVATION si ce nom vient du client, de l'entreprise utilisatrice ou d'une adresse de devis.",
     "Le ratio doit être numérique quand il est présent ou déductible. Sinon null avec reasoning.",
@@ -203,13 +205,18 @@ serve(async (req) => {
   const openAiKey = Deno.env.get("OPENAI_API_KEY") ?? "";
   if (!openAiKey) return json({ error: "OPENAI_API_KEY manquante." }, 500);
 
+  const documentsText = text((body as any)?.documentsText);
+  const promptPayload = documentsText
+    ? { product: (body as any)?.product ?? null, documentsText: documentsText.slice(0, 60000) }
+    : { product: (body as any)?.product ?? null, documents: (body as any)?.documents ?? [] };
+
   const response = await fetch("https://api.openai.com/v1/responses", {
     method: "POST",
     headers: { Authorization: `Bearer ${openAiKey}`, "Content-Type": "application/json" },
     body: JSON.stringify({
       model: Deno.env.get("OPENAI_PRODUCT_READER_MODEL") || Deno.env.get("OPENAI_MODEL") || "gpt-4.1-mini",
       instructions: buildInstructions(),
-      input: [{ role: "user", content: JSON.stringify(body).slice(0, 70000) }],
+      input: [{ role: "user", content: JSON.stringify(promptPayload).slice(0, 70000) }],
       temperature: 0.05,
       max_output_tokens: 5000,
     }),

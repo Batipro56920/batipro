@@ -1,24 +1,17 @@
 import { useMemo, useState } from "react";
 import { CheckCircle2, FileText, Loader2, UploadCloud, X } from "lucide-react";
-import { supabase } from "../../../lib/supabaseClient";
 import type { SupplierRow } from "../../../services/suppliers.service";
 import type { DocumentUnit } from "../../document-engine";
-import type { ProductCatalogDraft, ProductCatalogItem, ProductDocument, ProductSupplierPrice } from "../domain/types";
-import type { ExtractedQuoteProduct } from "../services/productQuoteImport.service";
+import type { ProductCatalogDraft, ProductCatalogItem, ProductDocument, ProductKnowledge, ProductSupplierPrice } from "../domain/types";
+import { analyzeProductTextWithCoco } from "../services/productKnowledge.service";
 
 const ACCEPTED_PRODUCT_FILES = "application/pdf,.pdf,.xlsx,.xls,.csv,.txt,text/plain,text/csv";
 const SUPPORTED_FILE_LABEL = "PDF, Excel, CSV ou texte";
 
-type ExtractProductsResponse = {
-  ok?: boolean;
-  error?: string;
-  products?: ExtractedQuoteProduct[];
-};
-
 type ProductDraftPatch = Partial<ProductCatalogDraft | ProductCatalogItem>;
 
 type ProductImportAnalysis = {
-  product: ExtractedQuoteProduct;
+  knowledge: ProductKnowledge;
   patch: ProductDraftPatch;
   notes: string[];
 };
@@ -66,15 +59,10 @@ export default function ProductFileImportPanel({
         throw new Error("Texte insuffisant dans ces fichiers. Verifiez que le document contient des informations produit lisibles.");
       }
 
-      const extractedProducts = await extractProducts(cleanedText);
-      const bestProduct = chooseBestProduct(extractedProducts);
-      if (!bestProduct) {
-        throw new Error("Aucune information produit exploitable n'a ete detectee dans ces fichiers.");
-      }
-
-      const patch = buildProductPatch(currentProduct, bestProduct, selectedFiles, suppliers, cleanedText);
-      const notes = buildAnalysisNotes(bestProduct, patch);
-      setPendingAnalysis({ product: bestProduct, patch, notes });
+      const knowledge = await analyzeProductTextWithCoco(currentProduct, cleanedText);
+      const patch = buildProductPatch(currentProduct, knowledge, selectedFiles, suppliers, cleanedText);
+      const notes = buildAnalysisNotes(knowledge, patch);
+      setPendingAnalysis({ knowledge, patch, notes });
       setResult("Analyse Coco prete a verifier avant application.");
     } catch (err: any) {
       setError(err?.message ?? "Analyse automatique du fichier impossible.");
@@ -95,7 +83,7 @@ export default function ProductFileImportPanel({
   function applyPendingAnalysis() {
     if (!pendingAnalysis) return;
     onApply(pendingAnalysis.patch);
-    setResult(`${pendingAnalysis.product.designation} applique a la fiche.`);
+    setResult(`${pendingAnalysis.patch.designation ?? "Produit"} applique a la fiche.`);
     setPendingAnalysis(null);
   }
 
@@ -136,18 +124,18 @@ export default function ProductFileImportPanel({
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
               <div className="text-sm font-semibold text-slate-950">Coco a compris</div>
-              <div className="mt-1 text-sm text-slate-600">{pendingAnalysis.product.designation}</div>
+              <div className="mt-1 text-sm text-slate-600">{pendingAnalysis.patch.designation}</div>
             </div>
-            <span className={confidenceClassName(pendingAnalysis.product.confidence)}>
-              Confiance {Math.round((pendingAnalysis.product.confidence ?? 0) * 100)} %
+            <span className={confidenceClassName(pendingAnalysis.knowledge.confidence.value.global)}>
+              Confiance {confidenceLabel(pendingAnalysis.knowledge.confidence.value.global)}
             </span>
           </div>
 
           <div className="grid gap-2 text-sm md:grid-cols-2 xl:grid-cols-4">
             {buildReadOnlyMetric("Designation", pendingAnalysis.patch.designation || "Non trouvee")}
             {buildReadOnlyMetric("Marque", pendingAnalysis.patch.brand || "Non trouvee")}
-            {buildReadOnlyMetric("Categorie", pendingAnalysis.patch.category || "Non trouvee")}
             {buildReadOnlyMetric("Prix achat", formatMaybeCurrency(pendingAnalysis.patch.standardPurchasePriceHt))}
+            {buildReadOnlyMetric("Ratio / consommation", formatRatio(pendingAnalysis.knowledge.materialUsage.value))}
           </div>
 
           {pendingAnalysis.notes.length ? (
@@ -187,95 +175,78 @@ function buildReadOnlyMetric(label: string, value: string) {
   );
 }
 
-async function extractProducts(cleanedText: string): Promise<ExtractedQuoteProduct[]> {
-  const { data, error } = await supabase.functions.invoke<ExtractProductsResponse>("extract-devis-products", {
-    body: { cleaned_text: cleanedText },
-  });
-
-  if (error) throw new Error(error.message);
-  if (!data?.ok) throw new Error(data?.error ?? "Lecture automatique du document impossible.");
-  return (data.products ?? []).filter((product) => Boolean(normalizeText(product.designation)));
-}
-
-function chooseBestProduct(products: ExtractedQuoteProduct[]): ExtractedQuoteProduct | null {
-  return [...products].sort((a, b) => (b.confidence ?? 0) - (a.confidence ?? 0))[0] ?? null;
-}
-
 function buildProductPatch(
   currentProduct: ProductCatalogDraft | ProductCatalogItem,
-  extracted: ExtractedQuoteProduct,
+  knowledge: ProductKnowledge,
   files: File[],
   suppliers: SupplierRow[],
   text: string,
 ): ProductDraftPatch {
-  const supplierName = normalizeText(extracted.supplier_name);
+  const identity = knowledge.identity.value;
+  const supplierInfo = knowledge.supplier.value;
+  const pricing = knowledge.pricing.value;
+
+  const supplierName = normalizeText(supplierInfo.supplier);
   const supplier = supplierName ? suppliers.find((row) => normalizeKey(row.name) === normalizeKey(supplierName)) ?? null : null;
-  const purchasePrice = positivePrice(extracted.purchase_price_ht) ?? extractPrice(text) ?? positivePrice(currentProduct.standardPurchasePriceHt);
-  const packagePrice = positivePrice(extracted.package_price_ht);
-  const coverageM2 = positiveNumber(extracted.coverage_m2);
-  const unitPrice = purchasePrice ?? computeCoverageUnitPrice(packagePrice, coverageM2);
+  const purchasePrice = positivePrice(pricing.purchasePrice) ?? extractPrice(text) ?? positivePrice(currentProduct.standardPurchasePriceHt);
   const marginRate = positiveNumber(currentProduct.targetMarginRate) ?? 30;
-  const salePrice = positivePrice(extracted.sale_price_ht) ?? computeSalePrice(unitPrice, marginRate) ?? positivePrice(currentProduct.recommendedSalePriceHt);
-  const unit = normalizeUnit(extracted.unit) || currentProduct.unit;
-  const supplierPrice = buildSupplierPrice(extracted, supplier, packagePrice ?? purchasePrice, unitPrice);
-  const importedDocuments = buildImportedDocuments(files, extracted, text);
+  const salePrice = positivePrice(pricing.recommendedSalePrice) ?? computeSalePrice(purchasePrice, marginRate) ?? positivePrice(currentProduct.recommendedSalePriceHt);
+  const unit = normalizeUnit(identity.unit) || currentProduct.unit;
+  const supplierPrice = buildSupplierPrice(knowledge, supplier, purchasePrice);
+  const importedDocuments = buildImportedDocuments(files);
 
   return {
-    designation: normalizeText(extracted.designation) ?? currentProduct.designation,
-    manufacturerReference: normalizeText(extracted.supplier_reference) ?? currentProduct.manufacturerReference,
-    brand: normalizeText(extracted.brand) ?? currentProduct.brand,
-    category: normalizeText(extracted.category) ?? currentProduct.category ?? "Materiaux",
+    designation: normalizeText(identity.designation) ?? currentProduct.designation,
+    manufacturerReference: normalizeText(identity.manufacturerReference) ?? currentProduct.manufacturerReference,
+    brand: normalizeText(identity.brand) ?? currentProduct.brand,
+    category: currentProduct.category ?? "Materiaux",
     unit,
-    vatRate: positiveNumber(extracted.vat_rate) ?? currentProduct.vatRate,
+    vatRate: positiveNumber(pricing.vat) ?? currentProduct.vatRate,
     mainSupplierId: supplier?.id ?? currentProduct.mainSupplierId,
     mainSupplierName: supplier?.name ?? supplierName ?? currentProduct.mainSupplierName,
-    standardPurchasePriceHt: unitPrice ?? currentProduct.standardPurchasePriceHt,
+    standardPurchasePriceHt: purchasePrice ?? currentProduct.standardPurchasePriceHt,
     recommendedSalePriceHt: salePrice ?? currentProduct.recommendedSalePriceHt,
     supplierPrices: supplierPrice ? mergeSupplierPrice(currentProduct.supplierPrices, supplierPrice) : currentProduct.supplierPrices,
     documents: [...currentProduct.documents, ...importedDocuments],
+    knowledge,
   };
 }
 
 function buildSupplierPrice(
-  extracted: ExtractedQuoteProduct,
+  knowledge: ProductKnowledge,
   supplier: SupplierRow | null,
-  packagePrice: number | null,
-  unitPrice: number | null,
+  purchasePrice: number | null,
 ): ProductSupplierPrice | null {
-  const supplierName = normalizeText(extracted.supplier_name);
-  if (packagePrice === null || packagePrice <= 0) return null;
+  const supplierName = normalizeText(knowledge.supplier.value.supplier);
+  if (purchasePrice === null || purchasePrice <= 0) return null;
   if (!supplier && !supplierName) return null;
 
+  const usage = knowledge.materialUsage.value;
+  const coverageM2 = positiveNumber(usage.coverage);
   return {
     id: crypto.randomUUID(),
     supplierId: supplier?.id ?? null,
     supplierName: supplier?.name ?? supplierName ?? "",
-    priceHt: packagePrice,
+    priceHt: purchasePrice,
     discountPercent: null,
     startDate: null,
     endDate: null,
-    packaging: normalizeText(extracted.packaging),
-    minimumQuantity: positiveNumber(extracted.quantity) ?? positiveNumber(extracted.minimum_quantity),
+    packaging: normalizeText(knowledge.identity.value.conditionnement),
+    minimumQuantity: positiveNumber(usage.minimumOrder),
     deliveryLeadTimeDays: null,
-    coverageM2: positiveNumber(extracted.coverage_m2),
-    pricePerM2Ht: unitPrice,
+    coverageM2,
+    pricePerM2Ht: coverageM2 ? computeCoverageUnitPrice(purchasePrice, coverageM2) : null,
   };
 }
 
-function buildImportedDocuments(files: File[], extracted: ExtractedQuoteProduct, text: string): ProductDocument[] {
-  const notes = [
-    "Fichier importe pour analyse automatique de la fiche produit.",
-    normalizeText((extracted as ExtractedQuoteProduct & Record<string, unknown>).business_interpretation),
-    extractShortTechnicalNote(text),
-  ].filter((note): note is string => Boolean(note));
-
+function buildImportedDocuments(files: File[]): ProductDocument[] {
   return files.map((file) => ({
     id: crypto.randomUUID(),
     kind: "technical_sheet",
     name: file.name,
     url: null,
     usage: { task: true, doe: true },
-    notes: notes.join("\n"),
+    notes: "Fichier importe pour analyse automatique de la fiche produit.",
     analysis: null,
   }));
 }
@@ -290,11 +261,15 @@ function mergeSupplierPrice(prices: ProductSupplierPrice[], candidate: ProductSu
   return exists ? prices : [...prices, candidate];
 }
 
-function buildAnalysisNotes(extracted: ExtractedQuoteProduct, patch: ProductDraftPatch) {
+function buildAnalysisNotes(knowledge: ProductKnowledge, patch: ProductDraftPatch) {
+  const usage = knowledge.materialUsage.value;
   return [
-    normalizeText((extracted as ExtractedQuoteProduct & Record<string, unknown>).business_interpretation),
     patch.mainSupplierName ? `Fournisseur detecte : ${patch.mainSupplierName}` : null,
     patch.recommendedSalePriceHt ? `Prix vente estime : ${formatMaybeCurrency(patch.recommendedSalePriceHt)}` : null,
+    usage.ratioQuantity ? `Ratio detecte : ${formatRatio(usage)}` : null,
+    knowledge.confidence.value.missingInformation.length
+      ? `Informations manquantes : ${knowledge.confidence.value.missingInformation.slice(0, 3).join(", ")}`
+      : null,
   ].filter((note): note is string => Boolean(note));
 }
 
@@ -420,20 +395,25 @@ function computeSalePrice(purchasePrice: number | null, marginRate: number): num
   return Math.round(purchasePrice * (1 + marginRate / 100) * 100) / 100;
 }
 
-function extractShortTechnicalNote(text: string): string | null {
-  const normalized = text.replace(/\s+/g, " ").trim();
-  return normalized ? normalized.slice(0, 700) : null;
-}
-
 function formatMaybeCurrency(value: unknown): string {
   const number = Number(value);
   if (!Number.isFinite(number) || number <= 0) return "Non trouve";
   return new Intl.NumberFormat("fr-FR", { style: "currency", currency: "EUR", maximumFractionDigits: 2 }).format(number);
 }
 
-function confidenceClassName(confidence: number | null | undefined) {
-  const value = confidence ?? 0;
-  if (value >= 0.8) return "rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700";
-  if (value >= 0.55) return "rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-700";
+function formatRatio(usage: ProductKnowledge["materialUsage"]["value"]): string {
+  if (!usage.ratioQuantity || !usage.sourceUnit) return "Non trouve";
+  return `${usage.ratioQuantity} ${usage.ratioUnit ?? ""} / ${usage.sourceUnit}`.replace(/\s+/g, " ").trim();
+}
+
+function confidenceClassName(level: "high" | "medium" | "low") {
+  if (level === "high") return "rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700";
+  if (level === "medium") return "rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-700";
   return "rounded-full border border-red-200 bg-red-50 px-3 py-1 text-xs font-semibold text-red-700";
+}
+
+function confidenceLabel(level: "high" | "medium" | "low") {
+  if (level === "high") return "Haute";
+  if (level === "medium") return "Moyenne";
+  return "Faible";
 }

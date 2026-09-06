@@ -528,7 +528,8 @@ function ProductForm({ product, suppliers, onCancel, onSave }: { product: Produc
 
       {activeTab === "product" ? (
         <>
-          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+          <div className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">Identité produit</div>
+          <div className="mt-2 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
         <Field label="Désignation" value={draft.designation} onChange={(designation) => patch({ designation })} className="xl:col-span-2" />
         <Field label="Référence interne" value={draft.internalReference ?? ""} onChange={(internalReference) => patch({ internalReference })} />
         <Field label="Référence fabricant" value={draft.manufacturerReference ?? ""} onChange={(manufacturerReference) => patch({ manufacturerReference })} />
@@ -536,14 +537,21 @@ function ProductForm({ product, suppliers, onCancel, onSave }: { product: Produc
         <Field label="Catégorie" value={draft.category ?? ""} onChange={(category) => patch({ category })} />
         <label className={labelClass}>Unité<Select className="mt-1" value={draft.unit} onChange={(unit) => patch({ unit: unit as DocumentUnit })} options={["u", "h", "ml", "m2", "m3", "forfait", "kg", "l"]} /></label>
         <NumberField label="TVA" value={draft.vatRate} onChange={(vatRate) => patch({ vatRate })} />
-        <label className={labelClass}>Fournisseur principal<Select className="mt-1" value={draft.mainSupplierId ?? ""} onChange={selectMainSupplier} options={["", ...suppliers.map((supplier) => supplier.id)]} labels={Object.fromEntries([["", "Aucun"], ...suppliers.map((supplier) => [supplier.id, supplier.name])])} /></label>
-        <NumberField label="Prix achat standard" value={draft.standardPurchasePriceHt} onChange={changePurchasePrice} />
-        <NumberField label="Prix vente conseillé" value={draft.recommendedSalePriceHt} onChange={(recommendedSalePriceHt) => patch({ recommendedSalePriceHt })} />
-        <NumberField label="Marge cible %" value={draft.targetMarginRate} onChange={changeTargetMargin} />
         <label className={`${labelClass} flex items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2 normal-case tracking-normal text-slate-700`}>
           <input type="checkbox" checked={draft.isSellable} onChange={(event) => patch({ isSellable: event.target.checked })} />
           <span>Produit revendable / utilisable dans un ouvrage</span>
         </label>
+      </div>
+
+          <div className="mt-5 text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">Prix par défaut (catalogue)</div>
+          <p className="mt-1 text-xs text-slate-500">
+            Sert de référence tant qu'aucun prix fournisseur spécifique n'est retenu. Le détail par fournisseur (remises, conditionnement, délais) se gère juste en dessous, dans "Prix négociés par fournisseur".
+          </p>
+          <div className="mt-2 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+        <label className={labelClass}>Fournisseur principal<Select className="mt-1" value={draft.mainSupplierId ?? ""} onChange={selectMainSupplier} options={["", ...suppliers.map((supplier) => supplier.id)]} labels={Object.fromEntries([["", "Aucun"], ...suppliers.map((supplier) => [supplier.id, supplier.name])])} /></label>
+        <NumberField label="Prix achat standard" value={draft.standardPurchasePriceHt} onChange={changePurchasePrice} />
+        <NumberField label="Prix vente conseillé" value={draft.recommendedSalePriceHt} onChange={(recommendedSalePriceHt) => patch({ recommendedSalePriceHt })} />
+        <NumberField label="Marge cible %" value={draft.targetMarginRate} onChange={changeTargetMargin} />
       </div>
 
           <ProductPricingSummary draft={draft} />

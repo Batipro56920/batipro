@@ -177,21 +177,41 @@ export function normalizeProductKnowledge(raw: unknown, product?: Partial<Produc
   };
 }
 
+function buildProductContext(product: ProductLike) {
+  return {
+    designation: product.designation,
+    brand: product.brand,
+    manufacturerReference: product.manufacturerReference,
+    unit: product.unit,
+    mainSupplierName: product.mainSupplierName,
+    standardPurchasePriceHt: product.standardPurchasePriceHt,
+    recommendedSalePriceHt: product.recommendedSalePriceHt,
+    vatRate: product.vatRate,
+    supplierPrices: product.supplierPrices,
+  };
+}
+
 export async function analyzeProductDocumentsWithCoco(product: ProductLike): Promise<ProductKnowledge> {
   const { data, error } = await supabase.functions.invoke("analyze-product-documents", {
     body: {
-      product: {
-        designation: product.designation,
-        brand: product.brand,
-        manufacturerReference: product.manufacturerReference,
-        unit: product.unit,
-        mainSupplierName: product.mainSupplierName,
-        standardPurchasePriceHt: product.standardPurchasePriceHt,
-        recommendedSalePriceHt: product.recommendedSalePriceHt,
-        vatRate: product.vatRate,
-        supplierPrices: product.supplierPrices,
-      },
+      product: buildProductContext(product),
       documents: product.documents,
+    },
+  });
+  if (error) throw error;
+  return normalizeProductKnowledge((data as { knowledge?: unknown } | null)?.knowledge, product);
+}
+
+/**
+ * Variante qui envoie le texte deja extrait cote client (PDF/Excel/texte) au
+ * lieu des seules metadonnees de documents (nom/kind/url) : ces dernieres ne
+ * contiennent jamais le contenu reel, l'IA ne pouvait donc rien lire.
+ */
+export async function analyzeProductTextWithCoco(product: ProductLike, documentsText: string): Promise<ProductKnowledge> {
+  const { data, error } = await supabase.functions.invoke("analyze-product-documents", {
+    body: {
+      product: buildProductContext(product),
+      documentsText,
     },
   });
   if (error) throw error;
