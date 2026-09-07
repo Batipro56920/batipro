@@ -351,7 +351,14 @@ export default function ProductCatalogPage() {
               const displayedSupplierPrice = getDisplayedSupplierPrice(product, supplierFilter);
               const usesFilteredSupplierPrice = supplierFilter !== "all" && displayedSupplierPrice?.supplierId === supplierFilter && product.mainSupplierId !== supplierFilter;
               return (
-              <tr key={product.id} className={product.id === activeProductId ? "bg-blue-50 ring-1 ring-inset ring-blue-200" : "hover:bg-slate-50"}>
+              <tr
+                key={product.id}
+                onClick={() => openProductDrawer(product)}
+                className={[
+                  "cursor-pointer",
+                  product.id === activeProductId ? "bg-blue-50 ring-1 ring-inset ring-blue-200" : "hover:bg-slate-50",
+                ].join(" ")}
+              >
                 <td className="max-w-[320px] px-4 py-1.5 align-middle">
                   <div className="truncate font-semibold text-slate-950" title={product.designation}>{product.designation}</div>
                 </td>
@@ -362,6 +369,7 @@ export default function ProductCatalogPage() {
                     {product.mainSupplierId && product.mainSupplierName ? (
                       <Link
                         to={`/fournisseurs?supplierId=${encodeURIComponent(product.mainSupplierId)}`}
+                        onClick={(event) => event.stopPropagation()}
                         className="min-w-0 truncate font-semibold text-blue-700 hover:text-blue-900 hover:underline"
                       >
                         {product.mainSupplierName}
@@ -379,7 +387,7 @@ export default function ProductCatalogPage() {
                 <td className="px-4 py-1.5 text-right align-middle font-semibold">{formatUnitPurchasePrice(product, supplierFilter)}</td>
                 <td className="px-4 py-1.5 text-right align-middle font-semibold">{formatCurrency(getRecommendedSalePrice(product, supplierFilter))}</td>
                 <td className="px-4 py-1.5 text-right align-middle">{product.documents.length}</td>
-                <td className="px-4 py-1.5 align-middle">
+                <td className="px-4 py-1.5 align-middle" onClick={(event) => event.stopPropagation()}>
                   <div className="flex justify-end gap-2">
                     {orderSupplierId ? (
                       <Link

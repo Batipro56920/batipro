@@ -183,7 +183,7 @@ export default function App() {
         <Route
           path="/rentabilite"
           element={
-            <RequireCompanyFeature moduleId="rapports" profilePermissionKey="statistiques">
+            <RequireCompanyFeature moduleId="rapports" profilePermissionKey="rentabilite_entreprise">
               <RouteSuspense label="Chargement de la rentabilité..."><RentabilitePage /></RouteSuspense>
             </RequireCompanyFeature>
           }

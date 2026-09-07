@@ -21,6 +21,7 @@ export type ProfileFeaturePermissionKey =
   | "crm_quote_view"
   | "bibliotheque"
   | "statistiques"
+  | "rentabilite_entreprise"
   | "fournisseurs"
   | "entreprise_parametres"
   | "task_library_preparation"
@@ -130,6 +131,7 @@ const PROFILE_PERMISSION_KEYS: ProfileFeaturePermissionKey[] = [
   "crm_quote_view",
   "bibliotheque",
   "statistiques",
+  "rentabilite_entreprise",
   "fournisseurs",
   "entreprise_parametres",
   "task_library_preparation",
@@ -188,6 +190,7 @@ export const BUSINESS_PROFILE_PERMISSION_PRESETS: BusinessProfilePermissionPrese
       finance_purchases: false,
       fournisseurs: false,
       statistiques: false,
+      rentabilite_entreprise: false,
       entreprise_parametres: false,
       intervenants: false,
       bibliotheque: true,
@@ -241,6 +244,7 @@ export const BUSINESS_PROFILE_PERMISSION_PRESETS: BusinessProfilePermissionPrese
       chantier_financier_billing: false,
       crm: false,
       statistiques: false,
+      rentabilite_entreprise: false,
       entreprise_parametres: false,
       finance_margin_edit: false,
       finance_purchases: true,
@@ -270,6 +274,7 @@ export const BUSINESS_PROFILE_PERMISSION_PRESETS: BusinessProfilePermissionPrese
       chatbot_raul: false,
       fournisseurs: true,
       statistiques: true,
+      rentabilite_entreprise: true,
       rapports: true,
       budget: true,
       chantier_financier_view: true,
@@ -316,6 +321,7 @@ export const BUSINESS_PROFILE_PERMISSION_PRESETS: BusinessProfilePermissionPrese
       chantier_financier_billing: true,
       fournisseurs: false,
       statistiques: false,
+      rentabilite_entreprise: false,
       entreprise_parametres: false,
       intervenants: false,
       documents_delete: false,
@@ -342,6 +348,7 @@ export const BUSINESS_PROFILE_PERMISSION_PRESETS: BusinessProfilePermissionPrese
       intervenants: false,
       fournisseurs: false,
       statistiques: false,
+      rentabilite_entreprise: false,
       entreprise_parametres: false,
       chantier_financier_view: false,
       chantier_financier_edit: false,
@@ -373,6 +380,7 @@ export const BUSINESS_PROFILE_PERMISSION_PRESETS: BusinessProfilePermissionPrese
       intervenants: false,
       fournisseurs: false,
       statistiques: false,
+      rentabilite_entreprise: false,
       entreprise_parametres: false,
       chantier_financier_view: false,
       chantier_financier_edit: false,
@@ -410,6 +418,7 @@ const EXTRA_PERMISSION_DEFINITIONS: Record<Exclude<ProfileFeaturePermissionKey, 
   crm_quote_view: { key: "crm_quote_view", label: "Voir devis CRM", description: "Acces aux listes et fiches devis CRM." },
   bibliotheque: { key: "bibliotheque", label: "Bibliothèque", description: "Accès à la page bibliothèque et aux modèles de tâches du backoffice." },
   statistiques: { key: "statistiques", label: "Statistiques", description: "Accès à la page statistiques et aux synthèses globales de pilotage." },
+  rentabilite_entreprise: { key: "rentabilite_entreprise", label: "Rentabilité entreprise", description: "Accès au tableau de bord de rentabilité globale de l'entreprise (financier général)." },
   fournisseurs: { key: "fournisseurs", label: "Fournisseurs", description: "Accès à la base fournisseurs et aux réglages d’approvisionnement." },
   entreprise_parametres: { key: "entreprise_parametres", label: "Paramètres entreprise", description: "Accès aux paramètres entreprise, fonctionnalités et profils." },
   task_library_preparation: { key: "task_library_preparation", label: "Bibliothèque avancée", description: "Accès aux ratios matériaux, au matériel à prévoir et aux estimatifs avancés des modèles de tâches." },

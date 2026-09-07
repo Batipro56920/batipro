@@ -1,6 +1,6 @@
 import { supabase } from "../lib/supabaseClient";
 
-export const SIDEBAR_GROUPS = ["Pilotage", "Commerce", "Production", "Ressources", "Achats", "Financier", "Paramètres"] as const;
+export const SIDEBAR_GROUPS = ["Pilotage", "Rentabilité", "Commerce", "Production", "Ressources", "Achats", "Financier", "Paramètres"] as const;
 export type SidebarGroup = (typeof SIDEBAR_GROUPS)[number];
 
 export type BackofficeAccount = {
