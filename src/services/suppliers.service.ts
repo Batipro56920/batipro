@@ -6,6 +6,7 @@ export type SupplierRow = {
   id: string;
   organization_id: string;
   name: string;
+  contact_name: string | null;
   specialty: string | null;
   address: string | null;
   city: string | null;
@@ -20,6 +21,7 @@ export type SupplierRow = {
 
 export type SupplierCreateInput = {
   name: string;
+  contact_name?: string | null;
   specialty?: string | null;
   address?: string | null;
   city?: string | null;
@@ -53,6 +55,7 @@ export async function createSupplier(input: SupplierCreateInput): Promise<Suppli
 
   const payload = {
     name,
+    contact_name: sanitizeNullable(input.contact_name),
     specialty: sanitizeNullable(input.specialty),
     address: sanitizeNullable(input.address),
     city: sanitizeNullable(input.city),
@@ -77,6 +80,7 @@ export async function updateSupplier(id: string, patch: SupplierUpdateInput): Pr
     if (!cleanedName) throw new Error("Le nom du fournisseur est obligatoire.");
     payload.name = cleanedName;
   }
+  if (patch.contact_name !== undefined) payload.contact_name = sanitizeNullable(patch.contact_name);
   if (patch.specialty !== undefined) payload.specialty = sanitizeNullable(patch.specialty);
   if (patch.address !== undefined) payload.address = sanitizeNullable(patch.address);
   if (patch.city !== undefined) payload.city = sanitizeNullable(patch.city);

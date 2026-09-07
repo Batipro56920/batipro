@@ -13,6 +13,7 @@ import { DeliveryNotePanel, ProductStockLevelsPanel, PurchaseOrdersPanel, StockT
 
 type SupplierFormState = {
   name: string;
+  contact_name: string;
   specialty: string;
   address: string;
   city: string;
@@ -27,6 +28,7 @@ type FournisseursTab = "suppliers" | "orders" | "stock" | "delivery";
 
 const EMPTY_SUPPLIER: SupplierFormState = {
   name: "",
+  contact_name: "",
   specialty: "",
   address: "",
   city: "",
@@ -40,6 +42,7 @@ const EMPTY_SUPPLIER: SupplierFormState = {
 function toSupplierForm(row: SupplierRow): SupplierFormState {
   return {
     name: row.name ?? "",
+    contact_name: row.contact_name ?? "",
     specialty: row.specialty ?? "",
     address: row.address ?? "",
     city: row.city ?? "",
@@ -89,7 +92,7 @@ export default function FournisseursPage({ initialTab = "suppliers" }: Fournisse
     const q = search.trim().toLowerCase();
     if (!q) return suppliers;
     return suppliers.filter((row) =>
-      [row.name, row.specialty, row.city, row.email, row.phone]
+      [row.name, row.contact_name, row.specialty, row.city, row.email, row.phone]
         .map((part) => String(part ?? "").toLowerCase())
         .some((part) => part.includes(q)),
     );
@@ -370,6 +373,16 @@ export default function FournisseursPage({ initialTab = "suppliers" }: Fournisse
               />
             </label>
 
+            <label className="space-y-1 text-sm md:col-span-2">
+              <div className="text-xs text-slate-600">{t("fournisseurs.fields.contactName")}</div>
+              <input
+                className="w-full rounded-xl border px-3 py-2 text-sm"
+                placeholder="Ex : Jean Dupont"
+                value={supplierForm.contact_name}
+                onChange={(e) => setSupplierForm((prev) => ({ ...prev, contact_name: e.target.value }))}
+              />
+            </label>
+
             <label className="space-y-1 text-sm">
               <div className="text-xs text-slate-600">{t("fournisseurs.fields.specialty")}</div>
               <input
@@ -496,6 +509,7 @@ export default function FournisseursPage({ initialTab = "suppliers" }: Fournisse
             <thead className="bg-slate-50 text-slate-600">
               <tr>
                 <th className="px-4 py-3 text-left font-medium">{t("common.labels.name")}</th>
+                <th className="px-4 py-3 text-left font-medium">{t("fournisseurs.fields.contactName")}</th>
                 <th className="px-4 py-3 text-left font-medium">{t("fournisseurs.fields.specialty")}</th>
                 <th className="px-4 py-3 text-left font-medium">{t("fournisseurs.fields.city")}</th>
                 <th className="px-4 py-3 text-left font-medium">{t("common.labels.phone")}</th>
@@ -508,6 +522,7 @@ export default function FournisseursPage({ initialTab = "suppliers" }: Fournisse
               {filteredSuppliers.map((row) => (
                 <tr key={row.id} className={row.id === activeSupplierId ? "border-t bg-blue-50 ring-1 ring-inset ring-blue-200" : "border-t"}>
                   <td className="px-4 py-3 font-medium">{row.name}</td>
+                  <td className="px-4 py-3">{row.contact_name ?? "-"}</td>
                   <td className="px-4 py-3">{row.specialty ?? "-"}</td>
                   <td className="px-4 py-3">{row.city ?? "-"}</td>
                   <td className="px-4 py-3">{row.phone ?? "-"}</td>

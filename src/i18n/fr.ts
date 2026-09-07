@@ -508,6 +508,7 @@ export const fr = {
     searchPlaceholder: "Rechercher un fournisseur...",
     empty: "Aucun fournisseur.",
     fields: {
+      contactName: "Contact / Commercial",
       specialty: "Spécialité",
       city: "Ville",
       siret: "SIRET",
