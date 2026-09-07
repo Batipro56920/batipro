@@ -32,6 +32,7 @@ export type ChantierTaskRow = {
   etape_metier: string | null;
   description_technique: string | null;
   caracteristiques: string[];
+  coco_preparation: Record<string, unknown> | null;
   materiaux: string | null;
   contraintes: string | null;
   points_controle: string | null;
@@ -84,6 +85,7 @@ type CreateTaskPayload = {
   etape_metier?: string | null;
   description_technique?: string | null;
   caracteristiques?: string[];
+  coco_preparation?: Record<string, unknown> | null;
   materiaux?: string | null;
   contraintes?: string | null;
   points_controle?: string | null;
@@ -137,6 +139,7 @@ type UpdateTaskPatch = Partial<
     | "etape_metier"
     | "description_technique"
     | "caracteristiques"
+    | "coco_preparation"
     | "materiaux"
     | "contraintes"
     | "points_controle"
@@ -210,6 +213,9 @@ const TASK_SELECT = [
   "progress_admin_offset_updated_by",
   "duration_days",
   "order_index",
+  // Listes matériaux/matériel/EPI et mode opératoire préparés par Coco : affichés
+  // sur la fiche chantier et transmis à l'ouvrier.
+  "coco_preparation",
   "created_at",
   "updated_at",
 ].join(",");
@@ -454,6 +460,10 @@ function normalizeTaskRow(row: any): ChantierTaskRow {
     etape_metier: row?.etape_metier ?? null,
     description_technique: row?.description_technique ?? null,
     caracteristiques: normalizeCaracteristiques(row?.caracteristiques),
+    coco_preparation:
+      row?.coco_preparation && typeof row.coco_preparation === "object"
+        ? (row.coco_preparation as Record<string, unknown>)
+        : null,
     materiaux: row?.materiaux ?? null,
     contraintes: row?.contraintes ?? null,
     points_controle: row?.points_controle ?? null,
@@ -586,7 +596,8 @@ function hasMissingTaskV3ColumnsError(error: { message?: string } | null): boole
     isMissingTaskColumnError(error, "tva_taux_devis") ||
     isMissingTaskColumnError(error, "cout_estime_ht") ||
     isMissingTaskColumnError(error, "cout_matiere_estime_ht") ||
-    isMissingTaskColumnError(error, "cout_mo_estime_ht")
+    isMissingTaskColumnError(error, "cout_mo_estime_ht") ||
+    isMissingTaskColumnError(error, "coco_preparation")
   );
 }
 
