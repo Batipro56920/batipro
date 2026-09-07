@@ -531,11 +531,25 @@ function ProductForm({ product, suppliers, onCancel, onSave }: { product: Produc
       </div>
 
       {activeTab === "identite" ? (
-        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-          <Field label="Désignation" value={draft.designation} onChange={(designation) => patch({ designation })} className="xl:col-span-2" />
-          <Field label="Catégorie" value={draft.category ?? ""} onChange={(category) => patch({ category })} />
-          <label className={labelClass}>Unité<Select className="mt-1" value={draft.unit} onChange={(unit) => patch({ unit: unit as DocumentUnit })} options={["u", "h", "ml", "m2", "m3", "forfait", "kg", "l"]} /></label>
-        </div>
+        <>
+          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+            <Field label="Désignation" value={draft.designation} onChange={(designation) => patch({ designation })} className="xl:col-span-2" />
+            <Field label="Catégorie" value={draft.category ?? ""} onChange={(category) => patch({ category })} />
+            <label className={labelClass}>Unité<Select className="mt-1" value={draft.unit} onChange={(unit) => patch({ unit: unit as DocumentUnit })} options={["u", "h", "ml", "m2", "m3", "forfait", "kg", "l"]} /></label>
+          </div>
+
+          <div className="mt-5 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+            <div className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">Résumé</div>
+            <p className="mt-1 text-xs text-slate-500">Détail et modification dans les onglets "Financier" et "Technique".</p>
+            <div className="mt-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+              <SummaryMetric label="Prix d'achat" value={draft.standardPurchasePriceHt > 0 ? formatCurrency(draft.standardPurchasePriceHt) : "À renseigner"} />
+              <SummaryMetric label="Prix de vente" value={draft.recommendedSalePriceHt > 0 ? formatCurrency(draft.recommendedSalePriceHt) : "À renseigner"} />
+              <SummaryMetric label="Conditionnement" value={draft.supplierPrices.find((price) => price.supplierId === draft.mainSupplierId)?.packaging || "Non renseigné"} />
+              <SummaryMetric label="Ratio par unité" value={formatIdentityRatio(draft.knowledge?.materialUsage?.value)} />
+              <SummaryMetric label="Fournisseur retenu" value={draft.mainSupplierName || "Aucun"} />
+            </div>
+          </div>
+        </>
       ) : null}
 
       {activeTab === "financier" ? (
@@ -670,6 +684,20 @@ function PricingMetric({ label, value }: { label: string; value: string }) {
       <div className="mt-1 font-semibold text-slate-950">{value}</div>
     </div>
   );
+}
+
+function SummaryMetric({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-xl border border-slate-200 bg-white px-3 py-2">
+      <div className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-400">{label}</div>
+      <div className="mt-1 font-semibold text-slate-950">{value}</div>
+    </div>
+  );
+}
+
+function formatIdentityRatio(usage?: ProductKnowledge["materialUsage"]["value"] | null): string {
+  if (!usage?.ratioQuantity || !usage.sourceUnit) return "Non renseigné";
+  return `${usage.ratioQuantity} ${usage.ratioUnit ?? ""} / ${usage.sourceUnit}`.replace(/\s+/g, " ").trim();
 }
 
 function SupplierPricesEditor({ unit, prices, suppliers, onChange }: { unit: DocumentUnit; prices: ProductSupplierPrice[]; suppliers: SupplierRow[]; onChange: (prices: ProductSupplierPrice[]) => void }) {
