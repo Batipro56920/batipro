@@ -742,6 +742,40 @@ export async function intervenantTaskEquipment(
   }));
 }
 
+export type IntervenantTaskBriefing = {
+  procedure_steps: string[];
+  ppe: string[];
+  safety_points: string[];
+  controls: string[];
+  errors_to_avoid: string[];
+};
+
+/** Mode opératoire, EPI et points de contrôle préparés par Coco sur le modèle de tâche. */
+export async function intervenantTaskBriefing(
+  token: string,
+  chantierId: string,
+  taskId: string,
+): Promise<IntervenantTaskBriefing> {
+  const { data, error } = await (supabase as any).rpc("intervenant_task_briefing", {
+    p_token: normalizePortalToken(token),
+    p_chantier_id: chantierId,
+    p_task_id: taskId,
+  });
+  if (error) throw new Error(rpcMessage(error, "Chargement du mode opératoire impossible."));
+
+  const row = (Array.isArray(data) ? data[0] : data) ?? {};
+  const list = (value: unknown): string[] =>
+    Array.isArray(value) ? value.map((item) => String(item ?? "").trim()).filter(Boolean) : [];
+
+  return {
+    procedure_steps: list(row.procedure_steps),
+    ppe: list(row.ppe),
+    safety_points: list(row.safety_points),
+    controls: list(row.controls),
+    errors_to_avoid: list(row.errors_to_avoid),
+  };
+}
+
 export async function intervenantMaterialConsumptionCreate(
   token: string,
   payload: { chantier_id: string; task_id: string; material_ratio_id: string; quantite_consommee: number; work_date?: string | null },

@@ -27,6 +27,7 @@ import {
   intervenantSession,
   intervenantStockDeclarationCreate,
   intervenantTaskEquipment,
+  intervenantTaskBriefing,
   intervenantTaskMainMaterials,
   intervenantTerrainFeedbackCreate,
   intervenantTimeCreate,
@@ -41,6 +42,7 @@ import {
   type IntervenantProductCatalogItem,
   type IntervenantTask,
   type IntervenantTaskEquipment,
+  type IntervenantTaskBriefing,
   type IntervenantTaskMainMaterial,
 } from "../services/intervenantPortal.service";
 import {
@@ -173,6 +175,25 @@ function Pill({ children, tone = "slate" }: { children: React.ReactNode; tone?: 
   return <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${styles[tone]}`}>{children}</span>;
 }
 
+function BriefingList({ title, items, tone }: { title: string; items: string[]; tone: "emerald" | "red" | "amber" }) {
+  if (!items.length) return null;
+  const styles = {
+    emerald: "border-emerald-100 bg-emerald-50 text-emerald-900",
+    red: "border-red-100 bg-red-50 text-red-900",
+    amber: "border-amber-100 bg-amber-50 text-amber-900",
+  };
+  return (
+    <div className={`mt-2 rounded-lg border px-3 py-2 text-xs ${styles[tone]}`}>
+      <div className="font-semibold">{title}</div>
+      <ul className="mt-1 list-disc space-y-0.5 pl-4">
+        {items.map((item, index) => (
+          <li key={`${title}-${index}`}>{item}</li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
 export default function EmployeePortalV2Page() {
   const navigate = useNavigate();
   const location = useLocation();
@@ -204,6 +225,7 @@ export default function EmployeePortalV2Page() {
   const [planningLots, setPlanningLots] = useState<IntervenantPlanningLot[]>([]);
   const [matinMaterialsByTask, setMatinMaterialsByTask] = useState<Record<string, IntervenantTaskMainMaterial[]>>({});
   const [matinEquipmentByTask, setMatinEquipmentByTask] = useState<Record<string, IntervenantTaskEquipment[]>>({});
+  const [matinBriefingByTask, setMatinBriefingByTask] = useState<Record<string, IntervenantTaskBriefing>>({});
   const [matinGapReported, setMatinGapReported] = useState<Record<string, boolean>>({});
   const [matinReportingKey, setMatinReportingKey] = useState<string | null>(null);
   const [selectedTaskIds, setSelectedTaskIds] = useState<string[]>([]);
@@ -336,6 +358,7 @@ export default function EmployeePortalV2Page() {
     setDailyPlanLoaded(false);
     setMatinMaterialsByTask({});
     setMatinEquipmentByTask({});
+    setMatinBriefingByTask({});
     setMatinGapReported({});
     setStockQuery("");
     setStockResults([]);
@@ -434,6 +457,20 @@ export default function EmployeePortalV2Page() {
     Promise.all(
       selectedTaskIds.map(async (taskId) => [taskId, await intervenantTaskEquipment(token, selected.id, taskId).catch(() => [])] as const),
     ).then((entries) => { if (alive) setMatinEquipmentByTask(Object.fromEntries(entries)); });
+    return () => { alive = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [token, selected?.id, selectedTaskIds.join(",")]);
+
+  // Onglet Matin : mode opératoire, EPI et points de contrôle préparés par Coco.
+  useEffect(() => {
+    if (!selected || selectedTaskIds.length === 0) { setMatinBriefingByTask({}); return; }
+    let alive = true;
+    Promise.all(
+      selectedTaskIds.map(async (taskId) => [taskId, await intervenantTaskBriefing(token, selected.id, taskId).catch(() => null)] as const),
+    ).then((entries) => {
+      if (!alive) return;
+      setMatinBriefingByTask(Object.fromEntries(entries.filter(([, briefing]) => briefing !== null)) as Record<string, IntervenantTaskBriefing>);
+    });
     return () => { alive = false; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token, selected?.id, selectedTaskIds.join(",")]);
@@ -1054,6 +1091,52 @@ export default function EmployeePortalV2Page() {
                   </div>
                 );
               }) : <div className="rounded-xl bg-slate-50 p-3 text-sm text-slate-500">Choisis des tâches ci-dessus pour voir le matériel prévu.</div>}
+            </div>
+          </Card>
+
+          <Card>
+            <h3 className="font-bold">Mode opératoire</h3>
+            <p className="mt-1 text-xs text-slate-500">Étapes, EPI et points de contrôle préparés pour les tâches choisies.</p>
+            <div className="mt-3 space-y-3">
+              {selectedTaskIds.length ? selectedTaskIds.map((taskId) => {
+                const task = pendingTasks.find((t) => t.id === taskId);
+                const briefing = matinBriefingByTask[taskId];
+                if (!task || !briefing) return null;
+                const hasContent =
+                  briefing.procedure_steps.length ||
+                  briefing.ppe.length ||
+                  briefing.safety_points.length ||
+                  briefing.controls.length ||
+                  briefing.errors_to_avoid.length;
+                if (!hasContent) return null;
+                return (
+                  <div key={taskId} className="rounded-xl border border-slate-200 p-3">
+                    <div className="text-sm font-bold">{task.titre}</div>
+                    {briefing.ppe.length ? (
+                      <div className="mt-2 flex flex-wrap gap-1.5">
+                        {briefing.ppe.map((item) => (
+                          <span key={item} className="rounded-full bg-amber-50 px-2 py-1 text-[11px] font-semibold text-amber-800">
+                            {item}
+                          </span>
+                        ))}
+                      </div>
+                    ) : null}
+                    {briefing.procedure_steps.length ? (
+                      <ol className="mt-3 space-y-1.5">
+                        {briefing.procedure_steps.map((step, index) => (
+                          <li key={`${taskId}-step-${index}`} className="flex gap-2 rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-700">
+                            <span className="shrink-0 font-bold text-slate-500">{index + 1}.</span>
+                            <span>{step}</span>
+                          </li>
+                        ))}
+                      </ol>
+                    ) : null}
+                    <BriefingList title="Points de contrôle" items={briefing.controls} tone="emerald" />
+                    <BriefingList title="Erreurs à éviter" items={briefing.errors_to_avoid} tone="red" />
+                    <BriefingList title="Sécurité" items={briefing.safety_points} tone="amber" />
+                  </div>
+                );
+              }) : <div className="rounded-xl bg-slate-50 p-3 text-sm text-slate-500">Choisis des tâches ci-dessus pour voir le mode opératoire.</div>}
             </div>
           </Card>
 

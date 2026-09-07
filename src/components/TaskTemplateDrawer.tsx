@@ -238,6 +238,48 @@ function equipmentResultText(item: TaskTemplateCocoResult["equipment"][number]) 
   return [item.label, quantity, required, item.detail].filter(Boolean).join(" - ");
 }
 
+/**
+ * Le matériel proposé par Coco devient de vraies lignes "matériel à prévoir" : ce sont
+ * elles que le portail ouvrier interroge. On complète la liste existante sans écraser
+ * ce que l'utilisateur a déjà saisi ni dupliquer une entrée du même nom.
+ */
+function mergeCocoEquipment(
+  current: EquipmentDraft[],
+  proposed: TaskTemplateCocoResult["equipment"],
+): EquipmentDraft[] {
+  const known = new Set(current.map((row) => normalizeLabel(row.equipment_name)).filter(Boolean));
+  const additions = proposed
+    .filter((item) => item.label && !known.has(normalizeLabel(item.label)))
+    .map((item) =>
+      createEquipmentDraft({
+        equipment_name: item.label,
+        is_required: item.required,
+        default_quantity: item.quantity,
+        unit: item.unit,
+        notes: item.detail,
+      }),
+    );
+  return additions.length ? [...current, ...additions] : current;
+}
+
+function normalizeLabel(value: string): string {
+  return value
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+}
+
+function MaterialField({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <label className="block space-y-1">
+      <span className="block text-[11px] font-medium uppercase tracking-[0.1em] text-slate-500">{label}</span>
+      {children}
+    </label>
+  );
+}
+
 function CocoResultBlock({ title, items }: { title: string; items: string[] }) {
   return (
     <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
@@ -916,11 +958,10 @@ export default function TaskTemplateDrawer({
 
       setCocoResult(result);
 
-      // Les listes (matériaux, matériel, EPI) et le mode opératoire sont désormais
-      // conservés tels quels dans coco_preparation et affichés en listes : on ne les
-      // aplatit plus en pavés de texte dans les champs libres.
-      setDescriptionTechnique((prev) => fillIfEmpty(prev, result.technicalDescription));
-      setCaracteristiques((prev) => fillIfEmpty(prev, result.characteristics.join("\n")));
+      // Coco alimente directement les listes liées à la tâche : le matériel qu'il
+      // propose devient des lignes "matériel à prévoir" (celles que l'ouvrier reçoit
+      // sur son portail), le reste est conservé structuré dans coco_preparation.
+      setEquipmentDrafts((prev) => mergeCocoEquipment(prev, result.equipment));
 
       const missing = result.missingInformation.length
         ? ` À compléter : ${result.missingInformation.join(" ; ")}.`
@@ -965,7 +1006,7 @@ export default function TaskTemplateDrawer({
     <>
     <div className="fixed inset-0 z-50">
       <div className="absolute inset-0 bg-black/40" onClick={onClose} />
-      <div className="absolute right-0 top-0 h-screen w-[46vw] max-w-[860px] min-w-[360px] bg-white border-l shadow-xl flex flex-col">
+      <div className="absolute right-0 top-0 flex h-screen w-[70vw] min-w-[360px] max-w-[1180px] flex-col border-l bg-white shadow-xl">
         <div className="px-4 py-3 border-b flex items-center justify-between">
           <div className="font-semibold truncate">{title}</div>
           <button
@@ -1067,34 +1108,6 @@ export default function TaskTemplateDrawer({
             </label>
           </div>
 
-          <label className="block space-y-1">
-            <div className="text-xs text-slate-600">Description technique</div>
-            <textarea
-              className="w-full rounded-xl border px-3 py-2 text-sm min-h-24"
-              value={descriptionTechnique}
-              onChange={(e) => setDescriptionTechnique(e.target.value)}
-              placeholder="Ex : doublage sur ossature avec isolant et plaques hydrofuges."
-            />
-          </label>
-
-          <label className="block space-y-1">
-            <div className="text-xs text-slate-600">Caractéristiques (1 par ligne)</div>
-            <textarea
-              className="w-full rounded-xl border px-3 py-2 text-sm min-h-28"
-              value={caracteristiques}
-              onChange={(e) => setCaracteristiques(e.target.value)}
-              placeholder={"Plaque : BA13 hydrofuge\nIsolation : laine de roche 120 mm\nSystème : Optima"}
-            />
-          </label>
-
-          <label className="block space-y-1">
-            <div className="text-xs text-slate-600">Remarques</div>
-            <textarea
-              className="w-full rounded-xl border px-3 py-2 text-sm min-h-28"
-              value={remarques}
-              onChange={(e) => setRemarques(e.target.value)}
-            />
-          </label>
 
           <div className="rounded-2xl border border-violet-200 bg-violet-50/60 p-4">
             <div className="flex flex-wrap items-center justify-between gap-3">
@@ -1223,108 +1236,129 @@ export default function TaskTemplateDrawer({
                           </div>
                         </div>
 
-                        <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-4">
-                          <div className="flex gap-2 xl:col-span-2">
-                            <select
-                              className="min-w-0 flex-1 rounded-xl border bg-white px-3 py-2 text-sm"
-                              value={row.product_id}
-                              onChange={(e) => applyProductToMaterial(index, e.target.value)}
-                            >
-                              <option value="">Ligne libre / choisir produit catalogue</option>
-                              {products.map((product) => (
-                                <option key={product.id} value={product.id}>
-                                  {product.designation}
-                                </option>
-                              ))}
-                            </select>
-                            <button
-                              type="button"
-                              onClick={() => openQuickCreate(index)}
-                              disabled={busy}
-                              className="shrink-0 rounded-xl border border-blue-200 bg-blue-50 px-3 py-2 text-xs font-semibold text-blue-700 hover:bg-blue-100 disabled:cursor-not-allowed disabled:opacity-60"
-                            >
-                              + Nouveau produit
-                            </button>
-                          </div>
-                          <input
-                            className="rounded-xl border bg-white px-3 py-2 text-sm"
-                            value={row.material_name}
-                            onChange={(e) => updateMaterialDraft(index, { material_name: e.target.value })}
-                            placeholder="Matériau"
-                          />
-                          <input
-                            className="rounded-xl border bg-white px-3 py-2 text-sm"
-                            value={row.source_unit}
-                            onChange={(e) => updateMaterialDraft(index, { source_unit: e.target.value })}
-                            placeholder="Unité source"
-                          />
-                          <input
-                            className="rounded-xl border bg-white px-3 py-2 text-sm"
-                            inputMode="decimal"
-                            value={row.ratio_quantity}
-                            onChange={(e) => updateMaterialDraft(index, { ratio_quantity: e.target.value })}
-                            placeholder="Quantité ratio"
-                          />
-                          <input
-                            className="rounded-xl border bg-white px-3 py-2 text-sm"
-                            value={row.ratio_unit}
-                            onChange={(e) => updateMaterialDraft(index, { ratio_unit: e.target.value })}
-                            placeholder="Unité ratio"
-                          />
+                        <div className="flex flex-wrap gap-2">
+                          <select
+                            className="min-w-0 flex-1 rounded-xl border bg-white px-3 py-2 text-sm"
+                            value={row.product_id}
+                            onChange={(e) => applyProductToMaterial(index, e.target.value)}
+                          >
+                            <option value="">Ligne libre / choisir produit catalogue</option>
+                            {products.map((product) => (
+                              <option key={product.id} value={product.id}>
+                                {product.designation}
+                              </option>
+                            ))}
+                          </select>
+                          <button
+                            type="button"
+                            onClick={() => openQuickCreate(index)}
+                            disabled={busy}
+                            className="shrink-0 rounded-xl border border-blue-200 bg-blue-50 px-3 py-2 text-xs font-semibold text-blue-700 hover:bg-blue-100 disabled:cursor-not-allowed disabled:opacity-60"
+                          >
+                            + Nouveau produit
+                          </button>
                         </div>
 
-                        <div className="grid gap-2 md:grid-cols-[180px_minmax(0,1fr)]">
-                          <input
-                            className="rounded-xl border bg-white px-3 py-2 text-sm"
-                            inputMode="decimal"
-                            value={row.loss_percent}
-                            onChange={(e) => updateMaterialDraft(index, { loss_percent: e.target.value })}
-                            placeholder="Perte %"
-                          />
-                          <input
-                            className="rounded-xl border bg-white px-3 py-2 text-sm"
-                            value={row.notes}
-                            onChange={(e) => updateMaterialDraft(index, { notes: e.target.value })}
-                            placeholder="Remarque"
-                          />
-                        </div>
-                        <div className="grid gap-2 md:grid-cols-4">
-                          <input
-                            className="rounded-xl border bg-white px-3 py-2 text-sm"
-                            inputMode="decimal"
-                            value={row.purchase_price_ht}
-                            onChange={(e) =>
-                              updateMaterialDraft(index, {
-                                purchase_price_ht: e.target.value,
-                                price_source: "manual",
-                                manual_override: true,
-                              })
-                            }
-                            placeholder="Prix achat HT"
-                          />
-                          <input
-                            className="rounded-xl border bg-white px-3 py-2 text-sm"
-                            inputMode="decimal"
-                            value={row.sale_price_ht}
-                            onChange={(e) =>
-                              updateMaterialDraft(index, {
-                                sale_price_ht: e.target.value,
-                                price_source: "manual",
-                                manual_override: true,
-                              })
-                            }
-                            placeholder="Prix vente HT"
-                          />
-                          <input
-                            className="rounded-xl border bg-white px-3 py-2 text-sm"
-                            value={row.supplier_id}
-                            onChange={(e) => updateMaterialDraft(index, { supplier_id: e.target.value })}
-                            placeholder="Fournisseur"
-                          />
-                          <div className="rounded-xl border bg-white px-3 py-2 text-xs text-slate-500">
-                            Source : {row.manual_override ? "manuel" : row.price_source || "manuel"}
+                        {row.product_id ? (
+                          <div className="flex flex-wrap items-center gap-2 text-xs text-slate-600">
+                            <span className="rounded-full border border-slate-200 bg-white px-2 py-1">
+                              Achat {row.purchase_price_ht || "—"} € / {row.ratio_unit || "u"}
+                            </span>
+                            <span className="rounded-full border border-slate-200 bg-white px-2 py-1">
+                              {suppliers.find((s) => s.id === row.supplier_id)?.name ?? "Fournisseur non défini"}
+                            </span>
+                            <span className="rounded-full border border-slate-200 bg-white px-2 py-1">
+                              Prix issu de la fiche produit
+                            </span>
                           </div>
+                        ) : (
+                          <MaterialField label="Désignation du matériau">
+                            <input
+                              className="w-full rounded-xl border bg-white px-3 py-2 text-sm"
+                              value={row.material_name}
+                              onChange={(e) => updateMaterialDraft(index, { material_name: e.target.value })}
+                              placeholder="Ex : sable 0/4"
+                            />
+                          </MaterialField>
+                        )}
+
+                        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                          <MaterialField label={`Quantité par ${unite.trim() || "unité d'ouvrage"}`}>
+                            <input
+                              className="w-full rounded-xl border bg-white px-3 py-2 text-sm"
+                              inputMode="decimal"
+                              value={row.ratio_quantity}
+                              onChange={(e) => updateMaterialDraft(index, { ratio_quantity: e.target.value })}
+                              placeholder="Ex : 1.05"
+                            />
+                          </MaterialField>
+                          <MaterialField label="Unité du matériau">
+                            <input
+                              className="w-full rounded-xl border bg-white px-3 py-2 text-sm"
+                              value={row.ratio_unit}
+                              onChange={(e) => updateMaterialDraft(index, { ratio_unit: e.target.value })}
+                              placeholder="Ex : kg"
+                            />
+                          </MaterialField>
+                          <MaterialField label="Perte %">
+                            <input
+                              className="w-full rounded-xl border bg-white px-3 py-2 text-sm"
+                              inputMode="decimal"
+                              value={row.loss_percent}
+                              onChange={(e) => updateMaterialDraft(index, { loss_percent: e.target.value })}
+                              placeholder="Ex : 5"
+                            />
+                          </MaterialField>
+                          <MaterialField label="Remarque">
+                            <input
+                              className="w-full rounded-xl border bg-white px-3 py-2 text-sm"
+                              value={row.notes}
+                              onChange={(e) => updateMaterialDraft(index, { notes: e.target.value })}
+                              placeholder="Optionnel"
+                            />
+                          </MaterialField>
                         </div>
+
+                        <details className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm">
+                          <summary className="cursor-pointer text-xs font-medium text-slate-600">
+                            Forcer les prix de cette ligne
+                          </summary>
+                          <div className="mt-3 grid gap-3 sm:grid-cols-3">
+                            <MaterialField label="Prix achat HT">
+                              <input
+                                className="w-full rounded-xl border bg-white px-3 py-2 text-sm"
+                                inputMode="decimal"
+                                value={row.purchase_price_ht}
+                                onChange={(e) =>
+                                  updateMaterialDraft(index, {
+                                    purchase_price_ht: e.target.value,
+                                    price_source: "manual",
+                                    manual_override: true,
+                                  })
+                                }
+                              />
+                            </MaterialField>
+                            <MaterialField label="Prix vente HT">
+                              <input
+                                className="w-full rounded-xl border bg-white px-3 py-2 text-sm"
+                                inputMode="decimal"
+                                value={row.sale_price_ht}
+                                onChange={(e) =>
+                                  updateMaterialDraft(index, {
+                                    sale_price_ht: e.target.value,
+                                    price_source: "manual",
+                                    manual_override: true,
+                                  })
+                                }
+                              />
+                            </MaterialField>
+                            <MaterialField label="Source du prix">
+                              <div className="rounded-xl border bg-slate-50 px-3 py-2 text-xs text-slate-500">
+                                {row.manual_override ? "Saisie manuelle" : row.price_source || "manuel"}
+                              </div>
+                            </MaterialField>
+                          </div>
+                        </details>
 
                         {row.is_main_material ? (() => {
                           const loss = measuredLoss.find((entry) => entry.material_name === row.material_name.trim());
