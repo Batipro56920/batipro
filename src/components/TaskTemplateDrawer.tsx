@@ -18,7 +18,13 @@ import {
   type TaskTemplateMaterialRatioInput,
 } from "../services/taskTemplatePreparation.service";
 import type { ProductCatalogItem } from "../features/product-catalog";
-import { getBestSupplierPrice, listProductCatalogItems } from "../features/product-catalog";
+import { getBestSupplierPrice, listProductCatalogItems, saveProductCatalogItem } from "../features/product-catalog";
+import {
+  buildProductDraftFromQuickCreate,
+  ProductQuickCreateModal,
+} from "../features/product-catalog/components/ProductQuickCreateModal";
+import type { DocumentUnit } from "../features/document-engine";
+import { listSuppliers, type SupplierRow } from "../services/suppliers.service";
 import { TaskCostEngine } from "../features/task-cost-engine/TaskCostEngine";
 import {
   generateWithCoco,
@@ -293,6 +299,10 @@ export default function TaskTemplateDrawer({
   const [laborDrafts, setLaborDrafts] = useState<LaborDraft[]>([]);
   const [feeDrafts, setFeeDrafts] = useState<FeeDraft[]>([]);
   const [products, setProducts] = useState<ProductCatalogItem[]>([]);
+  const [suppliers, setSuppliers] = useState<SupplierRow[]>([]);
+  const [quickCreateForIndex, setQuickCreateForIndex] = useState<number | null>(null);
+  const [quickCreateSaving, setQuickCreateSaving] = useState(false);
+  const [quickCreateError, setQuickCreateError] = useState<string | null>(null);
   const [lotProfiles, setLotProfiles] = useState<TaskTemplateLotProfile[]>([]);
   const [lotProfilesLoading, setLotProfilesLoading] = useState(false);
   const [lotProfilesError, setLotProfilesError] = useState<string | null>(null);
@@ -332,11 +342,12 @@ export default function TaskTemplateDrawer({
     if (!open) return;
     let alive = true;
     setLotProfilesLoading(true);
-    Promise.all([listProductCatalogItems(), listTaskTemplateLotProfiles()])
-      .then(([items, profiles]) => {
+    Promise.all([listProductCatalogItems(), listTaskTemplateLotProfiles(), listSuppliers().catch(() => [])])
+      .then(([items, profiles, supplierRows]) => {
         if (!alive) return;
         setProducts(items);
         setLotProfiles(profiles);
+        setSuppliers(supplierRows);
         setLotProfilesError(null);
       })
       .catch((err: any) => {
@@ -658,6 +669,28 @@ export default function TaskTemplateDrawer({
       price_source: bestPrice ? "supplier_price" : "standard",
       manual_override: false,
     });
+  }
+
+  function openQuickCreate(index: number) {
+    setQuickCreateError(null);
+    setQuickCreateForIndex(index);
+  }
+
+  async function submitQuickCreate(values: { designation: string; unit: DocumentUnit; supplierId: string; priceHt: number }) {
+    if (quickCreateForIndex === null) return;
+    setQuickCreateSaving(true);
+    setQuickCreateError(null);
+    try {
+      const draft = await buildProductDraftFromQuickCreate(values, suppliers);
+      const saved = await saveProductCatalogItem(draft, "creation rapide bibliotheque de taches");
+      setProducts((current) => [...current, saved]);
+      applyProductToMaterial(quickCreateForIndex, saved.id);
+      setQuickCreateForIndex(null);
+    } catch (err: any) {
+      setQuickCreateError(err?.message ?? "Erreur creation produit.");
+    } finally {
+      setQuickCreateSaving(false);
+    }
   }
 
   function serializePreparation() {
@@ -1248,18 +1281,28 @@ export default function TaskTemplateDrawer({
                         </div>
 
                         <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-4">
-                          <select
-                            className="rounded-xl border bg-white px-3 py-2 text-sm xl:col-span-2"
-                            value={row.product_id}
-                            onChange={(e) => applyProductToMaterial(index, e.target.value)}
-                          >
-                            <option value="">Ligne libre / choisir produit catalogue</option>
-                            {products.map((product) => (
-                              <option key={product.id} value={product.id}>
-                                {product.designation}
-                              </option>
-                            ))}
-                          </select>
+                          <div className="flex gap-2 xl:col-span-2">
+                            <select
+                              className="min-w-0 flex-1 rounded-xl border bg-white px-3 py-2 text-sm"
+                              value={row.product_id}
+                              onChange={(e) => applyProductToMaterial(index, e.target.value)}
+                            >
+                              <option value="">Ligne libre / choisir produit catalogue</option>
+                              {products.map((product) => (
+                                <option key={product.id} value={product.id}>
+                                  {product.designation}
+                                </option>
+                              ))}
+                            </select>
+                            <button
+                              type="button"
+                              onClick={() => openQuickCreate(index)}
+                              disabled={busy}
+                              className="shrink-0 rounded-xl border border-blue-200 bg-blue-50 px-3 py-2 text-xs font-semibold text-blue-700 hover:bg-blue-100 disabled:cursor-not-allowed disabled:opacity-60"
+                            >
+                              + Nouveau produit
+                            </button>
+                          </div>
                           <input
                             className="rounded-xl border bg-white px-3 py-2 text-sm"
                             value={row.material_name}
@@ -1771,6 +1814,23 @@ export default function TaskTemplateDrawer({
         onClose={() => setLotSettingsOpen(false)}
         onSave={handleSaveLotProfile}
       />
+    ) : null}
+    {quickCreateForIndex !== null ? (
+      <ProductQuickCreateModal
+        initial={{
+          materialName: materialDrafts[quickCreateForIndex]?.material_name ?? "",
+          unit: materialDrafts[quickCreateForIndex]?.ratio_unit || unite,
+        }}
+        suppliers={suppliers}
+        saving={quickCreateSaving}
+        onCancel={() => setQuickCreateForIndex(null)}
+        onSubmit={(values) => void submitQuickCreate(values)}
+      />
+    ) : null}
+    {quickCreateError ? (
+      <div className="fixed inset-x-0 bottom-4 z-[60] mx-auto w-fit rounded-xl border border-red-200 bg-white px-4 py-2 text-sm font-semibold text-red-600 shadow-lg">
+        {quickCreateError}
+      </div>
     ) : null}
     </>
   );
