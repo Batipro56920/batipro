@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { MessageCircle, RefreshCw, Send, Search, AlertTriangle, FileText } from "lucide-react";
+import { MessageCircle, RefreshCw, Send, Search, AlertTriangle, FileText, X, Download } from "lucide-react";
 import { listChantiers, type ChantierRow } from "../services/chantiers.service";
 import { createChantierFeedPost, listAllChantierFeedPosts, type ChantierFeedPostRow } from "../services/chantierFeed.service";
 
@@ -28,6 +28,16 @@ export default function FilChantierPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [lightbox, setLightbox] = useState<{ url: string; fileName: string } | null>(null);
+
+  useEffect(() => {
+    if (!lightbox) return;
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") setLightbox(null);
+    }
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [lightbox]);
 
   async function load() {
     setLoading(true);
@@ -147,7 +157,7 @@ export default function FilChantierPage() {
             <div className="flex-1 space-y-3 overflow-y-auto bg-slate-50 p-4">
               {selected.rows.map((row) => {
                 const fromTerrain = Boolean(row.author_intervenant_id);
-                return <div key={row.id} className={`flex ${fromTerrain ? "justify-start" : "justify-end"}`}><div className={`max-w-[82%] rounded-2xl px-4 py-3 text-sm shadow-sm ${fromTerrain ? "rounded-bl-md bg-white text-slate-900 ring-1 ring-slate-200" : "rounded-br-md bg-blue-600 text-white"}`}><div className={`mb-1 text-[11px] font-bold ${fromTerrain ? "text-slate-500" : "text-blue-100"}`}>{fromTerrain ? row.author_name || "Intervenant" : row.author_name || "Équipe Batipro"}</div><div className="whitespace-pre-wrap">{row.body}</div>{row.attachments.map((attachment) => attachment.mime_type?.startsWith("image/") && attachment.signed_url ? <a key={attachment.id} href={attachment.signed_url} target="_blank" rel="noreferrer" className="mt-2 block overflow-hidden rounded-xl border border-white/20"><img src={attachment.signed_url} alt={attachment.file_name} className="max-h-72 w-full object-cover" /></a> : attachment.signed_url ? <a key={attachment.id} href={attachment.signed_url} target="_blank" rel="noreferrer" className={`mt-2 flex items-center gap-2 rounded-xl border px-3 py-2 text-xs font-semibold ${fromTerrain ? "border-slate-200" : "border-white/30"}`}><FileText className="h-4 w-4" /><span className="truncate">{attachment.file_name}</span></a> : null)}<div className={`mt-1 text-[10px] ${fromTerrain ? "text-slate-400" : "text-blue-100"}`}>{formatDate(row.created_at)}</div></div></div>;
+                return <div key={row.id} className={`flex ${fromTerrain ? "justify-start" : "justify-end"}`}><div className={`max-w-[82%] rounded-2xl px-4 py-3 text-sm shadow-sm ${fromTerrain ? "rounded-bl-md bg-white text-slate-900 ring-1 ring-slate-200" : "rounded-br-md bg-blue-600 text-white"}`}><div className={`mb-1 text-[11px] font-bold ${fromTerrain ? "text-slate-500" : "text-blue-100"}`}>{fromTerrain ? row.author_name || "Intervenant" : row.author_name || "Équipe Batipro"}</div><div className="whitespace-pre-wrap">{row.body}</div>{row.attachments.map((attachment) => attachment.mime_type?.startsWith("image/") && attachment.signed_url ? <button key={attachment.id} type="button" onClick={() => setLightbox({ url: attachment.signed_url!, fileName: attachment.file_name })} className="mt-2 block w-full overflow-hidden rounded-xl border border-white/20"><img src={attachment.signed_url} alt={attachment.file_name} className="max-h-72 w-full object-cover" /></button> : attachment.signed_url ? <a key={attachment.id} href={attachment.signed_url} target="_blank" rel="noreferrer" className={`mt-2 flex items-center gap-2 rounded-xl border px-3 py-2 text-xs font-semibold ${fromTerrain ? "border-slate-200" : "border-white/30"}`}><FileText className="h-4 w-4" /><span className="truncate">{attachment.file_name}</span></a> : null)}<div className={`mt-1 text-[10px] ${fromTerrain ? "text-slate-400" : "text-blue-100"}`}>{formatDate(row.created_at)}</div></div></div>;
               })}
             </div>
             <div className="border-t border-slate-200 bg-white p-3">
@@ -156,6 +166,36 @@ export default function FilChantierPage() {
           </> : <div className="flex flex-1 items-center justify-center p-8 text-center text-sm text-slate-500">Sélectionne un fil chantier.</div>}
         </section>
       </div>
+      {lightbox ? (
+        <div
+          className="fixed inset-0 z-50 flex flex-col items-center justify-center gap-4 bg-slate-950/80 p-4"
+          onClick={() => setLightbox(null)}
+        >
+          <div className="flex w-full max-w-4xl items-center justify-end gap-2" onClick={(event) => event.stopPropagation()}>
+            <a
+              href={`${lightbox.url}${lightbox.url.includes("?") ? "&" : "?"}download=${encodeURIComponent(lightbox.fileName)}`}
+              download={lightbox.fileName}
+              className="inline-flex items-center gap-2 rounded-xl bg-white px-3 py-2 text-sm font-semibold text-slate-900 hover:bg-slate-100"
+            >
+              <Download className="h-4 w-4" /> Télécharger
+            </a>
+            <button
+              type="button"
+              onClick={() => setLightbox(null)}
+              className="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-white text-slate-900 hover:bg-slate-100"
+              aria-label="Fermer"
+            >
+              <X className="h-5 w-5" />
+            </button>
+          </div>
+          <img
+            src={lightbox.url}
+            alt={lightbox.fileName}
+            className="max-h-[80vh] max-w-full rounded-xl object-contain"
+            onClick={(event) => event.stopPropagation()}
+          />
+        </div>
+      ) : null}
     </div>
   );
 }
