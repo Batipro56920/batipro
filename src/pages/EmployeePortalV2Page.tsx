@@ -674,7 +674,7 @@ export default function EmployeePortalV2Page() {
         progress_percent: progressPercent !== null && Number.isFinite(progressPercent) ? progressPercent : null,
       });
       await Promise.all(
-        mainMaterials.map(async (material) => {
+        mainMaterials.filter((material) => material.is_main_material).map(async (material) => {
           const raw = materialConsumptionQty[material.material_ratio_id]?.trim();
           if (!raw) return;
           const consumed = Number(raw.replace(",", "."));
@@ -1052,6 +1052,7 @@ export default function EmployeePortalV2Page() {
                   </div>
                 );
               }) : <div className="rounded-xl bg-slate-50 p-3 text-sm text-slate-500">Choisis des tâches ci-dessus pour voir les matériaux prévus.</div>}
+              {selectedTaskIds.length && selectedTaskIds.every((taskId) => !(matinMaterialsByTask[taskId] ?? []).length) ? <div className="rounded-xl bg-amber-50 p-3 text-sm text-amber-800">Aucun matériau n'est prévu sur le modèle de ces tâches. Préviens le bureau si tu en as besoin.</div> : null}
             </div>
           </Card>
 
@@ -1091,6 +1092,7 @@ export default function EmployeePortalV2Page() {
                   </div>
                 );
               }) : <div className="rounded-xl bg-slate-50 p-3 text-sm text-slate-500">Choisis des tâches ci-dessus pour voir le matériel prévu.</div>}
+              {selectedTaskIds.length && selectedTaskIds.every((taskId) => !(matinEquipmentByTask[taskId] ?? []).length) ? <div className="rounded-xl bg-amber-50 p-3 text-sm text-amber-800">Aucun matériel n'est prévu sur le modèle de ces tâches.</div> : null}
             </div>
           </Card>
 
@@ -1137,6 +1139,7 @@ export default function EmployeePortalV2Page() {
                   </div>
                 );
               }) : <div className="rounded-xl bg-slate-50 p-3 text-sm text-slate-500">Choisis des tâches ci-dessus pour voir le mode opératoire.</div>}
+              {selectedTaskIds.length && selectedTaskIds.every((taskId) => !matinBriefingByTask[taskId]?.procedure_steps.length) ? <div className="rounded-xl bg-amber-50 p-3 text-sm text-amber-800">Le mode opératoire de ces tâches n'a pas encore été préparé par le bureau.</div> : null}
             </div>
           </Card>
 
@@ -1184,7 +1187,7 @@ export default function EmployeePortalV2Page() {
                   <p className="mt-1 text-xs text-slate-400">Avancement global de la tâche, pas seulement d'aujourd'hui — utile quand une tâche se fait en plusieurs étapes (ex. structure, pose, bandes) difficiles à mesurer en m² au jour le jour.</p>
                 </div>
               ) : null}
-              {mainMaterials.map((material) => (
+              {mainMaterials.filter((material) => material.is_main_material).map((material) => (
                 <input
                   key={material.material_ratio_id}
                   value={materialConsumptionQty[material.material_ratio_id] ?? ""}

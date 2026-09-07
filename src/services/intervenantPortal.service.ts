@@ -682,6 +682,8 @@ export type IntervenantTaskMainMaterial = {
   loss_percent: number | null;
   /** Quantité prévue pour la tâche (chantier_tasks.quantite * ratio_quantity, pertes incluses) — pour le pré-remplissage de l'onglet Matin. */
   expected_quantity: number | null;
+  /** Le suivi de consommation ne concerne que les matériaux principaux. */
+  is_main_material: boolean;
 };
 
 /** Matériau(x) principal(aux) d'une tâche (marqués sur le modèle) — pour savoir si un champ de consommation doit apparaître, et ce qui est prévu (onglet Matin). */
@@ -706,6 +708,7 @@ export async function intervenantTaskMainMaterials(
     source_unit: asNullableString(row.source_unit),
     loss_percent: asNullableNumber(row.loss_percent),
     expected_quantity: asNullableNumber(row.expected_quantity),
+    is_main_material: row.is_main_material !== false,
   }));
 }
 
