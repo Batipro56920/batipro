@@ -611,3 +611,89 @@ export async function applyMeasuredLossToTaskTemplatePrice(
 
   return nextPrice;
 }
+
+/**
+ * Listes préparées par Coco (EPI, mode opératoire, contrôles) rattachées à une tâche.
+ * Même contenu que celui envoyé à l'ouvrier : la fiche chantier et le portail terrain
+ * doivent montrer exactement la même chose.
+ */
+export type TaskCocoPreparation = {
+  /** Repli texte quand la tâche n'est rattachée à aucun modèle (pas de ratios liés). */
+  materials: string[];
+  equipment: string[];
+  procedure: string[];
+  ppe: string[];
+  consumables: string[];
+  controls: string[];
+  errorsToAvoid: string[];
+  safetyPoints: string[];
+};
+
+export const EMPTY_TASK_COCO_PREPARATION: TaskCocoPreparation = {
+  materials: [],
+  equipment: [],
+  procedure: [],
+  ppe: [],
+  consumables: [],
+  controls: [],
+  errorsToAvoid: [],
+  safetyPoints: [],
+};
+
+/** Le modèle renvoie tantôt des chaînes, tantôt des étapes structurées. */
+function cocoList(raw: unknown): string[] {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .map((item) => {
+      if (item === null || item === undefined) return "";
+      if (typeof item !== "object") return String(item).trim();
+      const record = item as Record<string, unknown>;
+      const head = ["etape", "step", "label", "title", "titre", "action", "description", "text", "detail"]
+        .map((key) => String(record[key] ?? "").trim())
+        .find(Boolean);
+      return head ?? "";
+    })
+    .filter(Boolean);
+}
+
+export function normalizeTaskCocoPreparation(raw: unknown): TaskCocoPreparation {
+  const source = (raw ?? {}) as Record<string, unknown>;
+  return {
+    materials: cocoList(source.materials),
+    equipment: cocoList(source.equipment),
+    procedure: cocoList(source.procedure),
+    ppe: cocoList(source.ppe),
+    consumables: cocoList(source.consumables),
+    controls: cocoList(source.controls),
+    errorsToAvoid: cocoList(source.errorsToAvoid),
+    safetyPoints: cocoList(source.safetyPoints),
+  };
+}
+
+export function hasTaskCocoPreparation(preparation: TaskCocoPreparation | null | undefined): boolean {
+  if (!preparation) return false;
+  return Object.values(preparation).some((list) => Array.isArray(list) && list.length > 0);
+}
+
+export async function listTaskTemplateCocoPreparation(
+  templateIds: string[],
+): Promise<Record<string, TaskCocoPreparation>> {
+  const ids = Array.from(new Set((templateIds ?? []).map((id) => String(id ?? "").trim()).filter(Boolean)));
+  if (ids.length === 0) return {};
+
+  const { data, error } = await (supabase as any)
+    .from("task_templates")
+    .select("id, coco_preparation")
+    .in("id", ids);
+
+  if (error) {
+    if (isMissingPreparationSchemaError(error)) return {};
+    throw new Error(error.message);
+  }
+
+  const map: Record<string, TaskCocoPreparation> = {};
+  for (const row of data ?? []) {
+    map[String(row.id)] = normalizeTaskCocoPreparation(row.coco_preparation);
+  }
+  return map;
+}

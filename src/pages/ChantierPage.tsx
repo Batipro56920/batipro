@@ -172,8 +172,15 @@ import {
 } from "../services/profileFeaturePermissions.service";
 import {
   estimateTaskTemplatePreparation,
+  listTaskTemplateCocoPreparation,
   listTaskTemplatePreparationByTemplateIds,
   replaceTaskTemplatePreparation,
+  normalizeTaskCocoPreparation,
+  hasTaskCocoPreparation,
+  EMPTY_TASK_COCO_PREPARATION,
+  type TaskCocoPreparation,
+  type TaskPreparationEstimateEquipment,
+  type TaskPreparationEstimateMaterial,
   type TaskTemplateEquipmentItemRow,
   type TaskTemplateMaterialRatioRow,
 } from "../services/taskTemplatePreparation.service";
@@ -407,10 +414,9 @@ function parseTaskCaracteristiquesText(value: string): string[] {
     .filter((line) => line.length > 0);
 }
 
-function fillIfEmptyTechnique(existing: string, content: string): string {
-  const cleanContent = content.trim();
-  if (!cleanContent) return existing;
-  return existing.trim() ? existing : cleanContent;
+function taskEquipmentResultText(item: { label: string; quantity: number | null; unit: string | null; required: boolean; detail: string | null }): string {
+  const quantity = item.quantity !== null ? `${item.quantity}${item.unit ? ` ${item.unit}` : ''}` : '';
+  return [item.label, quantity, item.required ? '' : 'optionnel', item.detail].filter(Boolean).join(' - ');
 }
 
 function taskMaterialResultText(item: { label: string; quantity: number | null; unit: string | null; detail: string | null }): string {
@@ -1105,17 +1111,15 @@ export default function ChantierPage() {
   const [taskPreparationEquipmentByTemplateId, setTaskPreparationEquipmentByTemplateId] = useState<
     Record<string, TaskTemplateEquipmentItemRow[]>
   >({});
+  const [taskCocoPreparationByTemplateId, setTaskCocoPreparationByTemplateId] = useState<
+    Record<string, TaskCocoPreparation>
+  >({});
   const [taskDetailOpenId, setTaskDetailOpenId] = useState<string | null>(null);
   const [taskDetailTab, setTaskDetailTab] = useState<
     "synthese" | "technique" | "documents" | "etapes" | "reserves" | "remarques" | "historique"
   >("synthese");
-  const [techniqueEditing, setTechniqueEditing] = useState(false);
-  const [techniqueSaving, setTechniqueSaving] = useState(false);
   const [techniqueDescription, setTechniqueDescription] = useState("");
   const [techniqueCaracteristiques, setTechniqueCaracteristiques] = useState("");
-  const [techniqueMateriaux, setTechniqueMateriaux] = useState("");
-  const [techniqueContraintes, setTechniqueContraintes] = useState("");
-  const [techniquePointsControle, setTechniquePointsControle] = useState("");
   const [techniqueCocoLoading, setTechniqueCocoLoading] = useState(false);
   const [techniqueCocoMessage, setTechniqueCocoMessage] = useState<string | null>(null);
   const [techniqueCocoError, setTechniqueCocoError] = useState<string | null>(null);
@@ -3120,6 +3124,7 @@ export default function ChantierPage() {
     if (!advancedPreparationEnabled) {
       setTaskPreparationMaterialsByTemplateId({});
       setTaskPreparationEquipmentByTemplateId({});
+      setTaskCocoPreparationByTemplateId({});
       setTaskTemplatePreparationSchemaReady(true);
       return;
     }
@@ -3144,6 +3149,9 @@ export default function ChantierPage() {
         setTaskTemplatePreparationSchemaReady(result.schemaReady);
         setTaskPreparationMaterialsByTemplateId(result.materialsByTemplateId);
         setTaskPreparationEquipmentByTemplateId(result.equipmentByTemplateId);
+        // EPI et mode opératoire préparés par Coco sur le modèle : ce sont les mêmes
+        // listes que l'ouvrier reçoit, on les affiche ici plutôt que du texte libre.
+        setTaskCocoPreparationByTemplateId(await listTaskTemplateCocoPreparation(templateIds));
       } catch {
         if (!alive) return;
         setTaskTemplatePreparationSchemaReady(false);
@@ -3295,11 +3303,9 @@ export default function ChantierPage() {
   useEffect(() => {
     if (!taskDetailOpenId) {
       setTaskDetailTab("synthese");
-      setTechniqueEditing(false);
       return;
     }
     setTaskDetailTab("synthese");
-    setTechniqueEditing(false);
   }, [taskDetailOpenId]);
 
   useEffect(() => {
@@ -3310,9 +3316,6 @@ export default function ChantierPage() {
         ? ((activeTaskDetail as any).caracteristiques as string[]).join("\n")
         : "",
     );
-    setTechniqueMateriaux(String((activeTaskDetail as any).materiaux ?? ""));
-    setTechniqueContraintes(String((activeTaskDetail as any).contraintes ?? ""));
-    setTechniquePointsControle(String((activeTaskDetail as any).points_controle ?? ""));
     setTechniqueCocoMessage(null);
     setTechniqueCocoError(null);
   }, [activeTaskDetail?.id, activeTaskDetail]);
@@ -4288,23 +4291,20 @@ export default function ChantierPage() {
         },
       });
 
-      const nextDescription = fillIfEmptyTechnique(techniqueDescription, result.technicalDescription);
-      const nextCaracteristiques = fillIfEmptyTechnique(techniqueCaracteristiques, result.characteristics.join("\n"));
-      const materiauxLines = [
-        ...result.materials.map((item) => taskMaterialResultText(item)),
-        ...result.consumables,
-      ];
-      const nextMateriaux = fillIfEmptyTechnique(techniqueMateriaux, materiauxLines.join("\n"));
-      const contraintesLines = [...result.errorsToAvoid, ...result.safetyPoints];
-      const nextContraintes = fillIfEmptyTechnique(techniqueContraintes, contraintesLines.join("\n"));
-      const nextPointsControle = fillIfEmptyTechnique(techniquePointsControle, result.controls.join("\n"));
-
-      setTechniqueDescription(nextDescription);
-      setTechniqueCaracteristiques(nextCaracteristiques);
-      setTechniqueMateriaux(nextMateriaux);
-      setTechniqueContraintes(nextContraintes);
-      setTechniquePointsControle(nextPointsControle);
-      setTechniqueEditing(true);
+      // La préparation est stockée structurée sur la tâche : ce sont ces listes que
+      // la fiche chantier affiche et que le portail ouvrier reçoit. On n'aplatit plus
+      // le résultat dans des champs texte libres qui faisaient doublon.
+      const preparationPayload = {
+        materials: [...result.materials.map((item) => taskMaterialResultText(item)), ...result.consumables],
+        equipment: result.equipment.map((item) => taskEquipmentResultText(item)),
+        ppe: result.ppe,
+        procedure: result.procedure,
+        controls: result.controls,
+        errorsToAvoid: result.errorsToAvoid,
+        safetyPoints: result.safetyPoints,
+      };
+      await updateTask(task.id, { coco_preparation: preparationPayload } as any);
+      await refreshTasksOnly();
 
       const existingSteps = taskStepsByTaskId.get(task.id) ?? [];
       let stepsCreated = 0;
@@ -4331,27 +4331,6 @@ export default function ChantierPage() {
       setTechniqueCocoError(e?.message ?? "Preparation Coco impossible.");
     } finally {
       setTechniqueCocoLoading(false);
-    }
-  }
-
-  async function saveTaskTechnique() {
-    if (!activeTaskDetail) return;
-    setTechniqueSaving(true);
-    try {
-      const updated = await updateTask(activeTaskDetail.id, {
-        description_technique: techniqueDescription.trim() || null,
-        caracteristiques: parseTaskCaracteristiquesText(techniqueCaracteristiques),
-        materiaux: techniqueMateriaux.trim() || null,
-        contraintes: techniqueContraintes.trim() || null,
-        points_controle: techniquePointsControle.trim() || null,
-      } as any);
-      setTasks((current) => current.map((task) => (task.id === updated.id ? updated : task)));
-      setTechniqueEditing(false);
-      setToast({ type: "ok", msg: "Technique enregistrée." });
-    } catch (e: any) {
-      setToast({ type: "error", msg: e?.message ?? "Erreur sauvegarde technique." });
-    } finally {
-      setTechniqueSaving(false);
     }
   }
 
@@ -5309,10 +5288,14 @@ export default function ChantierPage() {
                 { key: "remarques", label: "Remarques" },
                 { key: "historique", label: "Historique" },
               ] as const;
-              const detailCaracteristiques = Array.isArray((activeTaskDetail as any).caracteristiques)
-                ? ((activeTaskDetail as any).caracteristiques as string[])
-                : [];
               const detailSelectedPieceIds = getTaskPieceZoneIds(activeTaskDetail);
+              // Préparation propre à la tâche si elle existe, sinon celle du modèle :
+              // c'est exactement la règle appliquée par le portail ouvrier.
+              const taskOwnPreparation = normalizeTaskCocoPreparation((activeTaskDetail as any).coco_preparation);
+              const detailCocoPreparation = hasTaskCocoPreparation(taskOwnPreparation)
+                ? taskOwnPreparation
+                : taskCocoPreparationByTemplateId[String(activeTaskDetail.task_template_id ?? "")] ??
+                  EMPTY_TASK_COCO_PREPARATION;
               const detailPreparationEstimate =
                 advancedPreparationEnabled && activeTaskDetail.task_template_id
                   ? estimateTaskTemplatePreparation(
@@ -5656,41 +5639,15 @@ export default function ChantierPage() {
                           >
                             {techniqueCocoLoading ? "Préparation..." : "Préparer avec Coco"}
                           </button>
-                          {techniqueEditing ? (
-                            <>
-                              <button
-                                type="button"
-                                disabled={techniqueSaving}
-                                onClick={() => {
-                                  setTechniqueEditing(false);
-                                  setTechniqueDescription(String((activeTaskDetail as any).description_technique ?? ""));
-                                  setTechniqueCaracteristiques(detailCaracteristiques.join("\n"));
-                                  setTechniqueMateriaux(String((activeTaskDetail as any).materiaux ?? ""));
-                                  setTechniqueContraintes(String((activeTaskDetail as any).contraintes ?? ""));
-                                  setTechniquePointsControle(String((activeTaskDetail as any).points_controle ?? ""));
-                                }}
-                                className="rounded-xl border px-3 py-2 text-xs hover:bg-slate-50 disabled:opacity-50"
-                              >
-                                Annuler
-                              </button>
-                              <button
-                                type="button"
-                                disabled={techniqueSaving}
-                                onClick={() => void saveTaskTechnique()}
-                                className="rounded-xl bg-slate-900 px-3 py-2 text-xs text-white hover:bg-slate-800 disabled:opacity-50"
-                              >
-                                Enregistrer
-                              </button>
-                            </>
-                          ) : (
+                          {activeTaskDetail.task_template_id ? (
                             <button
                               type="button"
-                              onClick={() => setTechniqueEditing(true)}
+                              onClick={() => navigate(`/bibliotheque?templateId=${activeTaskDetail.task_template_id}`)}
                               className="rounded-xl border px-3 py-2 text-xs hover:bg-slate-50"
                             >
-                              Mode édition
+                              Ouvrir le modèle
                             </button>
-                          )}
+                          ) : null}
                         </div>
                       </div>
                       {techniqueCocoMessage ? (
@@ -5704,59 +5661,13 @@ export default function ChantierPage() {
                         </div>
                       ) : null}
                       <div className="mt-4 space-y-3">
-                        <div className="rounded-2xl bg-white p-4">
-                          <div className="text-xs text-slate-500">Description technique</div>
-                          {techniqueEditing ? (
-                            <textarea
-                              className="mt-2 min-h-28 w-full rounded-xl border px-3 py-2 text-sm"
-                              value={techniqueDescription}
-                              onChange={(event) => setTechniqueDescription(event.target.value)}
-                            />
-                          ) : (
-                            <div className="mt-1 whitespace-pre-wrap text-sm text-slate-800">
-                              {(activeTaskDetail as any).description_technique || "—"}
-                            </div>
-                          )}
-                        </div>
-                        <div className="rounded-2xl bg-white p-4">
-                          <div className="text-xs text-slate-500">Caractéristiques</div>
-                          {techniqueEditing ? (
-                            <textarea
-                              className="mt-2 min-h-28 w-full rounded-xl border px-3 py-2 text-sm"
-                              value={techniqueCaracteristiques}
-                              onChange={(event) => setTechniqueCaracteristiques(event.target.value)}
-                              placeholder="Une caractéristique par ligne"
-                            />
-                          ) : detailCaracteristiques.length === 0 ? (
-                            <div className="mt-1 text-sm text-slate-500">—</div>
-                          ) : (
-                            <ul className="mt-2 space-y-1 text-sm text-slate-800">
-                              {detailCaracteristiques.map((item) => (
-                                <li key={`${activeTaskDetail.id}-${item}`}>• {item}</li>
-                              ))}
-                            </ul>
-                          )}
-                        </div>
-                        {[
-                          ["Matériaux", "materiaux", techniqueMateriaux, setTechniqueMateriaux],
-                          ["Contraintes", "contraintes", techniqueContraintes, setTechniqueContraintes],
-                          ["Points de contrôle", "points_controle", techniquePointsControle, setTechniquePointsControle],
-                        ].map(([label, key, value, setter]) => (
-                          <div key={String(key)} className="rounded-2xl bg-white p-4">
-                            <div className="text-xs text-slate-500">{String(label)}</div>
-                            {techniqueEditing ? (
-                              <textarea
-                                className="mt-2 min-h-24 w-full rounded-xl border px-3 py-2 text-sm"
-                                value={String(value)}
-                                onChange={(event) => (setter as (next: string) => void)(event.target.value)}
-                              />
-                            ) : (
-                              <div className="mt-1 whitespace-pre-wrap text-sm text-slate-800">
-                                {String((activeTaskDetail as any)[String(key)] ?? "").trim() || "—"}
-                              </div>
-                            )}
-                          </div>
-                        ))}
+                        <TaskPreparationLists
+                          materials={detailPreparationEstimate?.materials ?? []}
+                          equipment={detailPreparationEstimate?.equipment ?? []}
+                          preparation={detailCocoPreparation}
+                          taskUnit={String((activeTaskDetail as any).unite ?? "")}
+                          hasTemplate={Boolean(activeTaskDetail.task_template_id)}
+                        />
                         {String((activeTaskDetail as any).reprise_reason ?? "").trim() ? (
                           <div className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
                             Reprise demandée : {(activeTaskDetail as any).reprise_reason}
@@ -9282,3 +9193,141 @@ export default function ChantierPage() {
 
 
 
+
+/**
+ * Les quatre listes qui suivent une tâche : matériaux, matériel, EPI et mode
+ * opératoire. Mêmes données que celles envoyées à l'ouvrier sur son portail, pour
+ * qu'il n'y ait qu'une seule vérité entre le modèle, le chantier et le terrain.
+ */
+function TaskPreparationLists({
+  materials,
+  equipment,
+  preparation,
+  taskUnit,
+  hasTemplate,
+}: {
+  materials: TaskPreparationEstimateMaterial[];
+  equipment: TaskPreparationEstimateEquipment[];
+  preparation: TaskCocoPreparation;
+  taskUnit: string;
+  hasTemplate: boolean;
+}) {
+  const nothing =
+    materials.length === 0 &&
+    equipment.length === 0 &&
+    preparation.materials.length === 0 &&
+    preparation.equipment.length === 0 &&
+    preparation.ppe.length === 0 &&
+    preparation.procedure.length === 0;
+
+  if (nothing) {
+    return (
+      <div className="rounded-2xl border border-dashed border-slate-200 bg-white p-5 text-sm text-slate-600">
+        <div className="font-semibold text-slate-900">Aucune préparation pour cette tâche</div>
+        <p className="mt-1">
+          {hasTemplate
+            ? "Ouvre le modèle de tâche dans la bibliothèque et lance « Préparer avec Coco » : les listes matériaux, matériel, EPI et le mode opératoire seront rattachés à la tâche et transmis à l'ouvrier."
+            : "Cette tâche n'est rattachée à aucun modèle. Lance « Préparer avec Coco » ci-dessus pour générer ses listes et son mode opératoire."}
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <>
+      {materials.length ? (
+        <TaskListCard title="Matériaux" count={materials.length}>
+          {materials.map((item) => (
+            <li key={item.id} className="flex items-baseline justify-between gap-3">
+              <span>{item.material_name}</span>
+              <span className="shrink-0 font-semibold text-slate-900">
+                {item.estimated_quantity} {item.ratio_unit}
+              </span>
+            </li>
+          ))}
+        </TaskListCard>
+      ) : (
+        <TaskListCard title="Matériaux" count={preparation.materials.length}>
+          {preparation.materials.map((item) => <li key={item}>{item}</li>)}
+        </TaskListCard>
+      )}
+
+      {equipment.length ? (
+        <TaskListCard title="Matériel" count={equipment.length}>
+          {equipment.map((item) => (
+            <li key={item.id} className="flex items-baseline justify-between gap-3">
+              <span>{item.equipment_name}</span>
+              <span className="shrink-0 text-xs text-slate-500">
+                {item.default_quantity != null ? `${item.default_quantity}${item.unit ? ` ${item.unit}` : ""}` : ""}
+                {item.is_required ? "" : " · optionnel"}
+              </span>
+            </li>
+          ))}
+        </TaskListCard>
+      ) : (
+        <TaskListCard title="Matériel" count={preparation.equipment.length}>
+          {preparation.equipment.map((item) => <li key={item}>{item}</li>)}
+        </TaskListCard>
+      )}
+
+      <TaskListCard title="EPI" count={preparation.ppe.length}>
+        {preparation.ppe.map((item) => (
+          <li key={item}>{item}</li>
+        ))}
+      </TaskListCard>
+
+      <div className="rounded-2xl bg-white p-4">
+        <div className="flex items-baseline justify-between gap-3">
+          <div className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">Mode opératoire</div>
+          <div className="text-xs text-slate-400">{preparation.procedure.length} étape(s)</div>
+        </div>
+        {preparation.procedure.length === 0 ? (
+          <div className="mt-2 text-sm text-slate-500">—</div>
+        ) : (
+          <ol className="mt-2 space-y-2">
+            {preparation.procedure.map((step, index) => (
+              <li key={`step-${index}`} className="flex gap-2 rounded-xl bg-slate-50 px-3 py-2 text-sm text-slate-800">
+                <span className="shrink-0 font-bold text-slate-400">{index + 1}.</span>
+                <span>{step}</span>
+              </li>
+            ))}
+          </ol>
+        )}
+      </div>
+
+      {preparation.controls.length || preparation.errorsToAvoid.length || preparation.safetyPoints.length ? (
+        <div className="grid gap-3 md:grid-cols-3">
+          <TaskListCard title="Points de contrôle" count={preparation.controls.length}>
+            {preparation.controls.map((item) => <li key={item}>{item}</li>)}
+          </TaskListCard>
+          <TaskListCard title="Erreurs à éviter" count={preparation.errorsToAvoid.length}>
+            {preparation.errorsToAvoid.map((item) => <li key={item}>{item}</li>)}
+          </TaskListCard>
+          <TaskListCard title="Sécurité" count={preparation.safetyPoints.length}>
+            {preparation.safetyPoints.map((item) => <li key={item}>{item}</li>)}
+          </TaskListCard>
+        </div>
+      ) : null}
+
+      {taskUnit ? (
+        <div className="text-xs text-slate-400">Quantités calculées pour la quantité de la tâche ({taskUnit}).</div>
+      ) : null}
+    </>
+  );
+}
+
+function TaskListCard({ title, count, children }: { title: string; count: number; children: React.ReactNode }) {
+  return (
+    <div className="rounded-2xl bg-white p-4">
+      <div className="flex items-baseline justify-between gap-3">
+        <div className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">{title}</div>
+        <div className="text-xs text-slate-400">{count}</div>
+      </div>
+      {count === 0 ? (
+        <div className="mt-2 text-sm text-slate-500">—</div>
+      ) : (
+        <ul className="mt-2 space-y-1.5 text-sm text-slate-800">{children}</ul>
+      )}
+    </div>
+  );
+}
