@@ -751,6 +751,9 @@ export type IntervenantTaskBriefing = {
   safety_points: string[];
   controls: string[];
   errors_to_avoid: string[];
+  /** Repli quand la préparation vient de la tâche et non du modèle. */
+  materials: string[];
+  equipment: string[];
 };
 
 /** Mode opératoire, EPI et points de contrôle préparés par Coco sur le modèle de tâche. */
@@ -776,6 +779,8 @@ export async function intervenantTaskBriefing(
     safety_points: list(row.safety_points),
     controls: list(row.controls),
     errors_to_avoid: list(row.errors_to_avoid),
+    materials: list(row.materials),
+    equipment: list(row.equipment),
   };
 }
 
