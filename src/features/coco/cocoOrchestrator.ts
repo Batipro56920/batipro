@@ -129,7 +129,34 @@ function nullableNumber(value: unknown): number | null {
 
 function stringArray(value: unknown): string[] {
   if (!Array.isArray(value)) return [];
-  return value.map((item) => text(item)).filter(Boolean);
+  return value.map((item) => flattenToText(item)).filter(Boolean);
+}
+
+/**
+ * Le modèle renvoie parfois des étapes structurées ({etape, objectif, duree...})
+ * là où le contrat attend une phrase. Sans aplatissement on affichait "[object Object]"
+ * à l'utilisateur et à l'ouvrier.
+ */
+function flattenToText(item: unknown): string {
+  if (item === null || item === undefined) return "";
+  if (typeof item !== "object") return text(item);
+
+  const record = item as Record<string, unknown>;
+  const head = ["etape", "step", "label", "title", "titre", "action", "description", "text"]
+    .map((key) => text(record[key]))
+    .find(Boolean);
+  const details = [
+    ["Objectif", record.objectif ?? record.goal],
+    ["Matériel", record.materiel ?? record.equipment],
+    ["Durée", record.duree ?? record.duration],
+    ["Contrôle", record.controle ?? record.control],
+    ["Risque", record.risque ?? record.risk],
+  ]
+    .map(([label, value]) => (text(value) ? `${label} : ${text(value)}` : ""))
+    .filter(Boolean);
+
+  const parts = [head, details.join(" · ")].filter(Boolean);
+  return parts.length ? parts.join(" — ") : Object.values(record).map((value) => text(value)).filter(Boolean).join(" — ");
 }
 
 function unique(values: string[]) {

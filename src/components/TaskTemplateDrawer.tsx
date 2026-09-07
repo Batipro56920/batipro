@@ -862,6 +862,12 @@ export default function TaskTemplateDrawer({
       setLocalError(`${t("common.labels.title")} obligatoire.`);
       return;
     }
+    // La colonne lot est NOT NULL en base : sans ce garde-fou l'enregistrement
+    // repartait en erreur SQL illisible.
+    if (!lot.trim()) {
+      setLocalError("Choisis un lot avant d'enregistrer le modèle.");
+      return;
+    }
     const quantiteDefautValue = quantiteDefaut.trim() === "" ? null : Number(quantiteDefaut);
     const tempsParUniteValue = tempsParUnite.trim() === "" ? null : Number(tempsParUnite);
     const coutReferenceValue =

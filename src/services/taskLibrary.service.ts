@@ -146,14 +146,15 @@ const SELECT_LEGACY = [
 
 let supportsV2Columns: boolean | null = null;
 
+// Le test doit rester sur l'absence réelle de la table : sans la condition
+// "does not exist", une simple violation de contrainte (message du type
+// 'null value in column "lot" of relation "task_templates"') était rapportée à
+// l'utilisateur comme une table manquante, avec un conseil d'appliquer les migrations.
 function isMissingTableError(error: { message?: string } | null): boolean {
   const msg = (error?.message ?? "").toLowerCase();
   if (!msg) return false;
-  return (
-    (msg.includes("relation") && msg.includes("task_templates")) ||
-    (msg.includes("schema cache") && msg.includes("task_templates")) ||
-    msg.includes("does not exist")
-  );
+  if (!msg.includes("task_templates")) return false;
+  return msg.includes("does not exist") || msg.includes("schema cache");
 }
 
 function isMissingV2ColumnsError(error: { code?: string; message?: string } | null): boolean {
