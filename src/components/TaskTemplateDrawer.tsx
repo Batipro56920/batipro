@@ -26,6 +26,7 @@ import {
 import type { DocumentUnit } from "../features/document-engine";
 import { listSuppliers, type SupplierRow } from "../services/suppliers.service";
 import { TaskCostEngine } from "../features/task-cost-engine/TaskCostEngine";
+import { getCompanyHourlyRates, type CompanyHourlyRates } from "../services/indirectCosts.service";
 import {
   generateWithCoco,
   type TaskTemplateCocoResult,
@@ -191,10 +192,6 @@ function isMaterialDraftEmpty(row: MaterialRatioDraft) {
   );
 }
 
-function isLaborDraftEmpty(row: LaborDraft) {
-  return !row.duration.trim() && !row.hourlyCost.trim() && !row.hourlySalePrice.trim() && !row.note.trim();
-}
-
 function isFeeDraftEmpty(row: FeeDraft) {
   return !row.designation.trim() && !row.amountCostHt.trim() && !row.amountSaleHt.trim() && !row.note.trim();
 }
@@ -241,19 +238,6 @@ function equipmentResultText(item: TaskTemplateCocoResult["equipment"][number]) 
   return [item.label, quantity, required, item.detail].filter(Boolean).join(" - ");
 }
 
-function costSummaryLines(result: TaskTemplateCocoResult) {
-  const summary = result.costSummary;
-  if (summary.lines.length) return summary.lines;
-  return [
-    summary.materialCostHt !== null ? `Materiaux: ${summary.materialCostHt.toFixed(2)} EUR HT` : "",
-    summary.laborCostHt !== null ? `Main d'oeuvre: ${summary.laborCostHt.toFixed(2)} EUR HT` : "",
-    summary.feeCostHt !== null ? `Frais: ${summary.feeCostHt.toFixed(2)} EUR HT` : "",
-    summary.totalCostHt !== null ? `Total revient: ${summary.totalCostHt.toFixed(2)} EUR HT` : "",
-    summary.salePriceHt !== null ? `Prix vente: ${summary.salePriceHt.toFixed(2)} EUR HT` : "",
-    summary.marginRate !== null ? `Marge: ${summary.marginRate.toFixed(1)} %` : "",
-  ].filter(Boolean);
-}
-
 function CocoResultBlock({ title, items }: { title: string; items: string[] }) {
   return (
     <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
@@ -291,8 +275,6 @@ export default function TaskTemplateDrawer({
   const [descriptionTechnique, setDescriptionTechnique] = useState("");
   const [caracteristiques, setCaracteristiques] = useState("");
   const [remarques, setRemarques] = useState("");
-  const [quoteVisible, setQuoteVisible] = useState(true);
-  const [chantierVisible, setChantierVisible] = useState(true);
   const [usageMetier, setUsageMetier] = useState("");
   const [materialDrafts, setMaterialDrafts] = useState<MaterialRatioDraft[]>([]);
   const [equipmentDrafts, setEquipmentDrafts] = useState<EquipmentDraft[]>([]);
@@ -319,6 +301,22 @@ export default function TaskTemplateDrawer({
   const [cocoMessage, setCocoMessage] = useState<string | null>(null);
   const [cocoError, setCocoError] = useState<string | null>(null);
   const [cocoResult, setCocoResult] = useState<TaskTemplateCocoResult | null>(null);
+  const [hourlyRates, setHourlyRates] = useState<CompanyHourlyRates | null>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    let alive = true;
+    void getCompanyHourlyRates()
+      .then((rates) => {
+        if (alive) setHourlyRates(rates);
+      })
+      .catch(() => {
+        if (alive) setHourlyRates(null);
+      });
+    return () => {
+      alive = false;
+    };
+  }, [open]);
 
   useEffect(() => {
     if (!open) return;
@@ -376,11 +374,10 @@ export default function TaskTemplateDrawer({
       setDescriptionTechnique(template.description_technique ?? "");
       setCaracteristiques((template.caracteristiques ?? []).join("\n"));
       setRemarques(template.remarques ?? "");
-      setQuoteVisible(template.quote_visible !== false);
-      setChantierVisible(template.chantier_visible !== false);
       setUsageMetier("");
       setLaborDrafts((template.labor_items ?? []).map((row) => createLaborDraft(row)));
       setFeeDrafts((template.fee_items ?? []).map((row) => createFeeDraft(row)));
+      setCocoResult((template.coco_preparation as TaskTemplateCocoResult | null) ?? null);
     } else {
       setTitre(initialValues?.titre ?? "");
       setLot(initialValues?.lot ?? "");
@@ -391,8 +388,6 @@ export default function TaskTemplateDrawer({
       setDescriptionTechnique(initialValues?.description_technique ?? "");
       setCaracteristiques((initialValues?.caracteristiques ?? []).join("\n"));
       setRemarques(initialValues?.remarques ?? "");
-      setQuoteVisible(initialValues?.quote_visible !== false);
-      setChantierVisible(initialValues?.chantier_visible !== false);
       setUsageMetier("");
       setMaterialDrafts(
         (initialValues?.preparation_materials ?? []).map((row) =>
@@ -503,6 +498,20 @@ export default function TaskTemplateDrawer({
   const busy = saving || deleting || cocoLoading;
   const title = useMemo(() => (template ? `${t("common.actions.edit")} template` : t("bibliothequeTasks.new")), [t, template]);
   const selectedLotProfile = useMemo(() => findLotProfileByName(lotProfiles, lot), [lotProfiles, lot]);
+  /**
+   * La main d'oeuvre n'est plus une liste de lignes à saisir : c'est le temps estimé
+   * de la tâche valorisé au coût horaire moyen des salariés CB Rénovation.
+   */
+  const laborPlan = useMemo(() => {
+    const hours = parseDraftAmount(tempsParUnite) ?? 0;
+    const hourlyCostHt = hourlyRates?.averageEmployeeHourlyCostHt ?? 0;
+    return {
+      hours,
+      hourlyCostHt,
+      cost: Math.round(hours * hourlyCostHt * 100) / 100,
+    };
+  }, [tempsParUnite, hourlyRates]);
+
   const compositionTotals = useMemo(() => {
     const engineTotals = TaskCostEngine.calculate({
       materials: materialDrafts.map((row) => ({
@@ -512,12 +521,14 @@ export default function TaskTemplateDrawer({
         lossPercent: parseDraftAmount(row.loss_percent),
         marginRate: selectedLotProfile?.materialsMarginRate ?? null,
       })),
-      labor: laborDrafts.map((row) => ({
-        durationHours: parseDraftAmount(row.duration),
-        hourlyCostHt: parseDraftAmount(row.hourlyCost),
-        hourlySaleHt: parseDraftAmount(row.hourlySalePrice),
-        marginRate: selectedLotProfile?.laborMarginRate ?? null,
-      })),
+      labor: [
+        {
+          durationHours: laborPlan.hours,
+          hourlyCostHt: laborPlan.hourlyCostHt,
+          hourlySaleHt: null,
+          marginRate: selectedLotProfile?.laborMarginRate ?? null,
+        },
+      ],
       equipment: equipmentDrafts.map((row) => ({
         quantity: parseDraftAmount(row.default_quantity) || 1,
         unitCostHt: 0,
@@ -530,9 +541,13 @@ export default function TaskTemplateDrawer({
         marginRate: selectedLotProfile?.feesMarginRate ?? null,
       })),
       estimatedTimeHours: parseDraftAmount(tempsParUnite),
+      amortizationRatePerHour: hourlyRates?.amortizationRatePerHour ?? 0,
+      overheadRatePerHour: hourlyRates?.overheadRatePerHour ?? 0,
     });
 
     return {
+      amortizationCost: engineTotals.amortizationCost,
+      overheadCost: engineTotals.overheadCost,
       materialCost: engineTotals.materialCost,
       materialSale: engineTotals.materialSale,
       laborCost: engineTotals.laborCost,
@@ -552,7 +567,7 @@ export default function TaskTemplateDrawer({
       profitabilityRate: engineTotals.profitabilityRate,
       lines: engineTotals.lines,
     };
-  }, [materialDrafts, laborDrafts, equipmentDrafts, feeDrafts, selectedLotProfile, tempsParUnite]);
+  }, [materialDrafts, laborPlan, equipmentDrafts, feeDrafts, selectedLotProfile, tempsParUnite, hourlyRates]);
 
   if (!open) return null;
 
@@ -583,12 +598,6 @@ export default function TaskTemplateDrawer({
     );
   }
 
-  function updateLaborDraft(index: number, patch: Partial<LaborDraft>) {
-    setLaborDrafts((prev) =>
-      prev.map((row, rowIndex) => (rowIndex === index ? { ...row, ...patch } : row)),
-    );
-  }
-
   function updateFeeDraft(index: number, patch: Partial<FeeDraft>) {
     setFeeDrafts((prev) =>
       prev.map((row, rowIndex) => (rowIndex === index ? { ...row, ...patch } : row)),
@@ -600,8 +609,6 @@ export default function TaskTemplateDrawer({
     // Usage metier par defaut : remplace `applyLotProfile` du bridge DOM
     // taskTemplateLotDropdownBridge (setCheckboxByText).
     if (mode === "force") {
-      setQuoteVisible(profile.defaultQuoteVisible);
-      setChantierVisible(profile.defaultChantierVisible);
     }
     if ((mode === "force" || !tempsParUnite.trim()) && profile.averageTimeHours !== null) {
       setTempsParUnite(toField(profile.averageTimeHours));
@@ -773,27 +780,17 @@ export default function TaskTemplateDrawer({
       });
     }
 
-    for (const row of laborDrafts) {
-      if (isLaborDraftEmpty(row)) continue;
-      const duration = parseNumberField(row.duration);
-      const hourlyCost = row.hourlyCost.trim() === "" ? null : parseNumberField(row.hourlyCost);
-      const hourlySalePrice =
-        row.hourlySalePrice.trim() === "" ? null : parseNumberField(row.hourlySalePrice);
-      if (duration === null) throw new Error("Temps main d'oeuvre invalide.");
-      if (row.hourlyCost.trim() !== "" && hourlyCost === null) {
-        throw new Error("Coût horaire main d'oeuvre invalide.");
-      }
-      if (row.hourlySalePrice.trim() !== "" && hourlySalePrice === null) {
-        throw new Error("Prix de vente horaire main d'oeuvre invalide.");
-      }
+    // Une seule ligne de main d'oeuvre, dérivée du temps estimé et du coût horaire
+    // moyen des salariés : plus de saisie manuelle ligne par ligne.
+    if (laborPlan.hours > 0) {
       laborItems.push({
-        id: row.id,
-        resourceType: row.resourceType,
-        duration,
-        unit: row.unit.trim() || "h",
-        hourlyCost,
-        hourlySalePrice,
-        note: row.note.trim() || null,
+        id: laborDrafts[0]?.id ?? crypto.randomUUID(),
+        resourceType: "employee_role",
+        duration: laborPlan.hours,
+        unit: "h",
+        hourlyCost: laborPlan.hourlyCostHt || null,
+        hourlySalePrice: null,
+        note: "Coût horaire moyen des salariés (paramètres entreprise).",
       });
     }
 
@@ -867,8 +864,11 @@ export default function TaskTemplateDrawer({
         .map((value) => value.trim())
         .filter((value) => value.length > 0),
       remarques: remarques.trim() || null,
-      quote_visible: quoteVisible,
-      chantier_visible: chantierVisible,
+      // Un modèle de tâche sert toujours au chiffrage ET au chantier : la distinction
+      // n'apportait rien et compliquait la création.
+      quote_visible: true,
+      chantier_visible: true,
+      coco_preparation: cocoResult ? (cocoResult as unknown as Record<string, unknown>) : null,
       preparation_materials: advancedPreparationEnabled
         ? serializedPreparation.preparationMaterials
         : undefined,
@@ -916,35 +916,11 @@ export default function TaskTemplateDrawer({
 
       setCocoResult(result);
 
-      const materialLines = result.materials.map(materialResultText);
-      const equipmentLines = result.equipment.map(equipmentResultText);
-      const summaryLines = costSummaryLines(result);
-      const technicalContent = [
-        result.technicalDescription,
-        formatList("Mode operatoire COCO", result.procedure),
-      ].filter(Boolean).join("\n\n");
-      const characteristicsContent = [
-        formatList("Materiaux COCO", materialLines),
-        formatList("Materiel COCO", equipmentLines),
-        formatList("Consommables COCO", result.consumables),
-        formatList("EPI COCO", result.ppe),
-        formatList("Controles qualite COCO", result.controls),
-        formatList("Photos DOE attendues", result.doePhotos),
-        formatList("Documents DOE attendus", result.doeDocuments),
-        formatList("Resume couts COCO", summaryLines),
-        formatList("Caracteristiques COCO", result.characteristics),
-      ].filter(Boolean).join("\n\n");
-      const notesContent = [
-        formatList("Retours terrain a alimenter", result.fieldReturns),
-        formatList("Questions retour terrain", result.fieldReturnQuestions),
-        formatList("Erreurs a eviter", result.errorsToAvoid),
-        formatList("Points securite", result.safetyPoints),
-        formatList("Informations manquantes", result.missingInformation),
-      ].filter(Boolean).join("\n\n");
-
-      setDescriptionTechnique((prev) => fillIfEmpty(prev, technicalContent));
-      setCaracteristiques((prev) => fillIfEmpty(prev, characteristicsContent));
-      setRemarques((prev) => fillIfEmpty(prev, notesContent));
+      // Les listes (matériaux, matériel, EPI) et le mode opératoire sont désormais
+      // conservés tels quels dans coco_preparation et affichés en listes : on ne les
+      // aplatit plus en pavés de texte dans les champs libres.
+      setDescriptionTechnique((prev) => fillIfEmpty(prev, result.technicalDescription));
+      setCaracteristiques((prev) => fillIfEmpty(prev, result.characteristics.join("\n")));
 
       const missing = result.missingInformation.length
         ? ` À compléter : ${result.missingInformation.join(" ; ")}.`
@@ -1044,43 +1020,6 @@ export default function TaskTemplateDrawer({
                 placeholder="Ex: m2"
               />
             </label>
-          </div>
-
-          <div className="space-y-3 rounded-2xl border border-slate-200 bg-slate-50 p-4">
-            <div>
-              <div className="text-sm font-semibold text-slate-900">Usage métier</div>
-              <div className="text-xs text-slate-500">
-                Choisis où ce modèle doit être proposé : chiffrage devis, préparation/exécution chantier, ou les deux.
-              </div>
-            </div>
-            <div className="grid gap-3 md:grid-cols-2">
-              <label className="flex items-start gap-3 rounded-xl border border-sky-200 bg-white px-3 py-3 text-sm text-slate-700">
-                <input
-                  type="checkbox"
-                  className="mt-1"
-                  checked={quoteVisible}
-                  onChange={(e) => setQuoteVisible(e.target.checked)}
-                  disabled={busy}
-                />
-                <span>
-                  <span className="block font-medium text-slate-900">Visible dans les devis</span>
-                  <span className="block text-xs text-slate-500">Disponible pour le chiffrage et la bibliothèque commerciale.</span>
-                </span>
-              </label>
-              <label className="flex items-start gap-3 rounded-xl border border-emerald-200 bg-white px-3 py-3 text-sm text-slate-700">
-                <input
-                  type="checkbox"
-                  className="mt-1"
-                  checked={chantierVisible}
-                  onChange={(e) => setChantierVisible(e.target.checked)}
-                  disabled={busy}
-                />
-                <span>
-                  <span className="block font-medium text-slate-900">Visible côté chantier</span>
-                  <span className="block text-xs text-slate-500">Disponible pour préparer et piloter les tâches de production.</span>
-                </span>
-              </label>
-            </div>
           </div>
 
           <label className="block space-y-1">
@@ -1511,85 +1450,38 @@ export default function TaskTemplateDrawer({
               </div>
 
               <div className="space-y-3 rounded-2xl border border-slate-200 bg-white p-4">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <div>
-                    <div className="text-sm font-semibold text-slate-900">Main d'oeuvre</div>
-                    <div className="text-xs text-slate-500">Temps prévu, coût chargé et prix de vente horaire.</div>
+                <div>
+                  <div className="text-sm font-semibold text-slate-900">Main d'oeuvre</div>
+                  <div className="text-xs text-slate-500">
+                    Temps estimé de la tâche (champ "temps prévu" ci-dessus) valorisé au coût horaire moyen de tes
+                    salariés.
                   </div>
-                  <button
-                    type="button"
-                    className="rounded-xl border px-3 py-2 text-xs hover:bg-slate-50"
-                    onClick={() => setLaborDrafts((prev) => [...prev, createLaborDraft()])}
-                    disabled={busy}
-                  >
-                    Ajouter main d'oeuvre
-                  </button>
                 </div>
-                {laborDrafts.length === 0 ? (
-                  <div className="rounded-xl border border-dashed border-slate-200 px-4 py-3 text-sm text-slate-500">
-                    Aucune main d'oeuvre définie.
+                <div className="grid gap-2 md:grid-cols-3">
+                  <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm">
+                    <div className="text-[11px] uppercase tracking-[0.12em] text-slate-500">Temps estimé</div>
+                    <div className="mt-1 font-semibold text-slate-900">{laborPlan.hours ? `${laborPlan.hours} h` : "À renseigner"}</div>
                   </div>
-                ) : (
-                  <div className="space-y-3">
-                    {laborDrafts.map((row, index) => (
-                      <div key={row.id} className="grid gap-2 rounded-2xl border border-slate-200 bg-slate-50 p-3 md:grid-cols-6">
-                        <select
-                          className="rounded-xl border bg-white px-3 py-2 text-sm"
-                          value={row.resourceType}
-                          onChange={(e) =>
-                            updateLaborDraft(index, {
-                              resourceType: e.target.value as LaborDraft["resourceType"],
-                            })
-                          }
-                        >
-                          <option value="manual">Saisie manuelle</option>
-                          <option value="employee_role">Rôle salarié</option>
-                          <option value="subcontractor">Sous-traitant</option>
-                        </select>
-                        <input
-                          className="rounded-xl border bg-white px-3 py-2 text-sm"
-                          inputMode="decimal"
-                          value={row.duration}
-                          onChange={(e) => updateLaborDraft(index, { duration: e.target.value })}
-                          placeholder="Temps"
-                        />
-                        <input
-                          className="rounded-xl border bg-white px-3 py-2 text-sm"
-                          value={row.unit}
-                          onChange={(e) => updateLaborDraft(index, { unit: e.target.value })}
-                          placeholder="h"
-                        />
-                        <input
-                          className="rounded-xl border bg-white px-3 py-2 text-sm"
-                          inputMode="decimal"
-                          value={row.hourlyCost}
-                          onChange={(e) => updateLaborDraft(index, { hourlyCost: e.target.value })}
-                          placeholder="Coût horaire"
-                        />
-                        <input
-                          className="rounded-xl border bg-white px-3 py-2 text-sm"
-                          inputMode="decimal"
-                          value={row.hourlySalePrice}
-                          onChange={(e) => updateLaborDraft(index, { hourlySalePrice: e.target.value })}
-                          placeholder="PV horaire"
-                        />
-                        <button
-                          type="button"
-                          className="rounded-xl border border-red-200 px-3 py-2 text-sm text-red-700 hover:bg-red-50"
-                          onClick={() => setLaborDrafts((prev) => prev.filter((item) => item.id !== row.id))}
-                        >
-                          Supprimer
-                        </button>
-                        <input
-                          className="rounded-xl border bg-white px-3 py-2 text-sm md:col-span-6"
-                          value={row.note}
-                          onChange={(e) => updateLaborDraft(index, { note: e.target.value })}
-                          placeholder="Remarque"
-                        />
-                      </div>
-                    ))}
+                  <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm">
+                    <div className="text-[11px] uppercase tracking-[0.12em] text-slate-500">Coût horaire moyen</div>
+                    <div className="mt-1 font-semibold text-slate-900">
+                      {laborPlan.hourlyCostHt ? `${laborPlan.hourlyCostHt.toFixed(2) + " €"} /h` : "Non paramétré"}
+                    </div>
+                    <div className="mt-1 text-[11px] text-slate-500">
+                      {hourlyRates ? `${hourlyRates.activeEmployeeCount} salarié(s) CB Rénovation` : "Chargement..."}
+                    </div>
                   </div>
-                )}
+                  <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm">
+                    <div className="text-[11px] uppercase tracking-[0.12em] text-slate-500">Coût main d'oeuvre</div>
+                    <div className="mt-1 font-semibold text-slate-900">{laborPlan.cost.toFixed(2)} €</div>
+                  </div>
+                </div>
+                {hourlyRates && !hourlyRates.averageEmployeeHourlyCostHt ? (
+                  <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                    Aucun coût horaire salarié n'est renseigné dans Profils &amp; accès : le coût de main d'oeuvre
+                    restera à 0.
+                  </div>
+                ) : null}
               </div>
 
               <div className="space-y-3 rounded-2xl border border-slate-200 bg-white p-4">
@@ -1704,6 +1596,22 @@ export default function TaskTemplateDrawer({
                     <div className="font-semibold">{compositionTotals.laborCost.toFixed(2)} €</div>
                   </div>
                   <div className="rounded-xl bg-slate-50 p-3">
+                    <div className="text-xs text-slate-500">PR amortissement matériel</div>
+                    <div className="font-semibold">{compositionTotals.amortizationCost.toFixed(2)} €</div>
+                    <div className="mt-1 text-[11px] text-slate-500">
+                      {(hourlyRates?.amortizationRatePerHour ?? 0).toFixed(2)} €/h × temps homme
+                    </div>
+                  </div>
+                  <div className="rounded-xl bg-slate-50 p-3">
+                    <div className="text-xs text-slate-500">PR frais généraux</div>
+                    <div className="font-semibold">{compositionTotals.overheadCost.toFixed(2)} €</div>
+                    <div className="mt-1 text-[11px] text-slate-500">
+                      {(hourlyRates?.overheadRatePerHour ?? 0).toFixed(2)} €/h × temps homme
+                    </div>
+                  </div>
+                </div>
+                <div className="mt-3 grid gap-3 text-sm md:grid-cols-4">
+                  <div className="rounded-xl bg-slate-50 p-3">
                     <div className="text-xs text-slate-500">Temps homme</div>
                     <div className="font-semibold">{compositionTotals.humanTimeHours.toFixed(2)} h</div>
                   </div>
@@ -1712,6 +1620,12 @@ export default function TaskTemplateDrawer({
                     <div className="font-semibold">{compositionTotals.profitabilityRate.toFixed(1)} %</div>
                   </div>
                 </div>
+                {hourlyRates && !hourlyRates.amortizationRatePerHour && !hourlyRates.overheadRatePerHour ? (
+                  <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                    Amortissement et frais généraux à 0 : renseigne le matériel amorti et les charges d'exploitation
+                    dans Financier → Charges fixes pour qu'ils entrent dans le prix de revient.
+                  </div>
+                ) : null}
               </div>
 
               <div className="space-y-4 rounded-2xl border border-slate-200 bg-white p-4">

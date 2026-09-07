@@ -38,6 +38,44 @@ export type CompanyChargesSettings = {
   entries: CompanyChargeEntry[];
 };
 
+/** Matériel amorti par l'entreprise (échafaudage, outillage, véhicule...). */
+export type CompanyEquipmentAsset = {
+  id: string;
+  name: string;
+  purchaseValueHt: number;
+  amortizationYears: number;
+  active: boolean;
+};
+
+/**
+ * Coûts indirects ramenés à un coût horaire : l'amortissement matériel et les
+ * frais généraux sont divisés par les heures productives annuelles de l'équipe,
+ * puis imputés au temps de main d'oeuvre de chaque tâche.
+ */
+export type CompanyIndirectCostsSettings = {
+  equipmentAssets: CompanyEquipmentAsset[];
+  productiveHoursPerEmployeeYear: number;
+};
+
+export const DEFAULT_PRODUCTIVE_HOURS_PER_EMPLOYEE_YEAR = 1607;
+
+export function normalizeIndirectCosts(raw: unknown): CompanyIndirectCostsSettings {
+  const source = (raw ?? {}) as Partial<CompanyIndirectCostsSettings>;
+  const assets = Array.isArray(source.equipmentAssets) ? source.equipmentAssets : [];
+  const hours = Number(source.productiveHoursPerEmployeeYear);
+  return {
+    equipmentAssets: assets.map((asset) => ({
+      id: String(asset?.id ?? ""),
+      name: String(asset?.name ?? "").trim(),
+      purchaseValueHt: Math.max(0, Number(asset?.purchaseValueHt) || 0),
+      amortizationYears: Math.max(0, Number(asset?.amortizationYears) || 0),
+      active: asset?.active !== false,
+    })),
+    productiveHoursPerEmployeeYear:
+      Number.isFinite(hours) && hours > 0 ? hours : DEFAULT_PRODUCTIVE_HOURS_PER_EMPLOYEE_YEAR,
+  };
+}
+
 export type CompanySettingsRow = {
   id: string;
   organization_id: string;
@@ -59,6 +97,7 @@ export type CompanySettingsRow = {
   mode_interface: CompanyInterfaceMode;
   enabled_modules: CompanyFeatureModuleId[];
   charges_exploitation?: CompanyChargesSettings | null;
+  indirect_costs?: CompanyIndirectCostsSettings | null;
   created_at: string;
   updated_at: string;
   persistence_status?: "supabase" | "local_fallback";
@@ -112,7 +151,11 @@ function isMissingCompanySettingsTableError(error: { message?: string } | null):
 function isMissingCompanySettingsFieldError(error: { message?: string } | null): boolean {
   const msg = String(error?.message ?? "").toLowerCase();
   if (!msg) return false;
-  return msg.includes("column") && msg.includes("charges_exploitation") && msg.includes("does not exist");
+  return (
+    msg.includes("column") &&
+    msg.includes("does not exist") &&
+    (msg.includes("charges_exploitation") || msg.includes("indirect_costs"))
+  );
 }
 
 function loadLocalSettings(orgId: string): Partial<CompanySettingsRow> | null {
@@ -205,6 +248,7 @@ function withDefaults(orgId: string, row?: Partial<CompanySettingsRow>): Company
     mode_interface: interfaceMode,
     enabled_modules: enabledModules,
     charges_exploitation: row?.charges_exploitation ?? null,
+    indirect_costs: normalizeIndirectCosts(row?.indirect_costs),
     created_at: String(row?.created_at ?? ""),
     updated_at: String(row?.updated_at ?? ""),
     persistence_status: row?.persistence_status ?? "supabase",
@@ -280,6 +324,7 @@ export async function upsertCompanySettings(
       | "mode_interface"
       | "enabled_modules"
       | "charges_exploitation"
+      | "indirect_costs"
     >
   >,
 ): Promise<CompanySettingsRow> {
@@ -346,6 +391,9 @@ export async function upsertCompanySettings(
     mode_interface: normalizeCompanyInterfaceMode(interfaceMode, businessProfile),
     enabled_modules: normalizeCompanyFeatureModules(enabledModules, businessProfile),
     charges_exploitation: patch.charges_exploitation !== undefined ? patch.charges_exploitation : currentLocal.charges_exploitation ?? null,
+    indirect_costs: normalizeIndirectCosts(
+      patch.indirect_costs !== undefined ? patch.indirect_costs : currentLocal.indirect_costs,
+    ),
   };
 
   const { data, error } = await supabase

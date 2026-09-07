@@ -22,6 +22,8 @@ export type TaskTemplateRow = {
   chantier_visible: boolean;
   labor_items: TaskTemplateLaborItemInput[];
   fee_items: TaskTemplateFeeItemInput[];
+  /** Listes et mode opératoire préparés par Coco, conservés tels quels pour l'ouvrier. */
+  coco_preparation: Record<string, unknown> | null;
   created_at: string;
   updated_at: string;
 };
@@ -40,6 +42,7 @@ export type TaskTemplateInput = {
   chantier_visible?: boolean;
   labor_items?: TaskTemplateLaborItemInput[];
   fee_items?: TaskTemplateFeeItemInput[];
+  coco_preparation?: Record<string, unknown> | null;
   preparation_materials?: TaskTemplateMaterialRatioInput[];
   preparation_equipment?: TaskTemplateEquipmentItemInput[];
 };
@@ -124,6 +127,7 @@ const SELECT_V2 = [
   "chantier_visible",
   "labor_items",
   "fee_items",
+  "coco_preparation",
   "created_at",
   "updated_at",
 ].join(", ");
@@ -165,6 +169,7 @@ function isMissingV2ColumnsError(error: { code?: string; message?: string } | nu
       msg.includes("chantier_visible") ||
       msg.includes("labor_items") ||
       msg.includes("fee_items") ||
+      msg.includes("coco_preparation") ||
       msg.includes("schema cache") ||
       msg.includes("could not find"))
   );
@@ -229,6 +234,10 @@ function normalizeRow(row: any): TaskTemplateRow {
     chantier_visible: row?.chantier_visible !== false,
     labor_items: normalizeLaborItems(row?.labor_items),
     fee_items: normalizeFeeItems(row?.fee_items),
+    coco_preparation:
+      row?.coco_preparation && typeof row.coco_preparation === "object"
+        ? (row.coco_preparation as Record<string, unknown>)
+        : null,
     created_at: String(row?.created_at ?? ""),
     updated_at: String(row?.updated_at ?? ""),
   };
@@ -274,6 +283,7 @@ function normalizeInput(input: TaskTemplateInput) {
     chantier_visible: input.chantier_visible,
     labor_items: normalizeLaborItems(input.labor_items),
     fee_items: normalizeFeeItems(input.fee_items),
+    coco_preparation: input.coco_preparation ?? null,
   };
 }
 
@@ -286,6 +296,7 @@ function stripV2Columns<T extends Record<string, unknown>>(payload: T): T {
   delete (next as Record<string, unknown>).chantier_visible;
   delete (next as Record<string, unknown>).labor_items;
   delete (next as Record<string, unknown>).fee_items;
+  delete (next as Record<string, unknown>).coco_preparation;
   return next;
 }
 
@@ -432,6 +443,7 @@ export async function duplicate(id: string): Promise<TaskTemplateRow> {
     chantier_visible: source.chantier_visible,
     labor_items: source.labor_items,
     fee_items: source.fee_items,
+    coco_preparation: source.coco_preparation,
   });
 
   await duplicateTaskTemplatePreparation(source.id, duplicated.id);

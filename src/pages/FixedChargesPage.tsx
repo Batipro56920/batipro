@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Calculator, Pencil, Plus, Save, Trash2, X } from "lucide-react";
 import { FinancialNavigation } from "../features/financial/components/FinancialNavigation";
+import IndirectCostsPanel from "../features/financial/components/IndirectCostsPanel";
 import {
   getCompanySettings,
   upsertCompanySettings,
@@ -63,6 +64,9 @@ export default function FixedChargesPage() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  // Les frais généraux/heure dépendent des charges : on force le recalcul du panneau
+  // coûts indirects à chaque rechargement de la liste.
+  const [chargesVersion, setChargesVersion] = useState(0);
 
   async function refresh() {
     setLoading(true);
@@ -71,6 +75,7 @@ export default function FixedChargesPage() {
     try {
       const settings = await getCompanySettings();
       setCharges(settings.charges_exploitation?.entries ?? []);
+      setChargesVersion((current) => current + 1);
       setEditingCharge(null);
       setChargeForm(createDefaultChargeEntry());
       setDrawerOpen(false);
@@ -273,6 +278,8 @@ export default function FixedChargesPage() {
               </table>
             </div>
           </section>
+
+          <IndirectCostsPanel chargesVersion={chargesVersion} />
 
           {drawerOpen ? (
             <div className="fixed inset-0 z-50 flex justify-end bg-slate-950/40">

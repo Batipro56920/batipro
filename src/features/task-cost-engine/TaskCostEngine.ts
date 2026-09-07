@@ -36,6 +36,10 @@ export type TaskCostEngineInput = {
   estimatedTimeHours?: number | null;
   teamSize?: number | null;
   dailyHours?: number | null;
+  /** Amortissement matériel de l'entreprise ramené au coût horaire (€/h). */
+  amortizationRatePerHour?: number | null;
+  /** Frais généraux de l'entreprise ramenés au coût horaire (€/h). */
+  overheadRatePerHour?: number | null;
 };
 
 export type TaskCostEngineTotals = {
@@ -47,6 +51,8 @@ export type TaskCostEngineTotals = {
   equipmentSale: number;
   feeCost: number;
   feeSale: number;
+  amortizationCost: number;
+  overheadCost: number;
   cost: number;
   sale: number;
   margin: number;
@@ -131,12 +137,18 @@ export function calculateTaskCost(input: TaskCostEngineInput): TaskCostEngineTot
   const equipmentSale = money(equipmentTotals.sale);
   const feeCost = money(feeTotals.cost);
   const feeSale = money(feeTotals.sale);
-  const cost = money(materialCost + laborCost + equipmentCost + feeCost);
+  const estimatedTimeHours = money(positive(input.estimatedTimeHours) || laborTotals.hours);
+  const humanTimeHours = money(laborTotals.hours || estimatedTimeHours);
+
+  // Amortissement et frais généraux sont des coûts annuels d'entreprise convertis en
+  // €/h : on les impute au temps homme réellement passé sur la tâche.
+  const amortizationCost = money(humanTimeHours * positive(input.amortizationRatePerHour));
+  const overheadCost = money(humanTimeHours * positive(input.overheadRatePerHour));
+
+  const cost = money(materialCost + laborCost + equipmentCost + feeCost + amortizationCost + overheadCost);
   const sale = money(materialSale + laborSale + equipmentSale + feeSale);
   const margin = money(sale - cost);
   const marginRate = sale > 0 ? money((margin / sale) * 100) : 0;
-  const estimatedTimeHours = money(positive(input.estimatedTimeHours) || laborTotals.hours);
-  const humanTimeHours = money(laborTotals.hours || estimatedTimeHours);
   const teamSize = positive(input.teamSize) || laborTotals.teamSize || 1;
   const teamTimeHours = money(humanTimeHours / teamSize);
   const dailyHours = positive(input.dailyHours) || 7;
@@ -152,6 +164,8 @@ export function calculateTaskCost(input: TaskCostEngineInput): TaskCostEngineTot
     equipmentSale,
     feeCost,
     feeSale,
+    amortizationCost,
+    overheadCost,
     cost,
     sale,
     margin,
@@ -170,6 +184,8 @@ export function calculateTaskCost(input: TaskCostEngineInput): TaskCostEngineTot
       `PV matériel: ${equipmentSale.toFixed(2)} EUR HT`,
       `PR frais: ${feeCost.toFixed(2)} EUR HT`,
       `PV frais: ${feeSale.toFixed(2)} EUR HT`,
+      `PR amortissement matériel: ${amortizationCost.toFixed(2)} EUR HT`,
+      `PR frais généraux: ${overheadCost.toFixed(2)} EUR HT`,
       `PR ouvrage: ${cost.toFixed(2)} EUR HT`,
       `PV ouvrage: ${sale.toFixed(2)} EUR HT`,
       `Marge: ${margin.toFixed(2)} EUR HT (${marginRate.toFixed(1)} %)`,
