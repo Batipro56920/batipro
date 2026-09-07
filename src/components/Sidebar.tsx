@@ -34,6 +34,11 @@ import {
   getEnabledCompanyModulesFromSettings,
 } from "../services/companySettings.service";
 import { getCurrentUserProfile } from "../services/currentUserProfile.service";
+import {
+  getCurrentProfileFeaturePermissions,
+  hasProfileFeaturePermission,
+  type ProfileFeaturePermissions,
+} from "../services/profileFeaturePermissions.service";
 
 type Props = {
   collapsed?: boolean;
@@ -45,19 +50,26 @@ export default function Sidebar({ collapsed = false, onToggleCollapse, companyNa
   const { t } = useI18n();
   const [enabledModules, setEnabledModules] = useState<Set<CompanyFeatureModuleId> | null>(null);
   const [profileAccess, setProfileAccess] = useState<{ role: string | null; allowedGroups: string[] | null } | null>(null);
+  const [permissions, setPermissions] = useState<ProfileFeaturePermissions | null>(null);
 
   useEffect(() => {
     let alive = true;
     async function loadFeatureSettings() {
       try {
-        const [settings, profile] = await Promise.all([getCompanySettings(), getCurrentUserProfile()]);
+        const [settings, profile, featurePermissions] = await Promise.all([
+          getCompanySettings(),
+          getCurrentUserProfile(),
+          getCurrentProfileFeaturePermissions(),
+        ]);
         if (!alive) return;
         setEnabledModules(new Set(getEnabledCompanyModulesFromSettings(settings)));
         setProfileAccess({ role: profile?.role ?? null, allowedGroups: profile?.allowed_sidebar_groups ?? null });
+        setPermissions(featurePermissions.permissions);
       } catch {
         if (!alive) return;
         setEnabledModules(null);
         setProfileAccess(null);
+        setPermissions(null);
       }
     }
     void loadFeatureSettings();
@@ -104,7 +116,9 @@ export default function Sidebar({ collapsed = false, onToggleCollapse, companyNa
     const featureAllowed = !item.feature || !enabledModules || enabledModules.has(item.feature);
     const allowedGroups = profileAccess?.allowedGroups ?? null;
     const groupAllowed = role === "ADMIN" || !allowedGroups || allowedGroups.includes(item.group);
-    return adminAllowed && featureAllowed && groupAllowed;
+    const permissionAllowed =
+      role === "ADMIN" || !item.permissionKey || !permissions || hasProfileFeaturePermission(permissions, item.permissionKey, role);
+    return adminAllowed && featureAllowed && groupAllowed && permissionAllowed;
   });
 
   const groups = nav.reduce<Array<{ label: string; items: typeof nav }>>((acc, item) => {
