@@ -640,17 +640,7 @@ export default function TaskTemplateDrawer({
     if (profile) applyLotProfile(profile, "soft");
   }
 
-  function applyProductToMaterial(index: number, productId: string) {
-    if (!productId) {
-      updateMaterialDraft(index, {
-        product_id: "",
-        supplier_id: "",
-        price_source: "manual",
-      });
-      return;
-    }
-    const product = products.find((item) => item.id === productId);
-    if (!product) return;
+  function applyProductObjectToMaterial(index: number, product: ProductCatalogItem) {
     const bestPrice = getBestSupplierPrice(product);
     // Ratio, perte et notes techniques : logique reprise de
     // `taskTemplateProductAutofillBridge`, desormais en service pur.
@@ -671,6 +661,20 @@ export default function TaskTemplateDrawer({
     });
   }
 
+  function applyProductToMaterial(index: number, productId: string) {
+    if (!productId) {
+      updateMaterialDraft(index, {
+        product_id: "",
+        supplier_id: "",
+        price_source: "manual",
+      });
+      return;
+    }
+    const product = products.find((item) => item.id === productId);
+    if (!product) return;
+    applyProductObjectToMaterial(index, product);
+  }
+
   function openQuickCreate(index: number) {
     setQuickCreateError(null);
     setQuickCreateForIndex(index);
@@ -684,7 +688,7 @@ export default function TaskTemplateDrawer({
       const draft = await buildProductDraftFromQuickCreate(values, suppliers);
       const saved = await saveProductCatalogItem(draft, "creation rapide bibliotheque de taches");
       setProducts((current) => [...current, saved]);
-      applyProductToMaterial(quickCreateForIndex, saved.id);
+      applyProductObjectToMaterial(quickCreateForIndex, saved);
       setQuickCreateForIndex(null);
     } catch (err: any) {
       setQuickCreateError(err?.message ?? "Erreur creation produit.");
