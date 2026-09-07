@@ -333,16 +333,16 @@ export default function ProductCatalogPage() {
         <table className="min-w-[1040px] divide-y divide-slate-100 text-sm">
           <thead className="bg-slate-50 text-left text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">
             <tr>
-              <th className="px-4 py-3">Produit</th>
-              <th className="px-4 py-3">Catégorie</th>
-              <th className="px-4 py-3">Marque</th>
-              <th className="px-4 py-3">Fournisseur</th>
-              <th className="px-4 py-3">Unité</th>
-              <th className="px-4 py-3 text-right">Achat colis HT</th>
-              <th className="px-4 py-3 text-right">Prix à l'unité</th>
-              <th className="px-4 py-3 text-right">Vente conseillée</th>
-              <th className="px-4 py-3 text-right">Docs</th>
-              <th className="px-4 py-3 text-right">Actions</th>
+              <th className="px-4 py-2">Produit</th>
+              <th className="px-4 py-2">Catégorie</th>
+              <th className="px-4 py-2">Marque</th>
+              <th className="px-4 py-2">Fournisseur</th>
+              <th className="px-4 py-2">Unité</th>
+              <th className="px-4 py-2 text-right">Achat colis HT</th>
+              <th className="px-4 py-2 text-right">Prix à l'unité</th>
+              <th className="px-4 py-2 text-right">Vente conseillée</th>
+              <th className="px-4 py-2 text-right">Docs</th>
+              <th className="px-4 py-2 text-right">Actions</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
@@ -352,34 +352,34 @@ export default function ProductCatalogPage() {
               const usesFilteredSupplierPrice = supplierFilter !== "all" && displayedSupplierPrice?.supplierId === supplierFilter && product.mainSupplierId !== supplierFilter;
               return (
               <tr key={product.id} className={product.id === activeProductId ? "bg-blue-50 ring-1 ring-inset ring-blue-200" : "hover:bg-slate-50"}>
-                <td className="max-w-[440px] whitespace-normal px-4 py-3 align-top">
-                  <div className="font-semibold leading-snug text-slate-950">{product.designation}</div>
+                <td className="max-w-[320px] px-4 py-1.5 align-middle">
+                  <div className="truncate font-semibold text-slate-950" title={product.designation}>{product.designation}</div>
                 </td>
-                <td className="px-4 py-3 align-top text-slate-600">{product.category || "-"}</td>
-                <td className="px-4 py-3 align-top text-slate-600">{product.brand || "-"}</td>
-                <td className="px-4 py-3 align-top text-slate-600">
-                  <div className="space-y-1">
+                <td className="px-4 py-1.5 align-middle text-slate-600">{product.category || "-"}</td>
+                <td className="px-4 py-1.5 align-middle text-slate-600">{product.brand || "-"}</td>
+                <td className="max-w-[160px] px-4 py-1.5 align-middle text-slate-600">
+                  <div className="flex min-w-0 items-center gap-1.5">
                     {product.mainSupplierId && product.mainSupplierName ? (
                       <Link
                         to={`/fournisseurs?supplierId=${encodeURIComponent(product.mainSupplierId)}`}
-                        className="font-semibold text-blue-700 hover:text-blue-900 hover:underline"
+                        className="min-w-0 truncate font-semibold text-blue-700 hover:text-blue-900 hover:underline"
                       >
                         {product.mainSupplierName}
                       </Link>
                     ) : product.mainSupplierName || "-"}
                     {usesFilteredSupplierPrice ? (
-                      <div className="inline-flex rounded-full border border-blue-100 bg-blue-50 px-2 py-0.5 text-[11px] font-semibold text-blue-700">
-                        Prix négocié {displayedSupplierPrice?.supplierName || activeSupplier?.name || "fournisseur"}
+                      <div className="shrink-0 rounded-full border border-blue-100 bg-blue-50 px-2 py-0.5 text-[11px] font-semibold text-blue-700">
+                        Négocié
                       </div>
                     ) : null}
                   </div>
                 </td>
-                <td className="px-4 py-3 align-top text-slate-600">{product.unit}</td>
-                <td className="px-4 py-3 text-right align-top font-semibold">{formatCurrency(getPurchasePackagePrice(product, supplierFilter))}</td>
-                <td className="px-4 py-3 text-right align-top font-semibold">{formatUnitPurchasePrice(product, supplierFilter)}</td>
-                <td className="px-4 py-3 text-right align-top font-semibold">{formatCurrency(getRecommendedSalePrice(product, supplierFilter))}</td>
-                <td className="px-4 py-3 text-right align-top">{product.documents.length}</td>
-                <td className="px-4 py-3 align-top">
+                <td className="px-4 py-1.5 align-middle text-slate-600">{product.unit}</td>
+                <td className="px-4 py-1.5 text-right align-middle font-semibold">{formatCurrency(getPurchasePackagePrice(product, supplierFilter))}</td>
+                <td className="px-4 py-1.5 text-right align-middle font-semibold">{formatUnitPurchasePrice(product, supplierFilter)}</td>
+                <td className="px-4 py-1.5 text-right align-middle font-semibold">{formatCurrency(getRecommendedSalePrice(product, supplierFilter))}</td>
+                <td className="px-4 py-1.5 text-right align-middle">{product.documents.length}</td>
+                <td className="px-4 py-1.5 align-middle">
                   <div className="flex justify-end gap-2">
                     {orderSupplierId ? (
                       <Link
