@@ -207,11 +207,16 @@ export async function analyzeProductDocumentsWithCoco(product: ProductLike): Pro
  * lieu des seules metadonnees de documents (nom/kind/url) : ces dernieres ne
  * contiennent jamais le contenu reel, l'IA ne pouvait donc rien lire.
  */
-export async function analyzeProductTextWithCoco(product: ProductLike, documentsText: string): Promise<ProductKnowledge> {
+export async function analyzeProductTextWithCoco(
+  product: ProductLike,
+  documentsText: string,
+  images: { name: string; dataUrl: string }[] = [],
+): Promise<ProductKnowledge> {
   const { data, error } = await supabase.functions.invoke("analyze-product-documents", {
     body: {
       product: buildProductContext(product),
       documentsText,
+      images,
     },
   });
   if (error) throw error;

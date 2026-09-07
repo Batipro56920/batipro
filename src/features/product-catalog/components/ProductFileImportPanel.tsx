@@ -5,8 +5,8 @@ import type { DocumentUnit } from "../../document-engine";
 import type { ProductCatalogDraft, ProductCatalogItem, ProductDocument, ProductKnowledge, ProductSupplierPrice } from "../domain/types";
 import { analyzeProductTextWithCoco } from "../services/productKnowledge.service";
 
-const ACCEPTED_PRODUCT_FILES = "application/pdf,.pdf,.xlsx,.xls,.csv,.txt,text/plain,text/csv";
-const SUPPORTED_FILE_LABEL = "PDF, Excel, CSV ou texte";
+const ACCEPTED_PRODUCT_FILES = "application/pdf,.pdf,.xlsx,.xls,.csv,.txt,text/plain,text/csv,.jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp";
+const SUPPORTED_FILE_LABEL = "PDF, Excel, CSV, texte ou photo";
 
 type ProductDraftPatch = Partial<ProductCatalogDraft | ProductCatalogItem>;
 
@@ -50,16 +50,24 @@ export default function ProductFileImportPanel({
     setBusy(true);
     setFileNames(selectedFiles.map((file) => file.name));
     try {
-      const textBlocks = await Promise.all(selectedFiles.map(async (file) => {
+      const imageFiles = selectedFiles.filter((file) => isImageFile(file));
+      const textFiles = selectedFiles.filter((file) => !isImageFile(file));
+
+      const textBlocks = await Promise.all(textFiles.map(async (file) => {
         const text = await extractProductFileText(file);
         return `Fichier: ${file.name}\n${text}`;
       }));
       const cleanedText = textBlocks.join("\n\n---\n\n").trim();
-      if (cleanedText.length < 20) {
+      const images = await Promise.all(imageFiles.map(async (file) => ({
+        name: file.name,
+        dataUrl: await readFileAsDataUrl(file),
+      })));
+
+      if (cleanedText.length < 20 && images.length === 0) {
         throw new Error("Texte insuffisant dans ces fichiers. Verifiez que le document contient des informations produit lisibles.");
       }
 
-      const knowledge = await analyzeProductTextWithCoco(currentProduct, cleanedText);
+      const knowledge = await analyzeProductTextWithCoco(currentProduct, cleanedText, images);
       const patch = buildProductPatch(currentProduct, knowledge, selectedFiles, suppliers, cleanedText);
       const notes = buildAnalysisNotes(knowledge, patch);
       setPendingAnalysis({ knowledge, patch, notes });
@@ -275,8 +283,23 @@ function buildAnalysisNotes(knowledge: ProductKnowledge, patch: ProductDraftPatc
 
 function isSupportedProductFile(file: File): boolean {
   const name = file.name.toLowerCase();
-  return [".pdf", ".xlsx", ".xls", ".csv", ".txt"].some((extension) => name.endsWith(extension))
-    || ["application/pdf", "text/plain", "text/csv", "application/vnd.ms-excel", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"].includes(file.type);
+  return [".pdf", ".xlsx", ".xls", ".csv", ".txt", ".jpg", ".jpeg", ".png", ".webp"].some((extension) => name.endsWith(extension))
+    || ["application/pdf", "text/plain", "text/csv", "application/vnd.ms-excel", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"].includes(file.type)
+    || isImageFile(file);
+}
+
+function isImageFile(file: File): boolean {
+  const name = file.name.toLowerCase();
+  return file.type.startsWith("image/") || [".jpg", ".jpeg", ".png", ".webp"].some((extension) => name.endsWith(extension));
+}
+
+function readFileAsDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result));
+    reader.onerror = () => reject(reader.error ?? new Error("Lecture de l'image impossible."));
+    reader.readAsDataURL(file);
+  });
 }
 
 async function extractProductFileText(file: File): Promise<string> {

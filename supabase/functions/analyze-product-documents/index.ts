@@ -156,6 +156,7 @@ function buildInstructions() {
     "Tu dois répondre à: fabricant, vendeur, prix achat, prix conseillé, unité, ratio numérique, unité du ratio, supports, outils, EPI, limites météo, erreurs, mode opératoire, DOE.",
     "",
     "Si le champ documentsText est present, c'est le texte reel extrait des documents fournisseur (fiche technique, notice...) : lis-le entierement et en priorite, il contient les donnees a extraire (notamment le taux de consommation/ratio, souvent exprime en kg/m2, L/m2 ou u/ml).",
+    "Si des images sont jointes (photo de tarif, capture d'ecran, etiquette produit), lis-les comme un document produit a part entiere : elles peuvent etre la seule source d'information.",
     "",
     "Interdictions: ne copie pas adresses, téléphone, fax, mail, mentions légales, COV, FDES, certifications, copyright, sites web, sauf utilité métier directe.",
     "Le fournisseur ne doit jamais devenir CB RENOVATION si ce nom vient du client, de l'entreprise utilisatrice ou d'une adresse de devis.",
@@ -207,9 +208,18 @@ serve(async (req) => {
   if (!openAiKey) return json({ error: "OPENAI_API_KEY manquante." }, 500);
 
   const documentsText = text((body as any)?.documentsText);
+  const images = Array.isArray((body as any)?.images) ? (body as any).images : [];
+  const validImages = images
+    .filter((image: any) => typeof image?.dataUrl === "string" && image.dataUrl.startsWith("data:image/"))
+    .slice(0, 6);
   const promptPayload = documentsText
     ? { product: (body as any)?.product ?? null, documentsText: documentsText.slice(0, 60000) }
     : { product: (body as any)?.product ?? null, documents: (body as any)?.documents ?? [] };
+
+  const content: unknown[] = [{ type: "input_text", text: JSON.stringify(promptPayload).slice(0, 70000) }];
+  for (const image of validImages) {
+    content.push({ type: "input_image", image_url: image.dataUrl });
+  }
 
   const response = await fetch("https://api.openai.com/v1/responses", {
     method: "POST",
@@ -217,7 +227,7 @@ serve(async (req) => {
     body: JSON.stringify({
       model: Deno.env.get("OPENAI_PRODUCT_READER_MODEL") || Deno.env.get("OPENAI_MODEL") || "gpt-4.1-mini",
       instructions: buildInstructions(),
-      input: [{ role: "user", content: JSON.stringify(promptPayload).slice(0, 70000) }],
+      input: [{ role: "user", content }],
       temperature: 0.05,
       max_output_tokens: 5000,
     }),
