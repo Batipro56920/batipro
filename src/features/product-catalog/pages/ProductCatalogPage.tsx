@@ -494,6 +494,28 @@ function ProductForm({ product, suppliers, onCancel, onSave }: { product: Produc
     });
   }
 
+  /**
+   * Le prix "retenu" (standardPurchasePriceHt) est une copie figee du prix negocie
+   * du fournisseur retenu, pas une valeur recalculee a l'affichage. Sans resync ici,
+   * modifier le prix/quantite de ce fournisseur apres coup laisse le resume du haut
+   * afficher une ancienne valeur deconnectee de la ligne qu'on vient de changer.
+   */
+  function handleSupplierPricesChange(supplierPrices: ProductCatalogDraft["supplierPrices"]) {
+    const mainEntry = draft.mainSupplierId
+      ? supplierPrices.find((price) => price.supplierId === draft.mainSupplierId)
+      : null;
+    if (!mainEntry) {
+      patch({ supplierPrices });
+      return;
+    }
+    const unitPrice = getSupplierUnitPrice(mainEntry);
+    patch({
+      supplierPrices,
+      standardPurchasePriceHt: unitPrice,
+      recommendedSalePriceHt: computeSalePrice(unitPrice, draft.targetMarginRate),
+    });
+  }
+
   async function analyzeKnowledge(nextDraft: ProductCatalogItem | ProductCatalogDraft) {
     setKnowledgeLoading(true);
     setKnowledgeError(null);
@@ -522,7 +544,7 @@ function ProductForm({ product, suppliers, onCancel, onSave }: { product: Produc
         </div>
         <div className="flex gap-2">
           <button type="button" className="rounded-xl border px-3 py-2 text-sm hover:bg-slate-50" onClick={onCancel}>Annuler</button>
-          <button type="button" className="rounded-xl bg-slate-950 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800" onClick={() => onSave(draft)}>Enregistrer</button>
+          <button type="button" className="rounded-xl bg-slate-950 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800" onClick={() => onSave(resyncPricingFromMainSupplier(draft))}>Enregistrer</button>
         </div>
       </div>
 
@@ -574,7 +596,7 @@ function ProductForm({ product, suppliers, onCancel, onSave }: { product: Produc
 
           <ProductPricingSummary draft={draft} />
 
-          <SupplierPricesEditor unit={draft.unit} prices={draft.supplierPrices} suppliers={suppliers} onChange={(supplierPrices) => patch({ supplierPrices })} />
+          <SupplierPricesEditor unit={draft.unit} prices={draft.supplierPrices} suppliers={suppliers} onChange={handleSupplierPricesChange} />
 
           <div className="mt-5 rounded-2xl border border-slate-200 p-4">
             <div className="font-semibold text-slate-950">Prix par défaut (catalogue)</div>
@@ -638,6 +660,25 @@ function computeSalePrice(purchasePrice: number, marginRate: number) {
   const purchase = Number(purchasePrice) || 0;
   const margin = Number(marginRate) || 0;
   return Math.round(purchase * (1 + margin / 100) * 100) / 100;
+}
+
+/**
+ * Filet de securite a l'enregistrement : si le prix retenu (standardPurchasePriceHt)
+ * a fini par diverger de la ligne fournisseur qu'il est cense refleter (ex. donnee
+ * ancienne jamais resynchronisee), on le recale avant de sauvegarder plutot que de
+ * persister un prix "achat" deconnecte des prix negocies affiches.
+ */
+function resyncPricingFromMainSupplier<T extends ProductCatalogDraft | ProductCatalogItem>(draft: T): T {
+  if (!draft.mainSupplierId) return draft;
+  const entry = draft.supplierPrices.find((price) => price.supplierId === draft.mainSupplierId);
+  if (!entry) return draft;
+  const unitPrice = getSupplierUnitPrice(entry);
+  if (unitPrice === draft.standardPurchasePriceHt) return draft;
+  return {
+    ...draft,
+    standardPurchasePriceHt: unitPrice,
+    recommendedSalePriceHt: computeSalePrice(unitPrice, draft.targetMarginRate),
+  };
 }
 
 /**
