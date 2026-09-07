@@ -31,11 +31,7 @@ type ReadinessFilter =
   | "missing_time"
   | "missing_cost"
   | "missing_technical"
-  | "missing_preparation"
-  | "quote_hidden"
-  | "chantier_hidden";
-
-type UsageField = "quote_visible" | "chantier_visible";
+  | "missing_preparation";
 
 type PriorityAction = {
   key: ReadinessFilter;
@@ -58,8 +54,6 @@ const READINESS_FILTERS: ReadinessFilter[] = [
   "missing_cost",
   "missing_technical",
   "missing_preparation",
-  "quote_hidden",
-  "chantier_hidden",
 ];
 
 const READINESS_EMPTY_COPY: Record<Exclude<ReadinessFilter, "">, EmptyStateCopy> = {
@@ -82,16 +76,6 @@ const READINESS_EMPTY_COPY: Record<Exclude<ReadinessFilter, "">, EmptyStateCopy>
     label: "Préparation à compléter",
     title: "Aucun modèle sans préparation",
     description: "Les modèles visibles avec ces filtres ont déjà des besoins préparatoires associés.",
-  },
-  quote_hidden: {
-    label: "Masqués au devis",
-    title: "Aucun modèle masqué au devis",
-    description: "Tous les modèles visibles avec ces filtres restent disponibles pour le chiffrage.",
-  },
-  chantier_hidden: {
-    label: "Masqués au chantier",
-    title: "Aucun modèle masqué en production",
-    description: "Tous les modèles visibles avec ces filtres restent disponibles pour les chantiers.",
   },
 };
 
@@ -118,24 +102,6 @@ function hasPreparation(
   return preparation.materials + preparation.equipment > 0;
 }
 
-function buildTemplateUsagePayload(row: TaskTemplateRow, field: UsageField): TaskTemplateInput {
-  return {
-    titre: row.titre,
-    lot: row.lot,
-    unite: row.unite,
-    quantite_defaut: row.quantite_defaut,
-    temps_prevu_par_unite_h: row.temps_prevu_par_unite_h,
-    remarques: row.remarques,
-    description_technique: row.description_technique,
-    caracteristiques: row.caracteristiques,
-    cout_reference_unitaire_ht: row.cout_reference_unitaire_ht,
-    quote_visible: field === "quote_visible" ? !row.quote_visible : row.quote_visible,
-    chantier_visible: field === "chantier_visible" ? !row.chantier_visible : row.chantier_visible,
-    labor_items: row.labor_items,
-    fee_items: row.fee_items,
-  };
-}
-
 export default function BibliothequeTasksPage() {
   const { locale, t } = useI18n();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -156,7 +122,6 @@ export default function BibliothequeTasksPage() {
   const [drawerError, setDrawerError] = useState<string | null>(null);
   const [duplicateId, setDuplicateId] = useState<string | null>(null);
   const [deleteId, setDeleteId] = useState<string | null>(null);
-  const [visibilityUpdateId, setVisibilityUpdateId] = useState<string | null>(null);
   const [toast, setToast] = useState<ToastState>(null);
   const [advancedPreparationEnabled, setAdvancedPreparationEnabled] = useState(false);
   const [selectedLot, setSelectedLot] = useState(lotQueryParam);
@@ -209,8 +174,6 @@ export default function BibliothequeTasksPage() {
     const withCost = rows.filter((row) => row.cout_reference_unitaire_ht !== null).length;
     const withTechnicalDetail = rows.filter(hasTechnicalDetail).length;
     const withPreparation = rows.filter((row) => hasPreparation(row, preparationByTemplateId)).length;
-    const quoteVisible = rows.filter((row) => row.quote_visible).length;
-    const chantierVisible = rows.filter((row) => row.chantier_visible).length;
     const totalReferenceCost = rows.reduce((sum, row) => {
       const unitCost = Number(row.cout_reference_unitaire_ht ?? 0);
       const quantity = Number(row.quantite_defaut ?? 1);
@@ -224,14 +187,10 @@ export default function BibliothequeTasksPage() {
       withCost,
       withTechnicalDetail,
       withPreparation,
-      quoteVisible,
-      chantierVisible,
       missingTime: rows.length - withTime,
       missingCost: rows.length - withCost,
       missingTechnicalDetail: rows.length - withTechnicalDetail,
       missingPreparation: advancedPreparationEnabled && preparationSchemaReady ? rows.length - withPreparation : 0,
-      hiddenFromQuote: rows.length - quoteVisible,
-      hiddenFromChantier: rows.length - chantierVisible,
       totalReferenceCost,
     };
   }, [advancedPreparationEnabled, lotOptions.length, preparationByTemplateId, preparationSchemaReady, rows]);
@@ -294,8 +253,6 @@ export default function BibliothequeTasksPage() {
       if (readinessFilter === "missing_cost" && row.cout_reference_unitaire_ht !== null) return false;
       if (readinessFilter === "missing_technical" && hasTechnicalDetail(row)) return false;
       if (readinessFilter === "missing_preparation" && hasPreparation(row, preparationByTemplateId)) return false;
-      if (readinessFilter === "quote_hidden" && row.quote_visible) return false;
-      if (readinessFilter === "chantier_hidden" && row.chantier_visible) return false;
       if (!q) return true;
       const searchable = [
         row.titre,
@@ -303,8 +260,6 @@ export default function BibliothequeTasksPage() {
         row.unite,
         row.description_technique,
         row.remarques,
-        row.quote_visible ? "devis chiffrage" : "masque devis",
-        row.chantier_visible ? "chantier production" : "masque chantier",
         ...row.caracteristiques,
       ]
         .filter(Boolean)
@@ -364,31 +319,6 @@ export default function BibliothequeTasksPage() {
     return `${value.toLocaleString(locale)} h`;
   }
 
-  function renderUsageBadges(row: TaskTemplateRow) {
-    return (
-      <>
-        {row.quote_visible ? (
-          <span className="rounded-full border border-sky-200 bg-sky-50 px-2 py-0.5 text-[11px] font-medium text-sky-700">
-            Devis
-          </span>
-        ) : (
-          <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[11px] text-slate-500">
-            Masqué devis
-          </span>
-        )}
-        {row.chantier_visible ? (
-          <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[11px] font-medium text-emerald-700">
-            Chantier
-          </span>
-        ) : (
-          <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[11px] text-slate-500">
-            Masqué chantier
-          </span>
-        )}
-      </>
-    );
-  }
-
   function renderPreparationBadge(templateId: string) {
     if (!advancedPreparationEnabled) return null;
     if (!preparationSchemaReady) {
@@ -413,32 +343,6 @@ export default function BibliothequeTasksPage() {
       <span className="inline-flex rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[11px] font-medium text-emerald-700">
         Prépa : {preparation.materials} mat. / {preparation.equipment} matériel
       </span>
-    );
-  }
-
-  function renderUsageActions(row: TaskTemplateRow, className = "rounded-lg border px-2 py-1 text-xs hover:bg-slate-50") {
-    const quoteBusy = visibilityUpdateId === `${row.id}:quote_visible`;
-    const chantierBusy = visibilityUpdateId === `${row.id}:chantier_visible`;
-
-    return (
-      <>
-        <button
-          type="button"
-          disabled={quoteBusy}
-          onClick={() => onToggleUsage(row, "quote_visible")}
-          className={`${className} border-sky-200 text-sky-700 disabled:opacity-50`}
-        >
-          {quoteBusy ? "Mise à jour..." : row.quote_visible ? "Masquer devis" : "Afficher devis"}
-        </button>
-        <button
-          type="button"
-          disabled={chantierBusy}
-          onClick={() => onToggleUsage(row, "chantier_visible")}
-          className={`${className} border-emerald-200 text-emerald-700 disabled:opacity-50`}
-        >
-          {chantierBusy ? "Mise à jour..." : row.chantier_visible ? "Masquer chantier" : "Afficher chantier"}
-        </button>
-      </>
     );
   }
 
@@ -685,30 +589,6 @@ export default function BibliothequeTasksPage() {
     }
   }
 
-  async function onToggleUsage(row: TaskTemplateRow, field: UsageField) {
-    const updateId = `${row.id}:${field}`;
-    setVisibilityUpdateId(updateId);
-    try {
-      const updated = await update(row.id, buildTemplateUsagePayload(row, field));
-      setRows((prev) => prev.map((item) => (item.id === row.id ? updated : item)));
-      setToast({
-        type: "ok",
-        msg:
-          field === "quote_visible"
-            ? updated.quote_visible
-              ? "Modèle visible au devis."
-              : "Modèle masqué au devis."
-            : updated.chantier_visible
-              ? "Modèle visible au chantier."
-              : "Modèle masqué au chantier.",
-      });
-    } catch (err: any) {
-      setToast({ type: "error", msg: err?.message ?? "Impossible de mettre à jour l'usage du modèle." });
-    } finally {
-      setVisibilityUpdateId(null);
-    }
-  }
-
   async function onDeleteDrawer(id: string) {
     setDeleting(true);
     setDrawerError(null);
@@ -778,24 +658,6 @@ export default function BibliothequeTasksPage() {
           <div className="text-xs font-medium uppercase text-slate-500">Modèles</div>
           <div className="mt-1 text-2xl font-bold text-slate-900">{libraryStats.total}</div>
           <div className="text-xs text-slate-500">{libraryStats.lots} lots structurés</div>
-        </button>
-        <button
-          type="button"
-          onClick={() => updateReadinessFilter("quote_hidden")}
-          className="rounded-2xl border bg-white p-4 text-left hover:bg-slate-50"
-        >
-          <div className="text-xs font-medium uppercase text-slate-500">Devis</div>
-          <div className="mt-1 text-2xl font-bold text-slate-900">{libraryStats.quoteVisible}</div>
-          <div className="text-xs text-slate-500">{libraryStats.hiddenFromQuote} masqués au chiffrage</div>
-        </button>
-        <button
-          type="button"
-          onClick={() => updateReadinessFilter("chantier_hidden")}
-          className="rounded-2xl border bg-white p-4 text-left hover:bg-slate-50"
-        >
-          <div className="text-xs font-medium uppercase text-slate-500">Chantier</div>
-          <div className="mt-1 text-2xl font-bold text-slate-900">{libraryStats.chantierVisible}</div>
-          <div className="text-xs text-slate-500">{libraryStats.hiddenFromChantier} masqués en production</div>
         </button>
         <button
           type="button"
@@ -891,8 +753,6 @@ export default function BibliothequeTasksPage() {
           onChange={(e) => updateReadinessFilter(e.target.value as ReadinessFilter)}
         >
           <option value="">Tous les états</option>
-          <option value="quote_hidden">Masqués au devis</option>
-          <option value="chantier_hidden">Masqués au chantier</option>
           <option value="missing_time">Temps à compléter</option>
           <option value="missing_cost">Coût à compléter</option>
           <option value="missing_technical">Technique à compléter</option>
@@ -985,7 +845,6 @@ export default function BibliothequeTasksPage() {
                         <div className="line-clamp-2 text-xs text-slate-500">{row.description_technique}</div>
                       ) : null}
                       <div className="mt-1 flex flex-wrap gap-1">
-                        {renderUsageBadges(row)}
                         {row.caracteristiques.slice(0, 3).map((item) => (
                           <span
                             key={`${row.id}-${item}`}
@@ -1030,7 +889,6 @@ export default function BibliothequeTasksPage() {
                         >
                           {t("common.actions.edit")}
                         </button>
-                        {renderUsageActions(row)}
                         <button
                           type="button"
                           disabled={duplicateId === row.id}
@@ -1079,7 +937,6 @@ export default function BibliothequeTasksPage() {
                 ) : null}
 
                 <div className="mt-3 flex flex-wrap gap-1">
-                  {renderUsageBadges(row)}
                   {row.caracteristiques.slice(0, 4).map((item) => (
                     <span
                       key={`${row.id}-mobile-${item}`}
@@ -1129,7 +986,6 @@ export default function BibliothequeTasksPage() {
                   >
                     {t("common.actions.edit")}
                   </button>
-                  {renderUsageActions(row, "rounded-lg border px-3 py-2 text-xs hover:bg-slate-50")}
                   <button
                     type="button"
                     disabled={duplicateId === row.id}
