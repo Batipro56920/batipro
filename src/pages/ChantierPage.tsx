@@ -9288,7 +9288,7 @@ function TaskPreparationLists({
             {preparation.procedure.map((step, index) => (
               <li key={`step-${index}`} className="flex gap-2 rounded-xl bg-slate-50 px-3 py-2 text-sm text-slate-800">
                 <span className="shrink-0 font-bold text-slate-400">{index + 1}.</span>
-                <span>{step}</span>
+                <span>{stripStepNumber(step)}</span>
               </li>
             ))}
           </ol>
@@ -9314,6 +9314,11 @@ function TaskPreparationLists({
       ) : null}
     </>
   );
+}
+
+/** Coco numérote déjà ses étapes : sans ça on affichait "1. 1. Baliser la zone". */
+function stripStepNumber(step: string): string {
+  return step.replace(/^\s*\d+\s*[.)-]\s*/, "");
 }
 
 function TaskListCard({ title, count, children }: { title: string; count: number; children: React.ReactNode }) {

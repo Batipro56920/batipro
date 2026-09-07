@@ -1126,7 +1126,7 @@ export default function EmployeePortalV2Page() {
                         {briefing.procedure_steps.map((step, index) => (
                           <li key={`${taskId}-step-${index}`} className="flex gap-2 rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-700">
                             <span className="shrink-0 font-bold text-slate-500">{index + 1}.</span>
-                            <span>{step}</span>
+                            <span>{step.replace(/^\s*\d+\s*[.)-]\s*/, "")}</span>
                           </li>
                         ))}
                       </ol>
