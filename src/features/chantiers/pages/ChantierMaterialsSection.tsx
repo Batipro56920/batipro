@@ -56,7 +56,7 @@ function deriveStatus(prep: ChantierMaterialPreparationRow, purchaseOrderById: M
 
 type GapModalState = { prepId: string | null; materialName: string; unit: string };
 
-type SkippedTaskInfo = { taskId: string; title: string; reason: string };
+type SkippedTaskInfo = { taskId: string; title: string; reason: string; templateId?: string };
 
 export default function ChantierMaterialsSection({ chantierId }: { chantierId: string }) {
   const [tasks, setTasks] = useState<ChantierTaskRow[]>([]);
@@ -133,7 +133,7 @@ export default function ChantierMaterialsSection({ chantierId }: { chantierId: s
         }
         const materials = preparation.materialsByTemplateId[task.task_template_id] ?? [];
         if (materials.length === 0) {
-          skipped.push({ taskId: task.id, title: task.titre, reason: "Modele de tache sans ratio materiau configure" });
+          skipped.push({ taskId: task.id, title: task.titre, reason: "Modele de tache sans ratio materiau configure", templateId: task.task_template_id });
           continue;
         }
         const estimate = estimateTaskTemplatePreparation(
@@ -146,7 +146,7 @@ export default function ChantierMaterialsSection({ chantierId }: { chantierId: s
             estimate.taskQuantity === null || estimate.taskQuantity <= 0 || !estimate.taskUnit
               ? "Quantite ou unite manquante sur la tache"
               : `Unite de la tache ("${estimate.taskUnit}") incompatible avec les ratios du modele`;
-          skipped.push({ taskId: task.id, title: task.titre, reason });
+          skipped.push({ taskId: task.id, title: task.titre, reason, templateId: task.task_template_id });
           continue;
         }
         for (const material of estimate.materials) {
@@ -414,9 +414,21 @@ export default function ChantierMaterialsSection({ chantierId }: { chantierId: s
             </div>
             <ul className="space-y-1">
               {skippedTasks.map((item) => (
-                <li key={item.taskId} className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5">
+                <li key={item.taskId} className="flex flex-wrap items-center justify-between gap-x-3 gap-y-0.5">
                   <span className="font-medium">{item.title}</span>
-                  <span className="text-amber-800/80">{item.reason}</span>
+                  <span className="flex items-center gap-2">
+                    <span className="text-amber-800/80">{item.reason}</span>
+                    {item.templateId ? (
+                      <Link
+                        to={`/bibliotheque?templateId=${encodeURIComponent(item.templateId)}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="shrink-0 rounded-lg border border-amber-300 bg-white px-2 py-0.5 text-[11px] font-semibold text-amber-800 hover:bg-amber-100"
+                      >
+                        Configurer le ratio
+                      </Link>
+                    ) : null}
+                  </span>
                 </li>
               ))}
             </ul>
