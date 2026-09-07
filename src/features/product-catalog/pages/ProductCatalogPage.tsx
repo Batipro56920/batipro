@@ -444,31 +444,19 @@ function ProductDrawer({ product, suppliers, onCancel, onSave }: { product: Prod
 
 function ProductForm({ product, suppliers, onCancel, onSave }: { product: ProductCatalogItem | ProductCatalogDraft; suppliers: SupplierRow[]; onCancel: () => void; onSave: (product: ProductCatalogItem | ProductCatalogDraft) => void | Promise<void> }) {
   const [draft, setDraft] = useState(product);
-  const [activeTab, setActiveTab] = useState<"product" | "knowledge">("product");
+  const [activeTab, setActiveTab] = useState<"identite" | "financier" | "technique">("identite");
   const [knowledgeLoading, setKnowledgeLoading] = useState(false);
   const [knowledgeError, setKnowledgeError] = useState<string | null>(null);
 
   useEffect(() => {
     setDraft(product);
-    setActiveTab("product");
+    setActiveTab("identite");
     setKnowledgeLoading(false);
     setKnowledgeError(null);
   }, [product]);
 
   function patch(patch: Partial<ProductCatalogItem | ProductCatalogDraft>) {
     setDraft((current) => ({ ...current, ...patch }));
-  }
-
-  /**
-   * Recalcule le prix de vente conseille depuis le prix d'achat et la marge
-   * cible. Remplace `productDrawerPricingBridge.updateSalePrice`, qui pilotait
-   * les inputs via des setters natifs HTMLInputElement.
-   */
-  function changePurchasePrice(standardPurchasePriceHt: number) {
-    patch({
-      standardPurchasePriceHt,
-      recommendedSalePriceHt: computeSalePrice(standardPurchasePriceHt, draft.targetMarginRate),
-    });
   }
 
   function changeTargetMargin(targetMarginRate: number) {
@@ -478,9 +466,24 @@ function ProductForm({ product, suppliers, onCancel, onSave }: { product: Produc
     });
   }
 
-  function selectMainSupplier(id: string) {
-    const supplier = suppliers.find((row) => row.id === id);
-    patch({ mainSupplierId: supplier?.id ?? null, mainSupplierName: supplier?.name ?? null });
+  /**
+   * "Prix par défaut" n'est plus une saisie libre : on choisit parmi les prix
+   * déjà négociés par fournisseur lequel sert de référence catalogue.
+   */
+  function selectDefaultFromSupplierPrice(supplierId: string) {
+    if (!supplierId) {
+      patch({ mainSupplierId: null, mainSupplierName: null });
+      return;
+    }
+    const entry = draft.supplierPrices.find((price) => price.supplierId === supplierId);
+    const supplier = suppliers.find((row) => row.id === supplierId);
+    const unitPrice = entry ? getSupplierUnitPrice(entry) : draft.standardPurchasePriceHt;
+    patch({
+      mainSupplierId: supplierId,
+      mainSupplierName: supplier?.name ?? entry?.supplierName ?? null,
+      standardPurchasePriceHt: unitPrice,
+      recommendedSalePriceHt: computeSalePrice(unitPrice, draft.targetMarginRate),
+    });
   }
 
   async function analyzeKnowledge(nextDraft: ProductCatalogItem | ProductCatalogDraft) {
@@ -507,7 +510,7 @@ function ProductForm({ product, suppliers, onCancel, onSave }: { product: Produc
       <div className="mb-4 flex items-start justify-between gap-3">
         <div>
           <h3 className="text-base font-semibold text-slate-950">Informations produit</h3>
-          <p className="mt-1 text-sm text-slate-500">Prix fournisseurs, documents techniques et usage catalogue.</p>
+          <p className="mt-1 text-sm text-slate-500">Identité, prix fournisseurs et fiche technique du produit.</p>
         </div>
         <div className="flex gap-2">
           <button type="button" className="rounded-xl border px-3 py-2 text-sm hover:bg-slate-50" onClick={onCancel}>Annuler</button>
@@ -522,40 +525,80 @@ function ProductForm({ product, suppliers, onCancel, onSave }: { product: Produc
       />
 
       <div className="mb-4 mt-5 flex gap-2 border-b border-slate-200">
-        <button type="button" className={tabClass(activeTab === "product")} onClick={() => setActiveTab("product")}>Produit</button>
-        <button type="button" className={tabClass(activeTab === "knowledge")} onClick={() => setActiveTab("knowledge")}>Connaissance IA</button>
+        <button type="button" className={tabClass(activeTab === "identite")} onClick={() => setActiveTab("identite")}>Identité</button>
+        <button type="button" className={tabClass(activeTab === "financier")} onClick={() => setActiveTab("financier")}>Financier</button>
+        <button type="button" className={tabClass(activeTab === "technique")} onClick={() => setActiveTab("technique")}>Technique</button>
       </div>
 
-      {activeTab === "product" ? (
+      {activeTab === "identite" ? (
+        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+          <Field label="Désignation" value={draft.designation} onChange={(designation) => patch({ designation })} className="xl:col-span-2" />
+          <Field label="Catégorie" value={draft.category ?? ""} onChange={(category) => patch({ category })} />
+          <label className={labelClass}>Unité<Select className="mt-1" value={draft.unit} onChange={(unit) => patch({ unit: unit as DocumentUnit })} options={["u", "h", "ml", "m2", "m3", "forfait", "kg", "l"]} /></label>
+        </div>
+      ) : null}
+
+      {activeTab === "financier" ? (
         <>
-          <div className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">Identité produit</div>
-          <div className="mt-2 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-        <Field label="Désignation" value={draft.designation} onChange={(designation) => patch({ designation })} className="xl:col-span-2" />
-        <Field label="Référence interne" value={draft.internalReference ?? ""} onChange={(internalReference) => patch({ internalReference })} />
-        <Field label="Référence fabricant" value={draft.manufacturerReference ?? ""} onChange={(manufacturerReference) => patch({ manufacturerReference })} />
-        <Field label="Marque" value={draft.brand ?? ""} onChange={(brand) => patch({ brand })} />
-        <Field label="Catégorie" value={draft.category ?? ""} onChange={(category) => patch({ category })} />
-        <label className={labelClass}>Unité<Select className="mt-1" value={draft.unit} onChange={(unit) => patch({ unit: unit as DocumentUnit })} options={["u", "h", "ml", "m2", "m3", "forfait", "kg", "l"]} /></label>
-        <NumberField label="TVA" value={draft.vatRate} onChange={(vatRate) => patch({ vatRate })} />
-        <label className={`${labelClass} flex items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2 normal-case tracking-normal text-slate-700`}>
-          <input type="checkbox" checked={draft.isSellable} onChange={(event) => patch({ isSellable: event.target.checked })} />
-          <span>Produit revendable / utilisable dans un ouvrage</span>
-        </label>
-      </div>
-
-          <div className="mt-5 text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">Prix par défaut (catalogue)</div>
-          <p className="mt-1 text-xs text-slate-500">
-            Sert de référence tant qu'aucun prix fournisseur spécifique n'est retenu. Le détail par fournisseur (remises, conditionnement, délais) se gère juste en dessous, dans "Prix négociés par fournisseur".
-          </p>
-          <div className="mt-2 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-        <label className={labelClass}>Fournisseur principal<Select className="mt-1" value={draft.mainSupplierId ?? ""} onChange={selectMainSupplier} options={["", ...suppliers.map((supplier) => supplier.id)]} labels={Object.fromEntries([["", "Aucun"], ...suppliers.map((supplier) => [supplier.id, supplier.name])])} /></label>
-        <NumberField label="Prix achat standard" value={draft.standardPurchasePriceHt} onChange={changePurchasePrice} />
-        <NumberField label="Prix vente conseillé" value={draft.recommendedSalePriceHt} onChange={(recommendedSalePriceHt) => patch({ recommendedSalePriceHt })} />
-        <NumberField label="Marge cible %" value={draft.targetMarginRate} onChange={changeTargetMargin} />
-      </div>
+          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+            <NumberField label="TVA" value={draft.vatRate} onChange={(vatRate) => patch({ vatRate })} />
+            <NumberField label="Prix vente conseillé" value={draft.recommendedSalePriceHt} onChange={(recommendedSalePriceHt) => patch({ recommendedSalePriceHt })} />
+            <NumberField label="Marge cible %" value={draft.targetMarginRate} onChange={changeTargetMargin} />
+            <label className={`${labelClass} flex items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2 normal-case tracking-normal text-slate-700`}>
+              <input type="checkbox" checked={draft.isSellable} onChange={(event) => patch({ isSellable: event.target.checked })} />
+              <span>Produit revendable / utilisable dans un ouvrage</span>
+            </label>
+          </div>
 
           <ProductPricingSummary draft={draft} />
+
           <SupplierPricesEditor unit={draft.unit} prices={draft.supplierPrices} suppliers={suppliers} onChange={(supplierPrices) => patch({ supplierPrices })} />
+
+          <div className="mt-5 rounded-2xl border border-slate-200 p-4">
+            <div className="font-semibold text-slate-950">Prix par défaut (catalogue)</div>
+            <p className="mt-1 text-sm text-slate-500">
+              Choisissez, parmi les prix négociés ci-dessus, le fournisseur retenu (meilleur prix ou meilleure qualité) — c'est son prix qui sert de référence catalogue tant qu'un prix spécifique n'est pas utilisé ailleurs.
+            </p>
+            {draft.supplierPrices.filter((price) => price.supplierId).length === 0 ? (
+              <div className="mt-3 rounded-xl border border-dashed border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-500">
+                Ajoutez d'abord un prix négocié par fournisseur ci-dessus.
+              </div>
+            ) : (
+              <select
+                className={`${inputClass} mt-3`}
+                value={draft.mainSupplierId ?? ""}
+                onChange={(event) => selectDefaultFromSupplierPrice(event.target.value)}
+              >
+                <option value="">Aucun</option>
+                {draft.supplierPrices.filter((price) => price.supplierId).map((price) => (
+                  <option key={price.id} value={price.supplierId ?? ""}>
+                    {(suppliers.find((s) => s.id === price.supplierId)?.name ?? price.supplierName) || "Fournisseur"} — {formatCurrency(getSupplierUnitPrice(price))}/{draft.unit}
+                  </option>
+                ))}
+              </select>
+            )}
+          </div>
+        </>
+      ) : null}
+
+      {activeTab === "technique" ? (
+        <>
+          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+            <Field label="Référence interne" value={draft.internalReference ?? ""} onChange={(internalReference) => patch({ internalReference })} />
+            <Field label="Référence fabricant" value={draft.manufacturerReference ?? ""} onChange={(manufacturerReference) => patch({ manufacturerReference })} />
+            <Field label="Marque" value={draft.brand ?? ""} onChange={(brand) => patch({ brand })} />
+          </div>
+
+          <div className="mt-4">
+            <ProductKnowledgeEditor
+              knowledge={draft.knowledge ?? emptyProductKnowledge(draft)}
+              busy={knowledgeLoading}
+              error={knowledgeError}
+              onAnalyze={() => void analyzeKnowledge(draft)}
+              onChange={(knowledge) => patch({ knowledge })}
+            />
+          </div>
+
           <ProductDocumentsEditor
             documents={draft.documents}
             busy={knowledgeLoading}
@@ -564,15 +607,7 @@ function ProductForm({ product, suppliers, onCancel, onSave }: { product: Produc
             onChange={updateDocuments}
           />
         </>
-      ) : (
-        <ProductKnowledgeEditor
-          knowledge={draft.knowledge ?? emptyProductKnowledge(draft)}
-          busy={knowledgeLoading}
-          error={knowledgeError}
-          onAnalyze={() => void analyzeKnowledge(draft)}
-          onChange={(knowledge) => patch({ knowledge })}
-        />
-      )}
+      ) : null}
     </div>
   );
 }
@@ -692,15 +727,6 @@ function SupplierPricesEditor({ unit, prices, suppliers, onChange }: { unit: Doc
               </FieldShell>
               <FieldShell label="Remise %">
                 <SmallNumber value={price.discountPercent ?? 0} onChange={(discountPercent) => updatePrice(price.id, { discountPercent })} placeholder="Remise %" />
-              </FieldShell>
-              <FieldShell label="Début validité">
-                <input className={inputClass} type="date" value={price.startDate ?? ""} onChange={(event) => updatePrice(price.id, { startDate: event.target.value || null })} />
-              </FieldShell>
-              <FieldShell label="Fin validité">
-                <input className={inputClass} type="date" value={price.endDate ?? ""} onChange={(event) => updatePrice(price.id, { endDate: event.target.value || null })} />
-              </FieldShell>
-              <FieldShell label="Délai livraison j">
-                <SmallNumber value={price.deliveryLeadTimeDays ?? 0} onChange={(deliveryLeadTimeDays) => updatePrice(price.id, { deliveryLeadTimeDays })} placeholder="Délai j" />
               </FieldShell>
               <FieldShell label="Conditionnement" className="md:col-span-2 xl:col-span-4">
                 <input className={inputClass} placeholder="Ex : colis de 10 panneaux soit 6,48 m² ou botte de 30 ml" value={price.packaging ?? ""} onChange={(event) => updatePrice(price.id, { packaging: event.target.value || null })} />
@@ -881,22 +907,19 @@ function ProductKnowledgeEditor({
       </div>
 
       <div className="grid gap-4 xl:grid-cols-2">
-        <JsonKnowledgeBlock title="Identité" block={knowledge.identity} onValueChange={(value) => updateValue("identity", value as ProductKnowledge["identity"]["value"])} onMetaChange={(patch) => updateBlock("identity", patch)} />
-        <JsonKnowledgeBlock title="Fournisseur" block={knowledge.supplier} onValueChange={(value) => updateValue("supplier", value as ProductKnowledge["supplier"]["value"])} onMetaChange={(patch) => updateBlock("supplier", patch)} />
-        <JsonKnowledgeBlock title="Prix" block={knowledge.pricing} onValueChange={(value) => updateValue("pricing", value as ProductKnowledge["pricing"]["value"])} onMetaChange={(patch) => updateBlock("pricing", patch)} />
+        <ApplicationKnowledgeBlock block={knowledge.application} onValueChange={(value) => updateValue("application", value)} onMetaChange={(patch) => updateBlock("application", patch)} />
         <JsonKnowledgeBlock title="Ratio / consommation" block={knowledge.materialUsage} onValueChange={(value) => updateValue("materialUsage", value as ProductKnowledge["materialUsage"]["value"])} onMetaChange={(patch) => updateBlock("materialUsage", patch)} />
-        <JsonKnowledgeBlock title="Application" block={knowledge.application} onValueChange={(value) => updateValue("application", value as ProductKnowledge["application"]["value"])} onMetaChange={(patch) => updateBlock("application", patch)} />
-        <JsonKnowledgeBlock title="Limites météo" block={knowledge.weatherLimits} onValueChange={(value) => updateValue("weatherLimits", value as ProductKnowledge["weatherLimits"]["value"])} onMetaChange={(patch) => updateBlock("weatherLimits", patch)} />
+        <ListKnowledgeBlock title="Mode opératoire recommandé" block={knowledge.procedure} onValueChange={(value) => updateValue("procedure", value)} onMetaChange={(patch) => updateBlock("procedure", patch)} />
+        <ListKnowledgeBlock title="Matériels recommandés" block={knowledge.tools} onValueChange={(value) => updateValue("tools", value)} onMetaChange={(patch) => updateBlock("tools", patch)} />
       </div>
 
       <div className="grid gap-4 xl:grid-cols-2">
+        <JsonKnowledgeBlock title="Limites météo" block={knowledge.weatherLimits} onValueChange={(value) => updateValue("weatherLimits", value as ProductKnowledge["weatherLimits"]["value"])} onMetaChange={(patch) => updateBlock("weatherLimits", patch)} />
         <ListKnowledgeBlock title="Supports" block={knowledge.supports} onValueChange={(value) => updateValue("supports", value)} onMetaChange={(patch) => updateBlock("supports", patch)} />
         <ListKnowledgeBlock title="Supports interdits" block={knowledge.forbiddenSupports} onValueChange={(value) => updateValue("forbiddenSupports", value)} onMetaChange={(patch) => updateBlock("forbiddenSupports", patch)} />
-        <ListKnowledgeBlock title="Outils" block={knowledge.tools} onValueChange={(value) => updateValue("tools", value)} onMetaChange={(patch) => updateBlock("tools", patch)} />
         <ListKnowledgeBlock title="Consommables" block={knowledge.consumables} onValueChange={(value) => updateValue("consumables", value)} onMetaChange={(patch) => updateBlock("consumables", patch)} />
         <ListKnowledgeBlock title="EPI" block={knowledge.PPE} onValueChange={(value) => updateValue("PPE", value)} onMetaChange={(patch) => updateBlock("PPE", patch)} />
         <ListKnowledgeBlock title="Temps de séchage" block={knowledge.dryingTimes} onValueChange={(value) => updateValue("dryingTimes", value)} onMetaChange={(patch) => updateBlock("dryingTimes", patch)} />
-        <ListKnowledgeBlock title="Mode opératoire" block={knowledge.procedure} onValueChange={(value) => updateValue("procedure", value)} onMetaChange={(patch) => updateBlock("procedure", patch)} />
         <ListKnowledgeBlock title="Contrôles" block={knowledge.controls} onValueChange={(value) => updateValue("controls", value)} onMetaChange={(patch) => updateBlock("controls", patch)} />
         <ListKnowledgeBlock title="Erreurs à éviter" block={knowledge.commonMistakes} onValueChange={(value) => updateValue("commonMistakes", value)} onMetaChange={(patch) => updateBlock("commonMistakes", patch)} />
         <ListKnowledgeBlock title="DOE" block={knowledge.doe} onValueChange={(value) => updateValue("doe", value)} onMetaChange={(patch) => updateBlock("doe", patch)} />
@@ -912,6 +935,46 @@ type KnowledgeBlockMeta = {
   reasoning: string;
   sourceDocument: string | null;
 };
+
+const APPLICATION_LABELS: Record<keyof ProductKnowledge["application"]["value"], string> = {
+  interior: "Intérieur",
+  exterior: "Extérieur",
+  wall: "Mur",
+  floor: "Sol",
+  ceiling: "Plafond",
+  wood: "Bois",
+  metal: "Métal",
+  placo: "Placo",
+  concrete: "Béton",
+  facade: "Façade",
+};
+
+function ApplicationKnowledgeBlock({
+  block,
+  onValueChange,
+  onMetaChange,
+}: {
+  block: ProductKnowledge["application"];
+  onValueChange: (value: ProductKnowledge["application"]["value"]) => void;
+  onMetaChange: (patch: Partial<KnowledgeBlockMeta>) => void;
+}) {
+  return (
+    <KnowledgeShell title="Domaine d'application" block={block} onMetaChange={onMetaChange}>
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+        {(Object.keys(APPLICATION_LABELS) as Array<keyof typeof APPLICATION_LABELS>).map((key) => (
+          <label key={key} className="flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700">
+            <input
+              type="checkbox"
+              checked={block.value[key]}
+              onChange={(event) => onValueChange({ ...block.value, [key]: event.target.checked })}
+            />
+            {APPLICATION_LABELS[key]}
+          </label>
+        ))}
+      </div>
+    </KnowledgeShell>
+  );
+}
 
 function JsonKnowledgeBlock({
   title,
