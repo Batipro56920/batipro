@@ -71,7 +71,10 @@ export function QuoteBuilderWorkspace({ onClose, costsPanel }: Props) {
       taskTemplateId: template.id,
       taskTemplateLabel: template.titre,
     };
-    if (!currentTitle.trim()) patch.title = template.titre;
+    // "Nouvelle prestation" est le libellé par défaut d'une ligne vierge, pas une
+    // saisie : choisir une tâche doit le remplacer, sans écraser un vrai texte client.
+    const untouched = !currentTitle.trim() || currentTitle.trim() === "Nouvelle prestation";
+    if (untouched) patch.title = template.titre;
     if (template.unite) patch.unit = normalizeQuoteUnit(template.unite);
     if (template.cout_reference_unitaire_ht) patch.unitPriceHt = Number(template.cout_reference_unitaire_ht);
     updateNode(rowId, patch as Partial<QuoteBuilderNode>);
@@ -807,13 +810,24 @@ function TitleCell({ row, onChange, onSelectParent, onConfigureComposite, taskTe
           <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${node.taskTemplateId ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-700"}`}>
             {node.taskTemplateId ? "Exécutable" : "Chiffrage seul"}
           </span>
+          {/*
+            La bibliothèque arrive après le devis : sans option correspondante au
+            premier rendu, le select retombait sur "Aucune tâche liée" et donnait
+            l'impression que le lien avait été perdu. On garde donc une option pour
+            la tâche liée tant qu'elle n'est pas dans la liste, et on remonte le
+            select quand la liste arrive.
+          */}
           <select
+            key={`${node.id}-${taskTemplates.length}`}
             className="h-7 min-w-0 flex-1 rounded border border-slate-200 bg-white px-2 text-xs text-slate-700"
             value={node.taskTemplateId ?? ""}
             onChange={(event) => onLinkTask(event.target.value)}
             title="Tâche exécutée au chantier"
           >
             <option value="">Aucune tâche liée</option>
+            {node.taskTemplateId && !taskTemplates.some((template) => template.id === node.taskTemplateId) ? (
+              <option value={node.taskTemplateId}>{node.taskTemplateLabel ?? "Tâche liée"}</option>
+            ) : null}
             {taskTemplates.map((template) => (
               <option key={template.id} value={template.id}>{template.titre}</option>
             ))}
