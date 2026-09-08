@@ -190,6 +190,8 @@ export type CrmQuoteItemRow = {
   total_ht: number;
   ordre: number;
   task_template_id: string | null;
+  /** Composition de l'ouvrage propre à ce devis (jamais renvoyée au modèle de tâche). */
+  composite_items: unknown[] | null;
   supplier_id: string | null;
   line_type: string;
   family: string | null;
@@ -468,7 +470,7 @@ const CRM_SELECTS = {
     "id,quote_id,parent_id,title,description,section_type,ordre,numbering,show_total,page_break_before,created_at,updated_at",
   quoteLots: "id,quote_id,title,ordre,created_at,updated_at",
   quoteItems:
-    "id,quote_id,lot_id,section_id,parent_item_id,lot,designation,description,quantite,unite,prix_unitaire_ht,total_ht,ordre,task_template_id,supplier_id,line_type,family,supplier_reference,price_status,show_to_client,page_break_before,numbering,cost_materials_ht,cost_labor_ht,cost_subcontracting_ht,cost_fees_ht,labor_hours,labor_rate_ht,margin_rate,coefficient,tva_rate,sale_unit_price_ht,sale_total_ht,technical_description,generate_task,created_at,updated_at",
+    "id,quote_id,lot_id,section_id,parent_item_id,lot,designation,description,quantite,unite,prix_unitaire_ht,total_ht,ordre,task_template_id,supplier_id,line_type,family,supplier_reference,price_status,show_to_client,page_break_before,numbering,cost_materials_ht,cost_labor_ht,cost_subcontracting_ht,cost_fees_ht,labor_hours,labor_rate_ht,margin_rate,coefficient,tva_rate,sale_unit_price_ht,sale_total_ht,technical_description,composite_items,generate_task,created_at,updated_at",
   quoteItemsLegacy:
     "id,quote_id,lot,designation,description,quantite,unite,prix_unitaire_ht,total_ht,ordre,created_at,updated_at",
   quoteComponents:
@@ -1008,6 +1010,7 @@ function normalizeQuoteItem(row: any): CrmQuoteItemRow {
     section_id: row?.section_id ?? null,
     parent_item_id: row?.parent_item_id ?? null,
     task_template_id: row?.task_template_id ?? null,
+    composite_items: Array.isArray(row?.composite_items) ? row.composite_items : null,
     supplier_id: row?.supplier_id ?? null,
     line_type: row?.line_type ?? "simple",
     family: row?.family ?? null,
@@ -1111,6 +1114,7 @@ export async function createCrmQuoteItemFromTemplate(input: {
   template?: TaskTemplateRow | null;
   /** Rattachement direct quand l'appelant n'a que l'identifiant du modèle. */
   taskTemplateId?: string | null;
+  compositeItems?: unknown[] | null;
   designation?: string | null;
   description?: string | null;
   unit?: string | null;
@@ -1154,6 +1158,7 @@ export async function createCrmQuoteItemFromTemplate(input: {
     total_ht: input.unitPriceHt === undefined ? totals.total_ht : roundMoney(numberOrZero(input.unitPriceHt) * totals.quantity),
     ordre: input.ordre ?? 0,
     task_template_id: input.taskTemplateId ?? template?.id ?? null,
+    composite_items: input.compositeItems ?? null,
     line_type: text(input.lineType) ?? (template ? "composite" : "simple"),
     family: template?.lot ?? null,
     price_status: "estimated",

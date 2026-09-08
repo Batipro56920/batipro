@@ -193,6 +193,9 @@ function mapCrmItemsToQuoteNodes(items: CrmQuoteItemRow[]): QuoteBuilderSection[
       sourceLibraryId: row.task_template_id,
       taskTemplateId: row.task_template_id ?? null,
       taskTemplateLabel: (row as { task_template_label?: string | null }).task_template_label ?? null,
+      compositeItems: Array.isArray(row.composite_items)
+        ? (row.composite_items as QuoteBuilderItem["compositeItems"])
+        : undefined,
     });
     if (currentSubsection) currentSubsection.children.push(item);
     else {

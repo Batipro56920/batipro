@@ -13,6 +13,7 @@ import { downloadQuoteBuilderPdf, getQuoteBuilderPdfBlob } from "./quoteBuilderP
 import { useQuoteBuilderStore } from "./quoteBuilderStore";
 import TaskTemplateDrawer from "../../../components/TaskTemplateDrawer";
 import { create as createTaskTemplate, list as listTaskTemplates, type TaskTemplateInput, type TaskTemplateRow } from "../../../services/taskLibrary.service";
+import { listTaskTemplatePreparationByTemplateIds, type TaskTemplateMaterialRatioRow } from "../../../services/taskTemplatePreparation.service";
 import type { QuoteBuilderCompositeItem, QuoteBuilderFlatRow, QuoteBuilderItem, QuoteBuilderItemKind, QuoteBuilderNode, QuoteBuilderQuote, QuoteBuilderUnit, QuoteLibraryItem } from "./types";
 
 type Props = { onClose: () => void; costsPanel?: ReactNode };
@@ -46,6 +47,7 @@ export function QuoteBuilderWorkspace({ onClose, costsPanel }: Props) {
   const [taskDrawerRowId, setTaskDrawerRowId] = useState<string | null>(null);
   const [taskDrawerSaving, setTaskDrawerSaving] = useState(false);
   const [taskDrawerError, setTaskDrawerError] = useState<string | null>(null);
+  const [compositeBaseComponents, setCompositeBaseComponents] = useState<QuoteBuilderCompositeItem[]>([]);
 
   useEffect(() => {
     let alive = true;
@@ -79,6 +81,34 @@ export function QuoteBuilderWorkspace({ onClose, costsPanel }: Props) {
     if (template.cout_reference_unitaire_ht) patch.unitPriceHt = Number(template.cout_reference_unitaire_ht);
     updateNode(rowId, patch as Partial<QuoteBuilderNode>);
   }
+
+  /**
+   * Composition de base de la tâche liée (ratios matériaux + temps de pose), copiée
+   * dans le devis pour servir de point de départ. C'est une copie : adapter l'ouvrage
+   * ici ne modifie jamais le modèle de tâche de la bibliothèque.
+   */
+  useEffect(() => {
+    const item = compositeNodeId ? findRowItem(compositeNodeId) : null;
+    const templateId = item?.taskTemplateId;
+    if (!templateId) {
+      setCompositeBaseComponents([]);
+      return;
+    }
+    let alive = true;
+    void listTaskTemplatePreparationByTemplateIds([templateId])
+      .then((preparation) => {
+        if (!alive) return;
+        const template = taskTemplates.find((row) => row.id === templateId) ?? null;
+        setCompositeBaseComponents(buildBaseComponents(preparation.materialsByTemplateId[templateId] ?? [], template));
+      })
+      .catch(() => {
+        if (alive) setCompositeBaseComponents([]);
+      });
+    return () => {
+      alive = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [compositeNodeId, taskTemplates]);
 
   function findRowItem(rowId: string): QuoteBuilderItem | null {
     const flat = quote ? flattenQuoteBuilder(quote.nodes) : [];
@@ -209,7 +239,7 @@ export function QuoteBuilderWorkspace({ onClose, costsPanel }: Props) {
       </main>
 
       {optionsOpen ? <QuoteOptionsMenu quote={quote} updateQuote={updateQuote} onDraft={saveDraft} onPdf={() => downloadQuoteBuilderPdf(quote)} onClose={() => setOptionsOpen(false)} /> : null}
-      {compositeNodeId ? <CompositeDialog2 item={findQuoteItem(quote, compositeNodeId)} onSave={(patch) => updateNode(compositeNodeId, patch as Partial<QuoteBuilderNode>)} onClose={() => setCompositeNodeId(null)} /> : null}
+      {compositeNodeId ? <CompositeDialog2 item={findQuoteItem(quote, compositeNodeId)} baseComponents={compositeBaseComponents} onSave={(patch) => updateNode(compositeNodeId, patch as Partial<QuoteBuilderNode>)} onClose={() => setCompositeNodeId(null)} /> : null}
       {financialOpen ? <FinancialDetailsDrawer quote={quote} totals={totals} onPdf={() => downloadQuoteBuilderPdf(quote)} updateQuote={updateQuote} onClose={() => setFinancialOpen(false)} /> : null}
       {sendOpen ? <QuoteSendDialog quote={quote} onClose={() => setSendOpen(false)} /> : null}
       <TaskTemplateDrawer
@@ -242,8 +272,8 @@ export function QuoteDocumentLoader() {
 
 function QuoteTopbar({ quote, mode, saveState, libraryOpen, optionsOpen, setOptionsOpen, onToggleLibrary, onModeChange, onClose, onSave, onSend, onDuplicate, onDownload }: { quote: QuoteBuilderQuote; mode: Mode; saveState: string; libraryOpen: boolean; optionsOpen: boolean; setOptionsOpen: (open: boolean) => void; onToggleLibrary: () => void; onModeChange: (mode: Mode) => void; onClose: () => void; onSave: () => void; onSend: () => void; onDuplicate: () => void; onDownload: () => void }) {
   return (
-    <header className="sticky top-0 z-30 flex h-14 items-center justify-between border-b border-slate-200 bg-white px-4 shadow-sm">
-      <div className="flex min-w-0 items-center gap-3">
+    <header className="sticky top-0 z-30 flex min-h-14 flex-wrap items-center justify-between gap-x-3 gap-y-2 border-b border-slate-200 bg-white px-4 py-2 shadow-sm">
+      <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
         <button type="button" onClick={onToggleLibrary} className={iconButtonClass} aria-label="Ouvrir la bibliothèque" aria-pressed={libraryOpen}><BookOpen className="h-4 w-4" /></button>
         <div className="min-w-0">
           <div className="truncate text-lg font-semibold text-slate-950">Devis n° {quote.number}</div>
@@ -256,7 +286,7 @@ function QuoteTopbar({ quote, mode, saveState, libraryOpen, optionsOpen, setOpti
         <button type="button" onClick={() => onModeChange("preview")} className={tabClass(mode === "preview")}><Eye className="h-4 w-4" /> Prévisualisation</button>
         <button type="button" onClick={() => onModeChange("couts")} className={tabClass(mode === "couts")}><Settings2 className="h-4 w-4" /> Coûts cachés</button>
       </div>
-      <div className="flex items-center gap-2">
+      <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
         <button type="button" onClick={onDuplicate} className="hidden h-10 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 lg:inline-flex"><Copy className="h-4 w-4" /> Dupliquer</button>
         <button type="button" disabled title="Transformation facture à connecter au module Factures" className="hidden h-10 items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm font-semibold text-slate-400 xl:inline-flex"><FileText className="h-4 w-4" /> Transformer</button>
         <button type="button" onClick={onDownload} className="hidden h-10 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 md:inline-flex"><Download className="h-4 w-4" /> Télécharger</button>
@@ -749,8 +779,19 @@ export function CompositeDialog({ onClose }: { onClose: () => void }) {
   );
 }
 
-function CompositeDialog2({ item, onSave, onClose }: { item: QuoteBuilderItem | null; onSave: (patch: Partial<QuoteBuilderItem>) => void; onClose: () => void }) {
-  const [components, setComponents] = useState<QuoteBuilderCompositeItem[]>(item?.compositeItems?.length ? item.compositeItems : [createCompositeComponent("fourniture")]);
+function CompositeDialog2({ item, baseComponents, onSave, onClose }: { item: QuoteBuilderItem | null; baseComponents: QuoteBuilderCompositeItem[]; onSave: (patch: Partial<QuoteBuilderItem>) => void; onClose: () => void }) {
+  const [components, setComponents] = useState<QuoteBuilderCompositeItem[]>(
+    item?.compositeItems?.length ? item.compositeItems : [createCompositeComponent("fourniture")],
+  );
+  const [seeded, setSeeded] = useState(false);
+
+  // La composition de la tâche arrive après l'ouverture : on l'installe dès qu'elle
+  // est là, tant que l'utilisateur n'a rien configuré lui-même.
+  useEffect(() => {
+    if (seeded || item?.compositeItems?.length || !baseComponents.length) return;
+    setComponents(baseComponents);
+    setSeeded(true);
+  }, [baseComponents, item?.compositeItems?.length, seeded]);
   const totalHt = components.reduce((sum, component) => sum + component.quantity * component.unitPriceHt, 0);
   function updateComponent(id: string, patch: Partial<QuoteBuilderCompositeItem>) {
     setComponents((current) => current.map((component) => component.id === id ? { ...component, ...patch } : component));
@@ -763,7 +804,14 @@ function CompositeDialog2({ item, onSave, onClose }: { item: QuoteBuilderItem | 
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-4">
       <div className="w-full max-w-5xl rounded-2xl bg-white p-6 shadow-xl">
         <div className="flex items-center justify-between">
-          <div><h2 className="text-xl font-semibold text-slate-950">Configurer l'ouvrage</h2><p className="mt-1 text-sm text-slate-500">Ajoutez directement les éléments composant l'ouvrage.</p></div>
+          <div>
+            <h2 className="text-xl font-semibold text-slate-950">Configurer l'ouvrage</h2>
+            <p className="mt-1 text-sm text-slate-500">
+              {item?.taskTemplateId
+                ? "Composition reprise de la tâche liée, adaptable à ce chantier."
+                : "Ajoutez directement les éléments composant l'ouvrage."}
+            </p>
+          </div>
           <button type="button" onClick={onClose}><X className="h-5 w-5" /></button>
         </div>
         <div className="mt-5 flex flex-wrap gap-2">
@@ -784,6 +832,11 @@ function CompositeDialog2({ item, onSave, onClose }: { item: QuoteBuilderItem | 
             </div>
           ))}
         </div>
+        {item?.taskTemplateId ? (
+          <div className="mt-4 rounded-xl border border-blue-100 bg-blue-50 px-3 py-2 text-xs text-blue-800">
+            Ces ajustements ne concernent que ce devis. Le modèle de tâche de la bibliothèque n'est pas modifié.
+          </div>
+        ) : null}
         <div className="mt-6 grid gap-3 md:grid-cols-3"><Metric label="Déboursé sec" value={formatCurrency(totalHt)} /><Metric label="Marge brute" value="À compléter" /><Metric label="Prix vente HT" value={formatCurrency(totalHt)} /></div>
         <div className="mt-6 flex justify-end gap-2"><button type="button" className={secondaryButtonClass} onClick={onClose}>Annuler</button><button type="button" className={primaryButtonClass} onClick={saveComposite}>Enregistrer</button></div>
       </div>
@@ -842,6 +895,36 @@ function TitleCell({ row, onChange, onSelectParent, onConfigureComposite, taskTe
       {node.type === "item" ? <input className="h-8 w-full rounded border border-slate-100 px-2 text-xs text-slate-500" placeholder="Note interne" value={node.internalNote ?? ""} onChange={(event) => onChange({ internalNote: event.target.value } as Partial<QuoteBuilderNode>)} /> : null}
     </div>
   );
+}
+
+/** Traduit les ratios matériaux et le temps de pose du modèle en lignes d'ouvrage. */
+function buildBaseComponents(
+  materials: TaskTemplateMaterialRatioRow[],
+  template: TaskTemplateRow | null,
+): QuoteBuilderCompositeItem[] {
+  const components: QuoteBuilderCompositeItem[] = materials.map((material) => ({
+    id: crypto.randomUUID(),
+    kind: "fourniture",
+    title: material.material_name,
+    quantity: Number(material.ratio_quantity) || 0,
+    unit: normalizeQuoteUnit(material.ratio_unit),
+    unitPriceHt: Number(material.purchase_price_ht ?? 0) || 0,
+    vatRate: 20,
+  }));
+
+  const laborHours = Number(template?.temps_prevu_par_unite_h ?? 0);
+  if (laborHours > 0) {
+    components.push({
+      id: crypto.randomUUID(),
+      kind: "main_oeuvre",
+      title: "Main d'oeuvre",
+      quantity: laborHours,
+      unit: "h",
+      unitPriceHt: 0,
+      vatRate: 20,
+    });
+  }
+  return components;
 }
 
 function normalizeQuoteUnit(unit: string | null | undefined): QuoteBuilderUnit {
