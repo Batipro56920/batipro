@@ -14,6 +14,7 @@ import { useQuoteBuilderStore } from "./quoteBuilderStore";
 import TaskTemplateDrawer from "../../../components/TaskTemplateDrawer";
 import { create as createTaskTemplate, list as listTaskTemplates, type TaskTemplateInput, type TaskTemplateRow } from "../../../services/taskLibrary.service";
 import { listTaskTemplatePreparationByTemplateIds, type TaskTemplateMaterialRatioRow } from "../../../services/taskTemplatePreparation.service";
+import { getCompanyHourlyRates } from "../../../services/indirectCosts.service";
 import type { QuoteBuilderCompositeItem, QuoteBuilderFlatRow, QuoteBuilderItem, QuoteBuilderItemKind, QuoteBuilderNode, QuoteBuilderQuote, QuoteBuilderUnit, QuoteLibraryItem } from "./types";
 
 type Props = { onClose: () => void; costsPanel?: ReactNode };
@@ -48,6 +49,9 @@ export function QuoteBuilderWorkspace({ onClose, costsPanel }: Props) {
   const [taskDrawerSaving, setTaskDrawerSaving] = useState(false);
   const [taskDrawerError, setTaskDrawerError] = useState<string | null>(null);
   const [compositeBaseComponents, setCompositeBaseComponents] = useState<QuoteBuilderCompositeItem[]>([]);
+  // Coût horaire moyen des employés CB Rénovation : même base que la bibliothèque
+  // de tâches, pour que la main d'oeuvre soit chiffrée pareil partout.
+  const [hourlyCostHt, setHourlyCostHt] = useState(0);
 
   useEffect(() => {
     let alive = true;
@@ -58,6 +62,11 @@ export function QuoteBuilderWorkspace({ onClose, costsPanel }: Props) {
       .catch(() => {
         if (alive) setTaskTemplates([]);
       });
+    void getCompanyHourlyRates()
+      .then((rates) => {
+        if (alive) setHourlyCostHt(Number(rates.averageEmployeeHourlyCostHt) || 0);
+      })
+      .catch(() => undefined);
     return () => {
       alive = false;
     };
@@ -99,7 +108,7 @@ export function QuoteBuilderWorkspace({ onClose, costsPanel }: Props) {
       .then((preparation) => {
         if (!alive) return;
         const template = taskTemplates.find((row) => row.id === templateId) ?? null;
-        setCompositeBaseComponents(buildBaseComponents(preparation.materialsByTemplateId[templateId] ?? [], template));
+        setCompositeBaseComponents(buildBaseComponents(preparation.materialsByTemplateId[templateId] ?? [], template, hourlyCostHt));
       })
       .catch(() => {
         if (alive) setCompositeBaseComponents([]);
@@ -108,7 +117,7 @@ export function QuoteBuilderWorkspace({ onClose, costsPanel }: Props) {
       alive = false;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [compositeNodeId, taskTemplates]);
+  }, [compositeNodeId, taskTemplates, hourlyCostHt]);
 
   function findRowItem(rowId: string): QuoteBuilderItem | null {
     const flat = quote ? flattenQuoteBuilder(quote.nodes) : [];
@@ -907,12 +916,15 @@ function TitleCell({ row, onChange, onSelectParent, onConfigureComposite, taskTe
 function buildBaseComponents(
   materials: TaskTemplateMaterialRatioRow[],
   template: TaskTemplateRow | null,
+  hourlyCostHt: number,
 ): QuoteBuilderCompositeItem[] {
   const components: QuoteBuilderCompositeItem[] = materials.map((material) => ({
     id: crypto.randomUUID(),
     kind: "fourniture",
     title: material.material_name,
-    quantity: Number(material.ratio_quantity) || 0,
+    // Les pertes font partie de la quantité à acheter : les ignorer sous-évalue
+    // systématiquement l'ouvrage.
+    quantity: round4((Number(material.ratio_quantity) || 0) * (1 + (Number(material.loss_percent ?? 0) || 0) / 100)),
     unit: normalizeQuoteUnit(material.ratio_unit),
     unitPriceHt: Number(material.purchase_price_ht ?? 0) || 0,
     vatRate: 20,
@@ -926,11 +938,15 @@ function buildBaseComponents(
       title: "Main d'oeuvre",
       quantity: laborHours,
       unit: "h",
-      unitPriceHt: 0,
+      unitPriceHt: hourlyCostHt,
       vatRate: 20,
     });
   }
   return components;
+}
+
+function round4(value: number) {
+  return Math.round(value * 10000) / 10000;
 }
 
 function normalizeQuoteUnit(unit: string | null | undefined): QuoteBuilderUnit {

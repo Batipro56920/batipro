@@ -18,6 +18,13 @@ export type CrmVisitQuoteSource = {
     priceHintHt?: number | null;
     family?: string | null;
     libraryId?: string | null;
+    /**
+     * Modèle de tâche rattaché au relevé. La désignation reste l'intitulé précis
+     * du chantier ; la tâche porte le geste technique et alimente le devis puis
+     * le chantier (main d'oeuvre, matériaux, matériel, pertes, temps).
+     */
+    taskTemplateId?: string | null;
+    taskTemplateLabel?: string | null;
     technicalNotes?: string;
     constraints?: string;
     variants?: string;
@@ -111,7 +118,7 @@ export type CrmVisitReportInput = CrmVisitReportDraft & {
 const VISIT_REPORT_SELECT =
   "id,appointment_id,prospect_id,client_id,opportunity_id,status,client_name,phone,email,address,contact_on_site,visit_date,visit_time,duration_minutes,salesperson,project_type,client_objective,need_description,urgency,desired_deadline,zones,constraints,budget,next_action,follow_up_date,report_text,quote_source,created_at,updated_at";
 const VISIT_REPORT_ITEM_SELECT =
-  "id,visit_report_id,parent_id,source_line_id,line_type,title,unit,quantity,manual_quantity,length,width,height,estimated_hours,price_hint_ht,family,library_id,technical_notes,constraints,variants,attention_points,ordre,created_at,updated_at";
+  "id,visit_report_id,parent_id,source_line_id,line_type,title,unit,quantity,manual_quantity,length,width,height,estimated_hours,price_hint_ht,family,library_id,task_template_id,task_template_label,technical_notes,constraints,variants,attention_points,ordre,created_at,updated_at";
 const VISIT_REPORT_ATTACHMENT_SELECT =
   "id,visit_report_id,item_id,source_attachment_id,kind,name,storage_bucket,storage_path,url,mime_type,size_bytes,comment,ordre,created_at,updated_at";
 
@@ -123,6 +130,30 @@ function text(value: unknown): string | null {
 function numberOrZero(value: unknown): number {
   const n = Number(String(value ?? "0").replace(",", "."));
   return Number.isFinite(n) ? n : 0;
+}
+
+/**
+ * Les champs date/heure du formulaire valent "" tant qu'ils ne sont pas saisis.
+ * `??` ne rattrape pas la chaîne vide, et Postgres refuse "" pour un type date
+ * (22007) : tout l'enregistrement de la visite échouait pour un champ optionnel
+ * laissé vide.
+ */
+function dateOrNull(...values: unknown[]): string | null {
+  for (const value of values) {
+    if (value === null || value === undefined) continue;
+    const clean = String(value).trim();
+    if (clean) return clean;
+  }
+  return null;
+}
+
+function numberOrNull(...values: unknown[]): number | null {
+  for (const value of values) {
+    if (value === null || value === undefined || value === "") continue;
+    const n = Number(String(value).replace(",", "."));
+    if (Number.isFinite(n)) return n;
+  }
+  return null;
 }
 
 function jsonObjectOrDefault(value: unknown): Record<string, unknown> {
@@ -165,20 +196,20 @@ export async function saveCrmVisitReport(input: CrmVisitReportInput) {
     email: text(input.email)?.toLowerCase() ?? null,
     address: text(input.address),
     contact_on_site: text(input.contact_on_site ?? input.contactOnSite),
-    visit_date: input.visit_date ?? input.date ?? null,
-    visit_time: input.visit_time ?? input.time ?? null,
-    duration_minutes: input.duration_minutes ?? input.durationMinutes ?? null,
+    visit_date: dateOrNull(input.visit_date, input.date),
+    visit_time: dateOrNull(input.visit_time, input.time),
+    duration_minutes: numberOrNull(input.duration_minutes, input.durationMinutes),
     salesperson: text(input.salesperson),
     project_type: text(input.project_type ?? input.projectType),
     client_objective: text(input.client_objective ?? input.clientObjective),
     need_description: text(input.need_description ?? input.needDescription),
     urgency: text(input.urgency),
-    desired_deadline: input.desired_deadline ?? input.desiredDeadline ?? null,
+    desired_deadline: dateOrNull(input.desired_deadline, input.desiredDeadline),
     zones: text(input.zones),
     constraints: jsonObjectOrDefault(input.constraints),
     budget: jsonObjectOrDefault(input.budget),
     next_action: text(input.next_action ?? input.nextAction),
-    follow_up_date: input.follow_up_date ?? input.followUpDate ?? null,
+    follow_up_date: dateOrNull(input.follow_up_date, input.followUpDate),
     report_text: text(input.report_text),
     quote_source: jsonObjectOrDefault(input.quote_source),
   };
@@ -215,6 +246,8 @@ export async function saveCrmVisitReport(input: CrmVisitReportInput) {
       price_hint_ht: line.priceHintHt ?? null,
       family: text(line.family),
       library_id: text(line.libraryId),
+      task_template_id: text(line.taskTemplateId),
+      task_template_label: text(line.taskTemplateLabel),
       technical_notes: text(line.technicalNotes),
       constraints: text(line.constraints),
       variants: text(line.variants),
@@ -299,6 +332,8 @@ export async function loadCrmVisitReportDraft(appointmentId: string): Promise<Cr
     priceHintHt: row.price_hint_ht,
     family: row.family,
     libraryId: row.library_id,
+    taskTemplateId: row.task_template_id ?? null,
+    taskTemplateLabel: row.task_template_label ?? null,
     technicalNotes: row.technical_notes ?? "",
     constraints: row.constraints ?? "",
     variants: row.variants ?? "",
