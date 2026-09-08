@@ -264,45 +264,6 @@ export async function listTerrainFeedbackResponsibles(): Promise<TerrainFeedback
   }));
 }
 
-export async function getTerrainFeedbackSummary(
-  id: string,
-  chantierId: string,
-): Promise<TerrainFeedbackSummary | null> {
-  const { data, error } = await (supabase as any)
-    .from("terrain_feedbacks")
-    .select("id, title, description, category, urgency, status")
-    .eq("id", id)
-    .eq("chantier_id", chantierId)
-    .maybeSingle();
-
-  if (error) throw new Error(error.message);
-  if (!data) return null;
-
-  return {
-    id: String(data.id ?? ""),
-    title: String(data.title ?? "Retour terrain"),
-    description: String(data.description ?? ""),
-    category: String(data.category ?? "observation_chantier") as TerrainFeedbackCategory,
-    urgency: String(data.urgency ?? "normale") as TerrainFeedbackUrgency,
-    status: String(data.status ?? "nouveau") as TerrainFeedbackStatus,
-  };
-}
-
-export async function getTerrainFeedbackStatus(
-  id: string,
-  chantierId: string,
-): Promise<TerrainFeedbackStatus | null> {
-  const { data, error } = await (supabase as any)
-    .from("terrain_feedbacks")
-    .select("status")
-    .eq("id", id)
-    .eq("chantier_id", chantierId)
-    .maybeSingle();
-
-  if (error) throw new Error(error.message);
-  if (!data) return null;
-  return String(data.status ?? "nouveau") as TerrainFeedbackStatus;
-}
 
 export async function updateTerrainFeedback(
   id: string,

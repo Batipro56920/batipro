@@ -11,10 +11,7 @@ import {
   Save,
 } from "lucide-react";
 import { getChantiers, type ChantierRow } from "../services/chantiers.service";
-import {
-  appendChantierActivityLog,
-  listTerrainFeedbackReserveLinks,
-} from "../services/chantierActivityLog.service";
+import { appendChantierActivityLog } from "../services/chantierActivityLog.service";
 import { listIntervenants, type IntervenantRow } from "../services/intervenants.service";
 import {
   listTerrainFeedbackResponsibles,
@@ -66,12 +63,6 @@ type DraftState = {
   assigned_to: string;
   assigned_to_name: string;
   treatment_comment: string;
-};
-
-type CreatedReserveTarget = {
-  id: string;
-  title: string;
-  chantierId: string;
 };
 
 function badgeClass(tone: "blue" | "amber" | "green" | "red" | "slate") {
@@ -141,7 +132,6 @@ export default function TerrainFeedbacksPage({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [savingId, setSavingId] = useState<string | null>(null);
-  const [createdReserveByFeedback, setCreatedReserveByFeedback] = useState<Record<string, CreatedReserveTarget>>({});
   const [filterChantierId, setFilterChantierId] = useState(lockedChantierId || urlChantierId);
   const [filterIntervenantId, setFilterIntervenantId] = useState("");
   const [filterStatus, setFilterStatus] = useState<TerrainFeedbackStatus | "">("");
@@ -278,28 +268,10 @@ export default function TerrainFeedbacksPage({
         listIntervenants(),
         listTerrainFeedbackResponsibles().catch(() => []),
       ]);
-      const reserveLinks = await listTerrainFeedbackReserveLinks(
-        feedbackRows.map((row) => ({ id: row.id, chantierId: row.chantier_id })),
-      ).catch((err) => {
-        console.warn("[terrain-feedback] reserve links skipped", err);
-        return [];
-      });
-      const reserveTargets = Object.fromEntries(
-        reserveLinks.map((link) => [
-          link.feedbackId,
-          {
-            id: link.reserveId,
-            title: link.reserveTitle,
-            chantierId: link.chantierId,
-          },
-        ]),
-      );
-
       setRows(feedbackRows);
       setChantiers(chantierRows);
       setIntervenants(intervenantRows);
       setResponsibles(responsibleRows);
-      setCreatedReserveByFeedback(reserveTargets);
       syncDrafts(feedbackRows);
     } catch (err: any) {
       setError(err?.message ?? t("terrainFeedback.admin.loadError"));
@@ -774,19 +746,11 @@ export default function TerrainFeedbacksPage({
                           </button>
                         ) : null}
                         {/*
-                          Plus de création de réserve ici : une réserve est une
-                          reprise d'exécution, elle naît d'une visite chantier ou
-                          d'une saisie manuelle. Un retour terrain sert à ne pas
-                          refaire l'erreur, pas à ouvrir un ticket de reprise.
+                          Aucune réserve ici : une réserve est une reprise
+                          d'exécution née d'une visite chantier ou d'une saisie
+                          manuelle. Un retour terrain sert à ne pas refaire
+                          l'erreur. Les deux ne se croisent pas.
                         */}
-                        {createdReserveByFeedback[row.id] ? (
-                          <Link
-                            to={`/chantiers/${createdReserveByFeedback[row.id].chantierId}/qualite?reserveId=${createdReserveByFeedback[row.id].id}&feedbackId=${row.id}`}
-                            className="bt-control rounded-field border border-subtle bg-surface px-3 py-2 text-xs font-semibold text-ink-secondary hover:bg-interactive"
-                          >
-                            Réserve liée
-                          </Link>
-                        ) : null}
                       </div>
                     ) : null}
                   </div>
@@ -969,15 +933,6 @@ export default function TerrainFeedbacksPage({
                           placeholder={t("terrainFeedback.admin.processingCommentPlaceholder")}
                         />
                       </label>
-
-                      {row.chantier && createdReserveByFeedback[row.id] ? (
-                        <Link
-                          to={`/chantiers/${createdReserveByFeedback[row.id].chantierId}/qualite?reserveId=${createdReserveByFeedback[row.id].id}&feedbackId=${row.id}`}
-                          className="bt-control block w-full rounded-field border border-subtle bg-surface px-4 py-2.5 text-center text-sm font-semibold text-ink-secondary hover:bg-interactive"
-                        >
-                          Réserve liée à ce retour
-                        </Link>
-                      ) : null}
 
                       <button
                         type="button"
