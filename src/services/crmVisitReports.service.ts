@@ -360,7 +360,8 @@ export async function loadCrmVisitReportDraft(appointmentId: string): Promise<Cr
     address: report.address ?? "",
     contactOnSite: report.contact_on_site ?? "",
     date: report.visit_date ?? "",
-    time: report.visit_time ?? "",
+    // Postgres rend "HH:MM:SS" ; l'input type=time et le formulaire attendent "HH:MM".
+    time: String(report.visit_time ?? "").slice(0, 5),
     durationMinutes: Number(report.duration_minutes ?? 90),
     salesperson: report.salesperson ?? "",
     projectType: report.project_type ?? "",

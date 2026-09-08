@@ -259,6 +259,20 @@ function LinkedTaskSummary({
   );
 }
 
+/**
+ * Postgres renvoie l'heure en "HH:MM:SS" alors que le formulaire écrit "HH:MM" :
+ * recoller les deux naïvement donnait "2026-09-08T09:00:00:00", une date
+ * invalide qui faisait échouer tout ré-enregistrement d'une visite déjà en base.
+ */
+function visitStartDate(date: string, time: string): Date {
+  const day = /^\d{4}-\d{2}-\d{2}$/.test(String(date ?? "").trim()) ? date.trim() : today();
+  const match = String(time ?? "").trim().match(/^(\d{1,2}):(\d{2})/);
+  const hour = match ? String(match[1]).padStart(2, "0") : "09";
+  const minute = match ? match[2] : "00";
+  const parsed = new Date(`${day}T${hour}:${minute}:00`);
+  return Number.isNaN(parsed.getTime()) ? new Date() : parsed;
+}
+
 function readErrorMessage(error: unknown): string {
   const raw = (error as { message?: unknown } | null)?.message ?? error;
   const message = String(raw ?? "").trim();
@@ -645,7 +659,7 @@ export function ProjectVisitWorkspaceStable({ project, existingAppointment }: { 
       const base = draftOverride ?? draftRef.current;
       const nextStatus = status === "brouillon" ? base.status : status;
       const nextDraft = { ...base, status: nextStatus };
-      const startsAt = new Date(`${nextDraft.date}T${nextDraft.time || "09:00"}:00`);
+      const startsAt = visitStartDate(nextDraft.date, nextDraft.time);
       const endsAt = new Date(startsAt.getTime() + Number(nextDraft.durationMinutes || 90) * 60000);
       const opportunity = project.opportunity ?? (project.prospect ? await createOpportunityForProspect(project.prospect, { stage_key: "visite", probabilite: 40, prochaine_action: "Finaliser le compte rendu de visite" }) : null);
       const targetProjectId = opportunity ? `opportunity-${opportunity.id}` : project.id;
