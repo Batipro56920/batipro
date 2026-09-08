@@ -102,7 +102,10 @@ export function ProspectQuickDrawer({
               <div>Email : {prospect.email ?? "—"}</div>
               <div>Téléphone : {prospect.mobile ?? prospect.telephone ?? "—"}</div>
               <div>Adresse : {[prospect.adresse, prospect.code_postal, prospect.ville].filter(Boolean).join(" ") || "—"}</div>
-              <div>Source : {prospect.source_acquisition ?? "—"}</div>
+              <div>
+                Source : {prospect.source_acquisition ?? "—"}
+                {prospect.apporteur_affaire || prospect.source_detail ? ` · ${prospect.apporteur_affaire ?? prospect.source_detail}` : ""}
+              </div>
             </div>
           </section>
 

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import type { CrmProspectRow } from "../../../services/crm.service";
+import { isApporteurSource, type CrmProspectRow } from "../../../services/crm.service";
 import { getApporteursAffaires, type ApporteurAffaireRow } from "../../../services/apporteurs.service";
 import { CrmModal } from "./CrmFormPrimitives";
 
@@ -110,6 +110,8 @@ function stateFromProspect(prospect: CrmProspectRow): ProspectFormState {
     if (typeof value === "object") continue;
     state[key] = String(value);
   }
+  // Un seul champ à l'écran, deux colonnes en base selon la provenance.
+  state.source_person = String(prospect.apporteur_affaire ?? prospect.source_detail ?? "");
   return state;
 }
 
@@ -166,12 +168,16 @@ export default function ProspectForm({
 
   function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    // Le nom n'a de sens que pour les provenances qui en demandent un.
-    const apporteur = detailLabel ? (form.apporteur_affaire ?? "").trim() : "";
-    const { planification_visite: _visite, ...fields } = form;
+    // Le nom n'a de sens que pour les provenances qui en demandent un, et il ne
+    // compte comme apporteur d'affaires que si la provenance en est bien un :
+    // une recommandation ne doit pas déclencher un suivi de commissions.
+    const person = detailLabel ? (form.source_person ?? "").trim() : "";
+    const apporteurSource = isApporteurSource(form.source_acquisition);
+    const { planification_visite: _visite, source_person: _person, ...fields } = form;
     const payload: Partial<CrmProspectRow> = {
       ...fields,
-      apporteur_affaire: apporteur || null,
+      apporteur_affaire: apporteurSource ? person || null : null,
+      source_detail: apporteurSource ? null : person || null,
       budget_estime: normalizeMoney(form.budget_estime ?? "") as unknown as number,
       tags: form.tags ? form.tags.split(",").map((item) => item.trim()).filter(Boolean) : [],
       notes: [form.notes, form.planification_visite === "oui" ? "Visite terrain a planifier." : ""].filter(Boolean).join("\n\n"),
@@ -231,8 +237,8 @@ export default function ProspectForm({
                 <Field label={detailLabel}>
                   <select
                     className={inputClass}
-                    value={apporteurs.some((row) => row.nom === form.apporteur_affaire) ? form.apporteur_affaire ?? "" : form.apporteur_affaire ? "__autre__" : ""}
-                    onChange={(event) => patch(setForm, "apporteur_affaire", event.target.value === "__autre__" ? " " : event.target.value)}
+                    value={apporteurs.some((row) => row.nom === form.source_person) ? form.source_person ?? "" : form.source_person ? "__autre__" : ""}
+                    onChange={(event) => patch(setForm, "source_person", event.target.value === "__autre__" ? " " : event.target.value)}
                   >
                     <option value="">Selectionner un apporteur</option>
                     {apporteurs.map((row) => (
@@ -240,17 +246,17 @@ export default function ProspectForm({
                     ))}
                     <option value="__autre__">Autre (saisie libre)</option>
                   </select>
-                  {form.apporteur_affaire && !apporteurs.some((row) => row.nom === form.apporteur_affaire) ? (
+                  {form.source_person && !apporteurs.some((row) => row.nom === form.source_person) ? (
                     <input
                       className={`${inputClass} mt-2`}
                       placeholder="Nom de l'apporteur"
-                      value={form.apporteur_affaire.trim()}
-                      onChange={(event) => patch(setForm, "apporteur_affaire", event.target.value)}
+                      value={form.source_person.trim()}
+                      onChange={(event) => patch(setForm, "source_person", event.target.value)}
                     />
                   ) : null}
                 </Field>
               ) : (
-                <Input form={form} setForm={setForm} name="apporteur_affaire" label={detailLabel} />
+                <Input form={form} setForm={setForm} name="source_person" label={detailLabel} />
               )
             ) : null}
           </div>

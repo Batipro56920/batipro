@@ -11,6 +11,7 @@ import {
 } from "../features/projects/components/ProjectDetailSections";
 import { ProjectProfitabilityTab } from "../features/projects/components/ProjectProfitabilityTab";
 import { useProjectsData } from "../features/projects/hooks/useProjectsData";
+import { isApporteurSource } from "../services/crm.service";
 import type { ProjectRecord } from "../features/projects/types";
 import { getApporteurLeads, getApporteursAffaires } from "../services/apporteurs.service";
 
@@ -58,7 +59,11 @@ export default function ProjectDetailPage() {
   const [searchParams] = useSearchParams();
   const { projects, projectsById, loading, error, refresh } = useProjectsData();
   const project = id ? projectsById.get(id) ?? resolveProjectAlias(projects, id) : null;
-  const prospectApporteurLabel = project?.prospect?.apporteur_affaire?.trim() || null;
+  // La bannière apporteur n'a de sens que si la provenance en désigne un.
+  // "Recommandation" porte aussi le nom de quelqu'un, sans être un apporteur.
+  const prospectApporteurLabel = isApporteurSource(project?.prospect?.source_acquisition)
+    ? project?.prospect?.apporteur_affaire?.trim() || null
+    : null;
   const tabFromUrl = readProjectTab(searchParams.get("tab"));
   const [activeTab, setActiveTab] = useState<ProjectTab>(tabFromUrl);
   const [apporteurTracking, setApporteurTracking] = useState<ApporteurTracking | null>(null);

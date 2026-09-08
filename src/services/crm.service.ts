@@ -44,7 +44,10 @@ export type CrmProspectRow = {
   code_postal: string | null;
   ville: string | null;
   source_acquisition: string | null;
+  /** Apporteur d'affaires rémunéré, et lui seul : c'est lui qui ouvre le suivi des commissions. */
   apporteur_affaire: string | null;
+  /** Nom rattaché à la provenance quand ce n'est pas un apporteur (recommandé par, commercial...). */
+  source_detail: string | null;
   tags: string[];
   notes: string | null;
   budget_estime: number | null;
@@ -58,6 +61,15 @@ export type CrmProspectRow = {
   updated_at: string;
   archived_at: string | null;
 };
+
+/**
+ * Seul un apporteur d'affaires rémunéré ouvre le suivi des commissions. Une
+ * recommandation porte aussi le nom de quelqu'un, mais ce n'est pas la même
+ * chose : elle ne doit jamais faire passer un projet pour un dossier apporteur.
+ */
+export function isApporteurSource(source: string | null | undefined): boolean {
+  return String(source ?? "").toLowerCase().includes("apporteur");
+}
 
 export type CrmClientRow = {
   id: string;
@@ -457,7 +469,7 @@ const DEFAULT_STAGES = [
 
 const CRM_SELECTS = {
   prospects:
-    "id,type,civilite,prenom,nom,societe,telephone,mobile,email,adresse,code_postal,ville,source_acquisition,apporteur_affaire,tags,notes,budget_estime,urgence,type_projet,description_besoin,owner_id,statut,client_id,created_at,updated_at,archived_at",
+    "id,type,civilite,prenom,nom,societe,telephone,mobile,email,adresse,code_postal,ville,source_acquisition,apporteur_affaire,source_detail,tags,notes,budget_estime,urgence,type_projet,description_besoin,owner_id,statut,client_id,created_at,updated_at,archived_at",
   clients:
     "id,type,civilite,prenom,nom,societe,email,telephone,mobile,adresse,code_postal,ville,billing_address,addresses,tags,notes,created_at,updated_at,archived_at",
   opportunities:
@@ -691,6 +703,7 @@ export async function createCrmProspect(input: Partial<CrmProspectRow>) {
     ville: text(input.ville),
     source_acquisition: text(input.source_acquisition),
     apporteur_affaire: text(input.apporteur_affaire),
+    source_detail: text(input.source_detail),
     tags: normalizeTags(input.tags),
     notes: text(input.notes),
     budget_estime: input.budget_estime === null || input.budget_estime === undefined ? null : numberOrZero(input.budget_estime),
