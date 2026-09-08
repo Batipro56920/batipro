@@ -4,7 +4,7 @@ import { DndContext, PointerSensor, useSensor, useSensors, type DragEndEvent } f
 import { SortableContext, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { flexRender, getCoreRowModel, useReactTable, type ColumnDef } from "@tanstack/react-table";
-import { BookOpen, ChevronDown, Copy, Download, Eye, FileText, GripVertical, Pencil, Save, Send, Settings2, Trash2, X } from "lucide-react";
+import { BookOpen, ChevronDown, Copy, Download, Eye, GripVertical, Pencil, Save, Send, Settings2, Trash2, X } from "lucide-react";
 import { calculateQuoteBuilderTotals, flattenQuoteBuilder } from "./quoteBuilderCalculations";
 import { DocumentSendDialog } from "../../document-engine";
 import { DEFAULT_QUOTE_LIBRARY } from "./quoteBuilderLibrary";
@@ -272,28 +272,34 @@ export function QuoteDocumentLoader() {
 
 function QuoteTopbar({ quote, mode, saveState, libraryOpen, optionsOpen, setOptionsOpen, onToggleLibrary, onModeChange, onClose, onSave, onSend, onDuplicate, onDownload }: { quote: QuoteBuilderQuote; mode: Mode; saveState: string; libraryOpen: boolean; optionsOpen: boolean; setOptionsOpen: (open: boolean) => void; onToggleLibrary: () => void; onModeChange: (mode: Mode) => void; onClose: () => void; onSave: () => void; onSend: () => void; onDuplicate: () => void; onDownload: () => void }) {
   return (
-    <header className="sticky top-0 z-30 flex min-h-14 flex-wrap items-center justify-between gap-x-3 gap-y-2 border-b border-slate-200 bg-white px-4 py-2 shadow-sm">
-      <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
-        <button type="button" onClick={onToggleLibrary} className={iconButtonClass} aria-label="Ouvrir la bibliothèque" aria-pressed={libraryOpen}><BookOpen className="h-4 w-4" /></button>
-        <div className="min-w-0">
+    <header className="sticky top-0 z-30 border-b border-slate-200 bg-white px-4 py-2 shadow-sm">
+      {/* Ligne 1 : identité du devis et actions décisives uniquement. */}
+      <div className="flex items-center gap-3">
+        <button type="button" onClick={onToggleLibrary} className={`${iconButtonClass} shrink-0 xl:hidden`} aria-label="Ouvrir la bibliothèque" aria-pressed={libraryOpen}><BookOpen className="h-4 w-4" /></button>
+        <div className="min-w-0 flex-1">
           <div className="truncate text-lg font-semibold text-slate-950">Devis n° {quote.number}</div>
         </div>
-        <span className={`hidden items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-semibold sm:inline-flex ${saveStateClass(saveState)}`}>
+        <span className={`hidden shrink-0 items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-semibold sm:inline-flex ${saveStateClass(saveState)}`}>
           <span className="h-1.5 w-1.5 rounded-full bg-current" />
           {saveStateLabel(saveState)}
         </span>
+        <div className="flex shrink-0 items-center gap-2">
+          <button type="button" onClick={() => setOptionsOpen(!optionsOpen)} className={secondaryButtonClass}><Settings2 className="h-4 w-4" /> <span className="hidden sm:inline">Options</span> <ChevronDown className="h-4 w-4" /></button>
+          <button type="button" onClick={onSave} className={primaryButtonClass}><Save className="h-4 w-4" /> <span className="hidden sm:inline">Enregistrer</span></button>
+          <button type="button" onClick={onSend} className="inline-flex h-10 shrink-0 items-center gap-2 rounded-xl bg-emerald-600 px-4 text-sm font-semibold text-white shadow-sm hover:bg-emerald-700"><Send className="h-4 w-4" /> <span className="hidden sm:inline">Envoyer</span></button>
+          <button type="button" onClick={onClose} className={secondaryButtonClass} aria-label="Fermer le devis"><X className="h-4 w-4" /></button>
+        </div>
+      </div>
+
+      {/* Ligne 2 : navigation entre les vues, sur sa propre ligne pour ne rien écraser. */}
+      <div className="mt-2 flex items-center gap-1 overflow-x-auto">
         <button type="button" onClick={() => onModeChange("edit")} className={tabClass(mode === "edit")}><Pencil className="h-4 w-4" /> Edition</button>
         <button type="button" onClick={() => onModeChange("preview")} className={tabClass(mode === "preview")}><Eye className="h-4 w-4" /> Prévisualisation</button>
         <button type="button" onClick={() => onModeChange("couts")} className={tabClass(mode === "couts")}><Settings2 className="h-4 w-4" /> Coûts cachés</button>
-      </div>
-      <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
-        <button type="button" onClick={onDuplicate} className="hidden h-10 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 lg:inline-flex"><Copy className="h-4 w-4" /> Dupliquer</button>
-        <button type="button" disabled title="Transformation facture à connecter au module Factures" className="hidden h-10 items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm font-semibold text-slate-400 xl:inline-flex"><FileText className="h-4 w-4" /> Transformer</button>
-        <button type="button" onClick={onDownload} className="hidden h-10 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 md:inline-flex"><Download className="h-4 w-4" /> Télécharger</button>
-        <button type="button" onClick={() => setOptionsOpen(!optionsOpen)} className={secondaryButtonClass}><Settings2 className="h-4 w-4" /> Options <ChevronDown className="h-4 w-4" /></button>
-        <button type="button" onClick={onSave} className={primaryButtonClass}><Save className="h-4 w-4" /> Enregistrer</button>
-        <button type="button" onClick={onSend} className="inline-flex h-10 items-center gap-2 rounded-xl bg-emerald-600 px-4 text-sm font-semibold text-white shadow-sm hover:bg-emerald-700"><Send className="h-4 w-4" /> Envoyer</button>
-        <button type="button" onClick={onClose} className={secondaryButtonClass}>Fermer</button>
+        <div className="ml-auto flex shrink-0 items-center gap-1">
+          <button type="button" onClick={onDuplicate} className="hidden h-9 items-center gap-2 rounded-lg px-3 text-sm font-medium text-slate-600 transition hover:bg-slate-100 md:inline-flex"><Copy className="h-4 w-4" /> Dupliquer</button>
+          <button type="button" onClick={onDownload} className="hidden h-9 items-center gap-2 rounded-lg px-3 text-sm font-medium text-slate-600 transition hover:bg-slate-100 md:inline-flex"><Download className="h-4 w-4" /> Télécharger</button>
+        </div>
       </div>
     </header>
   );
