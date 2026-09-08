@@ -1,18 +1,18 @@
 import { Link } from "react-router-dom";
-import { FileText, Hammer, Handshake, Plus, Receipt, RefreshCw } from "lucide-react";
-import { Button } from "../../../components/ui/button";
+import { FileText, Hammer, Handshake, Plus, Receipt } from "lucide-react";
 import { PageHeader } from "../../../components/layout/PageHeader";
 
 export function ProjectsHeader({
   billingMode = false,
   quoteCreationMode = false,
   chantierCreationMode = false,
-  onRefresh,
+  // Conservé pour les appelants : le bouton "Rafraîchir" a été retiré, les données
+  // se rechargent à la navigation et après chaque action.
 }: {
   billingMode?: boolean;
   quoteCreationMode?: boolean;
   chantierCreationMode?: boolean;
-  onRefresh: () => void;
+  onRefresh?: () => void;
 }) {
   const title = billingMode
     ? "Projets à facturer"
@@ -44,10 +44,6 @@ export function ProjectsHeader({
               <Receipt className="h-4 w-4" />
               Retour factures
             </Link>
-            <Button type="button" variant="secondary" onClick={onRefresh}>
-              <RefreshCw className="h-4 w-4" />
-              Rafraîchir
-            </Button>
           </>
         ) : quoteCreationMode ? (
           <>
@@ -58,10 +54,6 @@ export function ProjectsHeader({
               <FileText className="h-4 w-4" />
               Retour devis
             </Link>
-            <Button type="button" variant="secondary" onClick={onRefresh}>
-              <RefreshCw className="h-4 w-4" />
-              Rafraîchir
-            </Button>
           </>
         ) : chantierCreationMode ? (
           <>
@@ -71,10 +63,6 @@ export function ProjectsHeader({
             >
               Retour projets
             </Link>
-            <Button type="button" variant="secondary" onClick={onRefresh}>
-              <RefreshCw className="h-4 w-4" />
-              Rafraîchir
-            </Button>
           </>
         ) : (
           <>
@@ -113,10 +101,6 @@ export function ProjectsHeader({
               <Receipt className="h-4 w-4" />
               À facturer
             </Link>
-            <Button type="button" variant="secondary" onClick={onRefresh}>
-              <RefreshCw className="h-4 w-4" />
-              Rafraîchir
-            </Button>
           </>
         )
       }
