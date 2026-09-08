@@ -18,6 +18,13 @@ export type QuoteBuilderItem = {
   internalNote?: string;
   clientNote?: string;
   sourceLibraryId?: string | null;
+  /**
+   * Modèle de tâche exécuté par l'ouvrier. La désignation reste libre côté client
+   * ("réhausse d'un muret") pendant que la tâche liée porte le geste technique
+   * ("blocs béton 20x20x50 montés au mortier") et alimente le chantier.
+   */
+  taskTemplateId?: string | null;
+  taskTemplateLabel?: string | null;
   compositeItems?: QuoteBuilderCompositeItem[];
 };
 

@@ -406,6 +406,11 @@ export type CrmInvoiceRow = {
   updated_at: string;
 };
 
+export type CrmUserRow = {
+  id: string;
+  display_name: string | null;
+};
+
 export type CrmDataset = {
   prospects: CrmProspectRow[];
   clients: CrmClientRow[];
@@ -421,6 +426,7 @@ export type CrmDataset = {
   purchases: CrmPurchaseRow[];
   chantiers: ChantierRow[];
   taskTemplates: TaskTemplateRow[];
+  users: CrmUserRow[];
 };
 
 export type CrmChantierContext = {
@@ -564,9 +570,25 @@ export async function ensureCrmDefaults() {
   return ((data ?? []) as CrmPipelineStageRow[]).sort((a, b) => a.ordre - b.ordre);
 }
 
+
+/**
+ * Annuaire des comptes back-office, pour afficher un nom la ou le CRM ne stocke
+ * qu'un identifiant (responsable_id, owner_id...). La lecture de "profiles" peut
+ * etre refusee par les RLS selon le role : dans ce cas on renvoie une liste vide
+ * et l'appelant retombe sur un libelle generique plutot que de faire echouer le CRM.
+ */
+async function selectCrmUsers(): Promise<CrmUserRow[]> {
+  const { data, error } = await crmDb.from("profiles").select("id,display_name");
+  if (error) return [];
+  return ((data ?? []) as Array<Record<string, unknown>>).map((row) => ({
+    id: String(row.id ?? ""),
+    display_name: text(row.display_name),
+  }));
+}
+
 export async function loadCrmDataset(): Promise<CrmDataset> {
   const stages = await ensureCrmDefaults();
-  const [prospects, clients, opportunities, quotes, tasks, appointments, sav, documents, communications, invoices, purchases, chantiers, taskTemplates] =
+  const [prospects, clients, opportunities, quotes, tasks, appointments, sav, documents, communications, invoices, purchases, chantiers, taskTemplates, users] =
     await Promise.all([
       selectTable<CrmProspectRow>("crm_prospects", CRM_SELECTS.prospects),
       selectTable<CrmClientRow>("crm_clients", CRM_SELECTS.clients),
@@ -581,8 +603,9 @@ export async function loadCrmDataset(): Promise<CrmDataset> {
       selectTable<CrmPurchaseRow>("crm_purchases", CRM_SELECTS.purchases),
       getChantiers(),
       listTaskTemplates().catch(() => []),
+      selectCrmUsers().catch(() => []),
     ]);
-  return { prospects, clients, opportunities, quotes, tasks, appointments, sav, stages, documents, communications, invoices, purchases, chantiers, taskTemplates };
+  return { prospects, clients, opportunities, quotes, tasks, appointments, sav, stages, documents, communications, invoices, purchases, chantiers, taskTemplates, users };
 }
 
 async function maybeSingleById<T>(table: string, select: string, id: string | null | undefined): Promise<T | null> {
@@ -689,6 +712,22 @@ export async function updateCrmProspect(id: string, patch: Partial<CrmProspectRo
   const { data, error } = await crmDb.from("crm_prospects").update(cleaned).eq("id", id).select(CRM_SELECTS.prospects).single();
   if (error) throw error;
   return data as CrmProspectRow;
+}
+
+const PROSPECT_STATUSES_BEFORE_QUALIFICATION: CrmProspectStatus[] = ["nouveau", "a_qualifier"];
+
+/**
+ * Passe un prospect en "qualifie" des qu'une etape commerciale reelle est franchie
+ * (RDV planifie, affaire creee depuis la fiche). Ne redescend jamais un statut deja
+ * avance et laisse tranquilles les dossiers perdus ou archives. L'echec est ignore :
+ * c'est un effet de bord du suivi, il ne doit pas faire echouer l'action de l'utilisateur.
+ */
+export async function qualifyProspectOnCommercialProgress(prospectId: string | null | undefined) {
+  if (!prospectId) return;
+  const { data, error } = await crmDb.from("crm_prospects").select("id,statut").eq("id", prospectId).maybeSingle();
+  if (error || !data) return;
+  if (!PROSPECT_STATUSES_BEFORE_QUALIFICATION.includes(data.statut as CrmProspectStatus)) return;
+  await crmDb.from("crm_prospects").update({ statut: "qualifie" }).eq("id", prospectId);
 }
 
 export async function convertProspectToClient(prospect: CrmProspectRow) {
@@ -1069,6 +1108,8 @@ export async function createCrmQuoteItemFromTemplate(input: {
   lineType?: string | null;
   lot?: string | null;
   template?: TaskTemplateRow | null;
+  /** Rattachement direct quand l'appelant n'a que l'identifiant du modèle. */
+  taskTemplateId?: string | null;
   designation?: string | null;
   description?: string | null;
   unit?: string | null;
@@ -1111,7 +1152,7 @@ export async function createCrmQuoteItemFromTemplate(input: {
     prix_unitaire_ht: input.unitPriceHt === undefined ? totals.prix_unitaire_ht : numberOrZero(input.unitPriceHt),
     total_ht: input.unitPriceHt === undefined ? totals.total_ht : roundMoney(numberOrZero(input.unitPriceHt) * totals.quantity),
     ordre: input.ordre ?? 0,
-    task_template_id: template?.id ?? null,
+    task_template_id: input.taskTemplateId ?? template?.id ?? null,
     line_type: text(input.lineType) ?? (template ? "composite" : "simple"),
     family: template?.lot ?? null,
     price_status: "estimated",
@@ -1424,6 +1465,7 @@ export async function createCrmAppointment(input: Partial<CrmAppointmentRow>) {
   };
   const { data, error } = await crmDb.from("crm_appointments").insert([row]).select(CRM_SELECTS.appointments).single();
   if (error) throw error;
+  await qualifyProspectOnCommercialProgress(row.prospect_id);
   return data as CrmAppointmentRow;
 }
 

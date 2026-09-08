@@ -201,6 +201,7 @@ async function persistItems(quote: QuoteBuilderQuote, original: CrmQuoteEngineDa
       unitPriceHt: patch.sale_unit_price_ht,
       tvaRate: patch.tva_rate,
       ordre: patch.ordre,
+      taskTemplateId: patch.task_template_id,
     });
     nextIds.add(created.id);
     idMap.set(row.id, created.id);
@@ -227,6 +228,9 @@ function rowToPersistence(row: QuoteBuilderFlatRow, quoteId: string, parentItemI
     sale_total_ht: 0,
     tva_rate: 0,
     technical_description: "",
+    // Le lien vers le modèle de tâche n'était jamais réécrit : chaque enregistrement
+    // recréait les lignes sans lui, et le chantier perdait la tâche à exécuter.
+    task_template_id: null as string | null,
   };
   if (row.node.type !== "item") return base;
   return {
@@ -240,6 +244,7 @@ function rowToPersistence(row: QuoteBuilderFlatRow, quoteId: string, parentItemI
     sale_total_ht: row.totalHt,
     tva_rate: row.node.vatRate,
     technical_description: row.node.internalNote ?? "",
+    task_template_id: row.node.taskTemplateId ?? null,
   };
 }
 

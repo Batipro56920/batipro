@@ -191,6 +191,8 @@ function mapCrmItemsToQuoteNodes(items: CrmQuoteItemRow[]): QuoteBuilderSection[
       vatRate: Number(row.tva_rate ?? 20),
       internalNote: row.technical_description ?? "",
       sourceLibraryId: row.task_template_id,
+      taskTemplateId: row.task_template_id ?? null,
+      taskTemplateLabel: (row as { task_template_label?: string | null }).task_template_label ?? null,
     });
     if (currentSubsection) currentSubsection.children.push(item);
     else {

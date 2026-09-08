@@ -11,13 +11,15 @@ import { DEFAULT_QUOTE_LIBRARY } from "./quoteBuilderLibrary";
 import { quoteBuilderToBusinessDocument } from "./quoteBuilderDocumentAdapter";
 import { downloadQuoteBuilderPdf, getQuoteBuilderPdfBlob } from "./quoteBuilderPdf";
 import { useQuoteBuilderStore } from "./quoteBuilderStore";
+import TaskTemplateDrawer from "../../../components/TaskTemplateDrawer";
+import { create as createTaskTemplate, list as listTaskTemplates, type TaskTemplateInput, type TaskTemplateRow } from "../../../services/taskLibrary.service";
 import type { QuoteBuilderCompositeItem, QuoteBuilderFlatRow, QuoteBuilderItem, QuoteBuilderItemKind, QuoteBuilderNode, QuoteBuilderQuote, QuoteBuilderUnit, QuoteLibraryItem } from "./types";
 
-type Props = { onClose: () => void };
-type Mode = "edit" | "preview";
+type Props = { onClose: () => void; costsPanel?: ReactNode };
+type Mode = "edit" | "preview" | "couts";
 type TextPanelKey = "paymentTerms" | "legalMentions" | "waste" | "footerNotes";
 
-export function QuoteBuilderWorkspace({ onClose }: Props) {
+export function QuoteBuilderWorkspace({ onClose, costsPanel }: Props) {
   const quote = useQuoteBuilderStore((state) => state.quote);
   const saveState = useQuoteBuilderStore((state) => state.saveState);
   const error = useQuoteBuilderStore((state) => state.error);
@@ -38,6 +40,73 @@ export function QuoteBuilderWorkspace({ onClose }: Props) {
   const [optionsOpen, setOptionsOpen] = useState(false);
   const [compositeNodeId, setCompositeNodeId] = useState<string | null>(null);
   const [financialOpen, setFinancialOpen] = useState(false);
+  // Vraie bibliothèque de tâches : la ligne de devis doit pointer vers le geste
+  // technique exécuté au chantier, pas vers une liste factice.
+  const [taskTemplates, setTaskTemplates] = useState<TaskTemplateRow[]>([]);
+  const [taskDrawerRowId, setTaskDrawerRowId] = useState<string | null>(null);
+  const [taskDrawerSaving, setTaskDrawerSaving] = useState(false);
+  const [taskDrawerError, setTaskDrawerError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let alive = true;
+    void listTaskTemplates()
+      .then((rows) => {
+        if (alive) setTaskTemplates(rows);
+      })
+      .catch(() => {
+        if (alive) setTaskTemplates([]);
+      });
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  /** Rattache un modèle et pré-remplit la ligne sans écraser ce qui est déjà saisi. */
+  function linkTaskTemplate(rowId: string, template: TaskTemplateRow | null, currentTitle: string) {
+    if (!template) {
+      updateNode(rowId, { taskTemplateId: null, taskTemplateLabel: null } as Partial<QuoteBuilderNode>);
+      return;
+    }
+    const patch: Partial<QuoteBuilderItem> = {
+      taskTemplateId: template.id,
+      taskTemplateLabel: template.titre,
+    };
+    if (!currentTitle.trim()) patch.title = template.titre;
+    if (template.unite) patch.unit = normalizeQuoteUnit(template.unite);
+    if (template.cout_reference_unitaire_ht) patch.unitPriceHt = Number(template.cout_reference_unitaire_ht);
+    updateNode(rowId, patch as Partial<QuoteBuilderNode>);
+  }
+
+  function findRowItem(rowId: string): QuoteBuilderItem | null {
+    const flat = quote ? flattenQuoteBuilder(quote.nodes) : [];
+    const row = flat.find((item) => item.id === rowId);
+    return row && row.node.type === "item" ? row.node : null;
+  }
+
+  // La désignation déjà saisie sur la ligne amorce le titre de la nouvelle tâche.
+  const taskDrawerInitialValues = useMemo<TaskTemplateInput | null>(() => {
+    if (!taskDrawerRowId || !quote) return null;
+    const flat = flattenQuoteBuilder(quote.nodes);
+    const row = flat.find((item) => item.id === taskDrawerRowId);
+    if (!row || row.node.type !== "item") return null;
+    return { titre: row.node.title, unite: row.node.unit };
+  }, [quote, taskDrawerRowId]);
+
+  async function createTaskTemplateForRow(input: TaskTemplateInput) {
+    if (!taskDrawerRowId) return;
+    setTaskDrawerSaving(true);
+    setTaskDrawerError(null);
+    try {
+      const created = await createTaskTemplate(input);
+      setTaskTemplates((current) => [...current, created]);
+      linkTaskTemplate(taskDrawerRowId, created, findRowItem(taskDrawerRowId)?.title ?? "");
+      setTaskDrawerRowId(null);
+    } catch (err: any) {
+      setTaskDrawerError(err?.message ?? "Création de la tâche impossible.");
+    } finally {
+      setTaskDrawerSaving(false);
+    }
+  }
   const [sendOpen, setSendOpen] = useState(false);
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
 
@@ -58,7 +127,7 @@ export function QuoteBuilderWorkspace({ onClose }: Props) {
   const columns = useMemo<ColumnDef<QuoteBuilderFlatRow>[]>(() => [
     { id: "drag", header: "", cell: () => <GripVertical className="h-4 w-4 text-slate-300" /> },
     { accessorKey: "number", header: "N°", cell: ({ row }) => <span className="font-mono text-xs text-slate-500">{row.original.number}</span> },
-    { id: "title", header: "Désignation", cell: ({ row }) => <TitleCell row={row.original} onSelectParent={setActiveParent} onChange={(patch) => updateNode(row.original.id, patch)} onConfigureComposite={() => setCompositeNodeId(row.original.id)} /> },
+    { id: "title", header: "Désignation", cell: ({ row }) => <TitleCell row={row.original} onSelectParent={setActiveParent} onChange={(patch) => updateNode(row.original.id, patch)} onConfigureComposite={() => setCompositeNodeId(row.original.id)} taskTemplates={taskTemplates} onLinkTask={(templateId) => linkTaskTemplate(row.original.id, taskTemplates.find((item) => item.id === templateId) ?? null, row.original.node.type === "item" ? row.original.node.title : "")} onCreateTask={() => setTaskDrawerRowId(row.original.id)} /> },
     { id: "quantity", header: "Qté", cell: ({ row }) => row.original.node.type === "item" && quote?.settings.showQuantityColumns ? <NumberInput value={row.original.node.quantity} onChange={(quantity) => updateNode(row.original.id, { quantity } as Partial<QuoteBuilderNode>)} /> : null },
     { id: "unit", header: "Unité", cell: ({ row }) => row.original.node.type === "item" && quote?.settings.showQuantityColumns ? <UnitSelect value={row.original.node.unit} onChange={(unit) => updateNode(row.original.id, { unit } as Partial<QuoteBuilderNode>)} /> : null },
     { id: "unitPriceHt", header: "PU HT", cell: ({ row }) => row.original.node.type === "item" ? <NumberInput value={row.original.node.unitPriceHt} onChange={(unitPriceHt) => updateNode(row.original.id, { unitPriceHt } as Partial<QuoteBuilderNode>)} /> : null },
@@ -119,6 +188,17 @@ export function QuoteBuilderWorkspace({ onClose }: Props) {
         <section className="overflow-auto px-4 py-5 xl:px-6">
           {mode === "edit" ? (
             <QuoteDocumentSurface quote={quote} rows={rows} table={table} totals={totals} sensors={sensors} onDragEnd={onDragEnd} updateQuote={updateQuote} updateNode={updateNode} removeNode={removeNode} addItem={addItem} addSection={addSection} addSubsection={addSubsection} onOpenFinancialDetails={() => setFinancialOpen(true)} />
+          ) : mode === "couts" ? (
+            <div className="mx-auto max-w-3xl space-y-4">
+              <div>
+                <h2 className="text-lg font-semibold text-slate-950">Coûts cachés</h2>
+                <p className="mt-1 text-sm text-slate-500">
+                  Déplacements et forfaits qui ne se saisissent qu'une fois par devis. Leur montant se reporte sur le
+                  total, sans encombrer la saisie des lignes.
+                </p>
+              </div>
+              {costsPanel}
+            </div>
           ) : (
             <QuotePreview quote={quote} rows={rows} totals={totals} onSend={() => setSendOpen(true)} />
           )}
@@ -129,6 +209,17 @@ export function QuoteBuilderWorkspace({ onClose }: Props) {
       {compositeNodeId ? <CompositeDialog2 item={findQuoteItem(quote, compositeNodeId)} onSave={(patch) => updateNode(compositeNodeId, patch as Partial<QuoteBuilderNode>)} onClose={() => setCompositeNodeId(null)} /> : null}
       {financialOpen ? <FinancialDetailsDrawer quote={quote} totals={totals} onPdf={() => downloadQuoteBuilderPdf(quote)} updateQuote={updateQuote} onClose={() => setFinancialOpen(false)} /> : null}
       {sendOpen ? <QuoteSendDialog quote={quote} onClose={() => setSendOpen(false)} /> : null}
+      <TaskTemplateDrawer
+        open={Boolean(taskDrawerRowId)}
+        template={null}
+        initialValues={taskDrawerInitialValues}
+        saving={taskDrawerSaving}
+        deleting={false}
+        error={taskDrawerError}
+        onClose={() => setTaskDrawerRowId(null)}
+        onSave={(input) => createTaskTemplateForRow(input)}
+        onDelete={async () => {}}
+      />
     </div>
   );
 }
@@ -160,6 +251,7 @@ function QuoteTopbar({ quote, mode, saveState, libraryOpen, optionsOpen, setOpti
         </span>
         <button type="button" onClick={() => onModeChange("edit")} className={tabClass(mode === "edit")}><Pencil className="h-4 w-4" /> Edition</button>
         <button type="button" onClick={() => onModeChange("preview")} className={tabClass(mode === "preview")}><Eye className="h-4 w-4" /> Prévisualisation</button>
+        <button type="button" onClick={() => onModeChange("couts")} className={tabClass(mode === "couts")}><Settings2 className="h-4 w-4" /> Coûts cachés</button>
       </div>
       <div className="flex items-center gap-2">
         <button type="button" onClick={onDuplicate} className="hidden h-10 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 lg:inline-flex"><Copy className="h-4 w-4" /> Dupliquer</button>
@@ -616,7 +708,7 @@ function QuoteOptionsMenu({ quote, updateQuote, onDraft, onPdf, onClose }: { quo
     ["hideSectionTotals", "Masquer totaux sections"],
   ] as const;
   return (
-    <div className="fixed right-4 top-16 z-40 w-80 rounded-xl border border-slate-200 bg-white p-4 shadow-xl">
+    <div className="fixed right-4 top-16 z-50 w-80 rounded-xl border border-slate-200 bg-white p-4 shadow-xl">
       <div className="flex items-center justify-between"><h3 className="font-semibold text-slate-950">Options document</h3><button type="button" onClick={onClose}><X className="h-4 w-4" /></button></div>
       <div className="mt-4 space-y-3">
         {options.map(([key, label]) => (
@@ -703,16 +795,45 @@ function SortableRow({ id, row, children }: { id: string; row: QuoteBuilderFlatR
   return <tr ref={setNodeRef} style={style} className={rowClass} {...attributes} {...listeners}>{children}</tr>;
 }
 
-function TitleCell({ row, onChange, onSelectParent, onConfigureComposite }: { row: QuoteBuilderFlatRow; onChange: (patch: Partial<QuoteBuilderNode>) => void; onSelectParent: (id: string | null) => void; onConfigureComposite: () => void }) {
+function TitleCell({ row, onChange, onSelectParent, onConfigureComposite, taskTemplates, onLinkTask, onCreateTask }: { row: QuoteBuilderFlatRow; onChange: (patch: Partial<QuoteBuilderNode>) => void; onSelectParent: (id: string | null) => void; onConfigureComposite: () => void; taskTemplates: TaskTemplateRow[]; onLinkTask: (templateId: string) => void; onCreateTask: () => void }) {
   const node = row.node;
   const weight = node.type === "section" ? "font-bold text-base" : node.type === "subsection" ? "font-semibold" : "";
   return (
-    <div className="space-y-1" style={{ paddingLeft: row.depth * 18 }}>
-      <input className={`w-full rounded border border-transparent bg-transparent px-2 py-1 text-slate-900 outline-none hover:border-slate-200 focus:border-blue-300 ${weight}`} value={node.title} onFocus={() => node.type !== "item" && onSelectParent(node.id)} onChange={(event) => onChange({ title: event.target.value } as Partial<QuoteBuilderNode>)} />
+    <div className="space-y-1.5" style={{ paddingLeft: row.depth * 18 }}>
+      <input className={`w-full rounded border border-transparent bg-transparent px-2 py-1 text-slate-900 outline-none hover:border-slate-200 focus:border-blue-300 ${weight}`} value={node.title} onFocus={() => node.type !== "item" && onSelectParent(node.id)} onChange={(event) => onChange({ title: event.target.value } as Partial<QuoteBuilderNode>)} placeholder={node.type === "item" ? "Ce que lit le client" : ""} />
+
+      {node.type === "item" ? (
+        <div className="flex flex-wrap items-center gap-1.5">
+          <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${node.taskTemplateId ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-700"}`}>
+            {node.taskTemplateId ? "Exécutable" : "Chiffrage seul"}
+          </span>
+          <select
+            className="h-7 min-w-0 flex-1 rounded border border-slate-200 bg-white px-2 text-xs text-slate-700"
+            value={node.taskTemplateId ?? ""}
+            onChange={(event) => onLinkTask(event.target.value)}
+            title="Tâche exécutée au chantier"
+          >
+            <option value="">Aucune tâche liée</option>
+            {taskTemplates.map((template) => (
+              <option key={template.id} value={template.id}>{template.titre}</option>
+            ))}
+          </select>
+          <button type="button" onClick={onCreateTask} className="shrink-0 rounded border border-blue-200 bg-blue-50 px-2 py-1 text-[11px] font-semibold text-blue-700 hover:bg-blue-100">
+            + Créer
+          </button>
+        </div>
+      ) : null}
+
       {node.type === "item" && node.kind === "ouvrage" ? <button type="button" onClick={onConfigureComposite} className="text-xs font-semibold text-blue-600 opacity-0 transition group-hover:opacity-100 hover:text-blue-700">Configurer l'ouvrage</button> : null}
       {node.type === "item" ? <input className="h-8 w-full rounded border border-slate-100 px-2 text-xs text-slate-500" placeholder="Note interne" value={node.internalNote ?? ""} onChange={(event) => onChange({ internalNote: event.target.value } as Partial<QuoteBuilderNode>)} /> : null}
     </div>
   );
+}
+
+function normalizeQuoteUnit(unit: string | null | undefined): QuoteBuilderUnit {
+  const value = String(unit ?? "").trim().toLowerCase();
+  if (value === "h" || value === "ml" || value === "m2" || value === "m3" || value === "forfait") return value;
+  return "u";
 }
 
 function MobileRow({ row, onChange, onRemove }: { row: QuoteBuilderFlatRow; onChange: (patch: Partial<QuoteBuilderNode>) => void; onRemove: () => void }) {

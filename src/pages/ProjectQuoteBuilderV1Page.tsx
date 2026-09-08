@@ -229,18 +229,22 @@ export default function ProjectQuoteBuilderV1Page() {
   }
 
   return (
-    <>
-      <QuoteBuilderWorkspace onClose={() => navigate(`/projets/${project.id}?tab=quotes`)} />
-      <DailyCleaningFlatRateControl quote={quote} onToggle={(enabled) => updateQuote({ settings: { ...quote.settings, dailyCleaningFlatRateEnabled: enabled } })} />
-      <TravelCostsControl
-        quote={quote}
-        routeError={travelRouteError}
-        routeLoading={travelRouteLoading}
-        onPatch={patchTravelCosts}
-        onCalculateRoute={() => void calculateTravelRoute()}
-        onInsertLine={insertTravelCostLine}
-      />
-    </>
+    <QuoteBuilderWorkspace
+      onClose={() => navigate(`/projets/${project.id}?tab=quotes`)}
+      costsPanel={
+        <>
+          <DailyCleaningFlatRateControl quote={quote} onToggle={(enabled) => updateQuote({ settings: { ...quote.settings, dailyCleaningFlatRateEnabled: enabled } })} />
+          <TravelCostsControl
+            quote={quote}
+            routeError={travelRouteError}
+            routeLoading={travelRouteLoading}
+            onPatch={patchTravelCosts}
+            onCalculateRoute={() => void calculateTravelRoute()}
+            onInsertLine={insertTravelCostLine}
+          />
+        </>
+      }
+    />
   );
 }
 
@@ -248,7 +252,7 @@ function DailyCleaningFlatRateControl({ quote, onToggle }: { quote: QuoteBuilder
   const days = getDailyCleaningFlatRateDays(quote);
   const checked = Boolean(quote.settings.dailyCleaningFlatRateEnabled);
   return (
-    <aside className="fixed right-4 top-16 z-40 w-[300px] rounded-xl border border-slate-200 bg-white p-3 text-sm shadow-xl">
+    <aside className="rounded-2xl border border-slate-200 bg-white p-4 text-sm shadow-sm">
       <label className="flex items-start gap-3 text-slate-700">
         <input type="checkbox" className="mt-1" checked={checked} onChange={(event) => onToggle(event.target.checked)} />
         <span>
@@ -282,7 +286,7 @@ function TravelCostsControl({
   const hasDistance = summary.oneWayDistanceKm > 0;
   const canCalculateRoute = Boolean(settings.companyAddress.trim() && (settings.siteAddress || quote.siteAddress).trim()) && !routeLoading;
   return (
-    <aside className="fixed right-4 top-44 z-40 hidden max-h-[calc(100vh-12rem)] w-[340px] overflow-auto rounded-xl border border-slate-200 bg-white p-4 text-sm shadow-xl xl:block">
+    <aside className="rounded-2xl border border-slate-200 bg-white p-4 text-sm shadow-sm">
       <div className="flex items-start justify-between gap-3">
         <div>
           <div className="text-xs font-semibold uppercase tracking-[0.14em] text-blue-600">Coûts cachés</div>
