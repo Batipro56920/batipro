@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import { FileText, Hammer, Handshake, Plus, Receipt } from "lucide-react";
+import { FileText, Plus, Receipt } from "lucide-react";
 import { PageHeader } from "../../../components/layout/PageHeader";
 
 export function ProjectsHeader({
@@ -73,34 +73,13 @@ export function ProjectsHeader({
               <Plus className="h-4 w-4" />
               Depuis prospect
             </Link>
-            <Link
-              to="/crm/apporteurs"
-              className="inline-flex h-9 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-3 text-sm font-medium text-slate-900 shadow-sm transition hover:bg-slate-50"
-            >
-              <Handshake className="h-4 w-4" />
-              Apporteurs
-            </Link>
-            <Link
-              to="/projets?devis=nouveau"
-              className="inline-flex h-9 items-center justify-center gap-2 rounded-xl bg-blue-600 px-3 text-sm font-medium text-white shadow-sm shadow-blue-600/15 transition hover:bg-blue-700"
-            >
-              <Plus className="h-4 w-4" />
-              Nouveau devis
-            </Link>
-            <Link
-              to="/projets?chantier=a-creer"
-              className="inline-flex h-9 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-3 text-sm font-medium text-slate-900 shadow-sm transition hover:bg-slate-50"
-            >
-              <Hammer className="h-4 w-4" />
-              À passer chantier
-            </Link>
-            <Link
-              to="/projets?facturation=1"
-              className="inline-flex h-9 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-3 text-sm font-medium text-slate-900 shadow-sm transition hover:bg-slate-50"
-            >
-              <Receipt className="h-4 w-4" />
-              À facturer
-            </Link>
+            {/*
+              Les autres raccourcis sont partis : "Apporteurs" doublait l'entrée
+              du menu, et les vues filtrées se lancent depuis le module concerné
+              (les factures pour "à facturer", les chantiers pour "à passer en
+              chantier", le menu Nouveau pour un devis). Les modes eux-mêmes
+              restent en place, seuls ces boutons d'accès disparaissent.
+            */}
           </>
         )
       }
