@@ -1,5 +1,6 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { CrmProspectRow } from "../../../services/crm.service";
+import { getApporteursAffaires, type ApporteurAffaireRow } from "../../../services/apporteurs.service";
 import { CrmModal } from "./CrmFormPrimitives";
 
 type ProspectFormState = Record<string, string>;
@@ -21,7 +22,35 @@ const projectTypes = [
   "Autre",
 ];
 
-const sources = ["Appel entrant", "Site internet", "Recommandation", "Agent immobilier", "Apporteur", "Reseau", "Le Bon Coin", "Publicite", "Autre"];
+/**
+ * Provenance du contact. La valeur enregistrée reste le libellé affiché : les
+ * prospects déjà en base portent ces mêmes libellés et les filtres du module
+ * comparent des chaînes.
+ */
+const sources = [
+  "Appel entrant",
+  "Site internet",
+  "Reseaux sociaux",
+  "Recommandation",
+  "Apporteur d'affaires",
+  "Commercial",
+  "Agent immobilier",
+  "Le Bon Coin",
+  "Publicite",
+  "Salon / foire",
+  "Panneau chantier",
+  "Autre",
+];
+
+/** Provenances qui appellent un nom : qui, précisément, a amené l'affaire. */
+const SOURCES_WITH_DETAIL: Record<string, string> = {
+  "Apporteur d'affaires": "Apporteur",
+  Commercial: "Commercial",
+  Recommandation: "Recommandé par",
+  "Agent immobilier": "Agent immobilier",
+  "Reseaux sociaux": "Réseau / page",
+  Autre: "Précisez la provenance",
+};
 
 function patch(setForm: React.Dispatch<React.SetStateAction<ProspectFormState>>, name: string, value: string) {
   setForm((current) => ({ ...current, [name]: value }));
@@ -80,6 +109,26 @@ export default function ProspectForm({ saving, onClose, onSubmit }: { saving: bo
     type_projet: "Renovation globale",
   });
 
+  const [apporteurs, setApporteurs] = useState<ApporteurAffaireRow[]>([]);
+
+  useEffect(() => {
+    let cancelled = false;
+    getApporteursAffaires()
+      .then((rows) => {
+        if (!cancelled) setApporteurs(rows.filter((row) => row.active));
+      })
+      .catch(() => {
+        // Le module apporteurs peut être indisponible : la saisie libre suffit alors.
+        if (!cancelled) setApporteurs([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const detailLabel = SOURCES_WITH_DETAIL[form.source_acquisition ?? ""] ?? null;
+  const useApporteurList = form.source_acquisition === "Apporteur d'affaires" && apporteurs.length > 0;
+
   const displayName = useMemo(() => {
     const name = [form.prenom, form.nom].filter(Boolean).join(" ").trim();
     return name || form.societe || "Nouveau prospect";
@@ -87,8 +136,11 @@ export default function ProspectForm({ saving, onClose, onSubmit }: { saving: bo
 
   function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    // Le nom n'a de sens que pour les provenances qui en demandent un.
+    const apporteur = detailLabel ? (form.apporteur_affaire ?? "").trim() : "";
     const payload: Partial<CrmProspectRow> = {
       ...form,
+      apporteur_affaire: apporteur || null,
       budget_estime: normalizeMoney(form.budget_estime ?? "") as unknown as number,
       tags: form.tags ? form.tags.split(",").map((item) => item.trim()).filter(Boolean) : [],
       notes: [form.notes, form.planification_visite === "oui" ? "Visite terrain a planifier." : ""].filter(Boolean).join("\n\n"),
@@ -124,6 +176,42 @@ export default function ProspectForm({ saving, onClose, onSubmit }: { saving: bo
           <div className="grid gap-3 md:grid-cols-2">
             <Input form={form} setForm={setForm} name="telephone" label="Telephone" required inputMode="tel" />
             <Input form={form} setForm={setForm} name="email" label="Email" />
+          </div>
+        </section>
+
+        <section className="space-y-3">
+          <div className="text-sm font-semibold text-slate-950">Provenance</div>
+          <div className="grid gap-3 md:grid-cols-2">
+            <Select form={form} setForm={setForm} name="source_acquisition" label="Comment ce prospect est-il arrivé ?" required>
+              {sources.map((source) => <option key={source} value={source}>{source}</option>)}
+            </Select>
+            {detailLabel ? (
+              useApporteurList ? (
+                <Field label={detailLabel}>
+                  <select
+                    className={inputClass}
+                    value={apporteurs.some((row) => row.nom === form.apporteur_affaire) ? form.apporteur_affaire ?? "" : form.apporteur_affaire ? "__autre__" : ""}
+                    onChange={(event) => patch(setForm, "apporteur_affaire", event.target.value === "__autre__" ? " " : event.target.value)}
+                  >
+                    <option value="">Selectionner un apporteur</option>
+                    {apporteurs.map((row) => (
+                      <option key={row.id} value={row.nom}>{row.entreprise ? `${row.nom} — ${row.entreprise}` : row.nom}</option>
+                    ))}
+                    <option value="__autre__">Autre (saisie libre)</option>
+                  </select>
+                  {form.apporteur_affaire && !apporteurs.some((row) => row.nom === form.apporteur_affaire) ? (
+                    <input
+                      className={`${inputClass} mt-2`}
+                      placeholder="Nom de l'apporteur"
+                      value={form.apporteur_affaire.trim()}
+                      onChange={(event) => patch(setForm, "apporteur_affaire", event.target.value)}
+                    />
+                  ) : null}
+                </Field>
+              ) : (
+                <Input form={form} setForm={setForm} name="apporteur_affaire" label={detailLabel} />
+              )
+            ) : null}
           </div>
         </section>
 
@@ -173,16 +261,12 @@ export default function ProspectForm({ saving, onClose, onSubmit }: { saving: bo
                 <option value="Mme">Mme</option>
                 <option value="Societe">Societe</option>
               </Select>
-              <Select form={form} setForm={setForm} name="source_acquisition" label="Source du contact">
-                {sources.map((source) => <option key={source} value={source}>{source}</option>)}
-              </Select>
               <Select form={form} setForm={setForm} name="urgence" label="Urgence">
                 <option value="faible">Faible</option>
                 <option value="normale">Normale</option>
                 <option value="urgente">Urgente</option>
               </Select>
               <Input form={form} setForm={setForm} name="mobile" label="Mobile secondaire" inputMode="tel" />
-              <Input form={form} setForm={setForm} name="apporteur_affaire" label="Apporteur / agent" />
               <div className="md:col-span-2"><Input form={form} setForm={setForm} name="tags" label="Tags internes" /></div>
               <div className="md:col-span-2"><TextArea form={form} setForm={setForm} name="notes" label="Notes internes" /></div>
             </div>
