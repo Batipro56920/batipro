@@ -161,10 +161,10 @@ export function ProspectsTable({
                 <td className="px-3 py-2">
                   <div className="flex items-center gap-2.5">
                     <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-field bg-primary text-[11px] font-semibold text-primary-contrast">{initials(row)}</div>
-                    <div className="min-w-0 max-w-[230px]">
-                      <div className="truncate font-semibold text-ink">{entityLabel(row)}</div>
+                    <div className="min-w-0 max-w-[190px]">
+                      <div className="truncate font-semibold text-ink" title={entityLabel(row)}>{entityLabel(row)}</div>
                       <div className="flex items-center gap-2 text-xs text-muted">
-                        <span className="inline-flex min-w-0 items-center gap-1"><Mail className="h-3 w-3 shrink-0" /><span className="truncate">{row.email ?? "—"}</span></span>
+                        <span className="inline-flex min-w-0 items-center gap-1" title={row.email ?? undefined}><Mail className="h-3 w-3 shrink-0" /><span className="truncate">{row.email ?? "—"}</span></span>
                         <span className="inline-flex shrink-0 items-center gap-1"><Phone className="h-3 w-3" />{row.mobile ?? row.telephone ?? "—"}</span>
                       </div>
                     </div>
