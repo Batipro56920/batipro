@@ -98,16 +98,46 @@ function normalizeMoney(value: string) {
   return clean || "";
 }
 
-export default function ProspectForm({ saving, onClose, onSubmit }: { saving: boolean; onClose: () => void; onSubmit: (payload: Partial<CrmProspectRow>) => void }) {
+/** Le formulaire sert aussi à la modification : on repart des valeurs existantes. */
+function stateFromProspect(prospect: CrmProspectRow): ProspectFormState {
+  const state: ProspectFormState = {};
+  for (const [key, value] of Object.entries(prospect)) {
+    if (value === null || value === undefined) continue;
+    if (Array.isArray(value)) {
+      state[key] = value.join(", ");
+      continue;
+    }
+    if (typeof value === "object") continue;
+    state[key] = String(value);
+  }
+  return state;
+}
+
+export default function ProspectForm({
+  saving,
+  onClose,
+  onSubmit,
+  initial,
+}: {
+  saving: boolean;
+  onClose: () => void;
+  onSubmit: (payload: Partial<CrmProspectRow>) => void;
+  initial?: CrmProspectRow | null;
+}) {
+  const editing = Boolean(initial);
   const [showAdvanced, setShowAdvanced] = useState(false);
-  const [form, setForm] = useState<ProspectFormState>({
-    type: "particulier",
-    civilite: "",
-    statut: "nouveau",
-    urgence: "normale",
-    source_acquisition: "Appel entrant",
-    type_projet: "Renovation globale",
-  });
+  const [form, setForm] = useState<ProspectFormState>(() =>
+    initial
+      ? stateFromProspect(initial)
+      : {
+          type: "particulier",
+          civilite: "",
+          statut: "nouveau",
+          urgence: "normale",
+          source_acquisition: "Appel entrant",
+          type_projet: "Renovation globale",
+        },
+  );
 
   const [apporteurs, setApporteurs] = useState<ApporteurAffaireRow[]>([]);
 
@@ -138,29 +168,40 @@ export default function ProspectForm({ saving, onClose, onSubmit }: { saving: bo
     event.preventDefault();
     // Le nom n'a de sens que pour les provenances qui en demandent un.
     const apporteur = detailLabel ? (form.apporteur_affaire ?? "").trim() : "";
+    const { planification_visite: _visite, ...fields } = form;
     const payload: Partial<CrmProspectRow> = {
-      ...form,
+      ...fields,
       apporteur_affaire: apporteur || null,
       budget_estime: normalizeMoney(form.budget_estime ?? "") as unknown as number,
       tags: form.tags ? form.tags.split(",").map((item) => item.trim()).filter(Boolean) : [],
       notes: [form.notes, form.planification_visite === "oui" ? "Visite terrain a planifier." : ""].filter(Boolean).join("\n\n"),
     } as Partial<CrmProspectRow>;
+    // En modification, les colonnes techniques ne doivent jamais repartir du formulaire.
+    for (const key of ["id", "organization_id", "created_at", "updated_at", "archived_at", "client_id"]) {
+      delete (payload as Record<string, unknown>)[key];
+    }
     onSubmit(payload);
   }
 
   return (
-    <CrmModal title="Ajouter un prospect" onClose={onClose}>
+    <CrmModal title={editing ? "Modifier le prospect" : "Ajouter un prospect"} onClose={onClose}>
       <form onSubmit={handleSubmit} className="space-y-5">
         <section className="rounded-2xl border border-blue-100 bg-blue-50/60 p-4">
-          <div className="text-xs font-semibold uppercase tracking-[0.16em] text-blue-700">Creation rapide</div>
+          <div className="text-xs font-semibold uppercase tracking-[0.16em] text-blue-700">{editing ? "Fiche prospect" : "Creation rapide"}</div>
           <div className="mt-1 text-lg font-semibold text-slate-950">{displayName}</div>
-          <p className="mt-1 text-sm text-slate-600">Renseigne le minimum utile. Batipro cree automatiquement l'opportunite commerciale.</p>
-          <div className="mt-3 flex flex-wrap gap-2 text-xs font-semibold text-blue-800">
-            <span className="rounded-full bg-white px-3 py-1">1. Prospect</span>
-            <span className="rounded-full bg-white px-3 py-1">2. Opportunite auto</span>
-            <span className="rounded-full bg-white px-3 py-1">3. Visite terrain</span>
-            <span className="rounded-full bg-white px-3 py-1">4. Pre-devis</span>
-          </div>
+          <p className="mt-1 text-sm text-slate-600">
+            {editing
+              ? "Corrigez les informations recueillies. Le projet commercial lie reste inchange."
+              : "Renseigne le minimum utile. Batipro cree automatiquement l'opportunite commerciale."}
+          </p>
+          {editing ? null : (
+            <div className="mt-3 flex flex-wrap gap-2 text-xs font-semibold text-blue-800">
+              <span className="rounded-full bg-white px-3 py-1">1. Prospect</span>
+              <span className="rounded-full bg-white px-3 py-1">2. Opportunite auto</span>
+              <span className="rounded-full bg-white px-3 py-1">3. Visite terrain</span>
+              <span className="rounded-full bg-white px-3 py-1">4. Pre-devis</span>
+            </div>
+          )}
         </section>
 
         <section className="space-y-3">
@@ -235,7 +276,7 @@ export default function ProspectForm({ saving, onClose, onSubmit }: { saving: bo
           <TextArea form={form} setForm={setForm} name="description_besoin" label="Description rapide du besoin" required />
         </section>
 
-        <section className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+        <section className={`rounded-2xl border border-slate-200 bg-slate-50 p-4 ${editing ? "hidden" : ""}`}>
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <div className="text-sm font-semibold text-slate-950">Suite commerciale</div>
@@ -276,7 +317,7 @@ export default function ProspectForm({ saving, onClose, onSubmit }: { saving: bo
         <div className="flex flex-col-reverse gap-2 border-t border-slate-100 pt-4 sm:flex-row sm:justify-end">
           <button type="button" onClick={onClose} className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50">Annuler</button>
           <button disabled={saving} className="rounded-xl bg-slate-950 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800 disabled:opacity-60">
-            {saving ? "Enregistrement..." : "Creer prospect"}
+            {saving ? "Enregistrement..." : editing ? "Enregistrer" : "Creer prospect"}
           </button>
         </div>
       </form>

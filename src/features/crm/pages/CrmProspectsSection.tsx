@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { lazy, Suspense, useState } from "react";
 import type { CrmProspectRow } from "../../../services/crm.service";
 import { ProspectsCards } from "../prospects/components/ProspectsCards";
 import { ProspectsEmptyState } from "../prospects/components/ProspectsEmptyState";
@@ -12,6 +12,8 @@ import { useProspectActions } from "../prospects/hooks/useProspectActions";
 import { useProspectsFilters } from "../prospects/hooks/useProspectsFilters";
 import type { ProspectView } from "../prospects/types";
 
+const ProspectForm = lazy(() => import("../forms/ProspectForm"));
+
 export default function CrmProspectsSection({
   rows,
   query,
@@ -23,6 +25,7 @@ export default function CrmProspectsSection({
   onCreateOpportunity,
   onCreateAppointment,
   onCreateQuote,
+  onUpdate,
 }: {
   rows: CrmProspectRow[];
   query: string;
@@ -34,9 +37,11 @@ export default function CrmProspectsSection({
   onCreateOpportunity: (row?: CrmProspectRow) => void;
   onCreateAppointment: (row?: CrmProspectRow) => void;
   onCreateQuote: (row?: CrmProspectRow) => void;
+  onUpdate?: (row: CrmProspectRow, patch: Partial<CrmProspectRow>) => void;
 }) {
   const [view, setView] = useState<ProspectView>("list");
   const [selectedProspect, setSelectedProspect] = useState<CrmProspectRow | null>(null);
+  const [editingProspect, setEditingProspect] = useState<CrmProspectRow | null>(null);
   const { filteredRows, filters, setFilters, sources, statuses, owners } = useProspectsFilters(rows, query);
   const actions = useProspectActions({ onCreate, onConvert, onStatus, onTask, onCreateOpportunity, onCreateAppointment, onCreateQuote });
 
@@ -66,7 +71,27 @@ export default function CrmProspectsSection({
         <ProspectsTable rows={filteredRows} actions={actions} onSelect={setSelectedProspect} />
       )}
 
-      <ProspectQuickDrawer prospect={selectedProspect} onClose={() => setSelectedProspect(null)} actions={actions} />
+      <ProspectQuickDrawer
+        prospect={selectedProspect}
+        onClose={() => setSelectedProspect(null)}
+        actions={actions}
+        onEdit={onUpdate ? (row) => setEditingProspect(row) : undefined}
+      />
+
+      {editingProspect ? (
+        <Suspense fallback={null}>
+          <ProspectForm
+            saving={false}
+            initial={editingProspect}
+            onClose={() => setEditingProspect(null)}
+            onSubmit={(payload) => {
+              onUpdate?.(editingProspect, payload);
+              setEditingProspect(null);
+              setSelectedProspect(null);
+            }}
+          />
+        </Suspense>
+      ) : null}
     </div>
   );
 }
