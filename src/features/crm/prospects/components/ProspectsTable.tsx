@@ -15,6 +15,9 @@ function initials(row: CrmProspectRow) {
     .join("") || "P";
 }
 
+const MENU_WIDTH = 184;
+const MENU_ENTRY_COUNT = 4;
+
 /**
  * Les actions secondaires vivent dans un menu : alignées en ligne elles passaient
  * à la ligne dans une colonne étroite et imposaient plus de 200px de hauteur à
@@ -30,9 +33,15 @@ function ProspectRowActions({ row, actions }: { row: CrmProspectRow; actions: Pr
   useLayoutEffect(() => {
     if (!open || !triggerRef.current) return;
     const rect = triggerRef.current.getBoundingClientRect();
+    const height = MENU_ENTRY_COUNT * 29 + 8;
     // Positionnement fixe : le tableau vit dans un conteneur scrollable qui
-    // rognerait un menu positionné en absolu.
-    setPosition({ top: rect.bottom + 4, left: Math.max(8, rect.right - 184) });
+    // rognerait un menu positionné en absolu. On rabat ensuite le menu dans la
+    // fenêtre, la colonne Actions pouvant se trouver au bord de l'écran.
+    const below = rect.bottom + 4;
+    setPosition({
+      top: below + height > window.innerHeight - 8 ? Math.max(8, rect.top - height - 4) : below,
+      left: Math.min(Math.max(8, rect.right - MENU_WIDTH), window.innerWidth - MENU_WIDTH - 8),
+    });
   }, [open]);
 
   useEffect(() => {
@@ -103,8 +112,8 @@ function ProspectRowActions({ row, actions }: { row: CrmProspectRow; actions: Pr
         <div
           ref={menuRef}
           role="menu"
-          style={{ top: position.top, left: position.left }}
-          className="fixed z-50 min-w-[184px] overflow-hidden rounded-field border border-subtle bg-surface py-1 shadow-lg"
+          style={{ top: position.top, left: position.left, width: MENU_WIDTH }}
+          className="fixed z-50 overflow-hidden rounded-field border border-subtle bg-surface py-1 shadow-lg"
         >
           {menuEntries.map((entry) => (
             <button
@@ -138,10 +147,10 @@ export function ProspectsTable({
   return (
     <section className="overflow-hidden rounded-surface border border-subtle bg-surface shadow-sm">
       <div className="overflow-x-auto">
-        <table className="w-full min-w-[1080px] text-sm">
-          <thead className="border-b border-subtle bg-interactive text-xs font-semibold uppercase tracking-[0.14em] text-muted">
+        <table className="w-full min-w-[980px] text-sm">
+          <thead className="border-b border-subtle bg-interactive text-xs font-semibold uppercase tracking-[0.06em] text-muted">
             <tr>
-              {["Prospect", "Projet", "Budget", "Source", "Commercial", "Dernière activité", "Statut", "Actions"].map((heading) => (
+              {["Prospect", "Projet", "Budget", "Source", "Commercial", "Activité", "Statut", "Actions"].map((heading) => (
                 <th key={heading} className={`px-3 py-2 ${heading === "Actions" ? "text-right" : "text-left"}`}>{heading}</th>
               ))}
             </tr>
@@ -152,7 +161,7 @@ export function ProspectsTable({
                 <td className="px-3 py-2">
                   <div className="flex items-center gap-2.5">
                     <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-field bg-primary text-[11px] font-semibold text-primary-contrast">{initials(row)}</div>
-                    <div className="min-w-0">
+                    <div className="min-w-0 max-w-[230px]">
                       <div className="truncate font-semibold text-ink">{entityLabel(row)}</div>
                       <div className="flex items-center gap-2 text-xs text-muted">
                         <span className="inline-flex min-w-0 items-center gap-1"><Mail className="h-3 w-3 shrink-0" /><span className="truncate">{row.email ?? "—"}</span></span>
@@ -167,7 +176,7 @@ export function ProspectsTable({
                 </td>
                 <td className="whitespace-nowrap px-3 py-2 font-medium text-ink">{row.budget_estime ? eur(row.budget_estime) : "—"}</td>
                 <td className="px-3 py-2 text-ink-secondary"><div className="max-w-[130px] truncate">{row.source_acquisition ?? "—"}</div></td>
-                <td className="px-3 py-2 text-ink-secondary"><div className="max-w-[130px] truncate" title={row.owner_id ?? undefined}>{row.owner_id ?? "—"}</div></td>
+                <td className="px-3 py-2 text-ink-secondary"><div className="max-w-[110px] truncate" title={row.owner_id ?? undefined}>{row.owner_id ?? "—"}</div></td>
                 <td className="whitespace-nowrap px-3 py-2 text-ink-secondary">{dateOnly(row.updated_at ?? row.created_at)}</td>
                 <td className="px-3 py-2"><ProspectStatusBadge status={row.statut} /></td>
                 <td className="px-3 py-2" onClick={(event) => event.stopPropagation()}>
