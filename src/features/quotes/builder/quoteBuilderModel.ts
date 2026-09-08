@@ -278,6 +278,7 @@ function dbKind(value: string | null | undefined): QuoteBuilderItemKind {
   if (value === "equipment" || value === "materiel") return "materiel";
   if (value === "ouvrage" || value === "composite") return "ouvrage";
   if (value === "misc" || value === "divers") return "divers";
+  if (value === "texte" || value === "text") return "texte";
   return "fourniture";
 }
 

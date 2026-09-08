@@ -693,6 +693,8 @@ export async function createTask(payload: CreateTaskPayload) {
     etape_metier: (payload.etape_metier ?? "").trim() || null,
     description_technique: (payload.description_technique ?? "").trim() || null,
     caracteristiques: normalizeCaracteristiques(payload.caracteristiques),
+    coco_preparation: payload.coco_preparation ?? null,
+    composite_items: Array.isArray(payload.composite_items) ? payload.composite_items : null,
     materiaux: (payload.materiaux ?? "").trim() || null,
     contraintes: (payload.contraintes ?? "").trim() || null,
     points_controle: (payload.points_controle ?? "").trim() || null,

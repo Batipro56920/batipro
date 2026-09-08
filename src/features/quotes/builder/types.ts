@@ -1,6 +1,6 @@
 export type QuoteBuilderUnit = "u" | "h" | "ml" | "m2" | "m3" | "forfait";
 
-export type QuoteBuilderItemKind = "fourniture" | "main_oeuvre" | "ouvrage" | "sous_traitance" | "materiel" | "divers";
+export type QuoteBuilderItemKind = "fourniture" | "main_oeuvre" | "ouvrage" | "sous_traitance" | "materiel" | "divers" | "texte";
 
 export type QuoteBuilderStatus = "draft" | "saved" | "ready" | "sent" | "accepted" | "refused";
 

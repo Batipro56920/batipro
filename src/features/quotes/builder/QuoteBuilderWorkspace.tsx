@@ -409,7 +409,7 @@ function QuoteDocumentSurface({ quote, rows, table, totals, sensors, onDragEnd, 
           <button type="button" onClick={() => addItem("fourniture")} className={lineButtonClass}>+ Fourniture</button>
           <button type="button" onClick={() => addItem("main_oeuvre")} className={lineButtonClass}>+ Main d'oeuvre</button>
           <button type="button" onClick={() => addItem("ouvrage")} className={lineButtonClass}>+ Ouvrage</button>
-          <button type="button" onClick={() => addItem("divers")} className={lineButtonClass}>+ Texte</button>
+          <button type="button" onClick={() => addItem("texte")} className={lineButtonClass}>+ Texte</button>
           <button type="button" onClick={addSection} className={lineButtonClass}>+ Section</button>
           <button type="button" onClick={addSubsection} className={lineButtonClass}>+ Sous-section</button>
         </div>
@@ -1029,6 +1029,7 @@ function kindLabel(kind: QuoteBuilderItemKind) {
   if (kind === "sous_traitance") return "Sous-traitance";
   if (kind === "materiel") return "Matériel";
   if (kind === "divers") return "Divers";
+  if (kind === "texte") return "Texte";
   if (kind === "ouvrage") return "Ouvrage";
   return "Fourniture";
 }
