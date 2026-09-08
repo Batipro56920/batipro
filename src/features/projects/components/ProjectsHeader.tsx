@@ -87,7 +87,7 @@ export function ProjectsHeader({
             </Link>
             <Link
               to="/crm/apporteurs"
-              className="inline-flex h-9 items-center justify-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-3 text-sm font-medium text-emerald-800 shadow-sm transition hover:bg-emerald-100"
+              className="inline-flex h-9 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-3 text-sm font-medium text-slate-900 shadow-sm transition hover:bg-slate-50"
             >
               <Handshake className="h-4 w-4" />
               Apporteurs
@@ -101,14 +101,14 @@ export function ProjectsHeader({
             </Link>
             <Link
               to="/projets?chantier=a-creer"
-              className="inline-flex h-9 items-center justify-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-3 text-sm font-medium text-emerald-800 shadow-sm transition hover:bg-emerald-100"
+              className="inline-flex h-9 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-3 text-sm font-medium text-slate-900 shadow-sm transition hover:bg-slate-50"
             >
               <Hammer className="h-4 w-4" />
               À passer chantier
             </Link>
             <Link
               to="/projets?facturation=1"
-              className="inline-flex h-9 items-center justify-center gap-2 rounded-xl border border-blue-200 bg-blue-50 px-3 text-sm font-medium text-blue-800 shadow-sm transition hover:bg-blue-100"
+              className="inline-flex h-9 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-3 text-sm font-medium text-slate-900 shadow-sm transition hover:bg-slate-50"
             >
               <Receipt className="h-4 w-4" />
               À facturer
