@@ -5291,6 +5291,11 @@ export default function ChantierPage() {
               const detailSelectedPieceIds = getTaskPieceZoneIds(activeTaskDetail);
               // Préparation propre à la tâche si elle existe, sinon celle du modèle :
               // c'est exactement la règle appliquée par le portail ouvrier.
+              // Composition revue au chiffrage pour ce chantier : elle prime sur les
+              // ratios du modèle, qui restent la référence en bibliothèque.
+              const detailAdaptedComponents = Array.isArray((activeTaskDetail as any).composite_items)
+                ? ((activeTaskDetail as any).composite_items as Array<{ title?: string; quantity?: number; unit?: string }>)
+                : [];
               const taskOwnPreparation = normalizeTaskCocoPreparation((activeTaskDetail as any).coco_preparation);
               const detailCocoPreparation = hasTaskCocoPreparation(taskOwnPreparation)
                 ? taskOwnPreparation
@@ -5662,6 +5667,7 @@ export default function ChantierPage() {
                       ) : null}
                       <div className="mt-4 space-y-3">
                         <TaskPreparationLists
+                          adaptedComponents={detailAdaptedComponents}
                           materials={detailPreparationEstimate?.materials ?? []}
                           equipment={detailPreparationEstimate?.equipment ?? []}
                           preparation={detailCocoPreparation}
@@ -9200,12 +9206,14 @@ export default function ChantierPage() {
  * qu'il n'y ait qu'une seule vérité entre le modèle, le chantier et le terrain.
  */
 function TaskPreparationLists({
+  adaptedComponents,
   materials,
   equipment,
   preparation,
   taskUnit,
   hasTemplate,
 }: {
+  adaptedComponents: Array<{ title?: string; quantity?: number; unit?: string }>;
   materials: TaskPreparationEstimateMaterial[];
   equipment: TaskPreparationEstimateEquipment[];
   preparation: TaskCocoPreparation;
@@ -9213,6 +9221,7 @@ function TaskPreparationLists({
   hasTemplate: boolean;
 }) {
   const nothing =
+    adaptedComponents.length === 0 &&
     materials.length === 0 &&
     equipment.length === 0 &&
     preparation.materials.length === 0 &&
@@ -9235,7 +9244,18 @@ function TaskPreparationLists({
 
   return (
     <>
-      {materials.length ? (
+      {adaptedComponents.length ? (
+        <TaskListCard title="Matériaux (adaptés au chiffrage)" count={adaptedComponents.length}>
+          {adaptedComponents.map((item, index) => (
+            <li key={`${item.title}-${index}`} className="flex items-baseline justify-between gap-3">
+              <span>{item.title}</span>
+              <span className="shrink-0 font-semibold text-slate-900">
+                {item.quantity} {item.unit}
+              </span>
+            </li>
+          ))}
+        </TaskListCard>
+      ) : materials.length ? (
         <TaskListCard title="Matériaux" count={materials.length}>
           {materials.map((item) => (
             <li key={item.id} className="flex items-baseline justify-between gap-3">

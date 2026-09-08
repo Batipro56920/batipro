@@ -1104,6 +1104,11 @@ export async function createCrmQuoteLot(input: { quote_id: string; title: string
   return data as CrmQuoteLotRow;
 }
 
+function isExecutableQuoteLine(lineType: string | null | undefined): boolean {
+  const value = String(lineType ?? "").trim().toLowerCase();
+  return value !== "section" && value !== "subsection" && value !== "sous_section" && value !== "texte" && value !== "text";
+}
+
 export async function createCrmQuoteItemFromTemplate(input: {
   quote_id: string;
   lot_id?: string | null;
@@ -1642,7 +1647,10 @@ export async function transformAcceptedQuoteToChantier(input: {
             titre_tache: item.designation,
           }).catch(() => null)
         : null;
-      if (item.generate_task) {
+      // generate_task vaut true par défaut en base et le builder ne l'écrit pas :
+      // sans ce filtre, les sections, sous-sections et lignes de texte devenaient
+      // elles aussi des tâches de chantier.
+      if (item.generate_task && isExecutableQuoteLine(item.line_type)) {
         await createTask({
           chantier_id: chantier.id,
           titre: item.designation,
@@ -1665,6 +1673,9 @@ export async function transformAcceptedQuoteToChantier(input: {
           quantite: item.quantite,
           unite: item.unite,
           temps_prevu_h: Number(item.labor_hours ?? 0) * Number(item.quantite ?? 1),
+          // Composition adaptée au chantier lors du chiffrage : elle prime sur celle
+          // du modèle, qui reste inchangé en bibliothèque.
+          composite_items: item.composite_items ?? null,
         }).catch(() => undefined);
       }
     }
