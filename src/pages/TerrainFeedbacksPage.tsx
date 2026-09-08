@@ -407,12 +407,10 @@ export default function TerrainFeedbacksPage({
             <h1 className="bt-page-title mt-1 text-ink">
               {embedded ? "Retours terrain du chantier" : t("terrainFeedback.admin.title")}
             </h1>
-            <div className="bt-secondary mt-1 flex flex-wrap gap-x-4 gap-y-1 text-muted">
-              <span>{visibleRows.length} visible{visibleRows.length > 1 ? "s" : ""}</span>
-              <span>{workflowStats.open} a traiter</span>
-              <span>{workflowStats.priority} prioritaire{workflowStats.priority > 1 ? "s" : ""}</span>
-              {selectedChantier ? <span>{selectedChantier.nom}</span> : null}
-            </div>
+            {/* Les compteurs vivent sur les filtres, qui les rendent cliquables. */}
+            {selectedChantier ? (
+              <div className="bt-secondary mt-1 text-muted">{selectedChantier.nom}</div>
+            ) : null}
           </div>
           <div className="flex flex-wrap gap-2">
             {filterChantierId && !embedded ? (
