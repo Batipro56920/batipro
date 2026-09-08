@@ -426,7 +426,8 @@ export type CrmDataset = {
   purchases: CrmPurchaseRow[];
   chantiers: ChantierRow[];
   taskTemplates: TaskTemplateRow[];
-  users: CrmUserRow[];
+  /** Optionnel : tous les jeux de données vides construits par les écrans ne le fournissent pas. */
+  users?: CrmUserRow[];
 };
 
 export type CrmChantierContext = {
