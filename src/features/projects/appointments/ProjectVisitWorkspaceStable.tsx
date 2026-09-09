@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { ArrowLeft, Camera, CheckCircle2, FileText, Plus, Save, Trash2 } from "lucide-react";
+import { ArrowLeft, Camera, CheckCircle2, FileText, Mic, Plus, Save, Trash2 } from "lucide-react";
 import { Button } from "../../../components/ui/button";
 import { createCrmAppointment, type CrmAppointmentRow } from "../../../services/crm.service";
 import { loadCrmVisitReportDraft, saveCrmVisitReport } from "../../../services/crmVisitReports.service";
@@ -10,6 +10,8 @@ import { listTaskTemplatePreparationByTemplateIds, type TaskTemplateEquipmentIte
 import { getCompanyHourlyRates, type CompanyHourlyRates } from "../../../services/indirectCosts.service";
 import { VISIT_DRAFT_MARKER } from "../../crm/utils/appointmentDraftStorage";
 import type { ProjectRecord } from "../types";
+import { VisitReportImportDrawer, type VisitImportSelection } from "./VisitReportImportDrawer";
+import { applyImportedFields, buildLinesFromImport } from "./applyVisitImport";
 
 type StepKey = "info" | "description" | "estimating" | "photos" | "constraints" | "budget" | "summary";
 type VisitStatus = "brouillon" | "planifiee" | "realisee" | "pre_devis";
@@ -465,6 +467,7 @@ export function ProjectVisitWorkspaceStable({ project, existingAppointment }: { 
   const pendingSaveRef = useRef(false);
   const lastSavedSignatureRef = useRef("");
   const firstDraftRender = useRef(true);
+  const [importOpen, setImportOpen] = useState(false);
 
   useEffect(() => {
     let alive = true;
@@ -799,6 +802,23 @@ export function ProjectVisitWorkspaceStable({ project, existingAppointment }: { 
     }
   }
 
+
+  /**
+   * Applique ce que l'utilisateur a retenu de la proposition de Coco. Les lignes
+   * arrivent en plus de l'existant : un import ne detruit jamais un releve deja
+   * commence.
+   */
+  function applyImport(selection: VisitImportSelection) {
+    const newLines = buildLinesFromImport<EstimateLine>(selection.sections, uid);
+    const fields = applyImportedFields(selection.fields);
+    setDraft((current) => ({
+      ...current,
+      ...(fields as Partial<VisitDraft>),
+      lines: [...current.lines, ...newLines],
+    }));
+    setImportOpen(false);
+    setStep(newLines.length ? "estimating" : "constraints");
+  }
   function renderMeasurements(line: EstimateLine) {
     if (line.type !== "task") return null;
     return (
@@ -831,7 +851,10 @@ export function ProjectVisitWorkspaceStable({ project, existingAppointment }: { 
             <span className={`rounded-full px-3 py-1 text-xs font-semibold ${saveState === "error" ? "bg-red-100 text-red-700" : saveState === "saved" ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 text-slate-600"}`}>
               {saveState === "saved" ? "enregistre" : saveState === "error" ? "erreur" : draft.status}
             </span>
-            <Button size="sm" variant="secondary" disabled={saving} onClick={() => saveVisit("brouillon")}><Save className="h-4 w-4" />Enregistrer</Button>
+            <div className="flex flex-wrap justify-end gap-2">
+              <Button size="sm" variant="secondary" onClick={() => setImportOpen(true)}><Mic className="h-4 w-4" />Compte rendu</Button>
+              <Button size="sm" variant="secondary" disabled={saving} onClick={() => saveVisit("brouillon")}><Save className="h-4 w-4" />Enregistrer</Button>
+            </div>
           </div>
         </div>
         {saveState === "error" && saveError ? (
@@ -1003,6 +1026,32 @@ export function ProjectVisitWorkspaceStable({ project, existingAppointment }: { 
 
         {step === "summary" ? <section className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm md:p-5"><div className="grid gap-3 md:grid-cols-4"><div className="rounded-2xl bg-slate-50 p-4"><div className="text-xs text-slate-500">Sections</div><div className="text-2xl font-bold">{sections.length}</div></div><div className="rounded-2xl bg-slate-50 p-4"><div className="text-xs text-slate-500">Taches</div><div className="text-2xl font-bold">{tasks.length}</div></div><div className="rounded-2xl bg-slate-50 p-4"><div className="text-xs text-slate-500">Photos</div><div className="text-2xl font-bold">{draft.attachments.filter((item) => item.kind === "photo").length}</div></div><div className="rounded-2xl bg-slate-50 p-4"><div className="text-xs text-slate-500">Documents</div><div className="text-2xl font-bold">{draft.attachments.filter((item) => item.kind === "document").length}</div></div></div><pre className="mt-4 whitespace-pre-wrap rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm leading-6 text-slate-700">{report}</pre><div className="mt-4 flex flex-wrap gap-2"><Button variant="secondary" disabled={saving} onClick={() => saveVisit("brouillon")}>Enregistrer brouillon</Button><Button variant="success" disabled={saving} onClick={() => saveVisit("realisee")}><CheckCircle2 className="h-4 w-4" />Terminer visite</Button><Button variant="primary" disabled={saving} onClick={() => saveVisit("pre_devis")}><FileText className="h-4 w-4" />Creer pre-devis</Button></div></section> : null}
       </main>
+
+      <VisitReportImportDrawer
+        open={importOpen}
+        onClose={() => setImportOpen(false)}
+        currentValues={draft as unknown as Record<string, string>}
+        buildInput={(transcript) => ({
+          transcript,
+          project: {
+            name: project.name,
+            clientName: draft.client,
+            address: draft.address,
+            projectType: draft.projectType,
+          },
+          // Coco voit ce qui est deja saisi pour completer au lieu d'ecraser.
+          currentDraft: {
+            clientObjective: draft.clientObjective,
+            needDescription: draft.needDescription,
+            zones: draft.zones,
+            constraints: { access: draft.access, parking: draft.parking, floor: draft.floor, condominium: draft.condominium, schedule: draft.schedule, nuisance: draft.nuisance, safety: draft.safety, waste: draft.waste, water: draft.water, electricity: draft.electricity, authorizations: draft.authorizations, notes: draft.constraintNotes },
+            budget: { budgetKnown: draft.budgetKnown, budgetRange: draft.budgetRange, decisionMaker: draft.decisionMaker },
+            lines: draft.lines.map((line) => ({ type: line.type, title: line.title })),
+          },
+          taskLibrary: taskTemplates.map((row) => ({ id: row.id, titre: row.titre, lot: row.lot, unite: row.unite })),
+        })}
+        onApply={applyImport}
+      />
     </div>
   );
 }
