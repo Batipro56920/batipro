@@ -668,13 +668,13 @@ export function ProjectVisitWorkspaceStable({ project, existingAppointment }: { 
     setDraft(nextDraft);
     // Une photo n'existe que dans l'onglet tant qu'elle n'est pas montée dans le
     // stockage : un rafraîchissement la perdrait. On l'envoie tout de suite.
-    void persistVisit(nextDraft.status, { draftOverride: nextDraft, silent: true });
+    void persistVisit(nextDraft.status, { draftOverride: nextDraft, silent: true, queueIfBusy: true });
   }
 
   function removeAttachment(id: string) {
     const nextDraft = { ...draftRef.current, attachments: draftRef.current.attachments.filter((item) => item.id !== id) };
     setDraft(nextDraft);
-    void persistVisit(nextDraft.status, { draftOverride: nextDraft, silent: true });
+    void persistVisit(nextDraft.status, { draftOverride: nextDraft, silent: true, queueIfBusy: true });
   }
 
   function patchAttachment(id: string, patch: Partial<VisitAttachment>) {
@@ -691,12 +691,14 @@ export function ProjectVisitWorkspaceStable({ project, existingAppointment }: { 
 
   async function persistVisit(
     status: VisitStatus,
-    { draftOverride, silent }: { draftOverride?: VisitDraft; silent?: boolean },
+    { draftOverride, silent, queueIfBusy }: { draftOverride?: VisitDraft; silent?: boolean; queueIfBusy?: boolean },
   ): Promise<{ targetProjectId: string; appointmentId: string } | null> {
-    // Un enregistrement déjà en cours ne fait pas jeter celui-ci : on le rejoue
-    // après, sinon une photo ajoutée pendant la sauvegarde n'était jamais montée.
+    // Un enregistrement en cours ne fait pas jeter une photo : celle-ci est
+    // rejouée après. En revanche l'auto-enregistrement, lui, ne se remet pas en
+    // file — sinon chaque cycle relance le suivant et la temporisation disparaît,
+    // ce qui remet la saisie à genoux.
     if (savingRef.current) {
-      pendingSaveRef.current = true;
+      if (queueIfBusy) pendingSaveRef.current = true;
       return null;
     }
     savingRef.current = true;
@@ -789,7 +791,10 @@ export function ProjectVisitWorkspaceStable({ project, existingAppointment }: { 
       // on repart pour un tour au lieu de l'ignorer.
       if (pendingSaveRef.current) {
         pendingSaveRef.current = false;
-        window.setTimeout(() => void persistVisit(draftRef.current.status, { silent: true }), 0);
+        window.setTimeout(() => {
+          if (draftSignature(draftRef.current) === lastSavedSignatureRef.current) return;
+          void persistVisit(draftRef.current.status, { silent: true, queueIfBusy: true });
+        }, 0);
       }
     }
   }
