@@ -4,8 +4,9 @@ import { DndContext, PointerSensor, useSensor, useSensors, type DragEndEvent } f
 import { SortableContext, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { flexRender, getCoreRowModel, useReactTable, type ColumnDef } from "@tanstack/react-table";
-import { BookOpen, ChevronDown, Copy, Download, Eye, GripVertical, Pencil, Save, Send, Settings2, Trash2, X } from "lucide-react";
+import { BookOpen, ChevronDown, Copy, Download, Eye, GripVertical, Pencil, Save, Send, Settings2, Sparkles, Trash2, X } from "lucide-react";
 import { calculateQuoteBuilderTotals, flattenQuoteBuilder } from "./quoteBuilderCalculations";
+import { QuoteReviewDrawer } from "./QuoteReviewDrawer";
 import { DocumentSendDialog } from "../../document-engine";
 import { DEFAULT_QUOTE_LIBRARY } from "./quoteBuilderLibrary";
 import { quoteBuilderToBusinessDocument } from "./quoteBuilderDocumentAdapter";
@@ -42,6 +43,7 @@ export function QuoteBuilderWorkspace({ onClose, costsPanel }: Props) {
   const [optionsOpen, setOptionsOpen] = useState(false);
   const [compositeNodeId, setCompositeNodeId] = useState<string | null>(null);
   const [financialOpen, setFinancialOpen] = useState(false);
+  const [reviewOpen, setReviewOpen] = useState(false);
   // Vraie bibliothèque de tâches : la ligne de devis doit pointer vers le geste
   // technique exécuté au chantier, pas vers une liste factice.
   const [taskTemplates, setTaskTemplates] = useState<TaskTemplateRow[]>([]);
@@ -222,7 +224,7 @@ export function QuoteBuilderWorkspace({ onClose, costsPanel }: Props) {
 
   return (
     <div className="min-h-screen bg-slate-100 text-slate-900">
-      <QuoteTopbar quote={quote} mode={mode} saveState={saveState} libraryOpen={libraryOpen} onToggleLibrary={() => setLibraryOpen((open) => !open)} onModeChange={setMode} onClose={onClose} onSave={() => void save()} onSend={() => setSendOpen(true)} onDuplicate={duplicateQuote} onDownload={() => downloadQuoteBuilderPdf(quote)} optionsOpen={optionsOpen} setOptionsOpen={setOptionsOpen} />
+      <QuoteTopbar quote={quote} mode={mode} saveState={saveState} libraryOpen={libraryOpen} onToggleLibrary={() => setLibraryOpen((open) => !open)} onModeChange={setMode} onClose={onClose} onSave={() => void save()} onSend={() => setSendOpen(true)} onDuplicate={duplicateQuote} onDownload={() => downloadQuoteBuilderPdf(quote)} onReview={() => setReviewOpen(true)} optionsOpen={optionsOpen} setOptionsOpen={setOptionsOpen} />
       {error ? <div className="mx-6 mt-3 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{error}</div> : null}
 
       <main className="grid min-h-[calc(100vh-56px)] grid-cols-1 gap-0 xl:grid-cols-[auto_minmax(760px,1fr)]">
@@ -262,6 +264,32 @@ export function QuoteBuilderWorkspace({ onClose, costsPanel }: Props) {
         onSave={(input) => createTaskTemplateForRow(input)}
         onDelete={async () => {}}
       />
+
+      <QuoteReviewDrawer
+        open={reviewOpen}
+        onClose={() => setReviewOpen(false)}
+        onApplyDesignation={(lineId, designation) => updateNode(lineId, { title: designation } as Partial<QuoteBuilderNode>)}
+        buildInput={() => ({
+          project: { name: quote.number, clientName: quote.clientName, siteAddress: quote.siteAddress },
+          totals: totals ? { totalHt: totals.totalHt, totalTtc: totals.totalTtc } : null,
+          settings: { defaultVatRate: quote.settings.defaultVatRate, depositPercent: quote.settings.depositPercent },
+          terms: { paymentTerms: quote.paymentTerms, legalMentions: quote.legalMentions, footerNotes: quote.footerNotes },
+          // Coco lit le devis a plat, avec les numeros que l'utilisateur voit a l'ecran.
+          lines: rows.map((row) => ({
+            id: row.id,
+            number: row.number,
+            type: row.node.type,
+            kind: row.node.type === "item" ? row.node.kind : undefined,
+            title: row.node.title,
+            description: row.node.type === "item" ? row.node.description : undefined,
+            quantity: row.node.type === "item" ? row.node.quantity : undefined,
+            unit: row.node.type === "item" ? row.node.unit : undefined,
+            unitPriceHt: row.node.type === "item" ? row.node.unitPriceHt : undefined,
+            vatRate: row.node.type === "item" ? row.node.vatRate : undefined,
+            taskTemplateLabel: row.node.type === "item" ? row.node.taskTemplateLabel ?? null : null,
+          })),
+        })}
+      />
     </div>
   );
 }
@@ -279,7 +307,7 @@ export function QuoteDocumentLoader() {
   );
 }
 
-function QuoteTopbar({ quote, mode, saveState, libraryOpen, optionsOpen, setOptionsOpen, onToggleLibrary, onModeChange, onClose, onSave, onSend, onDuplicate, onDownload }: { quote: QuoteBuilderQuote; mode: Mode; saveState: string; libraryOpen: boolean; optionsOpen: boolean; setOptionsOpen: (open: boolean) => void; onToggleLibrary: () => void; onModeChange: (mode: Mode) => void; onClose: () => void; onSave: () => void; onSend: () => void; onDuplicate: () => void; onDownload: () => void }) {
+function QuoteTopbar({ quote, mode, saveState, libraryOpen, optionsOpen, setOptionsOpen, onToggleLibrary, onModeChange, onClose, onSave, onSend, onDuplicate, onDownload, onReview }: { quote: QuoteBuilderQuote; mode: Mode; saveState: string; libraryOpen: boolean; optionsOpen: boolean; setOptionsOpen: (open: boolean) => void; onToggleLibrary: () => void; onModeChange: (mode: Mode) => void; onClose: () => void; onSave: () => void; onSend: () => void; onDuplicate: () => void; onDownload: () => void; onReview: () => void }) {
   return (
     <header className="sticky top-0 z-30 border-b border-slate-200 bg-white px-4 py-2 shadow-sm">
       {/* Ligne 1 : identité du devis et actions décisives uniquement. */}
@@ -306,6 +334,7 @@ function QuoteTopbar({ quote, mode, saveState, libraryOpen, optionsOpen, setOpti
         <button type="button" onClick={() => onModeChange("preview")} className={tabClass(mode === "preview")}><Eye className="h-4 w-4" /> Prévisualisation</button>
         <button type="button" onClick={() => onModeChange("couts")} className={tabClass(mode === "couts")}><Settings2 className="h-4 w-4" /> Coûts cachés</button>
         <div className="ml-auto flex shrink-0 items-center gap-1">
+          <button type="button" onClick={onReview} className="inline-flex h-9 items-center gap-2 rounded-lg border border-blue-200 bg-blue-50 px-3 text-sm font-semibold text-blue-800 transition hover:bg-blue-100"><Sparkles className="h-4 w-4" /> Relire avec Coco</button>
           <button type="button" onClick={onDuplicate} className="hidden h-9 items-center gap-2 rounded-lg px-3 text-sm font-medium text-slate-600 transition hover:bg-slate-100 md:inline-flex"><Copy className="h-4 w-4" /> Dupliquer</button>
           <button type="button" onClick={onDownload} className="hidden h-9 items-center gap-2 rounded-lg px-3 text-sm font-medium text-slate-600 transition hover:bg-slate-100 md:inline-flex"><Download className="h-4 w-4" /> Télécharger</button>
         </div>

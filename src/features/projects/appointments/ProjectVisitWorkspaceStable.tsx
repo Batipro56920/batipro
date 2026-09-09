@@ -809,7 +809,19 @@ export function ProjectVisitWorkspaceStable({ project, existingAppointment }: { 
    * commence.
    */
   function applyImport(selection: VisitImportSelection) {
-    const newLines = buildLinesFromImport<EstimateLine>(selection.sections, uid);
+    // Un identifiant de tache invente par Coco viole la cle etrangere et fait
+    // echouer l'ecriture des taches APRES celle des sections : le releve revient
+    // ampute de toutes ses taches. On ne garde que les modeles qui existent.
+    const knownTemplateIds = new Set(taskTemplates.map((row) => row.id));
+    const safeSections = selection.sections.map((section) => ({
+      ...section,
+      tasks: section.tasks.map((task) =>
+        task.taskTemplateId && knownTemplateIds.has(task.taskTemplateId)
+          ? task
+          : { ...task, taskTemplateId: null, taskTemplateLabel: null },
+      ),
+    }));
+    const newLines = buildLinesFromImport<EstimateLine>(safeSections, uid);
     const fields = applyImportedFields(selection.fields);
     setDraft((current) => ({
       ...current,

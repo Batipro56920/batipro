@@ -128,7 +128,7 @@ function parseJsonPayload(raw: string): Record<string, unknown> | null {
   }
 }
 
-function normalize(parsed: Record<string, unknown>) {
+function normalize(parsed: Record<string, unknown>, allowedTemplateIds: Set<string>) {
   const project = (parsed.project ?? {}) as Record<string, unknown>;
   const constraints = (parsed.constraints ?? {}) as Record<string, unknown>;
   const budget = (parsed.budget ?? {}) as Record<string, unknown>;
@@ -156,8 +156,9 @@ function normalize(parsed: Record<string, unknown>) {
         priceHintHt: numberOrNull(task?.priceHintHt),
         technicalNotes: multiline(task?.technicalNotes),
         constraints: multiline(task?.constraints),
-        taskTemplateId: text(task?.taskTemplateId) || null,
-        taskTemplateLabel: text(task?.taskTemplateLabel) || null,
+        // Un id absent de la bibliotheque casserait la cle etrangere a l'enregistrement.
+        taskTemplateId: allowedTemplateIds.has(text(task?.taskTemplateId)) ? text(task?.taskTemplateId) : null,
+        taskTemplateLabel: allowedTemplateIds.has(text(task?.taskTemplateId)) ? (text(task?.taskTemplateLabel) || null) : null,
       })),
     })),
     constraints: {
@@ -238,5 +239,8 @@ serve(async (req) => {
   const parsed = parseJsonPayload(extractOutputText(await response.json()));
   if (!parsed) return json({ error: "Reponse IA non structuree." }, 502);
 
-  return json({ result: normalize(parsed) });
+  const allowedTemplateIds = new Set<string>(
+    (payload.taskLibrary as Array<{ id?: unknown }>).map((row) => String(row?.id ?? "")).filter(Boolean),
+  );
+  return json({ result: normalize(parsed, allowedTemplateIds) });
 });
