@@ -273,6 +273,19 @@ function visitStartDate(date: string, time: string): Date {
   return Number.isNaN(parsed.getTime()) ? new Date() : parsed;
 }
 
+/**
+ * Empreinte du brouillon, pièces jointes non montées comprises. Elle sert à ne
+ * déclencher un auto-enregistrement que si quelque chose a réellement changé :
+ * sans elle, chaque sauvegarde relançait la suivante en boucle.
+ */
+function draftSignature(draft: VisitDraft): string {
+  const attachments = draft.attachments.map((item) => {
+    const state = item.storagePath || (item.file ? "local" : "");
+    return [item.id, state, item.comment, item.targetLineId || ""].join("|");
+  });
+  return JSON.stringify({ ...serializeDraft(draft), attachments });
+}
+
 function readErrorMessage(error: unknown): string {
   const raw = (error as { message?: unknown } | null)?.message ?? error;
   const message = String(raw ?? "").trim();
@@ -449,6 +462,8 @@ export function ProjectVisitWorkspaceStable({ project, existingAppointment }: { 
   const draftRef = useRef(draft);
   draftRef.current = draft;
   const savingRef = useRef(false);
+  const pendingSaveRef = useRef(false);
+  const lastSavedSignatureRef = useRef("");
   const firstDraftRender = useRef(true);
 
   useEffect(() => {
@@ -493,9 +508,14 @@ export function ProjectVisitWorkspaceStable({ project, existingAppointment }: { 
       firstDraftRender.current = false;
       return;
     }
+    // Enregistrer toutes les 4 s pendant la frappe rendait la saisie poussive :
+    // chaque cycle réécrivait toutes les lignes et toutes les pièces jointes du
+    // compte rendu. On laisse la main à l'utilisateur, et on ne repart que si
+    // quelque chose a réellement changé depuis le dernier enregistrement réussi.
     const timer = window.setTimeout(() => {
+      if (draftSignature(draftRef.current) === lastSavedSignatureRef.current) return;
       void persistVisit(draftRef.current.status, { silent: true });
-    }, 4000);
+    }, 12000);
     return () => window.clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [draft, appointmentId]);
@@ -652,13 +672,19 @@ export function ProjectVisitWorkspaceStable({ project, existingAppointment }: { 
     status: VisitStatus,
     { draftOverride, silent }: { draftOverride?: VisitDraft; silent?: boolean },
   ): Promise<{ targetProjectId: string; appointmentId: string } | null> {
-    if (savingRef.current) return null;
+    // Un enregistrement déjà en cours ne fait pas jeter celui-ci : on le rejoue
+    // après, sinon une photo ajoutée pendant la sauvegarde n'était jamais montée.
+    if (savingRef.current) {
+      pendingSaveRef.current = true;
+      return null;
+    }
     savingRef.current = true;
     if (!silent) setSaving(true);
     try {
       const base = draftOverride ?? draftRef.current;
       const nextStatus = status === "brouillon" ? base.status : status;
       const nextDraft = { ...base, status: nextStatus };
+      const signature = draftSignature(nextDraft);
       const startsAt = visitStartDate(nextDraft.date, nextDraft.time);
       const endsAt = new Date(startsAt.getTime() + Number(nextDraft.durationMinutes || 90) * 60000);
       const opportunity = project.opportunity ?? (project.prospect ? await createOpportunityForProspect(project.prospect, { stage_key: "visite", probabilite: 40, prochaine_action: "Finaliser le compte rendu de visite" }) : null);
@@ -681,7 +707,7 @@ export function ProjectVisitWorkspaceStable({ project, existingAppointment }: { 
       const appointmentToUpdate = currentAppointment ?? existingAppointment ?? null;
       const saved = appointmentToUpdate ? await updateCrmAppointment(appointmentToUpdate.id, payload) : await createCrmAppointment(payload);
       setCurrentAppointment(saved);
-      await saveCrmVisitReport({
+      const reportResult = await saveCrmVisitReport({
         appointment_id: saved.id,
         prospect_id: project.prospect?.id ?? null,
         client_id: project.client?.id ?? null,
@@ -713,13 +739,21 @@ export function ProjectVisitWorkspaceStable({ project, existingAppointment }: { 
       });
       if (opportunity) await updateCrmOpportunityStageByKey(opportunity.id, stageFor(nextStatus), { prochaine_action: nextActionFor(nextStatus), prochaine_action_date: nextStatus === "realisee" || nextStatus === "pre_devis" ? nextDraft.followUpDate || null : nextDraft.date });
       localStorage.removeItem(storageKey);
-      // On relit les pièces jointes stockées : elles reviennent avec leur chemin
-      // de stockage et une URL signée, ce qui évite de re-téléverser le même
-      // fichier à chaque enregistrement suivant.
-      const stored = await loadCrmVisitReportDraft(saved.id).catch(() => null);
-      const persisted = stored?.attachments?.length ? (stored.attachments as VisitAttachment[]) : null;
-      const finalDraft = persisted ? { ...nextDraft, attachments: persisted } : nextDraft;
-      setDraft(finalDraft);
+      // On NE remplace PAS le brouillon par l'instantané envoyé : un enregistrement
+      // dure plusieurs secondes, et tout ce qui a été tapé ou photographié pendant
+      // ce temps serait écrasé. On se contente de marquer comme stockées les pièces
+      // jointes réellement montées, dans le brouillon courant.
+      const storedById = new Map(reportResult?.storedAttachments?.map((item) => [item.sourceId, item]) ?? []);
+      if (storedById.size) {
+        setDraft((current) => ({
+          ...current,
+          attachments: current.attachments.map((item) => {
+            const stored = storedById.get(item.id);
+            return stored ? { ...item, file: null, storagePath: stored.path } : item;
+          }),
+        }));
+      }
+      lastSavedSignatureRef.current = signature;
       setSaveState("saved");
       setSaveError(null);
       return { targetProjectId, appointmentId: saved.id };
@@ -730,6 +764,12 @@ export function ProjectVisitWorkspaceStable({ project, existingAppointment }: { 
     } finally {
       savingRef.current = false;
       setSaving(false);
+      // Une modification arrivée pendant l'enregistrement ne doit pas être perdue :
+      // on repart pour un tour au lieu de l'ignorer.
+      if (pendingSaveRef.current) {
+        pendingSaveRef.current = false;
+        window.setTimeout(() => void persistVisit(draftRef.current.status, { silent: true }), 0);
+      }
     }
   }
 
@@ -884,10 +924,28 @@ export function ProjectVisitWorkspaceStable({ project, existingAppointment }: { 
                   return (
                     <figure key={photo.id} className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
                       {photo.previewUrl ? (
-                        <img src={photo.previewUrl} alt={photo.name} className="h-40 w-full object-cover" loading="lazy" />
-                      ) : (
-                        <div className="flex h-40 w-full items-center justify-center bg-slate-100 text-xs text-slate-500">Apercu indisponible</div>
-                      )}
+                        <img
+                          src={photo.previewUrl}
+                          alt={photo.name}
+                          className="h-40 w-full bg-slate-100 object-cover"
+                          loading="lazy"
+                          /* Une photo iPhone en HEIC ne s'affiche pas dans un navigateur :
+                             sans ce repli, la vignette restait blanche et la photo semblait
+                             perdue alors qu'elle est bien enregistrée. */
+                          onError={(event) => {
+                            const image = event.currentTarget;
+                            image.style.display = "none";
+                            const fallback = image.nextElementSibling as HTMLElement | null;
+                            if (fallback) fallback.style.display = "flex";
+                          }}
+                        />
+                      ) : null}
+                      <div
+                        className="h-40 w-full items-center justify-center bg-slate-100 px-3 text-center text-xs text-slate-500"
+                        style={{ display: photo.previewUrl ? "none" : "flex" }}
+                      >
+                        Enregistrée, apercu impossible dans le navigateur
+                      </div>
                       <figcaption className="space-y-2 p-3">
                         <div className="flex items-start justify-between gap-2">
                           <div className="min-w-0">

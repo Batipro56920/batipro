@@ -91,6 +91,12 @@ export type CrmVisitReportDraft = {
   attachments?: Array<CrmVisitReportAttachmentInput & { previewUrl?: string | null }>;
 };
 
+export type CrmVisitReportStoredAttachment = {
+  sourceId: string;
+  bucket: string | null;
+  path: string;
+};
+
 export type CrmVisitReportInput = CrmVisitReportDraft & {
   appointment_id: string;
   prospect_id?: string | null;
@@ -221,15 +227,36 @@ export async function saveCrmVisitReport(input: CrmVisitReportInput) {
   }
 
   const report = reportResult.data as { id: string };
+
+  // Les fichiers partent AVANT toute suppression. Auparavant les lignes de pièces
+  // jointes étaient effacées d'abord : un téléversement qui échouait ensuite (le
+  // réseau d'un chantier) emportait avec lui les photos déjà enregistrées.
+  const storedAttachments: CrmVisitReportStoredAttachment[] = [];
+  const uploadedBySourceId = new Map<string, { bucket: string; path: string }>();
+  for (const attachment of input.attachments ?? []) {
+    if (!attachment.file) continue;
+    const uploaded = await uploadVisitAttachment(attachment.file, report.id);
+    if (attachment.id) uploadedBySourceId.set(String(attachment.id), uploaded);
+  }
+
   const deleteAttachments = await crmDb.from("crm_visit_report_attachments").delete().eq("visit_report_id", report.id);
   if (deleteAttachments.error) throw deleteAttachments.error;
   const deleteItems = await crmDb.from("crm_visit_report_items").delete().eq("visit_report_id", report.id);
   if (deleteItems.error) throw deleteItems.error;
 
+
+  // Les lignes partent en deux requêtes (sections puis tâches, qui ont besoin de
+  // l'id de leur section) au lieu d'un aller-retour par ligne : sur un relevé
+  // d'une vingtaine de lignes, l'auto-enregistrement bloquait la saisie.
   const itemIdBySource = new Map<string, string>();
-  for (const [index, line] of (input.lines ?? []).entries()) {
-    const parent_id = line.parentId ? itemIdBySource.get(line.parentId) ?? null : null;
-    const insert = {
+  const lines = input.lines ?? [];
+  const orderBySourceId = new Map<string, number>();
+  lines.forEach((line, index) => {
+    if (line.id) orderBySourceId.set(line.id, index + 1);
+  });
+
+  function itemRow(line: CrmVisitReportLineInput, parent_id: string | null) {
+    return {
       organization_id,
       visit_report_id: report.id,
       parent_id,
@@ -252,36 +279,70 @@ export async function saveCrmVisitReport(input: CrmVisitReportInput) {
       constraints: text(line.constraints),
       variants: text(line.variants),
       attention_points: text(line.attentionPoints),
-      ordre: index + 1,
+      ordre: line.id ? orderBySourceId.get(line.id) ?? 1 : 1,
     };
-    const { data, error } = await crmDb.from("crm_visit_report_items").insert([insert]).select(VISIT_REPORT_ITEM_SELECT).single();
-    if (error) throw error;
-    if (line.id) itemIdBySource.set(line.id, String(data.id));
   }
 
+  const parentLines = lines.filter((line) => !line.parentId);
+  const childLines = lines.filter((line) => Boolean(line.parentId));
+
+  if (parentLines.length) {
+    const { data, error } = await crmDb
+      .from("crm_visit_report_items")
+      .insert(parentLines.map((line) => itemRow(line, null)))
+      .select(VISIT_REPORT_ITEM_SELECT);
+    if (error) throw error;
+    for (const row of data ?? []) {
+      if (row.source_line_id) itemIdBySource.set(String(row.source_line_id), String(row.id));
+    }
+  }
+
+  if (childLines.length) {
+    const { data, error } = await crmDb
+      .from("crm_visit_report_items")
+      .insert(childLines.map((line) => itemRow(line, line.parentId ? itemIdBySource.get(line.parentId) ?? null : null)))
+      .select(VISIT_REPORT_ITEM_SELECT);
+    if (error) throw error;
+    for (const row of data ?? []) {
+      if (row.source_line_id) itemIdBySource.set(String(row.source_line_id), String(row.id));
+    }
+  }
+
+  // On renvoie ce qui a été stocké pour que l.appelant marque ces pièces comme
+  // persistées, sans relire tout le compte rendu ni écraser la saisie en cours.
+  const attachmentRows: Array<Record<string, unknown>> = [];
+
   for (const [index, attachment] of (input.attachments ?? []).entries()) {
-    const uploaded = attachment.file ? await uploadVisitAttachment(attachment.file, report.id) : null;
+    const uploaded = attachment.id ? uploadedBySourceId.get(String(attachment.id)) ?? null : null;
     const item_id = attachment.targetLineId ? itemIdBySource.get(attachment.targetLineId) ?? null : null;
-    const row = {
+    const storage_bucket = uploaded?.bucket ?? (attachment.storagePath ? "crm-visit-attachments" : null);
+    const storage_path = uploaded?.path ?? attachment.storagePath ?? null;
+    if (attachment.id && storage_path) {
+      storedAttachments.push({ sourceId: String(attachment.id), bucket: storage_bucket, path: storage_path });
+    }
+    attachmentRows.push({
       organization_id,
       visit_report_id: report.id,
       item_id,
       source_attachment_id: text(attachment.id),
       kind: text(attachment.kind) ?? "document",
       name: text(attachment.name) ?? "Piece jointe",
-      storage_bucket: uploaded?.bucket ?? (attachment.storagePath ? "crm-visit-attachments" : null),
-      storage_path: uploaded?.path ?? attachment.storagePath ?? null,
+      storage_bucket,
+      storage_path,
       url: text(attachment.url),
       mime_type: text(attachment.mimeType ?? attachment.file?.type),
       size_bytes: attachment.sizeBytes ?? attachment.file?.size ?? null,
       comment: text(attachment.comment),
       ordre: index + 1,
-    };
-    const { error } = await crmDb.from("crm_visit_report_attachments").insert([row]).select(VISIT_REPORT_ATTACHMENT_SELECT).single();
+    });
+  }
+
+  if (attachmentRows.length) {
+    const { error } = await crmDb.from("crm_visit_report_attachments").insert(attachmentRows).select(VISIT_REPORT_ATTACHMENT_SELECT);
     if (error) throw error;
   }
 
-  return reportResult.data;
+  return { report: reportResult.data, storedAttachments };
 }
 
 async function signedVisitAttachmentUrl(bucket: string | null, path: string | null, fallbackUrl: string | null) {
