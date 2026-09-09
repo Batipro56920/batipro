@@ -520,6 +520,27 @@ export function ProjectVisitWorkspaceStable({ project, existingAppointment }: { 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [draft, appointmentId]);
 
+  /**
+   * Filet de sécurité : entre deux auto-enregistrements, le relevé n'existe que
+   * dans l'onglet. Quitter la page, verrouiller le téléphone ou basculer d'appli
+   * déclenche donc un enregistrement immédiat de ce qui n'est pas encore parti.
+   */
+  useEffect(() => {
+    if (!appointmentId) return;
+    function flush() {
+      if (document.visibilityState === "visible") return;
+      if (draftSignature(draftRef.current) === lastSavedSignatureRef.current) return;
+      void persistVisit(draftRef.current.status, { silent: true });
+    }
+    document.addEventListener("visibilitychange", flush);
+    window.addEventListener("pagehide", flush);
+    return () => {
+      document.removeEventListener("visibilitychange", flush);
+      window.removeEventListener("pagehide", flush);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [appointmentId]);
+
   useEffect(() => {
     let alive = true;
     if (!appointmentId) return () => {
