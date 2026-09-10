@@ -244,6 +244,37 @@ function rpcMessage(error: unknown, fallback: string): string {
   return String((error as { message?: string } | null)?.message ?? fallback).trim() || fallback;
 }
 
+
+/**
+ * supabase-js n'expose que "Edge Function returned a non-2xx status code" et
+ * garde le corps de la reponse dans error.context. Sans le lire, l'ouvrier voit
+ * un message technique qui ne dit pas quoi corriger.
+ */
+const EDGE_ERROR_LABELS: Record<string, string> = {
+  unsupported_file_type: "Format de photo non reconnu. Reprends la photo avec l'appareil.",
+  file_too_large: "Photo trop lourde. Reprends-la de moins pres ou baisse la qualite.",
+  empty_file: "Photo vide : la prise de vue n'a pas abouti.",
+  ai_unavailable: "Lecture automatique indisponible pour le moment. Reessaie dans un instant.",
+  ai_empty_response: "Rien n'a pu etre lu sur cette photo. Cadre le bon en entier, bien a plat.",
+  ai_invalid_response: "La lecture n'a rien donne d'exploitable. Reprends la photo.",
+  intervenant_required: "Ton acces ne permet pas d'envoyer un bon sur ce chantier.",
+  forbidden: "Acces refuse sur ce chantier.",
+};
+
+export async function edgeFunctionMessage(error: unknown, fallback: string): Promise<string> {
+  const context = (error as { context?: unknown } | null)?.context;
+  if (context instanceof Response) {
+    try {
+      const body = await context.clone().json();
+      const code = String((body as { error?: unknown })?.error ?? "").trim();
+      if (code) return EDGE_ERROR_LABELS[code] ?? code;
+    } catch {
+      // corps illisible : on retombe sur le message generique
+    }
+  }
+  return rpcMessage(error, fallback);
+}
+
 function normalizePortalToken(token: string | null | undefined): string | null {
   const trimmed = String(token ?? "").trim();
   if (!trimmed || trimmed === AUTH_SESSION_PORTAL_TOKEN) return null;
@@ -836,8 +867,11 @@ export async function intervenantStockDeclarationCreate(
   if (error) throw new Error(rpcMessage(error, "Enregistrement matériau impossible."));
 }
 
-export type IntervenantDeliverySlipLine = { designation: string; quantity: number; unit: string };
+export type IntervenantDeliverySlipLine = { designation: string; quantity: number; unit: string; unitPriceHt: number | null };
 export type IntervenantDeliverySlipExtractResult = {
+  supplier: string;
+  reference: string;
+  date: string;
   lines: IntervenantDeliverySlipLine[];
   storage_path: string;
   storage_bucket: string;
@@ -857,15 +891,19 @@ export async function intervenantDeliverySlipExtract(
   const { data, error } = await supabase.functions.invoke("intervenant-delivery-slip-extract", {
     body: formData,
   });
-  if (error) throw new Error(rpcMessage(error, "Lecture du bon de livraison impossible."));
+  if (error) throw new Error(await edgeFunctionMessage(error, "Lecture du bon de livraison impossible."));
 
   const payload = (data && typeof data === "object" ? data : {}) as Record<string, unknown>;
   const rows = Array.isArray(payload.lines) ? payload.lines : [];
   return {
+    supplier: String(payload.supplier ?? ""),
+    reference: String(payload.reference ?? ""),
+    date: String(payload.date ?? ""),
     lines: rows.map((row: any) => ({
       designation: String(row?.designation ?? ""),
       quantity: Number(row?.quantity ?? 0),
       unit: String(row?.unit ?? "u"),
+      unitPriceHt: row?.unitPriceHt === null || row?.unitPriceHt === undefined ? null : Number(row.unitPriceHt),
     })),
     storage_path: String(payload.storage_path ?? ""),
     storage_bucket: String(payload.storage_bucket ?? ""),
@@ -890,7 +928,9 @@ export async function intervenantDeliveryNoteSubmit(
     chantier_id: string;
     storage_bucket?: string | null;
     storage_path?: string | null;
-    lines: Array<{ designation: string; quantity: number; unit: string; product_id: string | null }>;
+    supplier_name?: string | null;
+    document_reference?: string | null;
+    lines: Array<{ designation: string; quantity: number; unit: string; product_id: string | null; unit_price_ht?: number | null }>;
   },
 ): Promise<IntervenantDeliveryNoteSubmitResult> {
   const { data, error } = await supabase.functions.invoke("intervenant-delivery-note-submit", {
@@ -899,10 +939,12 @@ export async function intervenantDeliveryNoteSubmit(
       chantier_id: payload.chantier_id,
       storage_bucket: payload.storage_bucket ?? null,
       storage_path: payload.storage_path ?? null,
+      supplier_name: payload.supplier_name ?? null,
+      document_reference: payload.document_reference ?? null,
       lines: payload.lines,
     },
   });
-  if (error) throw new Error(rpcMessage(error, "Enregistrement du bon de livraison impossible."));
+  if (error) throw new Error(await edgeFunctionMessage(error, "Enregistrement du bon de livraison impossible."));
 
   const result = (data && typeof data === "object" ? data : {}) as Record<string, unknown>;
   if (typeof result.error === "string") throw new Error(result.error);

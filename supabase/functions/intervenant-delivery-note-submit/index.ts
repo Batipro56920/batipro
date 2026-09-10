@@ -42,6 +42,7 @@ function normalizeLines(raw: unknown): SubmittedLine[] {
       quantity: Number(item?.quantity),
       unit: normalizeString(item?.unit).slice(0, 20) || "u",
       product_id: normalizeString(item?.product_id) || null,
+      unit_price_ht: item?.unit_price_ht === null || item?.unit_price_ht === undefined ? null : Number(item.unit_price_ht),
     }))
     .filter((line) => line.designation && Number.isFinite(line.quantity) && line.quantity > 0)
     .slice(0, 60);
@@ -61,6 +62,9 @@ serve(async (req) => {
     const chantierId = normalizeString(body.chantier_id);
     const storagePath = normalizeString(body.storage_path) || null;
     const storageBucket = normalizeString(body.storage_bucket) || null;
+    // Fournisseur et reference lus sur la photo : sans eux le bureau ressaisit tout.
+    const supplierName = normalizeString(body.supplier_name).slice(0, 160) || null;
+    const documentReference = normalizeString(body.document_reference).slice(0, 80) || null;
     const lines = normalizeLines(body.lines);
 
     if (!token) return json({ error: "auth required" }, 400);
@@ -140,8 +144,8 @@ serve(async (req) => {
         .insert({
           organization_id: organizationId,
           supplier_id: null,
-          supplier_name: null,
-          document_reference: null,
+          supplier_name: supplierName,
+          document_reference: documentReference,
           purchase_order_id: matchedOrderId,
           chantier_id: chantierId,
           status,

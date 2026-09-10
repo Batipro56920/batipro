@@ -13,16 +13,26 @@ const ALLOWED_CONTENT_TYPES = new Set(["image/jpeg", "image/png", "image/webp"])
 
 const EXTRACTION_PROMPT = `Tu lis une photo de bon de livraison ou de facture de matériaux de chantier (BTP / rénovation), prise par un ouvrier avec son téléphone.
 
-Extrait la liste des lignes de matériaux livrés. Pour chaque ligne, donne :
+Extrait d'abord l'en-tête du document :
+- "supplier": le nom du fournisseur (l'entreprise qui livre : négoce, point P, Leroy Merlin, etc.), pas le nom du chantier ni celui du client
+- "reference": le numéro du bon de livraison ou de la facture
+- "date": la date du document au format AAAA-MM-JJ
+
+Extrait ensuite la liste des lignes de matériaux livrés. Pour chaque ligne :
 - "designation": le nom du produit tel qu'écrit sur le bon (texte brut, garde les unités/dimensions visibles)
 - "quantity": la quantité livrée, en nombre (ex: 10, 2.5)
 - "unit": l'unité si elle est indiquée (ex: "u", "m2", "ml", "sac", "boîte", "rouleau"), sinon "u"
+- "unitPriceHt": le prix unitaire HORS TAXES en euros, si le document l'affiche, sinon null
+- "totalHt": le total hors taxes de la ligne en euros, si affiché, sinon null
+
+N'invente aucun prix : beaucoup de bons de livraison n'en portent pas. Si tu ne vois pas de prix, mets null.
+Si le document affiche des prix TTC seulement, laisse unitPriceHt et totalHt à null.
 
 Ignore les lignes qui ne sont pas des matériaux (frais de port, remises, totaux, TVA, mentions légales).
 Si l'image est illisible ou n'est pas un bon de livraison, renvoie une liste vide.
 
 Réponds uniquement en JSON valide, sans texte autour, avec exactement cette forme :
-{"lines": [{"designation": "...", "quantity": 0, "unit": "..."}]}`;
+{"supplier": "", "reference": "", "date": "", "lines": [{"designation": "...", "quantity": 0, "unit": "...", "unitPriceHt": null, "totalHt": null}]}`;
 
 function json(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), {
@@ -83,6 +93,12 @@ function parseJsonObject(text: string) {
   }
 }
 
+function priceOrNull(value: unknown) {
+  if (value === null || value === undefined || value === "") return null;
+  const parsed = Number(String(value).replace(",", ".").replace(/[^0-9.-]/g, ""));
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : null;
+}
+
 function normalizeLines(raw: unknown) {
   const list = Array.isArray((raw as any)?.lines) ? (raw as any).lines : [];
   return list
@@ -90,6 +106,8 @@ function normalizeLines(raw: unknown) {
       designation: normalizeString(item?.designation).slice(0, 200),
       quantity: Number(item?.quantity),
       unit: normalizeString(item?.unit).slice(0, 20) || "u",
+      unitPriceHt: priceOrNull(item?.unitPriceHt),
+      totalHt: priceOrNull(item?.totalHt),
     }))
     .filter((line: any) => line.designation && Number.isFinite(line.quantity) && line.quantity > 0)
     .slice(0, 40);
@@ -183,14 +201,21 @@ serve(async (req) => {
       return json({ error: "ai_empty_response", storage_path: storagePath, storage_bucket: BUCKET }, 502);
     }
 
-    let lines: Array<{ designation: string; quantity: number; unit: string }> = [];
+    let lines: Array<Record<string, unknown>> = [];
+    let header: Record<string, unknown> = {};
     try {
-      lines = normalizeLines(parseJsonObject(outputText));
+      const parsed = parseJsonObject(outputText);
+      header = (parsed && typeof parsed === "object" ? parsed : {}) as Record<string, unknown>;
+      lines = normalizeLines(parsed);
     } catch {
       return json({ error: "ai_invalid_response", storage_path: storagePath, storage_bucket: BUCKET }, 502);
     }
 
     return json({
+      // L'en-tete evite au bureau de ressaisir le fournisseur et la reference.
+      supplier: normalizeString(header.supplier).slice(0, 160),
+      reference: normalizeString(header.reference).slice(0, 80),
+      date: normalizeString(header.date).slice(0, 10),
       lines,
       storage_path: storagePath,
       storage_bucket: BUCKET,
