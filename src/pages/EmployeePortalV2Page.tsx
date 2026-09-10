@@ -1473,13 +1473,22 @@ export default function EmployeePortalV2Page() {
                     </div>
                   ))}
 
+                  {slipLines.some((line) => !line.productId) ? (
+                    <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-900">
+                      {slipLines.filter((line) => !line.productId).length} ligne(s) sans produit associé ne seront pas
+                      enregistrées : associe-les à un produit, ou retire-les.
+                    </div>
+                  ) : null}
+
                   <button
                     type="button"
                     onClick={submitSlipLines}
                     disabled={slipSubmitting || !slipLines.some((l) => l.productId && l.quantity.trim())}
                     className="w-full rounded-xl bg-slate-950 px-4 py-2.5 text-sm font-bold text-white disabled:opacity-40"
                   >
-                    {slipSubmitting ? "Enregistrement..." : "Valider et mettre en stock"}
+                    {slipSubmitting
+                      ? "Enregistrement..."
+                      : `Valider et mettre en stock (${slipLines.filter((l) => l.productId && l.quantity.trim()).length})`}
                   </button>
                 </div>
               ) : null}

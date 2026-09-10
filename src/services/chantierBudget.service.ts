@@ -5,7 +5,7 @@ import { supabase } from "../lib/supabaseClient";
 import { getTasksByChantierId, type ChantierTaskRow } from "./chantierTasks.service";
 import { listChantierPurchaseRequests, type ChantierPurchaseRequestRow } from "./chantierPurchaseRequests.service";
 import { listIntervenants } from "./intervenants.service";
-import { getChantierReceivedMaterialCost } from "./productStock.service";
+import { getChantierMaterialCost } from "./productStock.service";
 
 export type ChantierBudgetSettingsRow = {
   chantier_id: string;
@@ -46,6 +46,7 @@ export type ChantierBudgetDashboard = {
   achatsPrevusHt: number;
   achatsReelsHt: number;
   achatsSaisisHt: number;
+  /** Coût matières venant des mouvements de stock rattachés au chantier. */
   achatsLivresHt: number;
   coutPrevuHt: number;
   coutReelHt: number;
@@ -283,14 +284,14 @@ export async function listChantierLaborCostSummaries(
 export async function loadChantierBudgetDashboard(chantierId: string): Promise<ChantierBudgetDashboard> {
   if (!chantierId) throw new Error("chantierId manquant.");
 
-  const [settingsResult, devis, tasks, timeEntries, purchaseResult, changeOrdersResult, receivedMaterialCostHt] = await Promise.all([
+  const [settingsResult, devis, tasks, timeEntries, purchaseResult, changeOrdersResult, materialCostHt] = await Promise.all([
     getBudgetSettings(chantierId),
     listDevisByChantier(chantierId),
     getTasksByChantierId(chantierId),
     listChantierTimeEntriesByChantierId(chantierId),
     listChantierPurchaseRequests(chantierId),
     listChantierChangeOrders(chantierId),
-    getChantierReceivedMaterialCost(chantierId),
+    getChantierMaterialCost(chantierId),
   ]);
 
   const devisLignesGroups = await Promise.all(devis.map((row) => listDevisLignes(row.id)));
@@ -366,7 +367,7 @@ export async function loadChantierBudgetDashboard(chantierId: string): Promise<C
   const achatsSaisisHt = lots.reduce((sum, row) => sum + row.achats_reels_ht, 0);
   // Les bons de livraison lus sur le terrain s'ajoutent aux achats saisis au
   // bureau : ce sont deux sources distinctes du meme cout matieres.
-  const achatsLivresHt = normalizeNumber(receivedMaterialCostHt);
+  const achatsLivresHt = normalizeNumber(materialCostHt);
   const achatsReelsHt = achatsSaisisHt + achatsLivresHt;
   const coutPrevuHt = coutMoPrevuHt + achatsPrevusHt;
   const coutReelHt = coutMoReelHt + achatsReelsHt;
