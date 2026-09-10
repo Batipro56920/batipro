@@ -1,4 +1,4 @@
-import type { CrmClientRow, CrmProspectRow } from "../../../services/crm.service";
+import type { CrmClientRow, CrmProspectRow, CrmUserRow } from "../../../services/crm.service";
 
 export function eur(value: number | null | undefined) {
   return Number(value ?? 0).toLocaleString("fr-FR", { style: "currency", currency: "EUR", maximumFractionDigits: 0 });
@@ -12,6 +12,20 @@ export function dateOnly(value: string | null | undefined) {
 export function entityLabel(row: Pick<CrmProspectRow | CrmClientRow, "prenom" | "nom" | "societe" | "email"> | null | undefined) {
   if (!row) return "—";
   return [row.prenom, row.nom].filter(Boolean).join(" ") || row.societe || row.email || "Sans nom";
+}
+
+export function buildUserLabelMap(users: CrmUserRow[] | undefined) {
+  return new Map((users ?? []).map((user) => [user.id, user.display_name?.trim() || ""] as const));
+}
+
+/**
+ * Nom du commercial a partir de son identifiant. Sans correspondance dans
+ * l'annuaire (compte supprime, RLS restrictive), on evite d'exposer un UUID brut.
+ */
+export function salespersonLabel(id: string | null | undefined, userLabelById?: Map<string, string>) {
+  const key = String(id ?? "").trim();
+  if (!key) return "";
+  return userLabelById?.get(key)?.trim() || "Commercial inconnu";
 }
 
 export function statusPill(status: string) {

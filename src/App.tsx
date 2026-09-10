@@ -61,7 +61,6 @@ type CrmSection =
   | "dashboard"
   | "prospects"
   | "clients"
-  | "opportunities"
   | "quotes"
   | "invoices"
   | "purchases"
@@ -69,7 +68,6 @@ type CrmSection =
   | "resources"
   | "library"
   | "agenda"
-  | "sav"
   | "stats"
   | "settings";
 
@@ -283,7 +281,7 @@ export default function App() {
         <Route path="/crm/ressources" element={<CrmRoute section="resources" />} />
         <Route path="/crm/bibliotheque" element={<CrmRoute section="library" />} />
         <Route path="/crm/agenda" element={<CrmRoute section="agenda" />} />
-        <Route path="/crm/sav" element={<CrmRoute section="sav" />} />
+        <Route path="/crm/sav" element={<Navigate to="/chantiers" replace />} />
         <Route path="/crm/statistiques" element={<CrmRoute section="stats" />} />
         <Route path="/crm/parametres" element={<CrmRoute section="settings" />} />
 

@@ -533,7 +533,6 @@ export function useDashboardMetrics({ chantiers, materiel, alerts, filter, chant
     { key: "purchaseOrders", label: "Commandes à traiter", value: "—", hint: "Bons de commande ouverts", href: "/bons-commande?status=open", tone: "warning", actionable: true },
     { key: "quotes", label: "Devis à relancer", value: "—", hint: "Envoyés, non signés ni refusés", href: "/crm/devis?signatureStatus=attente_signature", tone: "info", actionable: false },
     { key: "opportunities", label: "Opportunités ouvertes", value: "—", hint: "Projets commerciaux en cours", href: "/projets", tone: "info", actionable: false },
-    { key: "sav", label: "SAV ouverts", value: "—", hint: "Dossiers SAV non clôturés", href: "/crm/sav", tone: "normal", actionable: false },
     { key: "apporteurCommissions", label: "Commissions à payer", value: "—", hint: "Apporteurs d’affaires", href: "/crm/apporteurs?status=commission_a_payer", tone: "warning", actionable: false },
   ], []);
 

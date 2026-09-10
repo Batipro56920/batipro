@@ -88,7 +88,6 @@ export default function Sidebar({ collapsed = false, onToggleCollapse, companyNa
     { to: "/fil-chantier", label: "Fil chantiers", icon: MessageCircle, feature: "journal_chantier" as const, group: "Production" },
     { to: "/visites-chantier", label: "Visites chantier", icon: ClipboardList, feature: "validation_qualite" as const, group: "Production" },
     { to: "/reserves", label: "Réserves chantier", icon: ClipboardList, feature: "preparation_chantier" as const, permissionKey: "preparation_chantier" as const, group: "Production" },
-    { to: "/crm/sav", label: "SAV", icon: ClipboardList, permissionKey: "crm" as const, group: "Production" },
     { to: "/temps", label: "Temps", icon: Clock3, feature: "temps" as const, permissionKey: "temps" as const, group: "Ressources" },
     { to: "/retours-terrain", label: t("sidebar.terrainFeedback"), icon: ClipboardList, feature: "journal_chantier" as const, group: "Ressources" },
     { to: "/bibliotheque", label: "Bibliothèque de tâches", icon: LibraryBig, feature: "documents" as const, permissionKey: "bibliotheque" as const, group: "Ressources" },

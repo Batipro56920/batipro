@@ -1,13 +1,11 @@
-import { BriefcaseBusiness, CalendarDays, Upload, UserPlus } from "lucide-react";
+import { CalendarDays, Upload, UserPlus } from "lucide-react";
 import { Button } from "../../../../components/ui/button";
 
 export function ProspectsHeader({
   onCreate,
-  onCreateOpportunity,
   onCreateAppointment,
 }: {
   onCreate: () => void;
-  onCreateOpportunity: () => void;
   onCreateAppointment: () => void;
 }) {
   return (
@@ -22,10 +20,6 @@ export function ProspectsHeader({
           <Button type="button" variant="primary" size="md" onClick={onCreate}>
             <UserPlus className="h-4 w-4" />
             Ajouter prospect
-          </Button>
-          <Button type="button" variant="secondary" size="md" onClick={onCreateOpportunity}>
-            <BriefcaseBusiness className="h-4 w-4" />
-            Créer affaire
           </Button>
           <Button type="button" variant="secondary" size="md" onClick={onCreateAppointment}>
             <CalendarDays className="h-4 w-4" />

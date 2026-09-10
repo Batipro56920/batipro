@@ -2,10 +2,8 @@ import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { ProjectDetailHeader } from "../features/projects/components/ProjectDetailHeader";
 import {
-  ProjectActivityTab,
   ProjectDocumentsTab,
   ProjectQuotesTab,
-  ProjectSavTab,
   ProjectSummaryTab,
   ProjectVisitsTab,
 } from "../features/projects/components/ProjectDetailSections";
@@ -13,7 +11,7 @@ import { ProjectProfitabilityTab } from "../features/projects/components/Project
 import { useProjectsData } from "../features/projects/hooks/useProjectsData";
 import { getApporteurLeads, getApporteursAffaires } from "../services/apporteurs.service";
 
-type ProjectTab = "summary" | "visits" | "quotes" | "profitability" | "documents" | "activity" | "sav";
+type ProjectTab = "summary" | "visits" | "quotes" | "profitability" | "documents";
 
 type ApporteurTracking = {
   label: string;
@@ -26,8 +24,6 @@ const TABS: Array<{ id: ProjectTab; label: string }> = [
   { id: "quotes", label: "Devis" },
   { id: "profitability", label: "Rentabilite" },
   { id: "documents", label: "Documents" },
-  { id: "activity", label: "Activité" },
-  { id: "sav", label: "SAV" },
 ];
 
 function readProjectTab(value: string | null): ProjectTab {
@@ -123,8 +119,6 @@ export default function ProjectDetailPage() {
     if (activeTab === "quotes") return <ProjectQuotesTab project={project} />;
     if (activeTab === "profitability") return <ProjectProfitabilityTab project={project} />;
     if (activeTab === "documents") return <ProjectDocumentsTab project={project} />;
-    if (activeTab === "activity") return <ProjectActivityTab project={project} />;
-    if (activeTab === "sav") return <ProjectSavTab project={project} />;
     return <ProjectSummaryTab project={project} />;
   }, [activeTab, project]);
 

@@ -225,14 +225,13 @@ export function ProjectSummaryTab({ project }: { project: ProjectRecord }) {
             ]}
           />
 
-          <div className="grid gap-3 md:grid-cols-3 xl:grid-cols-6">
+          <div className="grid gap-3 md:grid-cols-3 xl:grid-cols-5">
             {[
               ["RDV", project.appointments.length],
               ["Devis", project.quotes.length],
               ["Montant devis", formatCurrency(project.quoteAmount)],
               ["Documents", project.documents.length],
               ["Taches commerciales", openFollowUps],
-              ["SAV", project.sav.length],
             ].map(([label, value]) => (
               <div key={label} className="rounded-2xl border border-slate-200 p-4">
                 <div className="text-xl font-bold text-slate-950">{value}</div>
@@ -271,7 +270,7 @@ export function ProjectSummaryTab({ project }: { project: ProjectRecord }) {
         </Panel>
       </div>
 
-      <div className="grid gap-5 xl:grid-cols-3">
+      <div className="grid gap-5 xl:grid-cols-2">
         <Panel title="Derniere activite">
           {latestActivity ? (
             <div className="rounded-2xl border border-slate-200 p-4">
@@ -295,17 +294,6 @@ export function ProjectSummaryTab({ project }: { project: ProjectRecord }) {
           ) : (
             <EmptyProjectBlock title="Aucun devis" description="Creez un devis depuis le dossier projet." />
           )}
-        </Panel>
-
-        <Panel title="Qualification rapide">
-          <InfoGrid
-            rows={[
-              ["Type projet", project.projectType],
-              ["Besoin client", project.needDescription],
-              ["Urgence", project.prospect?.urgence],
-              ["Prochaine action", project.nextAction],
-            ]}
-          />
         </Panel>
       </div>
     </div>
@@ -659,48 +647,6 @@ export function ProjectDocumentsTab({ project }: { project: ProjectRecord }) {
         </div>
       ) : (
         <EmptyProjectBlock title="Aucun document centralise" description="Importez ou rattachez les documents commerciaux depuis les visites et devis." />
-      )}
-    </Panel>
-  );
-}
-
-export function ProjectActivityTab({ project }: { project: ProjectRecord }) {
-  const events = recentActivity(project);
-  return (
-    <Panel title="Activite" description="Timeline commerciale du projet.">
-      {events.length ? (
-        <div className="space-y-4">
-          {events.map(([label, date], index) => (
-            <div key={`${label}-${index}`} className="flex gap-3">
-              <div className="mt-1 h-2 w-2 rounded-full bg-blue-600" />
-              <div>
-                <div className="text-sm font-semibold text-slate-900">{label}</div>
-                <div className="text-xs text-slate-500">{formatDate(date)}</div>
-              </div>
-            </div>
-          ))}
-        </div>
-      ) : (
-        <EmptyProjectBlock title="Aucune activite" description="Les appels, emails, RDV, devis et relances apparaitront ici." />
-      )}
-    </Panel>
-  );
-}
-
-export function ProjectSavTab({ project }: { project: ProjectRecord }) {
-  return (
-    <Panel title="SAV" description="Vue legere des tickets lies au projet ou au client.">
-      {project.sav.length ? (
-        <div className="space-y-3">
-          {project.sav.map((ticket) => (
-            <div key={ticket.id} className="rounded-2xl border border-slate-200 p-4">
-              <div className="font-semibold text-slate-950">{ticket.titre}</div>
-              <div className="mt-1 text-sm text-slate-500">{ticket.statut} - {ticket.urgence} - {formatDate(ticket.created_at)}</div>
-            </div>
-          ))}
-        </div>
-      ) : (
-        <EmptyProjectBlock title="Aucun ticket SAV" description="Les demandes apres chantier liees au client apparaitront ici sans remplacer le module production SAV." />
       )}
     </Panel>
   );

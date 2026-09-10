@@ -19,7 +19,6 @@ export default function CrmStatsSection({ data, kpis, transformationRate }: { da
         ["Devis perdus", kpis.quotesRefused],
         ["Panier moyen", eur(avgQuote)],
         ["Performance commerciale", `${data.opportunities.filter((row) => row.status === "gagnee").length} gagnées`],
-        ["SAV ouverts", kpis.openSav],
       ].map(([label, value]) => (
         <div key={String(label)} className="rounded-3xl border bg-white p-5">
           <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">{label}</div>

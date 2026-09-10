@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
-import type { CrmProspectRow } from "../../../../services/crm.service";
+import type { CrmProspectRow, CrmUserRow } from "../../../../services/crm.service";
+import { buildUserLabelMap, salespersonLabel } from "../../components/crmFormat";
 import type { ProspectFilters, ProspectQuickFilter } from "../types";
 
 const DEFAULT_FILTERS: ProspectFilters = {
@@ -30,12 +31,20 @@ function matchesQuickFilter(row: CrmProspectRow, filter: ProspectQuickFilter) {
   return true;
 }
 
-export function useProspectsFilters(rows: CrmProspectRow[], query: string) {
+export function useProspectsFilters(rows: CrmProspectRow[], query: string, users?: CrmUserRow[]) {
   const [filters, setFilters] = useState<ProspectFilters>(DEFAULT_FILTERS);
+  const userLabelById = useMemo(() => buildUserLabelMap(users), [users]);
 
   const sources = useMemo(() => Array.from(new Set(rows.map((row) => row.source_acquisition).filter(Boolean) as string[])).sort(), [rows]);
   const statuses = useMemo(() => Array.from(new Set(rows.map((row) => row.statut))).sort(), [rows]);
-  const owners = useMemo(() => Array.from(new Set(rows.map((row) => row.owner_id).filter(Boolean) as string[])).sort(), [rows]);
+  const owners = useMemo(() => {
+    const byId = new Map<string, string>();
+    for (const row of rows) {
+      const id = row.owner_id?.trim();
+      if (id) byId.set(id, salespersonLabel(id, userLabelById));
+    }
+    return Array.from(byId, ([id, label]) => ({ id, label })).sort((a, b) => a.label.localeCompare(b.label, "fr"));
+  }, [rows, userLabelById]);
 
   const filteredRows = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase();

@@ -1,6 +1,6 @@
 import { Mail, MoreHorizontal, Phone } from "lucide-react";
 import type { CrmProspectRow } from "../../../../services/crm.service";
-import { dateOnly, entityLabel, eur } from "../../components/crmFormat";
+import { dateOnly, entityLabel, eur, salespersonLabel } from "../../components/crmFormat";
 import { ProspectStatusBadge } from "./ProspectStatusBadge";
 import type { ProspectActionHandlers } from "../types";
 
@@ -18,10 +18,12 @@ export function ProspectsTable({
   rows,
   actions,
   onSelect,
+  userLabelById,
 }: {
   rows: CrmProspectRow[];
   actions: ProspectActionHandlers;
   onSelect: (row: CrmProspectRow) => void;
+  userLabelById?: Map<string, string>;
 }) {
   return (
     <section className="overflow-hidden rounded-surface border border-subtle bg-surface shadow-sm">
@@ -55,7 +57,7 @@ export function ProspectsTable({
                 </td>
                 <td className="px-4 py-3 font-medium text-ink">{row.budget_estime ? eur(row.budget_estime) : "—"}</td>
                 <td className="px-4 py-3 text-ink-secondary">{row.source_acquisition ?? "—"}</td>
-                <td className="px-4 py-3 text-ink-secondary">{row.owner_id ?? "—"}</td>
+                <td className="px-4 py-3 text-ink-secondary">{salespersonLabel(row.owner_id, userLabelById) || "—"}</td>
                 <td className="px-4 py-3 text-ink-secondary">{dateOnly(row.updated_at ?? row.created_at)}</td>
                 <td className="px-4 py-3"><ProspectStatusBadge status={row.statut} /></td>
                 <td className="px-4 py-3" onClick={(event) => event.stopPropagation()}>
@@ -63,7 +65,6 @@ export function ProspectsTable({
                     <a href={row.mobile || row.telephone ? `tel:${row.mobile ?? row.telephone}` : undefined} className="bt-control rounded-field border border-subtle px-2 py-1 text-xs font-semibold text-ink-secondary hover:bg-interactive">Appeler</a>
                     <a href={row.email ? `mailto:${row.email}` : undefined} className="bt-control rounded-field border border-subtle px-2 py-1 text-xs font-semibold text-ink-secondary hover:bg-interactive">Email</a>
                     <button type="button" onClick={() => actions.onTask(row)} className="bt-control rounded-field border border-subtle px-2 py-1 text-xs font-semibold text-ink-secondary hover:bg-interactive">Tâche</button>
-                    <button type="button" onClick={() => actions.onCreateOpportunity(row)} className="bt-control rounded-field border border-subtle px-2 py-1 text-xs font-semibold text-ink-secondary hover:bg-interactive">Affaire</button>
                     <button type="button" onClick={() => actions.onCreateAppointment(row)} className="bt-control rounded-field border border-subtle px-2 py-1 text-xs font-semibold text-ink-secondary hover:bg-interactive">RDV</button>
                     <button type="button" onClick={() => actions.onCreateQuote(row)} className="bt-control rounded-field border border-subtle px-2 py-1 text-xs font-semibold text-ink-secondary hover:bg-interactive">Devis</button>
                     <button type="button" onClick={() => actions.onConvert(row)} className="bt-control rounded-field border border-success/20 bg-success-soft px-2 py-1 text-xs font-semibold text-success-on hover:bg-interactive">Convertir</button>

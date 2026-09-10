@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import type { CrmClientRow, CrmOpportunityRow, CrmProspectRow, CrmQuoteRow } from "../../../services/crm.service";
+import type { CrmClientRow, CrmOpportunityRow, CrmProspectRow, CrmQuoteRow, CrmUserRow } from "../../../services/crm.service";
 import { QuoteDetailDrawer } from "../quotes/components/QuoteDetailDrawer";
 import { QuotesEmptyState } from "../quotes/components/QuotesEmptyState";
 import { QuotesHeader } from "../quotes/components/QuotesHeader";
@@ -32,6 +32,7 @@ export default function CrmQuotesSection({
   prospectById,
   clientById,
   opportunityById,
+  users,
   projectPathByQuoteId,
   chantierPathByQuoteId,
   onCreate,
@@ -43,6 +44,7 @@ export default function CrmQuotesSection({
   prospectById: Map<string, CrmProspectRow>;
   clientById: Map<string, CrmClientRow>;
   opportunityById?: Map<string, CrmOpportunityRow>;
+  users?: CrmUserRow[];
   projectPathByQuoteId?: Map<string, string>;
   chantierPathByQuoteId?: Map<string, string>;
   onCreate: () => void;
@@ -72,6 +74,7 @@ export default function CrmQuotesSection({
     prospectById,
     clientById,
     opportunityById,
+    users,
     projectPathByQuoteId,
     chantierPathByQuoteId,
     globalQuery: "",

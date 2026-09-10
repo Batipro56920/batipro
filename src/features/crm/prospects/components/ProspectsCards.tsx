@@ -39,7 +39,6 @@ export function ProspectsCards({ rows, actions, onSelect }: { rows: CrmProspectR
           </button>
           <div className="mt-3 flex flex-wrap gap-2">
             <button type="button" onClick={() => actions.onTask(row)} className="bt-control rounded-field border border-subtle px-2 py-1 text-xs font-semibold text-ink-secondary hover:bg-interactive">Tâche</button>
-            <button type="button" onClick={() => actions.onCreateOpportunity(row)} className="bt-control rounded-field border border-subtle px-2 py-1 text-xs font-semibold text-ink-secondary hover:bg-interactive">Affaire</button>
             <button type="button" onClick={() => actions.onCreateAppointment(row)} className="bt-control rounded-field border border-subtle px-2 py-1 text-xs font-semibold text-ink-secondary hover:bg-interactive">RDV</button>
             <button type="button" onClick={() => actions.onCreateQuote(row)} className="bt-control rounded-field border border-subtle px-2 py-1 text-xs font-semibold text-ink-secondary hover:bg-interactive">Devis</button>
             <button type="button" onClick={() => actions.onConvert(row)} className="bt-control rounded-field border border-success/20 bg-success-soft px-2 py-1 text-xs font-semibold text-success-on hover:bg-interactive">Convertir</button>

@@ -28,7 +28,7 @@ export function ProspectsFilterBar({
   setFilters: Dispatch<SetStateAction<ProspectFilters>>;
   statuses: string[];
   sources: string[];
-  owners: string[];
+  owners: Array<{ id: string; label: string }>;
   view: ProspectView;
   setView: (value: ProspectView) => void;
 }) {
@@ -71,7 +71,7 @@ export function ProspectsFilterBar({
         </select>
         <select value={filters.owner} onChange={(event) => setFilters((current) => ({ ...current, owner: event.target.value }))} className="bt-control h-9 rounded-field border border-subtle bg-surface px-3 text-sm text-ink">
           <option value="all">Tous commerciaux</option>
-          {owners.map((owner) => <option key={owner} value={owner}>{owner}</option>)}
+          {owners.map((owner) => <option key={owner.id} value={owner.id}>{owner.label}</option>)}
         </select>
         <select value={filters.budget} onChange={(event) => setFilters((current) => ({ ...current, budget: event.target.value }))} className="bt-control h-9 rounded-field border border-subtle bg-surface px-3 text-sm text-ink">
           <option value="all">Tous budgets</option>

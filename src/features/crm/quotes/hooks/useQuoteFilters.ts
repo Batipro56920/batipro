@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
-import type { CrmClientRow, CrmOpportunityRow, CrmProspectRow, CrmQuoteRow } from "../../../../services/crm.service";
-import { entityLabel } from "../../components/crmFormat";
+import type { CrmClientRow, CrmOpportunityRow, CrmProspectRow, CrmQuoteRow, CrmUserRow } from "../../../../services/crm.service";
+import { buildUserLabelMap, entityLabel, salespersonLabel } from "../../components/crmFormat";
 import type { QuoteFilterOption, QuoteFilters, QuoteWithParty } from "../types";
 
 const DEFAULT_FILTERS: QuoteFilters = {
@@ -35,32 +35,17 @@ function quoteEditPath(row: CrmQuoteRow, projectPath: string) {
   return quoteCrmFallbackPath(row);
 }
 
-function shortId(value: string) {
-  return value.slice(0, 8);
-}
-
 function quoteSalesperson(
   row: CrmQuoteRow,
   prospectById: Map<string, CrmProspectRow>,
-  opportunityById?: Map<string, CrmOpportunityRow>,
+  opportunityById: Map<string, CrmOpportunityRow> | undefined,
+  userLabelById: Map<string, string>,
 ) {
   const opportunity = row.opportunity_id ? opportunityById?.get(row.opportunity_id) ?? null : null;
-  if (opportunity?.responsable_id) {
-    return {
-      key: `opportunity:${opportunity.responsable_id}`,
-      label: `Opportunité ${shortId(opportunity.responsable_id)}`,
-    };
-  }
-
   const prospect = row.prospect_id ? prospectById.get(row.prospect_id) ?? null : null;
-  if (prospect?.owner_id) {
-    return {
-      key: `prospect:${prospect.owner_id}`,
-      label: `Prospect ${shortId(prospect.owner_id)}`,
-    };
-  }
-
-  return { key: "unassigned", label: "Non assigné" };
+  const ownerId = opportunity?.responsable_id ?? prospect?.owner_id ?? null;
+  if (!ownerId) return { key: "unassigned", label: "Non assigné" };
+  return { key: ownerId, label: salespersonLabel(ownerId, userLabelById) };
 }
 
 export function useQuoteFilters({
@@ -68,6 +53,7 @@ export function useQuoteFilters({
   prospectById,
   clientById,
   opportunityById,
+  users,
   projectPathByQuoteId,
   chantierPathByQuoteId,
   globalQuery,
@@ -76,16 +62,18 @@ export function useQuoteFilters({
   prospectById: Map<string, CrmProspectRow>;
   clientById: Map<string, CrmClientRow>;
   opportunityById?: Map<string, CrmOpportunityRow>;
+  users?: CrmUserRow[];
   projectPathByQuoteId?: Map<string, string>;
   chantierPathByQuoteId?: Map<string, string>;
   globalQuery: string;
 }) {
   const [filters, setFilters] = useState<QuoteFilters>(DEFAULT_FILTERS);
+  const userLabelById = useMemo(() => buildUserLabelMap(users), [users]);
 
   const rowsWithParty = useMemo<QuoteWithParty[]>(() => rows.map((row) => {
     const linkedProjectPath = projectPathByQuoteId?.get(row.id) ?? "";
     const projectPath = linkedProjectPath || "/projets";
-    const salesperson = quoteSalesperson(row, prospectById, opportunityById);
+    const salesperson = quoteSalesperson(row, prospectById, opportunityById, userLabelById);
     return {
       ...row,
       partyLabel: entityLabel(clientById.get(row.client_id ?? "") ?? prospectById.get(row.prospect_id ?? "")),
@@ -96,7 +84,7 @@ export function useQuoteFilters({
       salespersonKey: salesperson.key,
       salespersonLabel: salesperson.label,
     };
-  }), [chantierPathByQuoteId, clientById, opportunityById, projectPathByQuoteId, prospectById, rows]);
+  }), [chantierPathByQuoteId, clientById, opportunityById, projectPathByQuoteId, prospectById, rows, userLabelById]);
 
   const statuses = useMemo(() => Array.from(new Set(rows.map((row) => row.statut))).sort(), [rows]);
   const clients = useMemo(() => Array.from(new Set(rowsWithParty.map((row) => row.partyLabel).filter((value) => value !== "—"))).sort(), [rowsWithParty]);

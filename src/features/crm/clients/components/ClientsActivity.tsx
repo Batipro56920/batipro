@@ -16,7 +16,7 @@ export function ClientsActivity({ rows, onSelect }: { rows: ClientWithMetrics[];
             <div className="flex items-start justify-between gap-3">
               <div>
                 <div className="font-semibold text-slate-950">{row.label}</div>
-                <div className="mt-1 text-sm text-slate-500">{row.totalChantiers} chantier(s) · {row.quotesCount} devis · {row.openSav} SAV</div>
+                <div className="mt-1 text-sm text-slate-500">{row.totalChantiers} chantier(s) · {row.quotesCount} devis</div>
               </div>
               <div className="text-right text-xs text-slate-500">
                 <div>{dateOnly(row.updated_at ?? row.created_at)}</div>

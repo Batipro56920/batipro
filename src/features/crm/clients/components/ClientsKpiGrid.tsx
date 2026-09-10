@@ -1,4 +1,4 @@
-import { BadgeEuro, FileWarning, Headphones, Home, UserRound, UsersRound } from "lucide-react";
+import { BadgeEuro, FileWarning, Home, UserRound, UsersRound } from "lucide-react";
 import type { ClientWithMetrics } from "../types";
 import { eur } from "../../components/crmFormat";
 
@@ -14,7 +14,6 @@ export function ClientsKpiGrid({ rows }: { rows: ClientWithMetrics[] }) {
   const newMonth = rows.filter((row) => isRecent(row.created_at, 30)).length;
   const revenue = rows.reduce((sum, row) => sum + row.totalRevenue, 0);
   const activeChantiers = rows.reduce((sum, row) => sum + row.activeChantiers, 0);
-  const openSav = rows.reduce((sum, row) => sum + row.openSav, 0);
   const pendingInvoices = rows.reduce((sum, row) => sum + row.pendingInvoices, 0);
 
   const items = [
@@ -22,12 +21,11 @@ export function ClientsKpiGrid({ rows }: { rows: ClientWithMetrics[] }) {
     { label: "Nouveaux ce mois", value: String(newMonth), hint: "Créés récemment", icon: UserRound, tone: "text-emerald-700 bg-emerald-50 border-emerald-200" },
     { label: "CA total", value: eur(revenue), hint: "Chantiers liés", icon: BadgeEuro, tone: "text-slate-700 bg-slate-50 border-slate-200" },
     { label: "Chantiers actifs", value: String(activeChantiers), hint: "Production en cours", icon: Home, tone: "text-indigo-700 bg-indigo-50 border-indigo-200" },
-    { label: "SAV ouverts", value: String(openSav), hint: "Tickets non clos", icon: Headphones, tone: "text-amber-700 bg-amber-50 border-amber-200" },
     { label: "Factures attente", value: String(pendingInvoices), hint: "Paiements à suivre", icon: FileWarning, tone: "text-red-700 bg-red-50 border-red-200" },
   ];
 
   return (
-    <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
+    <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
       {items.map((item) => {
         const Icon = item.icon;
         return (

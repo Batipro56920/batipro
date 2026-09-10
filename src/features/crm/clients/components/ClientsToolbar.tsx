@@ -49,11 +49,6 @@ export function ClientsToolbar({
           <option value="active">Chantier actif</option>
           <option value="none">Sans chantier</option>
         </select>
-        <select value={filters.sav} onChange={(event) => setFilters((current) => ({ ...current, sav: event.target.value }))} className="h-9 rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-700">
-          <option value="all">Tous SAV</option>
-          <option value="open">SAV ouvert</option>
-          <option value="none">Sans SAV ouvert</option>
-        </select>
         <select value={filters.date} onChange={(event) => setFilters((current) => ({ ...current, date: event.target.value }))} className="h-9 rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-700">
           <option value="all">Toute date</option>
           <option value="week">Créé semaine</option>

@@ -8,7 +8,6 @@ export type ClientFilters = {
   owner: string;
   status: string;
   chantier: string;
-  sav: string;
   date: string;
 };
 
@@ -16,7 +15,6 @@ export type ClientMetrics = {
   chantiers: CrmDataset["chantiers"];
   quotes: CrmDataset["quotes"];
   invoices: CrmDataset["invoices"];
-  sav: CrmDataset["sav"];
   documents: CrmDataset["documents"];
 };
 
@@ -27,6 +25,5 @@ export type ClientWithMetrics = CrmClientRow & {
   quotesCount: number;
   totalRevenue: number;
   pendingInvoices: number;
-  openSav: number;
   documentsCount: number;
 };

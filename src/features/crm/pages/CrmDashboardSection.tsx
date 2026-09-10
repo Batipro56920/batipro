@@ -4,7 +4,6 @@ import type { CrmClientRow, CrmDataset, CrmProspectRow, CrmQuoteRow } from "../.
 import { CrmActionCenter, type CrmActionItem } from "../components/CrmActionCenter";
 import { CrmAlertCenter, type CrmAlertItem } from "../components/CrmAlertCenter";
 import { CrmKpiGrid, type CrmKpiItem } from "../components/CrmKpiGrid";
-import { CrmPipelinePreview } from "../components/CrmPipelinePreview";
 import { CrmRecentActivity } from "../components/CrmRecentActivity";
 import { dateOnly, entityLabel, eur } from "../components/crmFormat";
 
@@ -22,7 +21,7 @@ export default function CrmDashboardSection({
   prospectById: Map<string, CrmProspectRow>;
   clientById: Map<string, CrmClientRow>;
   quoteById: Map<string, CrmQuoteRow>;
-  setModal: (value: "task" | "appointment" | "quote" | "sav") => void;
+  setModal: (value: "task" | "appointment" | "quote") => void;
   setError: (value: string | null) => void;
 }) {
   const today = new Date().toISOString().slice(0, 10);
@@ -32,8 +31,6 @@ export default function CrmDashboardSection({
   const quotesToSend = data.quotes.filter((row) => ["brouillon", "en_preparation"].includes(row.statut));
   const quotesToRelaunch = data.quotes.filter((row) => ["envoye", "relance_1", "relance_2"].includes(row.statut));
   const refusedQuotes = data.quotes.filter((row) => row.statut === "refuse");
-  const openSav = data.sav.filter((row) => row.statut !== "clos");
-  const inactiveOpportunities = data.opportunities.filter((row) => row.status === "ouverte" && (!row.prochaine_action_date || row.prochaine_action_date < today));
 
   const kpiItems: CrmKpiItem[] = [
     {
@@ -75,14 +72,6 @@ export default function CrmDashboardSection({
       hint: "Actions commerciales dépassées",
       href: "/crm/agenda",
       tone: kpis.overdueTasks > 0 ? "danger" : "success",
-    },
-    {
-      key: "sav",
-      label: "SAV ouverts",
-      value: String(kpis.openSav),
-      hint: "Tickets après chantier à suivre",
-      href: "/crm/sav",
-      tone: kpis.openSav > 0 ? "warning" : "success",
     },
   ];
 
@@ -143,22 +132,6 @@ export default function CrmDashboardSection({
       href: "/crm/devis",
       tone: refusedQuotes.length > 0 ? "warning" : "normal",
     },
-    {
-      key: "sav",
-      label: "SAV ouverts",
-      value: openSav.length,
-      description: "Tickets client encore ouverts",
-      href: "/crm/sav",
-      tone: openSav.length > 0 ? "warning" : "normal",
-    },
-    {
-      key: "inactive",
-      label: "Opportunités sans activité",
-      value: inactiveOpportunities.length,
-      description: "Affaires ouvertes sans prochaine action",
-      href: "/crm/opportunites",
-      tone: inactiveOpportunities.length > 0 ? "warning" : "normal",
-    },
   ];
 
   const recentItems: CrmActionItem[] = [
@@ -183,13 +156,6 @@ export default function CrmDashboardSection({
       description: appointment.type,
       tone: "info" as const,
     })),
-    ...data.sav.slice(0, 4).map((sav) => ({
-      id: `recent-sav-${sav.id}`,
-      title: `SAV : ${sav.titre}`,
-      meta: dateOnly(sav.created_at),
-      description: sav.statut,
-      tone: "warning" as const,
-    })),
   ]
     .sort((a, b) => String(b.meta).localeCompare(String(a.meta), "fr"))
     .slice(0, 8);
@@ -212,10 +178,10 @@ export default function CrmDashboardSection({
       icon: CalendarDays,
     },
     {
-      label: "Pipeline ouvert",
+      label: "Projets commerciaux",
       value: eur(kpis.pipelineRevenue),
-      helper: `${data.opportunities.filter((row) => row.status === "ouverte").length} affaire(s)`,
-      href: "/crm/opportunites",
+      helper: `${data.opportunities.filter((row) => row.status === "ouverte").length} dossier(s) en cours`,
+      href: "/projets",
       tone: kpis.pipelineRevenue > 0 ? "info" : "normal",
       icon: TrendingUp,
     },
@@ -268,7 +234,6 @@ export default function CrmDashboardSection({
         <CrmAlertCenter items={alertItems} />
       </div>
 
-      <CrmPipelinePreview data={data} />
       <CrmRecentActivity items={recentItems} />
     </div>
   );

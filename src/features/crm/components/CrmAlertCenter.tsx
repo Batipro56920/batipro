@@ -35,7 +35,7 @@ export function CrmAlertCenter({ items }: { items: CrmAlertItem[] }) {
         <h2 className="bt-card-title mt-1 text-ink">Ce qui demande attention</h2>
       </div>
       {!hasAlerts ? (
-        <CrmEmptyState title="Aucun point critique" description="Les relances, devis et SAV sont sous contrôle." />
+        <CrmEmptyState title="Aucun point critique" description="Les relances et les devis sont sous contrôle." />
       ) : (
         <div className="space-y-2">
           {items.map((item) => {

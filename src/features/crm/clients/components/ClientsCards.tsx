@@ -24,7 +24,6 @@ export function ClientsCards({ rows, onSelect }: { rows: ClientWithMetrics[]; on
             <div className="mt-4 grid grid-cols-2 gap-2 text-xs">
               <div className="rounded-xl bg-slate-50 p-2">Devis <span className="font-semibold text-slate-950">{row.quotesCount}</span></div>
               <div className="rounded-xl bg-slate-50 p-2">Chantiers <span className="font-semibold text-slate-950">{row.totalChantiers}</span></div>
-              <div className="rounded-xl bg-slate-50 p-2">SAV <span className="font-semibold text-slate-950">{row.openSav}</span></div>
               <div className="rounded-xl bg-slate-50 p-2">Factures <span className="font-semibold text-slate-950">{row.pendingInvoices}</span></div>
             </div>
             <div className="mt-3 rounded-2xl border border-slate-200 bg-slate-50 p-3 text-sm">

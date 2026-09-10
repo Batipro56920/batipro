@@ -7,7 +7,6 @@ const PRIMARY_NAV: Array<{ key?: CrmSection; label: string; href: string }> = [
   { key: "clients", label: "Clients", href: "/crm/clients" },
   { key: "quotes", label: "Devis", href: "/crm/devis" },
   { key: "agenda", label: "Agenda", href: "/crm/agenda" },
-  { key: "sav", label: "SAV", href: "/crm/sav" },
 ];
 
 function navClass(active: boolean) {

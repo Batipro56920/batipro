@@ -14,7 +14,6 @@ import type { ClientView, ClientWithMetrics } from "../clients/types";
 export default function CrmClientsSection({
   rows,
   chantiers,
-  sav,
   quotes,
   invoices,
   documents,
@@ -25,7 +24,6 @@ export default function CrmClientsSection({
 }: {
   rows: CrmClientRow[];
   chantiers: CrmDataset["chantiers"];
-  sav: CrmDataset["sav"];
   quotes: CrmDataset["quotes"];
   invoices: CrmDataset["invoices"];
   documents: CrmDataset["documents"];
@@ -38,7 +36,7 @@ export default function CrmClientsSection({
   const [view, setView] = useState<ClientView>("list");
   const [selectedClient, setSelectedClient] = useState<ClientWithMetrics | null>(null);
   const openedClientFromUrlRef = useRef("");
-  const metrics = { chantiers, sav, quotes, invoices, documents };
+  const metrics = { chantiers, quotes, invoices, documents };
   const { filters, setFilters, filteredRows, rowsWithMetrics, types } = useClientFilters({
     rows,
     metrics,
@@ -64,7 +62,6 @@ export default function CrmClientsSection({
       owner: "all",
       status: "all",
       chantier: "all",
-      sav: "all",
       date: "all",
     }));
     openedClientFromUrlRef.current = focusedClientId;

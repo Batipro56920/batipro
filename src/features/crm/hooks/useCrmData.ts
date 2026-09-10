@@ -16,6 +16,7 @@ export const EMPTY_CRM_DATASET: CrmDataset = {
   purchases: [],
   chantiers: [],
   taskTemplates: [],
+  users: [],
 };
 
 export function useCrmData() {

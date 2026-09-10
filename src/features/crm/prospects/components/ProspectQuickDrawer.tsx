@@ -97,7 +97,6 @@ export function ProspectQuickDrawer({
 
           <div className="grid gap-2 sm:grid-cols-2">
             <button type="button" onClick={() => actions.onTask(prospect)} className="bt-control rounded-field border border-subtle px-3 py-2 text-sm font-semibold text-ink-secondary hover:bg-interactive">Créer tâche</button>
-            <button type="button" onClick={() => actions.onCreateOpportunity(prospect)} className="bt-control rounded-field border border-subtle px-3 py-2 text-sm font-semibold text-ink-secondary hover:bg-interactive">Créer affaire</button>
             <button type="button" onClick={() => actions.onCreateAppointment(prospect)} className="bt-control rounded-field border border-subtle px-3 py-2 text-sm font-semibold text-ink-secondary hover:bg-interactive">Prise de RDV</button>
             <button type="button" onClick={() => actions.onCreateQuote(prospect)} className="bt-control rounded-field border border-subtle px-3 py-2 text-sm font-semibold text-ink-secondary hover:bg-interactive">Créer devis</button>
             <button type="button" onClick={() => actions.onConvert(prospect)} className="bt-control rounded-field border border-success/20 bg-success-soft px-3 py-2 text-sm font-semibold text-success-on hover:bg-interactive">Convertir client</button>

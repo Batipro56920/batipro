@@ -1,5 +1,6 @@
-import { useState } from "react";
-import type { CrmProspectRow } from "../../../services/crm.service";
+import { useMemo, useState } from "react";
+import { buildUserLabelMap } from "../components/crmFormat";
+import type { CrmProspectRow, CrmUserRow } from "../../../services/crm.service";
 import { ProspectsCards } from "../prospects/components/ProspectsCards";
 import { ProspectsEmptyState } from "../prospects/components/ProspectsEmptyState";
 import { ProspectsFilterBar } from "../prospects/components/ProspectsFilterBar";
@@ -14,35 +15,36 @@ import type { ProspectView } from "../prospects/types";
 
 export default function CrmProspectsSection({
   rows,
+  users,
   query,
   setQuery,
   onCreate,
   onConvert,
   onStatus,
   onTask,
-  onCreateOpportunity,
   onCreateAppointment,
   onCreateQuote,
 }: {
   rows: CrmProspectRow[];
+  users?: CrmUserRow[];
   query: string;
   setQuery: (value: string) => void;
   onCreate: () => void;
   onConvert: (row: CrmProspectRow) => void;
   onStatus: (row: CrmProspectRow, status: CrmProspectRow["statut"]) => void;
   onTask: (row: CrmProspectRow) => void;
-  onCreateOpportunity: (row?: CrmProspectRow) => void;
   onCreateAppointment: (row?: CrmProspectRow) => void;
   onCreateQuote: (row?: CrmProspectRow) => void;
 }) {
   const [view, setView] = useState<ProspectView>("list");
   const [selectedProspect, setSelectedProspect] = useState<CrmProspectRow | null>(null);
-  const { filteredRows, filters, setFilters, sources, statuses, owners } = useProspectsFilters(rows, query);
-  const actions = useProspectActions({ onCreate, onConvert, onStatus, onTask, onCreateOpportunity, onCreateAppointment, onCreateQuote });
+  const { filteredRows, filters, setFilters, sources, statuses, owners } = useProspectsFilters(rows, query, users);
+  const userLabelById = useMemo(() => buildUserLabelMap(users), [users]);
+  const actions = useProspectActions({ onCreate, onConvert, onStatus, onTask, onCreateAppointment, onCreateQuote });
 
   return (
     <div className="space-y-5">
-      <ProspectsHeader onCreate={onCreate} onCreateOpportunity={() => onCreateOpportunity()} onCreateAppointment={() => onCreateAppointment()} />
+      <ProspectsHeader onCreate={onCreate} onCreateAppointment={() => onCreateAppointment()} />
       <ProspectsKpiGrid rows={rows} />
       <ProspectsFilterBar
         query={query}
@@ -63,7 +65,7 @@ export default function CrmProspectsSection({
       ) : view === "cards" ? (
         <ProspectsCards rows={filteredRows} actions={actions} onSelect={setSelectedProspect} />
       ) : (
-        <ProspectsTable rows={filteredRows} actions={actions} onSelect={setSelectedProspect} />
+        <ProspectsTable rows={filteredRows} actions={actions} onSelect={setSelectedProspect} userLabelById={userLabelById} />
       )}
 
       <ProspectQuickDrawer prospect={selectedProspect} onClose={() => setSelectedProspect(null)} actions={actions} />

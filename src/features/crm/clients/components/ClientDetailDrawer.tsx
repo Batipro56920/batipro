@@ -25,7 +25,6 @@ export function ClientDetailDrawer({
   const chantiers = metrics.chantiers.filter((row) => row.crm_client_id === client.id);
   const quotes = metrics.quotes.filter((row) => row.client_id === client.id);
   const invoices = metrics.invoices.filter((row) => row.client_id === client.id);
-  const sav = metrics.sav.filter((row) => row.client_id === client.id);
   const documents = metrics.documents.filter((row) => row.client_id === client.id);
 
   function openLinkedItem(path: string) {
@@ -58,10 +57,6 @@ export function ClientDetailDrawer({
             <div className="rounded-2xl border border-slate-200 p-4">
               <div className="text-xs text-slate-500">Chantiers</div>
               <div className="mt-1 font-semibold text-slate-950">{client.totalChantiers}</div>
-            </div>
-            <div className="rounded-2xl border border-slate-200 p-4">
-              <div className="text-xs text-slate-500">SAV ouverts</div>
-              <div className="mt-1 font-semibold text-slate-950">{client.openSav}</div>
             </div>
           </section>
 
@@ -101,15 +96,6 @@ export function ClientDetailDrawer({
                 id: row.id,
                 label: `${row.invoice_number ?? row.type} · ${eur(row.amount_ttc)}`,
                 path: `/factures?invoice=${encodeURIComponent(row.id)}`,
-              }))}
-              onOpen={openLinkedItem}
-            />
-            <Panel
-              title="SAV"
-              items={sav.map((row) => ({
-                id: row.id,
-                label: `${row.titre} · ${row.statut}`,
-                path: `/crm/sav?savId=${encodeURIComponent(row.id)}`,
               }))}
               onOpen={openLinkedItem}
             />

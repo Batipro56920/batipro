@@ -1,5 +1,6 @@
 import type { CrmClientRow, CrmDataset, CrmProspectRow, CrmQuoteRow } from "../../../services/crm.service";
 import type { ChantierRow } from "../../../services/chantiers.service";
+import { buildUserLabelMap, salespersonLabel } from "../../crm/components/crmFormat";
 import type { ProjectMetrics, ProjectRecord, ProjectStatus } from "../types";
 
 const ACTIVE_STATUSES = new Set<ProjectStatus>([
@@ -143,6 +144,7 @@ function clientProjectName(client: CrmClientRow, quotes: CrmQuoteRow[]) {
 
 export function buildProjects(dataset: CrmDataset): ProjectRecord[] {
   const clientsById = new Map(dataset.clients.map((client) => [client.id, client]));
+  const userLabelById = buildUserLabelMap(dataset.users);
   const prospectsById = new Map(dataset.prospects.map((prospect) => [prospect.id, prospect]));
   const projects: ProjectRecord[] = [];
   const usedProspects = new Set<string>();
@@ -176,7 +178,7 @@ export function buildProjects(dataset: CrmDataset): ProjectRecord[] {
       contactEmail: client?.email ?? prospect?.email ?? null,
       contactPhone: client?.telephone ?? client?.mobile ?? prospect?.telephone ?? prospect?.mobile ?? null,
       address: chantiers[0]?.adresse ?? fullAddress(client ?? prospect),
-      salesperson: opportunity.responsable_id,
+      salesperson: salespersonLabel(opportunity.responsable_id, userLabelById) || null,
       status: resolveStatus({
         prospect,
         stageKey: opportunity.stage_key,
@@ -227,7 +229,7 @@ export function buildProjects(dataset: CrmDataset): ProjectRecord[] {
       contactEmail: client?.email ?? prospect.email,
       contactPhone: client?.telephone ?? client?.mobile ?? prospect.telephone ?? prospect.mobile,
       address: chantiers[0]?.adresse ?? fullAddress(client ?? prospect),
-      salesperson: prospect.owner_id,
+      salesperson: salespersonLabel(prospect.owner_id, userLabelById) || null,
       status: resolveStatus({
         prospect,
         quotes,

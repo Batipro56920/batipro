@@ -8,7 +8,6 @@ export function useProspectActions(handlers: ProspectActionHandlers) {
     email: (row: CrmProspectRow) => row.email,
     createTask: handlers.onTask,
     convert: handlers.onConvert,
-    createOpportunity: handlers.onCreateOpportunity,
     createAppointment: handlers.onCreateAppointment,
     createQuote: handlers.onCreateQuote,
     markQuoteInProgress: (row: CrmProspectRow) => handlers.onStatus(row, "devis_en_cours"),

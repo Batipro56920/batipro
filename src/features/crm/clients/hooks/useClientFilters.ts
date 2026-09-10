@@ -9,7 +9,6 @@ const DEFAULT_FILTERS: ClientFilters = {
   owner: "all",
   status: "all",
   chantier: "all",
-  sav: "all",
   date: "all",
 };
 
@@ -38,7 +37,6 @@ export function useClientFilters({
     const activeChantiers = chantiers.filter((chantier) => ["PREPARATION", "EN_COURS", "EN_PAUSE"].includes(chantier.status)).length;
     const quotes = metrics.quotes.filter((quote) => quote.client_id === row.id);
     const invoices = metrics.invoices.filter((invoice) => invoice.client_id === row.id);
-    const sav = metrics.sav.filter((ticket) => ticket.client_id === row.id);
     const documents = metrics.documents.filter((document) => document.client_id === row.id);
 
     return {
@@ -49,10 +47,9 @@ export function useClientFilters({
       quotesCount: quotes.length,
       totalRevenue: chantiers.reduce((sum, chantier) => sum + Number(chantier.signed_quote_amount_ht ?? 0), 0),
       pendingInvoices: invoices.filter((invoice) => !invoice.paid_at && invoice.statut !== "payee").length,
-      openSav: sav.filter((ticket) => ticket.statut !== "clos").length,
       documentsCount: documents.length,
     };
-  }), [metrics.chantiers, metrics.documents, metrics.invoices, metrics.quotes, metrics.sav, rows]);
+  }), [metrics.chantiers, metrics.documents, metrics.invoices, metrics.quotes, rows]);
 
   const types = useMemo(() => Array.from(new Set(rows.map((row) => row.type).filter(Boolean))).sort(), [rows]);
 
@@ -66,8 +63,6 @@ export function useClientFilters({
       if (filters.status === "archived" && !row.archived_at) return false;
       if (filters.chantier === "active" && row.activeChantiers === 0) return false;
       if (filters.chantier === "none" && row.totalChantiers > 0) return false;
-      if (filters.sav === "open" && row.openSav === 0) return false;
-      if (filters.sav === "none" && row.openSav > 0) return false;
       if (filters.date === "month" && !isRecent(row.created_at, 30)) return false;
       if (filters.date === "week" && !isRecent(row.created_at, 7)) return false;
       return true;
