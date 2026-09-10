@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
-import { CalendarClock, Check, ChevronRight, ExternalLink, Eye, Link2, Paperclip, Send, Sparkles, Video } from "lucide-react";
+import { CalendarClock, Check, CheckCircle2, ChevronRight, Copy, ExternalLink, Eye, Link2, Paperclip, Send, Sparkles, Video } from "lucide-react";
 import { Button } from "../../components/ui/button";
 import { createPublicationDraft, listSocialAccounts, uploadAssets } from "./communicationRepository";
 import type { Campaign, SocialAccount, SocialNetwork } from "./types";
+import { buildTrackedUrl } from "./trackingLinks";
 
 type Props = { campaigns: Campaign[]; onSaved: () => void };
 type NetworkDefinition = { id: SocialNetwork; label: string; color: string; limit: number; hint: string };
@@ -29,12 +30,18 @@ export function CommunicationComposer({ campaigns, onSaved }: Props) {
   const [saving, setSaving] = useState<"draft" | "review" | null>(null);
   const [message, setMessage] = useState("");
   const [files, setFiles] = useState<File[]>([]);
+  const [destinationUrl, setDestinationUrl] = useState("");
+  const [trackingEnabled, setTrackingEnabled] = useState(true);
+  const [copiedNetwork, setCopiedNetwork] = useState<SocialNetwork | null>(null);
 
   useEffect(() => { void listSocialAccounts().then(setAccounts).catch(() => setAccounts([])); }, []);
   useEffect(() => { if (!campaignId && campaigns[0]) setCampaignId(campaigns[0].id); }, [campaignId, campaigns]);
 
   const connected = useMemo(() => new Set(accounts.filter((account) => account.status === "connected").map((account) => account.provider)), [accounts]);
   const currentText = variants[activePreview] ?? baseContent;
+  const selectedCampaign = campaigns.find((campaign) => campaign.id === campaignId);
+  const trackedLinks = useMemo(() => Object.fromEntries(selectedNetworks.map((network) => [network, trackingEnabled ? buildTrackedUrl({ destinationUrl, network, campaignName: selectedCampaign?.title ?? "campagne", contentName: title }) : destinationUrl.trim()])), [destinationUrl, selectedNetworks, selectedCampaign?.title, title, trackingEnabled]) as Partial<Record<SocialNetwork, string>>;
+  const destinationIsValid = !destinationUrl.trim() || Boolean(buildTrackedUrl({ destinationUrl, network: activePreview, campaignName: selectedCampaign?.title ?? "campagne", contentName: title }));
 
   function toggleNetwork(network: SocialNetwork) {
     setSelectedNetworks((current) => current.includes(network) ? current.filter((entry) => entry !== network) : [...current, network]);
@@ -53,6 +60,10 @@ export function CommunicationComposer({ campaigns, onSaved }: Props) {
       setMessage("Choisis une campagne, un titre, un texte et au moins un réseau.");
       return;
     }
+    if (!destinationIsValid) {
+      setMessage("Corrige l’adresse de destination avant d’enregistrer.");
+      return;
+    }
     setSaving(submitForReview ? "review" : "draft"); setMessage("");
     try {
       const item = await createPublicationDraft({
@@ -61,12 +72,13 @@ export function CommunicationComposer({ campaigns, onSaved }: Props) {
           network,
           socialAccountId: accounts.find((account) => account.provider === network && account.status === "connected")?.id,
           body: (variants[network] || baseContent).trim(),
+          linkUrl: trackedLinks[network] || undefined,
         })),
         submitForReview,
       });
       if (files.length) await uploadAssets(campaignId, item.id, files);
       setMessage(submitForReview ? "Publication envoyée à Marie pour validation." : "Brouillon enregistré dans la campagne.");
-      setTitle(""); setBaseContent(""); setVariants({}); setScheduledAt(""); setFiles([]); onSaved();
+      setTitle(""); setBaseContent(""); setVariants({}); setScheduledAt(""); setFiles([]); setDestinationUrl(""); onSaved();
     } catch (error) { setMessage(error instanceof Error ? error.message : "Enregistrement impossible."); }
     finally { setSaving(null); }
   }
@@ -82,6 +94,7 @@ export function CommunicationComposer({ campaigns, onSaved }: Props) {
       <label className="block text-sm font-medium text-ink">Message principal<textarea rows={6} className={`${inputClass} mt-1`} value={baseContent} onChange={(event)=>setBaseContent(event.target.value)} placeholder="L’idée, l’histoire du chantier, le résultat obtenu et l’appel à l’action…"/></label>
       <div className="flex flex-wrap items-center gap-2"><Button variant="secondary" onClick={prepareVariants}><Sparkles className="h-4 w-4"/>Décliner sur les réseaux</Button><span className="text-xs text-muted">Pré-remplit les variantes sans écraser tes adaptations.</span></div>
       {selectedNetworks.length>0?<section className="rounded-2xl border border-subtle"><div className="flex overflow-x-auto border-b border-subtle p-1">{selectedNetworks.map((network)=><button key={network} onClick={()=>setActivePreview(network)} className={`whitespace-nowrap rounded-lg px-3 py-2 text-sm font-medium ${activePreview===network?"bg-primary text-primary-contrast":"text-muted"}`}>{networkLabel(network)}</button>)}</div><div className="p-4"><label className="text-sm font-medium text-ink">Version {networkLabel(activePreview)}<textarea rows={5} className={`${inputClass} mt-1`} value={currentText} maxLength={NETWORKS.find((network)=>network.id===activePreview)?.limit} onChange={(event)=>setVariants((current)=>({...current,[activePreview]:event.target.value}))}/></label><div className="mt-1 flex justify-between text-xs text-muted"><span>{NETWORKS.find((network)=>network.id===activePreview)?.hint}</span><span>{currentText.length} caractères</span></div></div></section>:null}
+      <section className="rounded-2xl border border-subtle bg-interactive/40 p-4"><div className="flex flex-wrap items-start justify-between gap-3"><div><h3 className="flex items-center gap-2 font-semibold text-ink"><Link2 className="h-4 w-4 text-primary"/>Lien de campagne traçable</h3><p className="mt-1 text-sm text-muted">Batipro crée un lien différent par réseau pour savoir lequel apporte des visites et des demandes de devis.</p></div><label className="flex cursor-pointer items-center gap-2 text-sm font-medium text-ink"><input type="checkbox" checked={trackingEnabled} onChange={(event)=>setTrackingEnabled(event.target.checked)} className="h-4 w-4 accent-[var(--color-primary)]"/>Activer le suivi UTM</label></div><label className="mt-4 block text-sm font-medium text-ink">Page de destination<input type="url" className={`${inputClass} mt-1 ${destinationIsValid?"":"border-danger"}`} value={destinationUrl} onChange={(event)=>setDestinationUrl(event.target.value)} placeholder="https://cb-renovation.fr/nos-realisations/dallage-parking"/></label>{!destinationIsValid?<p className="mt-1 text-xs text-danger">Saisis une adresse complète commençant par https://</p>:null}{destinationUrl.trim()&&destinationIsValid?<div className="mt-3 grid gap-2 sm:grid-cols-2">{selectedNetworks.map((network)=><div key={network} className="flex min-w-0 items-center gap-2 rounded-xl border border-subtle bg-surface p-3"><div className="min-w-0 flex-1"><p className="text-xs font-semibold text-ink">{networkLabel(network)}</p><p className="truncate text-xs text-muted">{trackedLinks[network]}</p></div><button type="button" title="Copier le lien" className="rounded-lg p-2 text-primary hover:bg-primary-soft" onClick={async()=>{await navigator.clipboard.writeText(trackedLinks[network]||"");setCopiedNetwork(network);window.setTimeout(()=>setCopiedNetwork(null),1600);}}>{copiedNetwork===network?<CheckCircle2 className="h-4 w-4"/>:<Copy className="h-4 w-4"/>}</button></div>)}</div>:null}</section>
       <label className="block text-sm font-medium text-ink"><span className="flex items-center gap-2"><CalendarClock className="h-4 w-4"/>Date souhaitée</span><input type="datetime-local" className={`${inputClass} mt-1`} value={scheduledAt} onChange={(event)=>setScheduledAt(event.target.value)}/></label>
       <label className="flex cursor-pointer items-center gap-3 rounded-xl border border-dashed border-strong p-4 text-sm text-muted"><Paperclip className="h-5 w-5 text-primary"/><span className="flex-1">{files.length?`${files.length} média(s) sélectionné(s) — ${files.map(file=>file.name).join(", ")}`:"Ajouter plusieurs photos, vidéos, PDF ou maquettes"}</span><input type="file" multiple accept="image/*,video/*,application/pdf" className="sr-only" onChange={event=>setFiles(Array.from(event.target.files??[]))}/></label>
       {message?<p className="rounded-xl bg-interactive p-3 text-sm text-ink">{message}</p>:null}
