@@ -3,7 +3,7 @@ import { ArrowRight, FileText, Hammer } from "lucide-react";
 import { isApporteurSource } from "../../../services/crm.service";
 import type { ProjectRecord } from "../types";
 import { ProjectStatusBadge } from "./ProjectStatusBadge";
-import { formatCurrency, formatDate } from "./ProjectShared";
+import { formatCurrency, formatDate, SalespersonName } from "./ProjectShared";
 
 type ProjectQuote = ProjectRecord["quotes"][number];
 type ProjectChantier = ProjectRecord["chantiers"][number];
@@ -237,7 +237,7 @@ export function ProjectsTable({
                     )}
                   </td>
                   <td className="max-w-[220px] truncate px-4 py-3 text-slate-500">{project.address || "Adresse à renseigner"}</td>
-                  <td className="px-4 py-3 text-slate-500">{project.salesperson || "À assigner"}</td>
+                  <td className="px-4 py-3 text-slate-500"><SalespersonName id={project.salesperson} /></td>
                   <td className="px-4 py-3">
                     <ProjectStatusBadge status={project.status} />
                   </td>

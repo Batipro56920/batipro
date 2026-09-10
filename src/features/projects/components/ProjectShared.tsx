@@ -67,3 +67,13 @@ export function useSalespersonName(salespersonId: string | null | undefined): st
 
   return name;
 }
+
+/**
+ * Affiche le nom du commercial a partir de son identifiant. Le projet ne stocke
+ * que l'identifiant, parce que le selecteur d'attribution en a besoin pour se
+ * positionner : la traduction en nom se fait donc a l'affichage.
+ */
+export function SalespersonName({ id, fallback = "À assigner" }: { id: string | null | undefined; fallback?: string }) {
+  const name = useSalespersonName(id);
+  return <>{name ?? fallback}</>;
+}
