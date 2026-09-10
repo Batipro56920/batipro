@@ -1,6 +1,6 @@
 import { supabase } from "../../lib/supabaseClient";
 import { getCurrentUserProfile } from "../../services/currentUserProfile.service";
-import type { ApprovalStatus, Campaign, CampaignAsset, CampaignComment, CampaignItem, CampaignStatus, ChantierOption, InboxThread, ItemStatus, ItemType, PublicationDraftInput, PublicationVariant, SocialAccount, SocialMetricsSummary, Workspace } from "./types";
+import type { ApprovalStatus, Campaign, CampaignAsset, CampaignComment, CampaignItem, CampaignStatus, ChantierOption, InboxThread, ItemStatus, ItemType, PublicationDraftInput, PublicationVariant, ReviewPublication, SocialAccount, SocialMetricsSummary, Workspace } from "./types";
 
 const db = supabase as any;
 async function identity() {
@@ -131,4 +131,25 @@ export async function loadMetricsSummary(): Promise<SocialMetricsSummary> {
   return (data ?? []).reduce((total: SocialMetricsSummary, row: SocialMetricsSummary) => ({
     impressions: total.impressions + Number(row.impressions || 0), reach: total.reach + Number(row.reach || 0), engagements: total.engagements + Number(row.engagements || 0), clicks: total.clicks + Number(row.clicks || 0), comments: total.comments + Number(row.comments || 0), shares: total.shares + Number(row.shares || 0), leads: total.leads + Number(row.leads || 0),
   }), { impressions:0, reach:0, engagements:0, clicks:0, comments:0, shares:0, leads:0 });
+}
+
+export async function listReviewPublications(): Promise<ReviewPublication[]> {
+  const { organizationId } = await identity();
+  const { data, error } = await db.from("communication_campaign_items").select("*,communication_campaigns(title),communication_publication_variants(id,organization_id,item_id,social_account_id,network,body,link_url,first_comment,approval_status,approved_at)").eq("organization_id", organizationId).eq("status", "to_review").order("updated_at", { ascending: false });
+  fail(error);
+  return (data ?? []).map((row: any) => ({ ...row, campaign_title: row.communication_campaigns?.title ?? "Campagne", variants: row.communication_publication_variants ?? [] })) as ReviewPublication[];
+}
+
+export async function decidePublication(itemId: string, variantIds: string[], decision: "approved" | "changes_requested", scheduledAt: string | null, note?: string) {
+  const who = await identity();
+  if (!variantIds.length) throw new Error("Aucune variante à traiter.");
+  const variantPatch = decision === "approved"
+    ? { approval_status: "approved", approved_by: who.userId, approved_at: new Date().toISOString() }
+    : { approval_status: "changes_requested", approved_by: null, approved_at: null };
+  const { error } = await db.from("communication_publication_variants").update(variantPatch).eq("organization_id", who.organizationId).in("id", variantIds);
+  fail(error);
+  const events = variantIds.map((variantId) => ({ organization_id: who.organizationId, variant_id: variantId, action: decision, note: note?.trim() || null, actor_name: who.name }));
+  const eventResult = await db.from("communication_approval_events").insert(events); fail(eventResult.error);
+  const nextStatus: ItemStatus = decision === "changes_requested" || !scheduledAt ? "to_prepare" : "scheduled";
+  const itemResult = await db.from("communication_campaign_items").update({ status: nextStatus }).eq("organization_id", who.organizationId).eq("id", itemId); fail(itemResult.error);
 }

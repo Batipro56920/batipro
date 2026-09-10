@@ -1,9 +1,10 @@
-import { BarChart3, Bell, Inbox, Link2, MessageSquareText, Radio, Send, Sparkles } from "lucide-react";
+import { BarChart3, Bell, CheckCircle2, Inbox, Link2, MessageSquareText, Radio, Send, Sparkles } from "lucide-react";
 import type { Campaign, CampaignItem } from "./types";
 
 type Props={campaigns:Campaign[];items:(CampaignItem&{campaign_title?:string})[];onNavigate:(view:string)=>void};
 const modules=[
   ["Créer","Rédiger et décliner une publication pour chaque réseau.",Sparkles,"composer"],
+  ["Validations","Relire avec Marie, corriger puis approuver.",CheckCircle2,"validations"],
   ["Planning","Programmer et déplacer les publications.",Send,"calendrier"],
   ["Boîte de réception","Messages, commentaires, mentions et avis.",Inbox,"inbox"],
   ["Statistiques","Portée, engagement, clics et leads.",BarChart3,"statistiques"],

@@ -83,3 +83,8 @@ export type SocialMetricsSummary = {
   shares: number;
   leads: number;
 };
+
+export type ReviewPublication = CampaignItem & {
+  campaign_title: string;
+  variants: PublicationVariant[];
+};
