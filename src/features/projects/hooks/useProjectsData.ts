@@ -58,6 +58,7 @@ export function useProjectsData() {
           project.sourceLabel,
           project.prospect?.source_acquisition,
           project.prospect?.apporteur_affaire,
+          project.prospect?.source_detail,
           ...project.quotes.flatMap((quote) => [quote.id, quote.quote_number]),
         ]
           .filter(Boolean)

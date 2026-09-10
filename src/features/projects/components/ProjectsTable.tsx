@@ -1,5 +1,6 @@
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { ArrowRight, FileText, Hammer } from "lucide-react";
+import { isApporteurSource } from "../../../services/crm.service";
 import type { ProjectRecord } from "../types";
 import { ProjectStatusBadge } from "./ProjectStatusBadge";
 import { formatCurrency, formatDate } from "./ProjectShared";
@@ -45,12 +46,14 @@ function getApporteurTrackingPath(project: ProjectRecord) {
 
 function getCommercialSource(project: ProjectRecord) {
   const source = project.sourceLabel?.trim() || null;
-  const apporteur = project.prospect?.apporteur_affaire?.trim() || null;
-  const isApporteur = Boolean(source?.toLowerCase().includes("apporteur") || apporteur);
-  if (!source && !apporteur) return null;
+  // Un nom rattaché à la provenance ne fait pas un apporteur d'affaires : seule
+  // la provenance le décide. Une recommandation porte aussi le nom de quelqu'un.
+  const isApporteur = isApporteurSource(source);
+  const detail = (isApporteur ? project.prospect?.apporteur_affaire : project.prospect?.source_detail)?.trim() || null;
+  if (!source && !detail) return null;
   return {
-    label: source ?? (isApporteur ? "Apporteur d'affaires" : "Origine commerciale"),
-    detail: apporteur,
+    label: source ?? "Origine commerciale",
+    detail,
     isApporteur,
     trackingPath: isApporteur ? getApporteurTrackingPath(project) : null,
   };
@@ -102,6 +105,8 @@ export function ProjectsTable({
   quoteCreationMode?: boolean;
   chantierCreationMode?: boolean;
 }) {
+  const navigate = useNavigate();
+
   if (!projects.length) {
     const modeActive = billingMode || quoteCreationMode || chantierCreationMode;
     return (
@@ -161,7 +166,17 @@ export function ProjectsTable({
                   ? chantierCreationPath
                   : `/projets/${project.id}${billingMode ? "?tab=quotes" : ""}`;
               return (
-                <tr key={project.id} className="transition hover:bg-slate-50/80">
+                <tr
+                  key={project.id}
+                  // Toute la ligne ouvre le projet : viser le bouton "Ouvrir" a
+                  // l'autre bout du tableau n'apporte rien. Les liens internes
+                  // (chantier, apporteur) gardent leur propre destination.
+                  onClick={(event) => {
+                    if ((event.target as HTMLElement).closest("a,button,input,select")) return;
+                    navigate(projectPath);
+                  }}
+                  className="cursor-pointer transition hover:bg-slate-50/80"
+                >
                   <td className="max-w-[260px] px-4 py-3">
                     <Link to={chantierCreationMode ? chantierCreationPath : `/projets/${project.id}${billingMode ? "?tab=quotes" : ""}`} className="font-semibold text-slate-950 hover:text-blue-700">
                       {project.name}

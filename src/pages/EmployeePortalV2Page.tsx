@@ -4,6 +4,7 @@ import { useLocation, useNavigate } from "react-router-dom";
 
 import { supabase } from "../lib/supabaseClient";
 import RaulPortalWidget from "../components/RaulPortalWidget";
+import { photoToJpeg } from "../lib/photoToJpeg";
 import {
   intervenantChantierFeedCreate,
   intervenantChantierFeedList,
@@ -258,11 +259,15 @@ export default function EmployeePortalV2Page() {
     productId: string | null;
     productDesignation: string | null;
     productUnit: string | null;
+    unitPriceHt: number | null;
   };
   const [slipUploading, setSlipUploading] = useState(false);
   const [slipError, setSlipError] = useState<string | null>(null);
   const [slipLines, setSlipLines] = useState<SlipLine[]>([]);
   const [slipStoragePath, setSlipStoragePath] = useState<string | null>(null);
+  const [slipSupplier, setSlipSupplier] = useState("");
+  const [slipProposalCount, setSlipProposalCount] = useState(0);
+  const [slipReference, setSlipReference] = useState("");
   const [slipStorageBucket, setSlipStorageBucket] = useState<string | null>(null);
   const [slipEditingIndex, setSlipEditingIndex] = useState<number | null>(null);
   const [slipSearchQuery, setSlipSearchQuery] = useState("");
@@ -748,14 +753,19 @@ export default function EmployeePortalV2Page() {
     setSlipDoneCount(null);
     setSlipMatchedPo(null);
     try {
-      const result = await intervenantDeliverySlipExtract(token, selected.id, file);
+      // Un iPhone livre du HEIC que le serveur refuse : on normalise avant l'envoi.
+      const photo = await photoToJpeg(file);
+      const result = await intervenantDeliverySlipExtract(token, selected.id, photo);
       setSlipStoragePath(result.storage_path);
       setSlipStorageBucket(result.storage_bucket);
+      setSlipSupplier(result.supplier);
+      setSlipReference(result.reference);
       setSlipLines(
         result.lines.map((line) => ({
           designation: line.designation,
           quantity: String(line.quantity),
           unit: line.unit,
+          unitPriceHt: line.unitPriceHt,
           productId: null,
           productDesignation: null,
           productUnit: null,
@@ -792,7 +802,8 @@ export default function EmployeePortalV2Page() {
 
   async function submitSlipLines() {
     if (!selected || slipSubmitting) return;
-    const ready = slipLines.filter((line) => line.productId && line.quantity.trim());
+    // Les lignes sans produit partent aussi : le bureau les validera en fiche produit.
+    const ready = slipLines.filter((line) => line.quantity.trim());
     if (ready.length === 0) return;
     setSlipSubmitting(true);
     setSlipError(null);
@@ -806,9 +817,13 @@ export default function EmployeePortalV2Page() {
           quantity: Number(line.quantity.replace(",", ".")),
           unit: line.unit,
           product_id: line.productId,
+          unit_price_ht: line.unitPriceHt,
         })),
+        supplier_name: slipSupplier.trim() || null,
+        document_reference: slipReference.trim() || null,
       });
       setSlipDoneCount(result.linesPosted);
+      setSlipProposalCount(result.proposalsCreated);
       setSlipMatchedPo(result.status === "matched");
       setSlipLines([]);
       setSlipStoragePath(null);
@@ -1368,15 +1383,37 @@ export default function EmployeePortalV2Page() {
               </label>
 
               {slipError ? <div className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs font-semibold text-red-700">{slipError}</div> : null}
-              {slipDoneCount ? (
+              {(slipDoneCount || slipProposalCount) ? (
                 <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-700">
-                  {slipDoneCount} matériau{slipDoneCount > 1 ? "x" : ""} ajouté{slipDoneCount > 1 ? "s" : ""} au stock.{" "}
+                  {slipDoneCount ?? 0} matériau{(slipDoneCount ?? 0) > 1 ? "x" : ""} ajouté{(slipDoneCount ?? 0) > 1 ? "s" : ""} au stock.{" "}
                   {slipMatchedPo ? "Bon de commande correspondant rapproché et passé « Livré »." : "Aucun bon de commande correspondant trouvé, à traiter au bureau."}
+                  {slipProposalCount ? ` ${slipProposalCount} produit(s) inconnu(s) envoye(s) au bureau pour creation de la fiche.` : ""}
                 </div>
               ) : null}
 
               {slipLines.length > 0 ? (
                 <div className="space-y-2">
+                  {/* En-tete lu sur la photo, corrigeable : sans lui le bureau ressaisit tout. */}
+                  <div className="grid grid-cols-2 gap-2">
+                    <label className="block">
+                      <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Fournisseur</span>
+                      <input
+                        className="mt-1 h-10 w-full rounded-xl border border-slate-200 px-2 text-sm"
+                        value={slipSupplier}
+                        placeholder="Non lu"
+                        onChange={(event) => setSlipSupplier(event.target.value)}
+                      />
+                    </label>
+                    <label className="block">
+                      <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">N° du bon</span>
+                      <input
+                        className="mt-1 h-10 w-full rounded-xl border border-slate-200 px-2 text-sm"
+                        value={slipReference}
+                        placeholder="Non lu"
+                        onChange={(event) => setSlipReference(event.target.value)}
+                      />
+                    </label>
+                  </div>
                   {slipLines.map((line, index) => (
                     <div key={index} className="rounded-xl border border-slate-200 p-3">
                       <div className="flex items-start justify-between gap-2">
@@ -1387,6 +1424,9 @@ export default function EmployeePortalV2Page() {
                           ) : (
                             <div className="mt-0.5 text-xs font-semibold text-amber-700">Produit à associer</div>
                           )}
+                          {line.unitPriceHt !== null ? (
+                            <div className="mt-0.5 text-xs text-slate-500">{line.unitPriceHt.toLocaleString("fr-FR", { minimumFractionDigits: 2 })} EUR HT / {line.unit}</div>
+                          ) : null}
                         </div>
                         <button type="button" onClick={() => removeSlipLine(index)} className="shrink-0 text-xs font-semibold text-slate-400">Retirer</button>
                       </div>
@@ -1437,13 +1477,20 @@ export default function EmployeePortalV2Page() {
                     </div>
                   ))}
 
+                  {slipLines.some((line) => !line.productId) ? (
+                    <div className="rounded-xl border border-blue-200 bg-blue-50 px-3 py-2 text-xs font-semibold text-blue-900">
+                      {slipLines.filter((line) => !line.productId).length} ligne(s) sans produit connu partiront au bureau
+                      pour création de la fiche. Associe-les si tu reconnais le produit.
+                    </div>
+                  ) : null}
+
                   <button
                     type="button"
                     onClick={submitSlipLines}
-                    disabled={slipSubmitting || !slipLines.some((l) => l.productId && l.quantity.trim())}
+                    disabled={slipSubmitting || !slipLines.some((l) => l.quantity.trim())}
                     className="w-full rounded-xl bg-slate-950 px-4 py-2.5 text-sm font-bold text-white disabled:opacity-40"
                   >
-                    {slipSubmitting ? "Enregistrement..." : "Valider et mettre en stock"}
+                    {slipSubmitting ? "Enregistrement..." : "Valider le bon de livraison"}
                   </button>
                 </div>
               ) : null}

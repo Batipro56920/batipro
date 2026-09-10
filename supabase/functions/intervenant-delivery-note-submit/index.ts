@@ -42,9 +42,48 @@ function normalizeLines(raw: unknown): SubmittedLine[] {
       quantity: Number(item?.quantity),
       unit: normalizeString(item?.unit).slice(0, 20) || "u",
       product_id: normalizeString(item?.product_id) || null,
+      unit_price_ht: item?.unit_price_ht === null || item?.unit_price_ht === undefined ? null : Number(item.unit_price_ht),
     }))
     .filter((line) => line.designation && Number.isFinite(line.quantity) && line.quantity > 0)
     .slice(0, 60);
+}
+
+
+/** Deux graphies du meme negoce ne doivent pas creer deux fournisseurs. */
+function supplierKey(value: string) {
+  return value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, "");
+}
+
+/**
+ * Rapproche le fournisseur lu sur le bon avec la liste de l'entreprise, et le
+ * cree s'il est inconnu. Sans cela le nom restait un texte libre, sans lien avec
+ * les commandes ni les encours.
+ */
+async function resolveSupplier(
+  admin: any,
+  organizationId: string | null,
+  supplierName: string | null,
+): Promise<{ id: string | null; name: string | null }> {
+  if (!supplierName) return { id: null, name: null };
+
+  const { data: existing } = await admin.from("suppliers").select("id,name").limit(200);
+  const wanted = supplierKey(supplierName);
+  const match = (existing ?? []).find((row: any) => supplierKey(String(row?.name ?? "")) === wanted);
+  if (match?.id) return { id: String(match.id), name: String(match.name ?? supplierName) };
+
+  if (!organizationId) return { id: null, name: supplierName };
+
+  const { data: created, error } = await admin
+    .from("suppliers")
+    .insert({ organization_id: organizationId, name: supplierName, specialty: "Materiaux", is_active: true })
+    .select("id,name")
+    .single();
+  if (error) return { id: null, name: supplierName };
+  return { id: created?.id ? String(created.id) : null, name: String(created?.name ?? supplierName) };
 }
 
 serve(async (req) => {
@@ -56,17 +95,31 @@ serve(async (req) => {
     const SUPABASE_SERVICE_ROLE_KEY = requireEnv("SUPABASE_SERVICE_ROLE_KEY");
     const admin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, { auth: { persistSession: false } });
 
+    // Le portail accepte un lien magique ou un compte connecte : sans ce second
+    // client, un compagnon connecte avec son compte n'a aucun jeton a fournir.
+    const authHeader = normalizeString(req.headers.get("authorization") ?? req.headers.get("Authorization"));
+    const sessionClient = authHeader
+      ? createClient(SUPABASE_URL, requireEnv("SUPABASE_ANON_KEY"), {
+          auth: { persistSession: false },
+          global: { headers: { Authorization: authHeader } },
+        })
+      : null;
+
     const body = await req.json().catch(() => ({}));
     const token = normalizeString(body.token);
     const chantierId = normalizeString(body.chantier_id);
     const storagePath = normalizeString(body.storage_path) || null;
     const storageBucket = normalizeString(body.storage_bucket) || null;
+    // Fournisseur et reference lus sur la photo : sans eux le bureau ressaisit tout.
+    const supplierName = normalizeString(body.supplier_name).slice(0, 160) || null;
+    const documentReference = normalizeString(body.document_reference).slice(0, 80) || null;
     const lines = normalizeLines(body.lines);
 
-    if (!token) return json({ error: "auth required" }, 400);
+    if (!token && !sessionClient) return json({ error: "auth required" }, 400);
     if (!chantierId) return json({ error: "chantier_id required" }, 400);
 
-    const { data: intervenantIdRaw, error: accessError } = await admin.rpc("_intervenant_assert_chantier_access", {
+    const accessClient = token ? admin : sessionClient;
+    const { data: intervenantIdRaw, error: accessError } = await (accessClient as any).rpc("_intervenant_assert_chantier_access", {
       p_token: token,
       p_chantier_id: chantierId,
     });
@@ -76,19 +129,6 @@ serve(async (req) => {
 
     const resolvedLines = lines.filter((line) => line.product_id);
 
-    for (const line of resolvedLines) {
-      const { error: movementError } = await admin.from("product_stock_movements").insert({
-        product_id: line.product_id,
-        movement_type: "entree",
-        quantity: line.quantity,
-        source: "declaration_terrain",
-        chantier_id: chantierId,
-        intervenant_id: intervenantId,
-        note: "Bon de livraison (portail ouvrier)",
-      });
-      if (movementError) return json({ error: movementError.message }, 400);
-    }
-
     const { data: adminProfile } = await admin
       .from("profiles")
       .select("id")
@@ -97,6 +137,25 @@ serve(async (req) => {
       .limit(1)
       .maybeSingle();
     const organizationId = adminProfile?.id ? String(adminProfile.id) : null;
+
+    const supplier = await resolveSupplier(admin, organizationId, supplierName);
+
+    for (const line of resolvedLines) {
+      const { error: movementError } = await admin.from("product_stock_movements").insert({
+        product_id: line.product_id,
+        movement_type: "entree",
+        quantity: line.quantity,
+        source: "declaration_terrain",
+        chantier_id: chantierId,
+        intervenant_id: intervenantId,
+        // Le prix lu sur le bon alimente le cout matieres reel du chantier.
+        unit_price_ht: line.unit_price_ht,
+        supplier_id: supplier.id,
+        note: "Bon de livraison (portail ouvrier)",
+      });
+      if (movementError) return json({ error: movementError.message }, 400);
+    }
+
 
     const { data: openOrders } = await admin
       .from("purchase_orders")
@@ -139,9 +198,9 @@ serve(async (req) => {
         .from("delivery_notes")
         .insert({
           organization_id: organizationId,
-          supplier_id: null,
-          supplier_name: null,
-          document_reference: null,
+          supplier_id: supplier.id,
+          supplier_name: supplier.name ?? supplierName,
+          document_reference: documentReference,
           purchase_order_id: matchedOrderId,
           chantier_id: chantierId,
           status,
@@ -155,7 +214,36 @@ serve(async (req) => {
       deliveryNoteId = inserted?.id ? String(inserted.id) : null;
     }
 
-    return json({ delivery_note_id: deliveryNoteId, purchase_order_id: matchedOrderId, status, lines_posted: resolvedLines.length });
+    // Les lignes sans produit du catalogue ne sont plus perdues : elles partent
+    // en proposition, pre-remplie, que le bureau valide avant toute creation.
+    const unresolvedLines = lines.filter((line) => !line.product_id);
+    let proposalsCreated = 0;
+    if (unresolvedLines.length && organizationId) {
+      const { error: proposalError } = await admin.from("product_catalog_proposals").insert(
+        unresolvedLines.map((line) => ({
+          organization_id: organizationId,
+          chantier_id: chantierId,
+          delivery_note_id: deliveryNoteId,
+          supplier_id: supplier.id,
+          supplier_name: supplier.name ?? supplierName,
+          designation: line.designation,
+          quantity: line.quantity,
+          unit: line.unit,
+          unit_price_ht: line.unit_price_ht,
+          storage_bucket: storageBucket,
+          storage_path: storagePath,
+        })),
+      );
+      if (!proposalError) proposalsCreated = unresolvedLines.length;
+    }
+
+    return json({
+      delivery_note_id: deliveryNoteId,
+      purchase_order_id: matchedOrderId,
+      status,
+      lines_posted: resolvedLines.length,
+      proposals_created: proposalsCreated,
+    });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown error";
     return json({ error: message }, 500);

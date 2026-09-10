@@ -1,12 +1,15 @@
-import { CalendarDays, Upload, UserPlus } from "lucide-react";
+import { Upload, UserPlus } from "lucide-react";
 import { Button } from "../../../../components/ui/button";
 
 export function ProspectsHeader({
   onCreate,
-  onCreateAppointment,
 }: {
   onCreate: () => void;
-  onCreateAppointment: () => void;
+  /**
+   * Conservés pour les appelants. Créer une affaire ou poser un RDV sans prospect
+   * désigné n'a pas de sens : ces actions vivent sur la ligne du prospect.
+   */
+  onCreateAppointment?: () => void;
 }) {
   return (
     <header className="rounded-surface border border-subtle bg-surface p-4 shadow-sm">
@@ -20,10 +23,6 @@ export function ProspectsHeader({
           <Button type="button" variant="primary" size="md" onClick={onCreate}>
             <UserPlus className="h-4 w-4" />
             Ajouter prospect
-          </Button>
-          <Button type="button" variant="secondary" size="md" onClick={onCreateAppointment}>
-            <CalendarDays className="h-4 w-4" />
-            Prise de RDV
           </Button>
           <Button type="button" variant="secondary" size="md" disabled title="Import CSV/XLSX à finaliser">
             <Upload className="h-4 w-4" />

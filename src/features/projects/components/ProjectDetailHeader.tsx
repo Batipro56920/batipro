@@ -11,7 +11,7 @@ import {
 } from "../../../services/crm.service";
 import type { ProjectRecord } from "../types";
 import { ProjectStatusBadge } from "./ProjectStatusBadge";
-import { formatCurrency, formatDate } from "./ProjectShared";
+import { formatCurrency, formatDate, useSalespersonName } from "./ProjectShared";
 import { getPrimaryQuote } from "../hooks/useProjectsData";
 
 const WON_PROJECT_STATUSES = ["accepte", "preparation_chantier", "en_chantier", "cloture"];
@@ -23,6 +23,7 @@ export function ProjectDetailHeader({ project, onProjectUpdated }: { project: Pr
   const [updatingOutcome, setUpdatingOutcome] = useState<"won" | "lost" | null>(null);
   const [chantierError, setChantierError] = useState<string | null>(null);
   const [outcomeError, setOutcomeError] = useState<string | null>(null);
+  const salespersonName = useSalespersonName(project.salesperson);
   const quote = getPrimaryQuote(project);
   const acceptedQuote = project.quotes.find((item) => item.statut === "accepte");
   const linkedAcceptedQuoteChantier = acceptedQuote
@@ -118,12 +119,16 @@ export function ProjectDetailHeader({ project, onProjectUpdated }: { project: Pr
             {project.clientName} · {project.address || "Adresse à renseigner"} · {formatCurrency(project.budgetEstimate || project.quoteAmount)}
           </p>
           <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-500">
-            <span>Commercial {project.salesperson || "à assigner"}</span>
+            <span>Commercial {salespersonName ?? "à assigner"}</span>
             <span>Source {project.sourceLabel || "non renseignée"}</span>
             <span>Échéance {formatDate(project.desiredDeadline)}</span>
           </div>
           {chantierError ? <div className="mt-3 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{chantierError}</div> : null}
           {outcomeError ? <div className="mt-3 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{outcomeError}</div> : null}
+          {/*
+            Le résumé achats vivait ici alors que le bouton "Achats projet" mène
+            déjà au module qui les gère vraiment.
+          */}
         </div>
 
         <div className="flex flex-wrap gap-2">

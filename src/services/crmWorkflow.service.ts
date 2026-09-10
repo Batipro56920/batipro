@@ -2,6 +2,7 @@ import { supabase } from "../lib/supabaseClient";
 import {
   createCrmProspect,
   createCrmTask,
+  isApporteurSource,
   upsertCrmOpportunity,
   type CrmAppointmentRow,
   type CrmOpportunityRow,
@@ -39,7 +40,9 @@ function uniqueTags(tags: string[]) {
 }
 
 function isApporteurProspect(prospect: CrmProspectRow) {
-  return prospect.source_acquisition === "Apporteur d'affaires" || Boolean(text(prospect.apporteur_affaire));
+  // La provenance décide, pas la présence d'un nom : une recommandation en porte
+  // un aussi, et ne doit pas taguer l'affaire comme venant d'un apporteur.
+  return isApporteurSource(prospect.source_acquisition);
 }
 
 function prospectOpportunityLabel(prospect: CrmProspectRow) {
@@ -48,9 +51,11 @@ function prospectOpportunityLabel(prospect: CrmProspectRow) {
 }
 
 function prospectOpportunityNotes(prospect: CrmProspectRow) {
-  const sourceLine = isApporteurProspect(prospect) ? "Origine : Apporteur d'affaires" : null;
-  const apporteurLine = text(prospect.apporteur_affaire) ? `Apporteur : ${text(prospect.apporteur_affaire)}` : null;
-  return [sourceLine, apporteurLine, prospect.description_besoin, prospect.notes].filter(Boolean).join("\n") || null;
+  const sourceLine = text(prospect.source_acquisition) ? `Origine : ${text(prospect.source_acquisition)}` : null;
+  const detailLine = isApporteurProspect(prospect)
+    ? text(prospect.apporteur_affaire) && `Apporteur : ${text(prospect.apporteur_affaire)}`
+    : text(prospect.source_detail) && `Contact d'origine : ${text(prospect.source_detail)}`;
+  return [sourceLine, detailLine || null, prospect.description_besoin, prospect.notes].filter(Boolean).join("\n") || null;
 }
 
 function prospectOpportunityTags(prospect: CrmProspectRow) {

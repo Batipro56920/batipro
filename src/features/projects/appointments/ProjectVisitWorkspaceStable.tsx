@@ -1,14 +1,19 @@
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { ArrowLeft, CheckCircle2, FileText, Plus, Save, Trash2 } from "lucide-react";
+import { ArrowLeft, Camera, CheckCircle2, FileText, Mic, Plus, Save, Trash2 } from "lucide-react";
 import { Button } from "../../../components/ui/button";
 import { createCrmAppointment, type CrmAppointmentRow } from "../../../services/crm.service";
 import { loadCrmVisitReportDraft, saveCrmVisitReport } from "../../../services/crmVisitReports.service";
 import { createOpportunityForProspect, updateCrmAppointment, updateCrmOpportunityStageByKey } from "../../../services/crmWorkflow.service";
+import { list as listTaskTemplates, type TaskTemplateRow } from "../../../services/taskLibrary.service";
+import { listTaskTemplatePreparationByTemplateIds, type TaskTemplateEquipmentItemRow, type TaskTemplateMaterialRatioRow } from "../../../services/taskTemplatePreparation.service";
+import { getCompanyHourlyRates, type CompanyHourlyRates } from "../../../services/indirectCosts.service";
 import { VISIT_DRAFT_MARKER } from "../../crm/utils/appointmentDraftStorage";
 import type { ProjectRecord } from "../types";
+import { VisitReportImportDrawer, type VisitImportSelection } from "./VisitReportImportDrawer";
+import { applyImportedFields, buildLinesFromImport } from "./applyVisitImport";
 
-type StepKey = "info" | "description" | "estimating" | "constraints" | "budget" | "summary";
+type StepKey = "info" | "description" | "estimating" | "photos" | "constraints" | "budget" | "summary";
 type VisitStatus = "brouillon" | "planifiee" | "realisee" | "pre_devis";
 type Unit = "u" | "ml" | "m2" | "m3" | "h";
 type LineType = "section" | "task";
@@ -28,6 +33,13 @@ type EstimateLine = {
   priceHintHt?: number | null;
   family?: string | null;
   libraryId?: string | null;
+  /**
+   * Modèle de tâche rattaché. La désignation reste l'intitulé précis annoncé au
+   * client ; la tâche liée porte le geste technique et transporte main d'oeuvre,
+   * matériaux, matériel, pertes et temps jusqu'au devis puis au chantier.
+   */
+  taskTemplateId?: string | null;
+  taskTemplateLabel?: string | null;
   technicalNotes: string;
   constraints: string;
   variants: string;
@@ -93,6 +105,7 @@ const steps: Array<{ key: StepKey; label: string }> = [
   { key: "info", label: "Infos" },
   { key: "description", label: "Projet" },
   { key: "estimating", label: "Terrain / pre-devis" },
+  { key: "photos", label: "Photos" },
   { key: "constraints", label: "Contraintes" },
   { key: "budget", label: "Budget" },
   { key: "summary", label: "Synthese" },
@@ -172,6 +185,122 @@ function quantity(line: EstimateLine) {
   if (line.unit === "m2") return Math.round(length * width * 100) / 100;
   if (line.unit === "m3") return Math.round(length * width * height * 100) / 100;
   return Number(line.quantity || 0);
+}
+
+function euro(value: number) {
+  return `${value.toLocaleString("fr-FR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} EUR`;
+}
+
+/**
+ * Ce que la tache liee apporte reellement au chiffrage. Meme methode de calcul
+ * que la bibliotheque de taches : main d'oeuvre au cout horaire moyen des
+ * employes, materiaux majores de leurs pertes, amortissement et frais generaux
+ * ramenes au temps passe.
+ */
+function LinkedTaskSummary({
+  template,
+  materials,
+  equipment,
+  rates,
+  quantity: measuredQuantity,
+}: {
+  template: TaskTemplateRow | null;
+  materials: TaskTemplateMaterialRatioRow[];
+  equipment: TaskTemplateEquipmentItemRow[];
+  rates: CompanyHourlyRates | null;
+  quantity: number;
+}) {
+  if (!template) {
+    return (
+      <p className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-3 text-xs text-slate-500">
+        Sans tache liee, cette ligne partira au devis en texte libre : ni main d'oeuvre, ni materiaux, ni mode operatoire ne suivront jusqu'au chantier.
+      </p>
+    );
+  }
+
+  const hoursPerUnit = Number(template.temps_prevu_par_unite_h ?? 0);
+  const laborPerUnit = hoursPerUnit * Number(rates?.averageEmployeeHourlyCostHt ?? 0);
+  const materialsPerUnit = materials.reduce(
+    (total, material) => total + Number(material.ratio_quantity ?? 0) * (1 + Number(material.loss_percent ?? 0) / 100) * Number(material.purchase_price_ht ?? 0),
+    0,
+  );
+  const indirectPerUnit = hoursPerUnit * (Number(rates?.amortizationRatePerHour ?? 0) + Number(rates?.overheadRatePerHour ?? 0));
+  const costPerUnit = laborPerUnit + materialsPerUnit + indirectPerUnit;
+  const rows: Array<[string, string]> = [
+    ["Main d'oeuvre", `${hoursPerUnit.toLocaleString("fr-FR")} h x ${euro(Number(rates?.averageEmployeeHourlyCostHt ?? 0))} = ${euro(laborPerUnit)}`],
+    ["Materiaux (pertes incluses)", `${materials.length} ligne(s) = ${euro(materialsPerUnit)}`],
+    ["Materiel", equipment.length ? equipment.map((item) => item.equipment_name).join(", ") : "aucun"],
+    ["Amortissement + frais generaux", euro(indirectPerUnit)],
+  ];
+
+  return (
+    <div className="rounded-2xl border border-blue-100 bg-blue-50/60 p-3">
+      <div className="text-xs font-semibold uppercase tracking-[0.12em] text-blue-700">Ce que la tache apporte</div>
+      <dl className="mt-2 space-y-1 text-xs text-slate-700">
+        {rows.map(([label, value]) => (
+          <div key={label} className="flex justify-between gap-3">
+            <dt className="shrink-0 text-slate-500">{label}</dt>
+            <dd className="text-right font-medium">{value}</dd>
+          </div>
+        ))}
+      </dl>
+      <div className="mt-2 flex justify-between border-t border-blue-200 pt-2 text-xs font-semibold text-slate-900">
+        <span>Prix de revient / {template.unite ?? "u"}</span>
+        <span>{euro(costPerUnit)}</span>
+      </div>
+      {measuredQuantity > 0 ? (
+        <div className="flex justify-between text-xs font-semibold text-blue-800">
+          <span>Pour {measuredQuantity.toLocaleString("fr-FR")} releve(s)</span>
+          <span>{euro(costPerUnit * measuredQuantity)}</span>
+        </div>
+      ) : null}
+      {!rates?.activeEmployeeCount ? (
+        <p className="mt-2 text-[11px] text-amber-700">Aucun employe actif renseigne : le cout de main d'oeuvre ressort a 0.</p>
+      ) : null}
+    </div>
+  );
+}
+
+/**
+ * Postgres renvoie l'heure en "HH:MM:SS" alors que le formulaire écrit "HH:MM" :
+ * recoller les deux naïvement donnait "2026-09-08T09:00:00:00", une date
+ * invalide qui faisait échouer tout ré-enregistrement d'une visite déjà en base.
+ */
+function visitStartDate(date: string, time: string): Date {
+  const day = /^\d{4}-\d{2}-\d{2}$/.test(String(date ?? "").trim()) ? date.trim() : today();
+  const match = String(time ?? "").trim().match(/^(\d{1,2}):(\d{2})/);
+  const hour = match ? String(match[1]).padStart(2, "0") : "09";
+  const minute = match ? match[2] : "00";
+  const parsed = new Date(`${day}T${hour}:${minute}:00`);
+  return Number.isNaN(parsed.getTime()) ? new Date() : parsed;
+}
+
+/**
+ * Empreinte du brouillon, pièces jointes non montées comprises. Elle sert à ne
+ * déclencher un auto-enregistrement que si quelque chose a réellement changé :
+ * sans elle, chaque sauvegarde relançait la suivante en boucle.
+ */
+function draftSignature(draft: VisitDraft): string {
+  const attachments = draft.attachments.map((item) => {
+    const state = item.storagePath || (item.file ? "local" : "");
+    return [item.id, state, item.comment, item.targetLineId || ""].join("|");
+  });
+  return JSON.stringify({ ...serializeDraft(draft), attachments });
+}
+
+function readErrorMessage(error: unknown): string {
+  const raw = (error as { message?: unknown } | null)?.message ?? error;
+  const message = String(raw ?? "").trim();
+  if (!message || message === "[object Object]") return "Enregistrement refusé par le serveur.";
+  if (message.toLowerCase().includes("bucket not found")) return "Stockage des photos indisponible : prévenez l'administrateur.";
+  return message;
+}
+
+/** Les unités de la bibliothèque sont plus larges que celles du relevé terrain. */
+function normalizeVisitUnit(unit: string | null | undefined): Unit | null {
+  const value = String(unit ?? "").trim().toLowerCase().replace("²", "2").replace("³", "3");
+  if (value === "u" || value === "ml" || value === "m2" || value === "m3" || value === "h") return value;
+  return null;
 }
 
 function appointmentVisitStatus(appointment?: CrmAppointmentRow | null): VisitStatus {
@@ -258,7 +387,10 @@ function reportText(project: ProjectRecord, draft: VisitDraft) {
   const tasks = draft.lines.filter((line) => line.type === "task");
   const taskLines = sections.map((section) => {
     const children = tasks.filter((task) => task.parentId === section.id);
-    return [`# ${section.title}`, ...children.map((task) => `- ${task.title}: ${quantity(task)} ${task.unit}${task.technicalNotes ? ` | ${task.technicalNotes}` : ""}`)].join("\n");
+    return [
+      `# ${section.title}`,
+      ...children.map((task) => `- ${task.title}: ${quantity(task)} ${task.unit}${task.taskTemplateLabel ? ` | tache liee: ${task.taskTemplateLabel}` : ""}${task.technicalNotes ? ` | ${task.technicalNotes}` : ""}`),
+    ].join("\n");
   }).join("\n\n");
 
   return [
@@ -323,6 +455,38 @@ export function ProjectVisitWorkspaceStable({ project, existingAppointment }: { 
   const [selectedLineId, setSelectedLineId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [saveState, setSaveState] = useState<"draft" | "saved" | "error">("draft");
+  // Un badge "erreur" muet ne dit pas quoi corriger : on garde le message réel.
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [taskTemplates, setTaskTemplates] = useState<TaskTemplateRow[]>([]);
+  const [linkedMaterials, setLinkedMaterials] = useState<TaskTemplateMaterialRatioRow[]>([]);
+  const [linkedEquipment, setLinkedEquipment] = useState<TaskTemplateEquipmentItemRow[]>([]);
+  const [hourlyRates, setHourlyRates] = useState<CompanyHourlyRates | null>(null);
+  const draftRef = useRef(draft);
+  draftRef.current = draft;
+  const savingRef = useRef(false);
+  const pendingSaveRef = useRef(false);
+  const lastSavedSignatureRef = useRef("");
+  const firstDraftRender = useRef(true);
+  const [importOpen, setImportOpen] = useState(false);
+
+  useEffect(() => {
+    let alive = true;
+    void listTaskTemplates()
+      .then((rows) => {
+        if (alive) setTaskTemplates(rows);
+      })
+      .catch(() => {
+        if (alive) setTaskTemplates([]);
+      });
+    void getCompanyHourlyRates()
+      .then((rates) => {
+        if (alive) setHourlyRates(rates);
+      })
+      .catch(() => undefined);
+    return () => {
+      alive = false;
+    };
+  }, []);
 
   useEffect(() => {
     if (existingAppointment?.id) setCurrentAppointment(existingAppointment);
@@ -331,10 +495,54 @@ export function ProjectVisitWorkspaceStable({ project, existingAppointment }: { 
   useEffect(() => {
     const timer = window.setTimeout(() => {
       localStorage.setItem(storageKey, JSON.stringify(serializeDraft(draft)));
-      setSaveState("draft");
+      setSaveState((current) => (current === "error" ? current : "draft"));
     }, 500);
     return () => window.clearTimeout(timer);
   }, [draft, storageKey]);
+
+  /**
+   * Auto-enregistrement serveur. Le relevé d'une visite représente une heure de
+   * terrain : il ne doit pas dépendre du fait de penser à cliquer "Enregistrer"
+   * avant de fermer l'onglet. On n'auto-enregistre qu'une visite déjà créée, pour
+   * ne pas semer des RDV vides au premier caractère saisi.
+   */
+  useEffect(() => {
+    if (!appointmentId || firstDraftRender.current) {
+      firstDraftRender.current = false;
+      return;
+    }
+    // Enregistrer toutes les 4 s pendant la frappe rendait la saisie poussive :
+    // chaque cycle réécrivait toutes les lignes et toutes les pièces jointes du
+    // compte rendu. On laisse la main à l'utilisateur, et on ne repart que si
+    // quelque chose a réellement changé depuis le dernier enregistrement réussi.
+    const timer = window.setTimeout(() => {
+      if (draftSignature(draftRef.current) === lastSavedSignatureRef.current) return;
+      void persistVisit(draftRef.current.status, { silent: true });
+    }, 12000);
+    return () => window.clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [draft, appointmentId]);
+
+  /**
+   * Filet de sécurité : entre deux auto-enregistrements, le relevé n'existe que
+   * dans l'onglet. Quitter la page, verrouiller le téléphone ou basculer d'appli
+   * déclenche donc un enregistrement immédiat de ce qui n'est pas encore parti.
+   */
+  useEffect(() => {
+    if (!appointmentId) return;
+    function flush() {
+      if (document.visibilityState === "visible") return;
+      if (draftSignature(draftRef.current) === lastSavedSignatureRef.current) return;
+      void persistVisit(draftRef.current.status, { silent: true });
+    }
+    document.addEventListener("visibilitychange", flush);
+    window.addEventListener("pagehide", flush);
+    return () => {
+      document.removeEventListener("visibilitychange", flush);
+      window.removeEventListener("pagehide", flush);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [appointmentId]);
 
   useEffect(() => {
     let alive = true;
@@ -361,6 +569,36 @@ export function ProjectVisitWorkspaceStable({ project, existingAppointment }: { 
   const selectedLine = useMemo(() => draft.lines.find((line) => line.id === selectedLineId) ?? null, [draft.lines, selectedLineId]);
   const activeSectionId = selectedLine?.type === "section" ? selectedLine.id : selectedLine?.parentId ?? sections[0]?.id ?? null;
   const report = useMemo(() => reportText(project, draft), [project, draft]);
+  const photos = useMemo(() => draft.attachments.filter((item) => item.kind === "photo"), [draft.attachments]);
+  const linkedTemplate = useMemo(
+    () => (selectedLine?.taskTemplateId ? taskTemplates.find((row) => row.id === selectedLine.taskTemplateId) ?? null : null),
+    [selectedLine?.taskTemplateId, taskTemplates],
+  );
+
+  /** Composition réelle de la tâche liée : ce que l'ouvrier trouvera au chantier. */
+  useEffect(() => {
+    const templateId = selectedLine?.taskTemplateId ?? null;
+    if (!templateId) {
+      setLinkedMaterials([]);
+      setLinkedEquipment([]);
+      return;
+    }
+    let alive = true;
+    void listTaskTemplatePreparationByTemplateIds([templateId])
+      .then((preparation) => {
+        if (!alive) return;
+        setLinkedMaterials(preparation.materialsByTemplateId[templateId] ?? []);
+        setLinkedEquipment(preparation.equipmentByTemplateId[templateId] ?? []);
+      })
+      .catch(() => {
+        if (!alive) return;
+        setLinkedMaterials([]);
+        setLinkedEquipment([]);
+      });
+    return () => {
+      alive = false;
+    };
+  }, [selectedLine?.taskTemplateId]);
 
   function patch<K extends keyof VisitDraft>(key: K, value: VisitDraft[K]) {
     setDraft((current) => ({ ...current, [key]: value }));
@@ -378,6 +616,29 @@ export function ProjectVisitWorkspaceStable({ project, existingAppointment }: { 
     }));
   }
 
+  /**
+   * Rattache un modèle de tâche sans écraser ce que le commercial a déjà relevé :
+   * la désignation reste libre, l'unité et le temps ne sont pré-remplis que
+   * lorsqu'ils sont encore vides.
+   */
+  function linkTaskTemplate(lineId: string, templateId: string) {
+    if (!templateId) {
+      patchLine(lineId, { taskTemplateId: null, taskTemplateLabel: null });
+      return;
+    }
+    const template = taskTemplates.find((row) => row.id === templateId);
+    if (!template) return;
+    const line = draft.lines.find((item) => item.id === lineId);
+    const patch: Partial<EstimateLine> = { taskTemplateId: template.id, taskTemplateLabel: template.titre };
+    const untouchedTitle = !line?.title.trim() || line.title.trim() === "Nouvelle tache / prestation";
+    if (untouchedTitle) patch.title = template.titre;
+    const templateUnit = normalizeVisitUnit(template.unite);
+    if (templateUnit) patch.unit = templateUnit;
+    if (!line?.estimatedHours && template.temps_prevu_par_unite_h) patch.estimatedHours = Number(template.temps_prevu_par_unite_h);
+    if (!line?.priceHintHt && template.cout_reference_unitaire_ht) patch.priceHintHt = Number(template.cout_reference_unitaire_ht);
+    patchLine(lineId, patch);
+  }
+
   function addSection(title = "Nouvelle section") {
     const line: EstimateLine = { id: uid("section"), type: "section", parentId: null, title, unit: "u", quantity: 0, manualQuantity: false, technicalNotes: "", constraints: "", variants: "", attentionPoints: "" };
     setDraft((current) => ({ ...current, lines: [...current.lines, line] }));
@@ -392,7 +653,7 @@ export function ProjectVisitWorkspaceStable({ project, existingAppointment }: { 
       parentId = uid("section");
       nextLines.push({ id: parentId, type: "section", parentId: null, title: "Nouvelle section", unit: "u", quantity: 0, manualQuantity: false, technicalNotes: "", constraints: "", variants: "", attentionPoints: "" });
     }
-    const line: EstimateLine = { id: uid("task"), type: "task", parentId, title: "Nouvelle tache / prestation", unit: "m2", quantity: 0, manualQuantity: false, length: null, width: null, height: null, estimatedHours: null, priceHintHt: null, family: null, libraryId: null, technicalNotes: "", constraints: "", variants: "", attentionPoints: "" };
+    const line: EstimateLine = { id: uid("task"), type: "task", parentId, title: "Nouvelle tache / prestation", unit: "m2", quantity: 0, manualQuantity: false, length: null, width: null, height: null, estimatedHours: null, priceHintHt: null, family: null, libraryId: null, taskTemplateId: null, taskTemplateLabel: null, technicalNotes: "", constraints: "", variants: "", attentionPoints: "" };
     setDraft((current) => ({ ...current, lines: [...nextLines.filter((item) => !current.lines.some((existing) => existing.id === item.id)), ...current.lines, line] }));
     setSelectedLineId(line.id);
     setStep("estimating");
@@ -403,18 +664,54 @@ export function ProjectVisitWorkspaceStable({ project, existingAppointment }: { 
     setSelectedLineId(null);
   }
 
-  function addFiles(files: FileList | null, kind: "photo" | "document") {
+  function addFiles(files: FileList | null, kind: "photo" | "document", targetLineId: string | null = selectedLineId) {
     if (!files?.length) return;
-    const attachments = Array.from(files).map((file) => ({ id: uid(kind), kind, name: file.name, targetLineId: selectedLineId, comment: "", previewUrl: kind === "photo" ? URL.createObjectURL(file) : null, file, mimeType: file.type || null, sizeBytes: file.size }));
-    setDraft((current) => ({ ...current, attachments: [...current.attachments, ...attachments] }));
+    const attachments = Array.from(files).map((file) => ({ id: uid(kind), kind, name: file.name, targetLineId, comment: "", previewUrl: kind === "photo" ? URL.createObjectURL(file) : null, file, mimeType: file.type || null, sizeBytes: file.size }));
+    const nextDraft = { ...draftRef.current, attachments: [...draftRef.current.attachments, ...attachments] };
+    setDraft(nextDraft);
+    // Une photo n'existe que dans l'onglet tant qu'elle n'est pas montée dans le
+    // stockage : un rafraîchissement la perdrait. On l'envoie tout de suite.
+    void persistVisit(nextDraft.status, { draftOverride: nextDraft, silent: true, queueIfBusy: true });
+  }
+
+  function removeAttachment(id: string) {
+    const nextDraft = { ...draftRef.current, attachments: draftRef.current.attachments.filter((item) => item.id !== id) };
+    setDraft(nextDraft);
+    void persistVisit(nextDraft.status, { draftOverride: nextDraft, silent: true, queueIfBusy: true });
+  }
+
+  function patchAttachment(id: string, patch: Partial<VisitAttachment>) {
+    setDraft((current) => ({ ...current, attachments: current.attachments.map((item) => (item.id === id ? { ...item, ...patch } : item)) }));
   }
 
   async function saveVisit(status: VisitStatus) {
-    setSaving(true);
+    const saved = await persistVisit(status, {});
+    if (!saved) return;
+    if (status === "pre_devis") navigate(`/projets/${saved.targetProjectId}/devis/nouveau`);
+    else if (status === "realisee") navigate(`/projets/${saved.targetProjectId}/visites/${saved.appointmentId}`);
+    else navigate(`/projets/${saved.targetProjectId}/visites/${saved.appointmentId}?edit=1`, { replace: true });
+  }
+
+  async function persistVisit(
+    status: VisitStatus,
+    { draftOverride, silent, queueIfBusy }: { draftOverride?: VisitDraft; silent?: boolean; queueIfBusy?: boolean },
+  ): Promise<{ targetProjectId: string; appointmentId: string } | null> {
+    // Un enregistrement en cours ne fait pas jeter une photo : celle-ci est
+    // rejouée après. En revanche l'auto-enregistrement, lui, ne se remet pas en
+    // file — sinon chaque cycle relance le suivant et la temporisation disparaît,
+    // ce qui remet la saisie à genoux.
+    if (savingRef.current) {
+      if (queueIfBusy) pendingSaveRef.current = true;
+      return null;
+    }
+    savingRef.current = true;
+    if (!silent) setSaving(true);
     try {
-      const nextStatus = status === "brouillon" ? draft.status : status;
-      const nextDraft = { ...draft, status: nextStatus };
-      const startsAt = new Date(`${nextDraft.date}T${nextDraft.time || "09:00"}:00`);
+      const base = draftOverride ?? draftRef.current;
+      const nextStatus = status === "brouillon" ? base.status : status;
+      const nextDraft = { ...base, status: nextStatus };
+      const signature = draftSignature(nextDraft);
+      const startsAt = visitStartDate(nextDraft.date, nextDraft.time);
       const endsAt = new Date(startsAt.getTime() + Number(nextDraft.durationMinutes || 90) * 60000);
       const opportunity = project.opportunity ?? (project.prospect ? await createOpportunityForProspect(project.prospect, { stage_key: "visite", probabilite: 40, prochaine_action: "Finaliser le compte rendu de visite" }) : null);
       const targetProjectId = opportunity ? `opportunity-${opportunity.id}` : project.id;
@@ -436,7 +733,7 @@ export function ProjectVisitWorkspaceStable({ project, existingAppointment }: { 
       const appointmentToUpdate = currentAppointment ?? existingAppointment ?? null;
       const saved = appointmentToUpdate ? await updateCrmAppointment(appointmentToUpdate.id, payload) : await createCrmAppointment(payload);
       setCurrentAppointment(saved);
-      await saveCrmVisitReport({
+      const reportResult = await saveCrmVisitReport({
         appointment_id: saved.id,
         prospect_id: project.prospect?.id ?? null,
         client_id: project.client?.id ?? null,
@@ -468,18 +765,72 @@ export function ProjectVisitWorkspaceStable({ project, existingAppointment }: { 
       });
       if (opportunity) await updateCrmOpportunityStageByKey(opportunity.id, stageFor(nextStatus), { prochaine_action: nextActionFor(nextStatus), prochaine_action_date: nextStatus === "realisee" || nextStatus === "pre_devis" ? nextDraft.followUpDate || null : nextDraft.date });
       localStorage.removeItem(storageKey);
-      setDraft(nextDraft);
+      // On NE remplace PAS le brouillon par l'instantané envoyé : un enregistrement
+      // dure plusieurs secondes, et tout ce qui a été tapé ou photographié pendant
+      // ce temps serait écrasé. On se contente de marquer comme stockées les pièces
+      // jointes réellement montées, dans le brouillon courant.
+      const storedById = new Map(reportResult?.storedAttachments?.map((item) => [item.sourceId, item]) ?? []);
+      if (storedById.size) {
+        setDraft((current) => ({
+          ...current,
+          attachments: current.attachments.map((item) => {
+            const stored = storedById.get(item.id);
+            return stored ? { ...item, file: null, storagePath: stored.path } : item;
+          }),
+        }));
+      }
+      lastSavedSignatureRef.current = signature;
       setSaveState("saved");
-      if (status === "pre_devis") navigate(`/projets/${targetProjectId}/devis/nouveau`);
-      else if (status === "realisee") navigate(`/projets/${targetProjectId}/visites/${saved.id}`);
-      else navigate(`/projets/${targetProjectId}/visites/${saved.id}?edit=1`, { replace: true });
-    } catch {
+      setSaveError(null);
+      return { targetProjectId, appointmentId: saved.id };
+    } catch (error) {
       setSaveState("error");
+      setSaveError(readErrorMessage(error));
+      return null;
     } finally {
+      savingRef.current = false;
       setSaving(false);
+      // Une modification arrivée pendant l'enregistrement ne doit pas être perdue :
+      // on repart pour un tour au lieu de l'ignorer.
+      if (pendingSaveRef.current) {
+        pendingSaveRef.current = false;
+        window.setTimeout(() => {
+          if (draftSignature(draftRef.current) === lastSavedSignatureRef.current) return;
+          void persistVisit(draftRef.current.status, { silent: true, queueIfBusy: true });
+        }, 0);
+      }
     }
   }
 
+
+  /**
+   * Applique ce que l'utilisateur a retenu de la proposition de Coco. Les lignes
+   * arrivent en plus de l'existant : un import ne detruit jamais un releve deja
+   * commence.
+   */
+  function applyImport(selection: VisitImportSelection) {
+    // Un identifiant de tache invente par Coco viole la cle etrangere et fait
+    // echouer l'ecriture des taches APRES celle des sections : le releve revient
+    // ampute de toutes ses taches. On ne garde que les modeles qui existent.
+    const knownTemplateIds = new Set(taskTemplates.map((row) => row.id));
+    const safeSections = selection.sections.map((section) => ({
+      ...section,
+      tasks: section.tasks.map((task) =>
+        task.taskTemplateId && knownTemplateIds.has(task.taskTemplateId)
+          ? task
+          : { ...task, taskTemplateId: null, taskTemplateLabel: null },
+      ),
+    }));
+    const newLines = buildLinesFromImport<EstimateLine>(safeSections, uid);
+    const fields = applyImportedFields(selection.fields);
+    setDraft((current) => ({
+      ...current,
+      ...(fields as Partial<VisitDraft>),
+      lines: [...current.lines, ...newLines],
+    }));
+    setImportOpen(false);
+    setStep(newLines.length ? "estimating" : "constraints");
+  }
   function renderMeasurements(line: EstimateLine) {
     if (line.type !== "task") return null;
     return (
@@ -509,10 +860,20 @@ export function ProjectVisitWorkspaceStable({ project, existingAppointment }: { 
             <p className="mt-1 truncate text-sm text-slate-500">{draft.client} - {draft.address || "Adresse a renseigner"}</p>
           </div>
           <div className="flex shrink-0 flex-col items-end gap-2">
-            <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">{saveState === "saved" ? "enregistre" : saveState === "error" ? "erreur" : draft.status}</span>
-            <Button size="sm" variant="secondary" disabled={saving} onClick={() => saveVisit("brouillon")}><Save className="h-4 w-4" />Enregistrer</Button>
+            <span className={`rounded-full px-3 py-1 text-xs font-semibold ${saveState === "error" ? "bg-red-100 text-red-700" : saveState === "saved" ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 text-slate-600"}`}>
+              {saveState === "saved" ? "enregistre" : saveState === "error" ? "erreur" : draft.status}
+            </span>
+            <div className="flex flex-wrap justify-end gap-2">
+              <Button size="sm" variant="secondary" onClick={() => setImportOpen(true)}><Mic className="h-4 w-4" />Compte rendu</Button>
+              <Button size="sm" variant="secondary" disabled={saving} onClick={() => saveVisit("brouillon")}><Save className="h-4 w-4" />Enregistrer</Button>
+            </div>
           </div>
         </div>
+        {saveState === "error" && saveError ? (
+          <p className="mt-3 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs font-medium text-red-800">
+            Enregistrement impossible : {saveError}
+          </p>
+        ) : null}
         <nav className="mt-4 flex gap-2 overflow-x-auto pb-1">
           {steps.map((item) => <button key={item.key} type="button" onClick={() => setStep(item.key)} className={["shrink-0 rounded-full px-3 py-2 text-xs font-semibold transition", step === item.key ? "bg-slate-950 text-white" : "border border-slate-200 bg-white text-slate-600"].join(" ")}>{item.label}</button>)}
         </nav>
@@ -554,9 +915,122 @@ export function ProjectVisitWorkspaceStable({ project, existingAppointment }: { 
           </div>
           <aside className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm xl:sticky xl:top-4 xl:self-start">
             <div className="mb-3 flex items-center justify-between gap-2"><div className="text-sm font-semibold text-slate-950">Detail</div>{selectedLine ? <button type="button" onClick={() => removeLine(selectedLine.id)} className="rounded-lg p-2 text-red-600 hover:bg-red-50"><Trash2 className="h-4 w-4" /></button> : null}</div>
-            {selectedLine ? <div className="space-y-3"><Field label="Designation"><input className={inputClass} value={selectedLine.title} onChange={(event) => patchLine(selectedLine.id, { title: event.target.value })} /></Field>{selectedLine.type === "task" ? <><div>{renderMeasurements(selectedLine)}</div><Field label="Temps estime / prix indicatif"><div className="grid gap-2 sm:grid-cols-2"><DecimalInput value={selectedLine.estimatedHours ?? null} placeholder="h" onValue={(value) => patchLine(selectedLine.id, { estimatedHours: value })} /><DecimalInput value={selectedLine.priceHintHt ?? null} placeholder="EUR HT" onValue={(value) => patchLine(selectedLine.id, { priceHintHt: value })} /></div></Field><Field label="Notes techniques"><textarea className={textareaClass} value={selectedLine.technicalNotes} onChange={(event) => patchLine(selectedLine.id, { technicalNotes: event.target.value })} /></Field><Field label="Contraintes / observations"><textarea className={textareaClass} value={selectedLine.constraints} onChange={(event) => patchLine(selectedLine.id, { constraints: event.target.value })} /></Field><label className="flex h-11 cursor-pointer items-center justify-center gap-2 rounded-xl border border-blue-200 bg-blue-50 px-3 text-sm font-semibold text-blue-800">Ajouter photo<input className="hidden" type="file" accept="image/*" capture="environment" onChange={(event) => addFiles(event.target.files, "photo")} /></label></> : null}</div> : <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-4 text-sm text-slate-500">Selectionnez une section ou une tache.</div>}
+            {selectedLine ? (
+              <div className="space-y-3">
+                <Field label="Designation">
+                  <input className={inputClass} value={selectedLine.title} onChange={(event) => patchLine(selectedLine.id, { title: event.target.value })} placeholder="Intitule precis annonce au client" />
+                </Field>
+                {selectedLine.type === "task" ? (
+                  <>
+                    <Field label="Tache liee">
+                      <select className={inputClass} value={selectedLine.taskTemplateId ?? ""} onChange={(event) => linkTaskTemplate(selectedLine.id, event.target.value)}>
+                        <option value="">Aucune tache liee</option>
+                        {/* La tache enregistree reste selectionnable meme si la bibliotheque n'est pas encore chargee. */}
+                        {selectedLine.taskTemplateId && !taskTemplates.some((row) => row.id === selectedLine.taskTemplateId) ? (
+                          <option value={selectedLine.taskTemplateId}>{selectedLine.taskTemplateLabel ?? "Tache liee"}</option>
+                        ) : null}
+                        {taskTemplates.map((row) => (
+                          <option key={row.id} value={row.id}>{row.lot ? `${row.lot} — ${row.titre}` : row.titre}</option>
+                        ))}
+                      </select>
+                    </Field>
+                    <LinkedTaskSummary template={linkedTemplate} materials={linkedMaterials} equipment={linkedEquipment} rates={hourlyRates} quantity={quantity(selectedLine)} />
+                    <div>{renderMeasurements(selectedLine)}</div>
+                    <Field label="Temps estime / prix indicatif">
+                      <div className="grid gap-2 sm:grid-cols-2">
+                        <DecimalInput value={selectedLine.estimatedHours ?? null} placeholder="h" onValue={(value) => patchLine(selectedLine.id, { estimatedHours: value })} />
+                        <DecimalInput value={selectedLine.priceHintHt ?? null} placeholder="EUR HT" onValue={(value) => patchLine(selectedLine.id, { priceHintHt: value })} />
+                      </div>
+                    </Field>
+                    <Field label="Notes techniques"><textarea className={textareaClass} value={selectedLine.technicalNotes} onChange={(event) => patchLine(selectedLine.id, { technicalNotes: event.target.value })} /></Field>
+                    <Field label="Contraintes / observations"><textarea className={textareaClass} value={selectedLine.constraints} onChange={(event) => patchLine(selectedLine.id, { constraints: event.target.value })} /></Field>
+                    <label className="flex h-11 cursor-pointer items-center justify-center gap-2 rounded-xl border border-blue-200 bg-blue-50 px-3 text-sm font-semibold text-blue-800">
+                      <Camera className="h-4 w-4" />Photo de cette tache
+                      <input className="hidden" type="file" accept="image/*" capture="environment" multiple onChange={(event) => { addFiles(event.target.files, "photo", selectedLine.id); event.target.value = ""; }} />
+                    </label>
+                  </>
+                ) : null}
+              </div>
+            ) : <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-4 text-sm text-slate-500">Selectionnez une section ou une tache.</div>}
           </aside>
         </section> : null}
+
+        {step === "photos" ? (
+          <section className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm md:p-5">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <div className="text-xs font-semibold uppercase tracking-[0.18em] text-blue-600">Photos du projet</div>
+                <h2 className="mt-1 text-lg font-semibold text-slate-950">{photos.length} photo(s)</h2>
+                <p className="mt-1 text-sm text-slate-500">Chaque photo part dans le stockage des l'ajout : elle reste disponible apres le rendez-vous.</p>
+              </div>
+              <div className="flex gap-2">
+                <label className="inline-flex h-11 cursor-pointer items-center gap-2 rounded-xl bg-slate-950 px-4 text-sm font-semibold text-white">
+                  <Camera className="h-4 w-4" />Prendre une photo
+                  <input className="hidden" type="file" accept="image/*" capture="environment" multiple onChange={(event) => { addFiles(event.target.files, "photo", null); event.target.value = ""; }} />
+                </label>
+                <label className="inline-flex h-11 cursor-pointer items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700">
+                  <Plus className="h-4 w-4" />Depuis la galerie
+                  <input className="hidden" type="file" accept="image/*" multiple onChange={(event) => { addFiles(event.target.files, "photo", null); event.target.value = ""; }} />
+                </label>
+              </div>
+            </div>
+            {photos.length === 0 ? (
+              <div className="mt-4 rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-6 text-center text-sm text-slate-500">
+                Aucune photo. Photographiez l'existant, les acces et les points singuliers : ils serviront au chiffrage puis a l'ouvrier.
+              </div>
+            ) : (
+              <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                {photos.map((photo) => {
+                  const linkedLine = photo.targetLineId ? draft.lines.find((line) => line.id === photo.targetLineId) ?? null : null;
+                  return (
+                    <figure key={photo.id} className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
+                      {photo.previewUrl ? (
+                        <img
+                          src={photo.previewUrl}
+                          alt={photo.name}
+                          className="h-40 w-full bg-slate-100 object-cover"
+                          loading="lazy"
+                          /* Une photo iPhone en HEIC ne s'affiche pas dans un navigateur :
+                             sans ce repli, la vignette restait blanche et la photo semblait
+                             perdue alors qu'elle est bien enregistrée. */
+                          onError={(event) => {
+                            const image = event.currentTarget;
+                            image.style.display = "none";
+                            const fallback = image.nextElementSibling as HTMLElement | null;
+                            if (fallback) fallback.style.display = "flex";
+                          }}
+                        />
+                      ) : null}
+                      <div
+                        className="h-40 w-full items-center justify-center bg-slate-100 px-3 text-center text-xs text-slate-500"
+                        style={{ display: photo.previewUrl ? "none" : "flex" }}
+                      >
+                        Enregistrée, apercu impossible dans le navigateur
+                      </div>
+                      <figcaption className="space-y-2 p-3">
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="min-w-0">
+                            <div className="truncate text-xs font-semibold text-slate-900" title={photo.name}>{photo.name}</div>
+                            <div className="text-[11px] text-slate-500">{linkedLine ? linkedLine.title : "Photo generale"}</div>
+                          </div>
+                          <button type="button" onClick={() => removeAttachment(photo.id)} className="rounded-lg p-1.5 text-red-600 hover:bg-red-50" title="Supprimer"><Trash2 className="h-4 w-4" /></button>
+                        </div>
+                        <input className="h-9 w-full rounded-lg border border-slate-200 px-2 text-xs outline-none focus:border-blue-500" placeholder="Commentaire" value={photo.comment} onChange={(event) => patchAttachment(photo.id, { comment: event.target.value })} />
+                        <select className="h-9 w-full rounded-lg border border-slate-200 px-2 text-xs outline-none focus:border-blue-500" value={photo.targetLineId ?? ""} onChange={(event) => patchAttachment(photo.id, { targetLineId: event.target.value || null })}>
+                          <option value="">Photo generale</option>
+                          {tasks.map((task) => <option key={task.id} value={task.id}>{task.title}</option>)}
+                        </select>
+                        <div className={`text-[11px] font-semibold ${photo.storagePath ? "text-emerald-700" : "text-amber-700"}`}>
+                          {photo.storagePath ? "Enregistree" : "En attente d'enregistrement"}
+                        </div>
+                      </figcaption>
+                    </figure>
+                  );
+                })}
+              </div>
+            )}
+          </section>
+        ) : null}
 
         {step === "constraints" ? <section className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm md:p-5"><div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">{[["Acces", "access"], ["Stationnement", "parking"], ["Etage", "floor"], ["Copropriete", "condominium"], ["Horaires", "schedule"], ["Evacuation gravats", "waste"], ["Eau", "water"], ["Electricite", "electricity"], ["Autorisations", "authorizations"]].map(([label, key]) => <Field key={key} label={label}><input className={inputClass} value={String(draft[key as keyof VisitDraft] ?? "")} onChange={(event) => patch(key as keyof VisitDraft, event.target.value as never)} /></Field>)}<div className="xl:col-span-3"><Field label="Remarques contraintes"><textarea className={textareaClass} value={draft.constraintNotes} onChange={(event) => patch("constraintNotes", event.target.value)} /></Field></div></div></section> : null}
 
@@ -564,6 +1038,32 @@ export function ProjectVisitWorkspaceStable({ project, existingAppointment }: { 
 
         {step === "summary" ? <section className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm md:p-5"><div className="grid gap-3 md:grid-cols-4"><div className="rounded-2xl bg-slate-50 p-4"><div className="text-xs text-slate-500">Sections</div><div className="text-2xl font-bold">{sections.length}</div></div><div className="rounded-2xl bg-slate-50 p-4"><div className="text-xs text-slate-500">Taches</div><div className="text-2xl font-bold">{tasks.length}</div></div><div className="rounded-2xl bg-slate-50 p-4"><div className="text-xs text-slate-500">Photos</div><div className="text-2xl font-bold">{draft.attachments.filter((item) => item.kind === "photo").length}</div></div><div className="rounded-2xl bg-slate-50 p-4"><div className="text-xs text-slate-500">Documents</div><div className="text-2xl font-bold">{draft.attachments.filter((item) => item.kind === "document").length}</div></div></div><pre className="mt-4 whitespace-pre-wrap rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm leading-6 text-slate-700">{report}</pre><div className="mt-4 flex flex-wrap gap-2"><Button variant="secondary" disabled={saving} onClick={() => saveVisit("brouillon")}>Enregistrer brouillon</Button><Button variant="success" disabled={saving} onClick={() => saveVisit("realisee")}><CheckCircle2 className="h-4 w-4" />Terminer visite</Button><Button variant="primary" disabled={saving} onClick={() => saveVisit("pre_devis")}><FileText className="h-4 w-4" />Creer pre-devis</Button></div></section> : null}
       </main>
+
+      <VisitReportImportDrawer
+        open={importOpen}
+        onClose={() => setImportOpen(false)}
+        currentValues={draft as unknown as Record<string, string>}
+        buildInput={(transcript) => ({
+          transcript,
+          project: {
+            name: project.name,
+            clientName: draft.client,
+            address: draft.address,
+            projectType: draft.projectType,
+          },
+          // Coco voit ce qui est deja saisi pour completer au lieu d'ecraser.
+          currentDraft: {
+            clientObjective: draft.clientObjective,
+            needDescription: draft.needDescription,
+            zones: draft.zones,
+            constraints: { access: draft.access, parking: draft.parking, floor: draft.floor, condominium: draft.condominium, schedule: draft.schedule, nuisance: draft.nuisance, safety: draft.safety, waste: draft.waste, water: draft.water, electricity: draft.electricity, authorizations: draft.authorizations, notes: draft.constraintNotes },
+            budget: { budgetKnown: draft.budgetKnown, budgetRange: draft.budgetRange, decisionMaker: draft.decisionMaker },
+            lines: draft.lines.map((line) => ({ type: line.type, title: line.title })),
+          },
+          taskLibrary: taskTemplates.map((row) => ({ id: row.id, titre: row.titre, lot: row.lot, unite: row.unite })),
+        })}
+        onApply={applyImport}
+      />
     </div>
   );
 }

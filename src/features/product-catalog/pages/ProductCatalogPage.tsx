@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { ProductProposalsPanel } from "../components/ProductProposalsPanel";
 import { Link, useSearchParams } from "react-router-dom";
 import { FileText, PackageSearch, Plus, RefreshCw, Trash2, UploadCloud, X } from "lucide-react";
 import type { SupplierRow } from "../../../services/suppliers.service";
@@ -280,6 +281,7 @@ export default function ProductCatalogPage() {
           </div>
         </div>
       </header>
+      <ProductProposalsPanel onAccepted={() => void refreshProducts()} />
 
       {bulkImportOpen ? (
         <ProductBulkImportPanel suppliers={suppliers} onImported={refreshProducts} />

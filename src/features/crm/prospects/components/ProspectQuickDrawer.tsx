@@ -1,5 +1,8 @@
-import { X } from "lucide-react";
+import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { ArrowRight, CalendarDays, Pencil, X } from "lucide-react";
 import type { CrmProspectRow } from "../../../../services/crm.service";
+import { findOpenProjectForProspect } from "../../../../services/crmWorkflow.service";
 import { CrmWorkflowSteps } from "../../components/CrmWorkflowSteps";
 import { buildCrmWorkflowSteps, type CrmWorkflowStepKey } from "../../components/crmWorkflowModel";
 import { dateOnly, entityLabel, eur } from "../../components/crmFormat";
@@ -36,11 +39,35 @@ export function ProspectQuickDrawer({
   prospect,
   onClose,
   actions,
+  onEdit,
 }: {
   prospect: CrmProspectRow | null;
   onClose: () => void;
   actions: ProspectActionHandlers;
+  onEdit?: (row: CrmProspectRow) => void;
 }) {
+  const navigate = useNavigate();
+  // Le projet commercial vit sous "opportunity-<id>" des qu'une affaire existe,
+  // sinon sous "prospect-<id>". On resout le lien reel plutot que de le deviner.
+  const [projectPath, setProjectPath] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!prospect) {
+      setProjectPath(null);
+      return;
+    }
+    let alive = true;
+    setProjectPath(`/projets/prospect-${prospect.id}`);
+    void findOpenProjectForProspect(prospect.id)
+      .then((opportunity) => {
+        if (alive && opportunity) setProjectPath(`/projets/opportunity-${opportunity.id}`);
+      })
+      .catch(() => undefined);
+    return () => {
+      alive = false;
+    };
+  }, [prospect?.id]);
+
   if (!prospect) return null;
 
   return (
@@ -75,7 +102,10 @@ export function ProspectQuickDrawer({
               <div>Email : {prospect.email ?? "—"}</div>
               <div>Téléphone : {prospect.mobile ?? prospect.telephone ?? "—"}</div>
               <div>Adresse : {[prospect.adresse, prospect.code_postal, prospect.ville].filter(Boolean).join(" ") || "—"}</div>
-              <div>Source : {prospect.source_acquisition ?? "—"}</div>
+              <div>
+                Source : {prospect.source_acquisition ?? "—"}
+                {prospect.apporteur_affaire || prospect.source_detail ? ` · ${prospect.apporteur_affaire ?? prospect.source_detail}` : ""}
+              </div>
             </div>
           </section>
 
@@ -96,12 +126,24 @@ export function ProspectQuickDrawer({
           </section>
 
           <div className="grid gap-2 sm:grid-cols-2">
-            <button type="button" onClick={() => actions.onTask(prospect)} className="bt-control rounded-field border border-subtle px-3 py-2 text-sm font-semibold text-ink-secondary hover:bg-interactive">Créer tâche</button>
-            <button type="button" onClick={() => actions.onCreateAppointment(prospect)} className="bt-control rounded-field border border-subtle px-3 py-2 text-sm font-semibold text-ink-secondary hover:bg-interactive">Prise de RDV</button>
-            <button type="button" onClick={() => actions.onCreateQuote(prospect)} className="bt-control rounded-field border border-subtle px-3 py-2 text-sm font-semibold text-ink-secondary hover:bg-interactive">Créer devis</button>
-            <button type="button" onClick={() => actions.onConvert(prospect)} className="bt-control rounded-field border border-success/20 bg-success-soft px-3 py-2 text-sm font-semibold text-success-on hover:bg-interactive">Convertir client</button>
-            <button type="button" disabled className="bt-control rounded-field border border-subtle px-3 py-2 text-sm font-semibold text-muted" title="Modification dédiée à finaliser">Modifier</button>
-            <button type="button" onClick={() => actions.onStatus(prospect, "archive")} className="bt-control rounded-field border border-danger/20 bg-danger-soft px-3 py-2 text-sm font-semibold text-danger-on hover:bg-interactive">Archiver</button>
+            <button
+              type="button"
+              onClick={() => {
+                if (projectPath) navigate(projectPath);
+              }}
+              className="bt-control inline-flex items-center justify-center gap-2 rounded-field bg-primary px-3 py-2 text-sm font-semibold text-primary-contrast hover:bg-primary-hover sm:col-span-2"
+            >
+              Ouvrir le projet commercial
+              <ArrowRight className="h-4 w-4" strokeWidth={1.75} />
+            </button>
+            <button type="button" onClick={() => actions.onCreateAppointment(prospect)} className="bt-control inline-flex items-center justify-center gap-2 rounded-field border border-subtle px-3 py-2 text-sm font-semibold text-ink-secondary hover:bg-interactive">
+              <CalendarDays className="h-4 w-4" strokeWidth={1.75} />
+              Prise de RDV
+            </button>
+            <button type="button" onClick={() => onEdit?.(prospect)} className="bt-control inline-flex items-center justify-center gap-2 rounded-field border border-subtle px-3 py-2 text-sm font-semibold text-ink-secondary hover:bg-interactive">
+              <Pencil className="h-4 w-4" strokeWidth={1.75} />
+              Modifier
+            </button>
           </div>
         </div>
       </aside>

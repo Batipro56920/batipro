@@ -9,6 +9,8 @@ import {
 } from "../features/projects/components/ProjectDetailSections";
 import { ProjectProfitabilityTab } from "../features/projects/components/ProjectProfitabilityTab";
 import { useProjectsData } from "../features/projects/hooks/useProjectsData";
+import { isApporteurSource } from "../services/crm.service";
+import type { ProjectRecord } from "../features/projects/types";
 import { getApporteurLeads, getApporteursAffaires } from "../services/apporteurs.service";
 
 type ProjectTab = "summary" | "visits" | "quotes" | "profitability" | "documents";
@@ -30,13 +32,34 @@ function readProjectTab(value: string | null): ProjectTab {
   return TABS.some((tab) => tab.id === value) ? (value as ProjectTab) : "summary";
 }
 
+/**
+ * Un projet est indexé sous "opportunity-<id>" dès qu'une affaire existe, sinon
+ * sous "prospect-<id>". Les raccourcis venant du CRM ne peuvent pas toujours
+ * connaître la bonne clé : on retrouve le dossier par son origine.
+ */
+function resolveProjectAlias(projects: ProjectRecord[], id: string): ProjectRecord | null {
+  const separator = id.indexOf("-");
+  if (separator < 0) return null;
+  const kind = id.slice(0, separator);
+  const sourceId = id.slice(separator + 1);
+  if (!sourceId) return null;
+  if (kind === "prospect") return projects.find((project) => project.prospect?.id === sourceId) ?? null;
+  if (kind === "opportunity") return projects.find((project) => project.opportunity?.id === sourceId) ?? null;
+  if (kind === "client") return projects.find((project) => project.client?.id === sourceId) ?? null;
+  return null;
+}
+
 export default function ProjectDetailPage() {
   const { id } = useParams();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const { projectsById, loading, error, refresh } = useProjectsData();
-  const project = id ? projectsById.get(id) : null;
-  const prospectApporteurLabel = project?.prospect?.apporteur_affaire?.trim() || null;
+  const { projects, projectsById, loading, error, refresh } = useProjectsData();
+  const project = id ? projectsById.get(id) ?? resolveProjectAlias(projects, id) : null;
+  // La bannière apporteur n'a de sens que si la provenance en désigne un.
+  // "Recommandation" porte aussi le nom de quelqu'un, sans être un apporteur.
+  const prospectApporteurLabel = isApporteurSource(project?.prospect?.source_acquisition)
+    ? project?.prospect?.apporteur_affaire?.trim() || null
+    : null;
   const tabFromUrl = readProjectTab(searchParams.get("tab"));
   const [activeTab, setActiveTab] = useState<ProjectTab>(tabFromUrl);
   const [apporteurTracking, setApporteurTracking] = useState<ApporteurTracking | null>(null);
@@ -119,7 +142,7 @@ export default function ProjectDetailPage() {
     if (activeTab === "quotes") return <ProjectQuotesTab project={project} />;
     if (activeTab === "profitability") return <ProjectProfitabilityTab project={project} />;
     if (activeTab === "documents") return <ProjectDocumentsTab project={project} />;
-    return <ProjectSummaryTab project={project} />;
+    return <ProjectSummaryTab project={project} onUpdated={refresh} />;
   }, [activeTab, project]);
 
   if (loading) {

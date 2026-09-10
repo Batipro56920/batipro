@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { createInvoice } from "../../invoices/application/invoiceFactory";
 import type { InvoiceRecord, InvoiceType } from "../../invoices/domain/types";
@@ -7,7 +7,8 @@ import { quoteBuilderToBusinessDocument } from "../../quotes/builder/quoteBuilde
 import { createQuoteBuilderFromEngine } from "../../quotes/builder/quoteBuilderModel";
 import { loadCrmQuoteEngineData, transformAcceptedQuoteToChantier } from "../../../services/crm.service";
 import type { ProjectRecord } from "../types";
-import { EmptyProjectBlock, Panel, formatCurrency, formatDate } from "./ProjectShared";
+import { EmptyProjectBlock, Panel, formatCurrency, formatDate, useSalespersonName } from "./ProjectShared";
+import { assignProjectSalesperson, listSalespeople, type Salesperson } from "../../../services/salespeople.service";
 import { getPrimaryQuote } from "../hooks/useProjectsData";
 import { ProjectProfitabilityWidgets } from "./ProjectProfitabilityWidgets";
 
@@ -23,37 +24,35 @@ type CreatedChantierLink = {
   chantierName: string;
 };
 
-function InfoGrid({ rows }: { rows: Array<[string, string | number | null | undefined]> }) {
-  return (
-    <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-      {rows.map(([label, value]) => (
-        <div key={label} className="rounded-2xl border border-slate-100 bg-slate-50 p-4">
-          <div className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">{label}</div>
-          <div className="mt-2 text-sm font-semibold text-slate-900">{value || "Non renseigne"}</div>
-        </div>
-      ))}
-    </div>
-  );
-}
-
-function recentActivity(project: ProjectRecord) {
-  const quote = getPrimaryQuote(project);
-  return [
-    project.prospect ? ["Prospect cree", project.prospect.created_at] : null,
-    project.opportunity ? ["Projet cree", project.opportunity.created_at] : null,
-    quote ? [`Devis ${quote.quote_number}`, quote.created_at] : null,
-    project.chantiers[0] ? ["Chantier cree", project.chantiers[0].created_at] : null,
-    ...project.communications.slice(0, 5).map((communication) => [communication.subject || communication.type, communication.occurred_at] as [string, string]),
-  ].filter(Boolean) as Array<[string, string | null | undefined]>;
-}
-
+/** Le compte rendu répète l'en-tête du projet : on ne garde que ce qu'il apporte. */
 function compactVisitSummary(value?: string | null) {
   const cleaned = String(value ?? "")
+    .replace(/^(Projet|Client|Adresse RDV)\s*:.*$/gim, "")
     .replace(/\s+/g, " ")
     .replace(/\b(non renseigne|Non renseignee|A assigner)\b/g, "")
     .trim();
-  if (!cleaned) return "Compte-rendu à compléter.";
+  if (!cleaned) return "Compte rendu à compléter.";
   return cleaned.length > 220 ? `${cleaned.slice(0, 220).trim()}...` : cleaned;
+}
+
+/** Les statuts et types de rendez-vous sont stockés en clés techniques. */
+function appointmentStatusLabel(value: string | null | undefined) {
+  const key = String(value ?? "").toLowerCase();
+  if (key === "planifie") return "Planifié";
+  if (key === "realise") return "Réalisé";
+  if (key === "annule") return "Annulé";
+  if (key === "reporte") return "Reporté";
+  return value || "À planifier";
+}
+
+function appointmentTypeLabel(value: string | null | undefined) {
+  const key = String(value ?? "").toLowerCase();
+  if (key.includes("pre_devis")) return "Visite de chiffrage · pré-devis";
+  if (key.includes("chiffrage")) return "Visite de chiffrage";
+  if (key.includes("qualification")) return "Qualification";
+  if (key.includes("relance")) return "Relance";
+  if (key.includes("sav")) return "SAV";
+  return String(value ?? "").replace(/_/g, " ") || "Rendez-vous";
 }
 
 function chantierStatusLabel(status: string | null | undefined) {
@@ -203,41 +202,130 @@ function ProductionContinuityPanel({ project }: { project: ProjectRecord }) {
   );
 }
 
-export function ProjectSummaryTab({ project }: { project: ProjectRecord }) {
-  const quote = getPrimaryQuote(project);
-  const latestActivity = recentActivity(project)[0] ?? null;
+/**
+ * Fiche d'identite du dossier. Une liste de definitions plutot que des tuiles en
+ * grille fixe : une adresse ou un besoin client y tiennent sur une ligne, au lieu
+ * de tomber un mot par ligne dans une colonne de 110px.
+ */
+function IdentityList({ rows }: { rows: Array<[string, ReactNode]> }) {
+  return (
+    <dl className="grid gap-x-10 gap-y-3 lg:grid-cols-2">
+      {rows.map(([label, value]) => (
+        <div key={label} className="flex flex-col gap-0.5 border-b border-slate-100 pb-2 sm:flex-row sm:items-baseline sm:gap-4">
+          <dt className="shrink-0 text-xs font-medium uppercase tracking-wide text-slate-400 sm:w-40">{label}</dt>
+          <dd className="min-w-0 text-sm font-medium text-slate-900">{value || "—"}</dd>
+        </div>
+      ))}
+    </dl>
+  );
+}
+
+function SummaryCounter({ label, value }: { label: string; value: string | number }) {
+  return (
+    <div className="rounded-2xl border border-slate-200 px-4 py-3">
+      <div className="text-xl font-bold text-slate-950">{value}</div>
+      <div className="mt-0.5 text-xs font-medium text-slate-500">{label}</div>
+    </div>
+  );
+}
+
+/**
+ * Attribution du dossier. Jusqu'ici le commercial etait celui qui avait cree la
+ * fiche, sans moyen de le changer : le dossier restait au nom de son createur.
+ */
+function SalespersonPicker({ project, onUpdated }: { project: ProjectRecord; onUpdated?: () => Promise<void> | void }) {
+  const [people, setPeople] = useState<Salesperson[]>([]);
+  const resolvedName = useSalespersonName(project.salesperson);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const current = project.salesperson ?? "";
+
+  useEffect(() => {
+    let alive = true;
+    void listSalespeople()
+      .then((rows) => {
+        if (alive) setPeople(rows);
+      })
+      .catch(() => {
+        if (alive) setPeople([]);
+      });
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  async function assign(value: string) {
+    setSaving(true);
+    setError(null);
+    try {
+      await assignProjectSalesperson(
+        { opportunityId: project.opportunity?.id ?? null, prospectId: project.prospect?.id ?? null },
+        value || null,
+      );
+      await onUpdated?.();
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Attribution impossible.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  // Sans liste lisible (droits restreints), on n'affiche pas un selecteur vide.
+  if (!people.length) return <>{resolvedName ?? "À assigner"}</>;
+
+  return (
+    <div className="flex flex-col gap-1">
+      <select
+        className="h-8 rounded-lg border border-slate-200 bg-white px-2 text-sm font-medium text-slate-900 disabled:opacity-60"
+        value={people.some((person) => person.id === current) ? current : ""}
+        disabled={saving}
+        onChange={(event) => void assign(event.target.value)}
+      >
+        <option value="">À assigner</option>
+        {people.map((person) => (
+          <option key={person.id} value={person.id}>{person.name}</option>
+        ))}
+      </select>
+      {error ? <span className="text-xs text-red-700">{error}</span> : null}
+    </div>
+  );
+}
+
+export function ProjectSummaryTab({ project, onUpdated }: { project: ProjectRecord; onUpdated?: () => Promise<void> | void }) {
   const openFollowUps = project.tasks.filter((task) => task.statut !== "termine" && task.statut !== "terminee").length;
 
   return (
     <div className="space-y-5">
-      <Panel title="Resume projet" description="Accueil commercial du dossier, sans melanger la preparation chantier.">
-        <div className="space-y-5">
-          <InfoGrid
+      <Panel title="Résumé projet" description="L'essentiel du dossier commercial. Le détail vit dans les onglets.">
+        <div className="space-y-6">
+          <IdentityList
             rows={[
               ["Client", project.clientName],
+              ["Téléphone", project.contactPhone],
+              ["Email", project.contactEmail],
               ["Adresse", project.address],
-              ["Commercial", project.salesperson || "A assigner"],
-              ["Source", project.sourceLabel],
+              ["Type de projet", project.projectType],
+              ["Origine", project.sourceLabel],
+              ["Commercial", <SalespersonPicker key="salesperson" project={project} onUpdated={onUpdated} />],
               ["Budget estimatif", formatCurrency(project.budgetEstimate)],
-              ["Echeance", formatDate(project.desiredDeadline)],
-              ["Type projet", project.projectType],
-              ["Derniere activite", latestActivity ? `${latestActivity[0]} - ${formatDate(latestActivity[1])}` : "Aucune"],
+              ["Échéance", formatDate(project.desiredDeadline)],
+              ["Prochaine action", project.nextAction],
             ]}
           />
 
-          <div className="grid gap-3 md:grid-cols-3 xl:grid-cols-5">
-            {[
-              ["RDV", project.appointments.length],
-              ["Devis", project.quotes.length],
-              ["Montant devis", formatCurrency(project.quoteAmount)],
-              ["Documents", project.documents.length],
-              ["Taches commerciales", openFollowUps],
-            ].map(([label, value]) => (
-              <div key={label} className="rounded-2xl border border-slate-200 p-4">
-                <div className="text-xl font-bold text-slate-950">{value}</div>
-                <div className="mt-1 text-xs font-medium text-slate-500">{label}</div>
-              </div>
-            ))}
+          {project.needDescription ? (
+            <div>
+              <div className="text-xs font-medium uppercase tracking-wide text-slate-400">Besoin client</div>
+              <p className="mt-1.5 whitespace-pre-wrap text-sm leading-6 text-slate-700">{project.needDescription}</p>
+            </div>
+          ) : null}
+
+          <div className="grid gap-3 sm:grid-cols-3 xl:grid-cols-5">
+            <SummaryCounter label="RDV" value={project.appointments.length} />
+            <SummaryCounter label="Devis" value={project.quotes.length} />
+            <SummaryCounter label="Montant devis" value={formatCurrency(project.quoteAmount)} />
+            <SummaryCounter label="Documents" value={project.documents.length} />
+            <SummaryCounter label="Tâches commerciales" value={openFollowUps} />
           </div>
 
           <ProjectProfitabilityWidgets project={project} />
@@ -245,64 +333,13 @@ export function ProjectSummaryTab({ project }: { project: ProjectRecord }) {
       </Panel>
 
       <ProductionContinuityPanel project={project} />
-
-      <div className="grid gap-5 xl:grid-cols-[1.25fr_0.75fr]">
-        <Panel title="Resume client">
-          <InfoGrid
-            rows={[
-              ["Telephone", project.contactPhone],
-              ["Email", project.contactEmail],
-              ["Contact principal", project.clientName],
-              ["Source lead", project.sourceLabel],
-            ]}
-          />
-        </Panel>
-
-        <Panel title="Situation commerciale">
-          <InfoGrid
-            rows={[
-              ["Statut projet", project.status],
-              ["Budget connu", formatCurrency(project.budgetEstimate)],
-              ["Prochaine relance", formatDate(project.nextActionDate)],
-              ["Commercial", project.salesperson || "A assigner"],
-            ]}
-          />
-        </Panel>
-      </div>
-
-      <div className="grid gap-5 xl:grid-cols-2">
-        <Panel title="Derniere activite">
-          {latestActivity ? (
-            <div className="rounded-2xl border border-slate-200 p-4">
-              <div className="font-semibold text-slate-950">{latestActivity[0]}</div>
-              <div className="mt-1 text-sm text-slate-500">{formatDate(latestActivity[1])}</div>
-            </div>
-          ) : (
-            <EmptyProjectBlock title="Aucune activite" description="Les appels, mails, notes, visites et devis apparaissent ici." />
-          )}
-        </Panel>
-
-        <Panel title="Devis recent">
-          {quote ? (
-            <div className="rounded-2xl border border-slate-200 p-4">
-              <div className="font-semibold text-slate-950">{quote.quote_number}</div>
-              <div className="mt-1 text-sm text-slate-500">{quote.statut} - {formatCurrency(quote.montant_ht)}</div>
-              <Link to={`/projets/${project.id}/devis/${quote.id}/edit`} className="mt-3 inline-flex text-sm font-semibold text-blue-700 hover:text-blue-800">
-                Ouvrir le devis
-              </Link>
-            </div>
-          ) : (
-            <EmptyProjectBlock title="Aucun devis" description="Creez un devis depuis le dossier projet." />
-          )}
-        </Panel>
-      </div>
     </div>
   );
 }
 
 export function ProjectVisitsTab({ project }: { project: ProjectRecord }) {
   return (
-    <Panel title="RDV / Visites" description="Historique simple des rendez-vous commerciaux." actions={<Link to={`/projets/${project.id}/visites/nouveau`} className="text-sm font-semibold text-blue-700 hover:text-blue-800">Nouvelle visite</Link>}>
+    <Panel title="RDV / Visites" description="Les rendez-vous commerciaux de ce dossier." actions={<Link to={`/projets/${project.id}/visites/nouveau`} className="text-sm font-semibold text-blue-700 hover:text-blue-800">Nouvelle visite</Link>}>
       <div className="space-y-3">
         {project.appointments.length ? (
           project.appointments.map((appointment) => (
@@ -311,14 +348,12 @@ export function ProjectVisitsTab({ project }: { project: ProjectRecord }) {
                 <div className="min-w-0">
                   <div className="flex flex-wrap items-center gap-2">
                     <h3 className="font-semibold text-slate-950">{appointment.titre}</h3>
-                    <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-600">{appointment.statut}</span>
-                    <span className="rounded-full bg-blue-50 px-2.5 py-1 text-xs font-semibold text-blue-700">{appointment.type}</span>
+                    <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-600">{appointmentStatusLabel(appointment.statut)}</span>
+                    <span className="rounded-full bg-blue-50 px-2.5 py-1 text-xs font-semibold text-blue-700">{appointmentTypeLabel(appointment.type)}</span>
                   </div>
-                  <div className="mt-2 flex flex-wrap gap-x-5 gap-y-1 text-sm text-slate-500">
-                    <span>{formatDate(appointment.starts_at)}</span>
-                    <span>{project.clientName}</span>
-                    {project.address ? <span>{project.address}</span> : null}
-                  </div>
+                  {/* Le client et l'adresse sont dans l'en-tête du projet et identiques
+                      sur chaque carte : seule la date distingue les rendez-vous. */}
+                  <div className="mt-2 text-sm text-slate-500">{formatDate(appointment.starts_at)}</div>
                 </div>
                 <Link to={`/projets/${project.id}/visites/${appointment.id}`} className="inline-flex h-9 shrink-0 items-center justify-center rounded-xl border border-slate-200 px-3 text-sm font-semibold text-slate-900 hover:bg-slate-50">
                   Ouvrir / modifier
@@ -328,12 +363,13 @@ export function ProjectVisitsTab({ project }: { project: ProjectRecord }) {
             </article>
           ))
         ) : (
-          <EmptyProjectBlock title="Aucun rendez-vous" description="Creez une visite de qualification, de chiffrage, de validation devis, de relance ou de SAV." />
+          <EmptyProjectBlock title="Aucun rendez-vous" description="Créez une visite de qualification, de chiffrage, de validation du devis, de relance ou de SAV." />
         )}
       </div>
     </Panel>
   );
 }
+
 
 export function ProjectQuotesTab({ project }: { project: ProjectRecord }) {
   const navigate = useNavigate();
@@ -473,7 +509,7 @@ export function ProjectQuotesTab({ project }: { project: ProjectRecord }) {
   }
 
   return (
-    <Panel title="Devis" description="Pre-devis, devis final, variantes, signatures et relances." actions={<Link to={`/projets/${project.id}/devis/nouveau`} className="text-sm font-semibold text-blue-700 hover:text-blue-800">Creer devis</Link>}>
+    <Panel title="Devis" description="Pré-devis, devis final, signatures et relances." actions={<Link to={`/projets/${project.id}/devis/nouveau`} className="text-sm font-semibold text-blue-700 hover:text-blue-800">Créer un devis</Link>}>
       <div className="space-y-4">
         {automaticChantierQuoteId && chantierActionKey === automaticChantierQuoteId ? (
           <div
@@ -621,7 +657,7 @@ export function ProjectQuotesTab({ project }: { project: ProjectRecord }) {
             </table>
           </div>
         ) : (
-          <EmptyProjectBlock title="Aucun devis lie" description="Creez un pre-devis ou un devis final depuis le projet." />
+          <EmptyProjectBlock title="Aucun devis" description="Créez un pré-devis ou un devis final depuis ce projet." />
         )}
       </div>
     </Panel>
@@ -630,12 +666,7 @@ export function ProjectQuotesTab({ project }: { project: ProjectRecord }) {
 
 export function ProjectDocumentsTab({ project }: { project: ProjectRecord }) {
   return (
-    <Panel title="Documents" description="Centraliser les pieces commerciales et projet.">
-      <div className="mb-4 flex flex-wrap gap-2">
-        {["Photos", "Plans", "Documents client", "Emails", "Pieces devis", "Annexes"].map((category) => (
-          <span key={category} className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">{category}</span>
-        ))}
-      </div>
+    <Panel title="Documents" description="Les pièces commerciales du dossier.">
       {project.documents.length ? (
         <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
           {project.documents.map((document) => (
@@ -646,7 +677,7 @@ export function ProjectDocumentsTab({ project }: { project: ProjectRecord }) {
           ))}
         </div>
       ) : (
-        <EmptyProjectBlock title="Aucun document centralise" description="Importez ou rattachez les documents commerciaux depuis les visites et devis." />
+        <EmptyProjectBlock title="Aucun document" description="Les pièces jointes des visites et des devis apparaissent ici." />
       )}
     </Panel>
   );

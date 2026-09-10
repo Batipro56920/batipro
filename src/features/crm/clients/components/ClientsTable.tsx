@@ -40,9 +40,24 @@ export function ClientsTable({ rows, onSelect }: { rows: ClientWithMetrics[]; on
                   <span className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-medium ${status(row)}`}>{row.archived_at ? "Archivé" : "Actif"}</span>
                 </td>
                 <td className="px-4 py-3" onClick={(event) => event.stopPropagation()}>
-                  <div className="flex flex-wrap gap-1 opacity-100 transition md:opacity-0 md:group-hover:opacity-100">
-                    <a href={row.mobile || row.telephone ? `tel:${row.mobile ?? row.telephone}` : undefined} className="rounded-lg border border-slate-200 px-2 py-1 text-xs font-medium hover:bg-slate-50">Appeler</a>
-                    <a href={row.email ? `mailto:${row.email}` : undefined} className="rounded-lg border border-slate-200 px-2 py-1 text-xs font-medium hover:bg-slate-50">Email</a>
+                  {/* Une seule ligne, sans retour : sinon la colonne étroite empile les boutons et étire toute la ligne. */}
+                  <div className="flex items-center justify-end gap-1 whitespace-nowrap">
+                    <a
+                      href={row.mobile || row.telephone ? `tel:${row.mobile ?? row.telephone}` : undefined}
+                      title="Appeler"
+                      aria-label="Appeler"
+                      className={`inline-flex h-7 w-7 items-center justify-center rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50 ${row.mobile || row.telephone ? "" : "pointer-events-none opacity-40"}`}
+                    >
+                      <Phone className="h-3.5 w-3.5" />
+                    </a>
+                    <a
+                      href={row.email ? `mailto:${row.email}` : undefined}
+                      title="Envoyer un email"
+                      aria-label="Envoyer un email"
+                      className={`inline-flex h-7 w-7 items-center justify-center rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50 ${row.email ? "" : "pointer-events-none opacity-40"}`}
+                    >
+                      <Mail className="h-3.5 w-3.5" />
+                    </a>
                     <button type="button" onClick={() => onSelect(row)} className="rounded-lg border border-blue-200 bg-blue-50 px-2 py-1 text-xs font-medium text-blue-800 hover:bg-blue-100">Ouvrir</button>
                   </div>
                 </td>

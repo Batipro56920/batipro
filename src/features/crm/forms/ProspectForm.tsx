@@ -1,5 +1,7 @@
-import { useMemo, useState } from "react";
-import type { CrmProspectRow } from "../../../services/crm.service";
+import { useEffect, useMemo, useState } from "react";
+import { isApporteurSource, type CrmProspectRow } from "../../../services/crm.service";
+import { getApporteursAffaires, type ApporteurAffaireRow } from "../../../services/apporteurs.service";
+import { listSalespeople, type Salesperson } from "../../../services/salespeople.service";
 import { CrmModal } from "./CrmFormPrimitives";
 
 type ProspectFormState = Record<string, string>;
@@ -21,7 +23,35 @@ const projectTypes = [
   "Autre",
 ];
 
-const sources = ["Appel entrant", "Site internet", "Recommandation", "Agent immobilier", "Apporteur", "Reseau", "Le Bon Coin", "Publicite", "Autre"];
+/**
+ * Provenance du contact. La valeur enregistrée reste le libellé affiché : les
+ * prospects déjà en base portent ces mêmes libellés et les filtres du module
+ * comparent des chaînes.
+ */
+const sources = [
+  "Appel entrant",
+  "Site internet",
+  "Reseaux sociaux",
+  "Recommandation",
+  "Apporteur d'affaires",
+  "Commercial",
+  "Agent immobilier",
+  "Le Bon Coin",
+  "Publicite",
+  "Salon / foire",
+  "Panneau chantier",
+  "Autre",
+];
+
+/** Provenances qui appellent un nom : qui, précisément, a amené l'affaire. */
+const SOURCES_WITH_DETAIL: Record<string, string> = {
+  "Apporteur d'affaires": "Apporteur",
+  Commercial: "Commercial",
+  Recommandation: "Recommandé par",
+  "Agent immobilier": "Agent immobilier",
+  "Reseaux sociaux": "Réseau / page",
+  Autre: "Précisez la provenance",
+};
 
 function patch(setForm: React.Dispatch<React.SetStateAction<ProspectFormState>>, name: string, value: string) {
   setForm((current) => ({ ...current, [name]: value }));
@@ -69,16 +99,83 @@ function normalizeMoney(value: string) {
   return clean || "";
 }
 
-export default function ProspectForm({ saving, onClose, onSubmit }: { saving: boolean; onClose: () => void; onSubmit: (payload: Partial<CrmProspectRow>) => void }) {
+/** Le formulaire sert aussi à la modification : on repart des valeurs existantes. */
+function stateFromProspect(prospect: CrmProspectRow): ProspectFormState {
+  const state: ProspectFormState = {};
+  for (const [key, value] of Object.entries(prospect)) {
+    if (value === null || value === undefined) continue;
+    if (Array.isArray(value)) {
+      state[key] = value.join(", ");
+      continue;
+    }
+    if (typeof value === "object") continue;
+    state[key] = String(value);
+  }
+  // Un seul champ à l'écran, deux colonnes en base selon la provenance.
+  state.source_person = String(prospect.apporteur_affaire ?? prospect.source_detail ?? "");
+  return state;
+}
+
+export default function ProspectForm({
+  saving,
+  onClose,
+  onSubmit,
+  initial,
+}: {
+  saving: boolean;
+  onClose: () => void;
+  onSubmit: (payload: Partial<CrmProspectRow>) => void;
+  initial?: CrmProspectRow | null;
+}) {
+  const editing = Boolean(initial);
   const [showAdvanced, setShowAdvanced] = useState(false);
-  const [form, setForm] = useState<ProspectFormState>({
-    type: "particulier",
-    civilite: "",
-    statut: "nouveau",
-    urgence: "normale",
-    source_acquisition: "Appel entrant",
-    type_projet: "Renovation globale",
-  });
+  const [form, setForm] = useState<ProspectFormState>(() =>
+    initial
+      ? stateFromProspect(initial)
+      : {
+          type: "particulier",
+          civilite: "",
+          statut: "nouveau",
+          urgence: "normale",
+          source_acquisition: "Appel entrant",
+          type_projet: "Renovation globale",
+        },
+  );
+
+  const [apporteurs, setApporteurs] = useState<ApporteurAffaireRow[]>([]);
+  const [salespeople, setSalespeople] = useState<Salesperson[]>([]);
+
+  useEffect(() => {
+    let cancelled = false;
+    listSalespeople()
+      .then((rows) => {
+        if (!cancelled) setSalespeople(rows);
+      })
+      .catch(() => {
+        if (!cancelled) setSalespeople([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    getApporteursAffaires()
+      .then((rows) => {
+        if (!cancelled) setApporteurs(rows.filter((row) => row.active));
+      })
+      .catch(() => {
+        // Le module apporteurs peut être indisponible : la saisie libre suffit alors.
+        if (!cancelled) setApporteurs([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const detailLabel = SOURCES_WITH_DETAIL[form.source_acquisition ?? ""] ?? null;
+  const useApporteurList = form.source_acquisition === "Apporteur d'affaires" && apporteurs.length > 0;
 
   const displayName = useMemo(() => {
     const name = [form.prenom, form.nom].filter(Boolean).join(" ").trim();
@@ -87,28 +184,46 @@ export default function ProspectForm({ saving, onClose, onSubmit }: { saving: bo
 
   function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    // Le nom n'a de sens que pour les provenances qui en demandent un, et il ne
+    // compte comme apporteur d'affaires que si la provenance en est bien un :
+    // une recommandation ne doit pas déclencher un suivi de commissions.
+    const person = detailLabel ? (form.source_person ?? "").trim() : "";
+    const apporteurSource = isApporteurSource(form.source_acquisition);
+    const { planification_visite: _visite, source_person: _person, ...fields } = form;
     const payload: Partial<CrmProspectRow> = {
-      ...form,
+      ...fields,
+      apporteur_affaire: apporteurSource ? person || null : null,
+      source_detail: apporteurSource ? null : person || null,
       budget_estime: normalizeMoney(form.budget_estime ?? "") as unknown as number,
       tags: form.tags ? form.tags.split(",").map((item) => item.trim()).filter(Boolean) : [],
       notes: [form.notes, form.planification_visite === "oui" ? "Visite terrain a planifier." : ""].filter(Boolean).join("\n\n"),
     } as Partial<CrmProspectRow>;
+    // En modification, les colonnes techniques ne doivent jamais repartir du formulaire.
+    for (const key of ["id", "organization_id", "created_at", "updated_at", "archived_at", "client_id"]) {
+      delete (payload as Record<string, unknown>)[key];
+    }
     onSubmit(payload);
   }
 
   return (
-    <CrmModal title="Ajouter un prospect" onClose={onClose}>
+    <CrmModal title={editing ? "Modifier le prospect" : "Ajouter un prospect"} onClose={onClose}>
       <form onSubmit={handleSubmit} className="space-y-5">
         <section className="rounded-2xl border border-blue-100 bg-blue-50/60 p-4">
-          <div className="text-xs font-semibold uppercase tracking-[0.16em] text-blue-700">Creation rapide</div>
+          <div className="text-xs font-semibold uppercase tracking-[0.16em] text-blue-700">{editing ? "Fiche prospect" : "Creation rapide"}</div>
           <div className="mt-1 text-lg font-semibold text-slate-950">{displayName}</div>
-          <p className="mt-1 text-sm text-slate-600">Renseigne le minimum utile. Batipro cree automatiquement l'opportunite commerciale.</p>
-          <div className="mt-3 flex flex-wrap gap-2 text-xs font-semibold text-blue-800">
-            <span className="rounded-full bg-white px-3 py-1">1. Prospect</span>
-            <span className="rounded-full bg-white px-3 py-1">2. Opportunite auto</span>
-            <span className="rounded-full bg-white px-3 py-1">3. Visite terrain</span>
-            <span className="rounded-full bg-white px-3 py-1">4. Pre-devis</span>
-          </div>
+          <p className="mt-1 text-sm text-slate-600">
+            {editing
+              ? "Corrigez les informations recueillies. Le projet commercial lie reste inchange."
+              : "Renseigne le minimum utile. Batipro cree automatiquement l'opportunite commerciale."}
+          </p>
+          {editing ? null : (
+            <div className="mt-3 flex flex-wrap gap-2 text-xs font-semibold text-blue-800">
+              <span className="rounded-full bg-white px-3 py-1">1. Prospect</span>
+              <span className="rounded-full bg-white px-3 py-1">2. Opportunite auto</span>
+              <span className="rounded-full bg-white px-3 py-1">3. Visite terrain</span>
+              <span className="rounded-full bg-white px-3 py-1">4. Pre-devis</span>
+            </div>
+          )}
         </section>
 
         <section className="space-y-3">
@@ -124,6 +239,57 @@ export default function ProspectForm({ saving, onClose, onSubmit }: { saving: bo
           <div className="grid gap-3 md:grid-cols-2">
             <Input form={form} setForm={setForm} name="telephone" label="Telephone" required inputMode="tel" />
             <Input form={form} setForm={setForm} name="email" label="Email" />
+          </div>
+        </section>
+
+        <section className="space-y-3">
+          <div className="text-sm font-semibold text-slate-950">Provenance</div>
+          <div className="grid gap-3 md:grid-cols-2">
+            <Select form={form} setForm={setForm} name="source_acquisition" label="Comment ce prospect est-il arrivé ?" required>
+              {sources.map((source) => <option key={source} value={source}>{source}</option>)}
+            </Select>
+            {detailLabel ? (
+              useApporteurList ? (
+                <Field label={detailLabel}>
+                  <select
+                    className={inputClass}
+                    value={apporteurs.some((row) => row.nom === form.source_person) ? form.source_person ?? "" : form.source_person ? "__autre__" : ""}
+                    onChange={(event) => patch(setForm, "source_person", event.target.value === "__autre__" ? " " : event.target.value)}
+                  >
+                    <option value="">Selectionner un apporteur</option>
+                    {apporteurs.map((row) => (
+                      <option key={row.id} value={row.nom}>{row.entreprise ? `${row.nom} — ${row.entreprise}` : row.nom}</option>
+                    ))}
+                    <option value="__autre__">Autre (saisie libre)</option>
+                  </select>
+                  {form.source_person && !apporteurs.some((row) => row.nom === form.source_person) ? (
+                    <input
+                      className={`${inputClass} mt-2`}
+                      placeholder="Nom de l'apporteur"
+                      value={form.source_person.trim()}
+                      onChange={(event) => patch(setForm, "source_person", event.target.value)}
+                    />
+                  ) : null}
+                </Field>
+              ) : (
+                <Input form={form} setForm={setForm} name="source_person" label={detailLabel} />
+              )
+            ) : null}
+          </div>
+        </section>
+
+        <section className="space-y-3">
+          <div className="text-sm font-semibold text-slate-950">Attribution</div>
+          <div className="grid gap-3 md:grid-cols-2">
+            <Field label="Commercial en charge">
+              {/* Sans ce choix, le dossier restait au nom de celui qui l'avait cree. */}
+              <select className={inputClass} value={form.owner_id ?? ""} onChange={(event) => patch(setForm, "owner_id", event.target.value)}>
+                <option value="">{salespeople.length ? "A assigner" : "Liste indisponible"}</option>
+                {salespeople.map((person) => (
+                  <option key={person.id} value={person.id}>{person.name}</option>
+                ))}
+              </select>
+            </Field>
           </div>
         </section>
 
@@ -147,7 +313,7 @@ export default function ProspectForm({ saving, onClose, onSubmit }: { saving: bo
           <TextArea form={form} setForm={setForm} name="description_besoin" label="Description rapide du besoin" required />
         </section>
 
-        <section className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+        <section className={`rounded-2xl border border-slate-200 bg-slate-50 p-4 ${editing ? "hidden" : ""}`}>
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <div className="text-sm font-semibold text-slate-950">Suite commerciale</div>
@@ -173,16 +339,12 @@ export default function ProspectForm({ saving, onClose, onSubmit }: { saving: bo
                 <option value="Mme">Mme</option>
                 <option value="Societe">Societe</option>
               </Select>
-              <Select form={form} setForm={setForm} name="source_acquisition" label="Source du contact">
-                {sources.map((source) => <option key={source} value={source}>{source}</option>)}
-              </Select>
               <Select form={form} setForm={setForm} name="urgence" label="Urgence">
                 <option value="faible">Faible</option>
                 <option value="normale">Normale</option>
                 <option value="urgente">Urgente</option>
               </Select>
               <Input form={form} setForm={setForm} name="mobile" label="Mobile secondaire" inputMode="tel" />
-              <Input form={form} setForm={setForm} name="apporteur_affaire" label="Apporteur / agent" />
               <div className="md:col-span-2"><Input form={form} setForm={setForm} name="tags" label="Tags internes" /></div>
               <div className="md:col-span-2"><TextArea form={form} setForm={setForm} name="notes" label="Notes internes" /></div>
             </div>
@@ -192,7 +354,7 @@ export default function ProspectForm({ saving, onClose, onSubmit }: { saving: bo
         <div className="flex flex-col-reverse gap-2 border-t border-slate-100 pt-4 sm:flex-row sm:justify-end">
           <button type="button" onClick={onClose} className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50">Annuler</button>
           <button disabled={saving} className="rounded-xl bg-slate-950 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800 disabled:opacity-60">
-            {saving ? "Enregistrement..." : "Creer prospect"}
+            {saving ? "Enregistrement..." : editing ? "Enregistrer" : "Creer prospect"}
           </button>
         </div>
       </form>

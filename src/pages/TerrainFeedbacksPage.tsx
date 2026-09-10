@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import {
-  AlertTriangle,
+  TrendingUp,
   Building2,
   CalendarClock,
   Camera,
@@ -11,12 +11,8 @@ import {
   Save,
 } from "lucide-react";
 import { getChantiers, type ChantierRow } from "../services/chantiers.service";
-import {
-  appendChantierActivityLog,
-  listTerrainFeedbackReserveLinks,
-} from "../services/chantierActivityLog.service";
+import { appendChantierActivityLog } from "../services/chantierActivityLog.service";
 import { listIntervenants, type IntervenantRow } from "../services/intervenants.service";
-import { createReserve, type ReservePriority } from "../services/reserves.service";
 import {
   listTerrainFeedbackResponsibles,
   listTerrainFeedbacks,
@@ -69,12 +65,6 @@ type DraftState = {
   treatment_comment: string;
 };
 
-type CreatedReserveTarget = {
-  id: string;
-  title: string;
-  chantierId: string;
-};
-
 function badgeClass(tone: "blue" | "amber" | "green" | "red" | "slate") {
   if (tone === "green") return "border-success/20 bg-success-soft text-success-on";
   if (tone === "amber") return "border-warning/20 bg-warning-soft text-warning-on";
@@ -103,22 +93,6 @@ function isOpenFeedback(row: TerrainFeedbackRow) {
 
 function isPriorityFeedback(row: TerrainFeedbackRow) {
   return isOpenFeedback(row) && PRIORITY_URGENCIES.has(row.urgency);
-}
-
-function reservePriorityFromUrgency(urgency: TerrainFeedbackRow["urgency"]): ReservePriority {
-  if (urgency === "critique" || urgency === "urgente") return "URGENTE";
-  if (urgency === "faible") return "BASSE";
-  return "NORMALE";
-}
-
-function buildReserveDescriptionFromFeedback(row: TerrainFeedbackRow) {
-  const parts = [
-    row.description.trim(),
-    `Origine : retour terrain ${row.category}.`,
-    row.author?.nom ? `Signalé par : ${row.author.nom}.` : null,
-  ].filter(Boolean);
-
-  return parts.join("\n\n");
 }
 
 function buildFeedbackActivityChanges(
@@ -158,8 +132,6 @@ export default function TerrainFeedbacksPage({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [savingId, setSavingId] = useState<string | null>(null);
-  const [reserveCreatingId, setReserveCreatingId] = useState<string | null>(null);
-  const [createdReserveByFeedback, setCreatedReserveByFeedback] = useState<Record<string, CreatedReserveTarget>>({});
   const [filterChantierId, setFilterChantierId] = useState(lockedChantierId || urlChantierId);
   const [filterIntervenantId, setFilterIntervenantId] = useState("");
   const [filterStatus, setFilterStatus] = useState<TerrainFeedbackStatus | "">("");
@@ -198,10 +170,11 @@ export default function TerrainFeedbacksPage({
       total: rows.length,
       open: openRows.length,
       priority: priorityRows.length,
+      newCount: rows.filter((row) => row.status === "nouveau").length,
+      inProgress: rows.filter((row) => row.status === "en_cours").length,
       unassigned: openRows.filter((row) => !row.assigned_to).length,
       withPhotos: rows.filter((row) => row.attachments.length > 0).length,
       treated: rows.filter((row) => row.status === "traite").length,
-      priorityRows: priorityRows.slice(0, 3),
     };
   }, [rows]);
 
@@ -295,28 +268,10 @@ export default function TerrainFeedbacksPage({
         listIntervenants(),
         listTerrainFeedbackResponsibles().catch(() => []),
       ]);
-      const reserveLinks = await listTerrainFeedbackReserveLinks(
-        feedbackRows.map((row) => ({ id: row.id, chantierId: row.chantier_id })),
-      ).catch((err) => {
-        console.warn("[terrain-feedback] reserve links skipped", err);
-        return [];
-      });
-      const reserveTargets = Object.fromEntries(
-        reserveLinks.map((link) => [
-          link.feedbackId,
-          {
-            id: link.reserveId,
-            title: link.reserveTitle,
-            chantierId: link.chantierId,
-          },
-        ]),
-      );
-
       setRows(feedbackRows);
       setChantiers(chantierRows);
       setIntervenants(intervenantRows);
       setResponsibles(responsibleRows);
-      setCreatedReserveByFeedback(reserveTargets);
       syncDrafts(feedbackRows);
     } catch (err: any) {
       setError(err?.message ?? t("terrainFeedback.admin.loadError"));
@@ -353,31 +308,6 @@ export default function TerrainFeedbacksPage({
       });
     } catch (err) {
       console.warn("[terrain-feedback] activity log skipped", err);
-    }
-  }
-
-  async function appendReserveActivity(row: TerrainFeedbackRow, reserveId: string) {
-    if (!row.chantier_id) return;
-
-    try {
-      await appendChantierActivityLog({
-        chantierId: row.chantier_id,
-        actionType: "created",
-        entityType: "reserve",
-        entityId: reserveId,
-        reason: `Réserve créée depuis un retour terrain : ${row.title}`,
-        changes: {
-          source: "terrain_feedback",
-          terrain_feedback_id: row.id,
-          title: row.title,
-          category: row.category,
-          urgency: row.urgency,
-          priority: reservePriorityFromUrgency(row.urgency),
-        },
-        actorName: "Pilotage retours terrain",
-      });
-    } catch (err) {
-      console.warn("[terrain-feedback] reserve activity skipped", err);
     }
   }
 
@@ -437,61 +367,6 @@ export default function TerrainFeedbacksPage({
     }
   }
 
-  async function createReserveFromFeedback(row: TerrainFeedbackRow) {
-    const chantierId = row.chantier_id;
-    if (!chantierId) {
-      setError("Retour terrain sans chantier associé.");
-      return;
-    }
-
-    setReserveCreatingId(row.id);
-    setError(null);
-    try {
-      const reserve = await createReserve({
-        chantier_id: chantierId,
-        title: row.title,
-        description: buildReserveDescriptionFromFeedback(row),
-        status: "OUVERTE",
-        priority: reservePriorityFromUrgency(row.urgency),
-        intervenant_id: row.author_intervenant_id || null,
-      });
-      const nextComment = [
-        row.treatment_comment,
-        `Réserve créée depuis ce retour terrain (${reserve.title}).`,
-      ]
-        .filter(Boolean)
-        .join("\n");
-      const nextDraft: DraftState = {
-        status: row.status === "nouveau" ? "en_cours" : row.status,
-        assigned_to: row.assigned_to ?? "",
-        assigned_to_name: row.assigned_to_name ?? "",
-        treatment_comment: nextComment,
-      };
-
-      await updateTerrainFeedback(row.id, {
-        status: nextDraft.status,
-        assigned_to: row.assigned_to,
-        assigned_to_name: row.assigned_to_name,
-        treatment_comment: nextComment,
-      });
-      await appendReserveActivity(row, reserve.id);
-      await appendFeedbackActivity(row, nextDraft, row.assigned_to_name);
-      setCreatedReserveByFeedback((current) => ({
-        ...current,
-        [row.id]: {
-          id: reserve.id,
-          title: reserve.title,
-          chantierId,
-        },
-      }));
-      await refresh();
-    } catch (err: any) {
-      setError(err?.message ?? "Erreur création réserve depuis le retour terrain.");
-    } finally {
-      setReserveCreatingId(null);
-    }
-  }
-
   return (
     <div className="space-y-4">
       <header className="rounded-surface border border-subtle bg-surface p-4 shadow-elevated">
@@ -504,12 +379,10 @@ export default function TerrainFeedbacksPage({
             <h1 className="bt-page-title mt-1 text-ink">
               {embedded ? "Retours terrain du chantier" : t("terrainFeedback.admin.title")}
             </h1>
-            <div className="bt-secondary mt-1 flex flex-wrap gap-x-4 gap-y-1 text-muted">
-              <span>{visibleRows.length} visible{visibleRows.length > 1 ? "s" : ""}</span>
-              <span>{workflowStats.open} a traiter</span>
-              <span>{workflowStats.priority} prioritaire{workflowStats.priority > 1 ? "s" : ""}</span>
-              {selectedChantier ? <span>{selectedChantier.nom}</span> : null}
-            </div>
+            {/* Les compteurs vivent sur les filtres, qui les rendent cliquables. */}
+            {selectedChantier ? (
+              <div className="bt-secondary mt-1 text-muted">{selectedChantier.nom}</div>
+            ) : null}
           </div>
           <div className="flex flex-wrap gap-2">
             {filterChantierId && !embedded ? (
@@ -631,13 +504,25 @@ export default function TerrainFeedbacksPage({
 
       <section className="rounded-surface border border-subtle bg-surface p-4 shadow-sm">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-          <div>
+          <div className="min-w-0 max-w-2xl">
             <div className="bt-caption text-muted">
-              Pilotage terrain
+              Retour d'expérience
             </div>
             <div className="bt-card-title mt-1 text-ink">
-              Retours à traiter et priorités ouvertes
+              Ce que le terrain nous apprend
             </div>
+            <p className="bt-secondary mt-1 text-muted">
+              Ce que les compagnons remontent du chantier pour qu'on ne refasse pas la même erreur.
+              Un défaut à reprendre n'a rien à faire ici : il se traite en réserve, depuis une visite
+              chantier ou en saisie directe.
+            </p>
+            <Link
+              to="/assistant-direction/amelioration"
+              className="bt-control mt-3 inline-flex items-center gap-2 rounded-field border border-subtle bg-surface px-3 py-2 text-sm font-semibold text-ink-secondary hover:bg-interactive"
+            >
+              <TrendingUp className="h-4 w-4" strokeWidth={1.75} />
+              Ce que Coco en a tiré
+            </Link>
           </div>
           <div className="flex flex-wrap gap-2">
             <button
@@ -645,148 +530,46 @@ export default function TerrainFeedbacksPage({
               onClick={() => applyWorkflowScope("all")}
               className={["bt-control rounded-field border px-3 py-2 text-sm font-semibold", workflowScope === "all" && filterStatus === "" ? "border-primary bg-primary text-primary-contrast" : "border-subtle bg-surface text-ink-secondary hover:bg-interactive"].join(" ")}
             >
-              Tous
+              Tous · {workflowStats.total}
             </button>
             <button
               type="button"
               onClick={() => applyWorkflowScope("open")}
               className={["bt-control rounded-field border px-3 py-2 text-sm font-semibold", workflowScope === "open" ? "border-primary bg-primary text-primary-contrast" : "border-primary/20 bg-primary-soft text-primary-on hover:bg-interactive"].join(" ")}
             >
-              À traiter
+              À traiter · {workflowStats.open}
             </button>
             <button
               type="button"
               onClick={() => applyWorkflowScope("priority")}
               className={["bt-control rounded-field border px-3 py-2 text-sm font-semibold", workflowScope === "priority" ? "border-danger bg-danger text-white" : "border-danger/20 bg-danger-soft text-danger-on hover:bg-interactive"].join(" ")}
             >
-              Urgents
+              Urgents · {workflowStats.priority}
             </button>
             <button
               type="button"
               onClick={() => applyStatusFilter("nouveau")}
               className={["bt-control rounded-field border px-3 py-2 text-sm font-semibold", workflowScope === "all" && filterStatus === "nouveau" ? "border-primary bg-primary text-primary-contrast" : "border-subtle bg-surface text-ink-secondary hover:bg-interactive"].join(" ")}
             >
-              Nouveaux
+              Nouveaux · {workflowStats.newCount}
             </button>
             <button
               type="button"
               onClick={() => applyStatusFilter("en_cours")}
               className={["bt-control rounded-field border px-3 py-2 text-sm font-semibold", workflowScope === "all" && filterStatus === "en_cours" ? "border-warning bg-warning text-white" : "border-warning/20 bg-warning-soft text-warning-on hover:bg-interactive"].join(" ")}
             >
-              En cours
+              En cours · {workflowStats.inProgress}
             </button>
             <button
               type="button"
               onClick={() => applyStatusFilter("traite")}
               className={["bt-control rounded-field border px-3 py-2 text-sm font-semibold", workflowScope === "all" && filterStatus === "traite" ? "border-success bg-success text-success-contrast" : "border-success/20 bg-success-soft text-success-on hover:bg-interactive"].join(" ")}
             >
-              Traités
+              Traités · {workflowStats.treated}
             </button>
           </div>
         </div>
 
-        <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-5">
-          <div className="rounded-card border border-subtle bg-interactive px-3 py-2">
-            <div className="bt-caption text-muted">Chargés</div>
-            <div className="bt-card-title mt-1 text-ink">{workflowStats.total}</div>
-          </div>
-          <div className="rounded-card border border-primary/20 bg-primary-soft px-3 py-2">
-            <div className="bt-caption text-primary-on">À traiter</div>
-            <div className="bt-card-title mt-1 text-primary-on">{workflowStats.open}</div>
-          </div>
-          <div className="rounded-card border border-danger/20 bg-danger-soft px-3 py-2">
-            <div className="bt-caption text-danger-on">Urgents</div>
-            <div className="bt-card-title mt-1 text-danger-on">{workflowStats.priority}</div>
-          </div>
-          <div className="rounded-card border border-warning/20 bg-warning-soft px-3 py-2">
-            <div className="bt-caption text-warning-on">Sans responsable</div>
-            <div className="bt-card-title mt-1 text-warning-on">{workflowStats.unassigned}</div>
-          </div>
-          <div className="rounded-card border border-success/20 bg-success-soft px-3 py-2">
-            <div className="bt-caption text-success-on">Traités</div>
-            <div className="bt-card-title mt-1 text-success-on">{workflowStats.treated}</div>
-          </div>
-        </div>
-
-        {workflowStats.priorityRows.length > 0 ? (
-          <div className="mt-4 rounded-card border border-danger/20 bg-danger-soft p-3">
-            <div className="bt-caption flex items-center gap-2 text-danger-on">
-              <AlertTriangle className="h-4 w-4" strokeWidth={1.75} />
-              Priorités ouvertes
-            </div>
-            <div className="mt-3 space-y-2">
-              {workflowStats.priorityRows.map((row) => (
-                <div key={row.id} className="flex flex-col gap-3 rounded-card border border-danger/20 bg-surface px-3 py-3 md:flex-row md:items-center md:justify-between">
-                  <div className="min-w-0">
-                    <div className="truncate text-sm font-semibold text-ink">{row.title}</div>
-                    <div className="mt-1 text-xs text-muted">
-                      {row.chantier?.nom ?? "Chantier non renseigné"} • {t(`terrainFeedback.urgencies.${row.urgency}`)} • {t(`terrainFeedback.statuses.${row.status}`)}
-                    </div>
-                  </div>
-                  <div className="flex flex-wrap gap-2">
-                    {row.chantier ? (
-                      <>
-                        <Link
-                          to={`/chantiers/${row.chantier.id}/execution`}
-                          className="bt-control rounded-field border border-subtle bg-surface px-2.5 py-1.5 text-xs font-semibold text-ink-secondary hover:bg-interactive"
-                        >
-                          Exécution
-                        </Link>
-                        <Link
-                          to={`/chantiers/${row.chantier.id}/planning`}
-                          className="bt-control rounded-field border border-subtle bg-surface px-2.5 py-1.5 text-xs font-semibold text-ink-secondary hover:bg-interactive"
-                        >
-                          Planning
-                        </Link>
-                        <Link
-                          to={`/chantiers/${row.chantier.id}/documents`}
-                          className="bt-control rounded-field border border-subtle bg-surface px-2.5 py-1.5 text-xs font-semibold text-ink-secondary hover:bg-interactive"
-                        >
-                          Documents
-                        </Link>
-                        <Link
-                          to={`/chantiers/${row.chantier.id}/qualite`}
-                          className="bt-control rounded-field border border-subtle bg-surface px-2.5 py-1.5 text-xs font-semibold text-ink-secondary hover:bg-interactive"
-                        >
-                          Réserves
-                        </Link>
-                      </>
-                    ) : null}
-                    {row.status === "nouveau" ? (
-                      <button
-                        type="button"
-                        onClick={() => void startProcessing(row)}
-                        disabled={savingId === row.id || reserveCreatingId === row.id}
-                        className="bt-control rounded-field bg-danger px-2.5 py-1.5 text-xs font-semibold text-white hover:brightness-95 disabled:opacity-60"
-                      >
-                        Passer en cours
-                      </button>
-                    ) : null}
-                    {row.chantier ? (
-                      createdReserveByFeedback[row.id] ? (
-                        <Link
-                          to={`/chantiers/${createdReserveByFeedback[row.id].chantierId}/qualite?reserveId=${createdReserveByFeedback[row.id].id}&feedbackId=${row.id}`}
-                          className="bt-control rounded-field border border-success/20 bg-success-soft px-2.5 py-1.5 text-xs font-semibold text-success-on hover:bg-interactive"
-                        >
-                          Ouvrir la réserve
-                        </Link>
-                      ) : (
-                        <button
-                          type="button"
-                          onClick={() => void createReserveFromFeedback(row)}
-                          disabled={savingId === row.id || reserveCreatingId === row.id}
-                          className="bt-control rounded-field border border-danger/20 bg-danger-soft px-2.5 py-1.5 text-xs font-semibold text-danger-on hover:bg-interactive disabled:opacity-60"
-                        >
-                          {reserveCreatingId === row.id ? "Création..." : "Créer réserve"}
-                        </button>
-                      )
-                    ) : null}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        ) : null}
       </section>
 
       <section className="rounded-surface border border-subtle bg-surface p-4 shadow-sm">
@@ -956,29 +739,18 @@ export default function TerrainFeedbacksPage({
                           <button
                             type="button"
                             onClick={() => void startProcessing(row)}
-                            disabled={savingId === row.id || reserveCreatingId === row.id}
+                            disabled={savingId === row.id}
                             className="bt-control rounded-field bg-primary px-3 py-2 text-xs font-semibold text-primary-contrast hover:bg-primary-hover disabled:opacity-60"
                           >
                             Passer en cours
                           </button>
                         ) : null}
-                        {createdReserveByFeedback[row.id] ? (
-                          <Link
-                            to={`/chantiers/${createdReserveByFeedback[row.id].chantierId}/qualite?reserveId=${createdReserveByFeedback[row.id].id}&feedbackId=${row.id}`}
-                            className="bt-control rounded-field border border-success/20 bg-success-soft px-3 py-2 text-xs font-semibold text-success-on hover:bg-interactive"
-                          >
-                            Ouvrir la réserve créée
-                          </Link>
-                        ) : (
-                          <button
-                            type="button"
-                            onClick={() => void createReserveFromFeedback(row)}
-                            disabled={savingId === row.id || reserveCreatingId === row.id}
-                            className="bt-control rounded-field border border-danger/20 bg-danger-soft px-3 py-2 text-xs font-semibold text-danger-on hover:bg-interactive disabled:opacity-60"
-                          >
-                            {reserveCreatingId === row.id ? "Création réserve..." : "Créer une réserve"}
-                          </button>
-                        )}
+                        {/*
+                          Aucune réserve ici : une réserve est une reprise
+                          d'exécution née d'une visite chantier ou d'une saisie
+                          manuelle. Un retour terrain sert à ne pas refaire
+                          l'erreur. Les deux ne se croisent pas.
+                        */}
                       </div>
                     ) : null}
                   </div>
@@ -1162,30 +934,10 @@ export default function TerrainFeedbacksPage({
                         />
                       </label>
 
-                      {row.chantier ? (
-                        createdReserveByFeedback[row.id] ? (
-                          <Link
-                            to={`/chantiers/${createdReserveByFeedback[row.id].chantierId}/qualite?reserveId=${createdReserveByFeedback[row.id].id}&feedbackId=${row.id}`}
-                            className="bt-control block w-full rounded-field border border-success/20 bg-success-soft px-4 py-2.5 text-center text-sm font-semibold text-success-on hover:bg-interactive"
-                          >
-                            Ouvrir la réserve créée
-                          </Link>
-                        ) : (
-                          <button
-                            type="button"
-                            onClick={() => void createReserveFromFeedback(row)}
-                            disabled={savingId === row.id || reserveCreatingId === row.id}
-                            className="bt-control w-full rounded-field border border-danger/20 bg-danger-soft px-4 py-2.5 text-sm font-semibold text-danger-on hover:bg-interactive disabled:opacity-60"
-                          >
-                            {reserveCreatingId === row.id ? "Création de la réserve..." : "Créer une réserve chantier"}
-                          </button>
-                        )
-                      ) : null}
-
                       <button
                         type="button"
                         onClick={() => void saveRow(row)}
-                        disabled={savingId === row.id || reserveCreatingId === row.id}
+                        disabled={savingId === row.id}
                         className="bt-control inline-flex w-full items-center justify-center gap-2 rounded-field bg-primary px-4 py-2.5 text-sm font-semibold text-primary-contrast hover:bg-primary-hover disabled:opacity-60"
                       >
                         <Save className="h-4 w-4" strokeWidth={1.75} />

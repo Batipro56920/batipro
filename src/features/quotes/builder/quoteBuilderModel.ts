@@ -152,6 +152,10 @@ function mapVisitToQuoteNodes(source: CrmVisitQuoteSource): QuoteBuilderSection[
       unitPriceHt: Number(item.priceHintHt ?? 0),
       internalNote: [item.technicalNotes, item.constraints].filter(Boolean).join("\n"),
       sourceLibraryId: item.libraryId ?? null,
+      // La tache rattachee pendant la visite suit jusqu'au devis : sans elle, la
+      // ligne repartirait de zero et le chantier ne recevrait aucune preparation.
+      taskTemplateId: item.taskTemplateId ?? null,
+      taskTemplateLabel: item.taskTemplateLabel ?? null,
     }));
   }
   return roots.length ? roots : [createSection("Nouvelle section")];
