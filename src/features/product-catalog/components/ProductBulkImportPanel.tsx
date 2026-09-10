@@ -17,6 +17,7 @@ import {
   buildProductPatch,
   createEmptyProductDraft,
   mergeProductPatches,
+  parseLooseNumber,
   scoreSignatureMatch,
   storeProductFiles,
   type ProductDraftPatch,
@@ -40,14 +41,34 @@ type AnalyzedFile = {
   error: string | null;
 };
 
+type GroupEdits = {
+  designation?: string;
+  brand?: string;
+  supplierId?: string;
+  purchasePrice?: string;
+  salePrice?: string;
+};
+
 type ProductGroup = {
   id: string;
   files: AnalyzedFile[];
   draft: ProductCatalogDraft;
+  edits: GroupEdits;
   warnings: string[];
 };
 
 const CURRENCY = new Intl.NumberFormat("fr-FR", { style: "currency", currency: "EUR" });
+
+const cellClass = "w-full min-w-0 rounded-lg border border-slate-200 bg-white px-2 py-1 text-sm outline-none focus:border-blue-400 disabled:opacity-60";
+
+/**
+ * Tant que l'utilisateur n'a rien saisi, on montre ce que Coco a trouve. Des
+ * qu'il saisit, on lui rend son texte tel quel pour ne pas gener la frappe.
+ */
+function priceFieldValue(edited: string | undefined, value: number | null | undefined): string {
+  if (edited !== undefined) return edited;
+  return typeof value === "number" && Number.isFinite(value) && value > 0 ? String(value) : "";
+}
 
 function formatPrice(value: number | null | undefined): string {
   return typeof value === "number" && Number.isFinite(value) && value > 0 ? CURRENCY.format(value) : "—";
@@ -75,6 +96,7 @@ export default function ProductBulkImportPanel({
   const [error, setError] = useState<string | null>(null);
   const [summary, setSummary] = useState<string | null>(null);
   const [batchSupplierId, setBatchSupplierId] = useState("");
+  const [edits, setEdits] = useState<Record<string, GroupEdits>>({});
 
   const analyzedCount = files.filter((row) => row.status === "analyzed").length;
   const failedFiles = files.filter((row) => row.status === "failed");
@@ -102,13 +124,24 @@ export default function ProductBulkImportPanel({
         draft.mainSupplierName = batchSupplier.name;
       }
 
+      const edit = edits[id] ?? {};
+      if (edit.designation !== undefined) draft.designation = edit.designation;
+      if (edit.brand !== undefined) draft.brand = edit.brand.trim() || null;
+      if (edit.supplierId !== undefined) {
+        const chosen = suppliers.find((row) => row.id === edit.supplierId) ?? null;
+        draft.mainSupplierId = chosen?.id ?? null;
+        draft.mainSupplierName = chosen?.name ?? null;
+      }
+      if (edit.purchasePrice !== undefined) draft.standardPurchasePriceHt = parseLooseNumber(edit.purchasePrice) ?? 0;
+      if (edit.salePrice !== undefined) draft.recommendedSalePriceHt = parseLooseNumber(edit.salePrice) ?? 0;
+
       const warnings = ordered.flatMap((row) => row.storageNotes);
       if (!draft.mainSupplierName) warnings.push("Fournisseur non identifie");
       if (!draft.standardPurchasePriceHt) warnings.push("Prix d'achat non trouve");
 
-      return { id, files: ordered, draft, warnings };
+      return { id, files: ordered, draft, edits: edit, warnings };
     }).filter((group) => Boolean(group.draft.designation?.trim()));
-  }, [files, batchSupplierId, suppliers]);
+  }, [files, batchSupplierId, suppliers, edits]);
 
   const selectedGroups = groups.filter((group) => !excludedGroups.has(group.id) && !createdGroups.has(group.id));
 
@@ -190,6 +223,10 @@ export default function ProductBulkImportPanel({
     patchFile(id, { groupId: crypto.randomUUID() });
   }
 
+  function editGroup(id: string, patch: GroupEdits) {
+    setEdits((current) => ({ ...current, [id]: { ...current[id], ...patch } }));
+  }
+
   function toggleGroup(id: string, include: boolean) {
     setExcludedGroups((current) => {
       const next = new Set(current);
@@ -228,6 +265,8 @@ export default function ProductBulkImportPanel({
 
   function reset() {
     setFiles([]);
+    setEdits({});
+    setBatchSupplierId("");
     setExcludedGroups(new Set());
     setCreatedGroups(new Set());
     setError(null);
@@ -343,24 +382,85 @@ export default function ProductBulkImportPanel({
                         disabled={busy || isCreated}
                         onChange={(event) => toggleGroup(group.id, event.target.checked)}
                         aria-label={`Inclure ${group.draft.designation}`}
+                        title={group.draft.designation}
                       />
                     </td>
-                    <td className="px-3 py-2 align-top font-medium text-slate-950">
-                      {group.draft.designation}
+                    <td className="px-3 py-2 align-top">
                       {isCreated ? (
-                        <div className="mt-1 flex items-center gap-1 text-xs font-normal text-emerald-700">
-                          <CheckCircle2 className="h-3 w-3" /> Cree au catalogue
-                        </div>
-                      ) : group.warnings.length ? (
-                        <div className="mt-1 flex items-start gap-1 text-xs font-normal text-amber-600">
-                          <AlertTriangle className="mt-0.5 h-3 w-3 shrink-0" /> {group.warnings.join(" · ")}
-                        </div>
-                      ) : null}
+                        <>
+                          <div className="font-medium text-slate-950">{group.draft.designation}</div>
+                          <div className="mt-1 flex items-center gap-1 text-xs text-emerald-700">
+                            <CheckCircle2 className="h-3 w-3" /> Cree au catalogue
+                          </div>
+                        </>
+                      ) : (
+                        <>
+                          <textarea
+                            className={cellClass + " min-h-[52px] resize-y font-medium text-slate-950"}
+                            value={group.draft.designation}
+                            disabled={busy}
+                            onChange={(event) => editGroup(group.id, { designation: event.target.value })}
+                            aria-label="Designation du produit"
+                          />
+                          {group.warnings.length ? (
+                            <div className="mt-1 flex items-start gap-1 text-xs text-amber-600">
+                              <AlertTriangle className="mt-0.5 h-3 w-3 shrink-0" /> {group.warnings.join(" · ")}
+                            </div>
+                          ) : null}
+                        </>
+                      )}
                     </td>
-                    <td className="px-3 py-2 align-top text-slate-600">{group.draft.brand || "—"}</td>
-                    <td className="px-3 py-2 align-top text-slate-600">{group.draft.mainSupplierName || "—"}</td>
-                    <td className="px-3 py-2 align-top text-right text-slate-900">{formatPrice(group.draft.standardPurchasePriceHt)}</td>
-                    <td className="px-3 py-2 align-top text-right text-slate-900">{formatPrice(group.draft.recommendedSalePriceHt)}</td>
+                    <td className="px-3 py-2 align-top text-slate-600">
+                      {isCreated ? (group.draft.brand || "—") : (
+                        <input
+                          className={cellClass}
+                          value={group.draft.brand ?? ""}
+                          disabled={busy}
+                          onChange={(event) => editGroup(group.id, { brand: event.target.value })}
+                          aria-label="Marque"
+                        />
+                      )}
+                    </td>
+                    <td className="px-3 py-2 align-top text-slate-600">
+                      {isCreated ? (group.draft.mainSupplierName || "—") : (
+                        <select
+                          className={cellClass}
+                          value={group.draft.mainSupplierId ?? ""}
+                          disabled={busy}
+                          onChange={(event) => editGroup(group.id, { supplierId: event.target.value })}
+                          aria-label="Fournisseur"
+                        >
+                          <option value="">Aucun</option>
+                          {suppliers.map((supplier) => (
+                            <option key={supplier.id} value={supplier.id}>{supplier.name}</option>
+                          ))}
+                        </select>
+                      )}
+                    </td>
+                    <td className="px-3 py-2 align-top text-right text-slate-900">
+                      {isCreated ? formatPrice(group.draft.standardPurchasePriceHt) : (
+                        <input
+                          className={cellClass + " text-right"}
+                          inputMode="decimal"
+                          value={priceFieldValue(group.edits.purchasePrice, group.draft.standardPurchasePriceHt)}
+                          disabled={busy}
+                          onChange={(event) => editGroup(group.id, { purchasePrice: event.target.value })}
+                          aria-label="Prix d'achat HT"
+                        />
+                      )}
+                    </td>
+                    <td className="px-3 py-2 align-top text-right text-slate-900">
+                      {isCreated ? formatPrice(group.draft.recommendedSalePriceHt) : (
+                        <input
+                          className={cellClass + " text-right"}
+                          inputMode="decimal"
+                          value={priceFieldValue(group.edits.salePrice, group.draft.recommendedSalePriceHt)}
+                          disabled={busy}
+                          onChange={(event) => editGroup(group.id, { salePrice: event.target.value })}
+                          aria-label="Prix de vente conseille HT"
+                        />
+                      )}
+                    </td>
                     <td className="px-3 py-2 align-top">
                       <div className="flex flex-wrap gap-1">
                         {group.files.map((row) => (
