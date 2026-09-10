@@ -25,6 +25,7 @@ import {
   TrendingUp,
   Wallet,
   MessageCircle,
+  Megaphone,
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import type { CompanyFeatureModuleId } from "../config/companyFeatures";
@@ -84,6 +85,7 @@ export default function Sidebar({ collapsed = false, onToggleCollapse, companyNa
     { to: "/crm", label: "CRM", icon: BriefcaseBusiness, permissionKey: "crm" as const, group: "Commerce", end: true },
     { to: "/projets", label: "Projets commerciaux", icon: FolderKanban, permissionKey: "crm" as const, group: "Commerce" },
     { to: "/crm/apporteurs", label: "Apporteurs d’affaires", icon: Handshake, permissionKey: "crm" as const, group: "Commerce" },
+    { to: "/communication", label: "Communication", icon: Megaphone, group: "Communication" },
     { to: "/chantiers", label: t("sidebar.chantiers"), icon: Hammer, feature: "preparation_chantier" as const, permissionKey: "preparation_chantier" as const, group: "Production" },
     { to: "/fil-chantier", label: "Fil chantiers", icon: MessageCircle, feature: "journal_chantier" as const, group: "Production" },
     { to: "/visites-chantier", label: "Visites chantier", icon: ClipboardList, feature: "validation_qualite" as const, group: "Production" },

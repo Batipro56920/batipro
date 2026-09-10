@@ -43,6 +43,7 @@ const StatistiquesPage = lazy(() => import("./pages/StatistiquesPage"));
 const MonEntreprisePage = lazy(() => import("./pages/MonEntreprisePage"));
 const TerrainFeedbacksPage = lazy(() => import("./pages/TerrainFeedbacksPage"));
 const FilChantierPage = lazy(() => import("./pages/FilChantierPage"));
+const CommunicationPage = lazy(() => import("./features/communication/CommunicationPage"));
 const ClientDocumentPage = lazy(() => import("./pages/ClientDocumentPage"));
 const ApporteursAffairesPage = lazy(() => import("./pages/ApporteursAffairesPage"));
 const ApporteurPortalPage = lazy(() => import("./pages/ApporteurPortalPage"));
@@ -178,6 +179,8 @@ export default function App() {
         <Route path="/assistant-direction" element={<RouteSuspense label="Chargement de l'assistant direction..."><AssistantDirectionPage /></RouteSuspense>} />
         <Route path="/assistant-direction/amelioration" element={<RouteSuspense label="Chargement du moteur d'amélioration COCO..."><CocoImprovementPage /></RouteSuspense>} />
         <Route path="/assistant-direction/anciens-devis" element={<RouteSuspense label="Chargement de la collecte historique COCO..."><CocoHistoricalQuotesPage /></RouteSuspense>} />
+        <Route path="/communication" element={<RouteSuspense label="Chargement du studio Communication..."><CommunicationPage /></RouteSuspense>} />
+        <Route path="/communication/campagnes/:campaignId" element={<RouteSuspense label="Chargement de la campagne..."><CommunicationPage /></RouteSuspense>} />
         <Route
           path="/rentabilite"
           element={
