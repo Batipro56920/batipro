@@ -4,6 +4,8 @@ import { listPurchaseOrders } from "../infrastructure/purchaseOrderRepository";
 import type { PurchaseOrderRecord } from "../domain/types";
 import { listProductCatalogItems, saveProductCatalogItem, type ProductCatalogItem } from "../../product-catalog";
 import { ProductQuickCreateModal, buildProductDraftFromQuickCreate } from "../../product-catalog/components/ProductQuickCreateModal";
+import { ProductProposalsPanel } from "../../product-catalog/components/ProductProposalsPanel";
+import { listPendingProductProposals, type ProductProposal } from "../../../services/productProposals.service";
 import type { SupplierRow } from "../../../services/suppliers.service";
 import {
   confirmDeliveryNote,
@@ -25,6 +27,7 @@ export function DeliveryNotePanel({ suppliers }: { suppliers: SupplierRow[] }) {
   const [products, setProducts] = useState<ProductCatalogItem[]>([]);
   const [orders, setOrders] = useState<PurchaseOrderRecord[]>([]);
   const [history, setHistory] = useState<DeliveryNoteRecord[]>([]);
+  const [proposals, setProposals] = useState<ProductProposal[]>([]);
   const [loading, setLoading] = useState(true);
 
   const [file, setFile] = useState<File | null>(null);
@@ -43,14 +46,16 @@ export function DeliveryNotePanel({ suppliers }: { suppliers: SupplierRow[] }) {
   async function refresh() {
     setLoading(true);
     try {
-      const [productRows, orderRows, historyRows] = await Promise.all([
+      const [productRows, orderRows, historyRows, proposalRows] = await Promise.all([
         listProductCatalogItems().catch(() => []),
         listPurchaseOrders().catch(() => []),
         listDeliveryNotes().catch(() => []),
+        listPendingProductProposals().catch(() => []),
       ]);
       setProducts(productRows);
       setOrders(orderRows);
       setHistory(historyRows);
+      setProposals(proposalRows);
     } finally {
       setLoading(false);
     }
@@ -300,6 +305,9 @@ export function DeliveryNotePanel({ suppliers }: { suppliers: SupplierRow[] }) {
         </div>
       ) : null}
 
+      {/* La validation se fait la ou la reception arrive, pas dans un autre module. */}
+      <ProductProposalsPanel onAccepted={() => void refresh()} />
+
       <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
         <div className="text-sm font-semibold text-slate-950">Historique des receptions</div>
         {loading ? (
@@ -311,7 +319,12 @@ export function DeliveryNotePanel({ suppliers }: { suppliers: SupplierRow[] }) {
                 <div>
                   <span className="font-medium text-slate-900">{note.supplierName ?? "Fournisseur non identifie"}</span>
                   {note.documentReference ? <span className="text-slate-500"> - {note.documentReference}</span> : null}
-                  <span className="ml-2 text-xs text-slate-400">{note.lines.length} ligne(s)</span>
+                  <span className="ml-2 text-xs text-slate-400">{note.lines.length} ligne(s) en stock</span>
+                  {proposals.filter((item) => item.deliveryNoteId === note.id).length ? (
+                    <span className="ml-2 rounded-full bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-800">
+                      {proposals.filter((item) => item.deliveryNoteId === note.id).length} produit(s) a creer
+                    </span>
+                  ) : null}
                 </div>
                 <span
                   className={[

@@ -12,10 +12,11 @@ export type ProductProposal = {
   supplierName: string | null;
   chantierId: string | null;
   chantierName: string | null;
+  deliveryNoteId: string | null;
   createdAt: string | null;
 };
 
-const SELECT = "id,designation,quantity,unit,unit_price_ht,supplier_id,supplier_name,chantier_id,created_at,chantiers(nom)";
+const SELECT = "id,designation,quantity,unit,unit_price_ht,supplier_id,supplier_name,chantier_id,delivery_note_id,created_at,chantiers(nom)";
 
 /** Produits vus sur un bon de livraison et pas encore au catalogue. */
 export async function listPendingProductProposals(): Promise<ProductProposal[]> {
@@ -36,6 +37,7 @@ export async function listPendingProductProposals(): Promise<ProductProposal[]> 
     supplierName: row.supplier_name ? String(row.supplier_name) : null,
     chantierId: row.chantier_id ? String(row.chantier_id) : null,
     chantierName: row.chantiers?.nom ? String(row.chantiers.nom) : null,
+    deliveryNoteId: row.delivery_note_id ? String(row.delivery_note_id) : null,
     createdAt: row.created_at ?? null,
   }));
 }
