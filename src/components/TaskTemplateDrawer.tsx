@@ -32,6 +32,7 @@ import {
   type TaskTemplateCocoResult,
 } from "../features/product-catalog/services/taskTemplateCoco.service";
 import { getProductRatioHint } from "../features/product-catalog/services/productMaterialAutofill.service";
+import { ProductPicker } from "../features/product-catalog/components/ProductPicker";
 import { useI18n } from "../i18n";
 
 type Props = {
@@ -1243,18 +1244,12 @@ export default function TaskTemplateDrawer({
                         </div>
 
                         <div className="flex flex-wrap gap-2">
-                          <select
-                            className="min-w-0 flex-1 rounded-xl border bg-white px-3 py-2 text-sm"
+                          <ProductPicker
+                            products={products}
                             value={row.product_id}
-                            onChange={(e) => applyProductToMaterial(index, e.target.value)}
-                          >
-                            <option value="">Ligne libre / choisir produit catalogue</option>
-                            {products.map((product) => (
-                              <option key={product.id} value={product.id}>
-                                {product.designation}
-                              </option>
-                            ))}
-                          </select>
+                            onChange={(productId) => applyProductToMaterial(index, productId)}
+                            disabled={busy}
+                          />
                           <button
                             type="button"
                             onClick={() => openQuickCreate(index)}
