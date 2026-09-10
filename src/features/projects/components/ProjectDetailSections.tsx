@@ -6,6 +6,7 @@ import { listInvoices, saveInvoice } from "../../invoices/infrastructure/invoice
 import { quoteBuilderToBusinessDocument } from "../../quotes/builder/quoteBuilderDocumentAdapter";
 import { createQuoteBuilderFromEngine } from "../../quotes/builder/quoteBuilderModel";
 import { loadCrmQuoteEngineData, transformAcceptedQuoteToChantier } from "../../../services/crm.service";
+import { listBackofficeAccounts } from "../../../services/backofficeAccounts.service";
 import type { ProjectRecord } from "../types";
 import { EmptyProjectBlock, Panel, formatCurrency, formatDate } from "./ProjectShared";
 import { getPrimaryQuote } from "../hooks/useProjectsData";
@@ -22,19 +23,6 @@ type CreatedChantierLink = {
   chantierId: string;
   chantierName: string;
 };
-
-function InfoGrid({ rows }: { rows: Array<[string, string | number | null | undefined]> }) {
-  return (
-    <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-      {rows.map(([label, value]) => (
-        <div key={label} className="rounded-2xl border border-slate-100 bg-slate-50 p-4">
-          <div className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">{label}</div>
-          <div className="mt-2 text-sm font-semibold text-slate-900">{value || "Non renseigne"}</div>
-        </div>
-      ))}
-    </div>
-  );
-}
 
 function recentActivity(project: ProjectRecord) {
   const quote = getPrimaryQuote(project);
@@ -203,42 +191,96 @@ function ProductionContinuityPanel({ project }: { project: ProjectRecord }) {
   );
 }
 
+const SALESPERSON_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * Fiche d'identite du dossier. Une liste de definitions plutot que des tuiles en
+ * grille fixe : une adresse ou un besoin client y tiennent sur une ligne, au lieu
+ * de tomber un mot par ligne dans une colonne de 110px.
+ */
+function IdentityList({ rows }: { rows: Array<[string, string | null | undefined]> }) {
+  return (
+    <dl className="grid gap-x-10 gap-y-3 lg:grid-cols-2">
+      {rows.map(([label, value]) => (
+        <div key={label} className="flex flex-col gap-0.5 border-b border-slate-100 pb-2 sm:flex-row sm:items-baseline sm:gap-4">
+          <dt className="shrink-0 text-xs font-medium uppercase tracking-wide text-slate-400 sm:w-40">{label}</dt>
+          <dd className="min-w-0 text-sm font-medium text-slate-900">{value || "—"}</dd>
+        </div>
+      ))}
+    </dl>
+  );
+}
+
+function SummaryCounter({ label, value }: { label: string; value: string | number }) {
+  return (
+    <div className="rounded-2xl border border-slate-200 px-4 py-3">
+      <div className="text-xl font-bold text-slate-950">{value}</div>
+      <div className="mt-0.5 text-xs font-medium text-slate-500">{label}</div>
+    </div>
+  );
+}
+
 export function ProjectSummaryTab({ project }: { project: ProjectRecord }) {
-  const quote = getPrimaryQuote(project);
-  const latestActivity = recentActivity(project)[0] ?? null;
   const openFollowUps = project.tasks.filter((task) => task.statut !== "termine" && task.statut !== "terminee").length;
+  const [salespersonName, setSalespersonName] = useState<string | null>(null);
+
+  // Le projet ne porte que l'identifiant du commercial. Afficher un UUID de 36
+  // caracteres n'apprend rien : on va chercher le nom, et on s'abstient si on ne
+  // peut pas le resoudre.
+  useEffect(() => {
+    const id = project.salesperson?.trim();
+    if (!id || !SALESPERSON_UUID.test(id)) {
+      setSalespersonName(id || null);
+      return;
+    }
+    let alive = true;
+    void listBackofficeAccounts()
+      .then((accounts) => {
+        if (!alive) return;
+        const match = accounts.find((account) => account.id === id);
+        setSalespersonName(match?.displayName || match?.email || null);
+      })
+      .catch(() => {
+        if (alive) setSalespersonName(null);
+      });
+    return () => {
+      alive = false;
+    };
+  }, [project.salesperson]);
 
   return (
     <div className="space-y-5">
-      <Panel title="Resume projet" description="Accueil commercial du dossier, sans melanger la preparation chantier.">
-        <div className="space-y-5">
-          <InfoGrid
+      <Panel title="Résumé projet" description="L'essentiel du dossier commercial. Le détail vit dans les onglets.">
+        <div className="space-y-6">
+          <IdentityList
             rows={[
               ["Client", project.clientName],
+              ["Téléphone", project.contactPhone],
+              ["Email", project.contactEmail],
               ["Adresse", project.address],
-              ["Commercial", project.salesperson || "A assigner"],
-              ["Source", project.sourceLabel],
+              ["Type de projet", project.projectType],
+              ["Origine", project.sourceLabel],
+              ["Commercial", salespersonName ?? "À assigner"],
               ["Budget estimatif", formatCurrency(project.budgetEstimate)],
-              ["Echeance", formatDate(project.desiredDeadline)],
-              ["Type projet", project.projectType],
-              ["Derniere activite", latestActivity ? `${latestActivity[0]} - ${formatDate(latestActivity[1])}` : "Aucune"],
+              ["Échéance", formatDate(project.desiredDeadline)],
+              ["Prochaine action", project.nextAction],
             ]}
           />
 
-          <div className="grid gap-3 md:grid-cols-3 xl:grid-cols-6">
-            {[
-              ["RDV", project.appointments.length],
-              ["Devis", project.quotes.length],
-              ["Montant devis", formatCurrency(project.quoteAmount)],
-              ["Documents", project.documents.length],
-              ["Taches commerciales", openFollowUps],
-              ["SAV", project.sav.length],
-            ].map(([label, value]) => (
-              <div key={label} className="rounded-2xl border border-slate-200 p-4">
-                <div className="text-xl font-bold text-slate-950">{value}</div>
-                <div className="mt-1 text-xs font-medium text-slate-500">{label}</div>
-              </div>
-            ))}
+          {project.needDescription ? (
+            <div>
+              <div className="text-xs font-medium uppercase tracking-wide text-slate-400">Besoin client</div>
+              <p className="mt-1.5 whitespace-pre-wrap text-sm leading-6 text-slate-700">{project.needDescription}</p>
+            </div>
+          ) : null}
+
+          <div className="grid gap-3 sm:grid-cols-3 xl:grid-cols-6">
+            <SummaryCounter label="RDV" value={project.appointments.length} />
+            <SummaryCounter label="Devis" value={project.quotes.length} />
+            <SummaryCounter label="Montant devis" value={formatCurrency(project.quoteAmount)} />
+            <SummaryCounter label="Documents" value={project.documents.length} />
+            <SummaryCounter label="Tâches commerciales" value={openFollowUps} />
+            <SummaryCounter label="SAV" value={project.sav.length} />
           </div>
 
           <ProjectProfitabilityWidgets project={project} />
@@ -246,68 +288,6 @@ export function ProjectSummaryTab({ project }: { project: ProjectRecord }) {
       </Panel>
 
       <ProductionContinuityPanel project={project} />
-
-      <div className="grid gap-5 xl:grid-cols-[1.25fr_0.75fr]">
-        <Panel title="Resume client">
-          <InfoGrid
-            rows={[
-              ["Telephone", project.contactPhone],
-              ["Email", project.contactEmail],
-              ["Contact principal", project.clientName],
-              ["Source lead", project.sourceLabel],
-            ]}
-          />
-        </Panel>
-
-        <Panel title="Situation commerciale">
-          <InfoGrid
-            rows={[
-              ["Statut projet", project.status],
-              ["Budget connu", formatCurrency(project.budgetEstimate)],
-              ["Prochaine relance", formatDate(project.nextActionDate)],
-              ["Commercial", project.salesperson || "A assigner"],
-            ]}
-          />
-        </Panel>
-      </div>
-
-      <div className="grid gap-5 xl:grid-cols-3">
-        <Panel title="Derniere activite">
-          {latestActivity ? (
-            <div className="rounded-2xl border border-slate-200 p-4">
-              <div className="font-semibold text-slate-950">{latestActivity[0]}</div>
-              <div className="mt-1 text-sm text-slate-500">{formatDate(latestActivity[1])}</div>
-            </div>
-          ) : (
-            <EmptyProjectBlock title="Aucune activite" description="Les appels, mails, notes, visites et devis apparaissent ici." />
-          )}
-        </Panel>
-
-        <Panel title="Devis recent">
-          {quote ? (
-            <div className="rounded-2xl border border-slate-200 p-4">
-              <div className="font-semibold text-slate-950">{quote.quote_number}</div>
-              <div className="mt-1 text-sm text-slate-500">{quote.statut} - {formatCurrency(quote.montant_ht)}</div>
-              <Link to={`/projets/${project.id}/devis/${quote.id}/edit`} className="mt-3 inline-flex text-sm font-semibold text-blue-700 hover:text-blue-800">
-                Ouvrir le devis
-              </Link>
-            </div>
-          ) : (
-            <EmptyProjectBlock title="Aucun devis" description="Creez un devis depuis le dossier projet." />
-          )}
-        </Panel>
-
-        <Panel title="Qualification rapide">
-          <InfoGrid
-            rows={[
-              ["Type projet", project.projectType],
-              ["Besoin client", project.needDescription],
-              ["Urgence", project.prospect?.urgence],
-              ["Prochaine action", project.nextAction],
-            ]}
-          />
-        </Panel>
-      </div>
     </div>
   );
 }
