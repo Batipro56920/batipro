@@ -1,0 +1,15 @@
+-- PLACEHOLDER - CE FICHIER NE CONTIENT PAS LE SQL REEL.
+--
+-- La migration 20260910090000 a ete appliquee directement sur la base de
+-- production (editeur SQL Supabase ou fichier jamais commite). Son contenu
+-- est introuvable : ni dans ce depot, ni sur origin/dev, ni sur origin/main.
+--
+-- Ce fichier existe uniquement pour que l'historique local corresponde a
+-- l'historique distant, sinon la CLI Supabase refuse tout push et tout pull.
+-- La version etant deja marquee appliquee en base, ce fichier ne sera JAMAIS
+-- execute par 'supabase db push'.
+--
+-- L'effet reel de cette migration est recupere par le fichier remote_schema
+-- genere via 'supabase db pull', qui capture le schema distant courant.
+
+-- Aucune instruction volontairement.

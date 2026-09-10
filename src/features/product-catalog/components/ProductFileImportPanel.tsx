@@ -1,14 +1,19 @@
 import { useMemo, useState } from "react";
 import { CheckCircle2, FileText, Loader2, UploadCloud, X } from "lucide-react";
 import type { SupplierRow } from "../../../services/suppliers.service";
-import type { DocumentUnit } from "../../document-engine";
-import type { ProductCatalogDraft, ProductCatalogItem, ProductDocument, ProductKnowledge, ProductSupplierPrice } from "../domain/types";
+import type { ProductCatalogDraft, ProductCatalogItem, ProductKnowledge } from "../domain/types";
 import { analyzeProductTextWithCoco } from "../services/productKnowledge.service";
-
-const ACCEPTED_PRODUCT_FILES = "application/pdf,.pdf,.xlsx,.xls,.csv,.txt,text/plain,text/csv,.jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp";
-const SUPPORTED_FILE_LABEL = "PDF, Excel, CSV, texte ou photo";
-
-type ProductDraftPatch = Partial<ProductCatalogDraft | ProductCatalogItem>;
+import {
+  buildProductPatch,
+  storeProductFiles,
+  type ProductDraftPatch,
+} from "../services/productImportMapper";
+import {
+  ACCEPTED_PRODUCT_FILES,
+  SUPPORTED_PRODUCT_FILE_LABEL,
+  isSupportedProductFile,
+  readProductFilesForAnalysis,
+} from "../services/productFileReader";
 
 type ProductImportAnalysis = {
   knowledge: ProductKnowledge;
@@ -43,33 +48,24 @@ export default function ProductFileImportPanel({
     const unsupported = selectedFiles.find((file) => !isSupportedProductFile(file));
     if (unsupported) {
       setFileNames([]);
-      setError(`Fichier non pris en charge : ${unsupported.name}. Formats acceptes : ${SUPPORTED_FILE_LABEL}.`);
+      setError(`Fichier non pris en charge : ${unsupported.name}. Formats acceptes : ${SUPPORTED_PRODUCT_FILE_LABEL}.`);
       return;
     }
 
     setBusy(true);
     setFileNames(selectedFiles.map((file) => file.name));
     try {
-      const imageFiles = selectedFiles.filter((file) => isImageFile(file));
-      const textFiles = selectedFiles.filter((file) => !isImageFile(file));
-
-      const textBlocks = await Promise.all(textFiles.map(async (file) => {
-        const text = await extractProductFileText(file);
-        return `Fichier: ${file.name}\n${text}`;
-      }));
-      const cleanedText = textBlocks.join("\n\n---\n\n").trim();
-      const images = await Promise.all(imageFiles.map(async (file) => ({
-        name: file.name,
-        dataUrl: await readFileAsDataUrl(file),
-      })));
+      const { text: cleanedText, images } = await readProductFilesForAnalysis(selectedFiles);
 
       if (cleanedText.length < 20 && images.length === 0) {
         throw new Error("Texte insuffisant dans ces fichiers. Verifiez que le document contient des informations produit lisibles.");
       }
 
       const knowledge = await analyzeProductTextWithCoco(currentProduct, cleanedText, images);
-      const patch = buildProductPatch(currentProduct, knowledge, selectedFiles, suppliers, cleanedText);
-      const notes = buildAnalysisNotes(knowledge, patch);
+      const productId = "id" in currentProduct ? currentProduct.id : "";
+      const stored = await storeProductFiles(productId, selectedFiles);
+      const patch = buildProductPatch(currentProduct, knowledge, stored.documents, suppliers, cleanedText);
+      const notes = [...buildAnalysisNotes(knowledge, patch), ...stored.notes];
       setPendingAnalysis({ knowledge, patch, notes });
       setResult("Analyse Coco prete a verifier avant application.");
     } catch (err: any) {
@@ -183,92 +179,6 @@ function buildReadOnlyMetric(label: string, value: string) {
   );
 }
 
-function buildProductPatch(
-  currentProduct: ProductCatalogDraft | ProductCatalogItem,
-  knowledge: ProductKnowledge,
-  files: File[],
-  suppliers: SupplierRow[],
-  text: string,
-): ProductDraftPatch {
-  const identity = knowledge.identity.value;
-  const supplierInfo = knowledge.supplier.value;
-  const pricing = knowledge.pricing.value;
-
-  const supplierName = normalizeText(supplierInfo.supplier);
-  const supplier = supplierName ? suppliers.find((row) => normalizeKey(row.name) === normalizeKey(supplierName)) ?? null : null;
-  const purchasePrice = positivePrice(pricing.purchasePrice) ?? extractPrice(text) ?? positivePrice(currentProduct.standardPurchasePriceHt);
-  const marginRate = positiveNumber(currentProduct.targetMarginRate) ?? 30;
-  const salePrice = positivePrice(pricing.recommendedSalePrice) ?? computeSalePrice(purchasePrice, marginRate) ?? positivePrice(currentProduct.recommendedSalePriceHt);
-  const unit = normalizeUnit(identity.unit) || currentProduct.unit;
-  const supplierPrice = buildSupplierPrice(knowledge, supplier, purchasePrice);
-  const importedDocuments = buildImportedDocuments(files);
-
-  return {
-    designation: normalizeText(identity.designation) ?? currentProduct.designation,
-    manufacturerReference: normalizeText(identity.manufacturerReference) ?? currentProduct.manufacturerReference,
-    brand: normalizeText(identity.brand) ?? currentProduct.brand,
-    category: currentProduct.category ?? "Materiaux",
-    unit,
-    vatRate: positiveNumber(pricing.vat) ?? currentProduct.vatRate,
-    mainSupplierId: supplier?.id ?? currentProduct.mainSupplierId,
-    mainSupplierName: supplier?.name ?? supplierName ?? currentProduct.mainSupplierName,
-    standardPurchasePriceHt: purchasePrice ?? currentProduct.standardPurchasePriceHt,
-    recommendedSalePriceHt: salePrice ?? currentProduct.recommendedSalePriceHt,
-    supplierPrices: supplierPrice ? mergeSupplierPrice(currentProduct.supplierPrices, supplierPrice) : currentProduct.supplierPrices,
-    documents: [...currentProduct.documents, ...importedDocuments],
-    knowledge,
-  };
-}
-
-function buildSupplierPrice(
-  knowledge: ProductKnowledge,
-  supplier: SupplierRow | null,
-  purchasePrice: number | null,
-): ProductSupplierPrice | null {
-  const supplierName = normalizeText(knowledge.supplier.value.supplier);
-  if (purchasePrice === null || purchasePrice <= 0) return null;
-  if (!supplier && !supplierName) return null;
-
-  const usage = knowledge.materialUsage.value;
-  const coverageM2 = positiveNumber(usage.coverage);
-  return {
-    id: crypto.randomUUID(),
-    supplierId: supplier?.id ?? null,
-    supplierName: supplier?.name ?? supplierName ?? "",
-    priceHt: purchasePrice,
-    discountPercent: null,
-    startDate: null,
-    endDate: null,
-    packaging: normalizeText(knowledge.identity.value.conditionnement),
-    minimumQuantity: positiveNumber(usage.minimumOrder),
-    deliveryLeadTimeDays: null,
-    coverageM2,
-    pricePerM2Ht: coverageM2 ? computeCoverageUnitPrice(purchasePrice, coverageM2) : null,
-  };
-}
-
-function buildImportedDocuments(files: File[]): ProductDocument[] {
-  return files.map((file) => ({
-    id: crypto.randomUUID(),
-    kind: "technical_sheet",
-    name: file.name,
-    url: null,
-    usage: { task: true, doe: true },
-    notes: "Fichier importe pour analyse automatique de la fiche produit.",
-    analysis: null,
-  }));
-}
-
-function mergeSupplierPrice(prices: ProductSupplierPrice[], candidate: ProductSupplierPrice): ProductSupplierPrice[] {
-  const exists = prices.some((price) => {
-    const sameSupplier = candidate.supplierId
-      ? price.supplierId === candidate.supplierId
-      : normalizeKey(price.supplierName) === normalizeKey(candidate.supplierName);
-    return sameSupplier && price.priceHt === candidate.priceHt && normalizeKey(price.packaging) === normalizeKey(candidate.packaging);
-  });
-  return exists ? prices : [...prices, candidate];
-}
-
 function buildAnalysisNotes(knowledge: ProductKnowledge, patch: ProductDraftPatch) {
   const usage = knowledge.materialUsage.value;
   return [
@@ -279,143 +189,6 @@ function buildAnalysisNotes(knowledge: ProductKnowledge, patch: ProductDraftPatc
       ? `Informations manquantes : ${knowledge.confidence.value.missingInformation.slice(0, 3).join(", ")}`
       : null,
   ].filter((note): note is string => Boolean(note));
-}
-
-function isSupportedProductFile(file: File): boolean {
-  const name = file.name.toLowerCase();
-  return [".pdf", ".xlsx", ".xls", ".csv", ".txt", ".jpg", ".jpeg", ".png", ".webp"].some((extension) => name.endsWith(extension))
-    || ["application/pdf", "text/plain", "text/csv", "application/vnd.ms-excel", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"].includes(file.type)
-    || isImageFile(file);
-}
-
-function isImageFile(file: File): boolean {
-  const name = file.name.toLowerCase();
-  return file.type.startsWith("image/") || [".jpg", ".jpeg", ".png", ".webp"].some((extension) => name.endsWith(extension));
-}
-
-function readFileAsDataUrl(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(String(reader.result));
-    reader.onerror = () => reject(reader.error ?? new Error("Lecture de l'image impossible."));
-    reader.readAsDataURL(file);
-  });
-}
-
-async function extractProductFileText(file: File): Promise<string> {
-  const name = file.name.toLowerCase();
-
-  if (name.endsWith(".pdf") || file.type === "application/pdf") {
-    return extractPdfText(file);
-  }
-
-  if (name.endsWith(".xlsx") || name.endsWith(".xls") || file.type.includes("spreadsheet") || file.type === "application/vnd.ms-excel") {
-    return extractSpreadsheetText(file);
-  }
-
-  return file.text();
-}
-
-async function extractPdfText(file: File): Promise<string> {
-  const [{ default: pdfWorkerUrl }, pdfjsLib] = await Promise.all([
-    import("pdfjs-dist/build/pdf.worker.mjs?url"),
-    import("pdfjs-dist"),
-  ]);
-  pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
-
-  const buffer = await file.arrayBuffer();
-  const pdf = await pdfjsLib.getDocument({ data: buffer }).promise;
-  const pages: string[] = [];
-
-  for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber += 1) {
-    const page = await pdf.getPage(pageNumber);
-    const content = await page.getTextContent();
-    const pageText = content.items
-      .map((item: any) => String(item?.str ?? "").trim())
-      .filter(Boolean)
-      .join(" ");
-    if (pageText) pages.push(pageText);
-  }
-
-  await pdf.destroy();
-  return pages.join("\n");
-}
-
-async function extractSpreadsheetText(file: File): Promise<string> {
-  const XLSX = await import("xlsx");
-  const buffer = await file.arrayBuffer();
-  const workbook = XLSX.read(buffer, { type: "array" });
-  const sheets = workbook.SheetNames
-    .map((sheetName) => {
-      const sheet = workbook.Sheets[sheetName];
-      if (!sheet) return "";
-      const csv = XLSX.utils.sheet_to_csv(sheet, { FS: ";" }).trim();
-      return csv ? `Feuille ${sheetName}\n${csv}` : "";
-    })
-    .filter(Boolean);
-
-  return sheets.join("\n\n");
-}
-
-function normalizeText(value: unknown): string | null {
-  const text = String(value ?? "").replace(/\s+/g, " ").trim();
-  return text ? text : null;
-}
-
-function normalizeKey(value: unknown): string {
-  return String(value ?? "")
-    .replace(/²/g, "2")
-    .replace(/³/g, "3")
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .replace(/[^a-z0-9]+/gi, " ")
-    .replace(/\s+/g, " ")
-    .trim()
-    .toLowerCase();
-}
-
-function normalizeUnit(unit: unknown): DocumentUnit {
-  const value = normalizeKey(unit);
-  if (["m2", "m 2"].includes(value)) return "m2";
-  if (["m3", "m 3"].includes(value)) return "m3";
-  if (["ml", "m", "metre lineaire"].includes(value)) return "ml";
-  if (["kg", "kilo", "g", "gramme", "grammes"].includes(value)) return "kg";
-  if (["l", "litre", "litres"].includes(value)) return "l";
-  if (["h", "heure"].includes(value)) return "h";
-  if (["forfait", "ens", "ensemble"].includes(value)) return "forfait";
-  return "u";
-}
-
-function positiveNumber(value: unknown): number | null {
-  const number = Number(value);
-  return Number.isFinite(number) && number >= 0 ? number : null;
-}
-
-function positivePrice(value: unknown): number | null {
-  const number = Number(value);
-  return Number.isFinite(number) && number > 0 ? number : null;
-}
-
-function extractPrice(text: string): number | null {
-  const match = text.match(/(?:prix|achat|tarif)[^0-9]{0,80}([0-9]+(?:[\s.,][0-9]{2})?)/i);
-  return parseLooseNumber(match?.[1]);
-}
-
-function parseLooseNumber(value: unknown): number | null {
-  const text = String(value ?? "").trim();
-  if (!text) return null;
-  const number = Number(text.replace(/\s+/g, "").replace(",", "."));
-  return Number.isFinite(number) ? Math.round(number * 100) / 100 : null;
-}
-
-function computeCoverageUnitPrice(price: number | null, coverageM2: number | null): number | null {
-  if (price === null || coverageM2 === null || coverageM2 <= 0) return null;
-  return Math.round((price / coverageM2) * 100) / 100;
-}
-
-function computeSalePrice(purchasePrice: number | null, marginRate: number): number | null {
-  if (purchasePrice === null) return null;
-  return Math.round(purchasePrice * (1 + marginRate / 100) * 100) / 100;
 }
 
 function formatMaybeCurrency(value: unknown): string {

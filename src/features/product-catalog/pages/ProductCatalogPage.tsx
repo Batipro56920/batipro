@@ -1,10 +1,12 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Link, useSearchParams } from "react-router-dom";
-import { FileText, PackageSearch, Plus, RefreshCw, Trash2, X } from "lucide-react";
+import { FileText, PackageSearch, Plus, RefreshCw, Trash2, UploadCloud, X } from "lucide-react";
 import type { SupplierRow } from "../../../services/suppliers.service";
 import { listSuppliers } from "../../../services/suppliers.service";
 import type { DocumentUnit } from "../../document-engine";
 import ProductFileImportPanel from "../components/ProductFileImportPanel";
+import ProductBulkImportPanel from "../components/ProductBulkImportPanel";
+import { isStoredProductDocumentPath, resolveProductDocumentUrl } from "../infrastructure/productDocumentStorage";
 import ProductQuoteReaderPanel from "../components/ProductQuoteReaderPanel";
 import type {
   ProductCatalogDraft,
@@ -64,6 +66,7 @@ export default function ProductCatalogPage() {
   const [brandFilter, setBrandFilter] = useState("all");
   const [priceFilter, setPriceFilter] = useState("all");
   const [editing, setEditing] = useState<ProductCatalogItem | ProductCatalogDraft | null>(null);
+  const [bulkImportOpen, setBulkImportOpen] = useState(false);
   const [quoteReaderOpen, setQuoteReaderOpen] = useState(false);
   const [quoteImporting, setQuoteImporting] = useState(false);
   const [quoteImportResult, setQuoteImportResult] = useState<ProductQuoteImportResult | null>(null);
@@ -268,12 +271,19 @@ export default function ProductCatalogPage() {
             <button type="button" onClick={() => setQuoteReaderOpen((open) => !open)} className="inline-flex h-10 items-center justify-center gap-2 rounded-xl border border-blue-200 bg-blue-50 px-4 text-sm font-semibold text-blue-700 hover:bg-blue-100">
               <FileText className="h-4 w-4" /> Lecteur devis
             </button>
+            <button type="button" onClick={() => setBulkImportOpen((open) => !open)} className="inline-flex h-10 items-center justify-center gap-2 rounded-xl border border-blue-200 bg-blue-50 px-4 text-sm font-semibold text-blue-700 hover:bg-blue-100">
+              <UploadCloud className="h-4 w-4" /> Import fiches produits
+            </button>
             <button type="button" onClick={() => openProductDrawer({ ...EMPTY_DRAFT })} className="inline-flex h-10 items-center justify-center rounded-xl bg-blue-600 px-4 text-sm font-semibold text-white hover:bg-blue-700">
               <Plus className="mr-2 h-4 w-4" /> Nouveau produit
             </button>
           </div>
         </div>
       </header>
+
+      {bulkImportOpen ? (
+        <ProductBulkImportPanel suppliers={suppliers} onImported={refreshProducts} />
+      ) : null}
 
       {quoteReaderOpen ? (
         <ProductQuoteReaderPanel
@@ -898,13 +908,19 @@ function ProductDocumentsEditor({
                     onChange={(event) => updateDocument(document.id, { name: event.target.value })}
                   />
                 </FieldShell>
-                <FieldShell label="Lien ou chemin fichier" className="md:col-span-2">
-                  <input
-                    className={inputClass}
-                    placeholder="URL fournisseur, chemin Supabase ou référence documentaire"
-                    value={document.url ?? ""}
-                    onChange={(event) => updateDocument(document.id, { url: event.target.value })}
-                  />
+                <FieldShell label="Lien ou fichier joint" className="md:col-span-2">
+                  <div className="flex gap-2">
+                    <input
+                      className={inputClass}
+                      placeholder="URL fournisseur, chemin Supabase ou référence documentaire"
+                      value={document.url ?? ""}
+                      onChange={(event) => updateDocument(document.id, { url: event.target.value })}
+                    />
+                    {document.url ? <OpenProductDocumentButton url={document.url} /> : null}
+                  </div>
+                  {isStoredProductDocumentPath(document.url) ? (
+                    <div className="mt-1 text-xs text-emerald-700">Fichier conservé — repris dans le DOE si la case ci-dessous est cochée.</div>
+                  ) : null}
                 </FieldShell>
                 <FieldShell label="Notes d'exploitation" className="md:col-span-2">
                   <textarea
@@ -1388,4 +1404,41 @@ function looksLikeThousandsGroups(value: string, separator: string): boolean {
 
 function formatNumberInputValue(value: number) {
   return Number.isFinite(value) ? String(value).replace(".", ",") : "0";
+}
+
+/**
+ * Ouvre la piece jointe : lien fournisseur externe tel quel, fiche stockee via
+ * une URL signee generee a la demande.
+ */
+function OpenProductDocumentButton({ url }: { url: string }) {
+  const [opening, setOpening] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function open() {
+    setOpening(true);
+    setError(null);
+    try {
+      const target = await resolveProductDocumentUrl(url);
+      if (target) window.open(target, "_blank", "noopener,noreferrer");
+    } catch (err: any) {
+      setError(err?.message ?? "Ouverture impossible.");
+    } finally {
+      setOpening(false);
+    }
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={() => void open()}
+      disabled={opening}
+      title={error ?? "Ouvrir la piece jointe"}
+      className={[
+        "shrink-0 rounded-xl border px-3 text-sm font-semibold",
+        error ? "border-red-200 text-red-600" : "border-slate-200 text-slate-700 hover:bg-slate-50",
+      ].join(" ")}
+    >
+      {opening ? "..." : "Ouvrir"}
+    </button>
+  );
 }

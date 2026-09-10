@@ -8,6 +8,7 @@ import {
   upsertDoeItem,
 } from "../../services/chantierDoe.service";
 import { generateDoeFinalPdfBlob } from "../../services/chantiersReportsPdf.service";
+import { importProductSheetsIntoDoe } from "../../services/chantierProductSheets.service";
 import { getCompanyBrandingForPdf } from "../../services/companySettings.service";
 import { useI18n } from "../../i18n";
 
@@ -32,6 +33,7 @@ export default function DoeTab({
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [generating, setGenerating] = useState(false);
+  const [importingSheets, setImportingSheets] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [orderedIds, setOrderedIds] = useState<string[]>([]);
@@ -181,6 +183,35 @@ export default function DoeTab({
     }
   }
 
+  /**
+   * Reprend au DOE les fiches techniques des produits prepares sur le chantier
+   * et marquees "A reprendre dans le DOE" dans le catalogue.
+   */
+  async function importProductSheets() {
+    if (importingSheets) return;
+    setImportingSheets(true);
+    setError(null);
+    setMessage(null);
+    try {
+      const result = await importProductSheetsIntoDoe(chantierId);
+      if (result.added) await onDocumentsRefresh();
+      await loadItems();
+
+      const parts: string[] = [];
+      if (result.added) parts.push(`${result.added} fiche(s) produit ajoutee(s) au DOE`);
+      if (result.alreadyPresent) parts.push(`${result.alreadyPresent} deja presente(s)`);
+      if (!result.added && !result.alreadyPresent) {
+        parts.push("Aucune fiche produit a reprendre : verifiez que les produits du chantier ont une fiche enregistree et cochee pour le DOE");
+      }
+      setMessage(parts.join(" · "));
+      if (result.errors.length) setError(result.errors.join("\n"));
+    } catch (err: any) {
+      setError(err?.message ?? "Reprise des fiches produits impossible.");
+    } finally {
+      setImportingSheets(false);
+    }
+  }
+
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -188,6 +219,19 @@ export default function DoeTab({
           <div className="font-semibold section-title">{t("doe.title")}</div>
           <div className="text-sm text-slate-500">{t("doe.subtitle")}</div>
         </div>
+        <div className="flex flex-wrap gap-2">
+        <button
+          type="button"
+          disabled={importingSheets || generating}
+          onClick={importProductSheets}
+          title="Ajouter au DOE les fiches techniques des produits prepares sur ce chantier"
+          className={[
+            "rounded-xl border px-4 py-2 text-sm font-semibold",
+            importingSheets ? "border-slate-200 bg-slate-100 text-slate-500" : "border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100",
+          ].join(" ")}
+        >
+          {importingSheets ? "Reprise..." : "Reprendre les fiches produits"}
+        </button>
         <button
           type="button"
           disabled={generating}
@@ -199,6 +243,7 @@ export default function DoeTab({
         >
           {generating ? t("common.states.generating") : t("doe.generate")}
         </button>
+        </div>
       </div>
 
       {error && (
