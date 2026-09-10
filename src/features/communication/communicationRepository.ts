@@ -135,9 +135,17 @@ export async function loadMetricsSummary(): Promise<SocialMetricsSummary> {
 
 export async function listReviewPublications(): Promise<ReviewPublication[]> {
   const { organizationId } = await identity();
-  const { data, error } = await db.from("communication_campaign_items").select("*,communication_campaigns(title),communication_publication_variants(id,organization_id,item_id,social_account_id,network,body,link_url,first_comment,approval_status,approved_at)").eq("organization_id", organizationId).eq("status", "to_review").order("updated_at", { ascending: false });
-  fail(error);
-  return (data ?? []).map((row: any) => ({ ...row, campaign_title: row.communication_campaigns?.title ?? "Campagne", variants: row.communication_publication_variants ?? [] })) as ReviewPublication[];
+  const { data, error } = await db.from("communication_campaign_items").select("*,communication_campaigns(title),communication_publication_variants(id,organization_id,item_id,social_account_id,network,body,link_url,first_comment,approval_status,approved_at)").eq("organization_id", organizationId).eq("status", "to_review").order("updated_at", { ascending: false }); fail(error);
+  const itemIds = (data ?? []).map((row: { id: string }) => row.id);
+  const assetsQuery = itemIds.length ? await db.from("communication_campaign_assets").select("id,campaign_id,item_id,file_name,mime_type,file_size,storage_path").eq("organization_id", organizationId).in("item_id", itemIds) : { data: [], error: null }; fail(assetsQuery.error);
+  const assets = await Promise.all((assetsQuery.data ?? []).map(async (asset: any) => { const { data: signed } = await supabase.storage.from("communication-assets").createSignedUrl(asset.storage_path, 3600); return { ...asset, signed_url: signed?.signedUrl } as CampaignAsset; }));
+  return (data ?? []).map((row: any) => ({ ...row, campaign_title: row.communication_campaigns?.title ?? "Campagne", variants: row.communication_publication_variants ?? [], assets: assets.filter((asset) => asset.item_id === row.id) })) as ReviewPublication[];
+}
+
+export async function updateReviewPublication(itemId: string, scheduledAt: string | null, variants: Array<{ id: string; body: string }>) {
+  const { organizationId } = await identity();
+  const itemResult = await db.from("communication_campaign_items").update({ scheduled_at: scheduledAt ? new Date(scheduledAt).toISOString() : null }).eq("organization_id", organizationId).eq("id", itemId); fail(itemResult.error);
+  for (const variant of variants) { const result = await db.from("communication_publication_variants").update({ body: variant.body }).eq("organization_id", organizationId).eq("id", variant.id); fail(result.error); }
 }
 
 export async function decidePublication(itemId: string, variantIds: string[], decision: "approved" | "changes_requested", scheduledAt: string | null, note?: string) {
@@ -150,6 +158,8 @@ export async function decidePublication(itemId: string, variantIds: string[], de
   fail(error);
   const events = variantIds.map((variantId) => ({ organization_id: who.organizationId, variant_id: variantId, action: decision, note: note?.trim() || null, actor_name: who.name }));
   const eventResult = await db.from("communication_approval_events").insert(events); fail(eventResult.error);
-  const nextStatus: ItemStatus = decision === "changes_requested" || !scheduledAt ? "to_prepare" : "scheduled";
+  const statusResult = await db.from("communication_publication_variants").select("approval_status").eq("organization_id", who.organizationId).eq("item_id", itemId); fail(statusResult.error);
+  const allApproved = (statusResult.data ?? []).length > 0 && (statusResult.data ?? []).every((variant: { approval_status: ApprovalStatus }) => variant.approval_status === "approved");
+  const nextStatus: ItemStatus = decision === "changes_requested" ? "to_prepare" : allApproved ? (scheduledAt ? "scheduled" : "to_prepare") : "to_review";
   const itemResult = await db.from("communication_campaign_items").update({ status: nextStatus }).eq("organization_id", who.organizationId).eq("id", itemId); fail(itemResult.error);
 }

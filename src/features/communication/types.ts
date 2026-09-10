@@ -87,4 +87,5 @@ export type SocialMetricsSummary = {
 export type ReviewPublication = CampaignItem & {
   campaign_title: string;
   variants: PublicationVariant[];
+  assets: CampaignAsset[];
 };
