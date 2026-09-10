@@ -1,4 +1,5 @@
-import type { ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
+import { listBackofficeAccounts } from "../../../services/backofficeAccounts.service";
 
 export function formatCurrency(value: number | null | undefined) {
   if (value === null || value === undefined) return "Non renseigné";
@@ -32,4 +33,38 @@ export function EmptyProjectBlock({ title, description }: { title: string; descr
       <p className="mt-1">{description}</p>
     </div>
   );
+}
+
+const SALESPERSON_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * Le projet ne porte que l'identifiant du commercial. Afficher un UUID de 36
+ * caractères n'apprend rien : on va chercher le nom, et on s'abstient quand on
+ * ne peut pas le résoudre.
+ */
+export function useSalespersonName(salespersonId: string | null | undefined): string | null {
+  const [name, setName] = useState<string | null>(null);
+
+  useEffect(() => {
+    const id = salespersonId?.trim();
+    if (!id || !SALESPERSON_UUID.test(id)) {
+      setName(id || null);
+      return;
+    }
+    let alive = true;
+    void listBackofficeAccounts()
+      .then((accounts) => {
+        if (!alive) return;
+        const match = accounts.find((account) => account.id === id);
+        setName(match?.displayName || match?.email || null);
+      })
+      .catch(() => {
+        if (alive) setName(null);
+      });
+    return () => {
+      alive = false;
+    };
+  }, [salespersonId]);
+
+  return name;
 }

@@ -6,9 +6,8 @@ import { listInvoices, saveInvoice } from "../../invoices/infrastructure/invoice
 import { quoteBuilderToBusinessDocument } from "../../quotes/builder/quoteBuilderDocumentAdapter";
 import { createQuoteBuilderFromEngine } from "../../quotes/builder/quoteBuilderModel";
 import { loadCrmQuoteEngineData, transformAcceptedQuoteToChantier } from "../../../services/crm.service";
-import { listBackofficeAccounts } from "../../../services/backofficeAccounts.service";
 import type { ProjectRecord } from "../types";
-import { EmptyProjectBlock, Panel, formatCurrency, formatDate } from "./ProjectShared";
+import { EmptyProjectBlock, Panel, formatCurrency, formatDate, useSalespersonName } from "./ProjectShared";
 import { getPrimaryQuote } from "../hooks/useProjectsData";
 import { ProjectProfitabilityWidgets } from "./ProjectProfitabilityWidgets";
 
@@ -27,21 +26,43 @@ type CreatedChantierLink = {
 function recentActivity(project: ProjectRecord) {
   const quote = getPrimaryQuote(project);
   return [
-    project.prospect ? ["Prospect cree", project.prospect.created_at] : null,
-    project.opportunity ? ["Projet cree", project.opportunity.created_at] : null,
+    project.prospect ? ["Prospect créé", project.prospect.created_at] : null,
+    project.opportunity ? ["Projet créé", project.opportunity.created_at] : null,
     quote ? [`Devis ${quote.quote_number}`, quote.created_at] : null,
-    project.chantiers[0] ? ["Chantier cree", project.chantiers[0].created_at] : null,
+    project.chantiers[0] ? ["Chantier créé", project.chantiers[0].created_at] : null,
     ...project.communications.slice(0, 5).map((communication) => [communication.subject || communication.type, communication.occurred_at] as [string, string]),
   ].filter(Boolean) as Array<[string, string | null | undefined]>;
 }
 
+/** Le compte rendu répète l'en-tête du projet : on ne garde que ce qu'il apporte. */
 function compactVisitSummary(value?: string | null) {
   const cleaned = String(value ?? "")
+    .replace(/^(Projet|Client|Adresse RDV)\s*:.*$/gim, "")
     .replace(/\s+/g, " ")
     .replace(/\b(non renseigne|Non renseignee|A assigner)\b/g, "")
     .trim();
-  if (!cleaned) return "Compte-rendu à compléter.";
+  if (!cleaned) return "Compte rendu à compléter.";
   return cleaned.length > 220 ? `${cleaned.slice(0, 220).trim()}...` : cleaned;
+}
+
+/** Les statuts et types de rendez-vous sont stockés en clés techniques. */
+function appointmentStatusLabel(value: string | null | undefined) {
+  const key = String(value ?? "").toLowerCase();
+  if (key === "planifie") return "Planifié";
+  if (key === "realise") return "Réalisé";
+  if (key === "annule") return "Annulé";
+  if (key === "reporte") return "Reporté";
+  return value || "À planifier";
+}
+
+function appointmentTypeLabel(value: string | null | undefined) {
+  const key = String(value ?? "").toLowerCase();
+  if (key.includes("pre_devis")) return "Visite de chiffrage · pré-devis";
+  if (key.includes("chiffrage")) return "Visite de chiffrage";
+  if (key.includes("qualification")) return "Qualification";
+  if (key.includes("relance")) return "Relance";
+  if (key.includes("sav")) return "SAV";
+  return String(value ?? "").replace(/_/g, " ") || "Rendez-vous";
 }
 
 function chantierStatusLabel(status: string | null | undefined) {
@@ -191,8 +212,6 @@ function ProductionContinuityPanel({ project }: { project: ProjectRecord }) {
   );
 }
 
-const SALESPERSON_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
 /**
  * Fiche d'identite du dossier. Une liste de definitions plutot que des tuiles en
  * grille fixe : une adresse ou un besoin client y tiennent sur une ligne, au lieu
@@ -222,31 +241,7 @@ function SummaryCounter({ label, value }: { label: string; value: string | numbe
 
 export function ProjectSummaryTab({ project }: { project: ProjectRecord }) {
   const openFollowUps = project.tasks.filter((task) => task.statut !== "termine" && task.statut !== "terminee").length;
-  const [salespersonName, setSalespersonName] = useState<string | null>(null);
-
-  // Le projet ne porte que l'identifiant du commercial. Afficher un UUID de 36
-  // caracteres n'apprend rien : on va chercher le nom, et on s'abstient si on ne
-  // peut pas le resoudre.
-  useEffect(() => {
-    const id = project.salesperson?.trim();
-    if (!id || !SALESPERSON_UUID.test(id)) {
-      setSalespersonName(id || null);
-      return;
-    }
-    let alive = true;
-    void listBackofficeAccounts()
-      .then((accounts) => {
-        if (!alive) return;
-        const match = accounts.find((account) => account.id === id);
-        setSalespersonName(match?.displayName || match?.email || null);
-      })
-      .catch(() => {
-        if (alive) setSalespersonName(null);
-      });
-    return () => {
-      alive = false;
-    };
-  }, [project.salesperson]);
+  const salespersonName = useSalespersonName(project.salesperson);
 
   return (
     <div className="space-y-5">
@@ -294,7 +289,7 @@ export function ProjectSummaryTab({ project }: { project: ProjectRecord }) {
 
 export function ProjectVisitsTab({ project }: { project: ProjectRecord }) {
   return (
-    <Panel title="RDV / Visites" description="Historique simple des rendez-vous commerciaux." actions={<Link to={`/projets/${project.id}/visites/nouveau`} className="text-sm font-semibold text-blue-700 hover:text-blue-800">Nouvelle visite</Link>}>
+    <Panel title="RDV / Visites" description="Les rendez-vous commerciaux de ce dossier." actions={<Link to={`/projets/${project.id}/visites/nouveau`} className="text-sm font-semibold text-blue-700 hover:text-blue-800">Nouvelle visite</Link>}>
       <div className="space-y-3">
         {project.appointments.length ? (
           project.appointments.map((appointment) => (
@@ -303,14 +298,12 @@ export function ProjectVisitsTab({ project }: { project: ProjectRecord }) {
                 <div className="min-w-0">
                   <div className="flex flex-wrap items-center gap-2">
                     <h3 className="font-semibold text-slate-950">{appointment.titre}</h3>
-                    <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-600">{appointment.statut}</span>
-                    <span className="rounded-full bg-blue-50 px-2.5 py-1 text-xs font-semibold text-blue-700">{appointment.type}</span>
+                    <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-600">{appointmentStatusLabel(appointment.statut)}</span>
+                    <span className="rounded-full bg-blue-50 px-2.5 py-1 text-xs font-semibold text-blue-700">{appointmentTypeLabel(appointment.type)}</span>
                   </div>
-                  <div className="mt-2 flex flex-wrap gap-x-5 gap-y-1 text-sm text-slate-500">
-                    <span>{formatDate(appointment.starts_at)}</span>
-                    <span>{project.clientName}</span>
-                    {project.address ? <span>{project.address}</span> : null}
-                  </div>
+                  {/* Le client et l'adresse sont dans l'en-tête du projet et identiques
+                      sur chaque carte : seule la date distingue les rendez-vous. */}
+                  <div className="mt-2 text-sm text-slate-500">{formatDate(appointment.starts_at)}</div>
                 </div>
                 <Link to={`/projets/${project.id}/visites/${appointment.id}`} className="inline-flex h-9 shrink-0 items-center justify-center rounded-xl border border-slate-200 px-3 text-sm font-semibold text-slate-900 hover:bg-slate-50">
                   Ouvrir / modifier
@@ -320,12 +313,13 @@ export function ProjectVisitsTab({ project }: { project: ProjectRecord }) {
             </article>
           ))
         ) : (
-          <EmptyProjectBlock title="Aucun rendez-vous" description="Creez une visite de qualification, de chiffrage, de validation devis, de relance ou de SAV." />
+          <EmptyProjectBlock title="Aucun rendez-vous" description="Créez une visite de qualification, de chiffrage, de validation du devis, de relance ou de SAV." />
         )}
       </div>
     </Panel>
   );
 }
+
 
 export function ProjectQuotesTab({ project }: { project: ProjectRecord }) {
   const navigate = useNavigate();
@@ -465,7 +459,7 @@ export function ProjectQuotesTab({ project }: { project: ProjectRecord }) {
   }
 
   return (
-    <Panel title="Devis" description="Pre-devis, devis final, variantes, signatures et relances." actions={<Link to={`/projets/${project.id}/devis/nouveau`} className="text-sm font-semibold text-blue-700 hover:text-blue-800">Creer devis</Link>}>
+    <Panel title="Devis" description="Pré-devis, devis final, signatures et relances." actions={<Link to={`/projets/${project.id}/devis/nouveau`} className="text-sm font-semibold text-blue-700 hover:text-blue-800">Créer un devis</Link>}>
       <div className="space-y-4">
         {automaticChantierQuoteId && chantierActionKey === automaticChantierQuoteId ? (
           <div
@@ -613,7 +607,7 @@ export function ProjectQuotesTab({ project }: { project: ProjectRecord }) {
             </table>
           </div>
         ) : (
-          <EmptyProjectBlock title="Aucun devis lie" description="Creez un pre-devis ou un devis final depuis le projet." />
+          <EmptyProjectBlock title="Aucun devis" description="Créez un pré-devis ou un devis final depuis ce projet." />
         )}
       </div>
     </Panel>
@@ -622,12 +616,7 @@ export function ProjectQuotesTab({ project }: { project: ProjectRecord }) {
 
 export function ProjectDocumentsTab({ project }: { project: ProjectRecord }) {
   return (
-    <Panel title="Documents" description="Centraliser les pieces commerciales et projet.">
-      <div className="mb-4 flex flex-wrap gap-2">
-        {["Photos", "Plans", "Documents client", "Emails", "Pieces devis", "Annexes"].map((category) => (
-          <span key={category} className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">{category}</span>
-        ))}
-      </div>
+    <Panel title="Documents" description="Les pièces commerciales du dossier.">
       {project.documents.length ? (
         <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
           {project.documents.map((document) => (
@@ -638,7 +627,7 @@ export function ProjectDocumentsTab({ project }: { project: ProjectRecord }) {
           ))}
         </div>
       ) : (
-        <EmptyProjectBlock title="Aucun document centralise" description="Importez ou rattachez les documents commerciaux depuis les visites et devis." />
+        <EmptyProjectBlock title="Aucun document" description="Les pièces jointes des visites et des devis apparaissent ici." />
       )}
     </Panel>
   );
@@ -647,7 +636,7 @@ export function ProjectDocumentsTab({ project }: { project: ProjectRecord }) {
 export function ProjectActivityTab({ project }: { project: ProjectRecord }) {
   const events = recentActivity(project);
   return (
-    <Panel title="Activite" description="Timeline commerciale du projet.">
+    <Panel title="Activité" description="Ce qui s'est passé sur ce dossier.">
       {events.length ? (
         <div className="space-y-4">
           {events.map(([label, date], index) => (
@@ -661,7 +650,7 @@ export function ProjectActivityTab({ project }: { project: ProjectRecord }) {
           ))}
         </div>
       ) : (
-        <EmptyProjectBlock title="Aucune activite" description="Les appels, emails, RDV, devis et relances apparaitront ici." />
+        <EmptyProjectBlock title="Aucune activité" description="Les rendez-vous, devis et relances apparaîtront ici." />
       )}
     </Panel>
   );
@@ -669,7 +658,7 @@ export function ProjectActivityTab({ project }: { project: ProjectRecord }) {
 
 export function ProjectSavTab({ project }: { project: ProjectRecord }) {
   return (
-    <Panel title="SAV" description="Vue legere des tickets lies au projet ou au client.">
+    <Panel title="SAV" description="Les tickets liés à ce projet ou à ce client.">
       {project.sav.length ? (
         <div className="space-y-3">
           {project.sav.map((ticket) => (
@@ -680,7 +669,7 @@ export function ProjectSavTab({ project }: { project: ProjectRecord }) {
           ))}
         </div>
       ) : (
-        <EmptyProjectBlock title="Aucun ticket SAV" description="Les demandes apres chantier liees au client apparaitront ici sans remplacer le module production SAV." />
+        <EmptyProjectBlock title="Aucun ticket SAV" description="Les demandes après chantier apparaîtront ici. Le suivi complet reste dans le module SAV." />
       )}
     </Panel>
   );
