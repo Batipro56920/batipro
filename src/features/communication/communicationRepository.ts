@@ -1,6 +1,6 @@
 import { supabase } from "../../lib/supabaseClient";
 import { getCurrentUserProfile } from "../../services/currentUserProfile.service";
-import type { Campaign, CampaignAsset, CampaignComment, CampaignItem, CampaignStatus, ChantierOption, ItemStatus, ItemType, Workspace } from "./types";
+import type { ApprovalStatus, Campaign, CampaignAsset, CampaignComment, CampaignItem, CampaignStatus, ChantierOption, InboxThread, ItemStatus, ItemType, PublicationDraftInput, PublicationVariant, SocialAccount, SocialMetricsSummary, Workspace } from "./types";
 
 const db = supabase as any;
 async function identity() {
@@ -65,3 +65,70 @@ export async function listAllAssets(): Promise<CampaignAsset[]> {
 }
 export async function listChantiers(): Promise<ChantierOption[]> { const { data, error } = await db.from("chantiers").select("id,nom,client").is("deleted_at", null).order("nom"); fail(error); return (data ?? []) as ChantierOption[]; }
 export const campaignStatusLabel: Record<CampaignStatus,string> = { draft:"Brouillon",active:"Active",paused:"En pause",completed:"Terminée",archived:"Archivée" };
+
+export async function listSocialAccounts(): Promise<SocialAccount[]> {
+  const { organizationId } = await identity();
+  const { data, error } = await db.from("communication_social_accounts").select("id,organization_id,provider,external_account_id,display_name,avatar_url,status,scopes,connected_at,updated_at").eq("organization_id", organizationId).order("provider");
+  fail(error);
+  return (data ?? []) as SocialAccount[];
+}
+
+export async function createPublicationDraft(input: PublicationDraftInput): Promise<CampaignItem> {
+  const who = await identity();
+  const status: ItemStatus = input.submitForReview ? "to_review" : "to_prepare";
+  const item = await addItem(input.campaignId, {
+    title: input.title,
+    content: input.baseContent,
+    item_type: "publication",
+    status,
+    channels: input.variants.map((variant) => variant.network),
+    chantier_id: input.chantierId,
+    scheduled_at: input.scheduledAt,
+  });
+
+  const approvalStatus: ApprovalStatus = input.submitForReview ? "review_requested" : "draft";
+  const rows = input.variants.map((variant) => ({
+    organization_id: who.organizationId,
+    item_id: item.id,
+    social_account_id: variant.socialAccountId || null,
+    network: variant.network,
+    body: variant.body,
+    link_url: variant.linkUrl || null,
+    first_comment: variant.firstComment || null,
+    approval_status: approvalStatus,
+  }));
+  const { data, error } = await db.from("communication_publication_variants").insert(rows).select("id");
+  if (error) {
+    await db.from("communication_campaign_items").delete().eq("organization_id", who.organizationId).eq("id", item.id);
+    fail(error);
+  }
+  if (input.submitForReview && data?.length) {
+    const events = data.map((variant: { id: string }) => ({ organization_id: who.organizationId, variant_id: variant.id, action: "requested", actor_name: who.name }));
+    const result = await db.from("communication_approval_events").insert(events);
+    fail(result.error);
+  }
+  return item;
+}
+
+export async function listPublicationVariants(itemId: string): Promise<PublicationVariant[]> {
+  const { organizationId } = await identity();
+  const { data, error } = await db.from("communication_publication_variants").select("id,organization_id,item_id,social_account_id,network,body,link_url,first_comment,approval_status,approved_at").eq("organization_id", organizationId).eq("item_id", itemId);
+  fail(error);
+  return (data ?? []) as PublicationVariant[];
+}
+
+export async function listInboxThreads(): Promise<InboxThread[]> {
+  const { organizationId } = await identity();
+  const { data, error } = await db.from("communication_inbox_threads").select("id,kind,contact_name,subject,status,last_message_at,communication_social_accounts(provider,display_name)").eq("organization_id", organizationId).order("last_message_at", { ascending: false });
+  fail(error);
+  return (data ?? []).map((row: any) => ({ ...row, provider: row.communication_social_accounts?.provider, account_name: row.communication_social_accounts?.display_name ?? "Compte" })) as InboxThread[];
+}
+
+export async function loadMetricsSummary(): Promise<SocialMetricsSummary> {
+  const { organizationId } = await identity();
+  const { data, error } = await db.from("communication_post_metrics").select("impressions,reach,engagements,clicks,comments,shares,leads").eq("organization_id", organizationId);
+  fail(error);
+  return (data ?? []).reduce((total: SocialMetricsSummary, row: SocialMetricsSummary) => ({
+    impressions: total.impressions + Number(row.impressions || 0), reach: total.reach + Number(row.reach || 0), engagements: total.engagements + Number(row.engagements || 0), clicks: total.clicks + Number(row.clicks || 0), comments: total.comments + Number(row.comments || 0), shares: total.shares + Number(row.shares || 0), leads: total.leads + Number(row.leads || 0),
+  }), { impressions:0, reach:0, engagements:0, clicks:0, comments:0, shares:0, leads:0 });
+}

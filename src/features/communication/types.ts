@@ -16,3 +16,70 @@ export type CampaignComment = { id: string; campaign_id: string; item_id: string
 export type CampaignAsset = { id: string; campaign_id: string; item_id: string | null; file_name: string; mime_type: string | null; file_size: number | null; signed_url?: string };
 export type ChantierOption = { id: string; nom: string; client: string | null };
 export type Workspace = { campaign: Campaign; items: CampaignItem[]; comments: CampaignComment[]; assets: CampaignAsset[] };
+
+export type SocialNetwork = "facebook" | "instagram" | "linkedin" | "google_business" | "tiktok" | "youtube";
+export type ApprovalStatus = "draft" | "review_requested" | "changes_requested" | "approved";
+export type SocialAccountStatus = "connected" | "expired" | "revoked";
+
+export type SocialAccount = {
+  id: string;
+  organization_id: string;
+  provider: SocialNetwork;
+  external_account_id: string;
+  display_name: string;
+  avatar_url: string | null;
+  status: SocialAccountStatus;
+  scopes: string[];
+  connected_at: string;
+  updated_at: string;
+};
+
+export type PublicationVariant = {
+  id: string;
+  organization_id: string;
+  item_id: string;
+  social_account_id: string | null;
+  network: SocialNetwork;
+  body: string | null;
+  link_url: string | null;
+  first_comment: string | null;
+  approval_status: ApprovalStatus;
+  approved_at: string | null;
+};
+
+export type PublicationDraftInput = {
+  campaignId: string;
+  title: string;
+  baseContent: string;
+  scheduledAt?: string;
+  chantierId?: string;
+  variants: Array<{
+    network: SocialNetwork;
+    socialAccountId?: string;
+    body: string;
+    linkUrl?: string;
+    firstComment?: string;
+  }>;
+  submitForReview: boolean;
+};
+
+export type InboxThread = {
+  id: string;
+  provider: SocialNetwork;
+  kind: "message" | "comment" | "mention" | "review";
+  contact_name: string | null;
+  subject: string | null;
+  status: "open" | "pending" | "closed";
+  last_message_at: string;
+  account_name: string;
+};
+
+export type SocialMetricsSummary = {
+  impressions: number;
+  reach: number;
+  engagements: number;
+  clicks: number;
+  comments: number;
+  shares: number;
+  leads: number;
+};
