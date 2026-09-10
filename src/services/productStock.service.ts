@@ -104,3 +104,24 @@ export async function createStockAdjustment(input: {
   });
   if (error) throw new Error(error.message);
 }
+
+/**
+ * Coût matières réellement reçu sur un chantier, d'après les prix lus sur les
+ * bons de livraison. Les mouvements sans prix ne comptent pas : mieux vaut un
+ * total incomplet et honnête qu'un chiffre inventé.
+ */
+export async function getChantierReceivedMaterialCost(chantierId: string): Promise<number> {
+  if (!chantierId) return 0;
+  const { data, error } = await (supabase as any)
+    .from("product_stock_movements")
+    .select("quantity,unit_price_ht")
+    .eq("chantier_id", chantierId)
+    .eq("movement_type", "entree")
+    .not("unit_price_ht", "is", null);
+  if (error) return 0;
+  return ((data ?? []) as Array<{ quantity: unknown; unit_price_ht: unknown }>).reduce((total, row) => {
+    const quantity = Number(row.quantity ?? 0);
+    const price = Number(row.unit_price_ht ?? 0);
+    return Number.isFinite(quantity) && Number.isFinite(price) ? total + quantity * price : total;
+  }, 0);
+}

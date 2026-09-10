@@ -276,6 +276,11 @@ export default function BudgetTab({ chantierId }: BudgetTabProps) {
           <div className="mt-1 text-xs text-slate-500">
             MO {formatMoney(dashboard?.coutMoReelHt ?? 0)} · achats {formatMoney(dashboard?.achatsReelsHt ?? 0)}
           </div>
+          {dashboard?.achatsLivresHt ? (
+            <div className="mt-0.5 text-[11px] text-slate-500">
+              dont {formatMoney(dashboard.achatsLivresHt)} lus sur les bons de livraison
+            </div>
+          ) : null}
         </div>
 
         <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">

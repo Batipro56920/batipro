@@ -5,6 +5,7 @@ import { supabase } from "../lib/supabaseClient";
 import { getTasksByChantierId, type ChantierTaskRow } from "./chantierTasks.service";
 import { listChantierPurchaseRequests, type ChantierPurchaseRequestRow } from "./chantierPurchaseRequests.service";
 import { listIntervenants } from "./intervenants.service";
+import { getChantierReceivedMaterialCost } from "./productStock.service";
 
 export type ChantierBudgetSettingsRow = {
   chantier_id: string;
@@ -44,6 +45,8 @@ export type ChantierBudgetDashboard = {
   coutMoReelHt: number;
   achatsPrevusHt: number;
   achatsReelsHt: number;
+  achatsSaisisHt: number;
+  achatsLivresHt: number;
   coutPrevuHt: number;
   coutReelHt: number;
   margePrevueHt: number;
@@ -280,13 +283,14 @@ export async function listChantierLaborCostSummaries(
 export async function loadChantierBudgetDashboard(chantierId: string): Promise<ChantierBudgetDashboard> {
   if (!chantierId) throw new Error("chantierId manquant.");
 
-  const [settingsResult, devis, tasks, timeEntries, purchaseResult, changeOrdersResult] = await Promise.all([
+  const [settingsResult, devis, tasks, timeEntries, purchaseResult, changeOrdersResult, receivedMaterialCostHt] = await Promise.all([
     getBudgetSettings(chantierId),
     listDevisByChantier(chantierId),
     getTasksByChantierId(chantierId),
     listChantierTimeEntriesByChantierId(chantierId),
     listChantierPurchaseRequests(chantierId),
     listChantierChangeOrders(chantierId),
+    getChantierReceivedMaterialCost(chantierId),
   ]);
 
   const devisLignesGroups = await Promise.all(devis.map((row) => listDevisLignes(row.id)));
@@ -359,7 +363,11 @@ export async function loadChantierBudgetDashboard(chantierId: string): Promise<C
   const coutMoPrevuHt = lots.reduce((sum, row) => sum + row.cout_mo_prevu_ht, 0);
   const coutMoReelHt = lots.reduce((sum, row) => sum + row.cout_mo_reel_ht, 0);
   const achatsPrevusHt = lots.reduce((sum, row) => sum + row.achats_prevus_ht, 0);
-  const achatsReelsHt = lots.reduce((sum, row) => sum + row.achats_reels_ht, 0);
+  const achatsSaisisHt = lots.reduce((sum, row) => sum + row.achats_reels_ht, 0);
+  // Les bons de livraison lus sur le terrain s'ajoutent aux achats saisis au
+  // bureau : ce sont deux sources distinctes du meme cout matieres.
+  const achatsLivresHt = normalizeNumber(receivedMaterialCostHt);
+  const achatsReelsHt = achatsSaisisHt + achatsLivresHt;
   const coutPrevuHt = coutMoPrevuHt + achatsPrevusHt;
   const coutReelHt = coutMoReelHt + achatsReelsHt;
   const margePrevueHt = chiffreAffairesPrevuHt - coutPrevuHt;
@@ -389,6 +397,8 @@ export async function loadChantierBudgetDashboard(chantierId: string): Promise<C
     coutMoReelHt,
     achatsPrevusHt,
     achatsReelsHt,
+    achatsSaisisHt,
+    achatsLivresHt,
     coutPrevuHt,
     coutReelHt,
     margePrevueHt,

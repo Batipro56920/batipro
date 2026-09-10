@@ -48,6 +48,44 @@ function normalizeLines(raw: unknown): SubmittedLine[] {
     .slice(0, 60);
 }
 
+
+/** Deux graphies du meme negoce ne doivent pas creer deux fournisseurs. */
+function supplierKey(value: string) {
+  return value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, "");
+}
+
+/**
+ * Rapproche le fournisseur lu sur le bon avec la liste de l'entreprise, et le
+ * cree s'il est inconnu. Sans cela le nom restait un texte libre, sans lien avec
+ * les commandes ni les encours.
+ */
+async function resolveSupplier(
+  admin: any,
+  organizationId: string | null,
+  supplierName: string | null,
+): Promise<{ id: string | null; name: string | null }> {
+  if (!supplierName) return { id: null, name: null };
+
+  const { data: existing } = await admin.from("suppliers").select("id,name").limit(200);
+  const wanted = supplierKey(supplierName);
+  const match = (existing ?? []).find((row: any) => supplierKey(String(row?.name ?? "")) === wanted);
+  if (match?.id) return { id: String(match.id), name: String(match.name ?? supplierName) };
+
+  if (!organizationId) return { id: null, name: supplierName };
+
+  const { data: created, error } = await admin
+    .from("suppliers")
+    .insert({ organization_id: organizationId, name: supplierName, specialty: "Materiaux", is_active: true })
+    .select("id,name")
+    .single();
+  if (error) return { id: null, name: supplierName };
+  return { id: created?.id ? String(created.id) : null, name: String(created?.name ?? supplierName) };
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") return json({ ok: true }, 200);
   if (req.method !== "POST") return json({ error: "Method not allowed" }, 405);
@@ -80,19 +118,6 @@ serve(async (req) => {
 
     const resolvedLines = lines.filter((line) => line.product_id);
 
-    for (const line of resolvedLines) {
-      const { error: movementError } = await admin.from("product_stock_movements").insert({
-        product_id: line.product_id,
-        movement_type: "entree",
-        quantity: line.quantity,
-        source: "declaration_terrain",
-        chantier_id: chantierId,
-        intervenant_id: intervenantId,
-        note: "Bon de livraison (portail ouvrier)",
-      });
-      if (movementError) return json({ error: movementError.message }, 400);
-    }
-
     const { data: adminProfile } = await admin
       .from("profiles")
       .select("id")
@@ -101,6 +126,25 @@ serve(async (req) => {
       .limit(1)
       .maybeSingle();
     const organizationId = adminProfile?.id ? String(adminProfile.id) : null;
+
+    const supplier = await resolveSupplier(admin, organizationId, supplierName);
+
+    for (const line of resolvedLines) {
+      const { error: movementError } = await admin.from("product_stock_movements").insert({
+        product_id: line.product_id,
+        movement_type: "entree",
+        quantity: line.quantity,
+        source: "declaration_terrain",
+        chantier_id: chantierId,
+        intervenant_id: intervenantId,
+        // Le prix lu sur le bon alimente le cout matieres reel du chantier.
+        unit_price_ht: line.unit_price_ht,
+        supplier_id: supplier.id,
+        note: "Bon de livraison (portail ouvrier)",
+      });
+      if (movementError) return json({ error: movementError.message }, 400);
+    }
+
 
     const { data: openOrders } = await admin
       .from("purchase_orders")
@@ -143,8 +187,8 @@ serve(async (req) => {
         .from("delivery_notes")
         .insert({
           organization_id: organizationId,
-          supplier_id: null,
-          supplier_name: supplierName,
+          supplier_id: supplier.id,
+          supplier_name: supplier.name ?? supplierName,
           document_reference: documentReference,
           purchase_order_id: matchedOrderId,
           chantier_id: chantierId,
