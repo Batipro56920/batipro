@@ -1,12 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
-import { Plus, RefreshCw, Search, ShoppingCart } from "lucide-react";
+import { Plus, RefreshCw, Search, ShoppingCart, Trash2 } from "lucide-react";
 import { supabase } from "../../../lib/supabaseClient";
 import { loadCrmDataset } from "../../../services/crm.service";
 import { calculateDocumentTotals } from "../../document-engine";
 import { buildProjects } from "../../projects/utils/projectMappers";
 import type { SupplierRow } from "../../../services/suppliers.service";
-import { createAndSavePurchaseOrder, listPurchaseOrders, savePurchaseOrder } from "../infrastructure/purchaseOrderRepository";
+import { createAndSavePurchaseOrder, deletePurchaseOrder, listPurchaseOrders, savePurchaseOrder } from "../infrastructure/purchaseOrderRepository";
 import { getPurchaseOrderDefaultTerms } from "../../../services/companySettings.service";
 import type { PurchaseOrderRecord, PurchaseOrderStatus } from "../domain/types";
 import { PurchaseOrderEditor } from "./PurchaseOrderEditor";
@@ -96,6 +96,7 @@ export function PurchaseOrdersPanel({
   const [chantierOptions, setChantierOptions] = useState<ChantierListOption[]>([]);
   const [projectOptions, setProjectOptions] = useState<ProjectListOption[]>([]);
   const [chantierOptionsLoaded, setChantierOptionsLoaded] = useState(false);
+  const [deletingOrderId, setDeletingOrderId] = useState<string | null>(null);
   const chantierById = useMemo(
     () => new Map(chantierOptions.map((chantier) => [chantier.id, chantier])),
     [chantierOptions],
@@ -428,6 +429,24 @@ export function PurchaseOrdersPanel({
     else clearActivePurchaseOrderParam();
   }
 
+  async function removeOrder(order: PurchaseOrderRecord) {
+    const label = order.document.number ? `le bon ${order.document.number}` : "ce bon de commande";
+    if (!window.confirm(`Supprimer definitivement ${label} ? Cette action est irreversible.`)) return;
+
+    setDeletingOrderId(order.id);
+    setError(null);
+    try {
+      await deletePurchaseOrder(order.id);
+      setOrders(await listPurchaseOrders());
+      if (selectedOrder?.id === order.id) closeOrder();
+      if (urlPurchaseOrderId === order.id) clearActivePurchaseOrderParam();
+    } catch (err: any) {
+      setError(err?.message ?? "Suppression du bon de commande impossible.");
+    } finally {
+      setDeletingOrderId(null);
+    }
+  }
+
   async function save(order: PurchaseOrderRecord) {
     const saved = await savePurchaseOrder(order);
     setOrders(await listPurchaseOrders());
@@ -701,10 +720,22 @@ export function PurchaseOrdersPanel({
                   <td className="px-4 py-3 text-slate-500">{order.expectedDeliveryDate ? formatDate(order.expectedDeliveryDate) : "-"}</td>
                   <td className="px-4 py-3"><PurchaseOrderStatusBadge status={order.status} /></td>
                   <td className="px-4 py-3 text-right font-semibold">{formatCurrency(orderTotals.totalTtc)}</td>
-                  <td className="px-4 py-3 text-right">
-                    <button type="button" className="font-semibold text-blue-700 hover:text-blue-800" onClick={() => openOrder(order)}>
-                      Ouvrir
-                    </button>
+                  <td className="px-4 py-3">
+                    <div className="flex items-center justify-end gap-3">
+                      <button type="button" className="font-semibold text-blue-700 hover:text-blue-800" onClick={() => openOrder(order)}>
+                        Ouvrir
+                      </button>
+                      <button
+                        type="button"
+                        className="inline-flex items-center gap-1 font-semibold text-red-600 hover:text-red-700 disabled:cursor-not-allowed disabled:opacity-50"
+                        onClick={() => void removeOrder(order)}
+                        disabled={deletingOrderId === order.id}
+                        title={`Supprimer definitivement le bon ${order.document.number ?? ""}`.trim()}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                        {deletingOrderId === order.id ? "Suppression..." : "Supprimer"}
+                      </button>
+                    </div>
                   </td>
                 </tr>
               );

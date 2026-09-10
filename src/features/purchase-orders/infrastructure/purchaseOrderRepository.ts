@@ -58,6 +58,16 @@ export async function savePurchaseOrder(order: PurchaseOrderRecord) {
   return fromRow(data);
 }
 
+/**
+ * Suppression definitive d'un bon de commande. Les bons de livraison et les
+ * preparations matiere qui le referencent sont detaches (contrainte "on delete
+ * set null" cote base), ils ne sont donc jamais supprimes avec lui.
+ */
+export async function deletePurchaseOrder(id: string) {
+  const { error } = await supabase.from(TABLE as any).delete().eq("id", id);
+  if (error) throw new Error(error.message);
+}
+
 export async function createAndSavePurchaseOrder(input: PurchaseOrderCreateInput = {}) {
   const [number] = await generateSequentialPurchaseOrderNumbers(1);
   const order = createPurchaseOrder({ ...input, number });
