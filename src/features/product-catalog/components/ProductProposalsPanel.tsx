@@ -52,17 +52,16 @@ export function ProductProposalsPanel({ onAccepted }: { onAccepted?: () => void 
       setError("Une désignation est nécessaire.");
       return;
     }
-    if (!Number.isFinite(price) || price <= 0) {
-      setError("Renseigne le prix d'achat : c'est lui qui alimente le coût des chantiers.");
-      return;
-    }
+    // Le prix d'achat n'est pas un prerequis : les tarifs fournisseur et de vente
+    // se renseignent dans la fiche produit. Comme le cout chantier lit le prix du
+    // catalogue a l'affichage, il se met a jour des que le prix est saisi.
     setBusyId(proposal.id);
     setError(null);
     try {
       await acceptProductProposal(proposal, {
         designation: draft.designation.trim(),
         unit: draft.unit.trim() || "u",
-        purchasePriceHt: price,
+        purchasePriceHt: Number.isFinite(price) && price > 0 ? price : 0,
         category: draft.category.trim() || null,
       });
       await refresh();
@@ -96,8 +95,8 @@ export function ProductProposalsPanel({ onAccepted }: { onAccepted?: () => void 
         <div>
           <h2 className="font-semibold text-slate-950">{proposals.length} produit(s) à créer</h2>
           <p className="mt-1 text-sm text-slate-600">
-            Vus sur un bon de livraison, absents du catalogue. Vérifie la fiche avant de l&apos;ajouter : le prix
-            d&apos;achat alimente le coût matériaux des chantiers.
+            Vus sur un bon de livraison, absents du catalogue. Le produit entre au catalogue avec ce que Coco a lu ;
+            les prix fournisseur et de vente se renseignent ensuite dans sa fiche.
           </p>
         </div>
       </div>
@@ -132,14 +131,19 @@ export function ProductProposalsPanel({ onAccepted }: { onAccepted?: () => void 
                   />
                 </label>
                 <label className="block">
-                  <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Prix d&apos;achat HT</span>
+                  <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Prix d&apos;achat HT (facultatif)</span>
                   <input
                     className="mt-1 h-9 w-full rounded-lg border border-slate-200 px-2 text-sm"
                     inputMode="decimal"
-                    placeholder={proposal.unitPriceHt === null ? "Non lu sur le bon" : ""}
+                    placeholder={proposal.unitPriceHt === null ? "À compléter dans la fiche" : ""}
                     value={draft?.purchasePriceHt ?? ""}
                     onChange={(event) => setDrafts((c) => ({ ...c, [proposal.id]: { ...c[proposal.id], purchasePriceHt: event.target.value } }))}
                   />
+                  {!String(draft?.purchasePriceHt ?? "").trim() ? (
+                    <span className="mt-1 block text-[11px] leading-4 text-slate-500">
+                      Sans prix, la réception n&apos;entre pas dans le coût du chantier tant qu&apos;il n&apos;est pas renseigné.
+                    </span>
+                  ) : null}
                 </label>
                 <label className="block">
                   <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Catégorie</span>
