@@ -226,6 +226,8 @@ export type ProductImportSignature = {
   ean: string | null;
   reference: string | null;
   tokens: string[];
+  /** Tokens contenant un chiffre : calibre, section, dimension. Ce sont eux qui separent deux variantes. */
+  specTokens: string[];
   hasIdentity: boolean;
   hasPrice: boolean;
 };
@@ -233,7 +235,13 @@ export type ProductImportSignature = {
 function identityTokens(...values: Array<string | null | undefined>): string[] {
   const tokens = normalizeKey(values.filter(Boolean).join(" "))
     .split(" ")
-    .filter((token) => token.length >= 3 && !IDENTITY_STOP_WORDS.has(token));
+    .filter((token) => {
+      if (IDENTITY_STOP_WORDS.has(token)) return false;
+      // Un calibre tient parfois en deux caracteres ("2A", "6A") et c'est
+      // justement lui qui distingue deux variantes d'une meme reference.
+      if (/\d/.test(token)) return token.length >= 2;
+      return token.length >= 3;
+    });
   return Array.from(new Set(tokens));
 }
 
@@ -242,10 +250,12 @@ export function buildImportSignature(knowledge: ProductKnowledge): ProductImport
   const supplier = knowledge.supplier.value;
   const pricing = knowledge.pricing.value;
   const tokens = identityTokens(identity.designation, identity.brand, identity.manufacturer);
+  const specTokens = tokens.filter((token) => /\d/.test(token));
   return {
     ean: normalizeText(identity.ean),
     reference: normalizeKey(identity.manufacturerReference ?? supplier.supplierReference ?? "") || null,
     tokens,
+    specTokens,
     // Une capture de tarif donne un prix mais rarement une designation complete.
     hasIdentity: tokens.length >= 2 && Boolean(normalizeText(identity.designation)),
     hasPrice: positivePrice(pricing.purchasePrice) !== null || positivePrice(pricing.recommendedSalePrice) !== null,
@@ -259,13 +269,31 @@ export function buildImportSignature(knowledge: ProductKnowledge): ProductImport
  * "Placo BA13 hydro".
  */
 export function scoreSignatureMatch(a: ProductImportSignature, b: ProductImportSignature): number {
-  if (a.ean && b.ean && a.ean === b.ean) return 1;
-  if (a.reference && b.reference && a.reference === b.reference) return 0.95;
+  // Un identifiant present des deux cotes tranche dans les deux sens : egal il
+  // prouve l'identite, different il prouve que ce sont deux produits distincts.
+  if (a.ean && b.ean) return a.ean === b.ean ? 1 : 0;
+  if (a.reference && b.reference) return a.reference === b.reference ? 0.95 : 0;
+
+  // Deux calibres qui se contredisent : "Resi9 XP 10A" n'est pas "Resi9 XP 16A",
+  // meme si tout le reste de la designation est identique. Un cote plus detaille
+  // que l'autre reste compatible : la capture de tarif est souvent plus courte
+  // que la fiche technique.
+  if (hasContradictorySpecs(a.specTokens, b.specTokens)) return 0;
+
   if (!a.tokens.length || !b.tokens.length) return 0;
   const bTokens = new Set(b.tokens);
   const shared = a.tokens.filter((token) => bTokens.has(token)).length;
   if (!shared) return 0;
   return (2 * shared) / (a.tokens.length + b.tokens.length);
+}
+
+function hasContradictorySpecs(a: string[], b: string[]): boolean {
+  if (!a.length || !b.length) return false;
+  const bSet = new Set(b);
+  const aSet = new Set(a);
+  const onlyInA = a.some((token) => !bSet.has(token));
+  const onlyInB = b.some((token) => !aSet.has(token));
+  return onlyInA && onlyInB;
 }
 
 export const PRODUCT_MATCH_THRESHOLD = 0.55;
