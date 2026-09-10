@@ -28,7 +28,7 @@ export function buildProductPatch(
   const pricing = knowledge.pricing.value;
 
   const supplierName = normalizeText(supplierInfo.supplier);
-  const supplier = supplierName ? suppliers.find((row) => normalizeKey(row.name) === normalizeKey(supplierName)) ?? null : null;
+  const supplier = findSupplierByName(suppliers, supplierName);
   const purchasePrice = positivePrice(pricing.purchasePrice) ?? extractPrice(text) ?? positivePrice(currentProduct.standardPurchasePriceHt);
   const marginRate = positiveNumber(currentProduct.targetMarginRate) ?? 30;
   const salePrice = positivePrice(pricing.recommendedSalePrice) ?? computeSalePrice(purchasePrice, marginRate) ?? positivePrice(currentProduct.recommendedSalePriceHt);
@@ -50,6 +50,42 @@ export function buildProductPatch(
     documents: [...currentProduct.documents, ...importedDocuments],
     knowledge,
   };
+}
+
+/**
+ * Rapproche un nom lu dans un document d'un fournisseur du carnet d'adresses.
+ * L'egalite stricte ne suffit pas : un site marchand signe "Rouenel" ce que
+ * Batipro enregistre sous "Rouenel Aubade". On accepte donc l'inclusion d'un
+ * nom dans l'autre, puis le partage d'un mot distinctif. En cas d'ambiguite
+ * entre deux fournisseurs aussi proches, on prefere ne rien decider.
+ */
+export function findSupplierByName(suppliers: SupplierRow[], rawName: string | null | undefined): SupplierRow | null {
+  const needle = normalizeKey(rawName ?? "");
+  if (!needle) return null;
+
+  const needleTokens = needle.split(" ").filter((token) => token.length >= 4);
+  const scored = suppliers
+    .map((row) => {
+      const name = normalizeKey(row.name);
+      if (!name) return { row, score: 0 };
+      if (name === needle) return { row, score: 3 };
+      if (containsWord(name, needle) || containsWord(needle, name)) return { row, score: 2 };
+      const nameTokens = new Set(name.split(" "));
+      return { row, score: needleTokens.some((token) => nameTokens.has(token)) ? 1 : 0 };
+    })
+    .filter((entry) => entry.score > 0)
+    .sort((a, b) => b.score - a.score);
+
+  if (!scored.length) return null;
+  const best = scored[0];
+  const tied = scored.filter((entry) => entry.score === best.score);
+  return tied.length === 1 ? best.row : null;
+}
+
+/** Inclusion sur des mots entiers : "rouenel" est dans "rouenel aubade", pas dans "rouenelle". */
+function containsWord(haystack: string, needle: string): boolean {
+  if (!needle) return false;
+  return ` ${haystack} `.includes(` ${needle} `) || haystack.startsWith(`${needle} `) || haystack.endsWith(` ${needle}`);
 }
 
 export function buildSupplierPrice(

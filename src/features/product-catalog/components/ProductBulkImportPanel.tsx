@@ -74,6 +74,7 @@ export default function ProductBulkImportPanel({
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [summary, setSummary] = useState<string | null>(null);
+  const [batchSupplierId, setBatchSupplierId] = useState("");
 
   const analyzedCount = files.filter((row) => row.status === "analyzed").length;
   const failedFiles = files.filter((row) => row.status === "failed");
@@ -95,13 +96,19 @@ export default function ProductBulkImportPanel({
       const merged = mergeProductPatches(ordered.map((row) => row.patch as ProductDraftPatch));
       const draft = { ...createEmptyProductDraft(), ...merged } as ProductCatalogDraft;
 
+      const batchSupplier = batchSupplierId ? suppliers.find((row) => row.id === batchSupplierId) ?? null : null;
+      if (!draft.mainSupplierId && batchSupplier) {
+        draft.mainSupplierId = batchSupplier.id;
+        draft.mainSupplierName = batchSupplier.name;
+      }
+
       const warnings = ordered.flatMap((row) => row.storageNotes);
       if (!draft.mainSupplierName) warnings.push("Fournisseur non identifie");
       if (!draft.standardPurchasePriceHt) warnings.push("Prix d'achat non trouve");
 
       return { id, files: ordered, draft, warnings };
     }).filter((group) => Boolean(group.draft.designation?.trim()));
-  }, [files]);
+  }, [files, batchSupplierId, suppliers]);
 
   const selectedGroups = groups.filter((group) => !excludedGroups.has(group.id) && !createdGroups.has(group.id));
 
@@ -268,6 +275,27 @@ export default function ProductBulkImportPanel({
       {analyzing ? (
         <div className="mt-4 rounded-2xl border border-blue-100 bg-white px-3 py-2 text-sm text-blue-800">
           {analyzedCount} / {files.length} fichier(s) analyse(s)...
+        </div>
+      ) : null}
+
+      {groups.length ? (
+        <div className="mt-4 flex flex-col gap-2 rounded-2xl border border-blue-100 bg-white px-3 py-3 sm:flex-row sm:items-center sm:gap-3">
+          <label htmlFor="batch-supplier" className="text-sm font-semibold text-slate-800">Fournisseur du lot</label>
+          <select
+            id="batch-supplier"
+            className="h-9 min-w-0 flex-1 rounded-xl border border-slate-200 bg-white px-2 text-sm sm:max-w-xs"
+            value={batchSupplierId}
+            disabled={busy}
+            onChange={(event) => setBatchSupplierId(event.target.value)}
+          >
+            <option value="">Laisser ce que Coco a trouve</option>
+            {suppliers.map((supplier) => (
+              <option key={supplier.id} value={supplier.id}>{supplier.name}</option>
+            ))}
+          </select>
+          <span className="text-xs text-slate-500">
+            Applique aux produits dont le fournisseur n'a pas ete trouve. Une capture de tarif ne le nomme pas toujours.
+          </span>
         </div>
       ) : null}
 
