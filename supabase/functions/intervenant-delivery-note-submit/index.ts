@@ -95,6 +95,16 @@ serve(async (req) => {
     const SUPABASE_SERVICE_ROLE_KEY = requireEnv("SUPABASE_SERVICE_ROLE_KEY");
     const admin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, { auth: { persistSession: false } });
 
+    // Le portail accepte un lien magique ou un compte connecte : sans ce second
+    // client, un compagnon connecte avec son compte n'a aucun jeton a fournir.
+    const authHeader = normalizeString(req.headers.get("authorization") ?? req.headers.get("Authorization"));
+    const sessionClient = authHeader
+      ? createClient(SUPABASE_URL, requireEnv("SUPABASE_ANON_KEY"), {
+          auth: { persistSession: false },
+          global: { headers: { Authorization: authHeader } },
+        })
+      : null;
+
     const body = await req.json().catch(() => ({}));
     const token = normalizeString(body.token);
     const chantierId = normalizeString(body.chantier_id);
@@ -105,10 +115,11 @@ serve(async (req) => {
     const documentReference = normalizeString(body.document_reference).slice(0, 80) || null;
     const lines = normalizeLines(body.lines);
 
-    if (!token) return json({ error: "auth required" }, 400);
+    if (!token && !sessionClient) return json({ error: "auth required" }, 400);
     if (!chantierId) return json({ error: "chantier_id required" }, 400);
 
-    const { data: intervenantIdRaw, error: accessError } = await admin.rpc("_intervenant_assert_chantier_access", {
+    const accessClient = token ? admin : sessionClient;
+    const { data: intervenantIdRaw, error: accessError } = await (accessClient as any).rpc("_intervenant_assert_chantier_access", {
       p_token: token,
       p_chantier_id: chantierId,
     });

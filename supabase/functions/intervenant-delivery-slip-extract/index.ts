@@ -136,12 +136,22 @@ serve(async (req) => {
       auth: { persistSession: false },
     });
 
+    // Le portail accepte un lien magique ou un compte connecte : sans ce second
+    // client, un compagnon connecte avec son compte n'a aucun jeton a fournir.
+    const authHeader = normalizeString(req.headers.get("authorization") ?? req.headers.get("Authorization"));
+    const sessionClient = authHeader
+      ? createClient(SUPABASE_URL, requireEnv("SUPABASE_ANON_KEY"), {
+          auth: { persistSession: false },
+          global: { headers: { Authorization: authHeader } },
+        })
+      : null;
+
     const formData = await req.formData();
     const token = normalizeString(formData.get("token"));
     const chantierId = normalizeString(formData.get("chantier_id"));
     const file = formData.get("file");
 
-    if (!token) return json({ error: "auth required" }, 400);
+    if (!token && !sessionClient) return json({ error: "auth required" }, 400);
     if (!chantierId) return json({ error: "chantier_id required" }, 400);
     if (!(file instanceof File)) return json({ error: "file required" }, 400);
     if (!file.size || file.size <= 0) return json({ error: "empty file" }, 400);
@@ -152,7 +162,8 @@ serve(async (req) => {
       return json({ error: "unsupported_file_type" }, 400);
     }
 
-    const { data: accessData, error: accessError } = await admin.rpc("_intervenant_assert_chantier_access", {
+    const accessClient = token ? admin : sessionClient;
+    const { data: accessData, error: accessError } = await (accessClient as any).rpc("_intervenant_assert_chantier_access", {
       p_token: token,
       p_chantier_id: chantierId,
     });

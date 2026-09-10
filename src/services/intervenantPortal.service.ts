@@ -259,6 +259,8 @@ const EDGE_ERROR_LABELS: Record<string, string> = {
   ai_invalid_response: "La lecture n'a rien donne d'exploitable. Reprends la photo.",
   intervenant_required: "Ton acces ne permet pas d'envoyer un bon sur ce chantier.",
   forbidden: "Acces refuse sur ce chantier.",
+  forbidden_token_scope: "Ce chantier ne fait pas partie de ceux qui te sont affectes.",
+  "auth required": "Session expiree : reconnecte-toi au portail.",
 };
 
 export async function edgeFunctionMessage(error: unknown, fallback: string): Promise<string> {
