@@ -12,6 +12,8 @@ import {
   type ChantierFinanceDataset,
 } from "../../services/chantierFinance.service";
 import { getChantierById, type ChantierRow } from "../../services/chantiers.service";
+import { listChantierDeliveryNotes, type DeliveryNoteRecord } from "../../services/deliveryNotes.service";
+import { getChantierMaterialLedger, type ChantierMaterialLedger } from "../../services/productStock.service";
 import { appendChantierActivityLog } from "../../services/chantierActivityLog.service";
 
 type BudgetTabProps = {
@@ -54,6 +56,8 @@ export default function BudgetTab({ chantierId }: BudgetTabProps) {
   const [dashboard, setDashboard] = useState<ChantierBudgetDashboard | null>(null);
   const [finance, setFinance] = useState<ChantierFinanceDataset | null>(null);
   const [chantier, setChantier] = useState<ChantierRow | null>(null);
+  const [deliveries, setDeliveries] = useState<DeliveryNoteRecord[]>([]);
+  const [ledger, setLedger] = useState<ChantierMaterialLedger | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -80,14 +84,18 @@ export default function BudgetTab({ chantierId }: BudgetTabProps) {
     setLoading(true);
     setError(null);
     try {
-      const [result, financeResult, chantierResult] = await Promise.all([
+      const [result, financeResult, chantierResult, deliveryRows, ledgerResult] = await Promise.all([
         loadChantierBudgetDashboard(chantierId),
         loadChantierFinanceDataset(chantierId),
         getChantierById(chantierId),
+        listChantierDeliveryNotes(chantierId).catch(() => []),
+        getChantierMaterialLedger(chantierId).catch(() => null),
       ]);
       setDashboard(result);
       setFinance(financeResult);
       setChantier(chantierResult);
+      setDeliveries(deliveryRows);
+      setLedger(ledgerResult);
       setHourlyRate(String(result.settings.taux_horaire_mo_ht));
       setMarginTargetPct(String(result.settings.objectif_marge_pct));
     } catch (err: any) {
@@ -481,11 +489,149 @@ export default function BudgetTab({ chantierId }: BudgetTabProps) {
         </form>
       </section>
 
+      <DeliveriesPanel deliveries={deliveries} ledger={ledger} />
+
       <section className="grid gap-4 xl:grid-cols-2">
         <FinanceList title="Achats / dépenses" rows={expenses.map((row) => `${row.description} · ${row.supplier_name ?? "—"} · ${formatMoney(row.amount_ht)} HT · ${row.status}`)} />
         <FinanceList title="Situations / facturation" rows={billings.map((row) => `${row.label} · ${formatMoney(row.amount_ttc)} TTC · encaissé ${formatMoney(row.paid_amount_ttc)} · ${row.payment_status}`)} />
       </section>
     </div>
+  );
+}
+
+function formatQuantity(value: number, unit: string) {
+  const amount = new Intl.NumberFormat("fr-FR", { maximumFractionDigits: 2 }).format(Number(value) || 0);
+  return unit ? `${amount} ${unit}` : amount;
+}
+
+function formatShortDate(value: string) {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  return new Intl.DateTimeFormat("fr-FR", { day: "2-digit", month: "2-digit", year: "numeric" }).format(date);
+}
+
+/**
+ * Les livraisons reçues sur le chantier, avec ce qu'elles pèsent.
+ *
+ * Le total matériaux du chantier ne disait pas d'où il venait : une réception
+ * disparaissait dans un chiffre agrégé, et un bon de livraison saisi au dépôt
+ * n'apparaissait nulle part dans le chantier. Ici chaque bon est nommé, daté et
+ * chiffré, et une ligne sans prix d'achat est signalée au lieu de compter zéro
+ * en silence.
+ */
+function DeliveriesPanel({
+  deliveries,
+  ledger,
+}: {
+  deliveries: DeliveryNoteRecord[];
+  ledger: ChantierMaterialLedger | null;
+}) {
+  const entries = ledger?.entries ?? [];
+  const byNote = new Map<string, typeof entries>();
+  const loose: typeof entries = [];
+  for (const entry of entries) {
+    if (!entry.deliveryNoteId) {
+      loose.push(entry);
+      continue;
+    }
+    const current = byNote.get(entry.deliveryNoteId) ?? [];
+    current.push(entry);
+    byNote.set(entry.deliveryNoteId, current);
+  }
+
+  const unpriced = ledger?.unpricedDesignations ?? [];
+
+  return (
+    <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <div>
+          <div className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-400">Achats livrés</div>
+          <h2 className="mt-1 text-base font-semibold text-slate-950">Bons de livraison &amp; matériaux reçus</h2>
+        </div>
+        <div className="text-sm font-semibold text-slate-900">
+          {formatMoney(ledger?.totalHt ?? 0)} HT
+        </div>
+      </div>
+
+      {deliveries.length === 0 && entries.length === 0 ? (
+        <div className="mt-4 rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-6 text-center text-sm text-slate-500">
+          Aucune livraison rattachée à ce chantier.
+        </div>
+      ) : (
+        <div className="mt-4 space-y-3">
+          {deliveries.map((note) => {
+            const noteEntries = byNote.get(note.id) ?? [];
+            const total = noteEntries.reduce((sum, entry) => sum + entry.amountHt, 0);
+            return (
+              <div key={note.id} className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+                <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm">
+                  <span className="font-semibold text-slate-900">{note.supplierName ?? "Fournisseur inconnu"}</span>
+                  {note.documentReference ? <span className="text-slate-500">· {note.documentReference}</span> : null}
+                  <span className="text-slate-400">· {formatShortDate(note.createdAt)}</span>
+                  <span
+                    className={[
+                      "rounded-full px-2 py-0.5 text-[11px] font-semibold",
+                      note.purchaseOrderId
+                        ? "bg-emerald-50 text-emerald-700"
+                        : "bg-amber-50 text-amber-700",
+                    ].join(" ")}
+                  >
+                    {note.purchaseOrderId ? "Bon de commande rapproché" : "Sans bon de commande"}
+                  </span>
+                  <span className="ml-auto font-semibold text-slate-900">{formatMoney(total)} HT</span>
+                </div>
+                {noteEntries.length ? (
+                  <div className="mt-2 space-y-1">
+                    {noteEntries.map((entry) => (
+                      <div key={entry.movementId} className="flex flex-wrap items-baseline gap-x-2 text-xs text-slate-600">
+                        <span className="text-slate-800">{entry.designation}</span>
+                        <span>· {formatQuantity(entry.quantity, entry.unit)}</span>
+                        {entry.unitPriceHt === null ? (
+                          <span className="font-semibold text-amber-700">· prix d'achat non renseigné</span>
+                        ) : (
+                          <span>
+                            · {formatMoney(entry.unitPriceHt)} /u {entry.priceSource === "bon" ? "(bon)" : "(catalogue)"}
+                          </span>
+                        )}
+                        <span className="ml-auto text-slate-800">{formatMoney(entry.amountHt)}</span>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="mt-2 text-xs text-amber-700">
+                    Aucune ligne entrée en stock : les produits attendent d'être créés au catalogue.
+                  </div>
+                )}
+              </div>
+            );
+          })}
+
+          {loose.length ? (
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+              <div className="text-sm font-semibold text-slate-900">Mouvements de stock sans bon de livraison</div>
+              <div className="mt-2 space-y-1">
+                {loose.map((entry) => (
+                  <div key={entry.movementId} className="flex flex-wrap items-baseline gap-x-2 text-xs text-slate-600">
+                    <span className="text-slate-800">{entry.designation}</span>
+                    <span>· {entry.movementType === "sortie" ? "sortie dépôt" : "entrée"}</span>
+                    <span>· {formatQuantity(entry.quantity, entry.unit)}</span>
+                    <span className="ml-auto text-slate-800">{formatMoney(entry.amountHt)}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : null}
+        </div>
+      )}
+
+      {unpriced.length ? (
+        <div className="mt-3 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-800">
+          Comptés à 0 € faute de prix d'achat dans la bibliothèque de produits : {unpriced.join(", ")}. Renseigne le prix
+          sur la fiche produit et le coût remonte ici.
+        </div>
+      ) : null}
+    </section>
   );
 }
 
