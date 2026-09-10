@@ -1,5 +1,6 @@
 ﻿import { useState } from "react";
 import type { PlanningEntryRow, PlanningTaskRow, TaskDependencyRow } from "./planning.service";
+import { addDays, diffDays, formatDate, parseDate } from "./planning.utils";
 
 type Props = {
   selectedEntry: PlanningEntryRow | null;
@@ -31,6 +32,22 @@ export default function PlanningSidebar({
   onUpdateEntryDates,
 }: Props) {
   const [predecessorPick, setPredecessorPick] = useState("");
+
+  /**
+   * Deplacer le debut d'une tache emmene la fin avec lui et conserve la duree,
+   * comme quand on fait glisser la barre dans le Gantt. Sans ca il faudrait
+   * d'abord repousser la fin, ce qui bloquait toute planification en avant.
+   */
+  function updateStartDate(entry: PlanningEntryRow, nextStart: string) {
+    if (!nextStart) return;
+    if (nextStart <= entry.end_date) {
+      onUpdateEntryDates(entry.id, nextStart, entry.end_date);
+      return;
+    }
+    const duration = diffDays(parseDate(entry.start_date), parseDate(entry.end_date));
+    const nextEnd = formatDate(addDays(parseDate(nextStart), duration));
+    onUpdateEntryDates(entry.id, nextStart, nextEnd);
+  }
   const taskDeps = selectedTask
     ? dependencies.filter(
         (d) => d.predecessor_task_id === selectedTask.id || d.successor_task_id === selectedTask.id,
@@ -72,8 +89,7 @@ export default function PlanningSidebar({
               <input
                 type="date"
                 value={selectedEntry.start_date}
-                max={selectedEntry.end_date}
-                onChange={(e) => onUpdateEntryDates(selectedEntry.id, e.target.value, selectedEntry.end_date)}
+                onChange={(e) => updateStartDate(selectedEntry, e.target.value)}
                 className="mt-0.5 w-full rounded-lg border border-slate-200 px-2 py-1 text-xs"
               />
             </label>
