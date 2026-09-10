@@ -203,7 +203,36 @@ serve(async (req) => {
       deliveryNoteId = inserted?.id ? String(inserted.id) : null;
     }
 
-    return json({ delivery_note_id: deliveryNoteId, purchase_order_id: matchedOrderId, status, lines_posted: resolvedLines.length });
+    // Les lignes sans produit du catalogue ne sont plus perdues : elles partent
+    // en proposition, pre-remplie, que le bureau valide avant toute creation.
+    const unresolvedLines = lines.filter((line) => !line.product_id);
+    let proposalsCreated = 0;
+    if (unresolvedLines.length && organizationId) {
+      const { error: proposalError } = await admin.from("product_catalog_proposals").insert(
+        unresolvedLines.map((line) => ({
+          organization_id: organizationId,
+          chantier_id: chantierId,
+          delivery_note_id: deliveryNoteId,
+          supplier_id: supplier.id,
+          supplier_name: supplier.name ?? supplierName,
+          designation: line.designation,
+          quantity: line.quantity,
+          unit: line.unit,
+          unit_price_ht: line.unit_price_ht,
+          storage_bucket: storageBucket,
+          storage_path: storagePath,
+        })),
+      );
+      if (!proposalError) proposalsCreated = unresolvedLines.length;
+    }
+
+    return json({
+      delivery_note_id: deliveryNoteId,
+      purchase_order_id: matchedOrderId,
+      status,
+      lines_posted: resolvedLines.length,
+      proposals_created: proposalsCreated,
+    });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown error";
     return json({ error: message }, 500);

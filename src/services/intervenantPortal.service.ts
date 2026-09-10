@@ -915,6 +915,7 @@ export type IntervenantDeliveryNoteSubmitResult = {
   purchaseOrderId: string | null;
   status: "matched" | "unmatched";
   linesPosted: number;
+  proposalsCreated: number;
 };
 
 /**
@@ -954,6 +955,7 @@ export async function intervenantDeliveryNoteSubmit(
     purchaseOrderId: result.purchase_order_id ? String(result.purchase_order_id) : null,
     status: result.status === "matched" ? "matched" : "unmatched",
     linesPosted: Number(result.lines_posted ?? 0),
+    proposalsCreated: Number(result.proposals_created ?? 0),
   };
 }
 

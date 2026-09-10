@@ -266,6 +266,7 @@ export default function EmployeePortalV2Page() {
   const [slipLines, setSlipLines] = useState<SlipLine[]>([]);
   const [slipStoragePath, setSlipStoragePath] = useState<string | null>(null);
   const [slipSupplier, setSlipSupplier] = useState("");
+  const [slipProposalCount, setSlipProposalCount] = useState(0);
   const [slipReference, setSlipReference] = useState("");
   const [slipStorageBucket, setSlipStorageBucket] = useState<string | null>(null);
   const [slipEditingIndex, setSlipEditingIndex] = useState<number | null>(null);
@@ -801,7 +802,8 @@ export default function EmployeePortalV2Page() {
 
   async function submitSlipLines() {
     if (!selected || slipSubmitting) return;
-    const ready = slipLines.filter((line) => line.productId && line.quantity.trim());
+    // Les lignes sans produit partent aussi : le bureau les validera en fiche produit.
+    const ready = slipLines.filter((line) => line.quantity.trim());
     if (ready.length === 0) return;
     setSlipSubmitting(true);
     setSlipError(null);
@@ -821,6 +823,7 @@ export default function EmployeePortalV2Page() {
         document_reference: slipReference.trim() || null,
       });
       setSlipDoneCount(result.linesPosted);
+      setSlipProposalCount(result.proposalsCreated);
       setSlipMatchedPo(result.status === "matched");
       setSlipLines([]);
       setSlipStoragePath(null);
@@ -1380,10 +1383,11 @@ export default function EmployeePortalV2Page() {
               </label>
 
               {slipError ? <div className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs font-semibold text-red-700">{slipError}</div> : null}
-              {slipDoneCount ? (
+              {(slipDoneCount || slipProposalCount) ? (
                 <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-700">
-                  {slipDoneCount} matériau{slipDoneCount > 1 ? "x" : ""} ajouté{slipDoneCount > 1 ? "s" : ""} au stock.{" "}
+                  {slipDoneCount ?? 0} matériau{(slipDoneCount ?? 0) > 1 ? "x" : ""} ajouté{(slipDoneCount ?? 0) > 1 ? "s" : ""} au stock.{" "}
                   {slipMatchedPo ? "Bon de commande correspondant rapproché et passé « Livré »." : "Aucun bon de commande correspondant trouvé, à traiter au bureau."}
+                  {slipProposalCount ? ` ${slipProposalCount} produit(s) inconnu(s) envoye(s) au bureau pour creation de la fiche.` : ""}
                 </div>
               ) : null}
 
@@ -1474,21 +1478,19 @@ export default function EmployeePortalV2Page() {
                   ))}
 
                   {slipLines.some((line) => !line.productId) ? (
-                    <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-900">
-                      {slipLines.filter((line) => !line.productId).length} ligne(s) sans produit associé ne seront pas
-                      enregistrées : associe-les à un produit, ou retire-les.
+                    <div className="rounded-xl border border-blue-200 bg-blue-50 px-3 py-2 text-xs font-semibold text-blue-900">
+                      {slipLines.filter((line) => !line.productId).length} ligne(s) sans produit connu partiront au bureau
+                      pour création de la fiche. Associe-les si tu reconnais le produit.
                     </div>
                   ) : null}
 
                   <button
                     type="button"
                     onClick={submitSlipLines}
-                    disabled={slipSubmitting || !slipLines.some((l) => l.productId && l.quantity.trim())}
+                    disabled={slipSubmitting || !slipLines.some((l) => l.quantity.trim())}
                     className="w-full rounded-xl bg-slate-950 px-4 py-2.5 text-sm font-bold text-white disabled:opacity-40"
                   >
-                    {slipSubmitting
-                      ? "Enregistrement..."
-                      : `Valider et mettre en stock (${slipLines.filter((l) => l.productId && l.quantity.trim()).length})`}
+                    {slipSubmitting ? "Enregistrement..." : "Valider le bon de livraison"}
                   </button>
                 </div>
               ) : null}
