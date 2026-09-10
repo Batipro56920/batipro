@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { createInvoice } from "../../invoices/application/invoiceFactory";
 import type { InvoiceRecord, InvoiceType } from "../../invoices/domain/types";
@@ -8,6 +8,7 @@ import { createQuoteBuilderFromEngine } from "../../quotes/builder/quoteBuilderM
 import { loadCrmQuoteEngineData, transformAcceptedQuoteToChantier } from "../../../services/crm.service";
 import type { ProjectRecord } from "../types";
 import { EmptyProjectBlock, Panel, formatCurrency, formatDate, useSalespersonName } from "./ProjectShared";
+import { assignProjectSalesperson, listSalespeople, type Salesperson } from "../../../services/salespeople.service";
 import { getPrimaryQuote } from "../hooks/useProjectsData";
 import { ProjectProfitabilityWidgets } from "./ProjectProfitabilityWidgets";
 
@@ -217,7 +218,7 @@ function ProductionContinuityPanel({ project }: { project: ProjectRecord }) {
  * grille fixe : une adresse ou un besoin client y tiennent sur une ligne, au lieu
  * de tomber un mot par ligne dans une colonne de 110px.
  */
-function IdentityList({ rows }: { rows: Array<[string, string | null | undefined]> }) {
+function IdentityList({ rows }: { rows: Array<[string, ReactNode]> }) {
   return (
     <dl className="grid gap-x-10 gap-y-3 lg:grid-cols-2">
       {rows.map(([label, value]) => (
@@ -239,9 +240,70 @@ function SummaryCounter({ label, value }: { label: string; value: string | numbe
   );
 }
 
-export function ProjectSummaryTab({ project }: { project: ProjectRecord }) {
+/**
+ * Attribution du dossier. Jusqu'ici le commercial etait celui qui avait cree la
+ * fiche, sans moyen de le changer : le dossier restait au nom de son createur.
+ */
+function SalespersonPicker({ project, onUpdated }: { project: ProjectRecord; onUpdated?: () => Promise<void> | void }) {
+  const [people, setPeople] = useState<Salesperson[]>([]);
+  const resolvedName = useSalespersonName(project.salesperson);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const current = project.salesperson ?? "";
+
+  useEffect(() => {
+    let alive = true;
+    void listSalespeople()
+      .then((rows) => {
+        if (alive) setPeople(rows);
+      })
+      .catch(() => {
+        if (alive) setPeople([]);
+      });
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  async function assign(value: string) {
+    setSaving(true);
+    setError(null);
+    try {
+      await assignProjectSalesperson(
+        { opportunityId: project.opportunity?.id ?? null, prospectId: project.prospect?.id ?? null },
+        value || null,
+      );
+      await onUpdated?.();
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Attribution impossible.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  // Sans liste lisible (droits restreints), on n'affiche pas un selecteur vide.
+  if (!people.length) return <>{resolvedName ?? "À assigner"}</>;
+
+  return (
+    <div className="flex flex-col gap-1">
+      <select
+        className="h-8 rounded-lg border border-slate-200 bg-white px-2 text-sm font-medium text-slate-900 disabled:opacity-60"
+        value={people.some((person) => person.id === current) ? current : ""}
+        disabled={saving}
+        onChange={(event) => void assign(event.target.value)}
+      >
+        <option value="">À assigner</option>
+        {people.map((person) => (
+          <option key={person.id} value={person.id}>{person.name}</option>
+        ))}
+      </select>
+      {error ? <span className="text-xs text-red-700">{error}</span> : null}
+    </div>
+  );
+}
+
+export function ProjectSummaryTab({ project, onUpdated }: { project: ProjectRecord; onUpdated?: () => Promise<void> | void }) {
   const openFollowUps = project.tasks.filter((task) => task.statut !== "termine" && task.statut !== "terminee").length;
-  const salespersonName = useSalespersonName(project.salesperson);
 
   return (
     <div className="space-y-5">
@@ -255,7 +317,7 @@ export function ProjectSummaryTab({ project }: { project: ProjectRecord }) {
               ["Adresse", project.address],
               ["Type de projet", project.projectType],
               ["Origine", project.sourceLabel],
-              ["Commercial", salespersonName ?? "À assigner"],
+              ["Commercial", <SalespersonPicker key="salesperson" project={project} onUpdated={onUpdated} />],
               ["Budget estimatif", formatCurrency(project.budgetEstimate)],
               ["Échéance", formatDate(project.desiredDeadline)],
               ["Prochaine action", project.nextAction],

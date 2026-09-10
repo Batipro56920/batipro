@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from "react";
-import { listBackofficeAccounts } from "../../../services/backofficeAccounts.service";
+import { listSalespeople } from "../../../services/salespeople.service";
 
 export function formatCurrency(value: number | null | undefined) {
   if (value === null || value === undefined) return "Non renseigné";
@@ -52,11 +52,10 @@ export function useSalespersonName(salespersonId: string | null | undefined): st
       return;
     }
     let alive = true;
-    void listBackofficeAccounts()
-      .then((accounts) => {
+    void listSalespeople()
+      .then((people) => {
         if (!alive) return;
-        const match = accounts.find((account) => account.id === id);
-        setName(match?.displayName || match?.email || null);
+        setName(people.find((person) => person.id === id)?.name ?? null);
       })
       .catch(() => {
         if (alive) setName(null);

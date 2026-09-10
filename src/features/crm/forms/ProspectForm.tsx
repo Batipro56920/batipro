@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { isApporteurSource, type CrmProspectRow } from "../../../services/crm.service";
 import { getApporteursAffaires, type ApporteurAffaireRow } from "../../../services/apporteurs.service";
+import { listSalespeople, type Salesperson } from "../../../services/salespeople.service";
 import { CrmModal } from "./CrmFormPrimitives";
 
 type ProspectFormState = Record<string, string>;
@@ -142,6 +143,21 @@ export default function ProspectForm({
   );
 
   const [apporteurs, setApporteurs] = useState<ApporteurAffaireRow[]>([]);
+  const [salespeople, setSalespeople] = useState<Salesperson[]>([]);
+
+  useEffect(() => {
+    let cancelled = false;
+    listSalespeople()
+      .then((rows) => {
+        if (!cancelled) setSalespeople(rows);
+      })
+      .catch(() => {
+        if (!cancelled) setSalespeople([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -259,6 +275,21 @@ export default function ProspectForm({
                 <Input form={form} setForm={setForm} name="source_person" label={detailLabel} />
               )
             ) : null}
+          </div>
+        </section>
+
+        <section className="space-y-3">
+          <div className="text-sm font-semibold text-slate-950">Attribution</div>
+          <div className="grid gap-3 md:grid-cols-2">
+            <Field label="Commercial en charge">
+              {/* Sans ce choix, le dossier restait au nom de celui qui l'avait cree. */}
+              <select className={inputClass} value={form.owner_id ?? ""} onChange={(event) => patch(setForm, "owner_id", event.target.value)}>
+                <option value="">{salespeople.length ? "A assigner" : "Liste indisponible"}</option>
+                {salespeople.map((person) => (
+                  <option key={person.id} value={person.id}>{person.name}</option>
+                ))}
+              </select>
+            </Field>
           </div>
         </section>
 

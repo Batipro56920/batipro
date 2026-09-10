@@ -148,7 +148,7 @@ export default function ProjectDetailPage() {
     if (activeTab === "documents") return <ProjectDocumentsTab project={project} />;
     if (activeTab === "activity") return <ProjectActivityTab project={project} />;
     if (activeTab === "sav") return <ProjectSavTab project={project} />;
-    return <ProjectSummaryTab project={project} />;
+    return <ProjectSummaryTab project={project} onUpdated={refresh} />;
   }, [activeTab, project]);
 
   if (loading) {
