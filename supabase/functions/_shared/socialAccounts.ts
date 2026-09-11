@@ -1,4 +1,4 @@
-import { refreshGoogleToken } from "./socialPublish.ts";
+import { refreshGoogleToken, refreshTiktokToken } from "./socialPublish.ts";
 
 export type ConnectedAccount = {
   id: string;
@@ -33,6 +33,20 @@ export async function accountAccessToken(service: any, account: ConnectedAccount
     const refreshed = await refreshGoogleToken(String(token.refresh_token));
     await service.from("communication_social_tokens")
       .update({ access_token: refreshed.accessToken, expires_at: refreshed.expiresAt, updated_at: new Date().toISOString() })
+      .eq("social_account_id", account.id);
+    return refreshed.accessToken;
+  }
+  if (token.refresh_token && account.provider === "tiktok") {
+    // TikTok renvoie un nouveau jeton de rafraichissement : garder l'ancien
+    // condamnerait le compte au prochain renouvellement.
+    const refreshed = await refreshTiktokToken(String(token.refresh_token));
+    await service.from("communication_social_tokens")
+      .update({
+        access_token: refreshed.accessToken,
+        refresh_token: refreshed.refreshToken,
+        expires_at: refreshed.expiresAt,
+        updated_at: new Date().toISOString(),
+      })
       .eq("social_account_id", account.id);
     return refreshed.accessToken;
   }

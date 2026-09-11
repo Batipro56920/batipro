@@ -97,11 +97,54 @@ async function linkedinMetrics(shareUrn: string, token: string): Promise<PostMet
   return { ...EMPTY_METRICS, engagements: likes + comments, comments };
 }
 
+/**
+ * TikTok ne mesure que des videos publiees.
+ *
+ * Ce que la diffusion a retenu est un identifiant de traitement : il faut
+ * d'abord demander a TikTok ce qu'il est devenu, car la video peut encore etre
+ * en cours d'encodage plusieurs minutes apres l'envoi.
+ */
+async function tiktokMetrics(publishId: string, token: string): Promise<PostMetrics> {
+  const status = await readJson(
+    await fetch("https://open.tiktokapis.com/v2/post/publish/status/fetch/", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ publish_id: publishId }),
+    }),
+    "Statut de la publication TikTok",
+  );
+  const postIds = status?.data?.publicaly_available_post_id ?? status?.data?.publicly_available_post_id ?? [];
+  const videoId = Array.isArray(postIds) ? String(postIds[0] ?? "") : String(postIds ?? "");
+  if (!videoId) throw new Error("Vidéo TikTok encore en traitement : mesure indisponible.");
+
+  const payload = await readJson(
+    await fetch("https://open.tiktokapis.com/v2/video/query/?fields=id,like_count,comment_count,share_count,view_count", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ filters: { video_ids: [videoId] } }),
+    }),
+    "Statistiques TikTok",
+  );
+  const video = (Array.isArray(payload?.data?.videos) ? payload.data.videos[0] : null) ?? {};
+  const likes = Number(video.like_count ?? 0);
+  const comments = Number(video.comment_count ?? 0);
+  const shares = Number(video.share_count ?? 0);
+  return {
+    impressions: 0,
+    reach: Number(video.view_count ?? 0),
+    engagements: likes + comments + shares,
+    clicks: 0,
+    comments,
+    shares,
+  };
+}
+
 export async function fetchPostMetrics(input: { provider: string; postId: string; accessToken: string }): Promise<PostMetrics> {
   switch (input.provider) {
     case "facebook": return facebookMetrics(input.postId, input.accessToken);
     case "instagram": return instagramMetrics(input.postId, input.accessToken);
     case "linkedin": return linkedinMetrics(input.postId, input.accessToken);
+    case "tiktok": return tiktokMetrics(input.postId, input.accessToken);
     case "google_business":
       // Google ne publie pas de statistiques par publication locale : seules
       // les vues de la fiche entiere existent, ce qui n'est pas comparable.

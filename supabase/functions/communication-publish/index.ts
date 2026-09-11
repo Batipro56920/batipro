@@ -1,5 +1,6 @@
 import { corsHeaders, getServiceClient, jsonResponse } from "../_shared/communicationAuth.ts";
-import { publishToNetwork, refreshGoogleToken } from "../_shared/socialPublish.ts";
+import { accountAccessToken, type ConnectedAccount } from "../_shared/socialAccounts.ts";
+import { publishToNetwork } from "../_shared/socialPublish.ts";
 
 const MAX_ATTEMPTS = 3;
 const BATCH = 10;
@@ -52,30 +53,11 @@ Deno.serve(async (req) => {
 
       const { data: account, error: accountError } = await service
         .from("communication_social_accounts")
-        .select("id, provider, external_account_id, parent_account_id, status")
+        .select("id, organization_id, provider, external_account_id, parent_account_id, display_name, status")
         .eq("id", variant.social_account_id)
         .single();
       if (accountError) throw new Error(accountError.message);
-      if (account.status !== "connected") throw new Error("Compte social déconnecté : reconnecte-le dans Connexions.");
-
-      const { data: token, error: tokenError } = await service
-        .from("communication_social_tokens")
-        .select("access_token, refresh_token, expires_at")
-        .eq("social_account_id", account.id)
-        .single();
-      if (tokenError) throw new Error("Jeton introuvable : reconnecte ce compte.");
-
-      let accessToken = String(token.access_token ?? "");
-      const expired = token.expires_at ? Date.parse(token.expires_at) < Date.now() + 60_000 : false;
-      if (expired && token.refresh_token && account.provider === "google_business") {
-        const refreshed = await refreshGoogleToken(String(token.refresh_token));
-        accessToken = refreshed.accessToken;
-        await service.from("communication_social_tokens")
-          .update({ access_token: refreshed.accessToken, expires_at: refreshed.expiresAt, updated_at: new Date().toISOString() })
-          .eq("social_account_id", account.id);
-      } else if (expired) {
-        throw new Error("Autorisation expirée : reconnecte ce compte dans Connexions.");
-      }
+      const accessToken = await accountAccessToken(service, account as ConnectedAccount);
 
       // Les médias vivent dans un dépôt privé : le réseau va les chercher
       // lui-même, il lui faut donc une adresse signée et temporaire.
@@ -85,10 +67,15 @@ Deno.serve(async (req) => {
         .eq("item_id", variant.item_id)
         .order("created_at");
       const mediaUrls: string[] = [];
+      const videoUrls: string[] = [];
       for (const asset of assets ?? []) {
-        if (!String(asset.mime_type ?? "").startsWith("image/")) continue;
+        const mime = String(asset.mime_type ?? "");
+        const isImage = mime.startsWith("image/");
+        const isVideo = mime.startsWith("video/");
+        if (!isImage && !isVideo) continue;
         const { data: signed } = await service.storage.from("communication-assets").createSignedUrl(asset.storage_path, MEDIA_TTL_SECONDS);
-        if (signed?.signedUrl) mediaUrls.push(signed.signedUrl);
+        if (!signed?.signedUrl) continue;
+        (isVideo ? videoUrls : mediaUrls).push(signed.signedUrl);
       }
 
       const result = await publishToNetwork({
@@ -99,6 +86,7 @@ Deno.serve(async (req) => {
         body: String(variant.body ?? ""),
         linkUrl: variant.link_url ? String(variant.link_url) : null,
         mediaUrls,
+        videoUrls,
       });
 
       await service.from("communication_publish_jobs").update({

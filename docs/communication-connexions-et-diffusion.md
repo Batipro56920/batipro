@@ -19,6 +19,7 @@ C'est cette adresse qu'il faut déclarer comme *redirect URI* chez chaque platef
 | Meta (Facebook + Instagram) | Une application sur developers.facebook.com, produit « Facebook Login », en mode Business | `META_APP_ID`, `META_APP_SECRET` |
 | LinkedIn | Une application sur developer.linkedin.com, rattachée à la page entreprise | `LINKEDIN_CLIENT_ID`, `LINKEDIN_CLIENT_SECRET` |
 | Google Business Profile | Un projet Google Cloud, API « Business Profile » activée, écran de consentement publié | `GOOGLE_BUSINESS_CLIENT_ID`, `GOOGLE_BUSINESS_CLIENT_SECRET` |
+| TikTok | Une application sur developers.tiktok.com, produits « Login Kit » et « Content Posting API » | `TIKTOK_CLIENT_KEY`, `TIKTOK_CLIENT_SECRET` |
 
 Les secrets se renseignent dans Supabase, rubrique Edge Functions puis Secrets. Tant qu'un secret manque, l'onglet Connexions le dit nommément et le bouton reste inactif.
 
@@ -30,6 +31,9 @@ Permissions demandées par Batipro :
 - Instagram : les mêmes, plus `instagram_basic`, `instagram_content_publish`, `instagram_manage_comments`, `instagram_manage_insights`
 - LinkedIn : `r_organization_social`, `w_organization_social`, `rw_organization_admin`
 - Google : `https://www.googleapis.com/auth/business.manage`
+- TikTok : `user.info.basic`, `video.publish`, `video.upload`, `video.list`
+
+Tant que TikTok n'a pas audité l'application, ses règles n'autorisent que des publications privées. Renseigner alors le secret `TIKTOK_PRIVACY_LEVEL` avec la valeur `SELF_ONLY` : sans lui, TikTok refuse l'envoi et le message d'erreur le dit. Une fois l'audit obtenu, supprimer ce secret pour revenir aux publications publiques.
 
 ## 3. Activer les tâches de fond
 
@@ -49,11 +53,13 @@ Dans Supabase, rubrique Integrations puis Cron, créer un travail pour chacune. 
 |---|---|---|---|
 | Facebook | Oui | Messages et commentaires | Portée, impressions, engagements, clics |
 | Instagram | Oui, média obligatoire | Messages et commentaires | Portée et engagements |
-| LinkedIn | Oui, texte et lien | Non | Réactions et commentaires |
+| LinkedIn | Oui, texte et lien | Commentaires des publications faites depuis Batipro | Réactions et commentaires |
 | Google Business | Oui | Avis, avec réponse | Non fourni par Google par publication |
+| TikTok | Oui, vidéo de 64 Mo maximum | Non, TikTok réserve les commentaires à ses partenaires | Vues, mentions j'aime, commentaires, partages |
 
 ## 5. Ce qui n'est pas encore branché
 
-- TikTok et YouTube ne sont pas pris en charge.
-- Les commentaires LinkedIn ne remontent pas dans la boîte de réception : le réseau ne les expose que publication par publication.
+- YouTube n'est pas pris en charge.
+- LinkedIn ne donne pas le nom des personnes qui commentent sans autorisation supplémentaire : la conversation s'affiche sous « Membre LinkedIn ».
+- Les commentaires LinkedIn ne remontent que pour les publications diffusées depuis Batipro, les vingt-cinq dernières par compte. Le réseau n'offre pas de vue d'ensemble.
 - Les appels aux API des réseaux n'ont jamais été exécutés contre un vrai compte, faute d'identifiants. Le premier essai réel demandera sans doute des ajustements.

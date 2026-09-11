@@ -8,10 +8,10 @@ import type { SocialAccount, SocialNetwork } from "./types";
 const PROVIDERS: Array<{ id: SocialNetwork; label: string; use: string; priority: string }> = [
   { id: "facebook", label: "Facebook Pages", use: "Publier, programmer et traiter commentaires/messages.", priority: "Prioritaire" },
   { id: "instagram", label: "Instagram professionnel", use: "Publications, médias, commentaires et statistiques.", priority: "Prioritaire" },
-  { id: "linkedin", label: "LinkedIn Page", use: "Actualités entreprise, expertise et recrutement.", priority: "Prioritaire" },
+  { id: "linkedin", label: "LinkedIn Page", use: "Actualités, commentaires et statistiques d'engagement.", priority: "Prioritaire" },
   { id: "google_business", label: "Google Business Profile", use: "Actualités locales et avis clients.", priority: "Prioritaire" },
-  { id: "tiktok", label: "TikTok", use: "Vidéos courtes et performances.", priority: "Phase 2" },
-  { id: "youtube", label: "YouTube", use: "Vidéos chantier et statistiques.", priority: "Phase 2" },
+  { id: "tiktok", label: "TikTok", use: "Vidéos courtes et vues. Pas de commentaires : TikTok ne les ouvre qu'à ses partenaires.", priority: "Publication et vues" },
+  { id: "youtube", label: "YouTube", use: "Vidéos chantier et statistiques.", priority: "Pas encore pris en charge" },
 ];
 
 const EMPTY: ConnectionsState = { providers: [], accounts: [] };

@@ -11,7 +11,7 @@
  * bouton correspondant reste inactif, avec la raison affichee.
  */
 
-export type ProviderId = "facebook" | "instagram" | "linkedin" | "google_business";
+export type ProviderId = "facebook" | "instagram" | "linkedin" | "google_business" | "tiktok";
 
 export type DiscoveredAccount = {
   externalAccountId: string;
@@ -238,6 +238,63 @@ const PROVIDERS: Record<ProviderId, ProviderAdapter> = {
           accessToken: null,
         };
       });
+    },
+  },
+  tiktok: {
+    label: "TikTok",
+    secrets: ["TIKTOK_CLIENT_KEY", "TIKTOK_CLIENT_SECRET"],
+    scopes: ["user.info.basic", "video.publish", "video.upload", "video.list"],
+    authorizeUrl(input) {
+      const params = new URLSearchParams({
+        client_key: requireEnv("TIKTOK_CLIENT_KEY"),
+        scope: PROVIDERS.tiktok.scopes.join(","),
+        response_type: "code",
+        redirect_uri: input.redirectUri,
+        state: input.state,
+      });
+      return `https://www.tiktok.com/v2/auth/authorize/?${params.toString()}`;
+    },
+    async exchange(input) {
+      const payload = await readJson(
+        await fetch("https://open.tiktokapis.com/v2/oauth/token/", {
+          method: "POST",
+          headers: { "Content-Type": "application/x-www-form-urlencoded" },
+          body: new URLSearchParams({
+            client_key: requireEnv("TIKTOK_CLIENT_KEY"),
+            client_secret: requireEnv("TIKTOK_CLIENT_SECRET"),
+            code: input.code,
+            grant_type: "authorization_code",
+            redirect_uri: input.redirectUri,
+          }),
+        }),
+        "Échange du code TikTok",
+      );
+      return {
+        accessToken: String(payload.access_token ?? ""),
+        refreshToken: payload.refresh_token ? String(payload.refresh_token) : null,
+        expiresAt: expiryFromSeconds(payload.expires_in),
+        scopes: String(payload.scope ?? "").split(/[ ,]+/).filter(Boolean),
+        // L'identifiant du compte arrive avec le jeton : inutile de le redemander.
+        openId: payload.open_id ? String(payload.open_id) : null,
+      } as TokenSet & { openId: string | null };
+    },
+    async discoverAccounts(tokens) {
+      const payload = await readJson(
+        await fetch("https://open.tiktokapis.com/v2/user/info/?fields=open_id,display_name,avatar_url", {
+          headers: { Authorization: `Bearer ${tokens.accessToken}` },
+        }),
+        "Lecture du compte TikTok",
+      );
+      const user = payload?.data?.user ?? {};
+      const openId = String(user.open_id ?? (tokens as { openId?: string }).openId ?? "");
+      if (!openId) return [];
+      return [{
+        externalAccountId: openId,
+        displayName: String(user.display_name ?? "Compte TikTok"),
+        avatarUrl: user.avatar_url ? String(user.avatar_url) : null,
+        parentAccountId: null,
+        accessToken: null,
+      }];
     },
   },
   google_business: {

@@ -15,6 +15,7 @@ export type PublishInput = {
   body: string;
   linkUrl: string | null;
   mediaUrls: string[];
+  videoUrls: string[];
 };
 
 export type PublishResult = { postId: string; url: string | null };
@@ -36,6 +37,28 @@ async function readJson(response: Response, context: string) {
     throw new Error(`${context} : ${message || response.status}`);
   }
   return payload ?? {};
+}
+
+/** TikTok expire en vingt-quatre heures : le renouvellement rend le jeton précédent caduc. */
+export async function refreshTiktokToken(refreshToken: string) {
+  const payload = await readJson(
+    await fetch("https://open.tiktokapis.com/v2/oauth/token/", {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        client_key: env("TIKTOK_CLIENT_KEY"),
+        client_secret: env("TIKTOK_CLIENT_SECRET"),
+        grant_type: "refresh_token",
+        refresh_token: refreshToken,
+      }),
+    }),
+    "Renouvellement du jeton TikTok",
+  );
+  return {
+    accessToken: String(payload.access_token ?? ""),
+    refreshToken: payload.refresh_token ? String(payload.refresh_token) : refreshToken,
+    expiresAt: new Date(Date.now() + Number(payload.expires_in ?? 86400) * 1000).toISOString(),
+  };
 }
 
 /** Le jeton Google expire en une heure : il se renouvelle avant chaque envoi. */
@@ -159,6 +182,68 @@ async function publishGoogleBusiness(input: PublishInput): Promise<PublishResult
   return { postId: String(payload.name ?? ""), url: String(payload.searchUrl ?? "") || null };
 }
 
+const TIKTOK_MAX_BYTES = 64 * 1024 * 1024;
+
+/**
+ * TikTok recoit le fichier lui-meme, pas son adresse.
+ *
+ * L'autre voie, PULL_FROM_URL, impose de prouver a TikTok qu'on possede le
+ * domaine qui heberge la video. Nos medias vivent sur un domaine Supabase :
+ * cette preuve est impossible. On televerse donc les octets.
+ */
+async function publishTiktok(input: PublishInput): Promise<PublishResult> {
+  const source = input.videoUrls[0];
+  if (!source) throw new Error("TikTok exige une vidéo : ajoute un fichier vidéo à la publication.");
+
+  const download = await fetch(source);
+  if (!download.ok) throw new Error("Vidéo illisible depuis la médiathèque.");
+  const bytes = new Uint8Array(await download.arrayBuffer());
+  if (!bytes.length) throw new Error("Vidéo vide.");
+  if (bytes.length > TIKTOK_MAX_BYTES) throw new Error("Vidéo trop lourde pour TikTok : 64 Mo maximum.");
+
+  const init = await readJson(
+    await fetch("https://open.tiktokapis.com/v2/post/publish/video/init/", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${input.accessToken}`, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        post_info: {
+          title: input.body.slice(0, 2200),
+          // Une application non auditee par TikTok ne peut publier qu'en prive :
+          // le secret permet de rester conforme sans changer le code.
+          privacy_level: Deno.env.get("TIKTOK_PRIVACY_LEVEL")?.trim() || "PUBLIC_TO_EVERYONE",
+          disable_comment: false,
+        },
+        source_info: {
+          source: "FILE_UPLOAD",
+          video_size: bytes.length,
+          chunk_size: bytes.length,
+          total_chunk_count: 1,
+        },
+      }),
+    }),
+    "Préparation de la publication TikTok",
+  );
+
+  const publishId = String(init?.data?.publish_id ?? "");
+  const uploadUrl = String(init?.data?.upload_url ?? "");
+  if (!publishId || !uploadUrl) throw new Error("TikTok n'a pas renvoyé d'adresse de téléversement.");
+
+  const upload = await fetch(uploadUrl, {
+    method: "PUT",
+    headers: {
+      "Content-Type": "video/mp4",
+      "Content-Length": String(bytes.length),
+      "Content-Range": `bytes 0-${bytes.length - 1}/${bytes.length}`,
+    },
+    body: bytes,
+  });
+  if (!upload.ok) throw new Error(`Téléversement TikTok refusé : ${upload.status}`);
+
+  // TikTok finit le traitement de son côté : la publication n'est pas encore
+  // visible, seul son identifiant de traitement existe à cet instant.
+  return { postId: publishId, url: null };
+}
+
 export async function publishToNetwork(input: PublishInput): Promise<PublishResult> {
   if (!input.body.trim()) throw new Error("Le texte de la publication est vide.");
   switch (input.provider) {
@@ -166,6 +251,7 @@ export async function publishToNetwork(input: PublishInput): Promise<PublishResu
     case "instagram": return publishInstagram(input);
     case "linkedin": return publishLinkedin(input);
     case "google_business": return publishGoogleBusiness(input);
+    case "tiktok": return publishTiktok(input);
     default: throw new Error(`Diffusion non prise en charge pour ${input.provider}.`);
   }
 }

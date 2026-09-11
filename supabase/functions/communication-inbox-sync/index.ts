@@ -30,11 +30,28 @@ Deno.serve(async (req) => {
   for (const account of accounts) {
     try {
       const token = await accountAccessToken(service, account);
+
+      // LinkedIn ne se parcourt pas par compte mais par publication : il faut
+      // donc lui donner la liste de ce que Batipro a déjà diffusé.
+      let publishedPostIds: string[] = [];
+      if (account.provider === "linkedin") {
+        const { data: posts } = await service
+          .from("communication_publish_jobs")
+          .select("provider_post_id, published_at, communication_publication_variants!inner(social_account_id)")
+          .eq("status", "published")
+          .not("provider_post_id", "is", null)
+          .eq("communication_publication_variants.social_account_id", account.id)
+          .order("published_at", { ascending: false })
+          .limit(25);
+        publishedPostIds = (posts ?? []).map((row: { provider_post_id: string }) => String(row.provider_post_id)).filter(Boolean);
+      }
+
       const threads = await fetchThreads({
         provider: account.provider,
         externalAccountId: account.external_account_id,
         parentAccountId: account.parent_account_id,
         accessToken: token,
+        publishedPostIds,
       });
 
       for (const thread of threads) {

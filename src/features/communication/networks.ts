@@ -30,7 +30,7 @@ export const CHANNELS: ChannelDefinition[] = [
   { id: "instagram", label: "Instagram", dot: "bg-pink-600", calendar: "border-pink-300 bg-pink-50 text-pink-950", limit: 2200, hint: "Accroche visuelle et hashtags ciblés", publishable: true },
   { id: "linkedin", label: "LinkedIn", dot: "bg-sky-700", calendar: "border-sky-300 bg-sky-50 text-sky-950", limit: 3000, hint: "Expertise, méthode et résultat métier", publishable: true },
   { id: "google_business", label: "Google Business", dot: "bg-amber-500", calendar: "border-amber-300 bg-amber-50 text-amber-950", limit: 1500, hint: "Actualité locale et bénéfice client", publishable: true },
-  { id: "tiktok", label: "TikTok", dot: "bg-slate-900", calendar: "border-slate-300 bg-slate-50 text-slate-950", limit: 2200, hint: "Vidéo verticale, première seconde décisive", publishable: true },
+  { id: "tiktok", label: "TikTok", dot: "bg-slate-900", calendar: "border-slate-300 bg-slate-50 text-slate-950", limit: 2200, hint: "Vidéo verticale obligatoire, 64 Mo maximum", publishable: true },
   { id: "youtube", label: "YouTube", dot: "bg-red-600", calendar: "border-red-300 bg-red-50 text-red-950", limit: 5000, hint: "Titre explicite et description détaillée", publishable: true },
   { id: "site_web", label: "Site web", dot: "bg-emerald-600", calendar: "border-emerald-300 bg-emerald-50 text-emerald-950", limit: 0, hint: "Page réalisation ou article de blog", publishable: false },
 ];
@@ -38,7 +38,7 @@ export const CHANNELS: ChannelDefinition[] = [
 /** Réseaux proposés dans le compositeur, dans l'ordre d'usage. */
 export const COMPOSER_NETWORKS = CHANNELS.filter(
   (channel): channel is ChannelDefinition & { id: SocialNetwork } =>
-    channel.publishable && ["facebook", "instagram", "linkedin", "google_business"].includes(channel.id),
+    channel.publishable && ["facebook", "instagram", "linkedin", "google_business", "tiktok"].includes(channel.id),
 );
 
 const BY_ID = new Map<string, ChannelDefinition>(CHANNELS.map((channel) => [channel.id, channel]));
