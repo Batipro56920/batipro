@@ -247,6 +247,46 @@ async function linkedinComments(organizationUrn: string, postUrns: string[], tok
   return threads;
 }
 
+/** YouTube aussi ne connait les commentaires que video par video. */
+async function youtubeComments(channelId: string, videoIds: string[], token: string): Promise<NormalizedThread[]> {
+  const threads: NormalizedThread[] = [];
+  for (const videoId of videoIds.slice(0, 25)) {
+    const payload = await readJson(
+      await fetch(
+        `https://www.googleapis.com/youtube/v3/commentThreads?part=snippet&videoId=${encodeURIComponent(videoId)}&maxResults=50&order=time`,
+        { headers: { Authorization: `Bearer ${token}` } },
+      ),
+      "Lecture des commentaires YouTube",
+    );
+    for (const item of Array.isArray(payload.items) ? payload.items : []) {
+      const top = item?.snippet?.topLevelComment;
+      const snippet = top?.snippet ?? {};
+      if (String(snippet.authorChannelId?.value ?? "") === channelId) continue;
+      const commentId = String(top?.id ?? "");
+      if (!commentId) continue;
+      threads.push({
+        providerThreadId: commentId,
+        kind: "comment",
+        contactName: snippet.authorDisplayName ? String(snippet.authorDisplayName) : null,
+        contactAvatarUrl: snippet.authorProfileImageUrl ? String(snippet.authorProfileImageUrl) : null,
+        subject: null,
+        permalink: `https://www.youtube.com/watch?v=${videoId}&lc=${commentId}`,
+        lastMessageAt: isoOr(snippet.updatedAt ?? snippet.publishedAt),
+        metadata: { commentId, videoId, channelId },
+        messages: [{
+          providerMessageId: commentId,
+          providerParentId: videoId,
+          direction: "inbound",
+          body: String(snippet.textOriginal ?? snippet.textDisplay ?? ""),
+          authorName: snippet.authorDisplayName ? String(snippet.authorDisplayName) : null,
+          sentAt: isoOr(snippet.publishedAt),
+        }],
+      });
+    }
+  }
+  return threads;
+}
+
 export async function fetchThreads(input: {
   provider: string;
   externalAccountId: string;
@@ -275,6 +315,8 @@ export async function fetchThreads(input: {
     }
     case "linkedin":
       return linkedinComments(input.externalAccountId, input.publishedPostIds ?? [], input.accessToken);
+    case "youtube":
+      return youtubeComments(input.externalAccountId, input.publishedPostIds ?? [], input.accessToken);
     // TikTok ne donne acces aux commentaires qu'aux partenaires valides :
     // l'API publique ne les expose pas.
     default:
@@ -304,6 +346,20 @@ export async function replyToThread(input: {
       "Réponse à l'avis Google",
     );
     return { providerMessageId: `${reviewName}:reply` };
+  }
+
+  if (input.provider === "youtube") {
+    const commentId = String(input.metadata?.commentId ?? "");
+    if (!commentId) throw new Error("Commentaire YouTube introuvable : relance une synchronisation.");
+    const payload = await readJson(
+      await fetch("https://www.googleapis.com/youtube/v3/comments?part=snippet", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${input.accessToken}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ snippet: { parentId: commentId, textOriginal: text } }),
+      }),
+      "Réponse au commentaire YouTube",
+    );
+    return { providerMessageId: String(payload.id ?? "") };
   }
 
   if (input.provider === "linkedin") {

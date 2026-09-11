@@ -9,6 +9,8 @@
 
 export type PublishInput = {
   provider: string;
+  /** Titre interne de la publication, seul YouTube en exige un distinct du texte. */
+  title: string;
   externalAccountId: string;
   parentAccountId: string | null;
   accessToken: string;
@@ -61,15 +63,21 @@ export async function refreshTiktokToken(refreshToken: string) {
   };
 }
 
-/** Le jeton Google expire en une heure : il se renouvelle avant chaque envoi. */
-export async function refreshGoogleToken(refreshToken: string) {
+/**
+ * Le jeton Google expire en une heure : il se renouvelle avant chaque envoi.
+ *
+ * Google Business et YouTube sont deux applications distinctes chez Google :
+ * renouveler l'une avec les identifiants de l'autre echoue.
+ */
+export async function refreshGoogleToken(refreshToken: string, provider: string) {
+  const prefix = provider === "youtube" ? "YOUTUBE" : "GOOGLE_BUSINESS";
   const payload = await readJson(
     await fetch("https://oauth2.googleapis.com/token", {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
       body: new URLSearchParams({
-        client_id: env("GOOGLE_BUSINESS_CLIENT_ID"),
-        client_secret: env("GOOGLE_BUSINESS_CLIENT_SECRET"),
+        client_id: env(`${prefix}_CLIENT_ID`),
+        client_secret: env(`${prefix}_CLIENT_SECRET`),
         grant_type: "refresh_token",
         refresh_token: refreshToken,
       }),
@@ -244,6 +252,65 @@ async function publishTiktok(input: PublishInput): Promise<PublishResult> {
   return { postId: publishId, url: null };
 }
 
+const YOUTUBE_MAX_BYTES = 128 * 1024 * 1024;
+
+/**
+ * YouTube recoit la video en deux temps : une session d'envoi, puis les octets.
+ *
+ * Le titre et la description sont deux champs distincts, ce qu'aucun autre
+ * reseau ne demande : le titre interne de la publication sert de titre, le
+ * texte valide sert de description.
+ */
+async function publishYoutube(input: PublishInput): Promise<PublishResult> {
+  const source = input.videoUrls[0];
+  if (!source) throw new Error("YouTube exige une vidéo : ajoute un fichier vidéo à la publication.");
+
+  const download = await fetch(source);
+  if (!download.ok) throw new Error("Vidéo illisible depuis la médiathèque.");
+  const bytes = new Uint8Array(await download.arrayBuffer());
+  if (!bytes.length) throw new Error("Vidéo vide.");
+  if (bytes.length > YOUTUBE_MAX_BYTES) throw new Error("Vidéo trop lourde pour cet envoi : 128 Mo maximum.");
+
+  const metadata = {
+    snippet: {
+      title: (input.title || input.body).slice(0, 100) || "Publication",
+      description: input.body.slice(0, 5000),
+      categoryId: "26",
+    },
+    status: {
+      privacyStatus: Deno.env.get("YOUTUBE_PRIVACY_STATUS")?.trim() || "public",
+      selfDeclaredMadeForKids: false,
+    },
+  };
+
+  const session = await fetch(
+    "https://www.googleapis.com/upload/youtube/v3/videos?uploadType=resumable&part=snippet,status",
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${input.accessToken}`,
+        "Content-Type": "application/json; charset=UTF-8",
+        "X-Upload-Content-Length": String(bytes.length),
+        "X-Upload-Content-Type": "video/*",
+      },
+      body: JSON.stringify(metadata),
+    },
+  );
+  if (!session.ok) await readJson(session, "Préparation de l'envoi YouTube");
+  const uploadUrl = session.headers.get("location") ?? session.headers.get("Location") ?? "";
+  if (!uploadUrl) throw new Error("YouTube n'a pas renvoyé d'adresse d'envoi.");
+
+  const upload = await fetch(uploadUrl, {
+    method: "PUT",
+    headers: { "Content-Type": "video/*", "Content-Length": String(bytes.length) },
+    body: bytes,
+  });
+  const payload = await readJson(upload, "Envoi de la vidéo YouTube");
+  const videoId = String(payload.id ?? "");
+  if (!videoId) throw new Error("YouTube n'a pas renvoyé d'identifiant de vidéo.");
+  return { postId: videoId, url: `https://www.youtube.com/watch?v=${videoId}` };
+}
+
 export async function publishToNetwork(input: PublishInput): Promise<PublishResult> {
   if (!input.body.trim()) throw new Error("Le texte de la publication est vide.");
   switch (input.provider) {
@@ -252,6 +319,7 @@ export async function publishToNetwork(input: PublishInput): Promise<PublishResu
     case "linkedin": return publishLinkedin(input);
     case "google_business": return publishGoogleBusiness(input);
     case "tiktok": return publishTiktok(input);
+    case "youtube": return publishYoutube(input);
     default: throw new Error(`Diffusion non prise en charge pour ${input.provider}.`);
   }
 }

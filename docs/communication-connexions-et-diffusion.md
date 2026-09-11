@@ -20,6 +20,9 @@ C'est cette adresse qu'il faut déclarer comme *redirect URI* chez chaque platef
 | LinkedIn | Une application sur developer.linkedin.com, rattachée à la page entreprise | `LINKEDIN_CLIENT_ID`, `LINKEDIN_CLIENT_SECRET` |
 | Google Business Profile | Un projet Google Cloud, API « Business Profile » activée, écran de consentement publié | `GOOGLE_BUSINESS_CLIENT_ID`, `GOOGLE_BUSINESS_CLIENT_SECRET` |
 | TikTok | Une application sur developers.tiktok.com, produits « Login Kit » et « Content Posting API » | `TIKTOK_CLIENT_KEY`, `TIKTOK_CLIENT_SECRET` |
+| YouTube | Un projet Google Cloud, API « YouTube Data API v3 » activée, écran de consentement publié | `YOUTUBE_CLIENT_ID`, `YOUTUBE_CLIENT_SECRET` |
+
+Google Business et YouTube sont deux applications distinctes, même dans un seul projet Google Cloud. Leurs identifiants ne sont pas interchangeables.
 
 Les secrets se renseignent dans Supabase, rubrique Edge Functions puis Secrets. Tant qu'un secret manque, l'onglet Connexions le dit nommément et le bouton reste inactif.
 
@@ -32,6 +35,7 @@ Permissions demandées par Batipro :
 - LinkedIn : `r_organization_social`, `w_organization_social`, `rw_organization_admin`
 - Google : `https://www.googleapis.com/auth/business.manage`
 - TikTok : `user.info.basic`, `video.publish`, `video.upload`, `video.list`
+- YouTube : `youtube.upload`, `youtube.force-ssl`
 
 Tant que TikTok n'a pas audité l'application, ses règles n'autorisent que des publications privées. Renseigner alors le secret `TIKTOK_PRIVACY_LEVEL` avec la valeur `SELF_ONLY` : sans lui, TikTok refuse l'envoi et le message d'erreur le dit. Une fois l'audit obtenu, supprimer ce secret pour revenir aux publications publiques.
 
@@ -56,10 +60,14 @@ Dans Supabase, rubrique Integrations puis Cron, créer un travail pour chacune. 
 | LinkedIn | Oui, texte et lien | Commentaires des publications faites depuis Batipro | Réactions et commentaires |
 | Google Business | Oui | Avis, avec réponse | Non fourni par Google par publication |
 | TikTok | Oui, vidéo de 64 Mo maximum | Non, TikTok réserve les commentaires à ses partenaires | Vues, mentions j'aime, commentaires, partages |
+| YouTube | Oui, vidéo de 128 Mo maximum | Commentaires des vidéos publiées depuis Batipro | Vues, mentions j'aime, commentaires |
 
-## 5. Ce qui n'est pas encore branché
+Sur YouTube, le titre interne de la publication devient le titre de la vidéo, limité à 100 caractères, et le texte validé devient la description. Les vidéos partent publiques ; pour les mettre en privé le temps des essais, renseigner le secret `YOUTUBE_PRIVACY_STATUS` avec la valeur `private`.
 
-- YouTube n'est pas pris en charge.
+## 5. Limites imposées par les réseaux
+
 - LinkedIn ne donne pas le nom des personnes qui commentent sans autorisation supplémentaire : la conversation s'affiche sous « Membre LinkedIn ».
 - Les commentaires LinkedIn ne remontent que pour les publications diffusées depuis Batipro, les vingt-cinq dernières par compte. Le réseau n'offre pas de vue d'ensemble.
+- YouTube ne donne pas les impressions dans l'API utilisée ici : ce sont les vues qui font foi. Les impressions existent dans l'API Analytics, qui demande une autorisation supplémentaire.
+- Les vidéos transitent par la fonction serveur, qui les télécharge puis les renvoie au réseau. Au-delà d'une centaine de mégaoctets, il faudra passer par un envoi en plusieurs morceaux.
 - Les appels aux API des réseaux n'ont jamais été exécutés contre un vrai compte, faute d'identifiants. Le premier essai réel demandera sans doute des ajustements.

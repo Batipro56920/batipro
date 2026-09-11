@@ -44,7 +44,7 @@ Deno.serve(async (req) => {
     try {
       const { data: variant, error: variantError } = await service
         .from("communication_publication_variants")
-        .select("id, item_id, network, body, link_url, approval_status, social_account_id")
+        .select("id, item_id, network, body, link_url, approval_status, social_account_id, communication_campaign_items(title)")
         .eq("id", job.variant_id)
         .single();
       if (variantError) throw new Error(variantError.message);
@@ -80,6 +80,8 @@ Deno.serve(async (req) => {
 
       const result = await publishToNetwork({
         provider: String(account.provider),
+        // YouTube veut un titre court distinct de la description.
+        title: String((variant as { communication_campaign_items?: { title?: string } }).communication_campaign_items?.title ?? ""),
         externalAccountId: String(account.external_account_id),
         parentAccountId: account.parent_account_id ? String(account.parent_account_id) : null,
         accessToken,

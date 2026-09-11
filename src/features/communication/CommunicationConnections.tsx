@@ -11,7 +11,7 @@ const PROVIDERS: Array<{ id: SocialNetwork; label: string; use: string; priority
   { id: "linkedin", label: "LinkedIn Page", use: "Actualités, commentaires et statistiques d'engagement.", priority: "Prioritaire" },
   { id: "google_business", label: "Google Business Profile", use: "Actualités locales et avis clients.", priority: "Prioritaire" },
   { id: "tiktok", label: "TikTok", use: "Vidéos courtes et vues. Pas de commentaires : TikTok ne les ouvre qu'à ses partenaires.", priority: "Publication et vues" },
-  { id: "youtube", label: "YouTube", use: "Vidéos chantier et statistiques.", priority: "Pas encore pris en charge" },
+  { id: "youtube", label: "YouTube", use: "Vidéos chantier, commentaires et vues.", priority: "Complet" },
 ];
 
 const EMPTY: ConnectionsState = { providers: [], accounts: [] };

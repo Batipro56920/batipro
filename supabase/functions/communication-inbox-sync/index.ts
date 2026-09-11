@@ -31,10 +31,10 @@ Deno.serve(async (req) => {
     try {
       const token = await accountAccessToken(service, account);
 
-      // LinkedIn ne se parcourt pas par compte mais par publication : il faut
-      // donc lui donner la liste de ce que Batipro a déjà diffusé.
+      // LinkedIn et YouTube ne se parcourent pas par compte mais par
+      // publication : il faut leur donner la liste de ce que Batipro a diffusé.
       let publishedPostIds: string[] = [];
-      if (account.provider === "linkedin") {
+      if (account.provider === "linkedin" || account.provider === "youtube") {
         const { data: posts } = await service
           .from("communication_publish_jobs")
           .select("provider_post_id, published_at, communication_publication_variants!inner(social_account_id)")

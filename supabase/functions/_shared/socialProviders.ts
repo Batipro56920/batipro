@@ -11,7 +11,7 @@
  * bouton correspondant reste inactif, avec la raison affichee.
  */
 
-export type ProviderId = "facebook" | "instagram" | "linkedin" | "google_business" | "tiktok";
+export type ProviderId = "facebook" | "instagram" | "linkedin" | "google_business" | "tiktok" | "youtube";
 
 export type DiscoveredAccount = {
   externalAccountId: string;
@@ -295,6 +295,68 @@ const PROVIDERS: Record<ProviderId, ProviderAdapter> = {
         parentAccountId: null,
         accessToken: null,
       }];
+    },
+  },
+  youtube: {
+    label: "YouTube",
+    secrets: ["YOUTUBE_CLIENT_ID", "YOUTUBE_CLIENT_SECRET"],
+    scopes: [
+      "https://www.googleapis.com/auth/youtube.upload",
+      "https://www.googleapis.com/auth/youtube.force-ssl",
+    ],
+    authorizeUrl(input) {
+      const params = new URLSearchParams({
+        client_id: requireEnv("YOUTUBE_CLIENT_ID"),
+        redirect_uri: input.redirectUri,
+        response_type: "code",
+        access_type: "offline",
+        prompt: "consent",
+        include_granted_scopes: "true",
+        scope: PROVIDERS.youtube.scopes.join(" "),
+        state: input.state,
+      });
+      return `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`;
+    },
+    async exchange(input) {
+      const payload = await readJson(
+        await fetch("https://oauth2.googleapis.com/token", {
+          method: "POST",
+          headers: { "Content-Type": "application/x-www-form-urlencoded" },
+          body: new URLSearchParams({
+            client_id: requireEnv("YOUTUBE_CLIENT_ID"),
+            client_secret: requireEnv("YOUTUBE_CLIENT_SECRET"),
+            redirect_uri: input.redirectUri,
+            grant_type: "authorization_code",
+            code: input.code,
+          }),
+        }),
+        "Échange du code YouTube",
+      );
+      if (!payload.refresh_token) {
+        throw new Error("Google n'a pas renvoyé de refresh token. Révoque l'accès dans ton compte Google puis reconnecte.");
+      }
+      return {
+        accessToken: String(payload.access_token ?? ""),
+        refreshToken: String(payload.refresh_token),
+        expiresAt: expiryFromSeconds(payload.expires_in),
+        scopes: String(payload.scope ?? "").split(/s+/).filter(Boolean),
+      };
+    },
+    async discoverAccounts(tokens) {
+      const payload = await readJson(
+        await fetch("https://www.googleapis.com/youtube/v3/channels?part=snippet&mine=true", {
+          headers: { Authorization: `Bearer ${tokens.accessToken}` },
+        }),
+        "Lecture de la chaîne YouTube",
+      );
+      const items = Array.isArray(payload.items) ? payload.items : [];
+      return items.map((channel: any) => ({
+        externalAccountId: String(channel.id ?? ""),
+        displayName: String(channel?.snippet?.title ?? "Chaîne YouTube"),
+        avatarUrl: channel?.snippet?.thumbnails?.default?.url ?? null,
+        parentAccountId: null,
+        accessToken: null,
+      })).filter((account: { externalAccountId: string }) => account.externalAccountId);
     },
   },
   google_business: {

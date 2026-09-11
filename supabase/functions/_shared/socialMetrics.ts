@@ -139,12 +139,40 @@ async function tiktokMetrics(publishId: string, token: string): Promise<PostMetr
   };
 }
 
+/**
+ * YouTube publie des compteurs, pas des impressions.
+ *
+ * Les impressions existent dans l'API Analytics, qui demande une autorisation
+ * supplementaire et un autre raisonnement : tant qu'on ne l'a pas, le nombre de
+ * vues fait foi et les impressions restent absentes.
+ */
+async function youtubeMetrics(videoId: string, token: string): Promise<PostMetrics> {
+  const payload = await readJson(
+    await fetch(`https://www.googleapis.com/youtube/v3/videos?part=statistics&id=${encodeURIComponent(videoId)}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    }),
+    "Statistiques YouTube",
+  );
+  const stats = (Array.isArray(payload.items) ? payload.items[0]?.statistics : null) ?? {};
+  const likes = Number(stats.likeCount ?? 0);
+  const comments = Number(stats.commentCount ?? 0);
+  return {
+    impressions: 0,
+    reach: Number(stats.viewCount ?? 0),
+    engagements: likes + comments,
+    clicks: 0,
+    comments,
+    shares: 0,
+  };
+}
+
 export async function fetchPostMetrics(input: { provider: string; postId: string; accessToken: string }): Promise<PostMetrics> {
   switch (input.provider) {
     case "facebook": return facebookMetrics(input.postId, input.accessToken);
     case "instagram": return instagramMetrics(input.postId, input.accessToken);
     case "linkedin": return linkedinMetrics(input.postId, input.accessToken);
     case "tiktok": return tiktokMetrics(input.postId, input.accessToken);
+    case "youtube": return youtubeMetrics(input.postId, input.accessToken);
     case "google_business":
       // Google ne publie pas de statistiques par publication locale : seules
       // les vues de la fiche entiere existent, ce qui n'est pas comparable.

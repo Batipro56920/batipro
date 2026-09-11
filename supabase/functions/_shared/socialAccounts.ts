@@ -29,8 +29,8 @@ export async function accountAccessToken(service: any, account: ConnectedAccount
   const expired = token.expires_at ? Date.parse(token.expires_at) < Date.now() + 60_000 : false;
   if (!expired) return String(token.access_token ?? "");
 
-  if (token.refresh_token && account.provider === "google_business") {
-    const refreshed = await refreshGoogleToken(String(token.refresh_token));
+  if (token.refresh_token && (account.provider === "google_business" || account.provider === "youtube")) {
+    const refreshed = await refreshGoogleToken(String(token.refresh_token), account.provider);
     await service.from("communication_social_tokens")
       .update({ access_token: refreshed.accessToken, expires_at: refreshed.expiresAt, updated_at: new Date().toISOString() })
       .eq("social_account_id", account.id);
