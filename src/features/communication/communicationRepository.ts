@@ -1,7 +1,7 @@
 import { supabase } from "../../lib/supabaseClient";
 import { getCurrentUserProfile } from "../../services/currentUserProfile.service";
 import { normalizeChannels } from "./networks";
-import type { ApprovalStatus, Campaign, CampaignAsset, CampaignComment, CampaignItem, CampaignStatus, ChantierOption, InboxThread, ItemStatus, ItemType, PublicationDraftInput, PublicationVariant, ReviewPublication, SocialAccount, SocialMetricsSummary, SocialNetwork, Workspace } from "./types";
+import type { ApprovalStatus, Campaign, CampaignAsset, CampaignComment, CampaignItem, CampaignStatus, ChantierOption, InboxThread, ItemStatus, ItemType, PublicationDraftInput, PublicationVariant, ReviewPublication, SocialAccount, PublishJob, SocialMetricsSummary, SocialNetwork, Workspace } from "./types";
 
 const db = supabase as any;
 async function identity() {
@@ -38,7 +38,8 @@ export async function loadWorkspace(id: string): Promise<Workspace> {
     const { data } = await supabase.storage.from("communication-assets").createSignedUrl(asset.storage_path, 3600);
     return { ...asset, signed_url: data?.signedUrl } as CampaignAsset;
   }));
-  return { campaign: withChannels(campaignQ.data) as Campaign, items: (itemsQ.data ?? []).map(withChannels) as CampaignItem[], comments: commentsQ.data as CampaignComment[], assets };
+  const items = (itemsQ.data ?? []).map(withChannels) as CampaignItem[];
+  return { campaign: withChannels(campaignQ.data) as Campaign, items, comments: commentsQ.data as CampaignComment[], assets, jobs: await listPublishJobs(items.map((item) => item.id)) };
 }
 export async function updateCampaign(id: string, patch: Partial<Pick<Campaign,"title"|"objective"|"audience"|"brief"|"status"|"channels"|"start_date"|"end_date">>) {
   const { organizationId } = await identity();
@@ -253,4 +254,32 @@ export async function startSocialConnection(provider: SocialNetwork): Promise<st
   const authUrl = String(payload?.authUrl ?? "");
   if (!authUrl) throw new Error("Le serveur n'a pas renvoyé d'adresse d'autorisation.");
   return authUrl;
+}
+
+/**
+ * État de diffusion des publications d'une campagne.
+ *
+ * Une diffusion qui échoue laissait la publication en "planifiée" pour
+ * toujours, sans rien dire. Le message du réseau doit remonter jusqu'à la
+ * carte, sinon personne ne saura que rien n'est parti.
+ */
+export async function listPublishJobs(itemIds: string[]): Promise<PublishJob[]> {
+  if (!itemIds.length) return [];
+  const { organizationId } = await identity();
+  const { data, error } = await db
+    .from("communication_publish_jobs")
+    .select("id,status,scheduled_at,published_at,provider_url,last_error,communication_publication_variants!inner(item_id,network)")
+    .eq("organization_id", organizationId)
+    .in("communication_publication_variants.item_id", itemIds);
+  if (error) return [];
+  return (data ?? []).map((row: any) => ({
+    id: String(row.id),
+    itemId: String(row.communication_publication_variants?.item_id ?? ""),
+    network: String(row.communication_publication_variants?.network ?? ""),
+    status: row.status,
+    scheduledAt: row.scheduled_at ?? null,
+    publishedAt: row.published_at ?? null,
+    providerUrl: row.provider_url ?? null,
+    lastError: row.last_error ?? null,
+  }));
 }

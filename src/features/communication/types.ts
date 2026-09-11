@@ -15,7 +15,18 @@ export type CampaignItem = {
 export type CampaignComment = { id: string; campaign_id: string; item_id: string | null; body: string; author_name: string | null; created_at: string };
 export type CampaignAsset = { id: string; campaign_id: string; item_id: string | null; file_name: string; mime_type: string | null; file_size: number | null; signed_url?: string };
 export type ChantierOption = { id: string; nom: string; client: string | null };
-export type Workspace = { campaign: Campaign; items: CampaignItem[]; comments: CampaignComment[]; assets: CampaignAsset[] };
+export type PublishJobStatus = "queued" | "processing" | "published" | "failed" | "cancelled";
+export type PublishJob = {
+  id: string;
+  itemId: string;
+  network: string;
+  status: PublishJobStatus;
+  scheduledAt: string | null;
+  publishedAt: string | null;
+  providerUrl: string | null;
+  lastError: string | null;
+};
+export type Workspace = { campaign: Campaign; items: CampaignItem[]; comments: CampaignComment[]; assets: CampaignAsset[]; jobs: PublishJob[] };
 
 export type SocialNetwork = "facebook" | "instagram" | "linkedin" | "google_business" | "tiktok" | "youtube";
 export type ApprovalStatus = "draft" | "review_requested" | "changes_requested" | "approved";
