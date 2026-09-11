@@ -31,22 +31,29 @@ Permissions demandées par Batipro :
 - LinkedIn : `r_organization_social`, `w_organization_social`, `rw_organization_admin`
 - Google : `https://www.googleapis.com/auth/business.manage`
 
-## 3. Activer la diffusion automatique
+## 3. Activer les tâches de fond
 
-Une publication validée et planifiée crée un travail de diffusion. Un service doit venir vider cette file. Il n'est pas encore programmé.
+Trois fonctions serveur tournent en arrière-plan. Aucune n'est encore programmée.
 
-Dans Supabase, rubrique Integrations puis Cron, créer un travail :
+Dans Supabase, rubrique Integrations puis Cron, créer un travail pour chacune. Type Edge Function, avec l'en-tête HTTP `x-communication-cron` portant la valeur du secret `COMMUNICATION_CRON_SECRET`, lisible dans Edge Functions puis Secrets. Sans cet en-tête la fonction répond « Appel non autorisé », pour que personne d'autre ne la déclenche.
 
-- Nom : `communication-publish`
-- Fréquence : toutes les 5 minutes
-- Type : Edge Function, fonction `communication-publish`
-- En-tête HTTP : `x-communication-cron` avec la valeur du secret `COMMUNICATION_CRON_SECRET`, lisible dans Edge Functions puis Secrets
+| Fonction | Fréquence conseillée | Rôle |
+|---|---|---|
+| `communication-publish` | toutes les 5 minutes | Diffuse les publications validées dont l'heure est venue |
+| `communication-inbox-sync` | toutes les 15 minutes | Récupère messages, commentaires et avis |
+| `communication-metrics-sync` | toutes les 6 heures | Relève les chiffres des publications diffusées |
 
-Sans cet en-tête la fonction répond « Appel non autorisé », pour que personne d'autre ne déclenche de diffusion.
+## 4. Ce que couvre chaque réseau
 
-## 4. Ce qui n'est pas encore branché
+| | Publier | Boîte de réception | Statistiques |
+|---|---|---|---|
+| Facebook | Oui | Messages et commentaires | Portée, impressions, engagements, clics |
+| Instagram | Oui, média obligatoire | Messages et commentaires | Portée et engagements |
+| LinkedIn | Oui, texte et lien | Non | Réactions et commentaires |
+| Google Business | Oui | Avis, avec réponse | Non fourni par Google par publication |
 
-- La boîte de réception n'affiche que ce qui est en base et rien ne l'alimente : la synchronisation des messages, commentaires et avis reste à écrire.
-- Les statistiques additionnent une table que rien ne remplit.
+## 5. Ce qui n'est pas encore branché
+
 - TikTok et YouTube ne sont pas pris en charge.
+- Les commentaires LinkedIn ne remontent pas dans la boîte de réception : le réseau ne les expose que publication par publication.
 - Les appels aux API des réseaux n'ont jamais été exécutés contre un vrai compte, faute d'identifiants. Le premier essai réel demandera sans doute des ajustements.

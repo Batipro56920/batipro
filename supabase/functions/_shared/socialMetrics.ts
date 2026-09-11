@@ -1,0 +1,112 @@
+/**
+ * Mesures d'une publication diffusee.
+ *
+ * Chaque reseau nomme ses compteurs autrement et n'expose pas les memes. Ce
+ * module ramene ce qui existe et laisse a zero ce qui n'existe pas, plutot que
+ * d'inventer une equivalence : un chiffre absent doit rester absent.
+ */
+
+const META_VERSION = "v21.0";
+
+export type PostMetrics = {
+  impressions: number;
+  reach: number;
+  engagements: number;
+  clicks: number;
+  comments: number;
+  shares: number;
+};
+
+export const EMPTY_METRICS: PostMetrics = { impressions: 0, reach: 0, engagements: 0, clicks: 0, comments: 0, shares: 0 };
+
+async function readJson(response: Response, context: string) {
+  const text = await response.text();
+  let payload: any = null;
+  try { payload = text ? JSON.parse(text) : null; } catch { payload = null; }
+  if (!response.ok) {
+    const message = payload?.error?.message ?? payload?.message ?? text.slice(0, 300);
+    throw new Error(`${context} : ${message || response.status}`);
+  }
+  return payload ?? {};
+}
+
+function metaInsightValues(payload: any): Record<string, number> {
+  const values: Record<string, number> = {};
+  for (const entry of Array.isArray(payload?.data) ? payload.data : []) {
+    const name = String(entry?.name ?? "");
+    const value = Number(entry?.values?.[0]?.value ?? 0);
+    if (name) values[name] = Number.isFinite(value) ? value : 0;
+  }
+  return values;
+}
+
+async function facebookMetrics(postId: string, token: string): Promise<PostMetrics> {
+  const insightParams = new URLSearchParams({
+    access_token: token,
+    metric: "post_impressions,post_impressions_unique,post_engaged_users,post_clicks",
+  });
+  const [insights, post] = await Promise.all([
+    readJson(await fetch(`https://graph.facebook.com/${META_VERSION}/${postId}/insights?${insightParams.toString()}`), "Statistiques Facebook"),
+    readJson(
+      await fetch(`https://graph.facebook.com/${META_VERSION}/${postId}?fields=shares,comments.summary(true)&access_token=${encodeURIComponent(token)}`),
+      "Publication Facebook",
+    ),
+  ]);
+  const values = metaInsightValues(insights);
+  return {
+    impressions: values.post_impressions ?? 0,
+    reach: values.post_impressions_unique ?? 0,
+    engagements: values.post_engaged_users ?? 0,
+    clicks: values.post_clicks ?? 0,
+    comments: Number(post?.comments?.summary?.total_count ?? 0),
+    shares: Number(post?.shares?.count ?? 0),
+  };
+}
+
+async function instagramMetrics(mediaId: string, token: string): Promise<PostMetrics> {
+  const params = new URLSearchParams({ access_token: token, metric: "reach,likes,comments,shares,saved" });
+  const payload = await readJson(
+    await fetch(`https://graph.facebook.com/${META_VERSION}/${mediaId}/insights?${params.toString()}`),
+    "Statistiques Instagram",
+  );
+  const values = metaInsightValues(payload);
+  const likes = values.likes ?? 0;
+  const comments = values.comments ?? 0;
+  const shares = values.shares ?? 0;
+  const saved = values.saved ?? 0;
+  return {
+    // Instagram ne publie plus d'impressions par media : la portee fait foi.
+    impressions: 0,
+    reach: values.reach ?? 0,
+    engagements: likes + comments + shares + saved,
+    clicks: 0,
+    comments,
+    shares,
+  };
+}
+
+async function linkedinMetrics(shareUrn: string, token: string): Promise<PostMetrics> {
+  const payload = await readJson(
+    await fetch(`https://api.linkedin.com/rest/socialActions/${encodeURIComponent(shareUrn)}`, {
+      headers: { Authorization: `Bearer ${token}`, "LinkedIn-Version": "202409", "X-Restli-Protocol-Version": "2.0.0" },
+    }),
+    "Statistiques LinkedIn",
+  );
+  const likes = Number(payload?.likesSummary?.totalLikes ?? 0);
+  const comments = Number(payload?.commentsSummary?.totalFirstLevelComments ?? 0);
+  return { ...EMPTY_METRICS, engagements: likes + comments, comments };
+}
+
+export async function fetchPostMetrics(input: { provider: string; postId: string; accessToken: string }): Promise<PostMetrics> {
+  switch (input.provider) {
+    case "facebook": return facebookMetrics(input.postId, input.accessToken);
+    case "instagram": return instagramMetrics(input.postId, input.accessToken);
+    case "linkedin": return linkedinMetrics(input.postId, input.accessToken);
+    case "google_business":
+      // Google ne publie pas de statistiques par publication locale : seules
+      // les vues de la fiche entiere existent, ce qui n'est pas comparable.
+      throw new Error("Google Business ne fournit pas de statistiques par publication.");
+    default:
+      throw new Error(`Statistiques non prises en charge pour ${input.provider}.`);
+  }
+}

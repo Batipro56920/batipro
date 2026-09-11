@@ -76,16 +76,35 @@ export type PublicationDraftInput = {
   submitForReview: boolean;
 };
 
+export type InboxThreadStatus = "open" | "pending" | "closed";
 export type InboxThread = {
   id: string;
   provider: SocialNetwork;
   kind: "message" | "comment" | "mention" | "review";
   contact_name: string | null;
   subject: string | null;
-  status: "open" | "pending" | "closed";
+  status: InboxThreadStatus;
+  unread: boolean;
+  permalink: string | null;
   last_message_at: string;
   account_name: string;
 };
+
+export type InboxMessage = {
+  id: string;
+  direction: "inbound" | "outbound" | "internal_note";
+  body: string;
+  author_name: string | null;
+  sent_at: string;
+};
+
+export type PublicationMetrics = {
+  variantId: string;
+  itemTitle: string;
+  network: string;
+  measuredAt: string | null;
+  syncError: string | null;
+} & SocialMetricsSummary;
 
 export type SocialMetricsSummary = {
   impressions: number;

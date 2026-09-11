@@ -1,7 +1,7 @@
 import { supabase } from "../../lib/supabaseClient";
 import { getCurrentUserProfile } from "../../services/currentUserProfile.service";
 import { normalizeChannels } from "./networks";
-import type { ApprovalStatus, Campaign, CampaignAsset, CampaignComment, CampaignItem, CampaignStatus, ChantierOption, InboxThread, ItemStatus, ItemType, PublicationDraftInput, PublicationVariant, ReviewPublication, SocialAccount, PublishJob, SocialMetricsSummary, SocialNetwork, Workspace } from "./types";
+import type { ApprovalStatus, Campaign, CampaignAsset, CampaignComment, CampaignItem, CampaignStatus, ChantierOption, InboxMessage, InboxThread, InboxThreadStatus, ItemStatus, ItemType, PublicationDraftInput, PublicationMetrics, PublicationVariant, ReviewPublication, SocialAccount, PublishJob, SocialMetricsSummary, SocialNetwork, Workspace } from "./types";
 
 const db = supabase as any;
 async function identity() {
@@ -169,18 +169,86 @@ export async function listPublicationVariants(itemId: string): Promise<Publicati
 
 export async function listInboxThreads(): Promise<InboxThread[]> {
   const { organizationId } = await identity();
-  const { data, error } = await db.from("communication_inbox_threads").select("id,kind,contact_name,subject,status,last_message_at,communication_social_accounts(provider,display_name)").eq("organization_id", organizationId).order("last_message_at", { ascending: false });
+  const { data, error } = await db.from("communication_inbox_threads").select("id,kind,contact_name,subject,status,unread,permalink,last_message_at,communication_social_accounts(provider,display_name)").eq("organization_id", organizationId).order("last_message_at", { ascending: false });
   fail(error);
-  return (data ?? []).map((row: any) => ({ ...row, provider: row.communication_social_accounts?.provider, account_name: row.communication_social_accounts?.display_name ?? "Compte" })) as InboxThread[];
+  return (data ?? []).map((row: any) => ({ ...row, unread: row.unread !== false, permalink: row.permalink ?? null, provider: row.communication_social_accounts?.provider, account_name: row.communication_social_accounts?.display_name ?? "Compte" })) as InboxThread[];
 }
 
-export async function loadMetricsSummary(): Promise<SocialMetricsSummary> {
+export async function loadInboxMessages(threadId: string): Promise<InboxMessage[]> {
   const { organizationId } = await identity();
-  const { data, error } = await db.from("communication_post_metrics").select("impressions,reach,engagements,clicks,comments,shares,leads").eq("organization_id", organizationId);
+  const { data, error } = await db
+    .from("communication_inbox_messages")
+    .select("id,direction,body,author_name,sent_at")
+    .eq("organization_id", organizationId)
+    .eq("thread_id", threadId)
+    .order("sent_at");
   fail(error);
-  return (data ?? []).reduce((total: SocialMetricsSummary, row: SocialMetricsSummary) => ({
-    impressions: total.impressions + Number(row.impressions || 0), reach: total.reach + Number(row.reach || 0), engagements: total.engagements + Number(row.engagements || 0), clicks: total.clicks + Number(row.clicks || 0), comments: total.comments + Number(row.comments || 0), shares: total.shares + Number(row.shares || 0), leads: total.leads + Number(row.leads || 0),
-  }), { impressions:0, reach:0, engagements:0, clicks:0, comments:0, shares:0, leads:0 });
+  return (data ?? []) as InboxMessage[];
+}
+
+/** La réponse part du serveur avec le jeton du compte, jamais du navigateur. */
+export async function replyToInboxThread(threadId: string, body: string): Promise<void> {
+  await invokeCommunicationFunction("communication-inbox-reply", { threadId, body });
+}
+
+export async function updateInboxThreadStatus(threadId: string, status: InboxThreadStatus): Promise<void> {
+  const { organizationId } = await identity();
+  const { error } = await db
+    .from("communication_inbox_threads")
+    .update({ status, unread: status === "open" })
+    .eq("organization_id", organizationId)
+    .eq("id", threadId);
+  fail(error);
+}
+
+export async function markInboxThreadRead(threadId: string): Promise<void> {
+  const { organizationId } = await identity();
+  await db.from("communication_inbox_threads").update({ unread: false }).eq("organization_id", organizationId).eq("id", threadId);
+}
+
+const EMPTY_SUMMARY: SocialMetricsSummary = { impressions: 0, reach: 0, engagements: 0, clicks: 0, comments: 0, shares: 0, leads: 0 };
+
+/**
+ * Mesures des publications, détail compris.
+ *
+ * Le total seul ne disait pas s'il valait zéro parce que rien n'a marché ou
+ * parce que rien n'a encore été publié. Le détail, lui, le dit.
+ */
+export async function loadMetrics(): Promise<{ summary: SocialMetricsSummary; publications: PublicationMetrics[] }> {
+  const { organizationId } = await identity();
+  const { data, error } = await db
+    .from("communication_post_metrics")
+    .select("variant_id,measured_at,sync_error,impressions,reach,engagements,clicks,comments,shares,leads,communication_publication_variants(network,communication_campaign_items(title))")
+    .eq("organization_id", organizationId)
+    .order("measured_at", { ascending: false });
+  fail(error);
+
+  const publications = (data ?? []).map((row: any) => ({
+    variantId: String(row.variant_id),
+    itemTitle: String(row.communication_publication_variants?.communication_campaign_items?.title ?? "Publication"),
+    network: String(row.communication_publication_variants?.network ?? ""),
+    measuredAt: row.measured_at ?? null,
+    syncError: row.sync_error ?? null,
+    impressions: Number(row.impressions ?? 0),
+    reach: Number(row.reach ?? 0),
+    engagements: Number(row.engagements ?? 0),
+    clicks: Number(row.clicks ?? 0),
+    comments: Number(row.comments ?? 0),
+    shares: Number(row.shares ?? 0),
+    leads: Number(row.leads ?? 0),
+  })) as PublicationMetrics[];
+
+  const summary = publications.reduce((total, row) => ({
+    impressions: total.impressions + row.impressions,
+    reach: total.reach + row.reach,
+    engagements: total.engagements + row.engagements,
+    clicks: total.clicks + row.clicks,
+    comments: total.comments + row.comments,
+    shares: total.shares + row.shares,
+    leads: total.leads + row.leads,
+  }), { ...EMPTY_SUMMARY });
+
+  return { summary, publications };
 }
 
 export async function listReviewPublications(): Promise<ReviewPublication[]> {
