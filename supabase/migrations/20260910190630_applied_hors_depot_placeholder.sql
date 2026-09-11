@@ -1,0 +1,13 @@
+-- PLACEHOLDER - CE FICHIER NE CONTIENT PAS LE SQL REEL.
+--
+-- La migration 20260910190630 a ete appliquee directement sur la base de
+-- production. Elle correspond au socle du module Communication, dont le SQL
+-- est conserve dans les fichiers 20260910145002 et 20260910184314 de ce
+-- depot, appliques sous un autre horodatage.
+--
+-- Ce fichier existe uniquement pour que l'historique local corresponde a
+-- l'historique distant, sinon la CLI Supabase refuse tout push et tout pull.
+-- La version etant deja marquee appliquee en base, ce fichier ne sera JAMAIS
+-- execute par 'supabase db push'.
+
+-- Aucune instruction volontairement.

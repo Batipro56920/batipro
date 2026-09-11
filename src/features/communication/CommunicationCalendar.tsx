@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import { Button } from "../../components/ui/button";
 import type { CampaignItem } from "./types";
+import { channelDefinition, channelLabel } from "./networks";
 
 type CalendarItem = CampaignItem & { campaign_title?: string };
 
@@ -18,15 +19,10 @@ type Props = {
   onOpenCampaign: (campaignId: string) => void;
 };
 
+const ALL_CHANNELS = "";
 const DAY_MS = 86_400_000;
 const HOURS = Array.from({ length: 12 }, (_, index) => index + 8);
-const CHANNEL_COLORS: Record<string, string> = {
-  Facebook: "border-blue-300 bg-blue-50 text-blue-950",
-  Instagram: "border-pink-300 bg-pink-50 text-pink-950",
-  LinkedIn: "border-sky-300 bg-sky-50 text-sky-950",
-  Google: "border-amber-300 bg-amber-50 text-amber-950",
-  "Site web": "border-emerald-300 bg-emerald-50 text-emerald-950",
-};
+
 
 function startOfWeek(value: Date) {
   const date = new Date(value);
@@ -43,22 +39,23 @@ function sameDay(left: Date, right: Date) {
 }
 
 function firstChannel(item: CalendarItem) {
-  return item.channels[0] ?? "Sans réseau";
+  return item.channels[0] ?? "";
 }
 
 function PlannerCard({ item, selected, onClick }: { item: CalendarItem; selected: boolean; onClick: () => void }) {
   const channel = firstChannel(item);
+  const definition = channelDefinition(channel);
   return (
     <button
       type="button"
       onClick={onClick}
       className={[
         "w-full rounded-lg border-l-[3px] p-2 text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow-md",
-        CHANNEL_COLORS[channel] ?? "border-primary bg-primary-soft text-ink",
+        definition?.calendar ?? "border-primary bg-primary-soft text-ink",
         selected ? "ring-2 ring-primary ring-offset-1" : "",
       ].join(" ")}
     >
-      <p className="truncate text-[10px] font-semibold uppercase opacity-70">{channel}</p>
+      <p className="truncate text-[10px] font-semibold uppercase opacity-70">{channel ? channelLabel(channel) : "Sans réseau"}</p>
       <p className="mt-0.5 line-clamp-2 text-xs font-semibold leading-tight">{item.title}</p>
       <p className="mt-1 text-[10px] opacity-70">
         {new Date(item.scheduled_at!).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })}
@@ -69,18 +66,18 @@ function PlannerCard({ item, selected, onClick }: { item: CalendarItem; selected
 
 export function CommunicationCalendar({ items, onOpenCampaign }: Props) {
   const [weekStart, setWeekStart] = useState(() => startOfWeek(new Date()));
-  const [channel, setChannel] = useState("Tous les réseaux");
+  const [channel, setChannel] = useState(ALL_CHANNELS);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const days = useMemo(
     () => Array.from({ length: 7 }, (_, index) => new Date(weekStart.getTime() + index * DAY_MS)),
     [weekStart],
   );
   const channels = useMemo(
-    () => ["Tous les réseaux", ...Array.from(new Set(items.flatMap((item) => item.channels)))],
+    () => Array.from(new Set(items.flatMap((item) => item.channels))),
     [items],
   );
   const visibleItems = useMemo(
-    () => items.filter((item) => channel === "Tous les réseaux" || item.channels.includes(channel)),
+    () => items.filter((item) => channel === ALL_CHANNELS || item.channels.includes(channel)),
     [channel, items],
   );
   const selected = items.find((item) => item.id === selectedId) ?? null;
@@ -113,7 +110,8 @@ export function CommunicationCalendar({ items, onOpenCampaign }: Props) {
         <label className="flex items-center gap-2 text-sm text-muted">
           <Filter className="h-4 w-4" />
           <select value={channel} onChange={(event) => setChannel(event.target.value)} className="rounded-xl border border-subtle bg-surface px-3 py-2 text-ink">
-            {channels.map((entry) => <option key={entry}>{entry}</option>)}
+            <option value={ALL_CHANNELS}>Tous les réseaux</option>
+            {channels.map((entry) => <option key={entry} value={entry}>{channelLabel(entry)}</option>)}
           </select>
         </label>
       </header>

@@ -1,11 +1,16 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { CheckCircle2, Clock3, Image, MessageSquareWarning, RefreshCw, Save, Send } from "lucide-react";
+import { Check, CheckCircle2, Clock3, Copy, Image, MessageSquareWarning, RefreshCw, Save, Send } from "lucide-react";
 import { Button } from "../../components/ui/button";
 import { decidePublication, listReviewPublications, updateReviewPublication } from "./communicationRepository";
-import type { ReviewPublication, SocialNetwork } from "./types";
-
-const labels: Record<SocialNetwork, string> = { facebook: "Facebook", instagram: "Instagram", linkedin: "LinkedIn", google_business: "Google Business", tiktok: "TikTok", youtube: "YouTube" };
+import type { ReviewPublication } from "./types";
+import { channelLabel, channelLimit } from "./networks";
 const inputClass = "w-full rounded-xl border border-subtle bg-surface px-3 py-2.5 text-sm text-ink outline-none focus:border-primary";
+
+/** Un texte trop long sera refusé par le réseau : autant le voir ici. */
+function overLimit(network: string, body: string | undefined) {
+  const limit = channelLimit(network);
+  return Boolean(limit && (body ?? "").length > limit);
+}
 
 function localDateTime(value: string | null) {
   if (!value) return "";
@@ -22,6 +27,7 @@ export function CommunicationApprovals() {
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
+  const [copiedId, setCopiedId] = useState<string | null>(null);
 
   const reload = useCallback(async () => {
     try {
@@ -48,6 +54,10 @@ export function CommunicationApprovals() {
   }
   async function decide(decision: "approved" | "changes_requested") {
     if (!item || !selectedVariants.length) { setMessage("Sélectionne au moins une version réseau."); return; }
+    if (decision === "approved") {
+      const refused = item.variants.filter((variant) => selectedVariants.includes(variant.id) && overLimit(variant.network, drafts[variant.id]));
+      if (refused.length) { setMessage(`Texte trop long pour ${refused.map((variant) => channelLabel(variant.network)).join(", ")} : le réseau le refusera.`); return; }
+    }
     setBusy(true); setMessage("");
     try {
       await updateReviewPublication(item.id, scheduledAt || null, item.variants.map((variant) => ({ id: variant.id, body: drafts[variant.id] ?? "" })));
@@ -62,7 +72,7 @@ export function CommunicationApprovals() {
     <main className="min-h-96 p-5">{item ? <><header><p className="text-xs font-semibold uppercase tracking-wide text-primary">{item.campaign_title}</p><h2 className="mt-1 text-xl font-semibold text-ink">{item.title}</h2><p className="mt-2 whitespace-pre-wrap text-sm text-muted">{item.content}</p></header>
       {item.assets.length ? <div className="mt-5 flex gap-3 overflow-x-auto">{item.assets.map((asset) => <a key={asset.id} href={asset.signed_url} target="_blank" rel="noreferrer" className="min-w-36 overflow-hidden rounded-xl border border-subtle bg-interactive">{asset.mime_type?.startsWith("image/") && asset.signed_url ? <img src={asset.signed_url} alt={asset.file_name} className="h-24 w-40 object-cover" /> : <div className="flex h-24 w-40 items-center justify-center"><Image className="h-6 w-6 text-primary" /></div>}<p className="w-40 truncate px-2 py-1.5 text-xs text-muted">{asset.file_name}</p></a>)}</div> : null}
       <label className="mt-5 block max-w-sm text-sm font-medium text-ink">Date et heure de publication<input type="datetime-local" value={scheduledAt} onChange={(event) => setScheduledAt(event.target.value)} className={`${inputClass} mt-1`} /></label>
-      <div className="mt-5 grid gap-3 md:grid-cols-2">{item.variants.map((variant) => { const checked = selectedVariants.includes(variant.id); const approved = variant.approval_status === "approved"; return <article key={variant.id} className={`rounded-xl border p-4 ${checked ? "border-primary" : "border-subtle"}`}><div className="flex items-center justify-between gap-3"><label className="flex items-center gap-2 font-semibold text-ink"><input type="checkbox" checked={checked} disabled={approved} onChange={() => toggleVariant(variant.id)} />{labels[variant.network]}</label><span className={`rounded-full px-2 py-1 text-xs ${approved ? "bg-success-soft text-success" : "bg-warning-soft text-warning-on"}`}>{approved ? "Validée" : "À valider"}</span></div><textarea rows={6} value={drafts[variant.id] ?? ""} onChange={(event) => setDrafts((current) => ({ ...current, [variant.id]: event.target.value }))} className={`${inputClass} mt-3`} /></article>; })}</div>
+      <div className="mt-5 grid gap-3 md:grid-cols-2">{item.variants.map((variant) => { const checked = selectedVariants.includes(variant.id); const approved = variant.approval_status === "approved"; return <article key={variant.id} className={`rounded-xl border p-4 ${checked ? "border-primary" : "border-subtle"}`}><div className="flex items-center justify-between gap-3"><label className="flex items-center gap-2 font-semibold text-ink"><input type="checkbox" checked={checked} disabled={approved} onChange={() => toggleVariant(variant.id)} />{channelLabel(variant.network)}</label><span className={`rounded-full px-2 py-1 text-xs ${approved ? "bg-success-soft text-success" : "bg-warning-soft text-warning-on"}`}>{approved ? "Validée" : "À valider"}</span></div><textarea rows={6} value={drafts[variant.id] ?? ""} onChange={(event) => setDrafts((current) => ({ ...current, [variant.id]: event.target.value }))} className={`${inputClass} mt-3`} /><div className="mt-2 flex items-center justify-between text-xs"><span className={overLimit(variant.network, drafts[variant.id]) ? "font-semibold text-danger" : "text-muted"}>{(drafts[variant.id] ?? "").length}{channelLimit(variant.network) ? ` / ${channelLimit(variant.network)}` : ""} caractères</span><button type="button" onClick={async () => { await navigator.clipboard.writeText(drafts[variant.id] ?? ""); setCopiedId(variant.id); window.setTimeout(() => setCopiedId(null), 1600); }} className="inline-flex items-center gap-1 rounded-lg px-2 py-1 font-medium text-primary hover:bg-primary-soft">{copiedId === variant.id ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}Copier le texte</button></div></article>; })}</div>
       <label className="mt-5 block text-sm font-medium text-ink">Commentaire pour Marie<textarea value={note} onChange={(event) => setNote(event.target.value)} rows={3} className={`${inputClass} mt-1`} placeholder="Préciser ce qu’il faut modifier…" /></label>{message ? <p className="mt-3 rounded-xl bg-interactive p-3 text-sm text-ink">{message}</p> : null}
       <footer className="mt-4 flex flex-wrap justify-end gap-2"><Button variant="secondary" disabled={busy} onClick={() => void save()}><Save className="h-4 w-4" />Enregistrer</Button><Button variant="secondary" disabled={busy || !selectedVariants.length} onClick={() => void decide("changes_requested")}><MessageSquareWarning className="h-4 w-4" />Demander des modifications</Button><Button variant="success" disabled={busy || !selectedVariants.length} onClick={() => void decide("approved")}><Send className="h-4 w-4" />Valider la sélection</Button></footer>
     </> : <div className="flex h-full min-h-80 flex-col items-center justify-center text-center"><CheckCircle2 className="h-10 w-10 text-success" /><h2 className="mt-3 font-semibold text-ink">Tout est validé</h2><p className="mt-1 text-sm text-muted">Les nouvelles demandes de Marie apparaîtront ici.</p></div>}</main>

@@ -1,5 +1,6 @@
 import { supabase } from "../../lib/supabaseClient";
 import { getCurrentUserProfile } from "../../services/currentUserProfile.service";
+import { normalizeChannels } from "./networks";
 import type { ApprovalStatus, Campaign, CampaignAsset, CampaignComment, CampaignItem, CampaignStatus, ChantierOption, InboxThread, ItemStatus, ItemType, PublicationDraftInput, PublicationVariant, ReviewPublication, SocialAccount, SocialMetricsSummary, Workspace } from "./types";
 
 const db = supabase as any;
@@ -9,6 +10,10 @@ async function identity() {
   return { organizationId: profile.organization_id, userId: profile.id, name: profile.display_name ?? profile.email ?? "Équipe" };
 }
 function fail(error: { message?: string } | null) { if (error) throw new Error(error.message || "Une erreur est survenue."); }
+/** Les lignes ecrites avant l'unification portent encore des libelles de canaux. */
+function withChannels<T extends { channels?: string[] | null }>(row: T): T {
+  return row ? ({ ...row, channels: normalizeChannels(row.channels) } as T) : row;
+}
 
 export async function listCampaigns(): Promise<Campaign[]> {
   const { organizationId } = await identity();
@@ -17,8 +22,8 @@ export async function listCampaigns(): Promise<Campaign[]> {
 }
 export async function createCampaign(input: { title: string; objective?: string; audience?: string; brief?: string; channels: string[]; start_date?: string; end_date?: string }): Promise<Campaign> {
   const { organizationId } = await identity();
-  const { data, error } = await db.from("communication_campaigns").insert({ organization_id: organizationId, ...input, objective: input.objective || null, audience: input.audience || null, brief: input.brief || null, start_date: input.start_date || null, end_date: input.end_date || null }).select("*").single();
-  fail(error); return data as Campaign;
+  const { data, error } = await db.from("communication_campaigns").insert({ organization_id: organizationId, ...input, channels: normalizeChannels(input.channels), objective: input.objective || null, audience: input.audience || null, brief: input.brief || null, start_date: input.start_date || null, end_date: input.end_date || null }).select("*").single();
+  fail(error); return withChannels(data) as Campaign;
 }
 export async function loadWorkspace(id: string): Promise<Workspace> {
   const { organizationId } = await identity();
@@ -33,17 +38,61 @@ export async function loadWorkspace(id: string): Promise<Workspace> {
     const { data } = await supabase.storage.from("communication-assets").createSignedUrl(asset.storage_path, 3600);
     return { ...asset, signed_url: data?.signedUrl } as CampaignAsset;
   }));
-  return { campaign: campaignQ.data as Campaign, items: itemsQ.data as CampaignItem[], comments: commentsQ.data as CampaignComment[], assets };
+  return { campaign: withChannels(campaignQ.data) as Campaign, items: (itemsQ.data ?? []).map(withChannels) as CampaignItem[], comments: commentsQ.data as CampaignComment[], assets };
 }
 export async function updateCampaign(id: string, patch: Partial<Pick<Campaign,"title"|"objective"|"audience"|"brief"|"status"|"channels"|"start_date"|"end_date">>) {
-  const { organizationId } = await identity(); const { error } = await db.from("communication_campaigns").update(patch).eq("organization_id", organizationId).eq("id", id); fail(error);
+  const { organizationId } = await identity();
+  const payload = patch.channels ? { ...patch, channels: normalizeChannels(patch.channels) } : patch;
+  const { error } = await db.from("communication_campaigns").update(payload).eq("organization_id", organizationId).eq("id", id); fail(error);
 }
 export async function addItem(campaignId: string, input: { title: string; content?: string; item_type: ItemType; status: ItemStatus; channels: string[]; chantier_id?: string; scheduled_at?: string }): Promise<CampaignItem> {
   const who = await identity();
-  const { data, error } = await db.from("communication_campaign_items").insert({ organization_id: who.organizationId, campaign_id: campaignId, ...input, content: input.content || null, chantier_id: input.chantier_id || null, scheduled_at: input.scheduled_at ? new Date(input.scheduled_at).toISOString() : null, created_by_name: who.name }).select("*").single();
-  fail(error); return data as CampaignItem;
+  const { data, error } = await db.from("communication_campaign_items").insert({ organization_id: who.organizationId, campaign_id: campaignId, ...input, channels: normalizeChannels(input.channels), content: input.content || null, chantier_id: input.chantier_id || null, scheduled_at: input.scheduled_at ? new Date(input.scheduled_at).toISOString() : null, created_by_name: who.name }).select("*").single();
+  fail(error); return withChannels(data) as CampaignItem;
 }
-export async function updateItemStatus(id: string, status: ItemStatus) { const { organizationId } = await identity(); const { error } = await db.from("communication_campaign_items").update({ status }).eq("organization_id", organizationId).eq("id", id); fail(error); }
+/**
+ * Le tableau ne doit pas contourner la validation.
+ *
+ * Le sélecteur de colonne permettait de faire passer n'importe quelle carte
+ * d'"Idées" à "Publiées" sans accord et sans que les versions par réseau
+ * changent d'état. Un contenu pouvait donc être planifié alors que ses
+ * variantes étaient encore en brouillon. Les règles ci-dessous sont les mêmes
+ * quel que soit l'écran qui déplace la carte.
+ */
+export async function assertItemTransition(id: string, status: ItemStatus): Promise<{ scheduledAt: string | null }> {
+  const { organizationId } = await identity();
+  const { data, error } = await db.from("communication_campaign_items").select("id,item_type,status,content,scheduled_at,communication_publication_variants(approval_status)").eq("organization_id", organizationId).eq("id", id).single();
+  fail(error);
+  const item = data as { item_type: ItemType; status: ItemStatus; content: string | null; scheduled_at: string | null; communication_publication_variants?: Array<{ approval_status: ApprovalStatus }> };
+  const variants = item.communication_publication_variants ?? [];
+  const approved = variants.length > 0 && variants.every((variant) => variant.approval_status === "approved");
+
+  if (status === "to_review" && !String(item.content ?? "").trim()) {
+    throw new Error("Écris le contenu avant de demander la validation.");
+  }
+  if (status === "scheduled") {
+    if (!item.scheduled_at) throw new Error("Donne une date de publication avant de planifier ce contenu.");
+    if (variants.length && !approved) throw new Error("Toutes les versions par réseau doivent être validées avant la planification.");
+  }
+  if (status === "published") {
+    if (item.item_type !== "publication") throw new Error("Seule une publication se marque comme publiée. Crée-la depuis le compositeur.");
+    if (!variants.length) throw new Error("Cette publication n'a aucune version par réseau.");
+    if (!approved) throw new Error("Valide toutes les versions par réseau avant de marquer la publication comme diffusée.");
+  }
+  return { scheduledAt: item.scheduled_at };
+}
+
+export async function updateItemStatus(id: string, status: ItemStatus) {
+  const { organizationId } = await identity();
+  const { scheduledAt } = await assertItemTransition(id, status);
+  const patch: Record<string, unknown> = { status };
+  // Une publication diffusée garde la date à laquelle elle l'a été.
+  if (status === "published") patch.published_at = new Date().toISOString();
+  if (status !== "published" && status !== "scheduled") patch.published_at = null;
+  if (status === "published" && !scheduledAt) patch.scheduled_at = new Date().toISOString();
+  const { error } = await db.from("communication_campaign_items").update(patch).eq("organization_id", organizationId).eq("id", id);
+  fail(error);
+}
 export async function deleteItem(id: string) { const { organizationId } = await identity(); const { error } = await db.from("communication_campaign_items").delete().eq("organization_id", organizationId).eq("id", id); fail(error); }
 export async function addComment(campaignId: string, body: string) { const who = await identity(); const { error } = await db.from("communication_campaign_comments").insert({ organization_id: who.organizationId, campaign_id: campaignId, body, author_name: who.name }); fail(error); }
 export async function uploadAssets(campaignId: string, itemId: string, files: File[]) {
@@ -57,7 +106,7 @@ export async function uploadAssets(campaignId: string, itemId: string, files: Fi
 }
 export async function listAllScheduled(): Promise<(CampaignItem & { campaign_title?: string })[]> {
   const { organizationId } = await identity(); const { data, error } = await db.from("communication_campaign_items").select("*, communication_campaigns(title)").eq("organization_id", organizationId).not("scheduled_at", "is", null).order("scheduled_at"); fail(error);
-  return (data ?? []).map((row: any) => ({ ...row, campaign_title: row.communication_campaigns?.title })) as (CampaignItem & { campaign_title?: string })[];
+  return (data ?? []).map((row: any) => withChannels({ ...row, campaign_title: row.communication_campaigns?.title })) as (CampaignItem & { campaign_title?: string })[];
 }
 export async function listAllAssets(): Promise<CampaignAsset[]> {
   const { organizationId } = await identity(); const { data, error } = await db.from("communication_campaign_assets").select("id,campaign_id,item_id,file_name,mime_type,file_size,storage_path").eq("organization_id", organizationId).order("created_at", { ascending: false }); fail(error);

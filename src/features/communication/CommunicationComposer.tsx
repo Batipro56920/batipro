@@ -2,25 +2,21 @@ import { useEffect, useMemo, useState } from "react";
 import { CalendarClock, Check, CheckCircle2, ChevronRight, Copy, ExternalLink, Eye, Link2, Paperclip, Send, Sparkles, Video } from "lucide-react";
 import { Button } from "../../components/ui/button";
 import { createPublicationDraft, listSocialAccounts, uploadAssets } from "./communicationRepository";
-import type { Campaign, SocialAccount, SocialNetwork } from "./types";
+import type { Campaign, ChantierOption, SocialAccount, SocialNetwork } from "./types";
 import { buildTrackedUrl } from "./trackingLinks";
+import { COMPOSER_NETWORKS, channelLabel } from "./networks";
 
-type Props = { campaigns: Campaign[]; onSaved: () => void };
-type NetworkDefinition = { id: SocialNetwork; label: string; color: string; limit: number; hint: string };
+type Props = { campaigns: Campaign[]; chantiers: ChantierOption[]; onSaved: () => void };
 
-const NETWORKS: NetworkDefinition[] = [
-  { id: "facebook", label: "Facebook", color: "bg-blue-600", limit: 63206, hint: "Texte clair, lien et appel à l’action" },
-  { id: "instagram", label: "Instagram", color: "bg-pink-600", limit: 2200, hint: "Accroche visuelle et hashtags ciblés" },
-  { id: "linkedin", label: "LinkedIn", color: "bg-sky-700", limit: 3000, hint: "Expertise, méthode et résultat métier" },
-  { id: "google_business", label: "Google Business", color: "bg-amber-500", limit: 1500, hint: "Actualité locale et bénéfice client" },
-];
+const NETWORKS = COMPOSER_NETWORKS;
 const inputClass = "w-full rounded-xl border border-subtle bg-surface px-3 py-2.5 text-sm text-ink outline-none focus:border-primary";
 
-function networkLabel(id: SocialNetwork) { return NETWORKS.find((network) => network.id === id)?.label ?? id; }
+function networkLabel(id: SocialNetwork) { return channelLabel(id); }
 
-export function CommunicationComposer({ campaigns, onSaved }: Props) {
+export function CommunicationComposer({ campaigns, chantiers, onSaved }: Props) {
   const [accounts, setAccounts] = useState<SocialAccount[]>([]);
   const [campaignId, setCampaignId] = useState(campaigns[0]?.id ?? "");
+  const [chantierId, setChantierId] = useState("");
   const [title, setTitle] = useState("");
   const [baseContent, setBaseContent] = useState("");
   const [selectedNetworks, setSelectedNetworks] = useState<SocialNetwork[]>(["facebook", "instagram"]);
@@ -64,10 +60,19 @@ export function CommunicationComposer({ campaigns, onSaved }: Props) {
       setMessage("Corrige l’adresse de destination avant d’enregistrer.");
       return;
     }
+    // Décliner recopie le texte commun : il peut dépasser la limite d'un réseau
+    // sans que personne ne l'ait tapé dans le champ qui la contrôle.
+    const tooLong = selectedNetworks
+      .map((network) => ({ network, definition: NETWORKS.find((entry) => entry.id === network), length: (variants[network] || baseContent).trim().length }))
+      .filter((entry) => entry.definition && entry.length > entry.definition.limit);
+    if (tooLong.length) {
+      setMessage(tooLong.map((entry) => `${networkLabel(entry.network)} : ${entry.length} caractères pour ${entry.definition!.limit} autorisés.`).join(" "));
+      return;
+    }
     setSaving(submitForReview ? "review" : "draft"); setMessage("");
     try {
       const item = await createPublicationDraft({
-        campaignId, title: title.trim(), baseContent: baseContent.trim(), scheduledAt,
+        campaignId, title: title.trim(), baseContent: baseContent.trim(), scheduledAt, chantierId: chantierId || undefined,
         variants: selectedNetworks.map((network) => ({
           network,
           socialAccountId: accounts.find((account) => account.provider === network && account.status === "connected")?.id,
@@ -78,7 +83,7 @@ export function CommunicationComposer({ campaigns, onSaved }: Props) {
       });
       if (files.length) await uploadAssets(campaignId, item.id, files);
       setMessage(submitForReview ? "Publication envoyée à Marie pour validation." : "Brouillon enregistré dans la campagne.");
-      setTitle(""); setBaseContent(""); setVariants({}); setScheduledAt(""); setFiles([]); setDestinationUrl(""); onSaved();
+      setTitle(""); setBaseContent(""); setVariants({}); setScheduledAt(""); setFiles([]); setDestinationUrl(""); setChantierId(""); onSaved();
     } catch (error) { setMessage(error instanceof Error ? error.message : "Enregistrement impossible."); }
     finally { setSaving(null); }
   }
@@ -89,8 +94,8 @@ export function CommunicationComposer({ campaigns, onSaved }: Props) {
     <section className="space-y-5 rounded-2xl border border-subtle bg-surface p-5 shadow-sm">
       <header><p className="text-xs font-semibold uppercase tracking-wider text-primary">Nouvelle publication</p><h2 className="mt-1 text-xl font-semibold text-ink">Créer une fois, adapter par réseau</h2><p className="mt-1 text-sm text-muted">Le texte commun sert de base. Chaque variante reste modifiable avant validation.</p></header>
       <div className="flex flex-wrap gap-2 rounded-xl bg-interactive p-3"><a href="https://www.canva.com/create/social-media/" target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 rounded-lg border border-subtle bg-surface px-3 py-2 text-sm font-medium text-ink hover:border-primary"><Sparkles className="h-4 w-4 text-primary"/>Créer un visuel dans Canva<ExternalLink className="h-3 w-3 text-muted"/></a><a href="https://www.capcut.com/editor" target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 rounded-lg border border-subtle bg-surface px-3 py-2 text-sm font-medium text-ink hover:border-primary"><Video className="h-4 w-4 text-primary"/>Monter une vidéo dans CapCut<ExternalLink className="h-3 w-3 text-muted"/></a><span className="self-center text-xs text-muted">Exporte puis ajoute plusieurs fichiers ci-dessous. La synchronisation Canva automatique arrive avec OAuth.</span></div>
-      <div className="grid gap-4 md:grid-cols-2"><label className="text-sm font-medium text-ink">Campagne<select className={`${inputClass} mt-1`} value={campaignId} onChange={(event)=>setCampaignId(event.target.value)}>{campaigns.map((campaign)=><option key={campaign.id} value={campaign.id}>{campaign.title}</option>)}</select></label><label className="text-sm font-medium text-ink">Titre interne<input className={`${inputClass} mt-1`} value={title} onChange={(event)=>setTitle(event.target.value)} placeholder="Ex. Avant / après dallage parking"/></label></div>
-      <fieldset><legend className="text-sm font-medium text-ink">Réseaux ciblés</legend><div className="mt-2 grid gap-2 sm:grid-cols-2">{NETWORKS.map((network)=>{const selected=selectedNetworks.includes(network.id);return <button type="button" key={network.id} onClick={()=>toggleNetwork(network.id)} className={`flex items-center justify-between rounded-xl border p-3 text-left ${selected?"border-primary bg-primary-soft":"border-subtle"}`}><span className="flex items-center gap-2"><span className={`h-3 w-3 rounded-full ${network.color}`}/><span><strong className="block text-sm text-ink">{network.label}</strong><small className="text-muted">{connected.has(network.id)?"Compte connecté":"Connexion à configurer"}</small></span></span>{selected?<Check className="h-4 w-4 text-primary"/>:null}</button>})}</div></fieldset>
+      <div className="grid gap-4 md:grid-cols-2"><label className="text-sm font-medium text-ink">Campagne<select className={`${inputClass} mt-1`} value={campaignId} onChange={(event)=>setCampaignId(event.target.value)}>{campaigns.map((campaign)=><option key={campaign.id} value={campaign.id}>{campaign.title}</option>)}</select></label><label className="text-sm font-medium text-ink">Titre interne<input className={`${inputClass} mt-1`} value={title} onChange={(event)=>setTitle(event.target.value)} placeholder="Ex. Avant / après dallage parking"/></label><label className="text-sm font-medium text-ink md:col-span-2">Chantier mis en avant<select className={`${inputClass} mt-1`} value={chantierId} onChange={(event)=>setChantierId(event.target.value)}><option value="">Aucun chantier</option>{chantiers.map((chantier)=><option key={chantier.id} value={chantier.id}>{chantier.nom}{chantier.client?` — ${chantier.client}`:""}</option>)}</select><small className="mt-1 block text-muted">Relie la publication au chantier qu'elle raconte, pour retrouver l'origine des photos et des chiffres.</small></label></div>
+      <fieldset><legend className="text-sm font-medium text-ink">Réseaux ciblés</legend><div className="mt-2 grid gap-2 sm:grid-cols-2">{NETWORKS.map((network)=>{const selected=selectedNetworks.includes(network.id);return <button type="button" key={network.id} onClick={()=>toggleNetwork(network.id)} className={`flex items-center justify-between rounded-xl border p-3 text-left ${selected?"border-primary bg-primary-soft":"border-subtle"}`}><span className="flex items-center gap-2"><span className={`h-3 w-3 rounded-full ${network.dot}`}/><span><strong className="block text-sm text-ink">{network.label}</strong><small className="text-muted">{connected.has(network.id)?"Compte connecté":"Connexion à configurer"}</small></span></span>{selected?<Check className="h-4 w-4 text-primary"/>:null}</button>})}</div></fieldset>
       <label className="block text-sm font-medium text-ink">Message principal<textarea rows={6} className={`${inputClass} mt-1`} value={baseContent} onChange={(event)=>setBaseContent(event.target.value)} placeholder="L’idée, l’histoire du chantier, le résultat obtenu et l’appel à l’action…"/></label>
       <div className="flex flex-wrap items-center gap-2"><Button variant="secondary" onClick={prepareVariants}><Sparkles className="h-4 w-4"/>Décliner sur les réseaux</Button><span className="text-xs text-muted">Pré-remplit les variantes sans écraser tes adaptations.</span></div>
       {selectedNetworks.length>0?<section className="rounded-2xl border border-subtle"><div className="flex overflow-x-auto border-b border-subtle p-1">{selectedNetworks.map((network)=><button key={network} onClick={()=>setActivePreview(network)} className={`whitespace-nowrap rounded-lg px-3 py-2 text-sm font-medium ${activePreview===network?"bg-primary text-primary-contrast":"text-muted"}`}>{networkLabel(network)}</button>)}</div><div className="p-4"><label className="text-sm font-medium text-ink">Version {networkLabel(activePreview)}<textarea rows={5} className={`${inputClass} mt-1`} value={currentText} maxLength={NETWORKS.find((network)=>network.id===activePreview)?.limit} onChange={(event)=>setVariants((current)=>({...current,[activePreview]:event.target.value}))}/></label><div className="mt-1 flex justify-between text-xs text-muted"><span>{NETWORKS.find((network)=>network.id===activePreview)?.hint}</span><span>{currentText.length} caractères</span></div></div></section>:null}
