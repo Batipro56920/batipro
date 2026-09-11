@@ -84,10 +84,26 @@ export async function listDeliveryNotes(): Promise<DeliveryNoteRecord[]> {
   return (data ?? []).map(fromRow);
 }
 
+/** Bons de livraison rattachés à un chantier, du plus récent au plus ancien. */
+export async function listChantierDeliveryNotes(chantierId: string): Promise<DeliveryNoteRecord[]> {
+  if (!chantierId) return [];
+  const { data, error } = await supabase
+    .from("delivery_notes" as any)
+    .select("*")
+    .eq("chantier_id", chantierId)
+    .order("created_at", { ascending: false });
+  if (error) throw new Error(error.message);
+  return (data ?? []).map(fromRow);
+}
+
 /**
- * Poste une entree de stock reelle par ligne resolue a un produit catalogue, marque le bon de
- * commande rapproche comme "delivered" (reception consideree complete en v1), et journalise le
- * bon de livraison pour tracabilite. Les lignes sans productId sont ignorees (a resoudre avant).
+ * Journalise le bon de livraison, poste une entree de stock reelle par ligne
+ * resolue a un produit catalogue, et marque le bon de commande rapproche comme
+ * "delivered" (reception consideree complete en v1).
+ *
+ * Le bon est cree en premier : chaque mouvement porte son identifiant, sinon la
+ * reception disparait du chantier des qu'on quitte l'ecran fournisseurs.
+ * Les lignes sans productId sont ignorees (a resoudre avant).
  */
 export async function confirmDeliveryNote(input: {
   supplierId: string | null;
@@ -99,24 +115,6 @@ export async function confirmDeliveryNote(input: {
   storageBucket: string | null;
   lines: DeliveryNoteLineRecord[];
 }): Promise<DeliveryNoteRecord> {
-  const resolvedLines = input.lines.filter((line) => line.productId);
-  for (const line of resolvedLines) {
-    await createStockReception({
-      productId: line.productId as string,
-      quantity: line.quantity,
-      note: [
-        "Bon de livraison",
-        input.documentReference || null,
-        input.supplierName || null,
-      ].filter(Boolean).join(" - "),
-      chantierId: input.chantierId,
-    });
-  }
-
-  if (input.purchaseOrderId) {
-    await updatePurchaseOrderStatus(input.purchaseOrderId, "delivered");
-  }
-
   const { data, error } = await supabase
     .from("delivery_notes" as any)
     .insert({
@@ -134,5 +132,27 @@ export async function confirmDeliveryNote(input: {
     .single();
 
   if (error) throw new Error(error.message);
-  return fromRow(data);
+  const note = fromRow(data);
+
+  const resolvedLines = input.lines.filter((line) => line.productId);
+  for (const line of resolvedLines) {
+    await createStockReception({
+      productId: line.productId as string,
+      quantity: line.quantity,
+      note: [
+        "Bon de livraison",
+        input.documentReference || null,
+        input.supplierName || null,
+      ].filter(Boolean).join(" - "),
+      chantierId: input.chantierId,
+      deliveryNoteId: note.id,
+      supplierId: input.supplierId,
+    });
+  }
+
+  if (input.purchaseOrderId) {
+    await updatePurchaseOrderStatus(input.purchaseOrderId, "delivered");
+  }
+
+  return note;
 }

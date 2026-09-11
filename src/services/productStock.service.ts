@@ -73,9 +73,13 @@ export async function createStockReception(input: {
   quantity: number;
   note?: string | null;
   chantierId?: string | null;
+  deliveryNoteId?: string | null;
+  supplierId?: string | null;
+  unitPriceHt?: number | null;
 }): Promise<void> {
   if (!input.productId) throw new Error("Produit manquant.");
   if (!(input.quantity > 0)) throw new Error("Quantité invalide.");
+  const unitPrice = Number(input.unitPriceHt);
   const { error } = await (supabase as any).from("product_stock_movements").insert({
     product_id: input.productId,
     movement_type: "entree",
@@ -83,6 +87,10 @@ export async function createStockReception(input: {
     source: "reception_manuelle",
     note: input.note?.trim() || null,
     chantier_id: input.chantierId || null,
+    // Sans ce lien la réception se voit dans le stock mais pas dans le chantier.
+    delivery_note_id: input.deliveryNoteId || null,
+    supplier_id: input.supplierId || null,
+    unit_price_ht: Number.isFinite(unitPrice) && unitPrice > 0 ? unitPrice : null,
   });
   if (error) throw new Error(error.message);
 }
@@ -106,11 +114,8 @@ export async function createStockAdjustment(input: {
 }
 
 /**
- * Coût matières réellement reçu sur un chantier, d'après les prix lus sur les
- * bons de livraison. Les mouvements sans prix ne comptent pas : mieux vaut un
- * total incomplet et honnête qu'un chiffre inventé.
-/**
- * Coût matières d'un chantier, d'après la bibliothèque de produits.
+ * Journal des matières d'un chantier : chaque mouvement de stock qui lui est
+ * rattaché, avec le prix retenu et d'où il vient.
  *
  * Un bon de livraison ne porte presque jamais de prix : ce qui compte, c'est que
  * la ligne soit rattachée à un produit du catalogue, où le prix d'achat est
@@ -120,43 +125,105 @@ export async function createStockAdjustment(input: {
  * Sont comptés les mouvements rattachés au chantier dans les deux sens : ce qui
  * y a été livré, et ce qui a été sorti du dépôt pour lui. Un même article passe
  * par l'un ou par l'autre, pas par les deux.
+ *
+ * Les lignes sans prix restent dans le journal, à zéro et signalées : le total
+ * doit rester honnête, mais le trou doit se voir.
  */
-export async function getChantierMaterialCost(chantierId: string): Promise<number> {
-  if (!chantierId) return 0;
+export type ChantierMaterialEntry = {
+  movementId: string;
+  deliveryNoteId: string | null;
+  productId: string;
+  designation: string;
+  unit: string;
+  movementType: "entree" | "sortie";
+  quantity: number;
+  unitPriceHt: number | null;
+  priceSource: "bon" | "catalogue" | "absent";
+  amountHt: number;
+  note: string | null;
+  occurredAt: string;
+};
+
+export type ChantierMaterialLedger = {
+  totalHt: number;
+  entries: ChantierMaterialEntry[];
+  /** Produits reçus dont le prix d'achat n'est renseigné nulle part. */
+  unpricedDesignations: string[];
+};
+
+const EMPTY_LEDGER: ChantierMaterialLedger = { totalHt: 0, entries: [], unpricedDesignations: [] };
+
+export async function getChantierMaterialLedger(chantierId: string): Promise<ChantierMaterialLedger> {
+  if (!chantierId) return EMPTY_LEDGER;
 
   const { data: movements, error } = await (supabase as any)
     .from("product_stock_movements")
-    .select("product_id,quantity,unit_price_ht,movement_type")
+    .select("id,product_id,quantity,unit_price_ht,movement_type,note,created_at,work_date,delivery_note_id")
     .eq("chantier_id", chantierId)
-    .in("movement_type", ["entree", "sortie"]);
-  if (error || !Array.isArray(movements) || !movements.length) return 0;
+    .in("movement_type", ["entree", "sortie"])
+    .order("created_at", { ascending: false });
+  if (error || !Array.isArray(movements) || !movements.length) return EMPTY_LEDGER;
 
-  const missingPriceIds = Array.from(
-    new Set(
-      movements
-        .filter((row: any) => row?.unit_price_ht === null || row?.unit_price_ht === undefined)
-        .map((row: any) => String(row?.product_id ?? ""))
-        .filter(Boolean),
-    ),
+  const productIds = Array.from(
+    new Set(movements.map((row: any) => String(row?.product_id ?? "")).filter(Boolean)),
   );
 
-  const catalogPrices = new Map<string, number>();
-  if (missingPriceIds.length) {
+  const catalog = new Map<string, { designation: string; unit: string; price: number }>();
+  if (productIds.length) {
     const { data: products } = await (supabase as any)
       .from("product_catalog_items")
-      .select("id,standard_purchase_price_ht")
-      .in("id", missingPriceIds);
+      .select("id,designation,unit,standard_purchase_price_ht")
+      .in("id", productIds);
     for (const product of (products ?? []) as Array<Record<string, unknown>>) {
       const price = Number(product.standard_purchase_price_ht ?? 0);
-      if (Number.isFinite(price) && price > 0) catalogPrices.set(String(product.id), price);
+      catalog.set(String(product.id), {
+        designation: String(product.designation ?? ""),
+        unit: String(product.unit ?? ""),
+        price: Number.isFinite(price) && price > 0 ? price : 0,
+      });
     }
   }
 
-  return movements.reduce((total: number, row: any) => {
-    const quantity = Number(row?.quantity ?? 0);
-    if (!Number.isFinite(quantity) || quantity <= 0) return total;
-    const slipPrice = row?.unit_price_ht === null || row?.unit_price_ht === undefined ? null : Number(row.unit_price_ht);
-    const price = slipPrice !== null && Number.isFinite(slipPrice) ? slipPrice : catalogPrices.get(String(row?.product_id ?? "")) ?? 0;
-    return price > 0 ? total + quantity * price : total;
-  }, 0);
+  const entries: ChantierMaterialEntry[] = [];
+  const unpriced = new Set<string>();
+
+  for (const row of movements as Array<Record<string, unknown>>) {
+    const quantity = Number(row.quantity ?? 0);
+    if (!Number.isFinite(quantity) || quantity <= 0) continue;
+    const productId = String(row.product_id ?? "");
+    const product = catalog.get(productId);
+    const slipPriceRaw =
+      row.unit_price_ht === null || row.unit_price_ht === undefined ? null : Number(row.unit_price_ht);
+    const slipPrice = slipPriceRaw !== null && Number.isFinite(slipPriceRaw) && slipPriceRaw > 0 ? slipPriceRaw : null;
+    const catalogPrice = product && product.price > 0 ? product.price : null;
+    const unitPriceHt = slipPrice ?? catalogPrice;
+    const designation = product?.designation || "Produit hors catalogue";
+    if (unitPriceHt === null) unpriced.add(designation);
+
+    entries.push({
+      movementId: String(row.id ?? ""),
+      deliveryNoteId: row.delivery_note_id ? String(row.delivery_note_id) : null,
+      productId,
+      designation,
+      unit: product?.unit ?? "",
+      movementType: row.movement_type === "sortie" ? "sortie" : "entree",
+      quantity,
+      unitPriceHt,
+      priceSource: slipPrice !== null ? "bon" : catalogPrice !== null ? "catalogue" : "absent",
+      amountHt: unitPriceHt === null ? 0 : quantity * unitPriceHt,
+      note: (row.note as string | null) ?? null,
+      occurredAt: String(row.created_at ?? row.work_date ?? ""),
+    });
+  }
+
+  return {
+    totalHt: entries.reduce((sum, entry) => sum + entry.amountHt, 0),
+    entries,
+    unpricedDesignations: Array.from(unpriced),
+  };
+}
+
+export async function getChantierMaterialCost(chantierId: string): Promise<number> {
+  const ledger = await getChantierMaterialLedger(chantierId);
+  return ledger.totalHt;
 }

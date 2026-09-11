@@ -72,6 +72,8 @@ export async function acceptProductProposal(
       quantity: proposal.quantity,
       source: "declaration_terrain",
       chantier_id: proposal.chantierId,
+      // Le produit arrive tard, mais l'entree appartient au bon d'origine.
+      delivery_note_id: proposal.deliveryNoteId,
       supplier_id: proposal.supplierId,
       unit_price_ht: proposal.unitPriceHt,
       note: "Bon de livraison (produit validé au bureau)",

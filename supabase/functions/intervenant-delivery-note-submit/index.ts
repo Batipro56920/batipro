@@ -140,23 +140,6 @@ serve(async (req) => {
 
     const supplier = await resolveSupplier(admin, organizationId, supplierName);
 
-    for (const line of resolvedLines) {
-      const { error: movementError } = await admin.from("product_stock_movements").insert({
-        product_id: line.product_id,
-        movement_type: "entree",
-        quantity: line.quantity,
-        source: "declaration_terrain",
-        chantier_id: chantierId,
-        intervenant_id: intervenantId,
-        // Le prix lu sur le bon alimente le cout matieres reel du chantier.
-        unit_price_ht: line.unit_price_ht,
-        supplier_id: supplier.id,
-        note: "Bon de livraison (portail ouvrier)",
-      });
-      if (movementError) return json({ error: movementError.message }, 400);
-    }
-
-
     const { data: openOrders } = await admin
       .from("purchase_orders")
       .select("id, document, status")
@@ -212,6 +195,29 @@ serve(async (req) => {
         .single();
       if (insertError) return json({ error: insertError.message }, 400);
       deliveryNoteId = inserted?.id ? String(inserted.id) : null;
+    }
+
+    // Les mouvements viennent apres le bon : ils en portent l'identifiant, ce
+    // qui rend la reception visible depuis le chantier et sa finance.
+    for (const line of resolvedLines) {
+      const { error: movementError } = await admin.from("product_stock_movements").insert({
+        product_id: line.product_id,
+        movement_type: "entree",
+        quantity: line.quantity,
+        source: "declaration_terrain",
+        chantier_id: chantierId,
+        intervenant_id: intervenantId,
+        delivery_note_id: deliveryNoteId,
+        // Le prix lu sur le bon alimente le cout matieres reel du chantier.
+        unit_price_ht: line.unit_price_ht,
+        supplier_id: supplier.id,
+        note: [
+          "Bon de livraison (portail ouvrier)",
+          documentReference,
+          supplier.name ?? supplierName,
+        ].filter(Boolean).join(" - "),
+      });
+      if (movementError) return json({ error: movementError.message }, 400);
     }
 
     // Les lignes sans produit du catalogue ne sont plus perdues : elles partent

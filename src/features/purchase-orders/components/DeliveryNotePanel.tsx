@@ -7,6 +7,7 @@ import { ProductQuickCreateModal, buildProductDraftFromQuickCreate } from "../..
 import { ProductProposalsPanel } from "../../product-catalog/components/ProductProposalsPanel";
 import { listPendingProductProposals, type ProductProposal } from "../../../services/productProposals.service";
 import type { SupplierRow } from "../../../services/suppliers.service";
+import { listChantiers, type ChantierRow } from "../../../services/chantiers.service";
 import {
   confirmDeliveryNote,
   extractDeliverySlip,
@@ -28,6 +29,7 @@ export function DeliveryNotePanel({ suppliers }: { suppliers: SupplierRow[] }) {
   const [orders, setOrders] = useState<PurchaseOrderRecord[]>([]);
   const [history, setHistory] = useState<DeliveryNoteRecord[]>([]);
   const [proposals, setProposals] = useState<ProductProposal[]>([]);
+  const [chantiers, setChantiers] = useState<ChantierRow[]>([]);
   const [loading, setLoading] = useState(true);
 
   const [file, setFile] = useState<File | null>(null);
@@ -36,6 +38,7 @@ export function DeliveryNotePanel({ suppliers }: { suppliers: SupplierRow[] }) {
   const [supplierId, setSupplierId] = useState("");
   const [documentReference, setDocumentReference] = useState("");
   const [purchaseOrderId, setPurchaseOrderId] = useState("");
+  const [chantierId, setChantierId] = useState("");
   const [lines, setLines] = useState<ReviewLine[]>([]);
   const [gapLine, setGapLine] = useState<{ index: number; materialName: string; unit: string } | null>(null);
   const [savingProduct, setSavingProduct] = useState(false);
@@ -46,16 +49,18 @@ export function DeliveryNotePanel({ suppliers }: { suppliers: SupplierRow[] }) {
   async function refresh() {
     setLoading(true);
     try {
-      const [productRows, orderRows, historyRows, proposalRows] = await Promise.all([
+      const [productRows, orderRows, historyRows, proposalRows, chantierRows] = await Promise.all([
         listProductCatalogItems().catch(() => []),
         listPurchaseOrders().catch(() => []),
         listDeliveryNotes().catch(() => []),
         listPendingProductProposals().catch(() => []),
+        listChantiers().catch(() => []),
       ]);
       setProducts(productRows);
       setOrders(orderRows);
       setHistory(historyRows);
       setProposals(proposalRows);
+      setChantiers(chantierRows);
     } finally {
       setLoading(false);
     }
@@ -108,7 +113,9 @@ export function DeliveryNotePanel({ suppliers }: { suppliers: SupplierRow[] }) {
       );
 
       const matchingOrders = orders.filter((order) => OPEN_STATUSES.has(order.status) && matchedSupplier && order.supplierId === matchedSupplier.id);
-      setPurchaseOrderId(matchingOrders.length === 1 ? matchingOrders[0].id : "");
+      const autoOrder = matchingOrders.length === 1 ? matchingOrders[0] : null;
+      setPurchaseOrderId(autoOrder?.id ?? "");
+      setChantierId(autoOrder?.chantierId ?? "");
 
       if (!result.lines.length) {
         setError("Aucune ligne de materiau reconnue sur ce document. Verifie la photo ou saisis manuellement.");
@@ -147,7 +154,16 @@ export function DeliveryNotePanel({ suppliers }: { suppliers: SupplierRow[] }) {
     setSupplierId("");
     setDocumentReference("");
     setPurchaseOrderId("");
+    setChantierId("");
     setLines([]);
+  }
+
+  // Choisir un bon de commande designe le chantier : c'est la commande qui sait
+  // pour qui on achete. Un choix manuel de chantier reste prioritaire ensuite.
+  function onPurchaseOrderChange(nextId: string) {
+    setPurchaseOrderId(nextId);
+    const order = nextId ? orders.find((row) => row.id === nextId) ?? null : null;
+    if (order?.chantierId) setChantierId(order.chantierId);
   }
 
   async function submitReception() {
@@ -160,20 +176,30 @@ export function DeliveryNotePanel({ suppliers }: { suppliers: SupplierRow[] }) {
     try {
       const matchedOrder = purchaseOrderId ? orders.find((order) => order.id === purchaseOrderId) ?? null : null;
       const supplier = suppliers.find((row) => row.id === supplierId) ?? null;
+      // Sans chantier, la reception alimente le stock mais aucune finance chantier.
+      const targetChantierId = chantierId || matchedOrder?.chantierId || null;
       await confirmDeliveryNote({
         supplierId: supplier?.id ?? matchedOrder?.supplierId ?? null,
         supplierName: supplier?.name ?? matchedOrder?.supplierName ?? extraction?.supplierName ?? null,
         documentReference: documentReference.trim() || null,
         purchaseOrderId: matchedOrder?.id ?? null,
-        chantierId: matchedOrder?.chantierId ?? null,
+        chantierId: targetChantierId,
         storagePath: extraction?.storagePath ?? null,
         storageBucket: extraction?.storageBucket ?? null,
         lines,
       });
+      const chantierLabel = targetChantierId
+        ? chantiers.find((row) => row.id === targetChantierId)?.nom ?? "le chantier"
+        : null;
       setNotice(
-        matchedOrder
-          ? `Reception enregistree. ${matchedOrder.document.number} passe "Livre" et le stock est mis a jour.`
-          : "Reception enregistree en stock (sans bon de commande rapproche).",
+        [
+          matchedOrder
+            ? `Reception enregistree. ${matchedOrder.document.number} passe "Livre" et le stock est mis a jour.`
+            : "Reception enregistree en stock (sans bon de commande rapproche).",
+          chantierLabel
+            ? `Livraison rattachee a ${chantierLabel} : elle apparait dans son suivi financier.`
+            : "Aucun chantier rattache : la livraison reste en stock general et n'entre dans aucun budget chantier.",
+        ].join(" "),
       );
       resetForm();
       await refresh();
@@ -239,7 +265,7 @@ export function DeliveryNotePanel({ suppliers }: { suppliers: SupplierRow[] }) {
               <div>Bon de commande a rapprocher</div>
               <select
                 value={purchaseOrderId}
-                onChange={(event) => setPurchaseOrderId(event.target.value)}
+                onChange={(event) => onPurchaseOrderChange(event.target.value)}
                 className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-900"
               >
                 <option value="">Sans bon de commande (imprevu)</option>
@@ -249,6 +275,26 @@ export function DeliveryNotePanel({ suppliers }: { suppliers: SupplierRow[] }) {
                   </option>
                 ))}
               </select>
+            </label>
+            <label className="space-y-1 text-xs text-slate-600">
+              <div>Chantier livre</div>
+              <select
+                value={chantierId}
+                onChange={(event) => setChantierId(event.target.value)}
+                className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-900"
+              >
+                <option value="">Stock general (aucun chantier)</option>
+                {chantiers.map((chantier) => (
+                  <option key={chantier.id} value={chantier.id}>
+                    {chantier.nom}
+                  </option>
+                ))}
+              </select>
+              <div className="text-[11px] text-slate-400">
+                {chantierId
+                  ? "Le cout de ces materiaux entre dans le budget du chantier."
+                  : "Sans chantier, la reception reste en stock et n'entre dans aucun budget."}
+              </div>
             </label>
           </div>
 
