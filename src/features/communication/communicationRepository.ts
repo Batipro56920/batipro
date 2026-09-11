@@ -1,7 +1,7 @@
 import { supabase } from "../../lib/supabaseClient";
 import { getCurrentUserProfile } from "../../services/currentUserProfile.service";
 import { normalizeChannels } from "./networks";
-import type { ApprovalStatus, Campaign, CampaignAsset, CampaignComment, CampaignItem, CampaignStatus, ChantierOption, InboxThread, ItemStatus, ItemType, PublicationDraftInput, PublicationVariant, ReviewPublication, SocialAccount, SocialMetricsSummary, Workspace } from "./types";
+import type { ApprovalStatus, Campaign, CampaignAsset, CampaignComment, CampaignItem, CampaignStatus, ChantierOption, InboxThread, ItemStatus, ItemType, PublicationDraftInput, PublicationVariant, ReviewPublication, SocialAccount, SocialMetricsSummary, SocialNetwork, Workspace } from "./types";
 
 const db = supabase as any;
 async function identity() {
@@ -211,4 +211,46 @@ export async function decidePublication(itemId: string, variantIds: string[], de
   const allApproved = (statusResult.data ?? []).length > 0 && (statusResult.data ?? []).every((variant: { approval_status: ApprovalStatus }) => variant.approval_status === "approved");
   const nextStatus: ItemStatus = decision === "changes_requested" ? "to_prepare" : allApproved ? (scheduledAt ? "scheduled" : "to_prepare") : "to_review";
   const itemResult = await db.from("communication_campaign_items").update({ status: nextStatus }).eq("organization_id", who.organizationId).eq("id", itemId); fail(itemResult.error);
+}
+
+/** Message réel d'une fonction serveur : sans ça on n'affiche qu'un code HTTP. */
+async function invokeCommunicationFunction<T>(name: string, body: Record<string, unknown>): Promise<T> {
+  const { data, error } = await supabase.functions.invoke(name, { body });
+  if (!error) return data as T;
+  const context = (error as { context?: unknown } | null)?.context;
+  if (context instanceof Response) {
+    try {
+      const payload = await context.clone().json();
+      const message = String((payload as { error?: unknown })?.error ?? "").trim();
+      if (message) throw new Error(message);
+    } catch (parsed) {
+      if (parsed instanceof Error && parsed.message) throw parsed;
+    }
+  }
+  throw new Error(error.message || "Fonction indisponible.");
+}
+
+export type ProviderReadiness = { provider: SocialNetwork; label: string; configured: boolean; missingSecrets: string[] };
+export type ConnectionsState = { providers: ProviderReadiness[]; accounts: SocialAccount[] };
+
+export async function loadConnections(): Promise<ConnectionsState> {
+  return invokeCommunicationFunction<ConnectionsState>("communication-connections", { action: "status" });
+}
+
+export async function disconnectSocialAccount(accountId: string): Promise<ConnectionsState> {
+  return invokeCommunicationFunction<ConnectionsState>("communication-connections", { action: "disconnect", accountId });
+}
+
+/**
+ * Ouvre l'autorisation du réseau. L'URL est construite côté serveur : les
+ * identifiants d'application ne descendent jamais dans le navigateur.
+ */
+export async function startSocialConnection(provider: SocialNetwork): Promise<string> {
+  const payload = await invokeCommunicationFunction<{ authUrl?: string }>("communication-oauth-start", {
+    provider,
+    redirectTo: `${window.location.origin}/communication?vue=connexions`,
+  });
+  const authUrl = String(payload?.authUrl ?? "");
+  if (!authUrl) throw new Error("Le serveur n'a pas renvoyé d'adresse d'autorisation.");
+  return authUrl;
 }

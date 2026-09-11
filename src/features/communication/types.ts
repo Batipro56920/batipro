@@ -29,6 +29,8 @@ export type SocialAccount = {
   display_name: string;
   avatar_url: string | null;
   status: SocialAccountStatus;
+  parent_account_id: string | null;
+  last_error: string | null;
   scopes: string[];
   connected_at: string;
   updated_at: string;
