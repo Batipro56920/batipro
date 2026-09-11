@@ -82,13 +82,13 @@ export function CommunicationComposer({ campaigns, chantiers, onSaved }: Props) 
         submitForReview,
       });
       if (files.length) await uploadAssets(campaignId, item.id, files);
-      setMessage(submitForReview ? "Publication envoyée à Marie pour validation." : "Brouillon enregistré dans la campagne.");
+      setMessage(submitForReview ? "Publication envoyée en validation." : "Brouillon enregistré dans la campagne.");
       setTitle(""); setBaseContent(""); setVariants({}); setScheduledAt(""); setFiles([]); setDestinationUrl(""); setChantierId(""); onSaved();
     } catch (error) { setMessage(error instanceof Error ? error.message : "Enregistrement impossible."); }
     finally { setSaving(null); }
   }
 
-  if (!campaigns.length) return <section className="rounded-2xl border border-dashed border-strong bg-surface p-10 text-center"><Sparkles className="mx-auto h-9 w-9 text-primary"/><h2 className="mt-3 font-semibold text-ink">Crée d’abord une campagne</h2><p className="mt-1 text-sm text-muted">Le compositeur rattache chaque publication à une campagne partagée avec Marie.</p></section>;
+  if (!campaigns.length) return <section className="rounded-2xl border border-dashed border-strong bg-surface p-10 text-center"><Sparkles className="mx-auto h-9 w-9 text-primary"/><h2 className="mt-3 font-semibold text-ink">Crée d’abord une campagne</h2><p className="mt-1 text-sm text-muted">Le compositeur rattache chaque publication à une campagne partagée avec l’équipe.</p></section>;
 
   return <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_390px]">
     <section className="space-y-5 rounded-2xl border border-subtle bg-surface p-5 shadow-sm">
