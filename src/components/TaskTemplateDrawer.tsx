@@ -272,6 +272,61 @@ function normalizeLabel(value: string): string {
     .trim();
 }
 
+/**
+ * Ligne de materiau validee : tout ce qui compte sur une seule ligne, pour que
+ * dix materiaux restent lisibles d'un coup d'oeil. "Modifier" la rouvre.
+ */
+function MaterialSummaryRow({
+  row,
+  index,
+  busy,
+  onEdit,
+  onRemove,
+}: {
+  row: MaterialRatioDraft;
+  index: number;
+  busy: boolean;
+  onEdit: () => void;
+  onRemove: () => void;
+}) {
+  const meta = [
+    row.ratio_quantity ? `${row.ratio_quantity} ${row.ratio_unit || "u"}` : null,
+    row.loss_percent && row.loss_percent !== "0" ? `perte ${row.loss_percent} %` : null,
+    row.purchase_price_ht ? `${row.purchase_price_ht} € / ${row.ratio_unit || "u"}` : null,
+  ].filter(Boolean);
+
+  return (
+    <div className="flex flex-wrap items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2">
+      <span className="text-xs font-medium text-slate-400">#{index + 1}</span>
+      <span className="min-w-0 flex-1 truncate text-sm font-medium text-slate-900" title={row.material_name}>
+        {row.material_name || "Matériau sans désignation"}
+      </span>
+      {row.is_main_material ? (
+        <span className="shrink-0 rounded-full bg-blue-50 px-2 py-0.5 text-xs font-semibold text-blue-700">Principal</span>
+      ) : null}
+      {meta.length ? <span className="shrink-0 text-xs text-slate-500">{meta.join(" · ")}</span> : null}
+      <div className="flex shrink-0 gap-2">
+        <button
+          type="button"
+          className="rounded-lg border px-2 py-1 text-xs hover:bg-slate-50"
+          onClick={onEdit}
+          disabled={busy}
+        >
+          Modifier
+        </button>
+        <button
+          type="button"
+          className="rounded-lg border border-red-200 px-2 py-1 text-xs text-red-700 hover:bg-red-50"
+          onClick={onRemove}
+          disabled={busy}
+        >
+          Supprimer
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function MaterialField({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <label className="block space-y-1">
@@ -320,6 +375,7 @@ export default function TaskTemplateDrawer({
   const [remarques, setRemarques] = useState("");
   const [usageMetier, setUsageMetier] = useState("");
   const [materialDrafts, setMaterialDrafts] = useState<MaterialRatioDraft[]>([]);
+  const [openMaterialIds, setOpenMaterialIds] = useState<Set<string>>(new Set());
   const [equipmentDrafts, setEquipmentDrafts] = useState<EquipmentDraft[]>([]);
   const [laborDrafts, setLaborDrafts] = useState<LaborDraft[]>([]);
   const [feeDrafts, setFeeDrafts] = useState<FeeDraft[]>([]);
@@ -1183,7 +1239,11 @@ export default function TaskTemplateDrawer({
                   <button
                     type="button"
                     className="rounded-xl border px-3 py-2 text-xs hover:bg-slate-50"
-                    onClick={() => setMaterialDrafts((prev) => [...prev, createMaterialDraft()])}
+                    onClick={() => {
+                      const draft = createMaterialDraft();
+                      setMaterialDrafts((prev) => [...prev, draft]);
+                      setOpenMaterialIds((prev) => new Set(prev).add(draft.id));
+                    }}
                     disabled={busy || preparationLoading || !preparationSchemaReady}
                   >
                     Ajouter un matériau
@@ -1200,8 +1260,24 @@ export default function TaskTemplateDrawer({
                   </div>
                 ) : (
                   <div className="space-y-3">
-                    {materialDrafts.map((row, index) => (
-                      <div key={row.id} className="space-y-3 rounded-2xl border border-slate-200 bg-slate-50 p-3">
+                    {materialDrafts.map((row, index) => {
+                      const isOpen = openMaterialIds.has(row.id);
+
+                      if (!isOpen) {
+                        return (
+                          <MaterialSummaryRow
+                            key={row.id}
+                            row={row}
+                            index={index}
+                            busy={busy}
+                            onEdit={() => setOpenMaterialIds((prev) => new Set(prev).add(row.id))}
+                            onRemove={() => setMaterialDrafts((prev) => prev.filter((item) => item.id !== row.id))}
+                          />
+                        );
+                      }
+
+                      return (
+                      <div key={row.id} className="space-y-3 rounded-2xl border border-blue-200 bg-slate-50 p-3">
                         <div className="flex flex-wrap items-center justify-between gap-2">
                           <div className="flex items-center gap-3">
                             <div className="text-xs font-medium text-slate-700">Matériau #{index + 1}</div>
@@ -1239,6 +1315,19 @@ export default function TaskTemplateDrawer({
                               disabled={busy}
                             >
                               Supprimer
+                            </button>
+                            <button
+                              type="button"
+                              className="rounded-lg bg-slate-900 px-2 py-1 text-xs font-semibold text-white hover:bg-slate-800 disabled:opacity-50"
+                              onClick={() => setOpenMaterialIds((prev) => {
+                                const next = new Set(prev);
+                                next.delete(row.id);
+                                return next;
+                              })}
+                              disabled={busy}
+                              title="Replier cette ligne"
+                            >
+                              Valider
                             </button>
                           </div>
                         </div>
@@ -1381,7 +1470,8 @@ export default function TaskTemplateDrawer({
                           );
                         })() : null}
                       </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 )}
               </div>

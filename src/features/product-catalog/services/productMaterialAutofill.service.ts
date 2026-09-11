@@ -51,11 +51,10 @@ export function getProductRatioHint(product: ProductCatalogItem): ProductRatioHi
         document.kind === "application_scope" ||
         document.kind === "work_method",
     )
-    .map((document) => {
-      const note = String(document.notes ?? "").trim();
-      return note ? `${document.name}: ${note}` : document.name;
-    })
-    .filter((line) => line.trim().length > 0)
+    // Seule une remarque redigee remonte. Le nom du fichier n'en est pas une :
+    // "Capture d'ecran 2026-09-10.png" n'apprend rien a qui pose le materiau.
+    .map((document) => String(document.notes ?? "").trim())
+    .filter((note) => note.length > 0)
     .slice(0, 3)
     .join("\n\n");
 

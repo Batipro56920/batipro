@@ -139,9 +139,10 @@ export async function storeProductFiles(
       name: file.name,
       url,
       usage: { task: true, doe: true },
-      notes: url
-        ? "Fiche importee et conservee, reprise automatiquement dans le DOE."
-        : "Fichier importe pour analyse automatique de la fiche produit.",
+      // Reserve aux consignes metier (pose, precautions, limites d'emploi).
+      // Un statut d'import n'a rien a y faire : il ressortirait en remarque
+      // dans les ratios materiaux des templates.
+      notes: null,
       analysis: null,
     };
   }));
