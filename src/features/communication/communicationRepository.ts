@@ -39,7 +39,20 @@ export async function loadWorkspace(id: string): Promise<Workspace> {
     return { ...asset, signed_url: data?.signedUrl } as CampaignAsset;
   }));
   const items = (itemsQ.data ?? []).map(withChannels) as CampaignItem[];
-  return { campaign: withChannels(campaignQ.data) as Campaign, items, comments: commentsQ.data as CampaignComment[], assets, jobs: await listPublishJobs(items.map((item) => item.id)) };
+  const itemIds = items.map((item) => item.id);
+  // L'état "validé" ne vit pas sur le contenu mais sur ses versions par réseau :
+  // sans elles, la liste ne saurait pas distinguer un brouillon d'un contenu prêt.
+  const { data: variantRows } = itemIds.length
+    ? await db.from("communication_publication_variants").select("id,organization_id,item_id,social_account_id,network,body,link_url,first_comment,approval_status,approved_at").eq("organization_id", organizationId).in("item_id", itemIds)
+    : { data: [] as PublicationVariant[] };
+  return {
+    campaign: withChannels(campaignQ.data) as Campaign,
+    items,
+    comments: commentsQ.data as CampaignComment[],
+    assets,
+    jobs: await listPublishJobs(itemIds),
+    variants: (variantRows ?? []) as PublicationVariant[],
+  };
 }
 export async function updateCampaign(id: string, patch: Partial<Pick<Campaign,"title"|"objective"|"audience"|"brief"|"status"|"channels"|"start_date"|"end_date">>) {
   const { organizationId } = await identity();
@@ -350,4 +363,121 @@ export async function listPublishJobs(itemIds: string[]): Promise<PublishJob[]> 
     providerUrl: row.provider_url ?? null,
     lastError: row.last_error ?? null,
   }));
+}
+
+/** Modifie un contenu existant : le tableau ne savait que le créer et le supprimer. */
+export async function updateItem(
+  id: string,
+  patch: { title?: string; content?: string | null; channels?: string[]; chantier_id?: string | null; scheduled_at?: string | null },
+): Promise<void> {
+  const { organizationId } = await identity();
+  const payload: Record<string, unknown> = {};
+  if (patch.title !== undefined) payload.title = patch.title;
+  if (patch.content !== undefined) payload.content = patch.content || null;
+  if (patch.channels !== undefined) payload.channels = normalizeChannels(patch.channels);
+  if (patch.chantier_id !== undefined) payload.chantier_id = patch.chantier_id || null;
+  if (patch.scheduled_at !== undefined) payload.scheduled_at = patch.scheduled_at ? new Date(patch.scheduled_at).toISOString() : null;
+  if (!Object.keys(payload).length) return;
+  const { error } = await db.from("communication_campaign_items").update(payload).eq("organization_id", organizationId).eq("id", id);
+  fail(error);
+}
+
+/**
+ * Aligne les versions par réseau sur les réseaux choisis.
+ *
+ * Une version retirée est supprimée plutôt que laissée orpheline : sinon elle
+ * resterait à valider, et la publication ne pourrait plus jamais être planifiée.
+ */
+export async function saveItemVariants(itemId: string, networks: string[], body: string): Promise<void> {
+  const { organizationId } = await identity();
+  const wanted = normalizeChannels(networks);
+
+  const [{ data: existing, error: readError }, accounts] = await Promise.all([
+    db.from("communication_publication_variants").select("id,network,approval_status").eq("organization_id", organizationId).eq("item_id", itemId),
+    listSocialAccounts().catch(() => [] as SocialAccount[]),
+  ]);
+  fail(readError);
+
+  const rows = (existing ?? []) as Array<{ id: string; network: string; approval_status: ApprovalStatus }>;
+  const obsolete = rows.filter((row) => !wanted.includes(row.network as never)).map((row) => row.id);
+  if (obsolete.length) {
+    const { error } = await db.from("communication_publication_variants").delete().eq("organization_id", organizationId).in("id", obsolete);
+    fail(error);
+  }
+
+  for (const network of wanted) {
+    const current = rows.find((row) => row.network === network);
+    if (current) {
+      // Retoucher le texte annule la validation : ce qui a été approuvé n'est plus ce qui partirait.
+      const { error } = await db.from("communication_publication_variants")
+        .update({ body, approval_status: "draft", approved_at: null, approved_by: null })
+        .eq("organization_id", organizationId)
+        .eq("id", current.id);
+      fail(error);
+      continue;
+    }
+    const account = accounts.find((entry) => entry.provider === network && entry.status === "connected");
+    const { error } = await db.from("communication_publication_variants").insert({
+      organization_id: organizationId,
+      item_id: itemId,
+      network,
+      body,
+      social_account_id: account?.id ?? null,
+      approval_status: "draft",
+    });
+    fail(error);
+  }
+
+  await updateItem(itemId, { channels: wanted });
+
+  // Retoucher un contenu déjà planifié le ramène en préparation : sinon la
+  // diffusion partirait avec un texte que plus personne n'a validé.
+  const { data: current } = await db
+    .from("communication_campaign_items")
+    .select("status")
+    .eq("organization_id", organizationId)
+    .eq("id", itemId)
+    .maybeSingle();
+  if (current?.status === "scheduled") await updateItemStatus(itemId, "to_prepare");
+}
+
+/** Validation directe par le bureau, sans passer par la file de relecture. */
+export async function validateItem(itemId: string): Promise<void> {
+  const who = await identity();
+  const { data, error } = await db
+    .from("communication_publication_variants")
+    .select("id")
+    .eq("organization_id", who.organizationId)
+    .eq("item_id", itemId);
+  fail(error);
+  const variants = (data ?? []) as Array<{ id: string }>;
+  if (!variants.length) throw new Error("Choisis au moins un réseau avant de valider ce contenu.");
+
+  const { error: updateError } = await db.from("communication_publication_variants")
+    .update({ approval_status: "approved", approved_by: who.userId, approved_at: new Date().toISOString() })
+    .eq("organization_id", who.organizationId)
+    .in("id", variants.map((variant) => variant.id));
+  fail(updateError);
+
+  const { error: eventError } = await db.from("communication_approval_events").insert(
+    variants.map((variant) => ({ organization_id: who.organizationId, variant_id: variant.id, action: "approved", actor_name: who.name })),
+  );
+  fail(eventError);
+}
+
+/** Remet un contenu validé en préparation, par exemple pour le corriger. */
+export async function reopenItem(itemId: string): Promise<void> {
+  const who = await identity();
+  const { error } = await db.from("communication_publication_variants")
+    .update({ approval_status: "draft", approved_by: null, approved_at: null })
+    .eq("organization_id", who.organizationId)
+    .eq("item_id", itemId);
+  fail(error);
+  await updateItemStatus(itemId, "to_prepare");
+}
+
+export async function scheduleItem(itemId: string, scheduledAt: string): Promise<void> {
+  if (!scheduledAt) throw new Error("Donne une date de publication.");
+  await updateItem(itemId, { scheduled_at: scheduledAt });
+  await updateItemStatus(itemId, "scheduled");
 }

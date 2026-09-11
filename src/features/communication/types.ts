@@ -26,7 +26,7 @@ export type PublishJob = {
   providerUrl: string | null;
   lastError: string | null;
 };
-export type Workspace = { campaign: Campaign; items: CampaignItem[]; comments: CampaignComment[]; assets: CampaignAsset[]; jobs: PublishJob[] };
+export type Workspace = { campaign: Campaign; items: CampaignItem[]; comments: CampaignComment[]; assets: CampaignAsset[]; jobs: PublishJob[]; variants: PublicationVariant[] };
 
 export type SocialNetwork = "facebook" | "instagram" | "linkedin" | "google_business" | "tiktok" | "youtube";
 export type ApprovalStatus = "draft" | "review_requested" | "changes_requested" | "approved";
