@@ -118,7 +118,9 @@ export default function Sidebar({ collapsed = false, onToggleCollapse, companyNa
     const adminAllowed = !("adminOnly" in item && item.adminOnly) || role === "ADMIN";
     const featureAllowed = !item.feature || !enabledModules || enabledModules.has(item.feature);
     const allowedGroups = profileAccess?.allowedGroups ?? null;
-    const groupAllowed = role === "ADMIN" || !allowedGroups || allowedGroups.includes(item.group);
+    // L'assistance reste accessible à chaque utilisateur connecté, même quand
+    // son profil limite les groupes métier affichés dans la barre latérale.
+    const groupAllowed = item.group === "Support" || role === "ADMIN" || !allowedGroups || allowedGroups.includes(item.group);
     const permissionAllowed =
       role === "ADMIN" || !item.permissionKey || !permissions || hasProfileFeaturePermission(permissions, item.permissionKey, role);
     return adminAllowed && featureAllowed && groupAllowed && permissionAllowed;
