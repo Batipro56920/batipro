@@ -6,6 +6,7 @@ import { createCrmAppointment, type CrmAppointmentRow } from "../../../services/
 import { loadCrmVisitReportDraft, saveCrmVisitReport } from "../../../services/crmVisitReports.service";
 import { createOpportunityForProspect, updateCrmAppointment, updateCrmOpportunityStageByKey } from "../../../services/crmWorkflow.service";
 import { list as listTaskTemplates, type TaskTemplateRow } from "../../../services/taskLibrary.service";
+import VisitTaskPickerDialog from "./VisitTaskPickerDialog";
 import { listTaskTemplatePreparationByTemplateIds, type TaskTemplateEquipmentItemRow, type TaskTemplateMaterialRatioRow } from "../../../services/taskTemplatePreparation.service";
 import { getCompanyHourlyRates, type CompanyHourlyRates } from "../../../services/indirectCosts.service";
 import { VISIT_DRAFT_MARKER } from "../../crm/utils/appointmentDraftStorage";
@@ -458,6 +459,7 @@ export function ProjectVisitWorkspaceStable({ project, existingAppointment }: { 
   // Un badge "erreur" muet ne dit pas quoi corriger : on garde le message réel.
   const [saveError, setSaveError] = useState<string | null>(null);
   const [taskTemplates, setTaskTemplates] = useState<TaskTemplateRow[]>([]);
+  const [pickerSectionId, setPickerSectionId] = useState<string | null>(null);
   const [linkedMaterials, setLinkedMaterials] = useState<TaskTemplateMaterialRatioRow[]>([]);
   const [linkedEquipment, setLinkedEquipment] = useState<TaskTemplateEquipmentItemRow[]>([]);
   const [hourlyRates, setHourlyRates] = useState<CompanyHourlyRates | null>(null);
@@ -567,6 +569,7 @@ export function ProjectVisitWorkspaceStable({ project, existingAppointment }: { 
   const sections = useMemo(() => draft.lines.filter((line) => line.type === "section"), [draft.lines]);
   const tasks = useMemo(() => draft.lines.filter((line) => line.type === "task"), [draft.lines]);
   const selectedLine = useMemo(() => draft.lines.find((line) => line.id === selectedLineId) ?? null, [draft.lines, selectedLineId]);
+  const pickerSection = useMemo(() => (pickerSectionId ? draft.lines.find((line) => line.id === pickerSectionId) ?? null : null), [draft.lines, pickerSectionId]);
   const activeSectionId = selectedLine?.type === "section" ? selectedLine.id : selectedLine?.parentId ?? sections[0]?.id ?? null;
   const report = useMemo(() => reportText(project, draft), [project, draft]);
   const photos = useMemo(() => draft.attachments.filter((item) => item.kind === "photo"), [draft.attachments]);
@@ -657,6 +660,47 @@ export function ProjectVisitWorkspaceStable({ project, existingAppointment }: { 
     setDraft((current) => ({ ...current, lines: [...nextLines.filter((item) => !current.lines.some((existing) => existing.id === item.id)), ...current.lines, line] }));
     setSelectedLineId(line.id);
     setStep("estimating");
+  }
+
+  /**
+   * Remplit une section d'un coup a partir de la bibliotheque. Chaque tache
+   * choisie devient une ligne deja reliee a son modele, avec l'unite, le temps
+   * et le prix de reference repris — il ne reste qu'a saisir la quantite.
+   */
+  function addTasksFromTemplates(sectionId: string, templateIds: string[]) {
+    if (!templateIds.length) return;
+    const newLines: EstimateLine[] = [];
+
+    for (const templateId of templateIds) {
+      const template = taskTemplates.find((row) => row.id === templateId);
+      if (!template) continue;
+      newLines.push({
+        id: uid("task"),
+        type: "task",
+        parentId: sectionId,
+        title: template.titre,
+        unit: normalizeVisitUnit(template.unite) ?? "m2",
+        quantity: 0,
+        manualQuantity: false,
+        length: null,
+        width: null,
+        height: null,
+        estimatedHours: template.temps_prevu_par_unite_h ? Number(template.temps_prevu_par_unite_h) : null,
+        priceHintHt: template.cout_reference_unitaire_ht ? Number(template.cout_reference_unitaire_ht) : null,
+        family: null,
+        libraryId: null,
+        taskTemplateId: template.id,
+        taskTemplateLabel: template.titre,
+        technicalNotes: "",
+        constraints: "",
+        variants: "",
+        attentionPoints: "",
+      });
+    }
+
+    if (!newLines.length) return;
+    setDraft((current) => ({ ...current, lines: [...current.lines, ...newLines] }));
+    setSelectedLineId(newLines[0].id);
   }
 
   function removeLine(id: string) {
@@ -909,7 +953,7 @@ export function ProjectVisitWorkspaceStable({ project, existingAppointment }: { 
             <div className="mt-4 space-y-3">
               {sections.length === 0 ? <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-5 text-sm text-slate-500">Creez une section, puis ajoutez les taches et quantites relevees.</div> : sections.map((section) => {
                 const children = tasks.filter((task) => task.parentId === section.id);
-                return <article key={section.id} className="overflow-hidden rounded-2xl border border-slate-200"><button type="button" onClick={() => setSelectedLineId(section.id)} className="flex w-full items-center justify-between bg-slate-50 px-4 py-3 text-left"><span className="font-semibold text-slate-950">{section.title}</span><span className="text-xs text-slate-500">{children.length} tache(s)</span></button><div className="divide-y divide-slate-100">{children.map((task) => <button key={task.id} type="button" onClick={() => setSelectedLineId(task.id)} className={["block w-full p-4 text-left hover:bg-slate-50", selectedLineId === task.id ? "bg-blue-50" : "bg-white"].join(" ")}><div className="font-semibold text-slate-950">{task.title}</div><div className="mt-1 text-sm text-slate-500">{quantity(task)} {task.unit}</div>{task.technicalNotes ? <div className="mt-1 line-clamp-2 text-xs text-slate-500">{task.technicalNotes}</div> : null}</button>)}</div></article>;
+                return <article key={section.id} className="overflow-hidden rounded-2xl border border-slate-200"><button type="button" onClick={() => { setSelectedLineId(section.id); setPickerSectionId(section.id); }} title="Ajouter des taches de la bibliotheque a cette section" className="flex w-full items-center justify-between bg-slate-50 px-4 py-3 text-left hover:bg-slate-100"><span className="font-semibold text-slate-950">{section.title}</span><span className="text-xs text-slate-500">{children.length} tache(s)</span></button><div className="divide-y divide-slate-100">{children.map((task) => <button key={task.id} type="button" onClick={() => setSelectedLineId(task.id)} className={["block w-full p-4 text-left hover:bg-slate-50", selectedLineId === task.id ? "bg-blue-50" : "bg-white"].join(" ")}><div className="font-semibold text-slate-950">{task.title}</div><div className="mt-1 text-sm text-slate-500">{quantity(task)} {task.unit}</div>{task.technicalNotes ? <div className="mt-1 line-clamp-2 text-xs text-slate-500">{task.technicalNotes}</div> : null}</button>)}</div></article>;
               })}
             </div>
           </div>
@@ -954,6 +998,18 @@ export function ProjectVisitWorkspaceStable({ project, existingAppointment }: { 
             ) : <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-4 text-sm text-slate-500">Selectionnez une section ou une tache.</div>}
           </aside>
         </section> : null}
+
+        {pickerSection ? (
+          <VisitTaskPickerDialog
+            sectionTitle={pickerSection.title}
+            templates={taskTemplates}
+            onCancel={() => setPickerSectionId(null)}
+            onConfirm={(templateIds) => {
+              addTasksFromTemplates(pickerSection.id, templateIds);
+              setPickerSectionId(null);
+            }}
+          />
+        ) : null}
 
         {step === "photos" ? (
           <section className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm md:p-5">
