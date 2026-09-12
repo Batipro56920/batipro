@@ -72,6 +72,9 @@ type ProviderAdapter = {
 const META_PAGE_SCOPES = [
   "pages_show_list",
   "pages_read_engagement",
+  // Lire les commentaires laisses par les visiteurs releve d'une autorisation
+  // distincte de la lecture des publications de la Page elle-meme.
+  "pages_read_user_content",
   "pages_manage_posts",
   "pages_manage_engagement",
   "business_management",
