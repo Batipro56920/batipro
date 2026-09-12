@@ -29,24 +29,19 @@ export default defineConfig({
   },
   plugins: [
     react(),
+    // Le service worker precachait index.html et tous les bundles, alors que
+    // l'application desactive deja son enregistrement (__BATIPRO_DISABLE_SW__).
+    // Resultat : qui l'avait installe avant restait bloque sur une version
+    // ancienne, et un deploiement n'arrivait jamais jusqu'a lui.
+    //
+    // selfDestroying produit un service worker qui desinstalle le precedent et
+    // vide ses caches. Le navigateur verifie /sw.js de lui-meme a chaque
+    // navigation : les postes bloques se debloquent seuls, sans vidage manuel.
+    // A supprimer une fois que plus personne ne porte l'ancien.
     VitePWA({
       manifest: false,
-      registerType: "autoUpdate",
       injectRegister: false,
-      includeAssets: [
-        "icons/apple-touch-icon.png",
-        "icons/icon-192.png",
-        "icons/icon-512.png",
-        "icons/icon-maskable-512.png",
-      ],
-      workbox: {
-        navigateFallback: "/index.html",
-        globPatterns: ["**/*.{js,css,html,ico,png,svg,webmanifest,woff2}"],
-        maximumFileSizeToCacheInBytes: 3 * 1024 * 1024,
-        cleanupOutdatedCaches: true,
-        clientsClaim: true,
-        skipWaiting: true,
-      },
+      selfDestroying: true,
     }),
   ],
 });
