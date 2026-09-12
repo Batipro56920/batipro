@@ -297,10 +297,26 @@ function readErrorMessage(error: unknown): string {
   return message;
 }
 
-/** Les unités de la bibliothèque sont plus larges que celles du relevé terrain. */
+/**
+ * Les unités de la bibliothèque sont plus larges que celles du relevé terrain,
+ * et rarement écrites à l'identique : un modèle dit "unité" là où le relevé
+ * attend "u". Sans cette traduction, l'unité du modèle était perdue.
+ */
 function normalizeVisitUnit(unit: string | null | undefined): Unit | null {
-  const value = String(unit ?? "").trim().toLowerCase().replace("²", "2").replace("³", "3");
-  if (value === "u" || value === "ml" || value === "m2" || value === "m3" || value === "h") return value;
+  const value = String(unit ?? "")
+    .replace("²", "2")
+    .replace("³", "3")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+
+  if (["u", "unite", "unites", "pce", "piece", "pieces", "ens", "ensemble", "forfait"].includes(value)) return "u";
+  if (["ml", "m", "metre lineaire", "metres lineaires", "metre", "metres"].includes(value)) return "ml";
+  if (["m2", "m 2"].includes(value)) return "m2";
+  if (["m3", "m 3"].includes(value)) return "m3";
+  if (["h", "heure", "heures"].includes(value)) return "h";
   return null;
 }
 
@@ -679,7 +695,7 @@ export function ProjectVisitWorkspaceStable({ project, existingAppointment }: { 
         type: "task",
         parentId: sectionId,
         title: template.titre,
-        unit: normalizeVisitUnit(template.unite) ?? "m2",
+        unit: normalizeVisitUnit(template.unite) ?? "u",
         quantity: 0,
         manualQuantity: false,
         length: null,
