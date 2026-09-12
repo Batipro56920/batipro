@@ -28,7 +28,7 @@ export type ChannelDefinition = {
 export const CHANNELS: ChannelDefinition[] = [
   { id: "facebook", label: "Facebook", dot: "bg-blue-600", calendar: "border-blue-300 bg-blue-50 text-blue-950", limit: 63206, hint: "Texte clair, lien et appel à l’action", publishable: true },
   { id: "instagram", label: "Instagram", dot: "bg-pink-600", calendar: "border-pink-300 bg-pink-50 text-pink-950", limit: 2200, hint: "Accroche visuelle et hashtags ciblés", publishable: true },
-  { id: "linkedin", label: "LinkedIn", dot: "bg-sky-700", calendar: "border-sky-300 bg-sky-50 text-sky-950", limit: 3000, hint: "Expertise, méthode et résultat métier", publishable: true },
+  { id: "linkedin", label: "LinkedIn", dot: "bg-sky-700", calendar: "border-sky-300 bg-sky-50 text-sky-950", limit: 3000, hint: "Publié sur le compte connecté, pas sur une page", publishable: true },
   { id: "google_business", label: "Google Business", dot: "bg-amber-500", calendar: "border-amber-300 bg-amber-50 text-amber-950", limit: 1500, hint: "Actualité locale et bénéfice client", publishable: true },
   { id: "tiktok", label: "TikTok", dot: "bg-slate-900", calendar: "border-slate-300 bg-slate-50 text-slate-950", limit: 2200, hint: "Vidéo verticale obligatoire, 64 Mo maximum", publishable: true },
   { id: "youtube", label: "YouTube", dot: "bg-red-600", calendar: "border-red-300 bg-red-50 text-red-950", limit: 5000, hint: "Vidéo obligatoire, le titre interne devient le titre", publishable: true },

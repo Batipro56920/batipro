@@ -85,16 +85,16 @@ async function instagramMetrics(mediaId: string, token: string): Promise<PostMet
   };
 }
 
-async function linkedinMetrics(shareUrn: string, token: string): Promise<PostMetrics> {
-  const payload = await readJson(
-    await fetch(`https://api.linkedin.com/rest/socialActions/${encodeURIComponent(shareUrn)}`, {
-      headers: { Authorization: `Bearer ${token}`, "LinkedIn-Version": "202409", "X-Restli-Protocol-Version": "2.0.0" },
-    }),
-    "Statistiques LinkedIn",
+/**
+ * LinkedIn reserve les compteurs aux publications d'organisation.
+ *
+ * Batipro publie au nom du compte connecte, faute de page entreprise : aucun
+ * chiffre n'est accessible, et il vaut mieux le dire que remonter des zeros.
+ */
+function linkedinMetrics(): Promise<PostMetrics> {
+  return Promise.reject(
+    new Error("LinkedIn ne fournit pas de statistiques pour une publication faite au nom d'un compte."),
   );
-  const likes = Number(payload?.likesSummary?.totalLikes ?? 0);
-  const comments = Number(payload?.commentsSummary?.totalFirstLevelComments ?? 0);
-  return { ...EMPTY_METRICS, engagements: likes + comments, comments };
 }
 
 /**
@@ -170,7 +170,7 @@ export async function fetchPostMetrics(input: { provider: string; postId: string
   switch (input.provider) {
     case "facebook": return facebookMetrics(input.postId, input.accessToken);
     case "instagram": return instagramMetrics(input.postId, input.accessToken);
-    case "linkedin": return linkedinMetrics(input.postId, input.accessToken);
+    case "linkedin": return linkedinMetrics();
     case "tiktok": return tiktokMetrics(input.postId, input.accessToken);
     case "youtube": return youtubeMetrics(input.postId, input.accessToken);
     case "google_business":

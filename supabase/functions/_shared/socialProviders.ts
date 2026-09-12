@@ -186,9 +186,12 @@ const PROVIDERS: Record<ProviderId, ProviderAdapter> = {
     },
   },
   linkedin: {
-    label: "LinkedIn Page",
+    label: "LinkedIn",
     secrets: ["LINKEDIN_CLIENT_ID", "LINKEDIN_CLIENT_SECRET"],
-    scopes: ["r_organization_social", "w_organization_social", "rw_organization_admin"],
+    // Publier au nom d'une organisation exige une page entreprise verifiee et
+    // un produit soumis a validation. Batipro publie donc au nom du compte
+    // connecte, avec un produit accorde en libre-service.
+    scopes: ["openid", "profile", "w_member_social"],
     authorizeUrl(input) {
       const params = new URLSearchParams({
         response_type: "code",
@@ -222,25 +225,23 @@ const PROVIDERS: Record<ProviderId, ProviderAdapter> = {
       };
     },
     async discoverAccounts(tokens) {
+      // Le compte connecte est la seule cible : son identifiant vient du jeton
+      // lui-meme, il n'y a pas de liste d'organisations a parcourir.
       const payload = await readJson(
-        await fetch(
-          "https://api.linkedin.com/rest/organizationAcls?q=roleAssignee&role=ADMINISTRATOR&state=APPROVED&projection=(elements*(organization~(id,localizedName,logoV2)))",
-          { headers: { Authorization: `Bearer ${tokens.accessToken}`, "LinkedIn-Version": "202409", "X-Restli-Protocol-Version": "2.0.0" } },
-        ),
-        "Lecture des pages LinkedIn",
+        await fetch("https://api.linkedin.com/v2/userinfo", {
+          headers: { Authorization: `Bearer ${tokens.accessToken}` },
+        }),
+        "Lecture du compte LinkedIn",
       );
-      const elements = Array.isArray(payload.elements) ? payload.elements : [];
-      return elements.map((element: any) => {
-        const organization = element["organization~"] ?? {};
-        const urn = String(element.organization ?? `urn:li:organization:${organization.id ?? ""}`);
-        return {
-          externalAccountId: urn,
-          displayName: String(organization.localizedName ?? "Page LinkedIn"),
-          avatarUrl: null,
-          parentAccountId: null,
-          accessToken: null,
-        };
-      });
+      const sub = String(payload.sub ?? "").trim();
+      if (!sub) return [];
+      return [{
+        externalAccountId: `urn:li:person:${sub}`,
+        displayName: String(payload.name ?? "Compte LinkedIn"),
+        avatarUrl: payload.picture ? String(payload.picture) : null,
+        parentAccountId: null,
+        accessToken: null,
+      }];
     },
   },
   tiktok: {

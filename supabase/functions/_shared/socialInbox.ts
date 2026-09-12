@@ -205,48 +205,6 @@ async function googleReviews(locationPath: string, token: string): Promise<Norma
   return threads;
 }
 
-/**
- * LinkedIn n'a pas de boite de reception : les commentaires ne se lisent que
- * publication par publication. On parcourt donc ce que Batipro a publie.
- */
-async function linkedinComments(organizationUrn: string, postUrns: string[], token: string): Promise<NormalizedThread[]> {
-  const threads: NormalizedThread[] = [];
-  for (const shareUrn of postUrns.slice(0, 25)) {
-    const payload = await readJson(
-      await fetch(`https://api.linkedin.com/rest/socialActions/${encodeURIComponent(shareUrn)}/comments?count=50`, {
-        headers: { Authorization: `Bearer ${token}`, "LinkedIn-Version": "202409", "X-Restli-Protocol-Version": "2.0.0" },
-      }),
-      "Lecture des commentaires LinkedIn",
-    );
-    for (const comment of Array.isArray(payload.elements) ? payload.elements : []) {
-      const actor = String(comment.actor ?? "");
-      if (actor === organizationUrn) continue;
-      const commentUrn = String(comment["$URN"] ?? comment.id ?? "");
-      if (!commentUrn) continue;
-      threads.push({
-        providerThreadId: commentUrn,
-        kind: "comment",
-        // LinkedIn ne donne pas le nom de l'auteur sans autorisation supplementaire.
-        contactName: actor.startsWith("urn:li:organization") ? "Page LinkedIn" : "Membre LinkedIn",
-        contactAvatarUrl: null,
-        subject: null,
-        permalink: `https://www.linkedin.com/feed/update/${shareUrn}`,
-        lastMessageAt: isoOr(comment?.created?.time ? new Date(Number(comment.created.time)).toISOString() : null),
-        metadata: { commentUrn, shareUrn, organizationUrn },
-        messages: [{
-          providerMessageId: commentUrn,
-          providerParentId: shareUrn,
-          direction: "inbound",
-          body: String(comment?.message?.text ?? ""),
-          authorName: null,
-          sentAt: isoOr(comment?.created?.time ? new Date(Number(comment.created.time)).toISOString() : null),
-        }],
-      });
-    }
-  }
-  return threads;
-}
-
 /** YouTube aussi ne connait les commentaires que video par video. */
 async function youtubeComments(channelId: string, videoIds: string[], token: string): Promise<NormalizedThread[]> {
   const threads: NormalizedThread[] = [];
@@ -313,8 +271,10 @@ export async function fetchThreads(input: {
       const location = input.externalAccountId.replace(/^.*?(locations\/)/, "$1");
       return googleReviews(`${input.parentAccountId}/${location}`, input.accessToken);
     }
+    // LinkedIn ne donne acces aux commentaires qu'au nom d'une organisation,
+    // ce qui suppose une page entreprise. Batipro publie au nom du compte.
     case "linkedin":
-      return linkedinComments(input.externalAccountId, input.publishedPostIds ?? [], input.accessToken);
+      return [];
     case "youtube":
       return youtubeComments(input.externalAccountId, input.publishedPostIds ?? [], input.accessToken);
     // TikTok ne donne acces aux commentaires qu'aux partenaires valides :
@@ -363,28 +323,7 @@ export async function replyToThread(input: {
   }
 
   if (input.provider === "linkedin") {
-    const shareUrn = String(input.metadata?.shareUrn ?? "");
-    const commentUrn = String(input.metadata?.commentUrn ?? "");
-    const organizationUrn = String(input.metadata?.organizationUrn ?? "");
-    if (!shareUrn || !organizationUrn) throw new Error("Publication LinkedIn introuvable : relance une synchronisation.");
-    const response = await fetch(`https://api.linkedin.com/rest/socialActions/${encodeURIComponent(shareUrn)}/comments`, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${input.accessToken}`,
-        "Content-Type": "application/json",
-        "LinkedIn-Version": "202409",
-        "X-Restli-Protocol-Version": "2.0.0",
-      },
-      body: JSON.stringify({
-        actor: organizationUrn,
-        object: shareUrn,
-        message: { text },
-        ...(commentUrn ? { parentComment: commentUrn } : {}),
-      }),
-    });
-    if (!response.ok) await readJson(response, "Réponse au commentaire LinkedIn");
-    const payload = await response.json().catch(() => ({}));
-    return { providerMessageId: String(payload?.["$URN"] ?? payload?.id ?? response.headers.get("x-restli-id") ?? "") };
+    throw new Error("Répondre à un commentaire LinkedIn demande une page entreprise. Réponds directement sur LinkedIn.");
   }
 
   if (input.kind === "comment") {

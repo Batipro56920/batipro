@@ -17,7 +17,7 @@ C'est cette adresse qu'il faut déclarer comme *redirect URI* chez chaque platef
 | Plateforme | À créer | Secrets à renseigner |
 |---|---|---|
 | Meta (Facebook + Instagram) | Une application sur developers.facebook.com, produit « Facebook Login », en mode Business | `META_APP_ID`, `META_APP_SECRET` |
-| LinkedIn | Une application sur developer.linkedin.com, rattachée à la page entreprise | `LINKEDIN_CLIENT_ID`, `LINKEDIN_CLIENT_SECRET` |
+| LinkedIn | Une application sur developer.linkedin.com, avec le produit « Share on LinkedIn » | `LINKEDIN_CLIENT_ID`, `LINKEDIN_CLIENT_SECRET` |
 | Google Business Profile | Un projet Google Cloud, API « Business Profile » activée, écran de consentement publié | `GOOGLE_BUSINESS_CLIENT_ID`, `GOOGLE_BUSINESS_CLIENT_SECRET` |
 | TikTok | Une application sur developers.tiktok.com, produits « Login Kit » et « Content Posting API » | `TIKTOK_CLIENT_KEY`, `TIKTOK_CLIENT_SECRET` |
 | YouTube | Un projet Google Cloud, API « YouTube Data API v3 » activée, écran de consentement publié | `YOUTUBE_CLIENT_ID`, `YOUTUBE_CLIENT_SECRET` |
@@ -32,7 +32,7 @@ Permissions demandées par Batipro :
 
 - Facebook : `pages_show_list`, `pages_read_engagement`, `pages_manage_posts`, `pages_manage_engagement`, `business_management`
 - Instagram : les mêmes, plus `instagram_basic`, `instagram_content_publish`, `instagram_manage_comments`, `instagram_manage_insights`
-- LinkedIn : `r_organization_social`, `w_organization_social`, `rw_organization_admin`
+- LinkedIn : `openid`, `profile`, `w_member_social`
 - Google : `https://www.googleapis.com/auth/business.manage`
 - TikTok : `user.info.basic`, `video.publish`, `video.upload`, `video.list`
 - YouTube : `youtube.upload`, `youtube.force-ssl`
@@ -57,7 +57,7 @@ Dans Supabase, rubrique Integrations puis Cron, créer un travail pour chacune. 
 |---|---|---|---|
 | Facebook | Oui | Messages et commentaires | Portée, impressions, engagements, clics |
 | Instagram | Oui, média obligatoire | Messages et commentaires | Portée et engagements |
-| LinkedIn | Oui, texte et lien | Commentaires des publications faites depuis Batipro | Réactions et commentaires |
+| LinkedIn | Oui, sur le compte connecté | Non | Non |
 | Google Business | Oui | Avis, avec réponse | Non fourni par Google par publication |
 | TikTok | Oui, vidéo de 64 Mo maximum | Non, TikTok réserve les commentaires à ses partenaires | Vues, mentions j'aime, commentaires, partages |
 | YouTube | Oui, vidéo de 128 Mo maximum | Commentaires des vidéos publiées depuis Batipro | Vues, mentions j'aime, commentaires |
@@ -66,8 +66,7 @@ Sur YouTube, le titre interne de la publication devient le titre de la vidéo, l
 
 ## 5. Limites imposées par les réseaux
 
-- LinkedIn ne donne pas le nom des personnes qui commentent sans autorisation supplémentaire : la conversation s'affiche sous « Membre LinkedIn ».
-- Les commentaires LinkedIn ne remontent que pour les publications diffusées depuis Batipro, les vingt-cinq dernières par compte. Le réseau n'offre pas de vue d'ensemble.
+- LinkedIn publie au nom du compte connecté, pas d'une page entreprise. Publier au nom d'une organisation exigerait une page entreprise vérifiée et le produit « Community Management API », soumis à validation. En contrepartie, ni les commentaires ni les statistiques ne sont accessibles : LinkedIn les réserve aux publications d'organisation.
 - YouTube ne donne pas les impressions dans l'API utilisée ici : ce sont les vues qui font foi. Les impressions existent dans l'API Analytics, qui demande une autorisation supplémentaire.
 - Les vidéos transitent par la fonction serveur, qui les télécharge puis les renvoie au réseau. Au-delà d'une centaine de mégaoctets, il faudra passer par un envoi en plusieurs morceaux.
 - Les appels aux API des réseaux n'ont jamais été exécutés contre un vrai compte, faute d'identifiants. Le premier essai réel demandera sans doute des ajustements.
