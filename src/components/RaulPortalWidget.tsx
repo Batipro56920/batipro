@@ -2,12 +2,13 @@ import { useEffect, useRef, useState, type ChangeEvent, type FormEvent } from "r
 import { createPortal } from "react-dom";
 import { Camera, FileText, HardHat, Maximize2, Paperclip, Send, X } from "lucide-react";
 import { supabase } from "../lib/supabaseClient";
+import { edgeFunctionErrorMessage } from "../lib/edgeFunctionError";
 import { prepareRaulAttachments, RAUL_FILE_ACCEPT, type RaulAttachment } from "./raulAttachments";
 import RaulImageLightbox from "./RaulImageLightbox";
 
 type RaulChatMessage = { role: "user" | "assistant"; content: string; attachments?: Array<{ name: string; mime_type: string }>; generatedImage?: string };
 const WELCOME_MESSAGE: RaulChatMessage = { role: "assistant", content: "Salut, je suis Raul. Pose-moi une question sur ta tâche, un imprévu, envoie-moi une photo, ou demande-moi une fiche technique illustrée." };
-function getErrorMessage(error: unknown) { const message = String((error as { message?: string } | null)?.message ?? "").trim(); return message || "Raul n'a pas pu répondre pour le moment."; }
+const getErrorMessage = (error: unknown) => edgeFunctionErrorMessage(error, "Raul n'a pas pu répondre pour le moment.");
 function RaulAvatar({ compact = false }: { compact?: boolean }) { return <span className={["grid shrink-0 place-items-center rounded-xl border border-yellow-300 bg-yellow-400 text-slate-950 shadow-sm shadow-yellow-950/10", compact ? "h-8 w-8" : "h-9 w-9"].join(" ")} aria-hidden="true"><HardHat className={compact ? "h-4 w-4" : "h-5 w-5"} /></span>; }
 
 export default function RaulPortalWidget({ token, chantierId }: { token: string; chantierId: string | null }) {
@@ -33,7 +34,7 @@ export default function RaulPortalWidget({ token, chantierId }: { token: string;
       const reply = String(payload?.reply ?? "").trim(); const generatedImage = typeof payload?.generated_image === "string" ? payload.generated_image : undefined;
       if (!reply && !generatedImage) throw new Error("Réponse vide de Raul.");
       setMessages((prev) => [...prev, { role: "assistant", content: reply || "La fiche technique illustrée est prête.", generatedImage }]);
-    } catch (err) { const message = getErrorMessage(err); setError(message); setMessages((prev) => [...prev, { role: "assistant", content: message }]); } finally { setSending(false); }
+    } catch (err) { const message = await getErrorMessage(err); setError(message); setMessages((prev) => [...prev, { role: "assistant", content: message }]); } finally { setSending(false); }
   }
 
   const triggerButton = <button type="button" onClick={() => setOpen((value) => !value)} title="Raul" className="flex min-h-14 flex-col items-center justify-center gap-1 rounded-xl px-1 text-[11px] font-semibold text-slate-500" aria-label={open ? "Fermer Raul" : "Ouvrir Raul"}><RaulAvatar compact /><span>Raul</span></button>;

@@ -245,7 +245,9 @@ serve(async (req) => {
   const visualRequest = wantsVisualTechnicalSheet(message);
   const requestPayload: Record<string, unknown> = {
     model: visualRequest
-      ? optionalEnv("OPENAI_RAUL_VISUAL_MODEL") || "gpt-5.6-sol"
+      // Le modele par defaut n'existait pas chez OpenAI : toute demande de
+      // fiche illustree partait vers un nom inconnu et revenait en erreur.
+      ? optionalEnv("OPENAI_RAUL_VISUAL_MODEL") || "gpt-4.1-mini"
       : optionalEnv("OPENAI_RAUL_MODEL") || optionalEnv("OPENAI_MODEL") || "gpt-4.1-mini",
     instructions: visualRequest ? `${baseInstructions}\n\n${TECH_SHEET_INSTRUCTIONS}` : baseInstructions,
     input: [...history, { role: "user", content: userContent }],
@@ -275,7 +277,12 @@ serve(async (req) => {
   if (!response.ok) {
     const details = await response.text();
     console.error("Raul OpenAI request failed", response.status, details.slice(0, 1500));
-    return json({ error: visualRequest ? "Raul n'a pas pu générer la fiche visuelle pour le moment." : "Raul n'a pas pu analyser la demande pour le moment." }, 502);
+    // Sans la raison exacte, un modele absent, un quota depasse et une image
+    // refusee donnent tous le meme message a l'ecran.
+    let reason = "";
+    try { reason = String(JSON.parse(details)?.error?.message ?? "").trim(); } catch { reason = ""; }
+    const prefix = visualRequest ? "Raul n'a pas pu générer la fiche visuelle" : "Raul n'a pas pu analyser la demande";
+    return json({ error: reason ? `${prefix} : ${reason.slice(0, 300)}` : `${prefix} pour le moment.` }, 502);
   }
 
   const data = await response.json();
