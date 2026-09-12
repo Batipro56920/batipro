@@ -1,3 +1,5 @@
+import { photoToJpeg } from "../lib/photoToJpeg";
+
 export type RaulAttachment = {
   name: string;
   mime_type: string;
@@ -32,7 +34,11 @@ export async function prepareRaulAttachments(files: FileList | File[], currentCo
     errors.push(`Seules ${remaining} pièce${remaining > 1 ? "s" : ""} jointe${remaining > 1 ? "s" : ""} supplémentaire${remaining > 1 ? "s" : ""} peuvent être ajoutées.`);
   }
 
-  for (const file of selected) {
+  for (const original of selected) {
+    // Un iPhone livre du HEIC, que l'IA ne sait pas lire, et une photo brute
+    // pèse plusieurs mégaoctets une fois encodée en base64 dans la requête.
+    const file = original.type.startsWith("image/") ? await photoToJpeg(original) : original;
+
     if (file.size > RAUL_MAX_FILE_SIZE) {
       errors.push(`${file.name} dépasse 8 Mo.`);
       continue;
