@@ -44,6 +44,7 @@ const MonEntreprisePage = lazy(() => import("./pages/MonEntreprisePage"));
 const TerrainFeedbacksPage = lazy(() => import("./pages/TerrainFeedbacksPage"));
 const FilChantierPage = lazy(() => import("./pages/FilChantierPage"));
 const CommunicationPage = lazy(() => import("./features/communication/CommunicationPage"));
+const SupportTicketsPage = lazy(() => import("./pages/SupportTicketsPage"));
 const ClientDocumentPage = lazy(() => import("./pages/ClientDocumentPage"));
 const ApporteursAffairesPage = lazy(() => import("./pages/ApporteursAffairesPage"));
 const ApporteurPortalPage = lazy(() => import("./pages/ApporteurPortalPage"));
@@ -166,6 +167,7 @@ export default function App() {
       {/* Portail employe V2 - protege, sans layout admin */}
       <Route path="/portail" element={<Navigate to="/portail/employe" replace />} />
       <Route path="/portail/employe/*" element={<EmployeePortalRoute />} />
+      <Route path="/portail/tickets" element={<RequireAuth allow="intervenant"><RouteSuspense label="Chargement des tickets..."><SupportTicketsPage portal /></RouteSuspense></RequireAuth>} />
 
       {/* Protégé */}
       <Route
@@ -181,6 +183,7 @@ export default function App() {
         <Route path="/assistant-direction/anciens-devis" element={<RouteSuspense label="Chargement de la collecte historique COCO..."><CocoHistoricalQuotesPage /></RouteSuspense>} />
         <Route path="/communication" element={<RouteSuspense label="Chargement du studio Communication..."><CommunicationPage /></RouteSuspense>} />
         <Route path="/communication/campagnes/:campaignId" element={<RouteSuspense label="Chargement de la campagne..."><CommunicationPage /></RouteSuspense>} />
+        <Route path="/tickets" element={<RouteSuspense label="Chargement des tickets..."><SupportTicketsPage /></RouteSuspense>} />
         <Route
           path="/rentabilite"
           element={

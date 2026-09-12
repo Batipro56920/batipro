@@ -397,15 +397,14 @@ export default function LayoutShell() {
               >
                 <Bell className="h-4 w-4" />
               </button>
-              <button
-                type="button"
-                disabled
-                title="Centre d'aide à connecter dans une prochaine étape."
-                className="hidden h-9 w-9 cursor-not-allowed place-items-center rounded-xl border border-subtle bg-surface text-muted shadow-sm md:grid"
-                aria-label="Aide"
+              <Link
+                to={`/tickets?from=${encodeURIComponent(`${location.pathname}${location.search}`)}`}
+                title="Tickets et assistance"
+                className="hidden h-9 w-9 place-items-center rounded-xl border border-subtle bg-surface text-ink-secondary shadow-sm transition hover:bg-interactive md:grid"
+                aria-label="Tickets et assistance"
               >
                 <CircleHelp className="h-4 w-4" />
-              </button>
+              </Link>
               <button
                 type="button"
                 onClick={logout}

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { AlertTriangle, Boxes, CalendarDays, Camera, CheckCircle2, Circle, FileText, ListOrdered, LogOut, MapPin, MessageCircle, Moon, PackageSearch, Paperclip, Plus, RefreshCw, Send, ShieldAlert, Sunrise, Wrench } from "lucide-react";
+import { AlertTriangle, Boxes, CalendarDays, Camera, CheckCircle2, Circle, CircleHelp, FileText, ListOrdered, LogOut, MapPin, MessageCircle, Moon, PackageSearch, Paperclip, Plus, RefreshCw, Send, ShieldAlert, Sunrise, Wrench } from "lucide-react";
 import { useLocation, useNavigate } from "react-router-dom";
 
 import { supabase } from "../lib/supabaseClient";
@@ -906,6 +906,7 @@ export default function EmployeePortalV2Page() {
       <header className="sticky top-0 z-30 border-b border-slate-200 bg-white/95 backdrop-blur">
         <div className="mx-auto flex max-w-3xl items-center justify-between gap-3 px-4 py-3">
           <div className="min-w-0"><div className="text-[11px] font-bold uppercase tracking-[0.18em] text-blue-700">Batipro terrain</div><div className="truncate text-lg font-bold">Bonjour {name.split(" ")[0]}</div></div>
+          <button type="button" onClick={() => navigate(`/portail/tickets?from=${encodeURIComponent(`${location.pathname}${location.search}`)}`)} className="rounded-full border border-slate-200 p-2.5 text-slate-500" aria-label="Tickets et assistance"><CircleHelp className="h-4 w-4" /></button>
           <button type="button" onClick={() => setRefreshKey((v) => v + 1)} className="rounded-full border border-slate-200 p-2.5 text-slate-500"><RefreshCw className="h-4 w-4" /></button>
           <button type="button" onClick={logout} className="rounded-full border border-slate-200 p-2.5 text-slate-500"><LogOut className="h-4 w-4" /></button>
         </div>

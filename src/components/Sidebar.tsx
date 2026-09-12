@@ -26,6 +26,7 @@ import {
   Wallet,
   MessageCircle,
   Megaphone,
+  TicketCheck,
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import type { CompanyFeatureModuleId } from "../config/companyFeatures";
@@ -111,6 +112,7 @@ export default function Sidebar({ collapsed = false, onToggleCollapse, companyNa
     { to: "/ressources/profils-types", label: "Profils types", icon: Users, permissionKey: "entreprise_parametres" as const, group: "Paramètres" },
     { to: "/entreprise/personnel", label: "Personnel", icon: Users, group: "Paramètres", adminOnly: true },
     { to: "/entreprise", label: "Mon entreprise", icon: Building2, permissionKey: "entreprise_parametres" as const, group: "Paramètres" },
+    { to: "/tickets", label: "Tickets", icon: TicketCheck, group: "Support" },
   ].filter((item) => {
     const role = String(profileAccess?.role ?? "").trim().toUpperCase();
     const adminAllowed = !("adminOnly" in item && item.adminOnly) || role === "ADMIN";
