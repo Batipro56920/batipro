@@ -26,7 +26,9 @@ Deno.serve(async (req) => {
       .order("provider");
     if (error) throw new Error(error.message);
 
-    return jsonResponse({ providers: providerReadiness(), accounts: data ?? [] });
+    // L'adresse de retour vient du serveur : c'est elle, au caractere pres,
+    // qu'il faut declarer chez le reseau.
+    return jsonResponse({ providers: providerReadiness(), accounts: data ?? [], redirectUri: Deno.env.get("COMMUNICATION_OAUTH_REDIRECT_URI") ?? null });
   } catch (err) {
     return jsonResponse({ error: err instanceof Error ? err.message : "Statut des connexions impossible." }, 400);
   }

@@ -1,20 +1,106 @@
 import { useCallback, useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import { AlertCircle, BarChart3, CheckCircle2, ExternalLink, Image, Link2, RefreshCw, ShieldCheck, Video } from "lucide-react";
+import { AlertCircle, BarChart3, Check, CheckCircle2, Copy, ExternalLink, Image, Link2, RefreshCw, ShieldCheck, Video } from "lucide-react";
 import { Button } from "../../components/ui/button";
-import { disconnectSocialAccount, loadConnections, startSocialConnection, type ConnectionsState } from "./communicationRepository";
+import { disconnectSocialAccount, loadConnections, startSocialConnection, type ConnectionsState, type ProviderReadiness } from "./communicationRepository";
 import type { SocialAccount, SocialNetwork } from "./types";
 
-const PROVIDERS: Array<{ id: SocialNetwork; label: string; use: string; priority: string }> = [
-  { id: "facebook", label: "Facebook Pages", use: "Publier, programmer et traiter commentaires/messages.", priority: "Prioritaire" },
-  { id: "instagram", label: "Instagram professionnel", use: "Publications, médias, commentaires et statistiques.", priority: "Prioritaire" },
-  { id: "linkedin", label: "LinkedIn Page", use: "Actualités, commentaires et statistiques d'engagement.", priority: "Prioritaire" },
-  { id: "google_business", label: "Google Business Profile", use: "Actualités locales et avis clients.", priority: "Prioritaire" },
-  { id: "tiktok", label: "TikTok", use: "Vidéos courtes et vues. Pas de commentaires : TikTok ne les ouvre qu'à ses partenaires.", priority: "Publication et vues" },
-  { id: "youtube", label: "YouTube", use: "Vidéos chantier, commentaires et vues.", priority: "Complet" },
+type ProviderCard = {
+  id: SocialNetwork;
+  label: string;
+  use: string;
+  priority: string;
+  /** Ce qu'il faut créer chez le réseau, et où. */
+  console: { url: string; name: string; create: string } | null;
+};
+
+const PROVIDERS: ProviderCard[] = [
+  { id: "facebook", label: "Facebook Pages", use: "Publier, programmer et traiter commentaires/messages.", priority: "Prioritaire", console: { url: "https://developers.facebook.com/apps", name: "Meta for Developers", create: "une application de type Business, avec le produit « Facebook Login »" } },
+  { id: "instagram", label: "Instagram professionnel", use: "Publications, médias, commentaires et statistiques.", priority: "Prioritaire", console: { url: "https://developers.facebook.com/apps", name: "Meta for Developers", create: "la même application que Facebook : un seul couple d'identifiants sert aux deux" } },
+  { id: "linkedin", label: "LinkedIn Page", use: "Actualités, commentaires et statistiques d'engagement.", priority: "Prioritaire", console: { url: "https://www.linkedin.com/developers/apps", name: "LinkedIn Developers", create: "une application rattachée à ta page entreprise" } },
+  { id: "google_business", label: "Google Business Profile", use: "Actualités locales et avis clients.", priority: "Prioritaire", console: { url: "https://console.cloud.google.com/apis/credentials", name: "Google Cloud", create: "un identifiant OAuth, API « Business Profile » activée" } },
+  { id: "tiktok", label: "TikTok", use: "Vidéos courtes et vues. Pas de commentaires : TikTok ne les ouvre qu'à ses partenaires.", priority: "Publication et vues", console: { url: "https://developers.tiktok.com/apps", name: "TikTok for Developers", create: "une application avec « Login Kit » et « Content Posting API »" } },
+  { id: "youtube", label: "YouTube", use: "Vidéos chantier, commentaires et vues.", priority: "Complet", console: { url: "https://console.cloud.google.com/apis/credentials", name: "Google Cloud", create: "un identifiant OAuth distinct, API « YouTube Data API v3 » activée" } },
 ];
 
-const EMPTY: ConnectionsState = { providers: [], accounts: [] };
+const EMPTY: ConnectionsState = { providers: [], accounts: [], redirectUri: null };
+
+/** Adresse de la page des secrets du projet, déduite de l'adresse Supabase. */
+function secretsPageUrl() {
+  const host = String(import.meta.env.VITE_SUPABASE_URL ?? "");
+  const ref = host.match(/https?:\/\/([a-z0-9]+)\.supabase\./i)?.[1];
+  return ref ? `https://supabase.com/dashboard/project/${ref}/settings/functions` : "https://supabase.com/dashboard";
+}
+
+function CopyLine({ value }: { value: string }) {
+  const [copied, setCopied] = useState(false);
+  return (
+    <span className="mt-1 flex items-center gap-2 rounded-lg border border-subtle bg-surface px-2 py-1">
+      <code className="min-w-0 flex-1 break-all font-mono text-[11px] text-ink">{value}</code>
+      <button
+        type="button"
+        onClick={async () => { await navigator.clipboard.writeText(value); setCopied(true); window.setTimeout(() => setCopied(false), 1600); }}
+        className="shrink-0 rounded p-1 text-primary hover:bg-primary-soft"
+        aria-label="Copier"
+      >
+        {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
+      </button>
+    </span>
+  );
+}
+
+/**
+ * Ce qu'il reste à faire pour ce réseau, en clair.
+ *
+ * La carte n'affichait que deux noms de variables et un bouton inactif : rien
+ * ne disait que l'étape suivante se passe chez le réseau, ni laquelle.
+ */
+function SetupGuide({ card, readiness, redirectUri }: { card: ProviderCard; readiness: ProviderReadiness; redirectUri: string | null }) {
+  const secrets = readiness.missingSecrets.filter((secret) => secret !== "COMMUNICATION_OAUTH_REDIRECT_URI");
+  return (
+    <div className="mt-4 space-y-3 rounded-xl border border-amber-200 bg-amber-50/60 p-3 text-xs text-ink">
+      <p className="flex items-center gap-2 font-semibold text-amber-800">
+        <AlertCircle className="h-4 w-4" />Connexion impossible tant que l&apos;application n&apos;existe pas chez le réseau
+      </p>
+
+      {card.console ? (
+        <p>
+          <span className="font-semibold">1.</span> Crée {card.console.create} sur{" "}
+          <a href={card.console.url} target="_blank" rel="noreferrer" className="font-medium text-primary">
+            {card.console.name} <ExternalLink className="inline h-3 w-3" />
+          </a>.
+        </p>
+      ) : null}
+
+      {redirectUri ? (
+        <div>
+          <p><span className="font-semibold">2.</span> Déclare cette adresse de retour, au caractère près :</p>
+          <CopyLine value={redirectUri} />
+        </div>
+      ) : null}
+
+      {readiness.scopes?.length ? (
+        <p>
+          <span className="font-semibold">3.</span> Demande ces autorisations : <span className="break-all font-mono text-[11px]">{readiness.scopes.join(", ")}</span>
+        </p>
+      ) : null}
+
+      {secrets.length ? (
+        <div>
+          <p>
+            <span className="font-semibold">4.</span> Colle les identifiants obtenus dans{" "}
+            <a href={secretsPageUrl()} target="_blank" rel="noreferrer" className="font-medium text-primary">
+              les secrets Supabase <ExternalLink className="inline h-3 w-3" />
+            </a>, sous ces noms :
+          </p>
+          {secrets.map((secret) => <CopyLine key={secret} value={secret} />)}
+        </div>
+      ) : null}
+
+      <p className="text-amber-800">Le bouton Connecter s&apos;active tout seul dès que ces identifiants sont enregistrés.</p>
+    </div>
+  );
+}
 
 function AccountRow({ account, onDisconnect, busy }: { account: SocialAccount; onDisconnect: () => void; busy: boolean }) {
   return (
@@ -152,20 +238,21 @@ export function CommunicationConnections() {
                   ) : configured ? (
                     <span className="text-sm text-muted">{accounts.length ? "Ajouter un autre compte" : "Aucun compte connecté"}</span>
                   ) : (
-                    <span className="min-w-0 text-sm text-muted">
-                      <AlertCircle className="mr-1 inline h-4 w-4" />
-                      Secrets serveur à renseigner : <span className="break-all font-mono text-xs">{readiness?.missingSecrets.join(", ")}</span>
-                    </span>
+                    <span className="text-sm font-medium text-amber-800">Configuration à faire</span>
                   )}
                   <Button
                     variant="secondary"
                     disabled={!configured || busy || loading}
                     onClick={() => void connect(provider.id)}
-                    title={configured ? undefined : "Disponible une fois l'application développeur créée et ses secrets renseignés"}
+                    title={configured ? undefined : "Disponible une fois l'application développeur créée et ses identifiants renseignés"}
                   >
                     {accounts.length ? <><RefreshCw className="h-4 w-4" />Reconnecter</> : <>Connecter <ExternalLink className="h-4 w-4" /></>}
                   </Button>
                 </div>
+
+                {supported && !configured && readiness ? (
+                  <SetupGuide card={provider} readiness={readiness} redirectUri={state.redirectUri} />
+                ) : null}
               </article>
             );
           })}

@@ -312,8 +312,8 @@ async function invokeCommunicationFunction<T>(name: string, body: Record<string,
   throw new Error(error.message || "Fonction indisponible.");
 }
 
-export type ProviderReadiness = { provider: SocialNetwork; label: string; configured: boolean; missingSecrets: string[] };
-export type ConnectionsState = { providers: ProviderReadiness[]; accounts: SocialAccount[] };
+export type ProviderReadiness = { provider: SocialNetwork; label: string; configured: boolean; missingSecrets: string[]; scopes: string[] };
+export type ConnectionsState = { providers: ProviderReadiness[]; accounts: SocialAccount[]; redirectUri: string | null };
 
 export async function loadConnections(): Promise<ConnectionsState> {
   return invokeCommunicationFunction<ConnectionsState>("communication-connections", { action: "status" });

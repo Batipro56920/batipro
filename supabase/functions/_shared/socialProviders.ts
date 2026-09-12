@@ -448,7 +448,9 @@ export function providerReadiness() {
     const adapter = PROVIDERS[id];
     const missing = adapter.secrets.filter((secret) => !env(secret));
     if (!redirectUri) missing.push("COMMUNICATION_OAUTH_REDIRECT_URI");
-    return { provider: id, label: adapter.label, configured: missing.length === 0, missingSecrets: missing };
+    // Les permissions demandees au reseau : le bureau doit les declarer a
+    // l'identique dans la console du reseau, sinon l'autorisation echoue.
+    return { provider: id, label: adapter.label, configured: missing.length === 0, missingSecrets: missing, scopes: adapter.scopes };
   });
 }
 
