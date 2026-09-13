@@ -100,7 +100,7 @@ async function createNewQuote(
   assertQuotePricePermission(quote, null, access);
   // Deux devis peuvent avoir été ouverts en même temps : le compteur est
   // repris ici, au moment où le devis existe vraiment.
-  const number = /^\d{8}$/.test(quote.number) ? await quoteNumber(quote.number) : quote.number;
+  const number = /^DEV-\d{8}$/.test(quote.number) ? await quoteNumber(quote.number) : quote.number;
   const created = await createCrmQuote({
     quote_number: number,
     client_id: quote.clientId,

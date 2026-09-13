@@ -855,13 +855,13 @@ export async function moveCrmOpportunityStage(id: string, stage: CrmPipelineStag
 }
 
 /**
- * Numéro de devis : AAAAMM suivi d'un compteur à deux chiffres remis à zéro
- * chaque mois (202609 01, puis 202609 02). L'ancien format mélangeait l'année
+ * Numéro de devis : DEV- puis AAAAMM et un compteur à deux chiffres remis à zéro
+ * chaque mois (DEV-20260901, puis DEV-20260902). L'ancien format mélangeait l'année
  * et un morceau d'identifiant de projet : impossible de savoir au premier coup
  * d'oeil lequel de deux devis était le plus récent.
  */
 export async function nextCrmQuoteNumber(reference = new Date()): Promise<string> {
-  const prefix = `${reference.getFullYear()}${String(reference.getMonth() + 1).padStart(2, "0")}`;
+  const prefix = `DEV-${reference.getFullYear()}${String(reference.getMonth() + 1).padStart(2, "0")}`;
   const { data } = await crmDb
     .from("crm_quotes")
     .select("quote_number")
