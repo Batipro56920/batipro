@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { TaskTemplateInput, TaskTemplateRow } from "../services/taskLibrary.service";
 import {
   findLotProfileByName,
@@ -228,15 +228,92 @@ function fillIfEmpty(existing: string, content: string) {
   return cleanExisting ? existing : cleanContent;
 }
 
-function materialResultText(item: TaskTemplateCocoResult["materials"][number]) {
-  const quantity = item.quantity !== null ? `${item.quantity}${item.unit ? ` ${item.unit}` : ""}` : "";
-  return [item.label, quantity, item.detail].filter(Boolean).join(" - ");
+type CocoMaterialResultItem = TaskTemplateCocoResult["materials"][number];
+type CocoEquipmentResultItem = TaskTemplateCocoResult["equipment"][number];
+
+function emptyCocoCostSummary(): TaskTemplateCocoResult["costSummary"] {
+  return {
+    materialCostHt: null,
+    materialSaleHt: null,
+    laborCostHt: null,
+    laborSaleHt: null,
+    equipmentCostHt: null,
+    equipmentSaleHt: null,
+    feeCostHt: null,
+    feeSaleHt: null,
+    totalCostHt: null,
+    salePriceHt: null,
+    marginHt: null,
+    marginRate: null,
+    estimatedTimeHours: null,
+    humanTimeHours: null,
+    teamTimeHours: null,
+    dailyCostHt: null,
+    profitabilityRate: null,
+    lines: [],
+  };
 }
 
-function equipmentResultText(item: TaskTemplateCocoResult["equipment"][number]) {
-  const quantity = item.quantity !== null ? `${item.quantity}${item.unit ? ` ${item.unit}` : ""}` : "";
-  const required = item.required ? "obligatoire" : "";
-  return [item.label, quantity, required, item.detail].filter(Boolean).join(" - ");
+/**
+ * Squelette vide : permet de remplir les encadres a la main sans avoir lance
+ * Coco, et sert de base quand on modifie un bloc avant toute generation.
+ */
+function emptyCocoResult(): TaskTemplateCocoResult {
+  return {
+    materials: [],
+    equipment: [],
+    consumables: [],
+    ppe: [],
+    procedure: [],
+    controls: [],
+    errorsToAvoid: [],
+    safetyPoints: [],
+    doePhotos: [],
+    doeDocuments: [],
+    technicalDescription: "",
+    characteristics: [],
+    fieldReturns: [],
+    fieldReturnQuestions: [],
+    costSummary: emptyCocoCostSummary(),
+    confidence: "medium",
+    missingInformation: [],
+    usedFallback: false,
+    errorMessage: null,
+  };
+}
+
+/**
+ * Les zones de saisie gardent les lignes vides le temps de la frappe : on ne
+ * nettoie qu'au moment d'enregistrer.
+ */
+function sanitizeCocoResult(result: TaskTemplateCocoResult): TaskTemplateCocoResult {
+  const cleanList = (values: string[]) => values.map((value) => value.trim()).filter((value) => value.length > 0);
+  const cleanText = (value: string | null) => {
+    const clean = (value ?? "").trim();
+    return clean ? clean : null;
+  };
+  const cleanLabelled = <T extends { label: string; unit: string | null; detail: string | null }>(rows: T[]) =>
+    rows
+      .filter((row) => row.label.trim().length > 0)
+      .map((row) => ({ ...row, label: row.label.trim(), unit: cleanText(row.unit), detail: cleanText(row.detail) }));
+
+  return {
+    ...result,
+    materials: cleanLabelled(result.materials),
+    equipment: cleanLabelled(result.equipment),
+    consumables: cleanList(result.consumables),
+    ppe: cleanList(result.ppe),
+    procedure: cleanList(result.procedure),
+    controls: cleanList(result.controls),
+    errorsToAvoid: cleanList(result.errorsToAvoid),
+    safetyPoints: cleanList(result.safetyPoints),
+    doePhotos: cleanList(result.doePhotos),
+    doeDocuments: cleanList(result.doeDocuments),
+    characteristics: cleanList(result.characteristics),
+    fieldReturns: cleanList(result.fieldReturns),
+    fieldReturnQuestions: cleanList(result.fieldReturnQuestions),
+    missingInformation: cleanList(result.missingInformation),
+  };
 }
 
 /**
@@ -336,17 +413,277 @@ function MaterialField({ label, children }: { label: string; children: React.Rea
   );
 }
 
-function CocoResultBlock({ title, items }: { title: string; items: string[] }) {
+/**
+ * Champ numerique tolerant : on garde la frappe en cours (virgule, saisie
+ * partielle) au lieu de la reecrire a chaque caractere.
+ */
+function CocoNumberInput({
+  value,
+  disabled,
+  placeholder,
+  className,
+  onChange,
+}: {
+  value: number | null;
+  disabled: boolean;
+  placeholder?: string;
+  className?: string;
+  onChange: (next: number | null) => void;
+}) {
+  const [text, setText] = useState(value === null ? "" : String(value));
+  const known = useRef(value);
+
+  useEffect(() => {
+    if (known.current === value) return;
+    known.current = value;
+    setText(value === null ? "" : String(value));
+  }, [value]);
+
+  return (
+    <input
+      className={className}
+      value={text}
+      disabled={disabled}
+      placeholder={placeholder}
+      inputMode="decimal"
+      onChange={(event) => {
+        const raw = event.target.value;
+        setText(raw);
+        const parsed = raw.trim() ? Number(raw.trim().replace(",", ".")) : NaN;
+        const next = Number.isFinite(parsed) ? parsed : null;
+        known.current = next;
+        onChange(next);
+      }}
+    />
+  );
+}
+
+/**
+ * Encadre Coco editable : une ligne = un element. Coco propose, l'utilisateur
+ * corrige, complete, ou saisit tout lui-meme.
+ */
+function CocoListBlock({
+  title,
+  items,
+  disabled,
+  onChange,
+}: {
+  title: string;
+  items: string[];
+  disabled: boolean;
+  onChange: (next: string[]) => void;
+}) {
+  return (
+    <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <div className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">{title}</div>
+        <span className="text-[11px] text-slate-400">une ligne = un element</span>
+      </div>
+      <textarea
+        className="mt-2 min-h-24 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm leading-6"
+        value={items.join("\n")}
+        disabled={disabled}
+        placeholder="Rien pour le moment. Saisis une ligne par element."
+        onChange={(event) => onChange(event.target.value.split(/\r?\n/))}
+      />
+    </div>
+  );
+}
+
+const cocoRowInputClass = "min-w-0 rounded-lg border border-slate-200 bg-white px-2 py-1 text-sm";
+
+function CocoRowActions({ disabled, onRemove }: { disabled: boolean; onRemove: () => void }) {
+  return (
+    <button
+      type="button"
+      className="shrink-0 rounded-lg border border-red-200 px-2 py-1 text-xs text-red-700 hover:bg-red-50"
+      disabled={disabled}
+      onClick={onRemove}
+    >
+      Supprimer
+    </button>
+  );
+}
+
+function CocoAddRowButton({ disabled, onClick }: { disabled: boolean; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      className="mt-2 rounded-lg border border-slate-200 bg-white px-3 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50"
+      disabled={disabled}
+      onClick={onClick}
+    >
+      + Ajouter une ligne
+    </button>
+  );
+}
+
+/**
+ * Materiaux proposes par Coco : chaque ligne reste modifiable (designation,
+ * quantite, unite, detail) et peut etre supprimee ou ajoutee a la main.
+ */
+function CocoMaterialsBlock({
+  title,
+  items,
+  disabled,
+  onChange,
+}: {
+  title: string;
+  items: CocoMaterialResultItem[];
+  disabled: boolean;
+  onChange: (next: CocoMaterialResultItem[]) => void;
+}) {
+  function patch(index: number, changes: Partial<CocoMaterialResultItem>) {
+    onChange(items.map((item, position) => (position === index ? { ...item, ...changes } : item)));
+  }
+
   return (
     <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
       <div className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">{title}</div>
-      {items.length ? (
-        <ul className="mt-2 space-y-1 text-sm leading-6 text-slate-700">
-          {items.map((item, index) => <li key={`${title}-${index}`}>- {item}</li>)}
-        </ul>
-      ) : (
-        <div className="mt-2 text-sm text-slate-500">Non renseigne.</div>
-      )}
+      <div className="mt-2 space-y-2">
+        {items.length ? (
+          items.map((item, index) => (
+            <div key={"coco-material-" + index} className="space-y-1 rounded-lg border border-slate-200 bg-white p-2">
+              <div className="flex flex-wrap items-center gap-2">
+                <input
+                  className={cocoRowInputClass + " flex-1"}
+                  value={item.label}
+                  disabled={disabled}
+                  placeholder="Designation"
+                  onChange={(event) => patch(index, { label: event.target.value })}
+                />
+                <CocoNumberInput
+                  className={cocoRowInputClass + " w-20"}
+                  value={item.quantity}
+                  disabled={disabled}
+                  placeholder="Qte"
+                  onChange={(quantity) => patch(index, { quantity })}
+                />
+                <input
+                  className={cocoRowInputClass + " w-20"}
+                  value={item.unit ?? ""}
+                  disabled={disabled}
+                  placeholder="Unite"
+                  onChange={(event) => patch(index, { unit: event.target.value })}
+                />
+                <CocoRowActions
+                  disabled={disabled}
+                  onRemove={() => onChange(items.filter((_, position) => position !== index))}
+                />
+              </div>
+              <input
+                className={cocoRowInputClass + " w-full"}
+                value={item.detail ?? ""}
+                disabled={disabled}
+                placeholder="Detail (mise en oeuvre, reference, remarque)"
+                onChange={(event) => patch(index, { detail: event.target.value })}
+              />
+            </div>
+          ))
+        ) : (
+          <div className="text-sm text-slate-500">Non renseigne.</div>
+        )}
+      </div>
+      <CocoAddRowButton
+        disabled={disabled}
+        onClick={() => onChange([...items, { label: "", quantity: null, unit: null, detail: null }])}
+      />
+    </div>
+  );
+}
+
+/**
+ * Materiel propose par Coco. Le bouton "Reporter" recopie la liste corrigee
+ * dans les lignes "materiel a prevoir" : ce sont elles que le portail ouvrier
+ * interroge, donc une correction manuelle doit pouvoir y redescendre.
+ */
+function CocoEquipmentBlock({
+  title,
+  items,
+  disabled,
+  onChange,
+  onPushToEquipment,
+}: {
+  title: string;
+  items: CocoEquipmentResultItem[];
+  disabled: boolean;
+  onChange: (next: CocoEquipmentResultItem[]) => void;
+  onPushToEquipment: () => void;
+}) {
+  function patch(index: number, changes: Partial<CocoEquipmentResultItem>) {
+    onChange(items.map((item, position) => (position === index ? { ...item, ...changes } : item)));
+  }
+
+  return (
+    <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <div className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">{title}</div>
+        <button
+          type="button"
+          className="rounded-lg border border-slate-200 bg-white px-2 py-1 text-[11px] font-medium text-slate-700 hover:bg-slate-50"
+          disabled={disabled || !items.length}
+          onClick={onPushToEquipment}
+        >
+          Reporter dans le materiel a prevoir
+        </button>
+      </div>
+      <div className="mt-2 space-y-2">
+        {items.length ? (
+          items.map((item, index) => (
+            <div key={"coco-equipment-" + index} className="space-y-1 rounded-lg border border-slate-200 bg-white p-2">
+              <div className="flex flex-wrap items-center gap-2">
+                <input
+                  className={cocoRowInputClass + " flex-1"}
+                  value={item.label}
+                  disabled={disabled}
+                  placeholder="Designation"
+                  onChange={(event) => patch(index, { label: event.target.value })}
+                />
+                <CocoNumberInput
+                  className={cocoRowInputClass + " w-20"}
+                  value={item.quantity}
+                  disabled={disabled}
+                  placeholder="Qte"
+                  onChange={(quantity) => patch(index, { quantity })}
+                />
+                <input
+                  className={cocoRowInputClass + " w-20"}
+                  value={item.unit ?? ""}
+                  disabled={disabled}
+                  placeholder="Unite"
+                  onChange={(event) => patch(index, { unit: event.target.value })}
+                />
+                <label className="flex shrink-0 items-center gap-1 text-xs text-slate-600">
+                  <input
+                    type="checkbox"
+                    checked={item.required}
+                    disabled={disabled}
+                    onChange={(event) => patch(index, { required: event.target.checked })}
+                  />
+                  Obligatoire
+                </label>
+                <CocoRowActions
+                  disabled={disabled}
+                  onRemove={() => onChange(items.filter((_, position) => position !== index))}
+                />
+              </div>
+              <input
+                className={cocoRowInputClass + " w-full"}
+                value={item.detail ?? ""}
+                disabled={disabled}
+                placeholder="Detail (usage, reglage, remarque)"
+                onChange={(event) => patch(index, { detail: event.target.value })}
+              />
+            </div>
+          ))
+        ) : (
+          <div className="text-sm text-slate-500">Non renseigne.</div>
+        )}
+      </div>
+      <CocoAddRowButton
+        disabled={disabled}
+        onClick={() => onChange([...items, { label: "", quantity: null, unit: null, required: false, detail: null }])}
+      />
     </div>
   );
 }
@@ -973,7 +1310,7 @@ export default function TaskTemplateDrawer({
       // n'apportait rien et compliquait la création.
       quote_visible: true,
       chantier_visible: true,
-      coco_preparation: cocoResult ? (cocoResult as unknown as Record<string, unknown>) : null,
+      coco_preparation: cocoResult ? (sanitizeCocoResult(cocoResult) as unknown as Record<string, unknown>) : null,
       preparation_materials: advancedPreparationEnabled
         ? serializedPreparation.preparationMaterials
         : undefined,
@@ -985,6 +1322,14 @@ export default function TaskTemplateDrawer({
     };
 
     await onSave(payload);
+  }
+
+  /**
+   * Chaque encadre Coco reste modifiable : on ne remplace que la portion editee,
+   * et on part d'un squelette vide si Coco n'a jamais tourne.
+   */
+  function patchCocoResult(changes: Partial<TaskTemplateCocoResult>) {
+    setCocoResult((prev) => ({ ...(prev ?? emptyCocoResult()), ...changes }));
   }
 
   async function handleGenerateWithCoco() {
@@ -1773,7 +2118,7 @@ export default function TaskTemplateDrawer({
 
                 {cocoResult ? (
                   <div className="space-y-3">
-                    <div className="flex flex-wrap gap-2 text-xs">
+                    <div className="flex flex-wrap items-center gap-2 text-xs">
                       <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-slate-600">
                         Confiance: {cocoResult.confidence}
                       </span>
@@ -1782,27 +2127,103 @@ export default function TaskTemplateDrawer({
                           {cocoResult.missingInformation.length} information(s) manquante(s)
                         </span>
                       ) : null}
+                      <span className="text-slate-500">
+                        Tous les encadres restent modifiables a la main : corrige, complete ou supprime avant d'enregistrer.
+                      </span>
                     </div>
                     <div className="grid gap-3 lg:grid-cols-2">
-                      <CocoResultBlock title="Liste materiaux Coco" items={cocoResult.materials.map(materialResultText)} />
-                      <CocoResultBlock title="Liste materiel Coco" items={cocoResult.equipment.map(equipmentResultText)} />
-                      <CocoResultBlock title="Consommables" items={cocoResult.consumables} />
-                      <CocoResultBlock title="EPI" items={cocoResult.ppe} />
-                      <CocoResultBlock title="Mode operatoire complet" items={cocoResult.procedure} />
-                      <CocoResultBlock
-                        title="Controles / erreurs a eviter"
-                        items={[...cocoResult.controls, ...cocoResult.errorsToAvoid.map((item) => `Erreur: ${item}`)]}
+                      <CocoMaterialsBlock
+                        title="Liste materiaux Coco"
+                        items={cocoResult.materials}
+                        disabled={busy}
+                        onChange={(materials) => patchCocoResult({ materials })}
                       />
-                      <CocoResultBlock title="Securite" items={cocoResult.safetyPoints} />
-                      <CocoResultBlock title="Photos DOE" items={cocoResult.doePhotos} />
-                      <CocoResultBlock title="Documents DOE" items={cocoResult.doeDocuments} />
-                      <CocoResultBlock title="Retour terrain attendu" items={[...cocoResult.fieldReturns, ...cocoResult.fieldReturnQuestions]} />
-                      <CocoResultBlock title="Informations manquantes" items={cocoResult.missingInformation} />
+                      <CocoEquipmentBlock
+                        title="Liste materiel Coco"
+                        items={cocoResult.equipment}
+                        disabled={busy}
+                        onChange={(equipment) => patchCocoResult({ equipment })}
+                        onPushToEquipment={() => setEquipmentDrafts((prev) => mergeCocoEquipment(prev, cocoResult.equipment))}
+                      />
+                      <CocoListBlock
+                        title="Consommables"
+                        items={cocoResult.consumables}
+                        disabled={busy}
+                        onChange={(consumables) => patchCocoResult({ consumables })}
+                      />
+                      <CocoListBlock
+                        title="EPI"
+                        items={cocoResult.ppe}
+                        disabled={busy}
+                        onChange={(ppe) => patchCocoResult({ ppe })}
+                      />
+                      <CocoListBlock
+                        title="Mode operatoire complet"
+                        items={cocoResult.procedure}
+                        disabled={busy}
+                        onChange={(procedure) => patchCocoResult({ procedure })}
+                      />
+                      <CocoListBlock
+                        title="Controles"
+                        items={cocoResult.controls}
+                        disabled={busy}
+                        onChange={(controls) => patchCocoResult({ controls })}
+                      />
+                      <CocoListBlock
+                        title="Erreurs a eviter"
+                        items={cocoResult.errorsToAvoid}
+                        disabled={busy}
+                        onChange={(errorsToAvoid) => patchCocoResult({ errorsToAvoid })}
+                      />
+                      <CocoListBlock
+                        title="Securite"
+                        items={cocoResult.safetyPoints}
+                        disabled={busy}
+                        onChange={(safetyPoints) => patchCocoResult({ safetyPoints })}
+                      />
+                      <CocoListBlock
+                        title="Photos DOE"
+                        items={cocoResult.doePhotos}
+                        disabled={busy}
+                        onChange={(doePhotos) => patchCocoResult({ doePhotos })}
+                      />
+                      <CocoListBlock
+                        title="Documents DOE"
+                        items={cocoResult.doeDocuments}
+                        disabled={busy}
+                        onChange={(doeDocuments) => patchCocoResult({ doeDocuments })}
+                      />
+                      <CocoListBlock
+                        title="Retour terrain attendu"
+                        items={cocoResult.fieldReturns}
+                        disabled={busy}
+                        onChange={(fieldReturns) => patchCocoResult({ fieldReturns })}
+                      />
+                      <CocoListBlock
+                        title="Questions au retour terrain"
+                        items={cocoResult.fieldReturnQuestions}
+                        disabled={busy}
+                        onChange={(fieldReturnQuestions) => patchCocoResult({ fieldReturnQuestions })}
+                      />
+                      <CocoListBlock
+                        title="Informations manquantes"
+                        items={cocoResult.missingInformation}
+                        disabled={busy}
+                        onChange={(missingInformation) => patchCocoResult({ missingInformation })}
+                      />
                     </div>
                   </div>
                 ) : (
-                  <div className="rounded-xl border border-dashed border-slate-200 px-4 py-3 text-sm text-slate-500">
-                    Aucun resultat Coco pour le moment.
+                  <div className="space-y-2 rounded-xl border border-dashed border-slate-200 px-4 py-3 text-sm text-slate-500">
+                    <div>Aucun resultat Coco pour le moment.</div>
+                    <button
+                      type="button"
+                      className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50"
+                      disabled={busy}
+                      onClick={() => setCocoResult(emptyCocoResult())}
+                    >
+                      Remplir les encadres a la main
+                    </button>
                   </div>
                 )}
               </div>
