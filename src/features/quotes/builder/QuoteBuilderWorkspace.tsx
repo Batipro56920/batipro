@@ -257,6 +257,31 @@ export function QuoteBuilderWorkspace({ onClose, costsPanel }: Props) {
     updateQuote({ estimatedDurationValue: estimatedDaysFromHours(costSummary.hours), estimatedDurationUnit: "jours" });
   }, [costSummary.hours, quote, updateQuote]);
 
+  /**
+   * Lignes vendues au déboursé ou en dessous. Un devis repris d'un ancien
+   * pré-devis arrive avec des prix indicatifs calculés sur le coût de référence
+   * du modèle : ils passent sous le déboursé réel sans que rien ne le signale.
+   */
+  const underPricedRows = useMemo(
+    () =>
+      rows.filter((row) => {
+        if (row.node.type !== "item") return false;
+        const cost = lineCosts.get(row.id);
+        return Boolean(cost && cost.costHt > 0 && row.totalHt <= cost.costHt);
+      }),
+    [rows, lineCosts],
+  );
+
+  function alignPricesOnCost() {
+    for (const row of underPricedRows) {
+      if (row.node.type !== "item") continue;
+      const cost = lineCosts.get(row.id);
+      if (!cost) continue;
+      const lineQuantity = Number(row.node.quantity ?? 0);
+      updateNode(row.id, { unitPriceHt: salePriceFromCost(lineQuantity > 0 ? cost.costHt / lineQuantity : cost.costHt) } as Partial<QuoteBuilderNode>);
+    }
+  }
+
   const library = useMemo(() => {
     const value = query.trim().toLowerCase();
     const filteredByTab = DEFAULT_QUOTE_LIBRARY.filter((item) => {
@@ -333,7 +358,7 @@ export function QuoteBuilderWorkspace({ onClose, costsPanel }: Props) {
         <section className="overflow-auto px-4 py-5 xl:px-6">
           {mode === "edit" ? (
             <>
-            <QuoteMarginBar summary={costSummary} />
+            <QuoteMarginBar summary={costSummary} underPriced={underPricedRows.length} onAlignPrices={alignPricesOnCost} />
             <QuoteDocumentSurface quote={quote} rows={rows} table={table} totals={totals} sensors={sensors} onDragEnd={onDragEnd} updateQuote={updateQuote} updateNode={updateNode} removeNode={removeNode} addItem={addItem} addSection={addSection} addSubsection={addSubsection} onOpenFinancialDetails={() => setFinancialOpen(true)} />
             </>
           ) : mode === "couts" ? (
@@ -1063,7 +1088,7 @@ function LineMarginHint({ cost, saleHt }: { cost: QuoteLineCost; saleHt: number 
  * part dans la previsualisation, dans le PDF ni chez le client : c'est la seule
  * facon de voir la marge se deformer pendant qu'on ajuste les prix.
  */
-function QuoteMarginBar({ summary }: { summary: QuoteCostSummary }) {
+function QuoteMarginBar({ summary, underPriced, onAlignPrices }: { summary: QuoteCostSummary; underPriced: number; onAlignPrices: () => void }) {
   const margin = summary.saleHt - summary.costHt;
   const rate = marginRateOnSale(summary.costHt, summary.saleHt);
   const missing = summary.total - summary.covered;
@@ -1077,6 +1102,15 @@ function QuoteMarginBar({ summary }: { summary: QuoteCostSummary }) {
         <MarginFigure label="Marge" value={formatCurrency(margin)} tone={marginClass} />
         <MarginFigure label="Taux de marge" value={rate === null ? "—" : `${rate.toFixed(1)} %`} tone={marginClass} />
         <MarginFigure label="Temps prévu" value={summary.hours > 0 ? `${summary.hours.toLocaleString("fr-FR")} h · ${estimatedDaysFromHours(summary.hours)} j` : "—"} />
+        {underPriced > 0 ? (
+          <button
+            type="button"
+            onClick={onAlignPrices}
+            className="ml-auto rounded-xl bg-white px-3 py-2 text-xs font-semibold text-slate-900 hover:bg-slate-100"
+          >
+            Aligner {underPriced} ligne(s) sans marge sur le déboursé + 30 %
+          </button>
+        ) : null}
       </div>
       <p className="mt-2 text-[11px] text-slate-300">
         Visible seulement ici : ni la prévisualisation, ni le PDF, ni le client ne voient ces montants.

@@ -9,6 +9,7 @@ import { list as listTaskTemplates, type TaskTemplateRow } from "../../../servic
 import VisitTaskPickerDialog from "./VisitTaskPickerDialog";
 import { listTaskTemplatePreparationByTemplateIds, type TaskTemplateEquipmentItemRow, type TaskTemplateMaterialRatioRow } from "../../../services/taskTemplatePreparation.service";
 import { getCompanyHourlyRates, type CompanyHourlyRates } from "../../../services/indirectCosts.service";
+import { salePriceFromCost, taskTemplateUnitCost } from "../../../services/taskCostBasis";
 import { VISIT_DRAFT_MARKER } from "../../crm/utils/appointmentDraftStorage";
 import type { ProjectRecord } from "../types";
 import { VisitReportImportDrawer, type VisitImportSelection } from "./VisitReportImportDrawer";
@@ -230,11 +231,20 @@ function lineTemplateQuantities(
   });
 }
 
-/** Valeur encore automatique : vide, ou egale a ce que les taches liees donnaient. */
-function isAutoValue(current: number | null | undefined, automatic: number): boolean {
+/**
+ * Une estimation suit encore le calcul automatique tant qu'elle est vide ou
+ * qu'elle vaut exactement ce que le calcul avait pose la derniere fois. Des
+ * que le commercial ecrit son propre chiffre, on ne le touche plus.
+ */
+function followsAutoValue(current: number | null | undefined, lastAutomatic: number | null): boolean {
   const value = Number(current ?? 0);
   if (!value) return true;
-  return Math.abs(value - automatic) < 0.005;
+  if (lastAutomatic === null) return false;
+  return Math.abs(value - lastAutomatic) < 0.005;
+}
+
+function sameEstimate(current: number | null | undefined, next: number): boolean {
+  return Math.abs(Number(current ?? 0) - next) < 0.005;
 }
 type LinkedTaskEntry = {
   template: TaskTemplateRow;
@@ -244,24 +254,15 @@ type LinkedTaskEntry = {
   quantity: number;
 };
 
-/**
- * Cout par unite d'une tache liee : main d'oeuvre, materiaux pertes incluses,
- * amortissement et frais generaux.
- */
+/** Cout par unite d'une tache liee, avec la base de chiffrage commune. */
 function linkedTaskCost(entry: LinkedTaskEntry, rates: CompanyHourlyRates | null) {
-  const hoursPerUnit = Number(entry.template.temps_prevu_par_unite_h ?? 0);
-  const laborPerUnit = hoursPerUnit * Number(rates?.averageEmployeeHourlyCostHt ?? 0);
-  const materialsPerUnit = entry.materials.reduce(
-    (total, material) => total + Number(material.ratio_quantity ?? 0) * (1 + Number(material.loss_percent ?? 0) / 100) * Number(material.purchase_price_ht ?? 0),
-    0,
-  );
-  const indirectPerUnit = hoursPerUnit * (Number(rates?.amortizationRatePerHour ?? 0) + Number(rates?.overheadRatePerHour ?? 0));
+  const basis = taskTemplateUnitCost(entry.template, entry.materials, rates);
   return {
-    hoursPerUnit,
-    laborPerUnit,
-    materialsPerUnit,
-    indirectPerUnit,
-    costPerUnit: laborPerUnit + materialsPerUnit + indirectPerUnit,
+    hoursPerUnit: basis.hours,
+    laborPerUnit: basis.laborHt,
+    materialsPerUnit: basis.materialsHt,
+    indirectPerUnit: basis.indirectHt,
+    costPerUnit: basis.costHt,
   };
 }
 
@@ -704,11 +705,20 @@ export function ProjectVisitWorkspaceStable({ project, existingAppointment }: { 
     [selectedLine, selectedTemplateIds],
   );
   const selectedLineQuantity = selectedLine ? quantity(selectedLine) : 0;
-  const selectedTemplateKey = selectedTemplateIds.join(",");
 
-  /** Composition reelle des taches liees : ce que l'ouvrier trouvera au chantier. */
+  /**
+   * Composition reelle des taches liees : ce que l'ouvrier trouvera au chantier.
+   * On la charge pour tout le releve et pas seulement pour la ligne ouverte :
+   * le prix indicatif de chaque ligne en depend, et il doit etre juste meme sur
+   * une ligne qu'on n'a jamais selectionnee.
+   */
+  const draftTemplateKey = useMemo(() => {
+    const ids = draft.lines.filter((line) => line.type === "task").flatMap((line) => lineTemplateIds(line));
+    return Array.from(new Set(ids)).sort().join(",");
+  }, [draft.lines]);
+
   useEffect(() => {
-    const ids = selectedTemplateKey ? selectedTemplateKey.split(",") : [];
+    const ids = draftTemplateKey ? draftTemplateKey.split(",") : [];
     if (!ids.length) {
       setLinkedPreparation({ materialsByTemplateId: {}, equipmentByTemplateId: {} });
       return;
@@ -729,7 +739,7 @@ export function ProjectVisitWorkspaceStable({ project, existingAppointment }: { 
     return () => {
       alive = false;
     };
-  }, [selectedTemplateKey]);
+  }, [draftTemplateKey]);
 
   const linkedEntries = useMemo<LinkedTaskEntry[]>(
     () =>
@@ -747,6 +757,64 @@ export function ProjectVisitWorkspaceStable({ project, existingAppointment }: { 
         .filter((entry): entry is LinkedTaskEntry => entry !== null),
     [selectedTemplateIds, selectedTemplateQuantities, selectedLineQuantity, taskTemplates, linkedPreparation],
   );
+
+  /**
+   * Temps et prix indicatifs des lignes liees a des taches. Ils suivent le
+   * chiffrage reel tant que le commercial n'a pas mis les siens : le prix part
+   * du deboursé sec (main d'oeuvre, materiaux pertes incluses, amortissement et
+   * frais generaux) majore de la marge par defaut, et non du cout de reference
+   * du modele, qui n'est ni un cout complet ni un prix de vente.
+   *
+   * Le calcul a besoin des ratios materiaux, qui arrivent en differe : il vit
+   * donc dans un effet, pas dans le clic qui rattache la tache.
+   */
+  const autoEstimates = useRef<Map<string, { hours: number | null; price: number | null }>>(new Map());
+  useEffect(() => {
+    if (!hourlyRates) return;
+    const patches = new Map<string, Partial<EstimateLine>>();
+
+    for (const line of draft.lines) {
+      if (line.type !== "task") continue;
+      const ids = lineTemplateIds(line);
+      if (!ids.length) continue;
+      const quantities = lineTemplateQuantities(line, ids);
+      const lineQuantity = quantity(line);
+      let hours = 0;
+      let costHt = 0;
+      for (let index = 0; index < ids.length; index += 1) {
+        const template = taskTemplates.find((row) => row.id === ids[index]);
+        if (!template) continue;
+        const pinned = quantities[index];
+        // Une tache sans quantite propre compte une fois par unite de la ligne ;
+        // une tache dont la quantite est fixee ne compte que sa part.
+        const share = pinned === null ? 1 : lineQuantity > 0 ? pinned / lineQuantity : pinned;
+        const unitCost = taskTemplateUnitCost(template, linkedPreparation.materialsByTemplateId[ids[index]] ?? [], hourlyRates);
+        hours += unitCost.hours * share;
+        costHt += unitCost.costHt * share;
+      }
+
+      const nextHours = hours > 0 ? Math.round(hours * 100) / 100 : null;
+      const nextPrice = costHt > 0 ? salePriceFromCost(costHt) : null;
+      const tracked = autoEstimates.current.get(line.id) ?? { hours: null, price: null };
+      const patch: Partial<EstimateLine> = {};
+      const followsHours = followsAutoValue(line.estimatedHours, tracked.hours);
+      const followsPrice = followsAutoValue(line.priceHintHt, tracked.price);
+      if (followsHours && nextHours !== null && !sameEstimate(line.estimatedHours, nextHours)) patch.estimatedHours = nextHours;
+      if (followsPrice && nextPrice !== null && !sameEstimate(line.priceHintHt, nextPrice)) patch.priceHintHt = nextPrice;
+
+      autoEstimates.current.set(line.id, {
+        hours: followsHours ? nextHours ?? tracked.hours : null,
+        price: followsPrice ? nextPrice ?? tracked.price : null,
+      });
+      if (Object.keys(patch).length) patches.set(line.id, patch);
+    }
+
+    if (!patches.size) return;
+    setDraft((current) => ({
+      ...current,
+      lines: current.lines.map((line) => (patches.has(line.id) ? { ...line, ...patches.get(line.id) } : line)),
+    }));
+  }, [draft.lines, hourlyRates, linkedPreparation, taskTemplates]);
   function patch<K extends keyof VisitDraft>(key: K, value: VisitDraft[K]) {
     setDraft((current) => ({ ...current, [key]: value }));
   }
@@ -817,9 +885,9 @@ export function ProjectVisitWorkspaceStable({ project, existingAppointment }: { 
   }
 
   /**
-   * Champs derives du lien : la liste, les libelles, les quantites, le couple
-   * historique (premiere tache) que lisent le devis et le chantier, et les
-   * estimations.
+   * Champs derives du lien : la liste, les libelles, les quantites et le couple
+   * historique (premiere tache) que lisent le devis et le chantier. Le temps et
+   * le prix indicatifs sont recalcules a part, quand les ratios materiaux sont la.
    */
   function templateLinkPatch(
     line: EstimateLine,
@@ -833,48 +901,14 @@ export function ProjectVisitWorkspaceStable({ project, existingAppointment }: { 
       const previousIndex = previousIds.indexOf(id);
       return line.taskTemplateLabels?.[previousIndex] ?? (previousIndex === 0 ? line.taskTemplateLabel ?? "" : "") ?? "";
     });
-    const patch: Partial<EstimateLine> = {
+    return {
       taskTemplateIds: nextIds,
       taskTemplateLabels: labels,
       taskTemplateQuantities: nextQuantities,
       taskTemplateId: nextIds[0] ?? null,
       taskTemplateLabel: labels[0] ?? null,
     };
-    const lineQuantity = quantity(line);
-    const previousQuantities = lineTemplateQuantities(line, previousIds);
-    const previousHours = templatesTotal(previousIds, previousQuantities, lineQuantity, (template) => template.temps_prevu_par_unite_h);
-    const previousPrice = templatesTotal(previousIds, previousQuantities, lineQuantity, (template) => template.cout_reference_unitaire_ht);
-    if (isAutoValue(line.estimatedHours, previousHours)) {
-      const hours = templatesTotal(nextIds, nextQuantities, lineQuantity, (template) => template.temps_prevu_par_unite_h);
-      patch.estimatedHours = hours > 0 ? hours : null;
-    }
-    if (isAutoValue(line.priceHintHt, previousPrice)) {
-      const price = templatesTotal(nextIds, nextQuantities, lineQuantity, (template) => template.cout_reference_unitaire_ht);
-      patch.priceHintHt = price > 0 ? price : null;
-    }
-    return patch;
   }
-
-  /**
-   * Valeur automatique ramenee a une unite de la ligne. Une tache sans quantite
-   * propre compte une fois par unite ; une tache dont la quantite est fixee ne
-   * compte que sa part.
-   */
-  function templatesTotal(
-    ids: string[],
-    quantities: Array<number | null>,
-    lineQuantity: number,
-    pick: (template: TaskTemplateRow) => number | string | null | undefined,
-  ): number {
-    return ids.reduce((total, id, index) => {
-      const template = taskTemplates.find((row) => row.id === id);
-      if (!template) return total;
-      const pinned = quantities[index] ?? null;
-      const share = pinned === null ? 1 : lineQuantity > 0 ? pinned / lineQuantity : pinned;
-      return total + Number(pick(template) ?? 0) * share;
-    }, 0);
-  }
-
   function addSection(title = "Nouvelle section") {
     const line: EstimateLine = { id: uid("section"), type: "section", parentId: null, title, unit: "u", quantity: 0, manualQuantity: false, technicalNotes: "", constraints: "", variants: "", attentionPoints: "" };
     setDraft((current) => ({ ...current, lines: [...current.lines, line] }));
