@@ -258,16 +258,18 @@ export function QuoteBuilderWorkspace({ onClose, costsPanel }: Props) {
   }, [costSummary.hours, quote, updateQuote]);
 
   /**
-   * Lignes vendues au déboursé ou en dessous. Un devis repris d'un ancien
-   * pré-devis arrive avec des prix indicatifs calculés sur le coût de référence
-   * du modèle : ils passent sous le déboursé réel sans que rien ne le signale.
+   * Lignes vendues sous la marge cible. Un devis repris d'un ancien pré-devis
+   * arrive avec des prix calculés sur le coût de référence du modèle : ils
+   * tombent sous le déboursé réel, ou lui laissent une marge dérisoire, sans
+   * que rien ne le signale.
    */
   const underPricedRows = useMemo(
     () =>
       rows.filter((row) => {
         if (row.node.type !== "item") return false;
         const cost = lineCosts.get(row.id);
-        return Boolean(cost && cost.costHt > 0 && row.totalHt <= cost.costHt);
+        if (!cost || cost.costHt <= 0) return false;
+        return row.totalHt < salePriceFromCost(cost.costHt) - 0.01;
       }),
     [rows, lineCosts],
   );
@@ -1095,7 +1097,7 @@ function QuoteMarginBar({ summary, underPriced, onAlignPrices }: { summary: Quot
   const marginClass = margin < 0 ? "text-red-300" : rate !== null && rate < 15 ? "text-amber-300" : "text-emerald-300";
 
   return (
-    <div className="mx-auto mb-3 max-w-[1080px] rounded-2xl bg-slate-900 px-4 py-3 text-white shadow-sm">
+    <div className="sticky top-2 z-20 mx-auto mb-3 max-w-[1080px] rounded-2xl bg-slate-900 px-4 py-3 text-white shadow-lg">
       <div className="flex flex-wrap items-end gap-x-8 gap-y-3">
         <MarginFigure label="Deboursé sec" value={formatCurrency(summary.costHt)} />
         <MarginFigure label="Prix de vente HT" value={formatCurrency(summary.saleHt)} />
@@ -1108,7 +1110,7 @@ function QuoteMarginBar({ summary, underPriced, onAlignPrices }: { summary: Quot
             onClick={onAlignPrices}
             className="ml-auto rounded-xl bg-white px-3 py-2 text-xs font-semibold text-slate-900 hover:bg-slate-100"
           >
-            Aligner {underPriced} ligne(s) sans marge sur le déboursé + 30 %
+            Aligner {underPriced} ligne(s) sur le déboursé + 30 %
           </button>
         ) : null}
       </div>
