@@ -854,6 +854,26 @@ export async function moveCrmOpportunityStage(id: string, stage: CrmPipelineStag
   return data as CrmOpportunityRow;
 }
 
+/**
+ * Numéro de devis : AAAAMM suivi d'un compteur à deux chiffres remis à zéro
+ * chaque mois (202609 01, puis 202609 02). L'ancien format mélangeait l'année
+ * et un morceau d'identifiant de projet : impossible de savoir au premier coup
+ * d'oeil lequel de deux devis était le plus récent.
+ */
+export async function nextCrmQuoteNumber(reference = new Date()): Promise<string> {
+  const prefix = `${reference.getFullYear()}${String(reference.getMonth() + 1).padStart(2, "0")}`;
+  const { data } = await crmDb
+    .from("crm_quotes")
+    .select("quote_number")
+    .like("quote_number", `${prefix}%`)
+    .order("quote_number", { ascending: false })
+    .limit(1);
+  const last = String(data?.[0]?.quote_number ?? "");
+  const counter = last.startsWith(prefix) ? Number(last.slice(prefix.length)) : 0;
+  const next = Number.isFinite(counter) && counter > 0 ? counter + 1 : 1;
+  return `${prefix}${String(next).padStart(2, "0")}`;
+}
+
 export async function createCrmQuote(input: Partial<CrmQuoteRow>) {
   const organization_id = await currentOrgId();
   const requestedQuoteNumber = text(input.quote_number) ?? `DEV-${new Date().getFullYear()}-${Date.now().toString().slice(-6)}`;

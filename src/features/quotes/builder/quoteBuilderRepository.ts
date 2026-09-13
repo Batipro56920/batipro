@@ -2,6 +2,7 @@ import type { ProjectRecord } from "../../projects/types";
 import {
   createCrmQuote,
   createCrmQuoteItemFromTemplate,
+  nextCrmQuoteNumber,
   deleteCrmQuoteItem,
   loadCrmQuoteEngineData,
   updateCrmQuote,
@@ -33,7 +34,10 @@ export async function loadQuoteBuilder(project: ProjectRecord, quoteId?: string 
       prospect_id: project.prospect?.id ?? null,
       client_id: project.client?.id ?? null,
     });
-    return applyVisitQuoteOptions(createQuoteBuilderFromProject(project, source));
+    const created = applyVisitQuoteOptions(createQuoteBuilderFromProject(project, source));
+    // Le numéro définitif est repris à l'enregistrement : celui-ci sert à
+    // afficher tout de suite la bonne forme plutôt qu'un code de projet.
+    return { ...created, number: await quoteNumber(created.number) };
   }
   const engine = await loadCrmQuoteEngineData(quoteId);
   return createQuoteBuilderFromEngine(engine, project);
@@ -78,6 +82,15 @@ async function assertQuoteBuilderSavePermission(quote: QuoteBuilderQuote): Promi
   };
 }
 
+/** Numéro du mois en cours, l'ancien format restant en secours. */
+async function quoteNumber(fallback: string): Promise<string> {
+  try {
+    return await nextCrmQuoteNumber();
+  } catch {
+    return fallback;
+  }
+}
+
 async function createNewQuote(
   quote: QuoteBuilderQuote,
   totalHt: number,
@@ -85,8 +98,11 @@ async function createNewQuote(
   access: QuoteSaveAccess,
 ): Promise<QuoteBuilderQuote> {
   assertQuotePricePermission(quote, null, access);
+  // Deux devis peuvent avoir été ouverts en même temps : le compteur est
+  // repris ici, au moment où le devis existe vraiment.
+  const number = /^\d{8}$/.test(quote.number) ? await quoteNumber(quote.number) : quote.number;
   const created = await createCrmQuote({
-    quote_number: quote.number,
+    quote_number: number,
     client_id: quote.clientId,
     prospect_id: quote.prospectId,
     opportunity_id: quote.opportunityId,

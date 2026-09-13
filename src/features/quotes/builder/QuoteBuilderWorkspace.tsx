@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { DndContext, PointerSensor, useSensor, useSensors, type DragEndEvent } from "@dnd-kit/core";
 import { SortableContext, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
@@ -15,10 +15,21 @@ import { useQuoteBuilderStore } from "./quoteBuilderStore";
 import TaskTemplateDrawer from "../../../components/TaskTemplateDrawer";
 import { create as createTaskTemplate, list as listTaskTemplates, type TaskTemplateInput, type TaskTemplateRow } from "../../../services/taskLibrary.service";
 import { listTaskTemplatePreparationByTemplateIds, type TaskTemplateMaterialRatioRow } from "../../../services/taskTemplatePreparation.service";
-import { getCompanyHourlyRates } from "../../../services/indirectCosts.service";
+import { getCompanyHourlyRates, type CompanyHourlyRates } from "../../../services/indirectCosts.service";
+import { normalizeTaskTemplateIds } from "./quoteBuilderModel";
+import {
+  EMPTY_LINE_COST,
+  estimatedDaysFromHours,
+  marginRateOnSale,
+  quoteItemCost,
+  salePriceFromCost,
+  type QuoteLineCost,
+} from "./quoteBuilderCosts";
 import type { QuoteBuilderCompositeItem, QuoteBuilderFlatRow, QuoteBuilderItem, QuoteBuilderItemKind, QuoteBuilderNode, QuoteBuilderQuote, QuoteBuilderUnit, QuoteLibraryItem } from "./types";
 
 type Props = { onClose: () => void; costsPanel?: ReactNode };
+/** Ce que coute le devis, ce qu'il rapporte, et combien de lignes sont chiffrees. */
+type QuoteCostSummary = { costHt: number; saleHt: number; hours: number; covered: number; total: number };
 type Mode = "edit" | "preview" | "couts";
 type TextPanelKey = "paymentTerms" | "legalMentions" | "waste" | "footerNotes";
 
@@ -51,9 +62,13 @@ export function QuoteBuilderWorkspace({ onClose, costsPanel }: Props) {
   const [taskDrawerSaving, setTaskDrawerSaving] = useState(false);
   const [taskDrawerError, setTaskDrawerError] = useState<string | null>(null);
   const [compositeBaseComponents, setCompositeBaseComponents] = useState<QuoteBuilderCompositeItem[]>([]);
-  // Coût horaire moyen des employés CB Rénovation : même base que la bibliothèque
-  // de tâches, pour que la main d'oeuvre soit chiffrée pareil partout.
-  const [hourlyCostHt, setHourlyCostHt] = useState(0);
+  // Taux de l'entreprise : même base que la bibliothèque de tâches et que le
+  // relevé terrain, pour qu'un même geste coûte le même prix partout.
+  const [rates, setRates] = useState<CompanyHourlyRates | null>(null);
+  const hourlyCostHt = Number(rates?.averageEmployeeHourlyCostHt ?? 0);
+  // Ratios matériaux de toutes les tâches liées du devis, pas seulement celle
+  // qu'on ouvre : sans eux, le déboursé affiché serait faux.
+  const [templateMaterials, setTemplateMaterials] = useState<Record<string, TaskTemplateMaterialRatioRow[]>>({});
 
   useEffect(() => {
     let alive = true;
@@ -65,8 +80,8 @@ export function QuoteBuilderWorkspace({ onClose, costsPanel }: Props) {
         if (alive) setTaskTemplates([]);
       });
     void getCompanyHourlyRates()
-      .then((rates) => {
-        if (alive) setHourlyCostHt(Number(rates.averageEmployeeHourlyCostHt) || 0);
+      .then((loaded) => {
+        if (alive) setRates(loaded);
       })
       .catch(() => undefined);
     return () => {
@@ -77,19 +92,20 @@ export function QuoteBuilderWorkspace({ onClose, costsPanel }: Props) {
   /** Rattache un modèle et pré-remplit la ligne sans écraser ce qui est déjà saisi. */
   function linkTaskTemplate(rowId: string, template: TaskTemplateRow | null, currentTitle: string) {
     if (!template) {
-      updateNode(rowId, { taskTemplateId: null, taskTemplateLabel: null } as Partial<QuoteBuilderNode>);
+      updateNode(rowId, { taskTemplateId: null, taskTemplateLabel: null, taskTemplateIds: [], taskTemplateQuantities: [] } as Partial<QuoteBuilderNode>);
       return;
     }
     const patch: Partial<QuoteBuilderItem> = {
       taskTemplateId: template.id,
       taskTemplateLabel: template.titre,
+      taskTemplateIds: [template.id],
+      taskTemplateQuantities: [null],
     };
     // "Nouvelle prestation" est le libellé par défaut d'une ligne vierge, pas une
     // saisie : choisir une tâche doit le remplacer, sans écraser un vrai texte client.
     const untouched = !currentTitle.trim() || currentTitle.trim() === "Nouvelle prestation";
     if (untouched) patch.title = template.titre;
     if (template.unite) patch.unit = normalizeQuoteUnit(template.unite);
-    if (template.cout_reference_unitaire_ht) patch.unitPriceHt = Number(template.cout_reference_unitaire_ht);
     updateNode(rowId, patch as Partial<QuoteBuilderNode>);
   }
 
@@ -156,6 +172,91 @@ export function QuoteBuilderWorkspace({ onClose, costsPanel }: Props) {
 
   const rows = useMemo(() => quote ? flattenQuoteBuilder(quote.nodes) : [], [quote]);
   const totals = useMemo(() => quote ? calculateQuoteBuilderTotals(quote) : null, [quote]);
+  const templatesById = useMemo(() => new Map(taskTemplates.map((row) => [row.id, row])), [taskTemplates]);
+
+  const linkedTemplateKey = useMemo(() => {
+    const ids = rows
+      .filter((row) => row.node.type === "item")
+      .flatMap((row) => normalizeTaskTemplateIds((row.node as QuoteBuilderItem).taskTemplateIds, (row.node as QuoteBuilderItem).taskTemplateId));
+    return Array.from(new Set(ids)).sort().join(",");
+  }, [rows]);
+
+  useEffect(() => {
+    const ids = linkedTemplateKey ? linkedTemplateKey.split(",") : [];
+    if (!ids.length) {
+      setTemplateMaterials({});
+      return;
+    }
+    let alive = true;
+    void listTaskTemplatePreparationByTemplateIds(ids)
+      .then((preparation) => {
+        if (alive) setTemplateMaterials(preparation.materialsByTemplateId ?? {});
+      })
+      .catch(() => {
+        if (alive) setTemplateMaterials({});
+      });
+    return () => {
+      alive = false;
+    };
+  }, [linkedTemplateKey]);
+
+  const lineCosts = useMemo(() => {
+    const map = new Map<string, QuoteLineCost>();
+    for (const row of rows) {
+      if (row.node.type !== "item") continue;
+      map.set(row.id, quoteItemCost(row.node, templatesById, templateMaterials, rates));
+    }
+    return map;
+  }, [rows, templatesById, templateMaterials, rates]);
+
+  const costSummary = useMemo<QuoteCostSummary>(() => {
+    let costHt = 0;
+    let saleHt = 0;
+    let hours = 0;
+    let covered = 0;
+    let total = 0;
+    for (const row of rows) {
+      if (row.node.type !== "item") continue;
+      total += 1;
+      saleHt += row.totalHt;
+      const cost = lineCosts.get(row.id) ?? EMPTY_LINE_COST;
+      costHt += cost.costHt;
+      hours += cost.hours;
+      if (cost.costHt > 0) covered += 1;
+    }
+    return { costHt, saleHt, hours, covered, total };
+  }, [rows, lineCosts]);
+
+  /**
+   * Une ligne qui arrive du relevé n'a pas de prix : le pré-devis ne parle que
+   * de gestes et de quantités. On la remplit une fois avec son déboursé majoré
+   * de la marge par défaut, sans jamais écraser un prix déjà saisi.
+   */
+  const prefilledPrices = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    if (!rates) return;
+    for (const row of rows) {
+      if (row.node.type !== "item") continue;
+      if (Number(row.node.unitPriceHt ?? 0) > 0) continue;
+      if (prefilledPrices.current.has(row.id)) continue;
+      const cost = lineCosts.get(row.id);
+      if (!cost || cost.costHt <= 0) continue;
+      const quantity = Number(row.node.quantity ?? 0);
+      prefilledPrices.current.add(row.id);
+      updateNode(row.id, { unitPriceHt: salePriceFromCost(quantity > 0 ? cost.costHt / quantity : cost.costHt) } as Partial<QuoteBuilderNode>);
+    }
+  }, [lineCosts, rates, rows, updateNode]);
+
+  /** Durée estimée : le temps des tâches liées, faute de quoi le champ restait vide. */
+  const durationFilled = useRef(false);
+  useEffect(() => {
+    if (durationFilled.current || !quote) return;
+    if (Number(quote.estimatedDurationValue ?? 0) > 0) return;
+    if (costSummary.hours <= 0) return;
+    durationFilled.current = true;
+    updateQuote({ estimatedDurationValue: estimatedDaysFromHours(costSummary.hours), estimatedDurationUnit: "jours" });
+  }, [costSummary.hours, quote, updateQuote]);
+
   const library = useMemo(() => {
     const value = query.trim().toLowerCase();
     const filteredByTab = DEFAULT_QUOTE_LIBRARY.filter((item) => {
@@ -171,14 +272,14 @@ export function QuoteBuilderWorkspace({ onClose, costsPanel }: Props) {
   const columns = useMemo<ColumnDef<QuoteBuilderFlatRow>[]>(() => [
     { id: "drag", header: "", cell: () => <GripVertical className="h-4 w-4 text-slate-300" /> },
     { accessorKey: "number", header: "N°", cell: ({ row }) => <span className="font-mono text-xs text-slate-500">{row.original.number}</span> },
-    { id: "title", header: "Désignation", cell: ({ row }) => <TitleCell row={row.original} onSelectParent={setActiveParent} onChange={(patch) => updateNode(row.original.id, patch)} onConfigureComposite={() => setCompositeNodeId(row.original.id)} taskTemplates={taskTemplates} onLinkTask={(templateId) => linkTaskTemplate(row.original.id, taskTemplates.find((item) => item.id === templateId) ?? null, row.original.node.type === "item" ? row.original.node.title : "")} onCreateTask={() => setTaskDrawerRowId(row.original.id)} /> },
+    { id: "title", header: "Désignation", cell: ({ row }) => <TitleCell row={row.original} onSelectParent={setActiveParent} onChange={(patch) => updateNode(row.original.id, patch)} onConfigureComposite={() => setCompositeNodeId(row.original.id)} taskTemplates={taskTemplates} onLinkTask={(templateId) => linkTaskTemplate(row.original.id, taskTemplates.find((item) => item.id === templateId) ?? null, row.original.node.type === "item" ? row.original.node.title : "")} onCreateTask={() => setTaskDrawerRowId(row.original.id)} cost={lineCosts.get(row.original.id) ?? null} saleHt={row.original.totalHt} /> },
     { id: "quantity", header: "Qté", cell: ({ row }) => row.original.node.type === "item" && quote?.settings.showQuantityColumns ? <NumberInput value={row.original.node.quantity} onChange={(quantity) => updateNode(row.original.id, { quantity } as Partial<QuoteBuilderNode>)} /> : null },
     { id: "unit", header: "Unité", cell: ({ row }) => row.original.node.type === "item" && quote?.settings.showQuantityColumns ? <UnitSelect value={row.original.node.unit} onChange={(unit) => updateNode(row.original.id, { unit } as Partial<QuoteBuilderNode>)} /> : null },
     { id: "unitPriceHt", header: "PU HT", cell: ({ row }) => row.original.node.type === "item" ? <NumberInput value={row.original.node.unitPriceHt} onChange={(unitPriceHt) => updateNode(row.original.id, { unitPriceHt } as Partial<QuoteBuilderNode>)} /> : null },
     { id: "vat", header: "TVA", cell: ({ row }) => row.original.node.type === "item" && quote?.settings.showVatColumn ? <VatSelect value={row.original.node.vatRate} onChange={(vatRate) => updateNode(row.original.id, { vatRate } as Partial<QuoteBuilderNode>)} /> : null },
     { id: "total", header: "Total HT", cell: ({ row }) => <span className="font-semibold text-slate-900">{row.original.node.type === "item" ? formatCurrency(row.original.totalHt) : sectionTotalLabel(row.original, rows, quote)}</span> },
     { id: "actions", header: "", cell: ({ row }) => <button type="button" onClick={() => removeNode(row.original.id)} className="rounded-lg p-1.5 text-slate-400 opacity-0 transition group-hover:opacity-100 hover:bg-red-50 hover:text-red-600"><Trash2 className="h-4 w-4" /></button> },
-  ], [quote, removeNode, rows, setActiveParent, updateNode]);
+  ], [lineCosts, quote, removeNode, rows, setActiveParent, updateNode]);
 
   const table = useReactTable({ data: rows, columns, getCoreRowModel: getCoreRowModel(), getRowId: (row) => row.id });
 
@@ -231,7 +332,10 @@ export function QuoteBuilderWorkspace({ onClose, costsPanel }: Props) {
         <QuoteLibraryPanel open={libraryOpen} onToggle={() => setLibraryOpen((open) => !open)} query={query} setQuery={setQuery} tab={libraryTab} setTab={setLibraryTab} items={library} onInsert={insertLibraryItem} />
         <section className="overflow-auto px-4 py-5 xl:px-6">
           {mode === "edit" ? (
+            <>
+            <QuoteMarginBar summary={costSummary} />
             <QuoteDocumentSurface quote={quote} rows={rows} table={table} totals={totals} sensors={sensors} onDragEnd={onDragEnd} updateQuote={updateQuote} updateNode={updateNode} removeNode={removeNode} addItem={addItem} addSection={addSection} addSubsection={addSubsection} onOpenFinancialDetails={() => setFinancialOpen(true)} />
+            </>
           ) : mode === "couts" ? (
             <div className="mx-auto max-w-3xl space-y-4">
               <div>
@@ -895,7 +999,7 @@ function SortableRow({ id, row, children }: { id: string; row: QuoteBuilderFlatR
   return <tr ref={setNodeRef} style={style} className={rowClass} {...attributes} {...listeners}>{children}</tr>;
 }
 
-function TitleCell({ row, onChange, onSelectParent, onConfigureComposite, taskTemplates, onLinkTask, onCreateTask }: { row: QuoteBuilderFlatRow; onChange: (patch: Partial<QuoteBuilderNode>) => void; onSelectParent: (id: string | null) => void; onConfigureComposite: () => void; taskTemplates: TaskTemplateRow[]; onLinkTask: (templateId: string) => void; onCreateTask: () => void }) {
+function TitleCell({ row, onChange, onSelectParent, onConfigureComposite, taskTemplates, onLinkTask, onCreateTask, cost, saleHt }: { row: QuoteBuilderFlatRow; onChange: (patch: Partial<QuoteBuilderNode>) => void; onSelectParent: (id: string | null) => void; onConfigureComposite: () => void; taskTemplates: TaskTemplateRow[]; onLinkTask: (templateId: string) => void; onCreateTask: () => void; cost: QuoteLineCost | null; saleHt: number }) {
   const node = row.node;
   const weight = node.type === "section" ? "font-bold text-base" : node.type === "subsection" ? "font-semibold" : "";
   return (
@@ -904,9 +1008,7 @@ function TitleCell({ row, onChange, onSelectParent, onConfigureComposite, taskTe
 
       {node.type === "item" ? (
         <div className="flex flex-wrap items-center gap-1.5">
-          <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${node.taskTemplateId ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-700"}`}>
-            {node.taskTemplateId ? "Exécutable" : "Chiffrage seul"}
-          </span>
+
           {/*
             La bibliothèque arrive après le devis : sans option correspondante au
             premier rendu, le select retombait sur "Aucune tâche liée" et donnait
@@ -937,6 +1039,58 @@ function TitleCell({ row, onChange, onSelectParent, onConfigureComposite, taskTe
 
       {node.type === "item" && node.kind === "ouvrage" ? <button type="button" onClick={onConfigureComposite} className="text-xs font-semibold text-blue-600 opacity-0 transition group-hover:opacity-100 hover:text-blue-700">Configurer l'ouvrage</button> : null}
       {node.type === "item" ? <input className="h-8 w-full rounded border border-slate-100 px-2 text-xs text-slate-500" placeholder="Note interne" value={node.internalNote ?? ""} onChange={(event) => onChange({ internalNote: event.target.value } as Partial<QuoteBuilderNode>)} /> : null}
+      {node.type === "item" && cost && cost.costHt > 0 ? <LineMarginHint cost={cost} saleHt={saleHt} /> : null}
+    </div>
+  );
+}
+
+/** Déboursé et marge de la ligne : chiffrage interne, jamais imprimé. */
+function LineMarginHint({ cost, saleHt }: { cost: QuoteLineCost; saleHt: number }) {
+  const margin = saleHt - cost.costHt;
+  const rate = marginRateOnSale(cost.costHt, saleHt);
+  const tone = margin < 0 ? "text-red-600" : rate !== null && rate < 15 ? "text-amber-600" : "text-slate-500";
+  return (
+    <div className={`text-[11px] ${tone}`}>
+      Déboursé {formatCurrency(cost.costHt)} · marge {formatCurrency(margin)}
+      {rate === null ? "" : ` (${rate.toFixed(0)} %)`}
+      {cost.hours > 0 ? ` · ${cost.hours.toLocaleString("fr-FR")} h` : ""}
+    </div>
+  );
+}
+
+/**
+ * Chiffrage interne, affiche uniquement pendant l'edition. Rien de ce bloc ne
+ * part dans la previsualisation, dans le PDF ni chez le client : c'est la seule
+ * facon de voir la marge se deformer pendant qu'on ajuste les prix.
+ */
+function QuoteMarginBar({ summary }: { summary: QuoteCostSummary }) {
+  const margin = summary.saleHt - summary.costHt;
+  const rate = marginRateOnSale(summary.costHt, summary.saleHt);
+  const missing = summary.total - summary.covered;
+  const marginClass = margin < 0 ? "text-red-300" : rate !== null && rate < 15 ? "text-amber-300" : "text-emerald-300";
+
+  return (
+    <div className="mx-auto mb-3 max-w-[1080px] rounded-2xl bg-slate-900 px-4 py-3 text-white shadow-sm">
+      <div className="flex flex-wrap items-end gap-x-8 gap-y-3">
+        <MarginFigure label="Deboursé sec" value={formatCurrency(summary.costHt)} />
+        <MarginFigure label="Prix de vente HT" value={formatCurrency(summary.saleHt)} />
+        <MarginFigure label="Marge" value={formatCurrency(margin)} tone={marginClass} />
+        <MarginFigure label="Taux de marge" value={rate === null ? "—" : `${rate.toFixed(1)} %`} tone={marginClass} />
+        <MarginFigure label="Temps prévu" value={summary.hours > 0 ? `${summary.hours.toLocaleString("fr-FR")} h · ${estimatedDaysFromHours(summary.hours)} j` : "—"} />
+      </div>
+      <p className="mt-2 text-[11px] text-slate-300">
+        Visible seulement ici : ni la prévisualisation, ni le PDF, ni le client ne voient ces montants.
+        {missing > 0 ? ` ${missing} ligne(s) sans tâche liée : leur déboursé n'est pas connu.` : ""}
+      </p>
+    </div>
+  );
+}
+
+function MarginFigure({ label, value, tone }: { label: string; value: string; tone?: string }) {
+  return (
+    <div>
+      <div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-400">{label}</div>
+      <div className={`text-lg font-semibold ${tone ?? "text-white"}`}>{value}</div>
     </div>
   );
 }
