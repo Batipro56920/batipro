@@ -2,8 +2,9 @@ import { supabase } from "../../../lib/supabaseClient";
 import type { SupplierRow } from "../../../services/suppliers.service";
 import { createSupplier } from "../../../services/suppliers.service";
 import type { DocumentUnit } from "../../document-engine";
-import type { ProductCatalogDraft, ProductCatalogItem, ProductSupplierPrice } from "../domain/types";
+import type { ProductCatalogDraft, ProductCatalogItem, ProductKnowledge, ProductSupplierPrice } from "../domain/types";
 import { saveProductCatalogItem } from "../infrastructure/productCatalogRepository";
+import { emptyProductKnowledge } from "./productKnowledge.service";
 
 export type ExtractedQuoteProduct = {
   designation: string;
@@ -109,6 +110,95 @@ export async function importProductsFromQuoteText(
   };
 }
 
+/**
+ * Lit les lignes d'articles d'un devis fournisseur sans rien enregistrer.
+ * L'import en lot les presente a la validation avant d'ecrire au catalogue,
+ * la ou le lecteur de devis, lui, cree directement.
+ */
+export async function extractQuoteProducts(quoteText: string): Promise<ExtractedQuoteProduct[]> {
+  const cleanedText = quoteText.trim();
+  if (cleanedText.length < 20) return [];
+  const documentSupplierName = inferDocumentSupplierName(cleanedText);
+  return (await extractProducts(cleanedText)).map((product) => normalizeExtractedProduct(product, documentSupplierName));
+}
+
+/**
+ * Traduit une ligne de devis dans le vocabulaire de Coco. L'import en lot passe
+ * ainsi par exactement le meme constructeur de fiche que les fiches techniques :
+ * une seule definition de ce qu'est un produit importe, quel que soit le
+ * document d'origine.
+ */
+export function knowledgeFromQuoteLine(line: ExtractedQuoteProduct): ProductKnowledge {
+  const base = emptyProductKnowledge();
+  const confidence = knowledgeConfidence(line.confidence);
+  const reasoning = normalizeText(line.business_interpretation) ?? "Ligne de devis fournisseur";
+  const coverageM2 = positivePrice(line.coverage_m2);
+
+  return {
+    ...base,
+    identity: {
+      value: {
+        designation: normalizeText(line.designation),
+        brand: normalizeText(line.brand),
+        manufacturer: null,
+        ean: null,
+        // Le code article du fournisseur est le seul identifiant sur un devis :
+        // c'est lui qui separe deux variantes d'un meme produit.
+        manufacturerReference: normalizeText(line.supplier_reference),
+        conditionnement: normalizeText(line.packaging),
+        unit: coverageM2 && coverageM2 > 0 ? "m2" : normalizeUnit(line.unit),
+      },
+      confidence,
+      reasoning,
+      sourceDocument: null,
+    },
+    supplier: {
+      value: {
+        supplier: normalizeText(line.supplier_name),
+        supplierReference: normalizeText(line.supplier_reference),
+        supplierProductCode: null,
+      },
+      confidence,
+      reasoning,
+      sourceDocument: null,
+    },
+    pricing: {
+      value: {
+        // P.U. NET sur un devis fournisseur. Le prix de vente reste vide : un
+        // devis d'achat n'en contient pas, il sera calcule a la marge cible.
+        purchasePrice: supplierPriceFromQuote(line),
+        recommendedSalePrice: positivePrice(line.sale_price_ht),
+        currency: "EUR",
+        vat: normalizeVatRate(line.vat_rate),
+      },
+      confidence,
+      reasoning,
+      sourceDocument: null,
+    },
+    materialUsage: {
+      value: {
+        ratioQuantity: positivePrice(line.consumption_ratio_quantity),
+        ratioUnit: normalizeText(line.consumption_ratio_unit),
+        sourceUnit: normalizeText(line.consumption_base_unit),
+        lossPercent: positiveNumber(line.loss_percent),
+        minimumOrder: positiveNumber(line.minimum_quantity),
+        coverage: coverageM2,
+      },
+      confidence,
+      reasoning,
+      sourceDocument: null,
+    },
+  };
+}
+
+function knowledgeConfidence(value: unknown): "high" | "medium" | "low" {
+  const score = Number(value);
+  if (!Number.isFinite(score)) return "medium";
+  if (score >= 0.8) return "high";
+  if (score >= 0.5) return "medium";
+  return "low";
+}
+
 async function extractProducts(cleanedText: string): Promise<ExtractedQuoteProduct[]> {
   const { data, error } = await supabase.functions.invoke<ExtractProductsResponse>("extract-devis-products", {
     body: { cleaned_text: cleanedText },
@@ -120,13 +210,38 @@ async function extractProducts(cleanedText: string): Promise<ExtractedQuoteProdu
 }
 
 function normalizeExtractedProduct(product: ExtractedQuoteProduct, documentSupplierName: string | null): ExtractedQuoteProduct {
-  return {
+  return reconcileLinePrices({
     ...product,
     supplier_name: preferDocumentSupplier(normalizeText(product.supplier_name), documentSupplierName),
     sale_price_ht: positivePrice(product.sale_price_ht),
     purchase_price_ht: positivePrice(product.purchase_price_ht),
     package_price_ht: positivePrice(product.package_price_ht),
-  };
+  });
+}
+
+/**
+ * Un devis fournisseur aligne des colonnes que la lecture confond parfois : le
+ * taux de remise se lit comme un prix, et le prix net glisse dans la colonne
+ * voisine. L'arithmetique de la ligne, elle, ne se trompe pas — le montant
+ * divise par la quantite donne le prix unitaire reel.
+ *
+ * On ne corrige que ce qui est demontrable : si le prix d'achat ne tombe pas
+ * juste mais qu'une autre valeur lue tombe juste, on prend celle-la. Si aucune
+ * ne tombe juste, on ne devine pas et on laisse la lecture telle quelle.
+ */
+function reconcileLinePrices(product: ExtractedQuoteProduct): ExtractedQuoteProduct {
+  const quantity = positivePrice(product.quantity);
+  const lineTotal = positivePrice(product.package_price_ht);
+  if (quantity === null || lineTotal === null) return product;
+
+  const expected = lineTotal / quantity;
+  const matches = (value: number | null) => value !== null && Math.abs(value - expected) <= Math.max(0.02, expected * 0.02);
+
+  if (matches(product.purchase_price_ht)) return product;
+  if (matches(product.sale_price_ht)) {
+    return { ...product, purchase_price_ht: product.sale_price_ht, sale_price_ht: null };
+  }
+  return product;
 }
 
 async function resolveSupplier(
@@ -165,7 +280,7 @@ function toProductDraft(extracted: ExtractedQuoteProduct, supplier: SupplierRow 
     brand: normalizeText(extracted.brand),
     category: normalizeText(extracted.category) ?? "Matériaux",
     unit,
-    vatRate: positiveNumber(extracted.vat_rate) ?? 20,
+    vatRate: normalizeVatRate(extracted.vat_rate) ?? 20,
     mainSupplierId: supplier?.id ?? null,
     mainSupplierName: supplier?.name ?? normalizeText(extracted.supplier_name),
     standardPurchasePriceHt: catalogPurchasePrice ?? 0,
@@ -229,7 +344,7 @@ function mergeExtractedProduct(
     changed = true;
   }
 
-  const vatRate = positiveNumber(extracted.vat_rate);
+  const vatRate = normalizeVatRate(extracted.vat_rate);
   if ((!next.vatRate || next.vatRate === 0) && vatRate !== null) {
     next.vatRate = vatRate;
     changed = true;
@@ -486,6 +601,16 @@ function normalizeUnit(unit: unknown): DocumentUnit {
   if (["h", "heure"].includes(value)) return "h";
   if (["forfait", "ens", "ensemble"].includes(value)) return "forfait";
   return "u";
+}
+
+/**
+ * Une TVA lue sur un document arrive tantot en pourcentage (20), tantot en
+ * taux (0,2). Enregistrer 0,2 donnerait une TVA de 0,2 % sur le produit.
+ */
+function normalizeVatRate(value: unknown): number | null {
+  const rate = positiveNumber(value);
+  if (rate === null) return null;
+  return rate > 0 && rate <= 1 ? roundPrice(rate * 100) : rate;
 }
 
 function positiveNumber(value: unknown): number | null {

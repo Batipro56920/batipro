@@ -1,9 +1,11 @@
 import { useMemo, useRef, useState } from "react";
-import { AlertTriangle, CheckCircle2, FileText, Image, Loader2, PackagePlus, Unlink, UploadCloud } from "lucide-react";
+import { AlertTriangle, CheckCircle2, FileText, Image, Loader2, PackagePlus, ReceiptText, Unlink, UploadCloud } from "lucide-react";
 import type { SupplierRow } from "../../../services/suppliers.service";
 import type { ProductCatalogDraft, ProductKnowledge } from "../domain/types";
 import { saveProductCatalogItem } from "../infrastructure/productCatalogRepository";
 import { analyzeProductTextWithCoco } from "../services/productKnowledge.service";
+import { extractQuoteProducts, knowledgeFromQuoteLine } from "../services/productQuoteImport.service";
+import { detectSupplierQuote } from "../services/supplierQuoteDetection";
 import {
   ACCEPTED_PRODUCT_FILES,
   SUPPORTED_PRODUCT_FILE_LABEL,
@@ -29,14 +31,26 @@ const ANALYSIS_CONCURRENCY = 3;
 
 type FileStatus = "pending" | "analyzing" | "analyzed" | "failed";
 
+/**
+ * Un produit candidat. Une fiche technique en donne un ; un devis fournisseur
+ * en donne autant qu'il a de lignes d'articles.
+ */
+type ProductCandidate = {
+  id: string;
+  fileId: string;
+  groupId: string;
+  knowledge: ProductKnowledge | null;
+  signature: ProductImportSignature | null;
+  patch: ProductDraftPatch;
+};
+
 type AnalyzedFile = {
   id: string;
   file: File;
   status: FileStatus;
-  groupId: string;
-  knowledge: ProductKnowledge | null;
-  signature: ProductImportSignature | null;
-  patch: ProductDraftPatch | null;
+  /** Un devis lu ligne a ligne, par opposition a une fiche decrivant un seul produit. */
+  fromQuote: boolean;
+  candidates: ProductCandidate[];
   storageNotes: string[];
   error: string | null;
 };
@@ -51,7 +65,8 @@ type GroupEdits = {
 
 type ProductGroup = {
   id: string;
-  files: AnalyzedFile[];
+  candidates: ProductCandidate[];
+  sources: { candidateId: string; file: File }[];
   draft: ProductCatalogDraft;
   edits: GroupEdits;
   warnings: string[];
@@ -75,9 +90,16 @@ function formatPrice(value: number | null | undefined): string {
 }
 
 /**
- * Import en lot. On depose tout d'un coup — fiches techniques et captures de
- * tarifs melangees. Chaque fichier est analyse separement, puis les fichiers qui
- * decrivent le meme produit sont rapproches pour ne creer qu'une seule fiche.
+ * Import en lot. On depose tout d'un coup — fiches techniques, captures de
+ * tarifs et devis fournisseurs melanges.
+ *
+ * Deux natures de documents, deux lectures. Une fiche technique decrit un
+ * produit : elle donne une ligne. Un devis fournisseur est un tableau
+ * d'articles : chacune de ses lignes est un produit distinct, avec son code
+ * article et son prix net. Les confondre revenait a ecraser quinze articles en
+ * une seule fiche, et a prendre les prix de deux produits differents pour un
+ * prix d'achat et un prix de vente.
+ *
  * Rien n'est ecrit au catalogue avant validation.
  */
 export default function ProductBulkImportPanel({
@@ -99,23 +121,27 @@ export default function ProductBulkImportPanel({
   const [edits, setEdits] = useState<Record<string, GroupEdits>>({});
 
   const analyzedCount = files.filter((row) => row.status === "analyzed").length;
+  const quoteCount = files.filter((row) => row.status === "analyzed" && row.fromQuote).length;
   const failedFiles = files.filter((row) => row.status === "failed");
   const busy = analyzing || creating;
 
   const groups = useMemo<ProductGroup[]>(() => {
-    const byGroup = new Map<string, AnalyzedFile[]>();
+    const fileById = new Map(files.map((row) => [row.id, row]));
+    const byGroup = new Map<string, ProductCandidate[]>();
     for (const row of files) {
-      if (row.status !== "analyzed" || !row.patch) continue;
-      const bucket = byGroup.get(row.groupId);
-      if (bucket) bucket.push(row);
-      else byGroup.set(row.groupId, [row]);
+      if (row.status !== "analyzed") continue;
+      for (const candidate of row.candidates) {
+        const bucket = byGroup.get(candidate.groupId);
+        if (bucket) bucket.push(candidate);
+        else byGroup.set(candidate.groupId, [candidate]);
+      }
     }
 
     return Array.from(byGroup, ([id, rows]) => {
-      // L'identite vient du fichier le plus descriptif : la fiche technique
+      // L'identite vient de la source la plus descriptive : la fiche technique
       // plutot que la capture de prix.
       const ordered = [...rows].sort((a, b) => Number(b.signature?.hasIdentity) - Number(a.signature?.hasIdentity));
-      const merged = mergeProductPatches(ordered.map((row) => row.patch as ProductDraftPatch));
+      const merged = mergeProductPatches(ordered.map((row) => row.patch));
       const draft = { ...createEmptyProductDraft(), ...merged } as ProductCatalogDraft;
 
       const batchSupplier = batchSupplierId ? suppliers.find((row) => row.id === batchSupplierId) ?? null : null;
@@ -135,11 +161,18 @@ export default function ProductBulkImportPanel({
       if (edit.purchasePrice !== undefined) draft.standardPurchasePriceHt = parseLooseNumber(edit.purchasePrice) ?? 0;
       if (edit.salePrice !== undefined) draft.recommendedSalePriceHt = parseLooseNumber(edit.salePrice) ?? 0;
 
-      const warnings = ordered.flatMap((row) => row.storageNotes);
+      const sources = ordered
+        .map((candidate) => {
+          const source = fileById.get(candidate.fileId);
+          return source ? { candidateId: candidate.id, file: source.file } : null;
+        })
+        .filter((source): source is { candidateId: string; file: File } => source !== null);
+
+      const warnings = Array.from(new Set(ordered.flatMap((candidate) => fileById.get(candidate.fileId)?.storageNotes ?? [])));
       if (!draft.mainSupplierName) warnings.push("Fournisseur non identifie");
       if (!draft.standardPurchasePriceHt) warnings.push("Prix d'achat non trouve");
 
-      return { id, files: ordered, draft, edits: edit, warnings };
+      return { id, candidates: ordered, sources, draft, edits: edit, warnings };
     }).filter((group) => Boolean(group.draft.designation?.trim()));
   }, [files, batchSupplierId, suppliers, edits]);
 
@@ -165,10 +198,8 @@ export default function ProductBulkImportPanel({
       id: crypto.randomUUID(),
       file,
       status: "pending",
-      groupId: crypto.randomUUID(),
-      knowledge: null,
-      signature: null,
-      patch: null,
+      fromQuote: false,
+      candidates: [],
       storageNotes: [],
       error: null,
     }));
@@ -185,16 +216,53 @@ export default function ProductBulkImportPanel({
         throw new Error("Contenu illisible : aucune information exploitable.");
       }
 
+      const quote = detectSupplierQuote(text);
+      // Le devis est depose une seule fois et rattache a chacun de ses articles :
+      // c'est la piece qui justifie leur prix. Il n'ira pas au DOE.
+      const stored = await storeProductFiles(
+        "",
+        [row.file],
+        quote.isQuote ? { kind: "other", usage: { task: true, doe: false } } : {},
+      );
+
+      const candidates: ProductCandidate[] = [];
+
+      if (quote.isQuote) {
+        for (const line of await extractQuoteProducts(text)) {
+          const knowledge = knowledgeFromQuoteLine(line);
+          candidates.push({
+            id: crypto.randomUUID(),
+            fileId: row.id,
+            groupId: crypto.randomUUID(),
+            knowledge,
+            signature: buildImportSignature(knowledge),
+            // Sans le texte du devis : y repecher un prix ferait entrer celui
+            // d'une autre ligne dans le produit courant.
+            patch: buildProductPatch(createEmptyProductDraft(), knowledge, stored.documents, suppliers, ""),
+          });
+        }
+      }
+
+      if (candidates.length) {
+        patchFile(row.id, { status: "analyzed", fromQuote: true, candidates, storageNotes: stored.notes });
+        return;
+      }
+
+      // Fiche technique, capture de tarif, ou devis dont aucune ligne n'a pu
+      // etre lue : un seul produit, analyse sur l'ensemble du document.
       const base = createEmptyProductDraft();
       const knowledge = await analyzeProductTextWithCoco(base, text, images);
-      const stored = await storeProductFiles("", [row.file]);
-      const patch = buildProductPatch(base, knowledge, stored.documents, suppliers, text);
-
       patchFile(row.id, {
         status: "analyzed",
-        knowledge,
-        signature: buildImportSignature(knowledge),
-        patch,
+        fromQuote: false,
+        candidates: [{
+          id: crypto.randomUUID(),
+          fileId: row.id,
+          groupId: crypto.randomUUID(),
+          knowledge,
+          signature: buildImportSignature(knowledge),
+          patch: buildProductPatch(base, knowledge, stored.documents, suppliers, text),
+        }],
         storageNotes: stored.notes,
       });
     } catch (err: any) {
@@ -212,15 +280,20 @@ export default function ProductBulkImportPanel({
         }
       });
       await Promise.all(workers);
-      setFiles((current) => regroupFiles(current));
+      setFiles((current) => regroupCandidates(current));
     } finally {
       setAnalyzing(false);
     }
   }
 
-  /** Detache un fichier de son produit : il repart seul, a regrouper autrement. */
-  function detachFile(id: string) {
-    patchFile(id, { groupId: crypto.randomUUID() });
+  /** Detache une source de son produit : elle repart seule, a regrouper autrement. */
+  function detachCandidate(candidateId: string) {
+    setFiles((current) => current.map((row) => ({
+      ...row,
+      candidates: row.candidates.map((candidate) => (
+        candidate.id === candidateId ? { ...candidate, groupId: crypto.randomUUID() } : candidate
+      )),
+    })));
   }
 
   function editGroup(id: string, patch: GroupEdits) {
@@ -279,9 +352,10 @@ export default function ProductBulkImportPanel({
         <div className="min-w-0">
           <div className="text-sm font-semibold text-slate-950">Import en lot de fiches produits</div>
           <p className="mt-1 max-w-2xl text-sm text-slate-600">
-            Deposez tout d'un coup : fiches techniques et captures de tarifs melangees. Coco lit chaque fichier, rapproche
-            ceux qui parlent du meme produit et vous propose une fiche par produit — marque, fournisseur, prix d'achat,
-            prix de vente conseille — avec les pieces conservees pour le DOE.
+            Deposez tout d'un coup : fiches techniques, captures de tarifs et devis fournisseurs melanges. Une fiche
+            technique donne un produit ; un devis est lu ligne par ligne et donne autant de produits qu'il contient
+            d'articles. Coco rapproche ensuite les documents qui parlent du meme produit — marque, fournisseur, prix
+            d'achat, prix de vente conseille — avec les pieces conservees pour le DOE.
           </p>
         </div>
         <div className="flex shrink-0 flex-wrap gap-2">
@@ -358,144 +432,150 @@ export default function ProductBulkImportPanel({
 
       {groups.length ? (
         <div className="mt-4 overflow-hidden rounded-2xl border border-blue-100 bg-white">
-          <table className="w-full min-w-[900px] text-sm">
-            <thead className="bg-slate-50 text-left text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">
-              <tr>
-                <th className="w-10 px-3 py-2"></th>
-                <th className="px-3 py-2">Produit</th>
-                <th className="px-3 py-2">Marque</th>
-                <th className="px-3 py-2">Fournisseur</th>
-                <th className="px-3 py-2 text-right">Achat HT</th>
-                <th className="px-3 py-2 text-right">Vente HT</th>
-                <th className="px-3 py-2">Fichiers rattaches</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {groups.map((group) => {
-                const isCreated = createdGroups.has(group.id);
-                return (
-                  <tr key={group.id} className={isCreated ? "bg-emerald-50/60" : undefined}>
-                    <td className="px-3 py-2 align-top">
-                      <input
-                        type="checkbox"
-                        checked={!excludedGroups.has(group.id) && !isCreated}
-                        disabled={busy || isCreated}
-                        onChange={(event) => toggleGroup(group.id, event.target.checked)}
-                        aria-label={`Inclure ${group.draft.designation}`}
-                        title={group.draft.designation}
-                      />
-                    </td>
-                    <td className="px-3 py-2 align-top">
-                      {isCreated ? (
-                        <>
-                          <div className="font-medium text-slate-950">{group.draft.designation}</div>
-                          <div className="mt-1 flex items-center gap-1 text-xs text-emerald-700">
-                            <CheckCircle2 className="h-3 w-3" /> Cree au catalogue
-                          </div>
-                        </>
-                      ) : (
-                        <>
-                          <textarea
-                            className={cellClass + " min-h-[52px] resize-y font-medium text-slate-950"}
-                            value={group.draft.designation}
-                            disabled={busy}
-                            onChange={(event) => editGroup(group.id, { designation: event.target.value })}
-                            aria-label="Designation du produit"
-                          />
-                          {group.warnings.length ? (
-                            <div className="mt-1 flex items-start gap-1 text-xs text-amber-600">
-                              <AlertTriangle className="mt-0.5 h-3 w-3 shrink-0" /> {group.warnings.join(" · ")}
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[900px] text-sm">
+              <thead className="bg-slate-50 text-left text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">
+                <tr>
+                  <th className="w-10 px-3 py-2"></th>
+                  <th className="px-3 py-2">Produit</th>
+                  <th className="px-3 py-2">Marque</th>
+                  <th className="px-3 py-2">Fournisseur</th>
+                  <th className="px-3 py-2 text-right">Achat HT</th>
+                  <th className="px-3 py-2 text-right">Vente HT</th>
+                  <th className="px-3 py-2">Documents rattaches</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {groups.map((group) => {
+                  const isCreated = createdGroups.has(group.id);
+                  return (
+                    <tr key={group.id} className={isCreated ? "bg-emerald-50/60" : undefined}>
+                      <td className="px-3 py-2 align-top">
+                        <input
+                          type="checkbox"
+                          checked={!excludedGroups.has(group.id) && !isCreated}
+                          disabled={busy || isCreated}
+                          onChange={(event) => toggleGroup(group.id, event.target.checked)}
+                          aria-label={`Inclure ${group.draft.designation}`}
+                          title={group.draft.designation}
+                        />
+                      </td>
+                      <td className="px-3 py-2 align-top">
+                        {isCreated ? (
+                          <>
+                            <div className="font-medium text-slate-950">{group.draft.designation}</div>
+                            <div className="mt-1 flex items-center gap-1 text-xs text-emerald-700">
+                              <CheckCircle2 className="h-3 w-3" /> Cree au catalogue
                             </div>
-                          ) : null}
-                        </>
-                      )}
-                    </td>
-                    <td className="px-3 py-2 align-top text-slate-600">
-                      {isCreated ? (group.draft.brand || "—") : (
-                        <input
-                          className={cellClass}
-                          value={group.draft.brand ?? ""}
-                          disabled={busy}
-                          onChange={(event) => editGroup(group.id, { brand: event.target.value })}
-                          aria-label="Marque"
-                        />
-                      )}
-                    </td>
-                    <td className="px-3 py-2 align-top text-slate-600">
-                      {isCreated ? (group.draft.mainSupplierName || "—") : (
-                        <select
-                          className={cellClass}
-                          value={group.draft.mainSupplierId ?? ""}
-                          disabled={busy}
-                          onChange={(event) => editGroup(group.id, { supplierId: event.target.value })}
-                          aria-label="Fournisseur"
-                        >
-                          <option value="">Aucun</option>
-                          {suppliers.map((supplier) => (
-                            <option key={supplier.id} value={supplier.id}>{supplier.name}</option>
-                          ))}
-                        </select>
-                      )}
-                    </td>
-                    <td className="px-3 py-2 align-top text-right text-slate-900">
-                      {isCreated ? formatPrice(group.draft.standardPurchasePriceHt) : (
-                        <input
-                          className={cellClass + " text-right"}
-                          inputMode="decimal"
-                          value={priceFieldValue(group.edits.purchasePrice, group.draft.standardPurchasePriceHt)}
-                          disabled={busy}
-                          onChange={(event) => editGroup(group.id, { purchasePrice: event.target.value })}
-                          aria-label="Prix d'achat HT"
-                        />
-                      )}
-                    </td>
-                    <td className="px-3 py-2 align-top text-right text-slate-900">
-                      {isCreated ? formatPrice(group.draft.recommendedSalePriceHt) : (
-                        <input
-                          className={cellClass + " text-right"}
-                          inputMode="decimal"
-                          value={priceFieldValue(group.edits.salePrice, group.draft.recommendedSalePriceHt)}
-                          disabled={busy}
-                          onChange={(event) => editGroup(group.id, { salePrice: event.target.value })}
-                          aria-label="Prix de vente conseille HT"
-                        />
-                      )}
-                    </td>
-                    <td className="px-3 py-2 align-top">
-                      <div className="flex flex-wrap gap-1">
-                        {group.files.map((row) => (
-                          <span
-                            key={row.id}
-                            className="inline-flex max-w-52 items-center gap-1 rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-xs text-slate-600"
-                            title={row.file.name}
-                          >
-                            {isImageFile(row.file) ? <Image className="h-3 w-3 shrink-0" /> : <FileText className="h-3 w-3 shrink-0" />}
-                            <span className="truncate">{row.file.name}</span>
-                            {group.files.length > 1 && !isCreated ? (
-                              <button
-                                type="button"
-                                onClick={() => detachFile(row.id)}
-                                disabled={busy}
-                                className="shrink-0 text-slate-400 hover:text-red-600 disabled:opacity-50"
-                                title="Detacher ce fichier de ce produit"
-                                aria-label={`Detacher ${row.file.name}`}
-                              >
-                                <Unlink className="h-3 w-3" />
-                              </button>
+                          </>
+                        ) : (
+                          <>
+                            <textarea
+                              className={cellClass + " min-h-[52px] resize-y font-medium text-slate-950"}
+                              value={group.draft.designation}
+                              disabled={busy}
+                              onChange={(event) => editGroup(group.id, { designation: event.target.value })}
+                              aria-label="Designation du produit"
+                            />
+                            {group.draft.manufacturerReference ? (
+                              <div className="mt-1 text-xs text-slate-400">Ref. {group.draft.manufacturerReference}</div>
                             ) : null}
-                          </span>
-                        ))}
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+                            {group.warnings.length ? (
+                              <div className="mt-1 flex items-start gap-1 text-xs text-amber-600">
+                                <AlertTriangle className="mt-0.5 h-3 w-3 shrink-0" /> {group.warnings.join(" · ")}
+                              </div>
+                            ) : null}
+                          </>
+                        )}
+                      </td>
+                      <td className="px-3 py-2 align-top text-slate-600">
+                        {isCreated ? (group.draft.brand || "—") : (
+                          <input
+                            className={cellClass}
+                            value={group.draft.brand ?? ""}
+                            disabled={busy}
+                            onChange={(event) => editGroup(group.id, { brand: event.target.value })}
+                            aria-label="Marque"
+                          />
+                        )}
+                      </td>
+                      <td className="px-3 py-2 align-top text-slate-600">
+                        {isCreated ? (group.draft.mainSupplierName || "—") : (
+                          <select
+                            className={cellClass}
+                            value={group.draft.mainSupplierId ?? ""}
+                            disabled={busy}
+                            onChange={(event) => editGroup(group.id, { supplierId: event.target.value })}
+                            aria-label="Fournisseur"
+                          >
+                            <option value="">Aucun</option>
+                            {suppliers.map((supplier) => (
+                              <option key={supplier.id} value={supplier.id}>{supplier.name}</option>
+                            ))}
+                          </select>
+                        )}
+                      </td>
+                      <td className="px-3 py-2 align-top text-right text-slate-900">
+                        {isCreated ? formatPrice(group.draft.standardPurchasePriceHt) : (
+                          <input
+                            className={cellClass + " text-right"}
+                            inputMode="decimal"
+                            value={priceFieldValue(group.edits.purchasePrice, group.draft.standardPurchasePriceHt)}
+                            disabled={busy}
+                            onChange={(event) => editGroup(group.id, { purchasePrice: event.target.value })}
+                            aria-label="Prix d'achat HT"
+                          />
+                        )}
+                      </td>
+                      <td className="px-3 py-2 align-top text-right text-slate-900">
+                        {isCreated ? formatPrice(group.draft.recommendedSalePriceHt) : (
+                          <input
+                            className={cellClass + " text-right"}
+                            inputMode="decimal"
+                            value={priceFieldValue(group.edits.salePrice, group.draft.recommendedSalePriceHt)}
+                            disabled={busy}
+                            onChange={(event) => editGroup(group.id, { salePrice: event.target.value })}
+                            aria-label="Prix de vente conseille HT"
+                          />
+                        )}
+                      </td>
+                      <td className="px-3 py-2 align-top">
+                        <div className="flex flex-wrap gap-1">
+                          {group.sources.map((source) => (
+                            <span
+                              key={source.candidateId}
+                              className="inline-flex max-w-52 items-center gap-1 rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-xs text-slate-600"
+                              title={source.file.name}
+                            >
+                              {isImageFile(source.file) ? <Image className="h-3 w-3 shrink-0" /> : <FileText className="h-3 w-3 shrink-0" />}
+                              <span className="truncate">{source.file.name}</span>
+                              {group.sources.length > 1 && !isCreated ? (
+                                <button
+                                  type="button"
+                                  onClick={() => detachCandidate(source.candidateId)}
+                                  disabled={busy}
+                                  className="shrink-0 text-slate-400 hover:text-red-600 disabled:opacity-50"
+                                  title="Detacher ce document de ce produit"
+                                  aria-label={`Detacher ${source.file.name}`}
+                                >
+                                  <Unlink className="h-3 w-3" />
+                                </button>
+                              ) : null}
+                            </span>
+                          ))}
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
 
           <div className="flex flex-col gap-3 border-t border-slate-100 bg-slate-50 px-3 py-3 sm:flex-row sm:items-center sm:justify-between">
             <div className="text-xs text-slate-500">
               {groups.length} produit(s) detecte(s) a partir de {analyzedCount} fichier(s) · {selectedGroups.length} a creer
+              {quoteCount ? ` · ${quoteCount} devis lu(s) ligne par ligne` : ""}
               {createdGroups.size ? ` · ${createdGroups.size} deja cree(s)` : ""}
             </div>
             <button
@@ -510,48 +590,79 @@ export default function ProductBulkImportPanel({
           </div>
         </div>
       ) : null}
+
+      {quoteCount && !analyzing ? (
+        <div className="mt-3 flex items-start gap-2 text-xs text-slate-500">
+          <ReceiptText className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+          <span>
+            Les devis fournisseurs sont conserves comme piece justificative du prix, mais exclus du DOE : ils portent vos
+            prix d'achat et vos remises.
+          </span>
+        </div>
+      ) : null}
     </section>
   );
 }
 
 /**
- * Rapproche les fichiers decrivant le meme produit. On part des fiches
- * identifiantes, puis on rattache a chacune les fichiers dont le contenu
- * correspond — typiquement la capture du tarif du meme produit.
+ * Rapproche les sources decrivant le meme produit. On part des documents
+ * identifiants, puis on rattache a chacun ceux dont le contenu correspond —
+ * typiquement la capture du tarif du meme produit.
+ *
+ * Deux lignes d'un meme devis ne se rejoignent jamais : ce sont deux articles
+ * distincts par construction, meme quand leurs libelles se ressemblent.
  */
-function regroupFiles(rows: AnalyzedFile[]): AnalyzedFile[] {
-  const analyzed = rows.filter((row) => row.status === "analyzed" && row.signature);
-  if (analyzed.length < 2) return rows;
+function regroupCandidates(files: AnalyzedFile[]): AnalyzedFile[] {
+  const all = files
+    .filter((row) => row.status === "analyzed")
+    .flatMap((row) => row.candidates)
+    .filter((candidate) => candidate.signature);
+  if (all.length < 2) return files;
 
-  const anchors = analyzed.filter((row) => row.signature?.hasIdentity);
-  const groupByFileId = new Map<string, string>();
+  const anchors = all.filter((candidate) => candidate.signature?.hasIdentity);
+  const groupOf = new Map<string, string>();
+  const filesInGroup = new Map<string, Set<string>>();
 
-  // Chaque fiche identifiante ouvre un produit, sauf si elle rejoint une fiche deja ouverte.
+  const assign = (candidate: ProductCandidate, groupId: string) => {
+    groupOf.set(candidate.id, groupId);
+    const sources = filesInGroup.get(groupId) ?? new Set<string>();
+    sources.add(candidate.fileId);
+    filesInGroup.set(groupId, sources);
+  };
+
+  const canJoin = (candidate: ProductCandidate, groupId: string) => !filesInGroup.get(groupId)?.has(candidate.fileId);
+
+  // Chaque document identifiant ouvre un produit, sauf s'il rejoint un produit deja ouvert.
   for (const anchor of anchors) {
     let best: { id: string; score: number } | null = null;
     for (const other of anchors) {
       if (other.id === anchor.id) continue;
-      const groupId = groupByFileId.get(other.id);
-      if (!groupId) continue;
+      const groupId = groupOf.get(other.id);
+      if (!groupId || !canJoin(anchor, groupId)) continue;
       const score = scoreSignatureMatch(anchor.signature!, other.signature!);
       if (score >= PRODUCT_MATCH_THRESHOLD && (!best || score > best.score)) best = { id: groupId, score };
     }
-    groupByFileId.set(anchor.id, best?.id ?? anchor.groupId);
+    assign(anchor, best?.id ?? anchor.groupId);
   }
 
-  // Les fichiers sans identite propre (captures de prix) rejoignent la meilleure fiche.
-  for (const row of analyzed) {
-    if (groupByFileId.has(row.id)) continue;
+  // Les documents sans identite propre (captures de prix) rejoignent le meilleur produit.
+  for (const candidate of all) {
+    if (groupOf.has(candidate.id)) continue;
     let best: { id: string; score: number } | null = null;
     for (const anchor of anchors) {
-      const score = scoreSignatureMatch(row.signature!, anchor.signature!);
-      if (score > 0 && (!best || score > best.score)) best = { id: groupByFileId.get(anchor.id) ?? anchor.groupId, score };
+      const groupId = groupOf.get(anchor.id) ?? anchor.groupId;
+      if (!canJoin(candidate, groupId)) continue;
+      const score = scoreSignatureMatch(candidate.signature!, anchor.signature!);
+      if (score > 0 && (!best || score > best.score)) best = { id: groupId, score };
     }
-    groupByFileId.set(row.id, best && best.score >= PRODUCT_MATCH_THRESHOLD ? best.id : row.groupId);
+    assign(candidate, best && best.score >= PRODUCT_MATCH_THRESHOLD ? best.id : candidate.groupId);
   }
 
-  return rows.map((row) => {
-    const groupId = groupByFileId.get(row.id);
-    return groupId && groupId !== row.groupId ? { ...row, groupId } : row;
-  });
+  return files.map((row) => ({
+    ...row,
+    candidates: row.candidates.map((candidate) => {
+      const groupId = groupOf.get(candidate.id);
+      return groupId && groupId !== candidate.groupId ? { ...candidate, groupId } : candidate;
+    }),
+  }));
 }

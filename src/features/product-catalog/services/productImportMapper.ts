@@ -123,6 +123,7 @@ export function buildSupplierPrice(
 export async function storeProductFiles(
   productId: string,
   files: File[],
+  options: { kind?: ProductDocument["kind"]; usage?: ProductDocument["usage"] } = {},
 ): Promise<{ documents: ProductDocument[]; notes: string[] }> {
   const notes: string[] = [];
   const documents = await Promise.all(files.map(async (file) => {
@@ -135,10 +136,13 @@ export async function storeProductFiles(
     }
     return {
       id,
-      kind: "technical_sheet" as const,
+      kind: options.kind ?? ("technical_sheet" as const),
       name: file.name,
       url,
-      usage: { task: true, doe: true },
+      // Par defaut une fiche produit : utile au chiffrage et destinee au DOE.
+      // Un devis fournisseur, lui, porte des prix d'achat et des remises : il
+      // sert au chiffrage mais ne doit jamais partir dans le dossier client.
+      usage: options.usage ?? { task: true, doe: true },
       // Reserve aux consignes metier (pose, precautions, limites d'emploi).
       // Un statut d'import n'a rien a y faire : il ressortirait en remarque
       // dans les ratios materiaux des templates.
