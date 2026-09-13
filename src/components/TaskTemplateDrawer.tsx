@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { TaskTemplateInput, TaskTemplateRow } from "../services/taskLibrary.service";
 import {
   findLotProfileByName,
@@ -228,9 +228,6 @@ function fillIfEmpty(existing: string, content: string) {
   return cleanExisting ? existing : cleanContent;
 }
 
-type CocoMaterialResultItem = TaskTemplateCocoResult["materials"][number];
-type CocoEquipmentResultItem = TaskTemplateCocoResult["equipment"][number];
-
 function emptyCocoCostSummary(): TaskTemplateCocoResult["costSummary"] {
   return {
     materialCostHt: null,
@@ -321,6 +318,29 @@ function sanitizeCocoResult(result: TaskTemplateCocoResult): TaskTemplateCocoRes
  * elles que le portail ouvrier interroge. On complète la liste existante sans écraser
  * ce que l'utilisateur a déjà saisi ni dupliquer une entrée du même nom.
  */
+/**
+ * Meme principe pour les materiaux : la proposition Coco descend dans les
+ * ratios materiaux, la seule liste qui porte les produits, les prix et les
+ * pertes. On complete sans ecraser ni dupliquer une designation deja saisie.
+ */
+function mergeCocoMaterials(
+  current: MaterialRatioDraft[],
+  proposed: TaskTemplateCocoResult["materials"],
+): MaterialRatioDraft[] {
+  const known = new Set(current.map((row) => normalizeLabel(row.material_name)).filter(Boolean));
+  const additions = proposed
+    .filter((item) => item.label && !known.has(normalizeLabel(item.label)))
+    .map((item) =>
+      createMaterialDraft({
+        material_name: item.label,
+        ratio_quantity: item.quantity,
+        ratio_unit: item.unit,
+        notes: item.detail,
+      }),
+    );
+  return additions.length ? [...current, ...additions] : current;
+}
+
 function mergeCocoEquipment(
   current: EquipmentDraft[],
   proposed: TaskTemplateCocoResult["equipment"],
@@ -414,51 +434,6 @@ function MaterialField({ label, children }: { label: string; children: React.Rea
 }
 
 /**
- * Champ numerique tolerant : on garde la frappe en cours (virgule, saisie
- * partielle) au lieu de la reecrire a chaque caractere.
- */
-function CocoNumberInput({
-  value,
-  disabled,
-  placeholder,
-  className,
-  onChange,
-}: {
-  value: number | null;
-  disabled: boolean;
-  placeholder?: string;
-  className?: string;
-  onChange: (next: number | null) => void;
-}) {
-  const [text, setText] = useState(value === null ? "" : String(value));
-  const known = useRef(value);
-
-  useEffect(() => {
-    if (known.current === value) return;
-    known.current = value;
-    setText(value === null ? "" : String(value));
-  }, [value]);
-
-  return (
-    <input
-      className={className}
-      value={text}
-      disabled={disabled}
-      placeholder={placeholder}
-      inputMode="decimal"
-      onChange={(event) => {
-        const raw = event.target.value;
-        setText(raw);
-        const parsed = raw.trim() ? Number(raw.trim().replace(",", ".")) : NaN;
-        const next = Number.isFinite(parsed) ? parsed : null;
-        known.current = next;
-        onChange(next);
-      }}
-    />
-  );
-}
-
-/**
  * Encadre Coco editable : une ligne = un element. Coco propose, l'utilisateur
  * corrige, complete, ou saisit tout lui-meme.
  */
@@ -485,204 +460,6 @@ function CocoListBlock({
         disabled={disabled}
         placeholder="Rien pour le moment. Saisis une ligne par element."
         onChange={(event) => onChange(event.target.value.split(/\r?\n/))}
-      />
-    </div>
-  );
-}
-
-const cocoRowInputClass = "min-w-0 rounded-lg border border-slate-200 bg-white px-2 py-1 text-sm";
-
-function CocoRowActions({ disabled, onRemove }: { disabled: boolean; onRemove: () => void }) {
-  return (
-    <button
-      type="button"
-      className="shrink-0 rounded-lg border border-red-200 px-2 py-1 text-xs text-red-700 hover:bg-red-50"
-      disabled={disabled}
-      onClick={onRemove}
-    >
-      Supprimer
-    </button>
-  );
-}
-
-function CocoAddRowButton({ disabled, onClick }: { disabled: boolean; onClick: () => void }) {
-  return (
-    <button
-      type="button"
-      className="mt-2 rounded-lg border border-slate-200 bg-white px-3 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50"
-      disabled={disabled}
-      onClick={onClick}
-    >
-      + Ajouter une ligne
-    </button>
-  );
-}
-
-/**
- * Materiaux proposes par Coco : chaque ligne reste modifiable (designation,
- * quantite, unite, detail) et peut etre supprimee ou ajoutee a la main.
- */
-function CocoMaterialsBlock({
-  title,
-  items,
-  disabled,
-  onChange,
-}: {
-  title: string;
-  items: CocoMaterialResultItem[];
-  disabled: boolean;
-  onChange: (next: CocoMaterialResultItem[]) => void;
-}) {
-  function patch(index: number, changes: Partial<CocoMaterialResultItem>) {
-    onChange(items.map((item, position) => (position === index ? { ...item, ...changes } : item)));
-  }
-
-  return (
-    <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
-      <div className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">{title}</div>
-      <div className="mt-2 space-y-2">
-        {items.length ? (
-          items.map((item, index) => (
-            <div key={"coco-material-" + index} className="space-y-1 rounded-lg border border-slate-200 bg-white p-2">
-              <div className="flex flex-wrap items-center gap-2">
-                <input
-                  className={cocoRowInputClass + " flex-1"}
-                  value={item.label}
-                  disabled={disabled}
-                  placeholder="Designation"
-                  onChange={(event) => patch(index, { label: event.target.value })}
-                />
-                <CocoNumberInput
-                  className={cocoRowInputClass + " w-20"}
-                  value={item.quantity}
-                  disabled={disabled}
-                  placeholder="Qte"
-                  onChange={(quantity) => patch(index, { quantity })}
-                />
-                <input
-                  className={cocoRowInputClass + " w-20"}
-                  value={item.unit ?? ""}
-                  disabled={disabled}
-                  placeholder="Unite"
-                  onChange={(event) => patch(index, { unit: event.target.value })}
-                />
-                <CocoRowActions
-                  disabled={disabled}
-                  onRemove={() => onChange(items.filter((_, position) => position !== index))}
-                />
-              </div>
-              <input
-                className={cocoRowInputClass + " w-full"}
-                value={item.detail ?? ""}
-                disabled={disabled}
-                placeholder="Detail (mise en oeuvre, reference, remarque)"
-                onChange={(event) => patch(index, { detail: event.target.value })}
-              />
-            </div>
-          ))
-        ) : (
-          <div className="text-sm text-slate-500">Non renseigne.</div>
-        )}
-      </div>
-      <CocoAddRowButton
-        disabled={disabled}
-        onClick={() => onChange([...items, { label: "", quantity: null, unit: null, detail: null }])}
-      />
-    </div>
-  );
-}
-
-/**
- * Materiel propose par Coco. Le bouton "Reporter" recopie la liste corrigee
- * dans les lignes "materiel a prevoir" : ce sont elles que le portail ouvrier
- * interroge, donc une correction manuelle doit pouvoir y redescendre.
- */
-function CocoEquipmentBlock({
-  title,
-  items,
-  disabled,
-  onChange,
-  onPushToEquipment,
-}: {
-  title: string;
-  items: CocoEquipmentResultItem[];
-  disabled: boolean;
-  onChange: (next: CocoEquipmentResultItem[]) => void;
-  onPushToEquipment: () => void;
-}) {
-  function patch(index: number, changes: Partial<CocoEquipmentResultItem>) {
-    onChange(items.map((item, position) => (position === index ? { ...item, ...changes } : item)));
-  }
-
-  return (
-    <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
-      <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <div className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">{title}</div>
-        <button
-          type="button"
-          className="rounded-lg border border-slate-200 bg-white px-2 py-1 text-[11px] font-medium text-slate-700 hover:bg-slate-50"
-          disabled={disabled || !items.length}
-          onClick={onPushToEquipment}
-        >
-          Reporter dans le materiel a prevoir
-        </button>
-      </div>
-      <div className="mt-2 space-y-2">
-        {items.length ? (
-          items.map((item, index) => (
-            <div key={"coco-equipment-" + index} className="space-y-1 rounded-lg border border-slate-200 bg-white p-2">
-              <div className="flex flex-wrap items-center gap-2">
-                <input
-                  className={cocoRowInputClass + " flex-1"}
-                  value={item.label}
-                  disabled={disabled}
-                  placeholder="Designation"
-                  onChange={(event) => patch(index, { label: event.target.value })}
-                />
-                <CocoNumberInput
-                  className={cocoRowInputClass + " w-20"}
-                  value={item.quantity}
-                  disabled={disabled}
-                  placeholder="Qte"
-                  onChange={(quantity) => patch(index, { quantity })}
-                />
-                <input
-                  className={cocoRowInputClass + " w-20"}
-                  value={item.unit ?? ""}
-                  disabled={disabled}
-                  placeholder="Unite"
-                  onChange={(event) => patch(index, { unit: event.target.value })}
-                />
-                <label className="flex shrink-0 items-center gap-1 text-xs text-slate-600">
-                  <input
-                    type="checkbox"
-                    checked={item.required}
-                    disabled={disabled}
-                    onChange={(event) => patch(index, { required: event.target.checked })}
-                  />
-                  Obligatoire
-                </label>
-                <CocoRowActions
-                  disabled={disabled}
-                  onRemove={() => onChange(items.filter((_, position) => position !== index))}
-                />
-              </div>
-              <input
-                className={cocoRowInputClass + " w-full"}
-                value={item.detail ?? ""}
-                disabled={disabled}
-                placeholder="Detail (usage, reglage, remarque)"
-                onChange={(event) => patch(index, { detail: event.target.value })}
-              />
-            </div>
-          ))
-        ) : (
-          <div className="text-sm text-slate-500">Non renseigne.</div>
-        )}
-      </div>
-      <CocoAddRowButton
-        disabled={disabled}
-        onClick={() => onChange([...items, { label: "", quantity: null, unit: null, required: false, detail: null }])}
       />
     </div>
   );
@@ -1369,6 +1146,7 @@ export default function TaskTemplateDrawer({
       // Coco alimente directement les listes liées à la tâche : le matériel qu'il
       // propose devient des lignes "matériel à prévoir" (celles que l'ouvrier reçoit
       // sur son portail), le reste est conservé structuré dans coco_preparation.
+      setMaterialDrafts((prev) => mergeCocoMaterials(prev, result.materials));
       setEquipmentDrafts((prev) => mergeCocoEquipment(prev, result.equipment));
 
       const missing = result.missingInformation.length
@@ -2129,22 +1907,11 @@ export default function TaskTemplateDrawer({
                       ) : null}
                       <span className="text-slate-500">
                         Tous les encadres restent modifiables a la main : corrige, complete ou supprime avant d'enregistrer.
+                        Les materiaux et le materiel proposes par Coco sont ajoutes directement dans « Ratios materiaux » et
+                        « Materiel a prevoir » ci-dessus : ils ne sont pas repetes ici.
                       </span>
                     </div>
                     <div className="grid gap-3 lg:grid-cols-2">
-                      <CocoMaterialsBlock
-                        title="Liste materiaux Coco"
-                        items={cocoResult.materials}
-                        disabled={busy}
-                        onChange={(materials) => patchCocoResult({ materials })}
-                      />
-                      <CocoEquipmentBlock
-                        title="Liste materiel Coco"
-                        items={cocoResult.equipment}
-                        disabled={busy}
-                        onChange={(equipment) => patchCocoResult({ equipment })}
-                        onPushToEquipment={() => setEquipmentDrafts((prev) => mergeCocoEquipment(prev, cocoResult.equipment))}
-                      />
                       <CocoListBlock
                         title="Consommables"
                         items={cocoResult.consumables}
