@@ -876,7 +876,9 @@ export async function nextCrmQuoteNumber(reference = new Date()): Promise<string
 
 export async function createCrmQuote(input: Partial<CrmQuoteRow>) {
   const organization_id = await currentOrgId();
-  const requestedQuoteNumber = text(input.quote_number) ?? `DEV-${new Date().getFullYear()}-${Date.now().toString().slice(-6)}`;
+  // Un devis cree sans numero explicite suit la meme numerotation que les autres :
+  // sinon il ressortait avec un horodatage, illisible au milieu des DEV-AAAAMMNN.
+  const requestedQuoteNumber = text(input.quote_number) ?? (await nextCrmQuoteNumber());
   const quote_number = await resolveAvailableQuoteNumber(organization_id, requestedQuoteNumber);
   const montant_ht = numberOrZero(input.montant_ht);
   const tva = input.tva === undefined || input.tva === null ? 20 : numberOrZero(input.tva);
