@@ -30,6 +30,13 @@ export type QuoteBuilderItem = {
    * liste complete suit jusqu'au chantier ; taskTemplateId en est la premiere.
    */
   taskTemplateIds?: string[] | null;
+  /**
+   * D'ou vient le prix de vente. "auto" : il suit le déboursé des tâches liées
+   * et se recalcule tout seul. "manual" : quelqu'un l'a décidé, on n'y touche
+   * plus jamais. Sans cette distinction, impossible de corriger un prix hérité
+   * d'un ancien calcul sans écraser un prix voulu.
+   */
+  priceSource?: "auto" | "manual";
   /** Quantite par tache liee ; null = la tache suit la quantite de la ligne. */
   taskTemplateQuantities?: Array<number | null> | null;
   compositeItems?: QuoteBuilderCompositeItem[];

@@ -1191,6 +1191,8 @@ export async function createCrmQuoteItemFromTemplate(input: {
   taskTemplateIds?: string[] | null;
   /** Quantité par tâche liée ; null = la tâche suit la quantité de la ligne. */
   taskTemplateQuantities?: Array<number | null> | null;
+  /** "manual" quand le prix a été décidé à la main : il ne se recalcule plus. */
+  priceStatus?: string | null;
   compositeItems?: unknown[] | null;
   designation?: string | null;
   description?: string | null;
@@ -1243,7 +1245,7 @@ export async function createCrmQuoteItemFromTemplate(input: {
     composite_items: input.compositeItems ?? null,
     line_type: text(input.lineType) ?? (template ? "composite" : "simple"),
     family: template?.lot ?? null,
-    price_status: "estimated",
+    price_status: text(input.priceStatus) ?? "estimated",
     show_to_client: true,
     cost_materials_ht: totals.cost_materials_ht,
     cost_labor_ht: totals.cost_labor_ht,

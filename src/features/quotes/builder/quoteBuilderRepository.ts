@@ -180,6 +180,10 @@ function assertQuotePricePermission(
 
   for (const row of flattenQuoteBuilder(quote.nodes)) {
     if (row.node.type !== "item") continue;
+    // Un prix encore automatique n'a ete choisi par personne : il suit le deboursé
+    // des taches liees. Le refuser ici empecherait un profil sans droit sur les prix
+    // d'ouvrir puis d'enregistrer un devis sans rien avoir touche.
+    if (row.node.priceSource !== "manual") continue;
     const previousPrice = row.node.persistedId ? originalPrices.get(row.node.persistedId) : 0;
     const nextPrice = Number(row.node.unitPriceHt || 0);
     if (Math.abs(nextPrice - Number(previousPrice ?? 0)) > 0.009) {
@@ -220,6 +224,7 @@ async function persistItems(quote: QuoteBuilderQuote, original: CrmQuoteEngineDa
       taskTemplateId: patch.task_template_id,
       taskTemplateIds: patch.task_template_ids,
       taskTemplateQuantities: patch.task_template_quantities,
+      priceStatus: patch.price_status,
       compositeItems: patch.composite_items,
     });
     nextIds.add(created.id);
@@ -252,6 +257,7 @@ function rowToPersistence(row: QuoteBuilderFlatRow, quoteId: string, parentItemI
     task_template_id: null as string | null,
     task_template_ids: [] as string[],
     task_template_quantities: [] as Array<number | null>,
+    price_status: "estimated" as string,
     composite_items: null as unknown[] | null,
   };
   if (row.node.type !== "item") return base;
@@ -268,6 +274,7 @@ function rowToPersistence(row: QuoteBuilderFlatRow, quoteId: string, parentItemI
     technical_description: row.node.internalNote ?? "",
     task_template_id: row.node.taskTemplateId ?? null,
     task_template_ids: normalizeTaskTemplateIds(row.node.taskTemplateIds, row.node.taskTemplateId),
+    price_status: row.node.priceSource === "manual" ? "manual" : "estimated",
     task_template_quantities: normalizeTaskTemplateQuantities(
       row.node.taskTemplateQuantities,
       normalizeTaskTemplateIds(row.node.taskTemplateIds, row.node.taskTemplateId).length,

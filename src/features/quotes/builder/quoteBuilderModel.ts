@@ -178,6 +178,10 @@ function mapVisitToQuoteNodes(source: CrmVisitQuoteSource): QuoteBuilderSection[
       taskTemplateId: item.taskTemplateId ?? null,
       taskTemplateLabel: item.taskTemplateLabel ?? null,
       taskTemplateIds: normalizeTaskTemplateIds(item.taskTemplateIds, item.taskTemplateId),
+      // Le relevé ne décide aucun prix : il ne parle que de gestes et de
+      // quantités. Le devis chiffre, et continue de chiffrer tant que personne
+      // n'a écrit son propre prix.
+      priceSource: "auto" as const,
       taskTemplateQuantities: normalizeTaskTemplateQuantities(item.taskTemplateQuantities, normalizeTaskTemplateIds(item.taskTemplateIds, item.taskTemplateId).length),
     }));
   }
@@ -221,6 +225,7 @@ function mapCrmItemsToQuoteNodes(items: CrmQuoteItemRow[]): QuoteBuilderSection[
       taskTemplateId: row.task_template_id ?? null,
       taskTemplateLabel: (row as { task_template_label?: string | null }).task_template_label ?? null,
       taskTemplateIds: normalizeTaskTemplateIds(row.task_template_ids, row.task_template_id),
+      priceSource: row.price_status === "manual" ? ("manual" as const) : ("auto" as const),
       taskTemplateQuantities: normalizeTaskTemplateQuantities(row.task_template_quantities, normalizeTaskTemplateIds(row.task_template_ids, row.task_template_id).length),
       compositeItems: Array.isArray(row.composite_items)
         ? (row.composite_items as QuoteBuilderItem["compositeItems"])

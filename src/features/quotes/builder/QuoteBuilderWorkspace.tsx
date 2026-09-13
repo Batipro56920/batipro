@@ -228,22 +228,22 @@ export function QuoteBuilderWorkspace({ onClose, costsPanel }: Props) {
   }, [rows, lineCosts]);
 
   /**
-   * Une ligne qui arrive du relevé n'a pas de prix : le pré-devis ne parle que
-   * de gestes et de quantités. On la remplit une fois avec son déboursé majoré
-   * de la marge par défaut, sans jamais écraser un prix déjà saisi.
+   * Le prix d'une ligne suit son déboursé tant que personne ne l'a décidé : le
+   * relevé ne transmet que des gestes et des quantités, jamais un prix de vente.
+   * Dès qu'un prix est saisi dans la colonne PU HT, la ligne passe en manuel et
+   * n'est plus recalculée, y compris après enregistrement et réouverture.
    */
-  const prefilledPrices = useRef<Set<string>>(new Set());
   useEffect(() => {
     if (!rates) return;
     for (const row of rows) {
       if (row.node.type !== "item") continue;
-      if (Number(row.node.unitPriceHt ?? 0) > 0) continue;
-      if (prefilledPrices.current.has(row.id)) continue;
+      if (row.node.priceSource === "manual") continue;
       const cost = lineCosts.get(row.id);
       if (!cost || cost.costHt <= 0) continue;
-      const quantity = Number(row.node.quantity ?? 0);
-      prefilledPrices.current.add(row.id);
-      updateNode(row.id, { unitPriceHt: salePriceFromCost(quantity > 0 ? cost.costHt / quantity : cost.costHt) } as Partial<QuoteBuilderNode>);
+      const lineQuantity = Number(row.node.quantity ?? 0);
+      const target = salePriceFromCost(lineQuantity > 0 ? cost.costHt / lineQuantity : cost.costHt);
+      if (Math.abs(Number(row.node.unitPriceHt ?? 0) - target) < 0.005) continue;
+      updateNode(row.id, { unitPriceHt: target } as Partial<QuoteBuilderNode>);
     }
   }, [lineCosts, rates, rows, updateNode]);
 
@@ -257,30 +257,29 @@ export function QuoteBuilderWorkspace({ onClose, costsPanel }: Props) {
     updateQuote({ estimatedDurationValue: estimatedDaysFromHours(costSummary.hours), estimatedDurationUnit: "jours" });
   }, [costSummary.hours, quote, updateQuote]);
 
-  /**
-   * Lignes vendues sous la marge cible. Un devis repris d'un ancien pré-devis
-   * arrive avec des prix calculés sur le coût de référence du modèle : ils
-   * tombent sous le déboursé réel, ou lui laissent une marge dérisoire, sans
-   * que rien ne le signale.
-   */
-  const underPricedRows = useMemo(
+  /** Lignes dont le prix a été décidé à la main alors qu'un déboursé est connu. */
+  const manualPricedRows = useMemo(
     () =>
       rows.filter((row) => {
         if (row.node.type !== "item") return false;
+        if (row.node.priceSource !== "manual") return false;
         const cost = lineCosts.get(row.id);
-        if (!cost || cost.costHt <= 0) return false;
-        return row.totalHt < salePriceFromCost(cost.costHt) - 0.01;
+        return Boolean(cost && cost.costHt > 0);
       }),
     [rows, lineCosts],
   );
 
-  function alignPricesOnCost() {
-    for (const row of underPricedRows) {
+  /** Rend la main au calcul : les lignes repassent au déboursé + marge cible. */
+  function resetPricesToCost() {
+    for (const row of manualPricedRows) {
       if (row.node.type !== "item") continue;
       const cost = lineCosts.get(row.id);
       if (!cost) continue;
       const lineQuantity = Number(row.node.quantity ?? 0);
-      updateNode(row.id, { unitPriceHt: salePriceFromCost(lineQuantity > 0 ? cost.costHt / lineQuantity : cost.costHt) } as Partial<QuoteBuilderNode>);
+      updateNode(row.id, {
+        priceSource: "auto",
+        unitPriceHt: salePriceFromCost(lineQuantity > 0 ? cost.costHt / lineQuantity : cost.costHt),
+      } as Partial<QuoteBuilderNode>);
     }
   }
 
@@ -302,7 +301,7 @@ export function QuoteBuilderWorkspace({ onClose, costsPanel }: Props) {
     { id: "title", header: "Désignation", cell: ({ row }) => <TitleCell row={row.original} onSelectParent={setActiveParent} onChange={(patch) => updateNode(row.original.id, patch)} onConfigureComposite={() => setCompositeNodeId(row.original.id)} taskTemplates={taskTemplates} onLinkTask={(templateId) => linkTaskTemplate(row.original.id, taskTemplates.find((item) => item.id === templateId) ?? null, row.original.node.type === "item" ? row.original.node.title : "")} onCreateTask={() => setTaskDrawerRowId(row.original.id)} cost={lineCosts.get(row.original.id) ?? null} saleHt={row.original.totalHt} /> },
     { id: "quantity", header: "Qté", cell: ({ row }) => row.original.node.type === "item" && quote?.settings.showQuantityColumns ? <NumberInput value={row.original.node.quantity} onChange={(quantity) => updateNode(row.original.id, { quantity } as Partial<QuoteBuilderNode>)} /> : null },
     { id: "unit", header: "Unité", cell: ({ row }) => row.original.node.type === "item" && quote?.settings.showQuantityColumns ? <UnitSelect value={row.original.node.unit} onChange={(unit) => updateNode(row.original.id, { unit } as Partial<QuoteBuilderNode>)} /> : null },
-    { id: "unitPriceHt", header: "PU HT", cell: ({ row }) => row.original.node.type === "item" ? <NumberInput value={row.original.node.unitPriceHt} onChange={(unitPriceHt) => updateNode(row.original.id, { unitPriceHt } as Partial<QuoteBuilderNode>)} /> : null },
+    { id: "unitPriceHt", header: "PU HT", cell: ({ row }) => row.original.node.type === "item" ? <NumberInput value={row.original.node.unitPriceHt} onChange={(unitPriceHt) => updateNode(row.original.id, { unitPriceHt, priceSource: "manual" } as Partial<QuoteBuilderNode>)} /> : null },
     { id: "vat", header: "TVA", cell: ({ row }) => row.original.node.type === "item" && quote?.settings.showVatColumn ? <VatSelect value={row.original.node.vatRate} onChange={(vatRate) => updateNode(row.original.id, { vatRate } as Partial<QuoteBuilderNode>)} /> : null },
     { id: "total", header: "Total HT", cell: ({ row }) => <span className="font-semibold text-slate-900">{row.original.node.type === "item" ? formatCurrency(row.original.totalHt) : sectionTotalLabel(row.original, rows, quote)}</span> },
     { id: "actions", header: "", cell: ({ row }) => <button type="button" onClick={() => removeNode(row.original.id)} className="rounded-lg p-1.5 text-slate-400 opacity-0 transition group-hover:opacity-100 hover:bg-red-50 hover:text-red-600"><Trash2 className="h-4 w-4" /></button> },
@@ -360,7 +359,7 @@ export function QuoteBuilderWorkspace({ onClose, costsPanel }: Props) {
         <section className="overflow-auto px-4 py-5 xl:px-6">
           {mode === "edit" ? (
             <>
-            <QuoteMarginBar summary={costSummary} underPriced={underPricedRows.length} onAlignPrices={alignPricesOnCost} />
+            <QuoteMarginBar summary={costSummary} manualPriced={manualPricedRows.length} onResetPrices={resetPricesToCost} />
             <QuoteDocumentSurface quote={quote} rows={rows} table={table} totals={totals} sensors={sensors} onDragEnd={onDragEnd} updateQuote={updateQuote} updateNode={updateNode} removeNode={removeNode} addItem={addItem} addSection={addSection} addSubsection={addSubsection} onOpenFinancialDetails={() => setFinancialOpen(true)} />
             </>
           ) : mode === "couts" ? (
@@ -1090,7 +1089,7 @@ function LineMarginHint({ cost, saleHt }: { cost: QuoteLineCost; saleHt: number 
  * part dans la previsualisation, dans le PDF ni chez le client : c'est la seule
  * facon de voir la marge se deformer pendant qu'on ajuste les prix.
  */
-function QuoteMarginBar({ summary, underPriced, onAlignPrices }: { summary: QuoteCostSummary; underPriced: number; onAlignPrices: () => void }) {
+function QuoteMarginBar({ summary, manualPriced, onResetPrices }: { summary: QuoteCostSummary; manualPriced: number; onResetPrices: () => void }) {
   const margin = summary.saleHt - summary.costHt;
   const rate = marginRateOnSale(summary.costHt, summary.saleHt);
   const missing = summary.total - summary.covered;
@@ -1104,17 +1103,18 @@ function QuoteMarginBar({ summary, underPriced, onAlignPrices }: { summary: Quot
         <MarginFigure label="Marge" value={formatCurrency(margin)} tone={marginClass} />
         <MarginFigure label="Taux de marge" value={rate === null ? "—" : `${rate.toFixed(1)} %`} tone={marginClass} />
         <MarginFigure label="Temps prévu" value={summary.hours > 0 ? `${summary.hours.toLocaleString("fr-FR")} h · ${estimatedDaysFromHours(summary.hours)} j` : "—"} />
-        {underPriced > 0 ? (
+        {manualPriced > 0 ? (
           <button
             type="button"
-            onClick={onAlignPrices}
+            onClick={onResetPrices}
             className="ml-auto rounded-xl bg-white px-3 py-2 text-xs font-semibold text-slate-900 hover:bg-slate-100"
           >
-            Aligner {underPriced} ligne(s) sur le déboursé + 30 %
+            Recalculer {manualPriced} prix saisi(s) à la main
           </button>
         ) : null}
       </div>
       <p className="mt-2 text-[11px] text-slate-300">
+        Les prix suivent le déboursé + 30 % tant que tu n'en saisis pas un toi-même.
         Visible seulement ici : ni la prévisualisation, ni le PDF, ni le client ne voient ces montants.
         {missing > 0 ? ` ${missing} ligne(s) sans tâche liée : leur déboursé n'est pas connu.` : ""}
       </p>
