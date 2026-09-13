@@ -47,6 +47,11 @@ type EstimateLine = {
    */
   taskTemplateIds?: string[] | null;
   taskTemplateLabels?: string[] | null;
+  /**
+   * Quantite propre a chaque tache liee, alignee sur taskTemplateIds.
+   * null = la tache suit la quantite de la ligne.
+   */
+  taskTemplateQuantities?: Array<number | null> | null;
   technicalNotes: string;
   constraints: string;
   variants: string;
@@ -138,7 +143,7 @@ function decimal(value: unknown): number | null {
   return Number.isFinite(next) ? next : null;
 }
 
-function DecimalInput({ value, onValue, placeholder }: { value: number | null | undefined; onValue: (value: number | null) => void; placeholder?: string }) {
+function DecimalInput({ value, onValue, placeholder, className }: { value: number | null | undefined; onValue: (value: number | null) => void; placeholder?: string; className?: string }) {
   const [focused, setFocused] = useState(false);
   const [display, setDisplay] = useState(value === null || value === undefined ? "" : String(value));
 
@@ -148,7 +153,7 @@ function DecimalInput({ value, onValue, placeholder }: { value: number | null | 
 
   return (
     <input
-      className={inputClass}
+      className={className ?? inputClass}
       inputMode="decimal"
       pattern={"[0-9\\s,.]*"}
       placeholder={placeholder}
@@ -210,6 +215,21 @@ function lineTemplateIds(line: Pick<EstimateLine, "taskTemplateIds" | "taskTempl
   return single ? [single] : [];
 }
 
+/**
+ * Quantites des taches liees, alignees sur les identifiants fournis. Une
+ * position sans valeur reste nulle : la tache suit alors la ligne.
+ */
+function lineTemplateQuantities(
+  line: Pick<EstimateLine, "taskTemplateQuantities">,
+  ids: string[],
+): Array<number | null> {
+  const list = Array.isArray(line.taskTemplateQuantities) ? line.taskTemplateQuantities : [];
+  return ids.map((_, index) => {
+    const value = Number(list[index] ?? NaN);
+    return Number.isFinite(value) ? value : null;
+  });
+}
+
 /** Valeur encore automatique : vide, ou egale a ce que les taches liees donnaient. */
 function isAutoValue(current: number | null | undefined, automatic: number): boolean {
   const value = Number(current ?? 0);
@@ -220,6 +240,8 @@ type LinkedTaskEntry = {
   template: TaskTemplateRow;
   materials: TaskTemplateMaterialRatioRow[];
   equipment: TaskTemplateEquipmentItemRow[];
+  /** Quantite retenue pour cette tache : celle saisie, sinon celle de la ligne. */
+  quantity: number;
 };
 
 /**
@@ -246,8 +268,8 @@ function linkedTaskCost(entry: LinkedTaskEntry, rates: CompanyHourlyRates | null
 /**
  * Ce que les taches liees apportent a la ligne. Un intitule annonce au client
  * ("remplacement complet du TGBT") demande souvent plusieurs gestes de la
- * bibliotheque : on additionne leur main d'oeuvre, leurs materiaux et leurs
- * frais, et on detaille tache par tache des qu'il y en a plus d'une.
+ * bibliotheque, et pas forcement dans la meme quantite : chaque tache est
+ * comptee avec la sienne, puis le total est ramene a l'unite de la ligne.
  */
 function LinkedTaskSummary({
   entries,
@@ -268,12 +290,24 @@ function LinkedTaskSummary({
     );
   }
 
-  const perTask = entries.map((entry) => ({ entry, ...linkedTaskCost(entry, rates) }));
-  const totalHours = perTask.reduce((total, row) => total + row.hoursPerUnit, 0);
-  const totalLabor = perTask.reduce((total, row) => total + row.laborPerUnit, 0);
-  const totalMaterials = perTask.reduce((total, row) => total + row.materialsPerUnit, 0);
-  const totalIndirect = perTask.reduce((total, row) => total + row.indirectPerUnit, 0);
-  const costPerUnit = totalLabor + totalMaterials + totalIndirect;
+  const perTask = entries.map((entry) => {
+    const unitCost = linkedTaskCost(entry, rates);
+    const count = entry.quantity > 0 ? entry.quantity : 0;
+    return {
+      entry,
+      count,
+      hours: unitCost.hoursPerUnit * count,
+      labor: unitCost.laborPerUnit * count,
+      materials: unitCost.materialsPerUnit * count,
+      indirect: unitCost.indirectPerUnit * count,
+      cost: unitCost.costPerUnit * count,
+    };
+  });
+  const totalHours = perTask.reduce((total, row) => total + row.hours, 0);
+  const totalLabor = perTask.reduce((total, row) => total + row.labor, 0);
+  const totalMaterials = perTask.reduce((total, row) => total + row.materials, 0);
+  const totalIndirect = perTask.reduce((total, row) => total + row.indirect, 0);
+  const totalCost = totalLabor + totalMaterials + totalIndirect;
   const materialLines = entries.reduce((total, entry) => total + entry.materials.length, 0);
   const equipmentNames = Array.from(
     new Set(entries.flatMap((entry) => entry.equipment.map((item) => item.equipment_name).filter(Boolean))),
@@ -305,21 +339,20 @@ function LinkedTaskSummary({
             <div key={row.entry.template.id} className="flex justify-between gap-3">
               <span className="min-w-0 truncate" title={row.entry.template.titre}>{row.entry.template.titre}</span>
               <span className="shrink-0 font-medium">
-                {row.hoursPerUnit ? `${row.hoursPerUnit.toLocaleString("fr-FR")} h · ` : ""}
-                {euro(row.costPerUnit)}
+                {row.count.toLocaleString("fr-FR")} {normalizeVisitUnit(row.entry.template.unite) ?? (unit || "u")} · {euro(row.cost)}
               </span>
             </div>
           ))}
         </div>
       ) : null}
       <div className="mt-2 flex justify-between border-t border-blue-200 pt-2 text-xs font-semibold text-slate-900">
-        <span>Prix de revient / {unit || "u"}</span>
-        <span>{euro(costPerUnit)}</span>
+        <span>Cout total des taches liees</span>
+        <span>{euro(totalCost)}</span>
       </div>
       {measuredQuantity > 0 ? (
         <div className="flex justify-between text-xs font-semibold text-blue-800">
-          <span>Pour {measuredQuantity.toLocaleString("fr-FR")} releve(s)</span>
-          <span>{euro(costPerUnit * measuredQuantity)}</span>
+          <span>Prix de revient / {unit || "u"}</span>
+          <span>{euro(totalCost / measuredQuantity)}</span>
         </div>
       ) : null}
       {!rates?.activeEmployeeCount ? (
@@ -666,6 +699,11 @@ export function ProjectVisitWorkspaceStable({ project, existingAppointment }: { 
   const report = useMemo(() => reportText(project, draft), [project, draft]);
   const photos = useMemo(() => draft.attachments.filter((item) => item.kind === "photo"), [draft.attachments]);
   const selectedTemplateIds = useMemo(() => (selectedLine ? lineTemplateIds(selectedLine) : []), [selectedLine]);
+  const selectedTemplateQuantities = useMemo(
+    () => (selectedLine ? lineTemplateQuantities(selectedLine, selectedTemplateIds) : []),
+    [selectedLine, selectedTemplateIds],
+  );
+  const selectedLineQuantity = selectedLine ? quantity(selectedLine) : 0;
   const selectedTemplateKey = selectedTemplateIds.join(",");
 
   /** Composition reelle des taches liees : ce que l'ouvrier trouvera au chantier. */
@@ -696,17 +734,18 @@ export function ProjectVisitWorkspaceStable({ project, existingAppointment }: { 
   const linkedEntries = useMemo<LinkedTaskEntry[]>(
     () =>
       selectedTemplateIds
-        .map((templateId) => {
+        .map((templateId, index) => {
           const template = taskTemplates.find((row) => row.id === templateId) ?? null;
           if (!template) return null;
           return {
             template,
             materials: linkedPreparation.materialsByTemplateId[templateId] ?? [],
             equipment: linkedPreparation.equipmentByTemplateId[templateId] ?? [],
+            quantity: selectedTemplateQuantities[index] ?? selectedLineQuantity,
           };
         })
         .filter((entry): entry is LinkedTaskEntry => entry !== null),
-    [selectedTemplateIds, taskTemplates, linkedPreparation],
+    [selectedTemplateIds, selectedTemplateQuantities, selectedLineQuantity, taskTemplates, linkedPreparation],
   );
   function patch<K extends keyof VisitDraft>(key: K, value: VisitDraft[K]) {
     setDraft((current) => ({ ...current, [key]: value }));
@@ -739,7 +778,8 @@ export function ProjectVisitWorkspaceStable({ project, existingAppointment }: { 
     const current = lineTemplateIds(line);
     if (current.includes(template.id)) return;
     const nextIds = [...current, template.id];
-    const patch = templateLinkPatch(line, current, nextIds);
+    const nextQuantities = [...lineTemplateQuantities(line, current), null];
+    const patch = templateLinkPatch(line, current, nextIds, nextQuantities);
     const untouchedTitle = !line.title.trim() || line.title.trim() === "Nouvelle tache / prestation";
     if (!current.length && untouchedTitle) patch.title = template.titre;
     if (!current.length) {
@@ -754,16 +794,39 @@ export function ProjectVisitWorkspaceStable({ project, existingAppointment }: { 
     const line = draft.lines.find((item) => item.id === lineId);
     if (!line) return;
     const current = lineTemplateIds(line);
-    if (!current.includes(templateId)) return;
+    const index = current.indexOf(templateId);
+    if (index === -1) return;
+    const quantities = lineTemplateQuantities(line, current);
     const nextIds = current.filter((id) => id !== templateId);
-    patchLine(lineId, templateLinkPatch(line, current, nextIds));
+    const nextQuantities = quantities.filter((_, position) => position !== index);
+    patchLine(lineId, templateLinkPatch(line, current, nextIds, nextQuantities));
   }
 
   /**
-   * Champs derives du lien : la liste, les libelles, le couple historique
-   * (premiere tache) que lisent le devis et le chantier, et les estimations.
+   * Quantite propre a une tache liee. Vide = la tache suit la quantite de la
+   * ligne : c'est le cas courant, et il reste juste apres une nouvelle mesure.
    */
-  function templateLinkPatch(line: EstimateLine, previousIds: string[], nextIds: string[]): Partial<EstimateLine> {
+  function setTaskTemplateQuantity(lineId: string, templateId: string, value: number | null) {
+    const line = draft.lines.find((item) => item.id === lineId);
+    if (!line) return;
+    const current = lineTemplateIds(line);
+    const index = current.indexOf(templateId);
+    if (index === -1) return;
+    const nextQuantities = lineTemplateQuantities(line, current).map((quantity, position) => (position === index ? value : quantity));
+    patchLine(lineId, templateLinkPatch(line, current, current, nextQuantities));
+  }
+
+  /**
+   * Champs derives du lien : la liste, les libelles, les quantites, le couple
+   * historique (premiere tache) que lisent le devis et le chantier, et les
+   * estimations.
+   */
+  function templateLinkPatch(
+    line: EstimateLine,
+    previousIds: string[],
+    nextIds: string[],
+    nextQuantities: Array<number | null>,
+  ): Partial<EstimateLine> {
     const labels = nextIds.map((id) => {
       const template = taskTemplates.find((row) => row.id === id);
       if (template) return template.titre;
@@ -773,26 +836,42 @@ export function ProjectVisitWorkspaceStable({ project, existingAppointment }: { 
     const patch: Partial<EstimateLine> = {
       taskTemplateIds: nextIds,
       taskTemplateLabels: labels,
+      taskTemplateQuantities: nextQuantities,
       taskTemplateId: nextIds[0] ?? null,
       taskTemplateLabel: labels[0] ?? null,
     };
-    const previousHours = templatesTotal(previousIds, (template) => template.temps_prevu_par_unite_h);
-    const previousPrice = templatesTotal(previousIds, (template) => template.cout_reference_unitaire_ht);
+    const lineQuantity = quantity(line);
+    const previousQuantities = lineTemplateQuantities(line, previousIds);
+    const previousHours = templatesTotal(previousIds, previousQuantities, lineQuantity, (template) => template.temps_prevu_par_unite_h);
+    const previousPrice = templatesTotal(previousIds, previousQuantities, lineQuantity, (template) => template.cout_reference_unitaire_ht);
     if (isAutoValue(line.estimatedHours, previousHours)) {
-      const hours = templatesTotal(nextIds, (template) => template.temps_prevu_par_unite_h);
+      const hours = templatesTotal(nextIds, nextQuantities, lineQuantity, (template) => template.temps_prevu_par_unite_h);
       patch.estimatedHours = hours > 0 ? hours : null;
     }
     if (isAutoValue(line.priceHintHt, previousPrice)) {
-      const price = templatesTotal(nextIds, (template) => template.cout_reference_unitaire_ht);
+      const price = templatesTotal(nextIds, nextQuantities, lineQuantity, (template) => template.cout_reference_unitaire_ht);
       patch.priceHintHt = price > 0 ? price : null;
     }
     return patch;
   }
 
-  function templatesTotal(ids: string[], pick: (template: TaskTemplateRow) => number | string | null | undefined): number {
-    return ids.reduce((total, id) => {
+  /**
+   * Valeur automatique ramenee a une unite de la ligne. Une tache sans quantite
+   * propre compte une fois par unite ; une tache dont la quantite est fixee ne
+   * compte que sa part.
+   */
+  function templatesTotal(
+    ids: string[],
+    quantities: Array<number | null>,
+    lineQuantity: number,
+    pick: (template: TaskTemplateRow) => number | string | null | undefined,
+  ): number {
+    return ids.reduce((total, id, index) => {
       const template = taskTemplates.find((row) => row.id === id);
-      return total + Number(pick(template ?? ({} as TaskTemplateRow)) ?? 0);
+      if (!template) return total;
+      const pinned = quantities[index] ?? null;
+      const share = pinned === null ? 1 : lineQuantity > 0 ? pinned / lineQuantity : pinned;
+      return total + Number(pick(template) ?? 0) * share;
     }, 0);
   }
 
@@ -810,7 +889,7 @@ export function ProjectVisitWorkspaceStable({ project, existingAppointment }: { 
       parentId = uid("section");
       nextLines.push({ id: parentId, type: "section", parentId: null, title: "Nouvelle section", unit: "u", quantity: 0, manualQuantity: false, technicalNotes: "", constraints: "", variants: "", attentionPoints: "" });
     }
-    const line: EstimateLine = { id: uid("task"), type: "task", parentId, title: "Nouvelle tache / prestation", unit: "m2", quantity: 0, manualQuantity: false, length: null, width: null, height: null, estimatedHours: null, priceHintHt: null, family: null, libraryId: null, taskTemplateId: null, taskTemplateLabel: null, taskTemplateIds: [], taskTemplateLabels: [], technicalNotes: "", constraints: "", variants: "", attentionPoints: "" };
+    const line: EstimateLine = { id: uid("task"), type: "task", parentId, title: "Nouvelle tache / prestation", unit: "m2", quantity: 0, manualQuantity: false, length: null, width: null, height: null, estimatedHours: null, priceHintHt: null, family: null, libraryId: null, taskTemplateId: null, taskTemplateLabel: null, taskTemplateIds: [], taskTemplateLabels: [], taskTemplateQuantities: [], technicalNotes: "", constraints: "", variants: "", attentionPoints: "" };
     setDraft((current) => ({ ...current, lines: [...nextLines.filter((item) => !current.lines.some((existing) => existing.id === item.id)), ...current.lines, line] }));
     setSelectedLineId(line.id);
     setStep("estimating");
@@ -847,6 +926,7 @@ export function ProjectVisitWorkspaceStable({ project, existingAppointment }: { 
         taskTemplateLabel: template.titre,
         taskTemplateIds: [template.id],
         taskTemplateLabels: [template.titre],
+        taskTemplateQuantities: [null],
         technicalNotes: "",
         constraints: "",
         variants: "",
@@ -1018,7 +1098,7 @@ export function ProjectVisitWorkspaceStable({ project, existingAppointment }: { 
       tasks: section.tasks.map((task) =>
         task.taskTemplateId && knownTemplateIds.has(task.taskTemplateId)
           ? task
-          : { ...task, taskTemplateId: null, taskTemplateLabel: null, taskTemplateIds: [], taskTemplateLabels: [] },
+          : { ...task, taskTemplateId: null, taskTemplateLabel: null, taskTemplateIds: [], taskTemplateLabels: [], taskTemplateQuantities: [] },
       ),
     }));
     const newLines = buildLinesFromImport<EstimateLine>(safeSections, uid);
@@ -1135,16 +1215,29 @@ export function ProjectVisitWorkspaceStable({ project, existingAppointment }: { 
                                   ? `${template.lot} — ${template.titre}`
                                   : template.titre
                                 : selectedLine.taskTemplateLabels?.[index] ?? selectedLine.taskTemplateLabel ?? "Tache liee";
+                              const templateUnit = template ? normalizeVisitUnit(template.unite) ?? selectedLine.unit : selectedLine.unit;
                               return (
-                                <li key={templateId} className="flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm">
-                                  <span className="min-w-0 flex-1 truncate" title={label}>{label}</span>
-                                  <button
-                                    type="button"
-                                    className="shrink-0 rounded-lg border border-red-200 px-2 py-1 text-xs text-red-700 hover:bg-red-50"
-                                    onClick={() => unlinkTaskTemplate(selectedLine.id, templateId)}
-                                  >
-                                    Retirer
-                                  </button>
+                                <li key={templateId} className="space-y-1 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
+                                  <div className="flex items-center gap-2">
+                                    <span className="min-w-0 flex-1 truncate text-sm" title={label}>{label}</span>
+                                    <button
+                                      type="button"
+                                      className="shrink-0 rounded-lg border border-red-200 px-2 py-1 text-xs text-red-700 hover:bg-red-50"
+                                      onClick={() => unlinkTaskTemplate(selectedLine.id, templateId)}
+                                    >
+                                      Retirer
+                                    </button>
+                                  </div>
+                                  <div className="flex items-center gap-2">
+                                    <span className="shrink-0 text-[11px] text-slate-500">Quantite</span>
+                                    <DecimalInput
+                                      className="h-9 w-24 rounded-lg border border-slate-200 bg-white px-2 text-sm"
+                                      value={selectedTemplateQuantities[index] ?? null}
+                                      placeholder={String(quantity(selectedLine) || 0)}
+                                      onValue={(value) => setTaskTemplateQuantity(selectedLine.id, templateId, value)}
+                                    />
+                                    <span className="shrink-0 text-[11px] text-slate-500">{templateUnit}</span>
+                                  </div>
                                 </li>
                               );
                             })}
@@ -1154,6 +1247,11 @@ export function ProjectVisitWorkspaceStable({ project, existingAppointment }: { 
                             Aucune tache liee.
                           </div>
                         )}
+                        {selectedTemplateIds.length ? (
+                          <p className="text-[11px] text-slate-500">
+                            Quantite vide = la tache suit celle de la ligne ({quantity(selectedLine) || 0} {selectedLine.unit}).
+                          </p>
+                        ) : null}
                         <select className={inputClass} value="" onChange={(event) => linkTaskTemplate(selectedLine.id, event.target.value)}>
                           <option value="">Ajouter une tache de la bibliotheque...</option>
                           {taskTemplates

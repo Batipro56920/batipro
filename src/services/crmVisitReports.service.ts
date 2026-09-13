@@ -31,6 +31,8 @@ export type CrmVisitQuoteSource = {
      */
     taskTemplateIds?: string[] | null;
     taskTemplateLabels?: string[] | null;
+    /** Quantite par tache liee ; null = la tache suit la quantite de la ligne. */
+    taskTemplateQuantities?: Array<number | null> | null;
     technicalNotes?: string;
     constraints?: string;
     variants?: string;
@@ -130,7 +132,7 @@ export type CrmVisitReportInput = CrmVisitReportDraft & {
 const VISIT_REPORT_SELECT =
   "id,appointment_id,prospect_id,client_id,opportunity_id,status,client_name,phone,email,address,contact_on_site,visit_date,visit_time,duration_minutes,salesperson,project_type,client_objective,need_description,urgency,desired_deadline,zones,constraints,budget,next_action,follow_up_date,report_text,quote_source,created_at,updated_at";
 const VISIT_REPORT_ITEM_SELECT =
-  "id,visit_report_id,parent_id,source_line_id,line_type,title,unit,quantity,manual_quantity,length,width,height,estimated_hours,price_hint_ht,family,library_id,task_template_id,task_template_label,task_template_ids,task_template_labels,technical_notes,constraints,variants,attention_points,ordre,created_at,updated_at";
+  "id,visit_report_id,parent_id,source_line_id,line_type,title,unit,quantity,manual_quantity,length,width,height,estimated_hours,price_hint_ht,family,library_id,task_template_id,task_template_label,task_template_ids,task_template_labels,task_template_quantities,technical_notes,constraints,variants,attention_points,ordre,created_at,updated_at";
 const VISIT_REPORT_ATTACHMENT_SELECT =
   "id,visit_report_id,item_id,source_attachment_id,kind,name,storage_bucket,storage_path,url,mime_type,size_bytes,comment,ordre,created_at,updated_at";
 
@@ -144,6 +146,18 @@ function templateIdList(ids: unknown, fallback: unknown): string[] {
   if (clean.length) return Array.from(new Set(clean));
   const single = String(fallback ?? "").trim();
   return single ? [single] : [];
+}
+
+/**
+ * Quantites des taches liees, une par tache. null reste null : la tache suit
+ * alors la quantite de la ligne.
+ */
+function templateQuantityList(values: unknown, length: number): Array<number | null> {
+  const list = Array.isArray(values) ? values : [];
+  return Array.from({ length }, (_unused, index) => {
+    const value = Number(list[index] ?? NaN);
+    return Number.isFinite(value) ? value : null;
+  });
 }
 
 function text(value: unknown): string | null {
@@ -297,6 +311,7 @@ export async function saveCrmVisitReport(input: CrmVisitReportInput) {
       task_template_label: text(line.taskTemplateLabel),
       task_template_ids: templateIdList(line.taskTemplateIds, line.taskTemplateId),
       task_template_labels: (line.taskTemplateLabels ?? []).map((label) => String(label ?? "").trim()).filter(Boolean),
+      task_template_quantities: templateQuantityList(line.taskTemplateQuantities, templateIdList(line.taskTemplateIds, line.taskTemplateId).length),
       technical_notes: text(line.technicalNotes),
       constraints: text(line.constraints),
       variants: text(line.variants),
@@ -418,6 +433,7 @@ export async function loadCrmVisitReportDraft(appointmentId: string): Promise<Cr
     taskTemplateId: row.task_template_id ?? null,
     taskTemplateLabel: row.task_template_label ?? null,
     taskTemplateIds: templateIdList(row.task_template_ids, row.task_template_id),
+    taskTemplateQuantities: templateQuantityList(row.task_template_quantities, templateIdList(row.task_template_ids, row.task_template_id).length),
     taskTemplateLabels: Array.isArray(row.task_template_labels) && row.task_template_labels.length
       ? row.task_template_labels.map((label: unknown) => String(label ?? ""))
       : row.task_template_label

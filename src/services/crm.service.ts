@@ -208,6 +208,8 @@ export type CrmQuoteItemRow = {
    * entière quand le devis est accepté.
    */
   task_template_ids: string[] | null;
+  /** Quantité par tâche liée ; null = la tâche suit la quantité de la ligne. */
+  task_template_quantities: Array<number | null> | null;
   /** Composition de l'ouvrage propre à ce devis (jamais renvoyée au modèle de tâche). */
   composite_items: unknown[] | null;
   supplier_id: string | null;
@@ -488,7 +490,7 @@ const CRM_SELECTS = {
     "id,quote_id,parent_id,title,description,section_type,ordre,numbering,show_total,page_break_before,created_at,updated_at",
   quoteLots: "id,quote_id,title,ordre,created_at,updated_at",
   quoteItems:
-    "id,quote_id,lot_id,section_id,parent_item_id,lot,designation,description,quantite,unite,prix_unitaire_ht,total_ht,ordre,task_template_id,task_template_ids,supplier_id,line_type,family,supplier_reference,price_status,show_to_client,page_break_before,numbering,cost_materials_ht,cost_labor_ht,cost_subcontracting_ht,cost_fees_ht,labor_hours,labor_rate_ht,margin_rate,coefficient,tva_rate,sale_unit_price_ht,sale_total_ht,technical_description,composite_items,generate_task,created_at,updated_at",
+    "id,quote_id,lot_id,section_id,parent_item_id,lot,designation,description,quantite,unite,prix_unitaire_ht,total_ht,ordre,task_template_id,task_template_ids,task_template_quantities,supplier_id,line_type,family,supplier_reference,price_status,show_to_client,page_break_before,numbering,cost_materials_ht,cost_labor_ht,cost_subcontracting_ht,cost_fees_ht,labor_hours,labor_rate_ht,margin_rate,coefficient,tva_rate,sale_unit_price_ht,sale_total_ht,technical_description,composite_items,generate_task,created_at,updated_at",
   quoteItemsLegacy:
     "id,quote_id,lot,designation,description,quantite,unite,prix_unitaire_ht,total_ht,ordre,created_at,updated_at",
   quoteComponents:
@@ -1144,6 +1146,15 @@ function quoteItemTemplateIds(ids: unknown, fallback: unknown): string[] {
   return single ? [single] : [];
 }
 
+/** Quantités des tâches d'une ligne de devis, une par tâche liée. */
+function quoteItemTemplateQuantities(values: unknown, length: number): Array<number | null> {
+  const list = Array.isArray(values) ? values : [];
+  return Array.from({ length }, (_unused, index) => {
+    const value = Number(list[index] ?? NaN);
+    return Number.isFinite(value) ? value : null;
+  });
+}
+
 export async function createCrmQuoteItemFromTemplate(input: {
   quote_id: string;
   lot_id?: string | null;
@@ -1156,6 +1167,8 @@ export async function createCrmQuoteItemFromTemplate(input: {
   taskTemplateId?: string | null;
   /** Toutes les tâches de la ligne quand elle en porte plusieurs. */
   taskTemplateIds?: string[] | null;
+  /** Quantité par tâche liée ; null = la tâche suit la quantité de la ligne. */
+  taskTemplateQuantities?: Array<number | null> | null;
   compositeItems?: unknown[] | null;
   designation?: string | null;
   description?: string | null;
@@ -1201,6 +1214,10 @@ export async function createCrmQuoteItemFromTemplate(input: {
     ordre: input.ordre ?? 0,
     task_template_id: input.taskTemplateId ?? template?.id ?? null,
     task_template_ids: quoteItemTemplateIds(input.taskTemplateIds, input.taskTemplateId ?? template?.id ?? null),
+    task_template_quantities: quoteItemTemplateQuantities(
+      input.taskTemplateQuantities,
+      quoteItemTemplateIds(input.taskTemplateIds, input.taskTemplateId ?? template?.id ?? null).length,
+    ),
     composite_items: input.compositeItems ?? null,
     line_type: text(input.lineType) ?? (template ? "composite" : "simple"),
     family: template?.lot ?? null,
@@ -1703,6 +1720,7 @@ export async function transformAcceptedQuoteToChantier(input: {
         // première : le budget du chantier ne doit pas être compté deux fois.
         const templateIds = quoteItemTemplateIds(item.task_template_ids, item.task_template_id);
         const plannedTemplates: Array<string | null> = templateIds.length ? templateIds : [null];
+        const plannedQuantities = quoteItemTemplateQuantities(item.task_template_quantities, plannedTemplates.length);
         for (let index = 0; index < plannedTemplates.length; index += 1) {
           const templateId = plannedTemplates[index];
           const templateLabel = templateId ? templateTitles.get(templateId) ?? null : null;
@@ -1728,7 +1746,9 @@ export async function transformAcceptedQuoteToChantier(input: {
             cout_estime_ht: first ? totalCostHt : 0,
             cout_matiere_estime_ht: first ? Number(item.cost_materials_ht ?? 0) * Number(item.quantite ?? 1) : 0,
             cout_mo_estime_ht: first ? Number(item.cost_labor_ht ?? 0) * Number(item.quantite ?? 1) : 0,
-            quantite: item.quantite,
+            // Chaque tâche liée porte sa propre quantité quand elle en a une :
+            // deux tableaux à poser, un seul interrupteur à remplacer.
+            quantite: plannedQuantities[index] ?? item.quantite,
             unite: item.unite,
             temps_prevu_h: first ? Number(item.labor_hours ?? 0) * Number(item.quantite ?? 1) : 0,
             // Composition adaptée au chantier lors du chiffrage : elle prime sur celle

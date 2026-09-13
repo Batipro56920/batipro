@@ -50,6 +50,7 @@ export function buildLinesFromImport<TLine extends Record<string, unknown>>(
         // l'utilisateur en rattache d'autres ensuite depuis le releve.
         taskTemplateIds: task.taskTemplateId ? [task.taskTemplateId] : [],
         taskTemplateLabels: task.taskTemplateLabel ? [task.taskTemplateLabel] : [],
+        taskTemplateQuantities: task.taskTemplateId ? [null] : [],
         technicalNotes: task.technicalNotes,
         constraints: task.constraints,
         variants: "",

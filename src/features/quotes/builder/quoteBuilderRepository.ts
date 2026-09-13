@@ -16,7 +16,7 @@ import {
 } from "../../../services/profileFeaturePermissions.service";
 import { calculateQuoteBuilderTotals, flattenQuoteBuilder } from "./quoteBuilderCalculations";
 import { validateQuoteBuilderForDocumentEngine } from "./quoteBuilderDocumentAdapter";
-import { createQuoteBuilderFromEngine, createQuoteBuilderFromProject, normalizeTaskTemplateIds } from "./quoteBuilderModel";
+import { createQuoteBuilderFromEngine, createQuoteBuilderFromProject, normalizeTaskTemplateIds, normalizeTaskTemplateQuantities } from "./quoteBuilderModel";
 import { applyVisitQuoteOptions } from "./quoteBuilderVisitOptions";
 import type { QuoteBuilderFlatRow, QuoteBuilderQuote } from "./types";
 
@@ -203,6 +203,7 @@ async function persistItems(quote: QuoteBuilderQuote, original: CrmQuoteEngineDa
       ordre: patch.ordre,
       taskTemplateId: patch.task_template_id,
       taskTemplateIds: patch.task_template_ids,
+      taskTemplateQuantities: patch.task_template_quantities,
       compositeItems: patch.composite_items,
     });
     nextIds.add(created.id);
@@ -234,6 +235,7 @@ function rowToPersistence(row: QuoteBuilderFlatRow, quoteId: string, parentItemI
     // recréait les lignes sans lui, et le chantier perdait la tâche à exécuter.
     task_template_id: null as string | null,
     task_template_ids: [] as string[],
+    task_template_quantities: [] as Array<number | null>,
     composite_items: null as unknown[] | null,
   };
   if (row.node.type !== "item") return base;
@@ -250,6 +252,10 @@ function rowToPersistence(row: QuoteBuilderFlatRow, quoteId: string, parentItemI
     technical_description: row.node.internalNote ?? "",
     task_template_id: row.node.taskTemplateId ?? null,
     task_template_ids: normalizeTaskTemplateIds(row.node.taskTemplateIds, row.node.taskTemplateId),
+    task_template_quantities: normalizeTaskTemplateQuantities(
+      row.node.taskTemplateQuantities,
+      normalizeTaskTemplateIds(row.node.taskTemplateIds, row.node.taskTemplateId).length,
+    ),
     composite_items: row.node.compositeItems?.length ? row.node.compositeItems : null,
   };
 }

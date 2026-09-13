@@ -16,6 +16,15 @@ export function normalizeTaskTemplateIds(ids: unknown, fallback: unknown): strin
   return single ? [single] : [];
 }
 
+/** Quantites des taches liees, une par tache liee. */
+export function normalizeTaskTemplateQuantities(values: unknown, length: number): Array<number | null> {
+  const list = Array.isArray(values) ? values : [];
+  return Array.from({ length }, (_unused, index) => {
+    const value = Number(list[index] ?? NaN);
+    return Number.isFinite(value) ? value : null;
+  });
+}
+
 export function createQuoteBuilderFromProject(project: ProjectRecord, visitSource?: CrmVisitQuoteSource | null): QuoteBuilderQuote {
   const source = visitSource ?? readVisitQuoteSource(project.id);
   return {
@@ -169,6 +178,7 @@ function mapVisitToQuoteNodes(source: CrmVisitQuoteSource): QuoteBuilderSection[
       taskTemplateId: item.taskTemplateId ?? null,
       taskTemplateLabel: item.taskTemplateLabel ?? null,
       taskTemplateIds: normalizeTaskTemplateIds(item.taskTemplateIds, item.taskTemplateId),
+      taskTemplateQuantities: normalizeTaskTemplateQuantities(item.taskTemplateQuantities, normalizeTaskTemplateIds(item.taskTemplateIds, item.taskTemplateId).length),
     }));
   }
   return roots.length ? roots : [createSection("Nouvelle section")];
@@ -211,6 +221,7 @@ function mapCrmItemsToQuoteNodes(items: CrmQuoteItemRow[]): QuoteBuilderSection[
       taskTemplateId: row.task_template_id ?? null,
       taskTemplateLabel: (row as { task_template_label?: string | null }).task_template_label ?? null,
       taskTemplateIds: normalizeTaskTemplateIds(row.task_template_ids, row.task_template_id),
+      taskTemplateQuantities: normalizeTaskTemplateQuantities(row.task_template_quantities, normalizeTaskTemplateIds(row.task_template_ids, row.task_template_id).length),
       compositeItems: Array.isArray(row.composite_items)
         ? (row.composite_items as QuoteBuilderItem["compositeItems"])
         : undefined,

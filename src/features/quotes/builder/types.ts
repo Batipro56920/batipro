@@ -30,6 +30,8 @@ export type QuoteBuilderItem = {
    * liste complete suit jusqu'au chantier ; taskTemplateId en est la premiere.
    */
   taskTemplateIds?: string[] | null;
+  /** Quantite par tache liee ; null = la tache suit la quantite de la ligne. */
+  taskTemplateQuantities?: Array<number | null> | null;
   compositeItems?: QuoteBuilderCompositeItem[];
 };
 
