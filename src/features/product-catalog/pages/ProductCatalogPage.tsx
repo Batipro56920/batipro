@@ -19,6 +19,7 @@ import type {
 } from "../domain/types";
 import { deleteProductCatalogItem, listProductCatalogItems, saveProductCatalogItem } from "../infrastructure/productCatalogRepository";
 import { analyzeProductDocumentsWithCoco, emptyProductKnowledge } from "../services/productKnowledge.service";
+import { buildCategorySuggestions, normalizeCategoryKey } from "../domain/productCategories";
 import { importProductsFromQuoteText, type ProductQuoteImportResult } from "../services/productQuoteImport.service";
 
 const EMPTY_DRAFT: ProductCatalogDraft = {
@@ -424,13 +425,13 @@ export default function ProductCatalogPage() {
       </section> : null}
 
       {editing ? (
-        <ProductDrawer product={editing} suppliers={suppliers} onCancel={closeProductDrawer} onSave={saveProduct} />
+        <ProductDrawer product={editing} suppliers={suppliers} categories={categories} onCancel={closeProductDrawer} onSave={saveProduct} />
       ) : null}
     </div>
   );
 }
 
-function ProductDrawer({ product, suppliers, onCancel, onSave }: { product: ProductCatalogItem | ProductCatalogDraft; suppliers: SupplierRow[]; onCancel: () => void; onSave: (product: ProductCatalogItem | ProductCatalogDraft) => void | Promise<void> }) {
+function ProductDrawer({ product, suppliers, categories, onCancel, onSave }: { product: ProductCatalogItem | ProductCatalogDraft; suppliers: SupplierRow[]; categories: string[]; onCancel: () => void; onSave: (product: ProductCatalogItem | ProductCatalogDraft) => void | Promise<void> }) {
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
       if (event.key === "Escape") onCancel();
@@ -455,14 +456,14 @@ function ProductDrawer({ product, suppliers, onCancel, onSave }: { product: Prod
           </button>
         </div>
         <div className="min-h-0 flex-1 overflow-y-auto">
-          <ProductForm product={product} suppliers={suppliers} onCancel={onCancel} onSave={onSave} />
+          <ProductForm product={product} suppliers={suppliers} categories={categories} onCancel={onCancel} onSave={onSave} />
         </div>
       </aside>
     </div>
   );
 }
 
-function ProductForm({ product, suppliers, onCancel, onSave }: { product: ProductCatalogItem | ProductCatalogDraft; suppliers: SupplierRow[]; onCancel: () => void; onSave: (product: ProductCatalogItem | ProductCatalogDraft) => void | Promise<void> }) {
+function ProductForm({ product, suppliers, categories, onCancel, onSave }: { product: ProductCatalogItem | ProductCatalogDraft; suppliers: SupplierRow[]; categories: string[]; onCancel: () => void; onSave: (product: ProductCatalogItem | ProductCatalogDraft) => void | Promise<void> }) {
   const [draft, setDraft] = useState(product);
   const [activeTab, setActiveTab] = useState<"identite" | "financier" | "technique">("identite");
   const [knowledgeLoading, setKnowledgeLoading] = useState(false);
@@ -576,7 +577,7 @@ function ProductForm({ product, suppliers, onCancel, onSave }: { product: Produc
         <>
           <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
             <Field label="Désignation" value={draft.designation} onChange={(designation) => patch({ designation })} className="xl:col-span-2" />
-            <Field label="Catégorie" value={draft.category ?? ""} onChange={(category) => patch({ category })} />
+            <CategoryField value={draft.category ?? ""} onChange={(category) => patch({ category })} categories={categories} />
             <label className={labelClass}>Unité<Select className="mt-1" value={draft.unit} onChange={(unit) => patch({ unit: unit as DocumentUnit })} options={["u", "h", "ml", "m2", "m3", "forfait", "kg", "l"]} /></label>
           </div>
 
@@ -1162,6 +1163,62 @@ function KnowledgeShell({
 
 function Field({ label, value, onChange, className = "" }: { label: string; value: string; onChange: (value: string) => void; className?: string }) {
   return <label className={`${labelClass} ${className}`}>{label}<input className={`${inputClass} mt-1`} value={value} onChange={(event) => onChange(event.target.value)} /></label>;
+}
+
+/**
+ * Le champ reste libre — un produit hors nomenclature se saisit tel quel —
+ * mais propose les categories deja employees puis la liste standard, pour que
+ * le meme corps d'etat ne se retrouve pas ecrit de trois facons differentes.
+ */
+function CategoryField({ value, onChange, categories }: { value: string; onChange: (value: string) => void; categories: string[] }) {
+  const [open, setOpen] = useState(false);
+  const options = useMemo(() => buildCategorySuggestions(categories), [categories]);
+  const visible = useMemo(() => {
+    const needle = normalizeCategoryKey(value);
+    if (!needle) return options;
+    const matching = options.filter((option) => normalizeCategoryKey(option).includes(needle));
+    // Une saisie qui ne ressemble a rien de connu garde la liste complete
+    // sous la main plutot que d'afficher un panneau vide.
+    return matching.length ? matching : options;
+  }, [options, value]);
+
+  return (
+    <label className={`${labelClass} relative`}>
+      Catégorie
+      <input
+        className={`${inputClass} mt-1`}
+        value={value}
+        placeholder="Choisir ou saisir..."
+        onChange={(event) => onChange(event.target.value)}
+        onFocus={() => setOpen(true)}
+        onBlur={() => setOpen(false)}
+      />
+      {open ? (
+        <div
+          className="absolute left-0 right-0 top-full z-20 mt-1 max-h-60 overflow-y-auto rounded-xl border border-slate-200 bg-white py-1 shadow-lg"
+          // Empeche le blur de l'input avant que le clic n'aboutisse.
+          onMouseDown={(event) => event.preventDefault()}
+        >
+          {visible.map((option) => (
+            <button
+              key={option}
+              type="button"
+              onClick={() => {
+                onChange(option);
+                setOpen(false);
+              }}
+              className={[
+                "block w-full px-3 py-2 text-left text-sm font-normal normal-case tracking-normal hover:bg-slate-50",
+                normalizeCategoryKey(option) === normalizeCategoryKey(value) ? "bg-blue-50 text-blue-700" : "text-slate-700",
+              ].join(" ")}
+            >
+              {option}
+            </button>
+          ))}
+        </div>
+      ) : null}
+    </label>
+  );
 }
 
 function FieldShell({ children, className = "", label }: { children: React.ReactNode; className?: string; label: string }) {
