@@ -202,6 +202,12 @@ export type CrmQuoteItemRow = {
   total_ht: number;
   ordre: number;
   task_template_id: string | null;
+  /**
+   * Toutes les tâches à exécuter pour cette ligne. La première est
+   * task_template_id ; les suivantes deviennent des tâches de chantier à part
+   * entière quand le devis est accepté.
+   */
+  task_template_ids: string[] | null;
   /** Composition de l'ouvrage propre à ce devis (jamais renvoyée au modèle de tâche). */
   composite_items: unknown[] | null;
   supplier_id: string | null;
@@ -482,7 +488,7 @@ const CRM_SELECTS = {
     "id,quote_id,parent_id,title,description,section_type,ordre,numbering,show_total,page_break_before,created_at,updated_at",
   quoteLots: "id,quote_id,title,ordre,created_at,updated_at",
   quoteItems:
-    "id,quote_id,lot_id,section_id,parent_item_id,lot,designation,description,quantite,unite,prix_unitaire_ht,total_ht,ordre,task_template_id,supplier_id,line_type,family,supplier_reference,price_status,show_to_client,page_break_before,numbering,cost_materials_ht,cost_labor_ht,cost_subcontracting_ht,cost_fees_ht,labor_hours,labor_rate_ht,margin_rate,coefficient,tva_rate,sale_unit_price_ht,sale_total_ht,technical_description,composite_items,generate_task,created_at,updated_at",
+    "id,quote_id,lot_id,section_id,parent_item_id,lot,designation,description,quantite,unite,prix_unitaire_ht,total_ht,ordre,task_template_id,task_template_ids,supplier_id,line_type,family,supplier_reference,price_status,show_to_client,page_break_before,numbering,cost_materials_ht,cost_labor_ht,cost_subcontracting_ht,cost_fees_ht,labor_hours,labor_rate_ht,margin_rate,coefficient,tva_rate,sale_unit_price_ht,sale_total_ht,technical_description,composite_items,generate_task,created_at,updated_at",
   quoteItemsLegacy:
     "id,quote_id,lot,designation,description,quantite,unite,prix_unitaire_ht,total_ht,ordre,created_at,updated_at",
   quoteComponents:
@@ -1126,6 +1132,18 @@ function isExecutableQuoteLine(lineType: string | null | undefined): boolean {
   return value !== "section" && value !== "subsection" && value !== "sous_section" && value !== "texte" && value !== "text";
 }
 
+/**
+ * Liste des tâches d'une ligne de devis, ancien champ unique compris : un devis
+ * enregistré avant le multi-lien doit continuer à se rejouer tel quel.
+ */
+function quoteItemTemplateIds(ids: unknown, fallback: unknown): string[] {
+  const list = Array.isArray(ids) ? ids : [];
+  const clean = list.map((value) => String(value ?? "").trim()).filter(Boolean);
+  if (clean.length) return Array.from(new Set(clean));
+  const single = String(fallback ?? "").trim();
+  return single ? [single] : [];
+}
+
 export async function createCrmQuoteItemFromTemplate(input: {
   quote_id: string;
   lot_id?: string | null;
@@ -1136,6 +1154,8 @@ export async function createCrmQuoteItemFromTemplate(input: {
   template?: TaskTemplateRow | null;
   /** Rattachement direct quand l'appelant n'a que l'identifiant du modèle. */
   taskTemplateId?: string | null;
+  /** Toutes les tâches de la ligne quand elle en porte plusieurs. */
+  taskTemplateIds?: string[] | null;
   compositeItems?: unknown[] | null;
   designation?: string | null;
   description?: string | null;
@@ -1180,6 +1200,7 @@ export async function createCrmQuoteItemFromTemplate(input: {
     total_ht: input.unitPriceHt === undefined ? totals.total_ht : roundMoney(numberOrZero(input.unitPriceHt) * totals.quantity),
     ordre: input.ordre ?? 0,
     task_template_id: input.taskTemplateId ?? template?.id ?? null,
+    task_template_ids: quoteItemTemplateIds(input.taskTemplateIds, input.taskTemplateId ?? template?.id ?? null),
     composite_items: input.compositeItems ?? null,
     line_type: text(input.lineType) ?? (template ? "composite" : "simple"),
     family: template?.lot ?? null,
@@ -1642,6 +1663,13 @@ export async function transformAcceptedQuoteToChantier(input: {
     budget_subcontracting_planned_ht: subcontractingBudget || Math.round(Number(quote.montant_ht ?? 0) * 0.15 * 100) / 100,
   } as any).catch(() => undefined);
   if (engine.items.length) {
+    // Les tâches supplémentaires d'une ligne n'ont que leur identifiant : on
+    // récupère leurs intitulés pour que le chantier reste lisible.
+    const templateTitles = new Map<string, string>();
+    if (engine.items.some((item) => quoteItemTemplateIds(item.task_template_ids, item.task_template_id).length > 1)) {
+      const templates = await listTaskTemplates().catch(() => [] as TaskTemplateRow[]);
+      for (const template of templates) templateTitles.set(template.id, template.titre);
+    }
     const chantierDevis = await createDevis({
       chantier_id: chantier.id,
       nom: quote.description ?? quote.quote_number,
@@ -1668,32 +1696,46 @@ export async function transformAcceptedQuoteToChantier(input: {
       // sans ce filtre, les sections, sous-sections et lignes de texte devenaient
       // elles aussi des tâches de chantier.
       if (item.generate_task && isExecutableQuoteLine(item.line_type)) {
-        await createTask({
-          chantier_id: chantier.id,
-          titre: item.designation,
-          titre_terrain: item.designation,
-          libelle_devis_original: item.description ?? item.designation,
-          devis_ligne_id: devisLigne?.id ?? null,
-          task_template_id: item.task_template_id,
-          task_template_label: item.designation,
-          corps_etat: lot,
-          lot,
-          description_technique: item.technical_description,
-          prix_unitaire_devis_ht: item.sale_unit_price_ht ?? item.prix_unitaire_ht,
-          montant_total_devis_ht: item.sale_total_ht ?? item.total_ht,
-          tva_taux_devis: item.tva_rate,
-          cout_estime_ht:
+        // Une ligne de devis peut porter plusieurs gestes (dépose, pose,
+        // raccordements) : chacun devient sa propre tâche de chantier, sinon tout
+        // ce qui n'était pas la première tâche disparaîtrait de la préparation
+        // matériaux et du portail ouvrier. L'argent et le temps restent sur la
+        // première : le budget du chantier ne doit pas être compté deux fois.
+        const templateIds = quoteItemTemplateIds(item.task_template_ids, item.task_template_id);
+        const plannedTemplates: Array<string | null> = templateIds.length ? templateIds : [null];
+        for (let index = 0; index < plannedTemplates.length; index += 1) {
+          const templateId = plannedTemplates[index];
+          const templateLabel = templateId ? templateTitles.get(templateId) ?? null : null;
+          const first = index === 0;
+          const titre = first || !templateLabel ? item.designation : `${item.designation} — ${templateLabel}`;
+          const totalCostHt =
             (Number(item.cost_materials_ht ?? 0) + Number(item.cost_labor_ht ?? 0) + Number(item.cost_subcontracting_ht ?? 0) + Number(item.cost_fees_ht ?? 0)) *
-            Number(item.quantite ?? 1),
-          cout_matiere_estime_ht: Number(item.cost_materials_ht ?? 0) * Number(item.quantite ?? 1),
-          cout_mo_estime_ht: Number(item.cost_labor_ht ?? 0) * Number(item.quantite ?? 1),
-          quantite: item.quantite,
-          unite: item.unite,
-          temps_prevu_h: Number(item.labor_hours ?? 0) * Number(item.quantite ?? 1),
-          // Composition adaptée au chantier lors du chiffrage : elle prime sur celle
-          // du modèle, qui reste inchangé en bibliothèque.
-          composite_items: item.composite_items ?? null,
-        }).catch(() => undefined);
+            Number(item.quantite ?? 1);
+          await createTask({
+            chantier_id: chantier.id,
+            titre,
+            titre_terrain: titre,
+            libelle_devis_original: item.description ?? item.designation,
+            devis_ligne_id: devisLigne?.id ?? null,
+            task_template_id: templateId,
+            task_template_label: templateLabel ?? item.designation,
+            corps_etat: lot,
+            lot,
+            description_technique: first ? item.technical_description : null,
+            prix_unitaire_devis_ht: first ? item.sale_unit_price_ht ?? item.prix_unitaire_ht : 0,
+            montant_total_devis_ht: first ? item.sale_total_ht ?? item.total_ht : 0,
+            tva_taux_devis: item.tva_rate,
+            cout_estime_ht: first ? totalCostHt : 0,
+            cout_matiere_estime_ht: first ? Number(item.cost_materials_ht ?? 0) * Number(item.quantite ?? 1) : 0,
+            cout_mo_estime_ht: first ? Number(item.cost_labor_ht ?? 0) * Number(item.quantite ?? 1) : 0,
+            quantite: item.quantite,
+            unite: item.unite,
+            temps_prevu_h: first ? Number(item.labor_hours ?? 0) * Number(item.quantite ?? 1) : 0,
+            // Composition adaptée au chantier lors du chiffrage : elle prime sur celle
+            // du modèle, qui reste inchangé en bibliothèque.
+            composite_items: first ? item.composite_items ?? null : null,
+          }).catch(() => undefined);
+        }
       }
     }
   }

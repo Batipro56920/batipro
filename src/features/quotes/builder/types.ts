@@ -25,6 +25,11 @@ export type QuoteBuilderItem = {
    */
   taskTemplateId?: string | null;
   taskTemplateLabel?: string | null;
+  /**
+   * Un meme ouvrage peut demander plusieurs gestes de la bibliotheque. La
+   * liste complete suit jusqu'au chantier ; taskTemplateId en est la premiere.
+   */
+  taskTemplateIds?: string[] | null;
   compositeItems?: QuoteBuilderCompositeItem[];
 };
 

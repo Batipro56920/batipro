@@ -46,6 +46,10 @@ export function buildLinesFromImport<TLine extends Record<string, unknown>>(
         libraryId: null,
         taskTemplateId: task.taskTemplateId,
         taskTemplateLabel: task.taskTemplateLabel,
+        // Coco ne propose qu'une tache par ligne : la liste demarre avec elle,
+        // l'utilisateur en rattache d'autres ensuite depuis le releve.
+        taskTemplateIds: task.taskTemplateId ? [task.taskTemplateId] : [],
+        taskTemplateLabels: task.taskTemplateLabel ? [task.taskTemplateLabel] : [],
         technicalNotes: task.technicalNotes,
         constraints: task.constraints,
         variants: "",

@@ -41,6 +41,12 @@ type EstimateLine = {
    */
   taskTemplateId?: string | null;
   taskTemplateLabel?: string | null;
+  /**
+   * Toutes les taches liees a la ligne. taskTemplateId reste la premiere :
+   * le devis puis le chantier la lisent deja sous ce nom.
+   */
+  taskTemplateIds?: string[] | null;
+  taskTemplateLabels?: string[] | null;
   technicalNotes: string;
   constraints: string;
   variants: string;
@@ -193,25 +199,68 @@ function euro(value: number) {
 }
 
 /**
- * Ce que la tache liee apporte reellement au chiffrage. Meme methode de calcul
- * que la bibliotheque de taches : main d'oeuvre au cout horaire moyen des
- * employes, materiaux majores de leurs pertes, amortissement et frais generaux
- * ramenes au temps passe.
+ * Toutes les taches liees a une ligne, l'ancien champ unique compris : un
+ * releve enregistre avant le multi-lien doit continuer a s'ouvrir tel quel.
  */
-function LinkedTaskSummary({
-  template,
-  materials,
-  equipment,
-  rates,
-  quantity: measuredQuantity,
-}: {
-  template: TaskTemplateRow | null;
+function lineTemplateIds(line: Pick<EstimateLine, "taskTemplateIds" | "taskTemplateId">): string[] {
+  const list = Array.isArray(line.taskTemplateIds) ? line.taskTemplateIds : [];
+  const clean = list.map((value) => String(value ?? "").trim()).filter(Boolean);
+  if (clean.length) return Array.from(new Set(clean));
+  const single = String(line.taskTemplateId ?? "").trim();
+  return single ? [single] : [];
+}
+
+/** Valeur encore automatique : vide, ou egale a ce que les taches liees donnaient. */
+function isAutoValue(current: number | null | undefined, automatic: number): boolean {
+  const value = Number(current ?? 0);
+  if (!value) return true;
+  return Math.abs(value - automatic) < 0.005;
+}
+type LinkedTaskEntry = {
+  template: TaskTemplateRow;
   materials: TaskTemplateMaterialRatioRow[];
   equipment: TaskTemplateEquipmentItemRow[];
+};
+
+/**
+ * Cout par unite d'une tache liee : main d'oeuvre, materiaux pertes incluses,
+ * amortissement et frais generaux.
+ */
+function linkedTaskCost(entry: LinkedTaskEntry, rates: CompanyHourlyRates | null) {
+  const hoursPerUnit = Number(entry.template.temps_prevu_par_unite_h ?? 0);
+  const laborPerUnit = hoursPerUnit * Number(rates?.averageEmployeeHourlyCostHt ?? 0);
+  const materialsPerUnit = entry.materials.reduce(
+    (total, material) => total + Number(material.ratio_quantity ?? 0) * (1 + Number(material.loss_percent ?? 0) / 100) * Number(material.purchase_price_ht ?? 0),
+    0,
+  );
+  const indirectPerUnit = hoursPerUnit * (Number(rates?.amortizationRatePerHour ?? 0) + Number(rates?.overheadRatePerHour ?? 0));
+  return {
+    hoursPerUnit,
+    laborPerUnit,
+    materialsPerUnit,
+    indirectPerUnit,
+    costPerUnit: laborPerUnit + materialsPerUnit + indirectPerUnit,
+  };
+}
+
+/**
+ * Ce que les taches liees apportent a la ligne. Un intitule annonce au client
+ * ("remplacement complet du TGBT") demande souvent plusieurs gestes de la
+ * bibliotheque : on additionne leur main d'oeuvre, leurs materiaux et leurs
+ * frais, et on detaille tache par tache des qu'il y en a plus d'une.
+ */
+function LinkedTaskSummary({
+  entries,
+  rates,
+  unit,
+  quantity: measuredQuantity,
+}: {
+  entries: LinkedTaskEntry[];
   rates: CompanyHourlyRates | null;
+  unit: string;
   quantity: number;
 }) {
-  if (!template) {
+  if (!entries.length) {
     return (
       <p className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-3 text-xs text-slate-500">
         Sans tache liee, cette ligne partira au devis en texte libre : ni main d'oeuvre, ni materiaux, ni mode operatoire ne suivront jusqu'au chantier.
@@ -219,24 +268,29 @@ function LinkedTaskSummary({
     );
   }
 
-  const hoursPerUnit = Number(template.temps_prevu_par_unite_h ?? 0);
-  const laborPerUnit = hoursPerUnit * Number(rates?.averageEmployeeHourlyCostHt ?? 0);
-  const materialsPerUnit = materials.reduce(
-    (total, material) => total + Number(material.ratio_quantity ?? 0) * (1 + Number(material.loss_percent ?? 0) / 100) * Number(material.purchase_price_ht ?? 0),
-    0,
+  const perTask = entries.map((entry) => ({ entry, ...linkedTaskCost(entry, rates) }));
+  const totalHours = perTask.reduce((total, row) => total + row.hoursPerUnit, 0);
+  const totalLabor = perTask.reduce((total, row) => total + row.laborPerUnit, 0);
+  const totalMaterials = perTask.reduce((total, row) => total + row.materialsPerUnit, 0);
+  const totalIndirect = perTask.reduce((total, row) => total + row.indirectPerUnit, 0);
+  const costPerUnit = totalLabor + totalMaterials + totalIndirect;
+  const materialLines = entries.reduce((total, entry) => total + entry.materials.length, 0);
+  const equipmentNames = Array.from(
+    new Set(entries.flatMap((entry) => entry.equipment.map((item) => item.equipment_name).filter(Boolean))),
   );
-  const indirectPerUnit = hoursPerUnit * (Number(rates?.amortizationRatePerHour ?? 0) + Number(rates?.overheadRatePerHour ?? 0));
-  const costPerUnit = laborPerUnit + materialsPerUnit + indirectPerUnit;
+
   const rows: Array<[string, string]> = [
-    ["Main d'oeuvre", `${hoursPerUnit.toLocaleString("fr-FR")} h x ${euro(Number(rates?.averageEmployeeHourlyCostHt ?? 0))} = ${euro(laborPerUnit)}`],
-    ["Materiaux (pertes incluses)", `${materials.length} ligne(s) = ${euro(materialsPerUnit)}`],
-    ["Materiel", equipment.length ? equipment.map((item) => item.equipment_name).join(", ") : "aucun"],
-    ["Amortissement + frais generaux", euro(indirectPerUnit)],
+    ["Main d'oeuvre", `${totalHours.toLocaleString("fr-FR")} h x ${euro(Number(rates?.averageEmployeeHourlyCostHt ?? 0))} = ${euro(totalLabor)}`],
+    ["Materiaux (pertes incluses)", `${materialLines} ligne(s) = ${euro(totalMaterials)}`],
+    ["Materiel", equipmentNames.length ? equipmentNames.join(", ") : "aucun"],
+    ["Amortissement + frais generaux", euro(totalIndirect)],
   ];
 
   return (
     <div className="rounded-2xl border border-blue-100 bg-blue-50/60 p-3">
-      <div className="text-xs font-semibold uppercase tracking-[0.12em] text-blue-700">Ce que la tache apporte</div>
+      <div className="text-xs font-semibold uppercase tracking-[0.12em] text-blue-700">
+        {entries.length > 1 ? `Ce que les ${entries.length} taches apportent` : "Ce que la tache apporte"}
+      </div>
       <dl className="mt-2 space-y-1 text-xs text-slate-700">
         {rows.map(([label, value]) => (
           <div key={label} className="flex justify-between gap-3">
@@ -245,8 +299,21 @@ function LinkedTaskSummary({
           </div>
         ))}
       </dl>
+      {entries.length > 1 ? (
+        <div className="mt-2 space-y-1 border-t border-blue-200 pt-2 text-[11px] text-slate-600">
+          {perTask.map((row) => (
+            <div key={row.entry.template.id} className="flex justify-between gap-3">
+              <span className="min-w-0 truncate" title={row.entry.template.titre}>{row.entry.template.titre}</span>
+              <span className="shrink-0 font-medium">
+                {row.hoursPerUnit ? `${row.hoursPerUnit.toLocaleString("fr-FR")} h · ` : ""}
+                {euro(row.costPerUnit)}
+              </span>
+            </div>
+          ))}
+        </div>
+      ) : null}
       <div className="mt-2 flex justify-between border-t border-blue-200 pt-2 text-xs font-semibold text-slate-900">
-        <span>Prix de revient / {template.unite ?? "u"}</span>
+        <span>Prix de revient / {unit || "u"}</span>
         <span>{euro(costPerUnit)}</span>
       </div>
       {measuredQuantity > 0 ? (
@@ -399,6 +466,13 @@ function quoteSource(draft: VisitDraft) {
   return { needDescription: serialized.needDescription, lines: serialized.lines };
 }
 
+/** Libelles des taches liees, pour le compte rendu texte. */
+function taskLinkedLabels(line: EstimateLine): string {
+  const labels = (line.taskTemplateLabels ?? []).map((label) => String(label ?? "").trim()).filter(Boolean);
+  if (labels.length) return labels.join(", ");
+  return String(line.taskTemplateLabel ?? "").trim();
+}
+
 function reportText(project: ProjectRecord, draft: VisitDraft) {
   const sections = draft.lines.filter((line) => line.type === "section");
   const tasks = draft.lines.filter((line) => line.type === "task");
@@ -406,7 +480,7 @@ function reportText(project: ProjectRecord, draft: VisitDraft) {
     const children = tasks.filter((task) => task.parentId === section.id);
     return [
       `# ${section.title}`,
-      ...children.map((task) => `- ${task.title}: ${quantity(task)} ${task.unit}${task.taskTemplateLabel ? ` | tache liee: ${task.taskTemplateLabel}` : ""}${task.technicalNotes ? ` | ${task.technicalNotes}` : ""}`),
+      ...children.map((task) => `- ${task.title}: ${quantity(task)} ${task.unit}${taskLinkedLabels(task) ? ` | taches liees: ${taskLinkedLabels(task)}` : ""}${task.technicalNotes ? ` | ${task.technicalNotes}` : ""}`),
     ].join("\n");
   }).join("\n\n");
 
@@ -476,8 +550,10 @@ export function ProjectVisitWorkspaceStable({ project, existingAppointment }: { 
   const [saveError, setSaveError] = useState<string | null>(null);
   const [taskTemplates, setTaskTemplates] = useState<TaskTemplateRow[]>([]);
   const [pickerSectionId, setPickerSectionId] = useState<string | null>(null);
-  const [linkedMaterials, setLinkedMaterials] = useState<TaskTemplateMaterialRatioRow[]>([]);
-  const [linkedEquipment, setLinkedEquipment] = useState<TaskTemplateEquipmentItemRow[]>([]);
+  const [linkedPreparation, setLinkedPreparation] = useState<{
+    materialsByTemplateId: Record<string, TaskTemplateMaterialRatioRow[]>;
+    equipmentByTemplateId: Record<string, TaskTemplateEquipmentItemRow[]>;
+  }>({ materialsByTemplateId: {}, equipmentByTemplateId: {} });
   const [hourlyRates, setHourlyRates] = useState<CompanyHourlyRates | null>(null);
   const draftRef = useRef(draft);
   draftRef.current = draft;
@@ -589,36 +665,49 @@ export function ProjectVisitWorkspaceStable({ project, existingAppointment }: { 
   const activeSectionId = selectedLine?.type === "section" ? selectedLine.id : selectedLine?.parentId ?? sections[0]?.id ?? null;
   const report = useMemo(() => reportText(project, draft), [project, draft]);
   const photos = useMemo(() => draft.attachments.filter((item) => item.kind === "photo"), [draft.attachments]);
-  const linkedTemplate = useMemo(
-    () => (selectedLine?.taskTemplateId ? taskTemplates.find((row) => row.id === selectedLine.taskTemplateId) ?? null : null),
-    [selectedLine?.taskTemplateId, taskTemplates],
-  );
+  const selectedTemplateIds = useMemo(() => (selectedLine ? lineTemplateIds(selectedLine) : []), [selectedLine]);
+  const selectedTemplateKey = selectedTemplateIds.join(",");
 
-  /** Composition réelle de la tâche liée : ce que l'ouvrier trouvera au chantier. */
+  /** Composition reelle des taches liees : ce que l'ouvrier trouvera au chantier. */
   useEffect(() => {
-    const templateId = selectedLine?.taskTemplateId ?? null;
-    if (!templateId) {
-      setLinkedMaterials([]);
-      setLinkedEquipment([]);
+    const ids = selectedTemplateKey ? selectedTemplateKey.split(",") : [];
+    if (!ids.length) {
+      setLinkedPreparation({ materialsByTemplateId: {}, equipmentByTemplateId: {} });
       return;
     }
     let alive = true;
-    void listTaskTemplatePreparationByTemplateIds([templateId])
+    void listTaskTemplatePreparationByTemplateIds(ids)
       .then((preparation) => {
         if (!alive) return;
-        setLinkedMaterials(preparation.materialsByTemplateId[templateId] ?? []);
-        setLinkedEquipment(preparation.equipmentByTemplateId[templateId] ?? []);
+        setLinkedPreparation({
+          materialsByTemplateId: preparation.materialsByTemplateId ?? {},
+          equipmentByTemplateId: preparation.equipmentByTemplateId ?? {},
+        });
       })
       .catch(() => {
         if (!alive) return;
-        setLinkedMaterials([]);
-        setLinkedEquipment([]);
+        setLinkedPreparation({ materialsByTemplateId: {}, equipmentByTemplateId: {} });
       });
     return () => {
       alive = false;
     };
-  }, [selectedLine?.taskTemplateId]);
+  }, [selectedTemplateKey]);
 
+  const linkedEntries = useMemo<LinkedTaskEntry[]>(
+    () =>
+      selectedTemplateIds
+        .map((templateId) => {
+          const template = taskTemplates.find((row) => row.id === templateId) ?? null;
+          if (!template) return null;
+          return {
+            template,
+            materials: linkedPreparation.materialsByTemplateId[templateId] ?? [],
+            equipment: linkedPreparation.equipmentByTemplateId[templateId] ?? [],
+          };
+        })
+        .filter((entry): entry is LinkedTaskEntry => entry !== null),
+    [selectedTemplateIds, taskTemplates, linkedPreparation],
+  );
   function patch<K extends keyof VisitDraft>(key: K, value: VisitDraft[K]) {
     setDraft((current) => ({ ...current, [key]: value }));
   }
@@ -636,26 +725,75 @@ export function ProjectVisitWorkspaceStable({ project, existingAppointment }: { 
   }
 
   /**
-   * Rattache un modèle de tâche sans écraser ce que le commercial a déjà relevé :
-   * la désignation reste libre, l'unité et le temps ne sont pré-remplis que
-   * lorsqu'ils sont encore vides.
+   * Rattache une tache de plus. Un intitule annonce au client demande souvent
+   * plusieurs gestes de la bibliotheque : ils s'ajoutent au lieu de se
+   * remplacer. Le temps et le prix indicatif ne sont recalcules que s'ils sont
+   * encore a la valeur automatique : une estimation saisie a la main gagne.
    */
   function linkTaskTemplate(lineId: string, templateId: string) {
-    if (!templateId) {
-      patchLine(lineId, { taskTemplateId: null, taskTemplateLabel: null });
-      return;
-    }
+    if (!templateId) return;
     const template = taskTemplates.find((row) => row.id === templateId);
     if (!template) return;
     const line = draft.lines.find((item) => item.id === lineId);
-    const patch: Partial<EstimateLine> = { taskTemplateId: template.id, taskTemplateLabel: template.titre };
-    const untouchedTitle = !line?.title.trim() || line.title.trim() === "Nouvelle tache / prestation";
-    if (untouchedTitle) patch.title = template.titre;
-    const templateUnit = normalizeVisitUnit(template.unite);
-    if (templateUnit) patch.unit = templateUnit;
-    if (!line?.estimatedHours && template.temps_prevu_par_unite_h) patch.estimatedHours = Number(template.temps_prevu_par_unite_h);
-    if (!line?.priceHintHt && template.cout_reference_unitaire_ht) patch.priceHintHt = Number(template.cout_reference_unitaire_ht);
+    if (!line) return;
+    const current = lineTemplateIds(line);
+    if (current.includes(template.id)) return;
+    const nextIds = [...current, template.id];
+    const patch = templateLinkPatch(line, current, nextIds);
+    const untouchedTitle = !line.title.trim() || line.title.trim() === "Nouvelle tache / prestation";
+    if (!current.length && untouchedTitle) patch.title = template.titre;
+    if (!current.length) {
+      const templateUnit = normalizeVisitUnit(template.unite);
+      if (templateUnit) patch.unit = templateUnit;
+    }
     patchLine(lineId, patch);
+  }
+
+  /** Detache une tache sans toucher a la designation ni aux mesures relevees. */
+  function unlinkTaskTemplate(lineId: string, templateId: string) {
+    const line = draft.lines.find((item) => item.id === lineId);
+    if (!line) return;
+    const current = lineTemplateIds(line);
+    if (!current.includes(templateId)) return;
+    const nextIds = current.filter((id) => id !== templateId);
+    patchLine(lineId, templateLinkPatch(line, current, nextIds));
+  }
+
+  /**
+   * Champs derives du lien : la liste, les libelles, le couple historique
+   * (premiere tache) que lisent le devis et le chantier, et les estimations.
+   */
+  function templateLinkPatch(line: EstimateLine, previousIds: string[], nextIds: string[]): Partial<EstimateLine> {
+    const labels = nextIds.map((id) => {
+      const template = taskTemplates.find((row) => row.id === id);
+      if (template) return template.titre;
+      const previousIndex = previousIds.indexOf(id);
+      return line.taskTemplateLabels?.[previousIndex] ?? (previousIndex === 0 ? line.taskTemplateLabel ?? "" : "") ?? "";
+    });
+    const patch: Partial<EstimateLine> = {
+      taskTemplateIds: nextIds,
+      taskTemplateLabels: labels,
+      taskTemplateId: nextIds[0] ?? null,
+      taskTemplateLabel: labels[0] ?? null,
+    };
+    const previousHours = templatesTotal(previousIds, (template) => template.temps_prevu_par_unite_h);
+    const previousPrice = templatesTotal(previousIds, (template) => template.cout_reference_unitaire_ht);
+    if (isAutoValue(line.estimatedHours, previousHours)) {
+      const hours = templatesTotal(nextIds, (template) => template.temps_prevu_par_unite_h);
+      patch.estimatedHours = hours > 0 ? hours : null;
+    }
+    if (isAutoValue(line.priceHintHt, previousPrice)) {
+      const price = templatesTotal(nextIds, (template) => template.cout_reference_unitaire_ht);
+      patch.priceHintHt = price > 0 ? price : null;
+    }
+    return patch;
+  }
+
+  function templatesTotal(ids: string[], pick: (template: TaskTemplateRow) => number | string | null | undefined): number {
+    return ids.reduce((total, id) => {
+      const template = taskTemplates.find((row) => row.id === id);
+      return total + Number(pick(template ?? ({} as TaskTemplateRow)) ?? 0);
+    }, 0);
   }
 
   function addSection(title = "Nouvelle section") {
@@ -672,7 +810,7 @@ export function ProjectVisitWorkspaceStable({ project, existingAppointment }: { 
       parentId = uid("section");
       nextLines.push({ id: parentId, type: "section", parentId: null, title: "Nouvelle section", unit: "u", quantity: 0, manualQuantity: false, technicalNotes: "", constraints: "", variants: "", attentionPoints: "" });
     }
-    const line: EstimateLine = { id: uid("task"), type: "task", parentId, title: "Nouvelle tache / prestation", unit: "m2", quantity: 0, manualQuantity: false, length: null, width: null, height: null, estimatedHours: null, priceHintHt: null, family: null, libraryId: null, taskTemplateId: null, taskTemplateLabel: null, technicalNotes: "", constraints: "", variants: "", attentionPoints: "" };
+    const line: EstimateLine = { id: uid("task"), type: "task", parentId, title: "Nouvelle tache / prestation", unit: "m2", quantity: 0, manualQuantity: false, length: null, width: null, height: null, estimatedHours: null, priceHintHt: null, family: null, libraryId: null, taskTemplateId: null, taskTemplateLabel: null, taskTemplateIds: [], taskTemplateLabels: [], technicalNotes: "", constraints: "", variants: "", attentionPoints: "" };
     setDraft((current) => ({ ...current, lines: [...nextLines.filter((item) => !current.lines.some((existing) => existing.id === item.id)), ...current.lines, line] }));
     setSelectedLineId(line.id);
     setStep("estimating");
@@ -707,6 +845,8 @@ export function ProjectVisitWorkspaceStable({ project, existingAppointment }: { 
         libraryId: null,
         taskTemplateId: template.id,
         taskTemplateLabel: template.titre,
+        taskTemplateIds: [template.id],
+        taskTemplateLabels: [template.titre],
         technicalNotes: "",
         constraints: "",
         variants: "",
@@ -878,7 +1018,7 @@ export function ProjectVisitWorkspaceStable({ project, existingAppointment }: { 
       tasks: section.tasks.map((task) =>
         task.taskTemplateId && knownTemplateIds.has(task.taskTemplateId)
           ? task
-          : { ...task, taskTemplateId: null, taskTemplateLabel: null },
+          : { ...task, taskTemplateId: null, taskTemplateLabel: null, taskTemplateIds: [], taskTemplateLabels: [] },
       ),
     }));
     const newLines = buildLinesFromImport<EstimateLine>(safeSections, uid);
@@ -982,19 +1122,49 @@ export function ProjectVisitWorkspaceStable({ project, existingAppointment }: { 
                 </Field>
                 {selectedLine.type === "task" ? (
                   <>
-                    <Field label="Tache liee">
-                      <select className={inputClass} value={selectedLine.taskTemplateId ?? ""} onChange={(event) => linkTaskTemplate(selectedLine.id, event.target.value)}>
-                        <option value="">Aucune tache liee</option>
-                        {/* La tache enregistree reste selectionnable meme si la bibliotheque n'est pas encore chargee. */}
-                        {selectedLine.taskTemplateId && !taskTemplates.some((row) => row.id === selectedLine.taskTemplateId) ? (
-                          <option value={selectedLine.taskTemplateId}>{selectedLine.taskTemplateLabel ?? "Tache liee"}</option>
-                        ) : null}
-                        {taskTemplates.map((row) => (
-                          <option key={row.id} value={row.id}>{row.lot ? `${row.lot} — ${row.titre}` : row.titre}</option>
-                        ))}
-                      </select>
+                    <Field label="Taches liees">
+                      <div className="space-y-2">
+                        {selectedTemplateIds.length ? (
+                          <ul className="space-y-1">
+                            {selectedTemplateIds.map((templateId, index) => {
+                              const template = taskTemplates.find((row) => row.id === templateId) ?? null;
+                              // La tache enregistree reste lisible meme si la bibliotheque n'est pas
+                              // encore chargee ou si le modele a ete supprime depuis la visite.
+                              const label = template
+                                ? template.lot
+                                  ? `${template.lot} — ${template.titre}`
+                                  : template.titre
+                                : selectedLine.taskTemplateLabels?.[index] ?? selectedLine.taskTemplateLabel ?? "Tache liee";
+                              return (
+                                <li key={templateId} className="flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm">
+                                  <span className="min-w-0 flex-1 truncate" title={label}>{label}</span>
+                                  <button
+                                    type="button"
+                                    className="shrink-0 rounded-lg border border-red-200 px-2 py-1 text-xs text-red-700 hover:bg-red-50"
+                                    onClick={() => unlinkTaskTemplate(selectedLine.id, templateId)}
+                                  >
+                                    Retirer
+                                  </button>
+                                </li>
+                              );
+                            })}
+                          </ul>
+                        ) : (
+                          <div className="rounded-xl border border-dashed border-slate-200 px-3 py-2 text-xs text-slate-500">
+                            Aucune tache liee.
+                          </div>
+                        )}
+                        <select className={inputClass} value="" onChange={(event) => linkTaskTemplate(selectedLine.id, event.target.value)}>
+                          <option value="">Ajouter une tache de la bibliotheque...</option>
+                          {taskTemplates
+                            .filter((row) => !selectedTemplateIds.includes(row.id))
+                            .map((row) => (
+                              <option key={row.id} value={row.id}>{row.lot ? `${row.lot} — ${row.titre}` : row.titre}</option>
+                            ))}
+                        </select>
+                      </div>
                     </Field>
-                    <LinkedTaskSummary template={linkedTemplate} materials={linkedMaterials} equipment={linkedEquipment} rates={hourlyRates} quantity={quantity(selectedLine)} />
+                    <LinkedTaskSummary entries={linkedEntries} rates={hourlyRates} unit={selectedLine.unit} quantity={quantity(selectedLine)} />
                     <div>{renderMeasurements(selectedLine)}</div>
                     <Field label="Temps estime / prix indicatif">
                       <div className="grid gap-2 sm:grid-cols-2">

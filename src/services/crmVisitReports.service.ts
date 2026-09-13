@@ -25,6 +25,12 @@ export type CrmVisitQuoteSource = {
      */
     taskTemplateId?: string | null;
     taskTemplateLabel?: string | null;
+    /**
+     * Toutes les taches liees. taskTemplateId reste la premiere : la chaine
+     * devis puis chantier la lit deja, on ne la casse pas.
+     */
+    taskTemplateIds?: string[] | null;
+    taskTemplateLabels?: string[] | null;
     technicalNotes?: string;
     constraints?: string;
     variants?: string;
@@ -124,9 +130,21 @@ export type CrmVisitReportInput = CrmVisitReportDraft & {
 const VISIT_REPORT_SELECT =
   "id,appointment_id,prospect_id,client_id,opportunity_id,status,client_name,phone,email,address,contact_on_site,visit_date,visit_time,duration_minutes,salesperson,project_type,client_objective,need_description,urgency,desired_deadline,zones,constraints,budget,next_action,follow_up_date,report_text,quote_source,created_at,updated_at";
 const VISIT_REPORT_ITEM_SELECT =
-  "id,visit_report_id,parent_id,source_line_id,line_type,title,unit,quantity,manual_quantity,length,width,height,estimated_hours,price_hint_ht,family,library_id,task_template_id,task_template_label,technical_notes,constraints,variants,attention_points,ordre,created_at,updated_at";
+  "id,visit_report_id,parent_id,source_line_id,line_type,title,unit,quantity,manual_quantity,length,width,height,estimated_hours,price_hint_ht,family,library_id,task_template_id,task_template_label,task_template_ids,task_template_labels,technical_notes,constraints,variants,attention_points,ordre,created_at,updated_at";
 const VISIT_REPORT_ATTACHMENT_SELECT =
   "id,visit_report_id,item_id,source_attachment_id,kind,name,storage_bucket,storage_path,url,mime_type,size_bytes,comment,ordre,created_at,updated_at";
+
+/**
+ * Une ligne de releve peut porter plusieurs taches. On accepte l'ancien champ
+ * unique comme la nouvelle liste, sans doublon ni valeur vide.
+ */
+function templateIdList(ids: unknown, fallback: unknown): string[] {
+  const values = Array.isArray(ids) ? ids : [];
+  const clean = values.map((value) => String(value ?? "").trim()).filter(Boolean);
+  if (clean.length) return Array.from(new Set(clean));
+  const single = String(fallback ?? "").trim();
+  return single ? [single] : [];
+}
 
 function text(value: unknown): string | null {
   const clean = String(value ?? "").trim();
@@ -273,8 +291,12 @@ export async function saveCrmVisitReport(input: CrmVisitReportInput) {
       price_hint_ht: line.priceHintHt ?? null,
       family: text(line.family),
       library_id: text(line.libraryId),
-      task_template_id: text(line.taskTemplateId),
+      // La premiere tache liee reste dans la colonne historique : le devis et le
+      // chantier la lisent telle quelle.
+      task_template_id: templateIdList(line.taskTemplateIds, line.taskTemplateId)[0] ?? null,
       task_template_label: text(line.taskTemplateLabel),
+      task_template_ids: templateIdList(line.taskTemplateIds, line.taskTemplateId),
+      task_template_labels: (line.taskTemplateLabels ?? []).map((label) => String(label ?? "").trim()).filter(Boolean),
       technical_notes: text(line.technicalNotes),
       constraints: text(line.constraints),
       variants: text(line.variants),
@@ -395,6 +417,12 @@ export async function loadCrmVisitReportDraft(appointmentId: string): Promise<Cr
     libraryId: row.library_id,
     taskTemplateId: row.task_template_id ?? null,
     taskTemplateLabel: row.task_template_label ?? null,
+    taskTemplateIds: templateIdList(row.task_template_ids, row.task_template_id),
+    taskTemplateLabels: Array.isArray(row.task_template_labels) && row.task_template_labels.length
+      ? row.task_template_labels.map((label: unknown) => String(label ?? ""))
+      : row.task_template_label
+        ? [String(row.task_template_label)]
+        : [],
     technicalNotes: row.technical_notes ?? "",
     constraints: row.constraints ?? "",
     variants: row.variants ?? "",

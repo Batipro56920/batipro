@@ -4,6 +4,18 @@ import type { CrmVisitQuoteSource } from "../../../services/crmVisitReports.serv
 import { normalizeQuoteTravelCostSettings } from "./quoteBuilderTravelCosts";
 import type { QuoteBuilderItem, QuoteBuilderItemKind, QuoteBuilderNode, QuoteBuilderQuote, QuoteBuilderSection, QuoteBuilderSettings, QuoteBuilderSubsection, QuoteBuilderUnit } from "./types";
 
+/**
+ * Taches liees a une ligne, l'ancien champ unique compris : un devis enregistre
+ * avant le multi-lien doit continuer a s'ouvrir et a se rejouer tel quel.
+ */
+export function normalizeTaskTemplateIds(ids: unknown, fallback: unknown): string[] {
+  const list = Array.isArray(ids) ? ids : [];
+  const clean = list.map((value) => String(value ?? "").trim()).filter(Boolean);
+  if (clean.length) return Array.from(new Set(clean));
+  const single = String(fallback ?? "").trim();
+  return single ? [single] : [];
+}
+
 export function createQuoteBuilderFromProject(project: ProjectRecord, visitSource?: CrmVisitQuoteSource | null): QuoteBuilderQuote {
   const source = visitSource ?? readVisitQuoteSource(project.id);
   return {
@@ -156,6 +168,7 @@ function mapVisitToQuoteNodes(source: CrmVisitQuoteSource): QuoteBuilderSection[
       // ligne repartirait de zero et le chantier ne recevrait aucune preparation.
       taskTemplateId: item.taskTemplateId ?? null,
       taskTemplateLabel: item.taskTemplateLabel ?? null,
+      taskTemplateIds: normalizeTaskTemplateIds(item.taskTemplateIds, item.taskTemplateId),
     }));
   }
   return roots.length ? roots : [createSection("Nouvelle section")];
@@ -197,6 +210,7 @@ function mapCrmItemsToQuoteNodes(items: CrmQuoteItemRow[]): QuoteBuilderSection[
       sourceLibraryId: row.task_template_id,
       taskTemplateId: row.task_template_id ?? null,
       taskTemplateLabel: (row as { task_template_label?: string | null }).task_template_label ?? null,
+      taskTemplateIds: normalizeTaskTemplateIds(row.task_template_ids, row.task_template_id),
       compositeItems: Array.isArray(row.composite_items)
         ? (row.composite_items as QuoteBuilderItem["compositeItems"])
         : undefined,
