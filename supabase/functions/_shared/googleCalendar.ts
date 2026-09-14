@@ -64,7 +64,20 @@ export async function refreshGoogleAccessToken(connection: any) {
   });
 
   const payload = await response.json();
-  if (!response.ok) throw new Error(payload?.error_description ?? payload?.error ?? "Actualisation Google Calendar impossible.");
+  if (!response.ok) {
+    // Google repond "Bad Request" en clair pour a peu pres tout : c'est le code
+    // qui porte le sens. invalid_grant veut dire que l'autorisation ne vaut plus
+    // rien - revoquee, ou expiree parce que l'application Google est restee en
+    // mode Test, ou le jeton de renouvellement n'y survit que sept jours.
+    const code = String(payload?.error ?? "").trim();
+    const detail = String(payload?.error_description ?? "").trim();
+    if (code === "invalid_grant") {
+      throw new Error(
+        "L'autorisation Google a expiré ou été révoquée. Clique sur Déconnecter puis reconnecte l'agenda.",
+      );
+    }
+    throw new Error([code, detail].filter(Boolean).join(" - ") || "Actualisation Google Calendar impossible.");
+  }
 
   const expiresAt = new Date(Date.now() + Number(payload.expires_in ?? 3600) * 1000).toISOString();
   const service = getServiceClient();
@@ -94,6 +107,13 @@ export async function getValidGoogleConnection(userId: string) {
 
   if (error) throw new Error(error.message);
   if (!data) throw new Error("Google Calendar n'est pas connecté.");
+  if (!String(data.refresh_token ?? "").trim()) {
+    // Google ne renvoie un jeton de renouvellement qu'au premier consentement :
+    // sans lui, la connexion meurt au bout d'une heure sans que rien ne le dise.
+    throw new Error(
+      "Connexion Google incomplète : déconnecte puis reconnecte l'agenda en acceptant l'accès demandé.",
+    );
+  }
 
   const expiresAt = Date.parse(String(data.access_token_expires_at ?? ""));
   if (!Number.isFinite(expiresAt) || expiresAt - Date.now() < 60_000) {
