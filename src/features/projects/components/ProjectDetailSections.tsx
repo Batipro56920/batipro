@@ -5,7 +5,7 @@ import type { InvoiceRecord, InvoiceType } from "../../invoices/domain/types";
 import { listInvoices, saveInvoice } from "../../invoices/infrastructure/invoiceRepository";
 import { quoteBuilderToBusinessDocument } from "../../quotes/builder/quoteBuilderDocumentAdapter";
 import { createQuoteBuilderFromEngine } from "../../quotes/builder/quoteBuilderModel";
-import { loadCrmQuoteEngineData, transformAcceptedQuoteToChantier } from "../../../services/crm.service";
+import { deleteCrmQuote, loadCrmQuoteEngineData, transformAcceptedQuoteToChantier } from "../../../services/crm.service";
 import type { ProjectRecord } from "../types";
 import { EmptyProjectBlock, Panel, formatCurrency, formatDate, useSalespersonName } from "./ProjectShared";
 import { assignProjectSalesperson, listSalespeople, type Salesperson } from "../../../services/salespeople.service";
@@ -371,7 +371,7 @@ export function ProjectVisitsTab({ project }: { project: ProjectRecord }) {
 }
 
 
-export function ProjectQuotesTab({ project }: { project: ProjectRecord }) {
+export function ProjectQuotesTab({ project, onUpdated }: { project: ProjectRecord; onUpdated?: () => void | Promise<void> }) {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const chantierQuoteId = searchParams.get("chantierQuoteId");
@@ -382,6 +382,8 @@ export function ProjectQuotesTab({ project }: { project: ProjectRecord }) {
   const [chantierError, setChantierError] = useState<string | null>(null);
   const [createdChantierLink, setCreatedChantierLink] = useState<CreatedChantierLink | null>(null);
   const [existingInvoices, setExistingInvoices] = useState<InvoiceRecord[]>([]);
+  const [deletingQuoteId, setDeletingQuoteId] = useState<string | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
   const acceptedQuote = project.quotes.find((quote) => quote.statut === "accepte");
 
   useEffect(() => {
@@ -413,6 +415,51 @@ export function ProjectQuotesTab({ project }: { project: ProjectRecord }) {
       project.chantiers.find((chantier) => chantier.crm_quote_id === quoteId)?.id ??
       (project.chantiers.length === 1 ? project.chantiers[0]?.id : null)
     );
+  }
+
+  /**
+   * Le lien reellement enregistre entre ce devis et un chantier.
+   * getQuoteChantierId se rabat sur l'unique chantier du projet pour proposer
+   * un raccourci : pratique pour un bouton "Preparer", faux pour autoriser une
+   * suppression — il ferait passer un devis sans chantier pour un devis engage.
+   */
+  function linkedChantierId(quoteId: string) {
+    return (
+      (createdChantierLink?.quoteId === quoteId ? createdChantierLink.chantierId : null) ??
+      project.quotes.find((quote) => quote.id === quoteId)?.chantier_id ??
+      project.chantiers.find((chantier) => chantier.crm_quote_id === quoteId)?.id ??
+      null
+    );
+  }
+
+  /** Ce qui empeche de supprimer ce devis, ou null s'il peut partir. */
+  function deletionBlocker(quote: ProjectRecord["quotes"][number]): string | null {
+    if (getQuoteInvoices(quote.id).length) return "Ce devis a deja ete facture : supprimez d'abord la facture.";
+    if (linkedChantierId(quote.id)) return "Un chantier a ete cree depuis ce devis : supprimez d'abord le chantier.";
+    if (quote.signature_status === "signe" || quote.signature_status === "sign\u00e9") {
+      return "Ce devis est signe : il engage le client, il ne se supprime pas.";
+    }
+    return null;
+  }
+
+  async function removeQuote(quote: ProjectRecord["quotes"][number]) {
+    const blocker = deletionBlocker(quote);
+    if (blocker) {
+      setDeleteError(blocker);
+      return;
+    }
+    if (!window.confirm(`Supprimer definitivement le devis ${quote.quote_number} et tout son contenu ? Cette action est irreversible.`)) return;
+
+    setDeletingQuoteId(quote.id);
+    setDeleteError(null);
+    try {
+      await deleteCrmQuote(quote.id);
+      await onUpdated?.();
+    } catch (error) {
+      setDeleteError(error instanceof Error ? error.message : "Suppression du devis impossible.");
+    } finally {
+      setDeletingQuoteId(null);
+    }
   }
 
   function chantierPreparationPath(chantierId: string) {
@@ -567,6 +614,11 @@ export function ProjectQuotesTab({ project }: { project: ProjectRecord }) {
             {billingError}
           </div>
         ) : null}
+        {deleteError ? (
+          <div className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm font-medium text-red-700">
+            {deleteError}
+          </div>
+        ) : null}
         {project.quotes.length ? (
           <div className="overflow-hidden rounded-2xl border border-slate-200">
             <table className="min-w-full divide-y divide-slate-100 text-sm">
@@ -588,6 +640,7 @@ export function ProjectQuotesTab({ project }: { project: ProjectRecord }) {
                   const canBill = Number(quote.montant_ttc ?? 0) > 0 && quote.statut === "accepte";
                   const canCreateChantier = quote.statut === "accepte" && !quoteChantierId;
                   const isCreatingChantier = chantierActionKey === quote.id;
+                  const deleteBlocker = deletionBlocker(quote);
                   return (
                     <tr key={quote.id}>
                       <td className="px-4 py-3 font-semibold text-slate-950">{quote.quote_number}</td>
@@ -648,6 +701,15 @@ export function ProjectQuotesTab({ project }: { project: ProjectRecord }) {
                               </button>
                             );
                           })}
+                          <button
+                            type="button"
+                            onClick={() => void removeQuote(quote)}
+                            disabled={Boolean(deleteBlocker) || deletingQuoteId !== null}
+                            title={deleteBlocker ?? "Supprimer definitivement ce devis"}
+                            className="inline-flex h-8 items-center rounded-lg border border-slate-200 px-2.5 text-xs font-semibold text-slate-600 hover:border-red-200 hover:bg-red-50 hover:text-red-700 disabled:bg-slate-50 disabled:text-slate-300"
+                          >
+                            {deletingQuoteId === quote.id ? "Suppression..." : "Supprimer"}
+                          </button>
                         </div>
                       </td>
                     </tr>

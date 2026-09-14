@@ -139,7 +139,7 @@ export default function ProjectDetailPage() {
   const content = useMemo(() => {
     if (!project) return null;
     if (activeTab === "visits") return <ProjectVisitsTab project={project} />;
-    if (activeTab === "quotes") return <ProjectQuotesTab project={project} />;
+    if (activeTab === "quotes") return <ProjectQuotesTab project={project} onUpdated={refresh} />;
     if (activeTab === "profitability") return <ProjectProfitabilityTab project={project} />;
     if (activeTab === "documents") return <ProjectDocumentsTab project={project} />;
     return <ProjectSummaryTab project={project} onUpdated={refresh} />;

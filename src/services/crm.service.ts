@@ -1003,6 +1003,36 @@ export async function duplicateCrmQuote(quote: CrmQuoteRow) {
   });
 }
 
+/**
+ * Suppression definitive d un devis. Ses sections, lots, lignes, composants,
+ * ressources et echeances partent avec lui (cascade en base) ; le chantier et
+ * les documents qui le referencent sont seulement detaches.
+ *
+ * Deux refus, parce qu ils couperaient une piste : un devis deja facture, et
+ * un devis dont le chantier a ete cree. Dans ces deux cas le devis justifie
+ * autre chose qui, lui, reste ; c est ce qui en decoule qu il faut traiter
+ * d abord, et cela se decide ailleurs.
+ */
+export async function deleteCrmQuote(id: string) {
+  const [invoices, chantiers] = await Promise.all([
+    crmDb.from("invoices").select("id").eq("source_quote_id", id).limit(1),
+    crmDb.from("chantiers").select("id").eq("crm_quote_id", id).limit(1),
+  ]);
+
+  if (invoices.error) throw invoices.error;
+  if (chantiers.error) throw chantiers.error;
+
+  if ((invoices.data ?? []).length) {
+    throw new Error("Ce devis a deja ete facture. Supprimez ou annulez la facture avant de supprimer le devis.");
+  }
+  if ((chantiers.data ?? []).length) {
+    throw new Error("Un chantier a ete cree depuis ce devis. Supprimez le chantier avant de supprimer le devis.");
+  }
+
+  const { error } = await crmDb.from("crm_quotes").delete().eq("id", id);
+  if (error) throw error;
+}
+
 function roundMoney(value: number): number {
   return Math.round((Number.isFinite(value) ? value : 0) * 100) / 100;
 }
