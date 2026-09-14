@@ -51,3 +51,36 @@ export async function disconnectGoogleCalendar(): Promise<void> {
 export async function syncGoogleCalendarEvents(events: GoogleCalendarSyncEvent[]): Promise<GoogleCalendarSyncResult> {
   return invokeCalendarFunction<GoogleCalendarSyncResult>("google-calendar-sync", { events });
 }
+
+/**
+ * Pousse un rendez-vous dans l'agenda connecté, sans jamais bloquer ni faire
+ * échouer l'enregistrement. Une visite se note souvent en déplacement : un
+ * agenda non connecté, un jeton expiré ou un réseau absent ne doivent pas
+ * empêcher de la poser dans Batipro. La synchronisation manuelle de l'onglet
+ * Agenda sert alors de rattrapage.
+ */
+export function syncAppointmentInBackground(appointment: {
+  id?: string | null;
+  titre?: string | null;
+  starts_at?: string | null;
+  ends_at?: string | null;
+  notes?: string | null;
+}): void {
+  const sourceId = String(appointment?.id ?? "").trim();
+  const startsAt = String(appointment?.starts_at ?? "").trim();
+  if (!sourceId || !startsAt) return;
+
+  void syncGoogleCalendarEvents([
+    {
+      sourceType: "crm_appointment",
+      sourceId,
+      title: String(appointment?.titre ?? "").trim() || "Rendez-vous",
+      startsAt,
+      endsAt: appointment?.ends_at ?? null,
+      calendarScope: "crm",
+      description: appointment?.notes ?? null,
+    },
+  ]).catch((error) => {
+    console.warn("Rendez-vous non synchronisé avec l'agenda", error);
+  });
+}

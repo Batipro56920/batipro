@@ -1,4 +1,5 @@
 import { supabase } from "../lib/supabaseClient";
+import { syncAppointmentInBackground } from "./googleCalendar.service";
 import {
   createCrmProspect,
   createCrmTask,
@@ -227,5 +228,8 @@ export async function updateCrmAppointment(id: string, patch: Partial<CrmAppoint
   const row = Object.fromEntries(Object.entries(cleaned).filter(([, value]) => value !== undefined));
   const { data, error } = await crmDb.from("crm_appointments").update(row).eq("id", id).select(APPOINTMENT_SELECT).single();
   if (error) throw error;
+  // Deplacer une visite doit deplacer le rappel : l'evenement est reecrit,
+  // pas duplique, grace au lien garde entre la source et l'agenda.
+  syncAppointmentInBackground(data as CrmAppointmentRow);
   return data as CrmAppointmentRow;
 }

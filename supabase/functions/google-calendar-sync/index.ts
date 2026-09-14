@@ -60,6 +60,16 @@ function buildGoogleEvent(event: SyncEvent) {
     location: event.location ?? undefined,
     start: { dateTime: new Date(event.startsAt).toISOString(), timeZone: "Europe/Paris" },
     end: { dateTime: new Date(end).toISOString(), timeZone: "Europe/Paris" },
+    // Sans rappel explicite, l'evenement arrive muet dans l'agenda : il ne sert
+    // alors qu'a relire l'agenda, pas a etre prevenu. La veille pour s'organiser,
+    // une heure avant pour partir a temps.
+    reminders: {
+      useDefault: false,
+      overrides: [
+        { method: "popup", minutes: 24 * 60 },
+        { method: "popup", minutes: 60 },
+      ],
+    },
   };
 }
 
