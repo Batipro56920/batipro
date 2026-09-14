@@ -12,6 +12,7 @@ import {
   validateItem,
 } from "./communicationRepository";
 import { COMPOSER_NETWORKS, channelLabel, channelLimit, normalizeChannels } from "./networks";
+import { COMMUNICATION_MEDIA_ACCEPT, COMMUNICATION_MEDIA_LABEL, describeRejectedMedia } from "./mediaConstraints";
 import type { CampaignAsset, CampaignItem, ChantierOption, PublishJob } from "./types";
 
 const inputClass = "w-full rounded-xl border border-subtle bg-surface px-3 py-2.5 text-sm text-ink outline-none focus:border-primary";
@@ -59,6 +60,17 @@ export function CommunicationContentEditor({
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
+
+  /** Un fichier que le stockage refusera ne doit pas attendre l envoi pour le dire. */
+  function selectFiles(selection: File[]) {
+    const rejected = describeRejectedMedia(selection);
+    if (rejected) {
+      setError(rejected);
+      return;
+    }
+    setError("");
+    setFiles(selection);
+  }
 
   const published = item.status === "published";
   const planned = item.status === "scheduled";
@@ -188,7 +200,7 @@ export function CommunicationContentEditor({
               <label className="flex h-20 w-28 cursor-pointer flex-col items-center justify-center gap-1 rounded-xl border border-dashed border-strong text-xs text-muted hover:border-primary">
                 <Upload className="h-4 w-4 text-primary" />
                 {files.length ? `${files.length} à envoyer` : "Ajouter"}
-                <input type="file" multiple accept="image/*,video/*,application/pdf" className="sr-only" onChange={(event) => setFiles(Array.from(event.target.files ?? []))} />
+                <input type="file" multiple accept={COMMUNICATION_MEDIA_ACCEPT} className="sr-only" title={COMMUNICATION_MEDIA_LABEL} onChange={(event) => selectFiles(Array.from(event.target.files ?? []))} />
               </label>
             </div>
           </div>
