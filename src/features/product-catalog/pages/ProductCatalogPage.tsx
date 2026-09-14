@@ -566,16 +566,39 @@ function ProductForm({ product, suppliers, categories, onCancel, onSave }: { pro
    * afficher une ancienne valeur deconnectee de la ligne qu'on vient de changer.
    */
   function handleSupplierPricesChange(supplierPrices: ProductCatalogDraft["supplierPrices"]) {
-    const mainEntry = draft.mainSupplierId
-      ? supplierPrices.find((price) => price.supplierId === draft.mainSupplierId)
+    const kept = draft.mainSupplierId
+      ? supplierPrices.find((price) => price.supplierId === draft.mainSupplierId) ?? null
       : null;
-    if (!mainEntry) {
-      patch({ supplierPrices });
+
+    // Le fournisseur retenu au catalogue doit suivre les prix negocies. Changer
+    // le fournisseur de la ligne laissait la fiche pointer l'ancien, qui n'avait
+    // plus aucun prix : c'est pourtant lui qui s'affichait dans la liste.
+    if (!kept) {
+      const withSupplier = supplierPrices.filter((price) => String(price.supplierId ?? "").trim());
+      const adopted = withSupplier.length === 1 ? withSupplier[0] : null;
+      if (!adopted) {
+        // Plusieurs candidats ou aucun : on ne choisit pas a sa place, mais on
+        // n'affiche plus un fournisseur qui n'a plus de prix negocie.
+        patch({ supplierPrices, mainSupplierId: null, mainSupplierName: null });
+        return;
+      }
+      const adoptedPrice = getSupplierUnitPrice(adopted);
+      patch({
+        supplierPrices,
+        mainSupplierId: adopted.supplierId,
+        mainSupplierName: suppliers.find((row) => row.id === adopted.supplierId)?.name ?? adopted.supplierName ?? null,
+        standardPurchasePriceHt: adoptedPrice,
+        recommendedSalePriceHt: computeSalePrice(adoptedPrice, draft.targetMarginRate),
+      });
       return;
     }
-    const unitPrice = getSupplierUnitPrice(mainEntry);
+
+    const unitPrice = getSupplierUnitPrice(kept);
     patch({
       supplierPrices,
+      // Le nom est duplique sur la fiche : renomme chez le fournisseur, il doit
+      // suivre ici aussi, sinon la liste garde l'ancien libelle.
+      mainSupplierName: suppliers.find((row) => row.id === kept.supplierId)?.name ?? kept.supplierName ?? draft.mainSupplierName ?? null,
       standardPurchasePriceHt: unitPrice,
       recommendedSalePriceHt: computeSalePrice(unitPrice, draft.targetMarginRate),
     });
