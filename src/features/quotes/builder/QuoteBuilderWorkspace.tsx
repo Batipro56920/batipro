@@ -17,6 +17,7 @@ import { create as createTaskTemplate, list as listTaskTemplates, type TaskTempl
 import { listTaskTemplatePreparationByTemplateIds, type TaskTemplateMaterialRatioRow } from "../../../services/taskTemplatePreparation.service";
 import { getCompanyHourlyRates, type CompanyHourlyRates } from "../../../services/indirectCosts.service";
 import { normalizeTaskTemplateIds } from "./quoteBuilderModel";
+import { calculateQuoteTravelCosts, normalizeQuoteTravelCostSettings } from "./quoteBuilderTravelCosts";
 import {
   EMPTY_LINE_COST,
   estimatedDaysFromHours,
@@ -29,7 +30,20 @@ import type { QuoteBuilderCompositeItem, QuoteBuilderFlatRow, QuoteBuilderItem, 
 
 type Props = { onClose: () => void; costsPanel?: ReactNode };
 /** Ce que coute le devis, ce qu'il rapporte, et combien de lignes sont chiffrees. */
-type QuoteCostSummary = { costHt: number; saleHt: number; hours: number; covered: number; total: number };
+type QuoteCostSummary = {
+  costHt: number;
+  saleHt: number;
+  hours: number;
+  covered: number;
+  total: number;
+  /** Cout du deplacement, compte dans le deboursé quel que soit son traitement. */
+  travelHt: number;
+  travelMode: "hidden" | "absorb" | "line";
+  /** Montant reparti sur les prix quand le deplacement est repercute. */
+  travelAbsorbedHt: number;
+  /** Lignes qui portent cette repartition. */
+  absorbingLines: number;
+};
 type Mode = "edit" | "preview" | "couts";
 type TextPanelKey = "paymentTerms" | "legalMentions" | "waste" | "footerNotes";
 
@@ -209,6 +223,41 @@ export function QuoteBuilderWorkspace({ onClose, costsPanel }: Props) {
     return map;
   }, [rows, templatesById, templateMaterials, rates]);
 
+  const travelSummary = useMemo(() => (quote ? calculateQuoteTravelCosts(quote) : null), [quote]);
+  const travelMode = useMemo(
+    () => (quote ? normalizeQuoteTravelCostSettings(quote.settings.travelCosts, quote.siteAddress).billingMode : "hidden"),
+    [quote],
+  );
+
+  /**
+   * Prix de base des lignes qui suivent encore le calcul : c'est sur elles, et
+   * seulement sur elles, qu'un deplacement repercute peut etre reparti. Une ligne
+   * dont le prix a ete decide a la main n'est jamais majoree dans le dos.
+   */
+  const absorbingRows = useMemo(
+    () =>
+      rows.filter((row) => {
+        if (row.node.type !== "item") return false;
+        if (row.node.priceSource === "manual") return false;
+        const cost = lineCosts.get(row.id);
+        return Boolean(cost && cost.costHt > 0);
+      }),
+    [rows, lineCosts],
+  );
+
+  const absorbingBaseHt = useMemo(
+    () => absorbingRows.reduce((total, row) => total + salePriceFromCost(lineCosts.get(row.id)?.costHt ?? 0), 0),
+    [absorbingRows, lineCosts],
+  );
+
+  const travelAbsorbedHt = travelMode === "absorb" ? Number(travelSummary?.totalCostHt ?? 0) : 0;
+  /**
+   * Coefficient applique aux prix calcules pour absorber le deplacement. Il part
+   * toujours des prix de base, jamais des prix deja majores : sans cela chaque
+   * rendu aurait rajoute une couche de deplacement par-dessus la precedente.
+   */
+  const travelFactor = travelAbsorbedHt > 0 && absorbingBaseHt > 0 ? 1 + travelAbsorbedHt / absorbingBaseHt : 1;
+
   const costSummary = useMemo<QuoteCostSummary>(() => {
     let costHt = 0;
     let saleHt = 0;
@@ -224,8 +273,21 @@ export function QuoteBuilderWorkspace({ onClose, costsPanel }: Props) {
       hours += cost.hours;
       if (cost.costHt > 0) covered += 1;
     }
-    return { costHt, saleHt, hours, covered, total };
-  }, [rows, lineCosts]);
+    const travelHt = Number(travelSummary?.totalCostHt ?? 0);
+    return {
+      // Le deplacement est un cout de l'entreprise dans tous les cas : le cacher
+      // du deboursé donnerait une marge qui n'existe pas.
+      costHt: costHt + travelHt,
+      saleHt,
+      hours,
+      covered,
+      total,
+      travelHt,
+      travelMode,
+      travelAbsorbedHt,
+      absorbingLines: absorbingRows.length,
+    };
+  }, [rows, lineCosts, travelSummary, travelMode, travelAbsorbedHt, absorbingRows]);
 
   /**
    * Le prix d'une ligne suit son déboursé tant que personne ne l'a décidé : le
@@ -241,11 +303,12 @@ export function QuoteBuilderWorkspace({ onClose, costsPanel }: Props) {
       const cost = lineCosts.get(row.id);
       if (!cost || cost.costHt <= 0) continue;
       const lineQuantity = Number(row.node.quantity ?? 0);
-      const target = salePriceFromCost(lineQuantity > 0 ? cost.costHt / lineQuantity : cost.costHt);
+      const base = salePriceFromCost(lineQuantity > 0 ? cost.costHt / lineQuantity : cost.costHt);
+      const target = Math.round(base * travelFactor * 100) / 100;
       if (Math.abs(Number(row.node.unitPriceHt ?? 0) - target) < 0.005) continue;
       updateNode(row.id, { unitPriceHt: target } as Partial<QuoteBuilderNode>);
     }
-  }, [lineCosts, rates, rows, updateNode]);
+  }, [lineCosts, rates, rows, travelFactor, updateNode]);
 
   /** Durée estimée : le temps des tâches liées, faute de quoi le champ restait vide. */
   const durationFilled = useRef(false);
@@ -1099,6 +1162,7 @@ function QuoteMarginBar({ summary, manualPriced, onResetPrices }: { summary: Quo
         <MarginFigure label="Marge" value={formatCurrency(margin)} tone={marginClass} />
         <MarginFigure label="Taux de marge" value={rate === null ? "—" : `${rate.toFixed(1)} %`} tone={marginClass} />
         <MarginFigure label="Temps prévu" value={summary.hours > 0 ? `${summary.hours.toLocaleString("fr-FR")} h · ${estimatedDaysFromHours(summary.hours)} j` : "—"} />
+        {summary.travelHt > 0 ? <MarginFigure label="Déplacement" value={formatCurrency(summary.travelHt)} tone={travelTone(summary)} /> : null}
         {manualPriced > 0 ? (
           <button
             type="button"
@@ -1113,9 +1177,27 @@ function QuoteMarginBar({ summary, manualPriced, onResetPrices }: { summary: Quo
         Les prix suivent le déboursé + 30 % tant que tu n'en saisis pas un toi-même.
         Visible seulement ici : ni la prévisualisation, ni le PDF, ni le client ne voient ces montants.
         {missing > 0 ? ` ${missing} ligne(s) sans tâche liée : leur déboursé n'est pas connu.` : ""}
+        {travelNote(summary)}
       </p>
     </div>
   );
+}
+
+/** Le deplacement est-il recupere quelque part, ou paye par l'entreprise ? */
+function travelTone(summary: QuoteCostSummary): string {
+  if (summary.travelMode === "line") return "text-white";
+  if (summary.travelMode !== "absorb") return "text-amber-300";
+  return summary.absorbingLines > 0 ? "text-white" : "text-amber-300";
+}
+
+function travelNote(summary: QuoteCostSummary): string {
+  if (summary.travelHt <= 0) return "";
+  if (summary.travelMode === "line") return ` Déplacement facturé sur sa propre ligne.`;
+  if (summary.travelMode !== "absorb") return ` Déplacement non facturé : ${formatCurrency(summary.travelHt)} à la charge de l'entreprise.`;
+  if (summary.absorbingLines <= 0) {
+    return ` Déplacement à répercuter, mais aucune ligne au prix calculé : ${formatCurrency(summary.travelHt)} restent à la charge de l'entreprise.`;
+  }
+  return ` Déplacement de ${formatCurrency(summary.travelAbsorbedHt)} réparti sur ${summary.absorbingLines} ligne(s), au prorata de leur prix.`;
 }
 
 function MarginFigure({ label, value, tone }: { label: string; value: string; tone?: string }) {
