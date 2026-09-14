@@ -136,7 +136,13 @@ export default function CrmAgendaSection({
       await refreshConnection(true);
       setSyncNotice(`${result.synced} événement(s) synchronisé(s) avec Google Calendar${result.skipped ? `, ${result.skipped} ignoré(s)` : ""}.`);
       if (result.errors.length) {
-        setSyncError(`${result.errors.length} événement(s) n'ont pas pu être synchronisés.`);
+        // Le detail renvoye par Google vaut mille fois mieux qu'un compteur : c'est
+        // lui qui dit si c'est un droit refuse, un agenda introuvable ou une date
+        // invalide.
+        const first = result.errors[0]?.message?.trim();
+        setSyncError(
+          `${result.errors.length} événement(s) non synchronisé(s)${first ? ` : ${first}` : "."}`,
+        );
       }
     } catch (err: any) {
       setSyncError(err?.message ?? "Synchronisation Google Calendar impossible.");

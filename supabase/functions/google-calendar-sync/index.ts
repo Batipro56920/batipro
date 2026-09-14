@@ -182,16 +182,30 @@ async function upsertEventLink(service: any, userId: string, event: SyncEvent, e
   if (fallback.error) throw new Error(fallback.error.message);
 }
 
+/**
+ * Nomme l'etape qui a echoue. Un "Bad Request" nu ne dit ni ou ni pourquoi :
+ * authentification, connexion Google, lecture du corps, chaque etape a ses
+ * propres facons de tomber.
+ */
+async function step<T>(label: string, run: () => Promise<T>): Promise<T> {
+  try {
+    return await run();
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err ?? "");
+    throw new Error(`${label} : ${message || "erreur inconnue"}`);
+  }
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
   if (req.method !== "POST") return jsonResponse({ error: "Méthode non supportée." }, 405);
 
   try {
-    const user = await getAuthenticatedUser(req);
+    const user = await step("Authentification", () => getAuthenticatedUser(req));
     const body = await req.json().catch(() => ({}));
     const events = Array.isArray(body?.events) ? body.events.map(normalizeEvent).filter(Boolean).slice(0, 200) as SyncEvent[] : [];
     const service = getServiceClient();
-    const connection = await getValidGoogleConnection(user.id);
+    const connection = await step("Connexion Google Calendar", () => getValidGoogleConnection(user.id));
     const targetCalendars = new Map<CalendarScope, string>();
     let synced = 0;
     let skipped = 0;
