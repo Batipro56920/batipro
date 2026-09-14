@@ -15,6 +15,7 @@ import { QuoteDocumentLoader } from "../features/quotes/builder/QuoteBuilderWork
 import type { QuoteBuilderItem, QuoteBuilderNode, QuoteBuilderQuote, QuoteTravelCostSettings } from "../features/quotes/builder/types";
 import { useProjectsData } from "../features/projects/hooks/useProjectsData";
 import { getCompanyTravelSettings } from "../services/companyTravelSettings.service";
+import { getCompanyHourlyRates } from "../services/indirectCosts.service";
 import {
   getCurrentProfileFeaturePermissions,
   hasProfileFeaturePermission,
@@ -150,8 +151,8 @@ export default function ProjectQuoteBuilderV1Page() {
   useEffect(() => {
     if (!quote || !quoteMatchesRoute || !routeKey || travelDefaultsAppliedKey === routeKey) return;
     let cancelled = false;
-    void getCompanyTravelSettings()
-      .then((settings) => {
+    void Promise.all([getCompanyTravelSettings(), getCompanyHourlyRates().catch(() => null)])
+      .then(([settings, rates]) => {
         if (cancelled) return;
         const current = normalizeQuoteTravelCostSettings(quote.settings.travelCosts, quote.siteAddress);
         const next = normalizeQuoteTravelCostSettings(
@@ -159,6 +160,10 @@ export default function ProjectQuoteBuilderV1Page() {
             ...current,
             companyAddress: current.companyAddress || settings.companyAddress,
             costPerKm: settings.costPerKm,
+            // Le cout horaire charge d'un ouvrier est deja calcule sur la paie :
+            // on le reprend plutot que d'en demander un deuxieme. Une valeur
+            // saisie sur ce devis n'est pas ecrasee — un devis est un instantane.
+            workerHourlyCost: current.workerHourlyCost || Number(rates?.averageEmployeeHourlyCostHt ?? 0),
             vehicleHourlyCost: settings.vehicleHourlyCost,
             vehicleWearCostPerKm: settings.vehicleWearCostPerKm,
             averageSpeedKmh: settings.averageSpeedKmh,
@@ -364,6 +369,8 @@ function TravelCostsControl({
         <NumberField label="Temps aller min" value={settings.oneWayDurationMinutes} onChange={(oneWayDurationMinutes) => onPatch({ oneWayDurationMinutes })} />
         <NumberField label="Jours chantier" value={settings.worksiteDays ?? summary.worksiteDays} onChange={(worksiteDays) => onPatch({ worksiteDays })} />
         <NumberField label="Véhicules" value={settings.vehiclesCount} onChange={(vehiclesCount) => onPatch({ vehiclesCount })} />
+        <NumberField label="Ouvriers transportés" value={settings.workersCount} onChange={(workersCount) => onPatch({ workersCount })} />
+        <NumberField label="Coût horaire ouvrier" value={settings.workerHourlyCost} step="0.01" onChange={(workerHourlyCost) => onPatch({ workerHourlyCost })} />
         <NumberField label="Coût km" value={settings.costPerKm} step="0.01" onChange={(costPerKm) => onPatch({ costPerKm })} />
         <NumberField label="Taux véhicule h" value={settings.vehicleHourlyCost} step="0.01" onChange={(vehicleHourlyCost) => onPatch({ vehicleHourlyCost })} />
         <NumberField label="Usure km" value={settings.vehicleWearCostPerKm} step="0.01" onChange={(vehicleWearCostPerKm) => onPatch({ vehicleWearCostPerKm })} />
@@ -374,8 +381,10 @@ function TravelCostsControl({
         <SummaryRow label="Aller-retour" value={`${formatNumber(summary.roundTripDistanceKm)} km`} />
         <SummaryRow label="Km totaux" value={`${formatNumber(summary.totalKm)} km`} />
         <SummaryRow label="Temps trajet" value={`${formatNumber(summary.travelHours)} h`} />
+        <SummaryRow label="Heures payées" value={`${formatNumber(summary.workerTravelHours)} h`} />
         <SummaryRow label="Carburant" value={formatCurrency(summary.fuelCostHt)} />
         <SummaryRow label="Temps trajet" value={formatCurrency(summary.travelTimeCostHt)} />
+        <SummaryRow label="Main d’œuvre trajet" value={formatCurrency(summary.workerTravelCostHt)} />
         <SummaryRow label="Usure véhicule" value={formatCurrency(summary.vehicleWearCostHt)} />
         <SummaryRow label="Péages" value={formatCurrency(summary.tollsCostHt)} />
       </div>

@@ -39,9 +39,114 @@ function statusTone(status: SupportTicketStatus) {
 function shortId(id: string) { return id.slice(0, 8).toUpperCase(); }
 function formatDate(value: string) { return new Date(value).toLocaleString("fr-FR", { dateStyle: "medium", timeStyle: "short" }); }
 
-function AttachmentTile({ attachment }: { attachment: SupportTicketAttachment }) {
+/**
+ * Telecharge vraiment le fichier au lieu de naviguer dessus. L'attribut
+ * "download" est ignore quand le fichier vient d'un autre domaine, ce qui est
+ * le cas des liens signes du stockage : le navigateur ouvrait l'image a la
+ * place de l'enregistrer.
+ */
+async function downloadAttachment(attachment: SupportTicketAttachment): Promise<void> {
+  const url = attachment.signed_url;
+  if (!url) return;
+  const name = attachment.file_name || "piece-jointe";
+  try {
+    const response = await fetch(url);
+    if (!response.ok) throw new Error(String(response.status));
+    const blob = await response.blob();
+    const objectUrl = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = objectUrl;
+    link.download = name;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.setTimeout(() => URL.revokeObjectURL(objectUrl), 10000);
+  } catch {
+    // Reseau coupe ou lien expire : l'onglet reste la meilleure porte de sortie.
+    window.open(url, "_blank", "noopener");
+  }
+}
+
+/**
+ * Une vignette de 200 pixels ne permet pas de lire une capture d'ecran. Cliquer
+ * dessus ouvrait le fichier brut dans un onglet, sans retour possible ni moyen
+ * simple de l'enregistrer : on affiche l'image en grand, avec le choix.
+ */
+function AttachmentViewer({ attachment, onClose }: { attachment: SupportTicketAttachment; onClose: () => void }) {
+  useEffect(() => {
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") onClose();
+    }
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [onClose]);
+
+  const isImage = Boolean(attachment.mime_type?.startsWith("image/"));
+
+  return (
+    <div className="fixed inset-0 z-50 flex flex-col bg-slate-950/90 p-4" role="dialog" aria-modal="true">
+      <button type="button" className="absolute inset-0 cursor-default" aria-label="Fermer l'aperçu" onClick={onClose} />
+      <div className="relative z-10 mx-auto flex w-full max-w-5xl flex-col gap-3">
+        <div className="flex flex-wrap items-center justify-between gap-2 rounded-2xl bg-white/95 px-4 py-3">
+          <span className="min-w-0 flex-1 truncate text-sm font-semibold text-slate-900" title={attachment.file_name}>
+            {attachment.file_name}
+          </span>
+          <div className="flex shrink-0 flex-wrap gap-2">
+            <button
+              type="button"
+              className="rounded-xl border border-slate-200 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50"
+              onClick={() => void downloadAttachment(attachment)}
+            >
+              Télécharger
+            </button>
+            <a
+              className="rounded-xl border border-slate-200 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50"
+              href={attachment.signed_url ?? "#"}
+              target="_blank"
+              rel="noreferrer"
+            >
+              Ouvrir dans un onglet
+            </a>
+            <button
+              type="button"
+              className="rounded-xl bg-slate-900 px-3 py-1.5 text-sm font-semibold text-white hover:bg-slate-800"
+              onClick={onClose}
+            >
+              Fermer
+            </button>
+          </div>
+        </div>
+        <div className="flex min-h-0 flex-1 items-center justify-center overflow-auto rounded-2xl bg-white/5 p-2">
+          {isImage && attachment.signed_url ? (
+            <img src={attachment.signed_url} alt={attachment.file_name} className="max-h-[75vh] w-auto max-w-full rounded-xl object-contain" />
+          ) : (
+            <div className="rounded-2xl bg-white/95 px-6 py-10 text-center text-sm text-slate-600">
+              Ce fichier ne s&apos;affiche pas ici. Télécharge-le ou ouvre-le dans un onglet.
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function AttachmentTile({ attachment, onOpen }: { attachment: SupportTicketAttachment; onOpen: (attachment: SupportTicketAttachment) => void }) {
   const image = attachment.mime_type?.startsWith("image/");
-  return <a href={attachment.signed_url} target="_blank" rel="noreferrer" className="overflow-hidden rounded-xl border border-subtle bg-surface hover:border-primary">{image && attachment.signed_url ? <img src={attachment.signed_url} alt={attachment.file_name} className="aspect-video w-full object-cover" /> : <div className="flex aspect-video items-center justify-center bg-interactive"><FileText className="h-7 w-7 text-primary" /></div>}<p className="truncate px-3 py-2 text-xs font-medium text-ink">{attachment.file_name}</p></a>;
+  return (
+    <button
+      type="button"
+      onClick={() => onOpen(attachment)}
+      className="overflow-hidden rounded-xl border border-subtle bg-surface text-left hover:border-primary"
+      title="Ouvrir en grand ou télécharger"
+    >
+      {image && attachment.signed_url ? (
+        <img src={attachment.signed_url} alt={attachment.file_name} className="aspect-video w-full object-cover" />
+      ) : (
+        <div className="flex aspect-video items-center justify-center bg-interactive"><FileText className="h-7 w-7 text-primary" /></div>
+      )}
+      <p className="truncate px-3 py-2 text-xs font-medium text-ink">{attachment.file_name}</p>
+    </button>
+  );
 }
 
 function NewTicketForm({ onClose, onCreated, sourceUrl }: { onClose: () => void; onCreated: (ticket: SupportTicket) => void; sourceUrl: string }) {
@@ -89,6 +194,7 @@ function TicketDetail({ ticketId, isAdmin, onBack, onChanged }: { ticketId: stri
   const [files, setFiles] = useState<File[]>([]);
   const [saving, setSaving] = useState(false);
   const [resolution, setResolution] = useState("");
+  const [preview, setPreview] = useState<SupportTicketAttachment | null>(null);
   const load = useCallback(async () => { setLoading(true); setError(""); try { const next = await loadSupportTicket(ticketId); setDetail(next); setResolution(next.ticket.resolution_summary ?? ""); } catch (reason) { setError(reason instanceof Error ? reason.message : "Chargement impossible."); } finally { setLoading(false); } }, [ticketId]);
   useEffect(() => { void load(); }, [load]);
 
@@ -97,7 +203,7 @@ function TicketDetail({ ticketId, isAdmin, onBack, onChanged }: { ticketId: stri
   if (loading && !detail) return <div className="rounded-2xl border border-subtle bg-surface p-10 text-center text-muted"><Loader2 className="mx-auto mb-2 h-6 w-6 animate-spin" />Chargement du ticket…</div>;
   if (!detail) return <div className="space-y-3"><Button variant="secondary" onClick={onBack}><ArrowLeft className="h-4 w-4" />Retour</Button><p className="rounded-xl bg-danger-soft p-4 text-danger-on">{error || "Ticket introuvable."}</p></div>;
   const { ticket, messages, attachments } = detail;
-  return <div className="space-y-5"><button type="button" onClick={onBack} className="flex items-center gap-2 text-sm font-medium text-primary"><ArrowLeft className="h-4 w-4" />Tous les tickets</button>{error ? <p className="rounded-xl bg-danger-soft p-3 text-sm text-danger-on">{error}</p> : null}<section className="rounded-2xl border border-subtle bg-surface p-5 shadow-sm"><div className="flex flex-wrap items-start justify-between gap-3"><div><div className="flex flex-wrap items-center gap-2"><span className="text-xs font-semibold text-muted">#{shortId(ticket.id)}</span><span className={`rounded-full px-2 py-1 text-xs font-semibold ${statusTone(ticket.status)}`}>{statusLabels[ticket.status]}</span><span className="rounded-full bg-interactive px-2 py-1 text-xs font-semibold text-ink-secondary">{categoryLabels[ticket.category]}</span></div><h1 className="mt-3 text-2xl font-semibold text-ink">{ticket.title}</h1><p className="mt-1 text-sm text-muted">Par {ticket.reporter_name || ticket.reporter_email || "Utilisateur"} · {formatDate(ticket.created_at)}</p></div>{isAdmin ? <div className="grid min-w-52 gap-2 sm:grid-cols-2"><label className="text-xs font-medium text-muted">Statut<select className={`${inputClass} mt-1`} value={ticket.status} disabled={saving} onChange={(event) => void update({ status: event.target.value as SupportTicketStatus })}>{Object.entries(statusLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label><label className="text-xs font-medium text-muted">Priorité<select className={`${inputClass} mt-1`} value={ticket.priority} disabled={saving} onChange={(event) => void update({ priority: event.target.value as SupportTicketPriority })}>{Object.entries(priorityLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label></div> : <span className="rounded-full bg-interactive px-3 py-1.5 text-xs font-semibold text-ink-secondary">Priorité {priorityLabels[ticket.priority].toLowerCase()}</span>}</div><div className="mt-5 grid gap-4 lg:grid-cols-[minmax(0,1fr)_280px]"><div className="space-y-4"><div><h2 className="text-sm font-semibold text-ink">Description</h2><p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed text-ink-secondary">{ticket.description}</p></div>{ticket.steps_to_reproduce ? <div><h2 className="text-sm font-semibold text-ink">Étapes pour reproduire</h2><p className="mt-2 whitespace-pre-wrap text-sm text-ink-secondary">{ticket.steps_to_reproduce}</p></div> : null}{ticket.expected_result ? <div><h2 className="text-sm font-semibold text-ink">Résultat attendu</h2><p className="mt-2 whitespace-pre-wrap text-sm text-ink-secondary">{ticket.expected_result}</p></div> : null}</div><aside className="rounded-xl bg-interactive p-4 text-xs text-muted"><strong className="text-ink">Contexte technique</strong><p className="mt-3 break-all">{ticket.page_url || "Page non renseignée"}</p><p className="mt-3 line-clamp-5">{ticket.user_agent || "Appareil non renseigné"}</p></aside></div>{attachments.filter((file) => !file.message_id).length ? <div className="mt-5 grid gap-3 border-t border-subtle pt-5 sm:grid-cols-2 lg:grid-cols-4">{attachments.filter((file) => !file.message_id).map((file) => <AttachmentTile key={file.id} attachment={file} />)}</div> : null}</section><section className="rounded-2xl border border-subtle bg-surface p-5"><h2 className="flex items-center gap-2 font-semibold text-ink"><MessageSquare className="h-5 w-5 text-primary" />Échanges</h2><div className="mt-4 space-y-3">{messages.length ? messages.map((message) => <article key={message.id} className={`rounded-xl p-4 ${message.is_internal ? "border border-warning bg-warning-soft" : "bg-interactive"}`}><div className="flex items-center justify-between gap-2"><strong className="text-sm text-ink">{message.author_name || "Utilisateur"}{message.is_internal ? " · note interne" : ""}</strong><span className="text-xs text-muted">{formatDate(message.created_at)}</span></div><p className="mt-2 whitespace-pre-wrap text-sm text-ink-secondary">{message.body}</p>{attachments.filter((file) => file.message_id === message.id).length ? <div className="mt-3 grid gap-2 sm:grid-cols-3">{attachments.filter((file) => file.message_id === message.id).map((file) => <AttachmentTile key={file.id} attachment={file} />)}</div> : null}</article>) : <p className="rounded-xl border border-dashed border-strong p-5 text-sm text-muted">Aucune réponse pour le moment.</p>}</div><div className="mt-5 space-y-3 border-t border-subtle pt-5"><textarea className={inputClass} rows={4} value={reply} onChange={(event) => setReply(event.target.value)} placeholder={isAdmin ? "Répondre à l’utilisateur ou ajouter une note interne…" : "Ajouter une précision ou répondre à l’administrateur…"} />{isAdmin ? <label className="flex items-center gap-2 text-sm text-ink"><input type="checkbox" checked={internal} onChange={(event) => setInternal(event.target.checked)} />Note interne invisible pour l’utilisateur</label> : null}<div className="flex flex-wrap items-center justify-between gap-3"><label className="flex cursor-pointer items-center gap-2 text-sm text-primary"><Paperclip className="h-4 w-4" />{files.length ? `${files.length} fichier(s)` : "Joindre des fichiers"}<input type="file" multiple accept="image/*,application/pdf,video/mp4" className="sr-only" onChange={(event) => setFiles(Array.from(event.target.files ?? []))} /></label><Button variant="primary" disabled={saving || !reply.trim()} onClick={() => void sendReply()}>{saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}Envoyer</Button></div></div></section>{isAdmin ? <section className="rounded-2xl border border-subtle bg-surface p-5"><h2 className="flex items-center gap-2 font-semibold text-ink"><ShieldCheck className="h-5 w-5 text-primary" />Conclusion administrateur</h2><textarea value={resolution} onChange={(event) => setResolution(event.target.value)} rows={3} className={`${inputClass} mt-3`} placeholder="Correction réalisée, solution apportée ou raison de la clôture…" /><div className="mt-3 flex justify-end"><Button variant="secondary" disabled={saving} onClick={() => void update({ resolutionSummary: resolution })}><CheckCircle2 className="h-4 w-4" />Enregistrer la conclusion</Button></div></section> : ticket.resolution_summary ? <section className="rounded-2xl border border-success bg-success-soft p-5"><h2 className="font-semibold text-success">Solution apportée</h2><p className="mt-2 whitespace-pre-wrap text-sm text-ink-secondary">{ticket.resolution_summary}</p></section> : null}</div>;
+  return <div className="space-y-5"><button type="button" onClick={onBack} className="flex items-center gap-2 text-sm font-medium text-primary"><ArrowLeft className="h-4 w-4" />Tous les tickets</button>{error ? <p className="rounded-xl bg-danger-soft p-3 text-sm text-danger-on">{error}</p> : null}<section className="rounded-2xl border border-subtle bg-surface p-5 shadow-sm"><div className="flex flex-wrap items-start justify-between gap-3"><div><div className="flex flex-wrap items-center gap-2"><span className="text-xs font-semibold text-muted">#{shortId(ticket.id)}</span><span className={`rounded-full px-2 py-1 text-xs font-semibold ${statusTone(ticket.status)}`}>{statusLabels[ticket.status]}</span><span className="rounded-full bg-interactive px-2 py-1 text-xs font-semibold text-ink-secondary">{categoryLabels[ticket.category]}</span></div><h1 className="mt-3 text-2xl font-semibold text-ink">{ticket.title}</h1><p className="mt-1 text-sm text-muted">Par {ticket.reporter_name || ticket.reporter_email || "Utilisateur"} · {formatDate(ticket.created_at)}</p></div>{isAdmin ? <div className="grid min-w-52 gap-2 sm:grid-cols-2"><label className="text-xs font-medium text-muted">Statut<select className={`${inputClass} mt-1`} value={ticket.status} disabled={saving} onChange={(event) => void update({ status: event.target.value as SupportTicketStatus })}>{Object.entries(statusLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label><label className="text-xs font-medium text-muted">Priorité<select className={`${inputClass} mt-1`} value={ticket.priority} disabled={saving} onChange={(event) => void update({ priority: event.target.value as SupportTicketPriority })}>{Object.entries(priorityLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label></div> : <span className="rounded-full bg-interactive px-3 py-1.5 text-xs font-semibold text-ink-secondary">Priorité {priorityLabels[ticket.priority].toLowerCase()}</span>}</div><div className="mt-5 grid gap-4 lg:grid-cols-[minmax(0,1fr)_280px]"><div className="space-y-4"><div><h2 className="text-sm font-semibold text-ink">Description</h2><p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed text-ink-secondary">{ticket.description}</p></div>{ticket.steps_to_reproduce ? <div><h2 className="text-sm font-semibold text-ink">Étapes pour reproduire</h2><p className="mt-2 whitespace-pre-wrap text-sm text-ink-secondary">{ticket.steps_to_reproduce}</p></div> : null}{ticket.expected_result ? <div><h2 className="text-sm font-semibold text-ink">Résultat attendu</h2><p className="mt-2 whitespace-pre-wrap text-sm text-ink-secondary">{ticket.expected_result}</p></div> : null}</div><aside className="rounded-xl bg-interactive p-4 text-xs text-muted"><strong className="text-ink">Contexte technique</strong><p className="mt-3 break-all">{ticket.page_url || "Page non renseignée"}</p><p className="mt-3 line-clamp-5">{ticket.user_agent || "Appareil non renseigné"}</p></aside></div>{attachments.filter((file) => !file.message_id).length ? <div className="mt-5 grid gap-3 border-t border-subtle pt-5 sm:grid-cols-2 lg:grid-cols-4">{attachments.filter((file) => !file.message_id).map((file) => <AttachmentTile key={file.id} attachment={file} onOpen={setPreview} />)}</div> : null}</section><section className="rounded-2xl border border-subtle bg-surface p-5"><h2 className="flex items-center gap-2 font-semibold text-ink"><MessageSquare className="h-5 w-5 text-primary" />Échanges</h2><div className="mt-4 space-y-3">{messages.length ? messages.map((message) => <article key={message.id} className={`rounded-xl p-4 ${message.is_internal ? "border border-warning bg-warning-soft" : "bg-interactive"}`}><div className="flex items-center justify-between gap-2"><strong className="text-sm text-ink">{message.author_name || "Utilisateur"}{message.is_internal ? " · note interne" : ""}</strong><span className="text-xs text-muted">{formatDate(message.created_at)}</span></div><p className="mt-2 whitespace-pre-wrap text-sm text-ink-secondary">{message.body}</p>{attachments.filter((file) => file.message_id === message.id).length ? <div className="mt-3 grid gap-2 sm:grid-cols-3">{attachments.filter((file) => file.message_id === message.id).map((file) => <AttachmentTile key={file.id} attachment={file} onOpen={setPreview} />)}</div> : null}</article>) : <p className="rounded-xl border border-dashed border-strong p-5 text-sm text-muted">Aucune réponse pour le moment.</p>}</div><div className="mt-5 space-y-3 border-t border-subtle pt-5"><textarea className={inputClass} rows={4} value={reply} onChange={(event) => setReply(event.target.value)} placeholder={isAdmin ? "Répondre à l’utilisateur ou ajouter une note interne…" : "Ajouter une précision ou répondre à l’administrateur…"} />{isAdmin ? <label className="flex items-center gap-2 text-sm text-ink"><input type="checkbox" checked={internal} onChange={(event) => setInternal(event.target.checked)} />Note interne invisible pour l’utilisateur</label> : null}<div className="flex flex-wrap items-center justify-between gap-3"><label className="flex cursor-pointer items-center gap-2 text-sm text-primary"><Paperclip className="h-4 w-4" />{files.length ? `${files.length} fichier(s)` : "Joindre des fichiers"}<input type="file" multiple accept="image/*,application/pdf,video/mp4" className="sr-only" onChange={(event) => setFiles(Array.from(event.target.files ?? []))} /></label><Button variant="primary" disabled={saving || !reply.trim()} onClick={() => void sendReply()}>{saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}Envoyer</Button></div></div></section>{isAdmin ? <section className="rounded-2xl border border-subtle bg-surface p-5"><h2 className="flex items-center gap-2 font-semibold text-ink"><ShieldCheck className="h-5 w-5 text-primary" />Conclusion administrateur</h2><textarea value={resolution} onChange={(event) => setResolution(event.target.value)} rows={3} className={`${inputClass} mt-3`} placeholder="Correction réalisée, solution apportée ou raison de la clôture…" /><div className="mt-3 flex justify-end"><Button variant="secondary" disabled={saving} onClick={() => void update({ resolutionSummary: resolution })}><CheckCircle2 className="h-4 w-4" />Enregistrer la conclusion</Button></div></section> : ticket.resolution_summary ? <section className="rounded-2xl border border-success bg-success-soft p-5"><h2 className="font-semibold text-success">Solution apportée</h2><p className="mt-2 whitespace-pre-wrap text-sm text-ink-secondary">{ticket.resolution_summary}</p></section> : null}{preview ? <AttachmentViewer attachment={preview} onClose={() => setPreview(null)} /> : null}</div>;
 }
 
 export default function SupportTicketsPage({ portal = false }: { portal?: boolean }) {

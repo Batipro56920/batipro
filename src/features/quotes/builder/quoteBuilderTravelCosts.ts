@@ -10,6 +10,7 @@ export const DEFAULT_QUOTE_TRAVEL_COST_SETTINGS: QuoteTravelCostSettings = {
   workersCount: 1,
   vehiclesCount: 1,
   costPerKm: 0.35,
+  workerHourlyCost: 0,
   vehicleHourlyCost: 0,
   vehicleWearCostPerKm: 0,
   averageSpeedKmh: 50,
@@ -23,9 +24,13 @@ export type QuoteTravelCostSummary = {
   roundTripDistanceKm: number;
   oneWayDurationMinutes: number;
   totalKm: number;
+  /** Heures de route, comptees par vehicule. */
   travelHours: number;
+  /** Heures de trajet payees, comptees par ouvrier transporte. */
+  workerTravelHours: number;
   fuelCostHt: number;
   travelTimeCostHt: number;
+  workerTravelCostHt: number;
   vehicleWearCostHt: number;
   tollsCostHt: number;
   totalCostHt: number;
@@ -48,6 +53,7 @@ export function normalizeQuoteTravelCostSettings(
     workersCount: Math.max(1, positiveNumber(raw.workersCount) || 1),
     vehiclesCount: Math.max(1, positiveNumber(raw.vehiclesCount) || 1),
     costPerKm: positiveNumber(raw.costPerKm) || DEFAULT_QUOTE_TRAVEL_COST_SETTINGS.costPerKm,
+    workerHourlyCost: positiveNumber(raw.workerHourlyCost),
     vehicleHourlyCost: positiveNumber(raw.vehicleHourlyCost),
     vehicleWearCostPerKm: positiveNumber(raw.vehicleWearCostPerKm),
     averageSpeedKmh: positiveNumber(raw.averageSpeedKmh) || DEFAULT_QUOTE_TRAVEL_COST_SETTINGS.averageSpeedKmh,
@@ -75,10 +81,17 @@ export function calculateQuoteTravelCosts(quote: QuoteBuilderQuote): QuoteTravel
     positiveNumber(settings.oneWayDurationMinutes) ||
     (oneWayDistanceKm > 0 && averageSpeedKmh > 0 ? (oneWayDistanceKm / averageSpeedKmh) * 60 : 0);
   const vehiclesCount = Math.max(1, positiveNumber(settings.vehiclesCount) || 1);
+  const workersCount = Math.max(1, positiveNumber(settings.workersCount) || 1);
+  const roundTripHours = (oneWayDurationMinutes * 2) / 60;
   const totalKm = worksiteDays * roundTripDistanceKm * vehiclesCount;
-  const travelHours = worksiteDays * (oneWayDurationMinutes * 2 / 60) * vehiclesCount;
+  const travelHours = worksiteDays * roundTripHours * vehiclesCount;
+  // Le trajet est du temps paye : il se compte par ouvrier transporte, pas par
+  // vehicule. Trois ouvriers dans la meme camionnette, ce sont trois heures
+  // payees pour une heure de route — c'est la ce que coute vraiment un aller.
+  const workerTravelHours = worksiteDays * roundTripHours * workersCount;
   const fuelCostHt = totalKm * positiveNumber(settings.costPerKm);
   const travelTimeCostHt = travelHours * positiveNumber(settings.vehicleHourlyCost);
+  const workerTravelCostHt = workerTravelHours * positiveNumber(settings.workerHourlyCost);
   const vehicleWearCostHt = totalKm * positiveNumber(settings.vehicleWearCostPerKm);
   const tollsCostHt = worksiteDays * positiveNumber(settings.tollsPerRoundTripHt) * vehiclesCount;
 
@@ -89,11 +102,13 @@ export function calculateQuoteTravelCosts(quote: QuoteBuilderQuote): QuoteTravel
     oneWayDurationMinutes,
     totalKm,
     travelHours,
+    workerTravelHours,
     fuelCostHt: money(fuelCostHt),
     travelTimeCostHt: money(travelTimeCostHt),
+    workerTravelCostHt: money(workerTravelCostHt),
     vehicleWearCostHt: money(vehicleWearCostHt),
     tollsCostHt: money(tollsCostHt),
-    totalCostHt: money(fuelCostHt + travelTimeCostHt + vehicleWearCostHt + tollsCostHt),
+    totalCostHt: money(fuelCostHt + travelTimeCostHt + workerTravelCostHt + vehicleWearCostHt + tollsCostHt),
   };
 }
 
@@ -104,8 +119,10 @@ export function buildTravelCostInternalNote(summary: QuoteTravelCostSummary) {
     `Jours chantier: ${formatNumber(summary.worksiteDays)}`,
     `Kilometres totaux: ${formatNumber(summary.totalKm)} km`,
     `Temps trajet total: ${formatNumber(summary.travelHours)} h`,
+    `Heures payees aux ouvriers: ${formatNumber(summary.workerTravelHours)} h`,
     `Carburant: ${formatCurrency(summary.fuelCostHt)}`,
     `Temps trajet: ${formatCurrency(summary.travelTimeCostHt)}`,
+    `Main d'oeuvre trajet: ${formatCurrency(summary.workerTravelCostHt)}`,
     `Usure vehicule: ${formatCurrency(summary.vehicleWearCostHt)}`,
     `Peages: ${formatCurrency(summary.tollsCostHt)}`,
   ].join("\n");

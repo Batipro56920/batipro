@@ -84,6 +84,8 @@ export type QuoteTravelCostSettings = {
   workersCount: number;
   vehiclesCount: number;
   costPerKm: number;
+  /** Cout horaire charge d'un ouvrier, repris du cout moyen calcule sur la paie. */
+  workerHourlyCost: number;
   vehicleHourlyCost: number;
   vehicleWearCostPerKm: number;
   averageSpeedKmh: number;
