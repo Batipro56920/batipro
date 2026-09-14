@@ -4,6 +4,7 @@ import { AlertCircle, BarChart3, Check, CheckCircle2, Copy, ExternalLink, Image,
 import { Button } from "../../components/ui/button";
 import { disconnectSocialAccount, loadConnections, startSocialConnection, type ConnectionsState, type ProviderReadiness } from "./communicationRepository";
 import type { SocialAccount, SocialNetwork } from "./types";
+import { CANVA_SOCIAL_MEDIA_URL, CAPCUT_EDITOR_URL } from "./externalStudios";
 
 type ProviderCard = {
   id: SocialNetwork;
@@ -263,8 +264,8 @@ export function CommunicationConnections() {
         <h2 className="mb-3 text-lg font-semibold text-ink">Création et mesure</h2>
         <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
           {([
-            [Image, "Canva", "Visuels, modèles de marque et export vers la médiathèque.", "Atelier externe", "https://www.canva.com/create/social-media/"],
-            [Video, "CapCut", "Montage vertical gratuit, sous-titres et exports sociaux.", "Atelier externe", "https://www.capcut.com/editor"],
+            [Image, "Canva", "Visuels, modèles de marque et export vers la médiathèque.", "Atelier externe", CANVA_SOCIAL_MEDIA_URL],
+            [Video, "CapCut", "Montage vertical gratuit, sous-titres et exports sociaux.", "Atelier externe", CAPCUT_EDITOR_URL],
             [BarChart3, "Statistiques natives", "Meta, LinkedIn et Google regroupés dans Batipro.", "Après connexion", ""],
             [BarChart3, "PostHog", "Visites du site, formulaires et conversions des campagnes.", "Gratuit jusqu’à 1 M d’événements", "https://posthog.com/"],
           ] as const).map(([Icon, title, description, badge, url]) => (
