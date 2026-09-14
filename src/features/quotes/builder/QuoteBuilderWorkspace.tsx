@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { createContext, useContext, useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { DndContext, PointerSensor, useSensor, useSensors, type DragEndEvent } from "@dnd-kit/core";
 import { SortableContext, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
@@ -359,7 +359,7 @@ export function QuoteBuilderWorkspace({ onClose, costsPanel }: Props) {
   }, [libraryTab, query]);
 
   const columns = useMemo<ColumnDef<QuoteBuilderFlatRow>[]>(() => [
-    { id: "drag", header: "", cell: () => <GripVertical className="h-4 w-4 text-slate-300" /> },
+    { id: "drag", header: "", cell: () => <RowDragHandle /> },
     { accessorKey: "number", header: "N°", cell: ({ row }) => <span className="font-mono text-xs text-slate-500">{row.original.number}</span> },
     { id: "title", header: "Désignation", cell: ({ row }) => <TitleCell row={row.original} onSelectParent={setActiveParent} onChange={(patch) => updateNode(row.original.id, patch)} onConfigureComposite={() => setCompositeNodeId(row.original.id)} taskTemplates={taskTemplates} onLinkTask={(templateId) => linkTaskTemplate(row.original.id, taskTemplates.find((item) => item.id === templateId) ?? null, row.original.node.type === "item" ? row.original.node.title : "")} onCreateTask={() => setTaskDrawerRowId(row.original.id)} cost={lineCosts.get(row.original.id) ?? null} saleHt={row.original.totalHt} /> },
     { id: "quantity", header: "Qté", cell: ({ row }) => row.original.node.type === "item" && quote?.settings.showQuantityColumns ? <NumberInput value={row.original.node.quantity} onChange={(quantity) => updateNode(row.original.id, { quantity } as Partial<QuoteBuilderNode>)} /> : null },
@@ -1077,11 +1077,40 @@ function CompositeDialog2({ item, baseComponents, onSave, onClose }: { item: Quo
   );
 }
 
+/**
+ * Ecouteurs de deplacement de la ligne, offerts a la seule poignee. Poses sur
+ * la ligne entiere, ils demarraient un glisser des qu'on cliquait dans un champ
+ * en bougeant la souris d'un pixel : ecrire dans le devis devenait un combat.
+ */
+const RowDragHandleContext = createContext<{ attributes: Record<string, unknown>; listeners: Record<string, unknown> } | null>(null);
+
 function SortableRow({ id, row, children }: { id: string; row: QuoteBuilderFlatRow; children: ReactNode }) {
   const { attributes, listeners, setNodeRef, transform, transition } = useSortable({ id });
   const style = { transform: CSS.Transform.toString(transform), transition };
   const rowClass = row.node.type === "section" ? "group bg-blue-50/90 text-slate-950 hover:bg-blue-50" : row.node.type === "subsection" ? "group bg-slate-50 text-slate-900 hover:bg-slate-100" : "group bg-white hover:bg-slate-50";
-  return <tr ref={setNodeRef} style={style} className={rowClass} {...attributes} {...listeners}>{children}</tr>;
+  const handle = useMemo(
+    () => ({ attributes: attributes as unknown as Record<string, unknown>, listeners: (listeners ?? {}) as unknown as Record<string, unknown> }),
+    [attributes, listeners],
+  );
+  return (
+    <RowDragHandleContext.Provider value={handle}>
+      <tr ref={setNodeRef} style={style} className={rowClass}>{children}</tr>
+    </RowDragHandleContext.Provider>
+  );
+}
+
+function RowDragHandle() {
+  const handle = useContext(RowDragHandleContext);
+  return (
+    <span
+      className="inline-flex cursor-grab touch-none text-slate-300 transition hover:text-slate-500"
+      aria-label="Déplacer la ligne"
+      {...(handle?.attributes ?? {})}
+      {...(handle?.listeners ?? {})}
+    >
+      <GripVertical className="h-4 w-4" />
+    </span>
+  );
 }
 
 function TitleCell({ row, onChange, onSelectParent, onConfigureComposite, taskTemplates, onLinkTask, onCreateTask, cost, saleHt }: { row: QuoteBuilderFlatRow; onChange: (patch: Partial<QuoteBuilderNode>) => void; onSelectParent: (id: string | null) => void; onConfigureComposite: () => void; taskTemplates: TaskTemplateRow[]; onLinkTask: (templateId: string) => void; onCreateTask: () => void; cost: QuoteLineCost | null; saleHt: number }) {
@@ -1261,8 +1290,56 @@ function Field({ value, onChange, placeholder, muted }: { value: string; onChang
   return <input className={`w-full rounded-lg border border-transparent px-3 py-3 text-sm outline-none hover:border-slate-200 focus:border-blue-300 ${muted ? "bg-slate-50" : "bg-white"}`} value={value} onChange={(event) => onChange(event.target.value)} placeholder={placeholder} />;
 }
 
+/**
+ * Champ numerique tolerant. En saisie directe, vider le champ le remettait a 0
+ * et une virgule ou un point final donnait NaN : il fallait tout reselectionner
+ * a chaque correction. On garde la frappe en cours et on ne remonte que des
+ * nombres exploitables.
+ */
 function NumberInput({ value, onChange }: { value: number; onChange: (value: number) => void }) {
-  return <input className="h-8 w-full min-w-16 rounded border border-slate-200 px-2 text-right text-sm" type="number" step="0.01" value={value} onChange={(event) => onChange(Number(event.target.value))} />;
+  const [text, setText] = useState(() => formatNumberInput(value));
+  const [focused, setFocused] = useState(false);
+
+  useEffect(() => {
+    if (focused) return;
+    setText(formatNumberInput(value));
+  }, [focused, value]);
+
+  return (
+    <input
+      className="h-8 w-full min-w-16 rounded border border-slate-200 px-2 text-right text-sm"
+      inputMode="decimal"
+      value={text}
+      onFocus={() => setFocused(true)}
+      onBlur={() => {
+        setFocused(false);
+        const parsed = parseNumberInput(text);
+        setText(formatNumberInput(parsed ?? 0));
+        if (parsed === null) onChange(0);
+      }}
+      onChange={(event) => {
+        const raw = event.target.value;
+        setText(raw);
+        if (!raw.trim()) {
+          onChange(0);
+          return;
+        }
+        const parsed = parseNumberInput(raw);
+        if (parsed !== null) onChange(parsed);
+      }}
+    />
+  );
+}
+
+function formatNumberInput(value: number): string {
+  return Number.isFinite(value) ? String(value) : "";
+}
+
+function parseNumberInput(raw: string): number | null {
+  const clean = raw.trim().replace(",", ".");
+  if (!clean) return null;
+  const parsed = Number(clean);
+  return Number.isFinite(parsed) ? parsed : null;
 }
 
 function UnitSelect({ value, onChange }: { value: string; onChange: (value: string) => void }) {
