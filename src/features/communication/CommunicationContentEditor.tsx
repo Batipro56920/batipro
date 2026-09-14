@@ -13,6 +13,7 @@ import {
 } from "./communicationRepository";
 import { COMPOSER_NETWORKS, channelLabel, channelLimit, normalizeChannels } from "./networks";
 import { COMMUNICATION_MEDIA_ACCEPT, COMMUNICATION_MEDIA_LABEL, describeRejectedMedia } from "./mediaConstraints";
+import { CreativeStudioLinks } from "./CreativeStudioLinks";
 import type { CampaignAsset, CampaignItem, ChantierOption, PublishJob } from "./types";
 
 const inputClass = "w-full rounded-xl border border-subtle bg-surface px-3 py-2.5 text-sm text-ink outline-none focus:border-primary";
@@ -189,6 +190,9 @@ export function CommunicationContentEditor({
 
           <div>
             <p className="text-sm font-medium text-ink">Visuels</p>
+            <div className="mt-2">
+              <CreativeStudioLinks hint="Exporte, puis ajoute le fichier ci-dessous." />
+            </div>
             <div className="mt-2 flex flex-wrap gap-2">
               {itemAssets.map((asset) => (
                 <a key={asset.id} href={asset.signed_url} target="_blank" rel="noreferrer" className="overflow-hidden rounded-xl border border-subtle">
