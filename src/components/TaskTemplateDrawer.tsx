@@ -281,6 +281,75 @@ function emptyCocoResult(): TaskTemplateCocoResult {
 }
 
 /**
+ * Un resultat Coco enregistre autrefois n'a pas forcement toutes ses listes :
+ * l'affichage lit directement .length dessus et fait tomber toute la page. On
+ * reconstruit donc un resultat complet a partir de ce qui a ete stocke, sans
+ * jamais faire confiance a la forme du JSON.
+ */
+function storedCocoResult(raw: unknown): TaskTemplateCocoResult | null {
+  if (!raw || typeof raw !== "object") return null;
+  const source = raw as Record<string, unknown>;
+  const list = (value: unknown): string[] =>
+    Array.isArray(value) ? value.map((item) => String(item ?? "")).filter((item) => item.length > 0) : [];
+  const nullableNumber = (value: unknown): number | null => {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : null;
+  };
+  const nullableText = (value: unknown): string | null => {
+    if (value === null || value === undefined) return null;
+    const clean = String(value).trim();
+    return clean ? clean : null;
+  };
+  const rows = (value: unknown): Array<Record<string, unknown>> =>
+    Array.isArray(value) ? value.filter((item): item is Record<string, unknown> => Boolean(item) && typeof item === "object") : [];
+
+  const base = emptyCocoResult();
+  const storedSummary = source.costSummary && typeof source.costSummary === "object" ? (source.costSummary as Record<string, unknown>) : {};
+  const summary = { ...emptyCocoCostSummary() };
+  for (const key of Object.keys(summary) as Array<keyof typeof summary>) {
+    if (key === "lines") continue;
+    (summary[key] as number | null) = nullableNumber(storedSummary[key]);
+  }
+  summary.lines = list(storedSummary.lines);
+
+  const confidence = source.confidence === "high" || source.confidence === "low" ? source.confidence : "medium";
+
+  return {
+    ...base,
+    materials: rows(source.materials).map((row) => ({
+      label: String(row.label ?? ""),
+      quantity: nullableNumber(row.quantity),
+      unit: nullableText(row.unit),
+      detail: nullableText(row.detail),
+    })),
+    equipment: rows(source.equipment).map((row) => ({
+      label: String(row.label ?? ""),
+      quantity: nullableNumber(row.quantity),
+      unit: nullableText(row.unit),
+      required: row.required === true,
+      detail: nullableText(row.detail),
+    })),
+    consumables: list(source.consumables),
+    ppe: list(source.ppe),
+    procedure: list(source.procedure),
+    controls: list(source.controls),
+    errorsToAvoid: list(source.errorsToAvoid),
+    safetyPoints: list(source.safetyPoints),
+    doePhotos: list(source.doePhotos),
+    doeDocuments: list(source.doeDocuments),
+    technicalDescription: String(source.technicalDescription ?? ""),
+    characteristics: list(source.characteristics),
+    fieldReturns: list(source.fieldReturns),
+    fieldReturnQuestions: list(source.fieldReturnQuestions),
+    missingInformation: list(source.missingInformation),
+    costSummary: summary,
+    confidence,
+    usedFallback: source.usedFallback === true,
+    errorMessage: nullableText(source.errorMessage),
+  };
+}
+
+/**
  * Les zones de saisie gardent les lignes vides le temps de la frappe : on ne
  * nettoie qu'au moment d'enregistrer.
  */
@@ -597,7 +666,7 @@ export default function TaskTemplateDrawer({
       setUsageMetier("");
       setLaborDrafts((template.labor_items ?? []).map((row) => createLaborDraft(row)));
       setFeeDrafts((template.fee_items ?? []).map((row) => createFeeDraft(row)));
-      setCocoResult((template.coco_preparation as TaskTemplateCocoResult | null) ?? null);
+      setCocoResult(storedCocoResult(template.coco_preparation));
     } else {
       setTitre(initialValues?.titre ?? "");
       setLot(initialValues?.lot ?? "");
