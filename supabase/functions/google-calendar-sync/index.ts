@@ -74,7 +74,10 @@ function buildGoogleEvent(event: SyncEvent) {
 }
 
 async function googleRequest(connection: any, path: string, method: "GET" | "POST" | "PUT" | "PATCH", body?: unknown) {
+  // Sans delai maximum, un appel qui ne revient pas bloque toute la
+  // synchronisation, et l ecran reste fige sur un bouton grise.
   const response = await fetch(`https://www.googleapis.com/calendar/v3/${path}`, {
+    signal: AbortSignal.timeout(15000),
     method,
     headers: {
       Authorization: `Bearer ${connection.access_token}`,

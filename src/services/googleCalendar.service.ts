@@ -29,8 +29,34 @@ export type GoogleCalendarSyncResult = {
   errors: Array<{ sourceId: string; message: string }>;
 };
 
+/** Au-dela, l'agenda ne repondra plus : Google a lache, ou la fonction est bloquee. */
+const CALENDAR_TIMEOUT_MS = 45000;
+
+/**
+ * Borne l'attente. Sans cela, une requete qui ne revient jamais laissait les
+ * boutons Synchroniser et Deconnecter grises pour toujours : l'ecran donnait
+ * l'impression d'etre casse, alors qu'il attendait simplement dans le vide.
+ */
+function withTimeout<T>(promise: Promise<T>, label: string): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = window.setTimeout(() => {
+      reject(new Error(`${label} n'a pas répondu en ${Math.round(CALENDAR_TIMEOUT_MS / 1000)} secondes. Réessaie.`));
+    }, CALENDAR_TIMEOUT_MS);
+    promise.then(
+      (value) => {
+        window.clearTimeout(timer);
+        resolve(value);
+      },
+      (error) => {
+        window.clearTimeout(timer);
+        reject(error);
+      },
+    );
+  });
+}
+
 async function invokeCalendarFunction<T>(name: string, body?: Record<string, unknown>): Promise<T> {
-  const { data, error } = await supabase.functions.invoke(name, { body: body ?? {} });
+  const { data, error } = await withTimeout(supabase.functions.invoke(name, { body: body ?? {} }), "L'agenda");
   // supabase-js jette "Edge Function returned a non-2xx status code" et range la
   // vraie reponse dans error.context : sans la lire, l'ecran affiche un code HTTP
   // habille en francais et personne ne sait ce qui a echoue.
