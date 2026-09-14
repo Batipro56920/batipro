@@ -181,21 +181,39 @@ export default function ProjectQuoteBuilderV1Page() {
   }, [quote, quoteMatchesRoute, routeKey, travelDefaultsAppliedKey, updateQuote]);
 
   /**
-   * Tant que le deplacement est facture en ligne, la ligne suit la fiche : sans
-   * cela elle restait figee sur le montant calcule le jour du clic, meme apres
-   * avoir corrige la distance ou la duree du chantier. Si le mode de facturation
-   * change, la ligne disparait plutot que de compter en double.
+   * Le menu "Traitement devis" decide seul du sort de la ligne deplacement :
+   * elle apparait en mode ligne, suit ensuite la fiche — distance, duree,
+   * vehicules — et disparait des qu'on choisit de repercuter dans les prix ou
+   * de ne pas facturer.
+   *
+   * Un bouton separe ajoutait la ligne en basculant le mode au passage : on
+   * choisissait "Repercuter dans les prix", on cliquait le bouton juste en
+   * dessous, et le devis repartait en mode ligne sans le dire.
    */
   useEffect(() => {
     if (!quote || !quoteMatchesRoute) return;
-    const lineId = findTravelCostLineId(quote);
-    if (!lineId) return;
     const settings = normalizeQuoteTravelCostSettings(quote.settings.travelCosts, quote.siteAddress);
+    const lineId = findTravelCostLineId(quote);
+
     if (settings.billingMode !== "line") {
-      removeNode(lineId);
+      if (lineId) removeNode(lineId);
       return;
     }
+
     const summary = calculateQuoteTravelCosts(quote);
+    // Rien a facturer tant que la distance n'est pas connue : une ligne a zero
+    // euro sur le devis du client ne veut rien dire.
+    if (summary.totalCostHt <= 0) {
+      if (lineId) removeNode(lineId);
+      return;
+    }
+
+    const patch = travelCostLinePatch(summary, settings.lineVatRate);
+    if (!lineId) {
+      addItem("divers", patch);
+      return;
+    }
+
     const line = flattenQuoteBuilder(quote.nodes).find((row) => row.id === lineId);
     if (!line || line.node.type !== "item") return;
     if (
@@ -204,8 +222,8 @@ export default function ProjectQuoteBuilderV1Page() {
     ) {
       return;
     }
-    updateNode(lineId, travelCostLinePatch(summary, settings.lineVatRate) as Partial<QuoteBuilderNode>);
-  }, [quote, quoteMatchesRoute, removeNode, updateNode]);
+    updateNode(lineId, patch as Partial<QuoteBuilderNode>);
+  }, [addItem, quote, quoteMatchesRoute, removeNode, updateNode]);
 
   if (permissionLoading) return <QuoteDocumentLoader />;
 
@@ -262,25 +280,6 @@ export default function ProjectQuoteBuilderV1Page() {
     }
   }
 
-  function insertTravelCostLine() {
-    if (!quote) return;
-    const settings = normalizeQuoteTravelCostSettings(quote.settings.travelCosts, quote.siteAddress);
-    const summary = calculateQuoteTravelCosts(quote);
-    if (summary.totalCostHt <= 0) return;
-    const patch = travelCostLinePatch(summary, settings.lineVatRate);
-    const existing = findTravelCostLineId(quote);
-    if (existing) {
-      updateNode(existing, patch as Partial<QuoteBuilderNode>);
-    } else {
-      addItem("divers", patch);
-    }
-    updateQuote({
-      settings: {
-        ...quote.settings,
-        travelCosts: { ...settings, billingMode: "line" },
-      },
-    });
-  }
 
   return (
     <QuoteBuilderWorkspace
@@ -294,7 +293,6 @@ export default function ProjectQuoteBuilderV1Page() {
             routeLoading={travelRouteLoading}
             onPatch={patchTravelCosts}
             onCalculateRoute={() => void calculateTravelRoute()}
-            onInsertLine={insertTravelCostLine}
           />
         </>
       }
@@ -326,14 +324,12 @@ function TravelCostsControl({
   routeLoading,
   onPatch,
   onCalculateRoute,
-  onInsertLine,
 }: {
   quote: QuoteBuilderQuote;
   routeError: string | null;
   routeLoading: boolean;
   onPatch: (patch: Partial<QuoteTravelCostSettings>) => void;
   onCalculateRoute: () => void;
-  onInsertLine: () => void;
 }) {
   const settings = normalizeQuoteTravelCostSettings(quote.settings.travelCosts, quote.siteAddress);
   const summary = calculateQuoteTravelCosts({ ...quote, settings: { ...quote.settings, travelCosts: settings } });
@@ -395,17 +391,23 @@ function TravelCostsControl({
         <option value="line">Créer une ligne déplacement</option>
       </select>
 
-      <button
-        type="button"
-        className="mt-3 inline-flex h-9 w-full items-center justify-center rounded-xl bg-blue-600 px-3 text-sm font-semibold text-white transition hover:bg-blue-700 disabled:bg-slate-300"
-        disabled={!hasDistance || summary.totalCostHt <= 0}
-        onClick={onInsertLine}
-      >
-        Ajouter la ligne déplacement
-      </button>
-      {!hasDistance ? <p className="mt-2 text-xs leading-5 text-slate-500">Renseigner au minimum la distance aller pour calculer le déplacement.</p> : null}
+      <p className="mt-2 text-xs leading-5 text-slate-500">{billingModeHint(settings.billingMode, hasDistance)}</p>
     </aside>
   );
+}
+
+/**
+ * Ce que le mode choisi produit concretement dans le devis. Le deplacement se
+ * regle ici et nulle part ailleurs : sans cette phrase, un mode qui agit sur
+ * les prix des autres lignes ne se voit pas.
+ */
+function billingModeHint(mode: QuoteTravelCostSettings["billingMode"], hasDistance: boolean): string {
+  if (!hasDistance) return "Renseigner au minimum la distance aller pour calculer le déplacement.";
+  if (mode === "line") return "Une ligne \"Déplacement chantier\" est ajoutée au devis et suit ces réglages.";
+  if (mode === "absorb") {
+    return "Le montant est réparti sur les lignes dont le prix est calculé, au prorata de leur prix de vente : une ligne qui pèse un tiers du devis en porte un tiers. Les lignes dont vous avez saisi le prix à la main ne sont pas touchées.";
+  }
+  return "Le déplacement reste à la charge de l'entreprise : il compte dans le déboursé, jamais dans le prix de vente.";
 }
 
 function TextField({ label, value, onChange }: { label: string; value: string; onChange: (value: string) => void }) {

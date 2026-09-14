@@ -1172,12 +1172,61 @@ function RowDragHandle() {
   );
 }
 
+/**
+ * Le libelle que lit le client tient rarement sur une ligne. Dans un champ
+ * d'une seule ligne, une designation un peu longue etait coupee et il fallait
+ * la faire defiler au curseur pour la relire — impossible de controler un devis
+ * comme ca. Le champ prend donc la hauteur de son texte.
+ */
+function AutoGrowTextarea({
+  className,
+  value,
+  onChange,
+  onFocus,
+  placeholder,
+}: {
+  className: string;
+  value: string;
+  onChange: (value: string) => void;
+  onFocus?: () => void;
+  placeholder?: string;
+}) {
+  const ref = useRef<HTMLTextAreaElement | null>(null);
+
+  useEffect(() => {
+    const node = ref.current;
+    if (!node) return;
+    // Remise a zero avant mesure : sans elle la hauteur ne fait que grandir,
+    // scrollHeight ne redescendant jamais sous la hauteur deja posee.
+    node.style.height = "auto";
+    node.style.height = node.scrollHeight + "px";
+  }, [value]);
+
+  return (
+    <textarea
+      ref={ref}
+      rows={1}
+      className={className}
+      value={value}
+      onFocus={onFocus}
+      onChange={(event) => onChange(event.target.value)}
+      placeholder={placeholder}
+    />
+  );
+}
+
 function TitleCell({ row, onChange, onSelectParent, onConfigureComposite, taskTemplates, onLinkTask, onCreateTask, cost, saleHt }: { row: QuoteBuilderFlatRow; onChange: (patch: Partial<QuoteBuilderNode>) => void; onSelectParent: (id: string | null) => void; onConfigureComposite: () => void; taskTemplates: TaskTemplateRow[]; onLinkTask: (templateId: string) => void; onCreateTask: () => void; cost: QuoteLineCost | null; saleHt: number }) {
   const node = row.node;
   const weight = node.type === "section" ? "font-bold text-base" : node.type === "subsection" ? "font-semibold" : "";
   return (
     <div className="space-y-1.5" style={{ paddingLeft: row.depth * 18 }}>
-      <input className={`w-full rounded border border-transparent bg-transparent px-2 py-1 text-slate-900 outline-none hover:border-slate-200 focus:border-blue-300 ${weight}`} value={node.title} onFocus={() => node.type !== "item" && onSelectParent(node.id)} onChange={(event) => onChange({ title: event.target.value } as Partial<QuoteBuilderNode>)} placeholder={node.type === "item" ? "Ce que lit le client" : ""} />
+      <AutoGrowTextarea
+        className={`w-full resize-none overflow-hidden rounded border border-transparent bg-transparent px-2 py-1 leading-5 text-slate-900 outline-none hover:border-slate-200 focus:border-blue-300 ${weight}`}
+        value={node.title}
+        onFocus={() => node.type !== "item" && onSelectParent(node.id)}
+        onChange={(title) => onChange({ title } as Partial<QuoteBuilderNode>)}
+        placeholder={node.type === "item" ? "Ce que lit le client" : ""}
+      />
 
       {node.type === "item" ? (
         <div className="flex flex-wrap items-center gap-1.5">
