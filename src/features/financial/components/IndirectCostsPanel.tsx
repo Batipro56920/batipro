@@ -86,7 +86,11 @@ export default function IndirectCostsPanel({ chargesVersion = 0 }: { chargesVers
     );
   }
 
-  const missingEmployees = rates.activeEmployeeCount === 0;
+  const missingEmployees = rates.productiveEmployeeCount === 0;
+  // Un salarie actif sans cout horaire : soit c'est un poste administratif et
+  // c'est normal, soit c'est un ouvrier dont le cout manque et son temps est
+  // chiffre a zero. Le dire plutot que de laisser deviner.
+  const withoutHourlyCost = Math.max(0, rates.activeEmployeeCount - rates.productiveEmployeeCount);
 
   return (
     <section className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
@@ -102,16 +106,25 @@ export default function IndirectCostsPanel({ chargesVersion = 0 }: { chargesVers
       {notice ? <div className="border-b border-emerald-100 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">{notice}</div> : null}
 
       <div className="grid gap-3 p-4 md:grid-cols-2 xl:grid-cols-4">
-        <Rate label="Coût horaire moyen ouvrier" value={`${formatCurrency(rates.averageEmployeeHourlyCostHt)}/h`} hint={`${rates.activeEmployeeCount} salarié(s) CB Rénovation`} />
-        <Rate label="Heures productives / an" value={`${rates.productiveHoursPerYear.toLocaleString("fr-FR")} h`} hint={`${rates.activeEmployeeCount} × ${rates.productiveHoursPerEmployeeYear} h`} />
+        <Rate label="Coût horaire moyen ouvrier" value={`${formatCurrency(rates.averageEmployeeHourlyCostHt)}/h`} hint={`${rates.productiveEmployeeCount} salarié(s) au temps vendu`} />
+        <Rate label="Heures productives / an" value={`${rates.productiveHoursPerYear.toLocaleString("fr-FR")} h`} hint={`${rates.productiveEmployeeCount} × ${rates.productiveHoursPerEmployeeYear} h`} />
         <Rate label="Amortissement matériel" value={`${formatCurrency(rates.amortizationRatePerHour)}/h`} hint={`${formatCurrency(rates.amortizationAnnualHt)} / an`} />
         <Rate label="Frais généraux" value={`${formatCurrency(rates.overheadRatePerHour)}/h`} hint={`${formatCurrency(rates.overheadAnnualHt)} / an`} />
       </div>
 
       {missingEmployees ? (
         <div className="mx-4 mb-4 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-          Aucun salarié actif de statut "Salarié" n'est enregistré dans Profils &amp; accès : les coûts horaires
-          d'amortissement et de frais généraux restent à 0 tant qu'il n'y a pas d'heures productives à répartir.
+          Aucun salarié actif de statut "Salarié" ne porte de coût horaire chargé dans Profils &amp; accès : les coûts
+          horaires d'amortissement et de frais généraux restent à 0 tant qu'il n'y a pas d'heures productives à répartir.
+        </div>
+      ) : null}
+
+      {!missingEmployees && withoutHourlyCost > 0 ? (
+        <div className="mx-4 mb-4 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
+          {withoutHourlyCost} salarié(s) actif(s) sans coût horaire chargé : leur temps n'entre ni dans le coût horaire
+          moyen, ni dans les heures vendues. C'est ce qu'il faut pour un poste administratif — son salaire se saisit
+          alors dans les charges fixes, catégorie "salaires", et ressort au prix de revient par le coût horaire des
+          frais généraux. Si c'est un ouvrier, renseignez son coût horaire : sans lui son temps est chiffré à zéro.
         </div>
       ) : null}
 

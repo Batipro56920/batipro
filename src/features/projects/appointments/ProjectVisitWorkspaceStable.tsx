@@ -356,8 +356,8 @@ function LinkedTaskSummary({
           <span>{euro(totalCost / measuredQuantity)}</span>
         </div>
       ) : null}
-      {!rates?.activeEmployeeCount ? (
-        <p className="mt-2 text-[11px] text-amber-700">Aucun employe actif renseigne : le cout de main d'oeuvre ressort a 0.</p>
+      {!rates?.productiveEmployeeCount ? (
+        <p className="mt-2 text-[11px] text-amber-700">Aucun salarie avec un cout horaire renseigne : le cout de main d'oeuvre ressort a 0.</p>
       ) : null}
     </div>
   );

@@ -1827,7 +1827,7 @@ export default function TaskTemplateDrawer({
                       {coutHoraireTache.trim()
                         ? "Taux propre à cette tâche."
                         : hourlyRates
-                          ? `Moyenne de ${hourlyRates.activeEmployeeCount} salarié(s) CB Rénovation`
+                          ? `Moyenne de ${hourlyRates.productiveEmployeeCount} salarié(s) au temps vendu`
                           : "Chargement..."}
                     </div>
                   </div>

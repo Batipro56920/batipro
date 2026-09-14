@@ -16,7 +16,14 @@ import {
  * pour pouvoir ensuite les imputer au temps de main d'oeuvre de la tâche.
  */
 export type CompanyHourlyRates = {
+  /** Tous les salaries actifs, administratif compris. */
   activeEmployeeCount: number;
+  /**
+   * Ceux dont le temps est vendu au client, reconnus a leur cout horaire
+   * charge : c'est sur eux, et seulement eux, que se calculent le cout
+   * horaire moyen et les heures productives.
+   */
+  productiveEmployeeCount: number;
   averageEmployeeHourlyCostHt: number;
   productiveHoursPerEmployeeYear: number;
   productiveHoursPerYear: number;
@@ -76,7 +83,17 @@ function round2(value: number): number {
  * les intervenants de statut "employee" encore actifs, jamais les sous-traitants
  * ni les intérimaires, dont le coût ne reflète pas notre masse salariale.
  */
-async function loadEmployeeHourlyCosts(): Promise<{ count: number; average: number }> {
+/**
+ * Un salarie compte dans la main d'oeuvre vendue s'il porte un cout horaire
+ * charge. Un poste administratif inscrit pour son acces a Batipro n'en a pas :
+ * son temps ne se facture pas, et son salaire releve des charges fixes.
+ *
+ * Les compter comme les autres faussait deux choses a la fois : le cout
+ * horaire moyen, tire vers leur salaire, et les heures productives annuelles,
+ * gonflees d'heures qui ne seront jamais vendues — ce qui diluait les charges
+ * fixes sur un volume imaginaire et les faisait disparaitre du prix de revient.
+ */
+async function loadEmployeeHourlyCosts(): Promise<{ activeCount: number; productiveCount: number; average: number }> {
   const { data, error } = await (supabase as any)
     .from("intervenants")
     .select("hourly_cost_ht")
@@ -89,9 +106,13 @@ async function loadEmployeeHourlyCosts(): Promise<{ count: number; average: numb
     .map((row: { hourly_cost_ht: unknown }) => Number(row?.hourly_cost_ht))
     .filter((value: number) => Number.isFinite(value) && value > 0);
 
-  const count = (data ?? []).length;
-  if (!costs.length) return { count, average: 0 };
-  return { count, average: costs.reduce((sum: number, value: number) => sum + value, 0) / costs.length };
+  const activeCount = (data ?? []).length;
+  if (!costs.length) return { activeCount, productiveCount: 0, average: 0 };
+  return {
+    activeCount,
+    productiveCount: costs.length,
+    average: costs.reduce((sum: number, value: number) => sum + value, 0) / costs.length,
+  };
 }
 
 export async function getCompanyHourlyRates(): Promise<CompanyHourlyRates> {
@@ -100,10 +121,11 @@ export async function getCompanyHourlyRates(): Promise<CompanyHourlyRates> {
   const indirect = normalizeIndirectCosts(settings.indirect_costs);
   const overheadAnnualHt = computeExploitationAnnual(settings.charges_exploitation?.entries ?? []);
   const amortizationAnnualHt = computeAmortizationAnnual(indirect.equipmentAssets);
-  const productiveHoursPerYear = employees.count * indirect.productiveHoursPerEmployeeYear;
+  const productiveHoursPerYear = employees.productiveCount * indirect.productiveHoursPerEmployeeYear;
 
   return {
-    activeEmployeeCount: employees.count,
+    activeEmployeeCount: employees.activeCount,
+    productiveEmployeeCount: employees.productiveCount,
     averageEmployeeHourlyCostHt: round2(employees.average),
     productiveHoursPerEmployeeYear: indirect.productiveHoursPerEmployeeYear,
     productiveHoursPerYear,
