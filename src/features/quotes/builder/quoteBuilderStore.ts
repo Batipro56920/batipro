@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import type { QuoteBuilderItemKind, QuoteBuilderNode, QuoteBuilderQuote } from "./types";
+import type { QuoteBuilderItem, QuoteBuilderItemKind, QuoteBuilderNode, QuoteBuilderQuote } from "./types";
 import { appendNode, cloneWithPatch, createItem, createSection, createSubsection, moveNode, removeNodeFromQuote } from "./quoteBuilderModel";
 import { normalizeDailyCleaningFlatRate, syncDailyCleaningFlatRate } from "./quoteBuilderDailyCleaning";
 import { saveQuoteBuilder, saveQuoteBuilderDraft } from "./quoteBuilderRepository";
@@ -17,7 +17,8 @@ type QuoteBuilderStore = {
   updateNode: (id: string, patch: Partial<QuoteBuilderNode>) => void;
   addSection: () => void;
   addSubsection: () => void;
-  addItem: (kind?: QuoteBuilderItemKind) => void;
+  /** Renvoie l'identifiant de la ligne creee, pour la completer juste apres. */
+  addItem: (kind?: QuoteBuilderItemKind, patch?: Partial<QuoteBuilderItem>) => string | null;
   removeNode: (id: string) => void;
   moveNode: (activeId: string, overId: string) => void;
   saveDraft: () => void;
@@ -50,11 +51,22 @@ export const useQuoteBuilderStore = create<QuoteBuilderStore>((set, get) => ({
     const subsection = createSubsection("Nouvelle sous-section");
     return { quote: appendNode(state.quote, state.activeParentId, subsection), activeParentId: subsection.id, saveState: "dirty" };
   }),
-  addItem: (kind = "fourniture") => set((state) => {
-    if (!state.quote) return state;
-    const item = createItem(kind === "main_oeuvre" ? "Main d'oeuvre" : "Nouvelle prestation", { kind, unit: kind === "main_oeuvre" ? "h" : "u" });
-    return { quote: appendNode(state.quote, state.activeParentId, item), saveState: "dirty" };
-  }),
+  /**
+   * Ajoute une ligne et rend son identifiant. Les appelants reperaient la
+   * nouvelle ligne par "la derniere du devis" : quand la section active
+   * n'etait pas la derniere, ils ecrasaient une ligne existante.
+   */
+  addItem: (kind = "fourniture", patch) => {
+    const state = get();
+    if (!state.quote) return null;
+    const item = createItem(kind === "main_oeuvre" ? "Main d'oeuvre" : "Nouvelle prestation", {
+      kind,
+      unit: kind === "main_oeuvre" ? "h" : "u",
+      ...(patch ?? {}),
+    });
+    set({ quote: appendNode(state.quote, state.activeParentId, item), saveState: "dirty" });
+    return item.id;
+  },
   removeNode: (id) => set((state) => state.quote ? { quote: removeNodeFromQuote(state.quote, id), saveState: "dirty" } : state),
   moveNode: (activeId, overId) => set((state) => state.quote ? { quote: moveNode(state.quote, activeId, overId), saveState: "dirty" } : state),
   saveDraft: () => {

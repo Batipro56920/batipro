@@ -323,21 +323,17 @@ export function QuoteBuilderWorkspace({ onClose, costsPanel }: Props) {
   }
 
   function insertLibraryItem(item: QuoteLibraryItem) {
-    addItem(item.kind);
-    window.setTimeout(() => {
-      const current = useQuoteBuilderStore.getState().quote;
-      const last = current ? flattenQuoteBuilder(current.nodes).filter((row) => row.node.type === "item").at(-1) : null;
-      if (!last) return;
-      useQuoteBuilderStore.getState().updateNode(last.id, {
-        title: item.title,
-        kind: item.kind,
-        unit: item.unit,
-        unitPriceHt: item.unitPriceHt,
-        vatRate: item.vatRate,
-        description: item.description,
-        sourceLibraryId: item.id,
-      } as Partial<QuoteBuilderNode>);
-    }, 0);
+    addItem(item.kind, {
+      title: item.title,
+      kind: item.kind,
+      unit: item.unit,
+      unitPriceHt: item.unitPriceHt,
+      vatRate: item.vatRate,
+      description: item.description,
+      sourceLibraryId: item.id,
+      // Le prix vient de la bibliotheque : il ne se recalcule pas tout seul.
+      priceSource: "manual",
+    });
   }
 
   function duplicateQuote() {

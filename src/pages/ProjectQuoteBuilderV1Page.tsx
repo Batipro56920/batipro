@@ -8,10 +8,11 @@ import {
   buildTravelCostInternalNote,
   calculateQuoteTravelCosts,
   normalizeQuoteTravelCostSettings,
+  type QuoteTravelCostSummary,
 } from "../features/quotes/builder/quoteBuilderTravelCosts";
 import { useQuoteBuilderStore } from "../features/quotes/builder/quoteBuilderStore";
 import { QuoteDocumentLoader } from "../features/quotes/builder/QuoteBuilderWorkspace";
-import type { QuoteBuilderNode, QuoteBuilderQuote, QuoteTravelCostSettings } from "../features/quotes/builder/types";
+import type { QuoteBuilderItem, QuoteBuilderNode, QuoteBuilderQuote, QuoteTravelCostSettings } from "../features/quotes/builder/types";
 import { useProjectsData } from "../features/projects/hooks/useProjectsData";
 import { getCompanyTravelSettings } from "../services/companyTravelSettings.service";
 import {
@@ -24,6 +25,44 @@ function quoteBuilderErrorMessage(error: unknown) {
   if (error instanceof Error && error.message) return error.message;
   if (typeof error === "string" && error.trim()) return error;
   return "Chargement du devis impossible.";
+}
+
+/**
+ * La ligne de deplacement est un report de la fiche Couts caches, pas une ligne
+ * ordinaire : elle porte un marqueur pour qu'on la retrouve, qu'on la mette a
+ * jour au lieu d'en creer une deuxieme, et qu'elle suive les reglages.
+ */
+const TRAVEL_COST_LINE_MARKER = "quote-travel-costs";
+
+function findTravelCostLineId(quote: QuoteBuilderQuote): string | null {
+  const row = flattenQuoteBuilder(quote.nodes).find((item) => {
+    if (item.node.type !== "item") return false;
+    if (item.node.sourceLibraryId === TRAVEL_COST_LINE_MARKER) return true;
+    // Lignes posees avant le marqueur : on les adopte plutot que d'en ajouter
+    // une seconde a cote.
+    return item.node.kind === "divers" && item.node.title.trim().toLowerCase() === "déplacement chantier";
+  });
+  return row?.id ?? null;
+}
+
+function travelCostLinePatch(summary: QuoteTravelCostSummary, lineVatRate: number): Partial<QuoteBuilderItem> {
+  return {
+    title: "Déplacement chantier",
+    kind: "divers",
+    quantity: 1,
+    unit: "forfait",
+    unitPriceHt: summary.totalCostHt,
+    vatRate: lineVatRate,
+    internalNote: buildTravelCostInternalNote(summary),
+    sourceLibraryId: TRAVEL_COST_LINE_MARKER,
+    // Un deplacement n'a pas de tache de chantier et son prix est celui de la
+    // fiche : le calcul automatique du deboursé ne doit pas s'en meler.
+    taskTemplateId: null,
+    taskTemplateLabel: null,
+    taskTemplateIds: [],
+    taskTemplateQuantities: [],
+    priceSource: "manual",
+  };
 }
 
 function quoteRouteKey(projectId: string, quoteId?: string) {
@@ -40,6 +79,8 @@ export default function ProjectQuoteBuilderV1Page() {
   const hydrate = useQuoteBuilderStore((state) => state.hydrate);
   const updateQuote = useQuoteBuilderStore((state) => state.updateQuote);
   const addItem = useQuoteBuilderStore((state) => state.addItem);
+  const updateNode = useQuoteBuilderStore((state) => state.updateNode);
+  const removeNode = useQuoteBuilderStore((state) => state.removeNode);
   const [permissionLoading, setPermissionLoading] = useState(true);
   const [permissionAllowed, setPermissionAllowed] = useState(false);
   const [quoteLoading, setQuoteLoading] = useState(false);
@@ -139,6 +180,33 @@ export default function ProjectQuoteBuilderV1Page() {
     };
   }, [quote, quoteMatchesRoute, routeKey, travelDefaultsAppliedKey, updateQuote]);
 
+  /**
+   * Tant que le deplacement est facture en ligne, la ligne suit la fiche : sans
+   * cela elle restait figee sur le montant calcule le jour du clic, meme apres
+   * avoir corrige la distance ou la duree du chantier. Si le mode de facturation
+   * change, la ligne disparait plutot que de compter en double.
+   */
+  useEffect(() => {
+    if (!quote || !quoteMatchesRoute) return;
+    const lineId = findTravelCostLineId(quote);
+    if (!lineId) return;
+    const settings = normalizeQuoteTravelCostSettings(quote.settings.travelCosts, quote.siteAddress);
+    if (settings.billingMode !== "line") {
+      removeNode(lineId);
+      return;
+    }
+    const summary = calculateQuoteTravelCosts(quote);
+    const line = flattenQuoteBuilder(quote.nodes).find((row) => row.id === lineId);
+    if (!line || line.node.type !== "item") return;
+    if (
+      line.node.sourceLibraryId === TRAVEL_COST_LINE_MARKER &&
+      Math.abs(Number(line.node.unitPriceHt ?? 0) - summary.totalCostHt) < 0.005
+    ) {
+      return;
+    }
+    updateNode(lineId, travelCostLinePatch(summary, settings.lineVatRate) as Partial<QuoteBuilderNode>);
+  }, [quote, quoteMatchesRoute, removeNode, updateNode]);
+
   if (permissionLoading) return <QuoteDocumentLoader />;
 
   if (!permissionAllowed) {
@@ -199,33 +267,19 @@ export default function ProjectQuoteBuilderV1Page() {
     const settings = normalizeQuoteTravelCostSettings(quote.settings.travelCosts, quote.siteAddress);
     const summary = calculateQuoteTravelCosts(quote);
     if (summary.totalCostHt <= 0) return;
-    addItem("divers");
-    window.setTimeout(() => {
-      const current = useQuoteBuilderStore.getState().quote;
-      const last = current ? flattenQuoteBuilder(current.nodes).filter((row) => row.node.type === "item").at(-1) : null;
-      if (!last) return;
-      useQuoteBuilderStore.getState().updateNode(last.id, {
-        title: "Déplacement chantier",
-        kind: "divers",
-        quantity: 1,
-        unit: "forfait",
-        unitPriceHt: summary.totalCostHt,
-        vatRate: settings.lineVatRate,
-        internalNote: buildTravelCostInternalNote(summary),
-      } as Partial<QuoteBuilderNode>);
-      const latest = useQuoteBuilderStore.getState().quote;
-      if (latest) {
-        useQuoteBuilderStore.getState().updateQuote({
-          settings: {
-            ...latest.settings,
-            travelCosts: {
-              ...normalizeQuoteTravelCostSettings(latest.settings.travelCosts, latest.siteAddress),
-              billingMode: "line",
-            },
-          },
-        });
-      }
-    }, 0);
+    const patch = travelCostLinePatch(summary, settings.lineVatRate);
+    const existing = findTravelCostLineId(quote);
+    if (existing) {
+      updateNode(existing, patch as Partial<QuoteBuilderNode>);
+    } else {
+      addItem("divers", patch);
+    }
+    updateQuote({
+      settings: {
+        ...quote.settings,
+        travelCosts: { ...settings, billingMode: "line" },
+      },
+    });
   }
 
   return (
