@@ -431,6 +431,32 @@ export default function ProductCatalogPage() {
   );
 }
 
+/**
+ * Une ligne de prix sans fournisseur ou sans montant est retiree a
+ * l'enregistrement : c'est volontaire, mais le faire en silence donnait
+ * l'impression que la fiche ne s'enregistrait pas.
+ */
+function describeIncompleteSupplierPrices(prices: ProductSupplierPrice[] | undefined): string | null {
+  const lines = Array.isArray(prices) ? prices : [];
+  const incomplete = lines.filter((price) => {
+    const hasSupplier = Boolean(String(price.supplierId ?? "").trim() || String(price.supplierName ?? "").trim());
+    const amount = Number(price.priceHt ?? 0);
+    const touched =
+      hasSupplier ||
+      amount > 0 ||
+      Number(price.discountPercent ?? 0) > 0 ||
+      Number(price.minimumQuantity ?? 0) > 0 ||
+      Number(price.coverageM2 ?? 0) > 0 ||
+      String(price.packaging ?? "").trim().length > 0;
+    if (!touched) return false;
+    return !hasSupplier || !(amount > 0);
+  });
+  if (!incomplete.length) return null;
+  return incomplete.length === 1
+    ? "Un prix fournisseur est incomplet : choisis le fournisseur et un prix colis supérieur à 0. Sans cela la ligne serait perdue à l'enregistrement."
+    : `${incomplete.length} prix fournisseurs sont incomplets : choisis le fournisseur et un prix colis supérieur à 0. Sans cela ces lignes seraient perdues à l'enregistrement.`;
+}
+
 function ProductDrawer({ product, suppliers, categories, onCancel, onSave }: { product: ProductCatalogItem | ProductCatalogDraft; suppliers: SupplierRow[]; categories: string[]; onCancel: () => void; onSave: (product: ProductCatalogItem | ProductCatalogDraft) => void | Promise<void> }) {
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
@@ -468,6 +494,32 @@ function ProductForm({ product, suppliers, categories, onCancel, onSave }: { pro
   const [activeTab, setActiveTab] = useState<"identite" | "financier" | "technique">("identite");
   const [knowledgeLoading, setKnowledgeLoading] = useState(false);
   const [knowledgeError, setKnowledgeError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+
+  /**
+   * Enregistrer ne disait rien : la promesse n'etait ni attendue ni surveillee.
+   * Un refus de la base laissait le tiroir ouvert, sans message, et on croyait
+   * a un enregistrement silencieux. Une ligne de prix incomplete etait, elle,
+   * jetee au passage : on la signale au lieu de la perdre.
+   */
+  async function submit() {
+    const next = resyncPricingFromMainSupplier(draft);
+    const incomplete = describeIncompleteSupplierPrices(next.supplierPrices);
+    if (incomplete) {
+      setSaveError(incomplete);
+      return;
+    }
+    setSaveError(null);
+    setSaving(true);
+    try {
+      await onSave(next);
+    } catch (error: any) {
+      setSaveError(String(error?.message ?? error ?? "").trim() || "Enregistrement refusé par le serveur.");
+    } finally {
+      setSaving(false);
+    }
+  }
 
   useEffect(() => {
     setDraft(product);
@@ -557,9 +609,15 @@ function ProductForm({ product, suppliers, categories, onCancel, onSave }: { pro
         </div>
         <div className="flex gap-2">
           <button type="button" className="rounded-xl border px-3 py-2 text-sm hover:bg-slate-50" onClick={onCancel}>Annuler</button>
-          <button type="button" className="rounded-xl bg-slate-950 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800" onClick={() => onSave(resyncPricingFromMainSupplier(draft))}>Enregistrer</button>
+          <button type="button" className="rounded-xl bg-slate-950 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800 disabled:bg-slate-400" disabled={saving} onClick={() => void submit()}>
+            {saving ? "Enregistrement..." : "Enregistrer"}
+          </button>
         </div>
       </div>
+
+      {saveError ? (
+        <div className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{saveError}</div>
+      ) : null}
 
       <ProductFileImportPanel
         currentProduct={draft}
