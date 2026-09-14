@@ -165,22 +165,49 @@ function isMissingTableError(error: { message?: string } | null): boolean {
   return msg.includes("does not exist") || msg.includes("schema cache");
 }
 
+/**
+ * PostgREST garde en memoire la liste des colonnes. Juste apres une migration,
+ * une colonne qui existe vraiment peut etre refusee : "could not find the
+ * column ... in the schema cache". Ce n'est pas une base d'ancienne generation,
+ * c'est un cache perime, et il se recharge tout seul en quelques secondes.
+ *
+ * Confondre les deux coutait cher : l'ecriture etait rejouee sans les colonnes
+ * concernees, elle reussissait, et la valeur saisie disparaissait sans le
+ * moindre message. Toute la session basculait ensuite en lecture ancienne.
+ */
+function isSchemaCacheError(error: { code?: string; message?: string } | null): boolean {
+  const code = String(error?.code ?? "");
+  const msg = String(error?.message ?? "").toLowerCase();
+  return code === "PGRST204" || msg.includes("schema cache");
+}
+
+type SupabaseResult<T> = { data: T; error: { code?: string; message?: string } | null };
+
+/** Rejoue une fois la meme requete, inchangee, le temps que le cache se recharge. */
+async function withSchemaCacheRetry<T>(run: () => PromiseLike<SupabaseResult<T>>): Promise<SupabaseResult<T>> {
+  const first = await run();
+  if (!first.error || !isSchemaCacheError(first.error)) return first;
+  await new Promise((resolve) => setTimeout(resolve, 900));
+  return run();
+}
+
 function isMissingV2ColumnsError(error: { code?: string; message?: string } | null): boolean {
   const code = String(error?.code ?? "");
   const msg = String(error?.message ?? "").toLowerCase();
+  if (isSchemaCacheError(error)) return false;
   if (code === "42703") return true;
   return (
     msg.includes("task_templates") &&
     (msg.includes("description_technique") ||
       msg.includes("caracteristiques") ||
       msg.includes("cout_reference_unitaire_ht") ||
+      msg.includes("labor_hourly_cost_ht") ||
+      msg.includes("target_margin_rate") ||
       msg.includes("quote_visible") ||
       msg.includes("chantier_visible") ||
       msg.includes("labor_items") ||
       msg.includes("fee_items") ||
-      msg.includes("coco_preparation") ||
-      msg.includes("schema cache") ||
-      msg.includes("could not find"))
+      msg.includes("coco_preparation"))
   );
 }
 
@@ -372,11 +399,13 @@ export async function list(): Promise<TaskTemplateRow[]> {
 
 export async function create(input: TaskTemplateInput): Promise<TaskTemplateRow> {
   const payload = normalizeInput(input);
-  const { data, error } = await supabase
-    .from("task_templates")
-    .insert(supportsV2Columns === false ? stripV2Columns(payload) : payload)
-    .select(supportsV2Columns === false ? SELECT_LEGACY : SELECT_V2)
-    .single();
+  const { data, error } = await withSchemaCacheRetry(() =>
+    supabase
+      .from("task_templates")
+      .insert(supportsV2Columns === false ? stripV2Columns(payload) : payload)
+      .select(supportsV2Columns === false ? SELECT_LEGACY : SELECT_V2)
+      .single(),
+  );
 
   if (error) {
     if (isMissingTableError(error)) {
@@ -402,12 +431,14 @@ export async function create(input: TaskTemplateInput): Promise<TaskTemplateRow>
 export async function update(id: string, input: TaskTemplateInput): Promise<TaskTemplateRow> {
   if (!id) throw new Error("id template manquant.");
   const payload = normalizeInput(input);
-  const { data, error } = await supabase
-    .from("task_templates")
-    .update(supportsV2Columns === false ? stripV2Columns(payload) : payload)
-    .eq("id", id)
-    .select(supportsV2Columns === false ? SELECT_LEGACY : SELECT_V2)
-    .single();
+  const { data, error } = await withSchemaCacheRetry(() =>
+    supabase
+      .from("task_templates")
+      .update(supportsV2Columns === false ? stripV2Columns(payload) : payload)
+      .eq("id", id)
+      .select(supportsV2Columns === false ? SELECT_LEGACY : SELECT_V2)
+      .single(),
+  );
 
   if (error) {
     if (isMissingTableError(error)) {
