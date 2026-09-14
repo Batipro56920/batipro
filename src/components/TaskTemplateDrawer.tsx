@@ -638,13 +638,15 @@ export default function TaskTemplateDrawer({
       );
       setLaborDrafts((initialValues?.labor_items ?? []).map((row) => createLaborDraft(row)));
       setFeeDrafts((initialValues?.fee_items ?? []).map((row) => createFeeDraft(row)));
+      setCocoResult(null);
     }
     setPreparationSchemaReady(true);
     setPreparationError(null);
     setLocalError(null);
     setCocoMessage(null);
     setCocoError(null);
-    setCocoResult(null);
+    // Le resultat Coco enregistre avec la tache etait pose puis efface ici
+    // meme : les encadres revenaient vides a chaque reouverture.
     setCocoLoading(false);
   }, [
     open,

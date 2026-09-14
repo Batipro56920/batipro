@@ -327,6 +327,28 @@ function normalizeInput(input: TaskTemplateInput) {
   };
 }
 
+/**
+ * Une ecriture qui "reussit" en ayant perdu des champs en route est pire
+ * qu'une erreur : l'utilisateur croit avoir enregistre, referme, et retrouve
+ * un champ vide sans avoir jamais vu de message. On compare donc ce qui a ete
+ * envoye a ce que la base renvoie, et on le dit.
+ */
+function assertWritePersisted(payload: ReturnType<typeof normalizeInput>, row: TaskTemplateRow): void {
+  const checks: Array<[string, number | null, number | null]> = [
+    ["coût horaire", payload.labor_hourly_cost_ht, row.labor_hourly_cost_ht],
+    ["marge", payload.target_margin_rate, row.target_margin_rate],
+    ["coût de référence", payload.cout_reference_unitaire_ht, row.cout_reference_unitaire_ht],
+    ["temps par unité", payload.temps_prevu_par_unite_h, row.temps_prevu_par_unite_h],
+  ];
+  const dropped = checks
+    .filter(([, sent, saved]) => sent !== null && Number(saved ?? NaN) !== Number(sent))
+    .map(([label]) => label);
+  if (!dropped.length) return;
+  throw new Error(
+    `La base n'a pas conservé : ${dropped.join(", ")}. Le reste de la tâche est enregistré. Rechargez la page et réessayez ; si cela se reproduit, prévenez l'administrateur.`,
+  );
+}
+
 function stripV2Columns<T extends Record<string, unknown>>(payload: T): T {
   const next = { ...payload };
   delete (next as Record<string, unknown>).description_technique;
@@ -425,7 +447,9 @@ export async function create(input: TaskTemplateInput): Promise<TaskTemplateRow>
   }
 
   if (supportsV2Columns !== false) supportsV2Columns = true;
-  return normalizeRow(data);
+  const saved = normalizeRow(data);
+  if (supportsV2Columns !== false) assertWritePersisted(payload, saved);
+  return saved;
 }
 
 export async function update(id: string, input: TaskTemplateInput): Promise<TaskTemplateRow> {
@@ -459,7 +483,9 @@ export async function update(id: string, input: TaskTemplateInput): Promise<Task
   }
 
   if (supportsV2Columns !== false) supportsV2Columns = true;
-  return normalizeRow(data);
+  const saved = normalizeRow(data);
+  if (supportsV2Columns !== false) assertWritePersisted(payload, saved);
+  return saved;
 }
 
 export async function remove(id: string): Promise<void> {
