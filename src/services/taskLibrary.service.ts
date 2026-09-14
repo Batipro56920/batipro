@@ -18,6 +18,10 @@ export type TaskTemplateRow = {
   description_technique: string | null;
   caracteristiques: string[];
   cout_reference_unitaire_ht: number | null;
+  /** Coût horaire retenu pour cette tâche ; null = coût horaire moyen des salariés. */
+  labor_hourly_cost_ht: number | null;
+  /** Marge appliquée au déboursé de cette tâche ; null = marge par défaut du chiffrage. */
+  target_margin_rate: number | null;
   quote_visible: boolean;
   chantier_visible: boolean;
   labor_items: TaskTemplateLaborItemInput[];
@@ -38,6 +42,8 @@ export type TaskTemplateInput = {
   description_technique?: string | null;
   caracteristiques?: string[];
   cout_reference_unitaire_ht?: number | null;
+  labor_hourly_cost_ht?: number | null;
+  target_margin_rate?: number | null;
   quote_visible?: boolean;
   chantier_visible?: boolean;
   labor_items?: TaskTemplateLaborItemInput[];
@@ -123,6 +129,8 @@ const SELECT_V2 = [
   "description_technique",
   "caracteristiques",
   "cout_reference_unitaire_ht",
+  "labor_hourly_cost_ht",
+  "target_margin_rate",
   "quote_visible",
   "chantier_visible",
   "labor_items",
@@ -231,6 +239,8 @@ function normalizeRow(row: any): TaskTemplateRow {
     description_technique: row?.description_technique ?? null,
     caracteristiques: normalizeCaracteristiques(row?.caracteristiques),
     cout_reference_unitaire_ht: normalizeNumber(row?.cout_reference_unitaire_ht),
+    labor_hourly_cost_ht: normalizeNumber(row?.labor_hourly_cost_ht),
+    target_margin_rate: normalizeNumber(row?.target_margin_rate),
     quote_visible: row?.quote_visible !== false,
     chantier_visible: row?.chantier_visible !== false,
     labor_items: normalizeLaborItems(row?.labor_items),
@@ -280,6 +290,8 @@ function normalizeInput(input: TaskTemplateInput) {
     description_technique: String(input.description_technique ?? "").trim() || null,
     caracteristiques: normalizeCaracteristiques(input.caracteristiques),
     cout_reference_unitaire_ht: coutReference,
+    labor_hourly_cost_ht: normalizeNumber(input.labor_hourly_cost_ht),
+    target_margin_rate: normalizeNumber(input.target_margin_rate),
     quote_visible: input.quote_visible,
     chantier_visible: input.chantier_visible,
     labor_items: normalizeLaborItems(input.labor_items),
@@ -293,6 +305,8 @@ function stripV2Columns<T extends Record<string, unknown>>(payload: T): T {
   delete (next as Record<string, unknown>).description_technique;
   delete (next as Record<string, unknown>).caracteristiques;
   delete (next as Record<string, unknown>).cout_reference_unitaire_ht;
+  delete (next as Record<string, unknown>).labor_hourly_cost_ht;
+  delete (next as Record<string, unknown>).target_margin_rate;
   delete (next as Record<string, unknown>).quote_visible;
   delete (next as Record<string, unknown>).chantier_visible;
   delete (next as Record<string, unknown>).labor_items;
@@ -440,6 +454,8 @@ export async function duplicate(id: string): Promise<TaskTemplateRow> {
     description_technique: source.description_technique,
     caracteristiques: source.caracteristiques,
     cout_reference_unitaire_ht: source.cout_reference_unitaire_ht,
+    labor_hourly_cost_ht: source.labor_hourly_cost_ht,
+    target_margin_rate: source.target_margin_rate,
     quote_visible: source.quote_visible,
     chantier_visible: source.chantier_visible,
     labor_items: source.labor_items,

@@ -9,7 +9,7 @@ import { list as listTaskTemplates, type TaskTemplateRow } from "../../../servic
 import VisitTaskPickerDialog from "./VisitTaskPickerDialog";
 import { listTaskTemplatePreparationByTemplateIds, type TaskTemplateEquipmentItemRow, type TaskTemplateMaterialRatioRow } from "../../../services/taskTemplatePreparation.service";
 import { getCompanyHourlyRates, type CompanyHourlyRates } from "../../../services/indirectCosts.service";
-import { salePriceFromCost, taskTemplateUnitCost } from "../../../services/taskCostBasis";
+import { taskTemplateUnitCost, taskTemplateUnitSale } from "../../../services/taskCostBasis";
 import { VISIT_DRAFT_MARKER } from "../../crm/utils/appointmentDraftStorage";
 import type { ProjectRecord } from "../types";
 import { VisitReportImportDrawer, type VisitImportSelection } from "./VisitReportImportDrawer";
@@ -780,7 +780,7 @@ export function ProjectVisitWorkspaceStable({ project, existingAppointment }: { 
       const quantities = lineTemplateQuantities(line, ids);
       const lineQuantity = quantity(line);
       let hours = 0;
-      let costHt = 0;
+      let saleHt = 0;
       for (let index = 0; index < ids.length; index += 1) {
         const template = taskTemplates.find((row) => row.id === ids[index]);
         if (!template) continue;
@@ -788,13 +788,14 @@ export function ProjectVisitWorkspaceStable({ project, existingAppointment }: { 
         // Une tache sans quantite propre compte une fois par unite de la ligne ;
         // une tache dont la quantite est fixee ne compte que sa part.
         const share = pinned === null ? 1 : lineQuantity > 0 ? pinned / lineQuantity : pinned;
-        const unitCost = taskTemplateUnitCost(template, linkedPreparation.materialsByTemplateId[ids[index]] ?? [], hourlyRates);
-        hours += unitCost.hours * share;
-        costHt += unitCost.costHt * share;
+        const materials = linkedPreparation.materialsByTemplateId[ids[index]] ?? [];
+        hours += taskTemplateUnitCost(template, materials, hourlyRates).hours * share;
+        // Chaque tache apporte son propre prix de vente : sa marge lui appartient.
+        saleHt += taskTemplateUnitSale(template, materials, hourlyRates) * share;
       }
 
       const nextHours = hours > 0 ? Math.round(hours * 100) / 100 : null;
-      const nextPrice = costHt > 0 ? salePriceFromCost(costHt) : null;
+      const nextPrice = saleHt > 0 ? Math.round(saleHt * 100) / 100 : null;
       const tracked = autoEstimates.current.get(line.id) ?? { hours: null, price: null };
       const patch: Partial<EstimateLine> = {};
       const followsHours = followsAutoValue(line.estimatedHours, tracked.hours);

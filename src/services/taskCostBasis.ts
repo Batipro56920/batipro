@@ -38,14 +38,32 @@ export function taskTemplateUnitCost(
   rates: CompanyHourlyRates | null,
 ): TaskCostBasis {
   if (!template) return EMPTY_TASK_COST;
+  // Le coût horaire propre à la tâche prime : un geste confié à un compagnon
+  // qualifié ne se chiffre pas au coût moyen de l'équipe.
+  const hourlyCostHt = Number(template.labor_hourly_cost_ht ?? rates?.averageEmployeeHourlyCostHt ?? 0);
   const hours = Number(template.temps_prevu_par_unite_h ?? 0);
-  const laborHt = hours * Number(rates?.averageEmployeeHourlyCostHt ?? 0);
+  const laborHt = hours * hourlyCostHt;
   const materialsHt = materials.reduce(
     (total, row) => total + Number(row.ratio_quantity ?? 0) * (1 + Number(row.loss_percent ?? 0) / 100) * Number(row.purchase_price_ht ?? 0),
     0,
   );
   const indirectHt = hours * (Number(rates?.amortizationRatePerHour ?? 0) + Number(rates?.overheadRatePerHour ?? 0));
   return { costHt: laborHt + materialsHt + indirectHt, hours, laborHt, materialsHt, indirectHt };
+}
+
+/** Marge retenue pour une tâche : la sienne, sinon celle par défaut. */
+export function taskTemplateMarginRate(template: TaskTemplateRow | null): number {
+  const value = Number(template?.target_margin_rate ?? NaN);
+  return Number.isFinite(value) && value >= 0 ? value : DEFAULT_QUOTE_MARGIN_RATE;
+}
+
+/** Prix de vente d'une unité de tâche : son déboursé majoré de sa propre marge. */
+export function taskTemplateUnitSale(
+  template: TaskTemplateRow | null,
+  materials: TaskTemplateMaterialRatioRow[],
+  rates: CompanyHourlyRates | null,
+): number {
+  return salePriceFromCost(taskTemplateUnitCost(template, materials, rates).costHt, taskTemplateMarginRate(template));
 }
 
 /** Prix de vente déduit d'un déboursé sec. */

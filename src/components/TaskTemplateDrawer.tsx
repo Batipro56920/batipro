@@ -27,6 +27,7 @@ import type { DocumentUnit } from "../features/document-engine";
 import { listSuppliers, type SupplierRow } from "../services/suppliers.service";
 import { TaskCostEngine } from "../features/task-cost-engine/TaskCostEngine";
 import { getCompanyHourlyRates, type CompanyHourlyRates } from "../services/indirectCosts.service";
+import { DEFAULT_QUOTE_MARGIN_RATE, salePriceFromCost } from "../services/taskCostBasis";
 import {
   generateWithCoco,
   type TaskTemplateCocoResult,
@@ -484,6 +485,10 @@ export default function TaskTemplateDrawer({
   const [quantiteDefaut, setQuantiteDefaut] = useState("");
   const [tempsParUnite, setTempsParUnite] = useState("");
   const [coutReferenceUnitaire, setCoutReferenceUnitaire] = useState("");
+  // Vides, ces deux champs laissent la tache suivre le cout horaire moyen des
+  // salaries et la marge par defaut du chiffrage.
+  const [coutHoraireTache, setCoutHoraireTache] = useState("");
+  const [margeTache, setMargeTache] = useState("");
   const [descriptionTechnique, setDescriptionTechnique] = useState("");
   const [caracteristiques, setCaracteristiques] = useState("");
   const [remarques, setRemarques] = useState("");
@@ -584,6 +589,8 @@ export default function TaskTemplateDrawer({
       setQuantiteDefaut(toField(template.quantite_defaut ?? null));
       setTempsParUnite(toField(template.temps_prevu_par_unite_h ?? null));
       setCoutReferenceUnitaire(toField(template.cout_reference_unitaire_ht ?? null));
+      setCoutHoraireTache(toField(template.labor_hourly_cost_ht ?? null));
+      setMargeTache(toField(template.target_margin_rate ?? null));
       setDescriptionTechnique(template.description_technique ?? "");
       setCaracteristiques((template.caracteristiques ?? []).join("\n"));
       setRemarques(template.remarques ?? "");
@@ -598,6 +605,8 @@ export default function TaskTemplateDrawer({
       setQuantiteDefaut(toField(initialValues?.quantite_defaut ?? null));
       setTempsParUnite(toField(initialValues?.temps_prevu_par_unite_h ?? null));
       setCoutReferenceUnitaire(toField(initialValues?.cout_reference_unitaire_ht ?? null));
+      setCoutHoraireTache(toField(initialValues?.labor_hourly_cost_ht ?? null));
+      setMargeTache(toField(initialValues?.target_margin_rate ?? null));
       setDescriptionTechnique(initialValues?.description_technique ?? "");
       setCaracteristiques((initialValues?.caracteristiques ?? []).join("\n"));
       setRemarques(initialValues?.remarques ?? "");
@@ -717,13 +726,21 @@ export default function TaskTemplateDrawer({
    */
   const laborPlan = useMemo(() => {
     const hours = parseDraftAmount(tempsParUnite) ?? 0;
-    const hourlyCostHt = hourlyRates?.averageEmployeeHourlyCostHt ?? 0;
+    // Le taux saisi sur la tache prime sur le cout horaire moyen de l'equipe.
+    const override = parseDraftAmount(coutHoraireTache);
+    const hourlyCostHt = override !== null && override >= 0 ? override : hourlyRates?.averageEmployeeHourlyCostHt ?? 0;
     return {
       hours,
       hourlyCostHt,
       cost: Math.round(hours * hourlyCostHt * 100) / 100,
     };
-  }, [tempsParUnite, hourlyRates]);
+  }, [tempsParUnite, coutHoraireTache, hourlyRates]);
+
+  /** Marge retenue pour cette tache : la sienne, sinon celle par defaut. */
+  const taskMarginRate = useMemo(() => {
+    const value = parseDraftAmount(margeTache);
+    return value !== null && value >= 0 ? value : DEFAULT_QUOTE_MARGIN_RATE;
+  }, [margeTache]);
 
   const compositionTotals = useMemo(() => {
     const engineTotals = TaskCostEngine.calculate({
@@ -1043,6 +1060,16 @@ export default function TaskTemplateDrawer({
     const tempsParUniteValue = tempsParUnite.trim() === "" ? null : Number(tempsParUnite);
     const coutReferenceValue =
       coutReferenceUnitaire.trim() === "" ? null : Number(coutReferenceUnitaire);
+    const coutHoraireValue = coutHoraireTache.trim() === "" ? null : Number(coutHoraireTache.replace(",", "."));
+    const margeValue = margeTache.trim() === "" ? null : Number(margeTache.replace(",", "."));
+    if (coutHoraireValue !== null && (Number.isNaN(coutHoraireValue) || coutHoraireValue < 0)) {
+      setLocalError("Coût horaire de la tâche invalide.");
+      return;
+    }
+    if (margeValue !== null && (Number.isNaN(margeValue) || margeValue < 0)) {
+      setLocalError("Marge de la tâche invalide.");
+      return;
+    }
     if (quantiteDefautValue !== null && Number.isNaN(quantiteDefautValue)) {
       setLocalError(t("taskTemplateDrawer.invalidDefaultQuantity"));
       return;
@@ -1077,6 +1104,9 @@ export default function TaskTemplateDrawer({
       quantite_defaut: quantiteDefautValue,
       temps_prevu_par_unite_h: tempsParUniteValue,
       cout_reference_unitaire_ht: coutReferenceValue,
+      labor_hourly_cost_ht: coutHoraireValue,
+      target_margin_rate: margeValue,
+
       description_technique: descriptionTechnique.trim() || null,
       caracteristiques: caracteristiques
         .split(/\r?\n/)
@@ -1701,8 +1731,9 @@ export default function TaskTemplateDrawer({
                 <div>
                   <div className="text-sm font-semibold text-slate-900">Main d'oeuvre</div>
                   <div className="text-xs text-slate-500">
-                    Temps estimé de la tâche (champ "temps prévu" ci-dessus) valorisé au coût horaire moyen de tes
-                    salariés.
+                    Temps estimé de la tâche (champ "temps prévu" ci-dessus) valorisé à un coût horaire. Laisse le
+                    coût horaire vide pour suivre la moyenne de tes salariés, et la marge vide pour la marge par
+                    défaut du chiffrage.
                   </div>
                 </div>
                 <div className="grid gap-2 md:grid-cols-3">
@@ -1711,17 +1742,49 @@ export default function TaskTemplateDrawer({
                     <div className="mt-1 font-semibold text-slate-900">{laborPlan.hours ? `${laborPlan.hours} h` : "À renseigner"}</div>
                   </div>
                   <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm">
-                    <div className="text-[11px] uppercase tracking-[0.12em] text-slate-500">Coût horaire moyen</div>
-                    <div className="mt-1 font-semibold text-slate-900">
-                      {laborPlan.hourlyCostHt ? `${laborPlan.hourlyCostHt.toFixed(2) + " €"} /h` : "Non paramétré"}
-                    </div>
+                    <div className="text-[11px] uppercase tracking-[0.12em] text-slate-500">Coût horaire</div>
+                    <input
+                      className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-2 py-1 text-sm font-semibold text-slate-900"
+                      inputMode="decimal"
+                      value={coutHoraireTache}
+                      placeholder={hourlyRates?.averageEmployeeHourlyCostHt ? hourlyRates.averageEmployeeHourlyCostHt.toFixed(2) : "Non paramétré"}
+                      onChange={(e) => setCoutHoraireTache(e.target.value)}
+                      disabled={busy}
+                    />
                     <div className="mt-1 text-[11px] text-slate-500">
-                      {hourlyRates ? `${hourlyRates.activeEmployeeCount} salarié(s) CB Rénovation` : "Chargement..."}
+                      {coutHoraireTache.trim()
+                        ? "Taux propre à cette tâche."
+                        : hourlyRates
+                          ? `Moyenne de ${hourlyRates.activeEmployeeCount} salarié(s) CB Rénovation`
+                          : "Chargement..."}
                     </div>
                   </div>
                   <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm">
                     <div className="text-[11px] uppercase tracking-[0.12em] text-slate-500">Coût main d'oeuvre</div>
                     <div className="mt-1 font-semibold text-slate-900">{laborPlan.cost.toFixed(2)} €</div>
+                  </div>
+                  <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm">
+                    <div className="text-[11px] uppercase tracking-[0.12em] text-slate-500">Marge de la tâche</div>
+                    <div className="mt-1 flex items-center gap-2">
+                      <input
+                        className="w-full rounded-lg border border-slate-200 bg-white px-2 py-1 text-sm font-semibold text-slate-900"
+                        inputMode="decimal"
+                        value={margeTache}
+                        placeholder={String(DEFAULT_QUOTE_MARGIN_RATE)}
+                        onChange={(e) => setMargeTache(e.target.value)}
+                        disabled={busy}
+                      />
+                      <span className="shrink-0 text-sm text-slate-500">%</span>
+                    </div>
+                    <div className="mt-1 text-[11px] text-slate-500">
+                      Appliquée au déboursé pour donner le prix de vente au devis.
+                    </div>
+                  </div>
+                  <div className="rounded-xl border border-blue-100 bg-blue-50 px-3 py-2 text-sm md:col-span-3">
+                    <div className="text-[11px] uppercase tracking-[0.12em] text-blue-700">Prix de vente de la main d'oeuvre</div>
+                    <div className="mt-1 font-semibold text-slate-900">
+                      {salePriceFromCost(laborPlan.cost, taskMarginRate).toFixed(2)} € · marge {taskMarginRate} %
+                    </div>
                   </div>
                 </div>
                 {hourlyRates && !hourlyRates.averageEmployeeHourlyCostHt ? (

@@ -23,7 +23,6 @@ import {
   estimatedDaysFromHours,
   marginRateOnSale,
   quoteItemCost,
-  salePriceFromCost,
   type QuoteLineCost,
 } from "./quoteBuilderCosts";
 import type { QuoteBuilderCompositeItem, QuoteBuilderFlatRow, QuoteBuilderItem, QuoteBuilderItemKind, QuoteBuilderNode, QuoteBuilderQuote, QuoteBuilderUnit, QuoteLibraryItem } from "./types";
@@ -246,7 +245,7 @@ export function QuoteBuilderWorkspace({ onClose, costsPanel }: Props) {
   );
 
   const absorbingBaseHt = useMemo(
-    () => absorbingRows.reduce((total, row) => total + salePriceFromCost(lineCosts.get(row.id)?.costHt ?? 0), 0),
+    () => absorbingRows.reduce((total, row) => total + (lineCosts.get(row.id)?.saleHt ?? 0), 0),
     [absorbingRows, lineCosts],
   );
 
@@ -303,7 +302,8 @@ export function QuoteBuilderWorkspace({ onClose, costsPanel }: Props) {
       const cost = lineCosts.get(row.id);
       if (!cost || cost.costHt <= 0) continue;
       const lineQuantity = Number(row.node.quantity ?? 0);
-      const base = salePriceFromCost(lineQuantity > 0 ? cost.costHt / lineQuantity : cost.costHt);
+      // Le prix de vente vient des tâches liées, chacune avec sa marge.
+      const base = lineQuantity > 0 ? cost.saleHt / lineQuantity : cost.saleHt;
       const target = Math.round(base * travelFactor * 100) / 100;
       if (Math.abs(Number(row.node.unitPriceHt ?? 0) - target) < 0.005) continue;
       updateNode(row.id, { unitPriceHt: target } as Partial<QuoteBuilderNode>);
@@ -341,7 +341,7 @@ export function QuoteBuilderWorkspace({ onClose, costsPanel }: Props) {
       const lineQuantity = Number(row.node.quantity ?? 0);
       updateNode(row.id, {
         priceSource: "auto",
-        unitPriceHt: salePriceFromCost(lineQuantity > 0 ? cost.costHt / lineQuantity : cost.costHt),
+        unitPriceHt: lineQuantity > 0 ? Math.round((cost.saleHt / lineQuantity) * 100) / 100 : cost.saleHt,
       } as Partial<QuoteBuilderNode>);
     }
   }
