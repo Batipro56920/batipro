@@ -5,6 +5,7 @@ import { createTask } from "./chantierTasks.service";
 import { list as listTaskTemplates, type TaskTemplateRow } from "./taskLibrary.service";
 import { getCurrentOrganizationId } from "./currentUserProfile.service";
 import { supabase } from "../lib/supabaseClient";
+import { syncAppointmentInBackground } from "./googleCalendar.service";
 
 const crmDb = supabase as any;
 
@@ -1029,8 +1030,14 @@ export async function deleteCrmQuote(id: string) {
     throw new Error("Un chantier a ete cree depuis ce devis. Supprimez le chantier avant de supprimer le devis.");
   }
 
-  const { error } = await crmDb.from("crm_quotes").delete().eq("id", id);
+  // .delete() ne signale pas une suppression qui n a touche aucune ligne : si
+  // la RLS ecarte le devis, l appel reussit et rien ne disparait. On redemande
+  // donc les lignes supprimees pour ne jamais annoncer un succes imaginaire.
+  const { data, error } = await crmDb.from("crm_quotes").delete().eq("id", id).select("id");
   if (error) throw error;
+  if (!(data ?? []).length) {
+    throw new Error("Le devis n a pas ete supprime : il n existe deja plus, ou votre compte n a pas le droit de le supprimer.");
+  }
 }
 
 function roundMoney(value: number): number {
@@ -1586,6 +1593,9 @@ export async function createCrmAppointment(input: Partial<CrmAppointmentRow>) {
   const { data, error } = await crmDb.from("crm_appointments").insert([row]).select(CRM_SELECTS.appointments).single();
   if (error) throw error;
   await qualifyProspectOnCommercialProgress(row.prospect_id);
+  // Une date posée dans Batipro doit sonner sur le téléphone : sans cela il
+  // fallait penser à lancer la synchronisation soi-même, donc y penser deux fois.
+  syncAppointmentInBackground(data as CrmAppointmentRow);
   return data as CrmAppointmentRow;
 }
 
