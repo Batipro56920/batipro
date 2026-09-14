@@ -1,4 +1,7 @@
 import { supabase } from "../lib/supabaseClient";
+// La marge par defaut vit dans la base de chiffrage : la redefinir ici la ferait
+// deriver des le premier changement.
+import { DEFAULT_QUOTE_MARGIN_RATE } from "./taskCostBasis";
 import {
   getCompanySettings,
   normalizeIndirectCosts,
@@ -22,6 +25,8 @@ export type CompanyHourlyRates = {
   overheadAnnualHt: number;
   overheadRatePerHour: number;
   equipmentAssets: CompanyEquipmentAsset[];
+  /** Marge par défaut de l'entreprise, appliquée faute de taux propre à la tâche. */
+  defaultMarginRate: number;
 };
 
 export function chargeMonthlyEquivalent(entry: CompanyChargeEntry): number {
@@ -107,5 +112,6 @@ export async function getCompanyHourlyRates(): Promise<CompanyHourlyRates> {
     overheadAnnualHt: round2(overheadAnnualHt),
     overheadRatePerHour: productiveHoursPerYear > 0 ? round2(overheadAnnualHt / productiveHoursPerYear) : 0,
     equipmentAssets: indirect.equipmentAssets,
+    defaultMarginRate: Number(settings.default_margin_rate ?? DEFAULT_QUOTE_MARGIN_RATE),
   };
 }

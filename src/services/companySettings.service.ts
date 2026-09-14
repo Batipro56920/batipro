@@ -90,6 +90,8 @@ export type CompanySettingsRow = {
   default_payment_terms: string | null;
   default_legal_mentions: string | null;
   default_waste_management: string | null;
+  /** Marge appliquée au déboursé faute de taux propre à la tâche ; null = 30 %. */
+  default_margin_rate: number | null;
   primary_color: string;
   secondary_color: string;
   business_profile: CompanyBusinessProfile;
@@ -131,6 +133,13 @@ function sanitizeFileName(name: string): string {
   const underscored = noApostrophes.replace(/\s+/g, "_");
   const safe = underscored.replace(/[^a-z0-9._-]/g, "");
   return safe || "logo";
+}
+
+/** Un taux de marge exploitable, ou null pour retomber sur la valeur par défaut. */
+function normalizeMarginRate(raw: unknown): number | null {
+  if (raw === null || raw === undefined || raw === "") return null;
+  const value = Number(String(raw).replace(",", "."));
+  return Number.isFinite(value) && value >= 0 ? value : null;
 }
 
 function normalizeHexColor(raw: string | null | undefined, fallback: string): string {
@@ -241,6 +250,7 @@ function withDefaults(orgId: string, row?: Partial<CompanySettingsRow>): Company
     default_payment_terms: row?.default_payment_terms ?? null,
     default_legal_mentions: row?.default_legal_mentions ?? null,
     default_waste_management: row?.default_waste_management ?? null,
+    default_margin_rate: normalizeMarginRate(rowAny?.default_margin_rate),
     primary_color: normalizeHexColor(row?.primary_color, "#2563eb"),
     secondary_color: normalizeHexColor(row?.secondary_color, "#0f172a"),
     business_profile: businessProfile,
@@ -317,6 +327,7 @@ export async function upsertCompanySettings(
       | "default_payment_terms"
       | "default_legal_mentions"
       | "default_waste_management"
+      | "default_margin_rate"
       | "primary_color"
       | "secondary_color"
       | "business_profile"
@@ -366,6 +377,10 @@ export async function upsertCompanySettings(
           ? patch.default_payment_terms.trim()
           : null
         : currentLocal.default_payment_terms,
+    default_margin_rate:
+      patch.default_margin_rate !== undefined
+        ? normalizeMarginRate(patch.default_margin_rate)
+        : currentLocal.default_margin_rate,
     default_legal_mentions:
       patch.default_legal_mentions !== undefined
         ? patch.default_legal_mentions

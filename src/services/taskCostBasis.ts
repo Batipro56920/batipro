@@ -51,10 +51,12 @@ export function taskTemplateUnitCost(
   return { costHt: laborHt + materialsHt + indirectHt, hours, laborHt, materialsHt, indirectHt };
 }
 
-/** Marge retenue pour une tâche : la sienne, sinon celle par défaut. */
-export function taskTemplateMarginRate(template: TaskTemplateRow | null): number {
+/** Marge retenue pour une tâche : la sienne, sinon celle de l'entreprise. */
+export function taskTemplateMarginRate(template: TaskTemplateRow | null, rates?: CompanyHourlyRates | null): number {
   const value = Number(template?.target_margin_rate ?? NaN);
-  return Number.isFinite(value) && value >= 0 ? value : DEFAULT_QUOTE_MARGIN_RATE;
+  if (Number.isFinite(value) && value >= 0) return value;
+  const company = Number(rates?.defaultMarginRate ?? NaN);
+  return Number.isFinite(company) && company >= 0 ? company : DEFAULT_QUOTE_MARGIN_RATE;
 }
 
 /** Prix de vente d'une unité de tâche : son déboursé majoré de sa propre marge. */
@@ -63,7 +65,7 @@ export function taskTemplateUnitSale(
   materials: TaskTemplateMaterialRatioRow[],
   rates: CompanyHourlyRates | null,
 ): number {
-  return salePriceFromCost(taskTemplateUnitCost(template, materials, rates).costHt, taskTemplateMarginRate(template));
+  return salePriceFromCost(taskTemplateUnitCost(template, materials, rates).costHt, taskTemplateMarginRate(template, rates));
 }
 
 /** Prix de vente déduit d'un déboursé sec. */

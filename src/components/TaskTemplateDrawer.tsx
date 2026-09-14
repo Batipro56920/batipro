@@ -736,11 +736,12 @@ export default function TaskTemplateDrawer({
     };
   }, [tempsParUnite, coutHoraireTache, hourlyRates]);
 
-  /** Marge retenue pour cette tache : la sienne, sinon celle par defaut. */
+  /** Marge retenue pour cette tache : la sienne, sinon celle de l'entreprise. */
+  const companyMarginRate = Number(hourlyRates?.defaultMarginRate ?? DEFAULT_QUOTE_MARGIN_RATE);
   const taskMarginRate = useMemo(() => {
     const value = parseDraftAmount(margeTache);
-    return value !== null && value >= 0 ? value : DEFAULT_QUOTE_MARGIN_RATE;
-  }, [margeTache]);
+    return value !== null && value >= 0 ? value : companyMarginRate;
+  }, [margeTache, companyMarginRate]);
 
   const compositionTotals = useMemo(() => {
     const engineTotals = TaskCostEngine.calculate({
@@ -1770,14 +1771,14 @@ export default function TaskTemplateDrawer({
                         className="w-full rounded-lg border border-slate-200 bg-white px-2 py-1 text-sm font-semibold text-slate-900"
                         inputMode="decimal"
                         value={margeTache}
-                        placeholder={String(DEFAULT_QUOTE_MARGIN_RATE)}
+                        placeholder={String(companyMarginRate)}
                         onChange={(e) => setMargeTache(e.target.value)}
                         disabled={busy}
                       />
                       <span className="shrink-0 text-sm text-slate-500">%</span>
                     </div>
                     <div className="mt-1 text-[11px] text-slate-500">
-                      Appliquée au déboursé pour donner le prix de vente au devis.
+                      Appliquée au déboursé pour donner le prix de vente au devis. Vide = marge de l'entreprise.
                     </div>
                   </div>
                   <div className="rounded-xl border border-blue-100 bg-blue-50 px-3 py-2 text-sm md:col-span-3">

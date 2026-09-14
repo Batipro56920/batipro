@@ -46,6 +46,7 @@ type CompanyFormState = {
   default_payment_terms: string;
   default_legal_mentions: string;
   default_waste_management: string;
+  default_margin_rate: string;
   primary_color: string;
   secondary_color: string;
 };
@@ -68,6 +69,7 @@ function toCompanyForm(settings: CompanySettingsRow): CompanyFormState {
     default_payment_terms: settings.default_payment_terms ?? "",
     default_legal_mentions: settings.default_legal_mentions ?? "",
     default_waste_management: settings.default_waste_management ?? "",
+    default_margin_rate: settings.default_margin_rate === null || settings.default_margin_rate === undefined ? "" : String(settings.default_margin_rate),
     primary_color: settings.primary_color ?? "#2563eb",
     secondary_color: settings.secondary_color ?? "#0f172a",
   };
@@ -112,6 +114,7 @@ export default function MonEntreprisePage() {
     default_payment_terms: "",
     default_legal_mentions: "",
     default_waste_management: "",
+    default_margin_rate: "",
     primary_color: "#2563eb",
     secondary_color: "#0f172a",
   });
@@ -221,7 +224,13 @@ export default function MonEntreprisePage() {
       if (logoFile) {
         nextLogoPath = await uploadCompanyLogo(logoFile, companySettings?.logo_path ?? null);
       }
-      const saved = await upsertCompanySettings({ ...companyForm, logo_path: nextLogoPath });
+      const marginRate = companyForm.default_margin_rate.trim();
+      const saved = await upsertCompanySettings({
+        ...companyForm,
+        // Vide = on retombe sur la marge par défaut du chiffrage.
+        default_margin_rate: marginRate === "" ? null : Number(marginRate.replace(",", ".")),
+        logo_path: nextLogoPath,
+      });
       setCompanySettings(saved);
       setCompanyForm(toCompanyForm(saved));
       setLogoFile(null);
@@ -404,6 +413,29 @@ export default function MonEntreprisePage() {
               <div className="text-sm font-medium">{t("monEntreprise.logoTitle")}</div>
               <input type="file" accept="image/*" onChange={(e) => setLogoFile(e.target.files?.[0] ?? null)} className="block w-full text-sm" />
               <div className="text-xs text-slate-500">{t("monEntreprise.logoHint")}</div>
+            </div>
+
+            <div className="rounded-xl border p-3 space-y-3">
+              <div>
+                <div className="text-sm font-medium">Chiffrage</div>
+                <div className="text-xs text-slate-500">
+                  Marge appliquée au déboursé sec pour obtenir un prix de vente. Elle sert partout où aucune marge
+                  n&apos;est fixée sur la tâche elle-même : relevé terrain, devis, bibliothèque.
+                </div>
+              </div>
+              <label className="space-y-1 text-sm block max-w-48">
+                <div className="text-xs text-slate-600">Marge par defaut</div>
+                <div className="flex items-center gap-2">
+                  <input
+                    className="w-full rounded-xl border px-3 py-2 text-sm"
+                    inputMode="decimal"
+                    placeholder="30"
+                    value={companyForm.default_margin_rate}
+                    onChange={(e) => setCompanyForm((prev) => ({ ...prev, default_margin_rate: e.target.value }))}
+                  />
+                  <span className="shrink-0 text-sm text-slate-500">%</span>
+                </div>
+              </label>
             </div>
 
             <div className="rounded-xl border p-3 space-y-3">
