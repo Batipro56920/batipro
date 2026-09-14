@@ -1,4 +1,5 @@
 import { supabase } from "../lib/supabaseClient";
+import { edgeFunctionErrorMessage } from "../lib/edgeFunctionError";
 
 export type GoogleCalendarConnectionStatus = {
   connected: boolean;
@@ -30,7 +31,12 @@ export type GoogleCalendarSyncResult = {
 
 async function invokeCalendarFunction<T>(name: string, body?: Record<string, unknown>): Promise<T> {
   const { data, error } = await supabase.functions.invoke(name, { body: body ?? {} });
-  if (error) throw new Error(error.message);
+  // supabase-js jette "Edge Function returned a non-2xx status code" et range la
+  // vraie reponse dans error.context : sans la lire, l'ecran affiche un code HTTP
+  // habille en francais et personne ne sait ce qui a echoue.
+  if (error) throw new Error(await edgeFunctionErrorMessage(error, "Agenda Google indisponible."));
+  const failure = String((data as { error?: unknown } | null)?.error ?? "").trim();
+  if (failure) throw new Error(failure);
   return data as T;
 }
 

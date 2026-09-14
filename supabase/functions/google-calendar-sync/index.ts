@@ -87,6 +87,24 @@ async function googleRequest(connection: any, path: string, method: "GET" | "POS
   return payload;
 }
 
+/**
+ * Agenda ou ecrire les evenements.
+ *
+ * L'autorisation demandee a Google ne couvre que les evenements
+ * (calendar.events) : lister ou creer un agenda est refuse, et toute la
+ * synchronisation echouait des la premiere ligne avec un code non-2xx. On
+ * tente donc l'agenda dedie, et a defaut on ecrit dans l'agenda principal,
+ * celui que le telephone affiche deja.
+ */
+async function resolveTargetCalendar(connection: any, scope: CalendarScope): Promise<string> {
+  try {
+    return await ensureBusinessCalendar(connection, scope);
+  } catch (error) {
+    console.warn("Agenda dedie indisponible, repli sur l agenda principal", error);
+    return String(connection?.calendar_id ?? "").trim() || "primary";
+  }
+}
+
 async function ensureBusinessCalendar(connection: any, scope: CalendarScope): Promise<string> {
   const target = CALENDAR_TARGETS[scope];
   const list = await googleRequest(connection, "users/me/calendarList", "GET");
@@ -184,7 +202,7 @@ Deno.serve(async (req) => {
         const googleEvent = buildGoogleEvent(event);
         let calendarId = targetCalendars.get(event.calendarScope);
         if (!calendarId) {
-          calendarId = await ensureBusinessCalendar(connection, event.calendarScope);
+          calendarId = await resolveTargetCalendar(connection, event.calendarScope);
           targetCalendars.set(event.calendarScope, calendarId);
         }
 
