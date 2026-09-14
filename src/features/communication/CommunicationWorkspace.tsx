@@ -7,6 +7,7 @@ import { addComment, addItem, campaignStatusLabel, listChantiers, loadWorkspace,
 import { channelLabel } from "./networks";
 import { AssetTile } from "./CommunicationAssetTile";
 import { CommunicationContentEditor } from "./CommunicationContentEditor";
+import { CreativeStudioLinks } from "./CreativeStudioLinks";
 import type { Campaign, CampaignItem, ChantierOption, PublicationVariant, Workspace } from "./types";
 
 const inputClass = "w-full rounded-xl border border-subtle bg-surface px-3 py-2.5 text-sm text-ink outline-none focus:border-primary";
@@ -182,6 +183,10 @@ export function CommunicationWorkspace({ id }: { id: string }) {
             <Button variant="secondary" disabled={busy} onClick={() => void create("texte")}><FileText className="h-4 w-4" />Nouveau texte</Button>
             <Button variant="secondary" disabled={busy} onClick={() => void create("visuel")}><Image className="h-4 w-4" />Nouveau visuel</Button>
           </div>
+        </div>
+
+        <div className="mt-4">
+          <CreativeStudioLinks hint="Exporte ton visuel, puis ouvre un contenu ci-dessous pour l’y joindre." />
         </div>
 
         <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
