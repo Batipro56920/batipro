@@ -358,17 +358,76 @@ export function QuoteBuilderWorkspace({ onClose, costsPanel }: Props) {
     return filteredByTab.filter((item) => [item.title, item.family, item.kind].some((part) => part.toLowerCase().includes(value)));
   }, [libraryTab, query]);
 
+  /**
+   * Tout ce dont les cellules ont besoin, derriere une reference stable.
+   *
+   * Les definitions de colonnes dependaient du devis : elles etaient donc
+   * recreees a chaque frappe, avec des fonctions de cellule d'identite nouvelle.
+   * React voit alors un autre composant, demonte la cellule et la remonte : le
+   * champ en cours de saisie est detruit et le curseur part. Les colonnes ne
+   * changent plus jamais ; les cellules lisent les donnees fraiches ici.
+   */
+  const cellData = useRef({
+    quote,
+    rows,
+    taskTemplates,
+    lineCosts,
+    updateNode,
+    removeNode,
+    setActiveParent,
+    linkTaskTemplate,
+    openComposite: setCompositeNodeId,
+    openTaskDrawer: setTaskDrawerRowId,
+  });
+  cellData.current = {
+    quote,
+    rows,
+    taskTemplates,
+    lineCosts,
+    updateNode,
+    removeNode,
+    setActiveParent,
+    linkTaskTemplate,
+    openComposite: setCompositeNodeId,
+    openTaskDrawer: setTaskDrawerRowId,
+  };
+
   const columns = useMemo<ColumnDef<QuoteBuilderFlatRow>[]>(() => [
     { id: "drag", header: "", cell: () => <RowDragHandle /> },
     { accessorKey: "number", header: "N°", cell: ({ row }) => <span className="font-mono text-xs text-slate-500">{row.original.number}</span> },
-    { id: "title", header: "Désignation", cell: ({ row }) => <TitleCell row={row.original} onSelectParent={setActiveParent} onChange={(patch) => updateNode(row.original.id, patch)} onConfigureComposite={() => setCompositeNodeId(row.original.id)} taskTemplates={taskTemplates} onLinkTask={(templateId) => linkTaskTemplate(row.original.id, taskTemplates.find((item) => item.id === templateId) ?? null, row.original.node.type === "item" ? row.original.node.title : "")} onCreateTask={() => setTaskDrawerRowId(row.original.id)} cost={lineCosts.get(row.original.id) ?? null} saleHt={row.original.totalHt} /> },
-    { id: "quantity", header: "Qté", cell: ({ row }) => row.original.node.type === "item" && quote?.settings.showQuantityColumns ? <NumberInput value={row.original.node.quantity} onChange={(quantity) => updateNode(row.original.id, { quantity } as Partial<QuoteBuilderNode>)} /> : null },
-    { id: "unit", header: "Unité", cell: ({ row }) => row.original.node.type === "item" && quote?.settings.showQuantityColumns ? <UnitSelect value={row.original.node.unit} onChange={(unit) => updateNode(row.original.id, { unit } as Partial<QuoteBuilderNode>)} /> : null },
-    { id: "unitPriceHt", header: "PU HT", cell: ({ row }) => row.original.node.type === "item" ? <NumberInput value={row.original.node.unitPriceHt} onChange={(unitPriceHt) => updateNode(row.original.id, { unitPriceHt, priceSource: "manual" } as Partial<QuoteBuilderNode>)} /> : null },
-    { id: "vat", header: "TVA", cell: ({ row }) => row.original.node.type === "item" && quote?.settings.showVatColumn ? <VatSelect value={row.original.node.vatRate} onChange={(vatRate) => updateNode(row.original.id, { vatRate } as Partial<QuoteBuilderNode>)} /> : null },
-    { id: "total", header: "Total HT", cell: ({ row }) => <span className="font-semibold text-slate-900">{row.original.node.type === "item" ? formatCurrency(row.original.totalHt) : sectionTotalLabel(row.original, rows, quote)}</span> },
-    { id: "actions", header: "", cell: ({ row }) => <button type="button" onClick={() => removeNode(row.original.id)} className="rounded-lg p-1.5 text-slate-400 opacity-0 transition group-hover:opacity-100 hover:bg-red-50 hover:text-red-600"><Trash2 className="h-4 w-4" /></button> },
-  ], [lineCosts, quote, removeNode, rows, setActiveParent, updateNode]);
+    {
+      id: "title",
+      header: "Désignation",
+      cell: ({ row }) => {
+        const ctx = cellData.current;
+        return (
+          <TitleCell
+            row={row.original}
+            onSelectParent={ctx.setActiveParent}
+            onChange={(patch) => ctx.updateNode(row.original.id, patch)}
+            onConfigureComposite={() => ctx.openComposite(row.original.id)}
+            taskTemplates={ctx.taskTemplates}
+            onLinkTask={(templateId) =>
+              ctx.linkTaskTemplate(
+                row.original.id,
+                ctx.taskTemplates.find((item) => item.id === templateId) ?? null,
+                row.original.node.type === "item" ? row.original.node.title : "",
+              )
+            }
+            onCreateTask={() => ctx.openTaskDrawer(row.original.id)}
+            cost={ctx.lineCosts.get(row.original.id) ?? null}
+            saleHt={row.original.totalHt}
+          />
+        );
+      },
+    },
+    { id: "quantity", header: "Qté", cell: ({ row }) => row.original.node.type === "item" && cellData.current.quote?.settings.showQuantityColumns ? <NumberInput value={row.original.node.quantity} onChange={(quantity) => cellData.current.updateNode(row.original.id, { quantity } as Partial<QuoteBuilderNode>)} /> : null },
+    { id: "unit", header: "Unité", cell: ({ row }) => row.original.node.type === "item" && cellData.current.quote?.settings.showQuantityColumns ? <UnitSelect value={row.original.node.unit} onChange={(unit) => cellData.current.updateNode(row.original.id, { unit } as Partial<QuoteBuilderNode>)} /> : null },
+    { id: "unitPriceHt", header: "PU HT", cell: ({ row }) => row.original.node.type === "item" ? <NumberInput value={row.original.node.unitPriceHt} onChange={(unitPriceHt) => cellData.current.updateNode(row.original.id, { unitPriceHt, priceSource: "manual" } as Partial<QuoteBuilderNode>)} /> : null },
+    { id: "vat", header: "TVA", cell: ({ row }) => row.original.node.type === "item" && cellData.current.quote?.settings.showVatColumn ? <VatSelect value={row.original.node.vatRate} onChange={(vatRate) => cellData.current.updateNode(row.original.id, { vatRate } as Partial<QuoteBuilderNode>)} /> : null },
+    { id: "total", header: "Total HT", cell: ({ row }) => <span className="font-semibold text-slate-900">{row.original.node.type === "item" ? formatCurrency(row.original.totalHt) : sectionTotalLabel(row.original, cellData.current.rows, cellData.current.quote)}</span> },
+    { id: "actions", header: "", cell: ({ row }) => <button type="button" onClick={() => cellData.current.removeNode(row.original.id)} className="rounded-lg p-1.5 text-slate-400 opacity-0 transition group-hover:opacity-100 hover:bg-red-50 hover:text-red-600"><Trash2 className="h-4 w-4" /></button> },
+  ], []);
 
   const table = useReactTable({ data: rows, columns, getCoreRowModel: getCoreRowModel(), getRowId: (row) => row.id });
 
