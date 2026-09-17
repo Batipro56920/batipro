@@ -6784,6 +6784,7 @@ export default function ChantierPage() {
                               setNewCorpsEtat(value);
                             }}
                           >
+                            <option value="">Choisir un lot...</option>
                             {lotOptions.map((lot) => (
                               <option key={lot} value={lot}>
                                 {lot}
@@ -7239,6 +7240,7 @@ export default function ChantierPage() {
                                       setEditCorpsEtat(value);
                                     }}
                                   >
+                                    <option value="">Choisir un lot...</option>
                                     {lotOptions.map((lot) => (
                                       <option key={lot} value={lot}>
                                         {lot}
