@@ -81,9 +81,15 @@ export default function ChantierChapterDrawer({
         .batipro-chapter-preview--documents .overflow-x-auto { max-height: 280px; overflow: hidden; }
         .batipro-chapter-preview--purchases > div > :not(:last-child) { display: none; }
         .batipro-chapter-preview--materials > div > div:first-child { display: flex; }
-        .batipro-chapter-preview--tasks-quotes > div > :first-child > :not(:last-child) { display: none; }
-        .batipro-chapter-preview--tasks-quotes > div > :last-child > :not(:last-child) { display: none; }
-        .batipro-chapter-preview--tasks-quotes > div { gap: 1rem; }
+        /*
+          L ancien apercu masquait, dans chaque bloc, tout sauf le dernier
+          enfant : les en-tetes disparaissaient — donc le compteur de taches —
+          et les bandeaux d information restaient sous forme de barres de
+          couleur vides. On voyait trois bandes colorees et plus aucun titre,
+          ce qui donnait l impression que les taches avaient disparu. L apercu
+          montre maintenant le contenu tel quel, simplement tronque en hauteur.
+        */
+        .batipro-chapter-preview--tasks-quotes { max-height: 420px; overflow: hidden; }
         .batipro-chapter-preview--financial > div > :not(:first-child),
         .batipro-chapter-preview--unforeseen > div > :not(:first-child),
         .batipro-chapter-preview--notes > div > :not(:last-child) { display: none; }
