@@ -5856,7 +5856,16 @@ export default function ChantierPage() {
         </div>
       </section>
 
-      <div className="rounded-surface border border-subtle bg-surface p-4 shadow-sm">
+      {/*
+        Le bouton "+ Ajouter tache" flotte au-dessus du contenu : sans marge
+        basse, il se posait sur les boutons de la derniere carte visible.
+      */}
+      <div
+        className={[
+          "rounded-surface border border-subtle bg-surface p-4 shadow-sm",
+          detailSection === "execution" ? "pb-24" : "",
+        ].filter(Boolean).join(" ")}
+      >
         {detailSection === "execution" ? (
           <button
             type="button"

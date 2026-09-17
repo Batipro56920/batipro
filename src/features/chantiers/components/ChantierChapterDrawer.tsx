@@ -82,14 +82,13 @@ export default function ChantierChapterDrawer({
         .batipro-chapter-preview--purchases > div > :not(:last-child) { display: none; }
         .batipro-chapter-preview--materials > div > div:first-child { display: flex; }
         /*
-          L ancien apercu masquait, dans chaque bloc, tout sauf le dernier
-          enfant : les en-tetes disparaissaient — donc le compteur de taches —
-          et les bandeaux d information restaient sous forme de barres de
-          couleur vides. On voyait trois bandes colorees et plus aucun titre,
-          ce qui donnait l impression que les taches avaient disparu. L apercu
-          montre maintenant le contenu tel quel, simplement tronque en hauteur.
+          Ce chapitre n est ni masque ni tronque.
+          Masquer, dans chaque bloc, tout sauf le dernier enfant faisait
+          disparaitre les en-tetes — donc le compteur de taches — et laissait
+          les bandeaux d aide sous forme de barres de couleur vides. Tronquer a
+          une hauteur fixe ne montrait qu une tache sur cinq, en coupant ses
+          boutons au milieu. Une liste de taches se lit en entier.
         */
-        .batipro-chapter-preview--tasks-quotes { max-height: 420px; overflow: hidden; }
         .batipro-chapter-preview--financial > div > :not(:first-child),
         .batipro-chapter-preview--unforeseen > div > :not(:first-child),
         .batipro-chapter-preview--notes > div > :not(:last-child) { display: none; }

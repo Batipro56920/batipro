@@ -28,7 +28,6 @@ export default function ChantierTasksQuotesSection({ children }: { children: Rea
       title="Taches et devis"
       subtitle="Taches chantier et devis rattaches. L'import, la creation et les edits detaillees se font dans le panneau lateral."
       actionLabel="Gerer taches et devis"
-      previewClassName="batipro-chapter-preview--tasks-quotes"
       drawerMaxWidthClassName="max-w-6xl"
       autoOpenKey={targetedTaskId ? `task:${targetedTaskId}` : ""}
       autoOpenLabel="Tache ciblee depuis la recherche globale"
