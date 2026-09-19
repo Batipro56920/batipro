@@ -107,7 +107,15 @@ export async function updateItemStatus(id: string, status: ItemStatus) {
   const { error } = await db.from("communication_campaign_items").update(patch).eq("organization_id", organizationId).eq("id", id);
   fail(error);
 }
-export async function deleteItem(id: string) { const { organizationId } = await identity(); const { error } = await db.from("communication_campaign_items").delete().eq("organization_id", organizationId).eq("id", id); fail(error); }
+export async function deleteItem(id: string) {
+  const { organizationId } = await identity();
+  // Les lignes de médias partent avec le contenu, pas les fichiers : sans ce
+  // ménage, chaque photo d'un contenu supprimé restait dans le stockage.
+  const { data: media, error: mediaError } = await db.from("communication_campaign_assets").select("storage_path").eq("organization_id", organizationId).eq("item_id", id); fail(mediaError);
+  const { error } = await db.from("communication_campaign_items").delete().eq("organization_id", organizationId).eq("id", id); fail(error);
+  const paths = (media ?? []).map((row: any) => String(row.storage_path ?? "")).filter(Boolean);
+  if (paths.length) await supabase.storage.from("communication-assets").remove(paths);
+}
 export async function addComment(campaignId: string, body: string) { const who = await identity(); const { error } = await db.from("communication_campaign_comments").insert({ organization_id: who.organizationId, campaign_id: campaignId, body, author_name: who.name }); fail(error); }
 export async function uploadAssets(campaignId: string, itemId: string, files: File[]) {
   const who = await identity();
