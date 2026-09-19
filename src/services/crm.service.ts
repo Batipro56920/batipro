@@ -1040,6 +1040,31 @@ export async function deleteCrmQuote(id: string) {
   }
 }
 
+function isoDateOrNull(value: unknown): string | null {
+  return typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value) ? value : null;
+}
+
+/**
+ * Dernier jour ouvre d'un chantier qui commence a `start` et dure `value`
+ * `unit`. Meme convention que le calcul du deplacement : une semaine vaut cinq
+ * jours ouvres, un mois vingt-deux. Le jour de debut compte comme le premier.
+ */
+function plannedEndFromDuration(start: string, value: unknown, unit: unknown): string | null {
+  const amount = Number(value);
+  if (!Number.isFinite(amount) || amount <= 0) return null;
+  const perUnit = unit === "jours" ? 1 : unit === "mois" ? 22 : 5;
+  // Midi : toISOString travaille en UTC, minuit local deborderait sur la veille.
+  const date = new Date(`${start}T12:00:00`);
+  if (Number.isNaN(date.getTime())) return null;
+  let remaining = Math.max(1, Math.ceil(amount * perUnit)) - 1;
+  while (remaining > 0) {
+    date.setDate(date.getDate() + 1);
+    const day = date.getDay();
+    if (day !== 0 && day !== 6) remaining -= 1;
+  }
+  return date.toISOString().slice(0, 10);
+}
+
 function roundMoney(value: number): number {
   return Math.round((Number.isFinite(value) ? value : 0) * 100) / 100;
 }
@@ -1699,13 +1724,23 @@ export async function transformAcceptedQuoteToChantier(input: {
     [account?.prenom, account?.nom].filter(Boolean).join(" ") ||
     account?.societe ||
     quote.quote_number;
+  // Le devis porte deja la date de debut, la duree et l'adresse du chantier
+  // (display_options). Elles etaient ignorees : le chantier partait sans date
+  // de debut, avec pour fin la date de VALIDITE du devis — qui n'a rien a voir
+  // avec les travaux — et avec l'adresse de la fiche client plutot que celle
+  // du chantier.
+  const display = (quote.display_options ?? {}) as Record<string, unknown>;
+  const workStart = isoDateOrNull(display.work_start_date);
+  const siteAddress = typeof display.site_address === "string" ? display.site_address.trim() : "";
   const chantier = await createChantier({
     nom: opportunity?.nom_affaire ?? quote.description ?? `Chantier ${clientName}`,
     client: clientName,
-    adresse: account?.adresse ?? null,
+    adresse: siteAddress || account?.adresse || null,
     status: "PREPARATION",
-    date_debut: null,
-    date_fin_prevue: quote.valid_until,
+    date_debut: workStart,
+    date_fin_prevue: workStart
+      ? plannedEndFromDuration(workStart, display.estimated_duration_value, display.estimated_duration_unit)
+      : null,
     heures_prevues: null,
   });
   const engine = await loadCrmQuoteEngineData(quote.id).catch(() => ({
@@ -1727,8 +1762,16 @@ export async function transformAcceptedQuoteToChantier(input: {
   const subcontractingBudget = roundMoney(
     engine.items.reduce((sum, row) => sum + Number(row.cost_subcontracting_ht ?? 0) * Number(row.quantite ?? 1), 0),
   );
+  // heures_prevues est NOT NULL en base, et le builder n'enregistre pas le temps
+  // des lignes : la somme valait 0, devenait null, et Postgres refusait la mise
+  // a jour ENTIERE. Rien de ce qui suit n'etait donc jamais ecrit — ni le lien
+  // vers la cliente, le projet et le devis, ni le montant signe, ni les
+  // budgets. Un chantier cree depuis un devis restait orphelin, et la
+  // Rentabilite ne voyait aucun montant vendu. Faute de temps connu, on laisse
+  // la colonne a sa valeur par defaut au lieu d'y ecrire null.
+  const plannedHours = engine.items.reduce((sum, row) => sum + Number(row.labor_hours ?? 0) * Number(row.quantite ?? 1), 0);
   await updateChantier(chantier.id, {
-    heures_prevues: engine.items.reduce((sum, row) => sum + Number(row.labor_hours ?? 0) * Number(row.quantite ?? 1), 0) || null,
+    ...(plannedHours > 0 ? { heures_prevues: plannedHours } : {}),
     crm_client_id: client?.id ?? quote.client_id ?? null,
     crm_prospect_id: prospect?.id ?? quote.prospect_id ?? null,
     crm_opportunity_id: opportunity?.id ?? quote.opportunity_id ?? null,
@@ -1742,7 +1785,12 @@ export async function transformAcceptedQuoteToChantier(input: {
     budget_labor_planned_ht: laborBudget || Math.round(Number(quote.montant_ht ?? 0) * 0.35 * 100) / 100,
     budget_materials_planned_ht: materialsBudget || Math.round(Number(quote.montant_ht ?? 0) * 0.35 * 100) / 100,
     budget_subcontracting_planned_ht: subcontractingBudget || Math.round(Number(quote.montant_ht ?? 0) * 0.15 * 100) / 100,
-  } as any).catch(() => undefined);
+  } as any).catch((error) => {
+    // Le chantier existe deja : on ne l'interrompt pas pour autant, sans quoi le
+    // devis ne serait pas relie et un second clic en creerait un doublon. Mais
+    // une erreur avalee en silence, c'est ce qui a laisse passer ce defaut.
+    console.error("[CRM] rattachement du chantier au devis impossible", { chantierId: chantier.id, quoteId: quote.id, error });
+  });
   if (engine.items.length) {
     // Les tâches supplémentaires d'une ligne n'ont que leur identifiant : on
     // récupère leurs intitulés pour que le chantier reste lisible.
