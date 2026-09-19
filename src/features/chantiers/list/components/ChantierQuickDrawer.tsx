@@ -107,13 +107,19 @@ function CommercialContext({ row }: { row: ChantierDerived }) {
 
   return (
     <div className={`rounded-card p-4 ${TONE_SOFT.info}`}>
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+      {/*
+        Infos et boutons empiles, toujours. Cote a cote des que l ECRAN depassait
+        640 px, alors que ce bloc vit dans un panneau etroit : les quatre boutons,
+        qui ne retrecissent pas, ecrasaient la colonne d infos a presque rien, et
+        les textes des deux colonnes se superposaient.
+      */}
+      <div className="flex flex-col gap-3">
         <div className="min-w-0">
           <h3 className="bt-card-title text-ink">Dossier commercial</h3>
-          <div className="mt-2 grid gap-2 text-sm sm:grid-cols-2">
+          <div className="mt-2 grid gap-2 text-sm sm:grid-cols-2 [&>div]:min-w-0">
             <div>
               <span className="bt-caption text-muted">Rattachement</span>
-              <div className="bt-card-title text-ink">{getCommercialSourceLabel(row)}</div>
+              <div className="bt-card-title break-words text-ink">{getCommercialSourceLabel(row)}</div>
             </div>
             <div>
               <span className="bt-caption text-muted">Devis signé</span>
@@ -121,15 +127,15 @@ function CommercialContext({ row }: { row: ChantierDerived }) {
             </div>
             <div>
               <span className="bt-caption text-muted">Contact client</span>
-              <div className="bt-card-title text-ink">{getClientContactLabel(row)}</div>
+              <div className="bt-card-title break-words text-ink">{getClientContactLabel(row)}</div>
             </div>
             <div>
               <span className="bt-caption text-muted">Suite métier</span>
-              <div className="bt-card-title text-ink">{getCommercialNextStepLabel({ quoteHref, billingHref })}</div>
+              <div className="bt-card-title break-words text-ink">{getCommercialNextStepLabel({ quoteHref, billingHref })}</div>
             </div>
           </div>
         </div>
-        <div className="flex shrink-0 flex-wrap gap-2">
+        <div className="flex flex-wrap gap-2">
           {projectHref ? (
             <Link to={projectHref} className="bt-tap inline-flex items-center rounded-field border border-strong bg-surface px-3 text-sm font-medium text-ink-secondary transition-colors duration-[120ms] hover:bg-interactive hover:text-ink">
               Projet commercial
