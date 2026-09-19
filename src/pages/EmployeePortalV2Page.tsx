@@ -1,9 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
-import { AlertTriangle, Boxes, CalendarDays, Camera, CheckCircle2, Circle, CircleHelp, FileText, ListOrdered, LogOut, MapPin, MessageCircle, Moon, PackageSearch, Paperclip, Plus, RefreshCw, Send, ShieldAlert, Sunrise, Wrench } from "lucide-react";
+import { AlertTriangle, Boxes, Briefcase, CalendarDays, Camera, CheckCircle2, Circle, CircleHelp, FileText, ListOrdered, LogOut, MapPin, MessageCircle, Moon, PackageSearch, Paperclip, Plus, RefreshCw, Send, ShieldAlert, Sunrise, Wrench } from "lucide-react";
 import { useLocation, useNavigate } from "react-router-dom";
 
 import { supabase } from "../lib/supabaseClient";
 import RaulPortalWidget from "../components/RaulPortalWidget";
+import SubcontractorProPanel from "../components/portal/SubcontractorProPanel";
+import { subcontractorPortalIsSubcontractor } from "../services/subcontractorPortal.service";
 import { photoToJpeg } from "../lib/photoToJpeg";
 import {
   intervenantChantierFeedCreate,
@@ -77,7 +79,7 @@ async function resolveEffectivePortalToken(search: string): Promise<string> {
   return stored || AUTH_SESSION_PORTAL_TOKEN;
 }
 
-type Tab = "chantier" | "matin" | "soir" | "fil";
+type Tab = "chantier" | "matin" | "soir" | "fil" | "pro";
 
 type SiteData = {
   tasks: IntervenantTask[];
@@ -201,6 +203,9 @@ export default function EmployeePortalV2Page() {
   const [resolvedToken, setResolvedToken] = useState<string | null>(null);
   const token = resolvedToken ?? AUTH_SESSION_PORTAL_TOKEN;
   const [tab, setTab] = useState<Tab>("chantier");
+  // Un sous-traitant a en plus son espace Pro : documents obligatoires, devis,
+  // factures et reserves. Un ouvrier ne le voit jamais.
+  const [isSubcontractor, setIsSubcontractor] = useState(false);
   const [name, setName] = useState("Intervenant");
   const [intervenantId, setIntervenantId] = useState("");
   const [chantiers, setChantiers] = useState<IntervenantChantier[]>([]);
@@ -284,6 +289,15 @@ export default function EmployeePortalV2Page() {
     });
     return () => { alive = false; };
   }, [location.search]);
+
+  useEffect(() => {
+    if (resolvedToken === null) return;
+    let alive = true;
+    void subcontractorPortalIsSubcontractor(resolvedToken ?? AUTH_SESSION_PORTAL_TOKEN).then((value) => {
+      if (alive) setIsSubcontractor(value);
+    });
+    return () => { alive = false; };
+  }, [resolvedToken]);
 
   useEffect(() => {
     if (resolvedToken === null) return;
@@ -921,6 +935,8 @@ export default function EmployeePortalV2Page() {
             <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-800">Tu as une tâche planifiée aujourd'hui sur un autre chantier.</div>
           ) : null}
         </> : null}
+
+        {tab === "pro" && isSubcontractor ? <SubcontractorProPanel token={token} /> : null}
 
         {tab === "chantier" && selected ? <>
           <Card>
@@ -1616,11 +1632,12 @@ export default function EmployeePortalV2Page() {
         </> : null}
       </main>
 
-      <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-slate-200 bg-white/95 px-2 pb-[max(8px,env(safe-area-inset-bottom))] pt-2 backdrop-blur"><div className="mx-auto grid max-w-3xl grid-cols-5 gap-1">{([
+      <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-slate-200 bg-white/95 px-2 pb-[max(8px,env(safe-area-inset-bottom))] pt-2 backdrop-blur"><div className={`mx-auto grid max-w-3xl gap-1 ${isSubcontractor ? "grid-cols-6" : "grid-cols-5"}`}>{([
         ["chantier", "Chantier", Wrench],
         ["matin", "Matin", Sunrise],
         ["soir", "Soir", Moon],
         ["fil", "Fil", MessageCircle],
+        ...(isSubcontractor ? ([["pro", "Pro", Briefcase]] as const) : []),
       ] as const).map(([key, label, Icon]) => <button key={key} type="button" onClick={() => setTab(key)} className={`flex min-h-14 flex-col items-center justify-center gap-1 rounded-xl px-1 text-[11px] font-semibold ${tab === key ? "bg-blue-50 text-blue-700" : "text-slate-500"}`}><Icon className="h-5 w-5" /><span>{label}</span></button>)}<div id="raul-widget-dock-portal" className="grid" /></div></nav>
 
       <RaulPortalWidget token={token} chantierId={selected?.id ?? null} />

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import type { FormEvent } from "react";
 import { Link, useParams } from "react-router-dom";
+import SubcontractorCompliancePanel from "../components/intervenants/SubcontractorCompliancePanel";
 import { getChantiers, type ChantierRow } from "../services/chantiers.service";
 import {
   archiveIntervenant,
@@ -621,6 +622,7 @@ export default function IntervenantDetailPage() {
           </section>
         </aside>
       </div>
+      {row.status === "subcontractor" ? <SubcontractorCompliancePanel intervenantId={row.id} /> : null}
     </div>
   );
 }

@@ -37,6 +37,17 @@ function getEmail(row: HTMLTableRowElement) {
   return (cells[6].querySelector("div")?.textContent ?? "").trim();
 }
 
+/**
+ * La fonction renvoie des codes : les afficher tels quels ("intervenant_email_required")
+ * ne dit pas quoi faire. L'e-mail sert d'identifiant de connexion au portail,
+ * sans lui aucun compte ne peut etre cree.
+ */
+const CREDENTIAL_ERRORS: Record<string, string> = {
+  intervenant_email_required: "Ajoute une adresse e-mail sur la fiche de ce profil : c'est elle qui sert d'identifiant pour se connecter au portail.",
+  intervenant_account_already_exists: "Un compte existe déjà avec cette adresse e-mail. Utilise « Réessayer » pour générer un nouveau mot de passe, ou change l'adresse sur la fiche.",
+  intervenant_not_found: "Profil introuvable : recharge la page.",
+};
+
 async function generateCredentials(intervenantId: string) {
   const { data, error } = await supabase.functions.invoke("generate-intervenant-link", {
     body: { intervenantId },
@@ -47,7 +58,10 @@ async function generateCredentials(intervenantId: string) {
       const context = (error as any)?.context;
       if (context && typeof context.json === "function") {
         const payload = await context.json();
-        if (payload?.error) message = String(payload.error);
+        if (payload?.error) {
+          const code = String(payload.error);
+          message = CREDENTIAL_ERRORS[code] ?? code;
+        }
       }
     } catch {
       // Keep fallback message.
