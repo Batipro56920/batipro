@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { AlertTriangle, CheckCircle2, ExternalLink, FileText, Receipt, RefreshCw, ShieldCheck, Trash2, Upload, Wrench } from "lucide-react";
+import { CheckCircle2, ExternalLink, FileText, Paperclip, Receipt, RefreshCw, ShieldCheck, Trash2, Upload, Wrench, X } from "lucide-react";
 import {
   DOCUMENT_KINDS,
   INVOICE_KIND_LABELS,
@@ -38,11 +38,18 @@ function formatMoney(value: number | null): string {
   return value.toLocaleString("fr-FR", { style: "currency", currency: "EUR" });
 }
 
+/** Le poids d'un fichier, dit comme on le lit : 840 Ko, 2,4 Mo. */
+function formatSize(bytes: number | null): string {
+  if (!bytes) return "";
+  if (bytes < 1024 * 1024) return `${Math.max(1, Math.round(bytes / 1024))} Ko`;
+  return `${(Math.round((bytes / (1024 * 1024)) * 10) / 10).toLocaleString("fr-FR")} Mo`;
+}
+
 const STATE_STYLES: Record<DocumentStatusSummary["state"], { label: (entry: DocumentStatusSummary) => string; tone: string }> = {
   manquant: { label: () => "À déposer", tone: "bg-amber-50 text-amber-800 border-amber-200" },
-  a_valider: { label: () => "En cours de vérification", tone: "bg-blue-50 text-blue-800 border-blue-200" },
+  a_valider: { label: () => "En vérification", tone: "bg-blue-50 text-blue-800 border-blue-200" },
   valide: {
-    label: (entry) => (entry.expiresOn ? `Valide jusqu'au ${formatDate(entry.expiresOn)}` : "Validé"),
+    label: (entry) => (entry.expiresOn ? `Jusqu'au ${formatDate(entry.expiresOn)}` : "À jour"),
     tone: "bg-emerald-50 text-emerald-800 border-emerald-200",
   },
   expire_bientot: {
@@ -65,6 +72,11 @@ const INVOICE_TONES: Record<SubcontractorInvoiceStatus, string> = {
  * relation de sous-traitance, en plus du travail sur le chantier. Documents
  * obligatoires avec leurs échéances, devis et factures déposés au lieu d'être
  * envoyés par mail, réserves qui lui sont affectées.
+ *
+ * Tout se lit sur un téléphone, d'un pouce : une ligne par pièce, une seule
+ * action mise en avant à la fois — celle qui manque. Ce qui est à jour ne
+ * propose qu'un remplacement discret. L'échéance d'un document n'est pas
+ * demandée ici : elle est lue sur la pièce au moment de la valider, au bureau.
  */
 export default function SubcontractorProPanel({ token }: Props) {
   const [data, setData] = useState<SubcontractorPortalData | null>(null);
@@ -99,6 +111,15 @@ export default function SubcontractorProPanel({ token }: Props) {
   const attention = useMemo(() => documentsNeedingAttention(summary), [summary]);
   const openReserves = useMemo(() => reserves.filter((reserve) => reserve.status !== "LEVEE"), [reserves]);
   const chantierName = useMemo(() => new Map((data?.chantiers ?? []).map((row) => [row.id, row.nom])), [data?.chantiers]);
+  const waiting = (data?.invoices ?? []).filter((row) => row.status === "soumis").length;
+  const extraDocuments = (data?.documents ?? []).filter((row) => row.kind === "autre");
+
+  // Une seule phrase pour dire ce qui reste à faire : les pastilles de chaque
+  // ligne disent déjà l'état, inutile de les recompter en gros chiffres.
+  const todo = [
+    attention.length ? `${attention.length} document${attention.length > 1 ? "s" : ""} à fournir` : null,
+    openReserves.length ? `${openReserves.length} réserve${openReserves.length > 1 ? "s" : ""} à lever` : null,
+  ].filter(Boolean) as string[];
 
   async function run(label: string, task: () => Promise<SubcontractorPortalData | void>, success: string) {
     setBusy(label);
@@ -131,10 +152,9 @@ export default function SubcontractorProPanel({ token }: Props) {
             <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
           </button>
         </div>
-        <div className="mt-3 grid grid-cols-3 gap-2 text-center">
-          <Stat value={attention.length} label="document(s) à fournir" alert={attention.length > 0} />
-          <Stat value={(data?.invoices ?? []).filter((row) => row.status === "soumis").length} label="pièce(s) en attente" />
-          <Stat value={openReserves.length} label="réserve(s) à lever" alert={openReserves.length > 0} />
+        <div className={`mt-3 rounded-xl px-3 py-2 text-sm ${todo.length ? "bg-amber-50 text-amber-900" : "bg-emerald-50 text-emerald-800"}`}>
+          {todo.length ? `À faire : ${todo.join(" · ")}.` : "Tout est à jour, rien à fournir."}
+          {waiting ? <span className="block text-xs text-slate-500">{waiting} pièce(s) en attente de réponse de CB Rénovation.</span> : null}
         </div>
       </section>
 
@@ -146,19 +166,31 @@ export default function SubcontractorProPanel({ token }: Props) {
         <p className="mt-1 text-xs text-slate-500">
           CB Rénovation doit les détenir à jour pour te confier des travaux. Dépose une photo nette ou le PDF.
         </p>
-        <div className="mt-3 space-y-3">
+        <div className="mt-3 divide-y divide-slate-100">
           {summary.map((entry) => (
             <DocumentRow
               key={entry.kind}
               entry={entry}
               busy={busy === `doc-${entry.kind}`}
-              onUpload={(file, validUntil) =>
-                run(`doc-${entry.kind}`, () => subcontractorUploadDocument(token, { kind: entry.kind, file, validUntil }), `${entry.label} déposé.`)
-              }
+              disabled={busy !== null}
+              onUpload={(file) => run(`doc-${entry.kind}`, () => subcontractorUploadDocument(token, { kind: entry.kind, file }), `${entry.label} déposé.`)}
             />
+          ))}
+          {extraDocuments.map((document) => (
+            <div key={document.id} className="flex items-center gap-3 py-3">
+              <Thumbnail url={document.url} mime={document.mime_type} />
+              <div className="min-w-0 flex-1">
+                <div className="truncate text-sm font-semibold text-slate-900">{document.label || document.file_name}</div>
+                <div className="text-xs text-slate-500">
+                  {[`Déposé le ${formatDate(document.created_at)}`, formatSize(document.size_bytes)].filter(Boolean).join(" · ")}
+                </div>
+              </div>
+              {document.url ? <OpenLink url={document.url} /> : null}
+            </div>
           ))}
           <OtherDocumentUpload
             busy={busy === "doc-autre"}
+            disabled={busy !== null}
             onUpload={(file, label) =>
               run("doc-autre", () => subcontractorUploadDocument(token, { kind: "autre" as SubcontractorDocumentKind, file, label }), "Document déposé.")
             }
@@ -177,16 +209,24 @@ export default function SubcontractorProPanel({ token }: Props) {
           {(data?.invoices ?? []).length ? (
             (data?.invoices ?? []).map((invoice) => (
               <div key={invoice.id} className="rounded-xl border border-slate-200 p-3">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <div className="min-w-0">
+                <div className="flex items-start gap-3">
+                  <Thumbnail url={invoice.url} mime={invoice.mime_type} />
+                  <div className="min-w-0 flex-1">
                     <div className="truncate text-sm font-semibold text-slate-900">
                       {INVOICE_KIND_LABELS[invoice.kind]}
                       {invoice.reference ? ` n° ${invoice.reference}` : ""}
                     </div>
                     <div className="text-xs text-slate-500">
-                      {[invoice.chantier_id ? chantierName.get(invoice.chantier_id) ?? "Chantier" : null, formatMoney(invoice.amount_ht) ? `${formatMoney(invoice.amount_ht)} HT` : null, invoice.issued_on ? `du ${formatDate(invoice.issued_on)}` : null]
+                      {[
+                        invoice.chantier_id ? chantierName.get(invoice.chantier_id) ?? "Chantier" : null,
+                        formatMoney(invoice.amount_ht) ? `${formatMoney(invoice.amount_ht)} HT` : null,
+                        invoice.issued_on ? `du ${formatDate(invoice.issued_on)}` : null,
+                      ]
                         .filter(Boolean)
                         .join(" · ")}
+                    </div>
+                    <div className="text-xs text-slate-400">
+                      {[`Déposé le ${formatDate(invoice.created_at)}`, formatSize(invoice.size_bytes)].filter(Boolean).join(" · ")}
                     </div>
                   </div>
                   <span className={`shrink-0 rounded-full px-2 py-1 text-[11px] font-semibold ${INVOICE_TONES[invoice.status]}`}>
@@ -194,14 +234,14 @@ export default function SubcontractorProPanel({ token }: Props) {
                   </span>
                 </div>
                 {invoice.review_note ? <p className="mt-2 rounded-lg bg-slate-50 px-2 py-1 text-xs text-slate-600">CB Rénovation : {invoice.review_note}</p> : null}
-                <div className="mt-2 flex flex-wrap gap-2">
-                  {invoice.url ? <FileLink url={invoice.url} name={invoice.file_name} /> : null}
+                <div className="mt-2 flex flex-wrap items-center gap-3">
+                  {invoice.url ? <OpenLink url={invoice.url} /> : null}
                   {invoice.status === "soumis" ? (
                     <button
                       type="button"
                       disabled={busy !== null}
                       onClick={() => void run(`del-${invoice.id}`, () => subcontractorDeletePiece(token, "invoice", invoice.id), "Pièce retirée.")}
-                      className="inline-flex items-center gap-1 rounded-lg border border-red-200 px-2 py-1 text-xs text-red-700"
+                      className="inline-flex items-center gap-1 text-xs font-semibold text-red-700 disabled:opacity-50"
                     >
                       <Trash2 className="h-3.5 w-3.5" />
                       Retirer
@@ -263,15 +303,6 @@ export default function SubcontractorProPanel({ token }: Props) {
   );
 }
 
-function Stat({ value, label, alert }: { value: number; label: string; alert?: boolean }) {
-  return (
-    <div className={`rounded-xl p-2 ${alert ? "bg-amber-50" : "bg-slate-50"}`}>
-      <div className={`text-xl font-bold ${alert ? "text-amber-700" : "text-slate-900"}`}>{value}</div>
-      <div className="text-[11px] leading-4 text-slate-500">{label}</div>
-    </div>
-  );
-}
-
 function SectionTitle({ icon: Icon, title }: { icon: typeof FileText; title: string }) {
   return (
     <h3 className="flex items-center gap-2 text-base font-semibold text-slate-950">
@@ -281,11 +312,29 @@ function SectionTitle({ icon: Icon, title }: { icon: typeof FileText; title: str
   );
 }
 
-function FileLink({ url, name }: { url: string; name: string }) {
+/** Ce qui a été envoyé, en un coup d'œil : la photo elle-même, ou l'icône du PDF. */
+function Thumbnail({ url, mime }: { url: string | null; mime: string | null }) {
+  const isImage = Boolean(mime && mime.startsWith("image/") && url);
+  const content = isImage ? (
+    <img src={url!} alt="" className="h-11 w-11 rounded-lg object-cover" />
+  ) : (
+    <span className="flex h-11 w-11 items-center justify-center rounded-lg bg-slate-100 text-slate-500">
+      <FileText className="h-5 w-5" />
+    </span>
+  );
+  if (!url) return <span className="shrink-0">{content}</span>;
   return (
-    <a href={url} target="_blank" rel="noreferrer" className="inline-flex max-w-full items-center gap-1 rounded-lg border border-slate-200 px-2 py-1 text-xs text-slate-700">
-      <ExternalLink className="h-3.5 w-3.5 shrink-0" />
-      <span className="truncate">{name}</span>
+    <a href={url} target="_blank" rel="noreferrer" className="shrink-0" aria-label="Ouvrir le fichier">
+      {content}
+    </a>
+  );
+}
+
+function OpenLink({ url }: { url: string }) {
+  return (
+    <a href={url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-xs font-semibold text-blue-700">
+      <ExternalLink className="h-3.5 w-3.5" />
+      Ouvrir
     </a>
   );
 }
@@ -293,76 +342,117 @@ function FileLink({ url, name }: { url: string; name: string }) {
 function DocumentRow({
   entry,
   busy,
+  disabled,
   onUpload,
 }: {
   entry: DocumentStatusSummary;
   busy: boolean;
-  onUpload: (file: File, validUntil: string | null) => void;
+  disabled: boolean;
+  onUpload: (file: File) => void;
 }) {
-  const [validUntil, setValidUntil] = useState("");
   const style = STATE_STYLES[entry.state];
   const needsAction = ["manquant", "refuse", "expire", "expire_bientot"].includes(entry.state);
 
   return (
-    <div className={`rounded-xl border p-3 ${needsAction ? "border-amber-200 bg-amber-50/40" : "border-slate-200"}`}>
-      <div className="flex flex-wrap items-start justify-between gap-2">
-        <div className="min-w-0">
-          <div className="text-sm font-semibold text-slate-900">{entry.label}</div>
-          <div className="text-xs text-slate-500">{entry.hint}</div>
+    <div className="flex items-center gap-3 py-3">
+      {entry.latest ? <Thumbnail url={entry.latest.url} mime={entry.latest.mime_type} /> : null}
+      <div className="min-w-0 flex-1">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-sm font-semibold text-slate-900">{entry.label}</span>
+          <span className={`rounded-full border px-2 py-0.5 text-[11px] font-semibold ${style.tone}`}>{style.label(entry)}</span>
         </div>
-        <span className={`shrink-0 rounded-full border px-2 py-1 text-[11px] font-semibold ${style.tone}`}>
-          {needsAction ? <AlertTriangle className="mr-1 inline h-3 w-3" /> : null}
-          {style.label(entry)}
-        </span>
+        <div className="mt-0.5 truncate text-xs text-slate-500">
+          {entry.latest
+            ? [`Déposé le ${formatDate(entry.latest.created_at)}`, formatSize(entry.latest.size_bytes)].filter(Boolean).join(" · ")
+            : entry.hint}
+        </div>
+        {entry.state === "refuse" && entry.latest?.review_note ? (
+          <p className="mt-1 text-xs text-red-700">Motif : {entry.latest.review_note}</p>
+        ) : null}
       </div>
-      {entry.state === "refuse" && entry.latest?.review_note ? (
-        <p className="mt-2 rounded-lg bg-white px-2 py-1 text-xs text-red-700">Motif : {entry.latest.review_note}</p>
-      ) : null}
-      {entry.latest?.url ? (
-        <div className="mt-2">
-          <FileLink url={entry.latest.url} name={entry.latest.file_name} />
-        </div>
-      ) : null}
-      <div className="mt-3 grid gap-2 sm:grid-cols-[1fr_auto]">
-        <label className="text-xs text-slate-500">
-          Valable jusqu'au (si indiqué sur le document)
-          <input type="date" className={`${inputClass} mt-1`} value={validUntil} onChange={(event) => setValidUntil(event.target.value)} />
-        </label>
-        <FilePickButton
-          label={entry.latest ? "Remplacer" : "Déposer"}
+      <FilePick
+        label={entry.latest ? "Remplacer" : "Déposer"}
+        quiet={!needsAction}
+        busy={busy}
+        disabled={disabled}
+        onPick={onUpload}
+      />
+    </div>
+  );
+}
+
+/** Un document en plus du socle obligatoire : le nom n'est demandé qu'une fois le dépôt engagé. */
+function OtherDocumentUpload({ busy, disabled, onUpload }: { busy: boolean; disabled: boolean; onUpload: (file: File, label: string | null) => void }) {
+  const [open, setOpen] = useState(false);
+  const [label, setLabel] = useState("");
+  const other = DOCUMENT_KINDS.find((entry) => entry.kind === "autre");
+
+  if (!open) {
+    return (
+      <button type="button" onClick={() => setOpen(true)} className="flex w-full items-center gap-2 py-3 text-sm font-semibold text-blue-700">
+        <Paperclip className="h-4 w-4" />
+        Ajouter un autre document
+      </button>
+    );
+  }
+
+  return (
+    <div className="py-3">
+      <div className="flex items-center justify-between gap-2">
+        <div className="text-sm font-semibold text-slate-900">{other?.label}</div>
+        <button type="button" onClick={() => setOpen(false)} className="rounded-lg p-1 text-slate-400" aria-label="Annuler">
+          <X className="h-4 w-4" />
+        </button>
+      </div>
+      <div className="text-xs text-slate-500">{other?.hint}</div>
+      <div className="mt-2 flex items-center gap-2">
+        <input className={inputClass} placeholder="Nom du document" value={label} onChange={(event) => setLabel(event.target.value)} />
+        <FilePick
+          label="Déposer"
           busy={busy}
-          onPick={(file) => onUpload(file, validUntil || null)}
+          disabled={disabled}
+          onPick={(file) => {
+            onUpload(file, label.trim() || null);
+            setLabel("");
+            setOpen(false);
+          }}
         />
       </div>
     </div>
   );
 }
 
-function OtherDocumentUpload({ busy, onUpload }: { busy: boolean; onUpload: (file: File, label: string | null) => void }) {
-  const [label, setLabel] = useState("");
-  const other = DOCUMENT_KINDS.find((entry) => entry.kind === "autre");
+/**
+ * Le même bouton partout où un fichier est demandé : le champ natif du
+ * navigateur ("Aucun fichier choisi", tronqué sur un téléphone) reste caché.
+ */
+function FilePick({
+  label,
+  busy,
+  disabled,
+  quiet,
+  onPick,
+}: {
+  label: string;
+  busy: boolean;
+  disabled?: boolean;
+  quiet?: boolean;
+  onPick: (file: File) => void;
+}) {
+  const tone = quiet
+    ? "border border-slate-200 bg-white text-slate-600"
+    : "bg-blue-600 text-white";
   return (
-    <div className="rounded-xl border border-dashed border-slate-200 p-3">
-      <div className="text-sm font-semibold text-slate-900">{other?.label}</div>
-      <div className="text-xs text-slate-500">{other?.hint}</div>
-      <div className="mt-2 grid gap-2 sm:grid-cols-[1fr_auto]">
-        <input className={inputClass} placeholder="Nom du document" value={label} onChange={(event) => setLabel(event.target.value)} />
-        <FilePickButton label="Déposer" busy={busy} onPick={(file) => onUpload(file, label.trim() || null)} />
-      </div>
-    </div>
-  );
-}
-
-function FilePickButton({ label, busy, onPick }: { label: string; busy: boolean; onPick: (file: File) => void }) {
-  return (
-    <label className={`inline-flex h-11 cursor-pointer items-center justify-center gap-2 self-end rounded-xl bg-blue-600 px-4 text-sm font-semibold text-white ${busy ? "opacity-60" : ""}`}>
+    <label
+      className={`inline-flex h-10 shrink-0 cursor-pointer items-center justify-center gap-2 rounded-xl px-3 text-sm font-semibold ${tone} ${busy || disabled ? "opacity-60" : ""}`}
+    >
       {busy ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
       {busy ? "Envoi…" : label}
       <input
         type="file"
         accept="application/pdf,image/*"
         className="sr-only"
-        disabled={busy}
+        disabled={busy || disabled}
         onChange={(event) => {
           const file = event.target.files?.[0];
           event.target.value = "";
@@ -443,19 +533,29 @@ function InvoiceForm({
         Montant HT (€)
         <input className={`${inputClass} mt-1`} inputMode="decimal" value={amountHt} onChange={(event) => setAmountHt(event.target.value)} placeholder="0,00" />
       </label>
-      <label className="text-xs text-slate-500">
+      <label className="text-xs text-slate-500 sm:col-span-2">
         Date du document
         <input type="date" className={`${inputClass} mt-1`} value={issuedOn} onChange={(event) => setIssuedOn(event.target.value)} />
       </label>
-      <label className="text-xs text-slate-500">
-        Fichier (PDF ou photo)
-        <input
-          type="file"
-          accept="application/pdf,image/*"
-          className="mt-1 block w-full text-sm text-slate-700 file:mr-3 file:rounded-lg file:border-0 file:bg-white file:px-3 file:py-2 file:text-sm file:font-semibold"
-          onChange={(event) => setFile(event.target.files?.[0] ?? null)}
-        />
-      </label>
+
+      <div className="sm:col-span-2">
+        <div className="text-xs text-slate-500">Fichier (PDF ou photo)</div>
+        {file ? (
+          <div className="mt-1 flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2">
+            <Paperclip className="h-4 w-4 shrink-0 text-slate-400" />
+            <span className="min-w-0 flex-1 truncate text-sm text-slate-800">{file.name}</span>
+            <span className="shrink-0 text-xs text-slate-400">{formatSize(file.size)}</span>
+            <button type="button" onClick={() => setFile(null)} className="rounded-lg p-1 text-slate-400" aria-label="Retirer le fichier">
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+        ) : (
+          <div className="mt-1">
+            <FilePick label="Choisir le fichier" quiet busy={false} onPick={(picked) => setFile(picked)} />
+          </div>
+        )}
+      </div>
+
       <button
         type="button"
         onClick={submit}
