@@ -154,7 +154,11 @@ export default function SubcontractorProPanel({ token }: Props) {
         </div>
         <div className={`mt-3 rounded-xl px-3 py-2 text-sm ${todo.length ? "bg-amber-50 text-amber-900" : "bg-emerald-50 text-emerald-800"}`}>
           {todo.length ? `À faire : ${todo.join(" · ")}.` : "Tout est à jour, rien à fournir."}
-          {waiting ? <span className="block text-xs text-slate-500">{waiting} pièce(s) en attente de réponse de CB Rénovation.</span> : null}
+          {waiting ? (
+            <span className="mt-0.5 block text-xs text-slate-500">
+              {waiting > 1 ? `${waiting} pièces en attente` : "1 pièce en attente"} de réponse de CB Rénovation.
+            </span>
+          ) : null}
         </div>
       </section>
 
@@ -353,30 +357,35 @@ function DocumentRow({
   const style = STATE_STYLES[entry.state];
   const needsAction = ["manquant", "refuse", "expire", "expire_bientot"].includes(entry.state);
 
+  // Sur un téléphone, le bouton sur la même ligne que le texte ne laisse que
+  // 150 px au titre, qui se casse en trois lignes : il prend donc sa propre
+  // ligne, à droite, et revient à côté du texte dès qu'il y a de la place.
   return (
-    <div className="flex items-center gap-3 py-3">
+    <div className="flex flex-wrap items-start gap-x-3 gap-y-2 py-3">
       {entry.latest ? <Thumbnail url={entry.latest.url} mime={entry.latest.mime_type} /> : null}
-      <div className="min-w-0 flex-1">
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="text-sm font-semibold text-slate-900">{entry.label}</span>
+      <div className="min-w-0 flex-1 basis-40">
+        <div className="text-sm font-semibold text-slate-900">{entry.label}</div>
+        <div className="mt-1 flex flex-wrap items-center gap-2">
           <span className={`rounded-full border px-2 py-0.5 text-[11px] font-semibold ${style.tone}`}>{style.label(entry)}</span>
-        </div>
-        <div className="mt-0.5 truncate text-xs text-slate-500">
-          {entry.latest
-            ? [`Déposé le ${formatDate(entry.latest.created_at)}`, formatSize(entry.latest.size_bytes)].filter(Boolean).join(" · ")
-            : entry.hint}
+          <span className="text-xs text-slate-500">
+            {entry.latest
+              ? [`Déposé le ${formatDate(entry.latest.created_at)}`, formatSize(entry.latest.size_bytes)].filter(Boolean).join(" · ")
+              : entry.hint}
+          </span>
         </div>
         {entry.state === "refuse" && entry.latest?.review_note ? (
           <p className="mt-1 text-xs text-red-700">Motif : {entry.latest.review_note}</p>
         ) : null}
       </div>
-      <FilePick
-        label={entry.latest ? "Remplacer" : "Déposer"}
-        quiet={!needsAction}
-        busy={busy}
-        disabled={disabled}
-        onPick={onUpload}
-      />
+      <div className="ml-auto">
+        <FilePick
+          label={entry.latest ? "Remplacer" : "Déposer"}
+          quiet={!needsAction}
+          busy={busy}
+          disabled={disabled}
+          onPick={onUpload}
+        />
+      </div>
     </div>
   );
 }
