@@ -217,7 +217,7 @@ export default function SubcontractorProPanel({ token }: Props) {
                     pastille, il tombait en cinq lignes sur un telephone. */}
                 <div className="flex items-center gap-3">
                   <Thumbnail url={invoice.url} mime={invoice.mime_type} />
-                  <div className="min-w-0 flex-1 truncate text-sm font-semibold text-slate-900">
+                  <div className="min-w-0 flex-1 text-sm font-semibold text-slate-900">
                     {INVOICE_KIND_LABELS[invoice.kind]}
                     {invoice.reference ? ` n° ${invoice.reference}` : ""}
                   </div>
