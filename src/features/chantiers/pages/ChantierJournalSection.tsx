@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useParams, useSearchParams } from "react-router-dom";
 import {
   appendChantierActivityLog,
   type ChantierActivityLogRow,
@@ -187,6 +187,8 @@ export default function ChantierJournalSection({
   tone: (entityType: string) => string;
 }) {
   const { id: routeChantierId } = useParams<{ id: string }>();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const targetedFeedPostId = searchParams.get("feedPostId") ?? "";
   const chantierId = logs.find((log) => log.chantier_id)?.chantier_id ?? routeChantierId ?? null;
   const terrainFeedbackHref = chantierId
     ? `/chantiers/${encodeURIComponent(chantierId)}/retours-terrain`
@@ -325,6 +327,23 @@ export default function ChantierJournalSection({
     () => new Map(posts.map((post) => [post.id, post])),
     [posts],
   );
+
+  useEffect(() => {
+    if (!targetedFeedPostId || postsLoading || !postById.has(targetedFeedPostId)) return;
+    const frame = window.requestAnimationFrame(() => {
+      const target = document.getElementById(`feed-post-${targetedFeedPostId}`);
+      target?.scrollIntoView({ behavior: "smooth", block: "center" });
+      target?.focus({ preventScroll: true });
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [postById, postsLoading, targetedFeedPostId]);
+
+  function clearFeedPostTarget() {
+    if (!targetedFeedPostId) return;
+    const nextParams = new URLSearchParams(searchParams);
+    nextParams.delete("feedPostId");
+    setSearchParams(nextParams, { replace: true });
+  }
 
   const consigneByPostId = useMemo(() => {
     const links = new Map<string, string>(Object.entries(createdConsigneByPostId));
@@ -605,6 +624,30 @@ export default function ChantierJournalSection({
         </div>
       </section>
 
+      {targetedFeedPostId ? (
+        <div className="rounded-2xl border border-blue-200 bg-blue-50 p-4 text-sm text-blue-900">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <div className="font-semibold">Publication source ciblée</div>
+              <p className="mt-1 text-blue-800">
+                {postsLoading
+                  ? "Chargement de la publication source..."
+                  : postById.has(targetedFeedPostId)
+                    ? "La publication à l’origine de la consigne est mise en évidence ci-dessous."
+                    : "Cette publication n’est plus visible ou n’est pas accessible sur ce chantier."}
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={clearFeedPostTarget}
+              className="shrink-0 rounded-xl border border-blue-200 bg-white px-4 py-2 text-sm font-semibold text-blue-800 hover:bg-blue-100"
+            >
+              Retirer le ciblage
+            </button>
+          </div>
+        </div>
+      ) : null}
+
       {feedLogs.length > 0 ? (
         <div className="grid gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-3 md:grid-cols-[minmax(0,1fr)_minmax(220px,auto)_auto] md:items-center">
           <label className="min-w-0">
@@ -691,7 +734,17 @@ export default function ChantierJournalSection({
                     <div className="h-px flex-1 bg-slate-200" />
                   </div>
                 ) : null}
-                <article className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+                <article
+                  id={feedPost ? `feed-post-${feedPost.id}` : undefined}
+                  data-feed-post-id={feedPost?.id}
+                  tabIndex={feedPost ? -1 : undefined}
+                  className={[
+                    "rounded-3xl border bg-white p-5 shadow-sm outline-none transition-colors",
+                    feedPost?.id === targetedFeedPostId
+                      ? "border-blue-300 ring-2 ring-blue-100"
+                      : "border-slate-200",
+                  ].join(" ")}
+                >
                 <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
                   <div className="min-w-0">
                     <div className="flex flex-wrap gap-2">
