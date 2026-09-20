@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link, useSearchParams } from "react-router-dom";
+import { Link, useBlocker, useSearchParams } from "react-router-dom";
 import { ArrowRight, FileCheck2, RefreshCw, Search } from "lucide-react";
 import { Button } from "../../../components/ui/button";
 import { PageHeader } from "../../../components/layout/PageHeader";
@@ -98,6 +98,11 @@ export default function InvoicesPage() {
   const [clientWorkflowByInvoiceId, setClientWorkflowByInvoiceId] = useState<Map<string, ClientWorkflowStatus>>(() => new Map());
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [dirtyInvoiceIds, setDirtyInvoiceIds] = useState<Set<string>>(() => new Set());
+  const hasUnsavedInvoices = dirtyInvoiceIds.size > 0;
+  const navigationBlocker = useBlocker(
+    ({ currentLocation, nextLocation }) =>
+      hasUnsavedInvoices && currentLocation.pathname !== nextLocation.pathname,
+  );
   const [loading, setLoading] = useState(true);
   const [clientWorkflowLoadFailed, setClientWorkflowLoadFailed] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -117,6 +122,28 @@ export default function InvoicesPage() {
   useEffect(() => {
     void refresh();
   }, []);
+
+  useEffect(() => {
+    if (!hasUnsavedInvoices) return;
+
+    const preventUnsavedInvoiceLoss = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = "";
+    };
+
+    window.addEventListener("beforeunload", preventUnsavedInvoiceLoss);
+    return () => window.removeEventListener("beforeunload", preventUnsavedInvoiceLoss);
+  }, [hasUnsavedInvoices]);
+
+  useEffect(() => {
+    if (navigationBlocker.state !== "blocked") return;
+
+    const shouldLeave = window.confirm(
+      "Des modifications de facture ne sont pas enregistrées. Quitter cette page et les perdre ?",
+    );
+    if (shouldLeave) navigationBlocker.proceed();
+    else navigationBlocker.reset();
+  }, [navigationBlocker]);
 
   useEffect(() => {
     if (invalidStatusFromUrl) {
