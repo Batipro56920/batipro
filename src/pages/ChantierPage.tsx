@@ -2721,7 +2721,7 @@ export default function ChantierPage() {
   }, [id, tab]);
 
   useEffect(() => {
-    if (!id || tab !== "journal") return;
+    if (!id || (tab !== "journal" && tab !== "consignes")) return;
     void refreshActivityLogs();
   }, [id, tab]);
 
@@ -7616,11 +7616,11 @@ export default function ChantierPage() {
               </div>
               <button
                 type="button"
-                onClick={refreshConsignes}
+                onClick={() => void Promise.all([refreshConsignes(), refreshActivityLogs()])}
                 className="rounded-xl border px-3 py-2 text-sm hover:bg-slate-50"
-                disabled={consignesLoading}
+                disabled={consignesLoading || activityLogsLoading}
               >
-                {consignesLoading ? "Chargement..." : "Rafraîchir"}
+                {consignesLoading || activityLogsLoading ? "Chargement..." : "Rafraîchir"}
               </button>
             </div>
 
@@ -7798,6 +7798,16 @@ export default function ChantierPage() {
                     targetIntervenants.some((intervenant) => intervenant.id === intervenantId),
                   ).length;
                   const priorityMeta = consignePriorityMeta(row.priority);
+                  const sourceFeedPostId = (() => {
+                    const sourceLog = activityLogs.find((log) => {
+                      if (log.entity_type !== "consigne" || log.entity_id !== row.id) return false;
+                      const changes = (log.changes ?? {}) as Record<string, unknown>;
+                      return changes.source === "feed_post" && Boolean(String(changes.feed_post_id ?? "").trim());
+                    });
+                    return sourceLog
+                      ? String((sourceLog.changes as Record<string, unknown>).feed_post_id ?? "").trim()
+                      : "";
+                  })();
                   const dateLabel = row.date_debut
                     ? row.date_fin
                       ? `Du ${new Date(`${row.date_debut}T00:00:00`).toLocaleDateString("fr-FR")} au ${new Date(`${row.date_fin}T00:00:00`).toLocaleDateString("fr-FR")}`
@@ -7843,6 +7853,18 @@ export default function ChantierPage() {
 
                       <div className="text-sm font-semibold text-slate-900">{row.title}</div>
                       <div className="text-sm text-slate-900 whitespace-pre-wrap">{row.description}</div>
+
+                      {sourceFeedPostId ? (
+                        <div className="flex flex-col gap-2 rounded-xl border border-blue-200 bg-blue-50 px-3 py-2 text-sm text-blue-900 sm:flex-row sm:items-center sm:justify-between">
+                          <span>Origine : publication du fil chantier</span>
+                          <Link
+                            to={`/chantiers/${encodeURIComponent(id ?? row.chantier_id)}/terrain?feedPostId=${encodeURIComponent(sourceFeedPostId)}`}
+                            className="font-semibold text-blue-800 hover:text-blue-950 hover:underline"
+                          >
+                            Voir la publication source
+                          </Link>
+                        </div>
+                      ) : null}
 
                       {!row.applies_to_all && row.assignees.length > 0 ? (
                         <div className="flex flex-wrap gap-2">
