@@ -535,6 +535,17 @@ export default function IntervenantsPage() {
                       >
                         {openingPortalId === row.id ? "Ouverture..." : "Ouvrir portail"}
                       </button>
+                      {/*
+                        Le bouton grise disait pourquoi dans une infobulle, que
+                        personne ne survole : on cherchait la raison sans la trouver.
+                      */}
+                      {row.chantier_ids.length === 0 || !String(row.email ?? "").trim() ? (
+                        <span className="text-xs text-amber-700">
+                          {row.chantier_ids.length === 0
+                            ? "Portail indisponible : aucun chantier rattache."
+                            : "Portail indisponible : renseigne un email sur cette fiche, le lien d acces y est rattache."}
+                        </span>
+                      ) : null}
                       <button
                         type="button"
                         onClick={() => openEditModal(row)}
