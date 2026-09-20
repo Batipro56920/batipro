@@ -213,29 +213,29 @@ export default function SubcontractorProPanel({ token }: Props) {
           {(data?.invoices ?? []).length ? (
             (data?.invoices ?? []).map((invoice) => (
               <div key={invoice.id} className="rounded-xl border border-slate-200 p-3">
-                <div className="flex items-start gap-3">
+                {/* Le detail sur toute la largeur : coince entre la vignette et la
+                    pastille, il tombait en cinq lignes sur un telephone. */}
+                <div className="flex items-center gap-3">
                   <Thumbnail url={invoice.url} mime={invoice.mime_type} />
-                  <div className="min-w-0 flex-1">
-                    <div className="truncate text-sm font-semibold text-slate-900">
-                      {INVOICE_KIND_LABELS[invoice.kind]}
-                      {invoice.reference ? ` n° ${invoice.reference}` : ""}
-                    </div>
-                    <div className="text-xs text-slate-500">
-                      {[
-                        invoice.chantier_id ? chantierName.get(invoice.chantier_id) ?? "Chantier" : null,
-                        formatMoney(invoice.amount_ht) ? `${formatMoney(invoice.amount_ht)} HT` : null,
-                        invoice.issued_on ? `du ${formatDate(invoice.issued_on)}` : null,
-                      ]
-                        .filter(Boolean)
-                        .join(" · ")}
-                    </div>
-                    <div className="text-xs text-slate-400">
-                      {[`Déposé le ${formatDate(invoice.created_at)}`, formatSize(invoice.size_bytes)].filter(Boolean).join(" · ")}
-                    </div>
+                  <div className="min-w-0 flex-1 truncate text-sm font-semibold text-slate-900">
+                    {INVOICE_KIND_LABELS[invoice.kind]}
+                    {invoice.reference ? ` n° ${invoice.reference}` : ""}
                   </div>
                   <span className={`shrink-0 rounded-full px-2 py-1 text-[11px] font-semibold ${INVOICE_TONES[invoice.status]}`}>
                     {INVOICE_STATUS_LABELS[invoice.status]}
                   </span>
+                </div>
+                <div className="mt-1 text-xs text-slate-500">
+                  {[
+                    invoice.chantier_id ? chantierName.get(invoice.chantier_id) ?? "Chantier" : null,
+                    formatMoney(invoice.amount_ht) ? `${formatMoney(invoice.amount_ht)} HT` : null,
+                    invoice.issued_on ? `du ${formatDate(invoice.issued_on)}` : null,
+                  ]
+                    .filter(Boolean)
+                    .join(" · ")}
+                </div>
+                <div className="text-xs text-slate-400">
+                  {[`Déposé le ${formatDate(invoice.created_at)}`, formatSize(invoice.size_bytes)].filter(Boolean).join(" · ")}
                 </div>
                 {invoice.review_note ? <p className="mt-2 rounded-lg bg-slate-50 px-2 py-1 text-xs text-slate-600">CB Rénovation : {invoice.review_note}</p> : null}
                 <div className="mt-2 flex flex-wrap items-center gap-3">
@@ -320,7 +320,8 @@ function SectionTitle({ icon: Icon, title }: { icon: typeof FileText; title: str
 function Thumbnail({ url, mime }: { url: string | null; mime: string | null }) {
   const isImage = Boolean(mime && mime.startsWith("image/") && url);
   const content = isImage ? (
-    <img src={url!} alt="" className="h-11 w-11 rounded-lg object-cover" />
+    // Le liseré tient la vignette d'une photo claire, sinon elle se fond dans la carte.
+    <img src={url!} alt="" className="h-11 w-11 rounded-lg border border-slate-200 object-cover" />
   ) : (
     <span className="flex h-11 w-11 items-center justify-center rounded-lg bg-slate-100 text-slate-500">
       <FileText className="h-5 w-5" />
