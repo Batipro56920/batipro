@@ -226,6 +226,7 @@ function mapCrmItemsToQuoteNodes(items: CrmQuoteItemRow[]): QuoteBuilderSection[
       taskTemplateLabel: (row as { task_template_label?: string | null }).task_template_label ?? null,
       taskTemplateIds: normalizeTaskTemplateIds(row.task_template_ids, row.task_template_id),
       priceSource: row.price_status === "manual" ? ("manual" as const) : ("auto" as const),
+      included: row.show_to_client !== false,
       taskTemplateQuantities: normalizeTaskTemplateQuantities(row.task_template_quantities, normalizeTaskTemplateIds(row.task_template_ids, row.task_template_id).length),
       compositeItems: Array.isArray(row.composite_items)
         ? (row.composite_items as QuoteBuilderItem["compositeItems"])

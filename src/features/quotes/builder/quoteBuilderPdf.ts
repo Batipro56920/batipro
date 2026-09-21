@@ -1,6 +1,6 @@
 import { jsPDF } from "jspdf";
 import { calculateQuoteBuilderTotals, flattenQuoteBuilder } from "./quoteBuilderCalculations";
-import { validateQuoteBuilderForDocumentEngine } from "./quoteBuilderDocumentAdapter";
+import { quoteItemIsIncluded, validateQuoteBuilderForDocumentEngine } from "./quoteBuilderDocumentAdapter";
 import type { QuoteBuilderFlatRow, QuoteBuilderItem, QuoteBuilderQuote } from "./types";
 
 const PAGE = { width: 210, height: 297, marginX: 14, contentWidth: 182, footerY: 284 };
@@ -23,7 +23,11 @@ type PdfTotals = ReturnType<typeof calculateQuoteBuilderTotals>;
 export function createQuoteBuilderPdf(quote: QuoteBuilderQuote) {
   validateQuoteBuilderForDocumentEngine(quote);
   const pdf = new jsPDF({ unit: "mm", format: "a4", compress: true });
-  const rows = flattenQuoteBuilder(quote.nodes);
+  // Les lignes decochees ne partent pas chez le client : elles sont deja hors
+  // des totaux, les laisser au tableau afficherait un devis qui ne s'additionne pas.
+  const rows = flattenQuoteBuilder(quote.nodes).filter(
+    (row) => row.node.type !== "item" || quoteItemIsIncluded(row.node),
+  );
   const totals = calculateQuoteBuilderTotals(quote);
 
   let y = drawCoverHeader(pdf, quote);

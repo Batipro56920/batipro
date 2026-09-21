@@ -237,6 +237,7 @@ export function QuoteBuilderWorkspace({ onClose, costsPanel }: Props) {
     () =>
       rows.filter((row) => {
         if (row.node.type !== "item") return false;
+        if (row.node.included === false) return false;
         if (row.node.priceSource === "manual") return false;
         const cost = lineCosts.get(row.id);
         return Boolean(cost && cost.costHt > 0);
@@ -265,6 +266,8 @@ export function QuoteBuilderWorkspace({ onClose, costsPanel }: Props) {
     let total = 0;
     for (const row of rows) {
       if (row.node.type !== "item") continue;
+      // Hors devis : ni dans le deboursé, ni dans le vendu, ni dans les heures.
+      if (row.node.included === false) continue;
       total += 1;
       saleHt += row.totalHt;
       const cost = lineCosts.get(row.id) ?? EMPTY_LINE_COST;
@@ -394,6 +397,20 @@ export function QuoteBuilderWorkspace({ onClose, costsPanel }: Props) {
 
   const columns = useMemo<ColumnDef<QuoteBuilderFlatRow>[]>(() => [
     { id: "drag", header: "", cell: () => <RowDragHandle /> },
+    {
+      id: "included",
+      header: "Au devis",
+      cell: ({ row }) =>
+        row.original.node.type === "item" ? (
+          <input
+            type="checkbox"
+            className="h-4 w-4 cursor-pointer accent-blue-600"
+            checked={row.original.node.included !== false}
+            title="Décochée, la ligne sort du devis client, des totaux et de la marge. Elle reste ici pour être reprise."
+            onChange={(event) => cellData.current.updateNode(row.original.id, { included: event.target.checked } as Partial<QuoteBuilderNode>)}
+          />
+        ) : null,
+    },
     { accessorKey: "number", header: "N°", cell: ({ row }) => <span className="font-mono text-xs text-slate-500">{row.original.number}</span> },
     {
       id: "title",
@@ -1146,7 +1163,16 @@ const RowDragHandleContext = createContext<{ attributes: Record<string, unknown>
 function SortableRow({ id, row, children }: { id: string; row: QuoteBuilderFlatRow; children: ReactNode }) {
   const { attributes, listeners, setNodeRef, transform, transition } = useSortable({ id });
   const style = { transform: CSS.Transform.toString(transform), transition };
-  const rowClass = row.node.type === "section" ? "group bg-blue-50/90 text-slate-950 hover:bg-blue-50" : row.node.type === "subsection" ? "group bg-slate-50 text-slate-900 hover:bg-slate-100" : "group bg-white hover:bg-slate-50";
+  // Une ligne hors devis doit se voir d'un coup d'oeil, sinon on cherche
+  // pourquoi le total ne tombe pas juste.
+  const excluded = row.node.type === "item" && row.node.included === false;
+  const rowClass = row.node.type === "section"
+    ? "group bg-blue-50/90 text-slate-950 hover:bg-blue-50"
+    : row.node.type === "subsection"
+      ? "group bg-slate-50 text-slate-900 hover:bg-slate-100"
+      : excluded
+        ? "group bg-slate-50/70 text-slate-400 line-through decoration-slate-300 hover:bg-slate-100"
+        : "group bg-white hover:bg-slate-50";
   const handle = useMemo(
     () => ({ attributes: attributes as unknown as Record<string, unknown>, listeners: (listeners ?? {}) as unknown as Record<string, unknown> }),
     [attributes, listeners],

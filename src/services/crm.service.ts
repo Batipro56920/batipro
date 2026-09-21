@@ -1255,6 +1255,8 @@ export async function createCrmQuoteItemFromTemplate(input: {
   taskTemplateQuantities?: Array<number | null> | null;
   /** "manual" quand le prix a été décidé à la main : il ne se recalcule plus. */
   priceStatus?: string | null;
+  /** false quand la ligne est décochée : hors du devis client et hors des totaux. */
+  showToClient?: boolean | null;
   compositeItems?: unknown[] | null;
   designation?: string | null;
   description?: string | null;
@@ -1308,7 +1310,7 @@ export async function createCrmQuoteItemFromTemplate(input: {
     line_type: text(input.lineType) ?? (template ? "composite" : "simple"),
     family: template?.lot ?? null,
     price_status: text(input.priceStatus) ?? "estimated",
-    show_to_client: true,
+    show_to_client: input.showToClient !== false,
     cost_materials_ht: totals.cost_materials_ht,
     cost_labor_ht: totals.cost_labor_ht,
     cost_subcontracting_ht: totals.cost_subcontracting_ht,
@@ -1479,11 +1481,15 @@ export async function recalculateCrmQuoteTotals(quoteId: string) {
       : (Number(row.cost_materials_ht ?? 0) + Number(row.cost_labor_ht ?? 0) + Number(row.cost_subcontracting_ht ?? 0) + Number(row.cost_fees_ht ?? 0)) *
           Number(row.quantite ?? 1);
   };
-  const amountHt = roundMoney(engine.items.reduce((sum, row) => sum + itemSaleTotal(row), 0));
+  // Une ligne décochée dans l'atelier reste enregistrée avec son prix, pour être
+  // reprise si le client la redemande : elle ne doit compter ni dans le montant
+  // annoncé, ni dans la TVA, ni dans la marge.
+  const counted = engine.items.filter((row) => row.show_to_client !== false);
+  const amountHt = roundMoney(counted.reduce((sum, row) => sum + itemSaleTotal(row), 0));
   const tvaAmount = roundMoney(
-    engine.items.reduce((sum, row) => sum + itemSaleTotal(row) * (Number(row.tva_rate ?? 20) / 100), 0),
+    counted.reduce((sum, row) => sum + itemSaleTotal(row) * (Number(row.tva_rate ?? 20) / 100), 0),
   );
-  const costTotal = engine.items.reduce((sum, row) => sum + itemCostTotal(row), 0);
+  const costTotal = counted.reduce((sum, row) => sum + itemCostTotal(row), 0);
   return updateCrmQuote(quoteId, {
     montant_ht: amountHt,
     tva: amountHt ? roundMoney((tvaAmount / amountHt) * 100) : 20,
@@ -1753,14 +1759,17 @@ export async function transformAcceptedQuoteToChantier(input: {
     paymentTerms: [],
     taskTemplates: [],
   } as CrmQuoteEngineData));
+  // Ce qui a ete vendu, et rien d'autre : une ligne decochee n'est pas au devis
+  // signe, donc ni dans les budgets du chantier ni dans ses taches a faire.
+  const soldItems = engine.items.filter((row) => row.show_to_client !== false);
   const laborBudget = roundMoney(
-    engine.items.reduce((sum, row) => sum + Number(row.cost_labor_ht ?? 0) * Number(row.quantite ?? 1), 0),
+    soldItems.reduce((sum, row) => sum + Number(row.cost_labor_ht ?? 0) * Number(row.quantite ?? 1), 0),
   );
   const materialsBudget = roundMoney(
-    engine.items.reduce((sum, row) => sum + Number(row.cost_materials_ht ?? 0) * Number(row.quantite ?? 1), 0),
+    soldItems.reduce((sum, row) => sum + Number(row.cost_materials_ht ?? 0) * Number(row.quantite ?? 1), 0),
   );
   const subcontractingBudget = roundMoney(
-    engine.items.reduce((sum, row) => sum + Number(row.cost_subcontracting_ht ?? 0) * Number(row.quantite ?? 1), 0),
+    soldItems.reduce((sum, row) => sum + Number(row.cost_subcontracting_ht ?? 0) * Number(row.quantite ?? 1), 0),
   );
   // heures_prevues est NOT NULL en base, et le builder n'enregistre pas le temps
   // des lignes : la somme valait 0, devenait null, et Postgres refusait la mise
@@ -1769,7 +1778,7 @@ export async function transformAcceptedQuoteToChantier(input: {
   // budgets. Un chantier cree depuis un devis restait orphelin, et la
   // Rentabilite ne voyait aucun montant vendu. Faute de temps connu, on laisse
   // la colonne a sa valeur par defaut au lieu d'y ecrire null.
-  const plannedHours = engine.items.reduce((sum, row) => sum + Number(row.labor_hours ?? 0) * Number(row.quantite ?? 1), 0);
+  const plannedHours = soldItems.reduce((sum, row) => sum + Number(row.labor_hours ?? 0) * Number(row.quantite ?? 1), 0);
   await updateChantier(chantier.id, {
     ...(plannedHours > 0 ? { heures_prevues: plannedHours } : {}),
     crm_client_id: client?.id ?? quote.client_id ?? null,
@@ -1791,11 +1800,11 @@ export async function transformAcceptedQuoteToChantier(input: {
     // une erreur avalee en silence, c'est ce qui a laisse passer ce defaut.
     console.error("[CRM] rattachement du chantier au devis impossible", { chantierId: chantier.id, quoteId: quote.id, error });
   });
-  if (engine.items.length) {
+  if (soldItems.length) {
     // Les tâches supplémentaires d'une ligne n'ont que leur identifiant : on
     // récupère leurs intitulés pour que le chantier reste lisible.
     const templateTitles = new Map<string, string>();
-    if (engine.items.some((item) => quoteItemTemplateIds(item.task_template_ids, item.task_template_id).length > 1)) {
+    if (soldItems.some((item) => quoteItemTemplateIds(item.task_template_ids, item.task_template_id).length > 1)) {
       const templates = await listTaskTemplates().catch(() => [] as TaskTemplateRow[]);
       for (const template of templates) templateTitles.set(template.id, template.titre);
     }
@@ -1805,7 +1814,7 @@ export async function transformAcceptedQuoteToChantier(input: {
       numero: quote.quote_number,
       titre: quote.description ?? quote.quote_number,
     }).catch(() => null);
-    for (const item of engine.items) {
+    for (const item of soldItems) {
       const lot = engine.lots.find((row) => row.id === item.lot_id)?.title ?? item.lot ?? quote.lot ?? null;
       const devisLigne = chantierDevis
         ? await createDevisLigne({

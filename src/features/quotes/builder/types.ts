@@ -37,6 +37,13 @@ export type QuoteBuilderItem = {
    * d'un ancien calcul sans écraser un prix voulu.
    */
   priceSource?: "auto" | "manual";
+  /**
+   * Ligne comptée dans le devis. Décochée, elle reste dans l'atelier avec son
+   * prix et ses tâches, mais sort du document client, des totaux, de la marge
+   * et des tâches du chantier : de quoi préparer une option, ou retirer une
+   * prestation sans la ressaisir si le client la reprend.
+   */
+  included?: boolean;
   /** Quantite par tache liee ; null = la tache suit la quantite de la ligne. */
   taskTemplateQuantities?: Array<number | null> | null;
   compositeItems?: QuoteBuilderCompositeItem[];

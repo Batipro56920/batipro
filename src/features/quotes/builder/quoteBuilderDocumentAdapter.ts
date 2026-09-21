@@ -2,7 +2,35 @@ import { calculateDocumentTotals, flattenDocumentNodes, validateBusinessDocument
 import type { BusinessDocument, BusinessDocumentNode, DocumentItemComponent, DocumentItemKind, DocumentUnit, FlatDocumentNode } from "../../document-engine";
 import type { QuoteBuilderCompositeItem, QuoteBuilderFlatRow, QuoteBuilderItem, QuoteBuilderItemKind, QuoteBuilderNode, QuoteBuilderQuote, QuoteBuilderSection, QuoteBuilderUnit } from "./types";
 
-export function quoteBuilderToBusinessDocument(quote: QuoteBuilderQuote): BusinessDocument {
+/** Une ligne décochée ne sort ni au client ni dans les totaux. */
+export function quoteItemIsIncluded(item: QuoteBuilderItem): boolean {
+  return item.included !== false;
+}
+
+/**
+ * Les lignes décochées, retirées avant de construire le document : c'est lui
+ * qui calcule les totaux, la TVA et l'acompte, donc les écarter ici suffit à
+ * les faire disparaître partout à la fois. L'atelier, lui, continue de les
+ * afficher : il travaille sur l'arbre d'origine.
+ */
+function keepIncludedSections(nodes: QuoteBuilderSection[]): QuoteBuilderSection[] {
+  return nodes.map((section) => ({
+    ...section,
+    children: section.children
+      .filter((child) => child.type !== "item" || quoteItemIsIncluded(child))
+      .map((child) =>
+        child.type === "subsection"
+          ? { ...child, children: child.children.filter(quoteItemIsIncluded) }
+          : child,
+      ),
+  }));
+}
+
+export function quoteBuilderToBusinessDocument(
+  quote: QuoteBuilderQuote,
+  options?: { keepExcludedLines?: boolean },
+): BusinessDocument {
+  const nodes = options?.keepExcludedLines ? quote.nodes : keepIncludedSections(quote.nodes);
   const document: BusinessDocument = {
     id: quote.id,
     kind: "quote",
@@ -39,7 +67,7 @@ export function quoteBuilderToBusinessDocument(quote: QuoteBuilderQuote): Busine
       depositAmount: null,
       paymentMethods: ["transfer"],
     },
-    nodes: quoteBuilderNodesToBusinessNodes(quote.nodes),
+    nodes: quoteBuilderNodesToBusinessNodes(nodes),
     attachments: [],
   };
   return { ...document, totals: calculateDocumentTotals(document) };
