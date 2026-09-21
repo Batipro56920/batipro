@@ -852,6 +852,17 @@ function SupplierPricesEditor({ unit, prices, suppliers, onChange }: { unit: Doc
     onChange(prices.map((price) => price.id === id ? { ...price, ...patch } : price));
   }
 
+  /**
+   * Un prix negocie qui n'a plus cours doit pouvoir disparaitre : on pouvait
+   * l'ajouter et le corriger, jamais le retirer. Les fiches gardaient donc des
+   * tarifs faux, et le fournisseur retenu pouvait pointer sur l'un d'eux.
+   */
+  function removePrice(price: ProductSupplierPrice) {
+    const label = String(price.supplierName ?? "").trim() || suppliers.find((row) => row.id === price.supplierId)?.name || "ce fournisseur";
+    if (!window.confirm(`Supprimer le prix de ${label} ?`)) return;
+    onChange(prices.filter((row) => row.id !== price.id));
+  }
+
   return (
     <div className="mt-5 rounded-2xl border border-slate-200 p-4">
       <div className="mb-3 flex items-center justify-between gap-3">
@@ -866,6 +877,15 @@ function SupplierPricesEditor({ unit, prices, suppliers, onChange }: { unit: Doc
           const displayedUnitPrice = getSupplierUnitPrice(price);
           return (
           <div key={price.id} className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+            <div className="mb-2 flex justify-end">
+              <button
+                type="button"
+                className="rounded-lg border border-red-200 px-2 py-1 text-xs font-semibold text-red-600 hover:bg-red-50"
+                onClick={() => removePrice(price)}
+              >
+                Supprimer ce prix
+              </button>
+            </div>
             <div className="mb-3 grid gap-2 md:grid-cols-3">
               <div className="rounded-xl bg-white px-3 py-2 text-sm">
                 <div className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-400">Prix colis HT</div>
