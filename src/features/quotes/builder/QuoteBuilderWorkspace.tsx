@@ -681,8 +681,11 @@ function QuoteDocumentSurface({ quote, rows, table, totals, sensors, onDragEnd, 
       <DndContext sensors={sensors} onDragEnd={onDragEnd}>
         <SortableContext items={rows.map((row) => row.id)} strategy={verticalListSortingStrategy}>
           <table className="hidden w-full table-fixed text-sm md:table">
+            {/* Une colonne de plus sans son <col> ici, et toutes les largeurs
+                glissent d'un cran : la designation se retrouve a 4 rem. */}
             <colgroup>
               <col className="w-8" />
+              <col className="w-16" />
               <col className="w-16" />
               <col />
               <col className="w-20" />
