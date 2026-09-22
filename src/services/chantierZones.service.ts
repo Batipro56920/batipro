@@ -9,6 +9,13 @@ export type ChantierZoneRow = {
   chantier_id: string;
   parent_zone_id: string | null;
   nom: string;
+  /** Cotes relevées en visite : elles suivent la pièce jusqu'au chantier. */
+  longueur_m: number | null;
+  largeur_m: number | null;
+  hauteur_m: number | null;
+  ouvertures_m2: number | null;
+  deduction_plinthes_ml: number | null;
+  source_room_id: string | null;
   zone_type: ChantierZoneType;
   niveau: string | null;
   emplacement: ChantierZoneLocation;
@@ -21,6 +28,12 @@ export type ChantierZoneInput = {
   chantier_id: string;
   parent_zone_id?: string | null;
   nom: string;
+  longueur_m?: number | null;
+  largeur_m?: number | null;
+  hauteur_m?: number | null;
+  ouvertures_m2?: number | null;
+  deduction_plinthes_ml?: number | null;
+  source_room_id?: string | null;
   zone_type?: ChantierZoneType;
   niveau?: string | null;
   emplacement?: ChantierZoneLocation;
@@ -54,6 +67,12 @@ const ZONE_SELECT = [
   "id",
   "chantier_id",
   "parent_zone_id",
+  "longueur_m",
+  "largeur_m",
+  "hauteur_m",
+  "ouvertures_m2",
+  "deduction_plinthes_ml",
+  "source_room_id",
   "nom",
   "zone_type",
   "niveau",
@@ -67,12 +86,23 @@ function fromChantierZones() {
   return (supabase as any).from("chantier_zones");
 }
 
+function numberOrNull(value: unknown): number | null {
+  const parsed = Number(value);
+  return value === null || value === undefined || !Number.isFinite(parsed) ? null : parsed;
+}
+
 function normalizeZone(row: any): ChantierZoneRow {
   return {
     id: row.id,
     chantier_id: row.chantier_id,
     parent_zone_id: row.parent_zone_id ?? null,
     nom: row.nom,
+    longueur_m: numberOrNull(row.longueur_m),
+    largeur_m: numberOrNull(row.largeur_m),
+    hauteur_m: numberOrNull(row.hauteur_m),
+    ouvertures_m2: numberOrNull(row.ouvertures_m2),
+    deduction_plinthes_ml: numberOrNull(row.deduction_plinthes_ml),
+    source_room_id: row.source_room_id ?? null,
     zone_type: (row.zone_type ?? "piece") as ChantierZoneType,
     niveau: row.niveau ?? null,
     emplacement: (row.emplacement ?? "interieur") as ChantierZoneLocation,

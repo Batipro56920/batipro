@@ -20,6 +20,17 @@ type VisitStatus = "brouillon" | "planifiee" | "realisee" | "pre_devis";
 type Unit = "u" | "ml" | "m2" | "m3" | "h";
 type LineType = "section" | "task";
 
+/** Mesure d'une piece retenue pour une ligne : ce qui est reellement concerne. */
+export type ZoneMeasure = "sol" | "plafond" | "murs" | "plinthes" | "volume" | "unite";
+
+export type ZoneLink = {
+  roomId: string;
+  roomName: string;
+  measure: ZoneMeasure;
+  /** Quantite retenue : la mesure calculee, ou celle ajustee au reel. */
+  value: number;
+};
+
 type EstimateLine = {
   id: string;
   type: LineType;
@@ -46,6 +57,7 @@ type EstimateLine = {
    * Toutes les taches liees a la ligne. taskTemplateId reste la premiere :
    * le devis puis le chantier la lisent deja sous ce nom.
    */
+  zoneLinks?: ZoneLink[] | null;
   taskTemplateIds?: string[] | null;
   taskTemplateLabels?: string[] | null;
   /**
@@ -135,6 +147,15 @@ function positive(value: number | null | undefined): number {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : 0;
 }
 
+export const ZONE_MEASURES: Array<{ key: ZoneMeasure; label: string; unit: Unit }> = [
+  { key: "sol", label: "Sol", unit: "m2" },
+  { key: "plafond", label: "Plafond", unit: "m2" },
+  { key: "murs", label: "Murs", unit: "m2" },
+  { key: "plinthes", label: "Plinthes", unit: "ml" },
+  { key: "volume", label: "Volume", unit: "m3" },
+  { key: "unite", label: "A l'unite", unit: "u" },
+];
+
 export function roomMetrics(room: ArchitectureRoom) {
   const length = positive(room.length);
   const width = positive(room.width);
@@ -149,6 +170,16 @@ export function roomMetrics(room: ArchitectureRoom) {
     skirting: Math.max(0, perimeter - positive(room.skirtingDeductionMl)),
     volume: floor * height,
   };
+}
+
+export function measureValue(room: ArchitectureRoom, measure: ZoneMeasure): number {
+  const metrics = roomMetrics(room);
+  if (measure === "sol") return metrics.floor;
+  if (measure === "plafond") return metrics.ceiling;
+  if (measure === "murs") return metrics.walls;
+  if (measure === "plinthes") return metrics.skirting;
+  if (measure === "volume") return metrics.volume;
+  return 1;
 }
 
 function round2(value: number) {
@@ -738,9 +769,57 @@ export function ProjectVisitWorkspaceStable({ project, existingAppointment }: { 
     };
   }, [appointmentId]);
 
-  // Les mesures relevées dans l'onglet Architecture, prêtes à être reprises
-  // dans une ligne : c'est là qu'elles évitent d'être recomptées à la main.
-  const architectureMeasures = useMemo(() => architectureMeasureList(draft.architecture), [draft.architecture]);
+
+  /**
+   * La quantite d'une ligne rattachee a des pieces est la somme de ce qui est
+   * retenu piece par piece : trois murs sur quatre se corrigent dans la ligne
+   * de la piece, pas en reecrivant le total.
+   */
+  function applyZoneLinks(lineId: string, links: ZoneLink[]) {
+    const total = round2(links.reduce((sum, link) => sum + Number(link.value || 0), 0));
+    const firstMeasure = links[0] ? ZONE_MEASURES.find((entry) => entry.key === links[0].measure) : null;
+    patchLine(lineId, {
+      zoneLinks: links,
+      ...(links.length
+        ? { quantity: total, manualQuantity: true, length: null, width: null, height: null, ...(firstMeasure ? { unit: firstMeasure.unit } : {}) }
+        : {}),
+    });
+  }
+
+  function addZoneLink(lineId: string, roomId: string, measure: ZoneMeasure) {
+    const room = draft.architecture.find((entry) => entry.id === roomId);
+    if (!room) return;
+    const line = draft.lines.find((entry) => entry.id === lineId);
+    const links = [...(line?.zoneLinks ?? [])];
+    if (links.some((link) => link.roomId === roomId && link.measure === measure)) return;
+    links.push({ roomId, roomName: room.name.trim() || "Piece", measure, value: round2(measureValue(room, measure)) });
+    applyZoneLinks(lineId, links);
+  }
+
+  function patchZoneLink(lineId: string, index: number, value: number | null) {
+    const line = draft.lines.find((entry) => entry.id === lineId);
+    const links = [...(line?.zoneLinks ?? [])];
+    if (!links[index]) return;
+    links[index] = { ...links[index], value: round2(Number(value ?? 0)) };
+    applyZoneLinks(lineId, links);
+  }
+
+  /** Revenir a la mesure relevee apres un ajustement. */
+  function resetZoneLink(lineId: string, index: number) {
+    const line = draft.lines.find((entry) => entry.id === lineId);
+    const links = [...(line?.zoneLinks ?? [])];
+    const link = links[index];
+    const room = link ? draft.architecture.find((entry) => entry.id === link.roomId) : null;
+    if (!link || !room) return;
+    links[index] = { ...link, value: round2(measureValue(room, link.measure)) };
+    applyZoneLinks(lineId, links);
+  }
+
+  function removeZoneLink(lineId: string, index: number) {
+    const line = draft.lines.find((entry) => entry.id === lineId);
+    const links = (line?.zoneLinks ?? []).filter((_, position) => position !== index);
+    applyZoneLinks(lineId, links);
+  }
   const sections = useMemo(() => draft.lines.filter((line) => line.type === "section"), [draft.lines]);
   const tasks = useMemo(() => draft.lines.filter((line) => line.type === "task"), [draft.lines]);
   const selectedLine = useMemo(() => draft.lines.find((line) => line.id === selectedLineId) ?? null, [draft.lines, selectedLineId]);
@@ -1348,24 +1427,14 @@ export function ProjectVisitWorkspaceStable({ project, existingAppointment }: { 
                       </div>
                     </Field>
                     <LinkedTaskSummary entries={linkedEntries} rates={hourlyRates} unit={selectedLine.unit} quantity={quantity(selectedLine)} />
-                    {architectureMeasures.length ? (
-                      <Field label="Reprendre une mesure de l'architecture">
-                        <select
-                          className={inputClass}
-                          value=""
-                          onChange={(event) => {
-                            const measure = architectureMeasures.find((entry) => entry.key === event.target.value);
-                            if (!measure) return;
-                            patchLine(selectedLine.id, { quantity: measure.value, unit: measure.unit, manualQuantity: true, length: null, width: null, height: null });
-                          }}
-                        >
-                          <option value="">Choisir une mesure relevee...</option>
-                          {architectureMeasures.map((entry) => (
-                            <option key={entry.key} value={entry.key}>{entry.label}</option>
-                          ))}
-                        </select>
-                      </Field>
-                    ) : null}
+                    <ZoneLinkEditor
+                      line={selectedLine}
+                      rooms={draft.architecture}
+                      onAdd={(roomId, measure) => addZoneLink(selectedLine.id, roomId, measure)}
+                      onPatch={(index, value) => patchZoneLink(selectedLine.id, index, value)}
+                      onReset={(index) => resetZoneLink(selectedLine.id, index)}
+                      onRemove={(index) => removeZoneLink(selectedLine.id, index)}
+                    />
                     <div>{renderMeasurements(selectedLine)}</div>
                     <Field label="Temps estime / prix indicatif">
                       <div className="grid gap-2 sm:grid-cols-2">
@@ -1518,40 +1587,6 @@ export function ProjectVisitWorkspaceStable({ project, existingAppointment }: { 
   );
 }
 
-/** Les mesures relevees, proposees telles quelles aux lignes du pre-devis. */
-function architectureMeasureList(rooms: ArchitectureRoom[]) {
-  const entries: Array<{ key: string; label: string; value: number; unit: EstimateLine["unit"] }> = [];
-  const totals = rooms.reduce(
-    (sum, room) => {
-      const metrics = roomMetrics(room);
-      return {
-        floor: sum.floor + metrics.floor,
-        ceiling: sum.ceiling + metrics.ceiling,
-        walls: sum.walls + metrics.walls,
-        skirting: sum.skirting + metrics.skirting,
-        volume: sum.volume + metrics.volume,
-      };
-    },
-    { floor: 0, ceiling: 0, walls: 0, skirting: 0, volume: 0 },
-  );
-  const push = (key: string, label: string, value: number, unit: EstimateLine["unit"]) => {
-    if (value > 0) entries.push({ key, label, value: round2(value), unit });
-  };
-  push("total-floor", `Tout : sol ${round2(totals.floor)} m2`, totals.floor, "m2");
-  push("total-ceiling", `Tout : plafond ${round2(totals.ceiling)} m2`, totals.ceiling, "m2");
-  push("total-walls", `Tout : murs ${round2(totals.walls)} m2`, totals.walls, "m2");
-  push("total-skirting", `Tout : plinthes ${round2(totals.skirting)} ml`, totals.skirting, "ml");
-  push("total-volume", `Tout : volume ${round2(totals.volume)} m3`, totals.volume, "m3");
-  for (const room of rooms) {
-    const metrics = roomMetrics(room);
-    const name = room.name.trim() || "Piece";
-    push(`${room.id}-floor`, `${name} : sol ${round2(metrics.floor)} m2`, metrics.floor, "m2");
-    push(`${room.id}-walls`, `${name} : murs ${round2(metrics.walls)} m2`, metrics.walls, "m2");
-    push(`${room.id}-skirting`, `${name} : plinthes ${round2(metrics.skirting)} ml`, metrics.skirting, "ml");
-    push(`${room.id}-volume`, `${name} : volume ${round2(metrics.volume)} m3`, metrics.volume, "m3");
-  }
-  return entries;
-}
 
 /**
  * Architecture du releve : on mesure une piece, l'application en tire le sol, le
@@ -1657,5 +1692,93 @@ function Measure({ label, value }: { label: string; value: string }) {
       <span className="text-slate-500">{label} </span>
       <span className="font-semibold">{value}</span>
     </span>
+  );
+}
+
+/**
+ * Les pieces concernees par une ligne, et pour chacune la quantite retenue.
+ * La mesure relevee est proposee, puis ajustee : une piece dont trois murs
+ * seulement sont repris se corrige ici, sans toucher au releve ni au total.
+ */
+function ZoneLinkEditor({
+  line,
+  rooms,
+  onAdd,
+  onPatch,
+  onReset,
+  onRemove,
+}: {
+  line: EstimateLine;
+  rooms: ArchitectureRoom[];
+  onAdd: (roomId: string, measure: ZoneMeasure) => void;
+  onPatch: (index: number, value: number | null) => void;
+  onReset: (index: number) => void;
+  onRemove: (index: number) => void;
+}) {
+  const links = line.zoneLinks ?? [];
+  if (!rooms.length) {
+    return (
+      <Field label="Pieces concernees">
+        <p className="rounded-xl border border-dashed border-slate-200 p-3 text-xs text-slate-500">
+          Aucune piece relevee : ajoute-les dans l'onglet Architecture, elles seront proposees ici.
+        </p>
+      </Field>
+    );
+  }
+  const total = round2(links.reduce((sum, link) => sum + Number(link.value || 0), 0));
+  return (
+    <Field label="Pieces concernees">
+      <div className="space-y-2">
+        {links.map((link, index) => {
+          const room = rooms.find((entry) => entry.id === link.roomId) ?? null;
+          const releve = room ? round2(measureValue(room, link.measure)) : null;
+          const ajuste = releve !== null && Math.abs(releve - Number(link.value || 0)) > 0.009;
+          const mesure = ZONE_MEASURES.find((entry) => entry.key === link.measure);
+          return (
+            <div key={`${link.roomId}-${link.measure}`} className="rounded-xl border border-slate-200 bg-slate-50 p-2">
+              <div className="flex items-center gap-2">
+                <span className="min-w-0 flex-1 truncate text-sm font-medium text-slate-900">
+                  {link.roomName}
+                  <span className="text-slate-500"> — {mesure?.label ?? link.measure}</span>
+                </span>
+                <div className="w-24">
+                  <DecimalInput value={link.value} onValue={(value) => onPatch(index, value)} />
+                </div>
+                <span className="text-xs text-slate-500">{mesure?.unit ?? line.unit}</span>
+                <button type="button" onClick={() => onRemove(index)} className="rounded-lg p-1 text-red-600 hover:bg-red-50" aria-label="Retirer la piece">
+                  <Trash2 className="h-4 w-4" />
+                </button>
+              </div>
+              {ajuste ? (
+                <div className="mt-1 flex items-center gap-2 text-[11px] text-amber-700">
+                  <span>Ajuste au reel (releve : {releve} {mesure?.unit})</span>
+                  <button type="button" onClick={() => onReset(index)} className="font-semibold underline">Revenir au releve</button>
+                </div>
+              ) : null}
+            </div>
+          );
+        })}
+
+        <div className="grid gap-2 sm:grid-cols-2">
+          <select className={inputClass} value="" onChange={(event) => { const [roomId, measure] = event.target.value.split("|"); if (roomId && measure) onAdd(roomId, measure as ZoneMeasure); }}>
+            <option value="">Ajouter une piece...</option>
+            {rooms.map((room) => (
+              <optgroup key={room.id} label={room.name.trim() || "Piece"}>
+                {ZONE_MEASURES.map((mesure) => (
+                  <option key={mesure.key} value={`${room.id}|${mesure.key}`}>
+                    {mesure.label} ({round2(measureValue(room, mesure.key))} {mesure.unit})
+                  </option>
+                ))}
+              </optgroup>
+            ))}
+          </select>
+          {links.length ? (
+            <div className="flex items-center justify-end rounded-xl bg-blue-50 px-3 text-sm font-semibold text-blue-800">
+              Quantite de la ligne : {total} {ZONE_MEASURES.find((entry) => entry.key === links[0].measure)?.unit ?? line.unit}
+            </div>
+          ) : null}
+        </div>
+      </div>
+    </Field>
   );
 }

@@ -43,6 +43,8 @@ export type CrmVisitQuoteSource = {
 export type CrmVisitReportLineInput = NonNullable<CrmVisitQuoteSource["lines"]>[number] & {
   manualQuantity?: boolean;
   estimatedHours?: number | null;
+  /** Pièces concernées par la ligne, avec la quantité retenue pour chacune. */
+  zoneLinks?: unknown[] | null;
 };
 
 export type CrmVisitReportAttachmentInput = {
@@ -134,7 +136,7 @@ export type CrmVisitReportInput = CrmVisitReportDraft & {
 const VISIT_REPORT_SELECT =
   "id,appointment_id,prospect_id,client_id,opportunity_id,status,client_name,phone,email,address,contact_on_site,visit_date,visit_time,duration_minutes,salesperson,project_type,client_objective,need_description,urgency,desired_deadline,zones,architecture,constraints,budget,next_action,follow_up_date,report_text,quote_source,created_at,updated_at";
 const VISIT_REPORT_ITEM_SELECT =
-  "id,visit_report_id,parent_id,source_line_id,line_type,title,unit,quantity,manual_quantity,length,width,height,estimated_hours,price_hint_ht,family,library_id,task_template_id,task_template_label,task_template_ids,task_template_labels,task_template_quantities,technical_notes,constraints,variants,attention_points,ordre,created_at,updated_at";
+  "id,visit_report_id,parent_id,source_line_id,line_type,title,unit,quantity,manual_quantity,length,width,height,estimated_hours,price_hint_ht,family,library_id,task_template_id,task_template_label,task_template_ids,task_template_labels,task_template_quantities,zone_links,technical_notes,constraints,variants,attention_points,ordre,created_at,updated_at";
 const VISIT_REPORT_ATTACHMENT_SELECT =
   "id,visit_report_id,item_id,source_attachment_id,kind,name,storage_bucket,storage_path,url,mime_type,size_bytes,comment,ordre,created_at,updated_at";
 
@@ -315,6 +317,7 @@ export async function saveCrmVisitReport(input: CrmVisitReportInput) {
       task_template_ids: templateIdList(line.taskTemplateIds, line.taskTemplateId),
       task_template_labels: (line.taskTemplateLabels ?? []).map((label) => String(label ?? "").trim()).filter(Boolean),
       task_template_quantities: templateQuantityList(line.taskTemplateQuantities, templateIdList(line.taskTemplateIds, line.taskTemplateId).length),
+      zone_links: Array.isArray(line.zoneLinks) ? line.zoneLinks : [],
       technical_notes: text(line.technicalNotes),
       constraints: text(line.constraints),
       variants: text(line.variants),
@@ -442,6 +445,7 @@ export async function loadCrmVisitReportDraft(appointmentId: string): Promise<Cr
       : row.task_template_label
         ? [String(row.task_template_label)]
         : [],
+    zoneLinks: Array.isArray(row.zone_links) ? row.zone_links : [],
     technicalNotes: row.technical_notes ?? "",
     constraints: row.constraints ?? "",
     variants: row.variants ?? "",

@@ -2,6 +2,7 @@ import jsPDF from "jspdf";
 import { createChantier, getChantiers, updateChantier, type ChantierRow } from "./chantiers.service";
 import { createDevis, createDevisLigne } from "./devis.service";
 import { createTask } from "./chantierTasks.service";
+import { createChantierZone, listChantierZones } from "./chantierZones.service";
 import { list as listTaskTemplates, type TaskTemplateRow } from "./taskLibrary.service";
 import { getCurrentOrganizationId } from "./currentUserProfile.service";
 import { supabase } from "../lib/supabaseClient";
@@ -1808,6 +1809,10 @@ export async function transformAcceptedQuoteToChantier(input: {
       const templates = await listTaskTemplates().catch(() => [] as TaskTemplateRow[]);
       for (const template of templates) templateTitles.set(template.id, template.titre);
     }
+    // Les pièces relevées pendant la visite deviennent les zones du chantier :
+    // sans ce report, elles étaient ressaisies à la main, sans leurs cotes.
+    await createZonesFromVisit(chantier.id, quote.opportunity_id ?? null);
+
     const chantierDevis = await createDevis({
       chantier_id: chantier.id,
       nom: quote.description ?? quote.quote_number,
@@ -1895,4 +1900,63 @@ export async function transformAcceptedQuoteToChantier(input: {
       .eq("id", opportunity.id);
   }
   return chantier;
+}
+
+/**
+ * Reporte l'architecture du relevé de visite dans les zones du chantier.
+ *
+ * Le chantier parlait de zones sans dimensions pendant que la visite mesurait
+ * des pièces : les deux vocabulaires ne se rejoignaient jamais. Une zone créée
+ * ici garde l'identifiant de la pièce dont elle vient, ce qui évite le doublon
+ * si la fonction est rejouée.
+ */
+async function createZonesFromVisit(chantierId: string, opportunityId: string | null) {
+  if (!chantierId || !opportunityId) return;
+  try {
+    const { data, error } = await crmDb
+      .from("crm_visit_reports")
+      .select("architecture")
+      .eq("opportunity_id", opportunityId)
+      .order("updated_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (error || !data) return;
+    const rooms = Array.isArray((data as { architecture?: unknown }).architecture)
+      ? ((data as { architecture?: Array<Record<string, unknown>> }).architecture ?? [])
+      : [];
+    if (!rooms.length) return;
+
+    const zonesResult = await listChantierZones(chantierId).catch(() => ({ zones: [], schemaReady: false }));
+    const existing = Array.isArray(zonesResult) ? zonesResult : zonesResult.zones;
+    const dejaCreees = new Set(existing.map((zone) => zone.source_room_id).filter(Boolean) as string[]);
+    const nomsPris = new Set(existing.map((zone) => String(zone.nom ?? "").trim().toLowerCase()));
+
+    let ordre = existing.length;
+    for (const room of rooms) {
+      const sourceRoomId = String(room.id ?? "").trim();
+      const nom = String(room.name ?? "").trim();
+      if (!nom || (sourceRoomId && dejaCreees.has(sourceRoomId)) || nomsPris.has(nom.toLowerCase())) continue;
+      ordre += 1;
+      await createChantierZone({
+        chantier_id: chantierId,
+        nom,
+        zone_type: "piece",
+        ordre,
+        longueur_m: numberOrNullValue(room.length),
+        largeur_m: numberOrNullValue(room.width),
+        hauteur_m: numberOrNullValue(room.height),
+        ouvertures_m2: numberOrNullValue(room.openingsM2),
+        deduction_plinthes_ml: numberOrNullValue(room.skirtingDeductionMl),
+        source_room_id: sourceRoomId || null,
+      }).catch(() => null);
+    }
+  } catch {
+    // Un chantier doit naître même si le relevé est illisible : les zones se
+    // recréent à la main, le reste du transfert ne doit pas échouer pour ça.
+  }
+}
+
+function numberOrNullValue(value: unknown): number | null {
+  const parsed = Number(value);
+  return value === null || value === undefined || value === "" || !Number.isFinite(parsed) ? null : parsed;
 }
