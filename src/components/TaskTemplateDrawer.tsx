@@ -33,6 +33,7 @@ import {
   type TaskTemplateCocoResult,
 } from "../features/product-catalog/services/taskTemplateCoco.service";
 import { getProductRatioHint } from "../features/product-catalog/services/productMaterialAutofill.service";
+import { describeMaterialPriceBasis, resolveMaterialUnitPrice } from "../features/product-catalog/services/materialUnitPrice";
 import { ProductPicker } from "../features/product-catalog/components/ProductPicker";
 import { useI18n } from "../i18n";
 
@@ -963,7 +964,11 @@ export default function TaskTemplateDrawer({
       ...(hint.lossPercent !== null ? { loss_percent: toField(hint.lossPercent) } : {}),
       ...(hint.notes ? { notes: hint.notes } : {}),
       supplier_id: bestPrice?.supplierId ?? product.mainSupplierId ?? "",
-      purchase_price_ht: toField(bestPrice?.priceHt ?? product.standardPurchasePriceHt ?? null),
+      // Le prix doit etre celui de l unite du ratio, pas celle du produit :
+      // un ratio en plaques se chiffre au prix de la plaque, pas du m2.
+      purchase_price_ht: toField(
+        resolveMaterialUnitPrice(product, hint.ratioUnit ?? product.unit).priceHt ?? product.standardPurchasePriceHt ?? null,
+      ),
       sale_price_ht: toField(product.recommendedSalePriceHt ?? null),
       price_source: bestPrice ? "supplier_price" : "standard",
       manual_override: false,
@@ -1576,9 +1581,43 @@ export default function TaskTemplateDrawer({
 
                         {row.product_id ? (
                           <div className="flex flex-wrap items-center gap-2 text-xs text-slate-600">
-                            <span className="rounded-full border border-slate-200 bg-white px-2 py-1">
-                              Achat {row.purchase_price_ht || "—"} € / {row.ratio_unit || "u"}
-                            </span>
+                            {(() => {
+                              // Le prix affiche est celui qui SERT au calcul, celui enregistre
+                              // sur la ligne. A cote, ce que dit le catalogue pour cette unite :
+                              // un prix au m2 applique a un ratio en plaques sous-evalue le
+                              // materiau d autant de m2 que contient une plaque. L ecart se voit,
+                              // et se corrige d un clic — jamais dans le dos de l utilisateur.
+                              const product = products.find((item) => item.id === row.product_id) ?? null;
+                              const resolved = product ? resolveMaterialUnitPrice(product, row.ratio_unit) : null;
+                              const stored = Number(String(row.purchase_price_ht ?? "").replace(",", "."));
+                              const catalog = resolved?.priceHt ?? null;
+                              const ecart = catalog !== null && Number.isFinite(stored) && Math.abs(stored - catalog) > 0.005;
+                              return (
+                                <>
+                                  <span className="rounded-full border border-slate-200 bg-white px-2 py-1">
+                                    Achat {row.purchase_price_ht || "—"} € / {row.ratio_unit || "u"}
+                                  </span>
+                                  {resolved && ecart ? (
+                                    <span className="inline-flex items-center gap-2 rounded-full border border-amber-300 bg-amber-50 px-2 py-1 text-amber-900">
+                                      <span>Catalogue : {describeMaterialPriceBasis(resolved)}</span>
+                                      <button
+                                        type="button"
+                                        disabled={busy}
+                                        onClick={() => updateMaterialDraft(index, { purchase_price_ht: toField(catalog), manual_override: false })}
+                                        className="rounded-lg border border-amber-300 bg-white px-2 py-0.5 font-semibold text-amber-900 hover:bg-amber-100 disabled:opacity-60"
+                                      >
+                                        Reprendre ce prix
+                                      </button>
+                                    </span>
+                                  ) : null}
+                                  {resolved && resolved.basis === "indetermine" ? (
+                                    <span className="rounded-full border border-amber-300 bg-amber-50 px-2 py-1 text-amber-900">
+                                      Unite du ratio ({row.ratio_unit || "u"}) absente de la fiche produit : verifie ce prix.
+                                    </span>
+                                  ) : null}
+                                </>
+                              );
+                            })()}
                             <span className="rounded-full border border-slate-200 bg-white px-2 py-1">
                               {suppliers.find((s) => s.id === row.supplier_id)?.name ?? "Fournisseur non défini"}
                             </span>
