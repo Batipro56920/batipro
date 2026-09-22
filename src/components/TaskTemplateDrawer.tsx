@@ -1599,7 +1599,15 @@ export default function TaskTemplateDrawer({
                               const resolved = product ? resolveMaterialUnitPrice(product, row.ratio_unit) : null;
                               const stored = Number(String(row.purchase_price_ht ?? "").replace(",", "."));
                               const catalog = resolved?.priceHt ?? null;
-                              const ecart = catalog !== null && Number.isFinite(stored) && Math.abs(stored - catalog) > 0.005;
+                              // Le prix de vente se lit dans la meme unite que l'achat. Corriger
+                              // l'achat sans lui reviendrait a creuser la marge au lieu de la
+                              // retablir : la plaque passerait a 9 EUR d'achat en restant
+                              // vendue au prix du m2.
+                              const catalogSale = product ? resolveMaterialSalePrice(product, row.ratio_unit) : null;
+                              const storedSale = Number(String(row.sale_price_ht ?? "").replace(",", "."));
+                              const ecartAchat = catalog !== null && Number.isFinite(stored) && Math.abs(stored - catalog) > 0.005;
+                              const ecartVente = catalogSale !== null && Number.isFinite(storedSale) && Math.abs(storedSale - catalogSale) > 0.005;
+                              const ecart = ecartAchat || ecartVente;
                               return (
                                 <>
                                   <span className="rounded-full border border-slate-200 bg-white px-2 py-1">
@@ -1607,11 +1615,20 @@ export default function TaskTemplateDrawer({
                                   </span>
                                   {resolved && ecart ? (
                                     <span className="inline-flex items-center gap-2 rounded-full border border-amber-300 bg-amber-50 px-2 py-1 text-amber-900">
-                                      <span>Catalogue : {describeMaterialPriceBasis(resolved)}</span>
+                                      <span>
+                                        Catalogue : {describeMaterialPriceBasis(resolved)}
+                                        {ecartVente && catalogSale !== null ? ` · vente ${catalogSale.toFixed(2)} €` : ""}
+                                      </span>
                                       <button
                                         type="button"
                                         disabled={busy}
-                                        onClick={() => updateMaterialDraft(index, { purchase_price_ht: toField(catalog), manual_override: false })}
+                                        onClick={() =>
+                                          updateMaterialDraft(index, {
+                                            ...(ecartAchat && catalog !== null ? { purchase_price_ht: toField(catalog) } : {}),
+                                            ...(ecartVente && catalogSale !== null ? { sale_price_ht: toField(catalogSale) } : {}),
+                                            manual_override: false,
+                                          })
+                                        }
                                         className="rounded-lg border border-amber-300 bg-white px-2 py-0.5 font-semibold text-amber-900 hover:bg-amber-100 disabled:opacity-60"
                                       >
                                         Reprendre ce prix
