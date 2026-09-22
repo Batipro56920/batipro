@@ -796,10 +796,18 @@ export default function TaskTemplateDrawer({
     // Le taux saisi sur la tache prime sur le cout horaire moyen de l'equipe.
     const override = parseDraftAmount(coutHoraireTache);
     const hourlyCostHt = override !== null && override >= 0 ? override : hourlyRates?.averageEmployeeHourlyCostHt ?? 0;
+    // Les frais generaux et l'amortissement, ramenes a l'heure, font partie du
+    // cout de la main d'oeuvre : ils se chiffrent et se vendent avec elle, et
+    // nulle part ailleurs — ni tuile a part, ni ligne de devis supplementaire.
+    const overheadPerHour = Number(hourlyRates?.amortizationRatePerHour ?? 0) + Number(hourlyRates?.overheadRatePerHour ?? 0);
+    const fullHourlyCostHt = hourlyCostHt + overheadPerHour;
     return {
       hours,
       hourlyCostHt,
-      cost: Math.round(hours * hourlyCostHt * 100) / 100,
+      overheadPerHour,
+      fullHourlyCostHt,
+      overheadCost: Math.round(hours * overheadPerHour * 100) / 100,
+      cost: Math.round(hours * fullHourlyCostHt * 100) / 100,
     };
   }, [tempsParUnite, coutHoraireTache, hourlyRates]);
 
@@ -822,7 +830,7 @@ export default function TaskTemplateDrawer({
       labor: [
         {
           durationHours: laborPlan.hours,
-          hourlyCostHt: laborPlan.hourlyCostHt,
+          hourlyCostHt: laborPlan.fullHourlyCostHt,
           hourlySaleHt: null,
           marginRate: selectedLotProfile?.laborMarginRate ?? null,
         },
@@ -839,14 +847,10 @@ export default function TaskTemplateDrawer({
         marginRate: selectedLotProfile?.feesMarginRate ?? null,
       })),
       estimatedTimeHours: parseDraftAmount(tempsParUnite),
-      amortizationRatePerHour: hourlyRates?.amortizationRatePerHour ?? 0,
-      overheadRatePerHour: hourlyRates?.overheadRatePerHour ?? 0,
-      // La marge de la tâche, sinon celle du lot, sinon celle de l'entreprise.
-      indirectMarginRate:
-        parseDraftAmount(margeTache) ??
-        selectedLotProfile?.laborMarginRate ??
-        hourlyRates?.defaultMarginRate ??
-        null,
+      // Frais generaux et amortissement sont deja dans le cout horaire de la
+      // main d'oeuvre : les passer ici les compterait une seconde fois.
+      amortizationRatePerHour: 0,
+      overheadRatePerHour: 0,
     });
 
     return {
@@ -1898,8 +1902,18 @@ export default function TaskTemplateDrawer({
                     </div>
                   </div>
                   <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm">
+                    <div className="text-[11px] uppercase tracking-[0.12em] text-slate-500">Frais généraux</div>
+                    <div className="mt-1 font-semibold text-slate-900">{laborPlan.overheadPerHour.toFixed(2)} €/h</div>
+                    <div className="mt-1 text-[11px] text-slate-500">
+                      Charges fixes + amortissement ÷ heures vendues. Inclus dans la main d'oeuvre.
+                    </div>
+                  </div>
+                  <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm">
                     <div className="text-[11px] uppercase tracking-[0.12em] text-slate-500">Coût main d'oeuvre</div>
                     <div className="mt-1 font-semibold text-slate-900">{laborPlan.cost.toFixed(2)} €</div>
+                    <div className="mt-1 text-[11px] text-slate-500">
+                      {laborPlan.hours} h × {laborPlan.fullHourlyCostHt.toFixed(2)} €/h (salarié {laborPlan.hourlyCostHt.toFixed(2)} + frais {laborPlan.overheadPerHour.toFixed(2)})
+                    </div>
                   </div>
                   <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm">
                     <div className="text-[11px] uppercase tracking-[0.12em] text-slate-500">Marge de la tâche</div>
@@ -2041,21 +2055,10 @@ export default function TaskTemplateDrawer({
                     <div className="font-semibold">{compositionTotals.materialCost.toFixed(2)} €</div>
                   </div>
                   <div className="rounded-xl bg-slate-50 p-3">
-                    <div className="text-xs text-slate-500">PR MO</div>
+                    <div className="text-xs text-slate-500">PR MO (frais généraux inclus)</div>
                     <div className="font-semibold">{compositionTotals.laborCost.toFixed(2)} €</div>
-                  </div>
-                  <div className="rounded-xl bg-slate-50 p-3">
-                    <div className="text-xs text-slate-500">PR amortissement matériel</div>
-                    <div className="font-semibold">{compositionTotals.amortizationCost.toFixed(2)} €</div>
                     <div className="mt-1 text-[11px] text-slate-500">
-                      {(hourlyRates?.amortizationRatePerHour ?? 0).toFixed(2)} €/h × temps homme
-                    </div>
-                  </div>
-                  <div className="rounded-xl bg-slate-50 p-3">
-                    <div className="text-xs text-slate-500">PR frais généraux</div>
-                    <div className="font-semibold">{compositionTotals.overheadCost.toFixed(2)} €</div>
-                    <div className="mt-1 text-[11px] text-slate-500">
-                      {(hourlyRates?.overheadRatePerHour ?? 0).toFixed(2)} €/h × temps homme
+                      dont frais généraux {laborPlan.overheadCost.toFixed(2)} € — déjà comptés, pas ajoutés
                     </div>
                   </div>
                 </div>

@@ -28,9 +28,14 @@ export type TaskCostBasis = {
 export const EMPTY_TASK_COST: TaskCostBasis = { costHt: 0, hours: 0, laborHt: 0, materialsHt: 0, indirectHt: 0 };
 
 /**
- * Déboursé d'une tâche pour une unité : main d'oeuvre au coût horaire moyen des
- * employés, matériaux majorés de leurs pertes, amortissement et frais généraux
- * ramenés au temps passé.
+ * Déboursé d'une tâche pour une unité.
+ *
+ * La main d'oeuvre est comptée au coût horaire COMPLET : le coût du salarié,
+ * plus les frais généraux et l'amortissement ramenés à l'heure. Ces frais
+ * vivaient à part, ajoutés au déboursé sans jamais entrer dans le prix de
+ * vente ; ils sont désormais dans la main d'oeuvre, vendus avec elle, et nulle
+ * part ailleurs. indirectHt reste exposé pour dire "dont frais généraux" — il
+ * est DÉJÀ compris dans laborHt et ne doit jamais être additionné à nouveau.
  */
 export function taskTemplateUnitCost(
   template: TaskTemplateRow | null,
@@ -40,15 +45,17 @@ export function taskTemplateUnitCost(
   if (!template) return EMPTY_TASK_COST;
   // Le coût horaire propre à la tâche prime : un geste confié à un compagnon
   // qualifié ne se chiffre pas au coût moyen de l'équipe.
-  const hourlyCostHt = Number(template.labor_hourly_cost_ht ?? rates?.averageEmployeeHourlyCostHt ?? 0);
+  const baseHourlyCostHt = Number(template.labor_hourly_cost_ht ?? rates?.averageEmployeeHourlyCostHt ?? 0);
+  const overheadPerHour = Number(rates?.amortizationRatePerHour ?? 0) + Number(rates?.overheadRatePerHour ?? 0);
   const hours = Number(template.temps_prevu_par_unite_h ?? 0);
-  const laborHt = hours * hourlyCostHt;
+  const indirectHt = hours * overheadPerHour;
+  const laborHt = hours * (baseHourlyCostHt + overheadPerHour);
   const materialsHt = materials.reduce(
     (total, row) => total + Number(row.ratio_quantity ?? 0) * (1 + Number(row.loss_percent ?? 0) / 100) * Number(row.purchase_price_ht ?? 0),
     0,
   );
-  const indirectHt = hours * (Number(rates?.amortizationRatePerHour ?? 0) + Number(rates?.overheadRatePerHour ?? 0));
-  return { costHt: laborHt + materialsHt + indirectHt, hours, laborHt, materialsHt, indirectHt };
+  // indirectHt est deja dans laborHt : ne pas l'ajouter une seconde fois.
+  return { costHt: laborHt + materialsHt, hours, laborHt, materialsHt, indirectHt };
 }
 
 /** Marge retenue pour une tâche : la sienne, sinon celle de l'entreprise. */

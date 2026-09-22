@@ -382,17 +382,19 @@ function LinkedTaskSummary({
   const totalLabor = perTask.reduce((total, row) => total + row.labor, 0);
   const totalMaterials = perTask.reduce((total, row) => total + row.materials, 0);
   const totalIndirect = perTask.reduce((total, row) => total + row.indirect, 0);
-  const totalCost = totalLabor + totalMaterials + totalIndirect;
+  // Les frais generaux sont deja dans la main d'oeuvre : les additionner ici
+  // les compterait deux fois.
+  const totalCost = totalLabor + totalMaterials;
   const materialLines = entries.reduce((total, entry) => total + entry.materials.length, 0);
   const equipmentNames = Array.from(
     new Set(entries.flatMap((entry) => entry.equipment.map((item) => item.equipment_name).filter(Boolean))),
   );
 
   const rows: Array<[string, string]> = [
-    ["Main d'oeuvre", `${totalHours.toLocaleString("fr-FR")} h x ${euro(Number(rates?.averageEmployeeHourlyCostHt ?? 0))} = ${euro(totalLabor)}`],
+    ["Main d'oeuvre (frais generaux inclus)", `${totalHours.toLocaleString("fr-FR")} h = ${euro(totalLabor)}`],
     ["Materiaux (pertes incluses)", `${materialLines} ligne(s) = ${euro(totalMaterials)}`],
     ["Materiel", equipmentNames.length ? equipmentNames.join(", ") : "aucun"],
-    ["Amortissement + frais generaux", euro(totalIndirect)],
+    ["dont frais generaux", `${euro(totalIndirect)} (compris dans la main d'oeuvre)`],
   ];
 
   return (
