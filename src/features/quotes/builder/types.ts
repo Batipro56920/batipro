@@ -52,6 +52,15 @@ export type QuoteBuilderItem = {
   /** Quantite par tache liee ; null = la tache suit la quantite de la ligne. */
   taskTemplateQuantities?: Array<number | null> | null;
   compositeItems?: QuoteBuilderCompositeItem[];
+  /**
+   * Ligne sous-traitée : ce que le sous-traitant facture par unité (son devis)
+   * et la marge qu'on prend dessus. Le prix de vente en découle tant que
+   * personne ne l'a fixé à la main. Sans ces deux chiffres, une prestation
+   * sous-traitée n'avait ni déboursé ni marge dans le devis.
+   */
+  subcontractorUnitCostHt?: number | null;
+  subcontractorMarginRate?: number | null;
+  subcontractorName?: string | null;
 };
 
 export type QuoteBuilderCompositeItem = {

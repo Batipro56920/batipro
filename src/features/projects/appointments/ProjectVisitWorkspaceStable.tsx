@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { ArrowLeft, Camera, CheckCircle2, FileText, Mic, Plus, Save, Trash2 } from "lucide-react";
+import { ArrowLeft, Camera, CheckCircle2, FileText, Mic, Plus, Save, Trash2, Upload } from "lucide-react";
 import { Button } from "../../../components/ui/button";
 import { createCrmAppointment, type CrmAppointmentRow } from "../../../services/crm.service";
 import { loadCrmVisitReportDraft, saveCrmVisitReport } from "../../../services/crmVisitReports.service";
@@ -8,6 +8,8 @@ import { createOpportunityForProspect, updateCrmAppointment, updateCrmOpportunit
 import { list as listTaskTemplates, type TaskTemplateRow } from "../../../services/taskLibrary.service";
 import { loadTaskTemplateUnitCosts } from "../../../services/taskTemplateComputedCost";
 import VisitTaskPickerDialog from "./VisitTaskPickerDialog";
+import SubcontractorQuoteImportDialog, { type SubcontractedTaskDraft } from "./SubcontractorQuoteImportDialog";
+import { listIntervenants, type IntervenantRow } from "../../../services/intervenants.service";
 import { listTaskTemplatePreparationByTemplateIds, type TaskTemplateEquipmentItemRow, type TaskTemplateMaterialRatioRow } from "../../../services/taskTemplatePreparation.service";
 import { getCompanyHourlyRates, type CompanyHourlyRates } from "../../../services/indirectCosts.service";
 import { taskTemplateUnitCost, taskTemplateUnitSale } from "../../../services/taskCostBasis";
@@ -32,11 +34,29 @@ export type ZoneLink = {
   value: number;
 };
 
+/**
+ * Section confiee a un sous-traitant. Son devis (ou son prix) est le debourse ;
+ * la marge choisie fait le prix de vente. Chaque tache de la section porte le
+ * prix du sous-traitant par unite, et c'est tout : pas de main d'oeuvre a nous,
+ * pas de materiaux, pas de frais generaux a recompter.
+ */
+export type SubcontractingSection = {
+  intervenantId: string | null;
+  name: string;
+  marginRate: number;
+  /** Montant HT du devis du sous-traitant, pour controler que les taches le couvrent. */
+  quoteTotalHt: number | null;
+};
+
 type EstimateLine = {
   id: string;
   type: LineType;
   parentId: string | null;
   title: string;
+  /** Section sous-traitee : qui, a quelle marge. Null = travaux a nous. */
+  subcontracting?: SubcontractingSection | null;
+  /** Tache d'une section sous-traitee : prix du sous-traitant HT par unite. */
+  subcontractorUnitCostHt?: number | null;
   unit: Unit;
   quantity: number;
   manualQuantity: boolean;
@@ -320,6 +340,25 @@ function followsAutoValue(current: number | null | undefined, lastAutomatic: num
 function sameEstimate(current: number | null | undefined, next: number): boolean {
   return Math.abs(Number(current ?? 0) - next) < 0.005;
 }
+
+/** La sous-traitance d'une ligne : la sienne (section) ou celle de sa section (tache). */
+function subcontractingFor(line: EstimateLine, lines: EstimateLine[]): SubcontractingSection | null {
+  if (line.type === "section") return line.subcontracting ?? null;
+  const parent = line.parentId ? lines.find((entry) => entry.id === line.parentId) ?? null : null;
+  return parent?.subcontracting ?? null;
+}
+
+/** Prix de vente d'une unite sous-traitee : le prix du sous-traitant majore de la marge. */
+function subcontractedSalePrice(unitCost: number | null | undefined, marginRate: number): number | null {
+  const cost = Number(unitCost ?? 0);
+  if (!(cost > 0)) return null;
+  return round2(cost * (1 + Math.max(0, Number(marginRate) || 0) / 100));
+}
+
+function subcontractorLabel(row: IntervenantRow): string {
+  const company = String(row.subcontractor_company ?? row.entreprise ?? "").trim();
+  return company && company !== row.nom ? `${row.nom} — ${company}` : row.nom;
+}
 type LinkedTaskEntry = {
   template: TaskTemplateRow;
   materials: TaskTemplateMaterialRatioRow[];
@@ -589,8 +628,9 @@ function reportText(project: ProjectRecord, draft: VisitDraft) {
   const tasks = draft.lines.filter((line) => line.type === "task");
   const taskLines = sections.map((section) => {
     const children = tasks.filter((task) => task.parentId === section.id);
+    const sub = section.subcontracting ?? null;
     return [
-      `# ${section.title}`,
+      sub ? `# ${section.title} (sous-traite : ${sub.name || "a designer"}, marge ${sub.marginRate} %)` : `# ${section.title}`,
       ...children.map((task) => `- ${task.title}: ${quantity(task)} ${task.unit}${taskLinkedLabels(task) ? ` | taches liees: ${taskLinkedLabels(task)}` : ""}${task.technicalNotes ? ` | ${task.technicalNotes}` : ""}`),
     ].join("\n");
   }).join("\n\n");
@@ -674,6 +714,8 @@ export function ProjectVisitWorkspaceStable({ project, existingAppointment }: { 
   const lastSavedSignatureRef = useRef("");
   const firstDraftRender = useRef(true);
   const [importOpen, setImportOpen] = useState(false);
+  const [subcontractors, setSubcontractors] = useState<IntervenantRow[]>([]);
+  const [subQuoteImport, setSubQuoteImport] = useState<{ sectionId: string; file: File } | null>(null);
 
   useEffect(() => {
     let alive = true;
@@ -690,6 +732,11 @@ export function ProjectVisitWorkspaceStable({ project, existingAppointment }: { 
     void getCompanyHourlyRates()
       .then((rates) => {
         if (alive) setHourlyRates(rates);
+      })
+      .catch(() => undefined);
+    void listIntervenants()
+      .then((rows) => {
+        if (alive) setSubcontractors(rows.filter((row) => row.status === "subcontractor" && !row.archived_at));
       })
       .catch(() => undefined);
     return () => {
@@ -840,6 +887,8 @@ export function ProjectVisitWorkspaceStable({ project, existingAppointment }: { 
     [selectedLine, selectedTemplateIds],
   );
   const selectedLineQuantity = selectedLine ? quantity(selectedLine) : 0;
+  const selectedSubcontracting = useMemo(() => (selectedLine ? subcontractingFor(selectedLine, draft.lines) : null), [selectedLine, draft.lines]);
+  const defaultMarginRate = Number(hourlyRates?.defaultMarginRate ?? 30);
 
   /**
    * Composition reelle des taches liees : ce que l'ouvrier trouvera au chantier.
@@ -905,11 +954,23 @@ export function ProjectVisitWorkspaceStable({ project, existingAppointment }: { 
    */
   const autoEstimates = useRef<Map<string, { hours: number | null; price: number | null }>>(new Map());
   useEffect(() => {
-    if (!hourlyRates) return;
     const patches = new Map<string, Partial<EstimateLine>>();
 
     for (const line of draft.lines) {
       if (line.type !== "task") continue;
+      // Tache sous-traitee : ni main d'oeuvre ni materiaux a nous. Le prix suit
+      // le prix du sous-traitant et la marge de la section, tant que le
+      // commercial n'a pas ecrit le sien.
+      const subcontracting = subcontractingFor(line, draft.lines);
+      if (subcontracting) {
+        const nextPrice = subcontractedSalePrice(line.subcontractorUnitCostHt, subcontracting.marginRate);
+        const tracked = autoEstimates.current.get(line.id) ?? { hours: null, price: null };
+        const followsPrice = followsAutoValue(line.priceHintHt, tracked.price);
+        if (followsPrice && nextPrice !== null && !sameEstimate(line.priceHintHt, nextPrice)) patches.set(line.id, { priceHintHt: nextPrice });
+        autoEstimates.current.set(line.id, { hours: tracked.hours, price: followsPrice ? nextPrice ?? tracked.price : null });
+        continue;
+      }
+      if (!hourlyRates) continue;
       const ids = lineTemplateIds(line);
       if (!ids.length) continue;
       const quantities = lineTemplateQuantities(line, ids);
@@ -1059,7 +1120,8 @@ export function ProjectVisitWorkspaceStable({ project, existingAppointment }: { 
       parentId = uid("section");
       nextLines.push({ id: parentId, type: "section", parentId: null, title: "Nouvelle section", unit: "u", quantity: 0, manualQuantity: false, technicalNotes: "", constraints: "", variants: "", attentionPoints: "" });
     }
-    const line: EstimateLine = { id: uid("task"), type: "task", parentId, title: "Nouvelle tache / prestation", unit: "m2", quantity: 0, manualQuantity: false, length: null, width: null, height: null, estimatedHours: null, priceHintHt: null, family: null, libraryId: null, taskTemplateId: null, taskTemplateLabel: null, taskTemplateIds: [], taskTemplateLabels: [], taskTemplateQuantities: [], technicalNotes: "", constraints: "", variants: "", attentionPoints: "" };
+    const subcontracted = Boolean(draft.lines.find((item) => item.id === parentId)?.subcontracting);
+    const line: EstimateLine = { id: uid("task"), type: "task", parentId, title: subcontracted ? "Prestation sous-traitee" : "Nouvelle tache / prestation", unit: subcontracted ? "u" : "m2", ...(subcontracted ? { subcontractorUnitCostHt: null } : {}), quantity: 0, manualQuantity: false, length: null, width: null, height: null, estimatedHours: null, priceHintHt: null, family: null, libraryId: null, taskTemplateId: null, taskTemplateLabel: null, taskTemplateIds: [], taskTemplateLabels: [], taskTemplateQuantities: [], technicalNotes: "", constraints: "", variants: "", attentionPoints: "" };
     setDraft((current) => ({ ...current, lines: [...nextLines.filter((item) => !current.lines.some((existing) => existing.id === item.id)), ...current.lines, line] }));
     setSelectedLineId(line.id);
     setStep("estimating");
@@ -1107,6 +1169,99 @@ export function ProjectVisitWorkspaceStable({ project, existingAppointment }: { 
     if (!newLines.length) return;
     setDraft((current) => ({ ...current, lines: [...current.lines, ...newLines] }));
     setSelectedLineId(newLines[0].id);
+  }
+
+  /**
+   * Une section confiee a un sous-traitant. On y entre son prix ou son devis,
+   * on choisit la marge, et les taches en decoulent : chacune au prix du
+   * sous-traitant, vendue avec la marge. Rien de tout cela ne passe par la
+   * bibliotheque : ce ne sont pas nos gestes.
+   */
+  function addSubcontractingSection() {
+    const line: EstimateLine = {
+      id: uid("section"),
+      type: "section",
+      parentId: null,
+      title: "Sous-traitance",
+      unit: "u",
+      quantity: 0,
+      manualQuantity: false,
+      subcontracting: { intervenantId: null, name: "", marginRate: defaultMarginRate, quoteTotalHt: null },
+      technicalNotes: "",
+      constraints: "",
+      variants: "",
+      attentionPoints: "",
+    };
+    setDraft((current) => ({ ...current, lines: [...current.lines, line] }));
+    setSelectedLineId(line.id);
+    setStep("estimating");
+  }
+
+  /** Bascule une section existante en sous-traitance, ou l'en sort. */
+  function setSectionSubcontracted(sectionId: string, subcontracted: boolean) {
+    const line = draft.lines.find((item) => item.id === sectionId);
+    if (!line || line.type !== "section") return;
+    patchLine(sectionId, {
+      subcontracting: subcontracted ? line.subcontracting ?? { intervenantId: null, name: "", marginRate: defaultMarginRate, quoteTotalHt: null } : null,
+    });
+  }
+
+  function patchSubcontracting(sectionId: string, patch: Partial<SubcontractingSection>) {
+    const line = draft.lines.find((item) => item.id === sectionId);
+    if (!line?.subcontracting) return;
+    patchLine(sectionId, { subcontracting: { ...line.subcontracting, ...patch } });
+  }
+
+  /** Le sous-traitant choisi dans la liste : son nom suit, mais reste modifiable. */
+  function chooseSubcontractor(sectionId: string, intervenantId: string) {
+    const row = subcontractors.find((item) => item.id === intervenantId) ?? null;
+    patchSubcontracting(sectionId, { intervenantId: row?.id ?? null, ...(row ? { name: subcontractorLabel(row) } : {}) });
+  }
+
+  /**
+   * Les lignes du devis du sous-traitant deviennent des taches de la section,
+   * chacune au prix qu'il facture. Le prix de vente se calcule ensuite tout
+   * seul avec la marge de la section.
+   */
+  function addSubcontractedTasks(sectionId: string, drafts: SubcontractedTaskDraft[]) {
+    if (!drafts.length) return;
+    const newLines: EstimateLine[] = drafts.map((row) => ({
+      id: uid("task"),
+      type: "task",
+      parentId: sectionId,
+      title: row.title,
+      unit: row.unit,
+      quantity: row.quantity,
+      manualQuantity: true,
+      length: null,
+      width: null,
+      height: null,
+      estimatedHours: null,
+      priceHintHt: null,
+      family: null,
+      libraryId: null,
+      taskTemplateId: null,
+      taskTemplateLabel: null,
+      taskTemplateIds: [],
+      taskTemplateLabels: [],
+      taskTemplateQuantities: [],
+      subcontractorUnitCostHt: row.unitCostHt,
+      technicalNotes: row.technicalNotes,
+      constraints: "",
+      variants: "",
+      attentionPoints: "",
+    }));
+    setDraft((current) => ({ ...current, lines: [...current.lines, ...newLines] }));
+    setSelectedLineId(newLines[0].id);
+    setSubQuoteImport(null);
+  }
+
+  /** Le devis PDF du sous-traitant : garde avec la visite, puis lu pour en tirer les taches. */
+  function attachSubcontractorQuote(sectionId: string, files: FileList | null) {
+    const file = files?.[0] ?? null;
+    if (!file) return;
+    addFiles(files, "document", sectionId);
+    setSubQuoteImport({ sectionId, file });
   }
 
   function removeLine(id: string) {
@@ -1355,12 +1510,12 @@ export function ProjectVisitWorkspaceStable({ project, existingAppointment }: { 
           <div className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div><div className="text-xs font-semibold uppercase tracking-[0.18em] text-blue-600">Terrain / pre-devis</div><h2 className="mt-1 text-lg font-semibold text-slate-950">Sections et taches</h2></div>
-              <div className="flex gap-2"><Button variant="secondary" onClick={() => addSection()}><Plus className="h-4 w-4" />Section</Button><Button variant="secondary" onClick={() => addTask()}><Plus className="h-4 w-4" />Tache</Button></div>
+              <div className="flex flex-wrap gap-2"><Button variant="secondary" onClick={() => addSection()}><Plus className="h-4 w-4" />Section</Button><Button variant="secondary" onClick={() => addSubcontractingSection()} title="Une section dont les travaux sont confies a un sous-traitant : son prix ou son devis, plus notre marge"><Plus className="h-4 w-4" />Sous-traitant</Button><Button variant="secondary" onClick={() => addTask()}><Plus className="h-4 w-4" />Tache</Button></div>
             </div>
             <div className="mt-4 space-y-3">
               {sections.length === 0 ? <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-5 text-sm text-slate-500">Creez une section, puis ajoutez les taches et quantites relevees.</div> : sections.map((section) => {
                 const children = tasks.filter((task) => task.parentId === section.id);
-                return <article key={section.id} className="overflow-hidden rounded-2xl border border-slate-200"><button type="button" onClick={() => { setSelectedLineId(section.id); setPickerSectionId(section.id); }} title="Ajouter des taches de la bibliotheque a cette section" className="flex w-full items-center justify-between bg-slate-50 px-4 py-3 text-left hover:bg-slate-100"><span className="font-semibold text-slate-950">{section.title}</span><span className="text-xs text-slate-500">{children.length} tache(s)</span></button><div className="divide-y divide-slate-100">{children.map((task) => <button key={task.id} type="button" onClick={() => setSelectedLineId(task.id)} className={["block w-full p-4 text-left hover:bg-slate-50", selectedLineId === task.id ? "bg-blue-50" : "bg-white"].join(" ")}><div className="font-semibold text-slate-950">{task.title}</div><div className="mt-1 text-sm text-slate-500">{quantity(task)} {task.unit}</div>{task.technicalNotes ? <div className="mt-1 line-clamp-2 text-xs text-slate-500">{task.technicalNotes}</div> : null}</button>)}</div></article>;
+                return <article key={section.id} className="overflow-hidden rounded-2xl border border-slate-200"><button type="button" onClick={() => { setSelectedLineId(section.id); setPickerSectionId(section.id); }} title="Ajouter des taches de la bibliotheque a cette section" className="flex w-full items-center justify-between bg-slate-50 px-4 py-3 text-left hover:bg-slate-100"><span className="min-w-0 flex-1 truncate font-semibold text-slate-950">{section.title}{section.subcontracting ? <span className="ml-2 rounded-full bg-violet-100 px-2 py-0.5 text-[11px] font-semibold text-violet-800">Sous-traite{section.subcontracting.name ? ` · ${section.subcontracting.name}` : ""} · marge {section.subcontracting.marginRate} %</span> : null}</span><span className="shrink-0 text-xs text-slate-500">{children.length} tache(s)</span></button><div className="divide-y divide-slate-100">{children.map((task) => <button key={task.id} type="button" onClick={() => setSelectedLineId(task.id)} className={["block w-full p-4 text-left hover:bg-slate-50", selectedLineId === task.id ? "bg-blue-50" : "bg-white"].join(" ")}><div className="font-semibold text-slate-950">{task.title}</div><div className="mt-1 text-sm text-slate-500">{quantity(task)} {task.unit}{section.subcontracting ? <span className="ml-2 text-xs text-violet-700">ST {euro(Number(task.subcontractorUnitCostHt ?? 0))} → vente {task.priceHintHt ? euro(task.priceHintHt) : "a chiffrer"} / {task.unit}</span> : null}</div>{task.technicalNotes ? <div className="mt-1 line-clamp-2 text-xs text-slate-500">{task.technicalNotes}</div> : null}</button>)}</div></article>;
               })}
             </div>
           </div>
@@ -1371,8 +1526,30 @@ export function ProjectVisitWorkspaceStable({ project, existingAppointment }: { 
                 <Field label="Designation">
                   <input className={inputClass} value={selectedLine.title} onChange={(event) => patchLine(selectedLine.id, { title: event.target.value })} placeholder="Intitule precis annonce au client" />
                 </Field>
+                {selectedLine.type === "section" ? (
+                  <SubcontractingSectionPanel
+                    section={selectedLine}
+                    tasks={tasks.filter((task) => task.parentId === selectedLine.id)}
+                    documents={draft.attachments.filter((item) => item.kind === "document" && item.targetLineId === selectedLine.id)}
+                    subcontractors={subcontractors}
+                    onToggle={(value) => setSectionSubcontracted(selectedLine.id, value)}
+                    onPatch={(patch) => patchSubcontracting(selectedLine.id, patch)}
+                    onChoose={(id) => chooseSubcontractor(selectedLine.id, id)}
+                    onQuote={(files) => attachSubcontractorQuote(selectedLine.id, files)}
+                    onAddTask={() => addTask()}
+                    onRemoveDocument={removeAttachment}
+                  />
+                ) : null}
+                {selectedLine.type === "task" && selectedSubcontracting ? (
+                  <SubcontractedTaskPanel
+                    line={selectedLine}
+                    subcontracting={selectedSubcontracting}
+                    onCost={(value) => patchLine(selectedLine.id, { subcontractorUnitCostHt: value })}
+                  />
+                ) : null}
                 {selectedLine.type === "task" ? (
                   <>
+                    {selectedSubcontracting ? null : (<>
                     <Field label="Taches liees">
                       <div className="space-y-2">
                         {selectedTemplateIds.length ? (
@@ -1434,6 +1611,7 @@ export function ProjectVisitWorkspaceStable({ project, existingAppointment }: { 
                       </div>
                     </Field>
                     <LinkedTaskSummary entries={linkedEntries} rates={hourlyRates} unit={selectedLine.unit} quantity={quantity(selectedLine)} />
+                    </>)}
                     <ZoneLinkEditor
                       line={selectedLine}
                       rooms={draft.architecture}
@@ -1443,9 +1621,9 @@ export function ProjectVisitWorkspaceStable({ project, existingAppointment }: { 
                       onRemove={(index) => removeZoneLink(selectedLine.id, index)}
                     />
                     <div>{renderMeasurements(selectedLine)}</div>
-                    <Field label="Temps estime / prix indicatif">
+                    <Field label={selectedSubcontracting ? "Prix de vente HT / unite (calcule, modifiable)" : "Temps estime / prix indicatif"}>
                       <div className="grid gap-2 sm:grid-cols-2">
-                        <DecimalInput value={selectedLine.estimatedHours ?? null} placeholder="h" onValue={(value) => patchLine(selectedLine.id, { estimatedHours: value })} />
+                        {selectedSubcontracting ? null : <DecimalInput value={selectedLine.estimatedHours ?? null} placeholder="h" onValue={(value) => patchLine(selectedLine.id, { estimatedHours: value })} />}
                         <DecimalInput value={selectedLine.priceHintHt ?? null} placeholder="EUR HT" onValue={(value) => patchLine(selectedLine.id, { priceHintHt: value })} />
                       </div>
                     </Field>
@@ -1461,6 +1639,16 @@ export function ProjectVisitWorkspaceStable({ project, existingAppointment }: { 
             ) : <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-4 text-sm text-slate-500">Selectionnez une section ou une tache.</div>}
           </aside>
         </section> : null}
+
+        {subQuoteImport ? (
+          <SubcontractorQuoteImportDialog
+            file={subQuoteImport.file}
+            sectionTitle={draft.lines.find((line) => line.id === subQuoteImport.sectionId)?.title ?? "Sous-traitance"}
+            marginRate={draft.lines.find((line) => line.id === subQuoteImport.sectionId)?.subcontracting?.marginRate ?? defaultMarginRate}
+            onCancel={() => setSubQuoteImport(null)}
+            onConfirm={(rows) => addSubcontractedTasks(subQuoteImport.sectionId, rows)}
+          />
+        ) : null}
 
         {pickerSection ? (
           <VisitTaskPickerDialog
@@ -1787,5 +1975,137 @@ function ZoneLinkEditor({
         </div>
       </div>
     </Field>
+  );
+}
+
+/**
+ * Panneau d'une section : sous-traitee ou non, et si oui a qui, a quelle marge,
+ * sur quel devis. Le controle compare le devis du sous-traitant a ce que les
+ * taches couvrent : un ecart veut dire qu'une ligne manque ou qu'un prix est faux.
+ */
+function SubcontractingSectionPanel({
+  section,
+  tasks,
+  documents,
+  subcontractors,
+  onToggle,
+  onPatch,
+  onChoose,
+  onQuote,
+  onAddTask,
+  onRemoveDocument,
+}: {
+  section: EstimateLine;
+  tasks: EstimateLine[];
+  documents: VisitAttachment[];
+  subcontractors: IntervenantRow[];
+  onToggle: (value: boolean) => void;
+  onPatch: (patch: Partial<SubcontractingSection>) => void;
+  onChoose: (intervenantId: string) => void;
+  onQuote: (files: FileList | null) => void;
+  onAddTask: () => void;
+  onRemoveDocument: (id: string) => void;
+}) {
+  const sub = section.subcontracting ?? null;
+  const totalCost = round2(tasks.reduce((sum, task) => sum + Number(task.subcontractorUnitCostHt ?? 0) * quantity(task), 0));
+  const totalSale = round2(tasks.reduce((sum, task) => sum + Number(task.priceHintHt ?? 0) * quantity(task), 0));
+  const missingCost = tasks.filter((task) => !(Number(task.subcontractorUnitCostHt ?? 0) > 0)).length;
+  const quoteGap = sub?.quoteTotalHt ? round2(sub.quoteTotalHt - totalCost) : null;
+
+  return (
+    <div className="space-y-3">
+      <label className="flex cursor-pointer items-center gap-2 rounded-xl border border-slate-200 px-3 py-2 text-sm">
+        <input type="checkbox" className="h-4 w-4" checked={Boolean(sub)} onChange={(event) => onToggle(event.target.checked)} />
+        <span className="font-semibold text-slate-900">Section sous-traitee</span>
+      </label>
+      {sub ? (
+        <div className="space-y-3 rounded-2xl border border-violet-200 bg-violet-50/50 p-3">
+          <Field label="Sous-traitant">
+            <div className="space-y-2">
+              <select className={inputClass} value={sub.intervenantId ?? ""} onChange={(event) => onChoose(event.target.value)}>
+                <option value="">Choisir dans les intervenants...</option>
+                {subcontractors.map((row) => <option key={row.id} value={row.id}>{subcontractorLabel(row)}</option>)}
+              </select>
+              <input className={inputClass} value={sub.name} placeholder="Nom du sous-traitant" onChange={(event) => onPatch({ name: event.target.value, ...(sub.intervenantId ? { intervenantId: null } : {}) })} />
+            </div>
+          </Field>
+          <div className="grid gap-2 sm:grid-cols-2">
+            <Field label="Marge (%)"><DecimalInput value={sub.marginRate} placeholder="30" onValue={(value) => onPatch({ marginRate: Math.max(0, Number(value ?? 0)) })} /></Field>
+            <Field label="Montant devis ST HT"><DecimalInput value={sub.quoteTotalHt} placeholder="EUR HT" onValue={(value) => onPatch({ quoteTotalHt: value })} /></Field>
+          </div>
+          <div className="grid gap-2 sm:grid-cols-2">
+            <label className="flex h-11 cursor-pointer items-center justify-center gap-2 rounded-xl bg-slate-950 px-3 text-sm font-semibold text-white">
+              <Upload className="h-4 w-4" />Devis sous-traitant (PDF)
+              <input className="hidden" type="file" accept="application/pdf,.pdf" onChange={(event) => { onQuote(event.target.files); event.target.value = ""; }} />
+            </label>
+            <Button variant="secondary" onClick={onAddTask}><Plus className="h-4 w-4" />Prestation au prix</Button>
+          </div>
+          <p className="text-[11px] text-slate-500">Le PDF est garde avec la visite, puis lu : chaque ligne du devis devient une tache au prix du sous-traitant, vendue avec la marge.</p>
+          {documents.length ? (
+            <ul className="space-y-1">
+              {documents.map((doc) => (
+                <li key={doc.id} className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs">
+                  <FileText className="h-4 w-4 shrink-0 text-slate-500" />
+                  <span className="min-w-0 flex-1 truncate" title={doc.name}>{doc.name}</span>
+                  <span className={doc.storagePath ? "text-emerald-700" : "text-amber-700"}>{doc.storagePath ? "Enregistre" : "En attente"}</span>
+                  <button type="button" onClick={() => onRemoveDocument(doc.id)} className="rounded-lg p-1 text-red-600 hover:bg-red-50" aria-label="Retirer le document"><Trash2 className="h-4 w-4" /></button>
+                </li>
+              ))}
+            </ul>
+          ) : null}
+          <dl className="space-y-1 rounded-xl border border-violet-200 bg-white p-3 text-xs text-slate-700">
+            <div className="flex justify-between gap-3"><dt className="text-slate-500">Prix sous-traitant ({tasks.length} tache(s))</dt><dd className="font-medium">{euro(totalCost)}</dd></div>
+            <div className="flex justify-between gap-3"><dt className="text-slate-500">Marge {sub.marginRate} %</dt><dd className="font-medium">{euro(round2(totalSale - totalCost))}</dd></div>
+            <div className="flex justify-between gap-3 border-t border-violet-100 pt-1 font-semibold text-slate-900"><dt>Prix de vente HT</dt><dd>{euro(totalSale)}</dd></div>
+          </dl>
+          {missingCost ? <p className="text-[11px] font-semibold text-amber-700">{missingCost} tache(s) sans prix sous-traitant : elles partent a 0 au devis.</p> : null}
+          {quoteGap !== null && Math.abs(quoteGap) > 0.5 ? (
+            <p className="text-[11px] font-semibold text-amber-700">
+              Ecart avec le devis ST : {euro(quoteGap)} {quoteGap > 0 ? "non couverts par les taches" : "de trop dans les taches"}.
+            </p>
+          ) : null}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+/**
+ * Tache sous-traitee : le prix du sous-traitant par unite, la marge de la
+ * section, et ce que ca donne. Pas de bibliotheque ici : ce n'est pas nous
+ * qui posons, on ne compte ni heures ni materiaux.
+ */
+function SubcontractedTaskPanel({
+  line,
+  subcontracting,
+  onCost,
+}: {
+  line: EstimateLine;
+  subcontracting: SubcontractingSection;
+  onCost: (value: number | null) => void;
+}) {
+  const count = quantity(line);
+  const unitCost = Number(line.subcontractorUnitCostHt ?? 0);
+  const unitSale = Number(line.priceHintHt ?? 0);
+  return (
+    <div className="space-y-2 rounded-2xl border border-violet-200 bg-violet-50/60 p-3">
+      <div className="text-xs font-semibold uppercase tracking-[0.12em] text-violet-700">
+        Sous-traite{subcontracting.name ? ` par ${subcontracting.name}` : ""}
+      </div>
+      <Field label={`Prix sous-traitant HT / ${line.unit}`}>
+        <DecimalInput value={line.subcontractorUnitCostHt ?? null} placeholder="EUR HT" onValue={onCost} />
+      </Field>
+      <dl className="space-y-1 text-xs text-slate-700">
+        <div className="flex justify-between gap-3"><dt className="text-slate-500">Marge de la section</dt><dd className="font-medium">{subcontracting.marginRate} %</dd></div>
+        <div className="flex justify-between gap-3"><dt className="text-slate-500">Prix de vente / {line.unit}</dt><dd className="font-medium">{unitSale > 0 ? euro(unitSale) : "a chiffrer"}</dd></div>
+        {count > 0 ? (
+          <div className="flex justify-between gap-3 border-t border-violet-200 pt-1 font-semibold text-slate-900">
+            <dt>{count.toLocaleString("fr-FR")} {line.unit} : achat {euro(round2(unitCost * count))}</dt>
+            <dd>vente {euro(round2(unitSale * count))}</dd>
+          </div>
+        ) : null}
+      </dl>
+      {!(unitCost > 0) ? <p className="text-[11px] font-semibold text-amber-700">Sans prix sous-traitant, la tache part a 0 au devis.</p> : null}
+    </div>
   );
 }

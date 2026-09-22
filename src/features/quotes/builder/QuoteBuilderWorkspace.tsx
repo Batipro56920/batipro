@@ -1288,6 +1288,31 @@ function TitleCell({ row, onChange, onSelectParent, onConfigureComposite, taskTe
         </div>
       ) : null}
 
+      {node.type === "item" && node.kind === "sous_traitance" ? (
+        <div className="flex flex-wrap items-center gap-1.5 text-[11px] text-violet-800">
+          <span className="font-semibold">Sous-traitant{node.subcontractorName ? ` ${node.subcontractorName}` : ""} :</span>
+          <input
+            type="number"
+            step="0.01"
+            className="h-7 w-24 rounded border border-violet-200 bg-white px-2 text-xs text-slate-800"
+            value={node.subcontractorUnitCostHt ?? ""}
+            placeholder="Prix ST"
+            title="Prix du sous-traitant HT par unité"
+            onChange={(event) => onChange({ subcontractorUnitCostHt: event.target.value === "" ? null : Math.max(0, Number(event.target.value) || 0) } as Partial<QuoteBuilderNode>)}
+          />
+          <span>€ HT/u · marge</span>
+          <input
+            type="number"
+            step="0.5"
+            className="h-7 w-16 rounded border border-violet-200 bg-white px-2 text-xs text-slate-800"
+            value={node.subcontractorMarginRate ?? ""}
+            placeholder="défaut"
+            title="Marge prise sur le prix du sous-traitant"
+            onChange={(event) => onChange({ subcontractorMarginRate: event.target.value === "" ? null : Math.max(0, Number(event.target.value) || 0) } as Partial<QuoteBuilderNode>)}
+          />
+          <span>%</span>
+        </div>
+      ) : null}
       {node.type === "item" && node.kind === "ouvrage" ? <button type="button" onClick={onConfigureComposite} className="text-xs font-semibold text-blue-600 opacity-0 transition group-hover:opacity-100 hover:text-blue-700">Configurer l'ouvrage</button> : null}
       {node.type === "item" ? <input className="h-8 w-full rounded border border-slate-100 px-2 text-xs text-slate-500" placeholder="Note interne" value={node.internalNote ?? ""} onChange={(event) => onChange({ internalNote: event.target.value } as Partial<QuoteBuilderNode>)} /> : null}
       {node.type === "item" && cost && cost.costHt > 0 ? <LineMarginHint cost={cost} saleHt={saleHt} /> : null}

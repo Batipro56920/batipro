@@ -37,6 +37,10 @@ export type CrmVisitQuoteSource = {
     constraints?: string;
     variants?: string;
     attentionPoints?: string;
+    /** Section sous-traitée : qui, à quelle marge, sur quel devis. */
+    subcontracting?: { intervenantId?: string | null; name?: string; marginRate?: number; quoteTotalHt?: number | null } | null;
+    /** Tâche d'une section sous-traitée : prix du sous-traitant HT par unité. */
+    subcontractorUnitCostHt?: number | null;
   }>;
 };
 
@@ -421,8 +425,16 @@ export async function loadCrmVisitReportDraft(appointmentId: string): Promise<Cr
   }
   const constraints = report.constraints;
   const budget = report.budget;
+  // La table des lignes ne stocke pas la sous-traitance ; quote_source garde
+  // chaque ligne entière. On y reprend ce que la table ne sait pas dire.
+  const sourceLines = new Map<string, NonNullable<CrmVisitQuoteSource["lines"]>[number]>();
+  for (const line of ((report as { quote_source?: CrmVisitQuoteSource | null }).quote_source?.lines ?? [])) {
+    if (line?.id) sourceLines.set(String(line.id), line);
+  }
   const lines = (itemsResult.data ?? []).map((row: any) => ({
     id: row.source_line_id ?? row.id,
+    subcontracting: sourceLines.get(String(row.source_line_id ?? row.id))?.subcontracting ?? null,
+    subcontractorUnitCostHt: sourceLines.get(String(row.source_line_id ?? row.id))?.subcontractorUnitCostHt ?? null,
     type: row.line_type,
     parentId: row.parent_id ? sourceIdByItemId.get(String(row.parent_id)) ?? null : null,
     title: row.title,

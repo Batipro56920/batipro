@@ -228,6 +228,8 @@ async function persistItems(quote: QuoteBuilderQuote, original: CrmQuoteEngineDa
       showToClient: patch.show_to_client,
       zoneLinks: patch.zone_links,
       compositeItems: patch.composite_items,
+      subcontractingCost: patch.cost_subcontracting_ht,
+      marginRate: patch.margin_rate,
     });
     nextIds.add(created.id);
     idMap.set(row.id, created.id);
@@ -264,6 +266,8 @@ function rowToPersistence(row: QuoteBuilderFlatRow, quoteId: string, parentItemI
     // Une section reste toujours comptée : seules les lignes se décochent.
     show_to_client: true,
     composite_items: null as unknown[] | null,
+    cost_subcontracting_ht: undefined as number | undefined,
+    margin_rate: undefined as number | undefined,
   };
   if (row.node.type !== "item") return base;
   return {
@@ -287,6 +291,14 @@ function rowToPersistence(row: QuoteBuilderFlatRow, quoteId: string, parentItemI
       normalizeTaskTemplateIds(row.node.taskTemplateIds, row.node.taskTemplateId).length,
     ),
     composite_items: row.node.compositeItems?.length ? row.node.compositeItems : null,
+    // Ligne sous-traitée : le prix du sous-traitant est son déboursé, la marge
+    // fait son prix. Les autres lignes n'y touchent pas.
+    ...(row.node.kind === "sous_traitance"
+      ? {
+          cost_subcontracting_ht: Math.max(0, Number(row.node.subcontractorUnitCostHt ?? 0)),
+          ...(Number.isFinite(Number(row.node.subcontractorMarginRate ?? NaN)) ? { margin_rate: Number(row.node.subcontractorMarginRate) } : {}),
+        }
+      : {}),
   };
 }
 

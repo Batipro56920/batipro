@@ -154,10 +154,14 @@ export function moveNode(quote: QuoteBuilderQuote, activeId: string, overId: str
 function mapVisitToQuoteNodes(source: CrmVisitQuoteSource): QuoteBuilderSection[] {
   const sections = new Map<string, QuoteBuilderSection>();
   const roots: QuoteBuilderSection[] = [];
+  // Une section sous-traitée du relevé : ses tâches deviennent des lignes de
+  // sous-traitance, au prix du sous-traitant et à la marge choisie sur place.
+  const subcontractingBySection = new Map<string, NonNullable<CrmVisitQuoteSource["lines"]>[number]["subcontracting"]>();
   for (const item of source.lines ?? []) {
     if (item.type !== "section") continue;
     const section = createSection(item.title || "Section");
     if (item.id) sections.set(item.id, section);
+    if (item.id && item.subcontracting) subcontractingBySection.set(item.id, item.subcontracting);
     roots.push(section);
   }
   for (const item of source.lines ?? []) {
@@ -167,11 +171,16 @@ function mapVisitToQuoteNodes(source: CrmVisitQuoteSource): QuoteBuilderSection[
       section = createSection("Releve visite");
       roots.push(section);
     }
+    const subcontracting = item.parentId ? subcontractingBySection.get(item.parentId) ?? null : null;
     section.children.push(createItem(item.title || "Prestation relevee", {
+      kind: subcontracting ? "sous_traitance" : "fourniture",
       quantity: Number(item.quantity ?? 1),
       unit: normalizeUnit(item.unit),
       unitPriceHt: Number(item.priceHintHt ?? 0),
-      internalNote: [item.technicalNotes, item.constraints].filter(Boolean).join("\n"),
+      internalNote: [subcontracting?.name ? `Sous-traitant : ${subcontracting.name}` : null, item.technicalNotes, item.constraints].filter(Boolean).join("\n"),
+      subcontractorUnitCostHt: subcontracting ? Number(item.subcontractorUnitCostHt ?? 0) || null : null,
+      subcontractorMarginRate: subcontracting ? Number(subcontracting.marginRate ?? NaN) : null,
+      subcontractorName: subcontracting?.name ?? null,
       sourceLibraryId: item.libraryId ?? null,
       // La tache rattachee pendant la visite suit jusqu'au devis : sans elle, la
       // ligne repartirait de zero et le chantier ne recevrait aucune preparation.
@@ -234,6 +243,10 @@ function mapCrmItemsToQuoteNodes(items: CrmQuoteItemRow[]): QuoteBuilderSection[
       compositeItems: Array.isArray(row.composite_items)
         ? (row.composite_items as QuoteBuilderItem["compositeItems"])
         : undefined,
+      // Une ligne sous-traitée relit son déboursé et sa marge : sans eux, elle
+      // rouvrait avec un prix mais plus aucune marge derrière.
+      subcontractorUnitCostHt: dbKind(row.line_type) === "sous_traitance" ? Number(row.cost_subcontracting_ht ?? 0) || null : null,
+      subcontractorMarginRate: dbKind(row.line_type) === "sous_traitance" && Number.isFinite(Number(row.margin_rate)) ? Number(row.margin_rate) : null,
     });
     if (currentSubsection) currentSubsection.children.push(item);
     else {
