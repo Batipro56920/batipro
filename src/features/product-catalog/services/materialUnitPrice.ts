@@ -86,9 +86,13 @@ export function resolveMaterialUnitPrice(product: ProductCatalogItem, rawRatioUn
   const price = bestPrice(product);
   const packageQuantity = price ? positive(price.coverageM2) : null;
   const packagePriceHt = price ? positive(price.priceHt) : null;
+  // Sans conditionnement renseigne, le prix du fournisseur EST le prix a
+  // l unite : le retenir avant le prix standard du produit, sinon un tarif
+  // negocie plus bas que le prix catalogue passerait a la trappe.
   const perProductUnit =
     (price ? positive(price.pricePerM2Ht) : null) ??
     (packagePriceHt !== null && packageQuantity !== null ? Math.round((packagePriceHt / packageQuantity) * 100) / 100 : null) ??
+    packagePriceHt ??
     positive(product.standardPurchasePriceHt);
 
   const base = { packageQuantity, productUnit, ratioUnit };
