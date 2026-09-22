@@ -226,6 +226,7 @@ async function persistItems(quote: QuoteBuilderQuote, original: CrmQuoteEngineDa
       taskTemplateQuantities: patch.task_template_quantities,
       priceStatus: patch.price_status,
       showToClient: patch.show_to_client,
+      zoneLinks: patch.zone_links,
       compositeItems: patch.composite_items,
     });
     nextIds.add(created.id);
@@ -259,6 +260,7 @@ function rowToPersistence(row: QuoteBuilderFlatRow, quoteId: string, parentItemI
     task_template_ids: [] as string[],
     task_template_quantities: [] as Array<number | null>,
     price_status: "estimated" as string,
+    zone_links: [] as unknown[],
     // Une section reste toujours comptée : seules les lignes se décochent.
     show_to_client: true,
     composite_items: null as unknown[] | null,
@@ -279,6 +281,7 @@ function rowToPersistence(row: QuoteBuilderFlatRow, quoteId: string, parentItemI
     task_template_ids: normalizeTaskTemplateIds(row.node.taskTemplateIds, row.node.taskTemplateId),
     price_status: row.node.priceSource === "manual" ? "manual" : "estimated",
     show_to_client: row.node.included !== false,
+    zone_links: row.node.zoneLinks ?? [],
     task_template_quantities: normalizeTaskTemplateQuantities(
       row.node.taskTemplateQuantities,
       normalizeTaskTemplateIds(row.node.taskTemplateIds, row.node.taskTemplateId).length,

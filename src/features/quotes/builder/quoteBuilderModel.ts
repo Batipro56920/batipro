@@ -178,6 +178,8 @@ function mapVisitToQuoteNodes(source: CrmVisitQuoteSource): QuoteBuilderSection[
       taskTemplateId: item.taskTemplateId ?? null,
       taskTemplateLabel: item.taskTemplateLabel ?? null,
       taskTemplateIds: normalizeTaskTemplateIds(item.taskTemplateIds, item.taskTemplateId),
+      // Les pièces relevées suivent la ligne : le chantier saura où travailler.
+      zoneLinks: Array.isArray((item as { zoneLinks?: unknown }).zoneLinks) ? ((item as { zoneLinks?: QuoteBuilderItem["zoneLinks"] }).zoneLinks ?? null) : null,
       // Le relevé ne décide aucun prix : il ne parle que de gestes et de
       // quantités. Le devis chiffre, et continue de chiffrer tant que personne
       // n'a écrit son propre prix.
@@ -227,6 +229,7 @@ function mapCrmItemsToQuoteNodes(items: CrmQuoteItemRow[]): QuoteBuilderSection[
       taskTemplateIds: normalizeTaskTemplateIds(row.task_template_ids, row.task_template_id),
       priceSource: row.price_status === "manual" ? ("manual" as const) : ("auto" as const),
       included: row.show_to_client !== false,
+      zoneLinks: Array.isArray((row as { zone_links?: unknown }).zone_links) ? ((row as { zone_links?: QuoteBuilderItem["zoneLinks"] }).zone_links ?? null) : null,
       taskTemplateQuantities: normalizeTaskTemplateQuantities(row.task_template_quantities, normalizeTaskTemplateIds(row.task_template_ids, row.task_template_id).length),
       compositeItems: Array.isArray(row.composite_items)
         ? (row.composite_items as QuoteBuilderItem["compositeItems"])

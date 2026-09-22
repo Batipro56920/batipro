@@ -40,6 +40,15 @@ export type TaskCostEngineInput = {
   amortizationRatePerHour?: number | null;
   /** Frais généraux de l'entreprise ramenés au coût horaire (€/h). */
   overheadRatePerHour?: number | null;
+  /**
+   * Marge appliquée à l'amortissement et aux frais généraux.
+   *
+   * Sans elle, ces deux coûts entraient dans le prix de revient sans jamais
+   * entrer dans le prix de vente : la tâche partait en marge négative dès que
+   * les frais généraux depassaient la marge prise sur le reste. Une heure de
+   * structure se vend comme le reste, ou elle est offerte.
+   */
+  indirectMarginRate?: number | null;
 };
 
 export type TaskCostEngineTotals = {
@@ -146,7 +155,9 @@ export function calculateTaskCost(input: TaskCostEngineInput): TaskCostEngineTot
   const overheadCost = money(humanTimeHours * positive(input.overheadRatePerHour));
 
   const cost = money(materialCost + laborCost + equipmentCost + feeCost + amortizationCost + overheadCost);
-  const sale = money(materialSale + laborSale + equipmentSale + feeSale);
+  // L'amortissement et les frais généraux se vendent au même taux que le reste.
+  const indirectSale = money((amortizationCost + overheadCost) * (1 + Math.max(0, positive(input.indirectMarginRate)) / 100));
+  const sale = money(materialSale + laborSale + equipmentSale + feeSale + indirectSale);
   const margin = money(sale - cost);
   const marginRate = sale > 0 ? money((margin / sale) * 100) : 0;
   const teamSize = positive(input.teamSize) || laborTotals.teamSize || 1;

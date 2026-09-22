@@ -44,6 +44,11 @@ export type QuoteBuilderItem = {
    * prestation sans la ressaisir si le client la reprend.
    */
   included?: boolean;
+  /**
+   * Pièces concernées, reprises du relevé. Elles suivent jusqu'au chantier,
+   * où la tâche se retrouve rattachée aux bonnes zones.
+   */
+  zoneLinks?: Array<{ roomId: string; roomName: string; measure: string; value: number }> | null;
   /** Quantite par tache liee ; null = la tache suit la quantite de la ligne. */
   taskTemplateQuantities?: Array<number | null> | null;
   compositeItems?: QuoteBuilderCompositeItem[];

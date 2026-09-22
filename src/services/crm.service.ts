@@ -3,6 +3,7 @@ import { createChantier, getChantiers, updateChantier, type ChantierRow } from "
 import { createDevis, createDevisLigne } from "./devis.service";
 import { createTask } from "./chantierTasks.service";
 import { createChantierZone, listChantierZones } from "./chantierZones.service";
+import { replaceTaskZoneIds } from "./chantierTaskZones.service";
 import { list as listTaskTemplates, type TaskTemplateRow } from "./taskLibrary.service";
 import { getCurrentOrganizationId } from "./currentUserProfile.service";
 import { supabase } from "../lib/supabaseClient";
@@ -220,6 +221,8 @@ export type CrmQuoteItemRow = {
   supplier_reference: string | null;
   price_status: string;
   show_to_client: boolean;
+  /** Pièces concernées par la ligne, reprises du relevé de visite. */
+  zone_links: unknown[];
   page_break_before: boolean;
   numbering: string | null;
   cost_materials_ht: number;
@@ -492,7 +495,7 @@ const CRM_SELECTS = {
     "id,quote_id,parent_id,title,description,section_type,ordre,numbering,show_total,page_break_before,created_at,updated_at",
   quoteLots: "id,quote_id,title,ordre,created_at,updated_at",
   quoteItems:
-    "id,quote_id,lot_id,section_id,parent_item_id,lot,designation,description,quantite,unite,prix_unitaire_ht,total_ht,ordre,task_template_id,task_template_ids,task_template_quantities,supplier_id,line_type,family,supplier_reference,price_status,show_to_client,page_break_before,numbering,cost_materials_ht,cost_labor_ht,cost_subcontracting_ht,cost_fees_ht,labor_hours,labor_rate_ht,margin_rate,coefficient,tva_rate,sale_unit_price_ht,sale_total_ht,technical_description,composite_items,generate_task,created_at,updated_at",
+    "id,quote_id,lot_id,section_id,parent_item_id,lot,designation,description,quantite,unite,prix_unitaire_ht,total_ht,ordre,task_template_id,task_template_ids,task_template_quantities,supplier_id,line_type,family,supplier_reference,price_status,show_to_client,zone_links,page_break_before,numbering,cost_materials_ht,cost_labor_ht,cost_subcontracting_ht,cost_fees_ht,labor_hours,labor_rate_ht,margin_rate,coefficient,tva_rate,sale_unit_price_ht,sale_total_ht,technical_description,composite_items,generate_task,created_at,updated_at",
   quoteItemsLegacy:
     "id,quote_id,lot,designation,description,quantite,unite,prix_unitaire_ht,total_ht,ordre,created_at,updated_at",
   quoteComponents:
@@ -1127,6 +1130,7 @@ function normalizeQuoteItem(row: any): CrmQuoteItemRow {
     supplier_reference: row?.supplier_reference ?? null,
     price_status: row?.price_status ?? "estimated",
     show_to_client: row?.show_to_client ?? true,
+    zone_links: Array.isArray(row?.zone_links) ? row.zone_links : [],
     page_break_before: row?.page_break_before ?? false,
     numbering: row?.numbering ?? null,
     cost_materials_ht: numberOrZero(row?.cost_materials_ht),
@@ -1258,6 +1262,8 @@ export async function createCrmQuoteItemFromTemplate(input: {
   priceStatus?: string | null;
   /** false quand la ligne est décochée : hors du devis client et hors des totaux. */
   showToClient?: boolean | null;
+  /** Pièces concernées, reprises du relevé. */
+  zoneLinks?: unknown[] | null;
   compositeItems?: unknown[] | null;
   designation?: string | null;
   description?: string | null;
@@ -1312,6 +1318,7 @@ export async function createCrmQuoteItemFromTemplate(input: {
     family: template?.lot ?? null,
     price_status: text(input.priceStatus) ?? "estimated",
     show_to_client: input.showToClient !== false,
+    zone_links: Array.isArray(input.zoneLinks) ? input.zoneLinks : [],
     cost_materials_ht: totals.cost_materials_ht,
     cost_labor_ht: totals.cost_labor_ht,
     cost_subcontracting_ht: totals.cost_subcontracting_ht,
@@ -1811,7 +1818,7 @@ export async function transformAcceptedQuoteToChantier(input: {
     }
     // Les pièces relevées pendant la visite deviennent les zones du chantier :
     // sans ce report, elles étaient ressaisies à la main, sans leurs cotes.
-    await createZonesFromVisit(chantier.id, quote.opportunity_id ?? null);
+    const zonesByRoom = await createZonesFromVisit(chantier.id, quote.opportunity_id ?? null);
 
     const chantierDevis = await createDevis({
       chantier_id: chantier.id,
@@ -1855,7 +1862,8 @@ export async function transformAcceptedQuoteToChantier(input: {
           const totalCostHt =
             (Number(item.cost_materials_ht ?? 0) + Number(item.cost_labor_ht ?? 0) + Number(item.cost_subcontracting_ht ?? 0) + Number(item.cost_fees_ht ?? 0)) *
             Number(item.quantite ?? 1);
-          await createTask({
+          const zoneIds = zoneIdsForQuoteItem(item, zonesByRoom);
+          const tacheCreee = await createTask({
             chantier_id: chantier.id,
             titre,
             titre_terrain: titre,
@@ -1880,7 +1888,12 @@ export async function transformAcceptedQuoteToChantier(input: {
             // Composition adaptée au chantier lors du chiffrage : elle prime sur celle
             // du modèle, qui reste inchangé en bibliothèque.
             composite_items: first ? item.composite_items ?? null : null,
-          }).catch(() => undefined);
+          }).catch(() => null);
+          // La pièce relevée devient la localisation de la tâche : le terrain sait
+          // où aller, et les photos comme les réserves se rangent au bon endroit.
+          if (tacheCreee?.id && zoneIds.length) {
+            await replaceTaskZoneIds(tacheCreee.id, zoneIds).catch(() => undefined);
+          }
         }
       }
     }
@@ -1910,8 +1923,9 @@ export async function transformAcceptedQuoteToChantier(input: {
  * ici garde l'identifiant de la pièce dont elle vient, ce qui évite le doublon
  * si la fonction est rejouée.
  */
-async function createZonesFromVisit(chantierId: string, opportunityId: string | null) {
-  if (!chantierId || !opportunityId) return;
+async function createZonesFromVisit(chantierId: string, opportunityId: string | null): Promise<Map<string, string>> {
+  const zonesByKey = new Map<string, string>();
+  if (!chantierId || !opportunityId) return zonesByKey;
   try {
     const { data, error } = await crmDb
       .from("crm_visit_reports")
@@ -1920,16 +1934,21 @@ async function createZonesFromVisit(chantierId: string, opportunityId: string | 
       .order("updated_at", { ascending: false })
       .limit(1)
       .maybeSingle();
-    if (error || !data) return;
+    if (error || !data) return zonesByKey;
     const rooms = Array.isArray((data as { architecture?: unknown }).architecture)
       ? ((data as { architecture?: Array<Record<string, unknown>> }).architecture ?? [])
       : [];
-    if (!rooms.length) return;
+    if (!rooms.length) return zonesByKey;
 
     const zonesResult = await listChantierZones(chantierId).catch(() => ({ zones: [], schemaReady: false }));
     const existing = Array.isArray(zonesResult) ? zonesResult : zonesResult.zones;
     const dejaCreees = new Set(existing.map((zone) => zone.source_room_id).filter(Boolean) as string[]);
     const nomsPris = new Set(existing.map((zone) => String(zone.nom ?? "").trim().toLowerCase()));
+
+    for (const zone of existing) {
+      if (zone.source_room_id) zonesByKey.set(zone.source_room_id, zone.id);
+      zonesByKey.set(String(zone.nom ?? "").trim().toLowerCase(), zone.id);
+    }
 
     let ordre = existing.length;
     for (const room of rooms) {
@@ -1937,7 +1956,7 @@ async function createZonesFromVisit(chantierId: string, opportunityId: string | 
       const nom = String(room.name ?? "").trim();
       if (!nom || (sourceRoomId && dejaCreees.has(sourceRoomId)) || nomsPris.has(nom.toLowerCase())) continue;
       ordre += 1;
-      await createChantierZone({
+      const zoneCreee = await createChantierZone({
         chantier_id: chantierId,
         nom,
         zone_type: "piece",
@@ -1949,11 +1968,29 @@ async function createZonesFromVisit(chantierId: string, opportunityId: string | 
         deduction_plinthes_ml: numberOrNullValue(room.skirtingDeductionMl),
         source_room_id: sourceRoomId || null,
       }).catch(() => null);
+      if (zoneCreee) {
+        if (sourceRoomId) zonesByKey.set(sourceRoomId, zoneCreee.id);
+        zonesByKey.set(nom.toLowerCase(), zoneCreee.id);
+      }
     }
   } catch {
     // Un chantier doit naître même si le relevé est illisible : les zones se
     // recréent à la main, le reste du transfert ne doit pas échouer pour ça.
   }
+  return zonesByKey;
+}
+
+/** Zones du chantier correspondant aux pièces retenues sur une ligne de devis. */
+function zoneIdsForQuoteItem(item: CrmQuoteItemRow, zonesByKey: Map<string, string>): string[] {
+  const links = Array.isArray(item.zone_links) ? item.zone_links : [];
+  const ids = new Set<string>();
+  for (const link of links as Array<Record<string, unknown>>) {
+    const byRoom = zonesByKey.get(String(link.roomId ?? "").trim());
+    const byName = zonesByKey.get(String(link.roomName ?? "").trim().toLowerCase());
+    const zoneId = byRoom ?? byName;
+    if (zoneId) ids.add(zoneId);
+  }
+  return Array.from(ids);
 }
 
 function numberOrNullValue(value: unknown): number | null {

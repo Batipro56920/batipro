@@ -33,7 +33,7 @@ import {
   type TaskTemplateCocoResult,
 } from "../features/product-catalog/services/taskTemplateCoco.service";
 import { getProductRatioHint } from "../features/product-catalog/services/productMaterialAutofill.service";
-import { describeMaterialPriceBasis, resolveMaterialUnitPrice } from "../features/product-catalog/services/materialUnitPrice";
+import { describeMaterialPriceBasis, resolveMaterialSalePrice, resolveMaterialUnitPrice } from "../features/product-catalog/services/materialUnitPrice";
 import { ProductPicker } from "../features/product-catalog/components/ProductPicker";
 import { useI18n } from "../i18n";
 
@@ -846,6 +846,12 @@ export default function TaskTemplateDrawer({
       estimatedTimeHours: parseDraftAmount(tempsParUnite),
       amortizationRatePerHour: hourlyRates?.amortizationRatePerHour ?? 0,
       overheadRatePerHour: hourlyRates?.overheadRatePerHour ?? 0,
+      // La marge de la tâche, sinon celle du lot, sinon celle de l'entreprise.
+      indirectMarginRate:
+        parseDraftAmount(margeTache) ??
+        selectedLotProfile?.laborMarginRate ??
+        hourlyRates?.defaultMarginRate ??
+        null,
     });
 
     return {
@@ -969,7 +975,9 @@ export default function TaskTemplateDrawer({
       purchase_price_ht: toField(
         resolveMaterialUnitPrice(product, hint.ratioUnit ?? product.unit).priceHt ?? product.standardPurchasePriceHt ?? null,
       ),
-      sale_price_ht: toField(product.recommendedSalePriceHt ?? null),
+      // Le prix conseille de la fiche est dans l'unite du produit : applique tel
+      // quel a un ratio en colis, la plaque se vendait au prix du m2, a perte.
+      sale_price_ht: toField(resolveMaterialSalePrice(product, hint.ratioUnit ?? product.unit) ?? product.recommendedSalePriceHt ?? null),
       price_source: bestPrice ? "supplier_price" : "standard",
       manual_override: false,
     });

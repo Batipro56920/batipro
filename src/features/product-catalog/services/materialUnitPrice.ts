@@ -141,3 +141,23 @@ export function describeMaterialPriceBasis(resolved: MaterialUnitPrice): string 
   }
   return `Achat ${amount} / ${unit}`;
 }
+
+/**
+ * Prix de vente conseille, dans l'unite du ratio.
+ *
+ * Meme piege que pour l'achat, avec des consequences pires : la fiche produit
+ * conseille un prix au m2 (4,27 EUR) et le ratio compte des plaques. La plaque
+ * se vendait donc 4,27 EUR alors qu'elle en coute 9 — a perte, sans que rien ne
+ * le signale. Le prix de vente suit donc le meme raisonnement que l'achat :
+ * pour un ratio en colis, c'est le prix du colis.
+ */
+export function resolveMaterialSalePrice(product: ProductCatalogItem, rawRatioUnit: unknown): number | null {
+  const recommended = positive(product.recommendedSalePriceHt);
+  if (recommended === null) return null;
+
+  const resolved = resolveMaterialUnitPrice(product, rawRatioUnit);
+  if (resolved.basis === "colis" && resolved.packageQuantity !== null) {
+    return Math.round(recommended * resolved.packageQuantity * 100) / 100;
+  }
+  return recommended;
+}
