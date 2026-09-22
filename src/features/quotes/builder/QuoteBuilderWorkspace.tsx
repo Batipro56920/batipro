@@ -1257,7 +1257,7 @@ function TitleCell({ row, onChange, onSelectParent, onConfigureComposite, taskTe
         placeholder={node.type === "item" ? "Ce que lit le client" : ""}
       />
 
-      {node.type === "item" ? (
+      {node.type === "item" && node.kind !== "sous_traitance" ? (
         <div className="flex flex-wrap items-center gap-1.5">
 
           {/*
