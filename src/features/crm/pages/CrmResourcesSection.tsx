@@ -1,17 +1,31 @@
-import { useMemo } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import type { CrmDataset } from "../../../services/crm.service";
+import { loadTaskTemplateUnitCosts } from "../../../services/taskTemplateComputedCost";
 import { eur } from "../components/crmFormat";
 import ListShell from "../components/ListShell";
 
 export default function CrmResourcesSection({ templates }: { templates: CrmDataset["taskTemplates"] }) {
   const navigate = useNavigate();
+  // Le prix de revient vient du calcul (materiaux, main d'oeuvre, frais), pas
+  // d'une colonne saisie a la main qui ne bougeait plus.
+  const [unitCosts, setUnitCosts] = useState<Map<string, number>>(new Map());
+  useEffect(() => {
+    let alive = true;
+    void loadTaskTemplateUnitCosts(templates)
+      .then((costs) => { if (alive) setUnitCosts(costs); })
+      .catch(() => { if (alive) setUnitCosts(new Map()); });
+    return () => { alive = false; };
+  }, [templates]);
+  // Stable tant que la carte ne change pas : sinon le calcul des statistiques
+  // ne peut plus etre memorise et se refait a chaque rendu.
+  const unitCostOf = useCallback((id: string) => unitCosts.get(id) ?? 0, [unitCosts]);
   const libraryStats = useMemo(() => {
     const lots = new Set(templates.map((row) => (row.lot ?? "").trim()).filter(Boolean));
     const hasTechnicalBase = (row: CrmDataset["taskTemplates"][number]) =>
       Boolean(row.description_technique) || row.caracteristiques.length > 0 || Boolean(row.remarques);
     const readyForQuote = templates.filter(
-      (row) => row.quote_visible && row.temps_prevu_par_unite_h !== null && row.cout_reference_unitaire_ht !== null,
+      (row) => row.quote_visible && row.temps_prevu_par_unite_h !== null && unitCostOf(row.id) > 0,
     ).length;
     const readyForChantier = templates.filter(
       (row) => row.chantier_visible && row.temps_prevu_par_unite_h !== null && hasTechnicalBase(row),
@@ -19,7 +33,7 @@ export default function CrmResourcesSection({ templates }: { templates: CrmDatas
     const hiddenFromQuote = templates.filter((row) => !row.quote_visible).length;
     const hiddenFromChantier = templates.filter((row) => !row.chantier_visible).length;
     const missingQuoteTime = templates.filter((row) => row.quote_visible && row.temps_prevu_par_unite_h === null).length;
-    const missingQuoteCost = templates.filter((row) => row.quote_visible && row.cout_reference_unitaire_ht === null).length;
+    const missingQuoteCost = templates.filter((row) => row.quote_visible && unitCostOf(row.id) <= 0).length;
     const missingChantierTime = templates.filter((row) => row.chantier_visible && row.temps_prevu_par_unite_h === null).length;
     const missingChantierTechnical = templates.filter((row) => row.chantier_visible && !hasTechnicalBase(row)).length;
     return {
@@ -34,7 +48,7 @@ export default function CrmResourcesSection({ templates }: { templates: CrmDatas
       missingChantierTime,
       missingChantierTechnical,
     };
-  }, [templates]);
+  }, [templates, unitCostOf]);
 
   function openLibrary(templateId?: string) {
     if (templateId) {
@@ -169,7 +183,7 @@ export default function CrmResourcesSection({ templates }: { templates: CrmDatas
             const hasTechnicalBase =
               Boolean(row.description_technique) || row.caracteristiques.length > 0 || Boolean(row.remarques);
             const missingQuoteReadiness =
-              !row.quote_visible || row.temps_prevu_par_unite_h === null || row.cout_reference_unitaire_ht === null;
+              !row.quote_visible || row.temps_prevu_par_unite_h === null || unitCostOf(row.id) <= 0;
             const missingChantierReadiness =
               !row.chantier_visible || row.temps_prevu_par_unite_h === null || !hasTechnicalBase;
 
@@ -187,7 +201,7 @@ export default function CrmResourcesSection({ templates }: { templates: CrmDatas
                 <div className="mt-3 grid grid-cols-3 gap-2 text-xs">
                   <div className="rounded-xl bg-slate-50 p-2">Unité<br /><b>{row.unite ?? "u"}</b></div>
                   <div className="rounded-xl bg-slate-50 p-2">Temps<br /><b>{row.temps_prevu_par_unite_h ?? 0}h</b></div>
-                  <div className="rounded-xl bg-slate-50 p-2">Coût ref.<br /><b>{eur(row.cout_reference_unitaire_ht ?? 0)}</b></div>
+                  <div className="rounded-xl bg-slate-50 p-2">Prix de revient<br /><b>{eur(unitCostOf(row.id))}</b></div>
                 </div>
                 {row.description_technique ? <p className="mt-3 line-clamp-3 text-sm text-slate-600">{row.description_technique}</p> : null}
                 <div className="mt-4 flex flex-wrap gap-2">

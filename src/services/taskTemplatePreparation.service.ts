@@ -573,43 +573,52 @@ export async function listMeasuredMaterialLoss(taskTemplateId: string): Promise<
  * automatique, seulement au clic explicite de l'admin. Ajoute une entrée à
  * price_history (même principe que product_catalog_items.priceHistory).
  */
+/**
+ * Applique la perte mesuree sur chantier au materiau du modele.
+ *
+ * Le prix de revient d'un modele est calcule a partir de ses materiaux ; il
+ * n'y a plus de prix de reference a corriger a la main. Ce qui doit bouger,
+ * c'est la perte du materiau : le cout suit tout seul, et la ligne reste
+ * lisible ("perte 12 %" plutot qu'un prix majore sans explication).
+ * Renvoie la perte retenue, en pourcentage.
+ */
 export async function applyMeasuredLossToTaskTemplatePrice(
   taskTemplateId: string,
   loss: MeasuredMaterialLoss,
 ): Promise<number> {
   const plannedLossPercent = loss.planned_loss_percent ?? 0;
-  const measuredLossPercent = loss.measured_loss_percent ?? plannedLossPercent;
-  const purchasePrice = loss.purchase_price_ht ?? 0;
-  const deltaCostHt = loss.ratio_quantity * purchasePrice * (measuredLossPercent - plannedLossPercent) / 100;
+  const measuredLossPercent = Math.max(0, Math.round((loss.measured_loss_percent ?? plannedLossPercent) * 10) / 10);
 
+  const { error: ratioError } = await (supabase as any)
+    .from("task_template_material_ratios")
+    .update({ loss_percent: measuredLossPercent })
+    .eq("id", loss.material_ratio_id)
+    .eq("task_template_id", taskTemplateId);
+  if (ratioError) throw new Error(ratioError.message);
+
+  // L'historique reste : on veut pouvoir dire d'ou vient une perte.
   const { data: current, error: fetchError } = await (supabase as any)
     .from("task_templates")
-    .select("cout_reference_unitaire_ht, price_history")
+    .select("price_history")
     .eq("id", taskTemplateId)
     .maybeSingle();
   if (fetchError) throw new Error(fetchError.message);
-
-  const previousPrice = normalizeNumber(current?.cout_reference_unitaire_ht) ?? 0;
-  const nextPrice = Math.max(0, Math.round((previousPrice + deltaCostHt) * 100) / 100);
   const history = Array.isArray(current?.price_history) ? current.price_history : [];
   const entry = {
     date: new Date().toISOString(),
     source: "perte mesurée",
     material_name: loss.material_name,
-    previous_price_ht: previousPrice,
-    new_price_ht: nextPrice,
-    measured_loss_percent: measuredLossPercent,
-    planned_loss_percent: plannedLossPercent,
+    previous_loss_percent: plannedLossPercent,
+    new_loss_percent: measuredLossPercent,
     chantiers_count: loss.chantiers_count,
   };
-
   const { error: updateError } = await (supabase as any)
     .from("task_templates")
-    .update({ cout_reference_unitaire_ht: nextPrice, price_history: [...history, entry] })
+    .update({ price_history: [...history, entry] })
     .eq("id", taskTemplateId);
   if (updateError) throw new Error(updateError.message);
 
-  return nextPrice;
+  return measuredLossPercent;
 }
 
 /**

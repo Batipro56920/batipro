@@ -554,7 +554,6 @@ export default function TaskTemplateDrawer({
   const [unite, setUnite] = useState("");
   const [quantiteDefaut, setQuantiteDefaut] = useState("");
   const [tempsParUnite, setTempsParUnite] = useState("");
-  const [coutReferenceUnitaire, setCoutReferenceUnitaire] = useState("");
   // Vides, ces deux champs laissent la tache suivre le cout horaire moyen des
   // salaries et la marge par defaut du chiffrage.
   const [coutHoraireTache, setCoutHoraireTache] = useState("");
@@ -658,7 +657,6 @@ export default function TaskTemplateDrawer({
       setUnite(template.unite ?? "");
       setQuantiteDefaut(toField(template.quantite_defaut ?? null));
       setTempsParUnite(toField(template.temps_prevu_par_unite_h ?? null));
-      setCoutReferenceUnitaire(toField(template.cout_reference_unitaire_ht ?? null));
       setCoutHoraireTache(toField(template.labor_hourly_cost_ht ?? null));
       setMargeTache(toField(template.target_margin_rate ?? null));
       setDescriptionTechnique(template.description_technique ?? "");
@@ -674,7 +672,6 @@ export default function TaskTemplateDrawer({
       setUnite(initialValues?.unite ?? "");
       setQuantiteDefaut(toField(initialValues?.quantite_defaut ?? null));
       setTempsParUnite(toField(initialValues?.temps_prevu_par_unite_h ?? null));
-      setCoutReferenceUnitaire(toField(initialValues?.cout_reference_unitaire_ht ?? null));
       setCoutHoraireTache(toField(initialValues?.labor_hourly_cost_ht ?? null));
       setMargeTache(toField(initialValues?.target_margin_rate ?? null));
       setDescriptionTechnique(initialValues?.description_technique ?? "");
@@ -727,7 +724,6 @@ export default function TaskTemplateDrawer({
     template?.unite,
     template?.quantite_defaut,
     template?.temps_prevu_par_unite_h,
-    template?.cout_reference_unitaire_ht,
     template?.description_technique,
     template?.caracteristiques,
     template?.remarques,
@@ -738,7 +734,6 @@ export default function TaskTemplateDrawer({
     initialValues?.unite,
     initialValues?.quantite_defaut,
     initialValues?.temps_prevu_par_unite_h,
-    initialValues?.cout_reference_unitaire_ht,
     initialValues?.description_technique,
     initialValues?.caracteristiques,
     initialValues?.remarques,
@@ -891,9 +886,12 @@ export default function TaskTemplateDrawer({
     setApplyingLossId(loss.material_ratio_id);
     setApplyLossMessage(null);
     try {
-      const nextPrice = await applyMeasuredLossToTaskTemplatePrice(template.id, loss);
-      setCoutReferenceUnitaire(toField(nextPrice));
-      setApplyLossMessage(`Prix de référence mis à jour (${nextPrice.toFixed(2)} € HT) à partir de la perte mesurée sur ${loss.chantiers_count} chantier(s).`);
+      const nextLossPercent = await applyMeasuredLossToTaskTemplatePrice(template.id, loss);
+      // La perte du materiau change ; le prix de revient, calcule, suit.
+      setMaterialDrafts((prev) =>
+        prev.map((row) => (row.id === loss.material_ratio_id ? { ...row, loss_percent: toField(nextLossPercent) } : row)),
+      );
+      setApplyLossMessage(`Perte du matériau portée à ${nextLossPercent.toFixed(1)} % d'après ${loss.chantiers_count} chantier(s) : le prix de revient est recalculé.`);
     } catch (err: any) {
       setApplyLossMessage(err?.message ?? "Application impossible.");
     } finally {
@@ -1143,8 +1141,10 @@ export default function TaskTemplateDrawer({
     }
     const quantiteDefautValue = quantiteDefaut.trim() === "" ? null : Number(quantiteDefaut);
     const tempsParUniteValue = tempsParUnite.trim() === "" ? null : Number(tempsParUnite);
-    const coutReferenceValue =
-      coutReferenceUnitaire.trim() === "" ? null : Number(coutReferenceUnitaire);
+    // Le prix de revient enregistre est celui qui vient d'etre calcule : les
+    // ecrans qui le lisent (import de devis, pre-devis de visite, listes CRM)
+    // ne peuvent plus afficher un chiffre different de celui du modele.
+    const coutReferenceValue = compositionTotals.cost > 0 ? compositionTotals.cost : null;
     const coutHoraireValue = coutHoraireTache.trim() === "" ? null : Number(coutHoraireTache.replace(",", "."));
     const margeValue = margeTache.trim() === "" ? null : Number(margeTache.replace(",", "."));
     if (coutHoraireValue !== null && (Number.isNaN(coutHoraireValue) || coutHoraireValue < 0)) {
@@ -1242,7 +1242,7 @@ export default function TaskTemplateDrawer({
         lot,
         defaultQuantity: quantiteDefaut,
         timePerUnit: tempsParUnite,
-        referenceUnitCostHt: coutReferenceUnitaire,
+        referenceUnitCostHt: compositionTotals.cost > 0 ? compositionTotals.cost.toFixed(2) : "",
         usage: usageMetier,
         existingTechnicalDescription: descriptionTechnique,
         existingCharacteristics: caracteristiques,
@@ -1396,17 +1396,19 @@ export default function TaskTemplateDrawer({
                 onChange={(e) => setTempsParUnite(e.target.value)}
               />
             </label>
-            <label className="block space-y-1">
-              <div className="text-xs text-slate-600">Coût de référence HT / unité</div>
-              <input
-                type="number"
-                step="0.01"
-                className="w-full rounded-xl border px-3 py-2 text-sm"
-                value={coutReferenceUnitaire}
-                onChange={(e) => setCoutReferenceUnitaire(e.target.value)}
-                placeholder="Ex: 38"
-              />
-            </label>
+            {/*
+              Le prix de revient etait saisi a la main et ne bougeait plus : il
+              affichait 62,24 EUR quand le calcul en donnait 30,07. Il est
+              desormais calcule a partir des materiaux, de la main d'oeuvre et
+              des couts indirects, et enregistre tel quel. Une seule verite.
+            */}
+            <div className="block space-y-1">
+              <div className="text-xs text-slate-600">Prix de revient HT / unité</div>
+              <div className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-semibold text-slate-900">
+                {compositionTotals.cost.toFixed(2)} €
+              </div>
+              <div className="text-[11px] text-slate-500">Calculé : matériaux + main d&apos;œuvre + frais. Plus de saisie.</div>
+            </div>
           </div>
 
 

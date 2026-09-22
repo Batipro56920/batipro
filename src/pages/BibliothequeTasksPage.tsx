@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import TaskTemplateDrawer from "../components/TaskTemplateDrawer";
 import Toast, { type ToastState } from "../components/chantiers/Toast";
+import { loadTaskTemplateUnitCosts } from "../services/taskTemplateComputedCost";
 import {
   getCurrentProfileFeaturePermissions,
   hasProfileFeaturePermission,
@@ -64,7 +65,7 @@ const READINESS_EMPTY_COPY: Record<Exclude<ReadinessFilter, "">, EmptyStateCopy>
   },
   missing_cost: {
     label: "Coût à compléter",
-    title: "Aucun modèle sans coût de référence",
+    title: "Aucun modèle sans prix de revient",
     description: "Les modèles visibles avec ces filtres sont déjà exploitables pour le chiffrage.",
   },
   missing_technical: {
@@ -112,6 +113,17 @@ export default function BibliothequeTasksPage() {
   const initialReadinessFilter = isReadinessFilter(readinessQueryParam) ? readinessQueryParam : "";
   const openedTemplateFromUrlRef = useRef("");
   const [rows, setRows] = useState<TaskTemplateRow[]>([]);
+  // Le prix de revient de chaque modele vient du calcul (materiaux, main
+  // d'oeuvre, frais), plus d'une colonne saisie a la main : la liste affichait
+  // 62,24 EUR la ou le modele en calculait 30,07.
+  const [unitCosts, setUnitCosts] = useState<Map<string, number>>(new Map());
+  useEffect(() => {
+    let alive = true;
+    void loadTaskTemplateUnitCosts(rows)
+      .then((costs) => { if (alive) setUnitCosts(costs); })
+      .catch(() => { if (alive) setUnitCosts(new Map()); });
+    return () => { alive = false; };
+  }, [rows]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState(templateQueryParam);
@@ -171,11 +183,11 @@ export default function BibliothequeTasksPage() {
 
   const libraryStats = useMemo(() => {
     const withTime = rows.filter((row) => row.temps_prevu_par_unite_h !== null).length;
-    const withCost = rows.filter((row) => row.cout_reference_unitaire_ht !== null).length;
+    const withCost = rows.filter((row) => (unitCosts.get(row.id) ?? 0) > 0).length;
     const withTechnicalDetail = rows.filter(hasTechnicalDetail).length;
     const withPreparation = rows.filter((row) => hasPreparation(row, preparationByTemplateId)).length;
     const totalReferenceCost = rows.reduce((sum, row) => {
-      const unitCost = Number(row.cout_reference_unitaire_ht ?? 0);
+      const unitCost = unitCosts.get(row.id) ?? 0;
       const quantity = Number(row.quantite_defaut ?? 1);
       return sum + unitCost * quantity;
     }, 0);
@@ -193,10 +205,10 @@ export default function BibliothequeTasksPage() {
       missingPreparation: advancedPreparationEnabled && preparationSchemaReady ? rows.length - withPreparation : 0,
       totalReferenceCost,
     };
-  }, [advancedPreparationEnabled, lotOptions.length, preparationByTemplateId, preparationSchemaReady, rows]);
+  }, [advancedPreparationEnabled, lotOptions.length, preparationByTemplateId, preparationSchemaReady, rows, unitCosts]);
 
   const priorityActions = useMemo<PriorityAction[]>(() => {
-    const firstMissingCost = rows.find((row) => row.cout_reference_unitaire_ht === null) ?? null;
+    const firstMissingCost = rows.find((row) => (unitCosts.get(row.id) ?? 0) <= 0) ?? null;
     const firstMissingTime = rows.find((row) => row.temps_prevu_par_unite_h === null) ?? null;
     const firstMissingTechnical = rows.find((row) => !hasTechnicalDetail(row)) ?? null;
     const firstMissingPreparation = rows.find((row) => !hasPreparation(row, preparationByTemplateId)) ?? null;
@@ -243,14 +255,14 @@ export default function BibliothequeTasksPage() {
     }
 
     return actions.filter((action) => action.count > 0 || action.disabled);
-  }, [advancedPreparationEnabled, libraryStats, preparationByTemplateId, preparationSchemaReady, rows]);
+  }, [advancedPreparationEnabled, libraryStats, preparationByTemplateId, preparationSchemaReady, rows, unitCosts]);
 
   const filteredRows = useMemo(() => {
     const q = query.trim().toLowerCase();
     return rows.filter((row) => {
       if (selectedLot && (row.lot ?? "").trim() !== selectedLot) return false;
       if (readinessFilter === "missing_time" && row.temps_prevu_par_unite_h !== null) return false;
-      if (readinessFilter === "missing_cost" && row.cout_reference_unitaire_ht !== null) return false;
+      if (readinessFilter === "missing_cost" && (unitCosts.get(row.id) ?? 0) > 0) return false;
       if (readinessFilter === "missing_technical" && hasTechnicalDetail(row)) return false;
       if (readinessFilter === "missing_preparation" && hasPreparation(row, preparationByTemplateId)) return false;
       if (!q) return true;
@@ -267,7 +279,7 @@ export default function BibliothequeTasksPage() {
         .toLowerCase();
       return searchable.includes(q);
     });
-  }, [preparationByTemplateId, query, readinessFilter, rows, selectedLot]);
+  }, [preparationByTemplateId, query, readinessFilter, rows, selectedLot, unitCosts]);
 
   const hasActiveFilters = Boolean(query.trim() || selectedLot || readinessFilter);
 
@@ -675,7 +687,7 @@ export default function BibliothequeTasksPage() {
         >
           <div className="text-xs font-medium uppercase text-slate-500">Prix</div>
           <div className="mt-1 text-2xl font-bold text-slate-900">{libraryStats.withCost}</div>
-          <div className="text-xs text-slate-500">{libraryStats.missingCost} sans coût de référence</div>
+          <div className="text-xs text-slate-500">{libraryStats.missingCost} sans prix de revient</div>
         </button>
         <button
           type="button"
@@ -831,7 +843,7 @@ export default function BibliothequeTasksPage() {
                   <th className="w-[7%] px-4 py-3 text-left font-medium">{t("bibliothequeTasks.headers.unit")}</th>
                   <th className="w-[8%] px-4 py-3 text-left font-medium">{t("bibliothequeTasks.headers.defaultQuantity")}</th>
                   <th className="w-[9%] px-4 py-3 text-left font-medium">{t("bibliothequeTasks.headers.timePerUnit")}</th>
-                  <th className="w-[9%] px-4 py-3 text-left font-medium">Coût ref.</th>
+                  <th className="w-[9%] px-4 py-3 text-left font-medium">Prix de revient</th>
                   <th className="w-[9%] px-4 py-3 text-left font-medium">{t("bibliothequeTasks.headers.updatedAt")}</th>
                   <th className="w-[20%] px-4 py-3 text-left font-medium">{t("common.actions.edit")}</th>
                 </tr>
@@ -858,7 +870,7 @@ export default function BibliothequeTasksPage() {
                             Temps manquant
                           </span>
                         ) : null}
-                        {row.cout_reference_unitaire_ht === null ? (
+                        {(unitCosts.get(row.id) ?? 0) <= 0 ? (
                           <span className="rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[11px] text-amber-700">
                             Coût manquant
                           </span>
@@ -876,7 +888,7 @@ export default function BibliothequeTasksPage() {
                     <td className="px-4 py-3">{row.unite ?? "-"}</td>
                     <td className="px-4 py-3">{row.quantite_defaut ?? "-"}</td>
                     <td className="px-4 py-3">{formatHours(row.temps_prevu_par_unite_h)}</td>
-                    <td className="px-4 py-3">{formatCurrency(row.cout_reference_unitaire_ht)}</td>
+                    <td className="px-4 py-3">{formatCurrency(unitCosts.get(row.id) ?? null)}</td>
                     <td className="px-4 py-3">
                       {row.updated_at ? new Date(row.updated_at).toLocaleDateString(locale) : "-"}
                     </td>

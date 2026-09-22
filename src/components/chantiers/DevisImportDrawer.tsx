@@ -13,6 +13,7 @@ import { createDevis, createDevisLigne, deleteDevis, deleteDevisLigne } from "..
 import { createTask, deleteTasksByIds } from "../../services/chantierTasks.service";
 import { deleteDocument, linkDocumentToTask, uploadDocument } from "../../services/chantierDocuments.service";
 import { generateTerrainTaskTitle } from "../../services/taskTerrainTitlesOperational.service";
+import { loadTaskTemplateUnitCosts } from "../../services/taskTemplateComputedCost";
 import {
   findBestTaskTemplateMatch,
   list as listTaskLibraryTemplates,
@@ -96,6 +97,7 @@ export default function DevisImportDrawer({ open, chantierId, intervenants, onCl
   const [mode, setMode] = useState<ImportMode>("AI");
   const [rows, setRows] = useState<PreviewRow[]>([]);
   const [taskLibraryTemplates, setTaskLibraryTemplates] = useState<TaskTemplateRow[]>([]);
+  const [templateUnitCosts, setTemplateUnitCosts] = useState<Map<string, number>>(new Map());
   const [bulkIntervenantId, setBulkIntervenantId] = useState("__NONE__");
   const [bulkToast, setBulkToast] = useState<string | null>(null);
   const bulkToastTimerRef = useRef<number | null>(null);
@@ -124,6 +126,9 @@ export default function DevisImportDrawer({ open, chantierId, intervenants, onCl
         const templates = await listTaskLibraryTemplates();
         if (!alive) return;
         setTaskLibraryTemplates(templates);
+        const costs = await loadTaskTemplateUnitCosts(templates).catch(() => new Map<string, number>());
+        if (!alive) return;
+        setTemplateUnitCosts(costs);
       } catch {
         if (!alive) return;
         setTaskLibraryTemplates([]);
@@ -211,10 +216,8 @@ export default function DevisImportDrawer({ open, chantierId, intervenants, onCl
           task_template_label: matchedTemplate?.titre ?? line.task_template_label ?? null,
           estimated_cost_ht:
             line.estimated_cost_ht ??
-            (matchedTemplate?.cout_reference_unitaire_ht !== null &&
-            matchedTemplate?.cout_reference_unitaire_ht !== undefined &&
-            line.quantity !== null
-              ? Math.round(Number(matchedTemplate.cout_reference_unitaire_ht) * line.quantity * 100) / 100
+            (matchedTemplate && line.quantity !== null && (templateUnitCosts.get(matchedTemplate.id) ?? 0) > 0
+              ? Math.round((templateUnitCosts.get(matchedTemplate.id) ?? 0) * line.quantity * 100) / 100
               : null),
         };
       });

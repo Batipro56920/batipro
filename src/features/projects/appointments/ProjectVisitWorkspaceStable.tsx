@@ -6,6 +6,7 @@ import { createCrmAppointment, type CrmAppointmentRow } from "../../../services/
 import { loadCrmVisitReportDraft, saveCrmVisitReport } from "../../../services/crmVisitReports.service";
 import { createOpportunityForProspect, updateCrmAppointment, updateCrmOpportunityStageByKey } from "../../../services/crmWorkflow.service";
 import { list as listTaskTemplates, type TaskTemplateRow } from "../../../services/taskLibrary.service";
+import { loadTaskTemplateUnitCosts } from "../../../services/taskTemplateComputedCost";
 import VisitTaskPickerDialog from "./VisitTaskPickerDialog";
 import { listTaskTemplatePreparationByTemplateIds, type TaskTemplateEquipmentItemRow, type TaskTemplateMaterialRatioRow } from "../../../services/taskTemplatePreparation.service";
 import { getCompanyHourlyRates, type CompanyHourlyRates } from "../../../services/indirectCosts.service";
@@ -657,6 +658,7 @@ export function ProjectVisitWorkspaceStable({ project, existingAppointment }: { 
   // Un badge "erreur" muet ne dit pas quoi corriger : on garde le message réel.
   const [saveError, setSaveError] = useState<string | null>(null);
   const [taskTemplates, setTaskTemplates] = useState<TaskTemplateRow[]>([]);
+  const [templateUnitCosts, setTemplateUnitCosts] = useState<Map<string, number>>(new Map());
   const [pickerSectionId, setPickerSectionId] = useState<string | null>(null);
   const [linkedPreparation, setLinkedPreparation] = useState<{
     materialsByTemplateId: Record<string, TaskTemplateMaterialRatioRow[]>;
@@ -674,8 +676,11 @@ export function ProjectVisitWorkspaceStable({ project, existingAppointment }: { 
   useEffect(() => {
     let alive = true;
     void listTaskTemplates()
-      .then((rows) => {
-        if (alive) setTaskTemplates(rows);
+      .then(async (rows) => {
+        if (!alive) return;
+        setTaskTemplates(rows);
+        const costs = await loadTaskTemplateUnitCosts(rows).catch(() => new Map<string, number>());
+        if (alive) setTemplateUnitCosts(costs);
       })
       .catch(() => {
         if (alive) setTaskTemplates([]);
@@ -890,8 +895,8 @@ export function ProjectVisitWorkspaceStable({ project, existingAppointment }: { 
    * Temps et prix indicatifs des lignes liees a des taches. Ils suivent le
    * chiffrage reel tant que le commercial n'a pas mis les siens : le prix part
    * du deboursé sec (main d'oeuvre, materiaux pertes incluses, amortissement et
-   * frais generaux) majore de la marge par defaut, et non du cout de reference
-   * du modele, qui n'est ni un cout complet ni un prix de vente.
+   * frais generaux) majore de la marge par defaut. L'ancien cout de reference
+   * saisi a la main n'existe plus : une seule verite, le deboursé calcule.
    *
    * Le calcul a besoin des ratios materiaux, qui arrivent en differe : il vit
    * donc dans un effet, pas dans le clic qui rattache la tache.
@@ -1061,7 +1066,7 @@ export function ProjectVisitWorkspaceStable({ project, existingAppointment }: { 
   /**
    * Remplit une section d'un coup a partir de la bibliotheque. Chaque tache
    * choisie devient une ligne deja reliee a son modele, avec l'unite, le temps
-   * et le prix de reference repris — il ne reste qu'a saisir la quantite.
+   * et le prix de revient calcule repris — il ne reste qu'a saisir la quantite.
    */
   function addTasksFromTemplates(sectionId: string, templateIds: string[]) {
     if (!templateIds.length) return;
@@ -1082,7 +1087,7 @@ export function ProjectVisitWorkspaceStable({ project, existingAppointment }: { 
         width: null,
         height: null,
         estimatedHours: template.temps_prevu_par_unite_h ? Number(template.temps_prevu_par_unite_h) : null,
-        priceHintHt: template.cout_reference_unitaire_ht ? Number(template.cout_reference_unitaire_ht) : null,
+        priceHintHt: (templateUnitCosts.get(template.id) ?? 0) > 0 ? (templateUnitCosts.get(template.id) ?? 0) : null,
         family: null,
         libraryId: null,
         taskTemplateId: template.id,
