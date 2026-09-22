@@ -47,6 +47,7 @@ type CompanyFormState = {
   default_legal_mentions: string;
   default_waste_management: string;
   default_margin_rate: string;
+  default_labor_margin_rate: string;
   primary_color: string;
   secondary_color: string;
 };
@@ -70,6 +71,10 @@ function toCompanyForm(settings: CompanySettingsRow): CompanyFormState {
     default_legal_mentions: settings.default_legal_mentions ?? "",
     default_waste_management: settings.default_waste_management ?? "",
     default_margin_rate: settings.default_margin_rate === null || settings.default_margin_rate === undefined ? "" : String(settings.default_margin_rate),
+    default_labor_margin_rate:
+      settings.default_labor_margin_rate === null || settings.default_labor_margin_rate === undefined
+        ? ""
+        : String(settings.default_labor_margin_rate),
     primary_color: settings.primary_color ?? "#2563eb",
     secondary_color: settings.secondary_color ?? "#0f172a",
   };
@@ -115,6 +120,7 @@ export default function MonEntreprisePage() {
     default_legal_mentions: "",
     default_waste_management: "",
     default_margin_rate: "",
+    default_labor_margin_rate: "",
     primary_color: "#2563eb",
     secondary_color: "#0f172a",
   });
@@ -225,10 +231,12 @@ export default function MonEntreprisePage() {
         nextLogoPath = await uploadCompanyLogo(logoFile, companySettings?.logo_path ?? null);
       }
       const marginRate = companyForm.default_margin_rate.trim();
+      const laborMarginRate = companyForm.default_labor_margin_rate.trim();
       const saved = await upsertCompanySettings({
         ...companyForm,
         // Vide = on retombe sur la marge par défaut du chiffrage.
         default_margin_rate: marginRate === "" ? null : Number(marginRate.replace(",", ".")),
+        default_labor_margin_rate: laborMarginRate === "" ? null : Number(laborMarginRate.replace(",", ".")),
         logo_path: nextLogoPath,
       });
       setCompanySettings(saved);
@@ -423,19 +431,37 @@ export default function MonEntreprisePage() {
                   n&apos;est fixée sur la tâche elle-même : relevé terrain, devis, bibliothèque.
                 </div>
               </div>
-              <label className="space-y-1 text-sm block max-w-48">
-                <div className="text-xs text-slate-600">Marge par defaut</div>
-                <div className="flex items-center gap-2">
-                  <input
-                    className="w-full rounded-xl border px-3 py-2 text-sm"
-                    inputMode="decimal"
-                    placeholder="30"
-                    value={companyForm.default_margin_rate}
-                    onChange={(e) => setCompanyForm((prev) => ({ ...prev, default_margin_rate: e.target.value }))}
-                  />
-                  <span className="shrink-0 text-sm text-slate-500">%</span>
-                </div>
-              </label>
+              <div className="flex flex-wrap gap-3">
+                <label className="space-y-1 text-sm block max-w-48">
+                  <div className="text-xs text-slate-600">Marge par defaut</div>
+                  <div className="flex items-center gap-2">
+                    <input
+                      className="w-full rounded-xl border px-3 py-2 text-sm"
+                      inputMode="decimal"
+                      placeholder="30"
+                      value={companyForm.default_margin_rate}
+                      onChange={(e) => setCompanyForm((prev) => ({ ...prev, default_margin_rate: e.target.value }))}
+                    />
+                    <span className="shrink-0 text-sm text-slate-500">%</span>
+                  </div>
+                  <div className="text-[11px] text-slate-500">Fournitures et matériaux.</div>
+                </label>
+                {/* La main d'oeuvre porte le risque du chantier : sa marge se règle à part. */}
+                <label className="space-y-1 text-sm block max-w-48">
+                  <div className="text-xs text-slate-600">Marge main d&apos;oeuvre</div>
+                  <div className="flex items-center gap-2">
+                    <input
+                      className="w-full rounded-xl border px-3 py-2 text-sm"
+                      inputMode="decimal"
+                      placeholder={companyForm.default_margin_rate || "30"}
+                      value={companyForm.default_labor_margin_rate}
+                      onChange={(e) => setCompanyForm((prev) => ({ ...prev, default_labor_margin_rate: e.target.value }))}
+                    />
+                    <span className="shrink-0 text-sm text-slate-500">%</span>
+                  </div>
+                  <div className="text-[11px] text-slate-500">Heures vendues. Vide = marge par défaut.</div>
+                </label>
+              </div>
             </div>
 
             <div className="rounded-xl border p-3 space-y-3">

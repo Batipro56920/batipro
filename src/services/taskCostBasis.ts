@@ -66,13 +66,31 @@ export function taskTemplateMarginRate(template: TaskTemplateRow | null, rates?:
   return Number.isFinite(company) && company >= 0 ? company : DEFAULT_QUOTE_MARGIN_RATE;
 }
 
+/**
+ * Marge de la main d'œuvre : celle de la tâche si elle en a une, sinon celle
+ * réglée pour la main d'œuvre dans Mon entreprise, sinon la marge générale.
+ * Une heure vendue porte le risque du chantier, pas un sac de plâtre revendu.
+ */
+export function taskTemplateLaborMarginRate(template: TaskTemplateRow | null, rates?: CompanyHourlyRates | null): number {
+  const own = Number(template?.target_margin_rate ?? NaN);
+  if (Number.isFinite(own) && own >= 0) return own;
+  const labor = Number(rates?.defaultLaborMarginRate ?? NaN);
+  if (Number.isFinite(labor) && labor >= 0) return labor;
+  return taskTemplateMarginRate(template, rates);
+}
+
 /** Prix de vente d'une unité de tâche : son déboursé majoré de sa propre marge. */
 export function taskTemplateUnitSale(
   template: TaskTemplateRow | null,
   materials: TaskTemplateMaterialRatioRow[],
   rates: CompanyHourlyRates | null,
 ): number {
-  return salePriceFromCost(taskTemplateUnitCost(template, materials, rates).costHt, taskTemplateMarginRate(template, rates));
+  // Deux marges, deux natures de déboursé : la main d'œuvre et les matériaux
+  // ne se vendent pas au même taux.
+  const cost = taskTemplateUnitCost(template, materials, rates);
+  const labor = salePriceFromCost(cost.laborHt, taskTemplateLaborMarginRate(template, rates));
+  const materialsSale = salePriceFromCost(cost.materialsHt, taskTemplateMarginRate(template, rates));
+  return Math.round((labor + materialsSale) * 100) / 100;
 }
 
 /** Prix de vente déduit d'un déboursé sec. */

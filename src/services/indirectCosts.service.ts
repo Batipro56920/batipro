@@ -34,6 +34,8 @@ export type CompanyHourlyRates = {
   equipmentAssets: CompanyEquipmentAsset[];
   /** Marge par défaut de l'entreprise, appliquée faute de taux propre à la tâche. */
   defaultMarginRate: number;
+  /** Marge de la main d'œuvre : la sienne, sinon la marge générale. */
+  defaultLaborMarginRate: number;
 };
 
 export function chargeMonthlyEquivalent(entry: CompanyChargeEntry): number {
@@ -135,5 +137,6 @@ export async function getCompanyHourlyRates(): Promise<CompanyHourlyRates> {
     overheadRatePerHour: productiveHoursPerYear > 0 ? round2(overheadAnnualHt / productiveHoursPerYear) : 0,
     equipmentAssets: indirect.equipmentAssets,
     defaultMarginRate: Number(settings.default_margin_rate ?? DEFAULT_QUOTE_MARGIN_RATE),
+    defaultLaborMarginRate: Number(settings.default_labor_margin_rate ?? settings.default_margin_rate ?? DEFAULT_QUOTE_MARGIN_RATE),
   };
 }

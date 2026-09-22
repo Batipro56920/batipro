@@ -815,12 +815,14 @@ export default function TaskTemplateDrawer({
 
   /** Marge retenue pour cette tache : la sienne, sinon celle de l'entreprise. */
   const companyMarginRate = Number(hourlyRates?.defaultMarginRate ?? DEFAULT_QUOTE_MARGIN_RATE);
+  /** La main d'oeuvre a sa propre marge d'entreprise, plus elevee que celle des fournitures. */
+  const companyLaborMarginRate = Number(hourlyRates?.defaultLaborMarginRate ?? companyMarginRate);
   const taskMarginRate = useMemo(() => {
     // Meme piege que le cout horaire : un champ vide doit rendre la main a la
     // marge de l'entreprise, pas vendre a marge nulle.
     const value = parseNumberField(margeTache);
-    return value !== null && value >= 0 ? value : companyMarginRate;
-  }, [margeTache, companyMarginRate]);
+    return value !== null && value >= 0 ? value : companyLaborMarginRate;
+  }, [margeTache, companyLaborMarginRate]);
 
   const compositionTotals = useMemo(() => {
     const engineTotals = TaskCostEngine.calculate({
@@ -836,7 +838,7 @@ export default function TaskTemplateDrawer({
           durationHours: laborPlan.hours,
           hourlyCostHt: laborPlan.fullHourlyCostHt,
           hourlySaleHt: null,
-          marginRate: selectedLotProfile?.laborMarginRate ?? null,
+          marginRate: selectedLotProfile?.laborMarginRate ?? taskMarginRate,
         },
       ],
       equipment: equipmentDrafts.map((row) => ({
@@ -1926,14 +1928,14 @@ export default function TaskTemplateDrawer({
                         className="w-full rounded-lg border border-slate-200 bg-white px-2 py-1 text-sm font-semibold text-slate-900"
                         inputMode="decimal"
                         value={margeTache}
-                        placeholder={String(companyMarginRate)}
+                        placeholder={String(companyLaborMarginRate)}
                         onChange={(e) => setMargeTache(e.target.value)}
                         disabled={busy}
                       />
                       <span className="shrink-0 text-sm text-slate-500">%</span>
                     </div>
                     <div className="mt-1 text-[11px] text-slate-500">
-                      Appliquée au déboursé pour donner le prix de vente au devis. Vide = marge de l'entreprise.
+                      Appliquée à la main d'oeuvre pour donner son prix de vente. Vide = marge main d'oeuvre de l'entreprise.
                     </div>
                   </div>
                   <div className="rounded-xl border border-blue-100 bg-blue-50 px-3 py-2 text-sm md:col-span-3">
