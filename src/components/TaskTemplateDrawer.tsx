@@ -794,7 +794,9 @@ export default function TaskTemplateDrawer({
   const laborPlan = useMemo(() => {
     const hours = parseDraftAmount(tempsParUnite) ?? 0;
     // Le taux saisi sur la tache prime sur le cout horaire moyen de l'equipe.
-    const override = parseDraftAmount(coutHoraireTache);
+    // Champ vide = pas de taux propre : parseDraftAmount rendait 0, ce qui etait
+    // lu comme "zero euro de l'heure" et effacait la moyenne des salaries.
+    const override = parseNumberField(coutHoraireTache);
     const hourlyCostHt = override !== null && override >= 0 ? override : hourlyRates?.averageEmployeeHourlyCostHt ?? 0;
     // Les frais generaux et l'amortissement, ramenes a l'heure, font partie du
     // cout de la main d'oeuvre : ils se chiffrent et se vendent avec elle, et
@@ -814,7 +816,9 @@ export default function TaskTemplateDrawer({
   /** Marge retenue pour cette tache : la sienne, sinon celle de l'entreprise. */
   const companyMarginRate = Number(hourlyRates?.defaultMarginRate ?? DEFAULT_QUOTE_MARGIN_RATE);
   const taskMarginRate = useMemo(() => {
-    const value = parseDraftAmount(margeTache);
+    // Meme piege que le cout horaire : un champ vide doit rendre la main a la
+    // marge de l'entreprise, pas vendre a marge nulle.
+    const value = parseNumberField(margeTache);
     return value !== null && value >= 0 ? value : companyMarginRate;
   }, [margeTache, companyMarginRate]);
 
