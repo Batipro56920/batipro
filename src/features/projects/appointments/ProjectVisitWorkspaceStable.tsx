@@ -15,7 +15,7 @@ import type { ProjectRecord } from "../types";
 import { VisitReportImportDrawer, type VisitImportSelection } from "./VisitReportImportDrawer";
 import { applyImportedFields, buildLinesFromImport } from "./applyVisitImport";
 
-type StepKey = "info" | "description" | "estimating" | "photos" | "constraints" | "budget" | "summary";
+type StepKey = "info" | "description" | "architecture" | "estimating" | "photos" | "constraints" | "budget" | "summary";
 type VisitStatus = "brouillon" | "planifiee" | "realisee" | "pre_devis";
 type Unit = "u" | "ml" | "m2" | "m3" | "h";
 type LineType = "section" | "task";
@@ -110,13 +110,55 @@ type VisitDraft = {
   objections: string;
   nextAction: string;
   followUpDate: string;
+  architecture: ArchitectureRoom[];
   lines: EstimateLine[];
   attachments: VisitAttachment[];
 };
 
+/**
+ * Une piece relevee sur place. Les surfaces ne sont jamais saisies : elles se
+ * deduisent des trois dimensions, avec ce qu'il faut retirer pour les
+ * ouvertures (murs) et les passages de porte (plinthes).
+ */
+export type ArchitectureRoom = {
+  id: string;
+  name: string;
+  length: number | null;
+  width: number | null;
+  height: number | null;
+  openingsM2: number | null;
+  skirtingDeductionMl: number | null;
+};
+
+function positive(value: number | null | undefined): number {
+  const parsed = Number(value ?? 0);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : 0;
+}
+
+export function roomMetrics(room: ArchitectureRoom) {
+  const length = positive(room.length);
+  const width = positive(room.width);
+  const height = positive(room.height);
+  const floor = length * width;
+  const perimeter = 2 * (length + width);
+  return {
+    floor,
+    ceiling: floor,
+    perimeter,
+    walls: Math.max(0, perimeter * height - positive(room.openingsM2)),
+    skirting: Math.max(0, perimeter - positive(room.skirtingDeductionMl)),
+    volume: floor * height,
+  };
+}
+
+function round2(value: number) {
+  return Math.round(value * 100) / 100;
+}
+
 const steps: Array<{ key: StepKey; label: string }> = [
   { key: "info", label: "Infos" },
   { key: "description", label: "Projet" },
+  { key: "architecture", label: "Architecture" },
   { key: "estimating", label: "Terrain / pre-devis" },
   { key: "photos", label: "Photos" },
   { key: "constraints", label: "Contraintes" },
@@ -465,6 +507,7 @@ function initialDraft(project: ProjectRecord, appointment?: CrmAppointmentRow | 
     urgency: project.prospect?.urgence ?? "",
     desiredDeadline: project.desiredDeadline ?? "",
     zones: "",
+    architecture: [],
     access: "",
     parking: "",
     floor: "",
@@ -683,6 +726,9 @@ export function ProjectVisitWorkspaceStable({ project, existingAppointment }: { 
         ...current,
         ...stored,
         status: normalizeVisitStatus(stored.status),
+        architecture: Array.isArray((stored as { architecture?: unknown }).architecture)
+          ? ((stored as { architecture?: ArchitectureRoom[] }).architecture ?? [])
+          : current.architecture,
         lines: stored.lines?.length ? stored.lines as EstimateLine[] : current.lines,
         attachments: stored.attachments?.length ? stored.attachments as VisitAttachment[] : current.attachments,
       }));
@@ -692,6 +738,9 @@ export function ProjectVisitWorkspaceStable({ project, existingAppointment }: { 
     };
   }, [appointmentId]);
 
+  // Les mesures relevées dans l'onglet Architecture, prêtes à être reprises
+  // dans une ligne : c'est là qu'elles évitent d'être recomptées à la main.
+  const architectureMeasures = useMemo(() => architectureMeasureList(draft.architecture), [draft.architecture]);
   const sections = useMemo(() => draft.lines.filter((line) => line.type === "section"), [draft.lines]);
   const tasks = useMemo(() => draft.lines.filter((line) => line.type === "task"), [draft.lines]);
   const selectedLine = useMemo(() => draft.lines.find((line) => line.id === selectedLineId) ?? null, [draft.lines, selectedLineId]);
@@ -1069,6 +1118,7 @@ export function ProjectVisitWorkspaceStable({ project, existingAppointment }: { 
         urgency: nextDraft.urgency,
         desired_deadline: nextDraft.desiredDeadline,
         zones: nextDraft.zones,
+        architecture: nextDraft.architecture,
         constraints: { access: nextDraft.access, parking: nextDraft.parking, floor: nextDraft.floor, condominium: nextDraft.condominium, schedule: nextDraft.schedule, nuisance: nextDraft.nuisance, safety: nextDraft.safety, waste: nextDraft.waste, water: nextDraft.water, electricity: nextDraft.electricity, authorizations: nextDraft.authorizations, notes: nextDraft.constraintNotes },
         budget: { known: nextDraft.budgetKnown, range: nextDraft.budgetRange, priceSensitivity: nextDraft.priceSensitivity, decisionMaker: nextDraft.decisionMaker, decisionOnSite: nextDraft.decisionOnSite, objections: nextDraft.objections },
         next_action: nextDraft.nextAction,
@@ -1228,7 +1278,7 @@ export function ProjectVisitWorkspaceStable({ project, existingAppointment }: { 
               })}
             </div>
           </div>
-          <aside className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm xl:sticky xl:top-4 xl:self-start">
+          <aside className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm xl:sticky xl:top-4 xl:max-h-[calc(100dvh-2rem)] xl:self-start xl:overflow-y-auto">
             <div className="mb-3 flex items-center justify-between gap-2"><div className="text-sm font-semibold text-slate-950">Detail</div>{selectedLine ? <button type="button" onClick={() => removeLine(selectedLine.id)} className="rounded-lg p-2 text-red-600 hover:bg-red-50"><Trash2 className="h-4 w-4" /></button> : null}</div>
             {selectedLine ? (
               <div className="space-y-3">
@@ -1298,6 +1348,24 @@ export function ProjectVisitWorkspaceStable({ project, existingAppointment }: { 
                       </div>
                     </Field>
                     <LinkedTaskSummary entries={linkedEntries} rates={hourlyRates} unit={selectedLine.unit} quantity={quantity(selectedLine)} />
+                    {architectureMeasures.length ? (
+                      <Field label="Reprendre une mesure de l'architecture">
+                        <select
+                          className={inputClass}
+                          value=""
+                          onChange={(event) => {
+                            const measure = architectureMeasures.find((entry) => entry.key === event.target.value);
+                            if (!measure) return;
+                            patchLine(selectedLine.id, { quantity: measure.value, unit: measure.unit, manualQuantity: true, length: null, width: null, height: null });
+                          }}
+                        >
+                          <option value="">Choisir une mesure relevee...</option>
+                          {architectureMeasures.map((entry) => (
+                            <option key={entry.key} value={entry.key}>{entry.label}</option>
+                          ))}
+                        </select>
+                      </Field>
+                    ) : null}
                     <div>{renderMeasurements(selectedLine)}</div>
                     <Field label="Temps estime / prix indicatif">
                       <div className="grid gap-2 sm:grid-cols-2">
@@ -1327,6 +1395,13 @@ export function ProjectVisitWorkspaceStable({ project, existingAppointment }: { 
               addTasksFromTemplates(pickerSection.id, templateIds);
               setPickerSectionId(null);
             }}
+          />
+        ) : null}
+
+        {step === "architecture" ? (
+          <ArchitectureStep
+            rooms={draft.architecture}
+            onChange={(architecture) => patch("architecture", architecture)}
           />
         ) : null}
 
@@ -1440,5 +1515,147 @@ export function ProjectVisitWorkspaceStable({ project, existingAppointment }: { 
         onApply={applyImport}
       />
     </div>
+  );
+}
+
+/** Les mesures relevees, proposees telles quelles aux lignes du pre-devis. */
+function architectureMeasureList(rooms: ArchitectureRoom[]) {
+  const entries: Array<{ key: string; label: string; value: number; unit: EstimateLine["unit"] }> = [];
+  const totals = rooms.reduce(
+    (sum, room) => {
+      const metrics = roomMetrics(room);
+      return {
+        floor: sum.floor + metrics.floor,
+        ceiling: sum.ceiling + metrics.ceiling,
+        walls: sum.walls + metrics.walls,
+        skirting: sum.skirting + metrics.skirting,
+        volume: sum.volume + metrics.volume,
+      };
+    },
+    { floor: 0, ceiling: 0, walls: 0, skirting: 0, volume: 0 },
+  );
+  const push = (key: string, label: string, value: number, unit: EstimateLine["unit"]) => {
+    if (value > 0) entries.push({ key, label, value: round2(value), unit });
+  };
+  push("total-floor", `Tout : sol ${round2(totals.floor)} m2`, totals.floor, "m2");
+  push("total-ceiling", `Tout : plafond ${round2(totals.ceiling)} m2`, totals.ceiling, "m2");
+  push("total-walls", `Tout : murs ${round2(totals.walls)} m2`, totals.walls, "m2");
+  push("total-skirting", `Tout : plinthes ${round2(totals.skirting)} ml`, totals.skirting, "ml");
+  push("total-volume", `Tout : volume ${round2(totals.volume)} m3`, totals.volume, "m3");
+  for (const room of rooms) {
+    const metrics = roomMetrics(room);
+    const name = room.name.trim() || "Piece";
+    push(`${room.id}-floor`, `${name} : sol ${round2(metrics.floor)} m2`, metrics.floor, "m2");
+    push(`${room.id}-walls`, `${name} : murs ${round2(metrics.walls)} m2`, metrics.walls, "m2");
+    push(`${room.id}-skirting`, `${name} : plinthes ${round2(metrics.skirting)} ml`, metrics.skirting, "ml");
+    push(`${room.id}-volume`, `${name} : volume ${round2(metrics.volume)} m3`, metrics.volume, "m3");
+  }
+  return entries;
+}
+
+/**
+ * Architecture du releve : on mesure une piece, l'application en tire le sol, le
+ * plafond, les murs, les plinthes et le volume. Ces quantites partent ensuite
+ * dans les lignes du pre-devis sans etre recomptees a la main.
+ */
+function ArchitectureStep({ rooms, onChange }: { rooms: ArchitectureRoom[]; onChange: (rooms: ArchitectureRoom[]) => void }) {
+  function addRoom() {
+    onChange([...rooms, { id: uid("piece"), name: "", length: null, width: null, height: 2.5, openingsM2: null, skirtingDeductionMl: null }]);
+  }
+  function patchRoom(id: string, patchValue: Partial<ArchitectureRoom>) {
+    onChange(rooms.map((room) => (room.id === id ? { ...room, ...patchValue } : room)));
+  }
+  function removeRoom(id: string) {
+    onChange(rooms.filter((room) => room.id !== id));
+  }
+
+  const totals = rooms.reduce(
+    (sum, room) => {
+      const metrics = roomMetrics(room);
+      return {
+        floor: sum.floor + metrics.floor,
+        walls: sum.walls + metrics.walls,
+        skirting: sum.skirting + metrics.skirting,
+        volume: sum.volume + metrics.volume,
+      };
+    },
+    { floor: 0, walls: 0, skirting: 0, volume: 0 },
+  );
+
+  return (
+    <section className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm md:p-5">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <div className="text-xs font-semibold uppercase tracking-[0.18em] text-blue-600">Architecture</div>
+          <h2 className="mt-1 text-lg font-semibold text-slate-950">Pieces relevees</h2>
+          <p className="mt-1 text-sm text-slate-500">Longueur, largeur, hauteur : le sol, les plafonds, les murs, les plinthes et le volume se calculent seuls.</p>
+        </div>
+        <Button variant="secondary" onClick={addRoom}><Plus className="h-4 w-4" />Piece</Button>
+      </div>
+
+      <div className="mt-4 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+        <TotalCard label="Sol / plafond" value={`${round2(totals.floor)} m2`} />
+        <TotalCard label="Murs" value={`${round2(totals.walls)} m2`} />
+        <TotalCard label="Plinthes" value={`${round2(totals.skirting)} ml`} />
+        <TotalCard label="Volume" value={`${round2(totals.volume)} m3`} />
+      </div>
+
+      <div className="mt-4 space-y-3">
+        {rooms.length === 0 ? (
+          <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-5 text-sm text-slate-500">Ajoutez une piece, puis saisissez ses dimensions.</div>
+        ) : null}
+        {rooms.map((room) => {
+          const metrics = roomMetrics(room);
+          return (
+            <article key={room.id} className="rounded-2xl border border-slate-200 p-3">
+              <div className="flex flex-wrap items-center gap-2">
+                <input
+                  className={`${inputClass} flex-1`}
+                  placeholder="Nom de la piece (cuisine, chambre 1...)"
+                  value={room.name}
+                  onChange={(event) => patchRoom(room.id, { name: event.target.value })}
+                />
+                <button type="button" onClick={() => removeRoom(room.id)} className="rounded-lg p-2 text-red-600 hover:bg-red-50" aria-label="Supprimer la piece">
+                  <Trash2 className="h-4 w-4" />
+                </button>
+              </div>
+              <div className="mt-3 grid gap-2 sm:grid-cols-3 xl:grid-cols-5">
+                <Field label="Longueur (m)"><DecimalInput value={room.length} onValue={(value) => patchRoom(room.id, { length: value })} /></Field>
+                <Field label="Largeur (m)"><DecimalInput value={room.width} onValue={(value) => patchRoom(room.id, { width: value })} /></Field>
+                <Field label="Hauteur (m)"><DecimalInput value={room.height} onValue={(value) => patchRoom(room.id, { height: value })} /></Field>
+                <Field label="Ouvertures a deduire (m2)"><DecimalInput value={room.openingsM2} onValue={(value) => patchRoom(room.id, { openingsM2: value })} /></Field>
+                <Field label="Passages a deduire (ml)"><DecimalInput value={room.skirtingDeductionMl} onValue={(value) => patchRoom(room.id, { skirtingDeductionMl: value })} /></Field>
+              </div>
+              <div className="mt-3 flex flex-wrap gap-2 text-xs">
+                <Measure label="Sol" value={`${round2(metrics.floor)} m2`} />
+                <Measure label="Plafond" value={`${round2(metrics.ceiling)} m2`} />
+                <Measure label="Perimetre" value={`${round2(metrics.perimeter)} ml`} />
+                <Measure label="Murs" value={`${round2(metrics.walls)} m2`} />
+                <Measure label="Plinthes" value={`${round2(metrics.skirting)} ml`} />
+                <Measure label="Volume" value={`${round2(metrics.volume)} m3`} />
+              </div>
+            </article>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+
+function TotalCard({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-2xl bg-slate-50 p-4">
+      <div className="text-xs text-slate-500">{label}</div>
+      <div className="text-xl font-bold text-slate-950">{value}</div>
+    </div>
+  );
+}
+
+function Measure({ label, value }: { label: string; value: string }) {
+  return (
+    <span className="rounded-lg bg-slate-100 px-2 py-1 text-slate-700">
+      <span className="text-slate-500">{label} </span>
+      <span className="font-semibold">{value}</span>
+    </span>
   );
 }

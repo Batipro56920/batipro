@@ -75,6 +75,8 @@ export type CrmVisitReportDraft = {
   urgency?: string;
   desiredDeadline?: string;
   zones?: string;
+  /** Pièces mesurées sur place, d'où sont déduits les m², ml et m³. */
+  architecture?: unknown;
   access?: string;
   parking?: string;
   floor?: string;
@@ -130,7 +132,7 @@ export type CrmVisitReportInput = CrmVisitReportDraft & {
 };
 
 const VISIT_REPORT_SELECT =
-  "id,appointment_id,prospect_id,client_id,opportunity_id,status,client_name,phone,email,address,contact_on_site,visit_date,visit_time,duration_minutes,salesperson,project_type,client_objective,need_description,urgency,desired_deadline,zones,constraints,budget,next_action,follow_up_date,report_text,quote_source,created_at,updated_at";
+  "id,appointment_id,prospect_id,client_id,opportunity_id,status,client_name,phone,email,address,contact_on_site,visit_date,visit_time,duration_minutes,salesperson,project_type,client_objective,need_description,urgency,desired_deadline,zones,architecture,constraints,budget,next_action,follow_up_date,report_text,quote_source,created_at,updated_at";
 const VISIT_REPORT_ITEM_SELECT =
   "id,visit_report_id,parent_id,source_line_id,line_type,title,unit,quantity,manual_quantity,length,width,height,estimated_hours,price_hint_ht,family,library_id,task_template_id,task_template_label,task_template_ids,task_template_labels,task_template_quantities,technical_notes,constraints,variants,attention_points,ordre,created_at,updated_at";
 const VISIT_REPORT_ATTACHMENT_SELECT =
@@ -244,6 +246,7 @@ export async function saveCrmVisitReport(input: CrmVisitReportInput) {
     urgency: text(input.urgency),
     desired_deadline: dateOrNull(input.desired_deadline, input.desiredDeadline),
     zones: text(input.zones),
+    architecture: Array.isArray(input.architecture) ? input.architecture : [],
     constraints: jsonObjectOrDefault(input.constraints),
     budget: jsonObjectOrDefault(input.budget),
     next_action: text(input.next_action ?? input.nextAction),
@@ -475,6 +478,7 @@ export async function loadCrmVisitReportDraft(appointmentId: string): Promise<Cr
     urgency: report.urgency ?? "",
     desiredDeadline: report.desired_deadline ?? "",
     zones: report.zones ?? "",
+    architecture: Array.isArray((report as { architecture?: unknown }).architecture) ? ((report as { architecture?: unknown[] }).architecture ?? []) : [],
     access: readObjectValue(constraints, "access"),
     parking: readObjectValue(constraints, "parking"),
     floor: readObjectValue(constraints, "floor"),
