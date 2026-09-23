@@ -386,8 +386,17 @@ export async function updateItem(
   if (patch.chantier_id !== undefined) payload.chantier_id = patch.chantier_id || null;
   if (patch.scheduled_at !== undefined) payload.scheduled_at = patch.scheduled_at ? new Date(patch.scheduled_at).toISOString() : null;
   if (!Object.keys(payload).length) return;
-  const { error } = await db.from("communication_campaign_items").update(payload).eq("organization_id", organizationId).eq("id", id);
+  const { data, error } = await db
+    .from("communication_campaign_items")
+    .update(payload)
+    .eq("organization_id", organizationId)
+    .eq("id", id)
+    .select("id")
+    .maybeSingle();
   fail(error);
+  // PostgREST peut renvoyer une requête sans erreur alors que la RLS n'a
+  // autorisé aucune ligne. Ne jamais afficher « Enregistré » dans ce cas.
+  if (!data) throw new Error("Le contenu n'a pas été enregistré. Vérifie tes droits puis réessaie.");
 }
 
 /**
