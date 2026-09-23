@@ -61,6 +61,12 @@ export function CommunicationContentEditor({
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
+  const [savedState, setSavedState] = useState(() => ({
+    title: item.title,
+    content: item.content ?? "",
+    networks: normalizeChannels(item.channels),
+    chantierId: item.chantier_id ?? "",
+  }));
 
   /** Un fichier que le stockage refusera ne doit pas attendre l envoi pour le dire. */
   function selectFiles(selection: File[]) {
@@ -96,6 +102,15 @@ export function CommunicationContentEditor({
   const tooLong = networks
     .map((network) => ({ network, limit: channelLimit(network) }))
     .filter((entry) => entry.limit !== null && content.trim().length > entry.limit);
+  const dirty = title !== savedState.title
+    || content !== savedState.content
+    || chantierId !== savedState.chantierId
+    || networks.join("|") !== savedState.networks.join("|")
+    || files.length > 0;
+
+  useEffect(() => {
+    if (dirty) setMessage("");
+  }, [dirty]);
 
   async function save(): Promise<boolean> {
     if (!title.trim()) { setError("Donne un titre à ce contenu."); return false; }
@@ -108,13 +123,24 @@ export function CommunicationContentEditor({
     await saveItemVariants(item.id, networks, content.trim());
     if (files.length) { await uploadAssets(campaignId, item.id, files); setFiles([]); }
     await readVariants();
+    const savedTitle = title.trim();
+    const savedContent = content.trim();
+    setTitle(savedTitle);
+    setContent(savedContent);
+    setSavedState({
+      title: savedTitle,
+      content: savedContent,
+      networks: normalizeChannels(networks),
+      chantierId: chantierId || "",
+    });
     return true;
   }
 
-  async function run(action: () => Promise<void>, done: string) {
+  async function run(action: () => Promise<boolean | void>, done: string) {
     setBusy(true); setError(""); setMessage("");
     try {
-      await action();
+      const completed = await action();
+      if (completed === false) return;
       setMessage(done);
       onSaved();
     } catch (err) {
@@ -219,11 +245,11 @@ export function CommunicationContentEditor({
             </div>
           ) : null}
 
-          {error ? <p className="rounded-xl bg-danger-soft p-3 text-sm text-danger-on">{error}</p> : null}
-          {message ? <p className="rounded-xl bg-success-soft p-3 text-sm text-success">{message}</p> : null}
         </div>
 
         <footer className="space-y-3 border-t border-subtle px-5 py-4">
+          {error ? <p role="alert" className="rounded-xl bg-danger-soft p-3 text-sm text-danger-on">{error}</p> : null}
+          {message ? <p role="status" className="flex items-center gap-2 rounded-xl bg-success-soft p-3 text-sm font-medium text-success"><Check className="h-4 w-4" />{message}</p> : null}
           {approved && !published ? (
             <div className="flex flex-wrap items-end gap-2 rounded-xl bg-primary-soft p-3">
               <label className="flex-1 text-sm font-medium text-ink">
@@ -246,8 +272,8 @@ export function CommunicationContentEditor({
               <Trash2 className="h-4 w-4" />Supprimer
             </button>
             <div className="flex flex-wrap gap-2">
-              <Button variant="secondary" disabled={busy || published} onClick={() => void run(async () => { await save(); }, "Enregistré.")}>
-                {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : null}Enregistrer
+              <Button variant="secondary" disabled={busy || published || !dirty} onClick={() => void run(save, "Enregistré dans la campagne.")}>
+                {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : null}{dirty ? "Enregistrer" : "Déjà enregistré"}
               </Button>
               {approved ? (
                 <Button variant="secondary" disabled={busy || published} onClick={() => void run(() => reopenItem(item.id), "Contenu remis en préparation.")}>
