@@ -3,9 +3,19 @@ import type { InvoiceRecord, InvoiceType } from "../domain/types";
 import { normalizeInvoiceElectronicInvoicing } from "./electronicInvoicing";
 import { addLocalDays, getLocalInputDate } from "./invoiceDates";
 
-export function createInvoice(type: InvoiceType = "deposit", sourceQuote?: BusinessDocument): InvoiceRecord {
+export type InvoiceCreationOptions = {
+  alreadyInvoicedTtc?: number;
+};
+
+export function createInvoice(
+  type: InvoiceType = "deposit",
+  sourceQuote?: BusinessDocument,
+  options: InvoiceCreationOptions = {},
+): InvoiceRecord {
   const now = new Date().toISOString();
-  const document = sourceQuote ? createInvoiceDocumentFromQuote(sourceQuote, type) : createEmptyInvoiceDocument(type);
+  const document = sourceQuote
+    ? createInvoiceDocumentFromQuote(sourceQuote, type, options)
+    : createEmptyInvoiceDocument(type);
   return {
     id: crypto.randomUUID(),
     type,
@@ -20,10 +30,22 @@ export function createInvoice(type: InvoiceType = "deposit", sourceQuote?: Busin
   };
 }
 
-export function createInvoiceDocumentFromQuote(quote: BusinessDocument, type: InvoiceType): BusinessDocument {
+export function createInvoiceDocumentFromQuote(
+  quote: BusinessDocument,
+  type: InvoiceType,
+  options: InvoiceCreationOptions = {},
+): BusinessDocument {
   const quoteTotals = quote.totals ?? calculateDocumentTotals(quote);
   const isCreditNote = type === "credit_note";
   const depositPercent = quote.terms.depositPercent ?? 30;
+  const alreadyInvoicedTtc = Math.max(0, Number(options.alreadyInvoicedTtc ?? 0));
+  const remainingTtc = Math.max(0, quoteTotals.totalTtc - alreadyInvoicedTtc);
+  const finalBalancePercent = quoteTotals.totalTtc > 0 ? remainingTtc / quoteTotals.totalTtc * 100 : 0;
+
+  if (type === "final" && alreadyInvoicedTtc > 0 && remainingTtc <= 0.009) {
+    throw new Error("Ce devis est déjà entièrement facturé. Annulez ou corrigez une facture existante avant de créer la finale.");
+  }
+
   const document = {
     ...quote,
     id: null,
@@ -40,7 +62,9 @@ export function createInvoiceDocumentFromQuote(quote: BusinessDocument, type: In
       paymentTerms: type === "deposit"
         ? `Facture d'acompte de ${depositPercent}% selon devis ${quote.number}.`
         : type === "final"
-          ? `Facture finale selon devis ${quote.number}.`
+          ? alreadyInvoicedTtc > 0
+            ? `Facture finale de solde selon devis ${quote.number}, après déduction des factures précédentes.`
+            : `Facture finale selon devis ${quote.number}.`
           : type === "credit_note"
             ? `Avoir relatif au devis ${quote.number}.`
             : `Facture intermédiaire selon avancement du devis ${quote.number}.`,
@@ -53,6 +77,11 @@ export function createInvoiceDocumentFromQuote(quote: BusinessDocument, type: In
   if (type === "deposit") {
     document.nodes = createDepositInvoiceNodes(quote, depositPercent);
     document.description = `Acompte sur devis ${quote.number} - montant de reference ${formatCurrency(quoteTotals.totalTtc)} TTC.`;
+  }
+
+  if (type === "final" && alreadyInvoicedTtc > 0) {
+    document.nodes = quote.nodes.map((node, index) => cloneNodeWithPercentage(node, null, index, finalBalancePercent));
+    document.description = `Solde du devis ${quote.number} - déjà facturé ${formatCurrency(alreadyInvoicedTtc)} TTC sur ${formatCurrency(quoteTotals.totalTtc)} TTC.`;
   }
 
   return { ...document, totals: calculateDocumentTotals(document) };
@@ -79,7 +108,7 @@ function createEmptyInvoiceDocument(type: InvoiceType): BusinessDocument {
 
 function createDepositInvoiceNodes(quote: BusinessDocument, depositPercent: number): BusinessDocumentNode[] {
   const percent = Math.max(0, Math.min(100, depositPercent || 0));
-  const nodes = quote.nodes.map((node, index) => cloneNodeForDepositInvoice(node, null, index, percent));
+  const nodes = quote.nodes.map((node, index) => cloneNodeWithPercentage(node, null, index, percent));
 
   if (!hasPositiveInvoiceAmount(nodes)) {
     throw new Error("Impossible de créer une facture d'acompte sans montant positif.");
@@ -88,7 +117,7 @@ function createDepositInvoiceNodes(quote: BusinessDocument, depositPercent: numb
   return nodes;
 }
 
-function cloneNodeForDepositInvoice(node: BusinessDocumentNode, parentId: string | null, order: number, percent: number): BusinessDocumentNode {
+function cloneNodeWithPercentage(node: BusinessDocumentNode, parentId: string | null, order: number, percent: number): BusinessDocumentNode {
   const id = crypto.randomUUID();
   if (node.type === "section" || node.type === "subsection") {
     return {
@@ -96,7 +125,7 @@ function cloneNodeForDepositInvoice(node: BusinessDocumentNode, parentId: string
       id,
       parentId,
       order,
-      children: node.children.map((child, index) => cloneNodeForDepositInvoice(child, id, index, percent)),
+      children: node.children.map((child, index) => cloneNodeWithPercentage(child, id, index, percent)),
     };
   }
 

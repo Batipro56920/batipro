@@ -1,5 +1,6 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
+import { calculateDocumentTotals } from "../../document-engine";
 import { createInvoice } from "../../invoices/application/invoiceFactory";
 import type { InvoiceRecord, InvoiceType } from "../../invoices/domain/types";
 import { listInvoices, saveInvoice } from "../../invoices/infrastructure/invoiceRepository";
@@ -544,7 +545,15 @@ export function ProjectQuotesTab({ project, onUpdated }: { project: ProjectRecor
       const engine = await loadCrmQuoteEngineData(quoteId);
       const quoteBuilder = createQuoteBuilderFromEngine(engine, project);
       const document = quoteBuilderToBusinessDocument(quoteBuilder);
-      const invoice = createInvoice(invoiceType, document);
+      const alreadyInvoicedTtc = getQuoteInvoices(quoteId).reduce((total, invoice) => {
+        const totals = invoice.document.totals ?? calculateDocumentTotals(invoice.document);
+        return total + totals.totalTtc;
+      }, 0);
+      const invoice = createInvoice(
+        invoiceType,
+        document,
+        invoiceType === "final" ? { alreadyInvoicedTtc } : undefined,
+      );
       const savedInvoice = await saveInvoice(invoice);
       setExistingInvoices((current) => [savedInvoice, ...current]);
       navigate(invoiceDetailPath(savedInvoice.id));
