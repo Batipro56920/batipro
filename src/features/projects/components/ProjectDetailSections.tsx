@@ -547,7 +547,7 @@ export function ProjectQuotesTab({ project, onUpdated }: { project: ProjectRecor
       const document = quoteBuilderToBusinessDocument(quoteBuilder);
       const alreadyInvoicedTtc = getQuoteInvoices(quoteId).reduce((total, invoice) => {
         const totals = invoice.document.totals ?? calculateDocumentTotals(invoice.document);
-        return total + totals.totalTtc;
+        return total + (invoice.type === "credit_note" ? -totals.totalTtc : totals.totalTtc);
       }, 0);
       const invoice = createInvoice(
         invoiceType,
