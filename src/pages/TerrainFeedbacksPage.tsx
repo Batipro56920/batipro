@@ -730,7 +730,7 @@ export default function TerrainFeedbacksPage({
                           Documents
                         </Link>
                         <Link
-                          to={`/chantiers/${row.chantier.id}/qualite`}
+                          to={`/chantiers/${encodeURIComponent(row.chantier.id)}/qualite?feedbackId=${encodeURIComponent(row.id)}`}
                           className="bt-control rounded-field border border-info/20 bg-info-soft px-3 py-2 text-xs font-semibold text-info-on hover:bg-interactive"
                         >
                           Qualité / réserves
@@ -879,7 +879,7 @@ export default function TerrainFeedbacksPage({
                             Documents
                           </Link>
                           <Link
-                            to={`/chantiers/${row.chantier.id}/qualite`}
+                            to={`/chantiers/${encodeURIComponent(row.chantier.id)}/qualite?feedbackId=${encodeURIComponent(row.id)}`}
                             className="bt-control rounded-field border border-info/20 bg-info-soft px-2.5 py-1.5 text-xs font-semibold text-info-on hover:bg-interactive"
                           >
                             Réserves
