@@ -42,11 +42,13 @@ export async function saveQuote(quote: Quote, original: CrmQuoteEngineData) {
       quote_id: quote.id,
       parentItemId,
       lineType: patch.line_type,
+      taskTemplateId: patch.task_template_id,
       designation: patch.designation,
       description: patch.description,
       quantity: patch.quantite,
       unit: patch.unite,
       unitPriceHt: patch.sale_unit_price_ht,
+      materialsCost: patch.cost_materials_ht,
       tvaRate: patch.tva_rate,
       ordre: row.order,
     });

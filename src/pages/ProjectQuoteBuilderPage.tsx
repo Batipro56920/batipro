@@ -96,7 +96,7 @@ export default function ProjectQuoteBuilderPage() {
     }
     try {
       setSaveState("saving");
-      const savedQuote = await createProjectQuote(quote);
+      const savedQuote = await createProjectQuote(quote, currentProject);
       localStorage.removeItem(`batipro.project-quote-draft.${currentProject.id}`);
       localStorage.removeItem(`batipro.project-quote-source.${currentProject.id}`);
       setSaveState("saved");
@@ -120,9 +120,16 @@ export default function ProjectQuoteBuilderPage() {
   );
 }
 
-async function createProjectQuote(quote: Quote) {
+async function createProjectQuote(quote: Quote, project: ProjectRecord) {
   const quotePatch = mapQuoteToQuotePatch(quote);
-  const createdQuote = await createCrmQuote({ ...quotePatch, montant_ht: quote.totals.sellHt, montant_ttc: quote.totals.ttc, tva: quote.settings.defaultVatRate, statut: "brouillon" });
+  const createdQuote = await createCrmQuote({
+    ...quotePatch,
+    opportunity_id: project.opportunity?.id ?? null,
+    montant_ht: quote.totals.sellHt,
+    montant_ttc: quote.totals.ttc,
+    tva: quote.settings.defaultVatRate,
+    statut: "brouillon",
+  });
 
   const idMap = new Map<string, string>();
   const quoteToPersist: Quote = { ...quote, id: createdQuote.id };
@@ -133,11 +140,13 @@ async function createProjectQuote(quote: Quote) {
       quote_id: createdQuote.id,
       parentItemId,
       lineType: patch.line_type,
+      taskTemplateId: patch.task_template_id,
       designation: patch.designation,
       description: patch.description,
       quantity: patch.quantite,
       unit: patch.unite,
       unitPriceHt: patch.sale_unit_price_ht,
+      materialsCost: patch.cost_materials_ht,
       tvaRate: patch.tva_rate,
       ordre: row.order,
     });
