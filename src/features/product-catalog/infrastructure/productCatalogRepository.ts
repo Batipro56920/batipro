@@ -373,16 +373,24 @@ function buildLegacyDocumentId(index: number, label: string) {
 }
 
 function getSupplierUnitPrice(price: ProductSupplierPrice): number {
+  const grossPrice = normalizePrice(price.priceHt) ?? 0;
+  const discount = Math.min(100, Math.max(0, normalizePrice(price.discountPercent) ?? 0));
+  const netPrice = Math.round(grossPrice * (1 - discount / 100) * 10000) / 10000;
+  if (price.pricingMode === "unit") return netPrice;
+  if (price.pricingMode === "package") {
+    const quantity = normalizePrice(price.coverageM2);
+    return quantity !== null && quantity > 0 ? Math.round((netPrice / quantity) * 10000) / 10000 : 0;
+  }
+
   const explicitUnitPrice = normalizePrice(price.pricePerM2Ht);
   if (explicitUnitPrice !== null && explicitUnitPrice > 0) return explicitUnitPrice;
 
-  const packagePrice = normalizePrice(price.priceHt) ?? 0;
   const coveredQuantity = normalizePrice(price.coverageM2);
-  if (packagePrice > 0 && coveredQuantity !== null && coveredQuantity > 0) {
-    return Math.round((packagePrice / coveredQuantity) * 100) / 100;
+  if (netPrice > 0 && coveredQuantity !== null && coveredQuantity > 0) {
+    return Math.round((netPrice / coveredQuantity) * 10000) / 10000;
   }
 
-  return packagePrice;
+  return netPrice;
 }
 
 function buildNextPriceHistory(product: ProductCatalogItem, changedAt: string, source: string) {

@@ -449,12 +449,14 @@ function describeIncompleteSupplierPrices(prices: ProductSupplierPrice[] | undef
       Number(price.coverageM2 ?? 0) > 0 ||
       String(price.packaging ?? "").trim().length > 0;
     if (!touched) return false;
-    return !hasSupplier || !(amount > 0);
+    const mode = price.pricingMode ?? (Number(price.coverageM2 ?? 0) > 0 ? "package" : "unit");
+    const missingPackageQuantity = mode === "package" && !(Number(price.coverageM2 ?? 0) > 0);
+    return !hasSupplier || !(amount > 0) || missingPackageQuantity;
   });
   if (!incomplete.length) return null;
   return incomplete.length === 1
-    ? "Un prix fournisseur est incomplet : choisis le fournisseur et un prix colis supérieur à 0. Sans cela la ligne serait perdue à l'enregistrement."
-    : `${incomplete.length} prix fournisseurs sont incomplets : choisis le fournisseur et un prix colis supérieur à 0. Sans cela ces lignes seraient perdues à l'enregistrement.`;
+    ? "Un prix fournisseur est incomplet : choisissez le fournisseur, le tarif et, pour un achat par colis, son contenu."
+    : `${incomplete.length} prix fournisseurs sont incomplets : choisissez le fournisseur, le tarif et le contenu des colis.`;
 }
 
 function ProductDrawer({ product, suppliers, categories, onCancel, onSave }: { product: ProductCatalogItem | ProductCatalogDraft; suppliers: SupplierRow[]; categories: string[]; onCancel: () => void; onSave: (product: ProductCatalogItem | ProductCatalogDraft) => void | Promise<void> }) {
@@ -690,32 +692,14 @@ function ProductForm({ product, suppliers, categories, onCancel, onSave }: { pro
 
           <ProductPricingSummary draft={draft} />
 
-          <SupplierPricesEditor unit={draft.unit} prices={draft.supplierPrices} suppliers={suppliers} onChange={handleSupplierPricesChange} />
-
-          <div className="mt-5 rounded-2xl border border-slate-200 p-4">
-            <div className="font-semibold text-slate-950">Prix par défaut (catalogue)</div>
-            <p className="mt-1 text-sm text-slate-500">
-              Choisissez, parmi les prix négociés ci-dessus, le fournisseur retenu (meilleur prix ou meilleure qualité) — c'est son prix qui sert de référence catalogue tant qu'un prix spécifique n'est pas utilisé ailleurs.
-            </p>
-            {draft.supplierPrices.filter((price) => price.supplierId).length === 0 ? (
-              <div className="mt-3 rounded-xl border border-dashed border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-500">
-                Ajoutez d'abord un prix négocié par fournisseur ci-dessus.
-              </div>
-            ) : (
-              <select
-                className={`${inputClass} mt-3`}
-                value={draft.mainSupplierId ?? ""}
-                onChange={(event) => selectDefaultFromSupplierPrice(event.target.value)}
-              >
-                <option value="">Aucun</option>
-                {draft.supplierPrices.filter((price) => price.supplierId).map((price) => (
-                  <option key={price.id} value={price.supplierId ?? ""}>
-                    {(suppliers.find((s) => s.id === price.supplierId)?.name ?? price.supplierName) || "Fournisseur"} — {formatCurrency(getSupplierUnitPrice(price))}/{draft.unit}
-                  </option>
-                ))}
-              </select>
-            )}
-          </div>
+          <SupplierPricesEditor
+            unit={draft.unit}
+            prices={draft.supplierPrices}
+            suppliers={suppliers}
+            selectedSupplierId={draft.mainSupplierId}
+            onSelectSupplier={selectDefaultFromSupplierPrice}
+            onChange={handleSupplierPricesChange}
+          />
         </>
       ) : null}
 
@@ -844,9 +828,16 @@ function formatIdentityRatio(usage?: ProductKnowledge["materialUsage"]["value"] 
   return `${usage.ratioQuantity} ${usage.ratioUnit ?? ""} / ${usage.sourceUnit}`.replace(/\s+/g, " ").trim();
 }
 
-function SupplierPricesEditor({ unit, prices, suppliers, onChange }: { unit: DocumentUnit; prices: ProductSupplierPrice[]; suppliers: SupplierRow[]; onChange: (prices: ProductSupplierPrice[]) => void }) {
+function SupplierPricesEditor({ unit, prices, suppliers, selectedSupplierId, onSelectSupplier, onChange }: {
+  unit: DocumentUnit;
+  prices: ProductSupplierPrice[];
+  suppliers: SupplierRow[];
+  selectedSupplierId: string | null;
+  onSelectSupplier: (supplierId: string) => void;
+  onChange: (prices: ProductSupplierPrice[]) => void;
+}) {
   function addPrice() {
-    onChange([...prices, { id: crypto.randomUUID(), supplierId: null, supplierName: "", priceHt: 0, discountPercent: null, startDate: null, endDate: null, packaging: null, minimumQuantity: null, deliveryLeadTimeDays: null, coverageM2: null, pricePerM2Ht: null }]);
+    onChange([...prices, { id: crypto.randomUUID(), supplierId: null, supplierName: "", priceHt: 0, pricingMode: "unit", discountPercent: null, startDate: null, endDate: null, packaging: null, minimumQuantity: null, deliveryLeadTimeDays: null, coverageM2: null, pricePerM2Ht: null }]);
   }
 
   function updatePrice(id: string, patch: Partial<ProductSupplierPrice>) {
@@ -862,23 +853,31 @@ function SupplierPricesEditor({ unit, prices, suppliers, onChange }: { unit: Doc
     const label = String(price.supplierName ?? "").trim() || suppliers.find((row) => row.id === price.supplierId)?.name || "ce fournisseur";
     if (!window.confirm(`Supprimer le prix de ${label} ?`)) return;
     onChange(prices.filter((row) => row.id !== price.id));
+    if (price.supplierId && price.supplierId === selectedSupplierId) onSelectSupplier("");
   }
 
   return (
     <div className="mt-5 rounded-2xl border border-slate-200 p-4">
       <div className="mb-3 flex items-center justify-between gap-3">
         <div>
-          <div className="font-semibold text-slate-950">Prix négociés par fournisseur</div>
-          <p className="mt-1 text-sm text-slate-500">Renseignez le prix d'achat du colis ou de la botte, la quantité couverte et le prix exploitable à l'unité pour les devis.</p>
+          <div className="font-semibold text-slate-950">Prix d’achat par fournisseur</div>
+          <p className="mt-1 text-sm text-slate-500">Une seule saisie de tarif. Si le produit est vendu en colis, Batipro calcule automatiquement le prix par {unit}.</p>
         </div>
         <button type="button" className="rounded-xl border px-3 py-2 text-sm hover:bg-slate-50" onClick={addPrice}>Ajouter prix</button>
       </div>
       <div className="grid gap-3">
         {prices.map((price) => {
           const displayedUnitPrice = getSupplierUnitPrice(price);
+          const mode = price.pricingMode ?? (Number(price.coverageM2 ?? 0) > 0 ? "package" : "unit");
+          const isSelected = Boolean(price.supplierId && price.supplierId === selectedSupplierId);
+          const netPackagePrice = getSupplierNetPrice(price);
           return (
-          <div key={price.id} className="rounded-xl border border-slate-200 bg-slate-50 p-3">
-            <div className="mb-2 flex justify-end">
+          <div key={price.id} className={`rounded-xl border p-4 ${isSelected ? "border-blue-400 bg-blue-50/50 ring-1 ring-blue-200" : "border-slate-200 bg-slate-50"}`}>
+            <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+              <label className={`inline-flex items-center gap-2 text-sm font-semibold ${price.supplierId ? "text-slate-800" : "text-slate-400"}`}>
+                <input type="radio" name="catalog-main-supplier" checked={isSelected} disabled={!price.supplierId} onChange={() => price.supplierId && onSelectSupplier(price.supplierId)} />
+                {isSelected ? "Prix retenu pour les calculs" : "Utiliser ce fournisseur"}
+              </label>
               <button
                 type="button"
                 className="rounded-lg border border-red-200 px-2 py-1 text-xs font-semibold text-red-600 hover:bg-red-50"
@@ -887,42 +886,36 @@ function SupplierPricesEditor({ unit, prices, suppliers, onChange }: { unit: Doc
                 Supprimer ce prix
               </button>
             </div>
-            <div className="mb-3 grid gap-2 md:grid-cols-3">
-              <div className="rounded-xl bg-white px-3 py-2 text-sm">
-                <div className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-400">Prix colis HT</div>
-                <div className="mt-1 font-semibold text-slate-950">{formatCurrency(price.priceHt)}</div>
-              </div>
-              <div className="rounded-xl bg-white px-3 py-2 text-sm">
-                <div className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-400">Quantité par colis</div>
-                <div className="mt-1 font-semibold text-slate-950">{price.coverageM2 ? `${formatNumber(price.coverageM2)} ${unit}` : "Non renseignée"}</div>
-              </div>
-              <div className="rounded-xl bg-blue-50 px-3 py-2 text-sm text-blue-800">
-                <div className="text-[11px] font-semibold uppercase tracking-[0.12em] text-blue-500">Prix achat unité HT</div>
-                <div className="mt-1 font-semibold">{displayedUnitPrice > 0 ? `${formatCurrency(displayedUnitPrice)}/${unit}` : "À renseigner"}</div>
-              </div>
+            <div className="mb-4 grid grid-cols-2 gap-2 rounded-xl bg-white p-1">
+              <button type="button" onClick={() => updatePrice(price.id, { pricingMode: "unit", coverageM2: null, pricePerM2Ht: null })} className={`rounded-lg px-3 py-2 text-sm font-semibold ${mode === "unit" ? "bg-slate-900 text-white" : "text-slate-600 hover:bg-slate-50"}`}>Achat à l’unité</button>
+              <button type="button" onClick={() => updatePrice(price.id, { pricingMode: "package", pricePerM2Ht: null })} className={`rounded-lg px-3 py-2 text-sm font-semibold ${mode === "package" ? "bg-slate-900 text-white" : "text-slate-600 hover:bg-slate-50"}`}>Achat par colis</button>
             </div>
-            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
               <FieldShell label="Fournisseur">
                 <Select value={price.supplierId ?? ""} onChange={(supplierId) => {
                   const supplier = suppliers.find((row) => row.id === supplierId);
                   updatePrice(price.id, { supplierId: supplier?.id ?? null, supplierName: supplier?.name ?? "" });
                 }} options={["", ...suppliers.map((supplier) => supplier.id)]} labels={Object.fromEntries([["", "Fournisseur"], ...suppliers.map((supplier) => [supplier.id, supplier.name])])} />
               </FieldShell>
-              <FieldShell label="Prix colis HT">
-                <SmallNumber value={price.priceHt} onChange={(priceHt) => updatePrice(price.id, { priceHt, pricePerM2Ht: price.coverageM2 ? priceHt / price.coverageM2 : price.pricePerM2Ht ?? null })} placeholder="Prix colis HT" />
-              </FieldShell>
-              <FieldShell label={`Quantité par colis (${unit})`}>
-                <SmallNumber value={price.coverageM2 ?? 0} onChange={(coverageM2) => updatePrice(price.id, { coverageM2, pricePerM2Ht: coverageM2 > 0 ? price.priceHt / coverageM2 : null })} placeholder={`Quantité ${unit}`} />
-              </FieldShell>
-              <FieldShell label={`Prix achat unité HT (${unit})`}>
-                <SmallNumber value={getSupplierUnitPrice(price)} onChange={(pricePerM2Ht) => updatePrice(price.id, { pricePerM2Ht })} placeholder={`Prix/${unit}`} />
+              <FieldShell label={mode === "package" ? "Prix du colis HT avant remise" : `Prix d’achat HT / ${unit} avant remise`}>
+                <SmallNumber value={price.priceHt} onChange={(priceHt) => updatePrice(price.id, { priceHt, pricePerM2Ht: null })} placeholder="0,00" />
               </FieldShell>
               <FieldShell label="Remise %">
                 <SmallNumber value={price.discountPercent ?? 0} onChange={(discountPercent) => updatePrice(price.id, { discountPercent })} placeholder="Remise %" />
               </FieldShell>
-              <FieldShell label="Conditionnement" className="md:col-span-2 xl:col-span-4">
+              {mode === "package" ? (
+                <FieldShell label={`Contenu du colis (${unit})`}>
+                  <SmallNumber value={price.coverageM2 ?? 0} onChange={(coverageM2) => updatePrice(price.id, { coverageM2, pricePerM2Ht: null })} placeholder={`Ex. 50 ${unit}`} />
+                </FieldShell>
+              ) : null}
+              <FieldShell label="Conditionnement / référence tarifaire" className="md:col-span-2 xl:col-span-3">
                 <input className={inputClass} placeholder="Ex : colis de 10 panneaux soit 6,48 m² ou botte de 30 ml" value={price.packaging ?? ""} onChange={(event) => updatePrice(price.id, { packaging: event.target.value || null })} />
               </FieldShell>
+            </div>
+            <div className="mt-4 grid gap-2 sm:grid-cols-3">
+              <PricingMetric label="Tarif fournisseur HT" value={price.priceHt > 0 ? formatCurrency(price.priceHt) : "À renseigner"} />
+              <PricingMetric label="Après remise" value={netPackagePrice > 0 ? formatCurrency(netPackagePrice) : "À renseigner"} />
+              <PricingMetric label={`Coût réel / ${unit}`} value={displayedUnitPrice > 0 ? formatCurrency(displayedUnitPrice) : mode === "package" ? "Contenu du colis manquant" : "À renseigner"} />
             </div>
           </div>
           );
@@ -1452,6 +1445,7 @@ function sanitizeProductCatalogInput<T extends ProductCatalogItem | ProductCatal
     targetMarginRate: nonNegativeNumber(product.targetMarginRate, 0),
     supplierPrices: product.supplierPrices.map((price) => ({
       ...price,
+      pricingMode: price.pricingMode ?? (Number(price.coverageM2 ?? 0) > 0 ? "package" : "unit"),
       priceHt: nonNegativeNumber(price.priceHt, 0),
       discountPercent: nullableNonNegativeNumber(price.discountPercent),
       minimumQuantity: nullableNonNegativeNumber(price.minimumQuantity),
@@ -1542,18 +1536,25 @@ function getPurchasePackagePrice(product: ProductCatalogItem, supplierFilter = "
 
 function getUnitPurchasePrice(product: ProductCatalogItem, supplierFilter = "all") {
   const supplierPrice = getDisplayedSupplierPrice(product, supplierFilter);
-  const packagePrice = positiveNumber(supplierPrice?.priceHt) ?? positiveNumber(product.standardPurchasePriceHt);
-  const coveredQuantity = positiveNumber(supplierPrice?.coverageM2);
-  if (packagePrice !== null && coveredQuantity !== null) return packagePrice / coveredQuantity;
-
-  return positiveNumber(supplierPrice?.pricePerM2Ht) ?? packagePrice;
+  if (supplierPrice) return getSupplierUnitPrice(supplierPrice);
+  return positiveNumber(product.standardPurchasePriceHt) ?? 0;
 }
 
 function getSupplierUnitPrice(price: ProductSupplierPrice) {
-  const packagePrice = positiveNumber(price.priceHt);
-  const coveredQuantity = positiveNumber(price.coverageM2);
-  if (packagePrice !== null && coveredQuantity !== null) return packagePrice / coveredQuantity;
-  return positiveNumber(price.pricePerM2Ht) ?? 0;
+  const netPrice = getSupplierNetPrice(price);
+  const mode = price.pricingMode ?? (Number(price.coverageM2 ?? 0) > 0 ? "package" : "unit");
+  if (mode === "package") {
+    const coveredQuantity = positiveNumber(price.coverageM2);
+    return coveredQuantity !== null ? Math.round((netPrice / coveredQuantity) * 10000) / 10000 : 0;
+  }
+  if (!price.pricingMode) return positiveNumber(price.pricePerM2Ht) ?? netPrice;
+  return netPrice;
+}
+
+function getSupplierNetPrice(price: ProductSupplierPrice) {
+  const grossPrice = positiveNumber(price.priceHt) ?? 0;
+  const discount = Math.min(100, Math.max(0, Number(price.discountPercent ?? 0)));
+  return Math.round(grossPrice * (1 - discount / 100) * 10000) / 10000;
 }
 
 function getRecommendedSalePrice(product: ProductCatalogItem, supplierFilter = "all") {
@@ -1579,10 +1580,6 @@ function positiveNumber(value: unknown) {
 
 function formatCurrency(value: number) {
   return new Intl.NumberFormat("fr-FR", { style: "currency", currency: "EUR", maximumFractionDigits: 2 }).format(value);
-}
-
-function formatNumber(value: number) {
-  return new Intl.NumberFormat("fr-FR", { maximumFractionDigits: 2 }).format(value);
 }
 
 function parseFrenchNumber(value: string): number | null {

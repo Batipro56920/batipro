@@ -15,6 +15,8 @@ export type ProductSupplierPrice = {
   supplierId: string | null;
   supplierName: string;
   priceHt: number;
+  /** Saisie directe à l'unité ou tarif d'un conditionnement à convertir. */
+  pricingMode?: "unit" | "package";
   discountPercent: number | null;
   startDate: string | null;
   endDate: string | null;

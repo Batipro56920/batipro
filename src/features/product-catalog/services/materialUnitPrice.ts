@@ -69,11 +69,18 @@ function activeSupplierPrices(product: ProductCatalogItem): ProductSupplierPrice
 /** Le colis le moins cher a l'unite, comme partout ailleurs dans le catalogue. */
 function bestPrice(product: ProductCatalogItem): ProductSupplierPrice | null {
   const unitPriceOf = (price: ProductSupplierPrice) => {
+    const gross = positive(price.priceHt);
+    const discount = Math.min(100, Math.max(0, Number(price.discountPercent ?? 0)));
+    const net = gross !== null ? gross * (1 - discount / 100) : null;
+    if (price.pricingMode === "unit") return net ?? Number.POSITIVE_INFINITY;
+    if (price.pricingMode === "package") {
+      const quantity = positive(price.coverageM2);
+      return net !== null && quantity !== null ? net / quantity : Number.POSITIVE_INFINITY;
+    }
     const explicit = positive(price.pricePerM2Ht);
     if (explicit !== null) return explicit;
-    const packagePrice = positive(price.priceHt);
     const quantity = positive(price.coverageM2);
-    return packagePrice !== null && quantity !== null ? packagePrice / quantity : (packagePrice ?? Number.POSITIVE_INFINITY);
+    return net !== null && quantity !== null ? net / quantity : (net ?? Number.POSITIVE_INFINITY);
   };
   return activeSupplierPrices(product).sort((a, b) => unitPriceOf(a) - unitPriceOf(b))[0] ?? null;
 }
@@ -85,12 +92,16 @@ export function resolveMaterialUnitPrice(product: ProductCatalogItem, rawRatioUn
   const productUnit = normalizeUnit(product.unit);
   const price = bestPrice(product);
   const packageQuantity = price ? positive(price.coverageM2) : null;
-  const packagePriceHt = price ? positive(price.priceHt) : null;
+  const grossPackagePriceHt = price ? positive(price.priceHt) : null;
+  const discount = Math.min(100, Math.max(0, Number(price?.discountPercent ?? 0)));
+  const enteredNetPriceHt = grossPackagePriceHt !== null ? grossPackagePriceHt * (1 - discount / 100) : null;
+  const packagePriceHt = price?.pricingMode === "unit" ? null : enteredNetPriceHt;
   // Sans conditionnement renseigne, le prix du fournisseur EST le prix a
   // l unite : le retenir avant le prix standard du produit, sinon un tarif
   // negocie plus bas que le prix catalogue passerait a la trappe.
   const perProductUnit =
-    (price ? positive(price.pricePerM2Ht) : null) ??
+    (price?.pricingMode === "unit" ? enteredNetPriceHt : null) ??
+    (price?.pricingMode ? null : positive(price?.pricePerM2Ht)) ??
     (packagePriceHt !== null && packageQuantity !== null ? Math.round((packagePriceHt / packageQuantity) * 100) / 100 : null) ??
     packagePriceHt ??
     positive(product.standardPurchasePriceHt);
