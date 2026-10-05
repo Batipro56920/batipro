@@ -734,6 +734,8 @@ export default function TaskTemplateDrawer({
     initialValues?.unite,
     initialValues?.quantite_defaut,
     initialValues?.temps_prevu_par_unite_h,
+    initialValues?.labor_hourly_cost_ht,
+    initialValues?.target_margin_rate,
     initialValues?.description_technique,
     initialValues?.caracteristiques,
     initialValues?.remarques,
@@ -881,7 +883,7 @@ export default function TaskTemplateDrawer({
       profitabilityRate: engineTotals.profitabilityRate,
       lines: engineTotals.lines,
     };
-  }, [materialDrafts, laborPlan, equipmentDrafts, feeDrafts, selectedLotProfile, tempsParUnite, hourlyRates]);
+  }, [materialDrafts, laborPlan, equipmentDrafts, feeDrafts, selectedLotProfile, tempsParUnite, taskMarginRate]);
 
   if (!open) return null;
 
@@ -923,10 +925,6 @@ export default function TaskTemplateDrawer({
 
   function applyLotProfile(profile: TaskTemplateLotProfile, mode: "soft" | "force" = "soft") {
     if ((mode === "force" || !unite.trim()) && profile.defaultUnit) setUnite(profile.defaultUnit);
-    // Usage metier par defaut : remplace `applyLotProfile` du bridge DOM
-    // taskTemplateLotDropdownBridge (setCheckboxByText).
-    if (mode === "force") {
-    }
     if ((mode === "force" || !tempsParUnite.trim()) && profile.averageTimeHours !== null) {
       setTempsParUnite(toField(profile.averageTimeHours));
     }
@@ -1003,6 +1001,31 @@ export default function TaskTemplateDrawer({
     const product = products.find((item) => item.id === productId);
     if (!product) return;
     applyProductObjectToMaterial(index, product);
+  }
+
+  function applySupplierToMaterial(index: number, supplierId: string) {
+    const row = materialDrafts[index];
+    const product = products.find((item) => item.id === row?.product_id) ?? null;
+    if (!row || !product) return;
+    const supplierPrice = product.supplierPrices.find((price) => price.supplierId === supplierId) ?? null;
+    if (!supplierPrice) {
+      updateMaterialDraft(index, { supplier_id: "" });
+      return;
+    }
+    const price = getBestSupplierPrice(product, supplierId);
+    const unitPurchase = price?.priceHt ?? product.standardPurchasePriceHt;
+    const marginRate = Number(product.targetMarginRate ?? 0);
+    updateMaterialDraft(index, {
+      supplier_id: supplierId,
+      purchase_price_ht: toField(unitPurchase),
+      sale_price_ht: toField(
+        product.recommendedSalePriceHt > 0
+          ? product.recommendedSalePriceHt
+          : Math.round(unitPurchase * (1 + marginRate / 100) * 100) / 100,
+      ),
+      price_source: "supplier_price",
+      manual_override: false,
+    });
   }
 
   function openQuickCreate(index: number) {
@@ -1455,10 +1478,10 @@ export default function TaskTemplateDrawer({
             <div className="space-y-4 rounded-2xl border border-blue-200 bg-blue-50/40 p-4">
               <div>
                 <div className="text-xs font-semibold uppercase tracking-[0.18em] text-blue-700">
-                  Préparation avancée
+                  2. Produits et ratios
                 </div>
                 <div className="mt-1 text-sm text-slate-600">
-                  Ces données servent à produire une prévision théorique de matériaux et matériel sur les tâches chantier.
+                  Sélectionnez les produits réellement consommés pour une unité de tâche, leur fournisseur et leur ratio. Ces lignes calculent le prix de revient et alimentent les devis.
                 </div>
               </div>
 
@@ -1600,7 +1623,35 @@ export default function TaskTemplateDrawer({
                         </div>
 
                         {row.product_id ? (
-                          <div className="flex flex-wrap items-center gap-2 text-xs text-slate-600">
+                          <div className="space-y-2 text-xs text-slate-600">
+                            {(() => {
+                              const product = products.find((item) => item.id === row.product_id) ?? null;
+                              const supplierPrices = product?.supplierPrices.filter((price) => price.supplierId) ?? [];
+                              return supplierPrices.length ? (
+                                <label className="block max-w-md text-xs font-medium text-slate-700">
+                                  Fournisseur retenu pour cette tâche
+                                  <select
+                                    className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm"
+                                    value={row.supplier_id}
+                                    onChange={(event) => applySupplierToMaterial(index, event.target.value)}
+                                    disabled={busy}
+                                  >
+                                    <option value="">Choisir un fournisseur</option>
+                                    {supplierPrices.map((price) => (
+                                      <option key={price.id} value={price.supplierId ?? ""}>
+                                        {(suppliers.find((supplier) => supplier.id === price.supplierId)?.name ?? price.supplierName) || "Fournisseur"}
+                                        {` — ${getBestSupplierPrice(product!, price.supplierId)?.priceHt.toFixed(2) ?? "—"} € / ${product?.unit ?? "u"}`}
+                                      </option>
+                                    ))}
+                                  </select>
+                                </label>
+                              ) : (
+                                <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-amber-800">
+                                  Aucun prix fournisseur n'est renseigné dans la fiche de ce produit.
+                                </div>
+                              );
+                            })()}
+                            <div className="flex flex-wrap items-center gap-2">
                             {(() => {
                               // Le prix affiche est celui qui SERT au calcul, celui enregistre
                               // sur la ligne. A cote, ce que dit le catalogue pour cette unite :
@@ -1661,6 +1712,7 @@ export default function TaskTemplateDrawer({
                             <span className="rounded-full border border-slate-200 bg-white px-2 py-1">
                               Prix issu de la fiche produit
                             </span>
+                            </div>
                           </div>
                         ) : (
                           <MaterialField label="Désignation du matériau">

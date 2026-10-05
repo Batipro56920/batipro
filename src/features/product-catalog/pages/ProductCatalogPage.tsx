@@ -730,6 +730,7 @@ function ProductForm({ product, suppliers, categories, onCancel, onSave }: { pro
           <div className="mt-4">
             <ProductKnowledgeEditor
               knowledge={draft.knowledge ?? emptyProductKnowledge(draft)}
+              productUnit={draft.unit}
               busy={knowledgeLoading}
               error={knowledgeError}
               onAnalyze={() => void analyzeKnowledge(draft)}
@@ -1069,12 +1070,14 @@ function ProductDocumentsEditor({
 
 function ProductKnowledgeEditor({
   knowledge,
+  productUnit,
   busy,
   error,
   onAnalyze,
   onChange,
 }: {
   knowledge: ProductKnowledge;
+  productUnit: DocumentUnit;
   busy: boolean;
   error: string | null;
   onAnalyze: () => void;
@@ -1105,7 +1108,12 @@ function ProductKnowledgeEditor({
 
       <div className="grid gap-4 xl:grid-cols-2">
         <ApplicationKnowledgeBlock block={knowledge.application} onValueChange={(value) => updateValue("application", value)} onMetaChange={(patch) => updateBlock("application", patch)} />
-        <JsonKnowledgeBlock title="Ratio / consommation" block={knowledge.materialUsage} onValueChange={(value) => updateValue("materialUsage", value as ProductKnowledge["materialUsage"]["value"])} onMetaChange={(patch) => updateBlock("materialUsage", patch)} />
+        <MaterialUsageKnowledgeBlock
+          block={knowledge.materialUsage}
+          productUnit={productUnit}
+          onValueChange={(value) => updateValue("materialUsage", value)}
+          onMetaChange={(patch) => updateBlock("materialUsage", patch)}
+        />
         <ListKnowledgeBlock title="Mode opératoire recommandé" block={knowledge.procedure} onValueChange={(value) => updateValue("procedure", value)} onMetaChange={(patch) => updateBlock("procedure", patch)} />
         <ListKnowledgeBlock title="Matériels recommandés" block={knowledge.tools} onValueChange={(value) => updateValue("tools", value)} onMetaChange={(patch) => updateBlock("tools", patch)} />
       </div>
@@ -1132,6 +1140,54 @@ type KnowledgeBlockMeta = {
   reasoning: string;
   sourceDocument: string | null;
 };
+
+function MaterialUsageKnowledgeBlock({
+  block,
+  productUnit,
+  onValueChange,
+  onMetaChange,
+}: {
+  block: ProductKnowledge["materialUsage"];
+  productUnit: DocumentUnit | null;
+  onValueChange: (value: ProductKnowledge["materialUsage"]["value"]) => void;
+  onMetaChange: (patch: Partial<KnowledgeBlockMeta>) => void;
+}) {
+  const value = block.value;
+  const patch = (changes: Partial<typeof value>) => onValueChange({ ...value, ...changes });
+  const numberValue = (raw: string) => {
+    if (!raw.trim()) return null;
+    const parsed = Number(raw.replace(",", "."));
+    return Number.isFinite(parsed) ? parsed : null;
+  };
+
+  return (
+    <KnowledgeShell title="Ratio / consommation" block={block} onMetaChange={onMetaChange}>
+      <p className="mb-3 text-xs text-slate-500">
+        Quantité de produit nécessaire pour réaliser une unité d’ouvrage. Exemple : 1,05 m² de plaque pour 1 m² de cloison.
+      </p>
+      <div className="grid gap-3 sm:grid-cols-2">
+        <label className={labelClass}>Quantité consommée
+          <input className={inputClass} inputMode="decimal" value={value.ratioQuantity ?? ""} onChange={(event) => patch({ ratioQuantity: numberValue(event.target.value) })} placeholder="Ex. 1,05" />
+        </label>
+        <label className={labelClass}>Unité achetée
+          <input className={inputClass} value={value.ratioUnit ?? productUnit ?? ""} onChange={(event) => patch({ ratioUnit: event.target.value || null })} placeholder="Ex. m², kg, u" />
+        </label>
+        <label className={labelClass}>Pour une unité de tâche
+          <input className={inputClass} value={value.sourceUnit ?? ""} onChange={(event) => patch({ sourceUnit: event.target.value || null })} placeholder="Ex. m² de cloison" />
+        </label>
+        <label className={labelClass}>Perte à prévoir (%)
+          <input className={inputClass} inputMode="decimal" value={value.lossPercent ?? ""} onChange={(event) => patch({ lossPercent: numberValue(event.target.value) })} placeholder="Ex. 5" />
+        </label>
+        <label className={labelClass}>Commande minimale
+          <input className={inputClass} inputMode="decimal" value={value.minimumOrder ?? ""} onChange={(event) => patch({ minimumOrder: numberValue(event.target.value) })} placeholder="Optionnel" />
+        </label>
+        <label className={labelClass}>Couverture du conditionnement
+          <input className={inputClass} inputMode="decimal" value={value.coverage ?? ""} onChange={(event) => patch({ coverage: numberValue(event.target.value) })} placeholder="Ex. 3 m² par paquet" />
+        </label>
+      </div>
+    </KnowledgeShell>
+  );
+}
 
 const APPLICATION_LABELS: Record<keyof ProductKnowledge["application"]["value"], string> = {
   interior: "Intérieur",

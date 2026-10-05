@@ -427,6 +427,36 @@ export async function replaceTaskTemplatePreparation(
     }
     throw new Error(error.message);
   }
+
+  // La RPC remplace les anciennes lignes puis renvoie `void`. Jusqu'ici une
+  // politique RLS, une signature SQL ancienne ou un payload partiellement
+  // compris pouvait donc donner l'impression d'un enregistrement réussi. On
+  // relit immédiatement la composition et on refuse de confirmer si elle ne
+  // correspond pas à ce que l'utilisateur vient de saisir.
+  const persisted = await getTaskTemplatePreparation(taskTemplateId);
+  if (!persisted.schemaReady) {
+    throw new Error("La composition n'a pas pu être relue après enregistrement.");
+  }
+  if (persisted.materials.length !== materials.length || persisted.equipment.length !== equipment.length) {
+    throw new Error(
+      `Enregistrement incomplet : ${persisted.materials.length}/${materials.length} produit(s) et ${persisted.equipment.length}/${equipment.length} matériel(s) conservés.`,
+    );
+  }
+
+  for (let index = 0; index < materials.length; index += 1) {
+    const expected = materials[index];
+    const actual = persisted.materials[index];
+    if (
+      !actual ||
+      actual.product_id !== (expected.product_id ?? null) ||
+      actual.supplier_id !== (expected.supplier_id ?? null) ||
+      actual.material_name !== expected.material_name ||
+      actual.ratio_quantity !== expected.ratio_quantity ||
+      actual.ratio_unit !== expected.ratio_unit
+    ) {
+      throw new Error(`Le produit n°${index + 1} n'a pas été enregistré complètement. Rechargez la fiche avant de réessayer.`);
+    }
+  }
 }
 
 export async function duplicateTaskTemplatePreparation(
