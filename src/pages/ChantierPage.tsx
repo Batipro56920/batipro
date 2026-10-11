@@ -1154,6 +1154,20 @@ export default function ChantierPage() {
   const [activityLogsLoading, setActivityLogsLoading] = useState(false);
   const [activityLogsError, setActivityLogsError] = useState<string | null>(null);
   const [activityLogSchemaReady, setActivityLogSchemaReady] = useState(true);
+  const sourceFeedPostIdByReserveId = useMemo(() => {
+    const links = new Map<string, string>();
+    for (const log of activityLogs) {
+      if (log.entity_type !== "reserve" || !log.entity_id) continue;
+      const changes = (log.changes ?? {}) as Record<string, unknown>;
+      const feedPostId =
+        changes.source === "feed_post" ? String(changes.feed_post_id ?? "").trim() : "";
+      if (feedPostId && !links.has(log.entity_id)) links.set(log.entity_id, feedPostId);
+    }
+    return links;
+  }, [activityLogs]);
+  const activeReserveSourceFeedPostId = activeReserve
+    ? sourceFeedPostIdByReserveId.get(activeReserve.id) ?? ""
+    : "";
 
   function openDocumentModal() {
     setDocumentModalError(null);
@@ -2721,7 +2735,7 @@ export default function ChantierPage() {
   }, [id, tab]);
 
   useEffect(() => {
-    if (!id || (tab !== "journal" && tab !== "consignes")) return;
+    if (!id || (tab !== "journal" && tab !== "consignes" && tab !== "reserves")) return;
     void refreshActivityLogs();
   }, [id, tab]);
 
@@ -8276,6 +8290,23 @@ export default function ChantierPage() {
               <div className="flex-1 overflow-y-auto px-3 lg:px-4 py-3 space-y-4">
                 {reserveDrawerTab === "details" && (
                   <div className="space-y-4">
+                    {activeReserve && activeReserveSourceFeedPostId ? (
+                      <div className="flex flex-col gap-3 rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-900 sm:flex-row sm:items-center sm:justify-between">
+                        <div>
+                          <div className="font-semibold">Origine : publication du fil chantier</div>
+                          <div className="mt-1 text-xs text-blue-700">
+                            Cette réserve a été créée depuis un échange de l'équipe chantier.
+                          </div>
+                        </div>
+                        <Link
+                          to={`/chantiers/${encodeURIComponent(id)}/historique?feedPostId=${encodeURIComponent(activeReserveSourceFeedPostId)}`}
+                          onClick={closeReserveDrawer}
+                          className="shrink-0 rounded-lg border border-blue-300 bg-white px-3 py-2 text-center font-semibold text-blue-800 hover:bg-blue-100"
+                        >
+                          Voir la publication source
+                        </Link>
+                      </div>
+                    ) : null}
                     <div className="space-y-1">
                       <div className="text-xs text-slate-600">{t("common.labels.title")}</div>
                       <input
