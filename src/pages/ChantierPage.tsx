@@ -8299,7 +8299,7 @@ export default function ChantierPage() {
                           </div>
                         </div>
                         <Link
-                          to={`/chantiers/${encodeURIComponent(id)}/historique?feedPostId=${encodeURIComponent(activeReserveSourceFeedPostId)}`}
+                          to={`/chantiers/${encodeURIComponent(id)}/terrain?feedPostId=${encodeURIComponent(activeReserveSourceFeedPostId)}`}
                           onClick={closeReserveDrawer}
                           className="shrink-0 rounded-lg border border-blue-300 bg-white px-3 py-2 text-center font-semibold text-blue-800 hover:bg-blue-100"
                         >
