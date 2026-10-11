@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Link, useParams, useSearchParams } from "react-router-dom";
+import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import {
   appendChantierActivityLog,
   type ChantierActivityLogRow,
@@ -200,6 +200,7 @@ export default function ChantierJournalSection({
   tone: (entityType: string) => string;
 }) {
   const { id: routeChantierId } = useParams<{ id: string }>();
+  const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const targetedFeedPostId = searchParams.get("feedPostId") ?? "";
   const chantierId = logs.find((log) => log.chantier_id)?.chantier_id ?? routeChantierId ?? null;
@@ -384,6 +385,9 @@ export default function ChantierJournalSection({
       setCreatedReserveByPostId((current) => ({ ...current, [post.id]: reserve.id }));
       setReserveDraft(null);
       await onRefresh();
+      navigate(
+        `/chantiers/${encodeURIComponent(chantierId)}/qualite?reserveId=${encodeURIComponent(reserve.id)}`,
+      );
     } catch (conversionError: any) {
       setPostsError(conversionError?.message ?? "Impossible de créer la réserve.");
     } finally {
