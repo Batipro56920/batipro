@@ -5,6 +5,12 @@ import {
   type ChantierActivityLogRow,
 } from "../../../services/chantierActivityLog.service";
 import { createChantierConsigne } from "../../../services/chantierConsignes.service";
+import { createReserve, type ReservePriority } from "../../../services/reserves.service";
+import {
+  buildChantierZonePathMap,
+  listChantierZones,
+  type ChantierZoneRow,
+} from "../../../services/chantierZones.service";
 import {
   createChantierFeedPost,
   listChantierFeedPosts,
@@ -16,6 +22,13 @@ type JournalChangeItem = {
   label: string;
   value: string;
   tone?: "neutral" | "blue" | "green" | "amber" | "red";
+};
+
+type ReserveDraft = {
+  postId: string;
+  title: string;
+  priority: ReservePriority;
+  zoneId: string;
 };
 
 function stringifyJournalValue(value: unknown): string {
@@ -206,6 +219,13 @@ export default function ChantierJournalSection({
   const [publishing, setPublishing] = useState(false);
   const [convertingPostId, setConvertingPostId] = useState<string | null>(null);
   const [createdConsigneByPostId, setCreatedConsigneByPostId] = useState<Record<string, string>>({});
+  const [reserveDraft, setReserveDraft] = useState<ReserveDraft | null>(null);
+  const [creatingReserve, setCreatingReserve] = useState(false);
+  const [createdReserveByPostId, setCreatedReserveByPostId] = useState<Record<string, string>>({});
+  const [zones, setZones] = useState<ChantierZoneRow[]>([]);
+  const [zonesLoading, setZonesLoading] = useState(false);
+  const [zonesLoaded, setZonesLoaded] = useState(false);
+  const [zonesSchemaReady, setZonesSchemaReady] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [entityFilter, setEntityFilter] = useState("all");
 
@@ -292,6 +312,85 @@ export default function ChantierJournalSection({
     }
   }
 
+  async function openReserveDraft(post: ChantierFeedPostRow) {
+    const firstLine = post.body
+      .split("\n")
+      .map((line) => line.trim())
+      .find(Boolean) ?? "Réserve issue du fil chantier";
+    setReserveDraft({
+      postId: post.id,
+      title: firstLine.slice(0, 120),
+      priority: "NORMALE",
+      zoneId: "",
+    });
+
+    if (!chantierId || zonesLoaded || zonesLoading) return;
+    setZonesLoading(true);
+    setPostsError(null);
+    try {
+      const result = await listChantierZones(chantierId);
+      setZones(result.zones);
+      setZonesSchemaReady(result.schemaReady);
+      setZonesLoaded(true);
+    } catch (zoneError: any) {
+      setPostsError(zoneError?.message ?? "Impossible de charger les zones du chantier.");
+    } finally {
+      setZonesLoading(false);
+    }
+  }
+
+  async function createReserveFromPost(post: ChantierFeedPostRow) {
+    if (!chantierId || !reserveDraft || reserveDraft.postId !== post.id || creatingReserve) return;
+    const title = reserveDraft.title.trim();
+    if (!title) {
+      setPostsError("L'intitulé de la réserve est obligatoire.");
+      return;
+    }
+    if (!reserveDraft.zoneId) {
+      setPostsError("Choisis une zone ou confirme « Sans localisation ».");
+      return;
+    }
+
+    setCreatingReserve(true);
+    setPostsError(null);
+    try {
+      const zoneId = reserveDraft.zoneId === "none" ? null : reserveDraft.zoneId;
+      const zoneName = zoneId
+        ? buildChantierZonePathMap(zones).get(zoneId) ?? null
+        : null;
+      const reserve = await createReserve({
+        chantier_id: chantierId,
+        zone_id: zoneId,
+        title,
+        description: `Créée depuis le fil chantier.\n\n${post.body}`,
+        status: "OUVERTE",
+        priority: reserveDraft.priority,
+      });
+      await appendChantierActivityLog({
+        chantierId,
+        actionType: "created",
+        entityType: "reserve",
+        entityId: reserve.id,
+        reason: "Réserve créée depuis le fil chantier",
+        changes: {
+          source: "feed_post",
+          feed_post_id: post.id,
+          title: reserve.title,
+          priority: reserve.priority,
+          zone_id: zoneId,
+          zone_name: zoneName,
+        },
+      });
+      setCreatedReserveByPostId((current) => ({ ...current, [post.id]: reserve.id }));
+      setReserveDraft(null);
+      await onRefresh();
+    } catch (conversionError: any) {
+      setPostsError(conversionError?.message ?? "Impossible de créer la réserve.");
+    } finally {
+      setCreatingReserve(false);
+    }
+  }
+
   function selectFiles(files: FileList | null) {
     if (!files) return;
     const incoming = Array.from(files);
@@ -355,6 +454,19 @@ export default function ChantierJournalSection({
     }
     return links;
   }, [createdConsigneByPostId, logs]);
+
+  const reserveByPostId = useMemo(() => {
+    const links = new Map<string, string>(Object.entries(createdReserveByPostId));
+    for (const log of logs) {
+      if (log.entity_type !== "reserve" || !log.entity_id) continue;
+      const changes = (log.changes ?? {}) as Record<string, unknown>;
+      const postId = changes.source === "feed_post" ? String(changes.feed_post_id ?? "").trim() : "";
+      if (postId && !links.has(postId)) links.set(postId, log.entity_id);
+    }
+    return links;
+  }, [createdReserveByPostId, logs]);
+
+  const zonePathById = useMemo(() => buildChantierZonePathMap(zones), [zones]);
 
   const feedLogs = useMemo<ChantierActivityLogRow[]>(() => {
     const publicationLogs = posts.map<ChantierActivityLogRow>((post) => ({
@@ -717,6 +829,7 @@ export default function ChantierJournalSection({
               ? postById.get(log.entity_id) ?? null
               : null;
             const consigneId = feedPost ? consigneByPostId.get(feedPost.id) ?? null : null;
+            const createdReserveId = feedPost ? reserveByPostId.get(feedPost.id) ?? null : null;
             const parentPost = feedPost?.parent_post_id
               ? postById.get(feedPost.parent_post_id) ?? null
               : null;
@@ -836,6 +949,23 @@ export default function ChantierJournalSection({
                         {convertingPostId === feedPost.id ? "Création..." : "Créer une consigne"}
                       </button>
                     ) : null}
+                    {feedPost && createdReserveId && chantierId ? (
+                      <Link
+                        to={`/chantiers/${encodeURIComponent(chantierId)}/qualite?reserveId=${encodeURIComponent(createdReserveId)}`}
+                        className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm font-medium text-red-800 hover:bg-red-100"
+                      >
+                        Ouvrir la réserve créée
+                      </Link>
+                    ) : feedPost ? (
+                      <button
+                        type="button"
+                        onClick={() => void openReserveDraft(feedPost)}
+                        disabled={creatingReserve}
+                        className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm font-medium text-red-800 hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        Créer une réserve
+                      </button>
+                    ) : null}
                     {feedPost ? (
                       <button
                         type="button"
@@ -869,6 +999,92 @@ export default function ChantierJournalSection({
                     ) : null}
                   </div>
                 </div>
+
+                {feedPost && reserveDraft?.postId === feedPost.id && !createdReserveId ? (
+                  <div className="mt-4 rounded-2xl border border-red-200 bg-red-50 p-4">
+                    <div className="font-semibold text-red-900">Qualifier la réserve</div>
+                    <div className="mt-1 text-sm text-red-800">
+                      Vérifie l'intitulé, la priorité et la localisation avant de l'envoyer dans Qualité.
+                    </div>
+                    <div className="mt-4 grid gap-3 lg:grid-cols-[minmax(0,1fr)_180px_minmax(220px,1fr)]">
+                      <label className="text-sm font-medium text-slate-700">
+                        Intitulé
+                        <input
+                          value={reserveDraft.title}
+                          onChange={(event) =>
+                            setReserveDraft((current) => current ? { ...current, title: event.target.value } : current)
+                          }
+                          maxLength={160}
+                          className="mt-1 w-full rounded-xl border border-red-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-red-400 focus:ring-2 focus:ring-red-100"
+                        />
+                      </label>
+                      <label className="text-sm font-medium text-slate-700">
+                        Priorité
+                        <select
+                          value={reserveDraft.priority}
+                          onChange={(event) =>
+                            setReserveDraft((current) => current
+                              ? { ...current, priority: event.target.value as ReservePriority }
+                              : current)
+                          }
+                          className="mt-1 w-full rounded-xl border border-red-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-red-400 focus:ring-2 focus:ring-red-100"
+                        >
+                          <option value="BASSE">Basse</option>
+                          <option value="NORMALE">Normale</option>
+                          <option value="URGENTE">Urgente</option>
+                        </select>
+                      </label>
+                      <label className="text-sm font-medium text-slate-700">
+                        Zone
+                        <select
+                          value={reserveDraft.zoneId}
+                          onChange={(event) =>
+                            setReserveDraft((current) => current ? { ...current, zoneId: event.target.value } : current)
+                          }
+                          disabled={zonesLoading}
+                          className="mt-1 w-full rounded-xl border border-red-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-red-400 focus:ring-2 focus:ring-red-100 disabled:bg-slate-100"
+                        >
+                          <option value="" disabled>
+                            {zonesLoading ? "Chargement des zones..." : "Choisir une localisation"}
+                          </option>
+                          <option value="none">Sans localisation</option>
+                          {zones.map((zone) => (
+                            <option key={zone.id} value={zone.id}>
+                              {zonePathById.get(zone.id) ?? zone.nom}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                    </div>
+                    {!zonesSchemaReady ? (
+                      <div className="mt-3 text-xs font-medium text-amber-800">
+                        Les zones ne sont pas disponibles : sélectionne « Sans localisation » pour continuer.
+                      </div>
+                    ) : zonesLoaded && zones.length === 0 ? (
+                      <div className="mt-3 text-xs font-medium text-slate-600">
+                        Aucune zone n'est configurée sur ce chantier. Confirme « Sans localisation » pour continuer.
+                      </div>
+                    ) : null}
+                    <div className="mt-4 flex flex-wrap justify-end gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setReserveDraft(null)}
+                        disabled={creatingReserve}
+                        className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100 disabled:opacity-60"
+                      >
+                        Annuler
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => void createReserveFromPost(feedPost)}
+                        disabled={creatingReserve || zonesLoading || !reserveDraft.title.trim() || !reserveDraft.zoneId}
+                        className="rounded-xl bg-red-700 px-4 py-2 text-sm font-semibold text-white hover:bg-red-800 disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        {creatingReserve ? "Création..." : "Créer et ouvrir dans Qualité"}
+                      </button>
+                    </div>
+                  </div>
+                ) : null}
 
                 {changeItems.length > 0 ? (
                   <div className="mt-4 flex flex-wrap gap-2">
