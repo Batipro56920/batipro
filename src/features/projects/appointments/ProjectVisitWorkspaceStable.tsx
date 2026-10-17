@@ -1128,8 +1128,8 @@ export function ProjectVisitWorkspaceStable({ project, existingAppointment }: { 
     setStep("estimating");
   }
 
-  function addTask() {
-    let parentId = activeSectionId;
+  function addTask(parentSectionId?: string) {
+    let parentId = parentSectionId ?? activeSectionId;
     const nextLines = [...draft.lines];
     if (!parentId) {
       parentId = uid("section");
@@ -1544,6 +1544,7 @@ export function ProjectVisitWorkspaceStable({ project, existingAppointment }: { 
               <div><div className="text-xs font-semibold uppercase tracking-[0.18em] text-blue-600">Ouvrage par ouvrage</div><h3 className="mt-1 text-lg font-semibold text-slate-950">Lots et prestations</h3><p className="mt-1 text-sm text-slate-500">Un lot regroupe les travaux d'une même zone ou d'un même métier.</p></div>
               <div className="flex flex-wrap gap-2">
                 <Button variant="primary" onClick={addSectionFromLibrary}><LibraryBig className="h-4 w-4" />Depuis la bibliothèque</Button>
+                <Button variant="secondary" onClick={() => addTask()}><Plus className="h-4 w-4" />Tâche libre</Button>
                 <Button variant="secondary" onClick={() => addSection()}><Plus className="h-4 w-4" />Lot libre</Button>
                 <Button variant="secondary" onClick={() => addSubcontractingSection()} title="Travaux confiés à un sous-traitant"><Plus className="h-4 w-4" />Sous-traitance</Button>
               </div>
@@ -1556,6 +1557,7 @@ export function ProjectVisitWorkspaceStable({ project, existingAppointment }: { 
                   <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-slate-600">Le plus rapide est de choisir les prestations de la bibliothèque : leurs matériaux, temps de main-d'œuvre et prix sont déjà repris.</p>
                   <div className="mt-5 flex flex-col justify-center gap-2 sm:flex-row">
                     <Button variant="primary" onClick={addSectionFromLibrary}><LibraryBig className="h-4 w-4" />Choisir des prestations</Button>
+                    <Button variant="secondary" onClick={() => addTask()}><Plus className="h-4 w-4" />Ajouter une tâche libre</Button>
                     <Button variant="secondary" onClick={() => addSection()}><Plus className="h-4 w-4" />Créer un lot vide</Button>
                   </div>
                 </div>
@@ -1573,7 +1575,7 @@ export function ProjectVisitWorkspaceStable({ project, existingAppointment }: { 
                     </button>
                     <div className="flex items-center justify-between gap-2 md:justify-end">
                       <span className="min-w-[100px] text-right"><span className="block text-[10px] font-semibold uppercase tracking-wide text-slate-400">Montant HT</span><span className="font-bold text-slate-950">{sectionTotal > 0 ? euro(round2(sectionTotal)) : "À chiffrer"}</span></span>
-                      {!section.subcontracting ? <button type="button" onClick={() => setPickerSectionId(section.id)} className="inline-flex h-9 items-center gap-1 rounded-xl border border-blue-200 bg-white px-3 text-xs font-semibold text-blue-700 hover:bg-blue-50"><Plus className="h-3.5 w-3.5" />Prestations</button> : null}
+                      {!section.subcontracting ? <div className="flex gap-1.5"><button type="button" onClick={() => setPickerSectionId(section.id)} className="inline-flex h-9 items-center gap-1 rounded-xl border border-blue-200 bg-white px-3 text-xs font-semibold text-blue-700 hover:bg-blue-50"><LibraryBig className="h-3.5 w-3.5" />Bibliothèque</button><button type="button" onClick={() => addTask(section.id)} className="inline-flex h-9 items-center gap-1 rounded-xl border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-700 hover:bg-slate-50"><Plus className="h-3.5 w-3.5" />Libre</button></div> : null}
                     </div>
                   </div>
                   <div className="divide-y divide-slate-100">{children.map((task) => {
