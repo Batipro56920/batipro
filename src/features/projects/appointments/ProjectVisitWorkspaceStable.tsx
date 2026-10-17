@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { ArrowLeft, Camera, CheckCircle2, FileText, Mic, Plus, Save, Trash2, Upload } from "lucide-react";
+import { ArrowLeft, Camera, CheckCircle2, ChevronRight, Clock3, FileText, ImagePlus, Layers3, LibraryBig, Mic, Plus, Save, Sparkles, Trash2, Upload } from "lucide-react";
 import { Button } from "../../../components/ui/button";
 import { createCrmAppointment, type CrmAppointmentRow } from "../../../services/crm.service";
 import { loadCrmVisitReportDraft, saveCrmVisitReport } from "../../../services/crmVisitReports.service";
@@ -889,6 +889,13 @@ export function ProjectVisitWorkspaceStable({ project, existingAppointment }: { 
   const selectedLineQuantity = selectedLine ? quantity(selectedLine) : 0;
   const selectedSubcontracting = useMemo(() => (selectedLine ? subcontractingFor(selectedLine, draft.lines) : null), [selectedLine, draft.lines]);
   const defaultMarginRate = Number(hourlyRates?.defaultMarginRate ?? 30);
+  const estimateOverview = useMemo(() => {
+    const pricedTasks = tasks.filter((task) => Number(task.priceHintHt ?? 0) > 0 && quantity(task) > 0);
+    const estimatedTotal = tasks.reduce((sum, task) => sum + Number(task.priceHintHt ?? 0) * quantity(task), 0);
+    const estimatedHours = tasks.reduce((sum, task) => sum + Number(task.estimatedHours ?? 0) * quantity(task), 0);
+    const linkedTasks = tasks.filter((task) => lineTemplateIds(task).length > 0).length;
+    return { pricedTasks: pricedTasks.length, estimatedTotal, estimatedHours, linkedTasks };
+  }, [tasks]);
 
   /**
    * Composition reelle des taches liees : ce que l'ouvrier trouvera au chantier.
@@ -1110,6 +1117,14 @@ export function ProjectVisitWorkspaceStable({ project, existingAppointment }: { 
     const line: EstimateLine = { id: uid("section"), type: "section", parentId: null, title, unit: "u", quantity: 0, manualQuantity: false, technicalNotes: "", constraints: "", variants: "", attentionPoints: "" };
     setDraft((current) => ({ ...current, lines: [...current.lines, line] }));
     setSelectedLineId(line.id);
+    setStep("estimating");
+  }
+
+  function addSectionFromLibrary() {
+    const line: EstimateLine = { id: uid("section"), type: "section", parentId: null, title: "Nouveau lot", unit: "u", quantity: 0, manualQuantity: false, technicalNotes: "", constraints: "", variants: "", attentionPoints: "" };
+    setDraft((current) => ({ ...current, lines: [...current.lines, line] }));
+    setSelectedLineId(line.id);
+    setPickerSectionId(line.id);
     setStep("estimating");
   }
 
@@ -1506,21 +1521,81 @@ export function ProjectVisitWorkspaceStable({ project, existingAppointment }: { 
           <Field label="Description besoin"><textarea className={textareaClass} value={draft.needDescription} onChange={(event) => patch("needDescription", event.target.value)} /></Field>
         </div></section> : null}
 
-        {step === "estimating" ? <section className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_360px]">
-          <div className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <div><div className="text-xs font-semibold uppercase tracking-[0.18em] text-blue-600">Terrain / pre-devis</div><h2 className="mt-1 text-lg font-semibold text-slate-950">Sections et taches</h2></div>
-              <div className="flex flex-wrap gap-2"><Button variant="secondary" onClick={() => addSection()}><Plus className="h-4 w-4" />Section</Button><Button variant="secondary" onClick={() => addSubcontractingSection()} title="Une section dont les travaux sont confies a un sous-traitant : son prix ou son devis, plus notre marge"><Plus className="h-4 w-4" />Sous-traitant</Button><Button variant="secondary" onClick={() => addTask()}><Plus className="h-4 w-4" />Tache</Button></div>
-            </div>
-            <div className="mt-4 space-y-3">
-              {sections.length === 0 ? <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-5 text-sm text-slate-500">Creez une section, puis ajoutez les taches et quantites relevees.</div> : sections.map((section) => {
-                const children = tasks.filter((task) => task.parentId === section.id);
-                return <article key={section.id} className="overflow-hidden rounded-2xl border border-slate-200"><button type="button" onClick={() => { setSelectedLineId(section.id); if (!section.subcontracting) setPickerSectionId(section.id); }} title={section.subcontracting ? "Section sous-traitee : ses taches viennent du devis du sous-traitant" : "Ajouter des taches de la bibliotheque a cette section"} className="flex w-full items-center justify-between bg-slate-50 px-4 py-3 text-left hover:bg-slate-100"><span className="min-w-0 flex-1 truncate font-semibold text-slate-950">{section.title}{section.subcontracting ? <span className="ml-2 rounded-full bg-violet-100 px-2 py-0.5 text-[11px] font-semibold text-violet-800">Sous-traite{section.subcontracting.name ? ` · ${section.subcontracting.name}` : ""} · marge {section.subcontracting.marginRate} %</span> : null}</span><span className="shrink-0 text-xs text-slate-500">{children.length} tache(s)</span></button><div className="divide-y divide-slate-100">{children.map((task) => <button key={task.id} type="button" onClick={() => setSelectedLineId(task.id)} className={["block w-full p-4 text-left hover:bg-slate-50", selectedLineId === task.id ? "bg-blue-50" : "bg-white"].join(" ")}><div className="font-semibold text-slate-950">{task.title}</div><div className="mt-1 text-sm text-slate-500">{quantity(task)} {task.unit}{section.subcontracting ? <span className="ml-2 text-xs text-violet-700">ST {euro(Number(task.subcontractorUnitCostHt ?? 0))} → vente {task.priceHintHt ? euro(task.priceHintHt) : "a chiffrer"} / {task.unit}</span> : null}</div>{task.technicalNotes ? <div className="mt-1 line-clamp-2 text-xs text-slate-500">{task.technicalNotes}</div> : null}</button>)}</div></article>;
-              })}
+        {step === "estimating" ? <section className="space-y-4">
+          <div className="overflow-hidden rounded-3xl border border-blue-100 bg-gradient-to-br from-slate-950 via-slate-900 to-blue-950 p-5 text-white shadow-lg shadow-slate-200/60 md:p-6">
+            <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
+              <div className="max-w-2xl">
+                <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.18em] text-blue-300"><Sparkles className="h-4 w-4" />Pré-devis terrain</div>
+                <h2 className="mt-2 text-2xl font-bold tracking-tight">Construisez le chiffrage pendant la visite</h2>
+                <p className="mt-2 text-sm leading-6 text-slate-300">Choisissez des tâches déjà chiffrées, relevez les quantités et ajoutez vos photos. Le montant se construit au fur et à mesure.</p>
+              </div>
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 lg:min-w-[520px]">
+                <div className="rounded-2xl border border-white/10 bg-white/10 p-3 backdrop-blur"><div className="text-[11px] uppercase tracking-wide text-slate-300">Lots</div><div className="mt-1 text-xl font-bold">{sections.length}</div></div>
+                <div className="rounded-2xl border border-white/10 bg-white/10 p-3 backdrop-blur"><div className="text-[11px] uppercase tracking-wide text-slate-300">Prestations</div><div className="mt-1 text-xl font-bold">{tasks.length}</div><div className="mt-0.5 text-[10px] text-slate-300">{estimateOverview.linkedTasks} liée(s) au métier</div></div>
+                <div className="rounded-2xl border border-white/10 bg-white/10 p-3 backdrop-blur"><div className="text-[11px] uppercase tracking-wide text-slate-300">Temps prévu</div><div className="mt-1 text-xl font-bold">{round2(estimateOverview.estimatedHours)} h</div></div>
+                <div className="rounded-2xl bg-blue-500 p-3 shadow-inner"><div className="text-[11px] uppercase tracking-wide text-blue-100">Estimation HT</div><div className="mt-1 text-xl font-bold">{euro(round2(estimateOverview.estimatedTotal))}</div><div className="mt-0.5 text-[10px] text-blue-100">{estimateOverview.pricedTasks}/{tasks.length} chiffrée(s)</div></div>
+              </div>
             </div>
           </div>
-          <aside className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm xl:sticky xl:top-4 xl:max-h-[calc(100dvh-2rem)] xl:self-start xl:overflow-y-auto">
-            <div className="mb-3 flex items-center justify-between gap-2"><div className="text-sm font-semibold text-slate-950">Detail</div>{selectedLine ? <button type="button" onClick={() => removeLine(selectedLine.id)} className="rounded-lg p-2 text-red-600 hover:bg-red-50"><Trash2 className="h-4 w-4" /></button> : null}</div>
+
+          <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_400px]">
+          <div className="min-w-0 rounded-3xl border border-slate-200 bg-white shadow-sm">
+            <div className="flex flex-col gap-3 border-b border-slate-100 p-4 md:flex-row md:items-center md:justify-between md:p-5">
+              <div><div className="text-xs font-semibold uppercase tracking-[0.18em] text-blue-600">Ouvrage par ouvrage</div><h3 className="mt-1 text-lg font-semibold text-slate-950">Lots et prestations</h3><p className="mt-1 text-sm text-slate-500">Un lot regroupe les travaux d'une même zone ou d'un même métier.</p></div>
+              <div className="flex flex-wrap gap-2">
+                <Button variant="primary" onClick={addSectionFromLibrary}><LibraryBig className="h-4 w-4" />Depuis la bibliothèque</Button>
+                <Button variant="secondary" onClick={() => addSection()}><Plus className="h-4 w-4" />Lot libre</Button>
+                <Button variant="secondary" onClick={() => addSubcontractingSection()} title="Travaux confiés à un sous-traitant"><Plus className="h-4 w-4" />Sous-traitance</Button>
+              </div>
+            </div>
+            <div className="space-y-3 p-4 md:p-5">
+              {sections.length === 0 ? (
+                <div className="rounded-3xl border border-dashed border-blue-200 bg-blue-50/60 px-5 py-10 text-center">
+                  <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-white text-blue-600 shadow-sm"><Layers3 className="h-7 w-7" /></div>
+                  <h4 className="mt-4 text-lg font-semibold text-slate-950">Commencez votre relevé</h4>
+                  <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-slate-600">Le plus rapide est de choisir les prestations de la bibliothèque : leurs matériaux, temps de main-d'œuvre et prix sont déjà repris.</p>
+                  <div className="mt-5 flex flex-col justify-center gap-2 sm:flex-row">
+                    <Button variant="primary" onClick={addSectionFromLibrary}><LibraryBig className="h-4 w-4" />Choisir des prestations</Button>
+                    <Button variant="secondary" onClick={() => addSection()}><Plus className="h-4 w-4" />Créer un lot vide</Button>
+                  </div>
+                </div>
+              ) : sections.map((section, sectionIndex) => {
+                const children = tasks.filter((task) => task.parentId === section.id);
+                const sectionTotal = children.reduce((sum, task) => sum + Number(task.priceHintHt ?? 0) * quantity(task), 0);
+                const sectionHours = children.reduce((sum, task) => sum + Number(task.estimatedHours ?? 0) * quantity(task), 0);
+                const sectionPhotos = draft.attachments.filter((item) => item.kind === "photo" && children.some((task) => task.id === item.targetLineId)).length;
+                const active = selectedLineId === section.id || children.some((task) => task.id === selectedLineId);
+                return <article key={section.id} className={["overflow-hidden rounded-2xl border transition", active ? "border-blue-300 shadow-md shadow-blue-100/60" : "border-slate-200"].join(" ")}>
+                  <div className={["flex flex-col gap-3 px-4 py-4 md:flex-row md:items-center md:justify-between", active ? "bg-blue-50/70" : "bg-slate-50/80"].join(" ")}>
+                    <button type="button" onClick={() => setSelectedLineId(section.id)} className="flex min-w-0 flex-1 items-center gap-3 text-left">
+                      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white text-sm font-bold text-blue-700 shadow-sm">{sectionIndex + 1}</span>
+                      <span className="min-w-0"><span className="flex flex-wrap items-center gap-2"><span className="truncate font-semibold text-slate-950">{section.title}</span>{section.subcontracting ? <span className="rounded-full bg-violet-100 px-2 py-0.5 text-[11px] font-semibold text-violet-800">Sous-traité{section.subcontracting.name ? ` · ${section.subcontracting.name}` : ""}</span> : null}</span><span className="mt-1 block text-xs text-slate-500">{children.length} prestation(s) · {sectionHours ? `${round2(sectionHours)} h · ` : ""}{sectionPhotos} photo(s)</span></span>
+                    </button>
+                    <div className="flex items-center justify-between gap-2 md:justify-end">
+                      <span className="min-w-[100px] text-right"><span className="block text-[10px] font-semibold uppercase tracking-wide text-slate-400">Montant HT</span><span className="font-bold text-slate-950">{sectionTotal > 0 ? euro(round2(sectionTotal)) : "À chiffrer"}</span></span>
+                      {!section.subcontracting ? <button type="button" onClick={() => setPickerSectionId(section.id)} className="inline-flex h-9 items-center gap-1 rounded-xl border border-blue-200 bg-white px-3 text-xs font-semibold text-blue-700 hover:bg-blue-50"><Plus className="h-3.5 w-3.5" />Prestations</button> : null}
+                    </div>
+                  </div>
+                  <div className="divide-y divide-slate-100">{children.map((task) => {
+                    const taskPhotos = draft.attachments.filter((item) => item.kind === "photo" && item.targetLineId === task.id).length;
+                    const linkedCount = lineTemplateIds(task).length;
+                    const taskTotal = Number(task.priceHintHt ?? 0) * quantity(task);
+                    return <button key={task.id} type="button" onClick={() => setSelectedLineId(task.id)} className={["group flex w-full items-center gap-3 px-4 py-3.5 text-left transition hover:bg-slate-50", selectedLineId === task.id ? "bg-blue-50" : "bg-white"].join(" ")}>
+                      <span className={["h-2.5 w-2.5 shrink-0 rounded-full", quantity(task) > 0 && Number(task.priceHintHt ?? 0) > 0 ? "bg-emerald-500" : "bg-amber-400"].join(" ")} />
+                      <span className="min-w-0 flex-1"><span className="block truncate text-sm font-semibold text-slate-900">{task.title}</span><span className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-xs text-slate-500"><span>{quantity(task) || "—"} {task.unit}</span>{task.estimatedHours ? <span className="inline-flex items-center gap-1"><Clock3 className="h-3 w-3" />{round2(Number(task.estimatedHours) * quantity(task))} h</span> : null}{linkedCount ? <span>{linkedCount} tâche(s) métier</span> : <span className="text-amber-700">Composition à compléter</span>}{taskPhotos ? <span className="inline-flex items-center gap-1"><ImagePlus className="h-3 w-3" />{taskPhotos}</span> : null}</span></span>
+                      <span className="shrink-0 text-right"><span className="block text-sm font-semibold text-slate-900">{taskTotal > 0 ? euro(round2(taskTotal)) : "—"}</span><span className="text-[11px] text-slate-400">{task.priceHintHt ? `${euro(Number(task.priceHintHt))}/${task.unit}` : "prix manquant"}</span></span>
+                      <ChevronRight className="h-4 w-4 shrink-0 text-slate-300 group-hover:text-blue-600" />
+                    </button>;
+                  })}</div>
+                  {children.length === 0 ? <button type="button" onClick={() => section.subcontracting ? setSelectedLineId(section.id) : setPickerSectionId(section.id)} className="flex w-full items-center justify-center gap-2 border-t border-dashed border-slate-200 px-4 py-4 text-sm font-semibold text-blue-700 hover:bg-blue-50"><Plus className="h-4 w-4" />{section.subcontracting ? "Configurer la sous-traitance" : "Ajouter la première prestation"}</button> : null}
+                </article>;
+              })}
+              {sections.length > 0 ? <button type="button" onClick={() => addSection()} className="flex w-full items-center justify-center gap-2 rounded-2xl border border-dashed border-slate-300 py-3 text-sm font-semibold text-slate-600 hover:border-blue-300 hover:bg-blue-50 hover:text-blue-700"><Plus className="h-4 w-4" />Ajouter un autre lot</button> : null}
+            </div>
+          </div>
+          <aside className="rounded-3xl border border-slate-200 bg-white shadow-sm xl:sticky xl:top-4 xl:max-h-[calc(100dvh-2rem)] xl:self-start xl:overflow-y-auto">
+            <div className="sticky top-0 z-10 flex items-center justify-between gap-2 border-b border-slate-100 bg-white/95 p-4 backdrop-blur"><div><div className="text-xs font-semibold uppercase tracking-[0.14em] text-blue-600">{selectedLine?.type === "task" ? "Prestation sélectionnée" : selectedLine?.type === "section" ? "Lot sélectionné" : "Édition"}</div><div className="mt-0.5 text-base font-semibold text-slate-950">{selectedLine?.title ?? "Sélectionnez un élément"}</div></div>{selectedLine ? <button type="button" onClick={() => removeLine(selectedLine.id)} className="rounded-xl p-2 text-red-600 hover:bg-red-50" title="Supprimer"><Trash2 className="h-4 w-4" /></button> : null}</div>
+            <div className="p-4">
             {selectedLine ? (
               <div className="space-y-3">
                 <Field label="Designation">
@@ -1636,8 +1711,10 @@ export function ProjectVisitWorkspaceStable({ project, existingAppointment }: { 
                   </>
                 ) : null}
               </div>
-            ) : <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-4 text-sm text-slate-500">Selectionnez une section ou une tache.</div>}
+            ) : <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-5 text-sm leading-6 text-slate-500">Cliquez sur un lot ou une prestation pour modifier sa désignation, ses quantités, son prix, ses notes et ses photos.</div>}
+            </div>
           </aside>
+          </div>
         </section> : null}
 
         {subQuoteImport ? (
