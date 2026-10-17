@@ -5,6 +5,7 @@ import { DEFAULT_QUOTE_MARGIN_RATE } from "./taskCostBasis";
 import {
   getCompanySettings,
   normalizeIndirectCosts,
+  getInvestmentMonthlyTotal,
   type CompanyChargeEntry,
   type CompanyEquipmentAsset,
 } from "./companySettings.service";
@@ -121,7 +122,8 @@ export async function getCompanyHourlyRates(): Promise<CompanyHourlyRates> {
   const [settings, employees] = await Promise.all([getCompanySettings(), loadEmployeeHourlyCosts()]);
 
   const indirect = normalizeIndirectCosts(settings.indirect_costs);
-  const overheadAnnualHt = computeExploitationAnnual(settings.charges_exploitation?.entries ?? []);
+  const overheadAnnualHt = computeExploitationAnnual(settings.charges_exploitation?.entries ?? [])
+    + getInvestmentMonthlyTotal(settings.investment_plan?.entries ?? []) * 12;
   const amortizationAnnualHt = computeAmortizationAnnual(indirect.equipmentAssets);
   const productiveHoursPerYear = employees.productiveCount * indirect.productiveHoursPerEmployeeYear;
 

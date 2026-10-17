@@ -38,6 +38,58 @@ export type CompanyChargesSettings = {
   entries: CompanyChargeEntry[];
 };
 
+export type CompanyInvestmentCategory =
+  | "services"
+  | "materiel"
+  | "vehicules"
+  | "locaux"
+  | "numerique"
+  | "recrutement"
+  | "formation"
+  | "communication"
+  | "autre";
+
+export type CompanyInvestmentEntry = {
+  id: string;
+  name: string;
+  category: CompanyInvestmentCategory;
+  targetAmountHt: number;
+  durationMonths: number;
+  startDate: string;
+  notes: string;
+  status: "planned" | "paused" | "acquired";
+};
+
+export type CompanyInvestmentSettings = {
+  entries: CompanyInvestmentEntry[];
+};
+
+export function normalizeInvestmentPlan(raw: unknown): CompanyInvestmentSettings {
+  const source = (raw ?? {}) as Partial<CompanyInvestmentSettings>;
+  const entries = Array.isArray(source.entries) ? source.entries : [];
+  return {
+    entries: entries.map((entry) => ({
+      id: String(entry?.id ?? ""),
+      name: String(entry?.name ?? "").trim(),
+      category: (entry?.category ?? "autre") as CompanyInvestmentCategory,
+      targetAmountHt: Math.max(0, Number(entry?.targetAmountHt) || 0),
+      durationMonths: Math.max(1, Math.round(Number(entry?.durationMonths) || 1)),
+      startDate: String(entry?.startDate ?? new Date().toISOString().slice(0, 10)),
+      notes: String(entry?.notes ?? ""),
+      status: entry?.status === "paused" || entry?.status === "acquired" ? entry.status : "planned",
+    })),
+  };
+}
+
+export function investmentMonthlyContribution(entry: CompanyInvestmentEntry): number {
+  if (entry.status !== "planned" || entry.durationMonths <= 0) return 0;
+  return entry.targetAmountHt / entry.durationMonths;
+}
+
+export function getInvestmentMonthlyTotal(entries: CompanyInvestmentEntry[]): number {
+  return entries.reduce((sum, entry) => sum + investmentMonthlyContribution(entry), 0);
+}
+
 /** Matériel amorti par l'entreprise (échafaudage, outillage, véhicule...). */
 export type CompanyEquipmentAsset = {
   id: string;
@@ -102,6 +154,7 @@ export type CompanySettingsRow = {
   enabled_modules: CompanyFeatureModuleId[];
   charges_exploitation?: CompanyChargesSettings | null;
   indirect_costs?: CompanyIndirectCostsSettings | null;
+  investment_plan?: CompanyInvestmentSettings | null;
   created_at: string;
   updated_at: string;
   persistence_status?: "supabase" | "local_fallback";
@@ -165,7 +218,7 @@ function isMissingCompanySettingsFieldError(error: { message?: string } | null):
   return (
     msg.includes("column") &&
     msg.includes("does not exist") &&
-    (msg.includes("charges_exploitation") || msg.includes("indirect_costs"))
+    (msg.includes("charges_exploitation") || msg.includes("indirect_costs") || msg.includes("investment_plan"))
   );
 }
 
@@ -262,6 +315,7 @@ function withDefaults(orgId: string, row?: Partial<CompanySettingsRow>): Company
     enabled_modules: enabledModules,
     charges_exploitation: row?.charges_exploitation ?? null,
     indirect_costs: normalizeIndirectCosts(row?.indirect_costs),
+    investment_plan: normalizeInvestmentPlan(row?.investment_plan),
     created_at: String(row?.created_at ?? ""),
     updated_at: String(row?.updated_at ?? ""),
     persistence_status: row?.persistence_status ?? "supabase",
@@ -340,6 +394,7 @@ export async function upsertCompanySettings(
       | "enabled_modules"
       | "charges_exploitation"
       | "indirect_costs"
+      | "investment_plan"
     >
   >,
 ): Promise<CompanySettingsRow> {
@@ -416,6 +471,9 @@ export async function upsertCompanySettings(
     charges_exploitation: patch.charges_exploitation !== undefined ? patch.charges_exploitation : currentLocal.charges_exploitation ?? null,
     indirect_costs: normalizeIndirectCosts(
       patch.indirect_costs !== undefined ? patch.indirect_costs : currentLocal.indirect_costs,
+    ),
+    investment_plan: normalizeInvestmentPlan(
+      patch.investment_plan !== undefined ? patch.investment_plan : currentLocal.investment_plan,
     ),
   };
 

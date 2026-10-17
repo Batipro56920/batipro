@@ -4,8 +4,10 @@ import { FinancialNavigation } from "../features/financial/components/FinancialN
 import IndirectCostsPanel from "../features/financial/components/IndirectCostsPanel";
 import {
   getCompanySettings,
+  getInvestmentMonthlyTotal,
   upsertCompanySettings,
   type CompanyChargeEntry,
+  type CompanyInvestmentEntry,
 } from "../services/companySettings.service";
 
 const CHARGE_CATEGORY_OPTIONS = [
@@ -57,6 +59,7 @@ function createDefaultChargeEntry(): CompanyChargeEntry {
 
 export default function FixedChargesPage() {
   const [charges, setCharges] = useState<CompanyChargeEntry[]>([]);
+  const [investments, setInvestments] = useState<CompanyInvestmentEntry[]>([]);
   const [chargeForm, setChargeForm] = useState<CompanyChargeEntry>(() => createDefaultChargeEntry());
   const [editingCharge, setEditingCharge] = useState<CompanyChargeEntry | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -75,6 +78,7 @@ export default function FixedChargesPage() {
     try {
       const settings = await getCompanySettings();
       setCharges(settings.charges_exploitation?.entries ?? []);
+      setInvestments(settings.investment_plan?.entries ?? []);
       setChargesVersion((current) => current + 1);
       setEditingCharge(null);
       setChargeForm(createDefaultChargeEntry());
@@ -99,6 +103,7 @@ export default function FixedChargesPage() {
   const variableMonthly = variableCharges.reduce((sum, entry) => sum + monthlyEquivalent(entry), 0);
   const exploitationAnnual = fixedAnnual + variableMonthly * 12;
   const exploitationMonthly = exploitationAnnual / 12;
+  const investmentMonthly = getInvestmentMonthlyTotal(investments);
 
   function openNewChargeDrawer() {
     setEditingCharge(null);
@@ -193,11 +198,12 @@ export default function FixedChargesPage() {
 
       {!loading ? (
         <>
-          <section className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+          <section className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
             <Metric label="Fixes mensuelles" value={formatCurrency(fixedMonthly)} hint="Charges fixes actives" />
             <Metric label="Fixes annuelles" value={formatCurrency(fixedAnnual)} hint="Projection annuelle" />
             <Metric label="Variables mensuelles" value={formatCurrency(variableMonthly)} hint="Charges variables actives" />
-            <Metric label="Exploitation mensuelle" value={formatCurrency(exploitationMonthly)} hint="Charges fixes et variables actives" />
+            <Metric label="Investissements mensuels" value={formatCurrency(investmentMonthly)} hint="Réserve prévisionnelle active" />
+            <Metric label="Pilotage mensuel" value={formatCurrency(exploitationMonthly + investmentMonthly)} hint="Exploitation + investissements" />
           </section>
 
           <section className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">

@@ -35,6 +35,7 @@ import type { ProjectRecord } from "../features/projects/types";
 import {
   getCompanySettings,
   type CompanyChargeEntry,
+  type CompanyInvestmentEntry,
 } from "../services/companySettings.service";
 
 type ProjectFinancialRow = {
@@ -117,9 +118,10 @@ function buildSummary(
   invoices: InvoiceRecord[],
   purchaseOrders: PurchaseOrderRecord[],
   charges: CompanyChargeEntry[],
+  investments: CompanyInvestmentEntry[],
 ): ProfitabilitySummary {
   const metrics = buildFinancialDocumentMetrics(invoices, purchaseOrders);
-  const operatingCharges = getOperatingChargeMetrics(charges);
+  const operatingCharges = getOperatingChargeMetrics(charges, investments);
 
   return {
     invoicedHt: metrics.invoicedHt,
@@ -469,6 +471,7 @@ export default function RentabilitePage() {
   const [invoices, setInvoices] = useState<InvoiceRecord[]>([]);
   const [purchaseOrders, setPurchaseOrders] = useState<PurchaseOrderRecord[]>([]);
   const [charges, setCharges] = useState<CompanyChargeEntry[]>([]);
+  const [investments, setInvestments] = useState<CompanyInvestmentEntry[]>([]);
   const [laborCosts, setLaborCosts] = useState<Map<string, ChantierLaborCostSummary>>(() => new Map());
   const [laborLoading, setLaborLoading] = useState(false);
   const [laborError, setLaborError] = useState<string | null>(null);
@@ -483,11 +486,13 @@ export default function RentabilitePage() {
       setInvoices(invoiceRows);
       setPurchaseOrders(purchaseRows);
       setCharges(settings.charges_exploitation?.entries ?? []);
+      setInvestments(settings.investment_plan?.entries ?? []);
     } catch (err: any) {
       setError(err?.message ?? "Impossible de charger la rentabilité.");
       setInvoices([]);
       setPurchaseOrders([]);
       setCharges([]);
+      setInvestments([]);
     } finally {
       setLoading(false);
     }
@@ -529,7 +534,7 @@ export default function RentabilitePage() {
 
   const scopedInvoices = useMemo(() => invoices.filter((invoice) => isInFinancialPeriod(invoice.document.issueDate, period)), [invoices, period]);
   const scopedPurchaseOrders = useMemo(() => purchaseOrders.filter((order) => isInFinancialPeriod(order.document.issueDate || order.createdAt, period)), [period, purchaseOrders]);
-  const summary = useMemo(() => buildSummary(scopedInvoices, scopedPurchaseOrders, charges), [charges, scopedInvoices, scopedPurchaseOrders]);
+  const summary = useMemo(() => buildSummary(scopedInvoices, scopedPurchaseOrders, charges, investments), [charges, investments, scopedInvoices, scopedPurchaseOrders]);
   const recentInvoices = scopedInvoices.filter(isIssuedInvoice).slice(0, 6);
   const recentPurchases = scopedPurchaseOrders.filter(isCommittedPurchaseOrder).slice(0, 6);
   const projectFinancialRows = useMemo(

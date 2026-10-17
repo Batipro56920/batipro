@@ -2,7 +2,7 @@ import { calculateDocumentTotals } from "../../document-engine";
 import { getPaidAmount, getRemainingAmount } from "../../invoices/application/invoicePayments";
 import type { InvoiceRecord } from "../../invoices/domain/types";
 import type { PurchaseOrderRecord, PurchaseOrderStatus } from "../../purchase-orders";
-import type { CompanyChargeEntry } from "../../../services/companySettings.service";
+import { getInvestmentMonthlyTotal, type CompanyChargeEntry, type CompanyInvestmentEntry } from "../../../services/companySettings.service";
 
 export type FinancialDocumentMetrics = {
   invoicedHt: number;
@@ -94,14 +94,18 @@ export function isOpenPurchaseOrderStatus(status: PurchaseOrderStatus) {
   return OPEN_PURCHASE_ORDER_STATUSES.includes(status);
 }
 
-export function getOperatingChargeMetrics(charges: CompanyChargeEntry[]) {
-  const monthly = charges
+export function getOperatingChargeMetrics(charges: CompanyChargeEntry[], investments: CompanyInvestmentEntry[] = []) {
+  const chargeMonthly = charges
     .filter(isCurrentRecurringCharge)
     .reduce((sum, charge) => sum + monthlyChargeAmount(charge), 0);
+  const investmentMonthly = getInvestmentMonthlyTotal(investments);
+  const monthly = chargeMonthly + investmentMonthly;
 
   return {
     monthly: roundMoney(monthly),
     annual: roundMoney(monthly * 12),
+    chargeMonthly: roundMoney(chargeMonthly),
+    investmentMonthly: roundMoney(investmentMonthly),
   };
 }
 

@@ -9,6 +9,7 @@ const FINANCIAL_NAV_ITEMS = [
   { to: "/financier/tva", label: "TVA" },
   { to: "/financier/tresorerie", label: "Position simplifiée" },
   { to: "/financier/charges-fixes", label: "Charges fixes" },
+  { to: "/financier/investissements", label: "Investissements" },
 ] as const;
 
 export function FinancialNavigation() {
