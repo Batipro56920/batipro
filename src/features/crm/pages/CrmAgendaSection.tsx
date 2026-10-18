@@ -17,11 +17,26 @@ import type { AgendaEvent } from "../agenda/types";
 
 type AgendaDisplayMode = "batipro" | "google";
 
-function buildCalendarSyncEvents(events: AgendaEvent[]): GoogleCalendarSyncEvent[] {
+function projectPathForEvent(
+  event: AgendaEvent,
+  projectPathByTaskId: ReadonlyMap<string, string>,
+  projectPathByAppointmentId: ReadonlyMap<string, string>,
+) {
+  if (event.task) return projectPathByTaskId.get(event.task.id) ?? null;
+  if (event.appointment) return projectPathByAppointmentId.get(event.appointment.id) ?? null;
+  return null;
+}
+
+function buildCalendarSyncEvents(
+  events: AgendaEvent[],
+  projectPathByTaskId: ReadonlyMap<string, string>,
+  projectPathByAppointmentId: ReadonlyMap<string, string>,
+): GoogleCalendarSyncEvent[] {
   const syncEvents: GoogleCalendarSyncEvent[] = [];
 
   for (const event of events) {
     if (!event.date) continue;
+    const destination = projectPathForEvent(event, projectPathByTaskId, projectPathByAppointmentId) ?? "/crm/agenda";
 
     if (event.source === "appointment" && event.appointment?.starts_at) {
       syncEvents.push({
@@ -32,7 +47,7 @@ function buildCalendarSyncEvents(events: AgendaEvent[]): GoogleCalendarSyncEvent
         endsAt: event.appointment.ends_at,
         calendarScope: "crm",
         description: event.description,
-        url: `${window.location.origin}/crm/agenda`,
+        url: `${window.location.origin}${destination}`,
       });
       continue;
     }
@@ -46,7 +61,7 @@ function buildCalendarSyncEvents(events: AgendaEvent[]): GoogleCalendarSyncEvent
         endsAt: null,
         calendarScope: "crm",
         description: event.description,
-        url: `${window.location.origin}/crm/agenda`,
+        url: `${window.location.origin}${destination}`,
       });
     }
   }
@@ -65,12 +80,16 @@ const DISCONNECTED_GOOGLE_CALENDAR: GoogleCalendarConnectionStatus = {
 export default function CrmAgendaSection({
   tasks,
   appointments,
+  projectPathByTaskId,
+  projectPathByAppointmentId,
   onTask,
   onAppointment,
   onDone,
 }: {
   tasks: CrmTaskRow[];
   appointments: CrmAppointmentRow[];
+  projectPathByTaskId: ReadonlyMap<string, string>;
+  projectPathByAppointmentId: ReadonlyMap<string, string>;
   onTask: () => void;
   onAppointment: () => void;
   onDone: (row: CrmTaskRow) => void;
@@ -82,7 +101,13 @@ export default function CrmAgendaSection({
   const [syncNotice, setSyncNotice] = useState<string | null>(null);
   const [syncError, setSyncError] = useState<string | null>(null);
   const agenda = useAgendaData(tasks, appointments);
-  const syncEvents = useMemo(() => buildCalendarSyncEvents(agenda.events), [agenda.events]);
+  const syncEvents = useMemo(
+    () => buildCalendarSyncEvents(agenda.events, projectPathByTaskId, projectPathByAppointmentId),
+    [agenda.events, projectPathByAppointmentId, projectPathByTaskId],
+  );
+  const selectedProjectPath = selectedEvent
+    ? projectPathForEvent(selectedEvent, projectPathByTaskId, projectPathByAppointmentId)
+    : null;
 
   const refreshConnection = useCallback(async (showError = false) => {
     try {
@@ -187,6 +212,7 @@ export default function CrmAgendaSection({
       )}
       <AgendaEventDrawer
         event={selectedEvent}
+        projectPath={selectedProjectPath}
         onClose={() => setSelectedEvent(null)}
         onDone={(event) => {
           if (event.task) onDone(event.task);
