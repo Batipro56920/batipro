@@ -97,6 +97,12 @@ export type CompanyEquipmentAsset = {
   quantity: number;
   purchaseValueHt: number;
   amortizationYears: number;
+  /** Heures pendant lesquelles une unité de ce matériel est réellement utilisée chaque année. */
+  annualUsageHours: number;
+  /** Entretien, réparations et consommables annuels pour une unité. */
+  annualMaintenanceHt: number;
+  /** Tarif facturé par heure d'utilisation. 0 = calcul automatique avec la marge de l'entreprise. */
+  hourlySaleRateHt: number;
   /** general = réparti dans les charges ; task = imputé seulement aux tâches liées. */
   allocationMode: "general" | "task";
   active: boolean;
@@ -113,6 +119,26 @@ export type CompanyIndirectCostsSettings = {
 };
 
 export const DEFAULT_PRODUCTIVE_HOURS_PER_EMPLOYEE_YEAR = 1607;
+export const DEFAULT_EQUIPMENT_ANNUAL_USAGE_HOURS = 400;
+
+export function equipmentHourlyCost(asset: CompanyEquipmentAsset): number {
+  if (asset.amortizationYears <= 0 || asset.annualUsageHours <= 0) return 0;
+  const annualDepreciation = asset.purchaseValueHt / asset.amortizationYears;
+  return (annualDepreciation + asset.annualMaintenanceHt) / asset.annualUsageHours;
+}
+
+export function equipmentSuggestedHourlySale(asset: CompanyEquipmentAsset, marginRate: number): number {
+  return equipmentHourlyCost(asset) * (1 + Math.max(0, marginRate) / 100);
+}
+
+export function equipmentEffectiveHourlySale(asset: CompanyEquipmentAsset, marginRate: number): number {
+  return asset.hourlySaleRateHt > 0 ? asset.hourlySaleRateHt : equipmentSuggestedHourlySale(asset, marginRate);
+}
+
+export function equipmentPaybackYears(asset: CompanyEquipmentAsset, marginRate: number): number | null {
+  const annualContribution = equipmentEffectiveHourlySale(asset, marginRate) * asset.annualUsageHours - asset.annualMaintenanceHt;
+  return annualContribution > 0 ? asset.purchaseValueHt / annualContribution : null;
+}
 
 export function normalizeIndirectCosts(raw: unknown): CompanyIndirectCostsSettings {
   const source = (raw ?? {}) as Partial<CompanyIndirectCostsSettings>;
@@ -125,6 +151,11 @@ export function normalizeIndirectCosts(raw: unknown): CompanyIndirectCostsSettin
       quantity: Math.max(1, Math.round(Number(asset?.quantity) || 1)),
       purchaseValueHt: Math.max(0, Number(asset?.purchaseValueHt) || 0),
       amortizationYears: Math.max(0, Number(asset?.amortizationYears) || 0),
+      // Une ancienne fiche conserve le calcul historique à 1 607 h/an. Les
+      // nouvelles fiches proposent 400 h/an, à confirmer selon l'usage réel.
+      annualUsageHours: Math.max(1, Number(asset?.annualUsageHours) || DEFAULT_PRODUCTIVE_HOURS_PER_EMPLOYEE_YEAR),
+      annualMaintenanceHt: Math.max(0, Number(asset?.annualMaintenanceHt) || 0),
+      hourlySaleRateHt: Math.max(0, Number(asset?.hourlySaleRateHt) || 0),
       // Les anciennes fiches n'avaient pas de mode : elles suivent désormais
       // le modèle demandé, c'est-à-dire un amortissement par tâche liée.
       allocationMode: asset?.allocationMode === "general" ? "general" : "task",

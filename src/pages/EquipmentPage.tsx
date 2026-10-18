@@ -2,6 +2,10 @@ import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Pencil, Plus, Save, Trash2, Wrench, X } from "lucide-react";
 import {
   getCompanySettings,
+  equipmentEffectiveHourlySale,
+  equipmentHourlyCost,
+  equipmentPaybackYears,
+  equipmentSuggestedHourlySale,
   normalizeIndirectCosts,
   upsertCompanySettings,
   type CompanyEquipmentAsset,
@@ -15,7 +19,7 @@ function formatCurrency(value: number) {
 }
 
 function emptyAsset(): CompanyEquipmentAsset {
-  return { id: "", name: "", quantity: 1, purchaseValueHt: 0, amortizationYears: 5, allocationMode: "task", active: true };
+  return { id: "", name: "", quantity: 1, purchaseValueHt: 0, amortizationYears: 5, annualUsageHours: 400, annualMaintenanceHt: 0, hourlySaleRateHt: 0, allocationMode: "task", active: true };
 }
 
 export default function EquipmentPage() {
@@ -27,12 +31,14 @@ export default function EquipmentPage() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [defaultMarginRate, setDefaultMarginRate] = useState(30);
 
   async function refresh() {
     setLoading(true);
     try {
       const company = await getCompanySettings();
       setSettings(normalizeIndirectCosts(company.indirect_costs));
+      setDefaultMarginRate(Number(company.default_margin_rate ?? 30));
     } catch (err: any) {
       setError(err?.message ?? "Impossible de charger les matériels.");
     } finally { setLoading(false); }
@@ -70,6 +76,7 @@ export default function EquipmentPage() {
     if (!form.name.trim()) return setError("La désignation est obligatoire.");
     if (form.quantity < 1) return setError("Le nombre doit être au moins égal à 1.");
     if (form.amortizationYears <= 0) return setError("La durée d'amortissement doit être supérieure à 0.");
+    if (form.annualUsageHours <= 0) return setError("Le nombre d'heures d'utilisation annuelles doit être supérieur à 0.");
     const item = { ...form, id: editingId ?? crypto.randomUUID(), name: form.name.trim(), allocationMode: "task" as const };
     await persist(editingId ? assets.map((row) => row.id === editingId ? item : row) : [...assets, item], editingId ? "Matériel mis à jour." : "Matériel ajouté.");
   }
@@ -97,24 +104,27 @@ export default function EquipmentPage() {
       </div>
 
       <section className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
-        <div className="hidden grid-cols-[minmax(0,2fr)_80px_130px_120px_110px_90px] gap-3 border-b bg-slate-50 px-5 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500 md:grid">
-          <span>Désignation</span><span>Nombre</span><span>Prix unitaire</span><span>Durée</span><span>Coût / heure</span><span />
+        <div className="hidden grid-cols-[minmax(0,2fr)_70px_115px_100px_100px_100px_90px] gap-3 border-b bg-slate-50 px-5 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500 md:grid">
+          <span>Désignation</span><span>Nombre</span><span>Prix HT</span><span>Usage/an</span><span>Coût / h</span><span>Vente / h</span><span />
         </div>
         {assets.map((asset) => (
-          <div key={asset.id} className="grid gap-2 border-b border-slate-100 px-5 py-4 last:border-0 md:grid-cols-[minmax(0,2fr)_80px_130px_120px_110px_90px] md:items-center">
-            <div className="font-semibold text-slate-950">{asset.name}</div><div className="text-sm text-slate-700">{asset.quantity}</div><div className="text-sm text-slate-700">{formatCurrency(asset.purchaseValueHt)}</div><div className="text-sm text-slate-700">{asset.amortizationYears} an(s)</div><div className="text-sm font-semibold text-slate-900">{formatCurrency(asset.amortizationYears > 0 ? asset.purchaseValueHt / asset.amortizationYears / (settings?.productiveHoursPerEmployeeYear || 1) : 0)}/h</div>
+          <div key={asset.id} className="grid gap-2 border-b border-slate-100 px-5 py-4 last:border-0 md:grid-cols-[minmax(0,2fr)_70px_115px_100px_100px_100px_90px] md:items-center">
+            <div><div className="font-semibold text-slate-950">{asset.name}</div><div className="text-xs text-slate-500">Amorti sur {asset.amortizationYears} an(s) · entretien {formatCurrency(asset.annualMaintenanceHt)}/an</div></div><div className="text-sm text-slate-700">{asset.quantity}</div><div className="text-sm text-slate-700">{formatCurrency(asset.purchaseValueHt)}</div><div className="text-sm text-slate-700">{asset.annualUsageHours} h</div><div className="text-sm font-semibold text-slate-900">{formatCurrency(equipmentHourlyCost(asset))}</div><div className="text-sm font-semibold text-blue-700">{formatCurrency(equipmentEffectiveHourlySale(asset, defaultMarginRate))}</div>
             <div className="flex gap-1"><button onClick={() => openEdit(asset)} className="rounded-lg border p-2 text-slate-600" aria-label="Modifier"><Pencil className="h-4 w-4" /></button><button onClick={() => void persist(assets.filter((row) => row.id !== asset.id), "Matériel supprimé.")} className="rounded-lg border border-red-200 p-2 text-red-600" aria-label="Supprimer"><Trash2 className="h-4 w-4" /></button></div>
           </div>
         ))}
         {!assets.length ? <div className="p-10 text-center text-sm text-slate-500">Aucun matériel. Ajoutez uniquement ce qui doit être amorti dans vos prix de vente.</div> : null}
       </section>
 
-      <div className="rounded-2xl border border-blue-100 bg-blue-50 p-4 text-sm text-blue-900">Dans une tâche, sélectionnez le matériel et la quantité utilisée. Batipro calcule : prix unitaire ÷ durée ÷ heures productives annuelles × temps unitaire de la tâche.</div>
+      <div className="rounded-2xl border border-blue-100 bg-blue-50 p-4 text-sm text-blue-900">Dans une tâche, sélectionnez le matériel utilisé. Batipro impute son coût réel et son tarif de vente au temps unitaire de la tâche.</div>
 
       {drawerOpen ? <div className="fixed inset-0 z-50 flex justify-end bg-slate-950/40"><div className="h-full w-full max-w-lg overflow-y-auto bg-white p-6 shadow-2xl"><div className="flex items-center justify-between"><div><div className="text-xs font-semibold uppercase text-blue-600">Matériel</div><h2 className="text-xl font-bold">{editingId ? "Modifier" : "Ajouter"} un matériel</h2></div><button onClick={() => setDrawerOpen(false)} className="rounded-xl border p-2"><X className="h-5 w-5" /></button></div><div className="mt-6 space-y-4">
         <Field label="Désignation"><input autoFocus className={INPUT} value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="Ex : marteau-piqueur" /></Field>
         <div className="grid gap-4 sm:grid-cols-2"><Field label="Nombre"><input type="number" min={1} className={INPUT} value={form.quantity} onChange={(e) => setForm({ ...form, quantity: Math.max(1, Math.round(Number(e.target.value) || 1)) })} /></Field><Field label="Prix unitaire HT"><input type="number" min={0} step="0.01" className={INPUT} value={form.purchaseValueHt} onChange={(e) => setForm({ ...form, purchaseValueHt: Math.max(0, Number(e.target.value) || 0) })} /></Field></div>
         <Field label="Durée d'amortissement (années)"><input type="number" min={0.1} step="0.1" className={INPUT} value={form.amortizationYears} onChange={(e) => setForm({ ...form, amortizationYears: Math.max(0, Number(e.target.value) || 0) })} /></Field>
+        <div className="grid gap-4 sm:grid-cols-2"><Field label="Utilisation estimée (h/an)"><input type="number" min={1} step="1" className={INPUT} value={form.annualUsageHours} onChange={(e) => setForm({ ...form, annualUsageHours: Math.max(0, Number(e.target.value) || 0) })} /></Field><Field label="Entretien + consommables HT/an"><input type="number" min={0} step="0.01" className={INPUT} value={form.annualMaintenanceHt} onChange={(e) => setForm({ ...form, annualMaintenanceHt: Math.max(0, Number(e.target.value) || 0) })} /></Field></div>
+        <Field label="Tarif de vente HT / heure (facultatif)"><input type="number" min={0} step="0.01" className={INPUT} value={form.hourlySaleRateHt || ""} onChange={(e) => setForm({ ...form, hourlySaleRateHt: Math.max(0, Number(e.target.value) || 0) })} placeholder={`Automatique : ${formatCurrency(equipmentSuggestedHourlySale(form, defaultMarginRate))}`} /></Field>
+        <div className="grid gap-3 rounded-2xl bg-slate-50 p-4 sm:grid-cols-3"><Metric label="Coût réel / h" value={formatCurrency(equipmentHourlyCost(form))} /><Metric label="Vente / h" value={formatCurrency(equipmentEffectiveHourlySale(form, defaultMarginRate))} /><Metric label="Rentabilisé en" value={equipmentPaybackYears(form, defaultMarginRate) ? `${equipmentPaybackYears(form, defaultMarginRate)!.toFixed(1)} an(s)` : "—"} /></div>
         <button disabled={saving} onClick={() => void save()} className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-blue-600 font-semibold text-white disabled:opacity-60"><Save className="h-4 w-4" /> Enregistrer</button>
       </div></div></div> : null}
     </div>
@@ -123,3 +133,4 @@ export default function EquipmentPage() {
 
 function Summary({ label, value }: { label: string; value: string }) { return <div className="rounded-2xl border bg-white p-4"><div className="text-xs font-semibold uppercase tracking-wide text-slate-500">{label}</div><div className="mt-1 text-xl font-bold text-slate-950">{value}</div></div>; }
 function Field({ label, children }: { label: string; children: ReactNode }) { return <label className="block"><span className="mb-1 block text-sm font-semibold text-slate-700">{label}</span>{children}</label>; }
+function Metric({ label, value }: { label: string; value: string }) { return <div><div className="text-xs font-medium text-slate-500">{label}</div><div className="mt-1 font-bold text-slate-950">{value}</div></div>; }

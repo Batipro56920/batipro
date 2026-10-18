@@ -853,9 +853,13 @@ export default function TaskTemplateDrawer({
         unitCostHt: (() => {
           const asset = hourlyRates?.equipmentAssets.find((item) => item.id === row.equipment_asset_id);
           if (!asset || asset.allocationMode !== "task" || asset.amortizationYears <= 0) return 0;
-          return asset.purchaseValueHt / asset.amortizationYears / (hourlyRates?.productiveHoursPerEmployeeYear || 1) * laborPlan.hours;
+          return ((asset.purchaseValueHt / asset.amortizationYears + asset.annualMaintenanceHt) / asset.annualUsageHours) * laborPlan.hours;
         })(),
-        unitSaleHt: 0,
+        unitSaleHt: (() => {
+          const asset = hourlyRates?.equipmentAssets.find((item) => item.id === row.equipment_asset_id);
+          if (!asset?.hourlySaleRateHt) return 0;
+          return asset.hourlySaleRateHt * laborPlan.hours;
+        })(),
         marginRate: selectedLotProfile?.equipmentMarginRate ?? taskMarginRate,
       })),
       fees: feeDrafts.map((row) => ({

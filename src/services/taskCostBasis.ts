@@ -1,4 +1,5 @@
 import type { CompanyHourlyRates } from "./indirectCosts.service";
+import { equipmentEffectiveHourlySale, equipmentHourlyCost } from "./companySettings.service";
 import type { TaskTemplateRow } from "./taskLibrary.service";
 import type { TaskTemplateEquipmentItemRow, TaskTemplateMaterialRatioRow } from "./taskTemplatePreparation.service";
 
@@ -23,10 +24,11 @@ export type TaskCostBasis = {
   laborHt: number;
   materialsHt: number;
   equipmentHt: number;
+  equipmentSaleHt: number;
   indirectHt: number;
 };
 
-export const EMPTY_TASK_COST: TaskCostBasis = { costHt: 0, hours: 0, laborHt: 0, materialsHt: 0, equipmentHt: 0, indirectHt: 0 };
+export const EMPTY_TASK_COST: TaskCostBasis = { costHt: 0, hours: 0, laborHt: 0, materialsHt: 0, equipmentHt: 0, equipmentSaleHt: 0, indirectHt: 0 };
 
 /**
  * Déboursé d'une tâche pour une unité.
@@ -59,11 +61,16 @@ export function taskTemplateUnitCost(
   const equipmentHt = equipment.reduce((total, row) => {
     const asset = rates?.equipmentAssets.find((item) => item.id === row.equipment_asset_id);
     if (!asset || !asset.active || asset.allocationMode !== "task" || asset.amortizationYears <= 0) return total;
-    const hourly = asset.purchaseValueHt / asset.amortizationYears / (rates?.productiveHoursPerEmployeeYear || 1);
+    const hourly = equipmentHourlyCost(asset);
     return total + hourly * Math.max(0, Number(row.default_quantity ?? 1)) * hours;
   }, 0);
+  const equipmentSaleHt = equipment.reduce((total, row) => {
+    const asset = rates?.equipmentAssets.find((item) => item.id === row.equipment_asset_id);
+    if (!asset || !asset.active || asset.allocationMode !== "task") return total;
+    return total + equipmentEffectiveHourlySale(asset, taskTemplateMarginRate(template, rates)) * Math.max(0, Number(row.default_quantity ?? 1)) * hours;
+  }, 0);
   // indirectHt est deja dans laborHt : ne pas l'ajouter une seconde fois.
-  return { costHt: laborHt + materialsHt + equipmentHt, hours, laborHt, materialsHt, equipmentHt, indirectHt };
+  return { costHt: laborHt + materialsHt + equipmentHt, hours, laborHt, materialsHt, equipmentHt, equipmentSaleHt, indirectHt };
 }
 
 /** Marge retenue pour une tâche : la sienne, sinon celle de l'entreprise. */
@@ -99,7 +106,7 @@ export function taskTemplateUnitSale(
   const cost = taskTemplateUnitCost(template, materials, rates, equipment);
   const labor = salePriceFromCost(cost.laborHt, taskTemplateLaborMarginRate(template, rates));
   const materialsSale = salePriceFromCost(cost.materialsHt, taskTemplateMarginRate(template, rates));
-  const equipmentSale = salePriceFromCost(cost.equipmentHt, taskTemplateMarginRate(template, rates));
+  const equipmentSale = cost.equipmentSaleHt;
   return Math.round((labor + materialsSale + equipmentSale) * 100) / 100;
 }
 
