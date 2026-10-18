@@ -1,7 +1,18 @@
-import { X } from "lucide-react";
+import { FolderOpen, X } from "lucide-react";
+import { Link } from "react-router-dom";
 import type { AgendaEvent } from "../types";
 
-export function AgendaEventDrawer({ event, onClose, onDone }: { event: AgendaEvent | null; onClose: () => void; onDone: (event: AgendaEvent) => void }) {
+export function AgendaEventDrawer({
+  event,
+  projectPath,
+  onClose,
+  onDone,
+}: {
+  event: AgendaEvent | null;
+  projectPath?: string | null;
+  onClose: () => void;
+  onDone: (event: AgendaEvent) => void;
+}) {
   if (!event) return null;
   return (
     <div className="fixed inset-0 z-40 flex justify-end bg-slate-950/20" role="dialog" aria-modal="true">
@@ -27,6 +38,16 @@ export function AgendaEventDrawer({ event, onClose, onDone }: { event: AgendaEve
             <div className="mt-2">Priorité : {event.priority ?? "—"}</div>
             <p className="mt-3 leading-6">{event.description ?? "Aucune note renseignée."}</p>
           </section>
+          {projectPath ? (
+            <Link
+              to={projectPath}
+              onClick={onClose}
+              className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-xl bg-slate-950 px-3 text-sm font-semibold text-white transition hover:bg-slate-800"
+            >
+              <FolderOpen className="h-4 w-4" />
+              Ouvrir le projet associé
+            </Link>
+          ) : null}
           <div className="grid gap-2 sm:grid-cols-3">
             <button type="button" onClick={() => onDone(event)} disabled={event.source !== "task" || event.status === "terminee"} className="rounded-xl border border-emerald-200 px-3 py-2 text-sm font-medium text-emerald-700 hover:bg-emerald-50 disabled:cursor-not-allowed disabled:opacity-50">Terminer</button>
             <button type="button" disabled className="rounded-xl border border-slate-200 px-3 py-2 text-sm font-medium text-slate-400" title="Report à finaliser">Reporter</button>
