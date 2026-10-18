@@ -63,6 +63,7 @@ export type TaskTemplateFeeItemInput = {
 export type TaskTemplateEquipmentItemRow = {
   id: string;
   task_template_id: string;
+  equipment_asset_id: string | null;
   equipment_name: string;
   is_required: boolean;
   default_quantity: number | null;
@@ -73,6 +74,7 @@ export type TaskTemplateEquipmentItemRow = {
 };
 
 export type TaskTemplateEquipmentItemInput = {
+  equipment_asset_id?: string | null;
   equipment_name: string;
   is_required: boolean;
   default_quantity?: number | null;
@@ -156,6 +158,7 @@ const MATERIAL_SELECT = [
 const EQUIPMENT_SELECT = [
   "id",
   "task_template_id",
+  "equipment_asset_id",
   "equipment_name",
   "is_required",
   "default_quantity",
@@ -215,6 +218,7 @@ function normalizeEquipmentRow(row: any): TaskTemplateEquipmentItemRow {
   return {
     id: String(row?.id ?? ""),
     task_template_id: String(row?.task_template_id ?? ""),
+    equipment_asset_id: normalizeText(row?.equipment_asset_id),
     equipment_name: String(row?.equipment_name ?? "").trim(),
     is_required: row?.is_required === true,
     default_quantity: normalizeNumber(row?.default_quantity),
@@ -265,6 +269,7 @@ function normalizeEquipmentInput(
   if (!equipment_name) return null;
 
   return {
+    equipment_asset_id: normalizeText(item.equipment_asset_id),
     equipment_name,
     is_required: item.is_required === true,
     default_quantity: normalizeNumber(item.default_quantity),
@@ -455,6 +460,13 @@ export async function replaceTaskTemplatePreparation(
       actual.ratio_unit !== expected.ratio_unit
     ) {
       throw new Error(`Le produit n°${index + 1} n'a pas été enregistré complètement. Rechargez la fiche avant de réessayer.`);
+    }
+  }
+  for (let index = 0; index < equipment.length; index += 1) {
+    const expected = equipment[index];
+    const actual = persisted.equipment[index];
+    if (!actual || actual.equipment_asset_id !== (expected.equipment_asset_id ?? null) || actual.equipment_name !== expected.equipment_name) {
+      throw new Error(`Le matériel n°${index + 1} n'a pas été enregistré complètement. Rechargez la fiche avant de réessayer.`);
     }
   }
 }

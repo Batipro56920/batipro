@@ -1,6 +1,6 @@
 import type { CompanyHourlyRates } from "./indirectCosts.service";
 import type { TaskTemplateRow } from "./taskLibrary.service";
-import type { TaskTemplateMaterialRatioRow } from "./taskTemplatePreparation.service";
+import type { TaskTemplateEquipmentItemRow, TaskTemplateMaterialRatioRow } from "./taskTemplatePreparation.service";
 
 /**
  * Base de chiffrage commune au relevé terrain, au devis et à la bibliothèque de
@@ -22,10 +22,11 @@ export type TaskCostBasis = {
   hours: number;
   laborHt: number;
   materialsHt: number;
+  equipmentHt: number;
   indirectHt: number;
 };
 
-export const EMPTY_TASK_COST: TaskCostBasis = { costHt: 0, hours: 0, laborHt: 0, materialsHt: 0, indirectHt: 0 };
+export const EMPTY_TASK_COST: TaskCostBasis = { costHt: 0, hours: 0, laborHt: 0, materialsHt: 0, equipmentHt: 0, indirectHt: 0 };
 
 /**
  * Déboursé d'une tâche pour une unité.
@@ -41,6 +42,7 @@ export function taskTemplateUnitCost(
   template: TaskTemplateRow | null,
   materials: TaskTemplateMaterialRatioRow[],
   rates: CompanyHourlyRates | null,
+  equipment: TaskTemplateEquipmentItemRow[] = [],
 ): TaskCostBasis {
   if (!template) return EMPTY_TASK_COST;
   // Le coût horaire propre à la tâche prime : un geste confié à un compagnon
@@ -54,8 +56,14 @@ export function taskTemplateUnitCost(
     (total, row) => total + Number(row.ratio_quantity ?? 0) * (1 + Number(row.loss_percent ?? 0) / 100) * Number(row.purchase_price_ht ?? 0),
     0,
   );
+  const equipmentHt = equipment.reduce((total, row) => {
+    const asset = rates?.equipmentAssets.find((item) => item.id === row.equipment_asset_id);
+    if (!asset || !asset.active || asset.allocationMode !== "task" || asset.amortizationYears <= 0) return total;
+    const hourly = asset.purchaseValueHt / asset.amortizationYears / (rates?.productiveHoursPerEmployeeYear || 1);
+    return total + hourly * Math.max(0, Number(row.default_quantity ?? 1)) * hours;
+  }, 0);
   // indirectHt est deja dans laborHt : ne pas l'ajouter une seconde fois.
-  return { costHt: laborHt + materialsHt, hours, laborHt, materialsHt, indirectHt };
+  return { costHt: laborHt + materialsHt + equipmentHt, hours, laborHt, materialsHt, equipmentHt, indirectHt };
 }
 
 /** Marge retenue pour une tâche : la sienne, sinon celle de l'entreprise. */
@@ -84,13 +92,15 @@ export function taskTemplateUnitSale(
   template: TaskTemplateRow | null,
   materials: TaskTemplateMaterialRatioRow[],
   rates: CompanyHourlyRates | null,
+  equipment: TaskTemplateEquipmentItemRow[] = [],
 ): number {
   // Deux marges, deux natures de déboursé : la main d'œuvre et les matériaux
   // ne se vendent pas au même taux.
-  const cost = taskTemplateUnitCost(template, materials, rates);
+  const cost = taskTemplateUnitCost(template, materials, rates, equipment);
   const labor = salePriceFromCost(cost.laborHt, taskTemplateLaborMarginRate(template, rates));
   const materialsSale = salePriceFromCost(cost.materialsHt, taskTemplateMarginRate(template, rates));
-  return Math.round((labor + materialsSale) * 100) / 100;
+  const equipmentSale = salePriceFromCost(cost.equipmentHt, taskTemplateMarginRate(template, rates));
+  return Math.round((labor + materialsSale + equipmentSale) * 100) / 100;
 }
 
 /** Prix de vente déduit d'un déboursé sec. */

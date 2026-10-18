@@ -69,6 +69,7 @@ type MaterialRatioDraft = {
 
 type EquipmentDraft = {
   id: string;
+  equipment_asset_id: string;
   equipment_name: string;
   is_required: boolean;
   default_quantity: string;
@@ -164,6 +165,7 @@ function createFeeDraft(row?: Partial<TaskTemplateFeeItemInput>): FeeDraft {
 
 function createEquipmentDraft(row?: {
   id?: string | null;
+  equipment_asset_id?: string | null;
   equipment_name?: string | null;
   is_required?: boolean | null;
   default_quantity?: number | null;
@@ -172,6 +174,7 @@ function createEquipmentDraft(row?: {
 }): EquipmentDraft {
   return {
     id: String(row?.id ?? crypto.randomUUID()),
+    equipment_asset_id: String(row?.equipment_asset_id ?? ""),
     equipment_name: String(row?.equipment_name ?? ""),
     is_required: row?.is_required === true,
     default_quantity: toField(row?.default_quantity ?? null),
@@ -201,6 +204,7 @@ function isFeeDraftEmpty(row: FeeDraft) {
 
 function isEquipmentDraftEmpty(row: EquipmentDraft) {
   return (
+    !row.equipment_asset_id.trim() &&
     !row.equipment_name.trim() &&
     !row.default_quantity.trim() &&
     !row.unit.trim() &&
@@ -695,6 +699,7 @@ export default function TaskTemplateDrawer({
         (initialValues?.preparation_equipment ?? []).map((row) =>
           createEquipmentDraft({
             id: crypto.randomUUID(),
+            equipment_asset_id: (row as any).equipment_asset_id ?? null,
             equipment_name: row.equipment_name,
             is_required: row.is_required,
             default_quantity: row.default_quantity ?? null,
@@ -845,9 +850,13 @@ export default function TaskTemplateDrawer({
       ],
       equipment: equipmentDrafts.map((row) => ({
         quantity: parseDraftAmount(row.default_quantity) || 1,
-        unitCostHt: 0,
+        unitCostHt: (() => {
+          const asset = hourlyRates?.equipmentAssets.find((item) => item.id === row.equipment_asset_id);
+          if (!asset || asset.allocationMode !== "task" || asset.amortizationYears <= 0) return 0;
+          return asset.purchaseValueHt / asset.amortizationYears / (hourlyRates?.productiveHoursPerEmployeeYear || 1) * laborPlan.hours;
+        })(),
         unitSaleHt: 0,
-        marginRate: selectedLotProfile?.equipmentMarginRate ?? null,
+        marginRate: selectedLotProfile?.equipmentMarginRate ?? taskMarginRate,
       })),
       fees: feeDrafts.map((row) => ({
         amountCostHt: parseDraftAmount(row.amountCostHt),
@@ -883,7 +892,7 @@ export default function TaskTemplateDrawer({
       profitabilityRate: engineTotals.profitabilityRate,
       lines: engineTotals.lines,
     };
-  }, [materialDrafts, laborPlan, equipmentDrafts, feeDrafts, selectedLotProfile, tempsParUnite, taskMarginRate]);
+  }, [materialDrafts, laborPlan, equipmentDrafts, feeDrafts, selectedLotProfile, tempsParUnite, taskMarginRate, hourlyRates]);
 
   if (!open) return null;
 
@@ -1117,6 +1126,7 @@ export default function TaskTemplateDrawer({
       }
 
       preparationEquipment.push({
+        equipment_asset_id: row.equipment_asset_id.trim() || null,
         equipment_name: row.equipment_name.trim(),
         is_required: row.is_required,
         default_quantity: defaultQuantity,
@@ -1832,17 +1842,10 @@ export default function TaskTemplateDrawer({
               <div className="space-y-3 rounded-2xl border border-slate-200 bg-white p-4">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <div>
-                    <div className="text-sm font-semibold text-slate-900">Matériel à prévoir</div>
-                    <div className="text-xs text-slate-500">Définis le matériel obligatoire ou recommandé à prévoir.</div>
+                    <div className="text-sm font-semibold text-slate-900">Matériels utilisés</div>
+                    <div className="text-xs text-slate-500">Sélectionne simplement le matériel et le nombre utilisé par unité de tâche.</div>
                   </div>
-                  <button
-                    type="button"
-                    className="rounded-xl border px-3 py-2 text-xs hover:bg-slate-50"
-                    onClick={() => setEquipmentDrafts((prev) => [...prev, createEquipmentDraft()])}
-                    disabled={busy || preparationLoading || !preparationSchemaReady}
-                  >
-                    Ajouter du matériel
-                  </button>
+                  <div className="flex gap-2"><a href="/materiels" className="rounded-xl border px-3 py-2 text-xs hover:bg-slate-50">Gérer la liste</a><button type="button" className="rounded-xl bg-slate-900 px-3 py-2 text-xs font-semibold text-white" onClick={() => setEquipmentDrafts((prev) => [...prev, createEquipmentDraft({ default_quantity: 1, unit: "u" })])} disabled={busy || preparationLoading || !preparationSchemaReady}>Ajouter</button></div>
                 </div>
 
                 {equipmentDrafts.length === 0 ? (
@@ -1850,63 +1853,21 @@ export default function TaskTemplateDrawer({
                     Aucune donnée de préparation définie.
                   </div>
                 ) : (
-                  <div className="space-y-3">
+                  <div className="space-y-2">
                     {equipmentDrafts.map((row, index) => (
-                      <div key={row.id} className="space-y-3 rounded-2xl border border-slate-200 bg-slate-50 p-3">
-                        <div className="flex flex-wrap items-center justify-between gap-2">
-                          <div className="text-xs font-medium text-slate-700">Matériel #{index + 1}</div>
-                          <div className="flex gap-2">
-                            <button
-                              type="button"
-                              className="rounded-lg border px-2 py-1 text-xs hover:bg-white"
-                              onClick={() => setEquipmentDrafts((prev) => reorderItems(prev, index, -1))}
-                              disabled={index === 0 || busy}
-                            >
-                              Monter
-                            </button>
-                            <button
-                              type="button"
-                              className="rounded-lg border px-2 py-1 text-xs hover:bg-white"
-                              onClick={() => setEquipmentDrafts((prev) => reorderItems(prev, index, 1))}
-                              disabled={index === equipmentDrafts.length - 1 || busy}
-                            >
-                              Descendre
-                            </button>
-                            <button
-                              type="button"
-                              className="rounded-lg border border-red-200 px-2 py-1 text-xs text-red-700 hover:bg-red-50"
-                              onClick={() => setEquipmentDrafts((prev) => prev.filter((item) => item.id !== row.id))}
-                              disabled={busy}
-                            >
-                              Supprimer
-                            </button>
-                          </div>
-                        </div>
-
-                        <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-4">
+                      <div key={row.id} className="grid gap-2 rounded-xl border border-slate-200 bg-slate-50 p-2 md:grid-cols-[minmax(0,1fr)_110px_140px_auto] md:items-center">
+                          <select className="h-10 rounded-xl border bg-white px-3 text-sm" value={row.equipment_asset_id} onChange={(e) => { const asset = hourlyRates?.equipmentAssets.find((item) => item.id === e.target.value); updateEquipmentDraft(index, { equipment_asset_id: e.target.value, equipment_name: asset?.name ?? row.equipment_name, unit: "u" }); }}>
+                            <option value="">{row.equipment_name || "Choisir un matériel"}</option>
+                            {(hourlyRates?.equipmentAssets ?? []).filter((asset) => asset.active).map((asset) => <option key={asset.id} value={asset.id}>{asset.name}</option>)}
+                          </select>
                           <input
-                            className="rounded-xl border bg-white px-3 py-2 text-sm xl:col-span-2"
-                            value={row.equipment_name}
-                            onChange={(e) => updateEquipmentDraft(index, { equipment_name: e.target.value })}
-                            placeholder="Matériel"
-                          />
-                          <input
-                            className="rounded-xl border bg-white px-3 py-2 text-sm"
+                            className="h-10 rounded-xl border bg-white px-3 text-sm"
                             inputMode="decimal"
                             value={row.default_quantity}
                             onChange={(e) => updateEquipmentDraft(index, { default_quantity: e.target.value })}
-                            placeholder="Quantité"
+                            placeholder="Nombre"
                           />
-                          <input
-                            className="rounded-xl border bg-white px-3 py-2 text-sm"
-                            value={row.unit}
-                            onChange={(e) => updateEquipmentDraft(index, { unit: e.target.value })}
-                            placeholder="Unité"
-                          />
-                        </div>
-
-                        <div className="grid gap-2 md:grid-cols-[180px_minmax(0,1fr)]">
-                          <label className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700">
+                          <label className="flex h-10 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-700">
                             <input
                               type="checkbox"
                               checked={row.is_required}
@@ -1914,13 +1875,7 @@ export default function TaskTemplateDrawer({
                             />
                             <span>{row.is_required ? "Obligatoire" : "Recommandé"}</span>
                           </label>
-                          <input
-                            className="rounded-xl border bg-white px-3 py-2 text-sm"
-                            value={row.notes}
-                            onChange={(e) => updateEquipmentDraft(index, { notes: e.target.value })}
-                            placeholder="Remarque"
-                          />
-                        </div>
+                          <button type="button" className="h-10 rounded-xl border border-red-200 px-3 text-xs text-red-700 hover:bg-red-50" onClick={() => setEquipmentDrafts((prev) => prev.filter((item) => item.id !== row.id))} disabled={busy}>Supprimer</button>
                       </div>
                     ))}
                   </div>

@@ -94,8 +94,11 @@ export function getInvestmentMonthlyTotal(entries: CompanyInvestmentEntry[]): nu
 export type CompanyEquipmentAsset = {
   id: string;
   name: string;
+  quantity: number;
   purchaseValueHt: number;
   amortizationYears: number;
+  /** general = réparti dans les charges ; task = imputé seulement aux tâches liées. */
+  allocationMode: "general" | "task";
   active: boolean;
 };
 
@@ -119,8 +122,12 @@ export function normalizeIndirectCosts(raw: unknown): CompanyIndirectCostsSettin
     equipmentAssets: assets.map((asset) => ({
       id: String(asset?.id ?? ""),
       name: String(asset?.name ?? "").trim(),
+      quantity: Math.max(1, Math.round(Number(asset?.quantity) || 1)),
       purchaseValueHt: Math.max(0, Number(asset?.purchaseValueHt) || 0),
       amortizationYears: Math.max(0, Number(asset?.amortizationYears) || 0),
+      // Les anciennes fiches n'avaient pas de mode : elles suivent désormais
+      // le modèle demandé, c'est-à-dire un amortissement par tâche liée.
+      allocationMode: asset?.allocationMode === "general" ? "general" : "task",
       active: asset?.active !== false,
     })),
     productiveHoursPerEmployeeYear:

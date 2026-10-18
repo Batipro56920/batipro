@@ -1,6 +1,6 @@
 import type { CompanyHourlyRates } from "../../../services/indirectCosts.service";
 import type { TaskTemplateRow } from "../../../services/taskLibrary.service";
-import type { TaskTemplateMaterialRatioRow } from "../../../services/taskTemplatePreparation.service";
+import type { TaskTemplateEquipmentItemRow, TaskTemplateMaterialRatioRow } from "../../../services/taskTemplatePreparation.service";
 import { DEFAULT_QUOTE_MARGIN_RATE, taskTemplateUnitCost, taskTemplateUnitSale } from "../../../services/taskCostBasis";
 import { normalizeTaskTemplateIds } from "./quoteBuilderModel";
 import type { QuoteBuilderItem } from "./types";
@@ -57,6 +57,7 @@ export function quoteItemCost(
   item: QuoteBuilderItem,
   templatesById: Map<string, TaskTemplateRow>,
   materialsByTemplateId: Record<string, TaskTemplateMaterialRatioRow[]>,
+  equipmentByTemplateId: Record<string, TaskTemplateEquipmentItemRow[]>,
   rates: CompanyHourlyRates | null,
 ): QuoteLineCost {
   if (item.kind === "sous_traitance") return subcontractedItemCost(item, rates);
@@ -66,8 +67,9 @@ export function quoteItemCost(
   return ids.reduce<QuoteLineCost>((total, id, index) => {
     const template = templatesById.get(id) ?? null;
     const materials = materialsByTemplateId[id] ?? [];
-    const unitCost = taskTemplateUnitCost(template, materials, rates);
-    const unitSale = taskTemplateUnitSale(template, materials, rates);
+    const equipment = equipmentByTemplateId[id] ?? [];
+    const unitCost = taskTemplateUnitCost(template, materials, rates, equipment);
+    const unitSale = taskTemplateUnitSale(template, materials, rates, equipment);
     const pinned = Number(quantities[index] ?? NaN);
     const count = Number.isFinite(pinned) ? pinned : Number(item.quantity ?? 0);
     return {

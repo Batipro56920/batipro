@@ -369,7 +369,7 @@ type LinkedTaskEntry = {
 
 /** Cout par unite d'une tache liee, avec la base de chiffrage commune. */
 function linkedTaskCost(entry: LinkedTaskEntry, rates: CompanyHourlyRates | null) {
-  const basis = taskTemplateUnitCost(entry.template, entry.materials, rates);
+  const basis = taskTemplateUnitCost(entry.template, entry.materials, rates, entry.equipment);
   return {
     hoursPerUnit: basis.hours,
     laborPerUnit: basis.laborHt,
@@ -992,9 +992,10 @@ export function ProjectVisitWorkspaceStable({ project, existingAppointment }: { 
         // une tache dont la quantite est fixee ne compte que sa part.
         const share = pinned === null ? 1 : lineQuantity > 0 ? pinned / lineQuantity : pinned;
         const materials = linkedPreparation.materialsByTemplateId[ids[index]] ?? [];
-        hours += taskTemplateUnitCost(template, materials, hourlyRates).hours * share;
+        const equipment = linkedPreparation.equipmentByTemplateId[ids[index]] ?? [];
+        hours += taskTemplateUnitCost(template, materials, hourlyRates, equipment).hours * share;
         // Chaque tache apporte son propre prix de vente : sa marge lui appartient.
-        saleHt += taskTemplateUnitSale(template, materials, hourlyRates) * share;
+        saleHt += taskTemplateUnitSale(template, materials, hourlyRates, equipment) * share;
       }
 
       const nextHours = hours > 0 ? Math.round(hours * 100) / 100 : null;

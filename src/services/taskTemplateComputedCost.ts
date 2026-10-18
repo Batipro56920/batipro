@@ -27,7 +27,8 @@ export async function loadTaskTemplateUnitCosts(templates: TaskTemplateRow[]): P
 
   for (const template of rows) {
     const materials = preparation.materialsByTemplateId[template.id] ?? [];
-    costs.set(template.id, taskTemplateUnitCost(template, materials, rates).costHt);
+    const equipment = preparation.equipmentByTemplateId[template.id] ?? [];
+    costs.set(template.id, taskTemplateUnitCost(template, materials, rates, equipment).costHt);
   }
   return costs;
 }

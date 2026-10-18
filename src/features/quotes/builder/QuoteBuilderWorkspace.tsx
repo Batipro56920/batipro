@@ -14,7 +14,7 @@ import { downloadQuoteBuilderPdf, getQuoteBuilderPdfBlob } from "./quoteBuilderP
 import { useQuoteBuilderStore } from "./quoteBuilderStore";
 import TaskTemplateDrawer from "../../../components/TaskTemplateDrawer";
 import { create as createTaskTemplate, list as listTaskTemplates, type TaskTemplateInput, type TaskTemplateRow } from "../../../services/taskLibrary.service";
-import { listTaskTemplatePreparationByTemplateIds, type TaskTemplateMaterialRatioRow } from "../../../services/taskTemplatePreparation.service";
+import { listTaskTemplatePreparationByTemplateIds, type TaskTemplateEquipmentItemRow, type TaskTemplateMaterialRatioRow } from "../../../services/taskTemplatePreparation.service";
 import { getCompanyHourlyRates, type CompanyHourlyRates } from "../../../services/indirectCosts.service";
 import { normalizeTaskTemplateIds } from "./quoteBuilderModel";
 import { calculateQuoteTravelCosts, normalizeQuoteTravelCostSettings } from "./quoteBuilderTravelCosts";
@@ -82,6 +82,7 @@ export function QuoteBuilderWorkspace({ onClose, costsPanel }: Props) {
   // Ratios matériaux de toutes les tâches liées du devis, pas seulement celle
   // qu'on ouvre : sans eux, le déboursé affiché serait faux.
   const [templateMaterials, setTemplateMaterials] = useState<Record<string, TaskTemplateMaterialRatioRow[]>>({});
+  const [templateEquipment, setTemplateEquipment] = useState<Record<string, TaskTemplateEquipmentItemRow[]>>({});
 
   useEffect(() => {
     let alive = true;
@@ -198,15 +199,20 @@ export function QuoteBuilderWorkspace({ onClose, costsPanel }: Props) {
     const ids = linkedTemplateKey ? linkedTemplateKey.split(",") : [];
     if (!ids.length) {
       setTemplateMaterials({});
+      setTemplateEquipment({});
       return;
     }
     let alive = true;
     void listTaskTemplatePreparationByTemplateIds(ids)
       .then((preparation) => {
-        if (alive) setTemplateMaterials(preparation.materialsByTemplateId ?? {});
+        if (alive) {
+          setTemplateMaterials(preparation.materialsByTemplateId ?? {});
+          setTemplateEquipment(preparation.equipmentByTemplateId ?? {});
+        }
       })
       .catch(() => {
         if (alive) setTemplateMaterials({});
+        if (alive) setTemplateEquipment({});
       });
     return () => {
       alive = false;
@@ -217,10 +223,10 @@ export function QuoteBuilderWorkspace({ onClose, costsPanel }: Props) {
     const map = new Map<string, QuoteLineCost>();
     for (const row of rows) {
       if (row.node.type !== "item") continue;
-      map.set(row.id, quoteItemCost(row.node, templatesById, templateMaterials, rates));
+      map.set(row.id, quoteItemCost(row.node, templatesById, templateMaterials, templateEquipment, rates));
     }
     return map;
-  }, [rows, templatesById, templateMaterials, rates]);
+  }, [rows, templatesById, templateMaterials, templateEquipment, rates]);
 
   const travelSummary = useMemo(() => (quote ? calculateQuoteTravelCosts(quote) : null), [quote]);
   const travelMode = useMemo(

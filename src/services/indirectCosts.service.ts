@@ -73,8 +73,8 @@ export function computeExploitationAnnual(entries: CompanyChargeEntry[]): number
 /** Dotation annuelle d'amortissement : valeur d'achat / durée, en linéaire. */
 export function computeAmortizationAnnual(assets: CompanyEquipmentAsset[]): number {
   return assets
-    .filter((asset) => asset.active && asset.amortizationYears > 0)
-    .reduce((sum, asset) => sum + asset.purchaseValueHt / asset.amortizationYears, 0);
+    .filter((asset) => asset.active && asset.allocationMode === "general" && asset.amortizationYears > 0)
+    .reduce((sum, asset) => sum + (asset.purchaseValueHt * asset.quantity) / asset.amortizationYears, 0);
 }
 
 function round2(value: number): number {

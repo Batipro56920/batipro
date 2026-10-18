@@ -31,6 +31,7 @@ const InvoicesPage = lazy(() => import("./pages/InvoicesPage"));
 const FinancialPage = lazy(() => import("./pages/FinancialPage"));
 const FixedChargesPage = lazy(() => import("./pages/FixedChargesPage"));
 const InvestmentsPage = lazy(() => import("./pages/InvestmentsPage"));
+const EquipmentPage = lazy(() => import("./pages/EquipmentPage"));
 const FournisseursPage = lazy(() => import("./pages/FournisseursPage"));
 const SupplierOutstandingPage = lazy(() => import("./pages/SupplierOutstandingPage"));
 const ProductCatalogPage = lazy(() => import("./features/product-catalog/pages/ProductCatalogPage"));
@@ -288,6 +289,14 @@ export default function App() {
           element={
             <RequireCompanyFeature profilePermissionKey="entreprise_parametres">
               <RouteSuspense label="Chargement des investissements..."><InvestmentsPage /></RouteSuspense>
+            </RequireCompanyFeature>
+          }
+        />
+        <Route
+          path="/materiels"
+          element={
+            <RequireCompanyFeature profilePermissionKey="entreprise_parametres">
+              <RouteSuspense label="Chargement des matériels..."><EquipmentPage /></RouteSuspense>
             </RequireCompanyFeature>
           }
         />
