@@ -46,6 +46,14 @@ const CrmTaskDialog = lazy(() => import("../features/crm/dialogs/CrmTaskDialog")
 
 type Props = { section?: CrmSection };
 
+function defaultFollowUpDateTime() {
+  const date = new Date();
+  date.setDate(date.getDate() + 1);
+  date.setHours(9, 0, 0, 0);
+  const localDate = new Date(date.getTime() - date.getTimezoneOffset() * 60_000);
+  return localDate.toISOString().slice(0, 16);
+}
+
 const EMPTY_DATASET: CrmDataset = {
   prospects: [],
   clients: [],
@@ -74,6 +82,7 @@ export default function CrmPage({ section = "dashboard" }: Props) {
   const [query, setQuery] = useState("");
   const [modal, setModal] = useState<CrmModalKey | null>(null);
   const [appointmentProspect, setAppointmentProspect] = useState<CrmProspectRow | null>(null);
+  const [taskInitialValues, setTaskInitialValues] = useState<Record<string, string> | null>(null);
   const focusedClientId = section === "clients" ? searchParams.get("client") ?? "" : "";
 
   async function refresh() {
@@ -106,6 +115,45 @@ export default function CrmPage({ section = "dashboard" }: Props) {
   const opportunityById = useMemo(() => new Map(data.opportunities.map((row) => [row.id, row])), [data.opportunities]);
   const quoteById = useMemo(() => new Map(data.quotes.map((row) => [row.id, row])), [data.quotes]);
   const projects = useMemo(() => buildProjects(data), [data]);
+
+  useEffect(() => {
+    if (loading || searchParams.get("action") !== "nouvelle-relance") return;
+
+    const projectId = searchParams.get("project");
+    const project = projectId ? projects.find((item) => item.id === projectId) ?? null : null;
+    const nextSearchParams = new URLSearchParams(searchParams);
+    nextSearchParams.delete("action");
+    nextSearchParams.delete("project");
+    setSearchParams(nextSearchParams, { replace: true });
+
+    if (!project) {
+      setError("Le projet à relancer n'est plus accessible.");
+      return;
+    }
+
+    const prospectId = project.prospect?.id ?? "";
+    const clientId = prospectId ? "" : project.client?.id ?? "";
+    if (!prospectId && !clientId && !project.opportunity?.id) {
+      setError("Ce projet ne possède pas de contact commercial à relancer.");
+      return;
+    }
+
+    setTaskInitialValues({
+      type: "relance",
+      priorite: "normale",
+      statut: "a_faire",
+      titre: `Relancer ${project.clientName} - ${project.name}`,
+      description: project.nextAction
+        ? `Projet : ${project.name}\nAction prévue : ${project.nextAction}`
+        : `Projet : ${project.name}`,
+      due_at: defaultFollowUpDateTime(),
+      prospect_id: prospectId,
+      client_id: clientId,
+      opportunity_id: project.opportunity?.id ?? "",
+    });
+    setModal("task");
+  }, [loading, projects, searchParams, setSearchParams]);
+
   const projectPathByQuoteId = useMemo(() => {
     const paths = new Map<string, string>();
     for (const project of projects) {
@@ -157,6 +205,7 @@ export default function CrmPage({ section = "dashboard" }: Props) {
       await action();
       setModal(null);
       setAppointmentProspect(null);
+      setTaskInitialValues(null);
       await refresh();
     } catch (err: any) {
       setError(err?.message ?? "Action CRM impossible.");
@@ -235,7 +284,7 @@ export default function CrmPage({ section = "dashboard" }: Props) {
       ) : section === "library" ? (
         <CrmLibrarySection templates={data.taskTemplates} />
       ) : section === "agenda" ? (
-        <CrmAgendaSection tasks={data.tasks} appointments={data.appointments} onTask={() => setModal("task")} onAppointment={() => setModal("appointment")} onDone={(row) => submitSafely(async () => updateCrmTask(row.id, { statut: "terminee" }))} />
+        <CrmAgendaSection tasks={data.tasks} appointments={data.appointments} onTask={() => { setTaskInitialValues(null); setModal("task"); }} onAppointment={() => setModal("appointment")} onDone={(row) => submitSafely(async () => updateCrmTask(row.id, { statut: "terminee" }))} />
       ) : section === "stats" ? (
         <CrmStatsSection data={data} kpis={kpis} transformationRate={transformationRate} />
       ) : (
@@ -245,7 +294,7 @@ export default function CrmPage({ section = "dashboard" }: Props) {
       <Suspense fallback={null}>
         {modal === "prospect" ? <CrmProspectDialog saving={saving} onClose={() => setModal(null)} onSubmit={(payload) => submitSafely(() => createProspectWithInitialOpportunity(payload))} /> : null}
         {modal === "client" ? <CrmClientDialog saving={saving} onClose={() => setModal(null)} onSubmit={(payload) => submitSafely(() => createCrmClient(payload))} /> : null}
-        {modal === "task" ? <CrmTaskDialog data={data} saving={saving} onClose={() => setModal(null)} onSubmit={(payload) => submitSafely(() => createCrmTask(payload))} /> : null}
+        {modal === "task" ? <CrmTaskDialog data={data} saving={saving} initialValues={taskInitialValues ?? undefined} onClose={() => { setModal(null); setTaskInitialValues(null); }} onSubmit={(payload) => submitSafely(() => createCrmTask(payload))} /> : null}
         {modal === "appointment" ? <CrmAppointmentDialog data={data} saving={saving} initialProspect={appointmentProspect} onClose={() => { setModal(null); setAppointmentProspect(null); }} onSubmit={(payload) => submitSafely(() => createCrmAppointment(payload))} /> : null}
         {modal === "document" ? <CrmDocumentDialog data={data} saving={saving} onClose={() => setModal(null)} onSubmit={(payload) => submitSafely(() => createCrmDocument(payload))} /> : null}
         {modal === "purchase" ? <CrmPurchaseDialog data={data} saving={saving} onClose={() => setModal(null)} onSubmit={(payload) => submitSafely(() => createCrmPurchase(payload))} /> : null}

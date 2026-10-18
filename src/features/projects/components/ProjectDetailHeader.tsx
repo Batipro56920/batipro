@@ -144,7 +144,7 @@ export function ProjectDetailHeader({ project, onProjectUpdated }: { project: Pr
             <FileText className="h-4 w-4" />
             {quote ? "Ouvrir devis" : "Créer devis"}
           </Link>
-          <Link to="/crm/agenda" className="inline-flex h-9 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-3 text-sm font-medium text-slate-900 transition hover:bg-slate-50">
+          <Link to={`/crm/agenda?action=nouvelle-relance&project=${encodeURIComponent(project.id)}`} className="inline-flex h-9 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-3 text-sm font-medium text-slate-900 transition hover:bg-slate-50">
             <RefreshCw className="h-4 w-4" />
             Relancer
           </Link>

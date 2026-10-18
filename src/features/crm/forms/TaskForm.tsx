@@ -3,8 +3,25 @@ import type { CrmDataset, CrmTaskRow } from "../../../services/crm.service";
 import { CrmModal, Input, SelectEntity, Submit, TextArea } from "./CrmFormPrimitives";
 
 
-export default function TaskForm({ data, saving, onClose, onSubmit }: { data: CrmDataset; saving: boolean; onClose: () => void; onSubmit: (payload: Partial<CrmTaskRow>) => void }) {
-  const [form, setForm] = useState<Record<string, string>>({ type: "relance", priorite: "normale", statut: "a_faire" });
+export default function TaskForm({
+  data,
+  saving,
+  initialValues,
+  onClose,
+  onSubmit,
+}: {
+  data: CrmDataset;
+  saving: boolean;
+  initialValues?: Record<string, string>;
+  onClose: () => void;
+  onSubmit: (payload: Partial<CrmTaskRow>) => void;
+}) {
+  const [form, setForm] = useState<Record<string, string>>(() => ({
+    type: "relance",
+    priorite: "normale",
+    statut: "a_faire",
+    ...initialValues,
+  }));
   return (
     <CrmModal title="Créer une tâche commerciale" onClose={onClose}>
       <form onSubmit={(e) => { e.preventDefault(); onSubmit(form as Partial<CrmTaskRow>); }} className="space-y-4">
