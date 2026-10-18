@@ -154,6 +154,21 @@ export default function CrmPage({ section = "dashboard" }: Props) {
     setModal("task");
   }, [loading, projects, searchParams, setSearchParams]);
 
+  const agendaProjectPaths = useMemo(() => {
+    const taskPaths = new Map<string, string>();
+    const appointmentPaths = new Map<string, string>();
+    for (const project of projects) {
+      const path = `/projets/${project.id}`;
+      for (const task of project.tasks) {
+        if (!taskPaths.has(task.id)) taskPaths.set(task.id, path);
+      }
+      for (const appointment of project.appointments) {
+        if (!appointmentPaths.has(appointment.id)) appointmentPaths.set(appointment.id, path);
+      }
+    }
+    return { taskPaths, appointmentPaths };
+  }, [projects]);
+
   const projectPathByQuoteId = useMemo(() => {
     const paths = new Map<string, string>();
     for (const project of projects) {
@@ -284,7 +299,7 @@ export default function CrmPage({ section = "dashboard" }: Props) {
       ) : section === "library" ? (
         <CrmLibrarySection templates={data.taskTemplates} />
       ) : section === "agenda" ? (
-        <CrmAgendaSection tasks={data.tasks} appointments={data.appointments} onTask={() => { setTaskInitialValues(null); setModal("task"); }} onAppointment={() => setModal("appointment")} onDone={(row) => submitSafely(async () => updateCrmTask(row.id, { statut: "terminee" }))} />
+        <CrmAgendaSection tasks={data.tasks} appointments={data.appointments} projectPathByTaskId={agendaProjectPaths.taskPaths} projectPathByAppointmentId={agendaProjectPaths.appointmentPaths} onTask={() => { setTaskInitialValues(null); setModal("task"); }} onAppointment={() => setModal("appointment")} onDone={(row) => submitSafely(async () => updateCrmTask(row.id, { statut: "terminee" }))} />
       ) : section === "stats" ? (
         <CrmStatsSection data={data} kpis={kpis} transformationRate={transformationRate} />
       ) : (
