@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { ProductProposalsPanel } from "../components/ProductProposalsPanel";
 import { Link, useSearchParams } from "react-router-dom";
-import { FileText, PackageSearch, Plus, RefreshCw, Trash2, UploadCloud, X } from "lucide-react";
+import { FileText, PackageSearch, Pencil, Plus, RefreshCw, ShoppingCart, Trash2, UploadCloud, X } from "lucide-react";
 import type { SupplierRow } from "../../../services/suppliers.service";
 import { listSuppliers } from "../../../services/suppliers.service";
 import type { DocumentUnit } from "../../document-engine";
@@ -300,8 +300,8 @@ export default function ProductCatalogPage() {
       {loading ? <div className="rounded-3xl border border-slate-200 bg-white p-8 text-center text-sm text-slate-500">Chargement du catalogue produits...</div> : null}
 
       {!loading ? <section className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm">
-        <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_180px_180px_180px_160px]">
-          <input className={inputClass} placeholder="Rechercher désignation, référence, marque..." value={query} onChange={(event) => updateQuery(event.target.value)} />
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
+          <input className={`${inputClass} sm:col-span-2 xl:col-span-2`} placeholder="Rechercher désignation, référence, marque..." value={query} onChange={(event) => updateQuery(event.target.value)} />
           <Select value={categoryFilter} onChange={setCategoryFilter} options={["all", ...categories]} labels={{ all: "Toutes catégories" }} />
           <Select value={supplierFilter} onChange={updateSupplierFilter} options={["all", ...suppliers.map((supplier) => supplier.id)]} labels={Object.fromEntries([["all", "Tous fournisseurs"], ...suppliers.map((supplier) => [supplier.id, supplier.name])])} />
           <Select value={brandFilter} onChange={setBrandFilter} options={["all", ...brands]} labels={{ all: "Toutes marques" }} />
@@ -342,20 +342,24 @@ export default function ProductCatalogPage() {
         </div>
       ) : null}
 
-      {!loading ? <section className="overflow-x-auto rounded-3xl border border-slate-200 bg-white shadow-sm">
-        <table className="min-w-[1040px] divide-y divide-slate-100 text-sm">
+      {!loading ? <section className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
+        <div className="hidden border-b border-slate-100 px-5 py-4 sm:flex sm:items-center sm:justify-between">
+          <div>
+            <h2 className="font-semibold text-slate-950">Produits</h2>
+            <p className="mt-0.5 text-xs text-slate-500">{filtered.length} produit{filtered.length > 1 ? "s" : ""} affiché{filtered.length > 1 ? "s" : ""}</p>
+          </div>
+          <p className="text-xs text-slate-400">Cliquez sur une ligne pour ouvrir la fiche complète</p>
+        </div>
+        <div className="overflow-x-auto">
+        <table className="w-full min-w-[820px] table-fixed divide-y divide-slate-100 text-sm">
           <thead className="bg-slate-50 text-left text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">
             <tr>
-              <th className="px-4 py-2">Produit</th>
-              <th className="px-4 py-2">Catégorie</th>
-              <th className="px-4 py-2">Marque</th>
-              <th className="px-4 py-2">Fournisseur</th>
-              <th className="px-4 py-2">Unité</th>
-              <th className="px-4 py-2 text-right">Achat colis HT</th>
-              <th className="px-4 py-2 text-right">Prix à l'unité</th>
-              <th className="px-4 py-2 text-right">Vente conseillée</th>
-              <th className="px-4 py-2 text-right">Docs</th>
-              <th className="px-4 py-2 text-right">Actions</th>
+              <th className="w-[31%] px-5 py-3">Produit</th>
+              <th className="w-[14%] px-3 py-3">Catégorie</th>
+              <th className="w-[17%] px-3 py-3">Fournisseur</th>
+              <th className="w-[15%] px-3 py-3 text-right">Prix d'achat HT</th>
+              <th className="w-[13%] px-3 py-3 text-right">Vente conseillée</th>
+              <th className="w-[10%] px-4 py-3 text-right">Actions</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
@@ -372,12 +376,17 @@ export default function ProductCatalogPage() {
                   product.id === activeProductId ? "bg-blue-50 ring-1 ring-inset ring-blue-200" : "hover:bg-slate-50",
                 ].join(" ")}
               >
-                <td className="max-w-[320px] px-4 py-1.5 align-middle">
+                <td className="px-5 py-3 align-middle">
                   <div className="truncate font-semibold text-slate-950" title={product.designation}>{product.designation}</div>
+                  <div className="mt-1 flex min-w-0 items-center gap-2 text-xs text-slate-400">
+                    <span className="truncate">{product.brand || "Sans marque"}</span>
+                    <span aria-hidden="true">•</span>
+                    <span className="shrink-0">{product.unit}</span>
+                    {product.internalReference ? <><span aria-hidden="true">•</span><span className="truncate">Réf. {product.internalReference}</span></> : null}
+                  </div>
                 </td>
-                <td className="px-4 py-1.5 align-middle text-slate-600">{product.category || "-"}</td>
-                <td className="px-4 py-1.5 align-middle text-slate-600">{product.brand || "-"}</td>
-                <td className="max-w-[160px] px-4 py-1.5 align-middle text-slate-600">
+                <td className="px-3 py-3 align-middle text-slate-600"><span className="line-clamp-2">{product.category || "-"}</span></td>
+                <td className="px-3 py-3 align-middle text-slate-600">
                   <div className="flex min-w-0 items-center gap-1.5">
                     {product.mainSupplierId && product.mainSupplierName ? (
                       <Link
@@ -395,23 +404,25 @@ export default function ProductCatalogPage() {
                     ) : null}
                   </div>
                 </td>
-                <td className="px-4 py-1.5 align-middle text-slate-600">{product.unit}</td>
-                <td className="px-4 py-1.5 text-right align-middle font-semibold">{formatCurrency(getPurchasePackagePrice(product, supplierFilter))}</td>
-                <td className="px-4 py-1.5 text-right align-middle font-semibold">{formatUnitPurchasePrice(product, supplierFilter)}</td>
-                <td className="px-4 py-1.5 text-right align-middle font-semibold">{formatCurrency(getRecommendedSalePrice(product, supplierFilter))}</td>
-                <td className="px-4 py-1.5 text-right align-middle">{product.documents.length}</td>
-                <td className="px-4 py-1.5 align-middle" onClick={(event) => event.stopPropagation()}>
-                  <div className="flex justify-end gap-2">
+                <td className="px-3 py-3 text-right align-middle">
+                  <div className="font-semibold text-slate-950">{formatUnitPurchasePrice(product, supplierFilter)} <span className="font-normal text-slate-400">/{product.unit}</span></div>
+                  <div className="mt-1 text-xs text-slate-400">Colis : {formatCurrency(getPurchasePackagePrice(product, supplierFilter))}</div>
+                </td>
+                <td className="px-3 py-3 text-right align-middle font-semibold text-slate-950">{formatCurrency(getRecommendedSalePrice(product, supplierFilter))}</td>
+                <td className="px-4 py-3 align-middle" onClick={(event) => event.stopPropagation()}>
+                  <div className="flex justify-end gap-1.5">
                     {orderSupplierId ? (
                       <Link
                         to={`/bons-commande?supplierId=${encodeURIComponent(orderSupplierId)}&productId=${encodeURIComponent(product.id)}&newOrder=1`}
-                        className="rounded-lg border border-blue-200 px-2 py-1 text-xs font-semibold text-blue-700 hover:bg-blue-50"
+                        title="Commander ce produit"
+                        aria-label="Commander ce produit"
+                        className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-blue-200 text-blue-700 hover:bg-blue-50"
                       >
-                        Commander
+                        <ShoppingCart className="h-3.5 w-3.5" />
                       </Link>
                     ) : null}
-                    <button type="button" className="rounded-lg border px-2 py-1 text-xs hover:bg-slate-50" onClick={() => openProductDrawer(product)}>Modifier</button>
-                    <button type="button" className="rounded-lg border border-red-200 px-2 py-1 text-xs text-red-600 hover:bg-red-50" onClick={() => removeProduct(product.id)}>
+                    <button type="button" title={`Modifier${product.documents.length ? ` · ${product.documents.length} document${product.documents.length > 1 ? "s" : ""}` : ""}`} aria-label="Modifier le produit" className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50" onClick={() => openProductDrawer(product)}><Pencil className="h-3.5 w-3.5" /></button>
+                    <button type="button" title="Supprimer le produit" aria-label="Supprimer le produit" className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-red-200 text-red-600 hover:bg-red-50" onClick={() => removeProduct(product.id)}>
                       <Trash2 className="h-3.5 w-3.5" />
                     </button>
                   </div>
@@ -419,9 +430,10 @@ export default function ProductCatalogPage() {
               </tr>
               );
             })}
-            {!filtered.length ? <tr><td colSpan={10} className="px-4 py-12"><EmptyCatalogState onCreate={() => openProductDrawer({ ...EMPTY_DRAFT })} /></td></tr> : null}
+            {!filtered.length ? <tr><td colSpan={6} className="px-4 py-12"><EmptyCatalogState onCreate={() => openProductDrawer({ ...EMPTY_DRAFT })} /></td></tr> : null}
           </tbody>
         </table>
+        </div>
       </section> : null}
 
       {editing ? (
