@@ -155,19 +155,25 @@ export default function CrmPage({ section = "dashboard" }: Props) {
   }, [loading, projects, searchParams, setSearchParams]);
 
   const agendaProjectPaths = useMemo(() => {
+    const pathForRelation = (relation: { opportunity_id: string | null; prospect_id: string | null; client_id: string | null }) => {
+      const project =
+        (relation.opportunity_id ? projects.find((item) => item.opportunity?.id === relation.opportunity_id) : null) ??
+        (relation.prospect_id ? projects.find((item) => item.prospect?.id === relation.prospect_id) : null) ??
+        (relation.client_id ? projects.find((item) => item.client?.id === relation.client_id) : null);
+      return project ? `/projets/${project.id}` : null;
+    };
     const taskPaths = new Map<string, string>();
     const appointmentPaths = new Map<string, string>();
-    for (const project of projects) {
-      const path = `/projets/${project.id}`;
-      for (const task of project.tasks) {
-        if (!taskPaths.has(task.id)) taskPaths.set(task.id, path);
-      }
-      for (const appointment of project.appointments) {
-        if (!appointmentPaths.has(appointment.id)) appointmentPaths.set(appointment.id, path);
-      }
+    for (const task of data.tasks) {
+      const path = pathForRelation(task);
+      if (path) taskPaths.set(task.id, path);
+    }
+    for (const appointment of data.appointments) {
+      const path = pathForRelation(appointment);
+      if (path) appointmentPaths.set(appointment.id, path);
     }
     return { taskPaths, appointmentPaths };
-  }, [projects]);
+  }, [data.appointments, data.tasks, projects]);
 
   const projectPathByQuoteId = useMemo(() => {
     const paths = new Map<string, string>();
