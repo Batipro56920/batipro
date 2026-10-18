@@ -147,9 +147,9 @@ export default function CrmPage({ section = "dashboard" }: Props) {
         ? `Projet : ${project.name}\nAction prévue : ${project.nextAction}`
         : `Projet : ${project.name}`,
       due_at: defaultFollowUpDateTime(),
-      prospect_id: prospectId,
-      client_id: clientId,
-      opportunity_id: project.opportunity?.id ?? "",
+      ...(prospectId ? { prospect_id: prospectId } : {}),
+      ...(clientId ? { client_id: clientId } : {}),
+      ...(project.opportunity?.id ? { opportunity_id: project.opportunity.id } : {}),
     });
     setModal("task");
   }, [loading, projects, searchParams, setSearchParams]);
