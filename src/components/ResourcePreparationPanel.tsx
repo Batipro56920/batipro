@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { portalResourceCatalog, portalResourcePreparations, portalResourcePrepare, portalResourceIssue, type PortalResource, type PortalResourcePreparation } from "../services/intervenantPortal.service";
+import { portalResourceCatalog, portalResourcePreparations, portalResourcePrepare, portalResourceIssue, portalResourceComplete, type PortalResource, type PortalResourcePreparation } from "../services/intervenantPortal.service";
 
 export default function ResourcePreparationPanel({ token, chantierId, phase }: { token: string; chantierId: string; phase: "matin" | "soir" }) {
   const today = new Date().toLocaleDateString("sv-SE");
@@ -31,6 +31,20 @@ export default function ResourcePreparationPanel({ token, chantierId, phase }: {
     catch (err) { setError(err instanceof Error ? err.message : "Enregistrement impossible"); }
     finally { setBusy(false); }
   }
+  async function complete(item: PortalResourcePreparation) {
+    const usage = window.prompt(item.resource_type === "equipment" ? "Durée réellement utilisée (heures ou jours selon la fiche), ex. 3,5" : "Quantité réellement consommée", "0");
+    if (usage === null) return;
+    const used = Number(usage.replace(",", "."));
+    if (!Number.isFinite(used) || used < 0) return setError("Quantité utilisée invalide.");
+    const remaining = window.prompt("Quantité retournée au dépôt", "0");
+    if (remaining === null) return;
+    const returned = Number(remaining.replace(",", "."));
+    if (!Number.isFinite(returned) || returned < 0 || returned > item.quantity || (item.resource_type === "consumable" && used + returned > item.quantity)) return setError("Quantités incohérentes.");
+    setBusy(true); setError("");
+    try { await portalResourceComplete(token, chantierId, item.id, used, returned); await refresh(); }
+    catch (err) { setError(err instanceof Error ? err.message : "Clôture impossible."); }
+    finally { setBusy(false); }
+  }
   async function issue(id: string) {
     setBusy(true);setError("");
     try { await portalResourceIssue(token, chantierId, id); await refresh(); }
@@ -43,7 +57,7 @@ export default function ResourcePreparationPanel({ token, chantierId, phase }: {
     <label className="block text-xs font-medium">Date prévue<input type="date" min={today} value={date} onChange={event => setDate(event.target.value)} className="mt-1 w-full rounded-xl border p-2.5 text-sm"/></label>
     <div className="space-y-2">{items.map(item => <div key={item.id} className="flex items-center justify-between gap-2 rounded-xl bg-slate-50 p-3">
       <div><p className="text-sm font-semibold">{item.resource_name}</p><p className="text-xs text-slate-500">{item.quantity.toLocaleString("fr-FR")} {item.unit} · {item.resource_type === "equipment" ? "Matériel" : "Consommable"}</p></div>
-      {item.status === "issued" ? <span className="text-xs font-semibold text-emerald-700">Pris au dépôt</span> : phase === "matin" ? <button disabled={busy} onClick={() => void issue(item.id)} className="rounded-lg bg-blue-600 px-3 py-2 text-xs font-semibold text-white">Confirmer la prise</button> : <span className="text-xs font-semibold text-blue-700">Réservé</span>}
+      {item.completed_at ? <span className="text-xs font-semibold text-emerald-700">Clôturé</span> : item.status === "issued" ? <button disabled={busy} onClick={() => void complete(item)} className="rounded-lg border border-emerald-200 px-3 py-2 text-xs font-semibold text-emerald-700">Déclarer utilisation / retour</button> : phase === "matin" ? <button disabled={busy} onClick={() => void issue(item.id)} className="rounded-lg bg-blue-600 px-3 py-2 text-xs font-semibold text-white">Confirmer la prise</button> : <span className="text-xs font-semibold text-blue-700">Réservé</span>}
     </div>)}{!items.length && <p className="text-xs text-slate-500">Aucune préparation pour cette date.</p>}</div>
     <div className="space-y-2 rounded-xl border border-dashed p-3">
       <p className="text-sm font-semibold">{phase === "soir" ? "Ajouter à la préparation" : "Ajouter un imprévu"}</p>
