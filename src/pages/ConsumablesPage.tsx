@@ -13,8 +13,8 @@ function DecimalInput({ value, onChange, label, min = 0 }: { value: number; onCh
     <input className={field} type="text" inputMode="decimal" autoComplete="off" value={text}
       onFocus={(event) => event.currentTarget.select()}
       onChange={(event) => {
-        const next = event.target.value.replace(/\\./g, ",").replace(/[^0-9,]/g, "");
-        if (!/^\\d*(,\\d*)?$/.test(next)) return;
+        const next = event.target.value.replace(/\./g, ",").replace(/[^0-9,]/g, "");
+        if (!/^\d*(,\d*)?$/.test(next)) return;
         setText(next);
         if (next && next !== ",") onChange(Math.max(min, Number(next.replace(",", "."))));
       }}
