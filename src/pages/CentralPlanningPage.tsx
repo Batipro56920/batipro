@@ -26,7 +26,7 @@ export default function CentralPlanningPage(){
     listChantiers(),
     supabase.from("intervenants").select("id,nom").eq("is_active",true),
     supabase.from("chantier_task_planning_segments").select("id,chantier_id,intervenant_id,start_at,end_at,start_date,duration_days").limit(3000),
-    supabase.from("portal_resource_preparations").select("id,chantier_id,resource_id,resource_name,quantity,planned_for,status,resource_type").gte("planned_for",iso(week)).lte("planned_for",iso(shifted(week,6))).neq("status","cancelled").limit(3000),
+    (supabase as any).from("portal_resource_preparations").select("id,chantier_id,resource_id,resource_name,quantity,planned_for,status,resource_type").gte("planned_for",iso(week)).lte("planned_for",iso(shifted(week,6))).neq("status","cancelled").limit(3000),
     getCompanySettings()]);
    if(people.error)throw people.error;if(alloc.error)throw alloc.error;if(book.error)throw book.error;
    if(active){setSites(siteRows.map(s=>({id:s.id,name:s.nom})));setUsers((people.data??[]).map(p=>({id:p.id,name:p.nom})));setAssignments((alloc.data??[]) as Assignment[]);setBookings((book.data??[]) as Booking[]);setEquipment(normalizeIndirectCosts(settings.indirect_costs).equipmentAssets.map(e=>({id:e.id,name:e.name})));}
