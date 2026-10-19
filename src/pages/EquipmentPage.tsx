@@ -3,6 +3,8 @@ import { Pencil, Plus, Save, Trash2, Wrench, X } from "lucide-react";
 import {
   getCompanySettings,
   equipmentEffectiveHourlySale,
+  equipmentDailyCost,
+  equipmentEffectiveDailySale,
   equipmentHourlyCost,
   equipmentPaybackYears,
   equipmentSuggestedHourlySale,
@@ -19,7 +21,7 @@ function formatCurrency(value: number) {
 }
 
 function emptyAsset(): CompanyEquipmentAsset {
-  return { id: "", name: "", quantity: 1, purchaseValueHt: 0, amortizationYears: 5, annualUsageHours: 400, annualMaintenanceHt: 0, hourlySaleRateHt: 0, allocationMode: "task", active: true };
+  return { id: "", name: "", quantity: 1, purchaseValueHt: 0, amortizationYears: 5, annualUsageHours: 400, annualMaintenanceHt: 0, hourlySaleRateHt: 0, billingMode: "hour", annualUsageDays: 60, dailySaleRateHt: 0, allocationMode: "task", active: true };
 }
 
 export default function EquipmentPage() {
@@ -105,11 +107,11 @@ export default function EquipmentPage() {
 
       <section className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
         <div className="hidden grid-cols-[minmax(0,2fr)_70px_115px_100px_100px_100px_90px] gap-3 border-b bg-slate-50 px-5 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500 md:grid">
-          <span>Désignation</span><span>Nombre</span><span>Prix HT</span><span>Usage/an</span><span>Coût / h</span><span>Vente / h</span><span />
+          <span>Désignation</span><span>Nombre</span><span>Prix HT</span><span>Usage/an</span><span>Coût / unité</span><span>Vente / unité</span><span />
         </div>
         {assets.map((asset) => (
           <div key={asset.id} className="grid gap-2 border-b border-slate-100 px-5 py-4 last:border-0 md:grid-cols-[minmax(0,2fr)_70px_115px_100px_100px_100px_90px] md:items-center">
-            <div><div className="font-semibold text-slate-950">{asset.name}</div><div className="text-xs text-slate-500">Amorti sur {asset.amortizationYears} an(s) · entretien {formatCurrency(asset.annualMaintenanceHt)}/an</div></div><div className="text-sm text-slate-700">{asset.quantity}</div><div className="text-sm text-slate-700">{formatCurrency(asset.purchaseValueHt)}</div><div className="text-sm text-slate-700">{asset.annualUsageHours} h</div><div className="text-sm font-semibold text-slate-900">{formatCurrency(equipmentHourlyCost(asset))}</div><div className="text-sm font-semibold text-blue-700">{formatCurrency(equipmentEffectiveHourlySale(asset, defaultMarginRate))}</div>
+            <div><div className="font-semibold text-slate-950">{asset.name}</div><div className="text-xs text-slate-500">Amorti sur {asset.amortizationYears} an(s) · entretien {formatCurrency(asset.annualMaintenanceHt)}/an</div></div><div className="text-sm text-slate-700">{asset.quantity}</div><div className="text-sm text-slate-700">{formatCurrency(asset.purchaseValueHt)}</div><div className="text-sm text-slate-700">{asset.billingMode === "day" ? `${asset.annualUsageDays} j/an` : `${asset.annualUsageHours} h/an`}</div><div className="text-sm font-semibold text-slate-900">{formatCurrency(asset.billingMode === "day" ? equipmentDailyCost(asset) : equipmentHourlyCost(asset))}/{asset.billingMode === "day" ? "j" : "h"}</div><div className="text-sm font-semibold text-blue-700">{formatCurrency(asset.billingMode === "day" ? equipmentEffectiveDailySale(asset, defaultMarginRate) : equipmentEffectiveHourlySale(asset, defaultMarginRate))}/{asset.billingMode === "day" ? "j" : "h"}</div>
             <div className="flex gap-1"><button onClick={() => openEdit(asset)} className="rounded-lg border p-2 text-slate-600" aria-label="Modifier"><Pencil className="h-4 w-4" /></button><button onClick={() => void persist(assets.filter((row) => row.id !== asset.id), "Matériel supprimé.")} className="rounded-lg border border-red-200 p-2 text-red-600" aria-label="Supprimer"><Trash2 className="h-4 w-4" /></button></div>
           </div>
         ))}
@@ -122,9 +124,11 @@ export default function EquipmentPage() {
         <Field label="Désignation"><input autoFocus className={INPUT} value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="Ex : marteau-piqueur" /></Field>
         <div className="grid gap-4 sm:grid-cols-2"><Field label="Nombre"><input type="number" min={1} className={INPUT} value={form.quantity} onChange={(e) => setForm({ ...form, quantity: Math.max(1, Math.round(Number(e.target.value) || 1)) })} /></Field><Field label="Prix unitaire HT"><input type="number" min={0} step="0.01" className={INPUT} value={form.purchaseValueHt} onChange={(e) => setForm({ ...form, purchaseValueHt: Math.max(0, Number(e.target.value) || 0) })} /></Field></div>
         <Field label="Durée d'amortissement (années)"><input type="number" min={0.1} step="0.1" className={INPUT} value={form.amortizationYears} onChange={(e) => setForm({ ...form, amortizationYears: Math.max(0, Number(e.target.value) || 0) })} /></Field>
+        <Field label="Mode de facturation"><select className={INPUT} value={form.billingMode} onChange={(e) => setForm({ ...form, billingMode: e.target.value === "day" ? "day" : "hour" })}><option value="hour">À l'heure</option><option value="day">Forfait à la journée</option></select></Field>
+        {form.billingMode === "day" ? <><Field label="Journées réelles d'utilisation prévues par an"><input type="number" min={1} step={1} className={INPUT} value={form.annualUsageDays} onChange={(e) => setForm({ ...form, annualUsageDays: Math.max(0, Number(e.target.value) || 0) })} /></Field><Field label="Forfait de vente HT par journée (0 = calcul automatique)"><input type="number" min={0} step="0.01" className={INPUT} value={form.dailySaleRateHt} onChange={(e) => setForm({ ...form, dailySaleRateHt: Math.max(0, Number(e.target.value) || 0) })} /></Field><p className="text-xs text-slate-500">Le coût journalier répartit amortissement et entretien sur les journées d'utilisation prévues. Le chiffrage des tâches reste proportionnel au temps (base 7 h/j) pour éviter de facturer un jour entier sur chaque tâche.</p></> : null}
         <div className="grid gap-4 sm:grid-cols-2"><Field label="Utilisation estimée (h/an)"><input type="number" min={1} step="1" className={INPUT} value={form.annualUsageHours} onChange={(e) => setForm({ ...form, annualUsageHours: Math.max(0, Number(e.target.value) || 0) })} /></Field><Field label="Entretien + consommables HT/an"><input type="number" min={0} step="0.01" className={INPUT} value={form.annualMaintenanceHt} onChange={(e) => setForm({ ...form, annualMaintenanceHt: Math.max(0, Number(e.target.value) || 0) })} /></Field></div>
-        <Field label="Tarif de vente HT / heure (facultatif)"><input type="number" min={0} step="0.01" className={INPUT} value={form.hourlySaleRateHt || ""} onChange={(e) => setForm({ ...form, hourlySaleRateHt: Math.max(0, Number(e.target.value) || 0) })} placeholder={`Automatique : ${formatCurrency(equipmentSuggestedHourlySale(form, defaultMarginRate))}`} /></Field>
-        <div className="grid gap-3 rounded-2xl bg-slate-50 p-4 sm:grid-cols-3"><Metric label="Coût réel / h" value={formatCurrency(equipmentHourlyCost(form))} /><Metric label="Vente / h" value={formatCurrency(equipmentEffectiveHourlySale(form, defaultMarginRate))} /><Metric label="Rentabilisé en" value={equipmentPaybackYears(form, defaultMarginRate) ? `${equipmentPaybackYears(form, defaultMarginRate)!.toFixed(1)} an(s)` : "—"} /></div>
+        {form.billingMode === "hour" ? <Field label="Tarif de vente HT / heure (facultatif)"><input type="number" min={0} step="0.01" className={INPUT} value={form.hourlySaleRateHt || ""} onChange={(e) => setForm({ ...form, hourlySaleRateHt: Math.max(0, Number(e.target.value) || 0) })} placeholder={`Automatique : ${formatCurrency(equipmentSuggestedHourlySale(form, defaultMarginRate))}`} /></Field> : null}
+        <div className="grid gap-3 rounded-2xl bg-slate-50 p-4 sm:grid-cols-3"><Metric label="Coût réel / h" value={formatCurrency(form.billingMode === "day" ? equipmentDailyCost(form) : equipmentHourlyCost(form))} /><Metric label="Vente / h" value={formatCurrency(form.billingMode === "day" ? equipmentEffectiveDailySale(form, defaultMarginRate) : equipmentEffectiveHourlySale(form, defaultMarginRate))} /><Metric label="Rentabilisé en" value={equipmentPaybackYears(form, defaultMarginRate) ? `${equipmentPaybackYears(form, defaultMarginRate)!.toFixed(1)} an(s)` : "—"} /></div>
         <button disabled={saving} onClick={() => void save()} className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-blue-600 font-semibold text-white disabled:opacity-60"><Save className="h-4 w-4" /> Enregistrer</button>
       </div></div></div> : null}
     </div>

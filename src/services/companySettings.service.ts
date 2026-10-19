@@ -103,6 +103,12 @@ export type CompanyEquipmentAsset = {
   annualMaintenanceHt: number;
   /** Tarif facturé par heure d'utilisation. 0 = calcul automatique avec la marge de l'entreprise. */
   hourlySaleRateHt: number;
+  /** Mode de chiffrage du matériel : à l'heure ou au forfait journalier. */
+  billingMode: "hour" | "day";
+  /** Journées d'utilisation prévues par an pour calculer le coût journalier réel. */
+  annualUsageDays: number;
+  /** Forfait journalier HT. 0 = tarif conseillé selon la marge. */
+  dailySaleRateHt: number;
   /** general = réparti dans les charges ; task = imputé seulement aux tâches liées. */
   allocationMode: "general" | "task";
   active: boolean;
@@ -125,6 +131,25 @@ export function equipmentHourlyCost(asset: CompanyEquipmentAsset): number {
   if (asset.amortizationYears <= 0 || asset.annualUsageHours <= 0) return 0;
   const annualDepreciation = asset.purchaseValueHt / asset.amortizationYears;
   return (annualDepreciation + asset.annualMaintenanceHt) / asset.annualUsageHours;
+}
+
+export function equipmentDailyCost(asset: CompanyEquipmentAsset): number {
+  if (asset.amortizationYears <= 0 || asset.annualUsageDays <= 0) return 0;
+  return (asset.purchaseValueHt / asset.amortizationYears + asset.annualMaintenanceHt) / asset.annualUsageDays;
+}
+
+export function equipmentEffectiveDailySale(asset: CompanyEquipmentAsset, marginRate: number): number {
+  return asset.dailySaleRateHt > 0 ? asset.dailySaleRateHt : equipmentDailyCost(asset) * (1 + Math.max(0, marginRate) / 100);
+}
+
+/** Répartition proportionnelle en chiffrage unitaire, sans arrondir chaque tâche à un jour complet. */
+export function equipmentTaskAmounts(asset: CompanyEquipmentAsset, marginRate: number, hours: number): { costHt: number; saleHt: number } {
+  const duration = Math.max(0, hours);
+  if (asset.billingMode === "day") {
+    const dailyHours = 7;
+    return { costHt: equipmentDailyCost(asset) * duration / dailyHours, saleHt: equipmentEffectiveDailySale(asset, marginRate) * duration / dailyHours };
+  }
+  return { costHt: equipmentHourlyCost(asset) * duration, saleHt: equipmentEffectiveHourlySale(asset, marginRate) * duration };
 }
 
 export function equipmentSuggestedHourlySale(asset: CompanyEquipmentAsset, marginRate: number): number {
@@ -156,6 +181,9 @@ export function normalizeIndirectCosts(raw: unknown): CompanyIndirectCostsSettin
       annualUsageHours: Math.max(1, Number(asset?.annualUsageHours) || DEFAULT_PRODUCTIVE_HOURS_PER_EMPLOYEE_YEAR),
       annualMaintenanceHt: Math.max(0, Number(asset?.annualMaintenanceHt) || 0),
       hourlySaleRateHt: Math.max(0, Number(asset?.hourlySaleRateHt) || 0),
+      billingMode: asset?.billingMode === "day" ? "day" : "hour",
+      annualUsageDays: Math.max(1, Number(asset?.annualUsageDays) || Math.ceil((Number(asset?.annualUsageHours) || DEFAULT_EQUIPMENT_ANNUAL_USAGE_HOURS) / 7)),
+      dailySaleRateHt: Math.max(0, Number(asset?.dailySaleRateHt) || 0),
       // Les anciennes fiches n'avaient pas de mode : elles suivent désormais
       // le modèle demandé, c'est-à-dire un amortissement par tâche liée.
       allocationMode: asset?.allocationMode === "general" ? "general" : "task",

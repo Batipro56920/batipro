@@ -27,6 +27,7 @@ import type { DocumentUnit } from "../features/document-engine";
 import { listSuppliers, type SupplierRow } from "../services/suppliers.service";
 import { TaskCostEngine } from "../features/task-cost-engine/TaskCostEngine";
 import { getCompanyHourlyRates, type CompanyHourlyRates } from "../services/indirectCosts.service";
+import { equipmentTaskAmounts } from "../services/companySettings.service";
 import { DEFAULT_QUOTE_MARGIN_RATE, salePriceFromCost } from "../services/taskCostBasis";
 import {
   generateWithCoco,
@@ -853,12 +854,12 @@ export default function TaskTemplateDrawer({
         unitCostHt: (() => {
           const asset = hourlyRates?.equipmentAssets.find((item) => item.id === row.equipment_asset_id);
           if (!asset || asset.allocationMode !== "task" || asset.amortizationYears <= 0) return 0;
-          return ((asset.purchaseValueHt / asset.amortizationYears + asset.annualMaintenanceHt) / asset.annualUsageHours) * laborPlan.hours;
+          return equipmentTaskAmounts(asset, selectedLotProfile?.equipmentMarginRate ?? taskMarginRate, laborPlan.hours).costHt;
         })(),
         unitSaleHt: (() => {
           const asset = hourlyRates?.equipmentAssets.find((item) => item.id === row.equipment_asset_id);
-          if (!asset?.hourlySaleRateHt) return 0;
-          return asset.hourlySaleRateHt * laborPlan.hours;
+          if (!asset) return 0;
+          return equipmentTaskAmounts(asset, selectedLotProfile?.equipmentMarginRate ?? taskMarginRate, laborPlan.hours).saleHt;
         })(),
         marginRate: selectedLotProfile?.equipmentMarginRate ?? taskMarginRate,
       })),

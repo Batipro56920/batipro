@@ -1,5 +1,5 @@
 import type { CompanyHourlyRates } from "./indirectCosts.service";
-import { equipmentEffectiveHourlySale, equipmentHourlyCost } from "./companySettings.service";
+import { equipmentTaskAmounts } from "./companySettings.service";
 import type { TaskTemplateRow } from "./taskLibrary.service";
 import type { TaskTemplateEquipmentItemRow, TaskTemplateMaterialRatioRow } from "./taskTemplatePreparation.service";
 
@@ -61,13 +61,12 @@ export function taskTemplateUnitCost(
   const equipmentHt = equipment.reduce((total, row) => {
     const asset = rates?.equipmentAssets.find((item) => item.id === row.equipment_asset_id);
     if (!asset || !asset.active || asset.allocationMode !== "task" || asset.amortizationYears <= 0) return total;
-    const hourly = equipmentHourlyCost(asset);
-    return total + hourly * Math.max(0, Number(row.default_quantity ?? 1)) * hours;
+    return total + equipmentTaskAmounts(asset, taskTemplateMarginRate(template, rates), hours).costHt * Math.max(0, Number(row.default_quantity ?? 1));
   }, 0);
   const equipmentSaleHt = equipment.reduce((total, row) => {
     const asset = rates?.equipmentAssets.find((item) => item.id === row.equipment_asset_id);
     if (!asset || !asset.active || asset.allocationMode !== "task") return total;
-    return total + equipmentEffectiveHourlySale(asset, taskTemplateMarginRate(template, rates)) * Math.max(0, Number(row.default_quantity ?? 1)) * hours;
+    return total + equipmentTaskAmounts(asset, taskTemplateMarginRate(template, rates), hours).saleHt * Math.max(0, Number(row.default_quantity ?? 1));
   }, 0);
   // indirectHt est deja dans laborHt : ne pas l'ajouter une seconde fois.
   return { costHt: laborHt + materialsHt + equipmentHt, hours, laborHt, materialsHt, equipmentHt, equipmentSaleHt, indirectHt };
