@@ -1453,3 +1453,14 @@ export async function portalResourceIssue(token: string, chantierId: string, pre
   const { error } = await (supabase as any).rpc("intervenant_resource_issue", { p_token: normalizePortalToken(token), p_chantier_id: chantierId, p_preparation_id: preparationId });
   if (error) throw new Error(error.message);
 }
+
+export async function portalResourceComplete(token: string, chantierId: string, preparationId: string, used: number, returned: number): Promise<void> {
+ const { error } = await (supabase as any).rpc("intervenant_resource_complete", { p_token: normalizePortalToken(token), p_chantier_id: chantierId, p_preparation_id: preparationId, p_used_quantity: used, p_returned_quantity: returned });
+ if (error) throw new Error(error.message);
+}
+export type PortalAnnualResourceUsage = { resource_id: string; resource_type: "equipment" | "consumable"; used: number; returned: number };
+export async function portalAnnualResourceUsage(token: string, chantierId: string, year: number): Promise<PortalAnnualResourceUsage[]> {
+ const { data, error } = await (supabase as any).rpc("intervenant_resource_annual_usage", { p_token: normalizePortalToken(token), p_chantier_id: chantierId, p_year: year });
+ if (error) throw new Error(error.message);
+ return Array.isArray(data) ? data : [];
+}
