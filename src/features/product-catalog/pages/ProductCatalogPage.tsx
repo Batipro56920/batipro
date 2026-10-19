@@ -54,6 +54,7 @@ const PRODUCT_DOCUMENT_KINDS: ProductDocumentKind[] = [
 
 export default function ProductCatalogPage() {
   const [searchParams, setSearchParams] = useSearchParams();
+  const isConsumablesCatalog = window.location.pathname === "/consommables";
   const catalogQueryParam = searchParams.get("q") ?? "";
   const catalogSupplierIdParam = searchParams.get("supplierId") ?? "";
   const activeProductId = searchParams.get("productId") ?? "";
@@ -140,6 +141,7 @@ export default function ProductCatalogPage() {
   const filtered = useMemo(() => {
     const text = query.trim().toLocaleLowerCase("fr-FR");
     return products.filter((product) => {
+      if (isConsumablesCatalog ? product.category !== "Consommables" : product.category === "Consommables") return false;
       const matchesText = !text || [
         product.designation,
         product.internalReference,
@@ -159,13 +161,13 @@ export default function ProductCatalogPage() {
         || (priceFilter === "high" && purchasePrice >= 250);
       return matchesText && matchesCategory && matchesSupplier && matchesBrand && matchesPrice;
     });
-  }, [brandFilter, categoryFilter, priceFilter, products, query, supplierFilter]);
+  }, [brandFilter, categoryFilter, isConsumablesCatalog, priceFilter, products, query, supplierFilter]);
 
-  const categories = unique(products.map((product) => product.category));
+  const categories = unique(products.filter((product) => isConsumablesCatalog ? product.category === "Consommables" : product.category !== "Consommables").map((product) => product.category));
   const brands = unique(products.map((product) => product.brand));
 
   async function saveProduct(product: ProductCatalogItem | ProductCatalogDraft) {
-    await saveProductCatalogItem(sanitizeProductCatalogInput(product));
+    await saveProductCatalogItem(sanitizeProductCatalogInput(isConsumablesCatalog ? { ...product, category: "Consommables" } : product));
     setProducts(await listProductCatalogItems());
     closeProductDrawer();
   }
@@ -263,8 +265,8 @@ export default function ProductCatalogPage() {
         <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
           <div>
             <div className="text-xs font-semibold uppercase tracking-[0.18em] text-blue-600">Ressources</div>
-            <h1 className="mt-2 text-2xl font-bold text-slate-950">Catalogue produits</h1>
-            <p className="mt-1 text-sm text-slate-500">Produits, prix fournisseurs, documents techniques et future alimentation des bons de commande.</p>
+            <h1 className="mt-2 text-2xl font-bold text-slate-950">{isConsumablesCatalog ? "Catalogue consommables" : "Catalogue produits"}</h1>
+            <p className="mt-1 text-sm text-slate-500">{isConsumablesCatalog ? "Consommables, prix fournisseurs et conditionnements." : "Produits, prix fournisseurs, documents techniques et future alimentation des bons de commande."}</p>
           </div>
           <div className="flex flex-wrap gap-2">
             <button type="button" onClick={() => void refreshProducts()} className="inline-flex h-10 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 hover:bg-slate-50">
@@ -276,8 +278,8 @@ export default function ProductCatalogPage() {
             <button type="button" onClick={() => setBulkImportOpen((open) => !open)} className="inline-flex h-10 items-center justify-center gap-2 rounded-xl border border-blue-200 bg-blue-50 px-4 text-sm font-semibold text-blue-700 hover:bg-blue-100">
               <UploadCloud className="h-4 w-4" /> Import fiches produits
             </button>
-            <button type="button" onClick={() => openProductDrawer({ ...EMPTY_DRAFT })} className="inline-flex h-10 items-center justify-center rounded-xl bg-blue-600 px-4 text-sm font-semibold text-white hover:bg-blue-700">
-              <Plus className="mr-2 h-4 w-4" /> Nouveau produit
+            <button type="button" onClick={() => openProductDrawer({ ...EMPTY_DRAFT, category: isConsumablesCatalog ? "Consommables" : "" })} className="inline-flex h-10 items-center justify-center rounded-xl bg-blue-600 px-4 text-sm font-semibold text-white hover:bg-blue-700">
+              <Plus className="mr-2 h-4 w-4" /> {isConsumablesCatalog ? "Nouveau consommable" : "Nouveau produit"}
             </button>
           </div>
         </div>
