@@ -1434,7 +1434,7 @@ export async function intervenantReserveMarkLifted(
 
 
 export type PortalResource = { id: string; name: string; kind: "equipment" | "consumable"; unit: string };
-export type PortalResourcePreparation = { id: string; resource_type: "equipment" | "consumable"; resource_id: string; resource_name: string; unit: string; quantity: number; planned_for: string; status: "reserved" | "issued" | "cancelled" };
+export type PortalResourcePreparation = { id: string; resource_type: "equipment" | "consumable"; resource_id: string; resource_name: string; unit: string; quantity: number; planned_for: string; completed_at?: string | null; status: "reserved" | "issued" | "cancelled" };
 export async function portalResourceCatalog(token: string, chantierId: string): Promise<PortalResource[]> {
   const { data, error } = await (supabase as any).rpc("intervenant_resource_catalog", { p_token: normalizePortalToken(token), p_chantier_id: chantierId });
   if (error) throw new Error(error.message);
