@@ -91,7 +91,12 @@ export function getInvestmentMonthlyTotal(entries: CompanyInvestmentEntry[]): nu
 }
 
 /** Matériel amorti par l'entreprise (échafaudage, outillage, véhicule...). */
+export type ResourceUsageEntry = { id: string; date: string; quantity: number; chantier: string; task: string };
+export function yearlyUsage(entries: ResourceUsageEntry[] | undefined, year: number) {
+  return (entries ?? []).filter(row => row.date.startsWith(String(year))).reduce((sum, row) => sum + row.quantity, 0);
+}
 export type CompanyEquipmentAsset = {
+  usageEntries?: ResourceUsageEntry[];
   id: string;
   name: string;
   quantity: number;
@@ -128,6 +133,7 @@ export type CompanyConsumableSupplier = {
   reference: string;
 };
 export type CompanyConsumable = {
+  usageEntries?: ResourceUsageEntry[];
   id: string;
   name: string;
   category: string;
@@ -195,13 +201,17 @@ export function equipmentPaybackYears(asset: CompanyEquipmentAsset, marginRate: 
   return annualContribution > 0 ? asset.purchaseValueHt / annualContribution : null;
 }
 
+function safeUsage(value: ResourceUsageEntry[] | undefined): ResourceUsageEntry[] {
+  return (Array.isArray(value) ? value : []).filter(row => /^\\d{4}-\\d{2}-\\d{2}$/.test(String(row.date)) && Number(row.quantity) > 0)
+    .map(row => ({ id: String(row.id), date: String(row.date), quantity: Number(row.quantity), chantier: String(row.chantier ?? ""), task: String(row.task ?? "") }));
+}
 export function normalizeIndirectCosts(raw: unknown): CompanyIndirectCostsSettings {
   const source = (raw ?? {}) as Partial<CompanyIndirectCostsSettings>;
   const assets = Array.isArray(source.equipmentAssets) ? source.equipmentAssets : [];
   const hours = Number(source.productiveHoursPerEmployeeYear);
   return {
     consumables: (Array.isArray(source.consumables) ? source.consumables : []).map((item) => ({
-      id: String(item?.id ?? ""), name: String(item?.name ?? "").trim(),
+      id: String(item?.id ?? ""), name: String(item?.name ?? "").trim(), usageEntries: safeUsage(item?.usageEntries),
       category: String(item?.category ?? ""), unit: String(item?.unit ?? "u") || "u",
       mode: item?.mode === "use" || item?.mode === "hour" || item?.mode === "day" ? item.mode : "quantity",
       usageCapacity: Math.max(1, Number(item?.usageCapacity) || 1), active: item?.active !== false,
@@ -213,7 +223,7 @@ export function normalizeIndirectCosts(raw: unknown): CompanyIndirectCostsSettin
       })),
     })),
     equipmentAssets: assets.map((asset) => ({
-      id: String(asset?.id ?? ""),
+      id: String(asset?.id ?? ""), usageEntries: safeUsage(asset?.usageEntries),
       name: String(asset?.name ?? "").trim(),
       quantity: Math.max(1, Math.round(Number(asset?.quantity) || 1)),
       purchaseValueHt: Math.max(0, Number(asset?.purchaseValueHt) || 0),
