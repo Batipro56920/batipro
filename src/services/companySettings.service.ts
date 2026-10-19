@@ -119,7 +119,37 @@ export type CompanyEquipmentAsset = {
  * frais généraux sont divisés par les heures productives annuelles de l'équipe,
  * puis imputés au temps de main d'oeuvre de chaque tâche.
  */
+export type ConsumableMode = "quantity" | "use" | "hour" | "day";
+export type CompanyConsumableSupplier = {
+  id: string;
+  supplierId: string;
+  packagePriceHt: number;
+  packageQuantity: number;
+  reference: string;
+};
+export type CompanyConsumable = {
+  id: string;
+  name: string;
+  category: string;
+  unit: string;
+  mode: ConsumableMode;
+  /** Number of billable uses/hours/days per package for reusable consumables. */
+  usageCapacity: number;
+  suppliers: CompanyConsumableSupplier[];
+  active: boolean;
+};
+export function consumableUnitCost(item: CompanyConsumable, supplier: CompanyConsumableSupplier): number {
+  const base = Number(supplier.packagePriceHt) / Number(supplier.packageQuantity);
+  if (!Number.isFinite(base) || base < 0 || supplier.packageQuantity <= 0) return 0;
+  return item.mode === "quantity" ? base : base / Math.max(1, item.usageCapacity);
+}
+export function cheapestConsumableSupplier(item: CompanyConsumable): CompanyConsumableSupplier | null {
+  return [...item.suppliers].filter((row) => row.packageQuantity > 0 && row.packagePriceHt >= 0)
+    .sort((left, right) => consumableUnitCost(item, left) - consumableUnitCost(item, right))[0] ?? null;
+}
+
 export type CompanyIndirectCostsSettings = {
+  consumables: CompanyConsumable[];
   equipmentAssets: CompanyEquipmentAsset[];
   productiveHoursPerEmployeeYear: number;
 };
@@ -170,6 +200,18 @@ export function normalizeIndirectCosts(raw: unknown): CompanyIndirectCostsSettin
   const assets = Array.isArray(source.equipmentAssets) ? source.equipmentAssets : [];
   const hours = Number(source.productiveHoursPerEmployeeYear);
   return {
+    consumables: (Array.isArray(source.consumables) ? source.consumables : []).map((item) => ({
+      id: String(item?.id ?? ""), name: String(item?.name ?? "").trim(),
+      category: String(item?.category ?? ""), unit: String(item?.unit ?? "u") || "u",
+      mode: item?.mode === "use" || item?.mode === "hour" || item?.mode === "day" ? item.mode : "quantity",
+      usageCapacity: Math.max(1, Number(item?.usageCapacity) || 1), active: item?.active !== false,
+      suppliers: (Array.isArray(item?.suppliers) ? item.suppliers : []).map((price) => ({
+        id: String(price?.id ?? ""), supplierId: String(price?.supplierId ?? ""),
+        packagePriceHt: Math.max(0, Number(price?.packagePriceHt) || 0),
+        packageQuantity: Math.max(0.000001, Number(price?.packageQuantity) || 1),
+        reference: String(price?.reference ?? ""),
+      })),
+    })),
     equipmentAssets: assets.map((asset) => ({
       id: String(asset?.id ?? ""),
       name: String(asset?.name ?? "").trim(),
