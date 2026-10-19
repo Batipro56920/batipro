@@ -19,6 +19,7 @@ const RentabilitePage = lazy(() => import("./pages/RentabilitePage"));
 const CrmPage = lazy(() => import("./pages/CrmPage"));
 const CrmQuoteEditRedirectPage = lazy(() => import("./pages/CrmQuoteEditRedirectPage"));
 const ChantiersPage = lazy(() => import("./pages/ChantiersPage"));
+const CentralPlanningPage = lazy(() => import("./pages/CentralPlanningPage"));
 const ChantierVisitReportsPage = lazy(() => import("./pages/ChantierVisitReportsPage"));
 const ChantiersTimePage = lazy(() => import("./pages/ChantiersTimePage"));
 const ChantierNewPage = lazy(() => import("./pages/ChantierNewPage"));
@@ -413,7 +414,7 @@ export default function App() {
         />
         <Route
           path="/planning"
-          element={<ChantierBackofficeRoute label="Chargement du planning..."><ChantiersPage initialView="planning" /></ChantierBackofficeRoute>}
+          element={<ChantierBackofficeRoute label="Chargement du planning..."><CentralPlanningPage /></ChantierBackofficeRoute>}
         />
         <Route
           path="/taches"
