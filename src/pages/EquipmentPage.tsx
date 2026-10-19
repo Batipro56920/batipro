@@ -1,3 +1,4 @@
+import { ResourceUsageTracker } from "../components/ResourceUsageTracker";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Pencil, Plus, Save, Trash2, Wrench, X } from "lucide-react";
 import {
@@ -83,6 +84,12 @@ export default function EquipmentPage() {
     await persist(editingId ? assets.map((row) => row.id === editingId ? item : row) : [...assets, item], editingId ? "Matériel mis à jour." : "Matériel ajouté.");
   }
 
+  async function saveUsage(entries: NonNullable<CompanyEquipmentAsset["usageEntries"]>) {
+    const latest = normalizeIndirectCosts((await getCompanySettings()).indirect_costs);
+    const result = await upsertCompanySettings({ indirect_costs: { ...latest, equipmentAssets: latest.equipmentAssets.map(asset => asset.id === form.id ? { ...asset, usageEntries: entries } : asset) } });
+    setSettings(normalizeIndirectCosts(result.indirect_costs));
+    setForm(current => ({ ...current, usageEntries: entries }));
+  }
   if (loading) return <div className="rounded-3xl border bg-white p-8 text-sm text-slate-500">Chargement des matériels…</div>;
 
   return (
@@ -129,6 +136,7 @@ export default function EquipmentPage() {
         <div className="grid gap-4 sm:grid-cols-2"><Field label="Utilisation estimée (h/an)"><input type="number" min={1} step="1" className={INPUT} value={form.annualUsageHours} onChange={(e) => setForm({ ...form, annualUsageHours: Math.max(0, Number(e.target.value) || 0) })} /></Field><Field label="Entretien + consommables HT/an"><input type="number" min={0} step="0.01" className={INPUT} value={form.annualMaintenanceHt} onChange={(e) => setForm({ ...form, annualMaintenanceHt: Math.max(0, Number(e.target.value) || 0) })} /></Field></div>
         {form.billingMode === "hour" ? <Field label="Tarif de vente HT / heure (facultatif)"><input type="number" min={0} step="0.01" className={INPUT} value={form.hourlySaleRateHt || ""} onChange={(e) => setForm({ ...form, hourlySaleRateHt: Math.max(0, Number(e.target.value) || 0) })} placeholder={`Automatique : ${formatCurrency(equipmentSuggestedHourlySale(form, defaultMarginRate))}`} /></Field> : null}
         <div className="grid gap-3 rounded-2xl bg-slate-50 p-4 sm:grid-cols-3"><Metric label="Coût réel / h" value={formatCurrency(form.billingMode === "day" ? equipmentDailyCost(form) : equipmentHourlyCost(form))} /><Metric label="Vente / h" value={formatCurrency(form.billingMode === "day" ? equipmentEffectiveDailySale(form, defaultMarginRate) : equipmentEffectiveHourlySale(form, defaultMarginRate))} /><Metric label="Rentabilisé en" value={equipmentPaybackYears(form, defaultMarginRate) ? `${equipmentPaybackYears(form, defaultMarginRate)!.toFixed(1)} an(s)` : "—"} /></div>
+        {editingId && <ResourceUsageTracker entries={form.usageEntries} unit={form.billingMode === "day" ? "jours" : "heures"} planned={form.billingMode === "day" ? form.annualUsageDays : form.annualUsageHours} onSave={saveUsage} />}
         <button disabled={saving} onClick={() => void save()} className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-blue-600 font-semibold text-white disabled:opacity-60"><Save className="h-4 w-4" /> Enregistrer</button>
       </div></div></div> : null}
     </div>
