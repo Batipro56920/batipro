@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { supabase } from "../lib/supabaseClient";
 import { listChantiers } from "../services/chantiers.service";
+import { getCurrentUserProfile } from "../services/currentUserProfile.service";
 import { getCompanySettings, normalizeIndirectCosts } from "../services/companySettings.service";
 type Row = {id:string; name:string};
 type Assignment = {id:string;chantier_id:string;intervenant_id:string|null;start_at:string|null;end_at:string|null;start_date:string|null;duration_days:number|null};
@@ -18,6 +19,9 @@ export default function CentralPlanningPage(){
  const days=useMemo(()=>Array.from({length:5},(_,i)=>iso(shifted(week,i))),[week]);
  useEffect(()=>{let active=true;async function run(){setLoading(true);setError("");
   try{
+   const profile = await getCurrentUserProfile();
+   const role = String(profile?.role ?? "").toUpperCase();
+   if (!profile || !role || ["INTERVENANT","OUVRIER","SOUS_TRAITANT","SUBCONTRACTOR"].includes(role)) throw new Error("Planning réservé aux profils bureau.");
    const [siteRows,people,alloc,book,settings]=await Promise.all([
     listChantiers(),
     supabase.from("intervenants").select("id,nom").eq("is_active",true),
