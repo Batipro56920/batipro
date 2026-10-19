@@ -1,3 +1,4 @@
+import ResourcePreparationPanel from "../components/ResourcePreparationPanel";
 import { useEffect, useMemo, useState } from "react";
 import { AlertTriangle, Boxes, Briefcase, CalendarDays, Camera, CheckCircle2, Circle, CircleHelp, FileText, ListOrdered, LogOut, MapPin, MessageCircle, Moon, PackageSearch, Paperclip, Plus, RefreshCw, Send, ShieldAlert, Sunrise, Wrench } from "lucide-react";
 import { useLocation, useNavigate } from "react-router-dom";
@@ -998,6 +999,7 @@ export default function EmployeePortalV2Page() {
         </> : null}
 
         {tab === "matin" && selected ? <>
+          <ResourcePreparationPanel token={token} chantierId={selected.id} phase="matin" />
           <Card className="border-blue-200">
             <div className="flex items-center justify-between gap-3">
               <div><div className="text-[11px] font-bold uppercase tracking-[0.18em] text-blue-700">{selected.nom}</div><h2 className="mt-1 text-xl font-bold">Matin</h2></div>
@@ -1224,6 +1226,7 @@ export default function EmployeePortalV2Page() {
         </> : null}
 
         {tab === "soir" && selected ? <>
+          <ResourcePreparationPanel token={token} chantierId={selected.id} phase="soir" />
           <Card><div className="flex items-center justify-between"><div><div className="text-[11px] font-bold uppercase tracking-[0.18em] text-blue-700">{selected.nom}</div><h2 className="mt-1 text-lg font-bold">Soir</h2></div><Moon className="h-5 w-5 text-blue-600" /></div><p className="mt-1 text-sm text-slate-500">Fais le point sur la journée et prépare demain.</p></Card>
 
           <Card>

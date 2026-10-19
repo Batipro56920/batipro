@@ -1431,3 +1431,25 @@ export async function intervenantReserveMarkLifted(
 
   return mapReserve((data && typeof data === "object" ? data : {}) as Record<string, unknown>);
 }
+
+
+export type PortalResource = { id: string; name: string; kind: "equipment" | "consumable"; unit: string };
+export type PortalResourcePreparation = { id: string; resource_type: "equipment" | "consumable"; resource_id: string; resource_name: string; unit: string; quantity: number; planned_for: string; status: "reserved" | "issued" | "cancelled" };
+export async function portalResourceCatalog(token: string, chantierId: string): Promise<PortalResource[]> {
+  const { data, error } = await (supabase as any).rpc("intervenant_resource_catalog", { p_token: normalizePortalToken(token), p_chantier_id: chantierId });
+  if (error) throw new Error(error.message);
+  return Array.isArray(data) ? data as PortalResource[] : [];
+}
+export async function portalResourcePreparations(token: string, chantierId: string, date: string): Promise<PortalResourcePreparation[]> {
+  const { data, error } = await (supabase as any).rpc("intervenant_resource_preparations", { p_token: normalizePortalToken(token), p_chantier_id: chantierId, p_date: date });
+  if (error) throw new Error(error.message);
+  return Array.isArray(data) ? data as PortalResourcePreparation[] : [];
+}
+export async function portalResourcePrepare(token: string, chantierId: string, date: string, resource: PortalResource, quantity: number): Promise<void> {
+  const { error } = await (supabase as any).rpc("intervenant_resource_prepare", { p_token: normalizePortalToken(token), p_chantier_id: chantierId, p_date: date, p_kind: resource.kind, p_resource_id: resource.id, p_quantity: quantity });
+  if (error) throw new Error(error.message);
+}
+export async function portalResourceIssue(token: string, chantierId: string, preparationId: string): Promise<void> {
+  const { error } = await (supabase as any).rpc("intervenant_resource_issue", { p_token: normalizePortalToken(token), p_chantier_id: chantierId, p_preparation_id: preparationId });
+  if (error) throw new Error(error.message);
+}
