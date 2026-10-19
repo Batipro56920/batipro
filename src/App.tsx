@@ -35,6 +35,7 @@ const EquipmentPage = lazy(() => import("./pages/EquipmentPage"));
 const FournisseursPage = lazy(() => import("./pages/FournisseursPage"));
 const SupplierOutstandingPage = lazy(() => import("./pages/SupplierOutstandingPage"));
 const ProductCatalogPage = lazy(() => import("./features/product-catalog/pages/ProductCatalogPage"));
+const ConsumablesPage = lazy(() => import("./pages/ConsumablesPage"));
 const IntervenantPortalPage = lazy(() => import("./pages/IntervenantPortalPage"));
 const IntervenantDetailPage = lazy(() => import("./pages/IntervenantDetailPage"));
 const IntervenantsPage = lazy(() => import("./pages/IntervenantsPage"));
@@ -585,7 +586,7 @@ export default function App() {
             <RequireCompanyFeature moduleId="approvisionnement" profilePermissionKey="fournisseurs">
               <LazyRouteErrorBoundary>
                 <Suspense fallback={<div className="rounded-3xl border bg-white p-8 text-center text-sm text-slate-500">Chargement des consommables...</div>}>
-                  <ProductCatalogPage />
+                  <ConsumablesPage />
                 </Suspense>
               </LazyRouteErrorBoundary>
             </RequireCompanyFeature>
