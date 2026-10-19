@@ -1,3 +1,4 @@
+import { ResourceStockCard } from "../components/ResourceStockCard";
 import { ResourceUsageTracker } from "../components/ResourceUsageTracker";
 import { useEffect, useState } from "react";
 import { getCompanySettings, normalizeIndirectCosts, upsertCompanySettings, consumableUnitCost, cheapestConsumableSupplier, type CompanyConsumable, type CompanyIndirectCostsSettings } from "../services/companySettings.service";
@@ -91,6 +92,7 @@ export default function ConsumablesPage() {
         <p className="font-semibold text-blue-700">Coût d'utilisation : {euro(consumableUnitCost(draft, price))}</p>
         <button className="text-sm text-red-700" onClick={() => setDraft({ ...draft, suppliers: draft.suppliers.filter(p => p.id !== price.id) })}>Supprimer ce tarif</button>
       </div>)}
+      {draft.id && <ResourceStockCard resourceId={draft.id} kind="consumable" />}
       {draft.id && <ResourceUsageTracker entries={draft.usageEntries} unit={usageUnit(draft)} onSave={saveUsage} />}
       <button disabled={busy} className="w-full rounded-xl bg-blue-600 p-3 font-bold text-white disabled:opacity-50" onClick={save}>Enregistrer</button>
     </div></div>}
