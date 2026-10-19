@@ -1,3 +1,4 @@
+import { ResourceUsageTracker } from "../components/ResourceUsageTracker";
 import { useEffect, useState } from "react";
 import { getCompanySettings, normalizeIndirectCosts, upsertCompanySettings, consumableUnitCost, cheapestConsumableSupplier, type CompanyConsumable, type CompanyIndirectCostsSettings } from "../services/companySettings.service";
 import { listSuppliers, type SupplierRow } from "../services/suppliers.service";
@@ -44,6 +45,13 @@ export default function ConsumablesPage() {
     } catch (err) { setError(err instanceof Error ? err.message : "Enregistrement impossible"); }
     finally { setBusy(false); }
   }
+  async function saveUsage(entries: NonNullable<CompanyConsumable["usageEntries"]>) {
+    if (!draft?.id) return;
+    const latest = normalizeIndirectCosts((await getCompanySettings()).indirect_costs);
+    const result = await upsertCompanySettings({ indirect_costs: { ...latest, consumables: latest.consumables.map(item => item.id === draft.id ? { ...item, usageEntries: entries } : item) } });
+    setSettings(normalizeIndirectCosts(result.indirect_costs));
+    setDraft(current => current ? { ...current, usageEntries: entries } : null);
+  }
   function save() {
     if (!draft?.name.trim()) return setError("Désignation obligatoire.");
     if (!draft.suppliers.length || draft.suppliers.some(p => !p.supplierId || p.packageQuantity <= 0 || p.packagePriceHt < 0)) return setError("Renseigner au moins un fournisseur avec un prix et un conditionnement valides.");
@@ -83,6 +91,7 @@ export default function ConsumablesPage() {
         <p className="font-semibold text-blue-700">Coût d'utilisation : {euro(consumableUnitCost(draft, price))}</p>
         <button className="text-sm text-red-700" onClick={() => setDraft({ ...draft, suppliers: draft.suppliers.filter(p => p.id !== price.id) })}>Supprimer ce tarif</button>
       </div>)}
+      {draft.id && <ResourceUsageTracker entries={draft.usageEntries} unit={usageUnit(draft)} onSave={saveUsage} />}
       <button disabled={busy} className="w-full rounded-xl bg-blue-600 p-3 font-bold text-white disabled:opacity-50" onClick={save}>Enregistrer</button>
     </div></div>}
   </div>;
