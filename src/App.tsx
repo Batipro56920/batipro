@@ -580,6 +580,18 @@ export default function App() {
           }
         />
         <Route
+          path="/consommables"
+          element={
+            <RequireCompanyFeature moduleId="approvisionnement" profilePermissionKey="fournisseurs">
+              <LazyRouteErrorBoundary>
+                <Suspense fallback={<div className="rounded-3xl border bg-white p-8 text-center text-sm text-slate-500">Chargement des consommables...</div>}>
+                  <ProductCatalogPage />
+                </Suspense>
+              </LazyRouteErrorBoundary>
+            </RequireCompanyFeature>
+          }
+        />
+        <Route
           path="/catalogue-produits"
           element={
             <RequireCompanyFeature moduleId="approvisionnement" profilePermissionKey="fournisseurs">
