@@ -43,7 +43,7 @@ export default function CentralPlanningPage(){
  const siteNames=new Map(sites.map(s=>[s.id,s.name])),userNames=new Map(users.map(u=>[u.id,u.name]));
  const rows=view==="sites"?sites:view==="users"?users:equipment;
  function forDay(rowId:string,day:string){
-  if(view==="equipment")return bookings.filter(b=>b.resource_type==="equipment"&&b.resource_id===rowId&&b.planned_for===day).map(b=>({id:b.id,site:b.chantier_id,label:(siteNames.get(b.chantier_id)??"Chantier")+" · "+b.quantity+" unité(s)",status:b.status==="issued"?"Sorti":"Réservé"}));
+  if(view==="equipment")return bookings.filter(b=>{const a=office.find(x=>x.id===b.office_assignment_id);return b.resource_type==="equipment"&&b.resource_id===rowId&&(a?a.date_start<=day&&a.date_end>=day:b.planned_for===day);}).map(b=>({id:b.id,site:b.chantier_id,label:(siteNames.get(b.chantier_id)??"Chantier")+" · "+b.quantity+" unité(s)",status:b.status==="issued"?"Sorti":"Réservé"}));
   const added=office.filter(a=>a.date_start<=day&&a.date_end>=day&&(view==="sites"?a.chantier_id===rowId:a.intervenant_id===rowId)).map(a=>({id:a.id,site:a.chantier_id,label:view==="sites"?(userNames.get(a.intervenant_id)??"Ouvrier"):(siteNames.get(a.chantier_id)??"Chantier"),status:"Affecté"}));
   return added.concat(assignments.filter(a=>{const start=(a.start_at??a.start_date??"").slice(0,10);const end=(a.end_at??"").slice(0,10)||(start?iso(shifted(new Date(start+"T12:00:00"),Math.max(a.duration_days??1,1)-1)):"");return start<=day&&day<=end&&(view==="sites"?a.chantier_id===rowId:a.intervenant_id===rowId);}).map(a=>({id:a.id,site:a.chantier_id,label:view==="sites"?(userNames.get(a.intervenant_id??"")??"Équipe"):(siteNames.get(a.chantier_id)??"Chantier"),status:"Prévu"})));
  }
