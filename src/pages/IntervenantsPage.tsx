@@ -75,6 +75,50 @@ const EMPTY_FORM: IntervenantFormState = {
   insurance: "",
 };
 
+
+function SalaryEstimator({ hourlyCost, onHourlyCostChange }: { hourlyCost: string; onHourlyCostChange: (value: string) => void }) {
+  const [mode, setMode] = useState<"gross"|"net"|"employer">("employer");
+  const [monthly, setMonthly] = useState(() => (Number(hourlyCost.replace(",", ".")) * 151.67).toFixed(2).replace(".", ","));
+  const [days, setDays] = useState("210");
+  const [hours, setHours] = useState("7");
+  const [netRatio, setNetRatio] = useState("78");
+  const [employerRatio, setEmployerRatio] = useState("142");
+  const val=(s:string)=>Math.max(0,Number(s.replace(",","."))||0);
+  const employeeNet=val(netRatio)/100, employerFactor=val(employerRatio)/100;
+  const gross=mode==="gross"?val(monthly):mode==="net"?employeeNet>0?val(monthly)/employeeNet:0:employerFactor>0?val(monthly)/employerFactor:0;
+  const net=gross*employeeNet, employer=gross*employerFactor;
+  const yearlyHours=val(days)*val(hours);
+  function changeValue(next:string) {
+    setMonthly(next);
+    const numeric=val(next);
+    const employerMonthly=mode==="employer"?numeric:mode==="gross"?numeric*employerFactor:employeeNet>0?numeric/employeeNet*employerFactor:0;
+    onHourlyCostChange(yearlyHours>0?(employerMonthly*12/yearlyHours).toFixed(2).replace(".",","):"");
+  }
+  function changeSchedule(nextDays:string,nextHours:string){
+    setDays(nextDays);setHours(nextHours);
+    const total=val(nextDays)*val(nextHours);
+    onHourlyCostChange(total>0?(employer*12/total).toFixed(2).replace(".",","):"");
+  }
+  const format=(n:number)=>n.toLocaleString("fr-FR",{minimumFractionDigits:2,maximumFractionDigits:2})+" €";
+  return <div className="mt-4 space-y-3 rounded-xl border border-blue-100 bg-blue-50/50 p-4">
+    <h3 className="font-semibold">Simulation salariale et productivité</h3>
+    <p className="text-xs text-slate-600">Estimations paramétrables, hors primes et situations particulières. Vérifier avec la paie. Le coût horaire chargé enregistré dans Batipro est recalculé à partir du coût employeur et des heures productives.</p>
+    <div className="grid gap-3 sm:grid-cols-2">
+      <label className="text-sm">Montant saisi
+        <select className="mt-1 w-full rounded-lg border bg-white p-2" value={mode} onChange={e=>setMode(e.target.value as "gross"|"net"|"employer")}><option value="gross">Brut mensuel</option><option value="net">Net mensuel estimé</option><option value="employer">Coût employeur mensuel</option></select>
+        <input className="mt-2 w-full rounded-lg border bg-white p-2" inputMode="decimal" value={monthly} onChange={e=>changeValue(e.target.value.replace(".",","))}/>
+      </label>
+      <div className="grid grid-cols-2 gap-2">
+        <label className="text-sm">Net / brut (%)<input className="mt-1 w-full rounded-lg border bg-white p-2" inputMode="decimal" value={netRatio} onChange={e=>setNetRatio(e.target.value.replace(".",","))}/></label>
+        <label className="text-sm">Employeur / brut (%)<input className="mt-1 w-full rounded-lg border bg-white p-2" inputMode="decimal" value={employerRatio} onChange={e=>setEmployerRatio(e.target.value.replace(".",","))}/></label>
+      </div>
+      <label className="text-sm">Jours productifs / an<input className="mt-1 w-full rounded-lg border bg-white p-2" inputMode="decimal" value={days} onChange={e=>changeSchedule(e.target.value.replace(".",","),hours)}/></label>
+      <label className="text-sm">Heures productives / jour<input className="mt-1 w-full rounded-lg border bg-white p-2" inputMode="decimal" value={hours} onChange={e=>changeSchedule(days,e.target.value.replace(".",","))}/></label>
+    </div>
+    <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">{[["Brut mensuel",format(gross)],["Net mensuel estimé",format(net)],["Coût employeur / mois",format(employer)],["Heures productives / an",yearlyHours.toLocaleString("fr-FR")+" h"],["Coût employeur / h",yearlyHours>0?format(employer*12/yearlyHours):"—"],["Coût employeur / jour",val(days)>0?format(employer*12/val(days)):"—"]].map(([label,value])=><div key={label} className="rounded-lg bg-white p-3"><div className="text-xs text-slate-500">{label}</div><strong>{value}</strong></div>)}</div>
+  </div>;
+}
+
 const INTERVENANT_STATUS_LABELS: Record<IntervenantStatus, string> = {
   employee: "Employé",
   subcontractor: "Sous-traitant",
@@ -434,7 +478,7 @@ export default function IntervenantsPage() {
         </div>
       ) : (
         <div className="overflow-x-auto rounded-2xl border bg-white">
-          <table className="min-w-[1120px] w-full text-sm">
+          <table className="min-w-[920px] w-full table-fixed text-sm">
             <thead className="bg-slate-50 text-slate-600">
               <tr>
                 <th className="px-4 py-3 text-left font-medium">{t("common.labels.name")}</th>
@@ -603,7 +647,7 @@ export default function IntervenantsPage() {
       {modalOpen && (
         <div className="fixed inset-0 z-50 bg-black/40 p-4" onClick={closeModal}>
           <div
-            className="mx-auto flex h-auto max-h-[calc(100vh-48px)] w-full max-w-2xl flex-col overflow-hidden rounded-3xl border bg-white shadow-xl"
+            className="mx-auto flex h-auto max-h-[calc(100vh-32px)] w-full max-w-5xl flex-col overflow-hidden rounded-3xl border bg-white shadow-xl"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="shrink-0 px-6 py-5">
@@ -738,6 +782,7 @@ export default function IntervenantsPage() {
                           placeholder="Ex: 48"
                         />
                       </label>
+                      <div className="md:col-span-2"><SalaryEstimator key={editingRow?.id ?? "new"} hourlyCost={form.hourly_cost_ht} onHourlyCostChange={value=>setForm(prev=>({...prev,hourly_cost_ht:value}))}/></div>
                       <label className="flex items-center gap-2 text-sm">
                         <input
                           type="checkbox"
