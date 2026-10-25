@@ -305,7 +305,25 @@ export default function CrmPage({ section = "dashboard" }: Props) {
       ) : section === "library" ? (
         <CrmLibrarySection templates={data.taskTemplates} />
       ) : section === "agenda" ? (
-        <CrmAgendaSection tasks={data.tasks} appointments={data.appointments} projectPathByTaskId={agendaProjectPaths.taskPaths} projectPathByAppointmentId={agendaProjectPaths.appointmentPaths} onTask={() => { setTaskInitialValues(null); setModal("task"); }} onAppointment={() => setModal("appointment")} onDone={(row) => submitSafely(async () => updateCrmTask(row.id, { statut: "terminee" }))} />
+        <CrmAgendaSection
+          tasks={data.tasks}
+          appointments={data.appointments}
+          projectPathByTaskId={agendaProjectPaths.taskPaths}
+          projectPathByAppointmentId={agendaProjectPaths.appointmentPaths}
+          onTask={() => {
+            setTaskInitialValues(null);
+            setModal("task");
+          }}
+          onAppointment={() => setModal("appointment")}
+          onDone={(row) => submitSafely(async () => updateCrmTask(row.id, { statut: "terminee" }))}
+          onReschedule={(row, dueAt) =>
+            submitSafely(async () => updateCrmTask(row.id, { due_at: dueAt, statut: "a_faire", completed_at: null }))
+          }
+          onCancel={(row) =>
+            submitSafely(async () => updateCrmTask(row.id, { statut: "annulee", completed_at: null }))
+          }
+          actionBusy={saving}
+        />
       ) : section === "stats" ? (
         <CrmStatsSection data={data} kpis={kpis} transformationRate={transformationRate} />
       ) : (
