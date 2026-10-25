@@ -41,7 +41,7 @@ export function AgendaEventDrawer({
 
   const taskClosed = event.source === "task" && event.status === "terminee";
 
-  function submitReschedule() {
+  function submitReschedule(activeEvent: AgendaEvent) {
     if (!nextDueAt) {
       setDateError("Choisissez la nouvelle date de relance.");
       return;
@@ -52,7 +52,7 @@ export function AgendaEventDrawer({
       return;
     }
     setDateError(null);
-    onReschedule(event, nextDate.toISOString());
+    onReschedule(activeEvent, nextDate.toISOString());
   }
 
   return (
@@ -110,7 +110,7 @@ export function AgendaEventDrawer({
                     <button type="button" onClick={() => setRescheduleOpen(false)} disabled={busy} className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 disabled:opacity-50">
                       Fermer
                     </button>
-                    <button type="button" onClick={submitReschedule} disabled={busy} className="rounded-xl bg-blue-600 px-3 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50">
+                    <button type="button" onClick={() => submitReschedule(event)} disabled={busy} className="rounded-xl bg-blue-600 px-3 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50">
                       {busy ? "Enregistrement..." : "Confirmer le report"}
                     </button>
                   </div>
