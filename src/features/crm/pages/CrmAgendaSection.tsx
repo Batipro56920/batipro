@@ -85,6 +85,9 @@ export default function CrmAgendaSection({
   onTask,
   onAppointment,
   onDone,
+  onReschedule,
+  onCancel,
+  actionBusy,
 }: {
   tasks: CrmTaskRow[];
   appointments: CrmAppointmentRow[];
@@ -93,6 +96,9 @@ export default function CrmAgendaSection({
   onTask: () => void;
   onAppointment: () => void;
   onDone: (row: CrmTaskRow) => void;
+  onReschedule: (row: CrmTaskRow, dueAt: string) => void;
+  onCancel: (row: CrmTaskRow) => void;
+  actionBusy: boolean;
 }) {
   const [selectedEvent, setSelectedEvent] = useState<AgendaEvent | null>(null);
   const [displayMode, setDisplayMode] = useState<AgendaDisplayMode>("batipro");
@@ -213,9 +219,23 @@ export default function CrmAgendaSection({
       <AgendaEventDrawer
         event={selectedEvent}
         projectPath={selectedProjectPath}
+        busy={actionBusy}
         onClose={() => setSelectedEvent(null)}
         onDone={(event) => {
-          if (event.task) onDone(event.task);
+          if (!event.task) return;
+          onDone(event.task);
+          setSelectedEvent(null);
+        }}
+        onReschedule={(event, dueAt) => {
+          if (!event.task) return;
+          onReschedule(event.task, dueAt);
+          setSelectedEvent(null);
+        }}
+        onCancel={(event) => {
+          if (!event.task) return;
+          if (!window.confirm(`Annuler la tâche "${event.title}" ?`)) return;
+          onCancel(event.task);
+          setSelectedEvent(null);
         }}
       />
     </div>
