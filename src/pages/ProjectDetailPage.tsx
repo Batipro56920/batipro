@@ -141,9 +141,9 @@ export default function ProjectDetailPage() {
     if (activeTab === "visits") return <ProjectVisitsTab project={project} />;
     if (activeTab === "quotes") return <ProjectQuotesTab project={project} onUpdated={refresh} />;
     if (activeTab === "profitability") return <ProjectProfitabilityTab project={project} />;
-    if (activeTab === "documents") return <ProjectDocumentsTab project={project} />;
+    if (activeTab === "documents") return <ProjectDocumentsTab project={project} onUpdated={refresh} />;
     return <ProjectSummaryTab project={project} onUpdated={refresh} />;
-  }, [activeTab, project]);
+  }, [activeTab, project, refresh]);
 
   if (loading) {
     return (

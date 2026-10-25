@@ -6,7 +6,7 @@ import type { InvoiceRecord, InvoiceType } from "../../invoices/domain/types";
 import { listInvoices, saveInvoice } from "../../invoices/infrastructure/invoiceRepository";
 import { quoteBuilderToBusinessDocument } from "../../quotes/builder/quoteBuilderDocumentAdapter";
 import { createQuoteBuilderFromEngine } from "../../quotes/builder/quoteBuilderModel";
-import { deleteCrmQuote, loadCrmQuoteEngineData, transformAcceptedQuoteToChantier } from "../../../services/crm.service";
+import { createCrmDocument, deleteCrmQuote, loadCrmQuoteEngineData, transformAcceptedQuoteToChantier } from "../../../services/crm.service";
 import type { ProjectRecord } from "../types";
 import { EmptyProjectBlock, Panel, formatCurrency, formatDate, useSalespersonName } from "./ProjectShared";
 import { assignProjectSalesperson, listSalespeople, type Salesperson } from "../../../services/salespeople.service";
@@ -735,21 +735,224 @@ export function ProjectQuotesTab({ project, onUpdated }: { project: ProjectRecor
   );
 }
 
-export function ProjectDocumentsTab({ project }: { project: ProjectRecord }) {
+function normalizeProjectDocumentUrl(value: string | null | undefined) {
+  const raw = String(value ?? "").trim();
+  if (!raw) return null;
+  if (raw.startsWith("/")) return raw;
+
+  const candidate = /^[a-z][a-z0-9+.-]*:/i.test(raw) ? raw : `https://${raw}`;
+  try {
+    const parsed = new URL(candidate);
+    return parsed.protocol === "http:" || parsed.protocol === "https:" ? parsed.toString() : null;
+  } catch {
+    return null;
+  }
+}
+
+function projectDocumentTarget(project: ProjectRecord, document: ProjectRecord["documents"][number]) {
+  const directUrl = normalizeProjectDocumentUrl(document.url);
+  if (directUrl) {
+    return {
+      href: directUrl,
+      external: directUrl.startsWith("http://") || directUrl.startsWith("https://"),
+      label: "Ouvrir le document",
+    };
+  }
+
+  if (document.quote_id && project.quotes.some((quote) => quote.id === document.quote_id)) {
+    return {
+      href: `/projets/${project.id}/devis/${document.quote_id}/edit`,
+      external: false,
+      label: "Ouvrir le devis lié",
+    };
+  }
+
+  if (document.chantier_id && project.chantiers.some((chantier) => chantier.id === document.chantier_id)) {
+    return {
+      href: `/chantiers/${document.chantier_id}/documents`,
+      external: false,
+      label: "Ouvrir les documents chantier",
+    };
+  }
+
+  return null;
+}
+
+export function ProjectDocumentsTab({
+  project,
+  onUpdated,
+}: {
+  project: ProjectRecord;
+  onUpdated?: () => void | Promise<void>;
+}) {
+  const [showForm, setShowForm] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [draft, setDraft] = useState({ nom: "", type: "autre", url: "", notes: "" });
+
+  async function addDocument() {
+    const nom = draft.nom.trim();
+    const url = draft.url.trim() ? normalizeProjectDocumentUrl(draft.url) : null;
+    if (!nom) {
+      setError("Le nom du document est obligatoire.");
+      return;
+    }
+    if (draft.url.trim() && !url) {
+      setError("Le lien doit être une URL HTTP ou HTTPS valide.");
+      return;
+    }
+
+    setSaving(true);
+    setError(null);
+    try {
+      await createCrmDocument({
+        opportunity_id: project.opportunity?.id ?? (project.sourceType === "opportunity" ? project.sourceId : null),
+        prospect_id: project.prospect?.id ?? (project.sourceType === "prospect" ? project.sourceId : null),
+        client_id: project.client?.id ?? null,
+        type: draft.type.trim() || "autre",
+        nom,
+        url,
+        notes: draft.notes.trim() || null,
+      });
+      await onUpdated?.();
+      setDraft({ nom: "", type: "autre", url: "", notes: "" });
+      setShowForm(false);
+    } catch (saveError) {
+      setError(saveError instanceof Error ? saveError.message : "Ajout du document impossible.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
   return (
-    <Panel title="Documents" description="Les pièces commerciales du dossier.">
-      {project.documents.length ? (
-        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-          {project.documents.map((document) => (
-            <div key={document.id} className="rounded-2xl border border-slate-200 p-4">
-              <div className="font-semibold text-slate-950">{document.nom}</div>
-              <div className="mt-1 text-xs text-slate-500">{document.type} - {formatDate(document.created_at)}</div>
-            </div>
-          ))}
-        </div>
-      ) : (
-        <EmptyProjectBlock title="Aucun document" description="Les pièces jointes des visites et des devis apparaissent ici." />
+    <Panel
+      title="Documents"
+      description="Les pièces commerciales du dossier, reliées au projet, aux devis et au chantier."
+      actions={(
+        <button
+          type="button"
+          onClick={() => {
+            setShowForm((current) => !current);
+            setError(null);
+          }}
+          className="text-sm font-semibold text-blue-700 hover:text-blue-800"
+        >
+          {showForm ? "Fermer l'ajout" : "Ajouter un document"}
+        </button>
       )}
+    >
+      <div className="space-y-4">
+        {showForm ? (
+          <form
+            className="rounded-2xl border border-blue-200 bg-blue-50 p-4"
+            onSubmit={(event) => {
+              event.preventDefault();
+              void addDocument();
+            }}
+          >
+            <div className="grid gap-3 md:grid-cols-2">
+              <label className="text-sm font-medium text-slate-700">
+                Nom du document
+                <input
+                  value={draft.nom}
+                  onChange={(event) => setDraft((current) => ({ ...current, nom: event.target.value }))}
+                  className="mt-1 h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm outline-none focus:border-blue-400"
+                  placeholder="Compte rendu, plan, étude..."
+                  required
+                />
+              </label>
+              <label className="text-sm font-medium text-slate-700">
+                Type
+                <select
+                  value={draft.type}
+                  onChange={(event) => setDraft((current) => ({ ...current, type: event.target.value }))}
+                  className="mt-1 h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm outline-none focus:border-blue-400"
+                >
+                  <option value="autre">Autre</option>
+                  <option value="compte_rendu">Compte rendu</option>
+                  <option value="plan">Plan</option>
+                  <option value="etude">Étude</option>
+                  <option value="administratif">Administratif</option>
+                </select>
+              </label>
+              <label className="text-sm font-medium text-slate-700 md:col-span-2">
+                Lien du document
+                <input
+                  value={draft.url}
+                  onChange={(event) => setDraft((current) => ({ ...current, url: event.target.value }))}
+                  className="mt-1 h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm outline-none focus:border-blue-400"
+                  placeholder="https://..."
+                  inputMode="url"
+                />
+              </label>
+              <label className="text-sm font-medium text-slate-700 md:col-span-2">
+                Notes
+                <textarea
+                  value={draft.notes}
+                  onChange={(event) => setDraft((current) => ({ ...current, notes: event.target.value }))}
+                  className="mt-1 min-h-24 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-blue-400"
+                  placeholder="Contexte ou contenu utile du document"
+                />
+              </label>
+            </div>
+            {error ? <div className="mt-3 text-sm font-medium text-red-700">{error}</div> : null}
+            <div className="mt-4 flex flex-wrap justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowForm(false);
+                  setError(null);
+                }}
+                className="inline-flex h-9 items-center rounded-xl border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+              >
+                Annuler
+              </button>
+              <button
+                type="submit"
+                disabled={saving}
+                className="inline-flex h-9 items-center rounded-xl bg-blue-700 px-3 text-sm font-semibold text-white hover:bg-blue-800 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {saving ? "Ajout..." : "Ajouter au projet"}
+              </button>
+            </div>
+          </form>
+        ) : null}
+
+        {error && !showForm ? (
+          <div className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm font-medium text-red-700">{error}</div>
+        ) : null}
+
+        {project.documents.length ? (
+          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+            {project.documents.map((document) => {
+              const target = projectDocumentTarget(project, document);
+              return (
+                <article key={document.id} className="flex min-h-36 flex-col rounded-2xl border border-slate-200 bg-white p-4">
+                  <div className="font-semibold text-slate-950">{document.nom}</div>
+                  <div className="mt-1 text-xs text-slate-500">{document.type} - {formatDate(document.created_at)}</div>
+                  {document.notes ? <p className="mt-3 line-clamp-3 text-sm leading-5 text-slate-600">{document.notes}</p> : null}
+                  <div className="mt-auto pt-4">
+                    {target ? (
+                      <a
+                        href={target.href}
+                        target={target.external ? "_blank" : undefined}
+                        rel={target.external ? "noreferrer" : undefined}
+                        className="text-sm font-semibold text-blue-700 hover:text-blue-800"
+                      >
+                        {target.label}
+                      </a>
+                    ) : (
+                      <span className="text-xs text-slate-400">Aucun lien exploitable</span>
+                    )}
+                  </div>
+                </article>
+              );
+            })}
+          </div>
+        ) : (
+          <EmptyProjectBlock title="Aucun document" description="Ajoutez un lien documentaire : il restera rattaché au dossier commercial et visible dans le CRM." />
+        )}
+      </div>
     </Panel>
   );
 }
