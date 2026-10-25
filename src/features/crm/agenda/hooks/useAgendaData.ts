@@ -13,7 +13,7 @@ export function useAgendaData(tasks: CrmTaskRow[], appointments: CrmAppointmentR
   const weekLimitKey = weekLimit.toISOString().slice(0, 10);
 
   const events = useMemo<AgendaEvent[]>(() => [
-    ...tasks.map((task) => {
+    ...tasks.filter((task) => task.statut !== "annulee").map((task) => {
       const taskDate = dateKey(task.due_at);
       const done = task.statut === "terminee";
       const overdue = !done && taskDate !== null && taskDate < today;
