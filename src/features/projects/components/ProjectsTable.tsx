@@ -1,5 +1,5 @@
 import { Link, useNavigate } from "react-router-dom";
-import { ArrowRight, FileText, Hammer } from "lucide-react";
+import { ArrowRight, CalendarClock, FileText, Hammer } from "lucide-react";
 import { isApporteurSource } from "../../../services/crm.service";
 import type { ProjectRecord } from "../types";
 import { ProjectStatusBadge } from "./ProjectStatusBadge";
@@ -272,10 +272,24 @@ export function ProjectsTable({
                         </div>
                       </>
                     ) : (
-                      <>
-                        <div className="truncate text-slate-700">{project.nextAction || "Aucune action planifiée"}</div>
-                        {project.nextActionDate ? <div className="mt-1 text-xs text-slate-500">{formatDate(project.nextActionDate)}</div> : null}
-                      </>
+                      project.nextAction && project.nextActionTaskId ? (
+                        <Link
+                          to={`/crm/agenda?taskId=${encodeURIComponent(project.nextActionTaskId)}`}
+                          className="group block rounded-lg px-2 py-1.5 transition hover:bg-blue-50"
+                          title="Ouvrir cette relance dans l'agenda"
+                        >
+                          <div className="flex items-center gap-1.5 text-slate-700 group-hover:text-blue-700">
+                            <CalendarClock className="h-3.5 w-3.5 shrink-0" />
+                            <span className="truncate font-medium">{project.nextAction}</span>
+                          </div>
+                          {project.nextActionDate ? <div className="mt-1 text-xs text-slate-500">{formatDate(project.nextActionDate)}</div> : null}
+                        </Link>
+                      ) : (
+                        <>
+                          <div className="truncate text-slate-700">{project.nextAction || "Aucune action planifiée"}</div>
+                          {project.nextActionDate ? <div className="mt-1 text-xs text-slate-500">{formatDate(project.nextActionDate)}</div> : null}
+                        </>
+                      )
                     )}
                   </td>
                   <td className="px-4 py-3 text-right font-semibold text-slate-900">
