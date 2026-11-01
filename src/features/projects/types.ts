@@ -41,6 +41,7 @@ export type ProjectRecord = {
   status: ProjectStatus;
   nextAction: string | null;
   nextActionDate: string | null;
+  nextActionTaskId?: string | null;
   quoteAmount: number;
   createdAt: string | null;
   desiredDeadline: string | null;
