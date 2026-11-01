@@ -136,6 +136,22 @@ function latestDate(values: Array<string | null | undefined>) {
   return values.filter(Boolean).sort().at(-1) ?? null;
 }
 
+function projectFollowUp(tasks: CrmDataset["tasks"]) {
+  const relances = tasks.filter((task) => task.type === "relance");
+  const next = relances
+    .filter((task) => !["terminee", "annulee"].includes(task.statut))
+    .sort((a, b) => {
+      const dueComparison = String(a.due_at ?? "9999").localeCompare(String(b.due_at ?? "9999"));
+      return dueComparison || String(a.created_at).localeCompare(String(b.created_at));
+    })[0] ?? null;
+
+  return {
+    action: next?.titre ?? null,
+    date: next?.due_at ?? null,
+    hasHistory: relances.length > 0,
+  };
+}
+
 function clientProjectName(client: CrmClientRow, quotes: CrmQuoteRow[]) {
   const mainQuote = quotes[0] ?? null;
   return mainQuote?.description || mainQuote?.lot || `Projet ${fullName(client)}`;
@@ -163,6 +179,7 @@ export function buildProjects(dataset: CrmDataset): ProjectRecord[] {
     );
     const sav = dataset.sav.filter((ticket) => chantiers.some((chantier) => chantier.id === ticket.chantier_id) || (client && ticket.client_id === client.id));
     const tasks = dataset.tasks.filter((task) => task.opportunity_id === opportunity.id || (prospect && task.prospect_id === prospect.id) || (client && task.client_id === client.id));
+    const followUp = projectFollowUp(tasks);
     const appointments = dataset.appointments.filter((appointment) => appointment.opportunity_id === opportunity.id || (prospect && appointment.prospect_id === prospect.id) || (client && appointment.client_id === client.id));
     const documents = dataset.documents.filter((document) => document.opportunity_id === opportunity.id || quotes.some((quote) => quote.id === document.quote_id) || chantiers.some((chantier) => chantier.id === document.chantier_id));
     const communications = dataset.communications.filter((communication) => communication.opportunity_id === opportunity.id || quotes.some((quote) => quote.id === communication.quote_id));
@@ -186,8 +203,8 @@ export function buildProjects(dataset: CrmDataset): ProjectRecord[] {
         chantiers,
         hasOpenSav: sav.some((ticket) => isOpenSav(ticket.statut)),
       }),
-      nextAction: opportunity.prochaine_action,
-      nextActionDate: opportunity.prochaine_action_date,
+      nextAction: followUp.action ?? (followUp.hasHistory ? null : opportunity.prochaine_action),
+      nextActionDate: followUp.date ?? (followUp.hasHistory ? null : opportunity.prochaine_action_date),
       quoteAmount: quotes.reduce((sum, quote) => sum + Number(quote.montant_ht || 0), 0) || Number(opportunity.montant_estime || 0),
       createdAt: opportunity.created_at,
       desiredDeadline: opportunity.echeance,
@@ -217,6 +234,8 @@ export function buildProjects(dataset: CrmDataset): ProjectRecord[] {
     rememberQuotes(usedQuoteIds, quotes);
     const chantiers = dataset.chantiers.filter((chantier) => isChantierLinkedToProspectProject(chantier, prospect, quotes));
     const sav = dataset.sav.filter((ticket) => chantiers.some((chantier) => chantier.id === ticket.chantier_id));
+    const tasks = dataset.tasks.filter((task) => task.prospect_id === prospect.id || (client && task.client_id === client.id));
+    const followUp = projectFollowUp(tasks);
 
     projects.push({
       id: projectId,
@@ -234,8 +253,8 @@ export function buildProjects(dataset: CrmDataset): ProjectRecord[] {
         chantiers,
         hasOpenSav: sav.some((ticket) => isOpenSav(ticket.statut)),
       }),
-      nextAction: null,
-      nextActionDate: null,
+      nextAction: followUp.action,
+      nextActionDate: followUp.date,
       quoteAmount: quotes.reduce((sum, quote) => sum + Number(quote.montant_ht || 0), 0) || Number(prospect.budget_estime || 0),
       createdAt: prospect.created_at,
       desiredDeadline: null,
@@ -249,7 +268,7 @@ export function buildProjects(dataset: CrmDataset): ProjectRecord[] {
       opportunity: null,
       quotes,
       chantiers,
-      tasks: dataset.tasks.filter((task) => task.prospect_id === prospect.id || (client && task.client_id === client.id)),
+      tasks,
       appointments: dataset.appointments.filter((appointment) => appointment.prospect_id === prospect.id || (client && appointment.client_id === client.id)),
       documents: dataset.documents.filter((document) => document.prospect_id === prospect.id || quotes.some((quote) => quote.id === document.quote_id) || chantiers.some((chantier) => chantier.id === document.chantier_id)),
       communications: dataset.communications.filter((communication) => communication.prospect_id === prospect.id || quotes.some((quote) => quote.id === communication.quote_id)),
@@ -266,6 +285,8 @@ export function buildProjects(dataset: CrmDataset): ProjectRecord[] {
       (chantier) => chantier.crm_client_id === client.id || isChantierLinkedToQuotes(chantier, quotes),
     );
     const sav = dataset.sav.filter((ticket) => ticket.client_id === client.id || chantiers.some((chantier) => chantier.id === ticket.chantier_id));
+    const tasks = dataset.tasks.filter((task) => task.client_id === client.id || quotes.some((quote) => quote.id === task.quote_id));
+    const followUp = projectFollowUp(tasks);
 
     projects.push({
       id: projectId,
@@ -283,8 +304,8 @@ export function buildProjects(dataset: CrmDataset): ProjectRecord[] {
         chantiers,
         hasOpenSav: sav.some((ticket) => isOpenSav(ticket.statut)),
       }),
-      nextAction: null,
-      nextActionDate: null,
+      nextAction: followUp.action,
+      nextActionDate: followUp.date,
       quoteAmount: quotes.reduce((sum, quote) => sum + Number(quote.montant_ht || 0), 0),
       createdAt: latestDate(quotes.map((quote) => quote.created_at)) ?? client.created_at,
       desiredDeadline: null,
@@ -298,7 +319,7 @@ export function buildProjects(dataset: CrmDataset): ProjectRecord[] {
       opportunity: null,
       quotes,
       chantiers,
-      tasks: dataset.tasks.filter((task) => task.client_id === client.id || quotes.some((quote) => quote.id === task.quote_id)),
+      tasks,
       appointments: dataset.appointments.filter((appointment) => appointment.client_id === client.id),
       documents: dataset.documents.filter((document) => document.client_id === client.id || quotes.some((quote) => quote.id === document.quote_id) || chantiers.some((chantier) => chantier.id === document.chantier_id)),
       communications: dataset.communications.filter((communication) => communication.client_id === client.id || quotes.some((quote) => quote.id === communication.quote_id)),
