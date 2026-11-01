@@ -148,6 +148,7 @@ function projectFollowUp(tasks: CrmDataset["tasks"]) {
   return {
     action: next?.titre ?? null,
     date: next?.due_at ?? null,
+    taskId: next?.id ?? null,
     hasHistory: relances.length > 0,
   };
 }
@@ -205,6 +206,7 @@ export function buildProjects(dataset: CrmDataset): ProjectRecord[] {
       }),
       nextAction: followUp.action ?? (followUp.hasHistory ? null : opportunity.prochaine_action),
       nextActionDate: followUp.date ?? (followUp.hasHistory ? null : opportunity.prochaine_action_date),
+      nextActionTaskId: followUp.taskId,
       quoteAmount: quotes.reduce((sum, quote) => sum + Number(quote.montant_ht || 0), 0) || Number(opportunity.montant_estime || 0),
       createdAt: opportunity.created_at,
       desiredDeadline: opportunity.echeance,
@@ -255,6 +257,7 @@ export function buildProjects(dataset: CrmDataset): ProjectRecord[] {
       }),
       nextAction: followUp.action,
       nextActionDate: followUp.date,
+      nextActionTaskId: followUp.taskId,
       quoteAmount: quotes.reduce((sum, quote) => sum + Number(quote.montant_ht || 0), 0) || Number(prospect.budget_estime || 0),
       createdAt: prospect.created_at,
       desiredDeadline: null,
@@ -306,6 +309,7 @@ export function buildProjects(dataset: CrmDataset): ProjectRecord[] {
       }),
       nextAction: followUp.action,
       nextActionDate: followUp.date,
+      nextActionTaskId: followUp.taskId,
       quoteAmount: quotes.reduce((sum, quote) => sum + Number(quote.montant_ht || 0), 0),
       createdAt: latestDate(quotes.map((quote) => quote.created_at)) ?? client.created_at,
       desiredDeadline: null,
