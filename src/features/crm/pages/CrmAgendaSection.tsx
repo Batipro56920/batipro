@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import type { CrmAppointmentRow, CrmTaskRow } from "../../../services/crm.service";
 import {
   disconnectGoogleCalendar,
@@ -100,6 +101,8 @@ export default function CrmAgendaSection({
   onCancel: (row: CrmTaskRow) => void;
   actionBusy: boolean;
 }) {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const targetedTaskId = searchParams.get("taskId") ?? "";
   const [selectedEvent, setSelectedEvent] = useState<AgendaEvent | null>(null);
   const [displayMode, setDisplayMode] = useState<AgendaDisplayMode>("batipro");
   const [connection, setConnection] = useState<GoogleCalendarConnectionStatus | null>(null);
@@ -114,6 +117,30 @@ export default function CrmAgendaSection({
   const selectedProjectPath = selectedEvent
     ? projectPathForEvent(selectedEvent, projectPathByTaskId, projectPathByAppointmentId)
     : null;
+
+  useEffect(() => {
+    if (!targetedTaskId) return;
+    const targetedEvent = agenda.events.find((event) => event.task?.id === targetedTaskId);
+    if (!targetedEvent) return;
+    setDisplayMode("batipro");
+    setSelectedEvent((current) => current?.task?.id === targetedTaskId ? current : targetedEvent);
+  }, [agenda.events, targetedTaskId]);
+
+  function selectAgendaEvent(event: AgendaEvent) {
+    setSelectedEvent(event);
+    const nextParams = new URLSearchParams(searchParams);
+    if (event.task?.id) nextParams.set("taskId", event.task.id);
+    else nextParams.delete("taskId");
+    setSearchParams(nextParams, { replace: true });
+  }
+
+  function closeSelectedEvent() {
+    setSelectedEvent(null);
+    if (!searchParams.has("taskId")) return;
+    const nextParams = new URLSearchParams(searchParams);
+    nextParams.delete("taskId");
+    setSearchParams(nextParams, { replace: true });
+  }
 
   const refreshConnection = useCallback(async (showError = false) => {
     try {
@@ -214,28 +241,28 @@ export default function CrmAgendaSection({
       {displayMode === "google" ? (
         <AgendaGoogleCalendarFrame connection={connection} syncBusy={syncBusy} onConnectGoogle={connectGoogle} />
       ) : (
-        <AgendaCalendar events={agenda.events} onSelect={setSelectedEvent} onCreate={onAppointment} />
+        <AgendaCalendar events={agenda.events} onSelect={selectAgendaEvent} onCreate={onAppointment} />
       )}
       <AgendaEventDrawer
         event={selectedEvent}
         projectPath={selectedProjectPath}
         busy={actionBusy}
-        onClose={() => setSelectedEvent(null)}
+        onClose={closeSelectedEvent}
         onDone={(event) => {
           if (!event.task) return;
           onDone(event.task);
-          setSelectedEvent(null);
+          closeSelectedEvent();
         }}
         onReschedule={(event, dueAt) => {
           if (!event.task) return;
           onReschedule(event.task, dueAt);
-          setSelectedEvent(null);
+          closeSelectedEvent();
         }}
         onCancel={(event) => {
           if (!event.task) return;
           if (!window.confirm(`Annuler la tâche "${event.title}" ?`)) return;
           onCancel(event.task);
-          setSelectedEvent(null);
+          closeSelectedEvent();
         }}
       />
     </div>
