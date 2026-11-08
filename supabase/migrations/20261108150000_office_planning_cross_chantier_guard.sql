@@ -54,7 +54,7 @@ begin
      and planned.chantier_id <> p_chantier
      and planned.starts_on <= p_end
      and planned.ends_on >= p_start
-     and lower(coalesce(planned.status, '')) not in ('annule', 'annulé', 'cancelled', 'canceled')
+     and lower(coalesce(planned.status, '')) not in ('annule', 'annulé', 'cancelled', 'canceled', 'termine', 'terminé')
  ) then
    raise exception 'worker_task_on_other_chantier';
  end if;
