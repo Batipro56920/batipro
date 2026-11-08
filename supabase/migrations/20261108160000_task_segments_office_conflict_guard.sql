@@ -17,7 +17,7 @@ declare
 begin
   if new.intervenant_id is null
      or lower(coalesce(new.status, 'planifie')) in
-        ('annule', 'annulé', 'cancelled', 'canceled') then
+        ('annule', 'annulé', 'cancelled', 'canceled', 'termine', 'terminé') then
     return new;
   end if;
 
