@@ -25,20 +25,26 @@ begin
    select 1
    from (
      select s.chantier_id, s.intervenant_id,
-            coalesce(s.start_date, s.start_at::date) as starts_on,
+            coalesce(s.start_date, (s.start_at at time zone 'UTC')::date) as starts_on,
             coalesce(
-              s.end_at::date,
-              coalesce(s.start_date, s.start_at::date)
+              case when s.start_date is not null and s.duration_days is not null
+                then s.start_date + greatest(ceil(s.duration_days)::int, 1) - 1
+              end,
+              (s.end_at at time zone 'UTC')::date,
+              coalesce(s.start_date, (s.start_at at time zone 'UTC')::date)
                 + greatest(ceil(coalesce(s.duration_days, 1))::int, 1) - 1
             ) as ends_on,
             s.status
      from public.chantier_task_planning_segments s
      union all
      select s.chantier_id, s.intervenant_id,
-            coalesce(s.start_date, s.start_at::date),
+            coalesce(s.start_date, (s.start_at at time zone 'UTC')::date),
             coalesce(
-              s.end_at::date,
-              coalesce(s.start_date, s.start_at::date)
+              case when s.start_date is not null and s.duration_days is not null
+                then s.start_date + greatest(ceil(s.duration_days)::int, 1) - 1
+              end,
+              (s.end_at at time zone 'UTC')::date,
+              coalesce(s.start_date, (s.start_at at time zone 'UTC')::date)
                 + greatest(ceil(coalesce(s.duration_days, 1))::int, 1) - 1
             ),
             s.status
