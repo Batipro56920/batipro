@@ -8,6 +8,42 @@ type Row = {id:string; name:string};
 type Assignment = {id:string;chantier_id:string;intervenant_id:string|null;start_at:string|null;end_at:string|null;start_date:string|null;duration_days:number|null};
 type Booking = {office_assignment_id?:string|null;id:string;chantier_id:string;resource_id:string;resource_name:string;quantity:number;planned_for:string;status:string;resource_type:string};
 type View = "users"|"sites"|"equipment";
+type PlanningConflict = {workerId:string;day:string;chantierIds:string[]};
+// Les affectations bureau et les tâches constituent deux sources de planification
+// distinctes. On ne signale un conflit que lorsque les chantiers diffèrent.
+function assignmentDates(item:Assignment):{start:string;end:string}|null {
+ const start=(item.start_at??item.start_date??"").slice(0,10);
+ if(!/^\d{4}-\d{2}-\d{2}$/.test(start))return null;
+ const end=(item.end_at??"").slice(0,10)||iso(shifted(new Date(start+"T12:00:00"),Math.max(item.duration_days??1,1)-1));
+ return {start,end};
+}
+function conflictingWorkerDays(
+ office:Array<{chantier_id:string;intervenant_id:string;date_start:string;date_end:string}>,
+ tasks:Assignment[],days:string[]
+):PlanningConflict[]{
+ const conflicts:PlanningConflict[]=[];
+ for(const day of days){
+  const assignmentsByWorker=new Map<string,Set<string>>();
+  for(const item of office){
+   if(item.date_start>day||item.date_end<day)continue;
+   const sites=assignmentsByWorker.get(item.intervenant_id)??new Set<string>();
+   sites.add(item.chantier_id);
+   assignmentsByWorker.set(item.intervenant_id,sites);
+  }
+  for(const item of tasks){
+   if(!item.intervenant_id)continue;
+   const range=assignmentDates(item);
+   if(!range||range.start>day||range.end<day)continue;
+   const sites=assignmentsByWorker.get(item.intervenant_id)??new Set<string>();
+   sites.add(item.chantier_id);
+   assignmentsByWorker.set(item.intervenant_id,sites);
+  }
+  for(const [workerId,sites] of assignmentsByWorker){
+   if(sites.size>1)conflicts.push({workerId,day,chantierIds:[...sites]});
+  }
+ }
+ return conflicts;
+}
 const iso=(d:Date)=>[d.getFullYear(),String(d.getMonth()+1).padStart(2,"0"),String(d.getDate()).padStart(2,"0")].join("-");
 const shifted=(d:Date,n:number)=>{const x=new Date(d);x.setDate(x.getDate()+n);return x;};
 const monday=(d:Date)=>shifted(new Date(d.getFullYear(),d.getMonth(),d.getDate()),-(d.getDay()+6)%7);
@@ -64,18 +100,21 @@ export default function CentralPlanningPage(){
  async function edit(item:{id:string;chantier_id:string;intervenant_id:string;date_start:string;date_end:string}){setEditingId(item.id);setSiteId(item.chantier_id);setWorkerId(item.intervenant_id);setStart(item.date_start);setEnd(item.date_end);setChosenEquipment(bookings.filter(b=>(b as Booking & {office_assignment_id?:string}).office_assignment_id===item.id).map(b=>b.resource_id));setFormOpen(true);}
 
  const siteNames=new Map(sites.map(s=>[s.id,s.name])),userNames=new Map(users.map(u=>[u.id,u.name]));
+ const conflicts=useMemo(()=>conflictingWorkerDays(office,assignments,days),[office,assignments,days]);
+ const conflictsByWorkerDay=new Set(conflicts.map(x=>x.workerId+"|"+x.day));
  const rows=view==="sites"?sites:view==="users"?users:equipment;
  function forDay(rowId:string,day:string){
   if(view==="equipment")return bookings.filter(b=>{const a=office.find(x=>x.id===b.office_assignment_id);return b.resource_type==="equipment"&&b.resource_id===rowId&&(a?a.date_start<=day&&a.date_end>=day:b.planned_for===day);}).map(b=>({id:b.id,site:b.chantier_id,label:(siteNames.get(b.chantier_id)??"Chantier")+" · "+b.quantity+" unité(s)",status:b.status==="issued"?"Sorti":"Réservé"}));
   const added=office.filter(a=>a.date_start<=day&&a.date_end>=day&&(view==="sites"?a.chantier_id===rowId:a.intervenant_id===rowId)).map(a=>({id:a.id,site:a.chantier_id,label:view==="sites"?(userNames.get(a.intervenant_id)??"Ouvrier"):(siteNames.get(a.chantier_id)??"Chantier"),status:"Affecté"}));
-  return added.concat(assignments.filter(a=>{const start=(a.start_at??a.start_date??"").slice(0,10);const end=(a.end_at??"").slice(0,10)||(start?iso(shifted(new Date(start+"T12:00:00"),Math.max(a.duration_days??1,1)-1)):"");return start<=day&&day<=end&&(view==="sites"?a.chantier_id===rowId:a.intervenant_id===rowId);}).map(a=>({id:a.id,site:a.chantier_id,label:view==="sites"?(userNames.get(a.intervenant_id??"")??"Équipe"):(siteNames.get(a.chantier_id)??"Chantier"),status:"Prévu"})));
+  return added.concat(assignments.filter(a=>{const range=assignmentDates(a);return range!==null&&range.start<=day&&day<=range.end&&(view==="sites"?a.chantier_id===rowId:a.intervenant_id===rowId);}).map(a=>({id:a.id,site:a.chantier_id,label:view==="sites"?(userNames.get(a.intervenant_id??"")??"Équipe"):(siteNames.get(a.chantier_id)??"Chantier"),status:"Prévu"})));
  }
  return <div className="space-y-5"><header className="rounded-3xl bg-slate-950 p-6 text-white"><p className="text-xs font-semibold uppercase tracking-wider text-blue-300">Production · Bureau</p><h1 className="mt-2 text-2xl font-bold">Planning général</h1><p className="mt-1 text-sm text-slate-300">Utilisateurs, chantiers et réservations de matériel.</p></header>
  <button onClick={()=>{setEditingId(null);setChosenEquipment([]);setFormOpen(x=>!x)}} className="rounded-xl bg-blue-600 px-4 py-3 font-semibold text-white">+ Nouvelle affectation</button>
  {formOpen&&<section className="grid gap-3 rounded-2xl border bg-white p-4 sm:grid-cols-2"><label>Chantier<select className="mt-1 w-full rounded-lg border p-2" value={siteId} onChange={e=>setSiteId(e.target.value)}><option value="">Choisir</option>{sites.map(x=><option key={x.id} value={x.id}>{x.name}</option>)}</select></label><label>Ouvrier<select className="mt-1 w-full rounded-lg border p-2" value={workerId} onChange={e=>setWorkerId(e.target.value)}><option value="">Choisir</option>{users.map(x=><option key={x.id} value={x.id}>{x.name}</option>)}</select></label><label>Du<input className="mt-1 w-full rounded-lg border p-2" type="date" value={start} onChange={e=>setStart(e.target.value)}/></label><label>Au<input className="mt-1 w-full rounded-lg border p-2" type="date" min={start} value={end} onChange={e=>setEnd(e.target.value)}/></label><div className="sm:col-span-2"><p className="mb-2 text-sm font-semibold">Matériel à réserver</p><div className="grid max-h-44 gap-2 overflow-y-auto sm:grid-cols-2">{equipment.map(item=><label key={item.id} className="flex gap-2 rounded-lg border p-2 text-sm"><input type="checkbox" checked={chosenEquipment.includes(item.id)} onChange={e=>setChosenEquipment(old=>e.target.checked?[...old,item.id]:old.filter(id=>id!==item.id))}/>{item.name}</label>)}</div><p className="mt-2 text-xs text-amber-700">Le matériel sélectionné est réservé avec l'affectation, sans sortie de stock avant confirmation du matin.</p></div><button disabled={saving||!workerId||!siteId||end<start} className="rounded-lg bg-blue-600 p-2 text-white disabled:opacity-50" onClick={()=>void assign()}>{editingId?"Modifier l’affectation":"Enregistrer l’affectation"}</button></section>}
  <div className="flex flex-wrap items-center justify-between gap-3"><div className="flex rounded-xl border bg-white p-1">{([["users","Utilisateurs"],["sites","Chantiers"],["equipment","Matériels"]] as const).map(([key,label])=><button key={key} onClick={()=>setView(key)} className={`rounded-lg px-3 py-2 text-sm font-semibold ${view===key?"bg-blue-100 text-blue-900":"text-slate-500"}`}>{label}</button>)}</div><div className="flex items-center gap-2"><button className="rounded-lg border bg-white p-2" onClick={()=>setWeek(d=>shifted(d,-7))}>←</button><strong className="text-sm">{week.toLocaleDateString("fr-FR",{month:"long",year:"numeric"})}</strong><button className="rounded-lg border bg-white p-2" onClick={()=>setWeek(d=>shifted(d,7))}>→</button><button className="rounded-lg border bg-white px-3 py-2 text-sm" onClick={()=>setWeek(monday(new Date()))}>Aujourd'hui</button></div></div>
  {error&&<p className="rounded-xl bg-red-50 p-3 text-red-700">{error}</p>}
- {loading?<p>Chargement…</p>:<div className="overflow-x-auto rounded-2xl border bg-white"><table className="w-full min-w-[760px] text-sm"><thead><tr className="bg-slate-50"><th className="p-3 text-left">Ressource</th>{days.map(d=><th key={d} className="p-3">{new Date(d+"T12:00:00").toLocaleDateString("fr-FR",{weekday:"short",day:"numeric",month:"short"})}</th>)}</tr></thead><tbody>{rows.map(row=><tr key={row.id} className="border-t"><th className="p-3 text-left">{row.name}</th>{days.map(day=><td key={day} className="border-l p-2 align-top">{forDay(row.id,day).map(event=><Link key={event.id} to={`/chantiers/${event.site}/planning`} className="mb-1 block rounded-lg bg-blue-50 p-2 text-xs text-blue-900"><strong>{event.label}</strong><span className="block text-blue-600">{event.status}</span></Link>)}</td>)}</tr>)}</tbody></table>{rows.length===0&&<p className="p-8 text-center text-slate-500">Aucune donnée disponible.</p>}</div>}
+ {conflicts.length>0&&<section role="alert" className="rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950"><h2 className="font-semibold">Conflits de planning à vérifier ({conflicts.length} journée(s))</h2><p className="mt-1 text-xs">Un même intervenant est prévu sur plusieurs chantiers le même jour. Les affectations du bureau et les tâches chantier sont comparées sans duplication des données.</p><ul className="mt-2 space-y-1">{conflicts.slice(0,8).map(item=><li key={item.workerId+"|"+item.day}>{userNames.get(item.workerId)??"Intervenant"} · {item.day} · {item.chantierIds.map(id=>siteNames.get(id)??"Chantier").join(" / ")}</li>)}</ul>{conflicts.length>8&&<p className="mt-1 text-xs">Et {conflicts.length-8} autre(s) journée(s) à vérifier.</p>}</section>}
+ {loading?<p>Chargement…</p>:<div className="overflow-x-auto rounded-2xl border bg-white"><table className="w-full min-w-[760px] text-sm"><thead><tr className="bg-slate-50"><th className="p-3 text-left">Ressource</th>{days.map(d=><th key={d} className="p-3">{new Date(d+"T12:00:00").toLocaleDateString("fr-FR",{weekday:"short",day:"numeric",month:"short"})}</th>)}</tr></thead><tbody>{rows.map(row=><tr key={row.id} className="border-t"><th className="p-3 text-left">{row.name}</th>{days.map(day=><td key={day} className={`border-l p-2 align-top ${view==="users"&&conflictsByWorkerDay.has(row.id+"|"+day)?"bg-amber-50":""}`}>{forDay(row.id,day).map(event=><Link key={event.id} to={`/chantiers/${event.site}/planning`} className="mb-1 block rounded-lg bg-blue-50 p-2 text-xs text-blue-900"><strong>{event.label}</strong><span className="block text-blue-600">{event.status}</span></Link>)}</td>)}</tr>)}</tbody></table>{rows.length===0&&<p className="p-8 text-center text-slate-500">Aucune donnée disponible.</p>}</div>}
  <section className="rounded-2xl border bg-white p-4"><h2 className="mb-3 font-semibold">Affectations du bureau · modifier</h2><div className="space-y-2">{office.map(item=><div key={item.id} className="flex items-center justify-between gap-2 rounded-lg border p-2 text-sm"><span>{userNames.get(item.intervenant_id)??"Ouvrier"} · {siteNames.get(item.chantier_id)??"Chantier"} · {item.date_start} → {item.date_end}</span><button className="rounded-lg bg-blue-50 px-3 py-2 text-blue-800" onClick={()=>void edit(item)}>Modifier</button></div>)}</div></section>
- <p className="text-xs text-slate-500">Les affectations proviennent du planning chantier existant ; le matériel provient des réservations du portail ouvrier.</p></div>;
+ <p className="text-xs text-slate-500">Le planning rapproche les affectations du bureau et les tâches planifiées par chantier ; les conflits inter-chantiers sont signalés. Les réservations de matériel restent gérées par leur circuit existant.</p></div>;
 }
