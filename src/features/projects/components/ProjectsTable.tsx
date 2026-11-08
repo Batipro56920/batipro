@@ -284,11 +284,19 @@ export function ProjectsTable({
                           </div>
                           {project.nextActionDate ? <div className="mt-1 text-xs text-slate-500">{formatDate(project.nextActionDate)}</div> : null}
                         </Link>
-                      ) : (
+                      ) : project.nextAction ? (
                         <>
-                          <div className="truncate text-slate-700">{project.nextAction || "Aucune action planifiée"}</div>
+                          <div className="truncate text-slate-700">{project.nextAction}</div>
                           {project.nextActionDate ? <div className="mt-1 text-xs text-slate-500">{formatDate(project.nextActionDate)}</div> : null}
                         </>
+                      ) : (
+                        <Link
+                          to={`/crm/agenda?action=nouvelle-relance&project=${encodeURIComponent(project.id)}`}
+                          className="group inline-flex items-center gap-1.5 rounded-lg px-2 py-1.5 font-medium text-blue-700 transition hover:bg-blue-50 hover:text-blue-800"
+                        >
+                          <CalendarClock className="h-3.5 w-3.5 shrink-0" />
+                          Planifier une relance
+                        </Link>
                       )
                     )}
                   </td>
