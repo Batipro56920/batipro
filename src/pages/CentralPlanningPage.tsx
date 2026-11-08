@@ -4,8 +4,9 @@ import { supabase } from "../lib/supabaseClient";
 import { listChantiers } from "../services/chantiers.service";
 import { getCurrentUserProfile } from "../services/currentUserProfile.service";
 import { getCompanySettings, normalizeIndirectCosts } from "../services/companySettings.service";
+import { detectCrossChantierConflicts, taskInterval, type PlanningTaskInterval } from "../features/planning/officePlanningConflicts";
 type Row = {id:string; name:string};
-type Assignment = {id:string;chantier_id:string;intervenant_id:string|null;start_at:string|null;end_at:string|null;start_date:string|null;duration_days:number|null};
+type Assignment = PlanningTaskInterval & {id:string};
 type Booking = {office_assignment_id?:string|null;id:string;chantier_id:string;resource_id:string;resource_name:string;quantity:number;planned_for:string;status:string;resource_type:string};
 type View = "users"|"sites"|"equipment";
 const SAVE_ERROR_LABELS:Record<string,string>={
@@ -23,42 +24,6 @@ function planningSaveError(error:unknown):string{
  const raw=error instanceof Error?error.message:String(error);
  const code=Object.keys(SAVE_ERROR_LABELS).find(key=>raw.includes(key));
  return code?SAVE_ERROR_LABELS[code]:raw;
-}
-type PlanningConflict = {workerId:string;day:string;chantierIds:string[]};
-// Les affectations bureau et les tâches constituent deux sources de planification
-// distinctes. On ne signale un conflit que lorsque les chantiers diffèrent.
-function assignmentDates(item:Assignment):{start:string;end:string}|null {
- const start=(item.start_at??item.start_date??"").slice(0,10);
- if(!/^\d{4}-\d{2}-\d{2}$/.test(start))return null;
- const end=(item.end_at??"").slice(0,10)||iso(shifted(new Date(start+"T12:00:00"),Math.max(item.duration_days??1,1)-1));
- return {start,end};
-}
-function conflictingWorkerDays(
- office:Array<{chantier_id:string;intervenant_id:string;date_start:string;date_end:string}>,
- tasks:Assignment[],days:string[]
-):PlanningConflict[]{
- const conflicts:PlanningConflict[]=[];
- for(const day of days){
-  const assignmentsByWorker=new Map<string,Set<string>>();
-  for(const item of office){
-   if(item.date_start>day||item.date_end<day)continue;
-   const sites=assignmentsByWorker.get(item.intervenant_id)??new Set<string>();
-   sites.add(item.chantier_id);
-   assignmentsByWorker.set(item.intervenant_id,sites);
-  }
-  for(const item of tasks){
-   if(!item.intervenant_id)continue;
-   const range=assignmentDates(item);
-   if(!range||range.start>day||range.end<day)continue;
-   const sites=assignmentsByWorker.get(item.intervenant_id)??new Set<string>();
-   sites.add(item.chantier_id);
-   assignmentsByWorker.set(item.intervenant_id,sites);
-  }
-  for(const [workerId,sites] of assignmentsByWorker){
-   if(sites.size>1)conflicts.push({workerId,day,chantierIds:[...sites]});
-  }
- }
- return conflicts;
 }
 const iso=(d:Date)=>[d.getFullYear(),String(d.getMonth()+1).padStart(2,"0"),String(d.getDate()).padStart(2,"0")].join("-");
 const shifted=(d:Date,n:number)=>{const x=new Date(d);x.setDate(x.getDate()+n);return x;};
@@ -83,11 +48,11 @@ export default function CentralPlanningPage(){
    const results=await Promise.allSettled([
     listChantiers(),
     supabase.from("intervenants").select("id,nom").eq("is_active",true).is("archived_at",null),
-    supabase.from("chantier_task_segments").select("id,chantier_id,intervenant_id,start_at,end_at,start_date,duration_days").limit(3000),
+    supabase.from("chantier_task_segments").select("id,chantier_id,intervenant_id,start_at,end_at,start_date,duration_days,status").limit(3000),
     (supabase as any).from("portal_resource_preparations").select("id,chantier_id,resource_id,resource_name,quantity,planned_for,status,resource_type,office_assignment_id").gte("planned_for",iso(week)).lte("planned_for",iso(shifted(week,6))).neq("status","cancelled").limit(3000),
     getCompanySettings(),
     (supabase as any).from("office_planning_assignments").select("id,chantier_id,intervenant_id,date_start,date_end").lte("date_start",iso(shifted(week,6))).gte("date_end",iso(week)).limit(3000),
-    supabase.from("chantier_task_planning_segments").select("id,chantier_id,intervenant_id,start_at,end_at,start_date,duration_days").limit(3000)
+    supabase.from("chantier_task_planning_segments").select("id,chantier_id,intervenant_id,start_at,end_at,start_date,duration_days,status").limit(3000)
    ]);
    if(!active)return;
    const errors:string[]=[];
@@ -125,13 +90,13 @@ export default function CentralPlanningPage(){
  async function edit(item:{id:string;chantier_id:string;intervenant_id:string;date_start:string;date_end:string}){setEditingId(item.id);setSiteId(item.chantier_id);setWorkerId(item.intervenant_id);setStart(item.date_start);setEnd(item.date_end);setChosenEquipment(bookings.filter(b=>(b as Booking & {office_assignment_id?:string}).office_assignment_id===item.id).map(b=>b.resource_id));setFormOpen(true);}
 
  const siteNames=new Map(sites.map(s=>[s.id,s.name])),userNames=new Map(users.map(u=>[u.id,u.name]));
- const conflicts=useMemo(()=>conflictingWorkerDays(office,assignments,days),[office,assignments,days]);
+ const conflicts=useMemo(()=>detectCrossChantierConflicts(office,assignments,days),[office,assignments,days]);
  const conflictsByWorkerDay=new Set(conflicts.map(x=>x.workerId+"|"+x.day));
  const rows=view==="sites"?sites:view==="users"?users:equipment;
  function forDay(rowId:string,day:string){
   if(view==="equipment")return bookings.filter(b=>{const a=office.find(x=>x.id===b.office_assignment_id);return b.resource_type==="equipment"&&b.resource_id===rowId&&(a?a.date_start<=day&&a.date_end>=day:b.planned_for===day);}).map(b=>({id:b.id,site:b.chantier_id,label:(siteNames.get(b.chantier_id)??"Chantier")+" · "+b.quantity+" unité(s)",status:b.status==="issued"?"Sorti":"Réservé"}));
   const added=office.filter(a=>a.date_start<=day&&a.date_end>=day&&(view==="sites"?a.chantier_id===rowId:a.intervenant_id===rowId)).map(a=>({id:a.id,site:a.chantier_id,label:view==="sites"?(userNames.get(a.intervenant_id)??"Ouvrier"):(siteNames.get(a.chantier_id)??"Chantier"),status:"Affecté"}));
-  return added.concat(assignments.filter(a=>{const range=assignmentDates(a);return range!==null&&range.start<=day&&day<=range.end&&(view==="sites"?a.chantier_id===rowId:a.intervenant_id===rowId);}).map(a=>({id:a.id,site:a.chantier_id,label:view==="sites"?(userNames.get(a.intervenant_id??"")??"Équipe"):(siteNames.get(a.chantier_id)??"Chantier"),status:"Prévu"})));
+  return added.concat(assignments.filter(a=>{const range=taskInterval(a);return range!==null&&range.start<=day&&day<=range.end&&(view==="sites"?a.chantier_id===rowId:a.intervenant_id===rowId);}).map(a=>({id:a.id,site:a.chantier_id,label:view==="sites"?(userNames.get(a.intervenant_id??"")??"Équipe"):(siteNames.get(a.chantier_id)??"Chantier"),status:"Prévu"})));
  }
  return <div className="space-y-5"><header className="rounded-3xl bg-slate-950 p-6 text-white"><p className="text-xs font-semibold uppercase tracking-wider text-blue-300">Production · Bureau</p><h1 className="mt-2 text-2xl font-bold">Planning général</h1><p className="mt-1 text-sm text-slate-300">Utilisateurs, chantiers et réservations de matériel.</p></header>
  <button onClick={()=>{setEditingId(null);setChosenEquipment([]);setFormOpen(x=>!x)}} className="rounded-xl bg-blue-600 px-4 py-3 font-semibold text-white">+ Nouvelle affectation</button>
