@@ -34,10 +34,10 @@ begin
   v_end := coalesce(
     case
       when new.start_date is not null and new.duration_days is not null
-        then new.start_date + pg_catalog.greatest(pg_catalog.ceil(new.duration_days)::integer, 1) - 1
+        then new.start_date + greatest(ceil(new.duration_days)::integer, 1) - 1
     end,
     (new.end_at at time zone 'UTC')::date,
-    v_start + pg_catalog.greatest(pg_catalog.ceil(coalesce(new.duration_days, 1))::integer, 1) - 1
+    v_start + greatest(ceil(coalesce(new.duration_days, 1))::integer, 1) - 1
   );
 
   if v_start is null or v_end is null then
