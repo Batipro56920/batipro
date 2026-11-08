@@ -16,6 +16,7 @@ export default function CentralPlanningPage(){
  const [sites,setSites]=useState<Row[]>([]),[users,setUsers]=useState<Row[]>([]),[equipment,setEquipment]=useState<Row[]>([]);
  const [assignments,setAssignments]=useState<Assignment[]>([]),[bookings,setBookings]=useState<Booking[]>([]);
  const [loading,setLoading]=useState(true),[error,setError]=useState("");
+ const [refreshKey,setRefreshKey]=useState(0);
  const [chosenEquipment,setChosenEquipment]=useState<string[]>([]);
  const [editingId,setEditingId]=useState<string|null>(null);
  const [office,setOffice]=useState<{id:string;chantier_id:string;intervenant_id:string;date_start:string;date_end:string}[]>([]);
@@ -58,8 +59,8 @@ export default function CentralPlanningPage(){
    if(officeResult)setOffice(officeResult.data??[]);
    if(errors.length)setError("Chargement partiel : "+errors.join(" · "));
   }catch(e){if(active)setError(e instanceof Error?e.message:"Planning indisponible");}finally{if(active)setLoading(false);}}
- void run();return()=>{active=false};},[week]);
- async function assign(){if(!siteId||!workerId||end<start)return;setSaving(true);setError("");try{const {data,error}=await (supabase as any).rpc("office_planning_save",{p_id:editingId,p_chantier:siteId,p_worker:workerId,p_start:start,p_end:end,p_equipment:chosenEquipment});if(error)throw error;setOffice(x=>[...x.filter(item=>item.id!==data),{id:data,chantier_id:siteId,intervenant_id:workerId,date_start:start,date_end:end}]);setFormOpen(false);setChosenEquipment([]);setEditingId(null);setWeek(monday(new Date(start+"T12:00:00")));}catch(e){setError(e instanceof Error?e.message:"Affectation impossible");}finally{setSaving(false);}}
+ void run();return()=>{active=false};},[week,refreshKey]);
+ async function assign(){if(!siteId||!workerId||end<start)return;setSaving(true);setError("");try{const {data,error}=await (supabase as any).rpc("office_planning_save",{p_id:editingId,p_chantier:siteId,p_worker:workerId,p_start:start,p_end:end,p_equipment:chosenEquipment});if(error)throw error;setOffice(x=>[...x.filter(item=>item.id!==data),{id:data,chantier_id:siteId,intervenant_id:workerId,date_start:start,date_end:end}]);setRefreshKey(key=>key+1);setFormOpen(false);setChosenEquipment([]);setEditingId(null);setWeek(monday(new Date(start+"T12:00:00")));}catch(e){setError(e instanceof Error?e.message:"Affectation impossible");}finally{setSaving(false);}}
  async function edit(item:{id:string;chantier_id:string;intervenant_id:string;date_start:string;date_end:string}){setEditingId(item.id);setSiteId(item.chantier_id);setWorkerId(item.intervenant_id);setStart(item.date_start);setEnd(item.date_end);setChosenEquipment(bookings.filter(b=>(b as Booking & {office_assignment_id?:string}).office_assignment_id===item.id).map(b=>b.resource_id));setFormOpen(true);}
 
  const siteNames=new Map(sites.map(s=>[s.id,s.name])),userNames=new Map(users.map(u=>[u.id,u.name]));
