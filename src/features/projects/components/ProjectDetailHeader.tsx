@@ -35,6 +35,10 @@ export function ProjectDetailHeader({ project, onProjectUpdated }: { project: Pr
   const chantier = linkedAcceptedQuoteChantier ?? fallbackChantier;
   const linkedChantierId = linkedAcceptedQuoteChantier?.id ?? acceptedQuote?.chantier_id ?? fallbackChantier?.id ?? null;
   const editTarget = project.sourceType === "client" ? "/crm/clients" : "/crm/prospects";
+  const followUpTarget = project.nextActionTaskId
+    ? `/crm/agenda?taskId=${encodeURIComponent(project.nextActionTaskId)}`
+    : `/crm/agenda?action=nouvelle-relance&project=${encodeURIComponent(project.id)}`;
+  const followUpLabel = project.nextActionTaskId ? "Ouvrir relance" : "Relancer";
   const isWonProject = WON_PROJECT_STATUSES.includes(project.status);
   const canMarkWon = Boolean(quote) && !isWonProject && project.status !== "perdu";
   const canMarkLost = !linkedChantierId && !acceptedQuote && !isWonProject && project.status !== "perdu";
@@ -144,9 +148,13 @@ export function ProjectDetailHeader({ project, onProjectUpdated }: { project: Pr
             <FileText className="h-4 w-4" />
             {quote ? "Ouvrir devis" : "Créer devis"}
           </Link>
-          <Link to={`/crm/agenda?action=nouvelle-relance&project=${encodeURIComponent(project.id)}`} className="inline-flex h-9 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-3 text-sm font-medium text-slate-900 transition hover:bg-slate-50">
+          <Link
+            to={followUpTarget}
+            className="inline-flex h-9 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-3 text-sm font-medium text-slate-900 transition hover:bg-slate-50"
+            title={project.nextActionTaskId ? "Ouvrir la prochaine relance déjà planifiée dans l’agenda." : "Planifier une nouvelle relance pour ce projet."}
+          >
             <RefreshCw className="h-4 w-4" />
-            Relancer
+            {followUpLabel}
           </Link>
           {linkedChantierId ? (
             <>
