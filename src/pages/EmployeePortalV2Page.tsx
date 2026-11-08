@@ -1,4 +1,4 @@
-import { intervenantOfficePlanning } from "../services/officeWorkerPlanning.service";
+import { intervenantOfficePlanningAcrossChantiers, type WorkerOfficeAssignment } from "../services/officeWorkerPlanning.service";
 import ResourcePreparationPanel from "../components/ResourcePreparationPanel";
 import { useEffect, useMemo, useState } from "react";
 import { AlertTriangle, Boxes, Briefcase, CalendarDays, Camera, CheckCircle2, Circle, CircleHelp, FileText, ListOrdered, LogOut, MapPin, MessageCircle, Moon, PackageSearch, Paperclip, Plus, RefreshCw, Send, ShieldAlert, Sunrise, Wrench } from "lucide-react";
@@ -231,7 +231,8 @@ export default function EmployeePortalV2Page() {
   const [checklist, setChecklist] = useState<IntervenantDailyChecklist | null>(null);
   const [savingChecklistKey, setSavingChecklistKey] = useState<string | null>(null);
   const [planningLots, setPlanningLots] = useState<IntervenantPlanningLot[]>([]);
-  const [officePlanning,setOfficePlanning]=useState<{id:string;date_start:string;date_end:string;note:string}[]>([]);
+  const [officePlanning, setOfficePlanning] = useState<WorkerOfficeAssignment[]>([]);
+  const [officePlanningError, setOfficePlanningError] = useState("");
   const [matinMaterialsByTask, setMatinMaterialsByTask] = useState<Record<string, IntervenantTaskMainMaterial[]>>({});
   const [matinEquipmentByTask, setMatinEquipmentByTask] = useState<Record<string, IntervenantTaskEquipment[]>>({});
   const [matinBriefingByTask, setMatinBriefingByTask] = useState<Record<string, IntervenantTaskBriefing>>({});
@@ -425,12 +426,30 @@ export default function EmployeePortalV2Page() {
   useEffect(() => {
     let alive = true;
     if (!selectedChantierId) { setPlanningLots([]); return; }
-    intervenantOfficePlanning(token, selectedChantierId).then(setOfficePlanning).catch(()=>setOfficePlanning([]));
     intervenantGetPlanning(token, selectedChantierId)
       .then((planning) => { if (alive) setPlanningLots(planning.lots); })
       .catch(() => { if (alive) setPlanningLots([]); });
     return () => { alive = false; };
   }, [token, selectedChantierId, refreshKey]);
+
+  // Afficher les affectations du bureau sur tous les chantiers accessibles,
+  // sans contourner la verification d'acces de la RPC par chantier.
+  useEffect(() => {
+    let alive = true;
+    setOfficePlanning([]);
+    setOfficePlanningError("");
+    if (!token || chantiers.length === 0) return () => { alive = false; };
+    intervenantOfficePlanningAcrossChantiers(token, chantiers)
+      .then(({ assignments, failedChantierNames }) => {
+        if (!alive) return;
+        setOfficePlanning(assignments);
+        if (failedChantierNames.length) {
+          setOfficePlanningError("Certaines affectations n'ont pas pu être chargées : " + failedChantierNames.join(", ") + ".");
+        }
+      })
+      .catch(() => { if (alive) setOfficePlanningError("Impossible de charger les affectations du bureau."); });
+    return () => { alive = false; };
+  }, [token, chantiers, refreshKey]);
 
   useEffect(() => {
     let alive = true;
@@ -949,7 +968,21 @@ export default function EmployeePortalV2Page() {
             <a href={selected.adresse ? `https://maps.apple.com/?q=${encodeURIComponent(selected.adresse)}` : undefined} className="mt-4 flex items-center gap-3 rounded-xl border border-slate-200 p-3"><MapPin className="h-5 w-5 text-blue-600" /><span className="text-sm"><span className="block font-semibold">Adresse</span><span className="text-slate-500">{selected.adresse || "Non renseignée"}</span></span></a>
           </Card>
 
-          {officePlanning.length>0&&<Card><h3 className="font-bold">Mes affectations du bureau</h3><div className="mt-3 space-y-2">{officePlanning.map(a=><div key={a.id} className="rounded-xl bg-blue-50 p-3 text-sm text-blue-900">{a.date_start===a.date_end?a.date_start:a.date_start+" → "+a.date_end}{a.note?" · "+a.note:""}</div>)}</div></Card>}
+          {(officePlanning.length > 0 || officePlanningError) && <Card>
+            <h3 className="font-bold">Mes affectations du bureau · tous les chantiers</h3>
+            {officePlanningError && <p role="alert" className="mt-2 rounded-lg bg-amber-50 p-2 text-xs text-amber-800">{officePlanningError}</p>}
+            <div className="mt-3 space-y-2">
+              {officePlanning.map((assignment) => {
+                const chantier = chantiers.find((item) => item.id === assignment.chantier_id);
+                return <div key={assignment.id} className="rounded-xl bg-blue-50 p-3 text-sm text-blue-900">
+                  <div className="font-semibold">{chantier?.nom ?? "Chantier"}</div>
+                  <div>{assignment.date_start === assignment.date_end ? formatDate(assignment.date_start) : formatDate(assignment.date_start) + " → " + formatDate(assignment.date_end)}</div>
+                  {assignment.note && <div className="mt-1 text-xs">{assignment.note}</div>}
+                  {chantier && chantier.id !== selectedChantierId && <button type="button" onClick={() => setSelectedId(chantier.id)} className="mt-2 rounded-lg border border-blue-200 bg-white px-3 py-1.5 text-xs font-semibold text-blue-800">Voir ce chantier</button>}
+                </div>;
+              })}
+            </div>
+          </Card>}
           {planningLots.length ? (
             <Card>
               <div className="flex items-center justify-between"><h3 className="font-bold">Planning</h3><CalendarDays className="h-5 w-5 text-blue-600" /></div>

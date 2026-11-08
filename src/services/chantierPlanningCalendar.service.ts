@@ -13,6 +13,13 @@ import {
 
 const SEGMENT_TABLE_CANDIDATES = ["chantier_task_segments", "chantier_task_planning_segments"] as const;
 
+function planningSegmentMutationError(message: string): Error {
+  if (message.includes("worker_office_on_other_chantier")) {
+    return new Error("Cet intervenant est déjà affecté à un autre chantier par le planning du bureau sur cette période.");
+  }
+  return new Error(message);
+}
+
 let resolvedSegmentTableName: (typeof SEGMENT_TABLE_CANDIDATES)[number] | null = null;
 
 export type PlanningCalendarTask = {
@@ -694,7 +701,7 @@ export async function createPlanningCalendarSegment(
     if (missingOptional && markSegmentSupportMissing(missingOptional)) continue;
 
     if (!isMissingColumn(result.error, "start_date") && !isMissingColumn(result.error, "duration_days") && !isMissingColumn(result.error, "order_in_day")) {
-      throw new Error(result.error.message);
+      throw planningSegmentMutationError(result.error.message);
     }
 
     const fallbackPayload = { ...payload };
@@ -707,7 +714,7 @@ export async function createPlanningCalendarSegment(
     delete (fallbackPayload as any).comment;
 
     const second = await segmentsTable(activeTable).insert([fallbackPayload]).select(SEGMENT_SELECT_LEGACY).maybeSingle();
-    if (second.error) throw new Error(second.error.message);
+    if (second.error) throw planningSegmentMutationError(second.error.message);
     if (!second.data) throw new Error("Segment cree mais non retourne.");
     resolvedSegmentTableName = activeTable;
     return mapSegmentLegacy(second.data);
@@ -747,7 +754,7 @@ export async function updatePlanningCalendarSegment(
     if (missingOptional && markSegmentSupportMissing(missingOptional)) continue;
 
     if (!isMissingColumn(result.error, "start_date") && !isMissingColumn(result.error, "duration_days") && !isMissingColumn(result.error, "order_in_day")) {
-      throw new Error(result.error.message);
+      throw planningSegmentMutationError(result.error.message);
     }
 
     const fallbackPayload = { ...payload };
@@ -760,7 +767,7 @@ export async function updatePlanningCalendarSegment(
     delete (fallbackPayload as any).comment;
 
     const second = await segmentsTable(activeTable).update(fallbackPayload).eq("id", segmentId).select(SEGMENT_SELECT_LEGACY).maybeSingle();
-    if (second.error) throw new Error(second.error.message);
+    if (second.error) throw planningSegmentMutationError(second.error.message);
     if (!second.data) throw new Error("Segment introuvable.");
     resolvedSegmentTableName = activeTable;
     return mapSegmentLegacy(second.data);
