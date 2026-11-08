@@ -83,10 +83,11 @@ export default function CentralPlanningPage(){
    const results=await Promise.allSettled([
     listChantiers(),
     supabase.from("intervenants").select("id,nom").eq("is_active",true).is("archived_at",null),
-    supabase.from("chantier_task_planning_segments").select("id,chantier_id,intervenant_id,start_at,end_at,start_date,duration_days").limit(3000),
+    supabase.from("chantier_task_segments").select("id,chantier_id,intervenant_id,start_at,end_at,start_date,duration_days").limit(3000),
     (supabase as any).from("portal_resource_preparations").select("id,chantier_id,resource_id,resource_name,quantity,planned_for,status,resource_type,office_assignment_id").gte("planned_for",iso(week)).lte("planned_for",iso(shifted(week,6))).neq("status","cancelled").limit(3000),
     getCompanySettings(),
-    (supabase as any).from("office_planning_assignments").select("id,chantier_id,intervenant_id,date_start,date_end").lte("date_start",iso(shifted(week,6))).gte("date_end",iso(week)).limit(3000)
+    (supabase as any).from("office_planning_assignments").select("id,chantier_id,intervenant_id,date_start,date_end").lte("date_start",iso(shifted(week,6))).gte("date_end",iso(week)).limit(3000),
+    supabase.from("chantier_task_planning_segments").select("id,chantier_id,intervenant_id,start_at,end_at,start_date,duration_days").limit(3000)
    ]);
    if(!active)return;
    const errors:string[]=[];
@@ -101,8 +102,16 @@ export default function CentralPlanningPage(){
    if(sitesResult) setSites((sitesResult as {id:string;nom:string}[]).map(site=>({id:site.id,name:site.nom})));
    const workersResult=dataAt(1,"Intervenants");
    if(workersResult) setUsers((workersResult.data??[]).map((person:{id:string;nom:string})=>({id:person.id,name:person.nom})));
-   const allocResult=dataAt(2,"Tâches planifiées");
-   if(allocResult)setAssignments((allocResult.data??[]) as Assignment[]);
+   const primarySegments=dataAt(2,"Tâches planifiées");
+   const legacySegments=dataAt(6,"Tâches planifiées historiques");
+   if(primarySegments||legacySegments){
+    const primary=(primarySegments?.data??[]) as Assignment[];
+    const legacy=(legacySegments?.data??[]) as Assignment[];
+    // Comme le service du planning chantier, privilégier les segments modernes
+    // pour chaque chantier et utiliser les historiques uniquement en repli.
+    const modernChantiers=new Set(primary.map(item=>item.chantier_id));
+    setAssignments(primary.concat(legacy.filter(item=>!modernChantiers.has(item.chantier_id))));
+   }
    const bookingsResult=dataAt(3,"Réservations de matériel");
    if(bookingsResult)setBookings((bookingsResult.data??[]) as Booking[]);
    const settingsResult=dataAt(4,"Catalogue matériels");
