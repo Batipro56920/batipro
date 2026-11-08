@@ -10,6 +10,7 @@ type Booking = {office_assignment_id?:string|null;id:string;chantier_id:string;r
 type View = "users"|"sites"|"equipment";
 const SAVE_ERROR_LABELS:Record<string,string>={
  worker_already_booked:"Cet intervenant a déjà une affectation sur cette période.",
+ worker_task_on_other_chantier:"Cet intervenant a déjà une tâche planifiée sur un autre chantier à ces dates.",
  equipment_already_booked:"Un matériel sélectionné est déjà réservé sur cette période.",
  invalid_worker:"L'intervenant sélectionné est indisponible ou inactif.",
  invalid_chantier:"Le chantier sélectionné n'est pas accessible.",
