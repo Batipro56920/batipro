@@ -303,7 +303,19 @@ export function ProjectSummaryTab({ project, onUpdated }: { project: ProjectReco
       <span className="font-semibold">{project.nextAction || "Ouvrir la relance planifiée"}</span>
       {project.nextActionDate ? <span className="mt-0.5 text-xs font-normal text-slate-500">{formatDate(project.nextActionDate)}</span> : null}
     </Link>
-  ) : project.nextAction;
+  ) : project.nextAction ? (
+    <span className="inline-flex flex-col">
+      <span>{project.nextAction}</span>
+      {project.nextActionDate ? <span className="mt-0.5 text-xs font-normal text-slate-500">{formatDate(project.nextActionDate)}</span> : null}
+    </span>
+  ) : (
+    <Link
+      to={`/crm/agenda?action=nouvelle-relance&project=${encodeURIComponent(project.id)}`}
+      className="font-semibold text-blue-700 hover:text-blue-800"
+    >
+      Planifier une relance
+    </Link>
+  );
 
   return (
     <div className="space-y-5">
