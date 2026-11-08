@@ -294,6 +294,16 @@ function SalespersonPicker({ project, onUpdated }: { project: ProjectRecord; onU
 
 export function ProjectSummaryTab({ project, onUpdated }: { project: ProjectRecord; onUpdated?: () => Promise<void> | void }) {
   const openFollowUps = project.tasks.filter((task) => task.statut !== "termine" && task.statut !== "terminee").length;
+  const nextActionContent = project.nextActionTaskId ? (
+    <Link
+      to={`/crm/agenda?taskId=${encodeURIComponent(project.nextActionTaskId)}`}
+      className="inline-flex flex-col text-blue-700 hover:text-blue-800"
+      title="Ouvrir cette relance dans l’agenda commercial"
+    >
+      <span className="font-semibold">{project.nextAction || "Ouvrir la relance planifiée"}</span>
+      {project.nextActionDate ? <span className="mt-0.5 text-xs font-normal text-slate-500">{formatDate(project.nextActionDate)}</span> : null}
+    </Link>
+  ) : project.nextAction;
 
   return (
     <div className="space-y-5">
@@ -310,7 +320,7 @@ export function ProjectSummaryTab({ project, onUpdated }: { project: ProjectReco
               ["Commercial", <SalespersonPicker key="salesperson" project={project} onUpdated={onUpdated} />],
               ["Budget estimatif", formatCurrency(project.budgetEstimate)],
               ["Échéance", formatDate(project.desiredDeadline)],
-              ["Prochaine action", project.nextAction],
+              ["Prochaine action", nextActionContent],
             ]}
           />
 
