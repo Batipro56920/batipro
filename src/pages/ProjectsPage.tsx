@@ -31,6 +31,7 @@ export default function ProjectsPage() {
   const billingMode = searchParams.get("facturation") === "1";
   const quoteCreationMode = searchParams.get("devis") === "nouveau";
   const chantierCreationMode = searchParams.get("chantier") === "a-creer";
+  const followUpsDueMode = searchParams.get("vue") === "a-relancer";
   const urlQuery = searchParams.get("q")?.trim() ?? "";
   const { filteredProjects, metrics, projectTypes, filters, setFilters, loading, error, refresh } = useProjectsData();
 
@@ -39,6 +40,10 @@ export default function ProjectsPage() {
   }, [setFilters, urlQuery]);
 
   const visibleProjects = useMemo(() => {
+    if (followUpsDueMode) {
+      const today = new Date().toISOString().slice(0, 10);
+      return filteredProjects.filter((project) => Boolean(project.nextActionDate && project.nextActionDate < today));
+    }
     if (billingMode) {
       return filteredProjects.filter((project) => project.quotes.some((quote) => quote.statut === "accepte" && Number(quote.montant_ttc ?? 0) > 0));
     }
@@ -49,11 +54,20 @@ export default function ProjectsPage() {
       return filteredProjects.filter(hasAcceptedQuoteAwaitingChantier);
     }
     return filteredProjects;
-  }, [billingMode, quoteCreationMode, chantierCreationMode, filteredProjects]);
+  }, [billingMode, quoteCreationMode, chantierCreationMode, followUpsDueMode, filteredProjects]);
 
   return (
     <div className="space-y-6">
       <ProjectsHeader billingMode={billingMode} quoteCreationMode={quoteCreationMode} chantierCreationMode={chantierCreationMode} onRefresh={refresh} />
+
+      {followUpsDueMode ? (
+        <div className="flex flex-col gap-3 rounded-3xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950 sm:flex-row sm:items-center sm:justify-between">
+          <span>Vue prioritaire : projets dont la prochaine relance est échue.</span>
+          <a href="/projets" className="font-semibold text-amber-900 underline decoration-amber-400 underline-offset-4">
+            Voir tous les projets
+          </a>
+        </div>
+      ) : null}
 
       {billingMode ? (
         <div className="rounded-3xl border border-blue-100 bg-blue-50 p-4 text-sm text-blue-900">
@@ -83,7 +97,7 @@ export default function ProjectsPage() {
         <div className="rounded-3xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">{error}</div>
       ) : null}
 
-      <ProjectsKpiGrid metrics={metrics} />
+      <ProjectsKpiGrid metrics={metrics} followUpsDueMode={followUpsDueMode} />
       <ProjectsToolbar filters={filters} setFilters={setFilters} projectTypes={projectTypes} />
 
       {loading ? (
