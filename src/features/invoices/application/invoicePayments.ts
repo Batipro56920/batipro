@@ -3,6 +3,15 @@ import type { InvoicePayment, InvoiceProfitabilitySnapshot, InvoiceRecord } from
 import { isBeforeLocalToday } from "./invoiceDates";
 
 export function addInvoicePayment(invoice: InvoiceRecord, payment: Omit<InvoicePayment, "id">): InvoiceRecord {
+  const blockingReason = getInvoicePaymentBlockReason(invoice);
+  if (blockingReason) throw new Error(blockingReason);
+  if (!Number.isFinite(payment.amount) || payment.amount <= 0) {
+    throw new Error("Le montant du règlement doit être strictement positif.");
+  }
+  const remainingAmount = getRemainingAmount(invoice);
+  if (payment.amount - remainingAmount > 0.009) {
+    throw new Error("Le montant du règlement dépasse le reste dû.");
+  }
   const nextPayments = [...invoice.payments, { ...payment, id: crypto.randomUUID() }];
   return normalizeInvoiceStatus({ ...invoice, payments: nextPayments, updatedAt: new Date().toISOString() });
 }
@@ -18,6 +27,14 @@ export function getPaidAmount(invoice: InvoiceRecord) {
 export function getRemainingAmount(invoice: InvoiceRecord) {
   const totals = invoice.document.totals ?? calculateDocumentTotals(invoice.document);
   return round(Math.max(0, totals.totalTtc - getPaidAmount(invoice)));
+}
+
+export function getInvoicePaymentBlockReason(invoice: InvoiceRecord): string | null {
+  if (invoice.type === "credit_note") return "Un avoir ne reçoit pas d'encaissement client.";
+  if (invoice.status === "draft") return "Émettez la facture avant d'enregistrer un règlement.";
+  if (invoice.status === "cancelled") return "Une facture annulée ne peut pas recevoir de règlement.";
+  if (invoice.status === "paid" || getRemainingAmount(invoice) <= 0) return "Cette facture est déjà soldée.";
+  return null;
 }
 
 export function normalizeInvoiceStatus(invoice: InvoiceRecord): InvoiceRecord {

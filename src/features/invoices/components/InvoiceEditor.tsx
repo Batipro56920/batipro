@@ -3,7 +3,7 @@ import { Link } from "react-router-dom";
 import { ArrowRight, Download, FileCode2, Plus, Save, Send, Trash2 } from "lucide-react";
 import { Button } from "../../../components/ui/button";
 import { calculateDocumentTotals, createDocumentLine, createDocumentSection, DocumentPreview, DocumentSendDialog, DocumentTotalsCard, downloadBusinessDocumentPdf, flattenDocumentNodes, validateBusinessDocument, type BusinessDocument, type BusinessDocumentNode, type DocumentItemKind, type ElectronicInvoicingCustomerType, type ElectronicInvoicingMetadata, type ElectronicInvoicingOperationType, type ElectronicInvoicingTransmissionStatus, type FacturXExternalValidationStatus, type PdpConnectionMode, type PdpConnectorStatus } from "../../document-engine";
-import { addInvoicePayment, createProfitabilitySnapshot, getPaidAmount, getRemainingAmount, removeInvoicePayment } from "../application/invoicePayments";
+import { addInvoicePayment, createProfitabilitySnapshot, getInvoicePaymentBlockReason, getPaidAmount, getRemainingAmount, removeInvoicePayment } from "../application/invoicePayments";
 import { appendPdpSimulationEvent, buildPdpSimulationEvent, canUseInvoiceElectronicInvoicingStatus, cleanInvoiceElectronicInvoicingIdentifier, cleanInvoiceElectronicInvoicingText, ELECTRONIC_INVOICING_TRANSMISSION_STATUS_LABELS, FACTURX_EXTERNAL_VALIDATION_STATUS_LABELS, getInvoiceElectronicInvoicingReadiness, getInvoicePdpTransmissionReadiness, INVOICE_ELECTRONIC_INVOICING_STRATEGY, normalizeInvoiceElectronicInvoicing, normalizeInvoiceElectronicInvoicingPatch, PDP_CONNECTION_MODE_LABELS, PDP_CONNECTOR_STATUS_LABELS, PDP_PROVIDER_PLACEHOLDER, PDP_SIMULATION_STATUS_LABELS, RECOMMENDED_PDP_PROVIDER_OPTIONS } from "../application/electronicInvoicing";
 import { downloadFacturXPdf, getFacturXExportReadiness, type FacturXExportReadiness } from "../application/facturxExport";
 import type { InvoicePayment, InvoiceRecord } from "../domain/types";
@@ -601,9 +601,9 @@ function PaymentPanel({ invoice, hasUnsavedChanges, onAdd, onRemove }: { invoice
   const parsedAmount = parseCommittedFrenchNumber(amount);
   const remainingAmount = getRemainingAmount(invoice);
   const overpaidAmount = getOverpaidAmount(invoice);
-  const isInvoiceSettled = remainingAmount <= 0;
-  const exceedsRemainingAmount = !isInvoiceSettled && parsedAmount !== null && parsedAmount > remainingAmount;
-  const canAddPayment = parsedAmount !== null && parsedAmount > 0 && Boolean(paidAt) && !isInvoiceSettled && !exceedsRemainingAmount;
+  const paymentBlockReason = getInvoicePaymentBlockReason(invoice);
+  const exceedsRemainingAmount = !paymentBlockReason && parsedAmount !== null && parsedAmount > remainingAmount;
+  const canAddPayment = !paymentBlockReason && parsedAmount !== null && parsedAmount > 0 && Boolean(paidAt) && !exceedsRemainingAmount;
 
   useEffect(() => {
     setAmount("");
@@ -623,6 +623,7 @@ function PaymentPanel({ invoice, hasUnsavedChanges, onAdd, onRemove }: { invoice
       </div>
       {hasUnsavedChanges ? <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-medium text-amber-800">Les modifications de la facture seront validées à l'enregistrement.</div> : null}
       {overpaidAmount > 0 ? <div className="mt-3 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs font-medium text-red-700">Les paiements dépassent le total TTC de {formatCurrency(overpaidAmount)}. Retirez un paiement ou ajustez la facture avant d'enregistrer.</div> : null}
+      {paymentBlockReason ? <div className="mt-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-medium text-slate-700">{paymentBlockReason}</div> : null}
       <div className="mt-4 space-y-2">
         {invoice.payments.length ? invoice.payments.map((payment) => (
           <div key={payment.id} className="rounded-xl border border-slate-100 bg-slate-50 p-3">
@@ -641,10 +642,10 @@ function PaymentPanel({ invoice, hasUnsavedChanges, onAdd, onRemove }: { invoice
           <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50 p-3 text-xs text-slate-500">Aucun paiement enregistré.</div>
         )}
       </div>
-      <div className="mt-4 grid gap-2">
+      <fieldset className="mt-4 grid gap-2" disabled={Boolean(paymentBlockReason)}>
         <input className={inputClass} inputMode="decimal" placeholder="Montant" value={amount} onChange={(event) => setAmount(event.target.value)} />
         <div className="text-xs text-slate-500">
-          {isInvoiceSettled ? "Cette facture est déjà soldée." : `Reste dû actuel : ${formatCurrency(remainingAmount)}`}
+          {paymentBlockReason ?? `Reste dû actuel : ${formatCurrency(remainingAmount)}`}
         </div>
         {exceedsRemainingAmount ? <div className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs font-medium text-red-700">Le montant saisi dépasse le reste dû.</div> : null}
         <input className={inputClass} type="date" value={paidAt} onChange={(event) => setPaidAt(event.target.value)} />
@@ -663,7 +664,7 @@ function PaymentPanel({ invoice, hasUnsavedChanges, onAdd, onRemove }: { invoice
           setAmount("");
           setReference("");
         }}>Ajouter paiement</Button>
-      </div>
+      </fieldset>
     </div>
   );
 }

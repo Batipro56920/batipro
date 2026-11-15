@@ -1,7 +1,7 @@
 import { supabase } from "../../../lib/supabaseClient";
 import { normalizeBusinessDocument, type BusinessDocument } from "../../document-engine";
 import { createInvoice } from "../application/invoiceFactory";
-import { normalizeInvoiceStatus } from "../application/invoicePayments";
+import { addInvoicePayment, normalizeInvoiceStatus } from "../application/invoicePayments";
 import type { InvoicePayment, InvoiceRecord, InvoiceType } from "../domain/types";
 
 const TABLE = "invoices";
@@ -76,12 +76,7 @@ export async function updateInvoiceStatus(id: string, status: InvoiceRecord["sta
 export async function appendPayment(id: string, payment: Omit<InvoicePayment, "id">) {
   const invoice = await getInvoice(id);
   if (!invoice) return null;
-  const next = {
-    ...invoice,
-    payments: [...invoice.payments, { ...payment, id: crypto.randomUUID() }],
-    updatedAt: new Date().toISOString(),
-  };
-  return saveInvoice(next);
+  return saveInvoice(addInvoicePayment(invoice, payment));
 }
 
 function fromRow(row: InvoiceRow): InvoiceRecord {
