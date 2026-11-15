@@ -1,5 +1,5 @@
 import { useEffect, useMemo } from "react";
-import { useSearchParams } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { ProjectsHeader } from "../features/projects/components/ProjectsHeader";
 import { ProjectsKpiGrid } from "../features/projects/components/ProjectsKpiGrid";
 import { ProjectsTable } from "../features/projects/components/ProjectsTable";
@@ -63,9 +63,9 @@ export default function ProjectsPage() {
       {followUpsDueMode ? (
         <div className="flex flex-col gap-3 rounded-3xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950 sm:flex-row sm:items-center sm:justify-between">
           <span>Vue prioritaire : projets dont la prochaine relance est échue.</span>
-          <a href="/projets" className="font-semibold text-amber-900 underline decoration-amber-400 underline-offset-4">
+          <Link to="/projets" className="font-semibold text-amber-900 underline decoration-amber-400 underline-offset-4">
             Voir tous les projets
-          </a>
+          </Link>
         </div>
       ) : null}
 
