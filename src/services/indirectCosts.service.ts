@@ -101,7 +101,8 @@ async function loadEmployeeHourlyCosts(): Promise<{ activeCount: number; product
     .from("intervenants")
     .select("hourly_cost_ht")
     .eq("status", "employee")
-    .eq("is_active", true);
+    .eq("is_active", true)
+    .is("archived_at", null);
 
   if (error) throw new Error(error.message);
 
