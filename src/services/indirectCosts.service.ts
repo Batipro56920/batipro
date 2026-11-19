@@ -1,11 +1,11 @@
 import { supabase } from "../lib/supabaseClient";
+import { investmentMonthlyQuoteOverhead, investmentQuoteHourlyRate } from "../services/investmentQuoteAllocation";
 // La marge par defaut vit dans la base de chiffrage : la redefinir ici la ferait
 // deriver des le premier changement.
 import { DEFAULT_QUOTE_MARGIN_RATE } from "./taskCostBasis";
 import {
   getCompanySettings,
   normalizeIndirectCosts,
-  investmentMonthlyQuoteOverhead,
   type CompanyChargeEntry,
   type CompanyEquipmentAsset,
 } from "./companySettings.service";
@@ -142,7 +142,7 @@ export async function getCompanyHourlyRates(): Promise<CompanyHourlyRates> {
     amortizationRatePerHour: productiveHoursPerYear > 0 ? round2(amortizationAnnualHt / productiveHoursPerYear) : 0,
     overheadAnnualHt: round2(overheadAnnualHt),
     investmentQuoteMonthlyHt: round2(investmentQuoteMonthlyHt),
-    investmentQuoteRatePerHour: productiveHoursPerYear > 0 ? round2(investmentQuoteMonthlyHt * 12 / productiveHoursPerYear) : 0,
+    investmentQuoteRatePerHour: round2(investmentQuoteHourlyRate(investmentQuoteMonthlyHt, employees.productiveCount, indirect.productiveHoursPerEmployeeYear)),
     overheadRatePerHour: productiveHoursPerYear > 0 ? round2(overheadAnnualHt / productiveHoursPerYear) : 0,
     equipmentAssets: indirect.equipmentAssets,
     defaultMarginRate: Number(settings.default_margin_rate ?? DEFAULT_QUOTE_MARGIN_RATE),
