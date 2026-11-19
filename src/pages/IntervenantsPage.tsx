@@ -263,12 +263,6 @@ export default function IntervenantsPage() {
     }
   }
 
-  function legacyAccountStatusLabel(row: IntervenantRow) {
-    if (row.archived_at) return "Archivé";
-    if (row.user_id) return "Compte actif";
-    if (row.invitation_last_sent_at) return "Invitation envoyee";
-    return "Non invité";
-  }
 
   return (
     <div className="space-y-5">
