@@ -1,0 +1,30 @@
+name: Obat project quote import checks
+on:
+  push:
+    branches: [feat/import-obat-project-quote-20261119]
+  pull_request:
+    paths:
+      - "src/services/obatProjectQuotes.service.ts"
+      - "src/features/projects/components/ImportObatQuoteDialog.tsx"
+      - "src/features/projects/components/ProjectDetailSections.tsx"
+      - ".github/workflows/obat-project-quotes-checks.yml"
+permissions:
+  contents: read
+jobs:
+  frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+      - run: npm ci
+      - name: TypeScript
+        run: npx tsc --noEmit -p tsconfig.app.json
+      - name: Targeted ESLint
+        run: npx eslint src/services/obatProjectQuotes.service.ts src/features/projects/components/ImportObatQuoteDialog.tsx src/features/projects/components/ProjectDetailSections.tsx
+      - name: Production build
+        run: npm run build
