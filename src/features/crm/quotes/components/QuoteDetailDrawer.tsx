@@ -103,20 +103,20 @@ export function QuoteDetailDrawer({
           <div className="grid gap-2 sm:grid-cols-2">
             {quote.hasProjectLink ? (
               <Link to={quote.projectPath} className="rounded-xl border border-blue-200 bg-blue-50 px-3 py-2 text-center text-sm font-medium text-blue-800 hover:bg-blue-100" title="Ouvrir le dossier projet lié à ce devis.">Ouvrir projet</Link>
-            ) : (
-              {!isExternalObatQuote(quote) && <Link to={quote.quoteEditPath} className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-center text-sm font-medium text-amber-800 hover:bg-amber-100" title="Vérifier pourquoi ce devis n'a pas de projet commercial rattaché.">Rattachement à vérifier</Link>}
-            )}
+            ) : !isExternalObatQuote(quote) ? (
+              <Link to={quote.quoteEditPath} className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-center text-sm font-medium text-amber-800 hover:bg-amber-100" title="Vérifier pourquoi ce devis n'a pas de projet commercial rattaché.">Rattachement à vérifier</Link>
+            ) : null}
             {quote.chantierPath ? (
               <Link to={quote.chantierPath} className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-center text-sm font-medium text-emerald-800 hover:bg-emerald-100" title="Ouvrir le chantier déjà lié à ce devis.">Ouvrir chantier</Link>
             ) : null}
             {quote.hasProjectLink && !isExternalObatQuote(quote) ? (
               <Link to={quote.quoteEditPath} className="rounded-xl bg-slate-950 px-3 py-2 text-center text-sm font-medium text-white hover:bg-slate-800" title="Modifier ce devis dans le Quote Builder.">Modifier devis</Link>
             ) : null}
-            <button type="button" onClick={() => actions.onStatus(quote, "envoye")} className="rounded-xl border border-slate-200 px-3 py-2 text-sm font-medium hover:bg-slate-50">Envoyer</button>
-            <button type="button" onClick={() => actions.onStatus(quote, "relance_1")} className="rounded-xl border border-slate-200 px-3 py-2 text-sm font-medium hover:bg-slate-50">Relancer</button>
+            {!isExternalObatQuote(quote) && <button type="button" onClick={() => actions.onStatus(quote, "envoye")} className="rounded-xl border border-slate-200 px-3 py-2 text-sm font-medium hover:bg-slate-50">Envoyer</button>}
+            {!isExternalObatQuote(quote) && <button type="button" onClick={() => actions.onStatus(quote, "relance_1")} className="rounded-xl border border-slate-200 px-3 py-2 text-sm font-medium hover:bg-slate-50">Relancer</button>}
             <button type="button" onClick={() => actions.onPdf(quote)} className="rounded-xl border border-slate-200 px-3 py-2 text-sm font-medium hover:bg-slate-50">PDF</button>
-            <button type="button" onClick={() => actions.onStatus(quote, "accepte")} className="rounded-xl border border-emerald-200 px-3 py-2 text-sm font-medium text-emerald-700 hover:bg-emerald-50">Accepter</button>
-            <button type="button" onClick={() => actions.onStatus(quote, "refuse")} className="rounded-xl border border-red-200 px-3 py-2 text-sm font-medium text-red-700 hover:bg-red-50">Refuser</button>
+            {!isExternalObatQuote(quote) && <button type="button" onClick={() => actions.onStatus(quote, "accepte")} className="rounded-xl border border-emerald-200 px-3 py-2 text-sm font-medium text-emerald-700 hover:bg-emerald-50">Accepter</button>}
+            {!isExternalObatQuote(quote) && <button type="button" onClick={() => actions.onStatus(quote, "refuse")} className="rounded-xl border border-red-200 px-3 py-2 text-sm font-medium text-red-700 hover:bg-red-50">Refuser</button>}
             {needsChantierHandoff(quote) ? (
               <button type="button" onClick={() => actions.onTransform(quote)} className="rounded-xl border border-emerald-200 px-3 py-2 text-sm font-medium text-emerald-700 hover:bg-emerald-50">Créer le chantier</button>
             ) : null}
