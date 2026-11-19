@@ -1,0 +1,36 @@
+name: Intervenants PR checks
+on:
+  pull_request:
+    paths:
+      - "src/components/intervenants/**"
+      - "src/pages/IntervenantsPage.tsx"
+      - "src/pages/IntervenantDetailPage.tsx"
+      - "src/services/intervenants.service.ts"
+      - "src/services/intervenantCosts.service.ts"
+      - "src/services/intervenantCosts.test.mjs"
+      - "src/services/chantierBudget.service.ts"
+      - "src/services/indirectCosts.service.ts"
+      - ".github/workflows/intervenants-checks.yml"
+  push:
+    branches:
+      - feat/intervenants-directory-unified-20261119
+permissions:
+  contents: read
+jobs:
+  app:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+      - run: npm ci
+      - name: Labor cost unit tests
+        run: node --experimental-strip-types --test src/services/intervenantCosts.test.mjs
+      - name: TypeScript and Vite build
+        run: npm run build
+      - name: Targeted ESLint
+        run: npx eslint src/components/intervenants/IntervenantFormFields.tsx src/components/intervenants/intervenantFormModel.ts src/pages/IntervenantsPage.tsx src/pages/IntervenantDetailPage.tsx src/services/intervenantCosts.service.ts src/services/chantierBudget.service.ts src/services/indirectCosts.service.ts
