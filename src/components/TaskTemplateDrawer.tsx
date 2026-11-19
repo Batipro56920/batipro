@@ -1888,21 +1888,10 @@ export default function TaskTemplateDrawer({
                   </div>
                   <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm">
                     <div className="text-[11px] uppercase tracking-[0.12em] text-slate-500">Coût horaire</div>
-                    <input
-                      className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-2 py-1 text-sm font-semibold text-slate-900"
-                      inputMode="decimal"
-                      value={coutHoraireTache}
-                      placeholder={hourlyRates?.averageEmployeeHourlyCostHt ? hourlyRates.averageEmployeeHourlyCostHt.toFixed(2) : "Non paramétré"}
-                      onChange={(e) => setCoutHoraireTache(e.target.value)}
-                      disabled={busy}
-                    />
-                    <div className="mt-1 text-[11px] text-slate-500">
-                      {coutHoraireTache.trim()
-                        ? "Taux propre à cette tâche."
-                        : hourlyRates
-                          ? `Moyenne de ${hourlyRates.productiveEmployeeCount} salarié(s) au temps vendu`
-                          : "Chargement..."}
+                    <div className="mt-1 font-semibold text-slate-900">
+                      {hourlyRates?.productiveEmployeeCount ? `${hourlyRates.averageEmployeeHourlyCostHt.toFixed(2)} €/h` : "Coût moyen non renseigné"}
                     </div>
+                    <div className="mt-1 text-[11px] text-slate-500">Moyenne de {hourlyRates?.productiveEmployeeCount ?? 0} salarié(s) productifs · Profils &amp; accès</div>
                   </div>
                   <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm">
                     <div className="text-[11px] uppercase tracking-[0.12em] text-slate-500">Frais généraux</div>
@@ -1921,10 +1910,17 @@ export default function TaskTemplateDrawer({
                   <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm">
                     <div className="text-[11px] uppercase tracking-[0.12em] text-slate-500">Marge de la tâche</div>
                     <div className="mt-1 flex items-center gap-2">
-                      <div className="mt-1 font-semibold text-slate-900">
-                        {hourlyRates?.productiveEmployeeCount ? `${hourlyRates.averageEmployeeHourlyCostHt.toFixed(2)} €/h` : "Coût moyen non renseigné"}
-                      </div>
-                      <div className="mt-1 text-[11px] text-slate-500">Moyenne des {hourlyRates?.productiveEmployeeCount ?? 0} salarié(s) productifs · Profils &amp; accès</div>
+                      <input
+                        className="w-full rounded-lg border border-slate-200 bg-white px-2 py-1 text-sm font-semibold text-slate-900"
+                        inputMode="decimal"
+                        value={margeTache}
+                        placeholder={String(companyLaborMarginRate)}
+                        onChange={(e) => setMargeTache(e.target.value)}
+                        disabled={busy}
+                      />
+                      <span className="shrink-0 text-sm text-slate-500">%</span>
+                    </div>
+                    <div className="mt-1 text-[11px] text-slate-500">Moyenne des {hourlyRates?.productiveEmployeeCount ?? 0} salarié(s) productifs · Profils &amp; accès</div>
                     </div>
                     <div className="mt-1 text-[11px] text-slate-500">
                       Appliquée à la main d'oeuvre pour donner son prix de vente. Vide = marge main d'oeuvre de l'entreprise.
