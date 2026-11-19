@@ -791,14 +791,40 @@ export function ProjectQuotesTab({ project, onUpdated }: { project: ProjectRecor
 }
 
 export function ProjectDocumentsTab({ project }: { project: ProjectRecord }) {
+  const [pdfError, setPdfError] = useState<string | null>(null);
+  const [openingId, setOpeningId] = useState<string | null>(null);
+  async function viewObatDocument(documentId: string, quoteId: string) {
+    const quote = project.quotes.find((item) => item.id === quoteId && isExternalObatQuote(item));
+    if (!quote) return;
+    setPdfError(null);
+    setOpeningId(documentId);
+    const popup = window.open("", "_blank");
+    try {
+      const url = await openExternalQuotePdf(quote);
+      if (popup) popup.location.href = url;
+      else window.location.assign(url);
+    } catch (error) {
+      popup?.close();
+      setPdfError(error instanceof Error ? error.message : "PDF Obat inaccessible.");
+    } finally {
+      setOpeningId(null);
+    }
+  }
   return (
     <Panel title="Documents" description="Les pièces commerciales du dossier.">
+      {pdfError && <p role="alert" className="mb-4 rounded-xl bg-red-50 p-3 text-sm text-red-700">{pdfError}</p>}
       {project.documents.length ? (
         <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
           {project.documents.map((document) => (
             <div key={document.id} className="rounded-2xl border border-slate-200 p-4">
               <div className="font-semibold text-slate-950">{document.nom}</div>
               <div className="mt-1 text-xs text-slate-500">{document.type} - {formatDate(document.created_at)}</div>
+              {document.quote_id && project.quotes.some((quote) => quote.id === document.quote_id && isExternalObatQuote(quote)) && (
+                <button type="button" disabled={openingId === document.id} onClick={() => void viewObatDocument(document.id, document.quote_id!)}
+                  className="mt-3 rounded-xl border border-blue-200 px-3 py-2 text-sm font-semibold text-blue-700 hover:bg-blue-50 disabled:opacity-50">
+                  {openingId === document.id ? "Ouverture..." : "Consulter le PDF Obat"}
+                </button>
+              )}
             </div>
           ))}
         </div>
