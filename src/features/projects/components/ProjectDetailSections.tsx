@@ -11,6 +11,8 @@ import { EmptyProjectBlock, Panel, formatCurrency, formatDate, useSalespersonNam
 import { assignProjectSalesperson, listSalespeople, type Salesperson } from "../../../services/salespeople.service";
 import { getPrimaryQuote } from "../hooks/useProjectsData";
 import { ProjectProfitabilityWidgets } from "./ProjectProfitabilityWidgets";
+import { ImportObatQuoteDialog } from "./ImportObatQuoteDialog";
+import { isExternalObatQuote, openExternalQuotePdf } from "../../../services/obatProjectQuotes.service";
 
 const PROJECT_INVOICE_ACTIONS: Array<{ type: InvoiceType; label: string; title: string }> = [
   { type: "deposit", label: "Acompte", title: "Creer une facture d'acompte depuis ce devis" },
@@ -99,7 +101,7 @@ function ProductionContinuityPanel({ project }: { project: ProjectRecord }) {
   const quote = getPrimaryQuote(project);
   const acceptedQuote = project.quotes.find((item) => item.statut === "accepte") ?? null;
   const productionQuote = acceptedQuote ?? quote;
-  const hasAcceptedQuoteWithoutChantier = Boolean(acceptedQuote && !acceptedQuote.chantier_id);
+  const hasAcceptedQuoteWithoutChantier = Boolean(acceptedQuote && !isExternalObatQuote(acceptedQuote) && !acceptedQuote.chantier_id);
   const productionQuotePath = hasAcceptedQuoteWithoutChantier
     ? `/projets/${project.id}?tab=quotes&chantierQuoteId=${productionQuote?.id}`
     : `/projets/${project.id}?tab=quotes`;
@@ -123,7 +125,9 @@ function ProductionContinuityPanel({ project }: { project: ProjectRecord }) {
                 <p className="mt-3 text-sm text-slate-600">
                   {hasAcceptedQuoteWithoutChantier
                     ? "Le devis est prêt à basculer en chantier. La création reste pilotée depuis l'onglet Devis pour conserver le lien devis, facturation et préparation."
-                    : "Le dossier reste côté commerce tant qu'un devis accepté n'a pas été transformé en chantier."}
+                    : isExternalObatQuote(productionQuote)
+                      ? "Devis Obat : le PDF original reste consultable dans l'onglet Devis. La facturation reste gérée dans Obat."
+                      : "Le dossier reste côté commerce tant qu'un devis accepté n'a pas été transformé en chantier."}
                 </p>
               </div>
               <div className="flex shrink-0 flex-wrap gap-2">
@@ -133,12 +137,12 @@ function ProductionContinuityPanel({ project }: { project: ProjectRecord }) {
                 >
                   {hasAcceptedQuoteWithoutChantier ? "Créer le chantier" : "Ouvrir les devis"}
                 </Link>
-                <Link
+                {!isExternalObatQuote(productionQuote) && <Link
                   to={`/projets/${project.id}/devis/${productionQuote.id}/edit`}
                   className="inline-flex h-9 items-center rounded-xl border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-800 hover:bg-slate-50"
                 >
                   Ouvrir le devis
-                </Link>
+                </Link>}
               </div>
             </div>
           </div>
@@ -384,7 +388,10 @@ export function ProjectQuotesTab({ project, onUpdated }: { project: ProjectRecor
   const [existingInvoices, setExistingInvoices] = useState<InvoiceRecord[]>([]);
   const [deletingQuoteId, setDeletingQuoteId] = useState<string | null>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
-  const acceptedQuote = project.quotes.find((quote) => quote.statut === "accepte");
+  const [importObatOpen, setImportObatOpen] = useState(false);
+  const [pdfError, setPdfError] = useState<string | null>(null);
+  const [openingPdfId, setOpeningPdfId] = useState<string | null>(null);
+  const acceptedQuote = project.quotes.find((quote) => quote.statut === "accepte" && !isExternalObatQuote(quote));
 
   useEffect(() => {
     let alive = true;
@@ -434,6 +441,7 @@ export function ProjectQuotesTab({ project, onUpdated }: { project: ProjectRecor
 
   /** Ce qui empeche de supprimer ce devis, ou null s'il peut partir. */
   function deletionBlocker(quote: ProjectRecord["quotes"][number]): string | null {
+    if (isExternalObatQuote(quote)) return "Le devis Obat doit être retiré avec sa pièce jointe.";
     if (getQuoteInvoices(quote.id).length) return "Ce devis a deja ete facture : supprimez d'abord la facture.";
     if (linkedChantierId(quote.id)) return "Un chantier a ete cree depuis ce devis : supprimez d'abord le chantier.";
     if (quote.signature_status === "signe" || quote.signature_status === "sign\u00e9") {
@@ -468,7 +476,7 @@ export function ProjectQuotesTab({ project, onUpdated }: { project: ProjectRecor
 
   async function createChantierFromQuote(quoteId: string, automatic = false) {
     const quote = project.quotes.find((item) => item.id === quoteId);
-    if (!quote || chantierActionKey) return;
+    if (!quote || chantierActionKey || isExternalObatQuote(quote)) return;
     if (quote.statut !== "accepte") {
       setChantierError("La creation chantier est disponible uniquement depuis un devis accepte.");
       return;
@@ -511,8 +519,8 @@ export function ProjectQuotesTab({ project, onUpdated }: { project: ProjectRecor
     setSearchParams(nextSearchParams, { replace: true });
 
     const quote = project.quotes.find((item) => item.id === chantierQuoteId);
-    if (!quote) {
-      setChantierError("Devis à passer en chantier introuvable.");
+    if (!quote || isExternalObatQuote(quote)) {
+      setChantierError("Un devis Obat ne peut pas créer automatiquement un chantier Batipro.");
       return;
     }
 
@@ -527,7 +535,7 @@ export function ProjectQuotesTab({ project, onUpdated }: { project: ProjectRecor
 
   async function createInvoiceFromQuote(quoteId: string, invoiceType: InvoiceType) {
     const quote = project.quotes.find((item) => item.id === quoteId);
-    if (!quote) return;
+    if (!quote || isExternalObatQuote(quote)) return;
     if (quote.statut !== "accepte") {
       setBillingError("La facturation est disponible uniquement depuis un devis accepté.");
       return;
@@ -555,9 +563,30 @@ export function ProjectQuotesTab({ project, onUpdated }: { project: ProjectRecor
     }
   }
 
+  async function showObatPdf(quote: ProjectRecord["quotes"][number]) {
+    setPdfError(null);
+    setOpeningPdfId(quote.id);
+    const popup = window.open("", "_blank");
+    try {
+      const url = await openExternalQuotePdf(quote);
+      if (popup) popup.location.href = url;
+      else window.location.assign(url);
+    } catch (error) {
+      popup?.close();
+      setPdfError(error instanceof Error ? error.message : "PDF Obat inaccessible.");
+    } finally {
+      setOpeningPdfId(null);
+    }
+  }
+
   return (
-    <Panel title="Devis" description="Pré-devis, devis final, signatures et relances." actions={<Link to={`/projets/${project.id}/devis/nouveau`} className="text-sm font-semibold text-blue-700 hover:text-blue-800">Créer un devis</Link>}>
+    <Panel title="Devis" description="Devis Batipro et PDF des devis réalisés sur Obat." actions={<>
+      <button type="button" onClick={() => setImportObatOpen(true)} className="rounded-xl border border-blue-200 bg-blue-50 px-3 py-2 text-sm font-semibold text-blue-700 hover:bg-blue-100">Importer un devis Obat</button>
+      <Link to={`/projets/${project.id}/devis/nouveau`} className="text-sm font-semibold text-blue-700 hover:text-blue-800">Créer un devis</Link>
+    </>}>
       <div className="space-y-4">
+        {importObatOpen && <ImportObatQuoteDialog project={project} onClose={() => setImportObatOpen(false)} onImported={() => onUpdated?.()} />}
+        {pdfError && <p role="alert" className="rounded-xl bg-red-50 p-3 text-sm text-red-700">{pdfError}</p>}
         {automaticChantierQuoteId && chantierActionKey === automaticChantierQuoteId ? (
           <div
             aria-live="polite"
@@ -637,13 +666,14 @@ export function ProjectQuotesTab({ project, onUpdated }: { project: ProjectRecor
                 {project.quotes.map((quote) => {
                   const quoteInvoices = getQuoteInvoices(quote.id);
                   const quoteChantierId = getQuoteChantierId(quote.id);
-                  const canBill = Number(quote.montant_ttc ?? 0) > 0 && quote.statut === "accepte";
-                  const canCreateChantier = quote.statut === "accepte" && !quoteChantierId;
+                  const external = isExternalObatQuote(quote);
+                  const canBill = !external && Number(quote.montant_ttc ?? 0) > 0 && quote.statut === "accepte";
+                  const canCreateChantier = !external && quote.statut === "accepte" && !quoteChantierId;
                   const isCreatingChantier = chantierActionKey === quote.id;
                   const deleteBlocker = deletionBlocker(quote);
                   return (
                     <tr key={quote.id}>
-                      <td className="px-4 py-3 font-semibold text-slate-950">{quote.quote_number}</td>
+                      <td className="px-4 py-3 font-semibold text-slate-950">{quote.quote_number}{external && <span className="ml-2 rounded-lg bg-sky-50 px-2 py-1 text-xs text-sky-800">Obat · PDF</span>}</td>
                       <td className="px-4 py-3 text-slate-500">{quote.statut}</td>
                       <td className="px-4 py-3 text-slate-500">{quote.signature_status}</td>
                       <td className="px-4 py-3 text-slate-500">{formatDate(quote.valid_until)}</td>
@@ -651,8 +681,10 @@ export function ProjectQuotesTab({ project, onUpdated }: { project: ProjectRecor
                       <td className="px-4 py-3 text-right font-semibold">{formatCurrency(quote.montant_ttc)}</td>
                       <td className="px-4 py-3 text-right">
                         <div className="flex flex-wrap justify-end gap-2">
-                          <Link to={`/projets/${project.id}/devis/${quote.id}/edit`} className="inline-flex h-8 items-center font-semibold text-blue-700 hover:text-blue-800">Ouvrir</Link>
-                          {quoteChantierId ? (
+                          {external ? (
+                            <button type="button" onClick={() => void showObatPdf(quote)} disabled={openingPdfId === quote.id} className="inline-flex h-8 items-center font-semibold text-blue-700 hover:text-blue-800 disabled:opacity-50">{openingPdfId === quote.id ? "Ouverture..." : "Voir le PDF"}</button>
+                          ) : <Link to={`/projets/${project.id}/devis/${quote.id}/edit`} className="inline-flex h-8 items-center font-semibold text-blue-700 hover:text-blue-800">Ouvrir</Link>}
+                          {!external && quoteChantierId ? (
                             <Link to={chantierPreparationPath(quoteChantierId)} className="inline-flex h-8 items-center rounded-lg border border-blue-200 bg-blue-50 px-2.5 text-xs font-semibold text-blue-700 hover:bg-blue-100">
                               Préparer
                             </Link>
@@ -676,7 +708,7 @@ export function ProjectQuotesTab({ project, onUpdated }: { project: ProjectRecor
                               {quoteInvoices.length} facture{quoteInvoices.length > 1 ? "s" : ""}
                             </Link>
                           ) : null}
-                          {PROJECT_INVOICE_ACTIONS.map((action) => {
+                          {!external && PROJECT_INVOICE_ACTIONS.map((action) => {
                             const actionKey = `${quote.id}:${action.type}`;
                             const isBilling = billingKey === actionKey;
                             const alreadyExists = getQuoteInvoices(quote.id, action.type).length > 0;
@@ -701,7 +733,7 @@ export function ProjectQuotesTab({ project, onUpdated }: { project: ProjectRecor
                               </button>
                             );
                           })}
-                          <button
+                          {!external && <button
                             type="button"
                             onClick={() => void removeQuote(quote)}
                             disabled={Boolean(deleteBlocker) || deletingQuoteId !== null}
@@ -709,7 +741,7 @@ export function ProjectQuotesTab({ project, onUpdated }: { project: ProjectRecor
                             className="inline-flex h-8 items-center rounded-lg border border-slate-200 px-2.5 text-xs font-semibold text-slate-600 hover:border-red-200 hover:bg-red-50 hover:text-red-700 disabled:bg-slate-50 disabled:text-slate-300"
                           >
                             {deletingQuoteId === quote.id ? "Suppression..." : "Supprimer"}
-                          </button>
+                          </button>}
                         </div>
                       </td>
                     </tr>
@@ -719,7 +751,7 @@ export function ProjectQuotesTab({ project, onUpdated }: { project: ProjectRecor
             </table>
           </div>
         ) : (
-          <EmptyProjectBlock title="Aucun devis" description="Créez un pré-devis ou un devis final depuis ce projet." />
+          <EmptyProjectBlock title="Aucun devis" description="Créez un devis Batipro ou importez le PDF d’un devis établi dans Obat." />
         )}
       </div>
     </Panel>
