@@ -1,0 +1,33 @@
+name: Investment allocation checks
+on:
+  pull_request:
+    paths:
+      - "src/services/companySettings.service.ts"
+      - "src/services/investmentQuoteAllocation*"
+      - "src/services/indirectCosts.service.ts"
+      - "src/pages/InvestmentsPage.tsx"
+      - ".github/workflows/investment-allocation-checks.yml"
+  push:
+    branches: [fix/investment-cost-allocation-20261119]
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+      - run: npm ci
+      - name: Investment allocation business rules
+        run: node --experimental-strip-types --test src/services/investmentQuoteAllocation.test.mjs
+      - name: TypeScript
+        run: npx tsc --noEmit -p tsconfig.app.json
+      - name: Targeted ESLint
+        run: npx eslint src/services/companySettings.service.ts src/services/investmentQuoteAllocation.ts src/services/indirectCosts.service.ts src/pages/InvestmentsPage.tsx
+      - name: Production build
+        run: npm run build
