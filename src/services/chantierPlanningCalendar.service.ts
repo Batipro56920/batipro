@@ -486,7 +486,7 @@ async function fetchTasks(
 
       throw new Error(result.error.message);
     }
-  } catch (error: any) {
+  } catch {
     const fallback = await getTasksByChantierIdDetailed(chantierId);
     return {
       tasks: fallback.tasks.map((row) => mapFallbackTask(row, settings)),
@@ -615,6 +615,7 @@ export async function updatePlanningCalendarTask(
   settings: PlanningCalendarSettings,
   _allowMergedMeta: boolean,
 ): Promise<PlanningCalendarTask> {
+  void _allowMergedMeta; // Preserve the existing public signature; this flag is currently unused.
   const payload = buildTaskPayload(patch, settings);
 
   while (true) {
