@@ -5,8 +5,9 @@ import { supabase } from "../lib/supabaseClient";
 import { getTasksByChantierId, type ChantierTaskRow } from "./chantierTasks.service";
 import { listChantierPurchaseRequests, type ChantierPurchaseRequestRow } from "./chantierPurchaseRequests.service";
 import { listIntervenants } from "./intervenants.service";
-import { effectiveIntervenantHourlyCost } from "./intervenantCosts.service";
+import { configuredWorkerRates, sumLaborValues, valueLaborEntry } from "./laborCostValuation.service";
 import { getChantierMaterialCost } from "./productStock.service";
+import { getCompanyHourlyRates } from "./indirectCosts.service";
 
 export type ChantierBudgetSettingsRow = {
   chantier_id: string;
@@ -33,7 +34,18 @@ export type ChantierLaborCostSummary = {
   hourlyRateHt: number;
   laborCostHt: number;
   hoursUsingChantierRate: number;
+  hoursUsingSnapshot: number;
   usesDefaultRate: boolean;
+};
+
+export type ChantierBudgetTaskRow = {
+  taskId: string | null;
+  title: string;
+  lot: string;
+  plannedHours: number;
+  actualHours: number;
+  plannedLaborCostHt: number;
+  actualLaborCostHt: number;
 };
 
 export type ChantierBudgetDashboard = {
@@ -44,6 +56,8 @@ export type ChantierBudgetDashboard = {
   chiffreAffairesPrevuHt: number;
   coutMoPrevuHt: number;
   coutMoReelHt: number;
+  coutMoReelIndirectHt: number | null;
+  coutMoReelCompletHt: number | null;
   achatsPrevusHt: number;
   achatsReelsHt: number;
   achatsSaisisHt: number;
@@ -58,6 +72,7 @@ export type ChantierBudgetDashboard = {
   depassementBudgetHt: number;
   alertes: string[];
   lots: ChantierBudgetLotRow[];
+  taskLabor: ChantierBudgetTaskRow[];
   achats: ChantierPurchaseRequestRow[];
 };
 
@@ -203,18 +218,31 @@ export async function listChantierLaborCostSummaries(
   const ids = Array.from(new Set(chantierIds.filter(Boolean)));
   if (!ids.length) return [];
 
-  let timeQuery = (supabase as any)
-    .from("chantier_time_entries")
-    .select("chantier_id,intervenant_id,duration_hours,work_date")
-    .in("chantier_id", ids);
-  if (period.from) timeQuery = timeQuery.gte("work_date", period.from);
-  if (period.to) timeQuery = timeQuery.lte("work_date", period.to);
+  const fetchTimeEntries = async (withSnapshot: boolean) => {
+    let query = (supabase as any)
+      .from("chantier_time_entries")
+      .select(withSnapshot
+        ? "chantier_id,intervenant_id,duration_hours,work_date,hourly_cost_snapshot_ht,hourly_cost_snapshot_source"
+        : "chantier_id,intervenant_id,duration_hours,work_date")
+      .in("chantier_id", ids);
+    if (period.from) query = query.gte("work_date", period.from);
+    if (period.to) query = query.lte("work_date", period.to);
+    return query;
+  };
+  const loadTimeRows = async () => {
+    const latest = await fetchTimeEntries(true);
+    if (!latest.error) return latest;
+    const errorText = String(latest.error.message ?? "").toLowerCase();
+    if (!["hourly_cost_snapshot_ht", "42703"].some((token) => errorText.includes(token))
+        && latest.error.code !== "42703") return latest;
+    return fetchTimeEntries(false);
+  };
 
   const [settingsResult, timeResult, intervenants] = await Promise.all([
     fromBudgetSettings()
       .select("chantier_id,taux_horaire_mo_ht")
       .in("chantier_id", ids),
-    timeQuery,
+    loadTimeRows(),
     listIntervenants(),
   ]);
 
@@ -234,42 +262,26 @@ export async function listChantierLaborCostSummaries(
 
   if (timeResult.error) throw timeResult.error;
 
-  const individualRateById = new Map(
-    intervenants
-      .map((intervenant) => ({ id: intervenant.id, rate: effectiveIntervenantHourlyCost(intervenant) }))
-      .filter((item): item is { id: string; rate: number } => item.rate !== null)
-      .map((item) => [item.id, item.rate] as const),
-  );
-  const totalsByChantierId = new Map<string, {
-    hours: number;
-    laborCostHt: number;
-    hoursUsingChantierRate: number;
-  }>();
-
+  const individualRateById = configuredWorkerRates(intervenants);
+  const totalsByChantierId = new Map<string, ReturnType<typeof valueLaborEntry>[]>();
   (timeResult.data ?? []).forEach((row: any) => {
     const chantierId = String(row.chantier_id ?? "");
     if (!chantierId) return;
-    const hours = normalizeNumber(row.duration_hours);
     const chantierRate = settingsByChantierId.get(chantierId) ?? DEFAULT_SETTINGS.taux_horaire_mo_ht;
-    const individualRate = individualRateById.get(String(row.intervenant_id ?? ""));
-    const appliedRate = individualRate ?? chantierRate;
-    const current = totalsByChantierId.get(chantierId) ?? {
-      hours: 0,
-      laborCostHt: 0,
-      hoursUsingChantierRate: 0,
-    };
-    current.hours += hours;
-    current.laborCostHt += hours * appliedRate;
-    if (individualRate === undefined) current.hoursUsingChantierRate += hours;
-    totalsByChantierId.set(chantierId, current);
+    const cost = valueLaborEntry({
+      chantier_id: chantierId,
+      intervenant_id: String(row.intervenant_id ?? ""),
+      duration_hours: normalizeNumber(row.duration_hours),
+      hourly_cost_snapshot_ht: row.hourly_cost_snapshot_ht,
+      hourly_cost_snapshot_source: row.hourly_cost_snapshot_source,
+    }, individualRateById, chantierRate);
+    const values = totalsByChantierId.get(chantierId) ?? [];
+    values.push(cost);
+    totalsByChantierId.set(chantierId, values);
   });
 
   return ids.map((chantierId) => {
-    const totals = totalsByChantierId.get(chantierId) ?? {
-      hours: 0,
-      laborCostHt: 0,
-      hoursUsingChantierRate: 0,
-    };
+    const totals = sumLaborValues(totalsByChantierId.get(chantierId) ?? []);
     const hasConfiguredRate = settingsSchemaReady && settingsByChantierId.has(chantierId);
     const chantierRate = settingsByChantierId.get(chantierId) ?? DEFAULT_SETTINGS.taux_horaire_mo_ht;
     return {
@@ -278,6 +290,7 @@ export async function listChantierLaborCostSummaries(
       hourlyRateHt: totals.hours > 0 ? totals.laborCostHt / totals.hours : chantierRate,
       laborCostHt: totals.laborCostHt,
       hoursUsingChantierRate: totals.hoursUsingChantierRate,
+      hoursUsingSnapshot: totals.hoursUsingSnapshot,
       usesDefaultRate: totals.hoursUsingChantierRate > 0 && !hasConfiguredRate,
     };
   });
@@ -286,7 +299,7 @@ export async function listChantierLaborCostSummaries(
 export async function loadChantierBudgetDashboard(chantierId: string): Promise<ChantierBudgetDashboard> {
   if (!chantierId) throw new Error("chantierId manquant.");
 
-  const [settingsResult, devis, tasks, timeEntries, purchaseResult, changeOrdersResult, materialCostHt] = await Promise.all([
+  const [settingsResult, devis, tasks, timeEntries, purchaseResult, changeOrdersResult, materialCostHt, intervenants, companyRates] = await Promise.all([
     getBudgetSettings(chantierId),
     listDevisByChantier(chantierId),
     getTasksByChantierId(chantierId),
@@ -294,6 +307,8 @@ export async function loadChantierBudgetDashboard(chantierId: string): Promise<C
     listChantierPurchaseRequests(chantierId),
     listChantierChangeOrders(chantierId),
     getChantierMaterialCost(chantierId),
+    listIntervenants(),
+    getCompanyHourlyRates().catch(() => null),
   ]);
 
   const devisLignesGroups = await Promise.all(devis.map((row) => listDevisLignes(row.id)));
@@ -308,6 +323,11 @@ export async function loadChantierBudgetDashboard(chantierId: string): Promise<C
   const taskById = new Map(tasks.map((task) => [task.id, task]));
   const settings = settingsResult.settings;
   const lotsMap = new Map<string, ChantierBudgetLotRow>();
+  const taskLaborMap = new Map<string, ChantierBudgetTaskRow>();
+  const individualRateById = configuredWorkerRates(intervenants);
+  let hoursUsingChantierRate = 0;
+  let employeeHours = 0;
+  const employeeIds = new Set(intervenants.filter((person) => person.status === "employee").map((person) => person.id));
 
   function ensureLot(lot: string): ChantierBudgetLotRow {
     const normalizedLot = String(lot || "Sans lot").trim() || "Sans lot";
@@ -327,16 +347,46 @@ export async function loadChantierBudgetDashboard(chantierId: string): Promise<C
   }
 
   tasks.forEach((task) => {
-    const lotRow = ensureLot(resolveTaskLot(task));
-    lotRow.temps_prevu_h += normalizeNumber(task.temps_prevu_h);
-    lotRow.cout_mo_prevu_ht += normalizeNumber(task.temps_prevu_h) * settings.taux_horaire_mo_ht;
+    const lot = resolveTaskLot(task);
+    const lotRow = ensureLot(lot);
+    const plannedHours = normalizeNumber(task.temps_prevu_h);
+    const estimatedLabor = normalizeNumber(task.cout_mo_estime_ht);
+    const plannedLaborCostHt = estimatedLabor > 0 ? estimatedLabor : plannedHours * settings.taux_horaire_mo_ht;
+    lotRow.temps_prevu_h += plannedHours;
+    lotRow.cout_mo_prevu_ht += plannedLaborCostHt;
+    taskLaborMap.set(task.id, {
+      taskId: task.id,
+      title: task.titre || "Tâche",
+      lot,
+      plannedHours,
+      actualHours: 0,
+      plannedLaborCostHt,
+      actualLaborCostHt: 0,
+    });
   });
 
   timeEntries.forEach((entry) => {
     const task = entry.task_id ? taskById.get(entry.task_id) : undefined;
     const lotRow = ensureLot(resolveTaskLot(task));
     lotRow.temps_reel_h += normalizeNumber(entry.duration_hours);
-    lotRow.cout_mo_reel_ht += normalizeNumber(entry.duration_hours) * settings.taux_horaire_mo_ht;
+    const valuation = valueLaborEntry({
+      chantier_id: chantierId,
+      intervenant_id: entry.intervenant_id,
+      duration_hours: entry.duration_hours,
+      hourly_cost_snapshot_ht: entry.hourly_cost_snapshot_ht,
+      hourly_cost_snapshot_source: entry.hourly_cost_snapshot_source,
+    }, individualRateById, settings.taux_horaire_mo_ht);
+    lotRow.cout_mo_reel_ht += valuation.laborCostHt;
+    const key = task?.id ?? "__unassigned__";
+    const currentTask = taskLaborMap.get(key) ?? {
+      taskId: null, title: "Heures sans tâche", lot: resolveTaskLot(undefined),
+      plannedHours: 0, actualHours: 0, plannedLaborCostHt: 0, actualLaborCostHt: 0,
+    };
+    currentTask.actualHours += valuation.hours;
+    currentTask.actualLaborCostHt += valuation.laborCostHt;
+    taskLaborMap.set(key, currentTask);
+    hoursUsingChantierRate += valuation.hoursUsingChantierRate;
+    if (employeeIds.has(entry.intervenant_id)) employeeHours += valuation.hours;
   });
 
   purchaseResult.requests.forEach((request) => {
@@ -365,6 +415,12 @@ export async function loadChantierBudgetDashboard(chantierId: string): Promise<C
   const chiffreAffairesPrevuHt = chiffreAffairesBaseHt + avenantsValidesHt;
   const coutMoPrevuHt = lots.reduce((sum, row) => sum + row.cout_mo_prevu_ht, 0);
   const coutMoReelHt = lots.reduce((sum, row) => sum + row.cout_mo_reel_ht, 0);
+  // Coût complet indicatif, séparé du déboursé direct utilisé dans les marges
+  // existantes. Ne jamais ajouter ces frais une seconde fois au coût des tâches.
+  const coutMoReelIndirectHt = companyRates
+    ? employeeHours * (companyRates.overheadRatePerHour + companyRates.amortizationRatePerHour)
+    : null;
+  const coutMoReelCompletHt = coutMoReelIndirectHt === null ? null : coutMoReelHt + coutMoReelIndirectHt;
   const achatsPrevusHt = lots.reduce((sum, row) => sum + row.achats_prevus_ht, 0);
   const achatsSaisisHt = lots.reduce((sum, row) => sum + row.achats_reels_ht, 0);
   // Les bons de livraison lus sur le terrain s'ajoutent aux achats saisis au
@@ -379,6 +435,7 @@ export async function loadChantierBudgetDashboard(chantierId: string): Promise<C
   const margeReellePct = safePct(margeReelleHt, chiffreAffairesPrevuHt);
   const depassementBudgetHt = Math.max(0, coutReelHt - coutPrevuHt);
   const alertes: string[] = [];
+  if (hoursUsingChantierRate > 0) alertes.push(`${hoursUsingChantierRate.toLocaleString("fr-FR")} h valorisées au taux chantier faute de coût individuel.`);
 
   if (depassementBudgetHt > 0) {
     alertes.push(`Depassement budget de ${Math.round(depassementBudgetHt)} EUR HT`);
@@ -398,6 +455,8 @@ export async function loadChantierBudgetDashboard(chantierId: string): Promise<C
     chiffreAffairesPrevuHt,
     coutMoPrevuHt,
     coutMoReelHt,
+    coutMoReelIndirectHt,
+    coutMoReelCompletHt,
     achatsPrevusHt,
     achatsReelsHt,
     achatsSaisisHt,
@@ -411,6 +470,7 @@ export async function loadChantierBudgetDashboard(chantierId: string): Promise<C
     depassementBudgetHt,
     alertes,
     lots,
+    taskLabor: [...taskLaborMap.values()].sort((a,b) => b.actualLaborCostHt - a.actualLaborCostHt),
     achats: purchaseResult.requests,
   };
 }
