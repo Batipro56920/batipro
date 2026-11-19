@@ -3,6 +3,7 @@ import { MoreHorizontal } from "lucide-react";
 import type { QuoteActionHandlers, QuoteWithParty } from "../types";
 import { dateOnly, eur } from "../../components/crmFormat";
 import { QuoteStatusChip } from "./QuoteStatusChip";
+import { isExternalObatQuote } from "../../../../services/obatProjectQuotes.service";
 
 function signatureLabel(value: string) {
   if (value === "attente_signature") return "Attente signature";
@@ -16,7 +17,7 @@ function quoteHasClientApproval(row: QuoteWithParty) {
 }
 
 function needsChantierHandoff(row: QuoteWithParty) {
-  return !row.chantierPath && quoteHasClientApproval(row);
+  return !isExternalObatQuote(row) && !row.chantierPath && quoteHasClientApproval(row);
 }
 
 function ProjectLinkAction({ row, compact = false }: { row: QuoteWithParty; compact?: boolean }) {
@@ -32,6 +33,7 @@ function ProjectLinkAction({ row, compact = false }: { row: QuoteWithParty; comp
     );
   }
 
+  if (isExternalObatQuote(row)) return null;
   return (
     <Link
       to={row.quoteEditPath}
@@ -44,7 +46,7 @@ function ProjectLinkAction({ row, compact = false }: { row: QuoteWithParty; comp
 }
 
 function QuoteEditAction({ row, compact = false }: { row: QuoteWithParty; compact?: boolean }) {
-  if (!row.hasProjectLink) return null;
+  if (!row.hasProjectLink || isExternalObatQuote(row)) return null;
   return (
     <Link
       to={row.quoteEditPath}
@@ -107,7 +109,7 @@ function QuoteMobileCard({
       <button type="button" onClick={() => onSelect(row)} className="block w-full text-left">
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
-            <div className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">{row.quote_number}</div>
+            <div className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">{row.quote_number}{isExternalObatQuote(row) ? " · Obat" : ""}</div>
             <div className="mt-1 truncate text-base font-semibold text-slate-950">{row.partyLabel}</div>
           </div>
           <QuoteStatusChip status={row.statut} />
@@ -141,11 +143,11 @@ function QuoteMobileCard({
             <MoreHorizontal className="h-4 w-4" />
           </summary>
           <div className="absolute right-0 z-20 mt-1 w-52 rounded-2xl border border-slate-200 bg-white p-2 shadow-xl shadow-slate-950/10">
-            <button type="button" onClick={() => actions.onStatus(row, "envoye")} className="block w-full rounded-xl px-3 py-2 text-left text-sm hover:bg-slate-50">Envoyer</button>
-            <button type="button" onClick={() => actions.onStatus(row, "relance_1")} className="block w-full rounded-xl px-3 py-2 text-left text-sm hover:bg-slate-50">Relancer</button>
+            {!isExternalObatQuote(row) && <button type="button" onClick={() => actions.onStatus(row, "envoye")} className="block w-full rounded-xl px-3 py-2 text-left text-sm hover:bg-slate-50">Envoyer</button>}
+            {!isExternalObatQuote(row) && <button type="button" onClick={() => actions.onStatus(row, "relance_1")} className="block w-full rounded-xl px-3 py-2 text-left text-sm hover:bg-slate-50">Relancer</button>}
             <button type="button" onClick={() => actions.onPdf(row)} className="block w-full rounded-xl px-3 py-2 text-left text-sm hover:bg-slate-50">PDF</button>
-            <button type="button" onClick={() => actions.onStatus(row, "accepte")} className="block w-full rounded-xl px-3 py-2 text-left text-sm text-emerald-700 hover:bg-emerald-50">Accepter</button>
-            <button type="button" onClick={() => actions.onStatus(row, "refuse")} className="block w-full rounded-xl px-3 py-2 text-left text-sm text-red-700 hover:bg-red-50">Refuser</button>
+            {!isExternalObatQuote(row) && <button type="button" onClick={() => actions.onStatus(row, "accepte")} className="block w-full rounded-xl px-3 py-2 text-left text-sm text-emerald-700 hover:bg-emerald-50">Accepter</button>}
+            {!isExternalObatQuote(row) && <button type="button" onClick={() => actions.onStatus(row, "refuse")} className="block w-full rounded-xl px-3 py-2 text-left text-sm text-red-700 hover:bg-red-50">Refuser</button>}
           </div>
         </details>
       </div>
@@ -182,7 +184,7 @@ export function QuotesTable({
           <tbody>
             {rows.map((row) => (
               <tr key={row.id} onClick={() => onSelect(row)} className="group cursor-pointer border-b border-slate-100 align-top transition hover:bg-blue-50/30">
-                <td className="px-4 py-3 font-semibold text-slate-950">{row.quote_number}</td>
+                <td className="px-4 py-3 font-semibold text-slate-950">{row.quote_number}{isExternalObatQuote(row) ? " · Obat" : ""}</td>
                 <td className="px-4 py-3 text-slate-700">{row.partyLabel}</td>
                 <td className="px-4 py-3">
                   <div className="line-clamp-2 max-w-xs font-medium text-slate-800">{row.description ?? row.lot ?? "Projet à compléter"}</div>
