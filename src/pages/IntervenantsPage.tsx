@@ -16,6 +16,15 @@ import {
   updateIntervenant,
 } from "../services/intervenants.service";
 import { useI18n } from "../i18n";
+import IntervenantFormFields, {
+  EMPTY_INTERVENANT_FORM,
+  INTERVENANT_STATUS_LABELS,
+  effectiveHourlyCost,
+  intervenantFormFromRow,
+  intervenantPayload,
+  moneyFr,
+  type IntervenantFormState,
+} from "../components/intervenants/IntervenantFormFields";
 
 type IntervenantLinkRow = {
   intervenant_id: string;
@@ -35,96 +44,6 @@ type ProfileAccessSummary = {
   accessLabel: string;
   accessStatus: "active" | "invited" | "disabled" | "none";
   portalLabel: string;
-};
-
-type IntervenantFormState = {
-  nom: string;
-  entreprise: string;
-  metier: string;
-  email: string;
-  telephone: string;
-  notes: string;
-  status: IntervenantStatus;
-  job_title: string;
-  hourly_cost_ht: string;
-  hourly_sale_price_ht: string;
-  entry_date: string;
-  is_active: boolean;
-  subcontractor_company: string;
-  specialty: string;
-  daily_rate_ht: string;
-  insurance: string;
-};
-
-const EMPTY_FORM: IntervenantFormState = {
-  nom: "",
-  entreprise: "",
-  metier: "",
-  email: "",
-  telephone: "",
-  notes: "",
-  status: "subcontractor",
-  job_title: "",
-  hourly_cost_ht: "",
-  hourly_sale_price_ht: "",
-  entry_date: "",
-  is_active: true,
-  subcontractor_company: "",
-  specialty: "",
-  daily_rate_ht: "",
-  insurance: "",
-};
-
-
-function SalaryEstimator({ hourlyCost, onHourlyCostChange }: { hourlyCost: string; onHourlyCostChange: (value: string) => void }) {
-  const [mode, setMode] = useState<"gross"|"net"|"employer">("employer");
-  const [monthly, setMonthly] = useState(() => (Number(hourlyCost.replace(",", ".")) * 151.67).toFixed(2).replace(".", ","));
-  const [days, setDays] = useState("210");
-  const [hours, setHours] = useState("7");
-  const [netRatio, setNetRatio] = useState("78");
-  const [employerRatio, setEmployerRatio] = useState("142");
-  const val=(s:string)=>Math.max(0,Number(s.replace(",","."))||0);
-  const employeeNet=val(netRatio)/100, employerFactor=val(employerRatio)/100;
-  const gross=mode==="gross"?val(monthly):mode==="net"?employeeNet>0?val(monthly)/employeeNet:0:employerFactor>0?val(monthly)/employerFactor:0;
-  const net=gross*employeeNet, employer=gross*employerFactor;
-  const yearlyHours=val(days)*val(hours);
-  function changeValue(next:string) {
-    setMonthly(next);
-    const numeric=val(next);
-    const employerMonthly=mode==="employer"?numeric:mode==="gross"?numeric*employerFactor:employeeNet>0?numeric/employeeNet*employerFactor:0;
-    onHourlyCostChange(yearlyHours>0?(employerMonthly*12/yearlyHours).toFixed(2).replace(".",","):"");
-  }
-  function changeSchedule(nextDays:string,nextHours:string){
-    setDays(nextDays);setHours(nextHours);
-    const total=val(nextDays)*val(nextHours);
-    onHourlyCostChange(total>0?(employer*12/total).toFixed(2).replace(".",","):"");
-  }
-  const format=(n:number)=>n.toLocaleString("fr-FR",{minimumFractionDigits:2,maximumFractionDigits:2})+" €";
-  return <div className="mt-4 space-y-3 rounded-xl border border-blue-100 bg-blue-50/50 p-4">
-    <h3 className="font-semibold">Simulation salariale et productivité</h3>
-    <p className="text-xs text-slate-600">Estimations paramétrables, hors primes et situations particulières. Vérifier avec la paie. Le coût horaire chargé enregistré dans Batipro est recalculé à partir du coût employeur et des heures productives.</p>
-    <div className="grid gap-3 sm:grid-cols-2">
-      <label className="text-sm">Montant saisi
-        <select className="mt-1 w-full rounded-lg border bg-white p-2" value={mode} onChange={e=>setMode(e.target.value as "gross"|"net"|"employer")}><option value="gross">Brut mensuel</option><option value="net">Net mensuel estimé</option><option value="employer">Coût employeur mensuel</option></select>
-        <input className="mt-2 w-full rounded-lg border bg-white p-2" inputMode="decimal" value={monthly} onChange={e=>changeValue(e.target.value.replace(".",","))}/>
-      </label>
-      <div className="grid grid-cols-2 gap-2">
-        <label className="text-sm">Net / brut (%)<input className="mt-1 w-full rounded-lg border bg-white p-2" inputMode="decimal" value={netRatio} onChange={e=>setNetRatio(e.target.value.replace(".",","))}/></label>
-        <label className="text-sm">Employeur / brut (%)<input className="mt-1 w-full rounded-lg border bg-white p-2" inputMode="decimal" value={employerRatio} onChange={e=>setEmployerRatio(e.target.value.replace(".",","))}/></label>
-      </div>
-      <label className="text-sm">Jours productifs / an<input className="mt-1 w-full rounded-lg border bg-white p-2" inputMode="decimal" value={days} onChange={e=>changeSchedule(e.target.value.replace(".",","),hours)}/></label>
-      <label className="text-sm">Heures productives / jour<input className="mt-1 w-full rounded-lg border bg-white p-2" inputMode="decimal" value={hours} onChange={e=>changeSchedule(days,e.target.value.replace(".",","))}/></label>
-    </div>
-    <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">{[["Brut mensuel",format(gross)],["Net mensuel estimé",format(net)],["Coût employeur / mois",format(employer)],["Heures productives / an",yearlyHours.toLocaleString("fr-FR")+" h"],["Coût employeur / h",yearlyHours>0?format(employer*12/yearlyHours):"—"],["Coût employeur / jour",val(days)>0?format(employer*12/val(days)):"—"]].map(([label,value])=><div key={label} className="rounded-lg bg-white p-3"><div className="text-xs text-slate-500">{label}</div><strong>{value}</strong></div>)}</div>
-  </div>;
-}
-
-const INTERVENANT_STATUS_LABELS: Record<IntervenantStatus, string> = {
-  employee: "Employé",
-  subcontractor: "Sous-traitant",
-  temporary_worker: "Intérimaire",
-  partner: "Partenaire",
-  other: "Autre",
 };
 
 const PROFILE_TYPE_LABELS: Record<ProfileType, string> = {
@@ -151,7 +70,7 @@ export default function IntervenantsPage() {
   const [error, setError] = useState<string | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
   const [editingRow, setEditingRow] = useState<(IntervenantRow & { chantier_ids: string[] }) | null>(null);
-  const [form, setForm] = useState<IntervenantFormState>(EMPTY_FORM);
+  const [form, setForm] = useState<IntervenantFormState>(EMPTY_INTERVENANT_FORM);
   const [inviteUrlById, setInviteUrlById] = useState<Record<string, string>>({});
   const [invitingId, setInvitingId] = useState<string | null>(null);
   const [openingPortalId, setOpeningPortalId] = useState<string | null>(null);
@@ -231,37 +150,20 @@ export default function IntervenantsPage() {
   function openCreateModal() {
     setModalOpen(true);
     setEditingRow(null);
-    setForm(EMPTY_FORM);
+    setForm(EMPTY_INTERVENANT_FORM);
   }
 
   function openEditModal(row: IntervenantRow & { chantier_ids: string[] }) {
     setModalOpen(true);
     setEditingRow(row);
-    setForm({
-      nom: row.nom ?? "",
-      entreprise: row.entreprise ?? "",
-      metier: row.metier ?? "",
-      email: row.email ?? "",
-      telephone: row.telephone ?? "",
-      notes: row.notes ?? "",
-      status: row.status ?? "subcontractor",
-      job_title: row.job_title ?? "",
-      hourly_cost_ht: row.hourly_cost_ht == null ? "" : String(row.hourly_cost_ht),
-      hourly_sale_price_ht: row.hourly_sale_price_ht == null ? "" : String(row.hourly_sale_price_ht),
-      entry_date: row.entry_date ?? "",
-      is_active: row.is_active !== false,
-      subcontractor_company: row.subcontractor_company ?? row.entreprise ?? "",
-      specialty: row.specialty ?? row.metier ?? "",
-      daily_rate_ht: row.daily_rate_ht == null ? "" : String(row.daily_rate_ht),
-      insurance: row.insurance ?? "",
-    });
+    setForm(intervenantFormFromRow(row));
   }
 
   function closeModal() {
     if (saving) return;
     setModalOpen(false);
     setEditingRow(null);
-    setForm(EMPTY_FORM);
+    setForm(EMPTY_INTERVENANT_FORM);
   }
 
   async function onSubmit(e: FormEvent) {
@@ -270,45 +172,10 @@ export default function IntervenantsPage() {
     setError(null);
 
     try {
-      if (editingRow) {
-        await updateIntervenant(editingRow.id, {
-          nom: form.nom,
-          entreprise: form.entreprise,
-          metier: form.metier,
-          email: form.email,
-          telephone: form.telephone,
-          notes: form.notes,
-          status: form.status,
-          job_title: form.job_title,
-          hourly_cost_ht: form.hourly_cost_ht,
-          hourly_sale_price_ht: form.hourly_sale_price_ht,
-          entry_date: form.entry_date,
-          is_active: form.is_active,
-          subcontractor_company: form.subcontractor_company,
-          specialty: form.specialty,
-          daily_rate_ht: form.daily_rate_ht,
-          insurance: form.insurance,
-        });
-      } else {
-        await createIntervenant({
-          nom: form.nom,
-          entreprise: form.entreprise,
-          metier: form.metier,
-          email: form.email,
-          telephone: form.telephone,
-          notes: form.notes,
-          status: form.status,
-          job_title: form.job_title,
-          hourly_cost_ht: form.hourly_cost_ht,
-          hourly_sale_price_ht: form.hourly_sale_price_ht,
-          entry_date: form.entry_date,
-          is_active: form.is_active,
-          subcontractor_company: form.subcontractor_company,
-          specialty: form.specialty,
-          daily_rate_ht: form.daily_rate_ht,
-          insurance: form.insurance,
-        });
-      }
+      const payload = intervenantPayload(form);
+      if (!payload.nom) throw new Error("Le nom de l'intervenant est obligatoire.");
+      if (editingRow) await updateIntervenant(editingRow.id, payload);
+      else await createIntervenant(payload);
 
       closeModal();
       await refresh();
@@ -672,180 +539,8 @@ export default function IntervenantsPage() {
             </div>
 
             <div className="min-h-0 flex-1 overflow-y-auto px-6 py-4">
-              <form id="intervenant-form" className="space-y-4" onSubmit={onSubmit}>
-                <div className="grid gap-4 md:grid-cols-2">
-                  <label className="space-y-1 text-sm">
-                    <div className="text-slate-600">Nom</div>
-                    <input
-                      className="w-full rounded-xl border px-3 py-2"
-                      value={form.nom}
-                      onChange={(e) => setForm((prev) => ({ ...prev, nom: e.target.value }))}
-                      placeholder="Nom complet"
-                      required
-                    />
-                  </label>
-                  <label className="space-y-1 text-sm">
-                    <div className="text-slate-600">Entreprise</div>
-                    <input
-                      className="w-full rounded-xl border px-3 py-2"
-                      value={form.entreprise}
-                      onChange={(e) => setForm((prev) => ({ ...prev, entreprise: e.target.value }))}
-                      placeholder="Entreprise"
-                    />
-                  </label>
-                  <label className="space-y-1 text-sm">
-                    <div className="text-slate-600">Statut *</div>
-                    <select
-                      className="w-full rounded-xl border px-3 py-2"
-                      value={form.status}
-                      onChange={(e) =>
-                        setForm((prev) => ({ ...prev, status: e.target.value as IntervenantStatus }))
-                      }
-                      required
-                    >
-                      {Object.entries(INTERVENANT_STATUS_LABELS).map(([value, label]) => (
-                        <option key={value} value={value}>
-                          {label}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                  <label className="space-y-1 text-sm">
-                    <div className="text-slate-600">Metier</div>
-                    <input
-                      className="w-full rounded-xl border px-3 py-2"
-                      value={form.metier}
-                      onChange={(e) => setForm((prev) => ({ ...prev, metier: e.target.value }))}
-                      placeholder="Metier / specialite"
-                    />
-                  </label>
-                  <label className="space-y-1 text-sm">
-                    <div className="text-slate-600">Email</div>
-                    <input
-                      className="w-full rounded-xl border px-3 py-2"
-                      value={form.email}
-                      onChange={(e) => setForm((prev) => ({ ...prev, email: e.target.value }))}
-                      placeholder="email@exemple.com"
-                      type="email"
-                    />
-                  </label>
-                  <label className="space-y-1 text-sm">
-                    <div className="text-slate-600">Telephone</div>
-                    <input
-                      className="w-full rounded-xl border px-3 py-2"
-                      value={form.telephone}
-                      onChange={(e) => setForm((prev) => ({ ...prev, telephone: e.target.value }))}
-                      placeholder="Telephone"
-                    />
-                  </label>
-                </div>
-
-                {form.status === "employee" ? (
-                  <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                    <div className="text-sm font-semibold text-slate-900">Informations salarié</div>
-                    <div className="mt-3 grid gap-4 md:grid-cols-2">
-                      <label className="space-y-1 text-sm">
-                        <div className="text-slate-600">Poste</div>
-                        <input
-                          className="w-full rounded-xl border px-3 py-2"
-                          value={form.job_title}
-                          onChange={(e) => setForm((prev) => ({ ...prev, job_title: e.target.value }))}
-                          placeholder="Chef d'équipe, plaquiste..."
-                        />
-                      </label>
-                      <label className="space-y-1 text-sm">
-                        <div className="text-slate-600">Date d'entrée</div>
-                        <input
-                          type="date"
-                          className="w-full rounded-xl border px-3 py-2"
-                          value={form.entry_date}
-                          onChange={(e) => setForm((prev) => ({ ...prev, entry_date: e.target.value }))}
-                        />
-                      </label>
-                      <label className="space-y-1 text-sm">
-                        <div className="text-slate-600">Coût horaire chargé</div>
-                        <input
-                          className="w-full rounded-xl border px-3 py-2"
-                          inputMode="decimal"
-                          value={form.hourly_cost_ht}
-                          onChange={(e) => setForm((prev) => ({ ...prev, hourly_cost_ht: e.target.value }))}
-                          placeholder="Ex: 32"
-                        />
-                      </label>
-                      <label className="space-y-1 text-sm">
-                        <div className="text-slate-600">Prix de vente horaire</div>
-                        <input
-                          className="w-full rounded-xl border px-3 py-2"
-                          inputMode="decimal"
-                          value={form.hourly_sale_price_ht}
-                          onChange={(e) => setForm((prev) => ({ ...prev, hourly_sale_price_ht: e.target.value }))}
-                          placeholder="Ex: 48"
-                        />
-                      </label>
-                      <div className="md:col-span-2"><SalaryEstimator key={editingRow?.id ?? "new"} hourlyCost={form.hourly_cost_ht} onHourlyCostChange={value=>setForm(prev=>({...prev,hourly_cost_ht:value}))}/></div>
-                      <label className="flex items-center gap-2 text-sm">
-                        <input
-                          type="checkbox"
-                          checked={form.is_active}
-                          onChange={(e) => setForm((prev) => ({ ...prev, is_active: e.target.checked }))}
-                        />
-                        <span>Actif</span>
-                      </label>
-                    </div>
-                  </div>
-                ) : null}
-
-                {form.status === "subcontractor" ? (
-                  <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                    <div className="text-sm font-semibold text-slate-900">Sous-traitant</div>
-                    <div className="mt-3 grid gap-4 md:grid-cols-2">
-                      <label className="space-y-1 text-sm">
-                        <div className="text-slate-600">Entreprise</div>
-                        <input
-                          className="w-full rounded-xl border px-3 py-2"
-                          value={form.subcontractor_company}
-                          onChange={(e) => setForm((prev) => ({ ...prev, subcontractor_company: e.target.value }))}
-                        />
-                      </label>
-                      <label className="space-y-1 text-sm">
-                        <div className="text-slate-600">Spécialité</div>
-                        <input
-                          className="w-full rounded-xl border px-3 py-2"
-                          value={form.specialty}
-                          onChange={(e) => setForm((prev) => ({ ...prev, specialty: e.target.value }))}
-                        />
-                      </label>
-                      <label className="space-y-1 text-sm">
-                        <div className="text-slate-600">Tarif journalier HT</div>
-                        <input
-                          className="w-full rounded-xl border px-3 py-2"
-                          inputMode="decimal"
-                          value={form.daily_rate_ht}
-                          onChange={(e) => setForm((prev) => ({ ...prev, daily_rate_ht: e.target.value }))}
-                        />
-                      </label>
-                      <label className="space-y-1 text-sm">
-                        <div className="text-slate-600">Assurance / documents</div>
-                        <input
-                          className="w-full rounded-xl border px-3 py-2"
-                          value={form.insurance}
-                          onChange={(e) => setForm((prev) => ({ ...prev, insurance: e.target.value }))}
-                          placeholder="Décennale, RC Pro, KBIS..."
-                        />
-                      </label>
-                    </div>
-                  </div>
-                ) : null}
-
-                <label className="block space-y-1 text-sm">
-                  <div className="text-slate-600">{t("common.labels.notes")}</div>
-                  <textarea
-                    className="min-h-28 w-full rounded-xl border px-3 py-2"
-                    value={form.notes}
-                    onChange={(e) => setForm((prev) => ({ ...prev, notes: e.target.value }))}
-                    placeholder="Informations utiles, contexte, disponibilites..."
-                  />
-                </label>
+              <form id="intervenant-form" onSubmit={onSubmit}>
+                <IntervenantFormFields form={form} onChange={setForm} />
               </form>
             </div>
 
