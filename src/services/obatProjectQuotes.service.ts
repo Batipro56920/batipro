@@ -1,8 +1,9 @@
 import { supabase } from "../lib/supabaseClient";
+import { getCurrentOrganizationId } from "./currentUserProfile.service";
 import { createCrmDocument, createCrmQuote, deleteCrmQuote, type CrmQuoteRow, type CrmQuoteStatus } from "./crm.service";
 import type { ProjectRecord } from "../features/projects/types";
 
-const BUCKET = "devis-pdf";
+const BUCKET = "crm-quote-pdfs";
 const MAX_PDF_SIZE_BYTES = 20 * 1024 * 1024;
 
 /** An imported Obat quote is a reference, never an editable Batipro quote. */
@@ -13,7 +14,7 @@ export function isExternalObatQuote(quote: Pick<CrmQuoteRow, "display_options">)
 export function externalQuoteStoragePath(quote: Pick<CrmQuoteRow, "display_options">): string | null {
   if (!isExternalObatQuote(quote)) return null;
   const path = quote.display_options?.external_pdf_path;
-  return typeof path === "string" && path.startsWith("obat/") ? path : null;
+  return typeof path === "string" && /^[0-9a-f-]{36}\/obat\//i.test(path) ? path : null;
 }
 
 export type ObatImportInput = {
@@ -53,7 +54,8 @@ export async function importObatQuoteToProject(input: ObatImportInput): Promise<
   // Check file content as well as its extension: never register an arbitrary upload as a PDF.
   const signature = new TextDecoder().decode(await file.slice(0, 5).arrayBuffer());
   if (signature !== "%PDF-") throw new Error("Ce fichier ne semble pas être un PDF valide.");
-  const path = `obat/${project.sourceType}/${project.sourceId}/${crypto.randomUUID()}.pdf`;
+  const organizationId = await getCurrentOrganizationId();
+  const path = `${organizationId}/obat/${project.sourceType}/${project.sourceId}/${crypto.randomUUID()}.pdf`;
   let quoteId: string | null = null;
   let uploaded = false;
   try {
