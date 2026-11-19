@@ -1,5 +1,5 @@
 import type { IntervenantRow } from "./intervenants.service";
-import { effectiveIntervenantHourlyCost } from "./intervenantCosts.service";
+import { effectiveIntervenantHourlyCost } from "./intervenantCosts.service.ts";
 
 export type LaborTimeEntry = {
   chantier_id: string;
