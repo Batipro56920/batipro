@@ -76,3 +76,72 @@ before insert or update of
   chantier_id, intervenant_id, start_date, duration_days, start_at, end_at, status
 on public.chantier_task_planning_segments
 for each row execute function public.guard_task_segment_office_conflict();
+
+
+-- Direct writes to office_planning_assignments must also be guarded.
+-- The RPC guard alone is insufficient because authenticated office users
+-- currently have INSERT grants on that table.
+create or replace function public.guard_office_assignment_task_conflict()
+returns trigger
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  v_chantier_org uuid;
+begin
+  v_chantier_org := public.chantier_organization_id(new.chantier_id);
+  if v_chantier_org is null or v_chantier_org is distinct from new.organization_id then
+    raise exception 'invalid_chantier';
+  end if;
+  perform pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtext(new.organization_id::text));
+
+  if exists (
+    select 1
+    from (
+      select s.chantier_id, s.intervenant_id,
+             coalesce(s.start_date, (s.start_at at time zone 'UTC')::date) as starts_on,
+             coalesce(
+               case when s.start_date is not null and s.duration_days is not null
+                 then s.start_date + greatest(ceil(s.duration_days)::integer, 1) - 1
+               end,
+               (s.end_at at time zone 'UTC')::date,
+               coalesce(s.start_date, (s.start_at at time zone 'UTC')::date)
+                 + greatest(ceil(coalesce(s.duration_days, 1))::integer, 1) - 1
+             ) as ends_on,
+             s.status
+      from public.chantier_task_segments s
+      union all
+      select s.chantier_id, s.intervenant_id,
+             coalesce(s.start_date, (s.start_at at time zone 'UTC')::date),
+             coalesce(
+               case when s.start_date is not null and s.duration_days is not null
+                 then s.start_date + greatest(ceil(s.duration_days)::integer, 1) - 1
+               end,
+               (s.end_at at time zone 'UTC')::date,
+               coalesce(s.start_date, (s.start_at at time zone 'UTC')::date)
+                 + greatest(ceil(coalesce(s.duration_days, 1))::integer, 1) - 1
+             ),
+             s.status
+      from public.chantier_task_planning_segments s
+    ) planned
+    where planned.intervenant_id = new.intervenant_id
+      and planned.chantier_id <> new.chantier_id
+      and planned.starts_on <= new.date_end
+      and planned.ends_on >= new.date_start
+      and lower(coalesce(planned.status, '')) not in
+        ('annule','annulé','cancelled','canceled','termine','terminé')
+  ) then
+    raise exception 'worker_task_on_other_chantier';
+  end if;
+
+  return new;
+end;
+$$;
+revoke all on function public.guard_office_assignment_task_conflict() from public, anon, authenticated;
+
+drop trigger if exists office_assignment_task_conflict_guard on public.office_planning_assignments;
+create trigger office_assignment_task_conflict_guard
+before insert or update of chantier_id, intervenant_id, date_start, date_end, organization_id
+on public.office_planning_assignments
+for each row execute function public.guard_office_assignment_task_conflict();
