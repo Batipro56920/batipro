@@ -7,6 +7,9 @@ on:
       - "src/services/obatProjectQuotes.service.ts"
       - "src/features/projects/components/ImportObatQuoteDialog.tsx"
       - "src/features/projects/components/ProjectDetailSections.tsx"
+      - "src/features/crm/**"
+      - "supabase/migrations/20261119163000_crm_quote_pdf_storage.sql"
+      - "tests/obat-quotes/**"
       - ".github/workflows/obat-project-quotes-checks.yml"
 permissions:
   contents: read
@@ -25,6 +28,35 @@ jobs:
       - name: TypeScript
         run: npx tsc --noEmit -p tsconfig.app.json
       - name: Targeted ESLint
-        run: npx eslint src/services/obatProjectQuotes.service.ts src/features/projects/components/ImportObatQuoteDialog.tsx src/features/projects/components/ProjectDetailSections.tsx
+        run: npx eslint src/services/obatProjectQuotes.service.ts src/features/projects/components/ImportObatQuoteDialog.tsx src/features/projects/components/ProjectDetailSections.tsx src/features/crm/pages/CrmQuotesSection.tsx src/features/crm/quotes/components/QuotesTable.tsx src/features/crm/quotes/components/QuoteDetailDrawer.tsx
       - name: Production build
         run: npm run build
+  sql:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: test_password
+          POSTGRES_DB: tests
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres -d tests"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      PGHOST: localhost
+      PGUSER: postgres
+      PGPASSWORD: test_password
+      PGDATABASE: tests
+      PGPORT: 5432
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - run: sudo apt-get update && sudo apt-get install -y postgresql-client
+      - run: psql -v ON_ERROR_STOP=1 -f tests/obat-quotes/storage-fixture.sql
+      - run: psql -v ON_ERROR_STOP=1 -f supabase/migrations/20261119163000_crm_quote_pdf_storage.sql
+      - run: psql -v ON_ERROR_STOP=1 -f tests/obat-quotes/storage-security.sql
