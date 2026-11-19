@@ -7,6 +7,7 @@ export type LaborTimeEntry = {
   intervenant_id: string;
   duration_hours: number | null;
   hourly_cost_snapshot_ht?: number | null;
+  hourly_cost_snapshot_source?: "intervenant" | "journalier" | "chantier" | null;
 };
 export type LaborCostValuation = {
   hours: number;
@@ -42,7 +43,7 @@ export function valueLaborEntry(
   const snapshot = entry.hourly_cost_snapshot_ht;
   const hasSnapshot = snapshot != null && Number.isFinite(Number(snapshot)) && Number(snapshot) >= 0;
   const individualRate = rates.get(entry.intervenant_id);
-  const useChantier = !hasSnapshot && individualRate === undefined;
+  const useChantier = (hasSnapshot && entry.hourly_cost_snapshot_source === "chantier") || (!hasSnapshot && individualRate === undefined);
   const fallback = Number.isFinite(chantierHourlyRate) && chantierHourlyRate >= 0 ? chantierHourlyRate : 0;
   const appliedRate = hasSnapshot ? Number(snapshot) : individualRate ?? fallback;
   return {
