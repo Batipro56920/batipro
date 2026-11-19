@@ -98,6 +98,30 @@ export function getInvestmentMonthlyTotal(entries: CompanyInvestmentEntry[]): nu
   return entries.reduce((sum, entry) => sum + investmentMonthlyContribution(entry), 0);
 }
 
+/**
+ * Only confirmed additional business costs enter the quote cost basis.
+ * A purchase reserve, financing principal, cash buffer or asset already
+ * depreciated through Matériels is never silently added to hourly overhead.
+ *
+ * A planned allocation applies from its start month for durationMonths months.
+ * Old entries lacking quoteAllocation default to a non-charge reserve.
+ */
+export function investmentMonthlyQuoteOverhead(
+  entries: CompanyInvestmentEntry[],
+  asOf: Date = new Date(),
+): number {
+  const currentMonth = asOf.getUTCFullYear() * 12 + asOf.getUTCMonth();
+  return entries.reduce((total, entry) => {
+    if (entry.quoteAllocation !== "overhead" || entry.status !== "planned") return total;
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(entry.startDate)) return total;
+    const [year, month] = entry.startDate.slice(0, 7).split("-").map(Number);
+    if (!Number.isInteger(year) || !Number.isInteger(month) || month < 1 || month > 12) return total;
+    const startMonth = year * 12 + month - 1;
+    if (currentMonth < startMonth || currentMonth >= startMonth + entry.durationMonths) return total;
+    return total + investmentMonthlyContribution(entry);
+  }, 0);
+}
+
 /** Matériel amorti par l'entreprise (échafaudage, outillage, véhicule...). */
 export type ResourceUsageEntry = { id: string; date: string; quantity: number; chantier: string; task: string };
 export function yearlyUsage(entries: ResourceUsageEntry[] | undefined, year: number) {
