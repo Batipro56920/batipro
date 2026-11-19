@@ -21,6 +21,7 @@ begin
   -- Si l'intervenant ou la date change, determiner un nouveau taux de reference.
   if tg_op = 'UPDATE'
      and new.intervenant_id is not distinct from old.intervenant_id
+     and new.chantier_id is not distinct from old.chantier_id
      and new.work_date is not distinct from old.work_date then
     new.hourly_cost_snapshot_ht := old.hourly_cost_snapshot_ht;
     return new;
@@ -50,6 +51,6 @@ revoke all on function public.capture_chantier_time_hourly_cost() from public, a
 
 drop trigger if exists chantier_time_capture_hourly_cost on public.chantier_time_entries;
 create trigger chantier_time_capture_hourly_cost
-before insert or update of intervenant_id, work_date, hourly_cost_snapshot_ht
+before insert or update of chantier_id, intervenant_id, work_date, hourly_cost_snapshot_ht
 on public.chantier_time_entries
 for each row execute function public.capture_chantier_time_hourly_cost();
