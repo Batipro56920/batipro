@@ -7,6 +7,7 @@ export type ChantierTimeEntryRow = {
   intervenant_id: string;
   work_date: string;
   duration_hours: number | null;
+  hourly_cost_snapshot_ht: number | null;
   quantite_realisee: number | null;
   note: string | null;
   created_at: string | null;
@@ -54,6 +55,7 @@ function mapRow(row: any): ChantierTimeEntryRow {
     intervenant_id: String(row.intervenant_id ?? ""),
     work_date: String(row.work_date ?? ""),
     duration_hours: normalizeNumber(row.duration_hours),
+    hourly_cost_snapshot_ht: normalizeNumber(row.hourly_cost_snapshot_ht),
     quantite_realisee: normalizeNumber(row.quantite_realisee),
     note: normalizeText(row.note),
     created_at: normalizeText(row.created_at),
@@ -64,19 +66,29 @@ function mapRow(row: any): ChantierTimeEntryRow {
 export async function listChantierTimeEntriesByChantierId(chantierId: string): Promise<ChantierTimeEntryRow[]> {
   if (!chantierId) throw new Error("chantierId manquant.");
 
+  const selectV3 =
+    "id, chantier_id, task_id, intervenant_id, work_date, duration_hours, hourly_cost_snapshot_ht, quantite_realisee, note, created_at, updated_at";
   const selectV2 =
     "id, chantier_id, task_id, intervenant_id, work_date, duration_hours, quantite_realisee, note, created_at, updated_at";
   const selectV1 = "id, chantier_id, task_id, intervenant_id, work_date, duration_hours, note, created_at, updated_at";
 
   const first = await supabase
     .from("chantier_time_entries" as any)
-    .select(selectV2)
+    .select(selectV3)
     .eq("chantier_id", chantierId)
     .order("work_date", { ascending: false })
     .order("created_at", { ascending: false });
 
   if (first.error) {
-    if (!isMissingColumnError(first.error, ["quantite_realisee", "updated_at"])) throw first.error;
+    if (!isMissingColumnError(first.error, ["hourly_cost_snapshot_ht", "quantite_realisee", "updated_at"])) throw first.error;
+    const v2 = await supabase
+      .from("chantier_time_entries" as any)
+      .select(selectV2)
+      .eq("chantier_id", chantierId)
+      .order("work_date", { ascending: false })
+      .order("created_at", { ascending: false });
+    if (!v2.error) return (v2.data ?? []).map(mapRow);
+    if (!isMissingColumnError(v2.error, ["quantite_realisee", "updated_at"])) throw v2.error;
 
     const fallback = await supabase
       .from("chantier_time_entries" as any)
@@ -111,13 +123,18 @@ export async function createChantierTimeEntry(payload: CreateChantierTimeEntryPa
     note: normalizeText(payload.note),
   };
 
+  const selectV3 =
+    "id, chantier_id, task_id, intervenant_id, work_date, duration_hours, hourly_cost_snapshot_ht, quantite_realisee, note, created_at, updated_at";
   const selectV2 =
     "id, chantier_id, task_id, intervenant_id, work_date, duration_hours, quantite_realisee, note, created_at, updated_at";
   const selectV1 = "id, chantier_id, task_id, intervenant_id, work_date, duration_hours, note, created_at, updated_at";
 
-  const first = await (supabase as any).from("chantier_time_entries").insert([insertRow]).select(selectV2).single();
+  const first = await (supabase as any).from("chantier_time_entries").insert([insertRow]).select(selectV3).single();
   if (first.error) {
-    if (!isMissingColumnError(first.error, ["quantite_realisee", "updated_at"])) throw first.error;
+    if (!isMissingColumnError(first.error, ["hourly_cost_snapshot_ht", "quantite_realisee", "updated_at"])) throw first.error;
+    const v2 = await (supabase as any).from("chantier_time_entries").insert([insertRow]).select(selectV2).single();
+    if (!v2.error) return mapRow(v2.data);
+    if (!isMissingColumnError(v2.error, ["quantite_realisee", "updated_at"])) throw v2.error;
 
     const legacyInsert = { ...insertRow };
     delete (legacyInsert as Record<string, unknown>).quantite_realisee;
